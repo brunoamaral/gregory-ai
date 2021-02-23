@@ -1,15 +1,13 @@
 theme = ["gregory","github.com/RainerChiang/simpleness"]
 
-
-
-baseURL = "http://example.org/"
+baseURL = "http://labs.brunoamaral.eu/gregory/"
 languageCode = "en"
 DefaultContentLanguage = "en"
 enableInlineShortcodes = true
 enableEmoji = true
 # pagination = 10
 
-title = "Hugo"
+title = "Gregory, search aggregator"
 author = "Rainer Chiang"
 copyright = "[Home](/) &#183; Theme [Simpleness](https://github.com/RainerChiang/simpleness) Powered by [Hugo](https://gohugo.io/)"
 
@@ -18,12 +16,12 @@ googleAnalytics = ""
 [params]
   lazyImage = true
   enableMathJax = false # enable it in Front Matter
-  enableReadingTime = true
+  enableReadingTime = false
   favicon = "favicon.ico"
-  startyear = "2019"
+  startyear = "2021"
   showmonth = true
   slogan = "always make it happen"
-  description = "A simple and concise hugo theme."
+  description = "A simple search aggregator."
   disqus = ""
 
 [params.valine]
@@ -43,10 +41,6 @@ googleAnalytics = ""
   name = "Home"
   url = "/"
   weight = 1
-  [[menu.main]]
-  name = "About"
-  url = "/about/"
-  weight = 2
 
 [social]
   github = "https://github.com/RainerChiang"
