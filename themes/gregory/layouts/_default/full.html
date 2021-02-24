@@ -1,0 +1,47 @@
+{{ define "main" }}
+
+{{ $Data := $.Site.Data.articles}}
+
+{{ $home := .IsHome }}
+
+{{ $ShowMonth := .Site.Params.showmonth}}
+
+<article class="archive">
+  <header style="text-align: center;">
+    {{ if .IsHome }}
+      {{ if .Site.Params.Slogan }}
+      <div class="slogan">
+        {{ .Site.Params.Slogan }}
+      </div>
+      {{ end }}
+    {{ else }}
+    <h1>
+      {{ .Title }}
+    </h1>
+    {{ end }}
+  </header>
+
+  <div class="post-list">
+  {{ range $Data }}
+    <h2 class="year">{{ .Key }}</h2>
+
+    <ul>
+    {{ range $Data}}
+      <li class="post-item">
+      {{ if .discovery_date }}
+        <time datetime="{{ dateFormat "2006-01-02T15:04:05Z07:00" .discovery_date }}">{{ dateFormat "2006-01-02" .discovery_date }}</time>
+      {{ end }}
+        <a href="{{ .link | htmlUnescape }}">{{ .title }}</a>
+         <!-- range .Params.categories 
+          >> <a href="{{ "/categories/" | relLangURL }}{{ . | urlize }}" padding-left: auto;><strong>{{ . }}</strong></a>
+         end  -->
+      </li>
+      {{ end }}
+
+    </ul>
+    
+  {{ end }}
+  </div>
+</article>
+
+{{ end }}
