@@ -1,6 +1,6 @@
 {{ define "main" }}
 
-{{ $Data := $.Site.Data.articles }}
+{{ $Data := where $.Site.Data.articles "relevant" "=" 1 }}
 
 {{ $home := .IsHome }}
 
