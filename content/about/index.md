@@ -15,6 +15,10 @@ disableToC: false
 disableAutoCollapse: true
 
 url: sobre
----
 
+menu:
+  main:
+    Name: Sobre este Site
+    Weight: 2
+---
 

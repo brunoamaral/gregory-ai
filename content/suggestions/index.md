@@ -1,6 +1,6 @@
 ---
-title: "Listagem Completa de Resultados"
-date: 2021-02-24T13:25:38Z
+title: "Sugestões"
+date: 2021-02-24T15:14:33Z
 lastmod: 
 author: Bruno Amaral
 
@@ -14,10 +14,9 @@ enableMathJax: false
 disableToC: false
 disableAutoCollapse: true
 
-layout: full
-url: /tudo
 menu:
     main:
-        Name: Listagem Completa
-        weight: 2
+        Name: Sugestões
+        Weight: 4
 ---
+
