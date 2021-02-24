@@ -1,0 +1,29 @@
+
+<header class="menus">
+  {{ if not (gt (len .Site.Menus) 0) }}
+  <a href="{{ .Site.BaseURL }}">{{ .Site.Title }}</a>
+  {{ end }}
+
+  <nav >
+    {{ range .Site.Menus.main }}
+    <a href="{{ .URL }}"> {{ .Name | safeHTML }}</a>
+    {{ end }}
+  </nav>
+
+  <nav class="fontawesome">
+    {{ if .Site.Social.github }}
+    <a href="{{ .Site.Social.github }}" target="_blank">
+        <i title="GitHub" class="fab fa-github"></i>
+    </a>
+    {{ end }}
+    {{ if .Site.Social.rss }}
+    <a href="{{ "index.xml" | absLangURL }}" target="_blank">
+        <i title="RSS" class="fas fa-rss"></i>
+    </a>
+    {{ end }}
+  </nav>
+  
+  {{ with .Site.Params.description }}
+  <div class="hidden description">{{ safeHTML . }}</div>
+  {{ end }}
+</header>
