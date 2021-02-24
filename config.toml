@@ -44,7 +44,7 @@ googleAnalytics = ""
 
 [social]
   github = "https://github.com/brunoamaral/gregory"
-  rss = "index.xml"
+  rss = ""
 
 [taxonomies]
 category = "categories"
