@@ -7,7 +7,7 @@ enableInlineShortcodes = true
 enableEmoji = true
 # pagination = 10
 
-title = "Gregory, search aggregator"
+title = "Gregory"
 author = "Bruno Amaral"
 copyright = "[Home](/) &#183; Theme [Simpleness](https://github.com/RainerChiang/simpleness) Powered by [Hugo](https://gohugo.io/)"
 
@@ -21,7 +21,7 @@ googleAnalytics = ""
   startyear = "2021"
   showmonth = true
   slogan = ""
-  description = "A simple search aggregator."
+  description = "Um agregador automático de pesquisas"
   disqus = ""
 
 [params.valine]
@@ -38,9 +38,17 @@ googleAnalytics = ""
 
 [menu]
   [[menu.main]]
-  name = "Home"
+  name = '<span class="iconify" data-icon="fa:home"></span>'
   url = "/"
   weight = 1
+  [[menu.main]]
+  name = "Listagem Completa"
+  url = "/tudo"
+  weight = 2
+  [[menu.main]]
+  name = "Sobre o Projeto"
+  url = "/sobre"
+  weight = 3
 
 [social]
   github = "https://github.com/brunoamaral/gregory"
