@@ -8,7 +8,7 @@ enableEmoji = true
 # pagination = 10
 
 title = "Gregory, search aggregator"
-author = "Rainer Chiang"
+author = "Bruno Amaral"
 copyright = "[Home](/) &#183; Theme [Simpleness](https://github.com/RainerChiang/simpleness) Powered by [Hugo](https://gohugo.io/)"
 
 googleAnalytics = ""
@@ -20,7 +20,7 @@ googleAnalytics = ""
   favicon = "favicon.ico"
   startyear = "2021"
   showmonth = true
-  slogan = "always make it happen"
+  slogan = ""
   description = "A simple search aggregator."
   disqus = ""
 
@@ -43,7 +43,7 @@ googleAnalytics = ""
   weight = 1
 
 [social]
-  github = "https://github.com/RainerChiang"
+  github = "https://github.com/brunoamaral/gregory"
   rss = "index.xml"
 
 [taxonomies]
