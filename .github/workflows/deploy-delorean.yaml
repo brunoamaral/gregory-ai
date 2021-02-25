@@ -1,0 +1,36 @@
+name: Deploy site to DeLorean
+on:
+    push:
+        branches:
+            - main
+
+jobs:
+    build:
+        name: Building
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v2
+            - name: Use Github Actions cache
+              uses: actions/cache@v1
+              with:
+                  path: vendor/bundle
+                  key: ${{ runner.os }}-gems-${{ hashFiles('**/Gemfile.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-gems-
+
+            - name: SSH into DeLorean and run build 
+              uses: appleboy/ssh-action@master
+              with:
+                host: ${{ secrets.HOST }}
+                username: ${{ secrets.USERNAME }}
+                key: ${{ secrets.KEY }}
+                port: ${{ secrets.PORT }}
+                script: /home/gregory/gregory/build.py
+            - name: Telegram notification
+              if: cancelled() == false
+              uses: xinthink/action-telegram@v1.1
+              with:
+                  botToken: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+                  chatId: ${{ secrets.TELEGRAM_CHAT_ID }}
+                  jobStatus: ${{ job.status }}
+                  skipSuccess: false
