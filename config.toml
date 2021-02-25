@@ -1,6 +1,6 @@
 theme = ["gregory","github.com/RainerChiang/simpleness"]
 
-baseURL = "http://labs.brunoamaral.eu/gregory/"
+baseURL = "https://labs.brunoamaral.eu/"
 languageCode = "en"
 DefaultContentLanguage = "en"
 enableInlineShortcodes = true
