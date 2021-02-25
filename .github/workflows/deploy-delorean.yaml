@@ -25,7 +25,7 @@ jobs:
                 username: ${{ secrets.USERNAME }}
                 key: ${{ secrets.KEY }}
                 port: ${{ secrets.PORT }}
-                script: /home/gregory/gregory/build.py
+                script: /home/${{ secrets.USERNAME }}/gregory/build.py
             - name: Telegram notification
               if: cancelled() == false
               uses: xinthink/action-telegram@v1.1
