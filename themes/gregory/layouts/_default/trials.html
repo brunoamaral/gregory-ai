@@ -23,8 +23,8 @@
 
   <div class="post-list">
 
-  {{ partial "list-data" . }}
-  
+  {{ partial "list-data" (dict "context" . "dataVar" "data") }}
+
   </div>
 </article>
 

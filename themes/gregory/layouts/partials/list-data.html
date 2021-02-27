@@ -4,7 +4,7 @@
   {{ $dataYear := "" }}
   {{ $dataMonth := "" }}
 
-  {{ range sort $data ".discovery_date" "desc"}}
+  {{ range sort .dataVar ".discovery_date" "desc"}}
 
     {{ $dataYear = (dateFormat "2006" .discovery_date ) }}
 
