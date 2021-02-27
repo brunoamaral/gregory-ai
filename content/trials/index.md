@@ -19,5 +19,5 @@ url: /ensaios
 menu:
     main:
         Name: Ensaios Clínicos
-        weight: 5
+        weight: 3
 ---

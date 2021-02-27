@@ -17,6 +17,6 @@ disableAutoCollapse: true
 menu:
     main:
         Name: Sugestões
-        Weight: 4
+        Weight: 5
 ---
 
