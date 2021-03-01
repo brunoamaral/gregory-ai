@@ -24,10 +24,10 @@ menu:
 
 ```mermaid
 graph TD;
-    PubMed-->Gregory;
-    Reuters-->Gregory;
-    Manual[Inserção Manual]-->Gregory;
-    Gregory-->Website
+    PubMed[fa:fa-newspaper PubMed] -->Gregory;
+    Reuters[fa:fa-newspaper Reuters Health]-->Gregory;
+    Manual[fa:fa-keyboard Inserção Manual]-->Gregory;
+    Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
 ```
 
 
