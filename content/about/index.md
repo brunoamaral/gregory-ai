@@ -22,3 +22,12 @@ menu:
     Weight: 4
 ---
 
+```mermaid
+graph TD;
+    PubMed-->Gregory;
+    Reuters-->Gregory;
+    Manual[Inserção Manual]-->Gregory;
+    Gregory-->Website
+```
+
+

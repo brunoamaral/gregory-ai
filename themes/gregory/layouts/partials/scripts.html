@@ -7,3 +7,10 @@
 </script>
 {{ end }}
 <script src="https://code.iconify.design/1/1.0.7/iconify.min.js"></script>
+{{ $jsMermaid := resources.Get "js/mermaid.min.js" }}
+<script src="{{ $jsMermaid.Permalink }}"></script>
+<script>
+    window.onload = function() {
+        mermaid.init(undefined, ".language-mermaid");
+    };
+</script>
