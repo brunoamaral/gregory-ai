@@ -31,15 +31,15 @@
 
       {{ range sort $data ".discovery_date" "desc"}}
 
-        {{ $dataYear = (dateFormat "2006" .discovery_date ) }}
+        {{ $dataYear = (dateFormat "2006" .discovery_date ) }} 
+        {{ $dataMonth = (dateFormat "01" .discovery_date ) }}
 
-        {{ if gt $dataYear $year }}
+        {{ if ne $dataYear $year }}
           {{ $year = $dataYear }}
           <h2 class="year">{{ $year }}</h2>
         {{ end }}
 
-        {{ $dataMonth = (dateFormat "01" .discovery_date ) }}
-        {{ if gt $dataMonth $month }}
+        {{ if ne $dataMonth $month }}
           {{ $month = $dataMonth }}
           <h3 class="month">{{ dateFormat "January" .discovery_date }}</h3>
         {{ end }}
