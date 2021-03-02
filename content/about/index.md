@@ -24,9 +24,9 @@ menu:
 
 > O excesso de informação é tão mau como a falta de informação.
 
-Este site é destinado a ser usado por profissionais de saúde e permite facilitar a pesquisa em tempo real de artigos e notícias relacionadas com a Esclerose Múltipla.
+Este site é destinado a ser usado por profissionais de saúde e permite facilitar a pesquisa em tempo real de artigos e notícias relacionadas com a **Esclerose Múltipla**.
 
-A recolha dos dados é feita de forma automática, por um programa de nome **Gregory**, de forma contínua.
+A recolha dos dados é feita de forma automática e contínua por um programa de nome **Gregory**.
 
 Na primeira página são apresentados alguns resultados que merecem destaque por se incluirem numa destas categorias:
 
@@ -36,7 +36,7 @@ Na primeira página são apresentados alguns resultados que merecem destaque por
 
 ## Fontes de Informação
 
-O **Gregory** é capaz de usar várias fontes para executar pesquisas. Atualmente usa as seguintes fontes de informação. É possível acrescentar mais fontes onde pesquisar, e afinar os termos de pesquisa. Para isso, basta usar os contactos que estão no final desta página.
+O **Gregory** é capaz de usar várias fontes para executar pesquisas, e atualmente usa as seguintes fontes de informação. 
 
 ```mermaid
 graph TD;
@@ -46,6 +46,8 @@ graph TD;
     Manual[fa:fa-keyboard Inserção Manual]-->Gregory;
     Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
 ```
+
+É possível acrescentar mais fontes de informação e afinar os termos de pesquisa. Para isso, basta usar os contactos que estão no final desta página.
 
 ### Termos de pesquisa:
 
