@@ -36,7 +36,7 @@ import subprocess
 # set variables
 path = "/PATH-TO/gregory"
 server = "https://SERVER-RUNNING-NODE-RED.COM/"
-website_path = "./public" # /var/www/labs.brunoamaral.eu/
+website_path = "/PATH/TO/WEBSITE" 
 # Workflow starts
 os.chdir(path)
 g = git.cmd.Git(path)
