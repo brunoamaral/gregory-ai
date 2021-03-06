@@ -39,7 +39,7 @@ Na primeira página são apresentados alguns resultados que merecem destaque por
 O **Gregory** é capaz de usar várias fontes para executar pesquisas, e atualmente usa as seguintes fontes de informação. 
 
 ```mermaid
-graph TD;
+graph LR;
     APTA[fa:fa-newspaper APTA.org] -->Gregory;
     BioMedCentral[fa:fa-newspaper BioMedCentral.com] -->Gregory;
     ClinicalTrials[fa:fa-newspaper ClinicalTrials.gov]-->Gregory;
