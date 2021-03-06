@@ -41,6 +41,7 @@ O **Gregory** é capaz de usar várias fontes para executar pesquisas, e atualme
 ```mermaid
 graph TD;
     APTA[fa:fa-newspaper APTA.org] -->Gregory;
+    BioMedCentral[fa:fa-newspaper BioMedCentral.com] -->Gregory;
     PubMed[fa:fa-newspaper PubMed.gov] -->Gregory;
     Reuters[fa:fa-newspaper Reuters Health]-->Gregory;
     ClinicalTrials[fa:fa-newspaper ClinicalTrials.gov]-->Gregory;
