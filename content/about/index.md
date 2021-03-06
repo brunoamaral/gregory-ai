@@ -43,8 +43,11 @@ graph TD;
     APTA[fa:fa-newspaper APTA.org] -->Gregory;
     BioMedCentral[fa:fa-newspaper BioMedCentral.com] -->Gregory;
     ClinicalTrials[fa:fa-newspaper ClinicalTrials.gov]-->Gregory;
+    PEDro[fa:fa-newspaper PEDro.org.au] -->Gregory;
     PubMed[fa:fa-newspaper PubMed.gov] -->Gregory;
     Reuters[fa:fa-newspaper Reuters Health]-->Gregory;
+    Scielo[fa:fa-newspaper Scielo.org] -->Gregory;
+    TheLancet[fa:fa-newspaper The Lancet Health]-->Gregory;
     Manual[fa:fa-keyboard Inserção Manual]-->Gregory;
     Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
 ```
