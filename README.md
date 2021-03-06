@@ -15,7 +15,7 @@ hugo;
 ```
 # Node-RED Flow
 
-`data/articles.json` and `data/trials.json` is generated from a Node-Red flow available in the `flows.json` file.
+`data/articles.json` and `data/trials.json` are generated from a Node-Red flow available in the `flows.json` file.
 
 # Build script
 
