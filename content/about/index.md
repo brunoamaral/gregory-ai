@@ -43,6 +43,7 @@ graph TD;
     APTA[fa:fa-newspaper APTA.org] -->Gregory;
     BioMedCentral[fa:fa-newspaper BioMedCentral.com] -->Gregory;
     ClinicalTrials[fa:fa-newspaper ClinicalTrials.gov]-->Gregory;
+    JNeurosci[fa:fa-newspaper JNeurosci.org]-->Gregory;
     PEDro[fa:fa-newspaper PEDro.org.au] -->Gregory;
     PubMed[fa:fa-newspaper PubMed.gov] -->Gregory;
     Reuters[fa:fa-newspaper Reuters Health]-->Gregory;
