@@ -14,3 +14,5 @@
         mermaid.init(undefined, ".language-mermaid");
     };
 </script>
+{{ $custom := resources.Get "css/custom.css" }}
+<link rel="stylesheet" href="{{$custom.Permalink}}">

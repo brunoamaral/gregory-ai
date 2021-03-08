@@ -59,6 +59,49 @@ graph LR;
 
 > Multiple Sclerosis, autoimmune encephalomyelitis, encephalomyelitis, immune tolerance, myelin
 
+#### APTA
+
+https://www.apta.org/search?Q=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&searcharticletypes=8834&searchconditionandsymptoms=&searchloc=APTA
+
+
+#### BioMedCentral
+
+https://www.biomedcentral.com/search?searchType=publisherSearch&sort=PubDate&page=1&query=Multiple+Sclerosis
+
+
+#### ClinicalTrials
+
+https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000
+
+#### JNeurosci
+
+https://www.jneurosci.org/search/text_abstract_title%3AMultiple%2BSclerosis%20text_abstract_title_flags%3Amatch-phrase%20exclude_meeting_abstracts%3A1%20numresults%3A50%20sort%3Apublication-date%20direction%3Adescending%20format_result%3Astandard
+
+
+#### PEDro
+
+https://search.pedro.org.au/advanced-search/results?abstract_with_title=Multiple+Sclerosis&therapy=0&problem=0&body_part=0&subdiscipline=0&topic=0&method=0&authors_association=&title=&source=&year_of_publication=&date_record_was_created=&nscore=&perpage=20&lop=or&find=&find=Start+Search
+
+#### PubMed
+
+https://pubmed.ncbi.nlm.nih.gov/rss/search/10guX6I3SqrbUeeLKSTD6FCRM44ewnrN2MKKTQLLPMHB4xNsZU/?limit=15&utm_campaign=pubmed-2&fc=20210216052009
+
+#### Reuters
+
+https://www.reutersagency.com/feed/?best-topics=health
+#### Scielo
+
+https://search.scielo.org/?q=Multiple+Sclerosis&lang=en&count=15&from=0&output=site&sort=&format=summary&fb=&page=1&q=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&lang=en&page=1
+
+
+#### TheLancet
+
+https://www.thelancet.com/action/doSearch?text1=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&field1=AbstractTitleKeywordFilterField&startPage=0&sortBy=Earliest
+
+## Fontes por incluir
+
+https://journals.bmj.com/
+
 ## Contactos para melhorias e sugestões
 
 ### Bruno Amaral    
