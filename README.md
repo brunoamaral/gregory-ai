@@ -2,7 +2,7 @@
 
 https://labs.brunoamaral.eu
 
-# gregory
+# Gregory
 Gregory aggregates searches in JSON and outputs to a Hugo static site
 
 # Install
