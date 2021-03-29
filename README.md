@@ -19,39 +19,8 @@ hugo;
 
 # Build script
 
-Example on how to build the website:
+For an example on how to build the website, see build-example.py. The server URL was hidden for the time being. 
 
-```python
-#!/Library/Frameworks/Python.framework/Versions/3.7/bin/python3
-import os
-import shutil
-import urllib.request
-import git
-import subprocess
+The path /api/articles.json and /api/trials.json includes the full database export.
 
-# set variables
-path = "/PATH-TO/gregory"
-server = "https://SERVER-RUNNING-NODE-RED.COM/"
-website_path = "/PATH/TO/WEBSITE" 
-# Workflow starts
-os.chdir(path)
-g = git.cmd.Git(path)
-g.pull()
-
-# Get articles
-url = server + 'articles/all'
-file_name = path + '/data/articles.json'
-urllib.request.urlretrieve(url, file_name)
-
-# Get trials
-url = server + 'trials/all'
-file_name = path + '/data/trials.json'
-urllib.request.urlretrieve(url, file_name)
-
-args = ("/usr/local/bin/hugo", "-d", website_path,"--cacheDir", path)
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
-
-popen.wait()
-output = popen.stdout.read()
-print(output)
-```
+The same information is available in excel format: /api/articles.xlsx and /api/trials.xlsx.
