@@ -1,0 +1,34 @@
+{{ define "main" }}
+{{ $Pages := .Pages }}
+{{ $home := .IsHome }}
+{{ if .IsHome }}
+  {{ $Pages = where site.RegularPages "Type" "in" .Site.Params.mainSections }}
+{{ end }}
+
+<article class="archive">
+  {{ if not .IsHome }}
+  <header style="text-align: center;">
+    <h1>
+      {{ .Title }}
+    </h1>
+  </header>
+  {{ end }}
+  <div class="archive-list">
+  {{ range $Pages.GroupByDate "2006" }}
+    <h2 class="archive-year">{{ .Key }}</h2>
+    <ul>
+    {{ range .Pages.GroupByDate "January"}} <!-- .Pages in $Pages -->
+    {{ range .Pages }}
+      <li class="archive-item">
+      {{ if .Date }}
+        <time datetime="{{ .Date.Format "2006-01-02T15:04:05Z07:00" }}">{{ .Date.Format "2006-01-02" }}</time>
+        <a href="{{ .Permalink }}">{{ .Title }}</a>
+      {{ end }}
+      </li>
+      {{ end }}
+    {{ end }}
+    </ul>
+  {{ end }}
+  </div>
+</article>
+{{ end }}
