@@ -107,6 +107,6 @@ https://journals.bmj.com/
 ### Bruno Amaral    
 mail@brunoamaral.eu
 
-https://twitter.com/brunoamral     
+https://twitter.com/brunoamaral     
 
 [+351 912 875 856](tel:+351912875856)
