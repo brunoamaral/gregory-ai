@@ -2348,13 +2348,13 @@
         "as": "single",
         "map": [
             {
-                "search": "h2.meta__title",
+                "search": "h4.meta__title",
                 "ret": "text",
                 "replace": "title",
                 "attr": ""
             },
             {
-                "search": "h2.meta__title a",
+                "search": "h4.meta__title a",
                 "ret": "attribute",
                 "replace": "link",
                 "attr": "href"
@@ -2366,7 +2366,7 @@
                 "attr": ""
             },
             {
-                "search": "p.meta__details span:last-child",
+                "search": "p.meta__details > span:nth-child(5)",
                 "ret": "text",
                 "replace": "pubdate",
                 "attr": ""
@@ -2599,23 +2599,6 @@
                 "2042485f.ad9e18"
             ]
         ]
-    },
-    {
-        "id": "3056c8c4.4f28f8",
-        "type": "debug",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "article",
-        "targetType": "msg",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 1330,
-        "y": 3140,
-        "wires": []
     },
     {
         "id": "bf677c12.98036",
@@ -3190,7 +3173,6 @@
         "y": 2940,
         "wires": [
             [
-                "3056c8c4.4f28f8",
                 "91a0c554.3d6868"
             ]
         ]
