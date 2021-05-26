@@ -10,9 +10,9 @@ website_path = "/var/www/labs.brunoamaral.eu/"
 # Workflow starts
 os.chdir(path)
 ## Optional
-# import git
-# g = git.cmd.Git(path)
-# g.pull()
+import git
+g = git.cmd.Git(path)
+g.pull()
 # Get articles
 url = server + 'api/articles/all'
 res = requests.get(url)
