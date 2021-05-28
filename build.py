@@ -50,7 +50,7 @@ trials_json.summary = trials_json.summary.apply(html.unescape)
 trials_json.to_excel('content/api/trials.xlsx')
 
 # Make sure directory exists or create it
-articlesDir = path + "/content/articles/"
+articlesDir = path + "/content/article/"
 articlesDirExists = pathlib.Path(articlesDir)
 
 if articlesDirExists.exists() == False:
