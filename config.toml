@@ -64,3 +64,6 @@ tag = "tags"
     noClasses = true
     style = "monokai" # github, dracula, vim, monokai
     tabWidth = 4
+  [markup.goldmark.renderer]
+    hardWraps = false
+    unsafe = true

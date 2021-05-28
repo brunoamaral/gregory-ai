@@ -1,0 +1,86 @@
+{{ define "main" }}
+<article class="post">
+  <header class="post-header">
+    <h1 style="text-align: center;" >{{ .Title }}</h1>
+    <div class="post-metadata">
+    {{ if .Date }}
+      <time datetime="{{ .Date.Format "2006-01-02T15:04:05Z07:00" }}">{{ .Date.Format "January 02, 2006" }}</time> &nbsp; 
+    {{ end }}
+    <!-- Valine Vistors in Header Start -->
+    {{ if and .Site.Params.valine.enable (or (ne .Site.BaseURL "http://localhost:1313/") .Site.Params.valine.debug) }}
+      <i class="far fa-eye"></i>
+      <span id="{{ .Permalink | relURL }}" class="leancloud_visitors" data-flag-title="{{ .Title }}">
+          <span class="leancloud-visitors-count"> {{ T "valinePV" }} </span>
+      </span> &nbsp;
+    {{ end }}
+    <!-- Valine Vistors End -->
+    {{ if .Site.Params.enableReadingTime }}
+      <i class="far fa-clock"></i>
+      {{ $readTime := mul (div (countwords .Content) 220.0) 60 }}
+      {{ $minutes := math.Floor (div $readTime 60) }}
+      {{ $seconds := mod $readTime 60 }}
+      {{ if gt $minutes 0}}
+        {{ $minutes }} {{ cond (eq $minutes 1) "minute" "min" }}
+      {{ end }}
+      {{ $seconds }} {{ cond (eq $seconds 1) "second" "s" }}
+      &nbsp;
+    {{ end }}
+    {{ if .Params.categories }}
+      <i class="fas fa-folder"></i>
+      {{ range .Params.categories }}
+      <a href="{{ "/categories/" | relLangURL }}{{ . | urlize }}">{{ . }}</a>
+      &nbsp;
+      {{ end }}
+    {{ end }}
+    </div>
+  </header>
+
+  {{ if and .Params.toc .TableOfContents }}
+  <div class="post-toc">
+    <div class="post-toc-title">Contents</div>
+    {{ .TableOfContents }}
+  </div>
+  {{ end }}
+
+  <div class="post-text">
+    {{ .Content | safeHTML }}
+  </div>
+
+  <footer class="post-footer">
+    {{ if and .Lastmod (ne .Lastmod .Date) }}
+    <div class="post-lastmod">
+      <time datetime="{{ .Lastmod.Format "2006-01-02T15:04:05Z07:00" }}">
+        update @ {{ .Lastmod.Format "January 02, 2006" }}
+      </time>
+      <p></p>
+    </div>
+    {{ end }}
+
+    {{ if gt .Params.tags 0 }}
+    <div class="post-tags">
+      <i class="fas fa-tags"></i>
+      {{ range .Params.tags }}
+        <a href="{{ "/tags/" | relLangURL }}{{ . | urlize }}">{{ . }}</a>
+        &nbsp;
+      {{ end }}
+    </div>
+    {{ end }}
+
+    {{ $related := (where site.RegularPages "Type" "in" site.Params.mainSections).Related . | first 5 }}
+    {{ with $related }}
+    <div class="related-posts">
+      <h4>Related Posts</h4>
+      {{ range . }}
+      <i class="fas fa-paperclip"></i>
+      <a href="{{ .RelPermalink }}">{{ .Title }}</a>
+      <br>
+      {{ end }}
+    </div>
+    {{ end }}
+  </footer>
+  
+  <div class="comments">
+  {{ partial "comments.html" . }}
+  </div>
+</article>
+{{ end }}
