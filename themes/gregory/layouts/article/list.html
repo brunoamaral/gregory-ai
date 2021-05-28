@@ -1,6 +1,6 @@
 {{ define "main" }}
 
-{{ $data := $.Site.Data.articles }}
+{{ $data := .Pages }}
 
 {{ $home := .IsHome }}
 
@@ -29,10 +29,10 @@
       {{ $dataYear := "" }}
       {{ $dataMonth := "" }}
 
-      {{ range sort $data ".discovery_date" "desc"}}
+      {{ range sort $data ".Params.discovery_date" "desc"}}
 
-        {{ $dataYear = (dateFormat "2006" .discovery_date ) }} 
-        {{ $dataMonth = (dateFormat "01" .discovery_date ) }}
+        {{ $dataYear = (dateFormat "2006" .Params.discovery_date ) }} 
+        {{ $dataMonth = (dateFormat "01" .Params.discovery_date ) }}
 
         {{ if ne $dataYear $year }}
           {{ $year = $dataYear }}
@@ -41,14 +41,14 @@
 
         {{ if ne $dataMonth $month }}
           {{ $month = $dataMonth }}
-          <h3 class="month">{{ dateFormat "January" .discovery_date }}</h3>
+          <h3 class="month">{{ dateFormat "January" .Params.discovery_date }}</h3>
         {{ end }}
 
         <li class="post-item">
-        {{ if .discovery_date }}
-          <time datetime="{{ dateFormat "2006-01-02T15:04:05Z07:00" .discovery_date }}">{{ dateFormat "2006-01-02" .discovery_date }}</time>
+        {{ if .Params.discovery_date }}
+          <time datetime="{{ dateFormat "2006-01-02T15:04:05Z07:00" .Params.discovery_date }}">{{ dateFormat "2006-01-02" .Params.discovery_date }}</time>
         {{ end }}
-          <a href="{{ .link | htmlUnescape }}">{{ .title }}</a> {{.source | safeHTML }}
+          <a href="{{ .Permalink  }}">{{ .Title }}</a> {{ .Params.source | safeHTML }}
            <!-- range .Params.categories 
             >> <a href="{{ "/categories/" | relLangURL }}{{ . | urlize }}" padding-left: auto;><strong>{{ . }}</strong></a>
            end  -->
