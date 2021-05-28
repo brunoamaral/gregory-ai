@@ -1,0 +1,65 @@
+{{ define "main" }}
+
+{{ $data := where $.Site.Data.articles "relevant" "=" 1 }}
+
+{{ $home := .IsHome }}
+
+{{ $ShowMonth := .Site.Params.showmonth}}
+
+<article class="archive">
+  <header style="text-align: center;">
+    {{ if .IsHome }}
+      {{ if .Site.Params.Slogan }}
+      <div class="slogan">
+        {{ .Site.Params.Slogan }}
+      </div>
+      {{ end }}
+    {{ else }}
+    <h1>
+      {{ .Title }}
+    </h1>
+    {{ end }}
+  </header>
+
+  <div class="post-list">
+    <p><strong>Última atualização</strong> {{ now.Format "2 Jan, 15:04" }}</p>
+    <p><a href="/api/articles.xlsx" class="btn">Download dos <strong>ARTIGOS</strong> em Excel</a> | <a href="/api/trials.xlsx" class="btn">Download dos <strong>ENSAIOS CLÍNICOS</strong> em Excel</a></p>
+    <h2>Destaques</h2>
+    <p>Os estudos e notícias listados aqui são uma seleção manual. Os critérios de destaque são esclarecidos na página "Sobre este site".</p>
+    <ul>
+      {{ $year := 0 }}
+      {{ $month := 0 }}
+      {{ $dataYear := "" }}
+      {{ $dataMonth := "" }}
+
+      {{ range sort $data ".discovery_date" "desc"}}
+
+        {{ $dataYear = (dateFormat "2006" .discovery_date ) }}
+
+        {{ if ne $dataYear $year }}
+          {{ $year = $dataYear }}
+          <h2 class="year">{{ $year }}</h2>
+        {{ end }}
+
+        {{ $dataMonth = (dateFormat "01" .discovery_date ) }}
+        {{ if ne $dataMonth $month }}
+          {{ $month = $dataMonth }}
+          <h3 class="month">{{ dateFormat "January" .discovery_date }}</h3>
+        {{ end }}
+
+        <li class="post-item">
+        {{ if .discovery_date }}
+          <time datetime="{{ dateFormat "2006-01-02T15:04:05Z07:00" .discovery_date }}">{{ dateFormat "2006-01-02" .discovery_date }}</time>
+        {{ end }}
+          <a href="{{ .link | htmlUnescape }}">{{ .title }}</a> {{.source}}
+           <!-- range .Params.categories 
+            >> <a href="{{ "/categories/" | relLangURL }}{{ . | urlize }}" padding-left: auto;><strong>{{ . }}</strong></a>
+           end  -->
+        </li>
+      {{ end }}
+    </ul>
+
+  </div>
+</article>
+
+{{ end }}
