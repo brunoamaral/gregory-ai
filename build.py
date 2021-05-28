@@ -5,7 +5,7 @@ import subprocess
 import json 
 import pathlib
 from pathlib import Path
-import git
+import git  
 
 # set variables
 path = "/home/gregory/gregory"
@@ -69,8 +69,18 @@ for article in jsonArticles:
     markdownDir.mkdir(parents=True, exist_ok=True)
 
     with open(str(markdownDir)+"/index.md", "w+") as f:
-        articledata = "---\narticle_id: " + str(article["article_id"]) + "\ndiscovery_date: " + str(article["discovery_date"]) + "\ntitle: \'" + article["title"] + "\'\nsummary: \'" + article["summary"] + "\'\nlink: \'" + article["link"] + "\'\npublished_date: " + str(article["published_date"]) + "\nsource: " + article["source"] + "\nrelevant: " + \
-            str(article["relevant"]) + "\n---\n" + article["summary"]
+        articledata = "---\narticle_id: " + \
+            str(article["article_id"]) + \
+            "\ndiscovery_date: " + str(article["discovery_date"]) + \
+            "\ntitle: \'" + article["title"] + "\'" \
+            +"\nsummary: \'" + article["summary"] + "\'" \
+            +"\nlink: \'" + article["link"] + "\'" \
+            +"\npublished_date: " + str(article["published_date"]) + \
+            "\nsource: " + article["source"] + \
+            "\nrelevant: " + \
+            str(article["relevant"]) + \
+            "\n---\n" + \
+            html.unescape(article["summary"])
         # add content to file
 
         f.write(articledata)
