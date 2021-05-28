@@ -1,7 +1,7 @@
 # Thank you to
 
 @[Jneves](https://github.com/jneves) for help with the build script    
-@[Melo](https://github.com/melo) for showing me [Hugo](https://github.com/gohugoio/hugo)
+@[Melo](https://github.com/melo) for showing me [Hugo](https://github.com/gohugoio/hugo)    
 @[RainerChiang](https://github.com/RainerChiang) for the [Simplesness theme](https://github.com/RainerChiang/simpleness)    
 @[Rcarmo](https://github.com/rcarmo) for showing me [Node-RED](https://github.com/node-red/node-red)       
 
