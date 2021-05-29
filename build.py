@@ -78,8 +78,7 @@ for article in jsonArticles:
             "\nlink: \'" + article["link"] + "\'" +\
             "\npublished_date: " + str(article["published_date"]) + \
             "\nsource: " + article["source"] + \
-            "\nrelevant: " + \
-            str(article["relevant"]) + \
+            "\nrelevant: " + str(article["relevant"]) + \
             "\n---\n" + \
             html.unescape(article["summary"])
         # add content to file
