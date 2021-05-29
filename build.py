@@ -72,10 +72,11 @@ for article in jsonArticles:
         articledata = "---\narticle_id: " + \
             str(article["article_id"]) + \
             "\ndiscovery_date: " + str(article["discovery_date"]) + \
-            "\ntitle: \'" + article["title"] + "\'" \
-            +"\nsummary: \'" + article["summary"] + "\'" \
-            +"\nlink: \'" + article["link"] + "\'" \
-            +"\npublished_date: " + str(article["published_date"]) + \
+            "\ndate: " + str(article["discovery_date"]) + "Z" +\
+            "\ntitle: \'" + article["title"] + "\'" +\
+            "\nsummary: \'" + article["summary"] + "\'" +\
+            "\nlink: \'" + article["link"] + "\'" +\
+            "\npublished_date: " + str(article["published_date"]) + \
             "\nsource: " + article["source"] + \
             "\nrelevant: " + \
             str(article["relevant"]) + \
