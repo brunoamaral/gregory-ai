@@ -1,3 +1,21 @@
+# Thank you to
+
+@[Jneves](https://github.com/jneves) for help with the build script    
+@[Melo](https://github.com/melo) for showing me [Hugo](https://github.com/gohugoio/hugo)    
+@[RainerChiang](https://github.com/RainerChiang) for the [Simplesness theme](https://github.com/RainerChiang/simpleness)    
+@[Rcarmo](https://github.com/rcarmo) for showing me [Node-RED](https://github.com/node-red/node-red)       
+
+And the Lobsters at [One Over Zero](https://github.com/oneoverzero)
+
+
+# Changelog
+
+## 1.2
+
+- Fixes #5 and #8
+- Cleans up the build script a bit
+- Organizes theme files to help development
+
 # Live Version
 
 https://labs.brunoamaral.eu
