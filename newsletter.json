@@ -1,0 +1,148 @@
+// This is a very simple email digest using SQLite and Node-RED
+[
+    {
+        "id": "24eefeef.41f5f2",
+        "type": "inject",
+        "z": "5e1dd9b.17f6828",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "00 12 * * 1,4",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "SELECT * FROM articles WHERE discovery_date > (SELECT DATETIME('now', '-4 day'))",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 220,
+        "wires": [
+            [
+                "cbeea634.7a4a28"
+            ]
+        ]
+    },
+    {
+        "id": "cbeea634.7a4a28",
+        "type": "sqlite",
+        "z": "5e1dd9b.17f6828",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 330,
+        "y": 220,
+        "wires": [
+            [
+                "c9318a9a.1076a8"
+            ]
+        ]
+    },
+    {
+        "id": "c9318a9a.1076a8",
+        "type": "template",
+        "z": "5e1dd9b.17f6828",
+        "name": "",
+        "field": "text",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "<h1>Digest of articles in the last 7 days</h1>\n\n{{#payload}}\n\n<h2>{{{title}}}</h2>\n\n<p><strong>Discovery Date</strong>: {{discovery_date}}</p>\n<p>\n<a href=\"{{{link}}}\">{{{link}}}</a>\n</p>\n\n<p><a href=\"https://johnny.1q83.me/api/articles/id/{{article_id}}/relevant/1\">Mark Relevant</a></p>\n\n<p><a href=\"https://johnny.1q83.me/api/articles/id/{{article_id}}/relevant/0\">Mark Not Relevant</a></p>\n\n---\n\n{{/payload}}",
+        "output": "str",
+        "x": 520,
+        "y": 220,
+        "wires": [
+            [
+                "dc9360c2.96706"
+            ]
+        ]
+    },
+    {
+        "id": "39c1cf8e.2b2b2",
+        "type": "http request",
+        "z": "5e1dd9b.17f6828",
+        "name": "",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "body",
+        "url": "https://api.eu.mailgun.net/v3/1q83.me/messages",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "basic",
+        "x": 870,
+        "y": 220,
+        "wires": [
+            [
+                "dcbb15a3.4f4668"
+            ]
+        ]
+    },
+    {
+        "id": "dc9360c2.96706",
+        "type": "change",
+        "z": "5e1dd9b.17f6828",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "{\"from\":\"Gregory <gregory@1q83.me>\",\"to\":\"mail@brunoamaral.eu\",\"subject\":\"Gregory  Weekly Summary\",\"multipart\":true}",
+                "tot": "json"
+            },
+            {
+                "t": "move",
+                "p": "text",
+                "pt": "msg",
+                "to": "payload.html",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "headers",
+                "pt": "msg",
+                "to": "{\"content-type\":\"multipart/form-data\"}",
+                "tot": "json"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 700,
+        "y": 220,
+        "wires": [
+            [
+                "39c1cf8e.2b2b2"
+            ]
+        ]
+    },
+    {
+        "id": "9ccc1658.e12858",
+        "type": "sqlitedb",
+        "db": "/data/gregory.db",
+        "mode": "RWC"
+    },
+    {
+        "id": "e3876559.c845b8",
+        "type": "tls-config",
+        "name": "",
+        "cert": "",
+        "key": "",
+        "ca": "",
+        "certname": "node-cert.pem",
+        "keyname": "node-key.pem",
+        "caname": "",
+        "servername": "",
+        "verifyservercert": true
+    }
+]
