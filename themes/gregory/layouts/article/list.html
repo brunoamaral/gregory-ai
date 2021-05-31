@@ -48,7 +48,7 @@
         {{ if .Params.discovery_date }}
           <time datetime="{{ dateFormat "2006-01-02T15:04:05Z07:00" .Params.discovery_date }}">{{ dateFormat "2006-01-02" .Params.discovery_date }}</time>
         {{ end }}
-          <a href="{{ .Permalink  }}">{{ .Title }}</a> {{ .Params.source | safeHTML }}
+          <a href="{{ .Permalink  }}">{{ .Title | safeHTML }}</a> {{ .Params.source | safeHTML }}
            <!-- range .Params.categories 
             >> <a href="{{ "/categories/" | relLangURL }}{{ . | urlize }}" padding-left: auto;><strong>{{ . }}</strong></a>
            end  -->
