@@ -3,3 +3,4 @@ data/articles.json
 data/trials.json
 public/
 modules/
+content/article/*/
