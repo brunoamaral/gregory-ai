@@ -51,7 +51,7 @@
         {{ if .discovery_date }}
           <time datetime="{{ dateFormat "2006-01-02T15:04:05Z07:00" .discovery_date }}">{{ dateFormat "2006-01-02" .discovery_date }}</time>
         {{ end }}
-          <a href="{{ .link | htmlUnescape }}">{{ .title | safeHTML }}</a> {{.source}}
+          <a href="{{ .link | htmlUnescape }}">{{ .title | safeHTML }}</a> {{.source | safeHTML }}
            <!-- range .Params.categories 
             >> <a href="{{ "/categories/" | relLangURL }}{{ . | urlize }}" padding-left: auto;><strong>{{ . }}</strong></a>
            end  -->
