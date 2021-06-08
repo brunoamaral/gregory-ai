@@ -49,6 +49,7 @@ graph LR;
     Reuters[fa:fa-newspaper Reuters Health]-->Gregory;
     Scielo[fa:fa-newspaper Scielo.org] -->Gregory;
     TheLancet[fa:fa-newspaper The Lancet Health]-->Gregory;
+    MsRelDis[fa:fa-newspaper MS and Related Disorders]-->Gregory;
     Manual[fa:fa-keyboard Inserção Manual]-->Gregory;
     Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
 ```
@@ -97,6 +98,15 @@ https://search.scielo.org/?q=Multiple+Sclerosis&lang=en&count=15&from=0&output=s
 #### TheLancet
 
 https://www.thelancet.com/action/doSearch?text1=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&field1=AbstractTitleKeywordFilterField&startPage=0&sortBy=Earliest
+
+#### MS and Related Disorders
+
+https://www.msard-journal.com/action/doSearch?text1=Multiple+Sclerosis&field1=AbstractTitleKeywordFilterField&startPage=0&sortBy=Earliest
+
+
+#### Sage
+
+https://journals.sagepub.com/action/doSearch?AllField=multiple+sclerosis&SeriesKey=msja&content=articlesChapters&countTerms=true&target=default&sortBy=Ppub&startPage=&ContentItemType=research-article
 
 ## Fontes por incluir
 
