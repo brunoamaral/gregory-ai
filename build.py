@@ -9,7 +9,7 @@ import git
 
 # set variables
 path = "/home/gregory/gregory"
-server = "HTTPS://johnny.1q83.me/"
+server = "HTTPS://api.brunoamaral.net/"
 website_path = "/var/www/labs.brunoamaral.eu/"
 # Workflow starts
 os.chdir(path)
@@ -17,7 +17,7 @@ os.chdir(path)
 g = git.cmd.Git(path)
 g.pull()
 # Get articles
-url = server + 'api/articles/all'
+url = server + 'articles/all'
 res = requests.get(url)
 file_name = path + '/data/articles.json'
 with open(file_name, "w") as f:
@@ -27,7 +27,7 @@ with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
 # Get trials
-url = server + 'api/trials/all'
+url = server + 'trials/all'
 res = requests.get(url)
 file_name = path + '/data/trials.json'
 with open(file_name, "w") as f:
