@@ -52,6 +52,7 @@ graph LR;
     MsRelDis[fa:fa-newspaper MS and Related Disorders]-->Gregory;
     Manual[fa:fa-keyboard Inserção Manual]-->Gregory;
     Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
+    Gregory{fa:fa-robot Gregory}-->Newsletter(fa:fa-envelope Newsletter)
 ```
 
 É possível acrescentar mais fontes de informação e afinar os termos de pesquisa. Para isso, basta usar os contactos que estão no final desta página.
