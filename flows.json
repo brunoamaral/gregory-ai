@@ -1,33 +1,24 @@
-[
-    {
+[{
         "id": "acf883d8.84eea",
         "type": "subflow",
         "name": "Insert SQL subflow",
         "info": "",
         "category": "",
-        "in": [
-            {
-                "x": 60,
-                "y": 80,
-                "wires": [
-                    {
-                        "id": "4c001d43.2cc414"
-                    }
-                ]
-            }
-        ],
-        "out": [
-            {
-                "x": 340,
-                "y": 80,
-                "wires": [
-                    {
-                        "id": "4c001d43.2cc414",
-                        "port": 0
-                    }
-                ]
-            }
-        ],
+        "in": [{
+            "x": 60,
+            "y": 80,
+            "wires": [{
+                "id": "4c001d43.2cc414"
+            }]
+        }],
+        "out": [{
+            "x": 340,
+            "y": 80,
+            "wires": [{
+                "id": "4c001d43.2cc414",
+                "port": 0
+            }]
+        }],
         "env": [],
         "color": "#DDAA99"
     },
@@ -40,7 +31,7 @@
         "fieldType": "msg",
         "format": "sql",
         "syntax": "mustache",
-        "template": "INSERT INTO articles (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%S\", \"NOW\"),\"{{article.title}}\",\"{{article.description}}\",\"{{article.url}}\",\"{{article.pubdate\"}}\",\"{{article.source}}\",NULL)",
+        "template": "INSERT INTO articles (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%S\", \"NOW\"),\"{{article.title}}\",\"{{article.description}}\",\"{{{article.url}}}\",\"{{article.pubdate\"}}\",\"{{article.source}}\",NULL)",
         "output": "str",
         "x": 200,
         "y": 80,
@@ -62,11 +53,10 @@
         "name": "Clinical Trials.gov",
         "url": "https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000",
         "interval": "59",
-        "x": 140,
-        "y": 940,
+        "x": 180,
+        "y": 1700,
         "wires": [
             [
-                "fece258b.590898",
                 "ffb7b92d.9a01e8"
             ]
         ]
@@ -82,8 +72,8 @@
         "userId": "",
         "transport": "telegram",
         "store": "",
-        "x": 1110,
-        "y": 940,
+        "x": 1130,
+        "y": 1740,
         "wires": [
             [
                 "bd76365b.a61c38"
@@ -95,17 +85,15 @@
         "type": "chatbot-message",
         "z": "e677d300.d1d95",
         "name": "",
-        "message": [
-            {
-                "message": "New Clinical Trial Published\n\n{{payload.title}}\n\n{{topic}}"
-            }
-        ],
+        "message": [{
+            "message": "New Clinical Trial Published\n\n{{payload.title}}\n\n{{topic}}"
+        }],
         "language": "",
-        "x": 1250,
-        "y": 940,
+        "x": 1270,
+        "y": 1740,
         "wires": [
             [
-                "85d27dcc.5586d"
+                "b18aadfc.06727"
             ]
         ]
     },
@@ -119,8 +107,8 @@
         "passThrough": false,
         "errorOutput": false,
         "outputs": 0,
-        "x": 1610,
-        "y": 180,
+        "x": 1490,
+        "y": 1840,
         "wires": []
     },
     {
@@ -128,8 +116,102 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "",
-        "rules": [
+        "rules": [{
+                "t": "delete",
+                "p": "payload",
+                "pt": "msg"
+            },
             {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "article",
+                "tot": "msg"
+            },
+            {
+                "t": "change",
+                "p": "payload.summary",
+                "pt": "msg",
+                "from": "<b>",
+                "fromt": "str",
+                "to": "",
+                "tot": "str"
+            },
+            {
+                "t": "change",
+                "p": "payload.summary",
+                "pt": "msg",
+                "from": "</b>",
+                "fromt": "str",
+                "to": "",
+                "tot": "str"
+            },
+            {
+                "t": "change",
+                "p": "payload.summary",
+                "pt": "msg",
+                "from": "<br/>",
+                "fromt": "str",
+                "to": "\" \"",
+                "tot": "json"
+            },
+            {
+                "t": "set",
+                "p": "payload.chatId",
+                "pt": "msg",
+                "to": "48263287",
+                "tot": "num"
+            },
+            {
+                "t": "set",
+                "p": "payload.type",
+                "pt": "msg",
+                "to": "text",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "payload.content",
+                "pt": "msg",
+                "to": "",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 400,
+        "y": 1740,
+        "wires": [
+            [
+                "f1274334.01ae3"
+            ]
+        ]
+    },
+    {
+        "id": "937a615c.38fb1",
+        "type": "feedparse",
+        "z": "e677d300.d1d95",
+        "name": "PubMed : MS ",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/rss/search/10guX6I3SqrbUeeLKSTD6FCRM44ewnrN2MKKTQLLPMHB4xNsZU/?limit=15&utm_campaign=pubmed-2&fc=20210216052009",
+        "interval": "20",
+        "x": 170,
+        "y": 2060,
+        "wires": [
+            [
+                "a4d2d38e.94de7",
+                "56a4dc66.256874"
+            ]
+        ]
+    },
+    {
+        "id": "a4d2d38e.94de7",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "rules": [{
                 "t": "delete",
                 "p": "payload",
                 "pt": "msg"
@@ -196,103 +278,7 @@
         "to": "",
         "reg": false,
         "x": 380,
-        "y": 940,
-        "wires": [
-            [
-                "f1274334.01ae3"
-            ]
-        ]
-    },
-    {
-        "id": "937a615c.38fb1",
-        "type": "feedparse",
-        "z": "e677d300.d1d95",
-        "name": "PubMed : MS ",
-        "url": "https://pubmed.ncbi.nlm.nih.gov/rss/search/10guX6I3SqrbUeeLKSTD6FCRM44ewnrN2MKKTQLLPMHB4xNsZU/?limit=15&utm_campaign=pubmed-2&fc=20210216052009",
-        "interval": "20",
-        "x": 150,
-        "y": 1260,
-        "wires": [
-            [
-                "a4d2d38e.94de7",
-                "56a4dc66.256874"
-            ]
-        ]
-    },
-    {
-        "id": "a4d2d38e.94de7",
-        "type": "change",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "rules": [
-            {
-                "t": "delete",
-                "p": "payload",
-                "pt": "msg"
-            },
-            {
-                "t": "set",
-                "p": "payload",
-                "pt": "msg",
-                "to": "article",
-                "tot": "msg"
-            },
-            {
-                "t": "change",
-                "p": "payload.summary",
-                "pt": "msg",
-                "from": "<b>",
-                "fromt": "str",
-                "to": "",
-                "tot": "str"
-            },
-            {
-                "t": "change",
-                "p": "payload.summary",
-                "pt": "msg",
-                "from": "</b>",
-                "fromt": "str",
-                "to": "",
-                "tot": "str"
-            },
-            {
-                "t": "change",
-                "p": "payload.summary",
-                "pt": "msg",
-                "from": "<br/>",
-                "fromt": "str",
-                "to": "\" \"",
-                "tot": "json"
-            },
-            {
-                "t": "set",
-                "p": "payload.chatId",
-                "pt": "msg",
-                "to": "48263287",
-                "tot": "num"
-            },
-            {
-                "t": "set",
-                "p": "payload.type",
-                "pt": "msg",
-                "to": "text",
-                "tot": "str"
-            },
-            {
-                "t": "set",
-                "p": "payload.content",
-                "pt": "msg",
-                "to": "",
-                "tot": "str"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 360,
-        "y": 1220,
+        "y": 2020,
         "wires": [
             [
                 "9c3ffda2.19af"
@@ -310,8 +296,8 @@
         "userId": "",
         "transport": "telegram",
         "store": "",
-        "x": 1110,
-        "y": 1220,
+        "x": 1130,
+        "y": 2020,
         "wires": [
             [
                 "8c72fd69.b32b2"
@@ -323,34 +309,15 @@
         "type": "chatbot-message",
         "z": "e677d300.d1d95",
         "name": "",
-        "message": [
-            {
-                "message": "New Result on PubMed\n\n{{payload.title}}\n\n{{topic}}"
-            }
-        ],
+        "message": [{
+            "message": "New Result on PubMed\n\n{{payload.title}}\n\n{{topic}}"
+        }],
         "language": "",
-        "x": 1250,
-        "y": 1220,
+        "x": 1270,
+        "y": 2020,
         "wires": [
             [
-                "85d27dcc.5586d"
-            ]
-        ]
-    },
-    {
-        "id": "c8107088.37ef9",
-        "type": "http in",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "url": "/api/articles/all",
-        "method": "get",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 250,
-        "y": 640,
-        "wires": [
-            [
-                "ebc24695.52d7d8"
+                "b18aadfc.06727"
             ]
         ]
     },
@@ -359,8 +326,7 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "Set Headers",
-        "rules": [
-            {
+        "rules": [{
                 "t": "set",
                 "p": "headers",
                 "pt": "msg",
@@ -400,26 +366,14 @@
         "wires": []
     },
     {
-        "id": "d08c25f.3ad7e58",
-        "type": "comment",
-        "z": "e677d300.d1d95",
-        "name": "db model",
-        "info": "`\n{\n\t\"discovery_date\": 2021-02-16T17:57:16Z, # date \"+%FT%TZ\"`\"\n    \"title\": \"\",\n    \"summary\": \"\",\n    \"link\": \"\"\n    \"published_date\": ,\n    \"category\": \"\",\n\t\t\"source\":\"\"\n}\n`",
-        "x": 1120,
-        "y": 1360,
-        "wires": []
-    },
-    {
         "id": "e7f81480.58b468",
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "1 create articles",
-        "props": [
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
+        "props": [{
+            "p": "topic",
+            "vt": "str"
+        }],
         "repeat": "",
         "crontab": "",
         "once": false,
@@ -437,12 +391,10 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "Insert category values",
-        "props": [
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
+        "props": [{
+            "p": "topic",
+            "vt": "str"
+        }],
         "repeat": "",
         "crontab": "",
         "once": false,
@@ -459,12 +411,10 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "drop table articles",
-        "props": [
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
+        "props": [{
+            "p": "topic",
+            "vt": "str"
+        }],
         "repeat": "",
         "crontab": "",
         "once": false,
@@ -481,8 +431,7 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "sanity check",
-        "props": [
-            {
+        "props": [{
                 "p": "payload"
             },
             {
@@ -520,8 +469,8 @@
         "output": "payload",
         "outputType": "msg",
         "outTz": "Europe/Lisbon",
-        "x": 700,
-        "y": 1300,
+        "x": 940,
+        "y": 2080,
         "wires": [
             [
                 "12c5e787.dadea8"
@@ -551,12 +500,10 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "2 create categories",
-        "props": [
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
+        "props": [{
+            "p": "topic",
+            "vt": "str"
+        }],
         "repeat": "",
         "crontab": "",
         "once": false,
@@ -574,12 +521,10 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "3 create rel_articles_categories",
-        "props": [
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
+        "props": [{
+            "p": "topic",
+            "vt": "str"
+        }],
         "repeat": "",
         "crontab": "",
         "once": false,
@@ -620,8 +565,7 @@
         "order": 1,
         "width": 0,
         "height": 0,
-        "options": [
-            {
+        "options": [{
                 "label": "Title",
                 "value": "title",
                 "type": "text",
@@ -699,8 +643,7 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "format 'is relevant' field (not working)",
-        "rules": [
-            {
+        "rules": [{
                 "t": "change",
                 "p": "payload.relevant",
                 "pt": "msg",
@@ -752,35 +695,14 @@
         ]
     },
     {
-        "id": "74abba75.c6f944",
-        "type": "e-mail in",
-        "z": "e677d300.d1d95",
-        "name": "Emails Gregory",
-        "protocol": "IMAP",
-        "server": "imap.gmail.com",
-        "useSSL": true,
-        "port": "993",
-        "box": "Gregory",
-        "disposition": "Read",
-        "criteria": "UNSEEN",
-        "repeat": "90",
-        "fetch": "auto",
-        "inputs": 0,
-        "x": 200,
-        "y": 400,
-        "wires": [
-            []
-        ]
-    },
-    {
         "id": "75731cda.feee34",
         "type": "feedparse",
         "z": "e677d300.d1d95",
         "name": "Reuters",
         "url": "https://www.reutersagency.com/feed/?best-topics=health",
         "interval": "10",
-        "x": 130,
-        "y": 1420,
+        "x": 150,
+        "y": 2220,
         "wires": [
             [
                 "d3e84102.20011"
@@ -794,8 +716,7 @@
         "name": "filter if title contains MS",
         "property": "article.title",
         "propertyType": "msg",
-        "rules": [
-            {
+        "rules": [{
                 "t": "regex",
                 "v": ".*(multiple sclerosis ).*",
                 "vt": "str",
@@ -811,8 +732,8 @@
         "checkall": "true",
         "repair": false,
         "outputs": 2,
-        "x": 310,
-        "y": 1420,
+        "x": 330,
+        "y": 2220,
         "wires": [
             [
                 "acb25bab.c29098"
@@ -827,8 +748,7 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "set source reuters",
-        "rules": [
-            {
+        "rules": [{
                 "t": "set",
                 "p": "article.source",
                 "pt": "msg",
@@ -848,8 +768,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 550,
-        "y": 1420,
+        "x": 590,
+        "y": 2220,
         "wires": [
             [
                 "bb71d047.ff6f9"
@@ -861,8 +781,7 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "set source pubmed",
-        "rules": [
-            {
+        "rules": [{
                 "t": "set",
                 "p": "article.source",
                 "pt": "msg",
@@ -882,8 +801,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 370,
-        "y": 1300,
+        "x": 390,
+        "y": 2080,
         "wires": [
             [
                 "bb71d047.ff6f9"
@@ -915,22 +834,20 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "",
-        "rules": [
-            {
-                "t": "set",
-                "p": "topic",
-                "pt": "msg",
-                "to": "SELECT  * FROM articles ORDER BY article_id DESC;",
-                "tot": "str"
-            }
-        ],
+        "rules": [{
+            "t": "set",
+            "p": "topic",
+            "pt": "msg",
+            "to": "SELECT  * FROM articles ORDER BY article_id DESC;",
+            "tot": "str"
+        }],
         "action": "",
         "property": "",
         "from": "",
         "to": "",
         "reg": false,
         "x": 440,
-        "y": 640,
+        "y": 680,
         "wires": [
             [
                 "e80c0064.85234"
@@ -969,7 +886,9 @@
             "6c3c1a63.858e04",
             "2042485f.ad9e18",
             "d364aba7.a79228",
-            "f2c28c9f.29a42"
+            "f2c28c9f.29a42",
+            "30afd73c.dc5ba8",
+            "27c1f984.9aa296"
         ],
         "x": 1715,
         "y": 400,
@@ -987,8 +906,8 @@
         "links": [
             "dd8e58f7.7eb6e8"
         ],
-        "x": 995,
-        "y": 1300,
+        "x": 1235,
+        "y": 2080,
         "wires": []
     },
     {
@@ -1004,67 +923,6 @@
         "wires": []
     },
     {
-        "id": "bfdcd93f.a86878",
-        "type": "change",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "rules": [
-            {
-                "t": "set",
-                "p": "topic",
-                "pt": "msg",
-                "to": "SELECT  * FROM articles where relevant = 1 ORDER BY article_id DESC;",
-                "tot": "str"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 440,
-        "y": 680,
-        "wires": [
-            [
-                "e80c0064.85234"
-            ]
-        ]
-    },
-    {
-        "id": "65e623fc.e71b3c",
-        "type": "http in",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "url": "/api/articles/relevant",
-        "method": "get",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 230,
-        "y": 680,
-        "wires": [
-            [
-                "bfdcd93f.a86878"
-            ]
-        ]
-    },
-    {
-        "id": "6107021e.169f0c",
-        "type": "http in",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "url": "/api/articles/source/:source",
-        "method": "get",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 210,
-        "y": 720,
-        "wires": [
-            [
-                "31c3c9f2.4658c6"
-            ]
-        ]
-    },
-    {
         "id": "31c3c9f2.4658c6",
         "type": "template",
         "z": "e677d300.d1d95",
@@ -1076,7 +934,7 @@
         "template": "SELECT  * FROM articles where source = \"{{req.params.source}}\" ORDER BY article_id DESC;",
         "output": "str",
         "x": 460,
-        "y": 720,
+        "y": 760,
         "wires": [
             [
                 "e80c0064.85234"
@@ -1091,8 +949,8 @@
         "links": [
             "dd8e58f7.7eb6e8"
         ],
-        "x": 735,
-        "y": 680,
+        "x": 675,
+        "y": 740,
         "wires": []
     },
     {
@@ -1100,22 +958,20 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "set source ClinicalTrials",
-        "rules": [
-            {
-                "t": "set",
-                "p": "article.source",
-                "pt": "msg",
-                "to": "ClinicalTrials.gov",
-                "tot": "str"
-            }
-        ],
+        "rules": [{
+            "t": "set",
+            "p": "article.source",
+            "pt": "msg",
+            "to": "ClinicalTrials.gov",
+            "tot": "str"
+        }],
         "action": "",
         "property": "",
         "from": "",
         "to": "",
         "reg": false,
-        "x": 410,
-        "y": 900,
+        "x": 430,
+        "y": 1700,
         "wires": [
             [
                 "bc0c284f.e4f5d8"
@@ -1131,10 +987,10 @@
         "fieldType": "msg",
         "format": "sql",
         "syntax": "mustache",
-        "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%S\", \"NOW\"),\"{{article.title}}\",\"{{article.description}}\",\"{{topic}}\",\"{{payload}}\",\"{{article.source}}\",NULL)",
+        "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%S\", \"NOW\"),\"{{article.title}}\",\"{{article.description}}\",\"{{{topic}}}\",\"{{payload}}\",\"{{article.source}}\",NULL)",
         "output": "str",
-        "x": 1020,
-        "y": 900,
+        "x": 1040,
+        "y": 1700,
         "wires": [
             [
                 "6c3c1a63.858e04"
@@ -1158,8 +1014,8 @@
         "output": "payload",
         "outputType": "msg",
         "outTz": "Europe/Lisbon",
-        "x": 740,
-        "y": 900,
+        "x": 760,
+        "y": 1700,
         "wires": [
             [
                 "974801fc.d87d5"
@@ -1174,48 +1030,29 @@
         "links": [
             "dd8e58f7.7eb6e8"
         ],
-        "x": 1175,
-        "y": 900,
+        "x": 1195,
+        "y": 1700,
         "wires": []
-    },
-    {
-        "id": "5838a1b9.df1ca",
-        "type": "http in",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "url": "/api/trials/all",
-        "method": "get",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 260,
-        "y": 760,
-        "wires": [
-            [
-                "e1cb590b.e4fe88"
-            ]
-        ]
     },
     {
         "id": "e1cb590b.e4fe88",
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "",
-        "rules": [
-            {
-                "t": "set",
-                "p": "topic",
-                "pt": "msg",
-                "to": "SELECT  * FROM trials ORDER BY trial_id DESC;",
-                "tot": "str"
-            }
-        ],
+        "rules": [{
+            "t": "set",
+            "p": "topic",
+            "pt": "msg",
+            "to": "SELECT  * FROM trials ORDER BY trial_id DESC;",
+            "tot": "str"
+        }],
         "action": "",
         "property": "",
         "from": "",
         "to": "",
         "reg": false,
         "x": 440,
-        "y": 760,
+        "y": 800,
         "wires": [
             [
                 "e80c0064.85234"
@@ -1227,8 +1064,7 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "",
-        "props": [
-            {
+        "props": [{
                 "p": "payload"
             },
             {
@@ -1243,8 +1079,8 @@
         "topic": "",
         "payload": "",
         "payloadType": "date",
-        "x": 150,
-        "y": 1740,
+        "x": 170,
+        "y": 2540,
         "wires": [
             [
                 "7d34d84b.209178"
@@ -1264,8 +1100,8 @@
         "persist": false,
         "proxy": "",
         "authType": "",
-        "x": 290,
-        "y": 1740,
+        "x": 310,
+        "y": 2540,
         "wires": [
             [
                 "c61aca1a.a75f28"
@@ -1280,8 +1116,7 @@
         "tag": "div.mg-n40px div.mb-40px",
         "ret": "object",
         "as": "single",
-        "map": [
-            {
+        "map": [{
                 "search": "a",
                 "ret": "text",
                 "replace": "title",
@@ -1312,8 +1147,8 @@
         "lowerCaseAttributeNames": true,
         "recognizeCDATA": false,
         "recognizeSelfClosing": false,
-        "x": 580,
-        "y": 1740,
+        "x": 600,
+        "y": 2540,
         "wires": [
             [
                 "79a8247a.92ebfc"
@@ -1326,8 +1161,8 @@
         "z": "e677d300.d1d95",
         "name": "Insert SQL",
         "env": [],
-        "x": 890,
-        "y": 1300,
+        "x": 1130,
+        "y": 2080,
         "wires": [
             [
                 "e8bd17ee.3328d8"
@@ -1339,8 +1174,7 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "set source APTA",
-        "rules": [
-            {
+        "rules": [{
                 "t": "set",
                 "p": "article",
                 "pt": "msg",
@@ -1367,8 +1201,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 1120,
-        "y": 1740,
+        "x": 1140,
+        "y": 2540,
         "wires": [
             [
                 "5607a559.4d69ec"
@@ -1392,8 +1226,8 @@
         "output": "article.pubdate",
         "outputType": "msg",
         "outTz": "Europe/Lisbon",
-        "x": 940,
-        "y": 1740,
+        "x": 960,
+        "y": 2540,
         "wires": [
             [
                 "4a6f88df.668e58"
@@ -1406,8 +1240,8 @@
         "z": "e677d300.d1d95",
         "name": "Insert SQL",
         "env": [],
-        "x": 1410,
-        "y": 1740,
+        "x": 1430,
+        "y": 2540,
         "wires": [
             [
                 "2042485f.ad9e18"
@@ -1422,41 +1256,16 @@
         "links": [
             "dd8e58f7.7eb6e8"
         ],
-        "x": 1715,
-        "y": 2120,
+        "x": 1735,
+        "y": 2920,
         "wires": []
-    },
-    {
-        "id": "85d27dcc.5586d",
-        "type": "link out",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "links": [],
-        "x": 1355,
-        "y": 980,
-        "wires": []
-    },
-    {
-        "id": "26b229ff.74e626",
-        "type": "link in",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "links": [],
-        "x": 1445,
-        "y": 180,
-        "wires": [
-            [
-                "b18aadfc.06727"
-            ]
-        ]
     },
     {
         "id": "eeb3511f.107c9",
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "refresh list",
-        "props": [
-            {
+        "props": [{
                 "p": "payload"
             },
             {
@@ -1496,8 +1305,7 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "create trials table",
-        "props": [
-            {
+        "props": [{
                 "p": "payload"
             },
             {
@@ -1529,8 +1337,8 @@
         "arraySpltType": "len",
         "stream": false,
         "addname": "article.key",
-        "x": 790,
-        "y": 1740,
+        "x": 810,
+        "y": 2540,
         "wires": [
             [
                 "9114e276.66493"
@@ -1542,8 +1350,7 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "",
-        "props": [
-            {
+        "props": [{
                 "p": "payload"
             },
             {
@@ -1558,8 +1365,8 @@
         "topic": "",
         "payload": "",
         "payloadType": "date",
-        "x": 150,
-        "y": 1940,
+        "x": 170,
+        "y": 2740,
         "wires": [
             [
                 "692d4a70.c8ca94"
@@ -1579,8 +1386,8 @@
         "persist": false,
         "proxy": "",
         "authType": "",
-        "x": 320,
-        "y": 1940,
+        "x": 340,
+        "y": 2740,
         "wires": [
             [
                 "d525b5a.33ae548"
@@ -1595,8 +1402,7 @@
         "tag": "li.c-list-group__item",
         "ret": "object",
         "as": "single",
-        "map": [
-            {
+        "map": [{
                 "search": "h3",
                 "ret": "text",
                 "replace": "title",
@@ -1627,8 +1433,8 @@
         "lowerCaseAttributeNames": true,
         "recognizeCDATA": false,
         "recognizeSelfClosing": false,
-        "x": 560,
-        "y": 1940,
+        "x": 580,
+        "y": 2740,
         "wires": [
             [
                 "2d2a9ede.1ee7a2"
@@ -1640,8 +1446,7 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "set source BioMedCentral",
-        "rules": [
-            {
+        "rules": [{
                 "t": "set",
                 "p": "article",
                 "pt": "msg",
@@ -1682,8 +1487,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 1150,
-        "y": 1940,
+        "x": 1170,
+        "y": 2740,
         "wires": [
             [
                 "cfd4a1c6.42a0d"
@@ -1707,8 +1512,8 @@
         "output": "article.pubdate",
         "outputType": "msg",
         "outTz": "Europe/Lisbon",
-        "x": 940,
-        "y": 1940,
+        "x": 960,
+        "y": 2740,
         "wires": [
             [
                 "3b8b16c0.ace03a"
@@ -1726,8 +1531,8 @@
         "arraySpltType": "len",
         "stream": false,
         "addname": "article.key",
-        "x": 790,
-        "y": 1940,
+        "x": 810,
+        "y": 2740,
         "wires": [
             [
                 "7807a09e.45e49"
@@ -1740,8 +1545,8 @@
         "z": "e677d300.d1d95",
         "name": "Insert SQL",
         "env": [],
-        "x": 1430,
-        "y": 1940,
+        "x": 1450,
+        "y": 2740,
         "wires": [
             [
                 "2042485f.ad9e18"
@@ -1753,17 +1558,17 @@
         "type": "delay",
         "z": "e677d300.d1d95",
         "name": "",
-        "pauseType": "delay",
+        "pauseType": "random",
         "timeout": "500",
         "timeoutUnits": "milliseconds",
         "rate": "1",
         "nbRateUnits": "1",
         "rateUnits": "second",
-        "randomFirst": "1",
-        "randomLast": "5",
-        "randomUnits": "seconds",
+        "randomFirst": "200",
+        "randomLast": "300",
+        "randomUnits": "milliseconds",
         "drop": false,
-        "x": 1830,
+        "x": 1820,
         "y": 400,
         "wires": [
             [
@@ -1784,8 +1589,8 @@
         "persist": false,
         "proxy": "",
         "authType": "",
-        "x": 310,
-        "y": 2080,
+        "x": 330,
+        "y": 2880,
         "wires": [
             [
                 "7200f004.6c3a6"
@@ -1800,8 +1605,7 @@
         "tag": "table.search-results tr",
         "ret": "object",
         "as": "single",
-        "map": [
-            {
+        "map": [{
                 "search": "td>a",
                 "ret": "text",
                 "replace": "title",
@@ -1832,8 +1636,8 @@
         "lowerCaseAttributeNames": true,
         "recognizeCDATA": false,
         "recognizeSelfClosing": false,
-        "x": 580,
-        "y": 2080,
+        "x": 600,
+        "y": 2880,
         "wires": [
             [
                 "61d16b00.e6b704"
@@ -1851,8 +1655,8 @@
         "arraySpltType": "len",
         "stream": false,
         "addname": "article.key",
-        "x": 790,
-        "y": 2080,
+        "x": 810,
+        "y": 2880,
         "wires": [
             [
                 "76d89aca.9b37d4"
@@ -1876,8 +1680,8 @@
         "output": "article.pubdate",
         "outputType": "msg",
         "outTz": "Europe/Lisbon",
-        "x": 960,
-        "y": 2080,
+        "x": 980,
+        "y": 2880,
         "wires": [
             [
                 "f31ef1c8.3af84"
@@ -1889,8 +1693,7 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "set source PEDro",
-        "rules": [
-            {
+        "rules": [{
                 "t": "set",
                 "p": "article",
                 "pt": "msg",
@@ -1931,8 +1734,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 1150,
-        "y": 2080,
+        "x": 1170,
+        "y": 2880,
         "wires": [
             [
                 "1b5ac33e.1e7afd"
@@ -1945,8 +1748,8 @@
         "z": "e677d300.d1d95",
         "name": "Insert SQL",
         "env": [],
-        "x": 1450,
-        "y": 2080,
+        "x": 1470,
+        "y": 2880,
         "wires": [
             [
                 "2042485f.ad9e18"
@@ -1958,8 +1761,7 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "",
-        "props": [
-            {
+        "props": [{
                 "p": "payload"
             },
             {
@@ -1974,8 +1776,8 @@
         "topic": "",
         "payload": "",
         "payloadType": "date",
-        "x": 150,
-        "y": 2080,
+        "x": 170,
+        "y": 2880,
         "wires": [
             [
                 "93f5afdb.0c9ae"
@@ -1995,8 +1797,8 @@
         "persist": false,
         "proxy": "",
         "authType": "",
-        "x": 340,
-        "y": 2280,
+        "x": 360,
+        "y": 3080,
         "wires": [
             [
                 "76303108.1a242"
@@ -2008,8 +1810,7 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "",
-        "props": [
-            {
+        "props": [{
                 "p": "payload"
             },
             {
@@ -2024,8 +1825,8 @@
         "topic": "",
         "payload": "",
         "payloadType": "date",
-        "x": 150,
-        "y": 2280,
+        "x": 170,
+        "y": 3080,
         "wires": [
             [
                 "bc932279.fd3c1"
@@ -2043,8 +1844,8 @@
         "arraySpltType": "len",
         "stream": false,
         "addname": "article.key",
-        "x": 770,
-        "y": 2280,
+        "x": 790,
+        "y": 3080,
         "wires": [
             [
                 "2af11514.34f00a"
@@ -2068,8 +1869,8 @@
         "output": "article.pubdate",
         "outputType": "msg",
         "outTz": "Europe/Lisbon",
-        "x": 940,
-        "y": 2280,
+        "x": 960,
+        "y": 3080,
         "wires": [
             [
                 "597913bc.2b4dec"
@@ -2081,8 +1882,7 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "set source Scielo",
-        "rules": [
-            {
+        "rules": [{
                 "t": "set",
                 "p": "article",
                 "pt": "msg",
@@ -2123,8 +1923,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 1130,
-        "y": 2280,
+        "x": 1150,
+        "y": 3080,
         "wires": [
             [
                 "2f1250ba.05cd3"
@@ -2137,8 +1937,8 @@
         "z": "e677d300.d1d95",
         "name": "Insert SQL",
         "env": [],
-        "x": 1430,
-        "y": 2280,
+        "x": 1450,
+        "y": 3080,
         "wires": [
             [
                 "2042485f.ad9e18"
@@ -2153,8 +1953,7 @@
         "tag": "div.results div.item",
         "ret": "object",
         "as": "single",
-        "map": [
-            {
+        "map": [{
                 "search": "strong.title",
                 "ret": "text",
                 "replace": "title",
@@ -2185,8 +1984,8 @@
         "lowerCaseAttributeNames": true,
         "recognizeCDATA": false,
         "recognizeSelfClosing": false,
-        "x": 550,
-        "y": 2280,
+        "x": 570,
+        "y": 3080,
         "wires": [
             [
                 "ae4a277d.0b34e8"
@@ -2206,8 +2005,8 @@
         "persist": false,
         "proxy": "",
         "authType": "",
-        "x": 350,
-        "y": 2520,
+        "x": 370,
+        "y": 3320,
         "wires": [
             [
                 "77bb2168.9845"
@@ -2219,8 +2018,7 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "",
-        "props": [
-            {
+        "props": [{
                 "p": "payload"
             },
             {
@@ -2235,8 +2033,8 @@
         "topic": "",
         "payload": "",
         "payloadType": "date",
-        "x": 150,
-        "y": 2520,
+        "x": 170,
+        "y": 3320,
         "wires": [
             [
                 "93bfea98.134188"
@@ -2254,8 +2052,8 @@
         "arraySpltType": "len",
         "stream": false,
         "addname": "article.key",
-        "x": 770,
-        "y": 2520,
+        "x": 790,
+        "y": 3320,
         "wires": [
             [
                 "59a7b122.82c15"
@@ -2267,8 +2065,7 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "set source The Lancet",
-        "rules": [
-            {
+        "rules": [{
                 "t": "set",
                 "p": "article",
                 "pt": "msg",
@@ -2316,8 +2113,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 980,
-        "y": 2520,
+        "x": 1000,
+        "y": 3320,
         "wires": [
             [
                 "4fbb692.2486b98"
@@ -2330,8 +2127,8 @@
         "z": "e677d300.d1d95",
         "name": "Insert SQL",
         "env": [],
-        "x": 1430,
-        "y": 2520,
+        "x": 1450,
+        "y": 3320,
         "wires": [
             [
                 "2042485f.ad9e18"
@@ -2346,8 +2143,7 @@
         "tag": "div.search__item__body",
         "ret": "object",
         "as": "single",
-        "map": [
-            {
+        "map": [{
                 "search": "h4.meta__title",
                 "ret": "text",
                 "replace": "title",
@@ -2378,8 +2174,8 @@
         "lowerCaseAttributeNames": true,
         "recognizeCDATA": false,
         "recognizeSelfClosing": false,
-        "x": 570,
-        "y": 2520,
+        "x": 590,
+        "y": 3320,
         "wires": [
             [
                 "d9eff18c.c2dce"
@@ -2403,8 +2199,8 @@
         "output": "article.pubdate",
         "outputType": "msg",
         "outTz": "Europe/Lisbon",
-        "x": 1220,
-        "y": 2520,
+        "x": 1240,
+        "y": 3320,
         "wires": [
             [
                 "9a14f1a6.90d44"
@@ -2424,8 +2220,8 @@
         "persist": false,
         "proxy": "",
         "authType": "",
-        "x": 310,
-        "y": 2640,
+        "x": 330,
+        "y": 3440,
         "wires": [
             [
                 "155fede1.ee3852"
@@ -2440,8 +2236,7 @@
         "tag": "li.search-result",
         "ret": "object",
         "as": "single",
-        "map": [
-            {
+        "map": [{
                 "search": "a",
                 "ret": "text",
                 "replace": "title",
@@ -2472,8 +2267,8 @@
         "lowerCaseAttributeNames": true,
         "recognizeCDATA": false,
         "recognizeSelfClosing": false,
-        "x": 540,
-        "y": 2640,
+        "x": 560,
+        "y": 3440,
         "wires": [
             [
                 "242cc4f8.4e1b2c"
@@ -2491,8 +2286,8 @@
         "arraySpltType": "len",
         "stream": false,
         "addname": "article.key",
-        "x": 770,
-        "y": 2640,
+        "x": 790,
+        "y": 3440,
         "wires": [
             [
                 "a3b9d7eb.2f9c48"
@@ -2504,8 +2299,7 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "set source JNeuroSci",
-        "rules": [
-            {
+        "rules": [{
                 "t": "set",
                 "p": "article",
                 "pt": "msg",
@@ -2553,8 +2347,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 980,
-        "y": 2640,
+        "x": 1000,
+        "y": 3440,
         "wires": [
             [
                 "2484937c.b752dc"
@@ -2578,8 +2372,8 @@
         "output": "article.pubdate",
         "outputType": "msg",
         "outTz": "Europe/Lisbon",
-        "x": 1220,
-        "y": 2640,
+        "x": 1240,
+        "y": 3440,
         "wires": [
             [
                 "b087546f.c41f78"
@@ -2592,8 +2386,8 @@
         "z": "e677d300.d1d95",
         "name": "Insert SQL",
         "env": [],
-        "x": 1430,
-        "y": 2640,
+        "x": 1450,
+        "y": 3440,
         "wires": [
             [
                 "2042485f.ad9e18"
@@ -2605,8 +2399,7 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "",
-        "props": [
-            {
+        "props": [{
                 "p": "payload"
             },
             {
@@ -2621,28 +2414,11 @@
         "topic": "",
         "payload": "",
         "payloadType": "date",
-        "x": 150,
-        "y": 2640,
+        "x": 170,
+        "y": 3440,
         "wires": [
             [
                 "7042cf5f.37b8e"
-            ]
-        ]
-    },
-    {
-        "id": "89166b28.48c838",
-        "type": "http in",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "url": "/api/articles/by-date/:year/:month",
-        "method": "get",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 190,
-        "y": 820,
-        "wires": [
-            [
-                "c8f2f7dc.68cde8"
             ]
         ]
     },
@@ -2657,28 +2433,11 @@
         "syntax": "mustache",
         "template": "SELECT  * FROM articles WHERE discovery_date LIKE '%{{req.params.year}}-{{req.params.month}}%' ORDER BY article_id DESC;",
         "output": "str",
-        "x": 420,
-        "y": 820,
+        "x": 460,
+        "y": 840,
         "wires": [
             [
                 "e80c0064.85234"
-            ]
-        ]
-    },
-    {
-        "id": "cbb5cc37.dee51",
-        "type": "http in",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "url": "/api/articles/id/:id",
-        "method": "get",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 240,
-        "y": 560,
-        "wires": [
-            [
-                "7a94700a.d9908"
             ]
         ]
     },
@@ -2694,7 +2453,7 @@
         "template": "SELECT  * FROM articles where article_id = \"{{req.params.id}}\" ORDER BY article_id DESC;",
         "output": "str",
         "x": 460,
-        "y": 520,
+        "y": 640,
         "wires": [
             [
                 "e80c0064.85234"
@@ -2714,8 +2473,8 @@
         "persist": false,
         "proxy": "",
         "authType": "",
-        "x": 310,
-        "y": 2820,
+        "x": 330,
+        "y": 3620,
         "wires": [
             [
                 "a61c20a8.862f3"
@@ -2727,8 +2486,7 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "",
-        "props": [
-            {
+        "props": [{
                 "p": "payload"
             },
             {
@@ -2739,12 +2497,12 @@
         "repeat": "12000",
         "crontab": "",
         "once": true,
-        "onceDelay": "1",
+        "onceDelay": "20",
         "topic": "",
         "payload": "",
         "payloadType": "date",
-        "x": 130,
-        "y": 2820,
+        "x": 150,
+        "y": 3620,
         "wires": [
             [
                 "9451a01b.195e1"
@@ -2759,8 +2517,7 @@
         "tag": ".searchResultItem",
         "ret": "object",
         "as": "single",
-        "map": [
-            {
+        "map": [{
                 "search": "h2",
                 "ret": "text",
                 "replace": "title",
@@ -2791,8 +2548,8 @@
         "lowerCaseAttributeNames": true,
         "recognizeCDATA": false,
         "recognizeSelfClosing": false,
-        "x": 550,
-        "y": 2820,
+        "x": 570,
+        "y": 3620,
         "wires": [
             [
                 "7a8468df.b46ce8"
@@ -2810,8 +2567,8 @@
         "arraySpltType": "len",
         "stream": false,
         "addname": "article.key",
-        "x": 750,
-        "y": 2820,
+        "x": 770,
+        "y": 3620,
         "wires": [
             [
                 "9999e129.61d66"
@@ -2823,8 +2580,7 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "set source SagePub",
-        "rules": [
-            {
+        "rules": [{
                 "t": "set",
                 "p": "article",
                 "pt": "msg",
@@ -2872,8 +2628,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 920,
-        "y": 2820,
+        "x": 940,
+        "y": 3620,
         "wires": [
             [
                 "83c75162.7e39f"
@@ -2885,22 +2641,20 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "fix pubdate",
-        "rules": [
-            {
-                "t": "set",
-                "p": "payload.pubdate",
-                "pt": "msg",
-                "to": "$replace($replace(payload.pubdate[0],\" \", \"-\"),\",\",\"\")",
-                "tot": "jsonata"
-            }
-        ],
+        "rules": [{
+            "t": "set",
+            "p": "payload.pubdate",
+            "pt": "msg",
+            "to": "$replace($replace(payload.pubdate[0],\" \", \"-\"),\",\",\"\")",
+            "tot": "jsonata"
+        }],
         "action": "",
         "property": "",
         "from": "",
         "to": "",
         "reg": false,
-        "x": 1110,
-        "y": 2820,
+        "x": 1130,
+        "y": 3620,
         "wires": [
             [
                 "79cb9ccc.a4f644"
@@ -2924,8 +2678,8 @@
         "output": "article.pubdate",
         "outputType": "msg",
         "outTz": "Europe/Lisbon",
-        "x": 1280,
-        "y": 2820,
+        "x": 1300,
+        "y": 3620,
         "wires": [
             [
                 "143867a5.288e58"
@@ -2938,8 +2692,8 @@
         "z": "e677d300.d1d95",
         "name": "Insert SQL",
         "env": [],
-        "x": 1450,
-        "y": 2820,
+        "x": 1470,
+        "y": 3620,
         "wires": [
             [
                 "2042485f.ad9e18"
@@ -2951,8 +2705,7 @@
         "type": "inject",
         "z": "e677d300.d1d95",
         "name": "",
-        "props": [
-            {
+        "props": [{
                 "p": "payload"
             },
             {
@@ -2963,12 +2716,12 @@
         "repeat": "12000",
         "crontab": "",
         "once": true,
-        "onceDelay": "1",
+        "onceDelay": "10",
         "topic": "",
         "payload": "",
         "payloadType": "date",
-        "x": 150,
-        "y": 2940,
+        "x": 170,
+        "y": 3740,
         "wires": [
             [
                 "f04c92de.f0caa"
@@ -2988,8 +2741,8 @@
         "persist": false,
         "proxy": "",
         "authType": "",
-        "x": 340,
-        "y": 2940,
+        "x": 360,
+        "y": 3740,
         "wires": [
             [
                 "e4d19ed0.def17"
@@ -3004,8 +2757,7 @@
         "tag": "li.search__item",
         "ret": "object",
         "as": "single",
-        "map": [
-            {
+        "map": [{
                 "search": "h4.meta__title",
                 "ret": "text",
                 "replace": "title",
@@ -3036,8 +2788,8 @@
         "lowerCaseAttributeNames": true,
         "recognizeCDATA": false,
         "recognizeSelfClosing": false,
-        "x": 540,
-        "y": 2940,
+        "x": 560,
+        "y": 3740,
         "wires": [
             [
                 "5d91e310.64306c"
@@ -3055,8 +2807,8 @@
         "arraySpltType": "len",
         "stream": false,
         "addname": "article.key",
-        "x": 690,
-        "y": 2940,
+        "x": 710,
+        "y": 3740,
         "wires": [
             [
                 "b08406f.7ec44f8"
@@ -3068,8 +2820,7 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "set source MS & rel. disorders",
-        "rules": [
-            {
+        "rules": [{
                 "t": "set",
                 "p": "article",
                 "pt": "msg",
@@ -3117,8 +2868,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 890,
-        "y": 2940,
+        "x": 910,
+        "y": 3740,
         "wires": [
             [
                 "d49f5d0.0b73aa"
@@ -3130,22 +2881,20 @@
         "type": "change",
         "z": "e677d300.d1d95",
         "name": "fix pubdate",
-        "rules": [
-            {
-                "t": "set",
-                "p": "payload.pubdate",
-                "pt": "msg",
-                "to": "$replace($replace(payload.pubdate[0],\" \", \"-\"),\",\",\"\")",
-                "tot": "jsonata"
-            }
-        ],
+        "rules": [{
+            "t": "set",
+            "p": "payload.pubdate",
+            "pt": "msg",
+            "to": "$replace($replace(payload.pubdate[0],\" \", \"-\"),\",\",\"\")",
+            "tot": "jsonata"
+        }],
         "action": "",
         "property": "",
         "from": "",
         "to": "",
         "reg": false,
-        "x": 1130,
-        "y": 2940,
+        "x": 1150,
+        "y": 3740,
         "wires": [
             [
                 "3ea7f9fd.f836d6"
@@ -3169,8 +2918,8 @@
         "output": "article.pubdate",
         "outputType": "msg",
         "outTz": "Europe/Lisbon",
-        "x": 1300,
-        "y": 2940,
+        "x": 1320,
+        "y": 3740,
         "wires": [
             [
                 "91a0c554.3d6868"
@@ -3184,10 +2933,750 @@
         "name": "Insert SQL",
         "env": [],
         "x": 1490,
-        "y": 2900,
+        "y": 3740,
         "wires": [
             [
                 "2042485f.ad9e18"
+            ]
+        ]
+    },
+    {
+        "id": "5e2168cb.ed79b8",
+        "type": "http in",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "url": "/articles/id/:id",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 230,
+        "y": 640,
+        "wires": [
+            [
+                "7a94700a.d9908"
+            ]
+        ]
+    },
+    {
+        "id": "6bd120c6.5b2f98",
+        "type": "http in",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "url": "/articles/all",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 240,
+        "y": 680,
+        "wires": [
+            [
+                "ebc24695.52d7d8"
+            ]
+        ]
+    },
+    {
+        "id": "7b02b287.d436d4",
+        "type": "http in",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "url": "/articles/source/:source",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 200,
+        "y": 760,
+        "wires": [
+            [
+                "31c3c9f2.4658c6"
+            ]
+        ]
+    },
+    {
+        "id": "9de78c3c.81807",
+        "type": "http in",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "url": "/trials/all",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 250,
+        "y": 800,
+        "wires": [
+            [
+                "e1cb590b.e4fe88"
+            ]
+        ]
+    },
+    {
+        "id": "ea4a5814.6c023",
+        "type": "http in",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "url": "/articles/by-date/:year/:month",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 180,
+        "y": 840,
+        "wires": [
+            [
+                "c8f2f7dc.68cde8"
+            ]
+        ]
+    },
+    {
+        "id": "3aadcaaf.7ac7d6",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 730,
+        "y": 1120,
+        "wires": [
+            [
+                "20ab3aa1.029226"
+            ]
+        ]
+    },
+    {
+        "id": "c84a013b.32f76",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "Set Headers",
+        "rules": [{
+                "t": "set",
+                "p": "headers",
+                "pt": "msg",
+                "to": "{}",
+                "tot": "json"
+            },
+            {
+                "t": "set",
+                "p": "headers.content-type",
+                "pt": "msg",
+                "to": "application/json",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1110,
+        "y": 1120,
+        "wires": [
+            [
+                "ab2f921a.53d32"
+            ]
+        ]
+    },
+    {
+        "id": "ab2f921a.53d32",
+        "type": "http response",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1250,
+        "y": 1120,
+        "wires": []
+    },
+    {
+        "id": "d0831953.44a178",
+        "type": "function",
+        "z": "e677d300.d1d95",
+        "name": "Prepare Notion DB payload",
+        "func": "var data = msg.payload[0]\nvar title = msg.payload[0].title\nvar url = msg.payload[0].link\n\n\n\nvar postData = {\n\t\"parent\": { \"database_id\": \"4fa1dc37-a3bf-43be-9c8d-35b41e539f8d\" },\n\t\"properties\": {\n\t\t\"Name\": {\n\t\t\t\"title\": [\n\t\t\t\t{\n\t\t\t\t\t\"text\": {\n\t\t\t\t\t\t\"content\": title\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t],\n\t\t},\n\t\t\"Status\": {\n\t\t    \"select\": {\n\t\t        \"name\": \"Auto\"\n\t\t    }\n\t\t},\n        \"Link\": {\n            \"url\": url\n        }\n\t\t\n}}\n\n\n\n//\t\t\"Context\": {\n//\t\t\t\"select\": {\n//\t\t\t\t\"name\": context\n//\t\t\t}\n//\t\t},\n//\t\t\"Client\": {\n//\t\t    \"select\": {\n//\t\t        \"name\": client\n//\t\t    }\n//\t\t}\n\nmsg.payload = postData\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1140,
+        "y": 1180,
+        "wires": [
+            [
+                "a1ecd04e.53088"
+            ]
+        ]
+    },
+    {
+        "id": "a1ecd04e.53088",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "create page",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://api.notion.com/v1/pages",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "bearer",
+        "x": 1350,
+        "y": 1180,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "52f3e8da.db2a38",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 730,
+        "y": 1180,
+        "wires": [
+            [
+                "9e7cab35.3c7b98"
+            ]
+        ]
+    },
+    {
+        "id": "c65722e7.f1a52",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "rules": [{
+            "t": "set",
+            "p": "topic",
+            "pt": "msg",
+            "to": "SELECT  * FROM articles where relevant = 1 ORDER BY article_id DESC;",
+            "tot": "str"
+        }],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 440,
+        "y": 720,
+        "wires": [
+            [
+                "e80c0064.85234"
+            ]
+        ]
+    },
+    {
+        "id": "858ca449.34e688",
+        "type": "http in",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "url": "/articles/relevant",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 220,
+        "y": 720,
+        "wires": [
+            [
+                "c65722e7.f1a52"
+            ]
+        ]
+    },
+    {
+        "id": "1d14ecbe.8182c3",
+        "type": "http in",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "url": "/articles/id/:id/relevant/1",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 1160,
+        "wires": [
+            [
+                "e37d44f7.e70348",
+                "15fce5d8.14683a"
+            ]
+        ]
+    },
+    {
+        "id": "e37d44f7.e70348",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nSET relevant = \"1\"\nWHERE article_id = \"{{req.params.id}}\";",
+        "output": "str",
+        "x": 460,
+        "y": 1140,
+        "wires": [
+            [
+                "3aadcaaf.7ac7d6"
+            ]
+        ]
+    },
+    {
+        "id": "15fce5d8.14683a",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "SELECT  * FROM articles where article_id = \"{{req.params.id}}\" ORDER BY article_id DESC;",
+        "output": "str",
+        "x": 460,
+        "y": 1180,
+        "wires": [
+            [
+                "52f3e8da.db2a38"
+            ]
+        ]
+    },
+    {
+        "id": "9e7cab35.3c7b98",
+        "type": "delay",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "pauseType": "random",
+        "timeout": "5",
+        "timeoutUnits": "minutes",
+        "rate": "1",
+        "nbRateUnits": "10",
+        "rateUnits": "minute",
+        "randomFirst": "12",
+        "randomLast": "15",
+        "randomUnits": "hours",
+        "drop": false,
+        "x": 900,
+        "y": 1180,
+        "wires": [
+            [
+                "d0831953.44a178"
+            ]
+        ]
+    },
+    {
+        "id": "20ab3aa1.029226",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "status = OK ",
+        "rules": [{
+            "t": "set",
+            "p": "payload",
+            "pt": "msg",
+            "to": "{\"status\":\"OK\"}",
+            "tot": "json"
+        }],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 950,
+        "y": 1120,
+        "wires": [
+            [
+                "c84a013b.32f76"
+            ]
+        ]
+    },
+    {
+        "id": "11bbfc3.9ad0104",
+        "type": "http in",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "url": "/articles/id/:id/relevant/0",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 1100,
+        "wires": [
+            [
+                "e6a0aee.8f62f5"
+            ]
+        ]
+    },
+    {
+        "id": "e6a0aee.8f62f5",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nSET relevant = \"0\"\nWHERE article_id = \"{{req.params.id}}\";",
+        "output": "str",
+        "x": 460,
+        "y": 1080,
+        "wires": [
+            [
+                "3aadcaaf.7ac7d6"
+            ]
+        ]
+    },
+    {
+        "id": "eb35aaad.a31718",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://www.rnec.pt/pt_PT/pesquisa-de-estudos-clinicos?p_p_id=RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&p_p_col_id=column-1&p_p_col_count=1&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet__jsfBridgeAjax=true&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet__facesViewIdResource=%2Fviews%2Fview.xhtml",
+        "tls": "e3876559.c845b8",
+        "persist": true,
+        "proxy": "",
+        "authType": "",
+        "x": 530,
+        "y": 1840,
+        "wires": [
+            [
+                "4897384a.4b2518"
+            ]
+        ]
+    },
+    {
+        "id": "35e8187a.234a08",
+        "type": "function",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "func": "msg.headers = {}\n\n  msg.headers['Connection'] = 'keep-alive'\n\n  msg.headers['Pragma'] = 'no-cache' \n\n  msg.headers['Cache-Control'] = 'no-cache' \n\n  msg.headers['Accept'] = 'application/xml, text/xml, */*; q=0.01' \n\n  msg.headers['DNT'] = '1' \n\n  msg.headers['X-Requested-With'] = 'XMLHttpRequest' \n\n  msg.headers['Faces-Request'] = 'partial/ajax' \n\n  msg.headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36' \n\n  msg.headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8' \n\n  msg.headers['Sec-GPC'] = '1' \n\n  msg.headers['Origin'] = 'https://www.rnec.pt' \n\n  msg.headers['Sec-Fetch-Site'] = 'same-origin' \n\n  msg.headers['Sec-Fetch-Mode'] = 'cors' \n\n  msg.headers['Sec-Fetch-Dest'] = 'empty' \n\n  msg.headers['Referer'] = 'https://www.rnec.pt/pt_PT/pesquisa-de-estudos-clinicos' \n\n  msg.headers['Accept-Language'] = 'en-GB,en-US;q=0.9,en;q=0.8' \n\n  msg.headers['Cookie'] = 'GUEST_LANGUAGE_ID=pt_PT; COOKIE_SUPPORT=true; JSESSIONID=2904FFA0655A18A83E7335B1D620EE9C; LFR_SESSION_STATE_20158=1627411328837' \n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 320,
+        "y": 1840,
+        "wires": [
+            [
+                "eb35aaad.a31718",
+                "7d6d22e4.8928cc"
+            ]
+        ]
+    },
+    {
+        "id": "ea750bae.0383b8",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [{
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 1840,
+        "wires": [
+            [
+                "35e8187a.234a08"
+            ]
+        ]
+    },
+    {
+        "id": "4897384a.4b2518",
+        "type": "debug",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 720,
+        "y": 1840,
+        "wires": []
+    },
+    {
+        "id": "7d6d22e4.8928cc",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "payload",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "javax.faces.partial.ajax=true&javax.faces.source=_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt73&javax.faces.partial.execute=_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm&javax.faces.partial.render=_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3AresultsPanel&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt73=_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt73&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm=_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm&javax.faces.encodedURL=https%3A%2F%2Fwww.rnec.pt%2Fpt_PT%2Fpesquisa-de-estudos-clinicos%3Fp_p_id%3DRNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet%26p_p_lifecycle%3D2%26p_p_state%3Dnormal%26p_p_mode%3Dview%26p_p_cacheability%3DcacheLevelPage%26p_p_col_id%3Dcolumn-1%26p_p_col_count%3D1%26_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet__jsfBridgeAjax%3Dtrue%26_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet__facesViewIdResource%3D%252Fviews%252Fview.xhtml&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3AtextoLivre=ensaio&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt13_focus=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt13_input=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3ArnecNumber=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AeudraCT=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AprotocolNumber=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3Asponsor=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AtrialTitle=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3ArecruitmentStatus_focus=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3ArecruitmentStatus_input=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AclinicalIndication=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AauthorizationDateStart_input=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AauthorizationDateEnd_input=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AconclusionDateStart_input=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AconclusionDateEnd_input=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25_active=-1&javax.faces.ViewState=-2014375685200726364%3A-8157792764487954219",
+        "output": "str",
+        "x": 520,
+        "y": 1880,
+        "wires": [
+            [
+                "4897384a.4b2518"
+            ]
+        ]
+    },
+    {
+        "id": "552e99b3.a9d988",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://www.novartis.com/clinicaltrials/recruiting-trials?title=multiple%20sclerosis",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 330,
+        "y": 3900,
+        "wires": [
+            [
+                "689bbffb.67489"
+            ]
+        ]
+    },
+    {
+        "id": "dccf3bb6.7c85b8",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [{
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "25200",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "24",
+        "topic": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 3900,
+        "wires": [
+            [
+                "552e99b3.a9d988"
+            ]
+        ]
+    },
+    {
+        "id": "689bbffb.67489",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "Novartis",
+        "tag": "td.views-field",
+        "ret": "object",
+        "as": "single",
+        "map": [{
+                "search": "a",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "td.views-field.views-field-title>a",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 540,
+        "y": 3900,
+        "wires": [
+            [
+                "dd48b8d3.6d1788"
+            ]
+        ]
+    },
+    {
+        "id": "cf77906e.d94ce",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "sql",
+        "syntax": "mustache",
+        "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%S\", \"NOW\"),\"{{payload.title}}\",\"\",\"https://www.novartis.com{{{payload.link}}}\",\"\",\"Novartis\",NULL)",
+        "output": "str",
+        "x": 840,
+        "y": 3900,
+        "wires": [
+            [
+                "27c1f984.9aa296"
+            ]
+        ]
+    },
+    {
+        "id": "dd48b8d3.6d1788",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 690,
+        "y": 3900,
+        "wires": [
+            [
+                "cf77906e.d94ce"
+            ]
+        ]
+    },
+    {
+        "id": "27c1f984.9aa296",
+        "type": "link out",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "links": [
+            "dd8e58f7.7eb6e8"
+        ],
+        "x": 975,
+        "y": 3940,
+        "wires": []
+    },
+    {
+        "id": "ddd04c38.45e54",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://www.cuf.pt/cuf-academic-center/ensaios-clinicos?combine=&unidade=&estado=All&patologia=2346&especialidade=",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 330,
+        "y": 3980,
+        "wires": [
+            [
+                "6e73a2ca.0782cc"
+            ]
+        ]
+    },
+    {
+        "id": "f6573be5.523818",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [{
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "25200",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "42",
+        "topic": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 3980,
+        "wires": [
+            [
+                "ddd04c38.45e54"
+            ]
+        ]
+    },
+    {
+        "id": "6e73a2ca.0782cc",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "cuf",
+        "tag": "div.content",
+        "ret": "object",
+        "as": "single",
+        "map": [{
+                "search": ".field--name-title-text",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "a",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 530,
+        "y": 3980,
+        "wires": [
+            [
+                "be96c1a0.96ce3"
+            ]
+        ]
+    },
+    {
+        "id": "c0a8b1f3.daefc",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "sql",
+        "syntax": "mustache",
+        "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%S\", \"NOW\"),\"{{payload.title}}\",\"\",\"https://www.cuf.pt{{{payload.link}}}\",\"\",\"CUF\",NULL)",
+        "output": "str",
+        "x": 840,
+        "y": 3980,
+        "wires": [
+            [
+                "27c1f984.9aa296"
+            ]
+        ]
+    },
+    {
+        "id": "be96c1a0.96ce3",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 690,
+        "y": 3980,
+        "wires": [
+            [
+                "c0a8b1f3.daefc"
             ]
         ]
     },
@@ -3231,6 +3720,19 @@
         "collapse": false
     },
     {
+        "id": "e3876559.c845b8",
+        "type": "tls-config",
+        "name": "",
+        "cert": "",
+        "key": "",
+        "ca": "",
+        "certname": "node-cert.pem",
+        "keyname": "node-key.pem",
+        "caname": "",
+        "servername": "",
+        "verifyservercert": true
+    },
+    {
         "id": "510c9c14.f3eb74",
         "type": "chatbot-context-store",
         "name": "johnny-context",
@@ -3242,6 +3744,7 @@
         "type": "ui_tab",
         "name": "Gregory",
         "icon": "dashboard",
+        "order": 10,
         "disabled": false,
         "hidden": false
     },
@@ -3250,6 +3753,7 @@
         "type": "ui_tab",
         "name": "Development",
         "icon": "dashboard",
+        "order": 12,
         "disabled": false,
         "hidden": false
     }
