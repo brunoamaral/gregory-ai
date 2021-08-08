@@ -38,11 +38,12 @@ Na primeira página são apresentados alguns resultados que merecem destaque por
 
 O **Gregory** é capaz de usar várias fontes para executar pesquisas, e atualmente usa as seguintes fontes de informação. 
 
+### Artigos Clínicos
+
 ```mermaid
 graph LR;
     APTA[fa:fa-newspaper APTA.org] -->Gregory;
     BioMedCentral[fa:fa-newspaper BioMedCentral.com] -->Gregory;
-    ClinicalTrials[fa:fa-newspaper ClinicalTrials.gov]-->Gregory;
     JNeurosci[fa:fa-newspaper JNeurosci.org]-->Gregory;
     PEDro[fa:fa-newspaper PEDro.org.au] -->Gregory;
     PubMed[fa:fa-newspaper PubMed.gov] -->Gregory;
@@ -53,6 +54,16 @@ graph LR;
     Manual[fa:fa-keyboard Inserção Manual]-->Gregory;
     Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
     Gregory{fa:fa-robot Gregory}-->Newsletter(fa:fa-envelope Newsletter)
+```
+
+### Ensaios Clínicos
+
+```mermaid
+graph LR;
+    ClinicalTrials[fa:fa-newspaper ClinicalTrials.gov]-->Gregory;
+    CUF[fa:fa-newspaper CUF.pt]-->Gregory;
+    Novartis[fa:fa-newspaper Novartis.com]-->Gregory;
+    Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
 ```
 
 É possível acrescentar mais fontes de informação e afinar os termos de pesquisa. Para isso, basta usar os contactos que estão no final desta página.
