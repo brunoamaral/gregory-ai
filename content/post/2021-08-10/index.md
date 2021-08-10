@@ -55,7 +55,7 @@ No futuro gostaríamos de acrescentar as seguintes fontes de informação para e
 1. The file  notification flows.json replaces newsletter.json
 2. The main json file with the node-red flows was cleaned up and corrected some missing links between nodes
 3. The database schema was added to the repository as `gregory_schema.sql`
-4. The full sqlite database was added to the reposity as `gregory.sql`
+4. The full sqlite database was added to the repository as `gregory.sql`
 5. A new flow was added that integrates with twitter using a [Notion](https://www.notion.so/) database 
 
 ## Twitter integration
