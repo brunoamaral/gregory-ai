@@ -9,37 +9,45 @@ https://labs.brunoamaral.eu
 
 ## 1.6
 
-New Sources Added for Clinical Trials
+## New Sources Added for Clinical Trials
 
-CUF
-Novartis
-New Features
+- [CUF](https://www.cuf.pt/cuf-academic-center/ensaios-clinicos?combine=&unidade=&estado=All&patologia=2346&especialidade=)
+- [Novartis](https://www.novartis.com/clinicaltrials/recruiting-trials?title=multiple%20sclerosis)
 
-A digest of new articles is sent to the Admin every 48h so that the most relevant findings can be flagged.
-Weekly digest is sent to the subscribers, it lists the articles flagged by the admin.
-The Admin now receives a notification of new clinical trials as they are posted.
-Changes
+## New Features
 
-The file notification flows.json replaces newsletter.json
-The main json file with the node-red flows was cleaned up and corrected some missing links between nodes
-The database schema was added to the repository as gregory_schema.sql
-The full sqlite database was added to the repository as gregory.sql
-A new flow was added that integrates with twitter using a Notion database
-Twitter integration
+1. A digest of new articles is sent to the Admin every 48h so that the most relevant findings can be flagged.
+2. Weekly digest is sent to the subscribers, it lists the articles flagged by the admin.
+3. The Admin now receives a notification of new clinical trials as they are posted.
 
-Results that are flagged as relevant are posted in the account @GregroryMS_ using the service provided by Automate.io.
+## Changes
 
-image
+1. The file  notification flows.json replaces newsletter.json
+2. The main json file with the node-red flows was cleaned up and corrected some missing links between nodes
+3. The database schema was added to the repository as `gregory_schema.sql`
+4. The full sqlite database was added to the repository as `gregory.sql`
+5. A new flow was added that integrates with twitter using a [Notion](https://www.notion.so/) database 
 
-Roadmap
+## Twitter integration
+
+Results that are flagged as relevant are posted in the account @[GregroryMS_](https://twitter.com/gregoryms_) using the service provided by [Automate.io](https://automate.io/).
+
+```mermaid
+graph LR
+    Gregory --> Notion["Notion Database"]
+    Notion --> Automate.io
+    Automate.io --> Twitter["Twitter @GregoryMS_"]
+```
+
+# Roadmap
 
 New sources we would like to add:
+ - RNEC
+ - FirstWord Pharma
+ - [EMA](https://www.ema.europa.eu/en/human-regulatory/research-development/clinical-trials/clinical-trials-information-system-training-support) (CTIS system to be made available online on January 2022)
+ - Champalimaud Foundation
+ - CEIC (Doesn't seem to have any public database)
 
-RNEC
-FirstWord Pharma
-EMA (CTIS system to be made available online on January 2022)
-Champalimaud Foundation
-CEIC (Doesn't seem to have any public database)
 
 ## 1.2
 
