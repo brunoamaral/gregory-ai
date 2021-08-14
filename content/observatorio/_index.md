@@ -7,7 +7,10 @@ author: Bruno Amaral
 description: 
 categories: []
 tags: []
-
+menu:
+  main:
+    Name: Observatório
+    Weight: 1
 draft: false
 enableDisqus : true
 enableMathJax: false
