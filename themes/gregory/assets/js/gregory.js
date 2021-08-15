@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
                     let listItem = document.createElement('li');
                     listItem.appendChild(
                         document.createElement('strong')
-                    ).textContent = item.title;
+                    ).textContent = item.title + ' ';
 
                     let a = listItem.appendChild(document.createElement('a'));
                     a.textContent = `${item.source}`;
@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
                     let listItem = document.createElement('li');
                     listItem.appendChild(
                         document.createElement('strong')
-                    ).textContent = item.title;
+                    ).textContent = item.title + ' ';
 
                     let a = listItem.appendChild(document.createElement('a'));
                     a.textContent = `${item.source}`;
