@@ -13,9 +13,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
                 let list = document.querySelector('ol.articles.' + term);
                 for (const item of data) {
                     let listItem = document.createElement('li');
-                    listItem.appendChild(
-                        document.createElement('span')
-                    ).textContent = item.title + ' ';
+                    listItem.textContent = item.title + ' ';
 
                     let a = listItem.appendChild(document.createElement('a'));
                     a.textContent = `${item.source}`;
@@ -37,9 +35,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
                 let list = document.querySelector('ol.trials.' + term);
                 for (const item of data) {
                     let listItem = document.createElement('li');
-                    listItem.appendChild(
-                        document.createElement('span')
-                    ).textContent = item.title + ' ';
+                    listItem.textContent = item.title + ' ';
 
                     let a = listItem.appendChild(document.createElement('a'));
                     a.textContent = `${item.source}`;
