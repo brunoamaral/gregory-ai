@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
                 for (const item of data) {
                     let listItem = document.createElement('li');
                     listItem.appendChild(
-                        document.createElement('strong')
+                        document.createElement('span')
                     ).textContent = item.title + ' ';
 
                     let a = listItem.appendChild(document.createElement('a'));
@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
                 for (const item of data) {
                     let listItem = document.createElement('li');
                     listItem.appendChild(
-                        document.createElement('strong')
+                        document.createElement('span')
                     ).textContent = item.title + ' ';
 
                     let a = listItem.appendChild(document.createElement('a'));
