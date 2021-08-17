@@ -7,6 +7,23 @@ https://labs.brunoamaral.eu
 
 # Changelog
 
+## 1.8.1
+
+### New Sources Added for Clinical Trials and Articles
+
+- None
+
+### New Features
+
+1. Adds new API endpoints to search the database by keyword
+2. Adds a new section called Observatorio that lists promissing research according to the MS Society Website. https://www.mssociety.org.uk/research/explore-our-research/emerging-research-and-treatments/explore-treatments-in-trials
+
+### Changes
+
+- Adds the new section to the menu
+
+
+
 ## 1.6
 
 ### New Sources Added for Clinical Trials
@@ -39,15 +56,6 @@ graph LR
     Automate.io --> Twitter["Twitter @GregoryMS_"]
 ```
 
-### Roadmap
-
-New sources we would like to add:
- - RNEC
- - FirstWord Pharma
- - [EMA](https://www.ema.europa.eu/en/human-regulatory/research-development/clinical-trials/clinical-trials-information-system-training-support) (CTIS system to be made available online on January 2022)
- - Champalimaud Foundation
- - CEIC (Doesn't seem to have any public database)
-
 
 ## 1.2
 
@@ -74,6 +82,16 @@ For an example on how to build the website, see build-example.py. The server URL
 The path /api/articles.json and /api/trials.json includes the full database export.
 
 The same information is available in excel format: /api/articles.xlsx and /api/trials.xlsx.
+
+# Roadmap
+
+New sources we would like to add:
+ - RNEC
+ - FirstWord Pharma
+ - [EMA](https://www.ema.europa.eu/en/human-regulatory/research-development/clinical-trials/clinical-trials-information-system-training-support) (CTIS system to be made available online on January 2022)
+ - Champalimaud Foundation
+ - CEIC (Doesn't seem to have any public database)
+
 
 # Thank you to
 
