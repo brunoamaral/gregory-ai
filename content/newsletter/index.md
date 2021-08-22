@@ -22,9 +22,9 @@ menu:
     Weight: 5
 ---
 
-Existe uma newsletter semanal com a recolha de estudos aparentemente mais relevantes, de uma perspectiva pessoal. Esta seleção é feita com base no que parece ser mais vantajoso para a qualidade de vida das pessoas com Esclerose Múltipla. A newsletter destina-se somente a ser usada por profissionais de saúde e não deve ser considerada como qualquer tipo de sugestão clínica.
+There is a weekly newsletter with the collection of studies that seem  beneficial for the quality of life of people with Multiple Sclerosis. The newsletter is intended for use by healthcare professionals only and should not be considered as any kind of clinical suggestion.
 
-Para inclusão nesta lista de emails, basta contactar-me através de uma destas vias:
+To be included in this email list please contact me :
 
 ### Bruno Amaral
 

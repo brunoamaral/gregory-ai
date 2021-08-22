@@ -1,5 +1,5 @@
 ---
-title: "Observatorio"
+title: "Observatory"
 date: 2021-08-12T15:33:35+01:00
 lastmod: 
 author: Bruno Amaral
@@ -9,7 +9,7 @@ categories: []
 tags: []
 menu:
   main:
-    Name: Observatório
+    Name: Observatory
     Weight: 1
 draft: false
 enableDisqus : true
@@ -18,7 +18,6 @@ disableToC: false
 disableAutoCollapse: true
 ---
 
-Esta página tem uma secção para cada uma das terapias listadas como relevantes pela [MS Society](https://www.mssociety.org.uk/research/explore-our-research/emerging-research-and-treatments/explore-treatments-in-trials).
+This page includes searches for each of the new medicines identified by the [MS Society](https://www.mssociety.org.uk/research/explore-our-research/emerging-research-and-treatments/explore-treatments-in-trials) as relevant for people with MS.
 
-Em cada secção, são listados os ensaios clínicos e artigos publicados em que o fármaco consta do título.
-
+In each section we list the published articles and any clinical trials that include the new drug in the title.

@@ -1,5 +1,5 @@
 ---
 menu:
   main:
-    name: Lista de Alterações
+    name: Change log
 ---

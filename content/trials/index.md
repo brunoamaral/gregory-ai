@@ -1,5 +1,5 @@
 ---
-title: "Ensaios Clínicos"
+title: "Clinical Trials"
 date: 2021-02-24T13:25:38Z
 lastmod: 
 author: Bruno Amaral
@@ -18,6 +18,6 @@ layout: trials
 url: /ensaios
 menu:
     main:
-        Name: Ensaios Clínicos
+        Name: Clinical Trials
         weight: 3
 ---

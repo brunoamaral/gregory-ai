@@ -1,5 +1,5 @@
 ---
-title: "About and Contacts"
+title: "Sobre este Site e Contactos"
 date: 2021-02-24T13:00:55Z
 lastmod: 
 author: Bruno Amaral
@@ -18,27 +18,27 @@ url: sobre
 
 menu:
   main:
-    Name: About
+    Name: Sobre este Site
     Weight: 4
 ---
 
-> Too much information is as bad as not enough.
+> O excesso de informação é tão mau como a falta de informação.
 
-This website is meant for healthcare workers in the field of **Multiple Sclerosis** (MS) and Neurology. Think of it as a focused search engine for MS, with information on published articles and clinical trials.
+Este site é destinado a ser usado por profissionais de saúde e permite facilitar a pesquisa em tempo real de artigos e notícias relacionadas com a **Esclerose Múltipla**.
 
-The indexer that gathers data is a software robot that we call **Gregory**.
+A recolha dos dados é feita de forma automática e contínua por um programa de nome **Gregory**.
 
-In the homepage we show articles that seem relevant to one of the following categories:
+Na primeira página são apresentados alguns resultados que merecem destaque por se incluirem numa destas categorias:
 
-1. Medication that promotes the regeneration of the nervous system;
-2. Medication to treat symptoms;
-3. Other treatments;
+1. Medicação que promova a regeneração do sistema nervoso;
+2. Medicação para tratamento dos sintomas;
+3. Outros tratamentos;
 
-## Sources of Information
+## Fontes de Informação
 
-**Gregory** currently uses the following sources:
+O **Gregory** é capaz de usar várias fontes para executar pesquisas, e atualmente usa as seguintes fontes de informação. 
 
-### Clinical Articles
+### Artigos Clínicos
 
 ```mermaid
 graph LR;
@@ -56,7 +56,7 @@ graph LR;
     Gregory{fa:fa-robot Gregory}-->Newsletter(fa:fa-envelope Newsletter)
 ```
 
-### Clinical Trials
+### Ensaios Clínicos
 
 ```mermaid
 graph LR;
@@ -66,7 +66,9 @@ graph LR;
     Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
 ```
 
-### Search terms:
+É possível acrescentar mais fontes de informação e afinar os termos de pesquisa. Para isso, basta usar os contactos que estão no final desta página.
+
+### Termos de pesquisa:
 
 > Multiple Sclerosis, autoimmune encephalomyelitis, encephalomyelitis, immune tolerance, myelin
 
@@ -122,7 +124,7 @@ https://journals.sagepub.com/action/doSearch?AllField=multiple+sclerosis&SeriesK
 
 https://journals.bmj.com/
 
-## Contact details
+## Contactos para melhorias e sugestões
 
 ### Bruno Amaral    
 mail@brunoamaral.eu

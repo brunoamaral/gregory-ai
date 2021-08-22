@@ -1,8 +1,8 @@
 ---
 url: /tudo
-title: "Listagem Completa de Resultados"
+title: "Full Listing"
 weight: 2
 menu:
   main:
-    name: Listagem Completa
+    name: Full Listing
 ---
