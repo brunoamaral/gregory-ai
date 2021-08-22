@@ -38,7 +38,7 @@ googleAnalytics = ""
 
 [menu]
   [[menu.main]]
-  name = '<span class="iconify" data-icon="fa:home"></span> Home'
+  name = 'Home'
   url = "/"
   weight = 1
 
