@@ -581,11 +581,11 @@
         "sqlquery": "msg.topic",
         "sql": "",
         "name": "",
-        "x": 950,
+        "x": 730,
         "y": 820,
         "wires": [
             [
-                "a7b362ceee7e7c09"
+                "f2912ee0153a5f0d"
             ]
         ]
     },
@@ -623,8 +623,8 @@
         "method": "get",
         "upload": false,
         "swaggerDoc": "",
-        "x": 160,
-        "y": 860,
+        "x": 140,
+        "y": 840,
         "wires": [
             [
                 "1331051fe47f7045"
@@ -649,7 +649,7 @@
         "to": "",
         "reg": false,
         "x": 370,
-        "y": 860,
+        "y": 840,
         "wires": [
             [
                 "1ede8ebaaad306c1"
@@ -665,7 +665,7 @@
         "vars": "keyword",
         "outField": "topic",
         "x": 510,
-        "y": 860,
+        "y": 840,
         "wires": [
             [
                 "339d94878793e94f"
@@ -676,126 +676,16 @@
         "id": "7d219e5339925e23",
         "type": "http in",
         "z": "f8fda80096695167",
-        "d": true,
         "name": "",
         "url": "/articles/related/",
         "method": "post",
         "upload": false,
         "swaggerDoc": "",
         "x": 120,
-        "y": 980,
+        "y": 900,
         "wires": [
             [
-                "3f50fd4be61dcb8f"
-            ]
-        ]
-    },
-    {
-        "id": "a7b362ceee7e7c09",
-        "type": "debug",
-        "z": "f8fda80096695167",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 930,
-        "y": 1080,
-        "wires": []
-    },
-    {
-        "id": "ea325c584be27807",
-        "type": "change",
-        "z": "f8fda80096695167",
-        "name": "set params",
-        "rules": [{
-                "t": "set",
-                "p": "database",
-                "pt": "msg",
-                "to": "articles",
-                "tot": "str"
-            },
-            {
-                "t": "set",
-                "p": "command",
-                "pt": "msg",
-                "to": "select",
-                "tot": "str"
-            },
-            {
-                "t": "set",
-                "p": "column_name",
-                "pt": "msg",
-                "to": "[]",
-                "tot": "json"
-            },
-            {
-                "t": "set",
-                "p": "column_sort",
-                "pt": "msg",
-                "to": "[\"title\"]",
-                "tot": "json"
-            },
-            {
-                "t": "set",
-                "p": "data",
-                "pt": "msg",
-                "to": "\"%\" & payload & \"%\"",
-                "tot": "jsonata"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 510,
-        "y": 1080,
-        "wires": [
-            [
-                "a7b362ceee7e7c09"
-            ]
-        ]
-    },
-    {
-        "id": "3f50fd4be61dcb8f",
-        "type": "change",
-        "z": "f8fda80096695167",
-        "name": "",
-        "rules": [{
-                "t": "move",
-                "p": "payload.keywords",
-                "pt": "msg",
-                "to": "keywords",
-                "tot": "msg"
-            },
-            {
-                "t": "delete",
-                "p": "payload",
-                "pt": "msg"
-            },
-            {
-                "t": "set",
-                "p": "payload",
-                "pt": "msg",
-                "to": "keywords",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 340,
-        "y": 980,
-        "wires": [
-            [
-                "3cc03b94cba1beac"
+                "979bd9c52b881cd3"
             ]
         ]
     },
@@ -839,7 +729,7 @@
         "onceDelay": 0.1,
         "topic": "",
         "payload": "{\"keywords\":[\"mTOR\",\"Regulates Metabolic Function\",\"Oligodendrocyte Precursor Cells\",\"Promotes Efficient Brain Remyelination\",\"the Cuprizone Model\"]}",
-        "payloadType": "json",
+        "payloadType": "str",
         "x": 100,
         "y": 1200,
         "wires": [
@@ -858,25 +748,6 @@
         "x": 570,
         "y": 1240,
         "wires": []
-    },
-    {
-        "id": "3cc03b94cba1beac",
-        "type": "split",
-        "z": "f8fda80096695167",
-        "name": "",
-        "splt": "\\n",
-        "spltType": "str",
-        "arraySplt": 1,
-        "arraySpltType": "len",
-        "stream": false,
-        "addname": "",
-        "x": 290,
-        "y": 1040,
-        "wires": [
-            [
-                "ea325c584be27807"
-            ]
-        ]
     },
     {
         "id": "1b79ae52f639a2f6",
@@ -1021,6 +892,132 @@
         "wires": [
             [
                 "c3b406dd4b92297a"
+            ]
+        ]
+    },
+    {
+        "id": "e2f2163a0744355f",
+        "type": "template",
+        "z": "f8fda80096695167",
+        "name": "Query",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "sql",
+        "syntax": "mustache",
+        "template": "select * from articles\nwhere\n(title = \"\")\n{{#keywords}}\nOR (title like \"%{{.}}%\")\n{{/keywords}}\n;",
+        "output": "str",
+        "x": 510,
+        "y": 900,
+        "wires": [
+            [
+                "339d94878793e94f"
+            ]
+        ]
+    },
+    {
+        "id": "dc128ccf4411a6f3",
+        "type": "inject",
+        "z": "f8fda80096695167",
+        "name": "",
+        "props": [{
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"keywords\":[\"mTOR\",\"Regulates Metabolic Function\",\"Oligodendrocyte Precursor Cells\",\"Promotes Efficient Brain Remyelination\",\"the Cuprizone Model\"]}",
+        "payloadType": "json",
+        "x": 90,
+        "y": 1140,
+        "wires": [
+            [
+                "19e4c9feed69eada"
+            ]
+        ]
+    },
+    {
+        "id": "979bd9c52b881cd3",
+        "type": "function",
+        "z": "f8fda80096695167",
+        "name": "",
+        "func": "let words = msg.payload.keywords\nlet keywords = [];\n\nfor (const element of words) {\n  keywords.push(element.match(/(?:\\w|\\s|-\\w)*/)[0])\n}\nmsg.keywords = keywords;\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 320,
+        "y": 900,
+        "wires": [
+            [
+                "e2f2163a0744355f"
+            ]
+        ]
+    },
+    {
+        "id": "c8ace884ac7ec1c2",
+        "type": "http response",
+        "z": "f8fda80096695167",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1190,
+        "y": 820,
+        "wires": []
+    },
+    {
+        "id": "f2912ee0153a5f0d",
+        "type": "json",
+        "z": "f8fda80096695167",
+        "name": "",
+        "property": "payload",
+        "action": "",
+        "pretty": false,
+        "x": 890,
+        "y": 820,
+        "wires": [
+            [
+                "1f7b7b33aa14a006"
+            ]
+        ]
+    },
+    {
+        "id": "1f7b7b33aa14a006",
+        "type": "change",
+        "z": "f8fda80096695167",
+        "name": "Set Headers",
+        "rules": [{
+                "t": "set",
+                "p": "headers",
+                "pt": "msg",
+                "to": "{}",
+                "tot": "json"
+            },
+            {
+                "t": "set",
+                "p": "headers.content-type",
+                "pt": "msg",
+                "to": "application/json",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1030,
+        "y": 820,
+        "wires": [
+            [
+                "c8ace884ac7ec1c2"
             ]
         ]
     },
