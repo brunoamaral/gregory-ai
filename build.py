@@ -6,6 +6,7 @@ import json
 import pathlib
 from pathlib import Path
 import git  
+import spacy 
 
 # set variables
 path = "/home/gregory/gregory"
