@@ -95,8 +95,10 @@ New sources we would like to add:
 
 # Thank you to
 
+@[Chbm](https://github.com/chbm) for help in keeping the code secure.
 @[Jneves](https://github.com/jneves) for help with the build script    
 @[Melo](https://github.com/melo) for showing me [Hugo](https://github.com/gohugoio/hugo)    
+@[Nurv](https://github.com/nurv) for the suggestion in using Spacy.io 
 @[RainerChiang](https://github.com/RainerChiang) for the [Simplesness theme](https://github.com/RainerChiang/simpleness)    
 @[Rcarmo](https://github.com/rcarmo) for showing me [Node-RED](https://github.com/node-red/node-red)       
 
