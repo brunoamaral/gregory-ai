@@ -63,7 +63,22 @@ with open(articles,"r") as a:
 
 jsonArticles = json.loads(data)
 
+nlp = spacy.load('en_core_web_trf')
+
 for article in jsonArticles:
+
+    # Process whole documents
+    text = article["title"]
+    doc=nlp(text)
+    # Analyze syntax
+    noun_phrases = [chunk.text for chunk in doc.noun_chunks]
+    print("Noun phrases:", [chunk.text for chunk in doc.noun_chunks])
+    # print("verbs:", [token.lemma_ for token in doc if token.pos_ == "VERB"])
+    # Find named entities, phrases and concepts
+    # for entity in doc.ents:
+    #     print(entity.text, entity. label)
+
+
     # for each record, write a file
     markdownDir = pathlib.Path(articlesDir+str(article["article_id"]))
     markdownDir.mkdir(parents=True, exist_ok=True)
@@ -79,6 +94,7 @@ for article in jsonArticles:
             "\npublished_date: " + str(article["published_date"]) + \
             "\nsource: " + article["source"] + \
             "\nrelevant: " + str(article["relevant"]) + \
+            "\nNounphrases: " + str(noun_phrases) + \
             "\n---\n" + \
             html.unescape(article["summary"])
         # add content to file
