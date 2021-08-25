@@ -1,90 +1,79 @@
 {{ define "main" }}
 <article class="post">
-  <header class="post-header">
-    <h1 style="text-align: center;" >{{ .Title }}</h1>
-    <div class="post-metadata">
-    {{ if .Date }}
-      <time datetime="{{ .Date.Format "2006-01-02T15:04:05Z07:00" }}">{{ .Date.Format "January 02, 2006" }}</time> &nbsp; 
-    {{ end }}
-    <!-- Valine Vistors in Header Start -->
-    {{ if and .Site.Params.valine.enable (or (ne .Site.BaseURL "http://localhost:1313/") .Site.Params.valine.debug) }}
-      <i class="far fa-eye"></i>
-      <span id="{{ .Permalink | relURL }}" class="leancloud_visitors" data-flag-title="{{ .Title }}">
+    <header class="post-header">
+        <h1 style="text-align: center;">{{ .Title }}</h1>
+        <div class="post-metadata">
+            {{ if .Date }}
+            <time datetime="{{ .Date.Format " 2006-01-02T15:04:05Z07:00 " }}">{{ .Date.Format "January 02, 2006" }}</time> &nbsp; {{ end }}
+            <!-- Valine Vistors in Header Start -->
+            {{ if and .Site.Params.valine.enable (or (ne .Site.BaseURL "http://localhost:1313/") .Site.Params.valine.debug) }}
+            <i class="far fa-eye"></i>
+            <span id="{{ .Permalink | relURL }}" class="leancloud_visitors" data-flag-title="{{ .Title }}">
           <span class="leancloud-visitors-count"> {{ T "valinePV" }} </span>
-      </span> &nbsp;
-    {{ end }}
-    <!-- Valine Vistors End -->
-    {{ if .Site.Params.enableReadingTime }}
-      <i class="far fa-clock"></i>
-      {{ $readTime := mul (div (countwords .Content) 220.0) 60 }}
-      {{ $minutes := math.Floor (div $readTime 60) }}
-      {{ $seconds := mod $readTime 60 }}
-      {{ if gt $minutes 0}}
-        {{ $minutes }} {{ cond (eq $minutes 1) "minute" "min" }}
-      {{ end }}
-      {{ $seconds }} {{ cond (eq $seconds 1) "second" "s" }}
-      &nbsp;
-    {{ end }}
-    {{ if .Params.categories }}
-      <i class="fas fa-folder"></i>
-      {{ range .Params.categories }}
-      <a href="{{ "/categories/" | relLangURL }}{{ . | urlize }}">{{ . }}</a>
-      &nbsp;
-      {{ end }}
-    {{ end }}
+            </span> &nbsp; {{ end }}
+            <!-- Valine Vistors End -->
+            {{ if .Site.Params.enableReadingTime }}
+            <i class="far fa-clock"></i> {{ $readTime := mul (div (countwords .Content) 220.0) 60 }} {{ $minutes := math.Floor (div $readTime 60) }} {{ $seconds := mod $readTime 60 }} {{ if gt $minutes 0}} {{ $minutes }} {{ cond (eq $minutes 1) "minute"
+            "min" }} {{ end }} {{ $seconds }} {{ cond (eq $seconds 1) "second" "s" }} &nbsp; {{ end }} {{ if .Params.categories }}
+            <i class="fas fa-folder"></i> {{ range .Params.categories }}
+            <a href="{{ " /categories/ " | relLangURL }}{{ . | urlize }}">{{ . }}</a> &nbsp; {{ end }} {{ end }}
+        </div>
+    </header>
+
+    {{ if and .Params.toc .TableOfContents }}
+    <div class="post-toc">
+        <div class="post-toc-title">Contents</div>
+        {{ .TableOfContents }}
     </div>
-  </header>
+    {{ end }}
+    <p><strong>ID</strong>: <span id="id" data-datetime="{{.Params.article_id}}">{{ .Params.article_id }}</span></p>
+    <p><strong>Discovery Date</strong>: <span id="discovery_date" data-datetime="{{.Params.discovery_date}}">{{ .Params.discovery_date | dateFormat "02 January 2006, 15:04:05 MST" }}</span></p>
+    <p><strong>Published Date</strong>: <span id="published_date" data-datetime="{{.Params.published_date}}">{{ .Params.published_date }}</span></p>
+    <p><strong>Source</strong>: <span id="source">{{ .Params.source | safeHTML }}</span></p>
+    <p><strong>Link</strong>: <span id="link"><a href="{{ .Params.link | htmlUnescape | safeHTML }}">{{ .Params.link | safeHTML }}</a></span></p>
+    <div class="post-text" id="abstract">
+        {{ .Content | safeHTML }}
+    </div>
 
-  {{ if and .Params.toc .TableOfContents }}
-  <div class="post-toc">
-    <div class="post-toc-title">Contents</div>
-    {{ .TableOfContents }}
-  </div>
-  {{ end }}
-  <p><strong>ID</strong>: <span id="id" data-datetime="{{.Params.article_id}}">{{ .Params.article_id }}</span></p>
-  <p><strong>Discovery Date</strong>: <span id="discovery_date" data-datetime="{{.Params.discovery_date}}">{{ .Params.discovery_date | dateFormat "02 January 2006, 15:04:05 MST" }}</span></p>
-  <p><strong>Published Date</strong>: <span id="published_date" data-datetime="{{.Params.published_date}}">{{ .Params.published_date }}</span></p>
-  <p><strong>Source</strong>: <span id="source">{{ .Params.source | safeHTML }}</span></p>
-  <p><strong>Link</strong>: <span id="link"><a href="{{ .Params.link | htmlUnescape | safeHTML }}">{{ .Params.link | safeHTML }}</a></span></p>
-  <div class="post-text" id="abstract">
-    {{ .Content | safeHTML }}
-  </div>
 
-  <footer class="post-footer">
-    {{ if and .Lastmod (ne .Lastmod .Date) }}
-    <div class="post-lastmod">
-      <time datetime="{{ .Lastmod.Format "2006-01-02T15:04:05Z07:00" }}">
+    <div class="">
+        <h2>Noun Phrases in Title</h2>
+        <ul class="nounphrases">
+            {{ range .Params.Nounphrases }}
+            <li class="phrase">{{.}}</li>
+            {{ end }}
+        </ul>
+        <h2>Related Articles Based on Noun Phrases</h2>
+        <ol id="relatedarticles">
+
+        </ol>
+    </div>
+    <footer class="post-footer">
+        {{ if and .Lastmod (ne .Lastmod .Date) }}
+        <div class="post-lastmod">
+            <time datetime="{{ .Lastmod.Format " 2006-01-02T15:04:05Z07:00 " }}">
         update @ {{ .Lastmod.Format "January 02, 2006" }}
       </time>
-      <p></p>
-    </div>
-    {{ end }}
+            <p></p>
+        </div>
+        {{ end }} {{ if gt .Params.tags 0 }}
+        <div class="post-tags">
+            <i class="fas fa-tags"></i> {{ range .Params.tags }}
+            <a href="{{ " /tags/ " | relLangURL }}{{ . | urlize }}">{{ . }}</a> &nbsp; {{ end }}
+        </div>
+        {{ end }} {{ $related := (where site.RegularPages "Type" "in" site.Params.mainSections).Related . | first 5 }} {{ with $related }}
+        <div class="related-posts">
+            <h4>Related Posts</h4>
+            {{ range . }}
+            <i class="fas fa-paperclip"></i>
+            <a href="{{ .RelPermalink }}">{{ .Title }}</a>
+            <br> {{ end }}
+        </div>
+        {{ end }}
+    </footer>
 
-    {{ if gt .Params.tags 0 }}
-    <div class="post-tags">
-      <i class="fas fa-tags"></i>
-      {{ range .Params.tags }}
-        <a href="{{ "/tags/" | relLangURL }}{{ . | urlize }}">{{ . }}</a>
-        &nbsp;
-      {{ end }}
+    <div class="comments">
+        {{ partial "comments.html" . }}
     </div>
-    {{ end }}
-
-    {{ $related := (where site.RegularPages "Type" "in" site.Params.mainSections).Related . | first 5 }}
-    {{ with $related }}
-    <div class="related-posts">
-      <h4>Related Posts</h4>
-      {{ range . }}
-      <i class="fas fa-paperclip"></i>
-      <a href="{{ .RelPermalink }}">{{ .Title }}</a>
-      <br>
-      {{ end }}
-    </div>
-    {{ end }}
-  </footer>
-  
-  <div class="comments">
-  {{ partial "comments.html" . }}
-  </div>
 </article>
 {{ end }}

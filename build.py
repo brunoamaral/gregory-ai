@@ -95,7 +95,7 @@ for article in jsonArticles:
             "\npublished_date: " + str(article["published_date"]) + \
             "\nsource: " + article["source"] + \
             "\nrelevant: " + str(article["relevant"]) + \
-            "\nNounphrases: " + str(noun_phrases) + \
+            "\nnounphrases: " + str(noun_phrases) + \
             "\n---\n" + \
             html.unescape(article["summary"])
         # add content to file
