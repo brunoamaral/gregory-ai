@@ -10,7 +10,7 @@ import spacy
 
 # set variables
 path = "/home/gregory/gregory"
-server = "HTTPS://api.brunoamaral.net/"
+server = "https://api.brunoamaral.net/"
 website_path = "/var/www/labs.brunoamaral.eu/"
 # Workflow starts
 os.chdir(path)
