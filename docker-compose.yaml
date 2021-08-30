@@ -1,0 +1,38 @@
+################################################################################
+# Node-RED Stack or Compose
+################################################################################
+# docker stack deploy node-red --compose-file docker-compose-node-red.yml
+# docker-compose -f docker-compose-node-red.yml -p myNoderedProject up
+################################################################################
+version: "3.7"
+
+services:
+  node-red:
+    image: nodered/node-red:latest
+    restart: always
+    container_name: node-red 
+    environment:
+      - TZ=Europe/Lisbon
+    ports:
+      - "1880:1880"
+    networks:
+      - traefik_proxy
+    volumes:
+      - ./data:/data
+    # The labels below are used to configure Traefik. Traefik is a reverse proxy and more information can be found here: https://traefik.io/
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nodered.tls=true"
+      - "traefik.http.routers.nodered.tls.certResolver=default"
+      - "traefik.http.services.nodered.loadbalancer.server.port=1880"
+      - "traefik.http.routers.nodered.rule=Host(`${DOMAIN_NAME}`)&&PathPrefix(`/nodered/`)"
+      # - "traefik.http.routers.nodered.rule=Host(`gregory.${DOMAIN_NAME}`)"
+
+
+
+networks:
+  traefik_proxy:
+    external:
+      name: traefik_proxy
+  default:
+    driver: bridge
