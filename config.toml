@@ -21,7 +21,7 @@ googleAnalytics = ""
   startyear = "2021"
   showmonth = true
   slogan = ""
-  description = "Um agregador automático de pesquisas"
+  description = "An index engine for articles and clinical trials around Multiple Sclerosis"
   disqus = ""
 
 [params.valine]
