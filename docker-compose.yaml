@@ -18,7 +18,7 @@ services:
     networks:
       - traefik_proxy
     volumes:
-      - ./data:/data
+      - ./docker-data:/data
     # The labels below are used to configure Traefik. Traefik is a reverse proxy and more information can be found here: https://traefik.io/
     labels:
       - "traefik.enable=true"
