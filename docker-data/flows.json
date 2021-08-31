@@ -2,35 +2,35 @@
     {
         "id": "e677d300.d1d95",
         "type": "tab",
-        "label": "Gregory | Research",
+        "label": "Research",
         "disabled": false,
         "info": ""
     },
     {
         "id": "5e1dd9b.17f6828",
         "type": "tab",
-        "label": "Gregory | Email Digest",
+        "label": "Email Digest",
         "disabled": false,
         "info": ""
     },
     {
         "id": "f8fda80096695167",
         "type": "tab",
-        "label": "Gregory | API",
+        "label": "API",
         "disabled": false,
         "info": ""
     },
     {
         "id": "ad9a5c14.c1917",
         "type": "tab",
-        "label": "Gregory | SQLite CRUD",
-        "disabled": false,
+        "label": "SQLite CRUD",
+        "disabled": true,
         "info": ""
     },
     {
         "id": "3645fb833bf0fede",
         "type": "tab",
-        "label": "Gregory | Tests",
+        "label": "Tests",
         "disabled": false,
         "info": ""
     },
@@ -294,16 +294,6 @@
         }
     },
     {
-        "id": "d21d47a8.9ecc18",
-        "type": "ui_group",
-        "name": "Radar",
-        "tab": "3d931a5.e15dee6",
-        "order": 1,
-        "disp": false,
-        "width": 6,
-        "collapse": false
-    },
-    {
         "id": "ce499156.896fd8",
         "type": "ui_spacer",
         "name": "spacer",
@@ -551,6 +541,7 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "CREATE TABLE articles( article_id INTEGER NOT NULL PRIMARY KEY, discovery_date data_type TEXT, title data_type TEXT UNIQUE, summary data_type TEXT, link data_type TEXT, published_date TEXT, source data_type TEXT, relevant data_type INT, table_constraints );  ",
+        "payloadType": "str",
         "x": 3620,
         "y": 2140,
         "wires": [
@@ -574,6 +565,7 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "INSERT INTO categories (category_name) VALUES(\"Tratamento\"),(\"Sintomas e Mobilidade\"),(\"Regeneração do SNC\"); SELECT * FROM categories;",
+        "payloadType": "str",
         "x": 3600,
         "y": 2260,
         "wires": [
@@ -645,6 +637,7 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "CREATE TABLE categories( category_id INTEGER NOT NULL PRIMARY KEY, category_name TEXT );",
+        "payloadType": "str",
         "x": 3610,
         "y": 2180,
         "wires": [
@@ -668,6 +661,7 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "CREATE TABLE rel_articles_categories( article_id INTEGER, category_id INTEGER, FOREIGN KEY (article_id) REFERENCES articles(article_id), FOREIGN KEY (category_id) REFERENCES categories(category_id) );",
+        "payloadType": "str",
         "x": 3570,
         "y": 2220,
         "wires": [
@@ -4737,7 +4731,7 @@
         "complete": "false",
         "statusVal": "",
         "statusType": "auto",
-        "x": 860,
+        "x": 790,
         "y": 260,
         "wires": []
     },
@@ -5520,9 +5514,7 @@
         "x": 3270,
         "y": 1540,
         "wires": [
-            [
-                "7763df39.5e76d"
-            ]
+            []
         ]
     },
     {
@@ -5749,24 +5741,6 @@
         ]
     },
     {
-        "id": "7763df39.5e76d",
-        "type": "ui_list",
-        "z": "e677d300.d1d95",
-        "group": "d21d47a8.9ecc18",
-        "name": "",
-        "order": 2,
-        "width": 0,
-        "height": 0,
-        "lineType": "two",
-        "actionType": "none",
-        "allowHTML": true,
-        "outputs": 0,
-        "topic": "",
-        "x": 3550,
-        "y": 1520,
-        "wires": []
-    },
-    {
         "id": "6ecb04d73cbbd302",
         "type": "template",
         "z": "5e1dd9b.17f6828",
@@ -5950,5 +5924,15 @@
                 "daa1c0139efc32e7"
             ]
         ]
+    },
+    {
+        "id": "38b322308984e320",
+        "type": "comment",
+        "z": "ad9a5c14.c1917",
+        "name": "KEEP DISABLED",
+        "info": "This is a flow meant for sporadic use. It creates a table with full Write permissions on the Database.",
+        "x": 260,
+        "y": 60,
+        "wires": []
     }
 ]

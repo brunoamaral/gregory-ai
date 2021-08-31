@@ -2,35 +2,35 @@
     {
         "id": "e677d300.d1d95",
         "type": "tab",
-        "label": "Gregory | Research",
+        "label": "Research",
         "disabled": false,
         "info": ""
     },
     {
         "id": "5e1dd9b.17f6828",
         "type": "tab",
-        "label": "Gregory | Email Digest",
+        "label": "Email Digest",
         "disabled": false,
         "info": ""
     },
     {
         "id": "f8fda80096695167",
         "type": "tab",
-        "label": "Gregory | API",
+        "label": "API",
         "disabled": false,
         "info": ""
     },
     {
         "id": "ad9a5c14.c1917",
         "type": "tab",
-        "label": "Gregory | SQLite CRUD",
-        "disabled": false,
+        "label": "SQLite CRUD",
+        "disabled": true,
         "info": ""
     },
     {
         "id": "3645fb833bf0fede",
         "type": "tab",
-        "label": "Gregory | Tests",
+        "label": "Tests",
         "disabled": false,
         "info": ""
     },
@@ -196,166 +196,6 @@
         "verifyservercert": true
     },
     {
-        "id": "ee00f279.38dd2",
-        "type": "mqtt-broker",
-        "name": "mqtt broker",
-        "broker": "192.168.1.10",
-        "port": "1883",
-        "clientid": "",
-        "usetls": false,
-        "compatmode": false,
-        "keepalive": "60",
-        "cleansession": true,
-        "birthTopic": "",
-        "birthQos": "0",
-        "birthPayload": "",
-        "closeTopic": "",
-        "closeQos": "0",
-        "closePayload": "",
-        "willTopic": "",
-        "willQos": "0",
-        "willPayload": ""
-    },
-    {
-        "id": "93265d7e.a991e",
-        "type": "websocket-client",
-        "path": "ws://192.168.1.198:4444",
-        "tls": "",
-        "wholemsg": "false"
-    },
-    {
-        "id": "ed44d341.28767",
-        "type": "websocket-listener",
-        "path": "ws://192.168.1.198:4444",
-        "wholemsg": "true"
-    },
-    {
-        "id": "21c9917c.15264e",
-        "type": "chatbot-telegram-node",
-        "botname": "Johny Five",
-        "usernames": "amaralb,1116128351",
-        "providerToken": "",
-        "polling": "1000",
-        "store": "510c9c14.f3eb74",
-        "log": "",
-        "debug": false,
-        "webHook": "",
-        "connectMode": "polling"
-    },
-    {
-        "id": "510c9c14.f3eb74",
-        "type": "chatbot-context-store",
-        "name": "johnny-context",
-        "contextStorage": "memory",
-        "contextParams": ""
-    },
-    {
-        "id": "bdd8d916.594538",
-        "type": "server",
-        "name": "Home Assistant",
-        "version": 1,
-        "legacy": false,
-        "addon": false,
-        "rejectUnauthorizedCerts": false,
-        "ha_boolean": "y|yes|true|on|home|open",
-        "connectionDelay": true,
-        "cacheJson": true
-    },
-    {
-        "id": "28edc753.b2a758",
-        "type": "users_config",
-        "appPath": "/nodered/users",
-        "jwtCookieName": "nr.nodeUsers.jwt",
-        "jwtHttpsOnly": false
-    },
-    {
-        "id": "440220be.f0dea",
-        "type": "twitter-credentials",
-        "screen_name": "brunoamaral"
-    },
-    {
-        "id": "7ec37465.2c0f1c",
-        "type": "lgtv-config",
-        "host": "192.168.1.11"
-    },
-    {
-        "id": "34b8cfff.9bdb1",
-        "type": "transmission-config"
-    },
-    {
-        "id": "31b7ee5d.1a9c02",
-        "type": "persist-store",
-        "filename": "/data/persistence.json",
-        "interval": "60"
-    },
-    {
-        "id": "11da2887.fab2c7",
-        "type": "ui_tab",
-        "name": "Server Health",
-        "icon": "dashboard",
-        "order": 8,
-        "disabled": false,
-        "hidden": false
-    },
-    {
-        "id": "d8a3365d.44e008",
-        "type": "ui_tab",
-        "name": "Home",
-        "icon": "dashboard",
-        "order": 9,
-        "disabled": false,
-        "hidden": false
-    },
-    {
-        "id": "3d931a5.e15dee6",
-        "type": "ui_tab",
-        "name": "Gregory",
-        "icon": "dashboard",
-        "order": 10,
-        "disabled": false,
-        "hidden": false
-    },
-    {
-        "id": "f542726c.ddb2c",
-        "type": "ui_tab",
-        "name": "Email",
-        "icon": "email",
-        "order": 11,
-        "disabled": false,
-        "hidden": false
-    },
-    {
-        "id": "c7217fb3.4a4cc",
-        "type": "ui_tab",
-        "name": "Development",
-        "icon": "dashboard",
-        "order": 12,
-        "disabled": false,
-        "hidden": false
-    },
-    {
-        "id": "3e4d192e.aea486",
-        "type": "ui_tab",
-        "name": "LG TV Remote",
-        "icon": "dashboard",
-        "order": 13
-    },
-    {
-        "id": "6b749f6a.0f933",
-        "type": "ui_tab",
-        "name": "Lobsters",
-        "icon": "dashboard",
-        "order": 14,
-        "disabled": false,
-        "hidden": false
-    },
-    {
-        "id": "2f52ec48.3a82cc",
-        "type": "ui_tab",
-        "name": "List",
-        "icon": "dashboard"
-    },
-    {
         "id": "39b9d785.81cc68",
         "type": "ui_base",
         "theme": {
@@ -452,95 +292,6 @@
                 "py": 0
             }
         }
-    },
-    {
-        "id": "1db24b02.1897c5",
-        "type": "ui_group",
-        "name": "Johnny",
-        "tab": "11da2887.fab2c7",
-        "order": 1,
-        "disp": true,
-        "width": "12",
-        "collapse": false
-    },
-    {
-        "id": "8a50f58a.83fee8",
-        "type": "ui_group",
-        "name": "Heater",
-        "tab": "d8a3365d.44e008",
-        "order": 1,
-        "disp": true,
-        "width": 13,
-        "collapse": false
-    },
-    {
-        "id": "de9a7b80.a51bd8",
-        "type": "ui_group",
-        "name": "Marvin",
-        "tab": "11da2887.fab2c7",
-        "order": 2,
-        "disp": true,
-        "width": 12,
-        "collapse": false
-    },
-    {
-        "id": "d21d47a8.9ecc18",
-        "type": "ui_group",
-        "name": "Radar",
-        "tab": "3d931a5.e15dee6",
-        "order": 1,
-        "disp": false,
-        "width": 6,
-        "collapse": false
-    },
-    {
-        "id": "1de5780f.060978",
-        "type": "ui_group",
-        "name": "Send Email",
-        "tab": "f542726c.ddb2c",
-        "order": 1,
-        "disp": false,
-        "width": "12",
-        "collapse": false
-    },
-    {
-        "id": "2e3f3837.3647a8",
-        "type": "ui_group",
-        "name": "Development",
-        "tab": "c7217fb3.4a4cc",
-        "order": 1,
-        "disp": true,
-        "width": "6",
-        "collapse": false
-    },
-    {
-        "id": "c6dacf54.b2518",
-        "type": "ui_group",
-        "name": "LG TV Remote",
-        "tab": "3e4d192e.aea486",
-        "order": 1,
-        "disp": true,
-        "width": "6"
-    },
-    {
-        "id": "f840dd3.797f62",
-        "type": "ui_group",
-        "name": "Vacinas",
-        "tab": "6b749f6a.0f933",
-        "order": 1,
-        "disp": true,
-        "width": "20",
-        "collapse": false
-    },
-    {
-        "id": "7e4c65d6.0419cc",
-        "type": "ui_group",
-        "name": "Default",
-        "tab": "2f52ec48.3a82cc",
-        "order": 1,
-        "disp": true,
-        "width": "12",
-        "collapse": false
     },
     {
         "id": "ce499156.896fd8",
@@ -790,6 +541,7 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "CREATE TABLE articles( article_id INTEGER NOT NULL PRIMARY KEY, discovery_date data_type TEXT, title data_type TEXT UNIQUE, summary data_type TEXT, link data_type TEXT, published_date TEXT, source data_type TEXT, relevant data_type INT, table_constraints );  ",
+        "payloadType": "str",
         "x": 3620,
         "y": 2140,
         "wires": [
@@ -813,6 +565,7 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "INSERT INTO categories (category_name) VALUES(\"Tratamento\"),(\"Sintomas e Mobilidade\"),(\"Regeneração do SNC\"); SELECT * FROM categories;",
+        "payloadType": "str",
         "x": 3600,
         "y": 2260,
         "wires": [
@@ -884,6 +637,7 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "CREATE TABLE categories( category_id INTEGER NOT NULL PRIMARY KEY, category_name TEXT );",
+        "payloadType": "str",
         "x": 3610,
         "y": 2180,
         "wires": [
@@ -907,6 +661,7 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "CREATE TABLE rel_articles_categories( article_id INTEGER, category_id INTEGER, FOREIGN KEY (article_id) REFERENCES articles(article_id), FOREIGN KEY (category_id) REFERENCES categories(category_id) );",
+        "payloadType": "str",
         "x": 3570,
         "y": 2220,
         "wires": [
@@ -5759,9 +5514,7 @@
         "x": 3270,
         "y": 1540,
         "wires": [
-            [
-                "7763df39.5e76d"
-            ]
+            []
         ]
     },
     {
@@ -5988,24 +5741,6 @@
         ]
     },
     {
-        "id": "7763df39.5e76d",
-        "type": "ui_list",
-        "z": "e677d300.d1d95",
-        "group": "d21d47a8.9ecc18",
-        "name": "",
-        "order": 2,
-        "width": 0,
-        "height": 0,
-        "lineType": "two",
-        "actionType": "none",
-        "allowHTML": true,
-        "outputs": 0,
-        "topic": "",
-        "x": 3550,
-        "y": 1520,
-        "wires": []
-    },
-    {
         "id": "6ecb04d73cbbd302",
         "type": "template",
         "z": "5e1dd9b.17f6828",
@@ -6189,5 +5924,15 @@
                 "daa1c0139efc32e7"
             ]
         ]
+    },
+    {
+        "id": "38b322308984e320",
+        "type": "comment",
+        "z": "ad9a5c14.c1917",
+        "name": "KEEP DISABLED",
+        "info": "This is a flow meant for sporadic use. It creates a table with full Write permissions on the Database.",
+        "x": 260,
+        "y": 60,
+        "wires": []
     }
 ]
