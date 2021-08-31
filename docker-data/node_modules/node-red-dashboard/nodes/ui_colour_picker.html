@@ -1,0 +1,158 @@
+<script type="text/javascript">
+    RED.nodes.registerType('ui_colour_picker',{
+        category: RED._("node-red-dashboard/ui_base:ui_base.label.category"),
+        color: 'rgb(176, 223, 227)',
+        defaults: {
+            name: {value: ''},
+            label: {value: ''},
+            group: {type: 'ui_group', required: true},
+            format: {value: 'hex'},
+            outformat: {value: 'string'},
+            showSwatch: {value: true},
+            showPicker: {value: false},
+            showValue: {value: false},
+            showHue: {value: false},
+            showAlpha: {value: false},
+            showLightness: {value: true},
+            square: {value: "false"},
+            dynOutput: {value: "false"},
+            order: {value: 0},
+            width: {value: 0, validate: function(v) {
+                    var width = v||0;
+                    var currentGroup = $('#node-input-group').val()||this.group;
+                    var groupNode = RED.nodes.node(currentGroup);
+                    var valid = !groupNode || +width <= +groupNode.width;
+                    $("#node-input-size").toggleClass("input-error",!valid);
+                    return valid;
+                }
+            },
+            height: {value: 0},
+            passthru: {value: true},
+            topic: {value: 'topic', validate: (RED.validators.hasOwnProperty('typedInput')?RED.validators.typedInput('topicType'):function(v) { return true})},
+            topicType: {value: 'msg'}
+        },
+        inputs:1,
+        outputs:1,
+        outputLabels: function() { return this.format; },
+        icon: "ui_colour_picker.png",
+        paletteLabel: 'colour picker',
+        label: function() { return this.name || (~this.label.indexOf("{{") ? null : this.label) || 'colour picker'; },
+        labelStyle: function() { return this.name?"node_label_italic":""; },
+        oneditprepare: function() {
+            if (this.square === undefined) {
+                this.square = "false";
+                $("#node-input-square").val("false");
+            }
+            $("#node-input-square").on("change", function() {
+                if ($("#node-input-square").val() === "false") {
+                    $("#node-input-showLightness").prop('checked', true);
+                    $("#node-input-showHue").prop('checked', false);
+                }
+                else {
+                    $("#node-input-showLightness").prop('checked', false);
+                    $("#node-input-showHue").prop('checked', true);
+                }
+            });
+            $("#node-input-size").elementSizer({
+                width: "#node-input-width",
+                height: "#node-input-height",
+                group: "#node-input-group"
+            });
+            $("#node-input-format").on("change", function() {
+                if ($(this).val() === "hex") {
+                    $("#node-alpha-control").hide();
+                }
+                else {
+                    $("#node-alpha-control").show();
+                }
+            });
+            $('#node-input-topic').typedInput({
+                default: 'str',
+                typeField: $("#node-input-topicType"),
+                types: ['str','msg','flow','global']
+            });
+        },
+        oneditsave: function() {
+            if (!$("#node-input-showPicker").is(':checked') && !$("#node-input-showValue").is(':checked')) {
+                $("#node-input-showSwatch").prop('checked', true);
+                this.showSwatch = true;
+            }
+        }
+    });
+</script>
+
+<script type="text/html" data-template-name="ui_colour_picker">
+    <div class="form-row">
+        <label for="node-input-group"><i class="fa fa-table"></i> Group</label>
+        <input type="text" id="node-input-group">
+    </div>
+    <div class="form-row">
+        <label><i class="fa fa-object-group"></i> Size</label>
+        <input type="hidden" id="node-input-width">
+        <input type="hidden" id="node-input-height">
+        <button class="editor-button" id="node-input-size"></button>
+    </div>
+    <div class="form-row">
+        <label for="node-input-label"><i class="fa fa-i-cursor"></i> Label</label>
+        <input type="text" id="node-input-label">
+    </div>
+    <div class="form-row">
+        <label for="node-input-format"><i class="fa fa-keyboard-o"></i> Format</label>
+        <select id="node-input-format" style="width:156px;">
+            <option value="hex">hex</option>
+            <option value="hex8">hex8</option>
+            <option value="hsl">hsl</option>
+            <option value="hsv">hsv</option>
+            <option value="rgb">rgb</option>
+        </select>
+        <select id="node-input-square" style="width:130px; margin-left:30px">
+            <option value="false">round</option>
+            <option value="true">square</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <label>&nbsp;</label> Show hue slider : <input type="checkbox" id="node-input-showHue" style="display:inline-block; width:auto; vertical-align:baseline;">
+        <br/>
+        <label>&nbsp;</label> Show lightness slider : <input type="checkbox" id="node-input-showLightness" style="display:inline-block; width:auto; vertical-align:baseline;">
+        <br/>
+        <span id="node-alpha-control"><label>&nbsp;</label> Show transparency slider : <input type="checkbox" id="node-input-showAlpha" style="display:inline-block; width:auto; vertical-align:baseline;"></span>
+    </div>
+    <div class="form-row">
+        If width is 4 or greater:<br/>
+        <label>&nbsp;</label>
+        Always show swatch : <input type="checkbox" checked id="node-input-showSwatch" style="display:inline-block; width:auto; vertical-align:top;">
+        <br/>
+        <label>&nbsp;</label>
+        Always show picker : <input type="checkbox" checked id="node-input-showPicker" style="display:inline-block; width:auto; vertical-align:top;">
+        <br/>
+        <label>&nbsp;</label>
+        Always show value field : <input type="checkbox" checked id="node-input-showValue" style="display:inline-block; width:auto; vertical-align:top;">
+    </div>
+    <div class="form-row">
+        <label style="width:auto" for="node-input-passthru"><i class="fa fa-arrow-right"></i> If <code>msg</code> arrives on input, pass through to output: </label>
+        <input type="checkbox" checked id="node-input-passthru" style="display:inline-block; width:auto; vertical-align:top;">
+    </div>
+    <div class="form-row">
+        <label for="node-input-dynOutput"><i class="fa fa-envelope-o"></i> Send</label>
+        <select id="node-input-dynOutput" style="width:60%">
+            <option value="false">one value when released/closed</option>
+            <option value="true">multiple values during editing</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-outformat" style="padding-left: 25px; margin-right: -25px">Payload</label>
+        <select id="node-input-outformat" style="width:60%">
+            <option value="string">current value as a string</option>
+            <option value="object">current value as an object</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-topic" style="padding-left: 25px; margin-right: -25px">Topic</label>
+        <input type="text" id="node-input-topic" placeholder="optional topic">
+        <input type="hidden" id="node-input-topicType">
+    </div>
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name">
+    </div>
+</script>

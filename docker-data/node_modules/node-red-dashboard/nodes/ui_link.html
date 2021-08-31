@@ -1,0 +1,60 @@
+<script type="text/javascript">
+    RED.nodes.registerType('ui_link',{
+        category: 'config',
+        color: 'rgb( 63, 173, 181)',
+        defaults: {
+            name: {value: 'Google'},
+            link: {value: 'https://www.google.com'},
+            icon: {value: 'open_in_browser'},
+            target: {value: 'newtab', validate :function() { return true; }},
+            order: {value: 0}
+        },
+        inputs:0,
+        outputs:0,
+        hasUsers: false,
+        align: "right",
+        icon: "ui_link.png",
+        paletteLabel: 'link',
+        label: function() { return this.name || 'link'; },
+        labelStyle: function() { return this.name?"node_label_italic":""; },
+        oneditprepare: function() {
+            document.getElementById('node-config-input-target-opentab').checked = (this.target === 'newtab');
+            document.getElementById('node-config-input-target-openiframe').checked = (this.target === 'iframe');
+            document.getElementById('node-config-input-target-openthis').checked = (this.target === 'thistab');
+        },
+        oneditsave : function () {
+            var t = 'iframe';
+            if (document.getElementById('node-config-input-target-opentab').checked) { t = 'newtab'; }
+            if (document.getElementById('node-config-input-target-openthis').checked) { t = 'thistab'; }
+            this.target = t;
+        },
+        onadd: function() {
+            //console.log("PING");
+        }
+    });
+</script>
+
+<script type="text/html" data-template-name="ui_link">
+    <div class="form-row">
+        <label for="node-config-input-name"><i class="fa fa-tag"></i> <span data-i18n="ui_link.label.name"></span></label>
+        <input type="text" id="node-config-input-name">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-link"><i class="fa fa-link"></i> <span data-i18n="ui_link.label.link"></span></label>
+        <input type="text" id="node-config-input-link">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-icon"><i class="fa fa-image"></i> <span data-i18n="ui_link.label.icon"></span></label>
+        <input type="text" id="node-config-input-icon">
+    </div>
+    <div class="form-row">
+        <label><i class="fa fa-link"></i> <span data-i18n="ui_link.label.open-in"></span></label>
+        <input type="radio" id="node-config-input-target-opentab" name="open-link-method" style="width:20px; margin-top:0px; margin-bottom:5px" checked>
+        <label for="node-config-input-target-opentab" data-i18n="ui_link.label.new-tab"></label><br/>
+        <input type="radio" id="node-config-input-target-openthis" name="open-link-method" style="width:20px; margin-left:104px; margin-top:0px; margin-bottom:5px">
+        <label for="node-config-input-target-openthis" data-i18n="ui_link.label.this-tab"></label><br/>
+        <input type="radio" id="node-config-input-target-openiframe" name="open-link-method" style="width:20px; margin-left:104px; margin-top:0px; margin-bottom:5px">
+        <label for="node-config-input-target-openiframe" data-i18n="ui_link.label.iframe"></label>
+    </div>
+    <div class="form-tips" data-i18n="[html]ui_link.tip"></div>
+</script>

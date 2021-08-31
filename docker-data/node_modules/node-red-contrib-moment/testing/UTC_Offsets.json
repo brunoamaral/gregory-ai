@@ -1,0 +1,164 @@
+[
+    {
+        "id": "9fe47dca.ad366",
+        "type": "moment",
+        "z": "533475c4.a28eac",
+        "name": "UTC-4",
+        "topic": "UTC-4",
+        "input": "payload",
+        "inputType": "msg",
+        "inTz": "ETC/GMT-4",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "ddd Do MMM YYYY HH:mm",
+        "locale": "en_GB",
+        "output": "",
+        "outputType": "msg",
+        "outTz": "ETC/GMT-4",
+        "x": 450,
+        "y": 640,
+        "wires": [
+            [
+                "3b9b0dc5.bae662"
+            ]
+        ]
+    },
+    {
+        "id": "3c0267e8.e1c0b8",
+        "type": "inject",
+        "z": "533475c4.a28eac",
+        "name": "2017-05-28T21:00:00-04:00",
+        "topic": "",
+        "payload": "2017-05-28T21:00:00-04:00",
+        "payloadType": "str",
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "x": 200,
+        "y": 700,
+        "wires": [
+            [
+                "9fe47dca.ad366",
+                "71ef9d10.3d4904",
+                "72638b85.4698d4"
+            ]
+        ]
+    },
+    {
+        "id": "3b9b0dc5.bae662",
+        "type": "debug",
+        "z": "533475c4.a28eac",
+        "name": "",
+        "active": true,
+        "console": "false",
+        "complete": "false",
+        "x": 890,
+        "y": 640,
+        "wires": []
+    },
+    {
+        "id": "71ef9d10.3d4904",
+        "type": "moment",
+        "z": "533475c4.a28eac",
+        "name": "UTC",
+        "topic": "UTC",
+        "input": "payload",
+        "inputType": "msg",
+        "inTz": "etc/GMT-4",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "ddd Do MMM YYYY HH:mm",
+        "locale": "en_GB",
+        "output": "",
+        "outputType": "msg",
+        "outTz": "UTC",
+        "x": 450,
+        "y": 680,
+        "wires": [
+            [
+                "3b9b0dc5.bae662"
+            ]
+        ]
+    },
+    {
+        "id": "72638b85.4698d4",
+        "type": "moment",
+        "z": "533475c4.a28eac",
+        "name": "UTC+10",
+        "topic": "UTC+10",
+        "input": "payload",
+        "inputType": "msg",
+        "inTz": "etc/GMT-4",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "ddd Do MMM YYYY HH:mm",
+        "locale": "en_GB",
+        "output": "",
+        "outputType": "msg",
+        "outTz": "etc/GMT+10",
+        "x": 460,
+        "y": 720,
+        "wires": [
+            [
+                "3b9b0dc5.bae662"
+            ]
+        ]
+    },
+    {
+        "id": "e862abcc.69b328",
+        "type": "inject",
+        "z": "533475c4.a28eac",
+        "name": "2017-05-28T21:00:00",
+        "topic": "",
+        "payload": "2017-05-28T21:00:00",
+        "payloadType": "str",
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "x": 180,
+        "y": 760,
+        "wires": [
+            [
+                "72638b85.4698d4",
+                "71ef9d10.3d4904",
+                "9fe47dca.ad366"
+            ]
+        ]
+    },
+    {
+        "id": "ace5ef2a.af5c2",
+        "type": "inject",
+        "z": "533475c4.a28eac",
+        "name": "2017-05-28T21:00:00Z",
+        "topic": "",
+        "payload": "2017-05-28T21:00:00Z",
+        "payloadType": "str",
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "x": 180,
+        "y": 640,
+        "wires": [
+            [
+                "9fe47dca.ad366",
+                "71ef9d10.3d4904",
+                "72638b85.4698d4"
+            ]
+        ]
+    },
+    {
+        "id": "acbc2d1d.86082",
+        "type": "comment",
+        "z": "533475c4.a28eac",
+        "name": "Expected Results",
+        "info": "| Input                     | Moment | Output                  |\n|---------------------------|--------|-------------------------|\n| 2017-05-28T21:00:00Z      | UTC-4  | Mon 29th May 2017 01:00 |\n|                           | UTC    | Sun 28th May 2017 21:00 |\n|                           | UTC+10 | Sun 28th May 2017 11:00 |\n| 2017-05-28T21:00:00-04:00 | UTC-4  | Mon 29th May 2017 05:00 |\n|                           | UTC    | Mon 29th May 2017 01:00 |\n|                           | UTC+10 | Sun 28th May 2017 15:00 |\n| 2017-05-28T21:00:00       | UTC-4  | Sun 28th May 2017 07:00 |\n|                           | UTC    | Sun 28th May 2017 17:00 |\n|                           | UTC+10 | Sun 28th May 2017 21:00 |",
+        "x": 700,
+        "y": 760,
+        "wires": []
+    }
+]

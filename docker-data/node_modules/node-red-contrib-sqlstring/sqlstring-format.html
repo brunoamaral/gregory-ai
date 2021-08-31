@@ -1,0 +1,101 @@
+<script type="text/x-red" data-template-name="sqlstring-format">
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-outField"><i class="fa fa-edit"></i> Result to</label>
+        msg.<input type="text" id="node-input-outField" placeholder="topic" style="width: 64%;">
+    </div>
+    <div class="form-row" style="margin-bottom: 0px;">
+        <label for="node-input-query" style="width: 100% !important;"><i class="fa fa-comments"></i> Query</label>
+        <input type="hidden" id="node-input-query" autofocus="autofocus">
+    </div>
+    <div class="form-row node-text-editor-row">
+        <div style="height: 250px;" class="node-text-editor" id="node-input-query-editor" ></div>
+    </div>
+    <div class="form-tips" id="sqlstring-format-tips" style="margin-top: 20px; margin-bottom: 20px">Tip: Use ? as a placeholder for all variables.</div>
+    <div class="form-row" id="sqlstring-format-var-row">
+        <label for="node-input-vars">Variables</label>
+        <input type="text" id="node-input-vars" placeholder="req.query.id, payload.foo, ...">
+    </div>
+    <div class="alert alert-danger" id="sqlstring-format-vars-mismatch" style="margin-top: 20px">Variable Counts mismatch.</div>
+</script>
+
+<script type="text/x-red" data-help-name="sqlstring-format">
+    <h4>Format SQL-Queries to avoid SQL-Injections</h4>
+    <p>SELECT * FROM Test WHERE Name=?</p>
+    <p>Using the library: <a href="https://github.com/mysqljs/sqlstring">https://github.com/mysqljs/sqlstring</a></p>
+</script>
+
+<script type="text/javascript">
+    RED.nodes.registerType("sqlstring-format", {
+        category: "storage",
+        color: "#C0DEED",
+        defaults: {
+            name: { value: "" },
+            query: { value: "" },
+            vars: { value: "" },
+            outField: { value: "topic" },
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: "db.png",
+        label: function() {
+            return this.name || "SQL";
+        },
+        labelStyle: function() {
+            return this.name ? "node_label_italic" : "";
+        },
+        oneditprepare: function() {
+            this.editor = RED.editor.createEditor({
+                id: "node-input-query-editor",
+                mode: "ace/mode/sql",
+                value: $("#node-input-query").val(),
+            });
+            this.editor.focus();
+            this.editor.on("change", () => {
+                updateEditForm(this);
+            });
+            $("#node-input-vars").on("change", () => {
+                updateEditForm(this);
+            });
+            $("#node-input-vars").on("input", () => {
+                updateEditForm(this);
+            });
+            updateEditForm(this);
+        },
+        oneditsave: function() {
+            $("#node-input-query").val(this.editor.getValue());
+            delete this.editor;
+        },
+    });
+
+    function updateEditForm(form) {
+        const query = form.editor.getValue();
+
+        let queryVarCount = 0;
+        query.replace(/\?/g, m => {
+            queryVarCount++;
+            return m;
+        });
+
+        const vars = $("#node-input-vars").val();
+        let varCount = vars
+            .split(",")
+            .map(v => v.trim())
+            .filter(v => v !== "").length;
+
+        if (queryVarCount > 0) {
+            $("#sqlstring-format-tips").hide();
+        } else {
+            $("#sqlstring-format-tips").show();
+        }
+
+        if (varCount === queryVarCount) {
+            $("#sqlstring-format-vars-mismatch").hide();
+        } else {
+            $("#sqlstring-format-vars-mismatch").show();
+        }
+    }
+</script>

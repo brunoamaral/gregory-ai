@@ -1,0 +1,15 @@
+{
+    "feedparse": {
+        "feedparse": "feedparser",
+        "label": {
+            "feedurl": "Feed url",
+            "refresh": "Refresh",
+            "minutes": "minutes"
+        },
+        "errors": {
+            "badstatuscode": "error - Bad status code",
+            "invalidurl": "Invalid url",
+            "invalidinterval": "Repeat interval too large"
+        }
+    }
+}

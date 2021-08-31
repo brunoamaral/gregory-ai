@@ -1,0 +1,141 @@
+[
+    {
+        "id": "6e87ca1f.077804",
+        "type": "moment",
+        "z": "533475c4.a28eac",
+        "name": "input: msg.foo",
+        "topic": "",
+        "input": "foo",
+        "inputType": "msg",
+        "inTz": "America/New_York",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "YYYY-MM-DD HH:mm",
+        "locale": "en_US",
+        "output": "now",
+        "outputType": "msg",
+        "outTz": "America/New_York",
+        "x": 460,
+        "y": 660,
+        "wires": [
+            [
+                "61f6f582.f8708c"
+            ]
+        ]
+    },
+    {
+        "id": "12d13caf.fd1683",
+        "type": "inject",
+        "z": "533475c4.a28eac",
+        "name": "",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "x": 240,
+        "y": 600,
+        "wires": [
+            [
+                "6e87ca1f.077804"
+            ]
+        ]
+    },
+    {
+        "id": "61f6f582.f8708c",
+        "type": "debug",
+        "z": "533475c4.a28eac",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "x": 650,
+        "y": 660,
+        "wires": []
+    },
+    {
+        "id": "63c7416c.aa3ce",
+        "type": "inject",
+        "z": "533475c4.a28eac",
+        "name": "blank string",
+        "topic": "",
+        "payload": "",
+        "payloadType": "str",
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "x": 230,
+        "y": 640,
+        "wires": [
+            [
+                "6e87ca1f.077804"
+            ]
+        ]
+    },
+    {
+        "id": "c371a083.37e4f",
+        "type": "inject",
+        "z": "533475c4.a28eac",
+        "name": "'test'",
+        "topic": "",
+        "payload": "test",
+        "payloadType": "str",
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "x": 250,
+        "y": 680,
+        "wires": [
+            [
+                "6e87ca1f.077804"
+            ]
+        ]
+    },
+    {
+        "id": "c0c9733a.5abb3",
+        "type": "inject",
+        "z": "533475c4.a28eac",
+        "name": "null",
+        "topic": "",
+        "payload": "null",
+        "payloadType": "json",
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "x": 250,
+        "y": 720,
+        "wires": [
+            [
+                "6e87ca1f.077804"
+            ]
+        ]
+    },
+    {
+        "id": "bed64b79.64ac88",
+        "type": "comment",
+        "z": "533475c4.a28eac",
+        "name": "Reference a non-existent input property",
+        "info": "",
+        "x": 530,
+        "y": 620,
+        "wires": []
+    },
+    {
+        "id": "805b442c.c26d48",
+        "type": "comment",
+        "z": "533475c4.a28eac",
+        "name": "Expected Results",
+        "info": "As the input msg property does not exist,\n**all** outputs will be the same:\n\n```\n{\n  \"_msgid\":\"fbb0e16f.af613\",\"topic\":\"\",\n  \"payload\":1537719147115,\n  \"now\":\"2018-09-23 12:12\"\n}\n```\n\n1. `msg.payload` set to input msg.payload\n3. `msg.now` set to current date/time string.\n",
+        "x": 460,
+        "y": 720,
+        "wires": []
+    }
+]
