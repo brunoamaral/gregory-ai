@@ -1,0 +1,162 @@
+<style>
+    input.gauge-color {
+        width: 100px;
+        text-align: center;
+    }
+    input.gauge-color::-webkit-color-swatch {
+        border: none;
+    }
+</style>
+<script type="text/javascript">
+    RED.nodes.registerType('ui_gauge',{
+        category: RED._("node-red-dashboard/ui_base:ui_base.label.category"),
+        color: 'rgb(119, 198, 204)',
+        defaults: {
+            name: {value: ''},
+            group: {type: 'ui_group', required: true},
+            order: {value: 0},
+            width: {value: 0, validate: function(v) {
+                    var width = v || 0;
+                    var currentGroup = $('#node-input-group').val() || this.group;
+                    var groupNode = RED.nodes.node(currentGroup);
+                    var valid = !groupNode || +width <= +groupNode.width;
+                    $("#node-input-size").toggleClass("input-error",!valid);
+                    return valid;
+                }
+            },
+            height: {value: 0},
+            gtype: {value: 'gage'},
+            title: {value: 'gauge'},
+            label: {value: 'units'},
+            format: {value: '{{value}}'},
+            min: {value: 0, required: true, validate: RED.validators.number()},
+            max: {value: 10, required: true, validate: RED.validators.number()},
+            colors: {value: ["#00B500","#E6E600","#CA3838"]},
+            seg1: {value: ""},
+            seg2: {value: ""}
+        },
+        inputs:1,
+        outputs:0,
+        inputLabels: function() { return this.min+" - "+this.max; },
+        align: "right",
+        icon: "ui_gauge.png",
+        paletteLabel: 'gauge',
+        label: function() { return this.name || (~this.title.indexOf("{{") ? null : this.title) || ((this.gtype === "gage") ? "gauge" : this.gtype) || 'gauge'; },
+        labelStyle: function() { return this.name?"node_label_italic":""; },
+        oneditprepare: function() {
+            var setColour = function(id, value) {
+                $(id).val(value);
+                $(id).css("background-color", value);
+                var rgb = tinycolor(value).toRgb();
+                var level = ((rgb.r*299) + (rgb.g*587) + (rgb.b*114))/1000;
+                var textColor = (level >= 128) ? '#111111' : '#eeeeee';
+                $(id).css("color", textColor);
+            }
+            $(".gauge-color").on("change", function() {
+                setColour("#"+$(this).attr("id"), $(this).val());
+            });
+
+            var defaultColors = ['#00B500', '#E6E600', '#CA3838'];
+
+            if (this.colors) {
+                for (var i=0; i<this.colors.length; i++) {
+                    var value = this.colors[i] || defaultColors[i];
+                    setColour("#node-input-color"+(i+1), value);
+                }
+            }
+            else {
+                for (var j=0; j<defaultColors.length; j++) {
+                    setColour("#node-input-color"+(j+1), defaultColors[j]);
+                }
+            }
+            if (this.gtype === undefined) {
+                this.gtype = "gage";
+                $("#node-input-gtype").val("gage");
+            }
+            $("#node-input-size").elementSizer({
+                width: "#node-input-width",
+                height: "#node-input-height",
+                group: "#node-input-group"
+            });
+            $("#node-input-gtype").on("change", function() {
+                if (($(this).val() === "compass") || ($(this).val() === "wave")) {
+                    $("#ui-gauge-colours").hide();
+                    $("#ui-gauge-segments").hide();
+                }
+                else {
+                    $("#ui-gauge-colours").show();
+                    $("#ui-gauge-segments").show();
+                }
+            });
+            $("#node-input-min").on("change", function() {
+                $("#seg-min").text($(this).val());
+            });
+            $("#node-input-max").on("change", function() {
+                $("#seg-max").text($(this).val());
+            });
+        },
+        oneditsave: function() {
+            this.colors = [$("#node-input-color1").val(),$("#node-input-color2").val(),$("#node-input-color3").val()];
+        }
+    });
+</script>
+
+<script type="text/html" data-template-name="ui_gauge">
+    <div class="form-row">
+        <label for="node-input-group"><i class="fa fa-table"></i> Group</label>
+        <input type="text" id="node-input-group">
+    </div>
+    <div class="form-row">
+        <label><i class="fa fa-object-group"></i> Size</label>
+        <input type="hidden" id="node-input-width">
+        <input type="hidden" id="node-input-height">
+        <button class="editor-button" id="node-input-size"></button>
+    </div>
+    <div class="form-row">
+        <label for="node-input-gtype"><i class="fa fa-list"></i> Type</label>
+        <select id="node-input-gtype" style="width:150px">
+            <option value="gage">Gauge</option>
+            <option value="donut">Donut</option>
+            <option value="compass">Compass</option>
+            <option value="wave">Level</option>
+        </select>
+    </div>
+    <div id="ui-gauge-labels">
+        <div class="form-row">
+            <label for="node-input-title"><i class="fa fa-i-cursor"></i> Label</label>
+            <input type="text" id="node-input-title">
+        </div>
+        <div class="form-row" id="ui-gauge-format">
+            <label for="node-input-format"><i class="fa fa-i-cursor"></i> Value format</label>
+            <input type="text" id="node-input-format" placeholder="{{value}}">
+        </div>
+        <div class="form-row" id="ui-gauge-units">
+            <label for="node-input-label"><i class="fa fa-i-cursor"></i> Units</label>
+            <input type="text" id="node-input-label" placeholder="optional sub-label">
+        </div>
+    </div>
+    <div class="form-row">
+        <label for="node-input-min">Range</label>
+        <span for="node-input-min">min</span>
+        <input type="text" id="node-input-min" style="width:80px">
+        <span for="node-input-max" style="margin-left:20px;">max</span>
+        <input type="text" id="node-input-max" style="width:80px">
+    </div>
+    <div class="form-row" id="ui-gauge-colours">
+        <label for="node-input-color1">Colour gradient</label>
+        <input type="color" id="node-input-color1" class="gauge-color" style="width:100px;"/>
+        <input type="color" id="node-input-color2" class="gauge-color" style="width:100px;"/>
+        <input type="color" id="node-input-color3" class="gauge-color" style="width:100px;"/>
+    </div>
+    <div class="form-row" id="ui-gauge-segments">
+        <label>Sectors</label>
+        <span id="seg-min" style="display:inline-block; width:40px;">0</span>...
+        <input type="text" id="node-input-seg1" style="text-align:center; width:87px;" placeholder="optional"> ...
+        <input type="text" id="node-input-seg2" style="text-align:center; width:87px;" placeholder="optional"> ...
+        <span id="seg-max" style="display:inline-block; width:40px; text-align:right">10</span>
+    </div>
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name">
+    </div>
+</script>

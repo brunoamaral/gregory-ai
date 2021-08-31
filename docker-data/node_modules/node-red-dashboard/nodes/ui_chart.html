@@ -1,0 +1,290 @@
+<style>
+    input.series-color {
+        width: 100px;
+        text-align: center;
+    }
+    input.series-color::-webkit-color-swatch {
+        border: none;
+    }
+</style>
+<script type="text/javascript">
+    RED.nodes.registerType('ui_chart',{
+        category: RED._("node-red-dashboard/ui_base:ui_base.label.category"),
+        color: 'rgb(119, 198, 204)',
+        defaults: {
+            name: {value: ''},
+            group: {type: 'ui_group', required: true},
+            order: {value: 0},
+            width: {value: 0, validate: function(v) {
+                    var width = v||0;
+                    var currentGroup = $('#node-input-group').val()||this.group;
+                    var groupNode = RED.nodes.node(currentGroup);
+                    var valid = !groupNode || +width <= +groupNode.width;
+                    $("#node-input-size").toggleClass("input-error",!valid);
+                    return valid;
+                }},
+            height: {value: 0},
+            label: {value: 'chart'},
+            chartType: {value: 'line'},
+            legend: {value: 'false'},
+            xformat: {value: 'HH:mm:ss'},
+            interpolate: {value: 'linear', required:true},
+            nodata: {value: ''},
+            dot: {value: false},
+            ymin: {value: '', validate:function(value) { return value === '' || RED.validators.number(); }},
+            ymax: {value: '', validate:function(value) { return value === '' || RED.validators.number(); }},
+            removeOlder: {value: 1, validate:RED.validators.number(), required:true},
+            removeOlderPoints: {value: '', validate:function(value) { return value === '' || RED.validators.number(); }},
+            removeOlderUnit: {value: '3600', required:true},
+            cutout: {value: 0},
+            useOneColor: {value: false},
+            useUTC: {value: false},
+            colors: {value: ['#1F77B4', '#AEC7E8', '#FF7F0E', '#2CA02C', '#98DF8A', '#D62728', '#FF9896', '#9467BD', '#C5B0D5']},
+            outputs: {value: 1},
+            useDifferentColor: {value: false}
+        },
+        inputs:1,
+        outputs:1,
+        inputLabels: function() { return this.chartType; },
+        outputLabels: ["chart state"],
+        align: "right",
+        icon: "ui_chart.png",
+        paletteLabel: 'chart',
+        label: function() { return this.name || (~this.label.indexOf("{{") ? null : this.label) || 'chart'; },
+        labelStyle: function() { return this.name?"node_label_italic":""; },
+        oneditprepare: function() {
+            var oldouts = this.outputs;
+            if (RED.nodes.filterLinks({source:{id:this.id},sourcePort:1}).length > 0) { this.outputs = 2; }
+            else { this.outputs = 1; }
+            if (this.outputs !== oldouts) { this.changed = true; }
+            if (!$("#node-input-chartType").val()) {
+                $("#node-input-chartType").val("line");
+            }
+            $("#node-input-size").elementSizer({
+                width: "#node-input-width",
+                height: "#node-input-height",
+                group: "#node-input-group"
+            });
+            $("#node-input-chartType").on("change", function() {
+                $("#legend-show").hide();
+                $("#show-useDifferentColor").hide();
+                if ($(this).val() === "horizontalBar") {
+                    $("#y-label-show").hide();
+                    $("#x-label-show").show();
+                }
+                else {
+                    $("#y-label-show").show();
+                    $("#x-label-show").hide();
+                }
+                if ($(this).val() === "line") {
+                    $("#x-axis-show").show();
+                    $("#x-axis-label-show").show();
+                    $("#interpolate-show").show();
+                    $("#legend-show").show();
+                    $("#y-axis-show").show();
+                    $("#hole-size-show").hide();
+                    $("#show-dot-field").show();
+                    $("#show-useOneColor").hide();
+                }
+                else {
+                    $("#x-axis-show").hide();
+                    $("#x-axis-label-show").hide();
+                    $("#interpolate-show").hide();
+                    $("#show-dot-field").hide();
+                    if (($(this).val() === "bar")||($(this).val() === "horizontalBar")) {
+                        $("#show-useOneColor").show();
+                        $("#legend-show").show();
+                    }
+                    else {
+                        $("#show-useOneColor").hide();
+                    }
+                    if ($(this).val() === "pie") {
+                        $("#y-axis-show").hide();
+                        $("#legend-show").show();
+                        $("#hole-size-show").show();
+                    }
+                    else if ($(this).val() === "polar-area") {
+                        $("#y-axis-show").show();
+                        $("#legend-show").show();
+                        $("#hole-size-show").hide();
+                        $("#show-useDifferentColor").show();
+                    }
+                    else if ($(this).val() === "radar") {
+                        $("#y-axis-show").show();
+                        $("#legend-show").show();
+                        $("#hole-size-show").hide();
+                    }
+                    else {
+                        $("#y-axis-show").show();
+                        $("#hole-size-show").hide();
+                    }
+                }
+
+            });
+            var setColour = function(id, value) {
+                $(id).val(value);
+                $(id).css("background-color", value);
+                var rgb = tinycolor(value).toRgb();
+                var level = ((rgb.r*299) + (rgb.g*587) + (rgb.b*114))/1000;
+                var textColor = (level >= 128) ? '#111111' : '#eeeeee';
+                $(id).css("color", textColor);
+            }
+            $(".series-color").on("change", function() {
+                setColour("#"+$(this).attr("id"), $(this).val());
+            });
+            var oval = $("#node-input-xformat").val();
+            if (!oval) { $("#node-input-xformat").val("HH:mm:ss"); }
+            var odef = 'custom';
+            if (oval === "HH:mm:ss") { odef = oval; }
+            if (oval === "HH:mm") { odef = oval; }
+            if (oval === "Y-M-D") { odef = oval; }
+            if (oval === "D/M") { odef = oval; }
+            if (oval === "dd HH:mm") { odef = oval; }
+            if (oval === "auto") { odef = oval; }
+            var ohms = {value: "HH:mm:ss", label: RED._("node-red-dashboard/ui_chart:ui_chart.label.HHmmss"), hasValue: false};
+            var ohm = {value: "HH:mm", label: RED._("node-red-dashboard/ui_chart:ui_chart.label.HHmm"), hasValue: false};
+            var oymd = {value: "Y-M-D", label: RED._("node-red-dashboard/ui_chart:ui_chart.label.yearMonthDate"), hasValue: false};
+            var odm = {value: "D/M", label: RED._("node-red-dashboard/ui_chart:ui_chart.label.dateMonth"), hasValue: false};
+            var oahm = {value: "dd HH:mm", label: RED._("node-red-dashboard/ui_chart:ui_chart.label.dayHHmm"), hasValue: false};
+            var ocus = {value: "custom", label: RED._("node-red-dashboard/ui_chart:ui_chart.label.custom"), icon: "red/images/typedInput/az.png"};
+            var oaut = {value: "auto", label: RED._("node-red-dashboard/ui_chart:ui_chart.label.automatic"), hasValue: false};
+            $("#node-input-xformat").typedInput({
+                default: odef,
+                types:[ ohms, ohm, oahm, odm, oymd, ocus, oaut ]
+            });
+            var defaultColors = ['#1F77B4', '#AEC7E8', '#FF7F0E', '#2CA02C', '#98DF8A', '#D62728', '#FF9896', '#9467BD', '#C5B0D5'];
+
+            if (this.colors) {
+                for (var i=0; i<this.colors.length; i++) {
+                    var value = this.colors[i] || defaultColors[i];
+                    setColour("#node-input-color"+(i+1), value);
+                }
+            }
+            else {
+                for (var c=0; c<defaultColors.length; c++) {
+                    setColour("#node-input-color"+(c+1), defaultColors[c]);
+                }
+            }
+
+        },
+        oneditsave: function() {
+            if ($("#node-input-xformat").typedInput('type') !== 'custom') {
+                $("#node-input-xformat").val($("#node-input-xformat").typedInput('type'));
+            }
+            this.colors = [$("#node-input-color1").val(),$("#node-input-color2").val(),$("#node-input-color3").val(),
+            $("#node-input-color4").val(),$("#node-input-color5").val(),$("#node-input-color6").val(),
+            $("#node-input-color7").val(),$("#node-input-color8").val(),$("#node-input-color9").val()];
+        }
+    });
+</script>
+
+<script type="text/html" data-template-name="ui_chart">
+    <div class="form-row">
+        <label for="node-input-group"><i class="fa fa-table"></i> <span data-i18n="ui_chart.label.group"></label>
+        <input type="text" id="node-input-group">
+    </div>
+    <div class="form-row">
+        <label><i class="fa fa-object-group"></i> <span data-i18n="ui_chart.label.size"></label>
+        <input type="hidden" id="node-input-width">
+        <input type="hidden" id="node-input-height">
+        <button class="editor-button" id="node-input-size"></button>
+    </div>
+    <div class="form-row">
+        <label for="node-input-label"><i class="fa fa-i-cursor"></i> <span data-i18n="ui_chart.label.label"></label>
+        <input type="text" id="node-input-label" data-i18n="[placeholder]ui_chart.label.optionalChartTitle">
+    </div>
+    <div class="form-row">
+        <label for="node-input-removeOlder"><i class="fa fa-line-chart"></i> <span data-i18n="ui_chart.label.type"></label>
+        <select id="node-input-chartType" style="width:159px; font-family:'FontAwesome','Helvetica Neue', Helvetica, Arial, sans-serif">
+            <option value="line" data-i18n="[html]ui_chart.label.lineChart"></option>
+            <option value="bar" data-i18n="[html]ui_chart.label.barChart"></option>
+            <option value="horizontalBar" data-i18n="[html]ui_chart.label.barChartH"></option>
+            <option value="pie" data-i18n="[html]ui_chart.label.pieChart"></option>
+            <option value="polar-area" data-i18n="[html]ui_chart.label.polarAreaChart"></option>
+            <option value="radar" data-i18n="[html]ui_chart.label.radarChart"></option>
+        </select>
+        <div id="show-dot-field" style="display:inline-block;">
+            <input type="checkbox" id="node-input-dot" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:40px; margin-right:5px;"><span data-i18n="ui_chart.label.enlargePoints">
+        </div>
+    </div>
+    <div class="form-row" id="x-axis-show">
+        <label for="node-input-removeOlder" data-i18n="ui_chart.label.xAxis"></label>
+        <label for="node-input-removeOlder" style="width:auto" data-i18n="ui_chart.label.last"></label>
+        <input type="text" id="node-input-removeOlder" style="width:50px;">
+        <select id="node-input-removeOlderUnit" style="width:80px;">
+            <option value="1" data-i18n="ui_chart.label.seconds"></option>
+            <option value="60" data-i18n="ui_chart.label.minutes"></option>
+            <option value="3600" data-i18n="ui_chart.label.hours"></option>
+            <option value="86400" data-i18n="ui_chart.label.days"></option>
+            <option value="604800" data-i18n="ui_chart.label.weeks"></option>
+        </select>
+        <label for="node-input-removeOlderPoints" style="width:auto; margin-left:10px; margin-right:10px;" data-i18n="ui_chart.label.or"></label>
+        <input type="text" id="node-input-removeOlderPoints" style="width:60px;" placeholder="1000">
+        <span style="margin-left:5px;" data-i18n="ui_chart.label.points"></span>
+    </div>
+    <div class="form-row" id="x-axis-label-show">
+        <label for="node-input-xformat" data-i18n="ui_chart.label.xAxisLabel"></label>
+        <input type="text" id="node-input-xformat" style="width:250px;">
+        <input type="checkbox" id="node-input-useUTC" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;"> <span data-i18n="ui_chart.label.asUTC"></span>
+    </div>
+    <div class="form-row" id="y-axis-show">
+        <label id="y-label-show" for="node-input-ymin" data-i18n="ui_chart.label.yAxis"></label>
+        <label id="x-label-show" for="node-input-ymin" data-i18n="ui_chart.label.xAxis"></label>
+        <label for="node-input-ymin" style="width:auto" data-i18n="ui_chart.label.min"></label>
+        <input type="text" id="node-input-ymin" style="width:92px">
+        <label for="node-input-ymax" style="width:auto; margin-left:20px;" data-i18n="ui_chart.label.max"></label>
+        <input type="text" id="node-input-ymax" style="width:92px">
+    </div>
+    <div class="form-row" id="legend-show">
+        <label for="node-input-legend" data-i18n="ui_chart.label.legend"></label>
+        <select id="node-input-legend" style="width:120px;">
+            <option value="false" data-i18n="ui_chart.label.none"></option>
+            <option value="true" data-i18n="ui_chart.label.show"></option>
+        </select>
+        <span id="interpolate-show">&nbsp;&nbsp;&nbsp;&nbsp;<span data-i18n="ui_chart.label.interpolate"></span>
+            <select id="node-input-interpolate" style="width:120px;">
+                <option value="linear" data-i18n="ui_chart.label.linear"></option>
+                <option value="step" data-i18n="ui_chart.label.step"></option>
+                <option value="bezier" data-i18n="ui_chart.label.bezier"></option>
+                <option value="cubic" data-i18n="ui_chart.label.cubic"></option>
+                <option value="monotone" data-i18n="ui_chart.label.cubicMono"></option>
+            </select>
+        </span>
+        <span id="hole-size-show">&nbsp;&nbsp;&nbsp;&nbsp;<span data-i18n="ui_chart.label.cutout"></span>
+            <input type="text" id="node-input-cutout" style="width:35px"> %
+        </span>
+    </div>
+    <div id="show-useOneColor" style="display:none; height:24px;">
+        <input type="checkbox" id="node-input-useOneColor" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:105px; margin-right:5px;"><span data-i18n="ui_chart.label.useFirstColourForAllBars"></span>
+    </div>
+    <div class="form-row" id="ui-chart-colours">
+        <label for="node-input-color1" data-i18n="ui_chart.label.seriesColours"></label>
+        <input type="color" id="node-input-color1" class="series-color" style="width:100px;"/>
+        <input type="color" id="node-input-color2" class="series-color" style="width:100px;"/>
+        <input type="color" id="node-input-color3" class="series-color" style="width:100px;"/>
+        <div style="margin-top:5px; margin-left:104px;">
+            <input type="color" id="node-input-color4" class="series-color" style="width:100px;"/>
+            <input type="color" id="node-input-color5" class="series-color" style="width:100px;"/>
+            <input type="color" id="node-input-color6" class="series-color" style="width:100px;"/>
+        </div>
+        <div style="margin-top:5px; margin-left:104px;">
+            <input type="color" id="node-input-color7" class="series-color" style="width:100px;"/>
+            <input type="color" id="node-input-color8" class="series-color" style="width:100px;"/>
+            <input type="color" id="node-input-color9" class="series-color" style="width:100px;"/>
+        </div>
+    </div>
+    <div id="show-useDifferentColor" class="form-row">
+         <label></label>
+         <input type="checkbox" id="node-input-useDifferentColor" style="display:inline-block; width:auto; vertical-align:top;">
+             <span data-i18n="ui_chart.label.useDifferentColor"></span>
+         </input>
+    </div>
+    <div class="form-row">
+        <label for="node-input-nodata" data-i18n="ui_chart.label.blankLabel"></label>
+        <input type="text" id="node-input-nodata" data-i18n="[placeholder]ui_chart.label.displayThisTextBeforeValidDataArrives">
+    </div>
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> <span data-i18n="node-red:common.label.name"></label>
+        <input type="text" id="node-input-name" data-i18n="[placeholder]node-red:common.label.name">
+    </div>
+</script>

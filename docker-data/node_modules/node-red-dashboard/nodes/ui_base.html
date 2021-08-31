@@ -1,0 +1,3315 @@
+<style>
+    :root {
+        --nr-db-dark-text: #444;
+        --nr-db-light-text: #eee;
+        --nr-db-disabled-text: #999;
+        --nr-db-mid-grey: #7f7f7f;
+    }
+    .nr-db-sb {
+        position: absolute;
+        top: 1px;
+        bottom: 2px;
+        left: 1px;
+        right: 1px;
+        overflow-y: scroll;
+        padding: 10px;
+    }
+    .nr-db-sb .form-row label {
+        display: block;
+        width: auto;
+    }
+    .nr-db-sb .form-row input,
+    .nr-db-sb .form-row select {
+        width: calc(100% - 100px);
+        margin-bottom:0;
+    }
+    .nr-db-sb .compact {
+        margin-bottom: 8px !important;
+    }
+    .nr-db-sb .red-ui-editableList-container {
+        padding: 0;
+        min-height: 250px;
+        height: auto;
+    }
+    .nr-db-sb-tab-list {
+        min-height: 250px;
+        height: auto;
+    }
+    .nr-db-sb-tab-list li {
+        padding: 0;
+    }
+    .nr-db-sb-tab-list-item {
+        border-radius: 4px;
+        color: var(--nr-db-dark-text);
+    }
+    .nr-db-sb-list-header {
+        cursor: pointer;
+        position:relative;
+        color: var(--nr-db-dark-text);
+        padding:3px;
+        white-space: nowrap;
+    }
+    .nr-db-sb-list-header:hover {
+        color: var(--nr-db-dark-text);
+    }
+    .nr-db-sb-title-hidden {
+        text-decoration: line-through;
+    }
+    .nr-db-sb-title-disabled {
+        color: var(--nr-db-disabled-text);
+    }
+    .nr-db-sb-tab-list-header {
+        background: var(--nr-db-light-text);
+        padding:5px;
+    }
+    .nr-db-sb-group-list-header:hover,
+    .nr-db-sb-widget-list-header:hover {
+        background: var(--nr-db-light-text);
+    }
+    .nr-db-sb-list-chevron {
+        width: 15px;
+        text-align: center;
+        margin: 3px 5px 3px 5px;
+    }
+    .nr-db-sb-tab-list-item .red-ui-editableList-container {
+        border-radius: 0;
+        border: none;
+        height: auto !important;
+        min-height: unset;
+    }
+    .nr-db-sb-list-handle {
+        vertical-align: top;
+        opacity: 0;
+        cursor: move;
+    }
+    .nr-db-sb-list-header:hover>.nr-db-sb-list-handle,
+    .nr-db-sb-list-header:hover>.nr-db-sb-list-header-button-group {
+        opacity: 1;
+    }
+    .nr-db-sb-list-header-button-group {
+        opacity: 0;
+    }
+    .nr-db-sb-list-handle  {
+        color: var(--nr-db-light-text);
+        padding:5px;
+    }
+    .nr-db-sb-tab-list-header>.nr-db-sb-list-chevron  {
+        margin-left: 0px;
+        transition: transform 0.2s ease-in-out;
+    }
+    .nr-db-sb-group-list-header>.nr-db-sb-list-chevron {
+        margin-left: 20px;
+        transition: transform 0.2s ease-in-out;
+    }
+    .nr-db-sb-group-list {
+        min-height: 10px;
+    }
+    .nr-db-sb-group-list li {
+        border-bottom-color: var(--nr-db-light-text);
+    }
+    .nr-db-sb-group-list>li.ui-sortable-helper {
+        border-top: 1px solid var(--nr-db-light-text);
+    }
+    .nr-db-sb-group-list>li:last-child {
+        border-bottom: none;
+    }
+    .nr-db-sb-widget-list>li {
+        border: none !important;
+    }
+    .nr-db-sb-group-list>li>.red-ui-editableList-item-handle {
+        left: 10px;
+    }
+    .nr-db-sb-list-button-group {
+        position: absolute;
+        right: 3px;
+        top: 0px;
+        z-index: 2;
+    }
+    .nr-db-sb-list-header-button-group {
+        position: absolute;
+        right: 3px;
+        top: 4px;
+    }
+    .nr-db-sb-list-header-button {
+        margin-left: 5px;
+    }
+    .nr-db-sb li.ui-sortable-helper {
+        opacity: 0.9;
+    }
+    .nr-db-sb-widget-icon {
+        margin-left: 56px;
+    }
+    .nr-db-sb-icon {
+        margin-right: 10px;
+    }
+    .nr-db-sb-link {
+        display: inline-block;
+        padding-left: 20px;
+    }
+    .nr-db-sb-link-name-container .fa-external-link {
+      margin-right: 10px;
+    }
+    .nr-db-sb-link-url {
+        font-size: 0.8em;
+        color: var(--nr-db-mid-grey);
+    }
+    span.nr-db-color-pick-container {
+        max-width: 50px;
+        border-radius: 3px;
+        margin-left: 15px;
+    }
+    input.nr-db-field-themeColor[type="color"] {
+        width: 60px !important;
+        padding: 0px;
+        height: 20px;
+        box-shadow: none;
+        position: absolute;
+        right: 36px;
+        border-radius: 3px !important;
+        border: solid 1px #ccc;
+        -webkit-appearance: none;
+        font-size: smaller;
+        text-align: center;
+    }
+    input.nr-db-field-themeColor::-webkit-color-swatch {
+        border: none;
+    }
+    .red-ui-tabs {
+        margin-bottom: 15px;
+    }
+    .red-ui-tab.hidden {
+        display: none;
+    }
+    #dashboard-tabs-list li a:hover {
+        cursor: pointer;
+    }
+    #dash-link-button {
+        background: none;
+        border: none;
+        margin-top: 3px;
+        display: inline-block;
+        margin: 3px 0px 0px 3px;
+        height: 32px;
+        line-height: 29px;
+        max-width: 200px;
+        overflow: hidden;
+        white-space: nowrap;
+        position: relative;
+        padding: 0px 7px 0px 7px;
+    }
+    ul.red-ui-dashboard-theme-styles {
+        list-style: none;
+    }
+    ul.red-ui-dashboard-theme-styles li {
+        margin-bottom: 6px;
+    }
+    .nr-db-resetIcon {
+        margin: 3px 6px 0px 6px;
+        float: right;
+        color: var(--nr-db-mid-grey);
+        opacity: 0.8;
+        display: block;
+    }
+    .nr-db-resetIcon:hover {
+        cursor: pointer;
+    }
+    #nr-db-field-font {
+        margin-left: 2em;
+        width: calc(100% - 81px);
+    }
+    .nr-db-theme-label {
+        font-weight: bold;
+    }
+    #custom-theme-library-container .btn-group {
+        margin-bottom: 10px;
+    }
+</style>
+
+<!-- Dashboard layout tool -->
+<link rel="stylesheet" href="./ui_base/gs/gridstack.min.css">
+<link rel="stylesheet" href="./ui_base/css/gridstack-extra.min.css">
+<style>
+.grid-stack {
+    background-color: #f8f8f8;
+    border: solid 2px #C0C0C0;
+    margin: auto;
+    min-height: 42px;
+    display: table-cell;
+    background-image: linear-gradient(#C0C0C0 1px, transparent 0),
+                      linear-gradient(90deg, #C0C0C0 1px, transparent 0);
+    background-size: 40px 43px;
+}
+.grid-stack>.grid-stack-item>.grid-stack-item-content {
+    top: 3px;
+    left: 5px;
+    right: 5px;
+    bottom: 3px;
+}
+.grid-stack-item-content {
+    color: #2c3e50;
+    text-align: center;
+    background-color: #b0dfe3;
+    border-radius: 2px;
+    font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    white-space: nowrap;
+    font-size: 12px;
+    opacity: 0.7;
+}
+.grid-stack-item {
+    cursor: move;
+}
+.nr-dashboard-layout-container-fluid {
+  width: 100%;
+  padding-right: 0px;
+  padding-left: 0px;
+  margin-right: 0px;
+  margin-left: 0px;
+}
+.nr-dashboard-layout-row {
+  width: 100%;
+  display: -ms-flexbox;
+  display: flex;
+  -ms-flex-wrap: wrap;
+  flex-wrap: wrap;
+  margin-right: 0px;
+  margin-left: 0px;
+}
+.nr-dashboard-layout-span12 {
+  width: 98.4%;
+  padding: 2px;
+  margin-left: 2px;
+}
+.nr-dashboard-layout-span6 {
+  width: 49.2%;
+  padding: 2px;
+  margin-left: 2px;
+}
+.nr-dashboard-layout-span4 {
+  width: 32.7%;
+  padding: 2px;
+  margin-left: 2px;
+}
+.nr-dashboard-layout-span3 {
+  width: 24.3%;
+  padding: 2px;
+  margin-left: 2px;
+}
+.nr-dashboard-layout-span2 {
+  width: 16.0%;
+  padding: 2px;
+  margin-left: 2px;
+}
+.nr-dashboard-layout-resize-disable {
+    cursor: pointer;
+    float: right;
+    position: relative;
+    z-index: 90;
+    margin-right: 4px;
+}
+.nr-dashboard-layout-resize-enable {
+    cursor: pointer;
+    float: right;
+    position: relative;
+    z-index: 90;
+    margin-right: 1px;
+}
+.grid-stack>.ui-state-disabled {
+    opacity: 1;
+    background-image: none;
+}
+.grid-stack>.grid-stack-item>.ui-resizable-handle {
+    z-index: 90;
+    margin-right: -7px;
+}
+</style>
+
+
+<script type="text/javascript">
+(function($) {
+    var editSaveEventHandler;
+    var nodesAddEventHandler;
+    var nodesRemoveEventHandler;
+    var layoutUpdateEventHandler; // Dashboard layout tool
+    var uip = 'ui';
+    var attemptedVendorLoad = false;
+    var ensureDashboardNode;
+
+    var loadTinyColor = function(path) {
+        $.ajax({ url: path,
+            success: function (data) {
+                var jsScript = document.createElement("script");
+                jsScript.type = "application/javascript";
+                jsScript.src = path;
+                document.body.appendChild(jsScript);
+                //console.log('Tiny Color Loaded:',path);
+            },
+            error: function (xhr, ajaxOptions, thrownError) {
+                if (xhr.status === 404 && !attemptedVendorLoad) {
+                    loadTinyColor('/'+uip+'/vendor/tinycolor2/dist/tinycolor-min.js');
+                    attemptedVendorLoad = true;
+                }
+                //console.log('Tiny Color Failed to load:',path);
+            }
+        });
+    }
+
+    // convert to i18 text
+    function c_(x) {
+        return RED._("node-red-dashboard/ui_base:ui_base."+x);
+    }
+
+    // Try to load dist version first
+    // then if fails, load non dist version
+    loadTinyColor('ui_base/js/tinycolor-min.js');
+    //loadTinyColor('ui_base/tinycolor2/dist/tinycolor-min.js');
+
+    // Dashboard layout tool
+    // Load gridstack library
+    var loadGsLib = function(path, callback) {
+        $.ajax({ url: path,
+            success: function (data) {
+                var jsScript = document.createElement("script");
+                jsScript.type = "application/javascript";
+                jsScript.src = path;
+                document.body.appendChild(jsScript);
+                if (callback) { callback(); }
+            },
+            error: function (xhr, ajaxOptions, thrownError) {
+                // TODO
+            }
+        });
+    };
+
+    loadGsLib('ui_base/gs/gridstack.min.js', function() {
+        loadGsLib('ui_base/gs/gridstack.jQueryUI.min.js', null)
+    });
+
+    var tabDatas; // Layout editing tab data
+    var oldSpacer; // Spacer not needed after editing
+    var widthChange; // Group width change
+    var widgetResize; // Change widget event
+    var widgetDrag; // Drag wiget event
+
+    var MAX_GROUP_WIDTH = 30; // The maximum width is 30
+
+    /////////////////////////////////////////////////////////
+    // Get widget under specified tab from node information
+    /////////////////////////////////////////////////////////
+    function getTabDataFromNodes(tabID) {
+        var nodes = RED.nodes.createCompleteNodeSet(false);
+        var tab = {};
+        // Tab information
+        for (var cnt = 0; cnt < nodes.length; cnt++) {
+            if (nodes[cnt].type == "ui_tab" && nodes[cnt].id == tabID) {
+                tab = {
+                    id: nodes[cnt].id,
+                    name: nodes[cnt].name,
+                    type: nodes[cnt].type,
+                    order: nodes[cnt].order,
+                    groups: []
+                };
+                break;
+            }
+        }
+        // Group information
+        for (var cnt = 0; cnt < nodes.length; cnt++) {
+            if (nodes[cnt].type == "ui_group" && nodes[cnt].tab == tabID) {
+                var group = {
+                    id: nodes[cnt].id,
+                    name: nodes[cnt].name,
+                    type: nodes[cnt].type,
+                    order: nodes[cnt].order,
+                    width: nodes[cnt].width,
+                    widgets: []
+                };
+                tab.groups.push(group);
+            }
+        }
+        // Widget information
+        var groupsIdx = {};
+        for  (var cnt = 0; cnt < tab.groups.length; cnt++) {
+            groupsIdx[tab.groups[cnt].id] = tab.groups[cnt];
+        }
+        for (var cnt = 0; cnt < nodes.length; cnt++) {
+            var group = groupsIdx[nodes[cnt].group];
+            if (group != null && (/^ui_/.test(nodes[cnt].type) && nodes[cnt].type !== 'ui_link' && nodes[cnt].type !== 'ui_toast' && nodes[cnt].type !== 'ui_ui_control' && nodes[cnt].type !== 'ui_audio' && nodes[cnt].type !== 'ui_base' && nodes[cnt].type !== 'ui_group' && nodes[cnt].type !== 'ui_tab')) {
+                var widget = {
+                    id: nodes[cnt].id,
+                    type: nodes[cnt].type,
+                    order: nodes[cnt].order,
+                    width: nodes[cnt].width,
+                    height: nodes[cnt].height,
+                    auto: nodes[cnt].width == 0 ? true : false
+                };
+                group.widgets.push(widget);
+
+                if (!isLayoutToolSupported(nodes[cnt].type)) {
+                    console.log("LayoutTool warning: Unsupported widget. Widget="+JSON.stringify(widget));
+                }
+            }
+        }
+        return tab;
+    }
+
+    //////////////////////////////////////////////////
+    // Update node information in the edited widget
+    ////////////////////////////////////////////////////
+    function putTabDataToNodes() {
+        // Delete old flow spacer node
+        for (var cnt = 0; cnt < oldSpacer.length; cnt++) {
+            RED.nodes.remove(oldSpacer[cnt]);
+            RED.nodes.dirty(true);
+            RED.view.redraw(true);
+        }
+
+        var t_groups = tabDatas.groups;
+        for (var cnt1 = 0; cnt1 < t_groups.length; cnt1++) {
+            var n_group = RED.nodes.node(t_groups[cnt1].id);
+            n_group.width = t_groups[cnt1].width;
+            var t_widgets = t_groups[cnt1].widgets;
+            for (var cnt2 = 0; cnt2 < t_widgets.length; cnt2++) {
+                var n_widget = RED.nodes.node(t_widgets[cnt2].id);
+                if (n_widget != null) {
+                    if (n_widget.group !== n_group.id) {
+                        var oldGroupNode = RED.nodes.node(n_widget.group);
+                        if (oldGroupNode) {
+                            var index = oldGroupNode.users.indexOf(n_widget);
+                            oldGroupNode.users.splice(index,1);
+                        }
+                        n_widget.group = n_group.id;
+                        n_group.users.push(n_widget);
+                    }
+                    n_widget.order = t_widgets[cnt2].order;
+                    if (t_widgets[cnt2].auto === true ) {
+                        n_widget.width = 0;
+                        n_widget.height = 0;
+                    } else {
+                        n_widget.width = t_widgets[cnt2].width;
+                        n_widget.height = t_widgets[cnt2].height;
+                    }
+
+                    n_widget.changed = true;
+                    n_widget.dirty = true;
+                    RED.editor.validateNode(n_widget);
+                    RED.events.emit("layout:update",n_widget);
+                    RED.nodes.dirty(true);
+                    RED.view.redraw(true);
+                }
+                else {
+                    // Add a spacer node
+                    if (t_widgets[cnt2].type === 'ui_spacer') {
+                        var spaceNode = {
+                            _def: RED.nodes.getType("ui_spacer"),
+                            type: "ui_spacer",
+                            hasUsers: false,
+                            users: [],
+                            id: RED.nodes.id(),
+                            tab: tabDatas.id,
+                            group: n_group.id,
+                            order: t_widgets[cnt2].order,
+                            name: "spacer",
+                            width: t_widgets[cnt2].width,
+                            height: t_widgets[cnt2].height,
+                            z: RED.workspaces.active(),
+                            label: function() { return this.name + " " + this.width + "x" + this.height; }
+                        };
+                        RED.nodes.add(spaceNode);
+                        RED.nodes.dirty(true);
+                        RED.view.redraw(true);
+                    }
+                }
+            };
+        }
+        RED.sidebar.info.refresh();
+    }
+
+    ////////////////////////////////////////
+    // Sort by order
+    ////////////////////////////////////////
+    function compareOrder(a, b) {
+        var r = 0;
+        if (a.order < b.order) { r = -1; }
+        else if (a.order > b.order) { r = 1; }
+        return r;
+    }
+
+    ////////////////////////////////////////
+    // Sort by XY
+    ////////////////////////////////////////
+    function compareXY(a, b) {
+        var r = 0;
+        if (a.y < b.y) { r = -1; }
+        else if (a.y > b.y) { r = 1; }
+        else if (a.x < b.x) { r = -1; }
+        else if (a.x > b.x) { r = 1; }
+        return r;
+    }
+
+    ///////////////////////////////////////////////////////
+    // Placeable location search (placed in the upper left)
+    ///////////////////////////////////////////////////////
+    function search_point(width, height, maxWidth, maxHeight, tbl) {
+        for (var y=0; y < maxHeight; y++) {
+            for (var x=0; x < maxWidth; x++) {
+                if (check_matrix(x, y, width, height, maxWidth, tbl)) {
+                    fill_matrix(x, y, width, height, maxWidth, tbl);
+                    return  {x:x, y:y};
+                }
+            }
+        }
+        return false;
+    }
+    // Check placement position
+    function check_matrix(px, py, width, height, maxWidth, tbl) {
+        if (px+width > maxWidth) return false;
+        for (var y=py; y < py+height; y++) {
+            for (var x=px; x<px+width; x++) {
+                if (tbl[maxWidth*y+x]) return false;
+            }
+        }
+        return true;
+    }
+    // Mark the placement position
+    function fill_matrix(px, py, width, height, maxWidth, tbl) {
+        for (var y=py; y < py+height; y++) {
+            for (var x=px; x < px+width; x++) {
+                tbl[maxWidth*y+x] = 1;
+            }
+        }
+    }
+
+    ////////////////////////////////////////////////////
+    // Apply edit result to tab information for editing
+    ////////////////////////////////////////////////////
+    function saveGridDatas() {
+        var groups = tabDatas.groups;
+        for (var cnt = 0; cnt < groups.length; cnt++) {
+            // Get layout editing results
+            var gridID = '#grid'+cnt;
+            var serializedData = [];
+            $(gridID+'.grid-stack > .grid-stack-item:visible').each( function (index) {
+                el = $(this);
+                var node = el.data('_gridstack_node');
+                serializedData.push({
+                    id: el[0].dataset.noderedid,
+                    type: el[0].dataset.noderedtype,
+                    group: groups[cnt].id,
+                    width: Number(node.width),
+                    height: Number(node.height),
+                    x: node.x,
+                    y: node.y,
+                    auto: (el[0].dataset.noderedsizeauto == 'true') ? true : false
+                });
+            });
+
+            var width = Number(groups[cnt].width);
+            var height = 0;
+
+            // Search group height
+            for (var i=0; i < serializedData.length; i++) {
+                var wd = serializedData[i];
+                if (height < wd.y + wd.height) {
+                    height = wd.y + wd.height;
+                }
+            }
+
+            // Place widget on table
+            var tbl = new Array(width * height);
+            for (var i = 0; i< tbl.length; i++) {
+                tbl[i]=0;
+            }
+            for (var i = 0; i < serializedData.length; i++) {
+                var wd = serializedData[i];
+                for (var y = wd.y; y < wd.y+wd.height; y++) {
+                    for (var x = wd.x; x < wd.x+wd.width; x++) {
+                        tbl[width*y+x]=1;
+                    }
+                }
+            }
+
+            // Add Spacer to Blank
+            for (var y = 0; y < height; y++) {
+                var spacerAdded = false;
+                for (var x = 0; x < width; x++) {
+                    if (tbl[width*y+x]===0) {
+                        if (!spacerAdded) {
+                            // Add 1x1 spacer
+                            serializedData.push({
+                                x: x,
+                                y: y,
+                                z: RED.workspaces.active(),
+                                width: 1,
+                                height: 1,
+                                name: 'spacer',
+                                type: 'ui_spacer'
+                            });
+                            spacerAdded = true;
+                        } else {
+                            // Extend the spacer width by 1
+                            serializedData[serializedData.length-1].width += 1;
+                        }
+                    } else {
+                        spacerAdded = false;
+                    }
+                }
+            }
+
+            // Sort Gridstack objects by x, y information
+            serializedData.sort(compareXY);
+
+            // Delete x and y elements as information for sorting, and give order
+            var order = 0;
+            for (i in serializedData) {
+                order++;
+                delete serializedData[i].x;
+                delete serializedData[i].y;
+                serializedData[i].order = order;
+            }
+
+            // Update widget information in group with edited data
+            var group = groups[cnt];
+            delete group.widgets;
+            group.widgets = serializedData;
+        }
+
+        // Save process call
+        putTabDataToNodes();
+    };
+
+    ////////////////////////////////////////////////////
+    // Get default height for automatic settings
+    ////////////////////////////////////////////////////
+    function getDefaultHeight(nodeID, groupWidth) {
+        var redNode = RED.nodes.node(nodeID);
+        var height = 1;
+
+        if (redNode.type === 'ui_gauge') {
+            if (redNode.gtype === 'gage') {
+                height = Math.round(groupWidth/2)+1;
+            } else if (redNode.gtype === 'wave') {
+                if (groupWidth < 3) {
+                    height = 1;
+                } else {
+                    height = Math.round(groupWidth*0.75);
+                }
+            } else { // donut or compass
+                if (groupWidth < 3) {
+                    height = 1;
+                } else if (groupWidth < 11) {
+                    height = groupWidth - 1;
+                } else {
+                    height = Math.round(groupWidth*0.95);
+                }
+            }
+        } else if (redNode.type === 'ui_chart') {
+            height = Math.floor(groupWidth/2)+1;
+        } else if (redNode.type === 'ui_form') {
+            // var optNum = redNode.options.length; // Sub widget number
+            // if (redNode.label) {
+            //     height = optNum + 2; // Label and Button
+            // } else {
+            //     height = optNum + 1; // Button only
+            // }
+            height = redNode.rowCount
+        } else if (redNode.type === 'ui_lineargauge') {
+            if (redNode.unit && redNode.name) {
+                height = 5;
+            } else {
+                height = 4;
+            }
+        } else if (redNode.type === 'ui_list') {
+            height = 5;
+        } else if (redNode.type === 'ui_vega') {
+            height = 5;
+        }
+        return height;
+    }
+
+    /////////////////////////////
+    // Grid width change
+    ////////////////////////////
+    var changeGroupWidth = function(id) {
+        var widthID = '#change-width'+id;
+        var gridID = '#grid'+id;
+        $(widthID).spinner( {
+            min: 1,
+            max: MAX_GROUP_WIDTH,
+            spin: function(event, ui) {
+                // Search current maximum width
+                var serializedData = [];
+                $(gridID+'.grid-stack > .grid-stack-item:visible').each( function (index) {
+                    el = $(this);
+                    var node = el.data('_gridstack_node');
+                    serializedData.push({
+                        width: Number(node.width),
+                        x: node.x,
+                        auto: (el[0].dataset.noderedsizeauto == 'true') ? true : false
+                    });
+                });
+                var maxWidth = 0;
+                for (var i=0; i < serializedData.length; i++) {
+                    var wd = serializedData[i];
+                    if (wd.auto == false) {
+                        if (maxWidth < wd.x + wd.width) {
+                            maxWidth = wd.x + wd.width;
+                        }
+                    }
+                }
+                var width = ui.value;
+                if (width < maxWidth) {
+                    width = maxWidth;
+                }
+
+                var grid = $(gridID+'.grid-stack').data('gridstack');
+                $(gridID+'.grid-stack').css("width", width * 40);
+                $(gridID+'.grid-stack').css("background-size", 100/width+"% 43px");
+                grid.setColumn(tabDatas.groups[id].width, true);
+                grid.setColumn(width, true);
+                tabDatas.groups[id].width = width;
+
+                $(gridID+'.grid-stack > .grid-stack-item:visible').each( function(idx, el) {
+                    el = $(el);
+                    var node = el.data('_gridstack_node');
+                    var auto = (el[0].dataset.noderedsizeauto == 'true') ? true : false;
+                    var type = el[0].dataset.noderedtype;
+                    grid.resizable(el, !auto);
+                    if (auto === true) {
+                        grid.resize(el, width, getDefaultHeight(node.id, width));
+                    }
+                });
+
+                if (width !== ui.value) {
+                    event.stopPropagation();
+                    event.preventDefault();
+                }
+            }
+        });
+    };
+
+    //////////////////////////////////
+    // Move between groups of widgets
+    //////////////////////////////////
+    function handleMove(grid) {
+        return function(ev, prevWidget, newWidget) {
+            var elem = newWidget.el[0];
+            if (elem.getAttribute("data-noderedsizeauto") === "true") {
+                var id = elem.getAttribute("data-noderedid");
+                var width = grid.grid.column;
+                var height = getDefaultHeight(id, width);
+                grid.move(elem, 0, newWidget.y);
+                grid.resize(elem, width, height);
+
+                var en = $(elem).find('.nr-dashboard-layout-resize-enable');
+                en.off('click');
+                en.on('click',layoutResizeEnable);
+                en[0].setAttribute("title",c_("layout.auto"));
+            }
+            else {
+                var ds = $(elem).find('.nr-dashboard-layout-resize-disable');
+                ds.off('click');
+                ds.on('click',layoutResizeDisable);
+                ds[0].setAttribute("title",c_("layout.manual"));
+            }
+        };
+    }
+
+    //////////////////////////////////////////
+    // Widget size change (start event)
+    //////////////////////////////////////////
+    var resizeGroupWidget = function(id) {
+        var gridID = '#grid'+id;
+        var grid = $(gridID+'.grid-stack').data('gridstack');
+        $(gridID+'.grid-stack').on('resizestart', function(event, ui) {
+            // Reset group width
+            grid.setColumn(tabDatas.groups[id].width, true);
+        });
+    }
+
+    //////////////////////////////////////////
+    // Widget drag (start event)
+    //////////////////////////////////////////
+    var dragGroupWidget = function(id) {
+        var gridID = '#grid'+id;
+        var grid = $(gridID+'.grid-stack').data('gridstack');
+        $(gridID+'.grid-stack').on('dragstart', function(event, ui) {
+            // Reset group width
+            grid.setColumn(tabDatas.groups[id].width, true);
+        });
+    }
+
+    //////////////////////////////////////////
+    // Layout resize Disable (Auto:false)
+    //////////////////////////////////////////
+    var layoutResizeDisable = function(e) {
+        var target = $(e.target);
+        var el = target.parents('.grid-stack-item:visible');
+        var grid = target.parents('.grid-stack').data('gridstack');
+        var node = el.data('_gridstack_node');
+        var id = Number(target.parents('.grid-stack').attr('id').slice(4));
+        var width = Number(tabDatas.groups[id].width);
+        var nodeID = el[0].dataset.noderedid;
+        var height = getDefaultHeight(nodeID, width);
+
+        grid.move(el, 0, node.y);
+        grid.resize(el, width, height);
+        grid.resizable(el, false);
+        el.find('.nr-dashboard-layout-resize-disable').off('click');
+        el.attr({'data-noderedsizeauto':'true'});
+        target.removeClass().addClass('fa fa-unlock nr-dashboard-layout-resize-enable');
+        el.find('.nr-dashboard-layout-resize-enable')[0].setAttribute("title",c_("layout.auto"));
+        el.find('.nr-dashboard-layout-resize-enable').on('click',layoutResizeEnable);
+    }
+
+    //////////////////////////////////////////
+    // Layout resize Enable (Auto:true)
+    //////////////////////////////////////////
+    var layoutResizeEnable = function(e) {
+        var target = $(e.target);
+        var el = target.parents('.grid-stack-item:visible');
+        var grid = target.parents('.grid-stack').data('gridstack');
+
+        grid.resizable(el, true);
+        el.find('.nr-dashboard-layout-resize-enable').off('click');
+        el.attr({'data-noderedsizeauto':'false'});
+        target.removeClass().addClass('fa fa-lock nr-dashboard-layout-resize-disable');
+        el.find('.nr-dashboard-layout-resize-disable')[0].setAttribute("title",c_("layout.manual"));
+        el.find('.nr-dashboard-layout-resize-disable').on('click',layoutResizeDisable);
+    }
+
+    //////////////////////////////////////////
+    // Check dashboard layout tool supported
+    //////////////////////////////////////////
+    function isLayoutToolSupported(nodeType) {
+        if (nodeType.indexOf("ui_") !== 0) {
+            return false;
+        }
+        else {
+            return true;
+        }
+    }
+
+    RED.nodes.registerType('ui_base', {
+            category: 'config',
+            defaults: {
+                name: {},
+                theme: {},
+                site: {}
+            },
+            hasUsers: false,
+            paletteLabel: 'Dashboard',
+            label: function() { return this.name || 'Node-RED Dashboard'; },
+            labelStyle: function() { return this.name ? "node_label_italic" : ""; },
+            onpaletteremove: function() {
+                RED.sidebar.removeTab("dashboard");
+                RED.events.off("editor:save",editSaveEventHandler);
+                RED.events.off("nodes:add",nodesAddEventHandler);
+                RED.events.off("nodes:remove",nodesRemoveEventHandler);
+                RED.events.off("layout:update",layoutUpdateEventHandler); // Dashboard layout tool
+            },
+            onpaletteadd: function() {
+                var globalDashboardNode = null;
+                var editor;
+                var baseStyles = ['base-color'];
+                var configurableStyles = ['page-titlebar-backgroundColor', 'page-backgroundColor', 'page-sidebar-backgroundColor',
+                'group-textColor', 'group-borderColor', 'group-backgroundColor',
+                'widget-textColor', 'widget-backgroundColor','widget-borderColor'];
+                var baseFontName = "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif";
+                var aTheme = {primary:"indigo", accents:"blue", warn:"red", background:"grey", palette:"light"};
+                // tiny colour implementation
+                var colours = {
+                    leastReadable: function(base, colours) {
+                        var least = tinycolor.readability(base, colours[0]);
+                        var leastColor = colours[0];
+                        for (var i=1; i<colours.length; i++) {
+                            var readability = tinycolor.readability(base, colours[i]);
+                            if (readability < least) {
+                                least = readability;
+                                leastColor = colours[i];
+                            }
+                        }
+                        return leastColor;
+                    },
+                    whiteGreyMostReadable: function (base) {
+                        var rgb = tinycolor(base).toRgb();
+                        var level = ((rgb.r*299) + (rgb.g*587) + (rgb.b*114))/1000;
+                        var readable = (level >= 128) ? '#111111' : '#eeeeee';
+                        return readable;
+                    },
+                    whiteBlackLeastReadable: function(base) {
+                        return this.leastReadable(base, ["#000000", "#ffffff"]);
+                    },
+                    calculate_page_backgroundColor: function(base) {
+                        var pageBackground = "#fafafa";
+                        var theme = "light";
+                        if (globalDashboardNode && globalDashboardNode.hasOwnProperty("theme") && globalDashboardNode.theme.hasOwnProperty("name")) {
+                            theme = globalDashboardNode.theme.name.split('-')[1];
+                        }
+                        if (theme === "dark") {
+                            pageBackground = "#111111";
+                        }
+                        else if (theme === "custom") {
+                            var whiteOrBlack = this.whiteBlackLeastReadable(base);
+                            if (whiteOrBlack === "#000000") { pageBackground = "#111111"; }
+                        }
+                        return pageBackground;
+                    },
+                    calculate_page_sidebar_backgroundColor: function(base) {
+                        if (this.whiteBlackLeastReadable(base) === "#000000") { return "#333333"; }
+                        else { return "#ffffff"; }
+                    },
+                    calculate_page_titlebar_backgroundColor: function(base) {
+                        return base;
+                    },
+                    calculate_group_textColor: function(base) {
+                        var groupTextColour = tinycolor(base).lighten(15).toHexString();
+                        //if (this.whiteBlackLeastReadable(base) === "#ffffff") { groupTextColour = "#000000"; }
+                        return groupTextColour;
+                    },
+                    calculate_group_backgroundColor: function(base) {
+                        var groupBackground = "#ffffff";
+                        var theme = "light";
+                        if (globalDashboardNode && globalDashboardNode.hasOwnProperty("theme") && globalDashboardNode.theme.hasOwnProperty("name")) {
+                            theme = globalDashboardNode.theme.name.split('-')[1];
+                        }
+                        if (theme === "dark") {
+                            groupBackground = "#333333";
+                        }
+                        else if (theme === "custom") {
+                            var whiteOrBlack = this.whiteBlackLeastReadable(base);
+                            if (whiteOrBlack === "#000000") { groupBackground = "#333333"; }
+                        }
+                        return groupBackground;
+                    },
+                    calculate_group_borderColor: function(base) {
+                        var groupBackground = this.calculate_group_backgroundColor(base);
+                        return this.leastReadable(groupBackground, ["#ffffff", "#555555"]);
+                    },
+                    calculate_widget_textColor: function(base) {
+                        //most readable against group background
+                        var groupBackground = this.calculate_group_backgroundColor(base);
+                        return tinycolor.mostReadable(groupBackground, ["#111111", "#eeeeee"]).toHexString();
+                    },
+                    calculate_widget_backgroundColor: function(base) {
+                        //return tinycolor(base).darken(5).toHexString()
+                        return tinycolor(base).toHexString();
+                    },
+                    calculate_widget_borderColor: function(base) {
+                        var widgetBorder = "#ffffff";
+                        var theme = "light";
+                        if (globalDashboardNode && globalDashboardNode.hasOwnProperty("theme") && globalDashboardNode.theme.hasOwnProperty("name")) {
+                            theme = globalDashboardNode.theme.name.split('-')[1];
+                        }
+                        if (theme === "dark") {
+                            widgetBorder = "#333333";
+                        }
+                        else if (theme === "custom") {
+                            var whiteOrBlack = this.whiteBlackLeastReadable(base);
+                            if (whiteOrBlack === "#000000") { widgetBorder = "#333333"; }
+                        }
+                        return widgetBorder;
+                    },
+                    calculate_base_font: function(base) {
+                        return baseFontName;
+                    }
+                }
+                var sizes = {
+                    sx: 48, // width of <1> grid square
+                    sy: 48, // height of <1> grid square
+                    gx: 6, // gap between groups
+                    gy: 6, // gap between groups
+                    cx: 6, // gap between components
+                    cy: 6, // gap between components
+                    px: 0, // padding of group's cards
+                    py: 0  // padding of group's cards
+                };
+
+                ensureDashboardNode = function(createMissing) {
+                    if (globalDashboardNode !== null) {
+                        // Check if it has been deleted beneath us
+                        var n = RED.nodes.node(globalDashboardNode.id);
+                        if (n === null) { globalDashboardNode = null; }
+                    }
+
+                    // Find the old dashboard node
+                    if (globalDashboardNode === null) {
+                        var bases = [];
+                        RED.nodes.eachConfig(function(n) {
+                            if (n.type === 'ui_base') { bases.push(n); }
+                        });
+
+                        // make sure we only have one ui_base node
+                        // at the moment this will just use our existing one - deleting any new base node and theme
+                        // at some point we may want to make this an option to select one or the other.
+                        while (bases.length > 1) {
+                            var n = bases.pop();
+                            console.log("Removing ui_base node "+n.id);
+                            RED.nodes.remove(n.id);
+                            RED.nodes.dirty(true);
+                        }
+
+                        if (bases.length === 1) { globalDashboardNode = bases[0]; }
+
+                        // If there is no dashboard node, ensure we create it after
+                        // initialising
+                        var noDashboardNode = (globalDashboardNode === null);
+
+                        // set up theme state
+                        var themeState = {};
+                        var baseColor = "#0094CE"
+                        for (var i=0; i<baseStyles.length; i++) {
+                            themeState[baseStyles[i]] = { default:baseColor, value:baseColor, edited:false };
+                        }
+                        for (var j = 0; j < configurableStyles.length; j++) {
+                            var underscore = configurableStyles[j].split("-").join("_");
+                            var colour = colours['calculate_'+underscore](baseColor);
+                            themeState[configurableStyles[j]] = {value:colour, edited:false};
+                        }
+                        themeState["base-font"] = {value:baseFontName};
+
+                        var missingFields = (!globalDashboardNode || !globalDashboardNode.theme || !globalDashboardNode.site || !globalDashboardNode.site.sizes );
+
+                        if (missingFields && createMissing) {
+                            var lightTheme = {
+                                default: baseColor,
+                                baseColor: baseColor,
+                                baseFont: baseFontName,
+                                edited: false
+                            }
+                            var darkTheme = {
+                                default: "#097479",
+                                baseColor: "#097479",
+                                baseFont: baseFontName,
+                                edited: false
+                            }
+                            var customTheme = {
+                                name: 'Untitled Theme 1',
+                                default: "#4B7930",
+                                baseColor: "#4B7930",
+                                baseFont: baseFontName
+                            }
+                            var oldThemeName;
+                            if (globalDashboardNode && typeof(globalDashboardNode.theme === 'string')) { oldThemeName = globalDashboardNode.theme; }
+
+                            var theme = {
+                                name: oldThemeName || "theme-light",
+                                lightTheme: lightTheme,
+                                darkTheme: darkTheme,
+                                customTheme: customTheme,
+                                themeState: themeState,
+                                angularTheme: aTheme
+                            }
+
+                            var site_name = c_("site.title");
+                            var site_date_format = c_("site.date-format");
+                            var site = { name:site_name, hideToolbar:"false", allowSwipe:"false", lockMenu:"false", allowTempTheme:"true", dateFormat:site_date_format, sizes:sizes };
+                            if (globalDashboardNode !== null) {
+                                if (typeof globalDashboardNode.site !== "undefined") {
+                                    site = {
+                                        name: globalDashboardNode.site.name || globalDashboardNode.name,
+                                        hideToolbar: globalDashboardNode.site.hideToolbar,
+                                        lockMenu: globalDashboardNode.site.lockMenu,
+                                        allowSwipe: globalDashboardNode.site.allowSwipe,
+                                        allowTempTheme: globalDashboardNode.site.allowTempTheme,
+                                        dateFormat: globalDashboardNode.site.dateFormat,
+                                        sizes: globalDashboardNode.site.sizes
+                                    }
+                                }
+                                if (globalDashboardNode.theme.hasOwnProperty("angularTheme")) {
+                                    aTheme = globalDashboardNode.theme.angularTheme;
+                                }
+                                else { globalDashboardNode.theme.angularTheme = aTheme; }
+                            }
+
+                            if (noDashboardNode) {
+                                globalDashboardNode = {
+                                    id: RED.nodes.id(),
+                                    _def: RED.nodes.getType("ui_base"),
+                                    type: "ui_base",
+                                    site: site,
+                                    theme: theme,
+                                    users: []
+                                }
+                                RED.nodes.add(globalDashboardNode);
+                            }
+                            else {
+                                globalDashboardNode["_def"] = RED.nodes.getType("ui_base");
+                                globalDashboardNode.site = site;
+                                globalDashboardNode.theme = theme;
+                                delete globalDashboardNode.name;
+                            }
+                            $("#nr-db-field-font").val(baseFontName);
+                            RED.nodes.dirty(true);
+                        }
+                    }
+                }
+
+                var content = $("<div>").css({"position":"relative","height":"100%"});
+                var mainContent = $("<div>",{class:"nr-db-sb"}).appendTo(content);
+                var form = $('<form class="dialog-form">').appendTo(mainContent);
+
+                // Dashboard Tabs markup
+                var divTab = $('<div class="red-ui-tabs">').appendTo(form);
+                var ulDashboardTabs = $('<ul id="dashboard-tabs-list"></ul>').appendTo(divTab);
+                var layout_label = c_("label.layout");
+                var site_label = c_("label.site");
+                var theme_label = c_("label.theme");
+                var angular_label = c_("label.angular");
+                var liLayoutTab = $('<li class="red-ui-tab" style="width:70px;"><a class="red-ui-tab-label" title="Layout"><span>'+layout_label+'</span></a></li>').appendTo(ulDashboardTabs);
+                var liSiteTab = $('<li class="red-ui-tab" style="width:70px;"><a class="red-ui-tab-label" title="Site" style="width:60px;"><span>'+site_label+'</span></a></li>').appendTo(ulDashboardTabs);
+                var liThemeTab = $('<li class="red-ui-tab" style="width:70px;"><a class="red-ui-tab-label" title="Theme" style="width:80px;"><span>'+theme_label+'</span></a></li>').appendTo(ulDashboardTabs);
+                var liAngularTab = $('<li class="red-ui-tab" style="width:70px;"><a class="red-ui-tab-label" title="Angular" style="width:80px;"><span>'+angular_label+'</span></a></li>').appendTo(ulDashboardTabs);
+
+                // Link out to dashboard
+                $.getJSON('uisettings',function(data) {
+                    if (data.hasOwnProperty("path")) { uip = data.path; }
+                    var lnk = document.location.host+RED.settings.httpNodeRoot+"/"+uip;
+                    var re = new RegExp('\/{1,}','g');
+                    lnk = lnk.replace(re,'/');
+                    if (!RED.hasOwnProperty("actions")) {
+                        RED.keyboard.add("*",/* d */ 68,{ctrl:true, shift:true},function() { window.open(document.location.protocol+"//"+lnk, "nr-dashboard") });
+                    }
+                    else {
+                        RED.actions.add("dashboard:show-dashboard",function() { window.open(document.location.protocol+"//"+lnk, "nr-dashboard") });
+                        RED.keyboard.add("*","ctrl-shift-d","dashboard:show-dashboard");
+                    }
+                    $('<span id="dash-link-button" class="editor-button" style="position:absolute; right:0px;"><i class="fa fa-external-link"></i></span>')
+                    .click(function(evt) {
+                        window.open(document.location.protocol+"//"+lnk);
+                        evt.preventDefault();
+                    })
+                    .appendTo(ulDashboardTabs);
+                });
+
+                // Dashboard Tab containers
+                var layoutTab = $('<div id="dashboard-layout" style="height:calc(100% - 48px)">').appendTo(form);
+                var siteTab = $('<div id="dashboard-site" style="display:none;">').appendTo(form);
+                var themeTab = $('<div id="dashboard-theme" style="display:none;">').appendTo(form);
+                var angularTab = $('<div id="dashboard-angular" style="display:none;">').appendTo(form);
+
+                ulDashboardTabs.children().first().addClass("active");
+
+                // Tab logic
+                var onTabClick = function() {
+                    //Toggle tabs
+                    ulDashboardTabs.children().removeClass("active");
+                    ulDashboardTabs.children().css({"transition": "width 100ms"});
+                    $(this).parent().addClass("active");
+
+                    var selectedTab = $(this)[0].title;
+                    if (selectedTab === 'Layout') {
+                        themeTab.hide();
+                        siteTab.hide();
+                        angularTab.hide();
+                        layoutTab.show();
+                    }
+                    else if (selectedTab === 'Angular') {
+                        themeTab.hide();
+                        siteTab.hide();
+                        angularTab.show();
+                        layoutTab.hide();
+                    }
+                    else if (selectedTab === 'Theme') {
+                        layoutTab.hide();
+                        siteTab.hide();
+                        angularTab.hide();
+                        themeTab.show();
+                        if ($("#nr-db-field-theme option:selected").val() === 'theme-custom') { themeSettingsContainer.show(); }
+                        else { themeSettingsContainer.hide(); }
+                    }
+                    else {
+                        layoutTab.hide();
+                        themeTab.hide();
+                        angularTab.hide();
+                        siteTab.show();
+                    }
+                }
+
+                ulDashboardTabs.find("li.red-ui-tab a").on("click",onTabClick)
+
+                // Site Tab
+                var divTitle = $('<div>',{class:"form-row compact"}).appendTo(siteTab);
+                $('<div>').html('<b>'+c_("label.title")+'</b>').appendTo(divTitle);
+                $('<input type="text" id="nr-db-field-title">').val(site_name).css("width","100%")
+                .on("change", function() {
+                    if (!globalDashboardNode || globalDashboardNode.site.name !== $(this).val()) {
+                        //ensureDashboardNode(true);
+                        globalDashboardNode.site.name = $(this).val();
+                    }
+                    RED.nodes.dirty(true);
+                })
+                .appendTo(divTitle);
+
+                var divHideToolbar = $('<div>',{class:"form-row compact"}).appendTo(siteTab);
+                $('<div>').html('<b>'+c_("label.options")+'</b>').appendTo(divHideToolbar);
+                $('<select id="nr-db-field-hideToolbar">')
+                .css("width","100%")
+                .append($('<option>', { value:"false", text:c_("title-bar.show"), selected:true }))
+                .append($('<option>', { value:"true", text:c_("title-bar.hide") }))
+                .val("false")
+                .on("change", function() {
+                    if (!globalDashboardNode || globalDashboardNode.site.hideToolbar !== $(this).val()) {
+                        //ensureDashboardNode(true);
+                        globalDashboardNode.site.hideToolbar = $(this).val();
+                    }
+                    RED.nodes.dirty(true);
+                })
+                .appendTo(divHideToolbar);
+
+                var divLockMenu = $('<div>',{class:"form-row compact"}).appendTo(siteTab);
+                $('<select id="nr-db-field-lockMenu">')
+                .css("width","100%")
+                .append($('<option>', { value:"false", text:c_("lock.clicked"), selected:true }))
+                .append($('<option>', { value:"true", text:c_("lock.locked") }))
+                .append($('<option>', { value:"icon", text:c_("lock.locked-icon") }))
+                .val("false")
+                .on("change", function() {
+                    if (!globalDashboardNode || globalDashboardNode.site.lockMenu !== $(this).val()) {
+                        //ensureDashboardNode(true);
+                        globalDashboardNode.site.lockMenu = $(this).val();
+                    }
+                    RED.nodes.dirty(true);
+                })
+                .appendTo(divLockMenu);
+
+                var divAllowSwipe = $('<div>',{class:"form-row compact"}).appendTo(siteTab);
+                $('<select id="nr-db-field-allowSwipe">')
+                .css("width","100%")
+                .append($('<option>', { value:"false", text:c_("swipe.no-swipe"), selected:true }))
+                .append($('<option>', { value:"true", text:c_("swipe.allow-swipe") }))
+                .append($('<option>', { value:"menu", text:c_("swipe.show-menu") }))
+                .val("false")
+                .on("change", function() {
+                    if (!globalDashboardNode || globalDashboardNode.site.allowSwipe !== $(this).val()) {
+                        //ensureDashboardNode(true);
+                        globalDashboardNode.site.allowSwipe = $(this).val();
+                        RED.nodes.dirty(true);
+                    }
+                })
+                .appendTo(divAllowSwipe);
+
+                var divAllowTempTheme = $('<div>',{class:"form-row compact"}).appendTo(siteTab);
+                $('<select id="nr-db-field-allowTempTheme">')
+                .css("width","100%")
+                .append($('<option>', { value:"true", text:c_("temp.allow-theme"), selected:true }))
+                .append($('<option>', { value:"false", text:c_("temp.no-theme") }))
+                .append($('<option>', { value:"none", text:c_("temp.none") }))
+                .val("true")
+                .on("change", function() {
+                    if (!globalDashboardNode || globalDashboardNode.site.allowTempTheme !== $(this).val()) {
+                        //ensureDashboardNode(true);
+                        globalDashboardNode.site.allowTempTheme = $(this).val();
+                    }
+                    if ($('#nr-db-field-allowTempTheme').val() === "none") {
+                        ulDashboardTabs.children().eq(2).addClass("hidden");
+                        ulDashboardTabs.children().eq(3).removeClass("hidden");
+                    }
+                    else {
+                        ulDashboardTabs.children().eq(2).removeClass("hidden");
+                        ulDashboardTabs.children().eq(3).addClass("hidden");
+                    }
+                    RED.nodes.dirty(true);
+                })
+                .appendTo(divAllowTempTheme);
+
+                var site_name = c_("site.title");
+                var site_date_format = c_("site.date-format");
+                var divDateFormat = $('<div>',{class:"form-row"}).appendTo(siteTab);
+                $('<div>').html('<b>'+c_("label.date-format")+'</b>')
+                .css("width","80%")
+                .css("display","inline-block")
+                .appendTo(divDateFormat);
+                $('<div>').html("<a href='https://momentjs.com/docs/#/displaying/format/' target='_new'><i class='fa fa-info-circle' style='color:grey;'></i></a>")
+                .css("display","inline-block")
+                .css("margin-right","6px")
+                .css("float","right")
+                .appendTo(divDateFormat);
+                $('<input type="text" id="nr-db-field-dateFormat">').val(site_date_format).css("width","100%")
+                .on("change", function() {
+                    if (!globalDashboardNode || globalDashboardNode.site.dateFormat !== $(this).val()) {
+                        //ensureDashboardNode(true);
+                        globalDashboardNode.site.dateFormat = $(this).val();
+                    }
+                    RED.nodes.dirty(true);
+                })
+                .appendTo(divDateFormat);
+
+                var divSetSizes = $('<div>',{class:"form-row"}).appendTo(siteTab);
+                $('<span style="width:45%; display:inline-block">').html('<b>'+c_("label.sizes")+'</b>').appendTo(divSetSizes);
+                $('<span style="width:25%; display:inline-block; font-size:smaller">').text(c_("label.horizontal")).appendTo(divSetSizes);
+                $('<span style="width:20%; display:inline-block; font-size:smaller">').text(c_("label.vertical")).appendTo(divSetSizes);
+                $('<i id="sizes-reset" class="fa fa-undo nr-db-resetIcon"></i>')
+                .css({opacity:1.0})
+                .click(function(e) {
+                    $("#nr-db-field-sx").val(sizes.sx); globalDashboardNode.site.sizes.sx = sizes.sx;
+                    $("#nr-db-field-sy").val(sizes.sy); globalDashboardNode.site.sizes.sy = sizes.sy;
+                    $("#nr-db-field-px").val(sizes.px); globalDashboardNode.site.sizes.px = sizes.px;
+                    $("#nr-db-field-py").val(sizes.py); globalDashboardNode.site.sizes.py = sizes.py;
+                    $("#nr-db-field-gx").val(sizes.gx); globalDashboardNode.site.sizes.gx = sizes.gx;
+                    $("#nr-db-field-gy").val(sizes.gy); globalDashboardNode.site.sizes.gy = sizes.gy;
+                    $("#nr-db-field-cx").val(sizes.cx); globalDashboardNode.site.sizes.cx = sizes.cx;
+                    $("#nr-db-field-cy").val(sizes.cy); globalDashboardNode.site.sizes.cy = sizes.cy;
+                    RED.nodes.dirty(true);
+                })
+                .appendTo(divSetSizes);
+
+                $('<br/><span style="width:45%; display:inline-block">').text(c_("label.widget-size")).appendTo(divSetSizes);
+                $('<input type="number" name="sx" min="24" id="nr-db-field-sx">').val(48).css("width","20%")
+                .on("change", function() {
+                    //ensureDashboardNode(true);
+                    globalDashboardNode.site.sizes.sx=Number($(this).val()); RED.nodes.dirty(true); } )
+                .appendTo(divSetSizes);
+                $('<span style="width:5%; display:inline-block">').text(' ').appendTo(divSetSizes);
+                $('<input type="number" name="sy" min="24" id="nr-db-field-sy">').val(48).css("width","20%")
+                .on("change", function() {
+                    //ensureDashboardNode(true);
+                    globalDashboardNode.site.sizes.sy=Number($(this).val()); RED.nodes.dirty(true); } )
+                .appendTo(divSetSizes);
+
+                $('<br/><span style="width:45%; display:inline-block">').text(c_("label.widget-spacing")).appendTo(divSetSizes);
+                $('<input type="number" name="cx" min="0" id="nr-db-field-cx">').val(6).css("width","20%")
+                .on("change", function() {
+                    //ensureDashboardNode(true);
+                    globalDashboardNode.site.sizes.cx=Number($(this).val()); RED.nodes.dirty(true); } )
+                .appendTo(divSetSizes);
+                $('<span style="width:5%; display:inline-block">').text(' ').appendTo(divSetSizes);
+                $('<input type="number" name="cy" min="0" id="nr-db-field-cy">').val(6).css("width","20%")
+                .on("change", function() {
+                    //ensureDashboardNode(true);
+                    globalDashboardNode.site.sizes.cy=Number($(this).val()); RED.nodes.dirty(true); } )
+                .appendTo(divSetSizes);
+
+                $('<br/><span style="width:45%; display:inline-block">').text(c_("label.group-padding")).appendTo(divSetSizes);
+                $('<input type="number" name="px" min="0" id="nr-db-field-px">').val(0).css("width","20%")
+                .on("change", function() {
+                    //ensureDashboardNode(true);
+                    globalDashboardNode.site.sizes.px=Number($(this).val()); RED.nodes.dirty(true); } )
+                .appendTo(divSetSizes);
+                $('<span style="width:5%; display:inline-block">').text(' ').appendTo(divSetSizes);
+                $('<input type="number" name="py" min="0" id="nr-db-field-py">').val(0).css("width","20%")
+                .on("change", function() {
+                    //ensureDashboardNode(true);
+                    globalDashboardNode.site.sizes.py=Number($(this).val()); RED.nodes.dirty(true); } )
+                .appendTo(divSetSizes);
+
+                $('<br/><span style="width:45%; display:inline-block">').text(c_("label.group-spacing")).appendTo(divSetSizes);
+                $('<input type="number" name="gx" min="0" id="nr-db-field-gx">').val(6).css("width","20%")
+                .on("change", function() {
+                    //ensureDashboardNode(true);
+                    globalDashboardNode.site.sizes.gx=Number($(this).val()); RED.nodes.dirty(true); } )
+                .appendTo(divSetSizes);
+                $('<span style="width:5%; display:inline-block">').text(' ').appendTo(divSetSizes);
+                $('<input type="number" name="gy" min="0" id="nr-db-field-gy">').val(6).css("width","20%")
+                .on("change", function() {
+                    //ensureDashboardNode(true);
+                    globalDashboardNode.site.sizes.gy=Number($(this).val()); RED.nodes.dirty(true); } )
+                .appendTo(divSetSizes);
+
+                // Angular Theme Tab
+                var changed = function() {
+                    ensureDashboardNode(true);
+                    globalDashboardNode.theme.angularTheme = aTheme;
+                    RED.nodes.dirty(true);
+                }
+
+                var angColorList = ["red", "pink", "purple", "deep-purple", "indigo", "blue", "light-blue", "cyan", "teal", "green", "light-green", "lime", "yellow", "amber", "orange", "deep-orange", "brown", "grey", "blue-grey"];
+                var angColors = "";
+                angColorList.forEach(function(c) { angColors += '<option value="' + c + '">' + c + '</option>'; });
+
+                var divPrimStyle = $('<div>',{class:"form-row"}).appendTo(angularTab);
+                $('<span style="width:45%; display:inline-block">')
+                    .html('<b>'+c_("style.primary")+'</b>')
+                    .appendTo(divPrimStyle);
+                $('<i id="ang-reset" class="fa fa-undo nr-db-resetIcon"></i>')
+                    .css({opacity:1.0})
+                    .click(function(e) {
+                        $("#nr-db-field-angPrimary").val("indigo");
+                        globalDashboardNode.theme.angularTheme.primary = "indigo";
+                        RED.nodes.dirty(true);
+                    })
+                    .appendTo(divPrimStyle);
+                $('<select id="nr-db-field-angPrimary">'+angColors+'</select>')
+                    .css("width","100%")
+                    .val(aTheme.primary)
+                    .on("change", function() { aTheme.primary = $(this).val(); changed(); })
+                    .appendTo(divPrimStyle);
+
+                var divAccStyle = $('<div>',{class:"form-row"}).appendTo(angularTab);
+                $('<span style="width:45%; display:inline-block">')
+                    .html('<b>'+c_("style.accents")+'</b>')
+                    .appendTo(divAccStyle);
+                $('<i id="ang-reset" class="fa fa-undo nr-db-resetIcon"></i>')
+                    .css({opacity:1.0})
+                    .click(function(e) {
+                        $("#nr-db-field-angAccents").val("blue");
+                        globalDashboardNode.theme.angularTheme.accents = "blue";
+                        RED.nodes.dirty(true);
+                    })
+                    .appendTo(divAccStyle);
+                $('<select id="nr-db-field-angAccents">'+angColors+'</select>')
+                    .css("width","100%")
+                    .val(aTheme.accents)
+                    .on("change", function() { aTheme.accents = $(this).val(); changed(); })
+                    .appendTo(divAccStyle);
+
+                var divWarnStyle = $('<div>',{class:"form-row"}).appendTo(angularTab);
+                $('<span style="width:45%; display:inline-block">')
+                    .html('<b>'+c_("style.warnings")+'</b>')
+                    .appendTo(divWarnStyle);
+                $('<i id="ang-reset" class="fa fa-undo nr-db-resetIcon"></i>')
+                    .css({opacity:1.0})
+                    .click(function(e) {
+                        $("#nr-db-field-angWarn").val("red");
+                        globalDashboardNode.theme.angularTheme.warn = "red";
+                        RED.nodes.dirty(true);
+                    })
+                    .appendTo(divWarnStyle);
+                $('<select id="nr-db-field-angWarn">'+angColors+'</select>')
+                    .css("width","100%")
+                    .val(aTheme.warn)
+                    .on("change", function() { aTheme.warn = $(this).val(); changed(); })
+                    .appendTo(divWarnStyle);
+
+                var divBackStyle = $('<div>',{class:"form-row"}).appendTo(angularTab);
+                $('<span style="width:45%; display:inline-block">')
+                    .html('<b>'+c_("style.background")+'</b>')
+                    .appendTo(divBackStyle);
+                $('<i id="ang-reset" class="fa fa-undo nr-db-resetIcon"></i>')
+                    .css({opacity:1.0})
+                    .click(function(e) {
+                        $("#nr-db-field-angBackground").val("grey");
+                        globalDashboardNode.theme.angularTheme.background = "grey";
+                        RED.nodes.dirty(true);
+                    })
+                    .appendTo(divBackStyle);
+                $('<select id="nr-db-field-angBackground">'+angColors+'</select>')
+                    .css("width","100%")
+                    .val(aTheme.background)
+                    .on("change", function() { aTheme.background = $(this).val(); changed(); })
+                    .appendTo(divBackStyle);
+
+                var divPalStyle = $('<div>',{class:"form-row"}).appendTo(angularTab);
+                $('<span style="width:45%; display:inline-block">')
+                    .html('<b>'+c_("style.palette")+'</b>')
+                    .appendTo(divPalStyle);
+                var lightdark = '<option value="light">' +c_("style.light")+ '</option>';
+                lightdark += '<option value="dark">' +c_("style.dark")+ '</option>';
+                $('<select id="nr-db-field-angLook">'+lightdark+'</select>')
+                    .css("width","100%")
+                    .val(aTheme.palette)
+                    .on("change", function() { aTheme.palette = $(this).val(); changed(); })
+                    .appendTo(divPalStyle);
+
+                // Theme Tab
+                // For all customisable styles, generate and apply the css
+                var generateColours = function(base) {
+                    var theme = globalDashboardNode.theme.name.split('-')[1];
+                    if (!globalDashboardNode.theme.themeState.hasOwnProperty["base-font"]) {
+                        if (globalDashboardNode.theme[theme+"Theme"].baseFont === "Helvetica Neue") {
+                            globalDashboardNode.theme[theme+"Theme"].baseFont = baseFontName;
+                        }
+                        globalDashboardNode.theme.themeState["base-font"] = {value:globalDashboardNode.theme[theme+"Theme"].baseFont};
+                        $("#nr-db-field-font").val(globalDashboardNode.theme[theme+"Theme"].baseFont);
+                    }
+                    for (var i=0; i<configurableStyles.length; i++) {
+                        var styleID = configurableStyles[i];
+                        var underscore = styleID.split("-").join("_");
+                        if (!globalDashboardNode.theme.themeState.hasOwnProperty(styleID)) {
+                            globalDashboardNode.theme.themeState[styleID] = {value:"#fff",edited:false};
+                        }
+                        if (!globalDashboardNode.theme.themeState[styleID].edited || globalDashboardNode.theme[theme+'Theme'].reset) {
+                            var colour = colours['calculate_'+underscore](base);
+                            globalDashboardNode.theme.themeState[styleID].value = colour;
+                        }
+                        setColourPickerColour(styleID, globalDashboardNode.theme.themeState[styleID].value, globalDashboardNode.theme.themeState[styleID].edited);
+                    }
+                    globalDashboardNode.theme[theme+'Theme'].reset = false;
+                }
+
+                var divThemeStyle = $('<div>',{class:"form-row"}).appendTo(themeTab);
+                $('<label class="nr-db-theme-label">').text(c_("theme.style")).appendTo(divThemeStyle);
+                var themeSelection = $('<select id="nr-db-field-theme">'+
+                    '<option value="theme-light">'+c_("style.light")+'</option>'+
+                    '<option value="theme-dark">'+c_("style.dark")+'</option>'+
+                    '<option value="theme-custom">'+c_("style.custom")+'</option>'+
+                    '</select>')
+                .css("width","100%")
+                .on("change", function() {
+                    if (!globalDashboardNode || globalDashboardNode.theme.name !== $(this).val()) {
+                        //ensureDashboardNode(true);
+                        var theme = globalDashboardNode.theme.name.split('-')[1];
+                        var baseColour = globalDashboardNode.theme[theme+'Theme'].baseColor;
+                        var baseFont = globalDashboardNode.theme[theme+'Theme'].baseFont;
+                        globalDashboardNode.theme.name = $(this).val();
+                        theme = globalDashboardNode.theme.name.split('-')[1];
+                        if (theme !== "custom") {
+                            baseColour = globalDashboardNode.theme[theme+'Theme'].default;
+                        }
+                        else { baseColour = globalDashboardNode.theme[theme+'Theme'].baseColor; }
+                        setColourPickerColour("base-color", baseColour);
+                        globalDashboardNode.theme.themeState['base-color'].value = baseColour;
+                        globalDashboardNode.theme.themeState['base-color'].default = baseColour;
+                        globalDashboardNode.theme.themeState['base-font'] = {value:baseFont};
+                        $("#nr-db-field-font").val(baseFont);
+                        globalDashboardNode.theme[theme+'Theme'].reset = true;
+                        //generate colours for all colour settings from base colour
+                        generateColours(baseColour);
+                        RED.nodes.dirty(true);
+                    }
+                    $('#base-color-reset').remove();
+                    if ($(this).val() === 'theme-custom') {
+                        $("#custom-theme-library-container").show(); //TODO undo this at some point
+                        $("#custom-theme-settings").show();
+                        //addResetButton('base-color', baseSettingsUl.children());
+                    }
+                    else {
+                        $("#custom-theme-library-container").hide();
+                        $("#custom-theme-settings").hide();
+                        addLightAndDarkResetButton('base-color', baseSettingsUl.children().first());
+                    }
+                })
+                .appendTo(divThemeStyle);
+
+                var customThemeLibraryContainer = $('<div id="custom-theme-library-container">').appendTo(themeTab);
+                $('<label class="nr-db-theme-label">').text(c_("theme.custom-profile")).appendTo(customThemeLibraryContainer);
+                $('<input type="text" id="ui-sidebar-name" style="vertical-align:top;" placeholder="profile name (not blank)">')
+                .val(c_("theme.custom-profile-name"))
+                .on("change", function() {
+                    if (!globalDashboardNode || globalDashboardNode.theme.customTheme.name !== $(this).val()) {
+                        //ensureDashboardNode(true);
+                        globalDashboardNode.theme.customTheme.name = $(this).val();
+                        if (editor) {
+                            editor.setValue(JSON.stringify({theme:globalDashboardNode.theme.themeState, site:globalDashboardNode.site}),1);
+                            RED.nodes.dirty(true);
+                        }
+                    }
+                })
+                .keyup(function() {
+                    if ($(this).val().length === 0) {
+                        $("#custom-theme-library-container div").css("pointer-events","none");
+                    }
+                    else { $("#custom-theme-library-container div").css("pointer-events","inherit"); }
+                })
+                .appendTo(customThemeLibraryContainer);
+                $('<input type="hidden" id="nr-db-field-format">').appendTo(customThemeLibraryContainer);
+                $('<div style="display:none;" class="node-text-editor" id="nr-db-field-format-editor"></div>').appendTo(customThemeLibraryContainer);
+
+                var baseThemeSettingsContainer = $('<div id="base-theme-settings">').appendTo(themeTab);
+
+                var baseSettings = $('<div>',{class:"form-row"}).appendTo(baseThemeSettingsContainer);
+                $('<label class="nr-db-theme-label">').text(c_("theme.base-settings")).appendTo(baseSettings);
+                var baseSettingsUl = $('<ul id="base-settings-ul" class="red-ui-dashboard-theme-styles"></ul>').appendTo(baseSettings);
+
+                var baseColourItem = $('<li class="red-ui-dashboard-theme-item"><span>'+c_("base.colour")+'</span></li>').appendTo(baseSettingsUl);
+                var spanColorContainer = $('<span class="nr-db-color-pick-container"></span>').appendTo(baseColourItem);
+
+                $('<input id="base-color" class="nr-db-field-themeColor" type="color" value="#ffffff"/>')
+                .on("change", function() {
+                    //ensureDashboardNode(true);
+                    var value = $(this).val();
+                    var lightThemeMatch = globalDashboardNode.theme.lightTheme.baseColor === value;
+                    var darkThemeMatch = globalDashboardNode.theme.darkTheme.baseColor === value;
+                    var customThemeMatch = globalDashboardNode.theme.customTheme.baseColor === value;
+                    if (!globalDashboardNode || !lightThemeMatch || !darkThemeMatch || !customThemeMatch) {
+                        var theme = globalDashboardNode.theme.name.split('-')[1];
+                        globalDashboardNode.theme[theme+'Theme'].baseColor = value;
+                        if (globalDashboardNode.theme.name === 'theme-light' || globalDashboardNode.theme.name === 'theme-dark') {
+                            //for light and dark themes, reset the colours
+                            globalDashboardNode.theme[theme+'Theme'].reset = true;
+                        }
+                        generateColours(value);
+                        editor.setValue(JSON.stringify({theme:globalDashboardNode.theme.themeState, site:globalDashboardNode.site}),1);
+                        colourPickerChangeHandler($(this).attr('id'), value);
+                    }
+                })
+                .appendTo(spanColorContainer);
+
+                var baseFontItem = $('<li class="red-ui-dashboard-theme-item"><span>'+c_("base.font")+'</span></li>').appendTo(baseSettingsUl);
+                var fontSelector = $('<select id="nr-db-field-font">'+
+                    '<option value="'+baseFontName+'" style="font-family:'+baseFontName+'">'+c_("font.system")+'</option>'+
+                    '<option value="Arial,Arial,Helvetica,sans-serif" style="font-family:Arial,Arial,Helvetica,sans-serif">Arial</option>'+
+                    '<option value="Arial Black,Arial Black,Gadget,sans-serif" style="font-family:Arial Black,Arial Black,Gadget,sans-serif">Arial Black</option>'+
+                    '<option value="Arial Narrow,Nimbus Sans L,sans-serif" style="font-family:Arial Narrow,Nimbus Sans L,sans-serif">Arial Narrow</option>'+
+                    '<option value="Century Gothic,CenturyGothic,AppleGothic,sans-serif" style="font-family:Century Gothic,CenturyGothic,AppleGothic,sans-serif">Century Gothic</option>'+
+                    '<option value="Copperplate,Copperplate Gothic Light,fantasy" style="font-family:Copperplate,Copperplate Gothic Light,fantasy;">Copperplate</option>'+
+                    '<option value="Courier,monospace" style="font-family:Courier,monospace;">Courier</option>'+
+                    '<option value="Georgia,Georgia,serif" style="font-family:Georgia,Georgia,serif">Georgia</option>'+
+                    '<option value="Gill Sans,Geneva,sans-serif" style="font-family:Gill Sans,Geneva,sans-serif;">Gill Sans</option>'+
+                    //'<option value="Helvetica Neue,Helvetica,sans-serif" style="font-family:Helvetica Neue,Helvetica,sans-serif">Helvetica Neue</option>'+
+                    '<option value="Impact,Impact,Charcoal,sans-serif" style="font-family:Impact,Impact,Charcoal,sans-serif">Impact</option>'+
+                    '<option value="Lucida Sans Typewriter,Lucida Console,Monaco,monospace" style="font-family:Lucida Console,Monaco,monospace">Lucida Console</option>'+
+                    '<option value="Lucida Sans Unicode,Lucida Grande,sans-serif" style="font-family:Lucida Sans Unicode,Lucida Grande,sans-serif">Lucida Sans</option>'+
+                    '<option value="Palatino Linotype,Palatino,Book Antiqua,serif" style="font-family:Palatino Linotype,Palatino,Book Antiqua,serif">Palatino Linotype</option>'+
+                    '<option value="Tahoma,Geneva,sans-serif" style="font-family:Tahoma,Geneva,sans-serif">Tahoma</optionstyle="font-family:>'+
+                    '<option value="Times New Roman,Times,serif" style="font-family:Times New Roman,Times,serif">Times New Roman</option>'+
+                    '<option value="Trebuchet MS,Helvetica,sans-serif" style="font-family:Trebuchet MS,Helvetica,sans-serif">Trebuchet MS</option>'+
+                    '<option value="Verdana,Verdana,Geneva,sans-serif" style="font-family:Verdana,Verdana,Geneva,sans-serif">Verdana</option>'+
+                    '</select>')
+                    .on("change", function() {
+                        //ensureDashboardNode(true);
+                        var theme = globalDashboardNode.theme.name.split('-')[1];
+                        globalDashboardNode.theme[theme+'Theme'].baseFont = $(this).val();
+                        globalDashboardNode.theme.themeState['base-font'] = {value:$(this).val()};
+                        RED.nodes.dirty(true);
+                    })
+                    .appendTo(baseFontItem);
+
+                var themeSettingsContainer = $('<div id="custom-theme-settings">').appendTo(themeTab);
+
+                // Markup
+                // Page styles
+                var divPageStyle = $('<div>',{class:"form-row"}).appendTo(themeSettingsContainer);
+                $('<label class="nr-db-theme-label">').text(c_("theme.page-settings")).appendTo(divPageStyle);
+                var pageStyles = $('<ul class="red-ui-dashboard-theme-styles"></ul>').appendTo(themeSettingsContainer);
+                addCustomisableStyle('page-titlebar-backgroundColor', c_("theme.page.title"), pageStyles);
+                addCustomisableStyle('page-backgroundColor', c_("theme.page.page"), pageStyles);
+                addCustomisableStyle('page-sidebar-backgroundColor', c_("theme.page.side"), pageStyles);
+
+                // Group styles
+                var divGroupStyle = $('<div>',{class:"form-row"}).appendTo(themeSettingsContainer);
+                $('<label class="nr-db-theme-label">').text(c_("theme.group-settings")).appendTo(divGroupStyle);
+                var groupStyles = $('<ul class="red-ui-dashboard-theme-styles"></ul>').appendTo(themeSettingsContainer);
+                addCustomisableStyle('group-textColor', c_("theme.group.text"), groupStyles);
+                addCustomisableStyle('group-borderColor', c_("theme.group.border"), groupStyles);
+                addCustomisableStyle('group-backgroundColor', c_("theme.group.background"), groupStyles);
+
+                // Widget styles
+                var divWidgetStyle = $('<div>',{class:"form-row"}).appendTo(themeSettingsContainer);
+                $('<label class="nr-db-theme-label">').text(c_("theme.widget-settings")).appendTo(divWidgetStyle);
+                var widgetStyles = $('<ul class="red-ui-dashboard-theme-styles"></ul>').appendTo(themeSettingsContainer);
+                addCustomisableStyle('widget-textColor', c_("theme.widget.text"), widgetStyles);
+                addCustomisableStyle('widget-backgroundColor', c_("theme.widget.colour"), widgetStyles);
+                addCustomisableStyle('widget-borderColor', c_("theme.widget.background"), widgetStyles);
+
+                function addCustomisableStyle(id, name, parentUl) {
+                    var styleLi = $('<li class="red-ui-dashboard-theme-item"><span>'+name+'</span></li>').appendTo(parentUl);
+                    var spanColorContainer = $('<span class="nr-db-color-pick-container"></span>').appendTo(styleLi);
+                    $('<input id="'+id+'" class="nr-db-field-themeColor" type="color" value="#ffffff"/>')
+                    .on("change", function() {
+                        colourPickerChangeHandler($(this).attr('id'), $(this).val());
+                    })
+                    .appendTo(spanColorContainer);
+                    addResetButton(id, styleLi);
+                }
+
+                function colourPickerChangeHandler(id, value) {
+                    $("#"+id).css("background-color", value);
+                    $("#"+id+"-reset").css({opacity:1});
+                    globalDashboardNode.theme.themeState[id].edited = true;
+                    globalDashboardNode.theme.themeState[id].value = value;
+                    if (editor) {
+                        editor.setValue(JSON.stringify({theme:globalDashboardNode.theme.themeState, site:globalDashboardNode.site}),1);
+                    }
+                    RED.nodes.dirty(true);
+                }
+
+                function addResetButton(id, parent) {
+                    var resetToDefault = $('<i id="'+id+'-reset" class="fa fa-undo nr-db-resetIcon"></i>')
+                    .css({opacity:0.2})
+                    .click(function(e) { resetClick(e); })
+                    .appendTo(parent);
+                }
+
+                function addLightAndDarkResetButton(id, parent) {
+                    if ($("#" + id + "-reset").length === 0) {
+                        var resetToDefault = $('<i id="'+id+'-reset" class="fa fa-undo nr-db-resetIcon"></i>')
+                        .css({opacity:1})
+                        .click(function(e) { lightAndDarkResetClick(e); })
+                        .appendTo(parent);
+                        globalDashboardNode.theme[globalDashboardNode.theme.name.split('-')[1] + 'Theme'].edited = true;
+                    }
+                }
+
+                function lightAndDarkResetClick(e) {
+                    var elementID = e.target.id.split('-reset')[0];
+                    var key = globalDashboardNode.theme.name.split('-')[1] + 'Theme';
+                    //sanity check - light and dark only allow base-color-reset
+                    if (elementID === 'base-color') { // && globalDashboardNode.theme[key].edited) {
+                        var defaultColor = globalDashboardNode.theme[key].default;
+                        globalDashboardNode.theme[key].reset = true;
+                        generateColours(defaultColor);
+                        setColourPickerColour(elementID, defaultColor);
+                        $("#"+elementID+"-reset").css({opacity:0.2});
+                        globalDashboardNode.theme.themeState[elementID].value = defaultColor;
+                        globalDashboardNode.theme[key].baseColor = defaultColor;
+                        globalDashboardNode.theme[key].edited = false;
+                        RED.nodes.dirty(true);
+                    }
+                }
+
+                function resetClick(e) {
+                    //take off -reset
+                    var elementID = e.target.id.split('-reset')[0];
+                    if (globalDashboardNode.theme.themeState[elementID].edited) {
+                        var defaultColor = globalDashboardNode.theme.themeState['base-color'].value;
+                        var colour;
+                        //set colour
+                        if (elementID === 'base-color') {
+                            colour = defaultColor;
+                            generateColours(colour);
+                        }
+                        else {
+                            var underscore = elementID.split('-').join('_');
+                            colour = colours['calculate_'+underscore](defaultColor);
+                        }
+                        setColourPickerColour(elementID, colour);
+                        $("#"+elementID+"-reset").css({opacity:0.2});
+                        globalDashboardNode.theme.themeState[elementID].edited = false;
+                        globalDashboardNode.theme.themeState[elementID].value = colour;
+                        RED.nodes.dirty(true);
+                    }
+                }
+
+                function setColourPickerColour(id, val, ed) {
+                    $("#"+id).val(val);
+                    $("#"+id).css("background-color", val);
+                    //call mostReadableGreyWhite to set text colour
+                    var textColor = colours.whiteGreyMostReadable(val);
+                    $("#"+id).css("color", textColor);
+                    if (ed === true) { $("#"+id+"-reset").css({opacity:1}); }
+                    else { $("#"+id+"-reset").css({opacity:0.2}); }
+                }
+
+                //Layout Tab
+                var divTabs = $('<div>',{class:"form-row",style:"position:relative"}).appendTo(layoutTab);
+                $('<label>').html('<b>'+c_("layout.tab-and-link")+'</b>').appendTo(divTabs);
+
+                var buttonGroup = $('<div>',{class:"nr-db-sb-list-button-group"}).appendTo(divTabs);
+
+                //Toggle expand buttons
+                $('<a href="#" class="editor-button editor-button-small nr-db-sb-list-header-button"><i class="fa fa-angle-double-up"></i></a>')
+                .click(function(evt) {
+                    tabContainer.find(".nr-db-sb-group-list-container").slideUp().addClass('nr-db-sb-collapsed');
+                    tabContainer.find(".nr-db-sb-tab-list-header>.nr-db-sb-list-chevron").css({"transform":"rotate(-90deg)"});
+                    evt.preventDefault();
+                })
+                .appendTo(buttonGroup);
+                $('<a href="#" class="editor-button editor-button-small nr-db-sb-list-header-button"><i class="fa fa-angle-double-down"></i></a>')
+                .click(function(evt) {
+                    tabContainer.find(".nr-db-sb-group-list-container").slideDown().removeClass('nr-db-sb-collapsed');
+                    tabContainer.find(".nr-db-sb-tab-list-header>.nr-db-sb-list-chevron").css({"transform":""});
+                    evt.preventDefault();
+                })
+                .appendTo(buttonGroup);
+
+                //Add item button
+                $('<a href="#" class="editor-button editor-button-small nr-db-sb-list-header-button"><i class="fa fa-plus"></i> '+c_("layout.tab")+'</a>')
+                .click(function(evt) {
+                    tabContainer.editableList('addItem',{type: 'ui_tab'});
+                    evt.preventDefault();
+                })
+                .appendTo(buttonGroup);
+                $('<a href="#" class="editor-button editor-button-small nr-db-sb-list-header-button"><i class="fa fa-plus"></i> '+c_("layout.link")+'</a>')
+                .click(function(evt) {
+                    tabContainer.editableList('addItem',{type: 'ui_link'});
+                    evt.preventDefault();
+                })
+                .appendTo(buttonGroup);
+
+                var tabLists = {};
+                var groupLists = {};
+
+                // toggle slide tab group content
+                var titleToggle = function (id,content,chevron) {
+                    return function(evt) {
+                        if (content.is(":visible")) {
+                            content.slideUp();
+                            chevron.css({"transform":"rotate(-90deg)"});
+                            content.addClass('nr-db-sb-collapsed');
+                            listStates[id] = false;
+                        }
+                        else {
+                            content.slideDown();
+                            chevron.css({"transform":""});
+                            content.removeClass('nr-db-sb-collapsed');
+                            listStates[id] = true;
+                        }
+                    };
+                }
+
+                var addTabOrLinkItem = function(container,i,item) {
+                    ensureDashboardNode(true);
+                    // create node if needed
+                    if (!item.node) {
+                        var defaultItem = {
+                            'ui_tab': {
+                                _def: RED.nodes.getType('ui_tab'),
+                                type: 'ui_tab',
+                                users: [],
+                                icon: 'dashboard',
+                                name: 'Tab'
+                            },
+                            'ui_link': {
+                                _def: RED.nodes.getType('ui_link'),
+                                type: 'ui_link',
+                                users: [],
+                                icon: 'open_in_browser',
+                                name: 'Link',
+                                target: 'newtab'
+                            }
+                        }
+                        item.node = defaultItem[item.type]
+                        item.node.id = RED.nodes.id()
+                        item.node.order = i+1
+                        item.node.name += ' '+item.node.order
+                        listElements[item.node.id] = container;
+                        if (item.type === 'ui_tab') {
+                            item.groups = [];
+                        }
+                        RED.nodes.add(item.node);
+                        RED.history.push({
+                            t:'add',
+                            nodes:[item.node.id],
+                            dirty:RED.nodes.dirty()
+                        });
+                        RED.nodes.dirty(true);
+                    }
+                    else if (item.type === undefined) {
+                        item.type = item.node.type
+                    }
+
+                    listElements[item.node.id] = container;
+                    if (RED.nodes.hasOwnProperty('updateConfigNodeUsers')) {
+                        RED.nodes.updateConfigNodeUsers(item.node);
+                    }
+
+                    // title
+                    var titleRow = $('<div>',{class:"nr-db-sb-list-header nr-db-sb-tab-list-header"}).appendTo(container);
+                    switch (item.type) {
+                        case 'ui_tab': {
+                            container.addClass("nr-db-sb-tab-list-item");
+                            $('<i class="nr-db-sb-list-handle nr-db-sb-tab-list-handle fa fa-bars"></i>').appendTo(titleRow);
+                            var chevron = $('<i class="fa fa-angle-down nr-db-sb-list-chevron">',{style:"width:10px;"}).appendTo(titleRow);
+                            var tabicon = "fa-object-group";
+                            //var tabicon = item.node.disabled ? "fa-window-close-o" : item.node.hidden ? "fa-eye-slash" : "fa-object-group";
+                            $('<i>',{class:"nr-db-sb-icon nr-db-sb-tab-icon fa "+tabicon}).appendTo(titleRow);
+                            var tabhide = item.node.hidden ? " nr-db-sb-title-hidden" : "";
+                            var tabable = item.node.disabled ? " nr-db-sb-title-disabled" : "";
+                            $('<span>',{class:"nr-db-sb-title"+tabhide+tabable}).text(item.node.name||"").appendTo(titleRow);
+                            break;
+                        }
+                        case 'ui_link': {
+                            $('<i class="nr-db-sb-list-handle fa fa-bars"></i>').appendTo(titleRow);
+                            var title = $('<div class="nr-db-sb-link">').appendTo(titleRow);
+                            var nameContainer = $('<div class="nr-db-sb-link-name-container">').appendTo(title);
+                            $('<i class="fa fa-external-link"></i>').appendTo(nameContainer);
+                            $('<span class="nr-db-sb-link-name">').text(item.node.name||"untitled").appendTo(nameContainer);
+                            $('<div class="nr-db-sb-link-url">').text(item.node.link||"http://").appendTo(title);
+                            break;
+                        }
+                    }
+                    // buttons
+                    var buttonGroup = $('<div>',{class:"nr-db-sb-list-header-button-group",id: item.node.id}).appendTo(titleRow);
+                    if (item.type === 'ui_tab') {
+                        var addGroupButton = $('<a href="#" class="nr-db-sb-tab-add-group-button editor-button editor-button-small nr-db-sb-list-header-button" ><i class="fa fa-plus"></i> '+c_("layout.group")+'</a>').appendTo(buttonGroup);
+                    }
+                    var editButton = $('<a href="#" class="nr-db-sb-tab-edit-button editor-button  editor-button-small nr-db-sb-list-header-button"><i class="fa fa-pencil"></i> '+c_("layout.edit")+'</a>').appendTo(buttonGroup);
+                    editButton.on('click',function(evt) {
+                        RED.editor.editConfig("", item.type, item.node.id);
+                        evt.stopPropagation();
+                        evt.preventDefault();
+                    });
+
+                    // Dashboard layout tool
+                    if (item.type === 'ui_tab') {
+                        var layoutButton = $('<a href="#" class="nr-db-sb-tab-edit-layout-button editor-button editor-button-small nr-db-sb-list-header-button"><i class="fa fa-pencil"></i> '+c_("layout.layout")+'</a>').appendTo(buttonGroup);
+                        layoutButton.on('click',function(evt) {
+                            var editTabName = item.node.name ? item.node.name : item.node.id;
+                            var trayOptions = {
+                                title: c_("layout.layout-editor") + " : " + editTabName,
+                                width: Infinity,
+                                buttons: [
+                                    {
+                                        id: "node-dialog-cancel",
+                                        text: RED._("common.label.cancel"),
+                                        click: function() {
+                                            // clean editor
+                                            RED.tray.close();
+                                        }
+                                    },
+                                    {
+                                        id: "node-dialog-ok",
+                                        text: RED._("common.label.done"),
+                                        class: "primary",
+                                        click: function() {
+                                            // Save data after editing
+                                            saveGridDatas();
+                                            RED.tray.close();
+                                        }
+                                    }
+                                ],
+                                resize: function(dimensions) {},
+                                open: function(tray) {
+                                    // Get widget of specified tab from node information
+                                    tabDatas = getTabDataFromNodes(item.node.id);
+                                    // The width that can be handled by Layout is up to MAX_GROUP_WIDTH
+                                    // Groups exceeding the maximum width are not supported.
+                                    var tmpGroups = tabDatas.groups;
+                                    tmpGroups.sort(compareOrder);
+                                    var groups = [];
+                                    for (var cnt = 0; cnt < tmpGroups.length; cnt++) {
+                                        if (tmpGroups[cnt].width <= MAX_GROUP_WIDTH) {
+                                            groups.push(tmpGroups[cnt]);
+                                        }
+                                    }
+                                    tabDatas.groups = groups;
+
+                                    var editor = $('<div></div>',{addClass: 'nr-dashboard-layout-container-fluid'});
+                                    var row =  $('<div></div>',{addClass: 'nr-dashboard-layout-row'});
+                                    var span_num = Math.floor(12 / groups.length); // bootstrap grid 12 splits
+                                    span_num = span_num < 2 ? 2 : span_num; // max 6 groups per row
+                                    for (var cnt = 0; cnt < groups.length; cnt++) {
+                                        if (cnt !=0 && (cnt % 6) == 0) {
+                                            editor.append(row);
+                                            editor.append('<div><br></div>');
+                                            row = $('<div></div>',{addClass: 'nr-dashboard-layout-row'});
+                                        }
+                                        var span = $('<div></div>',{addClass: 'nr-dashboard-layout-span' + span_num});
+                                        var groupName = groups[cnt].name ? groups[cnt].name : groups[cnt].id;
+                                        var title = $('<div></div>', {
+                                            style: "margin-top:2px; margin-bottom:2px;"
+                                        });
+                                        var title_group = $('<div></div>', {
+                                            title: groupName,
+                                            style: "margin-left:4px; margin-right:8px; overflow:hidden;"
+                                        }).appendTo(title);
+                                        $("<b/>").text(groupName).appendTo(title_group);
+                                        var title_width = $('<div></div>', {
+                                            style: "text-align:right; margin-right:8px;"
+                                        }).appendTo(title);
+                                        $("<span/>", {
+                                            style: "margin_right: 8px;"
+                                        }).text(c_("layout.width")+': ').appendTo(title_width);
+                                        var changeWidth = $('<input>', {
+                                            id: 'change-width' + cnt,
+                                            value: groups[cnt].width,
+                                            style: 'width:30px;',
+                                            readonly: true,
+                                            'node-id': groups[cnt].id,
+                                        });
+                                        title_width.append(changeWidth);
+
+                                        title.css('white-space','nowrap');
+                                        title.css('overflow','hidden');
+                                        var gridstack = $('<div></div>', {
+                                            id: 'grid'+cnt,
+                                            addClass: 'grid-stack'
+                                        });
+                                        span.append(title);
+                                        span.append(gridstack);
+                                        row.append(span);
+                                    }
+                                    if (groups.length != 0) {
+                                        editor.append(row);
+                                    }
+
+                                    // Show layout editor in tray
+                                    var trayBody = tray.find('.red-ui-tray-body, .editor-tray-body');
+                                    trayBody.css('overflow','auto');
+                                    trayBody.append(editor);
+
+                                    /////////////////////////////////////////
+                                    // Editor screen generation
+                                    /////////////////////////////////////////
+                                    oldSpacer = [];
+                                    widthChange = [];
+                                    widgetResize = [];
+                                    widgetDrag = [];
+                                    for (var cnt=0; cnt < groups.length; cnt++) {
+                                        // Gridstack.js option
+                                        var options = {
+                                            acceptWidgets: true,
+                                            alwaysShowResizeHandle: true,
+                                            cellHeight: 42,
+                                            disableOneColumnMode : true,
+                                            float: true,
+                                            verticalMargin: 1
+                                        };
+                                        var gridID='#grid' + cnt;
+                                        // gridstack generation
+                                        $(gridID).gridstack(options);
+
+                                        // Clear the contents of Grid
+                                        var grid = $(gridID+'.grid-stack').data('gridstack');
+                                        grid.removeAll();
+                                        $(gridID).on("dropped", handleMove(grid));
+
+                                        // Set the width of the display area of gridstack
+                                        var groupWidth = Number(groups[cnt].width);
+                                        $(gridID+'.grid-stack').css("width", groupWidth * 40);
+                                        $(gridID+'.grid-stack').css("background-size", 100/groupWidth+"% 43px");
+                                        $(gridID+'.grid-stack').attr("node-id", groups[cnt].id);
+                                        $(gridID+'.grid-stack').attr("grid-column", groups[cnt].width);
+                                        grid.setColumn(groupWidth, true);
+
+                                        // Determination of placement position of widget of Grid
+                                        var widgets = groups[cnt].widgets;
+                                        widgets.sort(compareOrder);
+
+                                        var tbl = {};
+                                        for (var cnt2 = 0; cnt2 < widgets.length; cnt2++) {
+                                            // Set default value when there is auto width
+                                            if (widgets[cnt2].auto == true) {
+                                                widgets[cnt2].width = groupWidth;
+                                            // Adjust to the group width
+                                            } else if (widgets[cnt2].width > groupWidth) {
+                                                widgets[cnt2].width = groupWidth;
+                                            }
+                                            // Auto support
+                                            if (widgets[cnt2].auto === true || widgets[cnt2].type === 'ui_form') {
+                                                widgets[cnt2].height = getDefaultHeight(widgets[cnt2].id, groupWidth);
+                                            }
+                                            // Calculate coordinates to be placed
+                                            var point = search_point(Number(widgets[cnt2].width), Number(widgets[cnt2].height), groupWidth, 256, tbl);
+                                            if (point) {
+                                                widgets[cnt2].x = point.x;
+                                                widgets[cnt2].y = point.y;
+                                            }
+                                        }
+
+                                        var items = GridStackUI.Utils.sort(widgets);
+                                        items.forEach(function (node) {
+                                            var minHeight = null;
+                                            var maxHeight = null;
+                                            // ui_form is fixed to height 2
+                                            if (node.type === 'ui_form') {
+                                                minHeight = node.height;
+                                                maxHeight = node.height;
+                                            }
+                                            if (node.type !== 'ui_spacer') {
+                                                var dispNode = RED.nodes.node(node.id);
+                                                var dispType = dispNode._def.paletteLabel;
+                                                var dispLabel = dispNode._def.label;
+                                                try {
+                                                    dispLabel = (typeof dispLabel === "function" ? dispLabel.call(dispNode) : dispLabel)||"";
+                                                }
+                                                catch(err) {
+                                                    console.log("Definition error: " + node.type + ".label",err);
+                                                    dispLabel = dispType;
+                                                }
+
+                                                var item = $('<div></div>', {
+                                                    'data-noderedtype': node.type,
+                                                    'data-noderedid': node.id,
+                                                    'data-nodereddisptype': dispType,
+                                                    'data-nodereddisplabel': dispLabel,
+                                                    'data-noderedsizeauto': node.auto
+                                                });
+                                                var itemContent = $('<div></div>', {
+                                                    addClass: 'grid-stack-item-content',
+                                                    title: dispLabel + ':' + dispType
+                                                });
+
+                                                if (node.auto === true) {
+                                                    itemContent.append('<i class="fa fa-unlock nr-dashboard-layout-resize-enable" title="'+c_("layout.auto")+'"></i>');
+                                                } else {
+                                                    itemContent.append('<i class="fa fa-lock nr-dashboard-layout-resize-disable" title="'+c_("layout.manual")+'"></i>');
+                                                }
+                                                itemContent.append('<b>'+ dispLabel +'</b><br/>'+ dispType);
+                                                item.append(itemContent);
+                                                grid.addWidget(
+                                                    item,
+                                                    node.x, node.y, node.width, node.height, false, null, null,
+                                                    minHeight, maxHeight, node.id);
+                                            } else {
+                                                // Record the spacer node ID to be deleted
+                                                oldSpacer.push(node.id);
+                                            }
+                                        });
+
+                                        $(gridID+'.grid-stack > .grid-stack-item:visible').each( function(idx, el) {
+                                            el = $(el);
+                                            var node = el.data('_gridstack_node');
+                                            var auto = (el[0].dataset.noderedsizeauto == 'true') ? true : false;
+                                            grid.resizable(el, !auto);
+                                        });
+
+                                        // Group width change
+                                        widthChange.push(new changeGroupWidth(cnt));
+                                        // Resize widget in group (start event)
+                                        widgetResize.push(new resizeGroupWidget(cnt));
+                                        // Dragging widgets in a group (start event)
+                                        widgetDrag.push(new dragGroupWidget(cnt));
+                                    }
+                                    $('.grid-stack>.grid-stack-item>.grid-stack-item-content>.nr-dashboard-layout-resize-disable').on('click',layoutResizeDisable);
+                                    $('.grid-stack>.grid-stack-item>.grid-stack-item-content>.nr-dashboard-layout-resize-enable').on('click',layoutResizeEnable);
+                                },
+                                close: function() {},
+                                show: function() {}
+                            }
+                            RED.tray.show(trayOptions);
+                            evt.stopPropagation();
+                            evt.preventDefault();
+                        });
+                    }
+
+                    if (item.type === 'ui_tab') {
+                        var content = $('<div>',{class:"nr-db-sb-group-list-container"}).appendTo(container);
+
+                        // ui_tab group chevron
+                        if (listStates.hasOwnProperty(item.node.id) && !listStates[item.node.id]) {
+                            content.hide();
+                            chevron.css({"transform":"rotate(-90deg)"});
+                            content.addClass('nr-db-sb-collapsed');
+                            listStates[item.node.id] = false;
+                        }
+                        else {
+                            listStates[item.node.id] = true;
+                        }
+                        titleRow.click(titleToggle(item.node.id,content,chevron));
+
+                        // ui_tab group list
+                        var ol = $('<ol>',{class:"nr-db-sb-group-list"}).appendTo(content).editableList({
+                            sortable:".nr-db-sb-group-list-header",
+                            addButton: false,
+                            height: 'auto',
+                            connectWith: ".nr-db-sb-group-list",
+                            addItem: function(container,i,group) {
+                                if (!group.node) {
+                                    group.node = {
+                                        id: RED.nodes.id(),
+                                        _def: RED.nodes.getType("ui_group"),
+                                        type: "ui_group",
+                                        users: [],
+                                        tab: item.node.id,
+                                        order: i+1,
+                                        name: "Group "+(i+1),
+                                        width: 6,
+                                        disp: true
+                                    };
+                                    listElements[group.node.id] = container;
+                                    RED.nodes.add(group.node);
+                                    group.widgets = [];
+                                    RED.history.push({
+                                        t:'add',
+                                        nodes:[group.node.id],
+                                        dirty:RED.nodes.dirty()
+                                    });
+                                    RED.nodes.dirty(true);
+                                    if (RED.nodes.hasOwnProperty('updateConfigNodeUsers')) {
+                                        RED.nodes.updateConfigNodeUsers(group.node);
+                                    }
+                                }
+                                else {
+                                    if (group.node.order === undefined) {
+                                        group.node.order = i+1;
+                                    }
+                                }
+                                var groupNode = group.node;
+                                elementParents[groupNode] = item.node.id;
+                                var titleRow = $('<div>',{class:"nr-db-sb-list-header nr-db-sb-group-list-header"}).appendTo(container);
+                                $('<i class="nr-db-sb-list-handle nr-db-sb-group-list-handle fa fa-bars"></i>').appendTo(titleRow);
+                                var chevron = $('<i class="fa fa-angle-down nr-db-sb-list-chevron">',{style:"width:10px;"}).appendTo(titleRow);
+                                $('<i class="nr-db-sb-icon nr-db-sb-group-icon fa fa-table"></i>').appendTo(titleRow);
+                                var title = $('<span class="nr-db-sb-title">').text(groupNode.name||groupNode.id||"").appendTo(titleRow);
+                                listElements[groupNode.id] = container;
+                                var buttonGroup = $('<div>',{class:"nr-db-sb-list-header-button-group",id:groupNode.id}).appendTo(titleRow);
+                                var spacerButton = $('<a href="#" class="editor-button editor-button-small nr-db-sb-list-header-button"><i class="fa fa-plus"></i> '+c_("layout.spacer")+'</a>').appendTo(buttonGroup);
+                                spacerButton.on('click',function(evt) {
+                                    var spaceNode = {
+                                        _def: RED.nodes.getType("ui_spacer"),
+                                        type: "ui_spacer",
+                                        hasUsers: false,
+                                        users: [],
+                                        id: RED.nodes.id(),
+                                        tab: item.node.name,
+                                        group: group.node.id,
+                                        order: i+1,
+                                        name: "spacer",
+                                        width: 1,
+                                        height:1,
+                                        z: RED.workspaces.active(),
+                                        label: function() { return "spacer " + this.width + "x" + this.height; }
+                                    };
+                                    RED.nodes.add(spaceNode);
+                                    RED.editor.validateNode(spaceNode);
+                                    RED.history.push({
+                                        t:'add',
+                                        nodes:[spaceNode.id],
+                                        dirty:RED.nodes.dirty()
+                                    });
+                                    RED.nodes.dirty(true);
+                                    RED.view.redraw();
+                                    evt.stopPropagation();
+                                    evt.preventDefault();
+                                });
+                                var editButton = $('<a href="#" class="nr-db-sb-edit-group-button editor-button editor-button-small nr-db-sb-list-header-button"><i class="fa fa-pencil"></i> '+c_("layout.edit")+'</a>').appendTo(buttonGroup);
+                                var content = $('<div>',{class:"nr-db-sb-widget-list-container"}).appendTo(container);
+                                if (!listStates.hasOwnProperty(groupNode.id) || !listStates[groupNode.id]) {
+                                    content.hide();
+                                    chevron.css({"transform":"rotate(-90deg)"});
+                                    content.addClass('nr-db-sb-collapsed');
+                                    listStates[groupNode.id] = false;
+                                }
+                                else {
+                                    listStates[groupNode.id] = true;
+                                }
+
+                                var ol = $('<ol>',{class:"nr-db-sb-widget-list"}).appendTo(content).editableList({
+                                    sortable:".nr-db-sb-widget-list-header",
+                                    addButton: false,
+                                    height: 'auto',
+                                    connectWith: ".nr-db-sb-widget-list",
+                                    addItem: function(container,i,widgetNode) {
+                                        elementParents[widgetNode.id] = groupNode.id;
+                                        var titleRow = $('<div>',{class:"nr-db-sb-list-header nr-db-sb-widget-list-header"}).appendTo(container);
+                                        $('<i class="nr-db-sb-list-handle nr-db-sb-widget-list-handle fa fa-bars"></i>').appendTo(titleRow);
+                                        $('<i class="nr-db-sb-icon nr-db-sb-widget-icon fa fa-picture-o"></i>').click(function(e) { e.preventDefault(); RED.search.show(widgetNode.id); }).appendTo(titleRow);
+                                        var l = widgetNode._def.label;
+                                        try {
+                                            l = (typeof l === "function" ? l.call(widgetNode) : l)||"";
+                                        }
+                                        catch(err) {
+                                            console.log("Definition error: "+d.type+".label",err);
+                                            l = d.type;
+                                        }
+                                        var title = $('<span class="nr-db-sb-title">').text(l).appendTo(titleRow);
+                                        listElements[widgetNode.id] = container;
+                                        var buttonGroup = $('<div>',{class:"nr-db-sb-list-header-button-group"}).appendTo(titleRow);
+                                            var editButton = $('<a href="#" class="editor-button editor-button-small nr-db-sb-list-header-button"><i class="fa fa-pencil"></i> '+c_("layout.edit")+'</a>').appendTo(buttonGroup);
+                                            container.on('mouseover',function() {
+                                            widgetNode.highlighted = true;
+                                            widgetNode.dirty = true;
+                                            RED.view.redraw();
+                                        });
+                                        container.on('mouseout',function() {
+                                            widgetNode.highlighted = false;
+                                            widgetNode.dirty = true;
+                                            RED.view.redraw();
+                                        });
+                                        editButton.on('click',function(evt) {
+                                            RED.editor.edit(widgetNode);
+                                            evt.stopPropagation();
+                                            evt.preventDefault();
+                                        });
+                                    },
+                                    sortItems: function(items) {
+                                        var historyEvents = [];
+                                        items.each(function(i,el) {
+                                            var node = el.data('data');
+                                            var hev = {
+                                                t:'edit',
+                                                node:node,
+                                                changes:{
+                                                    order:node.order,
+                                                    group:node.group
+                                                },
+                                                dirty:node.dirty,
+                                                changed:node.changed
+                                            };
+                                            historyEvents.push(hev);
+                                            var changed = false;
+                                            if (node.order !== i+1) {
+                                                node.order = i+1;
+                                                changed = true;
+                                            }
+                                            if (node.group !== group.node.id) {
+                                                var oldGroupNode = RED.nodes.node(node.group);
+                                                if (oldGroupNode) {
+                                                    var index = oldGroupNode.users.indexOf(node);
+                                                    oldGroupNode.users.splice(index,1);
+                                                }
+                                                node.group = group.node.id;
+                                                group.node.users.push(node);
+                                                changed = true;
+                                            }
+                                            if (changed) {
+                                                node.dirty = true;
+                                                node.changed = true;
+                                            }
+                                        })
+                                        RED.history.push({
+                                            t:'multi',
+                                            events: historyEvents
+                                        });
+                                        RED.nodes.dirty(true);
+                                        RED.view.redraw();
+                                    }
+                                });
+                                ol.css("min-height","5px");
+                                if (groupNode.id) {
+                                    groupLists[groupNode.id] = ol;
+                                }
+                                titleRow.click(titleToggle(groupNode.id,content,chevron));
+                                editButton.on('click',function(evt) {
+                                    RED.editor.editConfig("", groupNode.type, groupNode.id);
+                                    evt.stopPropagation();
+                                    evt.preventDefault();
+                                });
+                                group.widgets.forEach(function(widget) {
+                                    ol.editableList('addItem',widget);
+                                })
+                            },
+                            sortItems: function(items) {
+                                var historyEvents = [];
+                                items.each(function(i,el) {
+                                    var groupData = el.data('data');
+                                    var node = groupData.node;
+                                    var hev = {
+                                        t:'edit',
+                                        node:node,
+                                        changes:{
+                                            order:node.order,
+                                            tab:node.tab
+                                        },
+                                        dirty:node.dirty,
+                                        changed:node.changed
+                                    };
+                                    historyEvents.push(hev);
+                                    var changed = false;
+                                    if (node.order !== i+1) {
+                                        node.order = i+1;
+                                        changed = true;
+                                    }
+                                    if (changed) {
+                                        node.dirty = true;
+                                        node.changed = true;
+                                    }
+                                    if (node.tab !== item.node.id) {
+                                        var oldTabNode = RED.nodes.node(node.tab);
+                                        if (oldTabNode) {
+                                            var index = oldTabNode.users.indexOf(node);
+                                            oldTabNode.users.splice(index,1);
+                                        }
+                                        node.tab = item.node.id;
+                                        item.node.users.push(node);
+                                        changed = true;
+                                    }
+                                })
+                                RED.history.push({
+                                    t:'multi',
+                                    events: historyEvents
+                                });
+                                RED.nodes.dirty(true);
+                                RED.view.redraw();
+                            }
+                        })
+                        tabLists[item.node.id] = ol;
+
+                        addGroupButton.click(function(evt) {
+                            ol.editableList('addItem',{});
+                            evt.stopPropagation();
+                            evt.preventDefault();
+                        });
+                        item.groups.forEach(function(group) {
+                            ol.editableList('addItem',group);
+                        });
+                    }
+                }
+
+                var tabContainer = $('<ol>',{class:"nr-db-sb-tab-list"}).appendTo(divTabs).editableList({
+                    sortable:".nr-db-sb-tab-list-header",
+                    addButton: false,
+                    addItem: addTabOrLinkItem,
+                    sortItems: function(items) {
+                        var historyEvents = [];
+                        items.each(function(i,el) {
+                            var itemData = el.data('data');
+                            var node = itemData.node;
+                            var hev = {
+                                t:'edit',
+                                node:node,
+                                changes:{
+                                    order:node.order
+                                },
+                                dirty:node.dirty,
+                                changed:node.changed
+                            }
+                            historyEvents.push(hev);
+                            var changed = false;
+                            if (node.order !== i+1) {
+                                node.order = i+1;
+                                changed = true;
+                            }
+                            if (changed) {
+                                node.dirty = true;
+                                node.changed = true;
+                            }
+                        })
+                        RED.history.push({
+                            t:'multi',
+                            events: historyEvents
+                        });
+                        RED.nodes.dirty(true);
+                        RED.view.redraw();
+                    }
+                });
+
+                var orphanedWidgets = $('<div>',{class:"form-row"}).appendTo(layoutTab);
+                $('<span><i class="fa fa-info-circle"></i> There <span id="nr-db-missing-group-count"></span> not in a group. Click <a id="nr-db-add-missing-groups" href="#">here</a> to create the missing groups</span>').appendTo(orphanedWidgets);
+                orphanedWidgets.find('a').click(function(event) {
+                    var unknownGroups = {};
+                    RED.nodes.eachNode(function(node) {
+                        if (/^ui_/.test(node.type) && node.type !== 'ui_link' && node.type !== 'ui_toast' && node.type !== 'ui_ui_control') {
+                            if (!RED.nodes.node(node.group)) {
+                                var g = node.group || "_BLANK_";
+                                unknownGroups[g] = unknownGroups[g] || [];
+                                unknownGroups[g].push(node);
+                            }
+                        }
+                    });
+                    var tab = null;
+                    var tabs = tabContainer.editableList('items');
+                    tabs.first().each(function(i,el) {
+                        var tabData = el.data('data');
+                        tab = tabData.node;
+                    });
+
+                    var hev = [];
+                    if (tab === null) {
+                        tab = {
+                            id: RED.nodes.id(),
+                            _def: RED.nodes.getType("ui_tab"),
+                            type: "ui_tab",
+                            users: [],
+                            order: 0,
+                            name: "Tab",
+                            icon: "dashboard"
+                        };
+                        RED.nodes.add(tab);
+                        hev.push(tab.id);
+                    }
+                    for (var groupId in unknownGroups) {
+                        if (unknownGroups.hasOwnProperty(groupId)) {
+                            var groupNode = {
+                                id: RED.nodes.id(),
+                                _def: RED.nodes.getType("ui_group"),
+                                type: "ui_group",
+                                users: [],
+                                tab: tab.id,
+                                order: i+1,
+                                name: (groupId==="_BLANK_"?"Group":groupId),
+                                width: 6,
+                                disp: true
+                            };
+                            hev.push(groupNode.id);
+                            RED.nodes.add(groupNode);
+                            RED.editor.validateNode(groupNode);
+                            if (RED.nodes.hasOwnProperty('updateConfigNodeUsers')) {
+                                RED.nodes.updateConfigNodeUsers(groupNode);
+                            }
+                            var widgets = unknownGroups[groupId];
+                            for (var i=0; i<widgets.length; i++) {
+                                widgets[i].group = groupNode.id;
+                                widgets[i].changed = true;
+                                widgets[i].dirty = true;
+                                if (RED.nodes.hasOwnProperty('updateConfigNodeUsers')) {
+                                    RED.nodes.updateConfigNodeUsers(widgets[i]);
+                                }
+                                RED.editor.validateNode(widgets[i]);
+                            }
+                        }
+                    }
+                    RED.history.push({
+                        t:'add',
+                        nodes: hev,
+                        dirty:RED.nodes.dirty()
+                    });
+                    RED.nodes.dirty(true);
+                    refresh();
+                    refreshOrphanedWidgets();
+                    RED.view.redraw();
+                    event.preventDefault();
+                });
+
+                var listElements = {};
+                var dashboard = [];
+                var listStates = {};
+                var elementParents = {};
+                var awaitingGroups = {};
+                var awaitingTabs = {};
+
+                function getCurrentList() {
+                    var currentList = [];
+                    var tabs = tabContainer.editableList('items');
+                    var open = false;
+                    tabs.each(function(i,el) {
+                        var tabData = el.data('data');
+                        var tab = [];
+                        var groups = el.find('.nr-db-sb-group-list').editableList('items');
+                        groups.each(function(j,el) {
+                            var group = [];
+                            var groupData = el.data('data');
+                            var widgets = el.find('.nr-db-sb-widget-list').editableList('items');
+                            widgets.each(function(k,el) {
+                                var widgetData = el.data('data');
+                                group.push(widgetData.id);
+                            })
+                            tab.push({id:groupData.node.id, widgets:group});
+                        });
+                        currentList.push({id:tabData.node.id,groups:tab});
+                    });
+                    return currentList;
+                }
+
+                function refreshOrphanedWidgets() {
+                    var unknownGroups = {};
+                    var count = 0;
+                    RED.nodes.eachNode(function(node) {
+                        if (/^ui_/.test(node.type) && node.type !== 'ui_link' && node.type !== 'ui_toast' && node.type !== 'ui_ui_control' && (node.type === 'ui_template' && node.templateScope !== 'global')) {
+                            if (!RED.nodes.node(node.group)) {
+                                var g = node.group || "_BLANK_";
+                                unknownGroups[g] = unknownGroups[g] || [];
+                                unknownGroups[g].push(node);
+                                count++;
+                            }
+                        }
+                    });
+
+                    if (count > 0) {
+                        orphanedWidgets.show();
+                        $("#nr-db-missing-group-count").text((count===1?"is ":"are ")+count+" widget"+(count === 1?"":"s"))
+                    }
+                    else {
+                        orphanedWidgets.hide();
+                    }
+                }
+
+                function refresh() {
+                    var currentList = getCurrentList();
+                    dashboard = [];
+                    var tabs = {};
+                    var groups = {};
+                    var elements = [];
+                    var groupElements = {};
+                    var tabGroups = {};
+                    var groupId;
+                    var group;
+                    var tabId;
+                    var tab;
+                    var unknownGroups = 0;
+                    // Find all the tabs and groups
+                    RED.nodes.eachConfig(function(node) {
+                        switch (node.type) {
+                            case 'ui_tab':
+                            case 'ui_link': {
+                                tabs[node.id] = node;
+                                //tabContainer.editableList('addItem',node);
+                                break;
+                            }
+                            case 'ui_group': {
+                                groups[node.id] = node;
+                                break;
+                            }
+                            case 'ui_spacer': {
+                                if (groups.hasOwnProperty(node.group)) {
+                                    groupElements[node.group] = groupElements[node.group]||[];
+                                    groupElements[node.group].push(node);
+                                }
+                                break;
+                            }
+                        }
+                    });
+                    for (groupId in groups) {
+                        if (groups.hasOwnProperty(groupId)) {
+                            group = groups[groupId];
+                            if (tabs.hasOwnProperty(group.tab)) {
+                                // This group belongs to a tab
+                                tabGroups[group.tab] = tabGroups[group.tab]||[];
+                                tabGroups[group.tab].push(group);
+                            }
+                            else {
+                                unknownGroups++;
+                            }
+                        }
+                    }
+                    // Find all ui widgets - list them by their group id
+                    RED.nodes.eachNode(function(node) {
+                        if (/^ui_/.test(node.type)) {
+                            if (groups.hasOwnProperty(node.group)) {
+                                groupElements[node.group] = groupElements[node.group]||[];
+                                groupElements[node.group].push(node);
+                            }
+                            else if ((node.type !== 'ui_toast')&&(node.type !== 'ui_ui_control')&&(node.type === 'ui_template' && node.templateScope !== 'global')) {
+                                unknownGroups++;
+                            }
+                        }
+                    });
+                    if (unknownGroups > 0) {
+                        $("#nr-db-missing-group-count").text((unknownGroups===1?"is ":"are ")+unknownGroups+" widget"+(unknownGroups === 1?"":"s"))
+                        orphanedWidgets.show();
+                    }
+                    else {
+                        orphanedWidgets.hide();
+                    }
+                    // Sort each group's array of widgets
+                    for (groupId in groupElements) {
+                        if (groupElements.hasOwnProperty(groupId)) {
+                            group = groupElements[groupId];
+                            groupElements[groupId] = group.map(function(v,i) { return {n:v,i:i} }).sort(function(A,B) {
+                                if (A.n.order < B.n.order) { return A.n.order!==0?-1:1;}
+                                if (A.n.order > B.n.order) { return B.n.order!==0?1:-1;}
+                                return A.i - B.i;
+                            }).map(function(v) { return v.n})
+                        }
+                    }
+                    // Sort each tabs's array of groups
+                    for (tabId in tabGroups) {
+                        if (tabGroups.hasOwnProperty(tabId)) {
+                            tab = tabGroups[tabId];
+                            tabGroups[tabId] = tab.map(function(v,i) { return {n:v,i:i} }).sort(function(A,B) {
+                                if (A.n.order < B.n.order) { return -1;}
+                                if (A.n.order > B.n.order) { return 1;}
+                                return A.i - B.i;
+                            }).map(function(v) { return v.n})
+                        }
+                    }
+                    var tabIds = Object.keys(tabs).map(function(v,i) { return {n:tabs[v],i:i} }).sort(function(A,B) {
+                        if (A.n.order < B.n.order) { return -1;}
+                        if (A.n.order > B.n.order) { return 1;}
+                        return A.i - B.i;
+                    }).map(function(v) { return v.n.id});
+                    tabIds.forEach(function(tabId) {
+                        var tab = {node:tabs[tabId],groups:[]};
+                        if (tabGroups[tabId]) {
+                            tabGroups[tabId].forEach(function(groupNode) {
+                                var group = {node:groupNode,widgets:[]};
+                                if (groupElements[groupNode.id]) {
+                                    group.widgets = groupElements[groupNode.id];
+                                }
+                                tab.groups.push(group);
+                            });
+                        }
+                        dashboard.push(tab);
+                    });
+                    var newList = dashboard.map(function(t) {
+                        return {
+                            id: t.node.id,
+                            groups: t.groups.map(function(g) {
+                                return {
+                                    id: g.node.id,
+                                    widgets: g.widgets.map(function(w) {
+                                        return w.id;
+                                    })
+                                }
+                            })
+                        }
+                    });
+                    if (JSON.stringify(newList)!=JSON.stringify(currentList)) {
+                        listElements = {};
+                        groupLists = {};
+                        tabLists = {};
+                        tabs = {};
+                        groups = {};
+                        elementParents = {};
+                        tabContainer.empty();
+                        dashboard.forEach(function(tab) {
+                            tabContainer.editableList('addItem',tab);
+                        });
+                    }
+                    //ensureDashboardNode(true);
+                    if (globalDashboardNode) {
+                        $("#nr-db-field-title").val(globalDashboardNode.site.name);
+                        $("#nr-db-field-allowSwipe").val(globalDashboardNode.site.allowSwipe || "false");
+                        $("#nr-db-field-allowTempTheme").val(globalDashboardNode.site.allowTempTheme || "true");
+                        $("#nr-db-field-hideToolbar").val(globalDashboardNode.site.hideToolbar || "false");
+                        $("#nr-db-field-dateFormat").val(globalDashboardNode.site.dateFormat);
+
+                        if (typeof globalDashboardNode.site.sizes !== "object") {
+                            globalDashboardNode.site.sizes = sizes;
+                        }
+                        $("#nr-db-field-sx").val(globalDashboardNode.site.sizes.sx);
+                        $("#nr-db-field-sy").val(globalDashboardNode.site.sizes.sy);
+                        $("#nr-db-field-px").val(globalDashboardNode.site.sizes.px);
+                        $("#nr-db-field-py").val(globalDashboardNode.site.sizes.py);
+                        $("#nr-db-field-cx").val(globalDashboardNode.site.sizes.cx);
+                        $("#nr-db-field-cy").val(globalDashboardNode.site.sizes.cy);
+                        $("#nr-db-field-gx").val(globalDashboardNode.site.sizes.gx);
+                        $("#nr-db-field-gy").val(globalDashboardNode.site.sizes.gy);
+
+                        if (typeof globalDashboardNode.theme.angularTheme !== "object") {
+                            globalDashboardNode.theme.angularTheme = aTheme;
+                        }
+                        $("#nr-db-field-angPrimary").val(globalDashboardNode.theme.angularTheme.primary || "indigo");
+                        $("#nr-db-field-angAccents").val(globalDashboardNode.theme.angularTheme.accents || "blue");
+                        $("#nr-db-field-angWarn").val(globalDashboardNode.theme.angularTheme.warn || "red");
+                        $("#nr-db-field-angBackground").val(globalDashboardNode.theme.angularTheme.background || "grey");
+                        $("#nr-db-field-angLook").val(globalDashboardNode.theme.angularTheme.palette || "light");
+
+                        $("#nr-db-field-theme").val(globalDashboardNode.theme.name);
+                        $("#ui-sidebar-name").val(globalDashboardNode.theme.customTheme.name);
+                        if (globalDashboardNode.theme.name === 'theme-custom') {
+                            $("#custom-theme-library-container").show();
+                            $("#custom-theme-settings").show();
+                        }
+                        else {
+                            $("#custom-theme-library-container").hide();
+                            $("#custom-theme-settings").hide();
+                        }
+                        if ($('#nr-db-field-allowTempTheme').val() === "none") {
+                            ulDashboardTabs.children().eq(2).addClass("hidden");
+                            ulDashboardTabs.children().eq(3).removeClass("hidden");
+                        }
+                        else {
+                            ulDashboardTabs.children().eq(2).removeClass("hidden");
+                            ulDashboardTabs.children().eq(3).addClass("hidden");
+                        }
+
+                        //set colour start
+                        if (typeof globalDashboardNode.theme.name !== "string") {
+                            globalDashboardNode.theme.name = "theme-light";
+                        }
+                        var currentTheme = globalDashboardNode.theme.name.split("-")[1];
+                        var startingValue = globalDashboardNode.theme[currentTheme+"Theme"].baseColor;
+                        setColourPickerColour("base-color", startingValue);
+                        $("#nr-db-field-font").val(globalDashboardNode.theme[currentTheme+"Theme"].baseFont);
+                        generateColours(startingValue);
+                        if (globalDashboardNode.theme.name === 'theme-light' || globalDashboardNode.theme.name === 'theme-dark') {
+                            addLightAndDarkResetButton('base-color', $('#base-settings-ul').children().first());
+                        }
+
+                        if (editor === undefined) {
+                            editor = RED.editor.createEditor({
+                                id: 'nr-db-field-format-editor',
+                                mode: 'ace/mode/javascript',
+                                value: JSON.stringify({theme:globalDashboardNode.theme.themeState, site:globalDashboardNode.site})
+                            });
+
+                            RED.library.create({
+                                url:"themes", // where to get the data from
+                                type:"theme", // the type of object the library is for
+                                editor: editor, // the field name the main text body goes to
+                                mode:"ace/mode/javascript",
+                                fields:['name'],
+                                elementPrefix:"ui-sidebar-"
+                            });
+                        }
+
+                        editor.on('input', function() {
+                            // Check for any changes on the editor object
+                            // i.e. has the theme been customised compared
+                            // to what is stored
+                            var editorObject = JSON.parse(editor.getValue());
+
+                            //Update theme object if necessary
+                            if (JSON.stringify(editorObject.theme) !== JSON.stringify(globalDashboardNode.theme.themeState)) {
+                                globalDashboardNode.theme.themeState = editorObject.theme;
+                                if ($("#ui-sidebar-name").val() !== globalDashboardNode.theme.customTheme.name) {
+                                    globalDashboardNode.theme.customTheme.name = $("#ui-sidebar-name").val();
+                                    globalDashboardNode.theme.customTheme.baseColor = globalDashboardNode.theme.themeState["base-color"].value;
+                                    setColourPickerColour("base-color", globalDashboardNode.theme.customTheme.baseColor);
+                                    generateColours(globalDashboardNode.theme.themeState["base-color"].value);
+                                    RED.nodes.dirty(true);
+                                }
+                            }
+                            if (JSON.stringify(aTheme) !== JSON.stringify(globalDashboardNode.theme.angularTheme)) {
+                                globalDashboardNode.theme.angularTheme = aTheme;
+                            }
+
+                            //Update site object if necessary
+                            if (JSON.stringify(editorObject.site) !== JSON.stringify(globalDashboardNode.site)) {
+                                globalDashboardNode.site = editorObject.site;
+                                $("#nr-db-field-title").val(globalDashboardNode.site.name);
+                                $("#nr-db-field-hideToolbar").val(globalDashboardNode.site.hideToolbar);
+                                $("#nr-db-field-allowSwipe").val(globalDashboardNode.site.allowSwipe);
+                                $("#nr-db-field-allowTempTheme").val(globalDashboardNode.site.allowTempTheme);
+                                $("#nr-db-field-dateFormat").val(globalDashboardNode.site.dateFormat);
+                                $("#nr-db-field-sx").val(globalDashboardNode.site.sizes.sx);
+                                $("#nr-db-field-sy").val(globalDashboardNode.site.sizes.sy);
+                                $("#nr-db-field-px").val(globalDashboardNode.site.sizes.px);
+                                $("#nr-db-field-py").val(globalDashboardNode.site.sizes.py);
+                                $("#nr-db-field-gx").val(globalDashboardNode.site.sizes.gx);
+                                $("#nr-db-field-gy").val(globalDashboardNode.site.sizes.gy);
+                                $("#nr-db-field-cx").val(globalDashboardNode.site.sizes.cx);
+                                $("#nr-db-field-cy").val(globalDashboardNode.site.sizes.cy);
+                                RED.nodes.dirty(true);
+                            }
+                        });
+                    }
+                    awaitingGroups = {};
+                    awaitingTabs = {};
+                }
+
+                RED.sidebar.addTab({
+                    id: "dashboard",
+                    label: c_("label.dashboard"),
+                    name: "Dashboard",
+                    content: content,
+                    closeable: true,
+                    pinned: true,
+                    iconClass: "fa fa-bar-chart",
+                    disableOnEdit: true,
+                    onchange: function() { refresh(); }
+                });
+
+                editSaveEventHandler = function(node) {
+                    if (/^ui_/.test(node.type)) {
+                        if (node.type === "ui_tab" || node.type === "ui_group") {
+                            if (listElements[node.id]) {
+                                // Existing element
+                                listElements[node.id].children(".nr-db-sb-list-header").find(".nr-db-sb-title").text(node.name||node.id);
+                                if (node.type === "ui_group") {
+                                    refresh();
+                                }
+                                else {
+                                    if (node.hidden === true) { listElements[node.id].children(".nr-db-sb-list-header").find(".nr-db-sb-title").addClass('nr-db-sb-title-hidden'); }
+                                    else { listElements[node.id].children(".nr-db-sb-list-header").find(".nr-db-sb-title").removeClass('nr-db-sb-title-hidden'); }
+                                    if (node.disabled === true) { listElements[node.id].children(".nr-db-sb-list-header").find(".nr-db-sb-title").addClass('nr-db-sb-title-disabled'); }
+                                    else { listElements[node.id].children(".nr-db-sb-list-header").find(".nr-db-sb-title").removeClass('nr-db-sb-title-disabled'); }
+                                }
+                            }
+                            else if (node.type === "ui_tab") {
+                                // Adding a tab
+                                tabContainer.editableList('addItem',{node:node,groups:[]})
+                            }
+                            else {
+                                // Adding a group
+                                if (tabLists[node.tab]) {
+                                    tabLists[node.tab].editableList('addItem',{node:node,widgets:[]})
+                                }
+                            }
+                        }
+                        else if (node.type === "ui_link") {
+                            if (listElements[node.id]) {
+                                var container = listElements[node.id];
+                                container.find(".nr-db-sb-link-name").text(node.name||"untitled");
+                                container.find(".nr-db-sb-link-url").text(node.link);
+                            }
+                        }
+                        else {
+                            refreshOrphanedWidgets();
+                            if (listElements[node.id]) {
+                                if (node.group != elementParents[node.id]) {
+                                    // Moved to a different group
+                                    if (groupLists[elementParents[node.id]]) {
+                                        groupLists[elementParents[node.id]].editableList('removeItem',listElements[node.id].data('data'))
+                                    }
+                                    if (groupLists[node.group]) {
+                                        groupLists[node.group].editableList('removeItem',node)
+                                        groupLists[node.group].editableList('addItem',node);
+                                    }
+                                }
+                                else {
+                                    var l = node._def.label;
+                                    try {
+                                        l = (typeof l === "function" ? l.call(node) : l)||"";
+                                    }
+                                    catch(err) {
+                                        console.log("Definition error: "+d.type+".label",err);
+                                        l = d.type;
+                                    }
+                                    listElements[node.id].children(".nr-db-sb-list-header").find(".nr-db-sb-title").text(l);
+                                }
+                            }
+                            else {
+                                if (groupLists[node.group]) {
+                                    if (node.order === 0) { node.order = groupLists[node.group].editableList('length'); }
+                                    groupLists[node.group].editableList('addItem',node);
+                                }
+                            }
+                        }
+                    }
+                };
+                RED.events.on("editor:save",editSaveEventHandler);
+
+                // Dashboard layout tool
+                layoutUpdateEventHandler = function(node) {
+                    if (/^ui_/.test(node.type) && node.type !== 'ui_link' && node.type !== 'ui_toast' && node.type !== 'ui_ui_control' && node.type !== 'ui_audio' && node.type !== 'ui_base' && node.type !== 'ui_group' && node.type !== 'ui_tab') {
+                        if (listElements[node.id]) {
+                            if (node.group != elementParents[node.id]) {
+                                // Moved to a different group
+                                if (groupLists[elementParents[node.id]]) {
+                                    groupLists[elementParents[node.id]].editableList('removeItem',listElements[node.id].data('data'))
+                                }
+                                if (groupLists[node.group]) {
+                                    groupLists[node.group].editableList('removeItem',node)
+                                    groupLists[node.group].editableList('addItem',node);
+                                    groupLists[node.group].editableList('sort',function(a,b) {return a.order-b.order;});
+                                }
+                            }
+                            else {
+                                groupLists[node.group].editableList('sort',function(a,b) {return a.order-b.order;});
+                            }
+                        }
+                    }
+                };
+                RED.events.on("layout:update",layoutUpdateEventHandler);
+
+                var pendingAdd = [];
+                var pendingAddTimer = null;
+
+                function handlePendingAdds() {
+                    var hasTabs = false;
+                    var hasGroups = false;
+                    pendingAdd.sort(function(A,B) {
+                        hasTabs = hasTabs || A.type === "ui_tab" || B.type === "ui_tab";
+                        hasGroups = hasGroups || A.type === "ui_group" || B.type === "ui_group";
+                        if (A.type === B.type) {
+                            return 0;
+                        }
+                        if (A.type === "ui_tab") {
+                            return -1;
+                        }
+                        else if (B.type === "ui_tab") {
+                            return 1;
+                        }
+                        else if (A.type === "ui_group") {
+                            return -1;
+                        }
+                        else if (B.type === "ui_group") {
+                            return 1;
+                        }
+                        return 0
+                    });
+                    var updateList = {};
+                    for (var i=0; i<pendingAdd.length; i++) {
+                        var node = pendingAdd[i];
+                        if (node.type === "ui_tab") {
+                            tabContainer.editableList('addItem',{node:node,groups:[]});
+                        }
+                        else {
+                            if (hasTabs) {
+                                // We've added some tabs, need to give jquery time to add the lists
+                                pendingAdd = pendingAdd.slice(i);
+                                pendingAddTimer = setTimeout(handlePendingAdds,50);
+                                return;
+                            }
+                            if (node.type === "ui_group") {
+                                if (tabLists[node.tab]) {
+                                    tabLists[node.tab].editableList('addItem',{node:node,widgets:[]});
+                                }
+                            }
+                            else {
+                                if (hasGroups) {
+                                    // We've added some tabs, need to give jquery time to add the lists
+                                    pendingAdd = pendingAdd.slice(i);
+                                    pendingAddTimer = setTimeout(handlePendingAdds,50);
+                                    return;
+                                }
+                                if (groupLists[node.group]) {
+                                    groupLists[node.group].editableList('addItem',node)
+                                    if (node.order >= 0) {
+                                        updateList[node.group] = true;
+                                    }
+                                }
+                                else {
+                                    refreshOrphanedWidgets();
+                                }
+                            }
+                        }
+                    }
+                    Object.keys(updateList).forEach(function (group) {
+                        var list = groupLists[group];
+                        if (list) {
+                            list.editableList("sort", function(a,b) {return a.order-b.order;});
+                        }
+                    });
+                    pendingAdd = [];
+                }
+
+                nodesAddEventHandler = function(node) {
+                    if (/^ui_/.test(node.type) && !listElements[node.id]) {
+                        pendingAdd.push(node);
+                        clearTimeout(pendingAddTimer);
+                        pendingAddTimer = setTimeout(handlePendingAdds,100);
+                    }
+                };
+                RED.events.on("nodes:add", nodesAddEventHandler);
+
+                nodesRemoveEventHandler = function(node) {
+                    if (/^ui_/.test(node.type)) {
+                        if (node.type === "ui_tab" || node.type === "ui_link") {
+                            if (listElements[node.id]) {
+                                tabContainer.editableList('removeItem',listElements[node.id].data('data'));
+                                delete tabLists[node.id];
+                            }
+                        }
+                        else if (node.type === "ui_group") {
+                            if (tabLists[node.tab] && listElements[node.id]) {
+                                tabLists[node.tab].editableList('removeItem',listElements[node.id].data('data'));
+                            }
+                            delete groupLists[node.id];
+                        }
+                        else {
+                            if (groupLists[node.group]) {
+                                groupLists[node.group].editableList('removeItem',node)
+                            }
+                        }
+                        refreshOrphanedWidgets();
+                        delete listElements[node.id];
+                    }
+                };
+                RED.events.on("nodes:remove", nodesRemoveEventHandler);
+            }
+        });
+
+    $.widget("nodereddashboard.elementSizerByNum", {
+        _create: function() {
+            var that = this;
+            var has_height = this.options.has_height;
+            var pos = this.options.pos;
+            var c_width = has_height ? '15%' : '6%';
+            var container = $('<div>').css({
+                position: 'absolute',
+                background: 'white',
+                padding: '10px 10px 10px 10px',
+                border: '1px solid grey',
+                zIndex: '20',
+                borderRadius: "4px",
+                display:"none",
+                width: c_width
+            }).appendTo(document.body);
+            var box0 = $("<div>").css({
+                fontSize: '13px',
+                color: '#aaa',
+                float: 'left',
+                paddingTop: '1px'
+            }).appendTo(container);
+
+            var width = $(this.options.width).val();
+            var height = has_height ? $(this.options.height).val() : undefined;
+            var max_w = '';
+            var groupNode = this.options.groupNode;
+            if(groupNode) {
+                max_w = 'max="'+groupNode.width+'"';
+            }
+            width = (width > 0) ? width : 1;
+            height = (height > 0) ? height : 1;
+            var in0 = $('<input type="number" min="1" '+max_w+'>')
+                .css("width", has_height ? "40%" : "100%")
+                .val(width)
+                .appendTo(box0);
+            if(has_height) {
+                var pad = $('<span>')
+                    .text(" x ")
+                    .appendTo(box0);
+                var in1 = $('<input type="number" min="1">')
+                    .css("width", "40%")
+                    .val(height)
+                    .appendTo(box0);
+            }
+            var closeTimer;
+            var closeFunc = function() {
+                var w = in0.val();
+                var h = has_height ? in1.val() : undefined;
+                var label = that.options.label;
+                label.text(w+(has_height ? (' x '+h) : ''));
+                $(that.options.width).val(w).change();
+                if(has_height) {
+                    $(that.options.height).val(h).change();
+                }
+                that.destroy();
+            };
+            container.keypress(function(e) {
+                if(e.which === 13) { // pressed ENTER
+                    container.fadeOut(100, closeFunc);
+                }
+            });
+            container.on('mouseleave', function(e) {
+                closeTimer = setTimeout(function() {
+                    container.fadeOut(200, closeFunc);
+                }, 100);
+            });
+            container.on('mouseenter', function(e) {
+                clearTimeout(closeTimer);
+            });
+            container.css({
+                top: (pos.top -10)+"px",
+                left: (pos.left +10)+"px"
+            });
+            container.fadeIn(200);
+        }
+    });
+
+    $.widget( "nodereddashboard.elementSizer", {
+        _create: function() {
+            var that = this;
+            var gridWidth = 6;
+            var width = parseInt($(this.options.width).val()||0);
+            var height = parseInt(this.options.hasOwnProperty('height')?$(this.options.height).val():"1")||0;
+            var hasAuto = (!this.options.hasOwnProperty('auto') || this.options.auto);
+
+            this.element.css({
+                minWidth: this.element.height()+4
+            });
+            var auto_text = c_("auto");
+            var sizeLabel = (width === 0 && height === 0)?auto_text:width+(this.options.hasOwnProperty('height')?" x "+height:"");
+            this.element.text(sizeLabel).on('mousedown',function(evt) {
+                evt.stopPropagation();
+                evt.preventDefault();
+
+                var width = parseInt($(that.options.width).val()||0);
+                var height = parseInt(that.options.hasOwnProperty('height')?$(that.options.height).val():"1")||0;
+                var maxWidth = 0;
+                var maxHeight;
+                var fixedWidth = false;
+                var fixedHeight = false;
+                var group = $(that.options.group).val();
+                if (group) {
+                    var groupNode = RED.nodes.node(group);
+                    if (groupNode) {
+                        gridWidth = Math.max(6,groupNode.width,+width);
+                        maxWidth = groupNode.width || gridWidth;
+                        fixedWidth = true;
+                    }
+                    maxHeight = Math.max(6,+height+1);
+                }
+                else {
+                    gridWidth = Math.max(12,+width);
+                    maxWidth = gridWidth;
+                    maxHeight = 1;
+                    fixedHeight = true;
+                }
+
+                var pos = $(this).offset();
+                var container = $('<div>').css({
+                    position: 'absolute',
+                    background: 'white',
+                    padding: '5px 10px 10px 10px',
+                    border: '1px solid grey',
+                    zIndex: '20',
+                    borderRadius: "4px",
+                    display:"none"
+                }).appendTo(document.body);
+
+                var closeTimer;
+                container.on('mouseleave',function(evt) {
+                    closeTimer = setTimeout(function() {
+                        container.fadeOut(200, function() { $(this).remove(); });
+                    },100)
+                });
+                container.on('mouseenter',function() {
+                    clearTimeout(closeTimer);
+                })
+
+                var label = $("<div>").css({
+                    fontSize: '13px',
+                    color: '#aaa',
+                    float: 'left',
+                    paddingTop: '1px'
+                }).appendTo(container).text((width === 0 && height === 0)?auto_text:(width+(that.options.hasOwnProperty('height')?" x "+height:"")));
+                label.hover(function() {
+                    $(this).css('text-decoration', 'underline');
+                }, function() {
+                    $(this).css('text-decoration', 'none');
+                });
+
+                label.click(function(e) {
+                    var group = $(that.options.group).val();
+                    var groupNode = null;
+                    if(group) {
+                        groupNode = RED.nodes.node(group);
+                        if(groupNode === null) {
+                            return;
+                        }
+                    }
+                    $(that).elementSizerByNum({
+                        width: that.options.width,
+                        height: that.options.height,
+                        groupNode: groupNode,
+                        pos: pos,
+                        label: that.element,
+                        has_height: that.options.hasOwnProperty('height')
+                    });
+                    closeTimer = setTimeout(function() {
+                        container.fadeOut(200, function() {
+                            $(this).remove();
+                        });
+                    },100)
+                });
+
+                var buttonRow = $('<div>',{style:"text-align:right; height:25px;"}).appendTo(container);
+
+                if (hasAuto) {
+                    var button = $('<a>',{href:"#",class:"editor-button editor-button-small",style:"margin-bottom:5px"})
+                    .text(auto_text)
+                    .appendTo(buttonRow)
+                    .on('mouseup',function(evt) {
+                        that.element.text(auto_text)
+                        $(that.options.width).val(0).change();
+                        $(that.options.height).val(0).change();
+                        evt.preventDefault();
+                        container.fadeOut(200, function() { $(this).remove(); });
+                    });
+                }
+
+                var cellBorder = "1px dashed lightGray";
+                var cellBorderExisting = "1px solid gray";
+                var cellBorderHighlight = "1px dashed black";
+                var rows = [];
+                function addRow(i) {
+                    var row = $('<div>').css({padding:0,margin:0,height:"25px","box-sizing":"border-box"}).appendTo(container);
+                    rows.push(row);
+                    cells.push([])
+                    for (var j=0; j<gridWidth; j++) {
+                        addCell(i,j);
+                    }
+                }
+                function addCell(i,j) {
+                    var row = rows[i];
+                    var cell = $('<div>').css({
+                        display:"inline-block",
+                        width: "25px",
+                        height: "25px",
+                        borderRight: (j===(width-1)&&i<height)?cellBorderExisting:cellBorder,
+                        borderBottom: (i===(height-1)&&j<width)?cellBorderExisting:cellBorder,
+                        boxSizing: "border-box",
+                        cursor:"pointer",
+                        background: (j<maxWidth)?"#fff":"#eee"
+                    }).appendTo(row);
+                    cells[i].push(cell);
+                    if (j===0) {
+                        cell.css({borderLeft:((i<=height-1)?cellBorderExisting:cellBorder)});
+                    }
+                    if (i===0) {
+                        cell.css({borderTop:((j<=width-1)?cellBorderExisting:cellBorder)});
+                    }
+                    if (j<maxWidth) {
+                        cell.data("w",j);
+                        cell.data("h",i);
+                        cell.on("mouseup",function() {
+                            that.element.text(($(this).data("w")+1)+(that.options.hasOwnProperty('height')?" x "+($(this).data("h")+1):""))
+                            $(that.options.width).val($(this).data("w")+1).change();
+                            $(that.options.height).val($(this).data("h")+1).change();
+                            container.fadeOut(200, function() { $(this).remove(); });
+                        });
+                        cell.on("mouseover",function() {
+                            var w = $(this).data("w");
+                            var h = $(this).data("h");
+                            label.text((w+1)+(that.options.hasOwnProperty('height')?" x "+(h+1):""));
+                            for (var y = 0; y<maxHeight; y++) {
+                                for (var x = 0; x<maxWidth; x++) {
+                                    cells[y][x].css({
+                                        background: (y<=h && x<=w)?'#ddd':'#fff',
+                                        borderLeft: (x===0&&y<=h)?cellBorderHighlight:(x===0)?((y<=height-1)?cellBorderExisting:cellBorder):'',
+                                        borderTop: (y===0&&x<=w)?cellBorderHighlight:(y===0)?((x<=width-1)?cellBorderExisting:cellBorder):'',
+                                        borderRight: (x===w&&y<=h)?cellBorderHighlight:((x===width-1&&y<=height-1)?cellBorderExisting:cellBorder),
+                                        borderBottom: (y===h&&x<=w)?cellBorderHighlight:((y===height-1&&x<=width-1)?cellBorderExisting:cellBorder)
+                                    })
+                                }
+                            }
+                            if (!fixedHeight && h === maxHeight-1) {
+                                addRow(maxHeight++)
+                            }
+                            if (!fixedWidth && w === maxWidth-1) {
+                                maxWidth++;
+                                gridWidth++;
+                                for (var r=0; r<maxHeight; r++) {
+                                    addCell(r,maxWidth-1);
+                                }
+                            }
+                        })
+                    }
+                }
+                var cells = [];
+                for (var i=0; i<maxHeight; i++) {
+                    addRow(i);
+                }
+                container.css({
+                    top:(pos.top)+"px",
+                    left:(pos.left)+"px"
+                });
+                container.fadeIn(200);
+            })
+        }
+    });
+})(jQuery);
+</script>
+
+<script type="text/html" data-template-name="ui_base">
+    <div class='form-row'>
+        This <i>ui_base</i> node is the main node that all<br/>other dashboard widget nodes communicate to.<br/>
+        <br/>One instance is required to support the dashboard.<br/>
+        <br/>If you have no dashboard you can delete this node.<br/>
+        It will be re-created automatically if required.<br/>
+    </div>
+</script>

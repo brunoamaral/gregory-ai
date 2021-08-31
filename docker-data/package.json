@@ -1,0 +1,17 @@
+{
+    "name": "node-red-project",
+    "description": "A Node-RED Project",
+    "version": "0.0.1",
+    "private": true,
+    "dependencies": {
+        "node-red-contrib-cheerio": "~1.1.0",
+        "node-red-contrib-html-entities": "~0.1.0",
+        "node-red-contrib-moment": "~4.0.0",
+        "node-red-contrib-pythonshell": "~1.5.4",
+        "node-red-contrib-sqlstring": "~0.1.1",
+        "node-red-dashboard": "~2.30.0",
+        "node-red-node-feedparser": "~0.2.1",
+        "node-red-node-sqlite": "~1.0.0",
+        "node-red-node-ui-list": "~0.3.6"
+    }
+}

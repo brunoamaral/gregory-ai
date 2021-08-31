@@ -1,0 +1,10 @@
+{
+    "ui_ui_control" : {
+        "label" : {
+            "name" : "名前"
+        },
+        "placeholder" : {
+            "name" : "名前"
+        }
+    }
+}

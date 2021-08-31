@@ -1,0 +1,91 @@
+[
+    {
+        "id": "df76bbb4.8529e8",
+        "type": "inject",
+        "z": "533475c4.a28eac",
+        "name": "UNIX timestamp",
+        "topic": "UNIX timestamp",
+        "payload": "1512545487",
+        "payloadType": "num",
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "x": 180,
+        "y": 380,
+        "wires": [
+            [
+                "c5a8c.dddf4574"
+            ]
+        ]
+    },
+    {
+        "id": "c5a8c.dddf4574",
+        "type": "moment",
+        "z": "533475c4.a28eac",
+        "name": "",
+        "topic": "",
+        "input": "",
+        "inputType": "msg",
+        "inTz": "",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "",
+        "output": "",
+        "outputType": "msg",
+        "outTz": "",
+        "x": 420,
+        "y": 380,
+        "wires": [
+            [
+                "e5a3e641.545528"
+            ]
+        ]
+    },
+    {
+        "id": "e5a3e641.545528",
+        "type": "debug",
+        "z": "533475c4.a28eac",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "x": 610,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "48c26998.0d90a8",
+        "type": "inject",
+        "z": "533475c4.a28eac",
+        "name": "JS Timestamp",
+        "topic": "JS Timestamp",
+        "payload": "1512545487000",
+        "payloadType": "num",
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "x": 170,
+        "y": 420,
+        "wires": [
+            [
+                "c5a8c.dddf4574"
+            ]
+        ]
+    },
+    {
+        "id": "d12e7985.07ef88",
+        "type": "comment",
+        "z": "533475c4.a28eac",
+        "name": "Expected Output",
+        "info": "UNIX Timestamps are the number of **SECONDS** \nsince 1970-01-01 00:00:00.\n\nJavaScript Timestamps are the number of **MILLIseconds**\nsince 1970-01-01 00:00:00.\n\nMoment.JS only recognises JavaScript timestamps\nso if you want to process a UNIX timestamp, \nplease multiply by 1000 as in the second\ninput.",
+        "x": 400,
+        "y": 420,
+        "wires": []
+    }
+]
