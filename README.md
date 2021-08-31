@@ -13,18 +13,22 @@ https://labs.brunoamaral.eu
 
 - [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/)
 - [ ] [Hugo](https://gohugo.io/) 
+- [ ] [Mailgun](https://www.mailgun.com/)
 - [ ] [SQLite](https://www.sqlite.org/index.html)
 
-## Commands
+## Setup the environment
 
-```bash 
-git clone git@github.com:brunoamaral/gregory.git;
-cd gregory;
-sudo docker-compose up -d;
-hugo mod get -u;
-# Open http://127.0.0.1:1880/ on your browser to confirm Node-Red is working
-python3 ./build.py
-```
+`git clone git@github.com:brunoamaral/gregory.git; cd gregory;`
+
+Edit the .env file to setup the domain, or edit directly in docker-compose.yaml.
+
+Update the Hugo Modules
+
+`hugo mod get -u;`
+
+Run the Docker container with `sudo docker-compose up -d;` and open http://127.0.0.1:1880/ on your browser to confirm Node-Red is working.
+
+Finally, build the site with `python3 ./build.py`.
 
 # Node-RED
 
@@ -33,11 +37,17 @@ This is where all of the processing of information happens. Node-RED provides a 
 The following tabs have been configured to divide the flows:
 
 1. Research (Collect data from different sources)
-2. Email Digest
+2. Email Digest (Sent to the admin and to subscribers)
 3. API
 4. Tests
 
 `data/articles.json` and `data/trials.json` are generated from a Node-Red flow available in the `flows.json` file.
+
+# Mailgun
+
+Currently, we are using Mailgun to send emails to the admin and subscribers. These nodes can be found on the Email Digest tab of Node-RED and have been disabled.
+
+To enable them, you will need a mailgun account, or you can replace them with another way to send emails.
 
 # Database
 
