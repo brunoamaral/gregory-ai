@@ -67,7 +67,7 @@ New sources we would like to add:
 
 # Thank you to
 
-@[Chbm](https://github.com/chbm) for help in keeping the code secure.
+@[Chbm](https://github.com/chbm) for help in keeping the code secure.    
 @[Jneves](https://github.com/jneves) for help with the build script    
 @[Melo](https://github.com/melo) for showing me [Hugo](https://github.com/gohugoio/hugo)    
 @[Nurv](https://github.com/nurv) for the suggestion in using Spacy.io    
