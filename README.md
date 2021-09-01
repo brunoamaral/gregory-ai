@@ -18,15 +18,9 @@ https://labs.brunoamaral.eu
 
 ## Setup the environment
 
-`git clone git@github.com:brunoamaral/gregory.git; cd gregory;`
+Execute `python3 setup.py`. The script will check if you have all the requirements and run the Node-RED container.
 
-Edit the .env file to setup the domain, or edit directly in docker-compose.yaml.
-
-Update the Hugo Modules
-
-`hugo mod get -u;`
-
-Run the Docker container with `sudo docker-compose up -d;` and open http://127.0.0.1:1880/ on your browser to confirm Node-Red is working.
+Edit the build.py file's variables to reflect your environment.
 
 Finally, build the site with `python3 ./build.py`.
 
