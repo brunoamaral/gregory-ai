@@ -5,6 +5,8 @@ import pathlib
 from pathlib import Path
 import git
 import sys
+import requests
+
 
 def is_tool(name):
     """Check whether `name` is on PATH and marked as executable."""
@@ -27,7 +29,7 @@ else:
 # Check for .env file
 f = Path(".env")
 
-if p.is_file:
+if p.is_file():
     print("Found .env file")
 else:
     print(".env file not found, creating with empty values")
@@ -39,7 +41,7 @@ else:
 # Check for docker-compose.yaml file
 docker_compose = Path("docker-compose.yaml")
 
-if docker_compose.is_file:
+if docker_compose.is_file():
     print("Found docker-compose.yaml file")
 else:
     print("Didn't find docker-compose.yaml, downloading latest version from https://raw.githubusercontent.com/brunoamaral/gregory/main/docker-compose.yaml")
@@ -52,7 +54,7 @@ else:
         f.close()
 
 # Check for docker-compose command
-if is_tool("docker-compose"):
+if is_tool("docker-compose command installed"):
     print("Found docker-compose")
 else:
     print("Didn't find docker-compose, please install it. Details at https://docs.docker.com/compose/install/")
