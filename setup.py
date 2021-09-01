@@ -7,14 +7,35 @@ import git
 import sys
 import requests
 
+cwd = os.getcwd()
+github = "git@github.com:brunoamaral/gregory.git"
+
 
 def is_tool(name):
     """Check whether `name` is on PATH and marked as executable."""
-
     # from whichcraft import which
     from shutil import which
-
     return which(name) is not None
+
+def is_git_repo(path):
+    try:
+        _ = git.Repo(path).git_dir
+        return True
+    except git.exc.InvalidGitRepositoryError:
+        return False
+
+if is_tool("git"):
+    print("Git is installed, proceeding.")
+else:
+    sys.exit("Git was not found and I can't install Gregory without it. Exiting.")
+
+if is_git_repo(cwd) == False or git.Repo(cwd).remotes[0].config_reader.get("url") != github:
+    print("Didn't find any git repository, or repository does not match Gregory. Cloning into ./gregory now, please wait...")
+    git.Git(".").clone(github)
+    os.chdir("./gregory")
+
+
+
 
 # Check for directories
 
@@ -35,8 +56,8 @@ else:
     print(".env file not found, creating with empty values")
     with open(".env", "w+") as f:
         env_file = "DOMAIN_NAME=''"
-    f.write(env_file)
-    f.close()
+        f.write(env_file)
+        f.close()
 
 # Check for docker-compose.yaml file
 docker_compose = Path("docker-compose.yaml")
