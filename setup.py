@@ -1,11 +1,13 @@
 #!/usr/bin/python3
-import os
-import subprocess
-import pathlib
 from pathlib import Path
+from sql_metadata import Parser
 import git
-import sys
+import os
+import pathlib
 import requests
+import sqlite3
+import subprocess
+import sys
 
 cwd = os.getcwd()
 github = "git@github.com:brunoamaral/gregory.git"
@@ -104,13 +106,32 @@ popen.wait()
 output = popen.stdout.read()
 print(output)
 
-# TO DO: Check if SQLite3 db is present
+# Check if SQLite3 db is present
+database = sqlite3.connect('./docker-data/gregory.db')
 
-# TO DO: Check if SQLite3 db is empty
+if database == False:
+    sys.exit('SQLite database not found, create it please')
 
-# TO DO: Add DB schema
+# Check Database is OK
+schema = open('gregory_schema.sql', 'r')
+Lines = schema.readlines()
 
-# TO DO: Launch Node-RED
+for line in Lines:
+    table = Parser(line)
+    for t in table.tables:
+        query ='select * from '+ t +';'
+        # This is going to break the script if it can't find the table
+        table_exists = database.execute(query).description
+        if table_exists:
+            print("Found table: " + t)
+        for column in table.columns:
+            query ='select '+ column +' from '+ t +';'
+            column_exists=database.execute(query).description
+            if column_exists:
+                print("Found column: " + column)
+
+# TO DO: If the Database is not ok, run corresponding SQL
+
 print("Running Node-RED, open http://127.0.0.1:1880/ on your browser to confirm Node-Red is working.")
 
 args = ("/usr/local/bin/docker-compose", "up")
