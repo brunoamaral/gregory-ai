@@ -104,7 +104,13 @@ popen.wait()
 output = popen.stdout.read()
 print(output)
 
-# Launch Node-RED
+# TO DO: Check if SQLite3 db is present
+
+# TO DO: Check if SQLite3 db is empty
+
+# TO DO: Add DB schema
+
+# TO DO: Launch Node-RED
 print("Running Node-RED, open http://127.0.0.1:1880/ on your browser to confirm Node-Red is working.")
 
 args = ("/usr/local/bin/docker-compose", "up")
