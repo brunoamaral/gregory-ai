@@ -27,7 +27,7 @@ def is_git_repo(path):
         return False
 
 if is_tool("git"):
-    print("Git is installed, proceeding.")
+    print("\N{check mark} Git is installed, proceeding.")
 else:
     sys.exit("Git was not found and I can't install Gregory without it. Exiting.")
 
@@ -44,7 +44,7 @@ if is_git_repo(cwd) == False or git.Repo(cwd).remotes[0].config_reader.get("url"
 p = Path("docker-data")
 
 if p.is_dir():
-    print("Found docker-data directory")
+    print("\N{check mark} Found docker-data directory")
 else:
     sys.exit('docker-data directory not found. Did the clone process from https://github.com/brunoamaral/gregory finish correctly?')
 
@@ -53,7 +53,7 @@ else:
 f = Path(".env")
 
 if p.is_file():
-    print("Found .env file")
+    print("\N{check mark} Found .env file")
 else:
     print(".env file not found, creating with empty values")
     with open(".env", "w+") as f:
@@ -65,7 +65,7 @@ else:
 docker_compose = Path("docker-compose.yaml")
 
 if docker_compose.is_file():
-    print("Found docker-compose.yaml file")
+    print("\N{check mark} Found docker-compose.yaml file")
 else:
     print("Didn't find docker-compose.yaml, downloading latest version from https://raw.githubusercontent.com/brunoamaral/gregory/main/docker-compose.yaml")
     # Get trials
@@ -77,21 +77,21 @@ else:
         f.close()
 
 # Check for docker-compose command
-if is_tool("docker-compose command installed"):
-    print("Found docker-compose")
+if is_tool("docker-compose"):
+    print("\N{check mark} Found docker-compose")
 else:
     print("Didn't find docker-compose, please install it. Details at https://docs.docker.com/compose/install/")
 
 # Check for SQLite
 
 if is_tool("sqlite3"):
-    print("Found Sqlite3, just in case")
+    print("\N{check mark} Found Sqlite3, just in case")
 else: 
     print("Didn't find SQLite3 (optional) on the host system, proceeding")
         
 # Check for Hugo
 if is_tool("hugo"):
-    print("Found Hugo")
+    print("\N{check mark} Found Hugo")
 else:
     print("Didn't find Hugo, please install it. Details at https://gohugo.io")
     sys.exit('Hugo not installed')
@@ -123,7 +123,7 @@ for line in Lines:
         # This is going to break the script if it can't find the table
         table_exists = database.execute(query).description
         if table_exists:
-            print("Found table: " + t)
+            print("\N{check mark} Found table: " + t)
         for column in table.columns:
             query ='select '+ column +' from '+ t +';'
             column_exists=database.execute(query).description
