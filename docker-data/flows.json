@@ -5362,5 +5362,196 @@
                 "f2912ee0153a5f0d"
             ]
         ]
+    },
+    {
+        "id": "d4754ef0237002dd",
+        "type": "comment",
+        "z": "e677d300.d1d95",
+        "name": "ADD SAGEPUB SUMMARY",
+        "info": "",
+        "x": 180,
+        "y": 1860,
+        "wires": []
+    },
+    {
+        "id": "5e3f762459dd676f",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "1800",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 140,
+        "y": 1900,
+        "wires": [
+            [
+                "0931fa2f502e3b0d"
+            ]
+        ]
+    },
+    {
+        "id": "0931fa2f502e3b0d",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "SELECT * FROM articles \nWHERE source = \"Sage Pub\" \nAND summary =\"not available\" \nLIMIT 1;",
+        "name": "",
+        "x": 360,
+        "y": 1900,
+        "wires": [
+            [
+                "0ad2b4ff5cb7bf39"
+            ]
+        ]
+    },
+    {
+        "id": "0ad2b4ff5cb7bf39",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 520,
+        "y": 1900,
+        "wires": [
+            [
+                "98e1cb0e17e511af"
+            ]
+        ]
+    },
+    {
+        "id": "912e28271f9e1b6e",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "tag": "body",
+        "ret": "object",
+        "as": "multi",
+        "map": [
+            {
+                "search": "div.hlFld-Abstract",
+                "ret": "text",
+                "replace": "summary",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": false,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 940,
+        "y": 1900,
+        "wires": [
+            [
+                "62c366474f3a725d"
+            ]
+        ]
+    },
+    {
+        "id": "087c5c6334250d1b",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "SAGEPUB",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 800,
+        "y": 1900,
+        "wires": [
+            [
+                "912e28271f9e1b6e"
+            ]
+        ]
+    },
+    {
+        "id": "98e1cb0e17e511af",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set fields",
+        "rules": [
+            {
+                "t": "set",
+                "p": "url",
+                "pt": "msg",
+                "to": "payload.link",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article_id",
+                "pt": "msg",
+                "to": "payload.article_id",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 650,
+        "y": 1900,
+        "wires": [
+            [
+                "087c5c6334250d1b"
+            ]
+        ]
+    },
+    {
+        "id": "62c366474f3a725d",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nset summary = \"{{{payload.summary}}}\"\nwhere article_id = {{article_id}};",
+        "output": "str",
+        "x": 1070,
+        "y": 1900,
+        "wires": [
+            [
+                "406a2e1a6df07626"
+            ]
+        ]
+    },
+    {
+        "id": "406a2e1a6df07626",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 1240,
+        "y": 1900,
+        "wires": [
+            []
+        ]
     }
 ]

@@ -2772,6 +2772,7 @@
         "id": "39c1cf8e.2b2b2",
         "type": "http request",
         "z": "5e1dd9b.17f6828",
+        "d": true,
         "name": "http request send mail",
         "method": "POST",
         "ret": "obj",
@@ -3301,7 +3302,9 @@
         "x": 580,
         "y": 240,
         "wires": [
-            []
+            [
+                "fe66e4830a734190"
+            ]
         ]
     },
     {
@@ -3326,7 +3329,9 @@
         "x": 580,
         "y": 360,
         "wires": [
-            []
+            [
+                "fe66e4830a734190"
+            ]
         ]
     },
     {
@@ -3436,7 +3441,9 @@
         "x": 580,
         "y": 280,
         "wires": [
-            []
+            [
+                "fe66e4830a734190"
+            ]
         ]
     },
     {
@@ -3725,7 +3732,9 @@
         "x": 580,
         "y": 440,
         "wires": [
-            []
+            [
+                "fe66e4830a734190"
+            ]
         ]
     },
     {
@@ -3767,7 +3776,9 @@
         "x": 580,
         "y": 480,
         "wires": [
-            []
+            [
+                "fe66e4830a734190"
+            ]
         ]
     },
     {
@@ -3862,6 +3873,7 @@
         "id": "e9e57ff66e5588b3",
         "type": "http request",
         "z": "5e1dd9b.17f6828",
+        "d": true,
         "name": "http request send mail",
         "method": "POST",
         "ret": "obj",
@@ -4088,7 +4100,9 @@
         "x": 510,
         "y": 900,
         "wires": [
-            []
+            [
+                "9ceb982ec3e8a837"
+            ]
         ]
     },
     {
@@ -4264,35 +4278,6 @@
         "y": 600,
         "wires": [
             []
-        ]
-    },
-    {
-        "id": "cfdd5c700f373464",
-        "type": "inject",
-        "z": "5e1dd9b.17f6828",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "{\"from\":\"gregory@mg.brunoamaral.net\",\"to\":\"labs@mg.brunoamaral.net\",\"subject\":\"Gregory Admin Summary\",\"html\":\"<h1>Digest of trials</h1>\"}",
-        "payloadType": "json",
-        "x": 970,
-        "y": 820,
-        "wires": [
-            [
-                "e9e57ff66e5588b3"
-            ]
         ]
     },
     {
@@ -5149,7 +5134,9 @@
         "x": 510,
         "y": 780,
         "wires": [
-            []
+            [
+                "9ceb982ec3e8a837"
+            ]
         ]
     },
     {
@@ -5163,7 +5150,9 @@
         "x": 510,
         "y": 840,
         "wires": [
-            []
+            [
+                "9ceb982ec3e8a837"
+            ]
         ]
     },
     {
@@ -5177,7 +5166,9 @@
         "x": 610,
         "y": 200,
         "wires": [
-            []
+            [
+                "fe66e4830a734190"
+            ]
         ]
     },
     {
@@ -5191,7 +5182,9 @@
         "x": 610,
         "y": 320,
         "wires": [
-            []
+            [
+                "fe66e4830a734190"
+            ]
         ]
     },
     {
@@ -5205,7 +5198,9 @@
         "x": 610,
         "y": 400,
         "wires": [
-            []
+            [
+                "fe66e4830a734190"
+            ]
         ]
     },
     {
@@ -5219,7 +5214,9 @@
         "x": 430,
         "y": 540,
         "wires": [
-            []
+            [
+                "ce4a3a4cf9a114c6"
+            ]
         ]
     },
     {
@@ -5233,7 +5230,9 @@
         "x": 430,
         "y": 600,
         "wires": [
-            []
+            [
+                "ce4a3a4cf9a114c6"
+            ]
         ]
     },
     {
@@ -5247,7 +5246,9 @@
         "x": 430,
         "y": 660,
         "wires": [
-            []
+            [
+                "84c57b048d704fcc"
+            ]
         ]
     },
     {
@@ -5297,5 +5298,69 @@
         "x": 260,
         "y": 60,
         "wires": []
+    },
+    {
+        "id": "fe66e4830a734190",
+        "type": "sqlite",
+        "z": "f8fda80096695167",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "/data/gregory.db",
+        "x": 930,
+        "y": 320,
+        "wires": [
+            [
+                "cef14c9d293a46a4"
+            ]
+        ]
+    },
+    {
+        "id": "ce4a3a4cf9a114c6",
+        "type": "sqlite",
+        "z": "f8fda80096695167",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "/data/gregory.db",
+        "x": 670,
+        "y": 560,
+        "wires": [
+            [
+                "b00d96c0d8fbf9b7"
+            ]
+        ]
+    },
+    {
+        "id": "84c57b048d704fcc",
+        "type": "sqlite",
+        "z": "f8fda80096695167",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "/data/gregory.db",
+        "x": 670,
+        "y": 660,
+        "wires": [
+            [
+                "3946a27509f91e67"
+            ]
+        ]
+    },
+    {
+        "id": "9ceb982ec3e8a837",
+        "type": "sqlite",
+        "z": "f8fda80096695167",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "/data/gregory.db",
+        "x": 710,
+        "y": 820,
+        "wires": [
+            [
+                "f2912ee0153a5f0d"
+            ]
+        ]
     }
 ]
