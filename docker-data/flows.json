@@ -1540,7 +1540,7 @@
         "fieldType": "msg",
         "format": "sql",
         "syntax": "mustache",
-        "template": "INSERT INTO articles (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%S\", \"NOW\"),\"{{article.title}}\",\"{{article.description}}\",\"{{{article.url}}}\",\"{{article.pubdate\"}}\",\"{{article.source}}\",NULL)",
+        "template": "INSERT INTO articles (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%S\", \"NOW\"),\"{{article.title}}\",\"{{article.description}}\",\"{{{article.url}}}\",\"{{article.pubdate\"}}\",\"{{{article.source}}}\",NULL)",
         "output": "str",
         "x": 200,
         "y": 80,
@@ -1838,8 +1838,8 @@
                 "t": "set",
                 "p": "article.description",
                 "pt": "msg",
-                "to": "$trim(article.description)",
-                "tot": "jsonata"
+                "to": "not available",
+                "tot": "str"
             },
             {
                 "t": "set",
@@ -1858,7 +1858,8 @@
         "y": 900,
         "wires": [
             [
-                "1b5ac33e.1e7afd"
+                "1b5ac33e.1e7afd",
+                "80497a74c8fd33dc"
             ]
         ]
     },
@@ -5794,8 +5795,7 @@
         "y": 2260,
         "wires": [
             [
-                "29250d5ba1eb433e",
-                "cd520b7409b1003d"
+                "29250d5ba1eb433e"
             ]
         ]
     },
@@ -5934,39 +5934,6 @@
                 "406a2e1a6df07626"
             ]
         ]
-    },
-    {
-        "id": "299c5927c46345d1",
-        "type": "debug",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 1450,
-        "y": 2460,
-        "wires": []
-    },
-    {
-        "id": "cd520b7409b1003d",
-        "type": "debug",
-        "z": "e677d300.d1d95",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 540,
-        "y": 2360,
-        "wires": []
     },
     {
         "id": "9b940885fa3084c0",
@@ -6154,8 +6121,245 @@
         "y": 2460,
         "wires": [
             [
-                "299c5927c46345d1",
                 "406a2e1a6df07626"
+            ]
+        ]
+    },
+    {
+        "id": "80497a74c8fd33dc",
+        "type": "debug",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1420,
+        "y": 940,
+        "wires": []
+    },
+    {
+        "id": "e283d592e7c07425",
+        "type": "comment",
+        "z": "e677d300.d1d95",
+        "name": "ADD Scielo SUMMARY",
+        "info": "",
+        "x": 120,
+        "y": 2540,
+        "wires": []
+    },
+    {
+        "id": "545034fc0204a603",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "3600",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 2580,
+        "wires": [
+            [
+                "b8ea88ef758bf629"
+            ]
+        ]
+    },
+    {
+        "id": "b8ea88ef758bf629",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "SELECT * FROM articles \nWHERE source = \"Scielo\" \nAND summary =\"\" ;",
+        "name": "",
+        "x": 320,
+        "y": 2580,
+        "wires": [
+            [
+                "51b6e953d5c65d6a"
+            ]
+        ]
+    },
+    {
+        "id": "51b6e953d5c65d6a",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 510,
+        "y": 2580,
+        "wires": [
+            [
+                "ae7d6e2930239da5"
+            ]
+        ]
+    },
+    {
+        "id": "27c454ca22ce5096",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "Scielo",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 990,
+        "y": 2580,
+        "wires": [
+            [
+                "7d2f9abc05b907b0"
+            ]
+        ]
+    },
+    {
+        "id": "f1a5fb939e1d3ade",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set fields",
+        "rules": [
+            {
+                "t": "set",
+                "p": "url",
+                "pt": "msg",
+                "to": "payload.link",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article_id",
+                "pt": "msg",
+                "to": "payload.article_id",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "rejectUnauthorized",
+                "pt": "msg",
+                "to": "false",
+                "tot": "bool"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 860,
+        "y": 2580,
+        "wires": [
+            [
+                "27c454ca22ce5096"
+            ]
+        ]
+    },
+    {
+        "id": "7d2f9abc05b907b0",
+        "type": "html",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "property": "payload",
+        "outproperty": "payload",
+        "tag": "meta",
+        "ret": "attr",
+        "as": "multi",
+        "x": 1130,
+        "y": 2580,
+        "wires": [
+            [
+                "dd84d11856eb45f4"
+            ]
+        ]
+    },
+    {
+        "id": "dd84d11856eb45f4",
+        "type": "switch",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "property": "payload.name",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "citation_abstract",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 1270,
+        "y": 2580,
+        "wires": [
+            [
+                "1b3a717e0a05b1c7"
+            ]
+        ]
+    },
+    {
+        "id": "1b3a717e0a05b1c7",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nset summary = \"{{{payload.content}}}\"\nwhere article_id = {{article_id}};",
+        "output": "str",
+        "x": 1400,
+        "y": 2580,
+        "wires": [
+            [
+                "406a2e1a6df07626"
+            ]
+        ]
+    },
+    {
+        "id": "ae7d6e2930239da5",
+        "type": "delay",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "15",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "x": 680,
+        "y": 2580,
+        "wires": [
+            [
+                "f1a5fb939e1d3ade"
             ]
         ]
     }
