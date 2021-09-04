@@ -70,13 +70,14 @@ jsonArticles = json.loads(data)
 ## en_core_web is more precise but uses more resources
 # nlp = spacy.load('en_core_web_trf')
 nlp = spacy.load('en_core_web_sm')
+print("Looking for noun phrases")
+
 for article in jsonArticles:
 
     # Process whole documents
     text = article["title"]
     doc=nlp(text)
     # Analyze syntax
-    print("Looking for noun phrases")
     noun_phrases = [chunk.text for chunk in doc.noun_chunks]
     # print("Noun phrases:", [chunk.text for chunk in doc.noun_chunks])
     # print("verbs:", [token.lemma_ for token in doc if token.pos_ == "VERB"])
