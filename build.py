@@ -8,8 +8,10 @@ from pathlib import Path
 import git  
 import spacy 
 
-# set variables
+# Set Variables
 path = "/home/gregory/gregory"
+# Set the API Server
+## If you are running docker-compose.yaml, this is http://localhost:18080/
 server = "https://api.brunoamaral.net/"
 website_path = "/var/www/labs.brunoamaral.eu/"
 # Workflow starts
@@ -17,7 +19,7 @@ os.chdir(path)
 ## Optional
 g = git.cmd.Git(path)
 g.pull()
-# Get articles
+# Get Articles
 url = server + 'articles/all'
 res = requests.get(url)
 file_name = path + '/data/articles.json'
@@ -27,7 +29,7 @@ file_name = path + '/content/api/articles.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
-# Get trials
+# Get Trials
 url = server + 'trials/all'
 res = requests.get(url)
 file_name = path + '/data/trials.json'
@@ -57,13 +59,15 @@ articlesDirExists = pathlib.Path(articlesDir)
 if articlesDirExists.exists() == False:
     articlesDirExists.mkdir(parents=True, exist_ok=True)
 
-# open articles.json
+# Open articles.json
 articles = path + '/data/articles.json'
 with open(articles,"r") as a:
     data = a.read()
 
 jsonArticles = json.loads(data)
 
+# Set which nlp module to use
+## en_core_web is more precise but uses more resources
 # nlp = spacy.load('en_core_web_trf')
 nlp = spacy.load('en_core_web_sm')
 for article in jsonArticles:
@@ -80,7 +84,7 @@ for article in jsonArticles:
     #     print(entity.text, entity. label)
 
 
-    # for each record, write a file
+    # Write a file for each record
     markdownDir = pathlib.Path(articlesDir+str(article["article_id"]))
     markdownDir.mkdir(parents=True, exist_ok=True)
 
@@ -105,7 +109,7 @@ for article in jsonArticles:
 
 
 
-
+# Build the website
 args = ("/usr/local/bin/hugo", "-d", website_path,"--cacheDir", path)
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
