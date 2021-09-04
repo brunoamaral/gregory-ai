@@ -94,8 +94,8 @@ for article in jsonArticles:
             "\ndiscovery_date: " + str(article["discovery_date"]) + \
             "\ndate: " + str(article["discovery_date"]) + "Z" +\
             "\ntitle: \'" + article["title"] + "\'" +\
-            "\nsummary: |\'" + \
-            '\n  ' + article["summary"] + "\'" +\
+            "\nsummary: |" + \
+            '\n  ' + article["summary"] +\
             "\nlink: \'" + article["link"] + "\'" +\
             "\npublished_date: " + str(article["published_date"]) + \
             "\nsource: " + article["source"] + \
