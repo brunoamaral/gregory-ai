@@ -76,6 +76,7 @@ for article in jsonArticles:
     text = article["title"]
     doc=nlp(text)
     # Analyze syntax
+    print("Looking for noun phrases")
     noun_phrases = [chunk.text for chunk in doc.noun_chunks]
     # print("Noun phrases:", [chunk.text for chunk in doc.noun_chunks])
     # print("verbs:", [token.lemma_ for token in doc if token.pos_ == "VERB"])
@@ -95,7 +96,7 @@ for article in jsonArticles:
             "\ndate: " + str(article["discovery_date"]) + "Z" +\
             "\ntitle: \'" + article["title"] + "\'" +\
             "\nsummary: |" + \
-            '\n  ' + article["summary"] +\
+            '\n  ' + article["summary"].replace("\n", "\n  ") +\
             "\nlink: \'" + article["link"] + "\'" +\
             "\npublished_date: " + str(article["published_date"]) + \
             "\nsource: " + article["source"] + \
