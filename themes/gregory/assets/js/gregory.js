@@ -2,11 +2,16 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
     const queries = document.querySelectorAll('h3')
     const nounphrases = document.querySelectorAll('li.phrase')
+    const commonwords = ['multiple sclerosis', 'ms']
     let related = [];
 
 
     for (const element of nounphrases) {
-        related.push(element.textContent);
+        let test = element.textContent.toLowerCase()
+        if (commonwords.includes(test) == false) {
+            related.push(element.textContent);
+        }
+
     }
 
     function searchArticles(term) {
