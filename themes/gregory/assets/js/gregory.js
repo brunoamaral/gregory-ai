@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
     const queries = document.querySelectorAll('h3')
     const nounphrases = document.querySelectorAll('li.phrase')
-    const commonwords = ['multiple sclerosis', 'ms']
+    const commonwords = ['multiple sclerosis', 'ms', 'patients']
     let related = [];
 
 
