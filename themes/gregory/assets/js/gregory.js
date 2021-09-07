@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
     const queries = document.querySelectorAll('h3')
     const nounphrases = document.querySelectorAll('li.phrase')
-    const commonwords = ['multiple sclerosis', 'ms', 'patients']
+    const commonwords = ['multiple sclerosis', 'ms', 'recovery', 'patients']
     let related = [];
 
 
@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
         let articleRequest = new Request('https://api.brunoamaral.net/articles/keyword/' + term);
 
-        fetch(articleRequest).then(response => response.json()).then(data => { console.log(data) })
+        // fetch(articleRequest).then(response => response.json()).then(data => { console.log(data) })
 
         fetch(articleRequest)
             .then(response => response.json())
