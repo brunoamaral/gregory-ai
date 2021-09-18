@@ -4,3 +4,4 @@ data/trials.json
 public/
 modules/
 content/article/*/
+docker-data/
