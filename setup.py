@@ -48,6 +48,11 @@ if p.is_dir():
 else:
     sys.exit('docker-data directory not found. Did the clone process from https://github.com/brunoamaral/gregory finish correctly?')
 
+p = Path("docker-python/")
+if p.is_dir():
+    print("\N{check mark} Found docker-python directory")
+else:
+    sys.exit('docker-data directory not found. Did the clone process from https://github.com/brunoamaral/gregory finish correctly?')
 
 # Check for .env file
 f = Path(".env")
