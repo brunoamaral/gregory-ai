@@ -1,1 +1,0 @@
-python file read content

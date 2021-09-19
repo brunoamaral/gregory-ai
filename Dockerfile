@@ -38,7 +38,7 @@ RUN ./known_hosts.sh /etc/ssh/ssh_known_hosts && rm /usr/src/node-red/known_host
 
 # package.json contains Node-RED NPM module and node dependencies
 COPY package.json .
-COPY flows.json /data
+COPY flows.json /data/
 COPY /python-ml/ /python-ml
 RUN chown -R node-red:root /python-ml 
 
@@ -84,6 +84,16 @@ RUN chown -R node-red:root /usr/src/node-red && \
 RUN pip3 install -r /python-ml/requirements.txt
 
 USER node-red
+
+# Install Gregory Nodes
+RUN npm install node-red-contrib-cheerio && \
+    npm install node-red-contrib-moment && \
+    npm install node-red-contrib-sqlstring && \
+    npm install node-red-dashboard && \
+    npm install node-red-node-feedparser && \
+    npm install node-red-node-sqlite && \
+    npm install node-red-node-ui-list
+
 
 # Env variables
 ENV NODE_RED_VERSION=$NODE_RED_VERSION \

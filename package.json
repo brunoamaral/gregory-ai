@@ -29,7 +29,14 @@
         }
     ],
     "dependencies": {
-        "node-red": "2.0.6"
+        "node-red": "2.0.6",
+        "node-red-contrib-cheerio": "~1.1.0",
+        "node-red-contrib-moment": "~4.0.0",
+        "node-red-contrib-sqlstring": "~0.1.1",
+        "node-red-dashboard": "~3.0.4",
+        "node-red-node-feedparser": "~0.2.1",
+        "node-red-node-sqlite": "~1.0.1",
+        "node-red-node-ui-list": "~0.3.6"
     },
     "engines": {
         "node": ">=12"
