@@ -104,6 +104,10 @@ ENV NODE_RED_VERSION=$NODE_RED_VERSION \
 # ENV NODE_RED_ENABLE_SAFE_MODE=true    # Uncomment to enable safe start mode (flows not running)
 # ENV NODE_RED_ENABLE_PROJECTS=true     # Uncomment to enable projects option
 
+# Saving for future reference in case we have trouble with copying python scripts and flows to the container
+# COPY --from=base /python-ml /python-ml
+# COPY --from=base /data/flows.json /data/flows.json
+
 # Expose the listening port of node-red
 EXPOSE 1880
 

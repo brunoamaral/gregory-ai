@@ -19,8 +19,8 @@ services:
     networks:
       - traefik_proxy
     volumes:
-      - ./docker-data:/data
-      - ./docker-python:/python-ml
+      - flows:/data
+      - python:/python-ml
     # The labels below are used to configure Traefik. Traefik is a reverse proxy and more information can be found here: https://traefik.io/
     labels:
       - "traefik.enable=true"
@@ -31,6 +31,19 @@ services:
       # - "traefik.http.routers.nodered.rule=Host(`gregory.${DOMAIN_NAME}`)"
 
 
+volumes:
+  flows:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: './docker-data'
+  python:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: './docker-python'
 
 networks:
   traefik_proxy:
