@@ -20,6 +20,7 @@ services:
       - traefik_proxy
     volumes:
       - ./docker-data:/data
+      - ./docker-python:/python-ml
     # The labels below are used to configure Traefik. Traefik is a reverse proxy and more information can be found here: https://traefik.io/
     labels:
       - "traefik.enable=true"
