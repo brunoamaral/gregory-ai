@@ -48,6 +48,11 @@ if p.is_dir():
 else:
     sys.exit('docker-data directory not found. Did the clone process from https://github.com/brunoamaral/gregory finish correctly?')
 
+p = Path("docker-python/")
+if p.is_dir():
+    print("\N{check mark} Found docker-python directory")
+else:
+    sys.exit('docker-data directory not found. Did the clone process from https://github.com/brunoamaral/gregory finish correctly?')
 
 # Check for .env file
 f = Path(".env")
@@ -107,8 +112,12 @@ output = popen.stdout.read()
 print(output)
 
 # Check if SQLite3 db is present
+print('Trying to connect to docker-data/gregory.db to apply gregory_schema.sql')
 database = sqlite3.connect('./docker-data/gregory.db')
+cur = database.cursor()
 
+with open('gregory_schema.sql') as fp:
+    cur.executescript(fp.read())
 if database == False:
     sys.exit('SQLite database not found, create it please')
 
@@ -124,6 +133,8 @@ for line in Lines:
         table_exists = database.execute(query).description
         if table_exists:
             print("\N{check mark} Found table: " + t)
+        else:
+            print("didn't find expected tables")
         for column in table.columns:
             query ='select '+ column +' from '+ t +';'
             column_exists=database.execute(query).description

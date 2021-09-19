@@ -4,3 +4,7 @@ data/trials.json
 public/
 modules/
 content/article/*/
+docker-data/
+workspace.code-workspace
+docker-python/
+docker-data/

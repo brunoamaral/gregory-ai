@@ -1,0 +1,6083 @@
+[
+    {
+        "id": "f6f2187d.f17ca8",
+        "type": "tab",
+        "label": "Flow 1",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "e677d300.d1d95",
+        "type": "tab",
+        "label": "Gregory | Research",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "725b288ad1226693",
+        "type": "tab",
+        "label": "Gregory | Email Digest",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "ed1d968f509a241a",
+        "type": "tab",
+        "label": "Gregory | API",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "acf883d8.84eea",
+        "type": "subflow",
+        "name": "Insert SQL subflow",
+        "info": "",
+        "category": "",
+        "in": [
+            {
+                "x": 60,
+                "y": 80,
+                "wires": [
+                    {
+                        "id": "4c001d43.2cc414"
+                    }
+                ]
+            }
+        ],
+        "out": [
+            {
+                "x": 340,
+                "y": 80,
+                "wires": [
+                    {
+                        "id": "4c001d43.2cc414",
+                        "port": 0
+                    }
+                ]
+            }
+        ],
+        "env": [],
+        "color": "#DDAA99"
+    },
+    {
+        "id": "e3876559.c845b8",
+        "type": "tls-config",
+        "name": "",
+        "cert": "",
+        "key": "",
+        "ca": "",
+        "certname": "node-cert.pem",
+        "keyname": "node-key.pem",
+        "caname": "",
+        "servername": "",
+        "verifyservercert": true
+    },
+    {
+        "id": "9ccc1658.e12858",
+        "type": "sqlitedb",
+        "db": "/data/gregory.db",
+        "mode": "RWC"
+    },
+    {
+        "id": "2e3f3837.3647a8",
+        "type": "ui_group",
+        "name": "Development",
+        "tab": "c7217fb3.4a4cc",
+        "order": 1,
+        "disp": true,
+        "width": "6",
+        "collapse": false
+    },
+    {
+        "id": "101790b7f36b6f9b",
+        "type": "ui_base",
+        "theme": {
+            "name": "theme-light",
+            "lightTheme": {
+                "default": "#0094CE",
+                "baseColor": "#0094CE",
+                "baseFont": "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif",
+                "edited": true,
+                "reset": false
+            },
+            "darkTheme": {
+                "default": "#097479",
+                "baseColor": "#097479",
+                "baseFont": "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif",
+                "edited": false
+            },
+            "customTheme": {
+                "name": "Untitled Theme 1",
+                "default": "#4B7930",
+                "baseColor": "#4B7930",
+                "baseFont": "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif"
+            },
+            "themeState": {
+                "base-color": {
+                    "default": "#0094CE",
+                    "value": "#0094CE",
+                    "edited": false
+                },
+                "page-titlebar-backgroundColor": {
+                    "value": "#0094CE",
+                    "edited": false
+                },
+                "page-backgroundColor": {
+                    "value": "#fafafa",
+                    "edited": false
+                },
+                "page-sidebar-backgroundColor": {
+                    "value": "#ffffff",
+                    "edited": false
+                },
+                "group-textColor": {
+                    "value": "#1bbfff",
+                    "edited": false
+                },
+                "group-borderColor": {
+                    "value": "#ffffff",
+                    "edited": false
+                },
+                "group-backgroundColor": {
+                    "value": "#ffffff",
+                    "edited": false
+                },
+                "widget-textColor": {
+                    "value": "#111111",
+                    "edited": false
+                },
+                "widget-backgroundColor": {
+                    "value": "#0094ce",
+                    "edited": false
+                },
+                "widget-borderColor": {
+                    "value": "#ffffff",
+                    "edited": false
+                },
+                "base-font": {
+                    "value": "-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif"
+                }
+            },
+            "angularTheme": {
+                "primary": "indigo",
+                "accents": "blue",
+                "warn": "red",
+                "background": "grey",
+                "palette": "light"
+            }
+        },
+        "site": {
+            "name": "Node-RED Dashboard",
+            "hideToolbar": "false",
+            "allowSwipe": "false",
+            "lockMenu": "false",
+            "allowTempTheme": "true",
+            "dateFormat": "DD/MM/YYYY",
+            "sizes": {
+                "sx": 48,
+                "sy": 48,
+                "gx": 6,
+                "gy": 6,
+                "cx": 6,
+                "cy": 6,
+                "px": 0,
+                "py": 0
+            }
+        }
+    },
+    {
+        "id": "3cc11d24.ff01a2",
+        "type": "comment",
+        "z": "f6f2187d.f17ca8",
+        "name": "WARNING: please check you have started this container with a volume that is mounted to /data\\n otherwise any flow changes are lost when you redeploy or upgrade the container\\n (e.g. upgrade to a more recent node-red docker image).\\n  If you are using named volumes you can ignore this warning.\\n Double click or see info side panel to learn how to start Node-RED in Docker to save your work",
+        "info": "\nTo start docker with a bind mount volume (-v option), for example:\n\n```\ndocker run -it -p 1880:1880 -v /home/user/node_red_data:/data --name mynodered nodered/node-red\n```\n\nwhere `/home/user/node_red_data` is a directory on your host machine where you want to store your flows.\n\nIf you do not do this then you can experiment and redploy flows, but if you restart or upgrade the container the flows will be disconnected and lost. \n\nThey will still exist in a hidden data volume, which can be recovered using standard docker techniques, but that is much more complex than just starting with a named volume as described above.",
+        "x": 350,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "4c001d43.2cc414",
+        "type": "template",
+        "z": "acf883d8.84eea",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "sql",
+        "syntax": "mustache",
+        "template": "INSERT INTO articles (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%S\", \"NOW\"),\"{{article.title}}\",\"{{article.description}}\",\"{{{article.url}}}\",\"{{article.pubdate\"}}\",\"{{{article.source}}}\",NULL)",
+        "output": "str",
+        "x": 200,
+        "y": 80,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "e7f81480.58b468",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "1 create articles",
+        "props": [
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "CREATE TABLE articles( article_id INTEGER NOT NULL PRIMARY KEY, discovery_date data_type TEXT, title data_type TEXT UNIQUE, summary data_type TEXT, link data_type TEXT, published_date TEXT, source data_type TEXT, relevant data_type INT, table_constraints );  ",
+        "x": 3620,
+        "y": 2140,
+        "wires": [
+            []
+        ],
+        "info": "CREATE TABLE IF NOT EXISTS articles (\n\tdiscovery_date data_type TEXT,\n   \ttitle data_type TEXT,\n\tsummary data_type TEXT,\n\tlink data_type TEXT,\n\tpublished_date TEXT,\n\tcategory data_type TEXT,\n\tsource data_type TEXT,\n\trelevant data_type INT,\n\ttable_constraints\n) ;"
+    },
+    {
+        "id": "b87e3b26.67f118",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "Insert category values",
+        "props": [
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "INSERT INTO categories (category_name) VALUES(\"Tratamento\"),(\"Sintomas e Mobilidade\"),(\"Regeneração do SNC\"); SELECT * FROM categories;",
+        "x": 3600,
+        "y": 2260,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "f6a85ea5.2bd9b",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "drop table articles",
+        "props": [
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "DROP TABLE IF EXISTS articles;",
+        "x": 3610,
+        "y": 2100,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "6cdc5f5.3ff67a",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "sanity check",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "SELECT      name FROM      sqlite_master  WHERE      type ='table' AND      name NOT LIKE 'sqlite_%';",
+        "payload": "",
+        "payloadType": "date",
+        "x": 3630,
+        "y": 2300,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "c45f9e4e.604e3",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "2 create categories",
+        "props": [
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "CREATE TABLE categories( category_id INTEGER NOT NULL PRIMARY KEY, category_name TEXT );",
+        "x": 3610,
+        "y": 2180,
+        "wires": [
+            []
+        ],
+        "info": "CREATE TABLE IF NOT EXISTS articles (\n\tdiscovery_date data_type TEXT,\n   \ttitle data_type TEXT,\n\tsummary data_type TEXT,\n\tlink data_type TEXT,\n\tpublished_date TEXT,\n\tcategory data_type TEXT,\n\tsource data_type TEXT,\n\trelevant data_type INT,\n\ttable_constraints\n) ;"
+    },
+    {
+        "id": "e54f69d7.9f9328",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "3 create rel_articles_categories",
+        "props": [
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "CREATE TABLE rel_articles_categories( article_id INTEGER, category_id INTEGER, FOREIGN KEY (article_id) REFERENCES articles(article_id), FOREIGN KEY (category_id) REFERENCES categories(category_id) );",
+        "x": 3570,
+        "y": 2220,
+        "wires": [
+            []
+        ],
+        "info": "CREATE TABLE IF NOT EXISTS articles (\n\tdiscovery_date data_type TEXT,\n   \ttitle data_type TEXT,\n\tsummary data_type TEXT,\n\tlink data_type TEXT,\n\tpublished_date TEXT,\n\tcategory data_type TEXT,\n\tsource data_type TEXT,\n\trelevant data_type INT,\n\ttable_constraints\n) ;"
+    },
+    {
+        "id": "5223398.ab62ec8",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "format 'is relevant' field (not working)",
+        "rules": [
+            {
+                "t": "change",
+                "p": "payload.relevant",
+                "pt": "msg",
+                "from": "false",
+                "fromt": "bool",
+                "to": "0",
+                "tot": "str"
+            },
+            {
+                "t": "change",
+                "p": "payload.relevant",
+                "pt": "msg",
+                "from": "true",
+                "fromt": "bool",
+                "to": "1",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 530,
+        "y": 2320,
+        "wires": [
+            [
+                "4da35fee.9ae0a"
+            ]
+        ]
+    },
+    {
+        "id": "4da35fee.9ae0a",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "INSERT INTO articles (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (\"{{payload.discovery_date}}\",\n\"{{payload.title}}\",\n\"{{payload.summary}}\",\n\"{{payload.link}}\",\n\"{{payload.published_date}}\",\n\"{{payload.source}}\",\"{{payload.relevant}}\");",
+        "output": "str",
+        "x": 780,
+        "y": 2320,
+        "wires": [
+            [
+                "2a6fbc39.af1ee4"
+            ]
+        ]
+    },
+    {
+        "id": "d3e84102.20011",
+        "type": "switch",
+        "z": "e677d300.d1d95",
+        "name": "filter if title contains MS",
+        "property": "article.title",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "regex",
+                "v": ".*(multiple sclerosis ).*",
+                "vt": "str",
+                "case": true
+            },
+            {
+                "t": "regex",
+                "v": ".*( MS ).*",
+                "vt": "str",
+                "case": false
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 430,
+        "y": 680,
+        "wires": [
+            [
+                "acb25bab.c29098"
+            ],
+            [
+                "acb25bab.c29098"
+            ]
+        ]
+    },
+    {
+        "id": "acb25bab.c29098",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set source reuters",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "reuters",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.url",
+                "pt": "msg",
+                "to": "topic",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 690,
+        "y": 680,
+        "wires": [
+            [
+                "bb71d047.ff6f9"
+            ]
+        ]
+    },
+    {
+        "id": "56a4dc66.256874",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set source pubmed",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "pubmed",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.url",
+                "pt": "msg",
+                "to": "topic",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 490,
+        "y": 540,
+        "wires": [
+            [
+                "bb71d047.ff6f9"
+            ]
+        ]
+    },
+    {
+        "id": "dd8e58f7.7eb6e8",
+        "type": "link in",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "links": [
+            "7b3f48c4.9c0f88",
+            "e8bd17ee.3328d8",
+            "2a6fbc39.af1ee4",
+            "29b465d7.a3aa5a",
+            "e80c0064.85234",
+            "17411654.54199a",
+            "958a1d17.8c224",
+            "6c3c1a63.858e04",
+            "2042485f.ad9e18",
+            "d364aba7.a79228",
+            "f2c28c9f.29a42",
+            "30afd73c.dc5ba8",
+            "27c1f984.9aa296"
+        ],
+        "x": 2975,
+        "y": 1540,
+        "wires": [
+            [
+                "362204ba.31312c"
+            ]
+        ]
+    },
+    {
+        "id": "e8bd17ee.3328d8",
+        "type": "link out",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "links": [
+            "dd8e58f7.7eb6e8"
+        ],
+        "x": 1335,
+        "y": 540,
+        "wires": []
+    },
+    {
+        "id": "2a6fbc39.af1ee4",
+        "type": "link out",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "links": [
+            "dd8e58f7.7eb6e8"
+        ],
+        "x": 895,
+        "y": 2320,
+        "wires": []
+    },
+    {
+        "id": "ffb7b92d.9a01e8",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set source ClinicalTrials",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "ClinicalTrials.gov",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 530,
+        "y": 2600,
+        "wires": [
+            [
+                "bc0c284f.e4f5d8"
+            ]
+        ]
+    },
+    {
+        "id": "974801fc.d87d5",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "sql",
+        "syntax": "mustache",
+        "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%S\", \"NOW\"),\"{{article.title}}\",\"{{article.description}}\",\"{{{topic}}}\",\"{{payload}}\",\"{{article.source}}\",NULL)",
+        "output": "str",
+        "x": 1140,
+        "y": 2600,
+        "wires": [
+            [
+                "6c3c1a63.858e04"
+            ]
+        ]
+    },
+    {
+        "id": "6c3c1a63.858e04",
+        "type": "link out",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "links": [
+            "dd8e58f7.7eb6e8"
+        ],
+        "x": 1295,
+        "y": 2600,
+        "wires": []
+    },
+    {
+        "id": "447e9609.e2ac08",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "10800",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "30",
+        "topic": "",
+        "payloadType": "date",
+        "x": 270,
+        "y": 1000,
+        "wires": [
+            [
+                "7d34d84b.209178"
+            ]
+        ]
+    },
+    {
+        "id": "7d34d84b.209178",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "APTA",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://www.apta.org/search?Q=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&searcharticletypes=8834&searchconditionandsymptoms=&searchloc=APTA",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 410,
+        "y": 1000,
+        "wires": [
+            [
+                "c61aca1a.a75f28"
+            ]
+        ]
+    },
+    {
+        "id": "12c5e787.dadea8",
+        "type": "subflow:acf883d8.84eea",
+        "z": "e677d300.d1d95",
+        "name": "Insert SQL",
+        "env": [],
+        "x": 1230,
+        "y": 540,
+        "wires": [
+            [
+                "e8bd17ee.3328d8"
+            ]
+        ]
+    },
+    {
+        "id": "4a6f88df.668e58",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set source APTA",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article",
+                "pt": "msg",
+                "to": "payload",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article.url",
+                "pt": "msg",
+                "to": "\"https://www.apta.org\" & payload.link",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "APTA",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1240,
+        "y": 1000,
+        "wires": [
+            [
+                "5607a559.4d69ec"
+            ]
+        ]
+    },
+    {
+        "id": "5607a559.4d69ec",
+        "type": "subflow:acf883d8.84eea",
+        "z": "e677d300.d1d95",
+        "name": "Insert SQL",
+        "env": [],
+        "x": 1530,
+        "y": 1000,
+        "wires": [
+            [
+                "2042485f.ad9e18"
+            ]
+        ]
+    },
+    {
+        "id": "2042485f.ad9e18",
+        "type": "link out",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "links": [
+            "dd8e58f7.7eb6e8"
+        ],
+        "x": 1835,
+        "y": 1380,
+        "wires": []
+    },
+    {
+        "id": "eeb3511f.107c9",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "refresh list",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "1200",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "SELECT  * FROM articles ORDER BY article_id DESC;",
+        "payloadType": "date",
+        "x": 2790,
+        "y": 1640,
+        "wires": [
+            [
+                "d364aba7.a79228"
+            ]
+        ]
+    },
+    {
+        "id": "d364aba7.a79228",
+        "type": "link out",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "links": [
+            "dd8e58f7.7eb6e8"
+        ],
+        "x": 2895,
+        "y": 1540,
+        "wires": []
+    },
+    {
+        "id": "2fefc425.4050bc",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "create trials table",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "CREATE TABLE trials( trial_id INTEGER NOT NULL PRIMARY KEY, discovery_date data_type TEXT,  title TEXT type UNIQUE, summary data_type TEXT, link data_type TEXT, published_date TEXT, source data_type TEXT, relevant data_type INT, table_constraints);",
+        "payload": "",
+        "payloadType": "date",
+        "x": 3620,
+        "y": 2380,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "79a8247a.92ebfc",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 910,
+        "y": 1000,
+        "wires": [
+            [
+                "9114e276.66493"
+            ]
+        ]
+    },
+    {
+        "id": "9e016eb0.ea6a7",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "11400",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "30",
+        "topic": "",
+        "payloadType": "date",
+        "x": 270,
+        "y": 1200,
+        "wires": [
+            [
+                "692d4a70.c8ca94"
+            ]
+        ]
+    },
+    {
+        "id": "692d4a70.c8ca94",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "BioMedCentral",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://www.biomedcentral.com/search?searchType=publisherSearch&sort=PubDate&page=1&query=Multiple+Sclerosis",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 440,
+        "y": 1200,
+        "wires": [
+            [
+                "d525b5a.33ae548"
+            ]
+        ]
+    },
+    {
+        "id": "3b8b16c0.ace03a",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set source BioMedCentral",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article",
+                "pt": "msg",
+                "to": "payload",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article.url",
+                "pt": "msg",
+                "to": "\"https:\" & payload.link",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "BioMedCentral",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.description",
+                "pt": "msg",
+                "to": "$trim(article.description)",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.title",
+                "pt": "msg",
+                "to": "$trim(article.title)",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1270,
+        "y": 1200,
+        "wires": [
+            [
+                "cfd4a1c6.42a0d"
+            ]
+        ]
+    },
+    {
+        "id": "2d2a9ede.1ee7a2",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 910,
+        "y": 1200,
+        "wires": [
+            [
+                "7807a09e.45e49"
+            ]
+        ]
+    },
+    {
+        "id": "cfd4a1c6.42a0d",
+        "type": "subflow:acf883d8.84eea",
+        "z": "e677d300.d1d95",
+        "name": "Insert SQL",
+        "env": [],
+        "x": 1550,
+        "y": 1200,
+        "wires": [
+            [
+                "2042485f.ad9e18"
+            ]
+        ]
+    },
+    {
+        "id": "362204ba.31312c",
+        "type": "delay",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "pauseType": "random",
+        "timeout": "500",
+        "timeoutUnits": "milliseconds",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "200",
+        "randomLast": "300",
+        "randomUnits": "milliseconds",
+        "drop": false,
+        "x": 3080,
+        "y": 1540,
+        "wires": [
+            [
+                "703141cb.40cd2"
+            ]
+        ]
+    },
+    {
+        "id": "93f5afdb.0c9ae",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "PEDro",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://search.pedro.org.au/advanced-search/results?abstract_with_title=Multiple+Sclerosis&therapy=0&problem=0&body_part=0&subdiscipline=0&topic=0&method=0&authors_association=&title=&source=&year_of_publication=&date_record_was_created=&nscore=&perpage=20&lop=or&find=&find=Start+Search",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 430,
+        "y": 1340,
+        "wires": [
+            [
+                "7200f004.6c3a6"
+            ]
+        ]
+    },
+    {
+        "id": "61d16b00.e6b704",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 910,
+        "y": 1340,
+        "wires": [
+            [
+                "76d89aca.9b37d4"
+            ]
+        ]
+    },
+    {
+        "id": "f31ef1c8.3af84",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set source PEDro",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article",
+                "pt": "msg",
+                "to": "payload",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article.url",
+                "pt": "msg",
+                "to": "payload.link",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "PEDro",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.description",
+                "pt": "msg",
+                "to": "not available",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.title",
+                "pt": "msg",
+                "to": "$trim(article.title)",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1270,
+        "y": 1340,
+        "wires": [
+            [
+                "1b5ac33e.1e7afd"
+            ]
+        ]
+    },
+    {
+        "id": "1b5ac33e.1e7afd",
+        "type": "subflow:acf883d8.84eea",
+        "z": "e677d300.d1d95",
+        "name": "Insert SQL",
+        "env": [],
+        "x": 1570,
+        "y": 1340,
+        "wires": [
+            [
+                "2042485f.ad9e18"
+            ]
+        ]
+    },
+    {
+        "id": "32d10bb5.f7c9b4",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "13200",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "300",
+        "topic": "",
+        "payloadType": "date",
+        "x": 270,
+        "y": 1340,
+        "wires": [
+            [
+                "93f5afdb.0c9ae"
+            ]
+        ]
+    },
+    {
+        "id": "bc932279.fd3c1",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "Scielo.org",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://search.scielo.org/?q=Multiple+Sclerosis&lang=en&count=15&from=0&output=site&sort=&format=summary&fb=&page=1&q=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&lang=en&page=1",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 460,
+        "y": 1540,
+        "wires": [
+            [
+                "76303108.1a242"
+            ]
+        ]
+    },
+    {
+        "id": "d14937a.fcc22c8",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "14400",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "30",
+        "topic": "",
+        "payloadType": "date",
+        "x": 270,
+        "y": 1540,
+        "wires": [
+            [
+                "bc932279.fd3c1"
+            ]
+        ]
+    },
+    {
+        "id": "ae4a277d.0b34e8",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 890,
+        "y": 1540,
+        "wires": [
+            [
+                "2af11514.34f00a"
+            ]
+        ]
+    },
+    {
+        "id": "597913bc.2b4dec",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set source Scielo",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article",
+                "pt": "msg",
+                "to": "payload",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article.url",
+                "pt": "msg",
+                "to": "payload.link",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "Scielo",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.description",
+                "pt": "msg",
+                "to": "$trim(article.description)",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.title",
+                "pt": "msg",
+                "to": "$trim(article.title)",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1250,
+        "y": 1540,
+        "wires": [
+            [
+                "2f1250ba.05cd3"
+            ]
+        ]
+    },
+    {
+        "id": "2f1250ba.05cd3",
+        "type": "subflow:acf883d8.84eea",
+        "z": "e677d300.d1d95",
+        "name": "Insert SQL",
+        "env": [],
+        "x": 1550,
+        "y": 1540,
+        "wires": [
+            [
+                "2042485f.ad9e18"
+            ]
+        ]
+    },
+    {
+        "id": "93bfea98.134188",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "The Lancet",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://www.thelancet.com/action/doSearch?text1=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&field1=AbstractTitleKeywordFilterField&startPage=0&sortBy=Earliest",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 470,
+        "y": 1780,
+        "wires": [
+            [
+                "77bb2168.9845"
+            ]
+        ]
+    },
+    {
+        "id": "8c1e7286.bf01a",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "14400",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "30",
+        "topic": "",
+        "payloadType": "date",
+        "x": 270,
+        "y": 1780,
+        "wires": [
+            [
+                "93bfea98.134188"
+            ]
+        ]
+    },
+    {
+        "id": "d9eff18c.c2dce",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 890,
+        "y": 1780,
+        "wires": [
+            [
+                "59a7b122.82c15"
+            ]
+        ]
+    },
+    {
+        "id": "59a7b122.82c15",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set source The Lancet",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article",
+                "pt": "msg",
+                "to": "payload",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article.url",
+                "pt": "msg",
+                "to": "\"https://www.thelancet.com\" & payload.link",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "The Lancet",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.description",
+                "pt": "msg",
+                "to": "$trim(article.description)",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.title",
+                "pt": "msg",
+                "to": "$trim(article.title)",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.pubdate",
+                "pt": "msg",
+                "to": "$trim($replace(article.pubdate, \"Published: \", \" \"))",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1100,
+        "y": 1780,
+        "wires": [
+            [
+                "4fbb692.2486b98"
+            ]
+        ]
+    },
+    {
+        "id": "9a14f1a6.90d44",
+        "type": "subflow:acf883d8.84eea",
+        "z": "e677d300.d1d95",
+        "name": "Insert SQL",
+        "env": [],
+        "x": 1550,
+        "y": 1780,
+        "wires": [
+            [
+                "2042485f.ad9e18"
+            ]
+        ]
+    },
+    {
+        "id": "7042cf5f.37b8e",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "JNeuroSci",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://www.jneurosci.org/search/text_abstract_title%3AMultiple%2BSclerosis%20text_abstract_title_flags%3Amatch-phrase%20exclude_meeting_abstracts%3A1%20numresults%3A50%20sort%3Apublication-date%20direction%3Adescending%20format_result%3Astandard",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 430,
+        "y": 1900,
+        "wires": [
+            [
+                "155fede1.ee3852"
+            ]
+        ]
+    },
+    {
+        "id": "242cc4f8.4e1b2c",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 890,
+        "y": 1900,
+        "wires": [
+            [
+                "a3b9d7eb.2f9c48"
+            ]
+        ]
+    },
+    {
+        "id": "a3b9d7eb.2f9c48",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set source JNeuroSci",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article",
+                "pt": "msg",
+                "to": "payload",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article.url",
+                "pt": "msg",
+                "to": "\"https://www.jneurosci.org\" & payload.link",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "JNeuroSci",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.description",
+                "pt": "msg",
+                "to": "$trim(article.description)",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.title",
+                "pt": "msg",
+                "to": "$trim(article.title)",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.pubdate",
+                "pt": "msg",
+                "to": "$trim($replace(article.pubdate, \"Published: \", \" \"))",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1100,
+        "y": 1900,
+        "wires": [
+            [
+                "2484937c.b752dc"
+            ]
+        ]
+    },
+    {
+        "id": "b087546f.c41f78",
+        "type": "subflow:acf883d8.84eea",
+        "z": "e677d300.d1d95",
+        "name": "Insert SQL",
+        "env": [],
+        "x": 1550,
+        "y": 1900,
+        "wires": [
+            [
+                "2042485f.ad9e18"
+            ]
+        ]
+    },
+    {
+        "id": "bf677c12.98036",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "13800",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "90",
+        "topic": "",
+        "payloadType": "date",
+        "x": 270,
+        "y": 1900,
+        "wires": [
+            [
+                "7042cf5f.37b8e"
+            ]
+        ]
+    },
+    {
+        "id": "9451a01b.195e1",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "journals.sagepub",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://journals.sagepub.com/action/doSearch?AllField=multiple+sclerosis&SeriesKey=msja&content=articlesChapters&countTerms=true&target=default&sortBy=Ppub&startPage=&ContentItemType=research-article",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 430,
+        "y": 2080,
+        "wires": [
+            [
+                "a61c20a8.862f3"
+            ]
+        ]
+    },
+    {
+        "id": "8b34e8cd.59fe58",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "12000",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "99",
+        "topic": "",
+        "payloadType": "date",
+        "x": 250,
+        "y": 2080,
+        "wires": [
+            [
+                "9451a01b.195e1"
+            ]
+        ]
+    },
+    {
+        "id": "7a8468df.b46ce8",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 870,
+        "y": 2080,
+        "wires": [
+            [
+                "9999e129.61d66"
+            ]
+        ]
+    },
+    {
+        "id": "9999e129.61d66",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set source SagePub",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article",
+                "pt": "msg",
+                "to": "payload",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article.url",
+                "pt": "msg",
+                "to": "\"https://journals.sagepub.com\" & payload.link",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "Sage Pub",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.description",
+                "pt": "msg",
+                "to": "not available",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.title",
+                "pt": "msg",
+                "to": "$trim(article.title)",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "payload.pubdate",
+                "pt": "msg",
+                "to": "$split($trim($replace(article.pubdate, \", First Published \", \" \")),\".\",1)",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1040,
+        "y": 2080,
+        "wires": [
+            [
+                "83c75162.7e39f"
+            ]
+        ]
+    },
+    {
+        "id": "83c75162.7e39f",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "fix pubdate",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload.pubdate",
+                "pt": "msg",
+                "to": "$replace($replace(payload.pubdate[0],\" \", \"-\"),\",\",\"\")",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1230,
+        "y": 2080,
+        "wires": [
+            [
+                "79cb9ccc.a4f644"
+            ]
+        ]
+    },
+    {
+        "id": "143867a5.288e58",
+        "type": "subflow:acf883d8.84eea",
+        "z": "e677d300.d1d95",
+        "name": "Insert SQL",
+        "env": [],
+        "x": 1570,
+        "y": 2080,
+        "wires": [
+            [
+                "2042485f.ad9e18"
+            ]
+        ]
+    },
+    {
+        "id": "d424b6d4.4fd928",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "13800",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "200",
+        "topic": "",
+        "payloadType": "date",
+        "x": 270,
+        "y": 2200,
+        "wires": [
+            [
+                "f04c92de.f0caa"
+            ]
+        ]
+    },
+    {
+        "id": "f04c92de.f0caa",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "MS and Rel. Disorders",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://www.msard-journal.com/action/doSearch?text1=Multiple+Sclerosis&field1=AbstractTitleKeywordFilterField&startPage=0&sortBy=Earliest",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 460,
+        "y": 2200,
+        "wires": [
+            [
+                "e4d19ed0.def17"
+            ]
+        ]
+    },
+    {
+        "id": "5d91e310.64306c",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 810,
+        "y": 2200,
+        "wires": [
+            [
+                "b08406f.7ec44f8"
+            ]
+        ]
+    },
+    {
+        "id": "b08406f.7ec44f8",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set source MS & rel. disorders",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article",
+                "pt": "msg",
+                "to": "payload",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article.url",
+                "pt": "msg",
+                "to": "\"https://www.msard-journal.com\" & payload.link",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "MS & Rel. Disorders",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.description",
+                "pt": "msg",
+                "to": "not available",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.title",
+                "pt": "msg",
+                "to": "$trim(article.title)",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "payload.pubdate",
+                "pt": "msg",
+                "to": "$split($trim($replace(article.pubdate, \"Published Online: \", \" \")),\".\",1)",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1010,
+        "y": 2200,
+        "wires": [
+            [
+                "d49f5d0.0b73aa"
+            ]
+        ]
+    },
+    {
+        "id": "d49f5d0.0b73aa",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "fix pubdate",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload.pubdate",
+                "pt": "msg",
+                "to": "$replace($replace(payload.pubdate[0],\" \", \"-\"),\",\",\"\")",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1250,
+        "y": 2200,
+        "wires": [
+            [
+                "3ea7f9fd.f836d6"
+            ]
+        ]
+    },
+    {
+        "id": "91a0c554.3d6868",
+        "type": "subflow:acf883d8.84eea",
+        "z": "e677d300.d1d95",
+        "name": "Insert SQL",
+        "env": [],
+        "x": 1590,
+        "y": 2200,
+        "wires": [
+            [
+                "2042485f.ad9e18"
+            ]
+        ]
+    },
+    {
+        "id": "eb35aaad.a31718",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://www.rnec.pt/pt_PT/pesquisa-de-estudos-clinicos?p_p_id=RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_cacheability=cacheLevelPage&p_p_col_id=column-1&p_p_col_count=1&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet__jsfBridgeAjax=true&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet__facesViewIdResource=%2Fviews%2Fview.xhtml",
+        "tls": "e3876559.c845b8",
+        "persist": true,
+        "proxy": "",
+        "authType": "",
+        "x": 630,
+        "y": 300,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "35e8187a.234a08",
+        "type": "function",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "func": "msg.headers = {}\n\n  msg.headers['Connection'] = 'keep-alive'\n\n  msg.headers['Pragma'] = 'no-cache' \n\n  msg.headers['Cache-Control'] = 'no-cache' \n\n  msg.headers['Accept'] = 'application/xml, text/xml, */*; q=0.01' \n\n  msg.headers['DNT'] = '1' \n\n  msg.headers['X-Requested-With'] = 'XMLHttpRequest' \n\n  msg.headers['Faces-Request'] = 'partial/ajax' \n\n  msg.headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36' \n\n  msg.headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8' \n\n  msg.headers['Sec-GPC'] = '1' \n\n  msg.headers['Origin'] = 'https://www.rnec.pt' \n\n  msg.headers['Sec-Fetch-Site'] = 'same-origin' \n\n  msg.headers['Sec-Fetch-Mode'] = 'cors' \n\n  msg.headers['Sec-Fetch-Dest'] = 'empty' \n\n  msg.headers['Referer'] = 'https://www.rnec.pt/pt_PT/pesquisa-de-estudos-clinicos' \n\n  msg.headers['Accept-Language'] = 'en-GB,en-US;q=0.9,en;q=0.8' \n\n  msg.headers['Cookie'] = 'GUEST_LANGUAGE_ID=pt_PT; COOKIE_SUPPORT=true; JSESSIONID=2904FFA0655A18A83E7335B1D620EE9C; LFR_SESSION_STATE_20158=1627411328837' \n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 420,
+        "y": 300,
+        "wires": [
+            [
+                "eb35aaad.a31718",
+                "7d6d22e4.8928cc"
+            ]
+        ]
+    },
+    {
+        "id": "ea750bae.0383b8",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 240,
+        "y": 300,
+        "wires": [
+            [
+                "35e8187a.234a08"
+            ]
+        ]
+    },
+    {
+        "id": "7d6d22e4.8928cc",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "payload",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "javax.faces.partial.ajax=true&javax.faces.source=_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt73&javax.faces.partial.execute=_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm&javax.faces.partial.render=_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3AresultsPanel&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt73=_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt73&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm=_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm&javax.faces.encodedURL=https%3A%2F%2Fwww.rnec.pt%2Fpt_PT%2Fpesquisa-de-estudos-clinicos%3Fp_p_id%3DRNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet%26p_p_lifecycle%3D2%26p_p_state%3Dnormal%26p_p_mode%3Dview%26p_p_cacheability%3DcacheLevelPage%26p_p_col_id%3Dcolumn-1%26p_p_col_count%3D1%26_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet__jsfBridgeAjax%3Dtrue%26_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet__facesViewIdResource%3D%252Fviews%252Fview.xhtml&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3AtextoLivre=ensaio&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt13_focus=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt13_input=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3ArnecNumber=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AeudraCT=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AprotocolNumber=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3Asponsor=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AtrialTitle=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3ArecruitmentStatus_focus=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3ArecruitmentStatus_input=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AclinicalIndication=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AauthorizationDateStart_input=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AauthorizationDateEnd_input=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AconclusionDateStart_input=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25%3AconclusionDateEnd_input=&_RNECPesquisaEstudosClinicos_WAR_RNECPesquisaEstudosClinicosportlet_%3AmainForm%3Aj_idt25_active=-1&javax.faces.ViewState=-2014375685200726364%3A-8157792764487954219",
+        "output": "str",
+        "x": 620,
+        "y": 340,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "552e99b3.a9d988",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "NOVARTIS",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://www.novartis.com/clinicaltrials/recruiting-trials?title=multiple%20sclerosis",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 430,
+        "y": 2440,
+        "wires": [
+            [
+                "689bbffb.67489"
+            ]
+        ]
+    },
+    {
+        "id": "dccf3bb6.7c85b8",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "18000",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "200",
+        "topic": "",
+        "payloadType": "date",
+        "x": 250,
+        "y": 2440,
+        "wires": [
+            [
+                "552e99b3.a9d988"
+            ]
+        ]
+    },
+    {
+        "id": "cf77906e.d94ce",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "sql",
+        "syntax": "mustache",
+        "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%S\", \"NOW\"),\"{{payload.title}}\",\"\",\"https://www.novartis.com{{{payload.link}}}\",\"\",\"Novartis\",NULL)",
+        "output": "str",
+        "x": 940,
+        "y": 2440,
+        "wires": [
+            [
+                "27c1f984.9aa296"
+            ]
+        ]
+    },
+    {
+        "id": "dd48b8d3.6d1788",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 790,
+        "y": 2440,
+        "wires": [
+            [
+                "cf77906e.d94ce"
+            ]
+        ]
+    },
+    {
+        "id": "27c1f984.9aa296",
+        "type": "link out",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "links": [
+            "dd8e58f7.7eb6e8"
+        ],
+        "x": 1075,
+        "y": 2480,
+        "wires": []
+    },
+    {
+        "id": "ddd04c38.45e54",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "CUF",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://www.cuf.pt/cuf-academic-center/ensaios-clinicos?combine=&unidade=&estado=All&patologia=2346&especialidade=",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 410,
+        "y": 2520,
+        "wires": [
+            [
+                "6e73a2ca.0782cc"
+            ]
+        ]
+    },
+    {
+        "id": "f6573be5.523818",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "18000",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "42",
+        "topic": "",
+        "payloadType": "date",
+        "x": 250,
+        "y": 2520,
+        "wires": [
+            [
+                "ddd04c38.45e54"
+            ]
+        ]
+    },
+    {
+        "id": "c0a8b1f3.daefc",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "sql",
+        "syntax": "mustache",
+        "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%S\", \"NOW\"),\"{{payload.title}}\",\"\",\"https://www.cuf.pt{{{payload.link}}}\",\"\",\"CUF\",NULL)",
+        "output": "str",
+        "x": 940,
+        "y": 2520,
+        "wires": [
+            [
+                "27c1f984.9aa296"
+            ]
+        ]
+    },
+    {
+        "id": "be96c1a0.96ce3",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 790,
+        "y": 2520,
+        "wires": [
+            [
+                "c0a8b1f3.daefc"
+            ]
+        ]
+    },
+    {
+        "id": "62165387885942bf",
+        "type": "comment",
+        "z": "e677d300.d1d95",
+        "name": "ADD SAGEPUB SUMMARY",
+        "info": "",
+        "x": 190,
+        "y": 2800,
+        "wires": []
+    },
+    {
+        "id": "740b4521085e0a60",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 530,
+        "y": 2840,
+        "wires": [
+            [
+                "4e6538c6bb9cfa33"
+            ]
+        ]
+    },
+    {
+        "id": "3ab9d84be3f68782",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "SAGEPUB",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 850,
+        "y": 2880,
+        "wires": [
+            [
+                "371a24150dbac887"
+            ]
+        ]
+    },
+    {
+        "id": "3a3c99e3e7780160",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set fields",
+        "rules": [
+            {
+                "t": "set",
+                "p": "url",
+                "pt": "msg",
+                "to": "payload.link",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article_id",
+                "pt": "msg",
+                "to": "payload.article_id",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 680,
+        "y": 2880,
+        "wires": [
+            [
+                "3ab9d84be3f68782"
+            ]
+        ]
+    },
+    {
+        "id": "c85d6622d2d0b41d",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nset summary = \"{{{payload.summary}}}\"\nwhere article_id = {{article_id}};",
+        "output": "str",
+        "x": 1120,
+        "y": 2880,
+        "wires": [
+            [
+                "1a9d20868bb34ced"
+            ]
+        ]
+    },
+    {
+        "id": "21ede6faf3176f3b",
+        "type": "comment",
+        "z": "e677d300.d1d95",
+        "name": "ADD MS & Rel. Disorders SUMMARY",
+        "info": "",
+        "x": 190,
+        "y": 2980,
+        "wires": []
+    },
+    {
+        "id": "726688d11cb9a5d2",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 530,
+        "y": 3020,
+        "wires": [
+            [
+                "fb9213853eb83842"
+            ]
+        ]
+    },
+    {
+        "id": "c88bcb2f64309773",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "MS & Rel. Disorders",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 860,
+        "y": 3020,
+        "wires": [
+            [
+                "7ed5da3693475147"
+            ]
+        ]
+    },
+    {
+        "id": "7ed5da3693475147",
+        "type": "html",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "property": "payload",
+        "outproperty": "payload",
+        "tag": "meta",
+        "ret": "attr",
+        "as": "multi",
+        "x": 1030,
+        "y": 3020,
+        "wires": [
+            [
+                "9c72d3878e3e3f99"
+            ]
+        ]
+    },
+    {
+        "id": "1831b749579d5dc2",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set fields",
+        "rules": [
+            {
+                "t": "set",
+                "p": "url",
+                "pt": "msg",
+                "to": "payload.link",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article_id",
+                "pt": "msg",
+                "to": "payload.article_id",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 680,
+        "y": 3040,
+        "wires": [
+            [
+                "c88bcb2f64309773"
+            ]
+        ]
+    },
+    {
+        "id": "9c72d3878e3e3f99",
+        "type": "switch",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "property": "payload.name",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "citation_abstract",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 1150,
+        "y": 3020,
+        "wires": [
+            [
+                "91a4f8218bed8e47"
+            ]
+        ]
+    },
+    {
+        "id": "91a4f8218bed8e47",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nset summary = \"{{{payload.content}}}\"\nwhere article_id = {{article_id}};",
+        "output": "str",
+        "x": 1300,
+        "y": 3020,
+        "wires": [
+            [
+                "1a9d20868bb34ced"
+            ]
+        ]
+    },
+    {
+        "id": "8d4f2b46f9797148",
+        "type": "comment",
+        "z": "e677d300.d1d95",
+        "name": "ADD The Lancet SUMMARY",
+        "info": "",
+        "x": 160,
+        "y": 3160,
+        "wires": []
+    },
+    {
+        "id": "86c2fe486de38a7c",
+        "type": "inject",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "288000",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 2920,
+        "wires": [
+            [
+                "a4dfa91f3f800e99",
+                "13acadc11bee9bae",
+                "54783d8cf2b056dd",
+                "889d79488724d57c",
+                "2ca3e3eeeba311b4"
+            ]
+        ]
+    },
+    {
+        "id": "6cd0a44c01bc20ec",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 530,
+        "y": 3200,
+        "wires": [
+            [
+                "9dae9fae7f3443af"
+            ]
+        ]
+    },
+    {
+        "id": "852bac7884e3e72b",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "The Lancet",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 950,
+        "y": 3200,
+        "wires": [
+            [
+                "29a39b2149323e4d"
+            ]
+        ]
+    },
+    {
+        "id": "29a39b2149323e4d",
+        "type": "html",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "property": "payload",
+        "outproperty": "payload",
+        "tag": "meta",
+        "ret": "attr",
+        "as": "multi",
+        "x": 1150,
+        "y": 3200,
+        "wires": [
+            [
+                "d2cf2dec7dc43ad6"
+            ]
+        ]
+    },
+    {
+        "id": "b18142aa0104cdd2",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set fields",
+        "rules": [
+            {
+                "t": "set",
+                "p": "url",
+                "pt": "msg",
+                "to": "payload.link",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article_id",
+                "pt": "msg",
+                "to": "payload.article_id",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 800,
+        "y": 3200,
+        "wires": [
+            [
+                "852bac7884e3e72b"
+            ]
+        ]
+    },
+    {
+        "id": "d2cf2dec7dc43ad6",
+        "type": "switch",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "property": "payload.name",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "citation_abstract",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 1290,
+        "y": 3200,
+        "wires": [
+            [
+                "75eb8279cf26b6b2"
+            ]
+        ]
+    },
+    {
+        "id": "75eb8279cf26b6b2",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nset summary = \"{{{payload.content}}}\"\nwhere article_id = {{article_id}};",
+        "output": "str",
+        "x": 1420,
+        "y": 3200,
+        "wires": [
+            [
+                "1a9d20868bb34ced"
+            ]
+        ]
+    },
+    {
+        "id": "894b65d4f7b6c097",
+        "type": "comment",
+        "z": "e677d300.d1d95",
+        "name": "ADD JNeuroSci SUMMARY",
+        "info": "",
+        "x": 160,
+        "y": 3340,
+        "wires": []
+    },
+    {
+        "id": "3710a73bbc050a22",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 530,
+        "y": 3380,
+        "wires": [
+            [
+                "adeca775cf47a41e"
+            ]
+        ]
+    },
+    {
+        "id": "5a8081eaacf34259",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "JNeuroSci",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 870,
+        "y": 3380,
+        "wires": [
+            [
+                "21628645ab5a66f0"
+            ]
+        ]
+    },
+    {
+        "id": "9712c4fbeb2811f1",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set fields",
+        "rules": [
+            {
+                "t": "set",
+                "p": "url",
+                "pt": "msg",
+                "to": "payload.link",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article_id",
+                "pt": "msg",
+                "to": "payload.article_id",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 720,
+        "y": 3380,
+        "wires": [
+            [
+                "5a8081eaacf34259"
+            ]
+        ]
+    },
+    {
+        "id": "21628645ab5a66f0",
+        "type": "html",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "property": "payload",
+        "outproperty": "payload",
+        "tag": "meta",
+        "ret": "attr",
+        "as": "multi",
+        "x": 1050,
+        "y": 3380,
+        "wires": [
+            [
+                "90dff27d7a9975c8"
+            ]
+        ]
+    },
+    {
+        "id": "90dff27d7a9975c8",
+        "type": "switch",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "property": "payload.name",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "citation_abstract",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 1190,
+        "y": 3380,
+        "wires": [
+            [
+                "2a353433d981032b"
+            ]
+        ]
+    },
+    {
+        "id": "2a353433d981032b",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nset summary = \"{{{payload.content}}}\"\nwhere article_id = {{article_id}};",
+        "output": "str",
+        "x": 1320,
+        "y": 3380,
+        "wires": [
+            [
+                "1a9d20868bb34ced"
+            ]
+        ]
+    },
+    {
+        "id": "6f682ae387ccfc4f",
+        "type": "debug",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1740,
+        "y": 2960,
+        "wires": []
+    },
+    {
+        "id": "63f5e18b25a67c33",
+        "type": "comment",
+        "z": "e677d300.d1d95",
+        "name": "ADD Scielo SUMMARY",
+        "info": "",
+        "x": 160,
+        "y": 3540,
+        "wires": []
+    },
+    {
+        "id": "a84fbef53f9303b2",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 530,
+        "y": 3580,
+        "wires": [
+            [
+                "cce851f37cea3218"
+            ]
+        ]
+    },
+    {
+        "id": "164d858cbda3e7ea",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "Scielo",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 1010,
+        "y": 3580,
+        "wires": [
+            [
+                "a0a3c8c570204d43"
+            ]
+        ]
+    },
+    {
+        "id": "5bbb8b4e5d8ab78c",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set fields",
+        "rules": [
+            {
+                "t": "set",
+                "p": "url",
+                "pt": "msg",
+                "to": "payload.link",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article_id",
+                "pt": "msg",
+                "to": "payload.article_id",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "rejectUnauthorized",
+                "pt": "msg",
+                "to": "false",
+                "tot": "bool"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 880,
+        "y": 3580,
+        "wires": [
+            [
+                "164d858cbda3e7ea"
+            ]
+        ]
+    },
+    {
+        "id": "a0a3c8c570204d43",
+        "type": "html",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "property": "payload",
+        "outproperty": "payload",
+        "tag": "meta",
+        "ret": "attr",
+        "as": "multi",
+        "x": 1150,
+        "y": 3580,
+        "wires": [
+            [
+                "39523117740b5199"
+            ]
+        ]
+    },
+    {
+        "id": "39523117740b5199",
+        "type": "switch",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "property": "payload.name",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "citation_abstract",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 1290,
+        "y": 3580,
+        "wires": [
+            [
+                "8bbd542319efe6c6"
+            ]
+        ]
+    },
+    {
+        "id": "8bbd542319efe6c6",
+        "type": "template",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nset summary = \"{{{payload.content}}}\"\nwhere article_id = {{article_id}};",
+        "output": "str",
+        "x": 1420,
+        "y": 3580,
+        "wires": [
+            [
+                "1a9d20868bb34ced"
+            ]
+        ]
+    },
+    {
+        "id": "cce851f37cea3218",
+        "type": "delay",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "30",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "x": 700,
+        "y": 3580,
+        "wires": [
+            [
+                "5bbb8b4e5d8ab78c"
+            ]
+        ]
+    },
+    {
+        "id": "059494b1be8270a4",
+        "type": "comment",
+        "z": "e677d300.d1d95",
+        "name": "ADD PEDro SUMMARY",
+        "info": "",
+        "x": 160,
+        "y": 3780,
+        "wires": []
+    },
+    {
+        "id": "2d8a49690481bb5a",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 510,
+        "y": 3820,
+        "wires": [
+            [
+                "180691ee4b6ccaeb"
+            ]
+        ]
+    },
+    {
+        "id": "0348c5d37a7fe1d3",
+        "type": "http request",
+        "z": "e677d300.d1d95",
+        "name": "PEDro",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 990,
+        "y": 3820,
+        "wires": [
+            [
+                "f10126daa0860fda"
+            ]
+        ]
+    },
+    {
+        "id": "edcab0520ed4b613",
+        "type": "change",
+        "z": "e677d300.d1d95",
+        "name": "set fields",
+        "rules": [
+            {
+                "t": "set",
+                "p": "url",
+                "pt": "msg",
+                "to": "payload.link",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article_id",
+                "pt": "msg",
+                "to": "payload.article_id",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "rejectUnauthorized",
+                "pt": "msg",
+                "to": "false",
+                "tot": "bool"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 860,
+        "y": 3820,
+        "wires": [
+            [
+                "0348c5d37a7fe1d3"
+            ]
+        ]
+    },
+    {
+        "id": "180691ee4b6ccaeb",
+        "type": "delay",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "30",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "x": 680,
+        "y": 3820,
+        "wires": [
+            [
+                "edcab0520ed4b613"
+            ]
+        ]
+    },
+    {
+        "id": "aba161ce6b42a06b",
+        "type": "split",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 850,
+        "y": 3940,
+        "wires": [
+            [
+                "3964357e32276ef1"
+            ]
+        ]
+    },
+    {
+        "id": "3964357e32276ef1",
+        "type": "function",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "func": "msg.payload = msg.payload.trim();\n\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1000,
+        "y": 3940,
+        "wires": [
+            [
+                "ec17adcb5588bf06"
+            ]
+        ]
+    },
+    {
+        "id": "adeca775cf47a41e",
+        "type": "delay",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "30",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "x": 500,
+        "y": 3440,
+        "wires": [
+            [
+                "9712c4fbeb2811f1"
+            ]
+        ]
+    },
+    {
+        "id": "9dae9fae7f3443af",
+        "type": "delay",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "30",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "x": 540,
+        "y": 3260,
+        "wires": [
+            [
+                "b18142aa0104cdd2"
+            ]
+        ]
+    },
+    {
+        "id": "fb9213853eb83842",
+        "type": "delay",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "30",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "x": 500,
+        "y": 3060,
+        "wires": [
+            [
+                "1831b749579d5dc2"
+            ]
+        ]
+    },
+    {
+        "id": "4e6538c6bb9cfa33",
+        "type": "delay",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "30",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "x": 520,
+        "y": 2900,
+        "wires": [
+            [
+                "3a3c99e3e7780160"
+            ]
+        ]
+    },
+    {
+        "id": "a75e364e43441852",
+        "type": "comment",
+        "z": "e677d300.d1d95",
+        "name": "Clinical Trials",
+        "info": "",
+        "x": 190,
+        "y": 2400,
+        "wires": []
+    },
+    {
+        "id": "6b24f780.dc8238",
+        "type": "feedparse",
+        "z": "e677d300.d1d95",
+        "name": "Clinical Trials.gov",
+        "url": "https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000",
+        "interval": "190",
+        "x": 220,
+        "y": 2600,
+        "wires": [
+            [
+                "ffb7b92d.9a01e8"
+            ]
+        ]
+    },
+    {
+        "id": "937a615c.38fb1",
+        "type": "feedparse",
+        "z": "e677d300.d1d95",
+        "name": "PubMed : MS ",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/rss/search/10guX6I3SqrbUeeLKSTD6FCRM44ewnrN2MKKTQLLPMHB4xNsZU/?limit=15&utm_campaign=pubmed-2&fc=20210216052009",
+        "interval": "180",
+        "x": 230,
+        "y": 540,
+        "wires": [
+            [
+                "56a4dc66.256874"
+            ]
+        ]
+    },
+    {
+        "id": "75731cda.feee34",
+        "type": "feedparse",
+        "z": "e677d300.d1d95",
+        "name": "Reuters",
+        "url": "https://www.reutersagency.com/feed/?best-topics=health",
+        "interval": "10",
+        "x": 250,
+        "y": 680,
+        "wires": [
+            [
+                "d3e84102.20011"
+            ]
+        ]
+    },
+    {
+        "id": "c61aca1a.a75f28",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "tag": "div.mg-n40px div.mb-40px",
+        "ret": "object",
+        "as": "single",
+        "map": [
+            {
+                "search": "a",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "a",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            },
+            {
+                "search": "p + p",
+                "ret": "text",
+                "replace": "description",
+                "attr": ""
+            },
+            {
+                "search": "p.text-uppercase.text-muted.ff-apta-sans.fw-600.fs-14px",
+                "ret": "text",
+                "replace": "pubdate",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 700,
+        "y": 1000,
+        "wires": [
+            [
+                "79a8247a.92ebfc"
+            ]
+        ]
+    },
+    {
+        "id": "d525b5a.33ae548",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "tag": "li.c-list-group__item",
+        "ret": "object",
+        "as": "single",
+        "map": [
+            {
+                "search": "h3",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "a[itemprop=\"url\"]",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            },
+            {
+                "search": "p.c-listing__text",
+                "ret": "text",
+                "replace": "description",
+                "attr": ""
+            },
+            {
+                "search": "span[itemprop=\"datePublished\"]",
+                "ret": "text",
+                "replace": "pubdate",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 680,
+        "y": 1200,
+        "wires": [
+            [
+                "2d2a9ede.1ee7a2"
+            ]
+        ]
+    },
+    {
+        "id": "7200f004.6c3a6",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "tag": "table.search-results tr",
+        "ret": "object",
+        "as": "single",
+        "map": [
+            {
+                "search": "td>a",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "td>a",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            },
+            {
+                "search": "p.NoSummary",
+                "ret": "text",
+                "replace": "description",
+                "attr": ""
+            },
+            {
+                "search": "p.NoDate",
+                "ret": "text",
+                "replace": "pubdate",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 700,
+        "y": 1340,
+        "wires": [
+            [
+                "61d16b00.e6b704"
+            ]
+        ]
+    },
+    {
+        "id": "76303108.1a242",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "tag": "div.results div.item",
+        "ret": "object",
+        "as": "single",
+        "map": [
+            {
+                "search": "strong.title",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "div.line a",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            },
+            {
+                "search": "p.NoSummary",
+                "ret": "text",
+                "replace": "description",
+                "attr": ""
+            },
+            {
+                "search": "p.NoDate",
+                "ret": "text",
+                "replace": "pubdate",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 670,
+        "y": 1540,
+        "wires": [
+            [
+                "ae4a277d.0b34e8"
+            ]
+        ]
+    },
+    {
+        "id": "77bb2168.9845",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "tag": "div.search__item__body",
+        "ret": "object",
+        "as": "single",
+        "map": [
+            {
+                "search": "h4.meta__title",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "h4.meta__title a",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            },
+            {
+                "search": "p.NoSummary",
+                "ret": "text",
+                "replace": "description",
+                "attr": ""
+            },
+            {
+                "search": "p.meta__details > span:nth-child(5)",
+                "ret": "text",
+                "replace": "pubdate",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 690,
+        "y": 1780,
+        "wires": [
+            [
+                "d9eff18c.c2dce"
+            ]
+        ]
+    },
+    {
+        "id": "155fede1.ee3852",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "tag": "li.search-result",
+        "ret": "object",
+        "as": "single",
+        "map": [
+            {
+                "search": "a",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "a",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            },
+            {
+                "search": "p.NoSummary",
+                "ret": "text",
+                "replace": "description",
+                "attr": ""
+            },
+            {
+                "search": "p.NoDate",
+                "ret": "text",
+                "replace": "pubdate",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 660,
+        "y": 1900,
+        "wires": [
+            [
+                "242cc4f8.4e1b2c"
+            ]
+        ]
+    },
+    {
+        "id": "a61c20a8.862f3",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "tag": ".searchResultItem",
+        "ret": "object",
+        "as": "single",
+        "map": [
+            {
+                "search": "h2",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "h2>span>a",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            },
+            {
+                "search": "div.hlFld-Abstract.preview-abstract",
+                "ret": "text",
+                "replace": "description",
+                "attr": ""
+            },
+            {
+                "search": "span.publication-meta",
+                "ret": "text",
+                "replace": "pubdate",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 670,
+        "y": 2080,
+        "wires": [
+            [
+                "7a8468df.b46ce8"
+            ]
+        ]
+    },
+    {
+        "id": "e4d19ed0.def17",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "tag": "li.search__item",
+        "ret": "object",
+        "as": "single",
+        "map": [
+            {
+                "search": "h4.meta__title",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "h4.meta__title>a",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            },
+            {
+                "search": "div.hlFld-Abstract.preview-abstract",
+                "ret": "text",
+                "replace": "description",
+                "attr": ""
+            },
+            {
+                "search": "p.meta__details > span:nth-child(3)",
+                "ret": "text",
+                "replace": "pubdate",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 660,
+        "y": 2200,
+        "wires": [
+            [
+                "5d91e310.64306c"
+            ]
+        ]
+    },
+    {
+        "id": "689bbffb.67489",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "Novartis",
+        "tag": "td.views-field",
+        "ret": "object",
+        "as": "single",
+        "map": [
+            {
+                "search": "a",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "td.views-field.views-field-title>a",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 640,
+        "y": 2440,
+        "wires": [
+            [
+                "dd48b8d3.6d1788"
+            ]
+        ]
+    },
+    {
+        "id": "6e73a2ca.0782cc",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "cuf",
+        "tag": "div.content",
+        "ret": "object",
+        "as": "single",
+        "map": [
+            {
+                "search": ".field--name-title-text",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "a",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 630,
+        "y": 2520,
+        "wires": [
+            [
+                "be96c1a0.96ce3"
+            ]
+        ]
+    },
+    {
+        "id": "371a24150dbac887",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "tag": "body",
+        "ret": "object",
+        "as": "multi",
+        "map": [
+            {
+                "search": "div.hlFld-Abstract",
+                "ret": "text",
+                "replace": "summary",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": false,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 990,
+        "y": 2880,
+        "wires": [
+            [
+                "c85d6622d2d0b41d"
+            ]
+        ]
+    },
+    {
+        "id": "f10126daa0860fda",
+        "type": "cheerio",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "tag": "#search-content > table > tbody",
+        "ret": "text",
+        "as": "single",
+        "map": [
+            {
+                "search": "",
+                "ret": "text",
+                "replace": "",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": false,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 930,
+        "y": 3880,
+        "wires": [
+            [
+                "aba161ce6b42a06b"
+            ]
+        ]
+    },
+    {
+        "id": "bb71d047.ff6f9",
+        "type": "moment",
+        "z": "e677d300.d1d95",
+        "name": "format pubdate",
+        "topic": "",
+        "input": "article.pubdate",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "en-US",
+        "output": "payload",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 1040,
+        "y": 540,
+        "wires": [
+            [
+                "12c5e787.dadea8"
+            ]
+        ]
+    },
+    {
+        "id": "bc0c284f.e4f5d8",
+        "type": "moment",
+        "z": "e677d300.d1d95",
+        "name": "format pubdate",
+        "topic": "",
+        "input": "article.date",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "en-US",
+        "output": "payload",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 860,
+        "y": 2600,
+        "wires": [
+            [
+                "974801fc.d87d5"
+            ]
+        ]
+    },
+    {
+        "id": "9114e276.66493",
+        "type": "moment",
+        "z": "e677d300.d1d95",
+        "name": "format pubdate",
+        "topic": "",
+        "input": "payload.pubdate",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "en-US",
+        "output": "article.pubdate",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 1060,
+        "y": 1000,
+        "wires": [
+            [
+                "4a6f88df.668e58"
+            ]
+        ]
+    },
+    {
+        "id": "7807a09e.45e49",
+        "type": "moment",
+        "z": "e677d300.d1d95",
+        "name": "format pubdate",
+        "topic": "",
+        "input": "payload.pubdate",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "en-US",
+        "output": "article.pubdate",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 1060,
+        "y": 1200,
+        "wires": [
+            [
+                "3b8b16c0.ace03a"
+            ]
+        ]
+    },
+    {
+        "id": "76d89aca.9b37d4",
+        "type": "moment",
+        "z": "e677d300.d1d95",
+        "name": "format pubdate",
+        "topic": "",
+        "input": "payload.pubdate",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "en-US",
+        "output": "article.pubdate",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 1080,
+        "y": 1340,
+        "wires": [
+            [
+                "f31ef1c8.3af84"
+            ]
+        ]
+    },
+    {
+        "id": "2af11514.34f00a",
+        "type": "moment",
+        "z": "e677d300.d1d95",
+        "name": "format pubdate",
+        "topic": "",
+        "input": "payload.pubdate",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "en-US",
+        "output": "article.pubdate",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 1060,
+        "y": 1540,
+        "wires": [
+            [
+                "597913bc.2b4dec"
+            ]
+        ]
+    },
+    {
+        "id": "4fbb692.2486b98",
+        "type": "moment",
+        "z": "e677d300.d1d95",
+        "name": "format pubdate",
+        "topic": "",
+        "input": "payload.pubdate",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "en-US",
+        "output": "article.pubdate",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 1340,
+        "y": 1780,
+        "wires": [
+            [
+                "9a14f1a6.90d44"
+            ]
+        ]
+    },
+    {
+        "id": "2484937c.b752dc",
+        "type": "moment",
+        "z": "e677d300.d1d95",
+        "name": "format pubdate",
+        "topic": "",
+        "input": "payload.pubdate",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "en-US",
+        "output": "article.pubdate",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 1340,
+        "y": 1900,
+        "wires": [
+            [
+                "b087546f.c41f78"
+            ]
+        ]
+    },
+    {
+        "id": "79cb9ccc.a4f644",
+        "type": "moment",
+        "z": "e677d300.d1d95",
+        "name": "format pubdate",
+        "topic": "",
+        "input": "payload.pubdate",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "en-US",
+        "output": "article.pubdate",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 1400,
+        "y": 2080,
+        "wires": [
+            [
+                "143867a5.288e58"
+            ]
+        ]
+    },
+    {
+        "id": "3ea7f9fd.f836d6",
+        "type": "moment",
+        "z": "e677d300.d1d95",
+        "name": "format pubdate",
+        "topic": "",
+        "input": "payload.pubdate",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "en-US",
+        "output": "article.pubdate",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 1420,
+        "y": 2200,
+        "wires": [
+            [
+                "91a0c554.3d6868"
+            ]
+        ]
+    },
+    {
+        "id": "703141cb.40cd2",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 3270,
+        "y": 1540,
+        "wires": [
+            [
+                "7763df39.5e76d",
+                "c6c74bb2.398ab8"
+            ]
+        ]
+    },
+    {
+        "id": "13acadc11bee9bae",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "SELECT * FROM articles \nWHERE source = \"Sage Pub\" \nAND summary =\"\"\nLIMIT 1;",
+        "name": "",
+        "x": 370,
+        "y": 2840,
+        "wires": [
+            [
+                "740b4521085e0a60"
+            ]
+        ]
+    },
+    {
+        "id": "1a9d20868bb34ced",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 1670,
+        "y": 3220,
+        "wires": [
+            [
+                "6f682ae387ccfc4f"
+            ]
+        ]
+    },
+    {
+        "id": "9462962b1c2d4223",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "SELECT * FROM articles \nWHERE source = \"MS & Rel. Disorders\" \nAND summary =\"not available\" \nLIMIT 1;",
+        "name": "",
+        "x": 340,
+        "y": 3020,
+        "wires": [
+            [
+                "726688d11cb9a5d2"
+            ]
+        ]
+    },
+    {
+        "id": "a4dfa91f3f800e99",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "SELECT * FROM articles \nWHERE source = \"The Lancet\" \nAND summary =\"\" \nLIMIT 1;",
+        "name": "",
+        "x": 340,
+        "y": 3200,
+        "wires": [
+            [
+                "6cd0a44c01bc20ec"
+            ]
+        ]
+    },
+    {
+        "id": "54783d8cf2b056dd",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "SELECT * FROM articles \nWHERE source = \"JNeuroSci\" \nAND summary =\"\" ;",
+        "name": "",
+        "x": 340,
+        "y": 3380,
+        "wires": [
+            [
+                "3710a73bbc050a22"
+            ]
+        ]
+    },
+    {
+        "id": "889d79488724d57c",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "SELECT * FROM articles \nWHERE source = \"Scielo\" \nAND summary =\"\" ;",
+        "name": "",
+        "x": 360,
+        "y": 3580,
+        "wires": [
+            [
+                "a84fbef53f9303b2"
+            ]
+        ]
+    },
+    {
+        "id": "2ca3e3eeeba311b4",
+        "type": "sqlite",
+        "z": "e677d300.d1d95",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "SELECT * FROM articles \nWHERE source = \"PEDro\" \nAND summary =\"\" ;",
+        "name": "",
+        "x": 320,
+        "y": 3820,
+        "wires": [
+            [
+                "2d8a49690481bb5a"
+            ]
+        ]
+    },
+    {
+        "id": "f934c45aad50dd13",
+        "type": "sqlstring-format",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "query": "UPDATE articles\nset summary = ?\nwhere article_id = ?;",
+        "vars": "payload.content, article_id",
+        "outField": "topic",
+        "x": 1310,
+        "y": 3060,
+        "wires": [
+            [
+                "1a9d20868bb34ced"
+            ]
+        ]
+    },
+    {
+        "id": "ec17adcb5588bf06",
+        "type": "sqlstring-format",
+        "z": "e677d300.d1d95",
+        "name": "",
+        "query": "UPDATE articles\nset summary = ?\nwhere article_id = ?;",
+        "vars": "payload, article_id",
+        "outField": "topic",
+        "x": 1230,
+        "y": 3940,
+        "wires": [
+            [
+                "1a9d20868bb34ced"
+            ]
+        ]
+    },
+    {
+        "id": "c6c74bb2.398ab8",
+        "type": "ui_template",
+        "z": "e677d300.d1d95",
+        "group": "2e3f3837.3647a8",
+        "name": "table template",
+        "order": 14,
+        "width": 0,
+        "height": 0,
+        "format": "<table style=\"width:100%\">\n  <tr>\n    <th>Index</th> \n    <th>Title</th>\n    <th>Link</th> \n  </tr>\n  <tr ng-repeat=\"x in msg.payload | limitTo:20\">\n    <td>{{$index}}</td>\n    <td ng-bind-html=\"msg.payload[$index].title\"></td>\n    <td ng-bind-html=\"msg.payload[$index].link\"></td>\n  </tr>\n</table>",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 3580,
+        "y": 1560,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "c2dff99f.6253e8",
+        "type": "ui_form",
+        "z": "e677d300.d1d95",
+        "name": "Manual Input Form",
+        "label": "",
+        "group": "2e3f3837.3647a8",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "options": [
+            {
+                "label": "Title",
+                "value": "title",
+                "type": "text",
+                "required": true,
+                "rows": null
+            },
+            {
+                "label": "Link",
+                "value": "link",
+                "type": "text",
+                "required": true,
+                "rows": null
+            },
+            {
+                "label": "Discovery Date",
+                "value": "discovery_date",
+                "type": "date",
+                "required": false,
+                "rows": null
+            },
+            {
+                "label": "Summary",
+                "value": "summary",
+                "type": "multiline",
+                "required": false,
+                "rows": 3
+            },
+            {
+                "label": "Published Date",
+                "value": "published_date",
+                "type": "date",
+                "required": false,
+                "rows": null
+            },
+            {
+                "label": "Source",
+                "value": "source",
+                "type": "text",
+                "required": false,
+                "rows": null
+            },
+            {
+                "label": "Relevant? (y/n)",
+                "value": "relevant",
+                "type": "checkbox",
+                "required": false,
+                "rows": null
+            }
+        ],
+        "formValue": {
+            "title": "",
+            "link": "",
+            "discovery_date": "",
+            "summary": "",
+            "published_date": "",
+            "source": "",
+            "relevant": false
+        },
+        "payload": "",
+        "submit": "save",
+        "cancel": "cancel",
+        "topic": "topic",
+        "topicType": "msg",
+        "splitLayout": true,
+        "className": "",
+        "x": 270,
+        "y": 2320,
+        "wires": [
+            [
+                "5223398.ab62ec8"
+            ]
+        ]
+    },
+    {
+        "id": "7763df39.5e76d",
+        "type": "ui_list",
+        "z": "e677d300.d1d95",
+        "group": "2e3f3837.3647a8",
+        "name": "",
+        "order": 2,
+        "width": 0,
+        "height": 0,
+        "lineType": "two",
+        "actionType": "none",
+        "allowHTML": true,
+        "outputs": 0,
+        "topic": "",
+        "x": 3550,
+        "y": 1520,
+        "wires": []
+    },
+    {
+        "id": "3d236ffd51a7062e",
+        "type": "inject",
+        "z": "725b288ad1226693",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "172800",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 110,
+        "y": 200,
+        "wires": [
+            [
+                "19709fa3da7bc3a4"
+            ]
+        ]
+    },
+    {
+        "id": "19709fa3da7bc3a4",
+        "type": "sqlite",
+        "z": "725b288ad1226693",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "SELECT * FROM articles WHERE sent IS NULL OR sent =  '' AND discovery_date > datetime('now', '-2 day') ",
+        "name": "",
+        "x": 310,
+        "y": 200,
+        "wires": [
+            [
+                "be712a5e45bebe50"
+            ]
+        ]
+    },
+    {
+        "id": "b8f8cf5a7f9f3373",
+        "type": "template",
+        "z": "725b288ad1226693",
+        "name": "email template",
+        "field": "text",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "<h1>Digest of articles in the last 2 days</h1>\n<br>\n{{#payload}}\n\n\n\n<h2>{{{title}}}</h2>\n\n<p><strong>Discovery Date</strong>: {{discovery_date}}</p>\n<p>\n<a href=\"{{{link}}}\">{{{link}}}</a>\n</p>\n\n<p><a href=\"https://api.brunoamaral.net/articles/id/{{article_id}}/relevant/1\">Mark Relevant</a></p>\n\n<br>\n---\n<br>\n<br>\n{{/payload}}",
+        "output": "str",
+        "x": 640,
+        "y": 240,
+        "wires": [
+            [
+                "2e8b4fbf83509ea4"
+            ]
+        ]
+    },
+    {
+        "id": "91bf7871b5902c4f",
+        "type": "http request",
+        "z": "725b288ad1226693",
+        "name": "http request send mail",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "body",
+        "url": "https://api.eu.mailgun.net/v3/mg.brunoamaral.net/messages",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "basic",
+        "x": 1040,
+        "y": 240,
+        "wires": [
+            [
+                "4f162ef82dbf4ff2"
+            ]
+        ]
+    },
+    {
+        "id": "2e8b4fbf83509ea4",
+        "type": "change",
+        "z": "725b288ad1226693",
+        "name": "",
+        "rules": [
+            {
+                "t": "move",
+                "p": "payload",
+                "pt": "msg",
+                "to": "articles",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "{\"from\":\"Gregory <gregory@mg.brunoamaral.net>\",\"to\":\"labs@mg.brunoamaral.net\",\"subject\":\"Gregory  Admin Summary\",\"multipart\":true}",
+                "tot": "json"
+            },
+            {
+                "t": "move",
+                "p": "text",
+                "pt": "msg",
+                "to": "payload.html",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "headers",
+                "pt": "msg",
+                "to": "{\"content-type\":\"multipart/form-data\"}",
+                "tot": "json"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 820,
+        "y": 240,
+        "wires": [
+            [
+                "91bf7871b5902c4f"
+            ]
+        ]
+    },
+    {
+        "id": "1937e7e42c6b13c7",
+        "type": "inject",
+        "z": "725b288ad1226693",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "00 08 * * 2",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "SELECT * FROM articles WHERE discovery_date > (SELECT DATETIME('now', '-14 day')) AND relevant = 1",
+        "payload": "",
+        "payloadType": "date",
+        "x": 130,
+        "y": 380,
+        "wires": [
+            [
+                "3ea73b308f1c969d"
+            ]
+        ]
+    },
+    {
+        "id": "3ea73b308f1c969d",
+        "type": "sqlite",
+        "z": "725b288ad1226693",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 310,
+        "y": 380,
+        "wires": [
+            [
+                "ebf412c0ad3516f8"
+            ]
+        ]
+    },
+    {
+        "id": "67c923de501bfe87",
+        "type": "template",
+        "z": "725b288ad1226693",
+        "name": "",
+        "field": "text",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "<p>Good Morning, %recipient_fname%. </p>\n\n<p>Here are the relevant articles we have found in the last 7 days</p>\n\n{{#payload}}\n\n<h2>{{{title}}}</h2>\n\n<p><strong>Discovery Date</strong>: {{discovery_date}}</p>\n<p>\n<a href=\"{{{link}}}\">{{{link}}}</a>\n</p>\n\n---\n\n{{/payload}}\n\n<p>For the full list, please visit <a href=\"https://labs.brunoamaral.eu\">https://labs.brunoamaral.eu/tudo</a></p>\n\n<p>For adding people to this email list or further information, please contact Bruno Amaral:</p>\n\n<p><strong>Mobile</strong>: +351 912 875 856</p>\n\n<p><strong>Email</strong>: mail@brunoamaral.eu</p>\n\n<p>If you wish to unsubscribe, follow the link below.</p>\n\n<p>Best wishes, Gregory. Your friendly research bot.</p>\n",
+        "output": "str",
+        "x": 540,
+        "y": 420,
+        "wires": [
+            [
+                "eeab0cfe85fe434e"
+            ]
+        ]
+    },
+    {
+        "id": "eeab0cfe85fe434e",
+        "type": "change",
+        "z": "725b288ad1226693",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "{\"from\":\"Gregory <gregory@mg.brunoamaral.net>\",\"to\":\"subscribers@mg.brunoamaral.net\",\"subject\":\"Gregory  Weekly Summary\",\"multipart\":true}",
+                "tot": "json"
+            },
+            {
+                "t": "move",
+                "p": "text",
+                "pt": "msg",
+                "to": "payload.html",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "headers",
+                "pt": "msg",
+                "to": "{\"content-type\":\"multipart/form-data\"}",
+                "tot": "json"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 700,
+        "y": 420,
+        "wires": [
+            [
+                "c64ea3f91bfee316"
+            ]
+        ]
+    },
+    {
+        "id": "ebf412c0ad3516f8",
+        "type": "switch",
+        "z": "725b288ad1226693",
+        "name": "check if empty",
+        "property": "payload",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "nempty"
+            },
+            {
+                "t": "empty"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 300,
+        "y": 440,
+        "wires": [
+            [
+                "67c923de501bfe87"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "c64ea3f91bfee316",
+        "type": "http request",
+        "z": "725b288ad1226693",
+        "name": "",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "body",
+        "url": "https://api.eu.mailgun.net/v3/mg.brunoamaral.net/messages",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "basic",
+        "x": 870,
+        "y": 420,
+        "wires": [
+            [
+                "e9b5511880c3d65c"
+            ]
+        ]
+    },
+    {
+        "id": "e9b5511880c3d65c",
+        "type": "switch",
+        "z": "725b288ad1226693",
+        "name": "statusCode=200?",
+        "property": "statusCode",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "200",
+                "vt": "num"
+            },
+            {
+                "t": "neq",
+                "v": "200",
+                "vt": "num"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 1050,
+        "y": 420,
+        "wires": [
+            [],
+            []
+        ]
+    },
+    {
+        "id": "ad7676f5da2abc74",
+        "type": "comment",
+        "z": "725b288ad1226693",
+        "name": "Admin summary of the last 2 days",
+        "info": "",
+        "x": 180,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "25045b3f80b3c6d2",
+        "type": "comment",
+        "z": "725b288ad1226693",
+        "name": "Weekly summary of relevant articles to the mailing list (Tuesday 8:00)",
+        "info": "",
+        "x": 280,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "4f162ef82dbf4ff2",
+        "type": "template",
+        "z": "725b288ad1226693",
+        "name": "SQLite template",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nSET sent = \"1\"\nWHERE article_id IN (\n\n{{#articles}}\n{{article_id}},\n{{/articles}}\n1\n\n);",
+        "output": "str",
+        "x": 1240,
+        "y": 240,
+        "wires": [
+            [
+                "2191f3289fec63b8"
+            ]
+        ]
+    },
+    {
+        "id": "2191f3289fec63b8",
+        "type": "sqlite",
+        "z": "725b288ad1226693",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 1430,
+        "y": 240,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "be712a5e45bebe50",
+        "type": "switch",
+        "z": "725b288ad1226693",
+        "name": "",
+        "property": "payload",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "empty"
+            },
+            {
+                "t": "nempty"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 470,
+        "y": 200,
+        "wires": [
+            [],
+            [
+                "b8f8cf5a7f9f3373"
+            ]
+        ]
+    },
+    {
+        "id": "01dc086f06c5c5fa",
+        "type": "sqlite",
+        "z": "725b288ad1226693",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 330,
+        "y": 760,
+        "wires": [
+            [
+                "1875cf4e089b9eca"
+            ]
+        ]
+    },
+    {
+        "id": "c96cfe44bb937017",
+        "type": "inject",
+        "z": "725b288ad1226693",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "86400",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "SELECT * FROM trials WHERE sent IS NULL OR sent = \"\" ",
+        "payloadType": "date",
+        "x": 110,
+        "y": 760,
+        "wires": [
+            [
+                "01dc086f06c5c5fa"
+            ]
+        ]
+    },
+    {
+        "id": "81eb0f0a0eba6294",
+        "type": "split",
+        "z": "725b288ad1226693",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "key",
+        "x": 610,
+        "y": 900,
+        "wires": [
+            [
+                "75f8d3a8a1896086"
+            ]
+        ]
+    },
+    {
+        "id": "75f8d3a8a1896086",
+        "type": "template",
+        "z": "725b288ad1226693",
+        "name": "SQLite template",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE trials\nSET sent = \"1\"\nWHERE trial_id = \"{{payload.trial_id}}\";",
+        "output": "str",
+        "x": 780,
+        "y": 860,
+        "wires": [
+            [
+                "3bd7e22581368591"
+            ]
+        ]
+    },
+    {
+        "id": "654521b6dd0e2649",
+        "type": "comment",
+        "z": "725b288ad1226693",
+        "name": "Notify admin of new clinical trials",
+        "info": "",
+        "x": 150,
+        "y": 700,
+        "wires": []
+    },
+    {
+        "id": "9b658d5e237c51e7",
+        "type": "http request",
+        "z": "725b288ad1226693",
+        "name": "http request send mail",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "body",
+        "url": "https://api.eu.mailgun.net/v3/mg.brunoamaral.net/messages",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "basic",
+        "x": 1100,
+        "y": 680,
+        "wires": [
+            [
+                "b500ee46c3679d09"
+            ]
+        ]
+    },
+    {
+        "id": "b500ee46c3679d09",
+        "type": "template",
+        "z": "725b288ad1226693",
+        "name": "SQLite template",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE trials\nSET sent = \"1\"\nWHERE trial_id IN (\n\n{{#trials}}\n{{trial_id}},\n{{/trials}}\n1\n\n);",
+        "output": "str",
+        "x": 1300,
+        "y": 680,
+        "wires": [
+            [
+                "3bd7e22581368591"
+            ]
+        ]
+    },
+    {
+        "id": "3bd7e22581368591",
+        "type": "sqlite",
+        "z": "725b288ad1226693",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 1510,
+        "y": 800,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "5db23d93543a15b2",
+        "type": "template",
+        "z": "725b288ad1226693",
+        "name": "email template",
+        "field": "text",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "<h1>Digest of trials in the last 2 days</h1>\n<br>\n{{#payload}}\n\n\n<br>\n<h2>{{{title}}}</h2>\n\n<p><strong>Discovery Date</strong>: {{discovery_date}}</p>\n<p>\n<a href=\"{{{link}}}\">{{{link}}}</a>\n</p>\n\n<br>\n---\n<br>\n<br>\n{{/payload}}",
+        "output": "str",
+        "x": 660,
+        "y": 680,
+        "wires": [
+            [
+                "860bb27f2d7d2e7d"
+            ]
+        ]
+    },
+    {
+        "id": "1875cf4e089b9eca",
+        "type": "switch",
+        "z": "725b288ad1226693",
+        "name": "",
+        "property": "payload",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "nempty"
+            },
+            {
+                "t": "empty"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 490,
+        "y": 760,
+        "wires": [
+            [
+                "5db23d93543a15b2",
+                "81eb0f0a0eba6294"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "a282a22ebe90e909",
+        "type": "inject",
+        "z": "725b288ad1226693",
+        "name": "teste",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "86400",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "SELECT * FROM trials WHERE sent IS NULL OR sent = 1 LIMIT 1",
+        "payloadType": "date",
+        "x": 110,
+        "y": 820,
+        "wires": [
+            [
+                "01dc086f06c5c5fa"
+            ]
+        ]
+    },
+    {
+        "id": "860bb27f2d7d2e7d",
+        "type": "change",
+        "z": "725b288ad1226693",
+        "name": "",
+        "rules": [
+            {
+                "t": "delete",
+                "p": "payload",
+                "pt": "msg"
+            },
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "{\"from\":\"gregory@mg.brunoamaral.net\",\"to\":\"labs@mg.brunoamaral.net\",\"subject\":\"Gregory  Admin Summary\",\"multipart\":true}",
+                "tot": "json"
+            },
+            {
+                "t": "move",
+                "p": "text",
+                "pt": "msg",
+                "to": "payload.html",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 840,
+        "y": 680,
+        "wires": [
+            [
+                "9b658d5e237c51e7",
+                "2370fcd56db3f50d"
+            ]
+        ]
+    },
+    {
+        "id": "e1400d3229f45a87",
+        "type": "inject",
+        "z": "725b288ad1226693",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"from\":\"gregory@mg.brunoamaral.net\",\"to\":\"labs@mg.brunoamaral.net\",\"subject\":\"Gregory Admin Summary\",\"html\":\"<h1>Digest of trials</h1>\"}",
+        "payloadType": "json",
+        "x": 1090,
+        "y": 740,
+        "wires": [
+            [
+                "9b658d5e237c51e7"
+            ]
+        ]
+    },
+    {
+        "id": "2370fcd56db3f50d",
+        "type": "debug",
+        "z": "725b288ad1226693",
+        "name": "",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 910,
+        "y": 800,
+        "wires": []
+    },
+    {
+        "id": "08843a43c7cc19c1",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "topic",
+                "pt": "msg",
+                "to": "SELECT  * FROM articles ORDER BY article_id DESC;",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 580,
+        "y": 240,
+        "wires": [
+            [
+                "bc8999262add45ad"
+            ]
+        ]
+    },
+    {
+        "id": "2de42969e58fa460",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "topic",
+                "pt": "msg",
+                "to": "SELECT  * FROM trials ORDER BY trial_id DESC;",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 580,
+        "y": 360,
+        "wires": [
+            [
+                "bc8999262add45ad"
+            ]
+        ]
+    },
+    {
+        "id": "7fbf634499ab044f",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/articles/id/:id",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 190,
+        "y": 200,
+        "wires": [
+            [
+                "b066e85a9e026e20"
+            ]
+        ]
+    },
+    {
+        "id": "6be09f5fabf8312a",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/articles/all",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 200,
+        "y": 240,
+        "wires": [
+            [
+                "08843a43c7cc19c1"
+            ]
+        ]
+    },
+    {
+        "id": "42f75fa0ccc65af7",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/articles/source/:source",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 320,
+        "wires": [
+            [
+                "86c6a848cc148a02"
+            ]
+        ]
+    },
+    {
+        "id": "946636f71217b73d",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/trials/all",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 210,
+        "y": 360,
+        "wires": [
+            [
+                "2de42969e58fa460"
+            ]
+        ]
+    },
+    {
+        "id": "a403290d7d9fe544",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/articles/by-date/:year/:month",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 400,
+        "wires": [
+            [
+                "bb53f6d7480dc232"
+            ]
+        ]
+    },
+    {
+        "id": "bf720f2e31bd565f",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "topic",
+                "pt": "msg",
+                "to": "SELECT  * FROM articles where relevant = 1 ORDER BY article_id DESC;",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 580,
+        "y": 280,
+        "wires": [
+            [
+                "bc8999262add45ad"
+            ]
+        ]
+    },
+    {
+        "id": "936cb6b5e6eea95d",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/articles/relevant",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 180,
+        "y": 280,
+        "wires": [
+            [
+                "bf720f2e31bd565f"
+            ]
+        ]
+    },
+    {
+        "id": "bc8999262add45ad",
+        "type": "sqlite",
+        "z": "ed1d968f509a241a",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 930,
+        "y": 320,
+        "wires": [
+            [
+                "6832ddc546050fc2"
+            ]
+        ]
+    },
+    {
+        "id": "6832ddc546050fc2",
+        "type": "json",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "property": "payload",
+        "action": "",
+        "pretty": false,
+        "x": 1110,
+        "y": 320,
+        "wires": [
+            [
+                "414e046cf10dd148"
+            ]
+        ]
+    },
+    {
+        "id": "414e046cf10dd148",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "Set Headers",
+        "rules": [
+            {
+                "t": "set",
+                "p": "headers",
+                "pt": "msg",
+                "to": "{}",
+                "tot": "json"
+            },
+            {
+                "t": "set",
+                "p": "headers.content-type",
+                "pt": "msg",
+                "to": "application/json",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1250,
+        "y": 320,
+        "wires": [
+            [
+                "40c239ea0f040c78"
+            ]
+        ]
+    },
+    {
+        "id": "40c239ea0f040c78",
+        "type": "http response",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1390,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "e5f8d1f919b35783",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/articles/id/:id/relevant/1",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 620,
+        "wires": [
+            [
+                "cb73fef320f86a0a",
+                "41120e6782e2a5f8"
+            ]
+        ]
+    },
+    {
+        "id": "7b8891c62f947d03",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/articles/id/:id/relevant/0",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 540,
+        "wires": [
+            [
+                "878646332f28d3d3"
+            ]
+        ]
+    },
+    {
+        "id": "8bd6d1352c1b7e05",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "status = OK ",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "{\"status\":\"OK\"}",
+                "tot": "json"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 910,
+        "y": 580,
+        "wires": [
+            [
+                "13fccd5c282d8b58"
+            ]
+        ]
+    },
+    {
+        "id": "6822cabc980171d5",
+        "type": "sqlite",
+        "z": "ed1d968f509a241a",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 690,
+        "y": 580,
+        "wires": [
+            [
+                "8bd6d1352c1b7e05"
+            ]
+        ]
+    },
+    {
+        "id": "13fccd5c282d8b58",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "Set Headers",
+        "rules": [
+            {
+                "t": "set",
+                "p": "headers",
+                "pt": "msg",
+                "to": "{}",
+                "tot": "json"
+            },
+            {
+                "t": "set",
+                "p": "headers.content-type",
+                "pt": "msg",
+                "to": "application/json",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1070,
+        "y": 580,
+        "wires": [
+            [
+                "ad66261d5b85bbe6"
+            ]
+        ]
+    },
+    {
+        "id": "ad66261d5b85bbe6",
+        "type": "http response",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1210,
+        "y": 580,
+        "wires": []
+    },
+    {
+        "id": "7bfdfbb64dd7603e",
+        "type": "function",
+        "z": "ed1d968f509a241a",
+        "name": "Prepare Notion DB payload",
+        "func": "var data = msg.payload[0]\nvar title = msg.payload[0].title\nvar url = msg.payload[0].link\n\n\n\nvar postData = {\n\t\"parent\": { \"database_id\": \"4fa1dc37-a3bf-43be-9c8d-35b41e539f8d\" },\n\t\"properties\": {\n\t\t\"Name\": {\n\t\t\t\"title\": [\n\t\t\t\t{\n\t\t\t\t\t\"text\": {\n\t\t\t\t\t\t\"content\": title\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t],\n\t\t},\n\t\t\"Status\": {\n\t\t    \"select\": {\n\t\t        \"name\": \"Auto\"\n\t\t    }\n\t\t},\n        \"Link\": {\n            \"url\": url\n        }\n\t\t\n}}\n\n\n\n//\t\t\"Context\": {\n//\t\t\t\"select\": {\n//\t\t\t\t\"name\": context\n//\t\t\t}\n//\t\t},\n//\t\t\"Client\": {\n//\t\t    \"select\": {\n//\t\t        \"name\": client\n//\t\t    }\n//\t\t}\n\nmsg.payload = postData\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1060,
+        "y": 660,
+        "wires": [
+            [
+                "5be0f0c5d5c291e4"
+            ]
+        ]
+    },
+    {
+        "id": "5be0f0c5d5c291e4",
+        "type": "http request",
+        "z": "ed1d968f509a241a",
+        "name": "create page",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://api.notion.com/v1/pages",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "bearer",
+        "x": 1270,
+        "y": 660,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "e47e7a87021eed3d",
+        "type": "sqlite",
+        "z": "ed1d968f509a241a",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 690,
+        "y": 660,
+        "wires": [
+            [
+                "c0a8bcb8b5eed125"
+            ]
+        ]
+    },
+    {
+        "id": "c0a8bcb8b5eed125",
+        "type": "delay",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "pauseType": "random",
+        "timeout": "5",
+        "timeoutUnits": "minutes",
+        "rate": "1",
+        "nbRateUnits": "10",
+        "rateUnits": "minute",
+        "randomFirst": "12",
+        "randomLast": "15",
+        "randomUnits": "hours",
+        "drop": false,
+        "allowrate": false,
+        "x": 860,
+        "y": 660,
+        "wires": [
+            [
+                "7bfdfbb64dd7603e"
+            ]
+        ]
+    },
+    {
+        "id": "0cadef73befc76a1",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/articles/sources",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 180,
+        "y": 440,
+        "wires": [
+            [
+                "dc5687c51e9fecfa"
+            ]
+        ]
+    },
+    {
+        "id": "dc5687c51e9fecfa",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "topic",
+                "pt": "msg",
+                "to": "select distinct source   from articles  order by source ASC;",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 580,
+        "y": 440,
+        "wires": [
+            [
+                "bc8999262add45ad"
+            ]
+        ]
+    },
+    {
+        "id": "1de40aebce227407",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/trials/sources",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 190,
+        "y": 480,
+        "wires": [
+            [
+                "3d88dfe4df13ea2d"
+            ]
+        ]
+    },
+    {
+        "id": "3d88dfe4df13ea2d",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "topic",
+                "pt": "msg",
+                "to": "select distinct source   from trials  order by source ASC;",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 580,
+        "y": 480,
+        "wires": [
+            [
+                "bc8999262add45ad"
+            ]
+        ]
+    },
+    {
+        "id": "49a9ae960e3ce4cc",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/articles/keyword/:keyword",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 780,
+        "wires": [
+            [
+                "af3f3488f9807b0a"
+            ]
+        ]
+    },
+    {
+        "id": "bb4cea85d54728e7",
+        "type": "sqlstring-format",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "query": "SELECT\n\t*\nFROM\n\tarticles\nWHERE\n\ttitle LIKE (?);",
+        "vars": "keyword",
+        "outField": "topic",
+        "x": 510,
+        "y": 780,
+        "wires": [
+            [
+                "f460bd87082a1cb8"
+            ]
+        ]
+    },
+    {
+        "id": "f460bd87082a1cb8",
+        "type": "sqlite",
+        "z": "ed1d968f509a241a",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 730,
+        "y": 820,
+        "wires": [
+            [
+                "0e03fd9c340c3244"
+            ]
+        ]
+    },
+    {
+        "id": "af3f3488f9807b0a",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "set keyword",
+        "rules": [
+            {
+                "t": "set",
+                "p": "keyword",
+                "pt": "msg",
+                "to": "\"%\" & req.params.keyword & \"%\"",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 370,
+        "y": 780,
+        "wires": [
+            [
+                "bb4cea85d54728e7"
+            ]
+        ]
+    },
+    {
+        "id": "2c1e21cb9af57251",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/trials/keyword/:keyword",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 140,
+        "y": 840,
+        "wires": [
+            [
+                "4475037a98e468ec"
+            ]
+        ]
+    },
+    {
+        "id": "4475037a98e468ec",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "set keyword",
+        "rules": [
+            {
+                "t": "set",
+                "p": "keyword",
+                "pt": "msg",
+                "to": "\"%\" & req.params.keyword & \"%\"",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 370,
+        "y": 840,
+        "wires": [
+            [
+                "03c4b05740cccd41"
+            ]
+        ]
+    },
+    {
+        "id": "03c4b05740cccd41",
+        "type": "sqlstring-format",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "query": "SELECT\n\t*\nFROM\n\ttrials\nWHERE\n\ttitle LIKE (?);",
+        "vars": "keyword",
+        "outField": "topic",
+        "x": 510,
+        "y": 840,
+        "wires": [
+            [
+                "f460bd87082a1cb8"
+            ]
+        ]
+    },
+    {
+        "id": "c006f78cb6d3e0e6",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/articles/related/",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 120,
+        "y": 900,
+        "wires": [
+            [
+                "cdbd05862cd8c88e"
+            ]
+        ]
+    },
+    {
+        "id": "2edfa449a679e171",
+        "type": "http request",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "body",
+        "url": "https://api.brunoamaral.net/articles/related/",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 250,
+        "y": 1200,
+        "wires": [
+            [
+                "fe8eeb3d8fe45570"
+            ]
+        ]
+    },
+    {
+        "id": "10c19e28eee52ded",
+        "type": "inject",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"keywords\":[\"mTOR\",\"Regulates Metabolic Function\",\"Oligodendrocyte Precursor Cells\",\"Promotes Efficient Brain Remyelination\",\"the Cuprizone Model\"]}",
+        "payloadType": "str",
+        "x": 100,
+        "y": 1200,
+        "wires": [
+            [
+                "2edfa449a679e171"
+            ]
+        ]
+    },
+    {
+        "id": "7e1b0e11c22af05a",
+        "type": "http response",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 570,
+        "y": 1200,
+        "wires": []
+    },
+    {
+        "id": "fe8eeb3d8fe45570",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "ok",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 420,
+        "y": 1200,
+        "wires": [
+            [
+                "7e1b0e11c22af05a"
+            ]
+        ]
+    },
+    {
+        "id": "b066e85a9e026e20",
+        "type": "sqlstring-format",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "query": "SELECT  * FROM articles where article_id = ? ORDER BY article_id DESC;",
+        "vars": "req.params.id",
+        "outField": "topic",
+        "x": 610,
+        "y": 200,
+        "wires": [
+            [
+                "bc8999262add45ad"
+            ]
+        ]
+    },
+    {
+        "id": "86c6a848cc148a02",
+        "type": "sqlstring-format",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "query": "SELECT  * FROM articles where source = ? ORDER BY article_id DESC;",
+        "vars": "req.params.source",
+        "outField": "topic",
+        "x": 610,
+        "y": 320,
+        "wires": [
+            [
+                "bc8999262add45ad"
+            ]
+        ]
+    },
+    {
+        "id": "71427419e8870aae",
+        "type": "sqlstring-format",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "query": "SELECT  * FROM articles WHERE discovery_date LIKE ? ORDER BY article_id DESC;",
+        "vars": "date",
+        "outField": "topic",
+        "x": 610,
+        "y": 400,
+        "wires": [
+            [
+                "bc8999262add45ad"
+            ]
+        ]
+    },
+    {
+        "id": "bb53f6d7480dc232",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "set date",
+        "rules": [
+            {
+                "t": "set",
+                "p": "date",
+                "pt": "msg",
+                "to": "\"%\" & req.params.year & \"-\" & req.params.month & \"%\"",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 480,
+        "y": 400,
+        "wires": [
+            [
+                "71427419e8870aae"
+            ]
+        ]
+    },
+    {
+        "id": "878646332f28d3d3",
+        "type": "sqlstring-format",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "query": "UPDATE articles\nSET relevant = \"0\"\nWHERE article_id = ?;",
+        "vars": "req.params.id",
+        "outField": "topic",
+        "x": 430,
+        "y": 540,
+        "wires": [
+            [
+                "6822cabc980171d5"
+            ]
+        ]
+    },
+    {
+        "id": "cb73fef320f86a0a",
+        "type": "sqlstring-format",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "query": "UPDATE articles\nSET relevant = \"1\"\nWHERE article_id = ?;",
+        "vars": "req.params.id",
+        "outField": "topic",
+        "x": 430,
+        "y": 600,
+        "wires": [
+            [
+                "6822cabc980171d5"
+            ]
+        ]
+    },
+    {
+        "id": "41120e6782e2a5f8",
+        "type": "sqlstring-format",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "query": "SELECT  * FROM articles where article_id = ? ORDER BY article_id DESC;",
+        "vars": "req.params.id",
+        "outField": "topic",
+        "x": 430,
+        "y": 660,
+        "wires": [
+            [
+                "e47e7a87021eed3d"
+            ]
+        ]
+    },
+    {
+        "id": "2058751c1d9b0918",
+        "type": "template",
+        "z": "ed1d968f509a241a",
+        "name": "Query",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "sql",
+        "syntax": "mustache",
+        "template": "select * from articles\nwhere\n(title = \"\")\n{{#keywords}}\nOR (title like \"%{{.}}%\")\n{{/keywords}}\n;",
+        "output": "str",
+        "x": 510,
+        "y": 900,
+        "wires": [
+            [
+                "f460bd87082a1cb8"
+            ]
+        ]
+    },
+    {
+        "id": "a4ee3e434e6d3499",
+        "type": "inject",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"keywords\":[\"mTOR\",\"Regulates Metabolic Function\",\"Oligodendrocyte Precursor Cells\",\"Promotes Efficient Brain Remyelination\",\"the Cuprizone Model\"]}",
+        "payloadType": "json",
+        "x": 90,
+        "y": 1140,
+        "wires": [
+            [
+                "2edfa449a679e171"
+            ]
+        ]
+    },
+    {
+        "id": "cdbd05862cd8c88e",
+        "type": "function",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "func": "let words = msg.payload.keywords\nlet keywords = [];\n\nfor (const element of words) {\n  keywords.push(element.match(/(?:\\w|\\s|-\\w)*/)[0])\n}\n\nmsg.keywords = keywords;\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 900,
+        "wires": [
+            [
+                "2058751c1d9b0918"
+            ]
+        ]
+    },
+    {
+        "id": "43cb553ff2e1be99",
+        "type": "http response",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 1190,
+        "y": 820,
+        "wires": []
+    },
+    {
+        "id": "0e03fd9c340c3244",
+        "type": "json",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "property": "payload",
+        "action": "",
+        "pretty": false,
+        "x": 890,
+        "y": 820,
+        "wires": [
+            [
+                "878ba106d22fcf7a"
+            ]
+        ]
+    },
+    {
+        "id": "878ba106d22fcf7a",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "Set Headers",
+        "rules": [
+            {
+                "t": "set",
+                "p": "headers",
+                "pt": "msg",
+                "to": "{}",
+                "tot": "json"
+            },
+            {
+                "t": "set",
+                "p": "headers.content-type",
+                "pt": "msg",
+                "to": "application/json",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1030,
+        "y": 820,
+        "wires": [
+            [
+                "43cb553ff2e1be99"
+            ]
+        ]
+    },
+    {
+        "id": "eb769a3d5e707ded",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/articles/unsent",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 190,
+        "y": 100,
+        "wires": [
+            [
+                "681914b9361e091e"
+            ]
+        ]
+    },
+    {
+        "id": "681914b9361e091e",
+        "type": "change",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "topic",
+                "pt": "msg",
+                "to": "SELECT  * FROM articles where sent != 1 ORDER BY article_id DESC;",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 600,
+        "y": 100,
+        "wires": [
+            [
+                "bc8999262add45ad"
+            ]
+        ]
+    }
+]
