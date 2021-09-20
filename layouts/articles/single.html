@@ -87,15 +87,24 @@
 					</div>
 				</header>
 				<span id="article" class="anchor"></span>
-				{{ .Content }}
+				<p><strong>ID</strong>: <span id="id" data-datetime="{{.Params.article_id}}">{{ .Params.article_id }}</span></p>
+				<p><strong>Discovery Date</strong>: <span id="discovery_date" data-datetime="{{.Params.discovery_date}}">{{ .Params.discovery_date | dateFormat "02 January 2006, 15:04:05 MST" }}</span></p>
+				<p><strong>Published Date</strong>: <span id="published_date" data-datetime="{{.Params.published_date}}">{{ .Params.published_date }}</span></p>
+				<p><strong>Source</strong>: <span id="source">{{ .Params.source | safeHTML }}</span></p>
+				<p><strong>Link</strong>: <span id="link"><a href="{{ .Params.link | htmlUnescape | safeHTML }}">{{ .Params.link | safeHTML }}</a></span></p>
+				<div class="post-text" id="abstract">
+					<h4>Abstract</h4>
+					{{ .Content | safeHTML }}
+				</div>
+			
 				<div class="">
-					<h2>Noun Phrases in Title</h2>
+					<h4>Noun Phrases in Title</h4>
 					<ul class="nounphrases">
 						{{ range .Params.Nounphrases }}
 						<li class="phrase">{{.}}</li>
 						{{ end }}
 					</ul>
-					<h2>Related Articles Based on Noun Phrases</h2>
+					<h4>Related Articles Based on Noun Phrases</h4>
 					<ol id="relatedarticles">
 			
 					</ol>
