@@ -3,6 +3,8 @@ title: "Observatory"
 date: 2021-08-12T15:33:35+01:00
 lastmod: 
 author: Bruno Amaral
+options:
+  unlisted: false
 
 description: 
 categories: []

@@ -3,6 +3,8 @@ title: "{{ replace .Name "-" " " | title }}"
 date: {{ .Date }}
 lastmod: 
 author: Bruno Amaral
+options:
+  unlisted: false
 
 description: 
 categories: []
