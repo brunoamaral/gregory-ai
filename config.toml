@@ -1,4 +1,4 @@
-theme = ["gregory","github.com/RainerChiang/simpleness"]
+theme = ["NowUI-Pro"]
 
 baseURL = "https://labs.brunoamaral.eu/"
 languageCode = "en"
