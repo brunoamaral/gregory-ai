@@ -1,0 +1,93 @@
+{{ define "bodyclasses" }}root{{ end }} {{ define "description" }}
+<meta name="description" content="{{ $.Site.Params.description }}" />
+<meta name="twitter:description" content="{{ $.Site.Params.description }}" /> {{ end }} {{ define "main" }}
+<div class="wrapper">
+	<div class="page-header page-header-mini">
+		<div class="page-header-image d-print-none" data-parallax="true" style="background-image: url('{{ partial "header-image.html" . }}');">
+		</div>
+		<div class="content-center">
+			<div class="container">
+				<div class="
+				{{ with $.Params.title_align }}
+				col-md-12 text-{{.}}
+				{{ else }}
+				col-md-8 ml-auto mr-auto text-center
+				{{ end }}
+	
+					">
+					{{- if (ne .Params.options.showTitle false)  }}
+					<h1 class="title" itemprop="headline d-print-block">{{ .Title }}</h1> {{ .Params.options.showTitle}}
+					{{ end }}
+					{{- with .Params.subtitle }}
+						<h2 itemprop="subtitle d-print-block">{{ . }}</h2>
+					{{- end }}
+					{{- with .Params.cta }}
+						{{ range . }}
+							<a href="{{ with .url }} {{ . }}{{ end }}" class="btn btn-lg {{ with .classes }}{{ . }}{{ else }} btn-primary{{ end }}">{{ with .label }}{{ . | safeHTML }}{{ end }}</a>
+						{{ end }}
+					{{- end }}
+				</div>
+			</div>
+		</div>
+	</div>
+
+    <div class="section">
+        <div class="container">
+            <section id="category-list">
+                <h2 class="d-sm-block d-lg-none text-center mt-3 title">{{ i18n "stories" }}</h2>
+                <div class="card-deck justify-content-center px-3 m-0">
+                    <div class="row">
+                        {{ range where (.Site.GetPage "section" "story").Sections ".Params.options.unlisted" false | intersect (where .Site.Pages "Params.story_featured" "=" true) }} {{ partial "story-card.html" . }} {{ end }}
+
+                    </div>
+                </div>
+
+            </section>
+            <div class="blogs-1" id="blogs-1">
+                <div class="container">
+                    <div class="row">
+                        <div class="col-md-10 ml-auto mr-auto">
+                            <h2 class="text-center title">Latest relevant articles</h2>
+                            <br> {{ $firstposts := (where (where .Site.RegularPages ".Params.relevant" 1) "Section" "!=" "instagram") }} {{ range $i,$p := $firstposts }} 
+                            <!-- first post -->
+                            <div class="card card-plain card-blog">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        {{ range $index, $category := .Params.categories }}
+                                        <span class="h6 category mt-3"><a class="text-info" title="{{ i18n "category" }} {{ $category}}" href="{{ $.Site.BaseURL }}categories/{{ $category | urlize }}/">{{ $category }}</a></span> {{ end }}
+                                        <h3 class="card-title">
+                                            <a href="{{ .Permalink }}">{{ .Title }}</a>
+                                        </h3>
+                                        <p class="card-description">
+                                            {{ .Summary | truncate 230 | plainify }}
+                                            <br>
+                                            <a href="{{ .Permalink }}">{{ i18n "continue_reading" }} </a>
+                                        </p>
+                                        <p class="author">
+                                            {{ with .Params.authors }} {{ range . }} {{ $author := ($.GetPage (printf "/authors/%s/" .) ) }} {{ with $author }} {{- i18n "by" -}}
+                                            <b>
+											<a href="{{ $author.Permalink }}" itemprop="author" title="{{ . }}" class="author">{{ $author.Params.name }}</a>
+																	{{ end }}
+																</b>, {{ end }} {{ end }}
+                                            <time class="published text-muted" itemprop="datePublished" datetime="{{ .Date.Format " 2006-01-02T15:04:05 " }}">{{ .Date.Format "January 2, 2006" }}</time>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        {{ end }}
+                            <!-- second post -->
+                        </div>
+                    </div>
+                    <!-- row -->
+                </div>
+            </div>
+            <p class="text-center"><a class="btn btn-primary btn-lg" href="{{ $.Site.BaseURL }}{{ " post " | relLangURL }}" role="button">{{ i18n "read_more_posts"}}</a></p>
+
+            <div class="separator separator-primary"></div>
+            <div class="row">
+                {{ $page := .Site.GetPage "page/featured-posts/index.md" }} {{ with $page }} {{.Content}} {{ end }}
+            </div>
+        </div>
+    </div>
+</div>
+{{ end }}
