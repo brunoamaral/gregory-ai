@@ -1,0 +1,28 @@
+<!-- TEMPLATE 1 for blog post lists -->
+						<div class="col-md-6">
+							<div class="card card-plain card-blog">
+							
+								<div class="card-body">
+									{{ if isset .Params "categories" }}
+									{{ range $index, $category := .Params.categories }}
+									<span class="h6 category text-info text-left {{ $category | urlize }} ">{{ $category }}</span>
+										{{ end }}
+										{{ end }}
+									{{.Date | time.Format ":date_long" }}
+									<h4 class="card-title">
+										<a href="{{ .Permalink }}">{{ .Title | safeHTML }}</a>
+									</h4>
+									<p class="card-description">
+
+										<a href="{{ .Permalink }}" class="btn btn-sm btn-info">{{ i18n "read_more" }}</a>
+									</p>
+										{{ range .Params.authors }}
+										{{ $author := ($.GetPage (printf "/authors/%s/" .) ) }}
+										{{ with $author }}
+
+										{{ end }}
+										{{ end }}
+									<p></p>
+								</div>
+							</div>
+						</div>
