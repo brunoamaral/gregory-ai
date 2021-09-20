@@ -17,7 +17,8 @@ disableToC: false
 disableAutoCollapse: true
 
 url: sobre
-
+scripts:
+  - '<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>'
 menu:
   main:
     Name: About
@@ -42,7 +43,7 @@ In the homepage we show articles that seem relevant to one of the following cate
 
 ### Clinical Articles
 
-```mermaid
+<div class="mermaid">
 graph LR;
     APTA[fa:fa-newspaper APTA.org] -->Gregory;
     BioMedCentral[fa:fa-newspaper BioMedCentral.com] -->Gregory;
@@ -56,17 +57,17 @@ graph LR;
     Manual[fa:fa-keyboard Inserção Manual]-->Gregory;
     Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
     Gregory{fa:fa-robot Gregory}-->Newsletter(fa:fa-envelope Newsletter)
-```
+</div>
 
 ### Clinical Trials
 
-```mermaid
+<div class="mermaid">
 graph LR;
     ClinicalTrials[fa:fa-newspaper ClinicalTrials.gov]-->Gregory;
     CUF[fa:fa-newspaper CUF.pt]-->Gregory;
     Novartis[fa:fa-newspaper Novartis.com]-->Gregory;
     Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
-```
+</div>
 
 ### Search terms:
 
