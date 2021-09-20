@@ -13,6 +13,11 @@ copyright = "[Home](/) &#183; Theme [Simpleness](https://github.com/RainerChiang
 
 googleAnalytics = ""
 
+[outputs]
+    home = [ "HTML", "RSS", "JSON" ]
+    section = [ "HTML", "RSS"]
+    term = [ "HTML", "RSS"]
+
 [params]
   lazyImage = true
   enableMathJax = false # enable it in Front Matter
