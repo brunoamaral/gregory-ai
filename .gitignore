@@ -8,3 +8,4 @@ docker-data/
 workspace.code-workspace
 docker-python/
 docker-data/
+resources/
