@@ -1,6 +1,6 @@
 ---
 title: "Clinical Trials"
-subtitle: Recent clinical trials for multiple sclerosis
+subtitle: Recent clinical trials for multiple sclerosis treatment 
 date: 2021-02-24T13:25:38Z
 lastmod: 
 author: Bruno Amaral
