@@ -19,6 +19,12 @@ server = "https://api.brunoamaral.net/"
 website_path = "/var/www/labs.brunoamaral.eu/"
 
 # Workflow starts
+
+print('''
+####
+## PULL FROM GITHUB
+####
+''')
 os.chdir(path)
 ## Optional
 g = git.cmd.Git(path)
