@@ -12,6 +12,12 @@ author = "Bruno Amaral"
 copyright = ""
 
 googleAnalytics = ""
+# Set the default site thumbnail
+defaultImage = ""
+# Google 
+googleSiteVerification = ""
+googleTagManager = ""
+headerPhoto = ""
 
 [outputs]
     home = [ "HTML", "RSS", "JSON" ]
