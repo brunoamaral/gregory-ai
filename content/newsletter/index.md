@@ -1,10 +1,11 @@
 ---
-title: "Sobre este Site e Contactos"
+title: "Newsletter"
 date: 2021-02-24T13:00:55Z
 lastmod: 
 author: Bruno Amaral
 options:
   unlisted: false
+  header: mini
 
 description: 
 categories: []
@@ -15,6 +16,10 @@ enableDisqus : true
 enableMathJax: false
 disableToC: false
 disableAutoCollapse: true
+
+resources:
+  - src: brett-jordan-LPZy4da9aRo-unsplash.jpeg
+    name: header
 
 url: newsletter
 

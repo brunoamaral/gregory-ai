@@ -1,10 +1,13 @@
 ---
-title: "API"
+title: "Developers"
+subtitle: "There is an API to query the MS Database that you can use, for free."
+subtitle: 
 date: 2021-08-11T15:27:16+01:00
 lastmod: 
 author: Bruno Amaral
 options:
   unlisted: false
+  header: small
 
 description: 
 categories: []
@@ -14,7 +17,7 @@ url: api
 
 menu:
   main:
-    Name: API
+    Name: Developers
     Weight: 6
 
 draft: false
@@ -22,6 +25,10 @@ enableDisqus : true
 enableMathJax: false
 disableToC: false
 disableAutoCollapse: true
+
+resources:
+  - src: lagos-techie-kwzWjTnDPLk-unsplash.jpeg
+    name: header
 ---
 
 ## API Endpoints

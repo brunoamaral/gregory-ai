@@ -20,4 +20,8 @@ menu:
     main:
         Name: Clinical Trials
         weight: 3
+
+resources:
+  - src: science-in-hd-9kSTF9PvETM-unsplash.jpeg
+    name: header
 ---
