@@ -3,8 +3,9 @@ data/articles.json
 data/trials.json
 public/
 modules/
-content/article/*/
+content/articles/*/
 docker-data/
 workspace.code-workspace
 docker-python/
 docker-data/
+resources/

@@ -15,11 +15,19 @@ disableToC: false
 disableAutoCollapse: true
 
 url: sobre
-
+scripts:
+  - '<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>'
 menu:
   main:
     Name: About
     Weight: 4
+options:
+  header: mini
+  unlisted: false
+
+resources:
+  - src: vladislav-klapin-SymZoeE8quA-unsplash.jpeg
+    name: header
 ---
 
 > Too much information is as bad as not enough.
@@ -40,7 +48,7 @@ In the homepage we show articles that seem relevant to one of the following cate
 
 ### Clinical Articles
 
-```mermaid
+<div class="mermaid">
 graph LR;
     APTA[fa:fa-newspaper APTA.org] -->Gregory;
     BioMedCentral[fa:fa-newspaper BioMedCentral.com] -->Gregory;
@@ -54,70 +62,48 @@ graph LR;
     Manual[fa:fa-keyboard Inserção Manual]-->Gregory;
     Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
     Gregory{fa:fa-robot Gregory}-->Newsletter(fa:fa-envelope Newsletter)
-```
+</div>
 
 ### Clinical Trials
 
-```mermaid
+<div class="mermaid">
 graph LR;
     ClinicalTrials[fa:fa-newspaper ClinicalTrials.gov]-->Gregory;
     CUF[fa:fa-newspaper CUF.pt]-->Gregory;
     Novartis[fa:fa-newspaper Novartis.com]-->Gregory;
     Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
-```
+</div>
 
-### Search terms:
+### Search Terms
 
 > Multiple Sclerosis, autoimmune encephalomyelitis, encephalomyelitis, immune tolerance, myelin
 
-#### APTA
-
-https://www.apta.org/search?Q=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&searcharticletypes=8834&searchconditionandsymptoms=&searchloc=APTA
 
 
-#### BioMedCentral
+### Search Sources
 
-https://www.biomedcentral.com/search?searchType=publisherSearch&sort=PubDate&page=1&query=Multiple+Sclerosis
+- [APTA](https://www.apta.org/search?Q=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&searcharticletypes=8834&searchconditionandsymptoms=&searchloc=APTA)
 
+- [BioMedCentral](https://www.biomedcentral.com/search?searchType=publisherSearch&sort=PubDate&page=1&query=Multiple+Sclerosis)
 
-#### ClinicalTrials
+- [JNeurosci](https://www.jneurosci.org/search/text_abstract_title%3AMultiple%2BSclerosis%20text_abstract_title_flags%3Amatch-phrase%20exclude_meeting_abstracts%3A1%20numresults%3A50%20sort%3Apublication-date%20direction%3Adescending%20format_result%3Astandard)
 
-https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000
+- [PEDro](https://search.pedro.org.au/advanced-search/results?abstract_with_title=Multiple+Sclerosis&therapy=0&problem=0&body_part=0&subdiscipline=0&topic=0&method=0&authors_association=&title=&source=&year_of_publication=&date_record_was_created=&nscore=&perpage=20&lop=or&find=&find=Start+Search)
 
-#### JNeurosci
+- [PubMed](https://pubmed.ncbi.nlm.nih.gov/rss/search/10guX6I3SqrbUeeLKSTD6FCRM44ewnrN2MKKTQLLPMHB4xNsZU/?limit=15&utm_campaign=pubmed-2&fc=20210216052009)
 
-https://www.jneurosci.org/search/text_abstract_title%3AMultiple%2BSclerosis%20text_abstract_title_flags%3Amatch-phrase%20exclude_meeting_abstracts%3A1%20numresults%3A50%20sort%3Apublication-date%20direction%3Adescending%20format_result%3Astandard
+- [Reuters](https://www.reutersagency.com/feed/?best-topics=health)
 
+- [Scielo](https://search.scielo.org/?q=Multiple+Sclerosis&lang=en&count=15&from=0&output=site&sort=&format=summary&fb=&page=1&q=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&lang=en&page=1)
 
-#### PEDro
+- [TheLancet](https://www.thelancet.com/action/doSearch?text1=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&field1=AbstractTitleKeywordFilterField&startPage=0&sortBy=Earliest)
 
-https://search.pedro.org.au/advanced-search/results?abstract_with_title=Multiple+Sclerosis&therapy=0&problem=0&body_part=0&subdiscipline=0&topic=0&method=0&authors_association=&title=&source=&year_of_publication=&date_record_was_created=&nscore=&perpage=20&lop=or&find=&find=Start+Search
+- [MS and Related Disorders](https://www.msard-journal.com/action/doSearch?text1=Multiple+Sclerosis&field1=AbstractTitleKeywordFilterField&startPage=0&sortBy=Earliest)
 
-#### PubMed
+- [Sage](https://journals.sagepub.com/action/doSearch?AllField=multiple+sclerosis&SeriesKey=msja&content=articlesChapters&countTerms=true&target=default&sortBy=Ppub&startPage=&ContentItemType=research-article)
 
-https://pubmed.ncbi.nlm.nih.gov/rss/search/10guX6I3SqrbUeeLKSTD6FCRM44ewnrN2MKKTQLLPMHB4xNsZU/?limit=15&utm_campaign=pubmed-2&fc=20210216052009
-
-#### Reuters
-
-https://www.reutersagency.com/feed/?best-topics=health
-#### Scielo
-
-https://search.scielo.org/?q=Multiple+Sclerosis&lang=en&count=15&from=0&output=site&sort=&format=summary&fb=&page=1&q=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&lang=en&page=1
-
-
-#### TheLancet
-
-https://www.thelancet.com/action/doSearch?text1=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&field1=AbstractTitleKeywordFilterField&startPage=0&sortBy=Earliest
-
-#### MS and Related Disorders
-
-https://www.msard-journal.com/action/doSearch?text1=Multiple+Sclerosis&field1=AbstractTitleKeywordFilterField&startPage=0&sortBy=Earliest
-
-
-#### Sage
-
-https://journals.sagepub.com/action/doSearch?AllField=multiple+sclerosis&SeriesKey=msja&content=articlesChapters&countTerms=true&target=default&sortBy=Ppub&startPage=&ContentItemType=research-article
-
+- [ClinicalTrials](https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000)
+- 
 ## Fontes por incluir
 
 https://journals.bmj.com/
