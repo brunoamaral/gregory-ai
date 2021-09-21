@@ -25,15 +25,16 @@ headerPhoto = ""
     term = [ "HTML", "RSS"]
 
 [params]
-  lazyImage = true
+  description = "An index engine for articles and clinical trials around Multiple Sclerosis"
+  disqus = ""
   enableMathJax = false # enable it in Front Matter
   enableReadingTime = false
   favicon = "favicon.ico"
-  startyear = "2021"
+  lazyImage = true
+  logo="/big-hero-6.jpeg"
   showmonth = true
   slogan = ""
-  description = "An index engine for articles and clinical trials around Multiple Sclerosis"
-  disqus = ""
+  startyear = "2021"
 
 [params.valine]
   enable = false
