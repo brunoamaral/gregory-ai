@@ -7,9 +7,9 @@ enableInlineShortcodes = true
 enableEmoji = true
 # pagination = 10
 
-title = "Gregory"
+title = "Gregory MS"
 author = "Bruno Amaral"
-copyright = "[Home](/) &#183; Theme [Simpleness](https://github.com/RainerChiang/simpleness) Powered by [Hugo](https://gohugo.io/)"
+copyright = ""
 
 googleAnalytics = ""
 

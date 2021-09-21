@@ -1,8 +1,15 @@
 {{ define "bodyclasses" }}root{{ end }} {{ define "description" }}
+
 <meta name="description" content="{{ $.Site.Params.description }}" />
-<meta name="twitter:description" content="{{ $.Site.Params.description }}" /> {{ end }} {{ define "main" }}
+<meta name="twitter:description" content="{{ $.Site.Params.description }}" /> {{ end }} 
+{{ define "main" }}
+{{ $headerSize := $.Params.options.header }}
+
+{{ if eq $headerSize nil }}
+	{{ $headerSize = "small" }}
+{{ end }} 
 <div class="wrapper">
-	<div class="page-header page-header-mini">
+	<div class="page-header page-header-{{ $headerSize }}">
 		<div class="page-header-image d-print-none" data-parallax="true" style="background-image: url('{{ partial "header-image.html" . }}');">
 		</div>
 		<div class="content-center">
