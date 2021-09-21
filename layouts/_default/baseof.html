@@ -34,14 +34,15 @@
 	<link rel="preload" href="/webfonts/fa-regular-400.woff2" as="font" crossorigin="anonymous">
 	<link rel="preload" href="/webfonts/fa-brands-400.woff2" as="font" crossorigin="anonymous">
 
-	{{ $fontawesome := resources.Get "fontawesome-free-5.9.0-web/scss/fontawesome.scss" | resources.ToCSS (dict "enableSourceMap" false "outputStyle" "compressed") }}
-	{{ $brands := resources.Get "fontawesome-free-5.9.0-web/scss/brands.scss" | resources.ToCSS (dict "enableSourceMap" false "outputStyle" "compressed") }}
-	{{ $regular := resources.Get "fontawesome-free-5.9.0-web/scss/regular.scss" | resources.ToCSS (dict "enableSourceMap" false "outputStyle" "compressed") }}
+	{{ $fontawesome := resources.Get "css/fontawesome/fontawesome.css"  }}
+	{{ $brands := resources.Get "css/fontawesome/brands.css"  }}
+	{{ $regular := resources.Get "css/fontawesome/regular.css"  }}
+	{{ $solid := resources.Get "css/fontawesome/solid.css"  }}
 
 	{{- $bootstrap := resources.Get "css/bootstrap.min.css" -}}
 	{{- $nowUi := resources.Get "scss/now-ui-kit.scss" | resources.ToCSS (dict "enableSourceMap" false "outputStyle" "compressed") -}}
 
-	{{- $style := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular | resources.Concat "css/style.css" | resources.Fingerprint -}}
+	{{- $style := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular $solid | resources.Concat "css/style.css" | resources.Fingerprint -}}
 	<link href="{{- $style.Permalink -}}" rel="stylesheet">
 	{{- if or (.HasShortcode "youtube") (.HasShortcode "youtube") (.HasShortcode "youtube") -}}
 	{{- $plyr_css := resources.Get "/css/plyr/plyr.css" -}}
