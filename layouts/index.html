@@ -47,13 +47,15 @@
                         <div class="col-md-10 ml-auto mr-auto">
                             <h2 class="text-center title">Latest relevant articles</h2>
                             <p class="text-center"><strong>Last Update</strong> {{ now.Format "2 Jan, 15:04" }}</p>
-                            <br> {{ $firstposts := (where (where .Site.RegularPages ".Params.relevant" 1) "Section" "!=" "instagram") }} {{ range $i,$p := $firstposts }} 
+                            <br> {{ $firstposts := (where (where .Site.RegularPages ".Params.relevant" 1) "Section" "!=" "instagram") }} 
+                            {{ range where .Site.RegularPages ".Params.relevant" 1 }} 
                             <!-- first post -->
                             <div class="card card-plain card-blog">
                                 <div class="row">
                                     <div class="col-md-12">
                                         {{ range $index, $category := .Params.categories }}
-                                        <span class="h6 category mt-3"><a class="text-info" title="{{ i18n "category" }} {{ $category}}" href="{{ $.Site.BaseURL }}categories/{{ $category | urlize }}/">{{ $category }}</a></span> {{ end }}
+                                        <span class="h6 category mt-3"><a class="text-info" title="{{ i18n "category" }} {{ $category}}" href="{{ $.Site.BaseURL }}categories/{{ $category | urlize }}/">{{ $category }}</a></span> 
+                                        {{ end }}
                                         <h3 class="card-title">
                                             <a href="{{ .Permalink }}">{{ .Title }}</a>
                                         </h3>
@@ -83,9 +85,7 @@
             <p class="text-center"><a class="btn btn-primary btn-lg" href="{{ $.Site.BaseURL }}{{ " post " | relLangURL }}" role="button">{{ i18n "read_more_posts"}}</a></p>
 
             <div class="separator separator-primary"></div>
-            <div class="row">
-                {{ $page := .Site.GetPage "page/featured-posts/index.md" }} {{ with $page }} {{.Content}} {{ end }}
-            </div>
+
         </div>
     </div>
 </div>
