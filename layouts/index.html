@@ -60,7 +60,7 @@
                                             <a href="{{ .Permalink }}">{{ .Title }}</a>
                                         </h3>
                                         <p class="card-description">
-                                            {{ .Summary | truncate 230 | plainify }}
+                                            {{ .Summary |  htmlUnescape | plainify | truncate 230 }}
                                             <br>
                                             <a href="{{ .Permalink }}">{{ i18n "continue_reading" }} </a>
                                         </p>
