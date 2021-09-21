@@ -48,7 +48,7 @@
                             <h2 class="text-center title">Latest relevant articles</h2>
                             <p class="text-center"><strong>Last Update</strong> {{ now.Format "2 Jan, 15:04" }}</p>
                             <br> {{ $firstposts := (where (where .Site.RegularPages ".Params.relevant" 1) "Section" "!=" "instagram") }} 
-                            {{ range where .Site.RegularPages ".Params.relevant" 1 }} 
+                            {{ range (.Paginate ( where .Site.RegularPages ".Params.relevant" 1 )).Pages }} 
                             <!-- first post -->
                             <div class="card card-plain card-blog">
                                 <div class="row">
@@ -82,8 +82,91 @@
                     <!-- row -->
                 </div>
             </div>
-            <p class="text-center"><a class="btn btn-primary btn-lg" href="{{ $.Site.BaseURL }}{{ " post " | relLangURL }}" role="button">{{ i18n "read_more_posts"}}</a></p>
+            {{ if or .Paginator.HasPrev .Paginator.HasNext }}
 
+            {{ $paginator := .Paginator }}
+            
+            <section class="py-1">
+                <div class="container">
+                  <div class="row py-2">
+                    <div class="col-lg-12">
+            
+            {{ $pag := $.Paginator }}
+            {{ if gt $pag.TotalPages 1 -}}
+            <ul class="pagination pagination-primary m-4 d-flex justify-content-center">
+              {{ if $pag.HasPrev }}
+              {{ with $pag.First -}}
+              <li class="page-item">
+                <a href="{{ .URL }}" class="page-link" aria-label="First">
+                    <span aria-hidden="true"><i class="fa fa-angle-left" aria-hidden="true"></i><i class="fa fa-angle-double-left" aria-hidden="true"></i></span>
+                </a>
+              </li>
+              {{ end }}
+            
+            
+            
+              <!-- <li class="page-item disabled">
+                <span class="page-link" aria-label="Previous">
+                    <span aria-hidden="true"><i class="fa fa-angle-double-left" aria-hidden="true"></i></span>
+                </span>
+              </li>
+             -->
+            
+              <li class="page-item{{ if not $pag.HasPrev }} disabled{{ end }}">
+                <a {{ if $pag.HasPrev }}href="{{ $pag.Prev.URL }}"{{ end }} class="page-link" aria-label="Previous">
+                    <span aria-hidden="true"><i class="fa fa-angle-double-left" aria-hidden="true"></i></span>
+                </a>
+              </li>
+            {{ end }}
+            
+            
+              
+              {{- $ellipsed := false -}}
+              {{- $shouldEllipse := false -}}
+              {{- range $pag.Pagers -}}
+              {{- $right := sub .TotalPages .PageNumber -}}
+              {{- $showNumber := or (le .PageNumber 3) (eq $right 0) -}}
+              {{- $showNumber := or $showNumber (le .TotalPages 5) -}}{{/* Issue #7523 */}}
+              {{- $showNumber := or $showNumber (and (gt .PageNumber (sub $pag.PageNumber 2)) (lt .PageNumber (add $pag.PageNumber 2))) -}}
+              {{- if $showNumber -}}
+                {{- $ellipsed = false -}}
+                {{- $shouldEllipse = false -}}
+              {{- else -}}
+                {{- $shouldEllipse = not $ellipsed -}}
+                {{- $ellipsed = true -}}
+              {{- end -}}
+              {{- if $showNumber }}
+              <li class="page-item{{ if eq . $pag }} active{{ end }}">
+                <a class="page-link" href="{{ .URL }}">{{ .PageNumber }}</a>
+              </li>
+              {{- else if $shouldEllipse }}
+              <li class="page-item disabled">
+                <span aria-hidden="true">&nbsp;&hellip;&nbsp;</span>
+              </li>
+              {{- end -}}
+              {{- end }}
+              {{ if $pag.HasNext }}
+              <li class="page-item{{ if not $pag.HasNext }} disabled{{ end }}">
+                <a {{ if $pag.HasNext }}href="{{ $pag.Next.URL }}"{{ end }} class="page-link" aria-label="Next">
+                    <span aria-hidden="true"><i class="fa fa-angle-double-right" aria-hidden="true"></i></span>
+                </a>
+              </li>
+            
+              {{- with $pag.Last }}
+              <li class="page-item">
+                <a href="{{ .URL }}" class="page-link" aria-label="Last">
+                    <span aria-hidden="true"><i class="fa fa-angle-double-right" aria-hidden="true"></i><i class="fa fa-angle-right" aria-hidden="true"></i></span>
+                </a>
+              </li>
+              {{- end }}
+              {{ end }}
+            </ul>
+            {{ end }}
+            </div>
+            </div>
+            </div>
+            </section>
+            {{ end }}
             <div class="separator separator-primary"></div>
 
         </div>
