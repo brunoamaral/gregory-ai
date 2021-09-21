@@ -1,0 +1,50 @@
+{{ define "bodyclasses" }}single page 404{{ end }}
+
+{{ define "main" }}
+	<div class="wrapper">
+			{{ partial "header-small.html" . }}
+		<div class="section">
+			<div class="container">
+				<article class="post">
+						<header>
+								<div class="title text-center">
+										<h1 class="title"><a href="#">I can't find what you are looking for</a></h1>
+										<p>QBRtOpwaehM</p>
+								</div>
+						</header>
+						<p><span id="resultmessage"></span> <span id="fourzerofour"></span></p>
+						<p>Please try <a href="/search/">searching the site</a> or <a href="/page/contact"><strong>send me an email</strong></a> in case there is something I can do to help.</p>
+				</article>
+				<div class="separator separator-primary"></div>
+			</div>
+		</div>
+	</div>
+
+	<script defer="true">
+
+	var pathname = window.location.pathname.split('/')
+    var jsonindex = {{ printf "%s%s" ($.Site.BaseURL | plainify) "search/index.json" }}
+    	fetch(jsonindex)
+		  .then(res => res.json())
+		  .then(data => {
+		  	var searchstring = pathname[pathname.length-1]
+		  	if (searchstring.length == 0 ) {
+		  		searchstring = pathname[pathname.length-2]
+		  	}
+		  	var match = data.find(_ => _.uri.includes(searchstring));
+		  	if (match !== undefined) {
+
+		  		var message = 'Maybe this is what you are looking for? '
+		  		document.getElementById('resultmessage').innerHTML = message;
+		  		var result = '<a href="' + match.uri + '">' + match.title + '</a>'
+
+		  		document.getElementById('fourzerofour').innerHTML = result;
+
+		  	}else{
+		  		console.log('match: ' + match, 'pathname: ' + pathname[pathname.length-1])
+		  	}
+		  })
+		  .catch(err => {console.log('<oh noes> ' + err)
+		     })
+	</script>
+{{ end }}

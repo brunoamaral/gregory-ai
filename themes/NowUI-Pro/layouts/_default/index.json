@@ -1,0 +1,14 @@
+[{{ range $index, $page := where .Site.AllRegularPages ".Params.options.unlisted" false }}
+{{- if ne $page.Type "json" -}}
+{{- if and $index (gt $index 0) -}},{{- end }}
+{
+	"uri": "{{ $page.Permalink | htmlEscape }}",
+	"title": {{ $page.Title | jsonify }},
+	"tags": [{{ range $index, $tag := $page.Params.tags }}{{ if $index }}, {{ end }}"{{ $tag | htmlEscape }}"{{ end }}],
+	"category": [{{ range $index, $category := $page.Params.categories }}{{ if $index }}, {{ end }}"{{ $category | htmlEscape }}"{{ end }}],
+	"description": "{{ htmlEscape .Description | truncate 120 }}",
+	"content": {{$page.Plain | jsonify}},
+	"image": "{{- with .Resources.GetMatch "header" }}{{- $image := .Fill "450x150" }}{{ $image.RelPermalink }}{{ else }}https://brunoamaral.eu/images/fractal_thumb.jpg{{ end }}"
+}
+{{- end -}}
+{{- end -}}]

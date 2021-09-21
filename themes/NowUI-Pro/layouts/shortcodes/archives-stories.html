@@ -1,0 +1,9 @@
+<div class="justify-content-center px-3 m-0">
+	<div class="row">
+		{{ $stories := where (.Site.GetPage "section" "story").Sections ".Params.options.unlisted" false }}
+		 {{  range $stories }} 
+			{{  .Scratch.Set "columns" (len $stories ) }}
+			{{  partial "story-card.html" . }}
+		 {{ end }}
+	</div>
+</div>

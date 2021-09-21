@@ -1,0 +1,17 @@
+<div class="col-4 m-0 p-0 mb-n1">
+	<article class="card p-0 m-0 border border-white shadow-none">
+			<a href="{{ .Permalink }}" title="{{ .Title }}" >
+				{{ with .Resources.GetMatch "header" }}
+					{{ $image := .Fill "388x388" }} 
+					<img src="{{ $image.RelPermalink }}" alt="{{- with $.Params.tags -}}
+			{{- $lenght := sub (len .) 1 -}}
+			{{- range $index, $tag := . -}}
+				{{ . }} {{- if lt $index $lenght -}}, {{- end -}}
+			{{- end -}}
+			{{- end -}}" class="" />
+				{{ else }}
+					<img src="{{ .Site.BaseURL }}images/fractal_thumb.jpg" alt="header" />
+				{{ end }}
+			</a>
+	</article>
+</div>

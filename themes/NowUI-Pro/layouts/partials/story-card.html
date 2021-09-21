@@ -1,0 +1,23 @@
+<div class="col-md-4">
+	<div class="card card-blog card-story">
+		<a href="{{ .Permalink }}">
+		  <div class="card-image">
+			  <img class="img rounded" loading="lazy" src="{{ with .Resources.GetMatch "header" }}{{ $image := .Fill "450x250" }}{{ $image.RelPermalink }}{{ end }}" alt="{{ i18n (.Section | lower) }} header: {{ .Params.title }}">
+		  </div>
+		  <div class="card-body">
+			<span class="h6 category text-primary"><i class="now-ui-icons education_agenda-bookmark"></i>&nbsp;{{ i18n (.Section | lower) }}</span>
+			<h5 class="card-title">
+			  {{ .Params.title }} 
+			</h5>
+			<p class="card-description">
+			  {{ with .Params.subtitle }} {{ . }} {{ else }}&nbsp;{{ end }}
+			</p>
+			<div class="card-footer">
+			  <div class="stats stats-right">
+				<i class="now-ui-icons files_single-copy-04"></i> {{ len .Data.Pages }} {{ i18n "pages" }}
+			  </div>
+			</div>
+		  </div>
+		</a>
+	</div>
+</div>

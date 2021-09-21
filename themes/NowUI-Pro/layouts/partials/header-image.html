@@ -1,0 +1,12 @@
+{{- if not (eq (.Params.options.showHeader) false) }}
+	{{- with .Resources.GetMatch "header" -}}
+		{{- if eq .MediaType.SubType "gif" -}}
+			{{- .RelPermalink -}}
+		{{- else }}
+			{{- $image := .Resize "1350x" -}}
+			{{- $image.RelPermalink -}}
+		{{- end }}
+	{{- else }}
+		{{- $.Site.Params.headerPhoto -}}
+	{{- end -}}
+{{- end -}} 

@@ -1,0 +1,61 @@
+{{ define "bodyclasses" }}section-list _default/section.html post-list post-list-html {{ end }}
+
+{{ define "data-attributes" }}
+	data-contentgrouptype="{{ .Section }}" data-contentgroupname="{{ .CurrentSection.Title }}" data-articletitle="{{ .Title }}"
+{{ end }}
+
+{{ define "description" }}
+	{{ partial "description.html" . }}
+{{ end }}
+{{ define "main" }}
+<div class="wrapper">
+	{{ if or (eq .Params.options.header "small") (eq .Params.options.header "mini") (eq .Params.options.header nil ) }}
+		{{ partial "header-small.html" . }}
+	{{ else if eq $.Params.options.header "full"  }}
+		{{ partial "header-full.html" . }}
+	{{ end }}
+
+	<div class="section">
+		<div class="container">
+			<a name="content"></a>
+			<section id="category-list" class="card-group">
+					<div class="row">
+					{{ $list := "none" }}
+						{{ if eq .Params.options.unlisted true }}
+							{{ $list = (where (where .Data.Pages ".Params.options.unlisted" true) "Section" "!=" "instagram") }}
+						{{ else }}
+							{{ $list = (where (where .Data.Pages ".Params.options.unlisted" false) "Section" "!=" "instagram") }}
+						{{ end }}
+
+						{{ with .Sections }}
+							{{ $stories := where . ".Params.options.unlisted" false }}
+							{{ range $stories }}
+								{{ .Scratch.Set "columns" (len $stories) }}
+								{{ partial "story-card.html" . }}
+							{{ end }}                               
+						{{ end }}
+
+						{{ if or (eq .Section "story") (eq .Section "page") }}
+							<div class="col-12">{{ .Content }}</div>
+						{{ end }}
+
+						{{ if not (or (eq .CurrentSection.Name (i18n "stories")) (eq .Section "page")) }}
+							{{ range (.Paginate $list 9).Pages }}
+								{{ .Render "summary" }}
+							{{ end }}
+						{{ end }}
+
+						{{ if not (or (eq .CurrentSection.Name (i18n "stories")) (eq .Section "page")) }}
+							{{ partial "pagination.html" . }}
+						{{ end }}
+					</div>
+			</section>
+			<div class="separator separator-primary"></div>
+		</div>
+	</div>
+</div>
+{{ end }}
+
+{{ define "list-javascript" }}
+	{{ partial "comments-js.html" . }}
+{{ end }}

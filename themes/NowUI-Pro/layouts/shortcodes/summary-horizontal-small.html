@@ -1,0 +1,44 @@
+{{ $ref := (.Get "ref") }}
+{{ $align := (.Get "align")}}
+{{ $page := "" }}
+{{ range .Page.Sites }}
+    {{ if eq (print (.GetPage $ref).File) $ref }}
+        {{ $page = (.GetPage $ref) }}
+    {{ end }}
+{{ end }}
+{{ with $page }}
+<div class="card card-plain card-blog">
+    <div class="row">
+        <div class="col-md-4 align-self-center {{ if eq $align "right"}}order-last{{end}}">
+            <div class="card-image">
+                {{ $image := "" }}
+                {{ with $page.Resources.GetMatch "header" }}
+                    {{ $image = (.Fill "400x400").Permalink }}
+                {{ else }}
+                    {{ $image = .Site.Params.defaultImage }}
+                {{ end }}
+                <img class="img rounded img-raised" src="{{ $image }}" alt="header" />
+            </div>
+        </div>
+        <div class="col-md-8">
+            <h3 class="card-title">
+                <a href="{{ $page.Permalink }}">{{ $page.Title }}</a>
+            </h3>
+            <p class="card-description">
+                {{ $page.Summary | truncate 240 }}<a href="{{ $page.Permalink}}"> {{ i18n "read_more" }} </a>
+            </p>
+                <div class="author">
+                    {{ range $page.Params.authors }}
+                    {{ $author := ($.Site.GetPage (printf "/authors/%s/" .)) }}
+                    {{- with $author.Resources.GetMatch "avatar" -}}
+                    {{- $avatar := .Fill "40x40" -}}
+                   <a href="{{ $author.Permalink }}" class="text-decoration-none"><img src="{{ $avatar.Permalink }}" alt="{{ $author.Params.name }}" class="avatar img-raised"></a>
+                   {{ end }}
+                   <span><a href="{{ $author.Permalink }}">{{ $author.Params.name }}</a></span>
+                   {{ end }}
+                </div>
+
+        </div>
+    </div>
+</div>
+{{ end }}

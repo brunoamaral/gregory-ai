@@ -1,0 +1,33 @@
+{{ $ref := (.Get "ref") }}
+{{ $page := "" }}
+{{ $col := (.Get "col") }}
+{{ range .Page.Sites }}
+	{{ if eq (print (.GetPage $ref).File) $ref }}
+		{{ $page = (.GetPage $ref) }}
+	{{ end }}
+{{ end }}
+{{ with $page }}
+<div class="col-md-4">
+	<div class="card card-blog card-story">
+		<a href="{{ .Permalink }}">
+		  <div class="card-image">
+			  <img class="img rounded" src="{{ with .Resources.GetMatch "header" }}{{ $image := .Fill "450x150" }}{{ $image.RelPermalink }}{{ end }}" alt="Story header: {{ .Params.title }}">
+		  </div>
+		  <div class="card-body">
+			<span class="h6 category text-primary"><i class="now-ui-icons education_agenda-bookmark"></i> {{ i18n (.Section | lower) }}</span>
+			<h5 class="card-title">
+			  {{ .Title }}
+			</h5>
+			<p class="card-description">
+			  {{ with .Params.subtitle }} {{ . }} {{ else }}&nbsp;{{ end }}
+			</p>
+			<div class="card-footer">
+			  <div class="stats stats-right">
+				<i class="now-ui-icons files_single-copy-04"></i> {{ len .Data.Pages }} Pages
+			  </div>
+			</div>
+		  </div>
+		</a>
+	</div>
+</div>
+{{ end }}

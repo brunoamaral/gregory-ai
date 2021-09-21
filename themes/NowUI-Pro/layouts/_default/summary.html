@@ -1,0 +1,43 @@
+<!-- TEMPLATE 1 for blog post lists -->
+						<div class="col-md-4">
+							<div class="card card-plain card-blog">
+								<div class="card-image">
+									<a href="{{ .Permalink }}">
+										{{ $image := ""}}
+										{{ with .Resources.GetMatch "header" }}
+											{{ $image = (.Fill "990x660").Permalink }}
+										{{ else }}
+											{{ $image = .Site.Params.defaultImage }}
+										{{ end }}
+										<img class="img rounded img-raised" src="{{ $image }}" alt="{{ .Title }}" loading="lazy" />
+									</a>
+								</div>
+								<div class="card-body">
+									{{ if isset .Params "categories" }}
+									{{ range $index, $category := .Params.categories }}
+									<span class="h6 category text-info text-left {{ $category | urlize }} ">{{ $category }}</span>
+										{{ end }}
+										{{ end }}
+									<h4 class="card-title">
+										<a href="{{ .Permalink }}">{{ .Title }}</a>
+									</h4>
+									<p class="card-description">
+										{{ .Summary | truncate 155 }}
+										<a href="{{ .Permalink }}">{{ i18n "read_more" }}</a> <a href="{{ .Permalink }}#commento" data-custom-comments-text="window.displayCommentsCount"></a>
+									</p>
+										{{ range .Params.authors }}
+										{{ $author := ($.GetPage (printf "/authors/%s/" .) ) }}
+										{{ with $author }}
+										<div class="author">
+											{{- with .Resources.GetMatch "avatar" -}}
+											{{- $avatar := .Fill "200x200" -}}
+											<a href="{{ $author.Permalink }}" class="" title="{{ $author.Params.name }}"><img src="{{$avatar.Permalink}}" alt="{{ $author.Params.name }}" class="avatar img-raised"></a>
+											{{ end }}
+											<span><a href="{{ $author.Permalink }}">{{ $author.Params.name }}</a></span>
+										</div>
+										{{ end }}
+										{{ end }}
+									<p></p>
+								</div>
+							</div>
+						</div>

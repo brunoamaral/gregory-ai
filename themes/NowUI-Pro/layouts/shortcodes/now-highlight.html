@@ -1,0 +1,127 @@
+
+{{ $1_img := .Get "1_img" }}
+{{ $1_title := .Get "1_title"}}
+{{ $1_subtitle := .Get "1_subtitle"}}
+{{ $1_link := .Get "1_link"}}
+
+{{ $2_img := .Get "2_img" }}
+{{ $2_title := .Get "2_title"}}
+{{ $2_subtitle := .Get "2_subtitle"}}
+{{ $2_link := .Get "2_link"}}
+
+{{ $3_img := .Get "3_img" }}
+{{ $3_title := .Get "3_title"}}
+{{ $3_subtitle := .Get "3_subtitle"}}
+{{ $3_link := .Get "3_link"}}
+
+{{ $4_img := .Get "4_img" }}
+{{ $4_title := .Get "4_title"}}
+{{ $4_subtitle := .Get "4_subtitle"}}
+{{ $4_link := .Get "4_link"}}
+
+<div class="row">
+{{ with $1_title }}
+  <div class="col-md-6 px-0">
+    <div class="card card-fashion card-background" style="background-image: url('{{ $1_img }}')">
+      <div class="card-body">
+        <div class="card-title text-left">
+          <h2>
+            <a href="{{ $1_link }}">
+              {{ $1_title }}
+            </a>
+          </h2>
+        </div>
+        <div class="card-footer text-left">
+          {{ with $1_subtitle  }}
+          <div class="stats">
+            <span>
+              <i class="now-ui-icons objects_globe"></i>{{ . }}
+            </span>
+          </div>
+          {{ end }}
+        </div>
+      </div>
+    </div>
+  </div>
+{{ end }}
+{{ with $2_title }}
+  <div class="col-md-6 px-0">
+    <div class="card-container">
+      <div class="card card-fashion">
+        <div class="card-title"><h4><a href="{{ $2_link }}">
+                {{ $2_title }}
+              </a>
+            </h4>
+        </div>
+        <div class="card-body">
+          <div class="card-footer">
+            <div class="stats">
+              {{ with $2_subtitle }}
+                <span>
+                  <i class="now-ui-icons education_paper"></i> {{ . }}
+                </span>
+              {{ end }}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card card-fashion card-background" style="background-image: url('{{ $2_img }}')">
+      </div>
+    </div>
+  </div>
+{{ end }}
+
+</div>
+
+<div class="row">
+  {{ with $3_title }}
+  <div class="col-md-6 px-0">
+    <div class="card-container">
+      <div class="card card-fashion card-background" style="background-image: url('{{ $3_img }}')">
+      </div>
+      <div class="card card-fashion arrow-left">
+        <div class="card-title">
+          <h4>
+            <a href="{{ $3_link }}">
+              {{ $3_title }}
+            </a>
+          </h4>
+        </div>
+        <div class="card-body">
+          <div class="card-footer">
+            <div class="stats">
+              {{ with $3_subtitle }}
+                <span>
+                  <i class="now-ui-icons design_app"></i>{{ . }}
+                </span>
+              {{ end }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {{ end }}
+  {{ with $4_title }}
+  <div class="col-md-6 px-0">
+    <div class="card card-fashion card-background" style="background-image: url('{{ $4_img }}')">
+      <div class="card-body">
+        <div class="card-title text-left">
+          <h2>
+            <a href="{{ $4_link }}">{{ $4_title }}</a>
+          </h2>
+        </div>
+        <div class="card-footer text-left">
+          <div class="stats">
+            {{ with $4_subtitle }}
+              <span>
+                <i class="now-ui-icons media-2_sound-wave"></i>{{ . }}
+              </span>
+            {{ end }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {{ end }}
+</div>

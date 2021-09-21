@@ -1,0 +1,159 @@
+{{ define "bodyclasses" }}root{{ end }}
+{{ define "description" }}
+	<meta name="description" content="{{ $.Site.Params.description }}" />
+	<meta name="twitter:description" content="{{ $.Site.Params.description }}"/>
+{{ end }}
+{{ define "main" }}
+<div class="wrapper">
+	<div class="page-header">
+		<div class="page-header-image" data-parallax="true" style="background-image: url('{{ $.Site.Params.headerPhoto }}'); transform: translate3d(0px, 0px, 0px);"></div>
+		<div class="container">
+			<div class="content-center brand">
+			<img class="n-logo" src="{{ $.Site.Params.logo }}" alt="Logo for {{ .Site.Title }}">
+			<h1 class="h1-seo title">{{ block "title" . }}{{ .Site.Title }}{{ end }}</h1>
+			<h2 class="description">{{ block "subtitle" . }}{{ $.Site.Params.subtitle }}{{ end }}</h2>
+			<a class="h2 text-white" href="#content"><i class="now-ui-icons arrows-1_minimal-down"></i></a>
+			{{ $author := "" }}
+			{{ with .Site.Params.defaultAuthor }}
+			{{- $author = .Site.GetPage (printf .Site.Params.defaultAuthor ) -}}
+			{{ end }}
+			{{ if ne $author "" }}
+				{{ with $author.Params.profiles }}
+					{{ $map := (index . ) }}
+						{{ range $key, $val := $map }}
+					<a href="{{ $val }}" title="{{ $.Site.Title }} on {{ $key }}" class="btn btn-neutral btn-icon btn-round">
+					<i class="fab fa-{{ printf $key }}"></i>
+					</a>
+					{{ end }}
+				{{ end }}
+			{{ end }}
+			</div>
+		</div>
+		<a id="content"></a>
+	</div>
+
+	<div class="section">
+		<div class="container">
+				<section id="category-list">
+					<h2 class="d-sm-block d-lg-none text-center mt-3 title">{{ i18n "stories" }}</h2>
+						<div class="card-deck justify-content-center px-3 m-0">
+							<div class="row">
+								{{ range where (.Site.GetPage "section" "story").Sections ".Params.options.unlisted" false | intersect (where .Site.Pages "Params.story_featured" "=" true) }}
+								{{ partial "story-card.html" . }}
+								{{ end }}
+
+							</div>
+						</div>
+
+				</section>
+					<div class="blogs-1" id="blogs-1">
+						<div class="container">
+							<div class="row">
+								<div class="col-md-10 ml-auto mr-auto">
+									<h2 class="text-center title">{{ i18n "latest_blogposts" }}</h2>
+									<br>
+										{{ $firstposts := first 2 (where (where .Site.RegularPages ".Params.options.unlisted" false) "Section" "!=" "instagram") }}
+										{{ range $i,$p := $firstposts }}
+										{{if not (modBool $i 2)}}
+										<!-- first post -->
+									<div class="card card-plain card-blog">
+										<div class="row">
+											<div class="col-md-5 align-self-center">
+												<div class="card-image">
+													<a href="{{ .Permalink }}">
+													<img class="img img-raised rounded" loading="lazy" src="{{- with .Resources.GetMatch "header" -}}
+															{{- $image := .Fill "300x300" -}}{{- $image.RelPermalink -}}{{- else -}}{{ .Site.Params.defaultImage }}{{end}}" alt="Header image for: {{ .Title }}">
+													</a>
+												</div>
+											</div>
+											<div class="col-md-7">
+													{{ range $index, $category := .Params.categories }}
+													<span class="h6 category mt-3"><a class="text-info" title="{{ i18n "category" }} {{ $category}}" href="{{ $.Site.BaseURL }}categories/{{ $category | urlize }}/">{{ $category }}</a></span>
+													{{ end }}
+													<h3 class="card-title">
+																  <a href="{{ .Permalink }}">{{ .Title }}</a>
+																</h3>
+													<p class="card-description">
+														{{ .Summary | truncate 230 }}
+														<br>
+														<a href="{{ .Permalink }}">{{ i18n "continue_reading" }} </a>
+													</p>
+													<p class="author"> 
+														{{ with .Params.authors }}
+															{{ range . }}
+																{{ $author := ($.GetPage (printf "/authors/%s/" .) ) }}
+																{{ with $author }}
+																	{{- i18n "by" -}} 
+																	<b>
+																	<a href="{{ $author.Permalink }}" itemprop="author" title="{{ . }}" class="author">{{ $author.Params.name }}</a>
+																	{{ end }}
+																</b>,
+																{{ end }}
+															{{ end }}
+														<time class="published text-muted" itemprop="datePublished" datetime="{{ .Date.Format "2006-01-02T15:04:05" }}">{{ .Date.Format "January 2, 2006" }}</time>
+													</p>
+											</div>
+										</div>
+									</div>
+									{{ else }}
+										<!-- second post -->
+											<div class="card card-plain card-blog">
+												<div class="row">
+													<div class="col-md-7">
+														{{ range $index, $category := .Params.categories }}
+														<span class="h6 category">
+															<a class="text-danger" title="{{ i18n "category" }} {{ $category}}" href="{{ $.Site.BaseURL }}categories/{{ $category | urlize }}/">{{ $category }}</a>
+														</span>
+														{{ end }}
+														<h3 class="card-title">
+																	  <a href="{{ .Permalink }}">{{ .Title }}</a>
+																	</h3>
+														<p class="card-description">
+															{{ .Summary | truncate 230 }}
+															<br>
+															<a href="{{ .Permalink }}"> {{ i18n "continue_reading" }} </a>
+														</p>
+														<p class="author"> 
+														{{ with .Params.authors }}
+															{{ range . }}
+																{{ $author := ($.GetPage (printf "/authors/%s/" .) ) }}
+																{{ with $author }}
+																	{{- i18n "by" -}} 
+																	<b>
+																	<a href="{{ $author.Permalink }}" itemprop="author" title="{{ . }}" class="author">{{ $author.Params.name }}</a></b>,
+																{{ end }}
+															{{ end }}
+														{{ end }}
+															<time class="published text-muted" itemprop="datePublished" datetime="{{ .Date.Format "2006-01-02T15:04:05" }}">{{ .Date.Format "January 2, 2006" }}</time>
+														</p>
+													</div>
+													<div class="col-md-5 align-self-center">
+														<div class="card-image">
+															<a href="{{ .Permalink }}">
+															<img class="img img-raised rounded" loading="lazy" src="{{- with .Resources.GetMatch "header" -}}
+																{{- $image := .Fill "300x300" -}}{{- $image.RelPermalink -}}{{- else -}}{{ .Site.Params.defaultImage }}{{- end -}}" alt="Header image for {{ .Title }}">
+															</a>
+														</div>
+														</div>
+													</div>
+												</div>
+												{{ end }}
+												{{ end }}
+												<!-- second post -->
+											</div>
+										</div><!-- row -->
+									</div>
+								</div>
+							<p class="text-center"><a class="btn btn-primary btn-lg" href="{{ $.Site.BaseURL }}{{ "post" | relLangURL }}" role="button">{{ i18n "read_more_posts"}}</a></p>
+
+			<div class="separator separator-primary"></div>
+				<div class="row">
+						{{ $page := .Site.GetPage "page/featured-posts/index.md" }}
+						{{ with $page }}
+							{{.Content}}
+						{{ end }}
+				</div>
+		</div>
+	</div>
+</div>
+{{ end }}

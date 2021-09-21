@@ -1,0 +1,27 @@
+{{ define "bodyclasses" }}single page _default/page.html{{ end }}
+
+{{ define "data-attributes" }}
+	data-contentgrouptype="{{ .Section }}" data-contentgroupname="{{ .Title }}"
+{{ end }}
+
+{{ define "description" }}
+	{{ partial "description.html" . }}
+{{ end }}
+
+{{ define "main" }}
+<div class="wrapper">
+	{{ if or (eq .Params.options.header "small") (eq .Params.options.header "mini") (eq .Params.options.header nil ) }}
+		{{ partial "header-small.html" . }}
+	{{ else if eq $.Params.options.header "full"  }}
+		{{ partial "header-full.html" . }}
+	{{ end }}
+	<div class="section">
+		<div class="container-fluid">
+		<div class="row">
+			{{ .Content }}
+		</div>
+		<div class="separator separator-primary"></div>
+		</div>
+	</div>
+</div>
+{{ end }}

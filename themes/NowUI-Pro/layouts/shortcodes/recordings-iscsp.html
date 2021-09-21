@@ -1,0 +1,17 @@
+{{ $audioResources := where (.Page.Resources.Match "recordings/**") "MediaType.SubType" "mp4a-latm" }}
+{{ with $audioResources }}
+	{{ range $audioResources }}
+		{{ $name := split .Name "/" }}
+		<a class="btn-info btn" href="{{ .Permalink }}">Audio : {{ index $name 2 }}</a>
+	{{ end }}
+{{ end }}
+
+<br>
+
+{{ $videooResources := where (.Page.Resources.Match "recordings/**") "MediaType.SubType" "mp4" }}
+{{ with $videooResources }}
+	{{ range $videooResources }}
+	{{ $name := split .Name "/" }}
+	<a class="btn-info btn" href="{{ .Permalink }}">Video : {{ index $name 2 }}</a>
+	{{ end }}
+{{ end }}

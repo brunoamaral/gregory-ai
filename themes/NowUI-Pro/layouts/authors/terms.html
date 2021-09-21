@@ -1,0 +1,63 @@
+{{ define "bodyclasses" }}about-us authors-page authors-terms _default/authors-terms-html contentgrouptype-{{ .Data.Singular }} contentgroupname-{{ .Title | urlize }} {{ end }}
+{{ define "description" }}
+
+{{ end }}
+{{ define "main" }}
+<div class="wrapper">
+	{{ partial "header-small.html" . }}
+	<div class="about-team team-4">
+				<div class="container">
+					<div class="row">
+						<div class="col-md-8 ml-auto mr-auto text-center">
+							<h2 class="title">{{ .Title }}</h2>
+							<h4 class="description">{{ .Content }}</h4>
+						</div>
+					</div>
+					<div class="row">
+						{{ range where .Data.Pages ".Params.options.unlisted" "!=" true }} {{ if .Params.name }}
+						<div class="col-xl-6 col-lg-7 ">
+							<div class="card card-profile card-plain">
+								<div class="row">
+									<div class="col-md-5">
+										<div class="card-image">
+											<a href="{{ .Permalink }}">
+												{{- with .Resources.GetMatch "avatar" -}}
+													{{- if eq .MediaType.SubType "gif" -}}
+														<img class="img img-raised rounded" src="{{- .RelPermalink -}}" alt="{{ i18n "photo_of" }}{{ .Params.name }}">
+													{{- else }}
+														{{- $avatar := .Fill "400x400" -}}
+														<img class="img img-raised rounded" src="{{- $avatar.RelPermalink -}}" alt="{{ i18n "photo_of" }}{{ .Params.name }}">
+													{{- end }}
+												{{- end -}}
+											</a>
+										</div>
+									</div>
+									<div class="col-md-7">
+										<div class="card-body">
+											<h4 class="card-title"><a href="{{ .Permalink }}">{{ .Params.name }}</a></h4>
+											{{ with .Params.subtitle }}
+											<h6 class="category">{{ . }}</h6>
+											{{ end }}
+											<p class="card-description">
+												{{ .Summary }}
+											</p>
+											<div class="card-footer">
+												{{ with .Params.profiles }}
+													{{ range $key, $val := . }}
+													<a href="{{ $val }}" class="btn btn-icon btn-neutral btn-{{ $key }}"><i class="fab fa-{{ $key }}"></i></a>
+													{{ end }}
+												{{ end }}
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+						{{ end }} {{ end }}
+					</div>
+				</div>
+			</div>
+	</div>
+{{ end }}
+{{ define "list-javascript" }}
+{{ end }}

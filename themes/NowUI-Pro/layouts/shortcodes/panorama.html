@@ -1,0 +1,28 @@
+{{ $type := ( .Get "type" )  }}
+{{ $image := ( .Get "image" )  }}
+{{ $showControls := ( .Get "showControls" )  }}
+{{ $autoload := ( .Get "autoload" )  }}
+{{ $author := ( .Get "author" )  }}
+{{ $autorotate := ( .Get "autorotate" )  }}
+
+<div id="panorama"></div>
+<link rel="stylesheet" href="/plugins/pannellum/shortcode/pannellum.css">
+<script type="text/javascript" src="/plugins/pannellum/src/js/libpannellum.js"></script>
+<script type="text/javascript" src="/plugins/pannellum/src/js/pannellum.js"></script>
+<script>
+	pannellum.viewer("panorama", { 
+		"type": {{ $type }},
+		"panorama": {{ $image }},
+		"showControls": {{ $showControls | safeJS }},
+		"autoLoad": {{ $autoload  | safeJS }},
+		"author": {{ $author }},
+		"autoRotate": {{ $autorotate | safeJS  }}
+});
+</script>
+<div id="container">
+	<noscript>
+		<div class="pnlm-info-box">
+			<p>Javascript is required to view this panorama.<br>(It could be worse; you could need a plugin.)</p>
+		</div>
+	</noscript>
+</div>
