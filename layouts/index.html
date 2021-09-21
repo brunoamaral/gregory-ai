@@ -40,16 +40,7 @@
 
     <div class="section">
         <div class="container">
-            <section id="category-list">
-                <h2 class="d-sm-block d-lg-none text-center mt-3 title">{{ i18n "stories" }}</h2>
-                <div class="card-deck justify-content-center px-3 m-0">
-                    <div class="row">
-                        {{ range where (.Site.GetPage "section" "story").Sections ".Params.options.unlisted" false | intersect (where .Site.Pages "Params.story_featured" "=" true) }} {{ partial "story-card.html" . }} {{ end }}
-
-                    </div>
-                </div>
-
-            </section>
+            
             <div class="blogs-1" id="blogs-1">
                 <div class="container">
                     <div class="row">
