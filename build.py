@@ -1,12 +1,15 @@
 #!/usr/bin/python3
-import os
-import requests
-import subprocess
-import json 
-import pathlib
 from pathlib import Path
 import git  
+import html
+import json 
+import os
+import pandas as pd
+import pathlib
+import requests
 import spacy 
+import subprocess
+
 
 # Set Variables
 path = "/home/gregory/gregory"
@@ -14,11 +17,19 @@ path = "/home/gregory/gregory"
 ## If you are running docker-compose.yaml, this is http://localhost:18080/
 server = "https://api.brunoamaral.net/"
 website_path = "/var/www/labs.brunoamaral.eu/"
+
 # Workflow starts
 os.chdir(path)
 ## Optional
 g = git.cmd.Git(path)
 g.pull()
+
+print('''
+####
+## GET JSON DATA
+####
+''')
+
 # Get Articles
 url = server + 'articles/all'
 res = requests.get(url)
@@ -40,9 +51,12 @@ file_name = path + '/content/api/trials.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
-## Save excel versions
-import pandas as pd
-import html
+
+print('''
+####
+## SAVE EXCEL VERSIONS
+####
+''')
 articles_json = pd.read_json('data/articles.json')
 articles_json.link = articles_json.link.apply(html.unescape)
 articles_json.summary = articles_json.summary.apply(html.unescape)
@@ -52,8 +66,14 @@ trials_json.link = trials_json.link.apply(html.unescape)
 trials_json.summary = trials_json.summary.apply(html.unescape)
 trials_json.to_excel('content/api/trials.xlsx')
 
+print('''
+####
+## GET ARTICLES
+####
+''')
+
 # Make sure directory exists or create it
-articlesDir = path + "/content/article/"
+articlesDir = path + "/content/articles/"
 articlesDirExists = pathlib.Path(articlesDir)
 
 if articlesDirExists.exists() == False:
@@ -68,8 +88,8 @@ jsonArticles = json.loads(data)
 
 # Set which nlp module to use
 ## en_core_web is more precise but uses more resources
-# nlp = spacy.load('en_core_web_trf')
-nlp = spacy.load('en_core_web_sm')
+nlp = spacy.load('en_core_web_trf')
+# nlp = spacy.load('en_core_web_sm')
 print("Looking for noun phrases")
 
 for article in jsonArticles:
@@ -103,6 +123,8 @@ for article in jsonArticles:
             "\nsource: " + article["source"] + \
             "\nrelevant: " + str(article["relevant"]) + \
             "\nnounphrases: " + str(noun_phrases) + \
+            "\noptions:" + \
+            "\n  unlisted: false" + \
             "\n---\n" + \
             html.unescape(article["summary"])
         # add content to file
@@ -110,7 +132,56 @@ for article in jsonArticles:
         f.write(articledata)
         f.close()
 
+print('''
+####
+## GET TRIALS
+####
+''')
 
+# Make sure directory exists or create it
+trialsDir = path + "/content/trials/"
+trialsDirExists = pathlib.Path(trialsDir)
+
+if trialsDirExists.exists() == False:
+    trialsDirExists.mkdir(parents=True, exist_ok=True)
+
+
+# Open trials.json
+trials = path + '/data/trials.json'
+with open(trials,"r") as a:
+    data = a.read()
+
+jsonTrials = json.loads(data)
+
+for trial in jsonTrials:
+
+    # Process whole documents
+    text = trial["title"]
+
+    # Write a file for each record
+    markdownDir = pathlib.Path(trialsDir+str(trial["trial_id"]))
+    markdownDir.mkdir(parents=True, exist_ok=True)
+
+    with open(str(markdownDir)+"/index.md", "w+") as f:
+        trialdata = "---\ntrial_id: " + \
+            str(trial["trial_id"]) + \
+            "\ndiscovery_date: " + str(trial["discovery_date"]) + \
+            "\ndate: " + str(trial["discovery_date"]) + "Z" +\
+            "\ntitle: \'" + trial["title"] + "\'" +\
+            "\nsummary: |" + \
+            '\n  ' + trial["summary"].replace("\n", "\n  ") +\
+            "\nlink: \'" + trial["link"] + "\'" +\
+            "\npublished_date: " + str(trial["published_date"]) + \
+            "\nsource: " + trial["source"] + \
+            "\nrelevant: " + str(trial["relevant"]) + \
+            "\noptions:" + \
+            "\n  unlisted: false" + \
+            "\n---\n" + \
+            html.unescape(trial["summary"])
+        # add content to file
+
+        f.write(trialdata)
+        f.close()
 
 # Build the website
 args = ("/usr/local/bin/hugo", "-d", website_path,"--cacheDir", path)
