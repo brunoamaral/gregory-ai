@@ -264,42 +264,47 @@
 {{- block "main" . -}}
 
 {{- end -}}
+
+{{ if eq .Site.Params.options.hideSubscribeForm false }}
 {{- if (ne $.Params.options.hideSubscribeForm true | and (ne .Section "instagram")) -}}
-	<div class="subscribe-line subscribe-line-image d-print-none">
-		<div class="container">
-		  <div class="row">
-			<div class="col-md-6 ml-auto mr-auto">
-			  <div class="text-center">
-				<span id="newsletter" class="title h4">{{- i18n "follow" -}}</span>
-				<p class="description">
-				  {{- i18n "subscribe_description" -}}
-				</p>
-			  </div>
-			  <div class="card card-raised card-form-horizontal">
-				<div class="card-body">
-					<form id="footerSubscribeForm" action="{{ $.Site.Params.tinyletter }}" method="post" target="popupwindow" onsubmit="window.open('{{ $.Site.Params.tinyletter }}', 'popupwindow', 'scrollbars=yes,width=800,height=600');return true">
-					<div class="row">
-					  <div class="col-sm-8 mr-0 pr-0">
-						<div class="input-group">
-						  <div class="input-group-prepend">
-							<span class="input-group-text"><i class="now-ui-icons ui-1_email-85"></i></span>
-						  </div>
-						  <label for="subscribeEmail" class="sr-only">Enter your email</label>
-						  <input id="subscribeEmail" type="text" class="form-control" placeholder="Email ...">
-						</div>
+<div class="subscribe-line subscribe-line-image d-print-none">
+	<div class="container">
+	  <div class="row">
+		<div class="col-md-6 ml-auto mr-auto">
+		  <div class="text-center">
+			<span id="newsletter" class="title h4">{{- i18n "follow" -}}</span>
+			<p class="description">
+			  {{- i18n "subscribe_description" -}}
+			</p>
+		  </div>
+		  <div class="card card-raised card-form-horizontal">
+			<div class="card-body">
+				<form id="footerSubscribeForm" action="{{ $.Site.Params.tinyletter }}" method="post" target="popupwindow" onsubmit="window.open('{{ $.Site.Params.tinyletter }}', 'popupwindow', 'scrollbars=yes,width=800,height=600');return true">
+				<div class="row">
+				  <div class="col-sm-8 mr-0 pr-0">
+					<div class="input-group">
+					  <div class="input-group-prepend">
+						<span class="input-group-text"><i class="now-ui-icons ui-1_email-85"></i></span>
 					  </div>
-					  <div class="col-sm-4 ml-0 pl-0">
-						<input type="submit" class="btn btn-primary btn-block" value="{{- i18n "subscribe_label" -}}">
-					  </div>
+					  <label for="subscribeEmail" class="sr-only">Enter your email</label>
+					  <input id="subscribeEmail" type="text" class="form-control" placeholder="Email ...">
 					</div>
-				  </form>
+				  </div>
+				  <div class="col-sm-4 ml-0 pl-0">
+					<input type="submit" class="btn btn-primary btn-block" value="{{- i18n "subscribe_label" -}}">
+				  </div>
 				</div>
-			  </div>
+			  </form>
 			</div>
 		  </div>
 		</div>
+	  </div>
 	</div>
+</div>
 {{- end -}}
+{{ end }}
+
+
 
 {{- if  ne .Section "instagram" | and ( ne $.Params.options.hideFooter true ) -}}
 	{{- partialCached "footer.html" . -}}

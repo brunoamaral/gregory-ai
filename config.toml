@@ -46,7 +46,8 @@ headerPhoto = ""
   visitor = true
   enableHeaderVisitor = true
   debug = true
-
+[params.options]
+  hideSubscribeForm = true
 [menu]
   [[menu.main]]
   name = 'Home'
