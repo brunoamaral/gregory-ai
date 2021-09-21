@@ -20,24 +20,10 @@
 		</div>
 		<div class="content-center">
 			<div class="container">
-				<div class="
-				{{ with $.Params.title_align }}
-				col-md-12 text-{{.}}
-				{{ else }}
-				col-md-8 ml-auto mr-auto text-center
-				{{ end }}
-	
-					">
-					{{- if (ne .Params.options.showTitle false)  }}
-					<h1 class="title" itemprop="headline d-print-block">{{ .Title }}</h1> {{ .Params.options.showTitle}}
-					{{ end }}
+				<div class="col-md-8 ml-auto mr-auto text-center">
+					<h1 class="title" itemprop="headline d-print-block">{{ .Title }}</h1> 
 					{{- with .Params.subtitle }}
 						<h2 itemprop="subtitle d-print-block">{{ . }}</h2>
-					{{- end }}
-					{{- with .Params.cta }}
-						{{ range . }}
-							<a href="{{ with .url }} {{ . }}{{ end }}" class="btn btn-lg {{ with .classes }}{{ . }}{{ else }} btn-primary{{ end }}">{{ with .label }}{{ . | safeHTML }}{{ end }}</a>
-						{{ end }}
 					{{- end }}
 				</div>
 			</div>
@@ -249,10 +235,4 @@
 		{{ partial "comments-js.html" . }}
 		<script defer src="https://commento.brunoamaral.eu/js/commento.js" data-no-fonts="true"></script>
 	{{ end }}
-	<!-- Plyr for better html <video> and <audio> -->
-	{{- $plyr_js := resources.Get "/js/plyr/plyr.min.js" -}} 
-	<script src="{{- $plyr_js.Permalink }}"></script>
-	<script type="text/javascript" defer="true">
-		const players = Plyr.setup('.player', {blankVideo: '/plyr/blank.mp4', iconUrl: '/plyr/plyr.svg'});
-	</script>
 {{ end }}

@@ -15,11 +15,21 @@
 {{ end }}
 {{ define "main" }}
 <div class="wrapper">
-	{{ if or (eq .Params.options.header "small") (eq .Params.options.header "mini") (eq .Params.options.header nil ) }}
-		{{ partial "header-small.html" . }}
-	{{ else if eq $.Params.options.header "full"  }}
-		{{ partial "header-full.html" . }}
-	{{ end }}
+	<div class="page-header page-header-mini">
+		<div class="page-header-image d-print-none" data-parallax="true" style="background-image: url('');">
+		</div>
+		<div class="content-center">
+			<div class="container">
+				<div class="col-md-8 ml-auto mr-auto text-center">
+					<h1 class="title" itemprop="headline d-print-block">{{ .Title }}</h1> 
+					{{- with .Params.subtitle }}
+						<h2 itemprop="subtitle d-print-block">{{ . }}</h2>
+					{{- end }}
+				</div>
+			</div>
+		</div>
+	</div>
+
 	<div class="section">
 	<div class="container">
 		<div class="row">
@@ -214,29 +224,7 @@
 	 	 </div>
 	 {{ end }}
 
-	 {{ if eq .Section "story" }}
-	 <section id="category-list" class="">
-		<div class="container">
-			<div class="row">
-				<div class="col-md-12">
-					<h2 class="title">{{ .CurrentSection.Title }}</h2> 
-					{{ with .CurrentSection.Params.subtitle }}
-					<h3>{{ . }}</h3>							
-					{{ end }}
-					<p>{{ i18n "select_one_of_the_pages_in_this_story" }}</p>
 
-					<div class="card-deck">
-						<div class="row">
-						{{ range where .CurrentSection.Pages ".Params.options.unlisted" false }}
-							{{ .Render "summary" }}
-						{{end}}
-						</div>
-					</div>
-				</div>
-			</div>
-		</div>
-	 </section>
-	{{ end }} 
 
 	{{ partial "pagination.html" }}
 	</div>	
@@ -247,10 +235,4 @@
 		{{ partial "comments-js.html" . }}
 		<script defer src="https://commento.brunoamaral.eu/js/commento.js" data-no-fonts="true"></script>
 	{{ end }}
-	<!-- Plyr for better html <video> and <audio> -->
-	{{- $plyr_js := resources.Get "/js/plyr/plyr.min.js" -}} 
-	<script src="{{- $plyr_js.Permalink }}"></script>
-	<script type="text/javascript" defer="true">
-		const players = Plyr.setup('.player', {blankVideo: '/plyr/blank.mp4', iconUrl: '/plyr/plyr.svg'});
-	</script>
 {{ end }}
