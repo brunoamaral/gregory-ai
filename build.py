@@ -36,7 +36,7 @@ res = requests.get(url)
 file_name = path + '/data/articles.json'
 with open(file_name, "w") as f:
     f.write(res.text)
-file_name = path + '/content/api/articles.json'
+file_name = path + '/content/developers/articles.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
@@ -47,7 +47,7 @@ file_name = path + '/data/trials.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
-file_name = path + '/content/api/trials.json'
+file_name = path + '/content/developers/trials.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
@@ -60,11 +60,11 @@ print('''
 articles_json = pd.read_json('data/articles.json')
 articles_json.link = articles_json.link.apply(html.unescape)
 articles_json.summary = articles_json.summary.apply(html.unescape)
-articles_json.to_excel('content/api/articles.xlsx')
+articles_json.to_excel('content/developers/articles.xlsx')
 trials_json = pd.read_json('data/trials.json')
 trials_json.link = trials_json.link.apply(html.unescape)
 trials_json.summary = trials_json.summary.apply(html.unescape)
-trials_json.to_excel('content/api/trials.xlsx')
+trials_json.to_excel('content/developers/trials.xlsx')
 
 print('''
 ####
