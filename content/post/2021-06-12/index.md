@@ -3,6 +3,8 @@ title: "Newsletter"
 date: 2021-06-12T17:11:10+01:00
 lastmod: 
 author: Bruno Amaral
+options:
+  unlisted: false
 
 description: 
 categories: []

@@ -1,12 +1,15 @@
 #!/usr/bin/python3
-import os
-import requests
-import subprocess
-import json 
-import pathlib
 from pathlib import Path
 import git  
+import html
+import json 
+import os
+import pandas as pd
+import pathlib
+import requests
 import spacy 
+import subprocess
+
 
 # Set Variables
 path = "/home/gregory/gregory"
@@ -14,6 +17,7 @@ path = "/home/gregory/gregory"
 ## If you are running docker-compose.yaml, this is http://localhost:18080/
 server = "https://api.brunoamaral.net/"
 website_path = "/var/www/labs.brunoamaral.eu/"
+
 # Workflow starts
 os.chdir(path)
 ## Optional
@@ -41,8 +45,6 @@ with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
 ## Save excel versions
-import pandas as pd
-import html
 articles_json = pd.read_json('data/articles.json')
 articles_json.link = articles_json.link.apply(html.unescape)
 articles_json.summary = articles_json.summary.apply(html.unescape)
@@ -53,7 +55,7 @@ trials_json.summary = trials_json.summary.apply(html.unescape)
 trials_json.to_excel('content/api/trials.xlsx')
 
 # Make sure directory exists or create it
-articlesDir = path + "/content/article/"
+articlesDir = path + "/content/articles/"
 articlesDirExists = pathlib.Path(articlesDir)
 
 if articlesDirExists.exists() == False:
@@ -68,8 +70,8 @@ jsonArticles = json.loads(data)
 
 # Set which nlp module to use
 ## en_core_web is more precise but uses more resources
-# nlp = spacy.load('en_core_web_trf')
-nlp = spacy.load('en_core_web_sm')
+nlp = spacy.load('en_core_web_trf')
+# nlp = spacy.load('en_core_web_sm')
 print("Looking for noun phrases")
 
 for article in jsonArticles:
@@ -103,6 +105,8 @@ for article in jsonArticles:
             "\nsource: " + article["source"] + \
             "\nrelevant: " + str(article["relevant"]) + \
             "\nnounphrases: " + str(noun_phrases) + \
+            "\noptions:" + \
+            "\n  unlisted: false" + \
             "\n---\n" + \
             html.unescape(article["summary"])
         # add content to file
@@ -118,3 +122,7 @@ popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
+
+
+
+

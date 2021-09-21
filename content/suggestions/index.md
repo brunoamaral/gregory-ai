@@ -1,8 +1,10 @@
 ---
-title: "Sugestões"
+title: "Suggestions"
 date: 2021-02-24T15:14:33Z
 lastmod: 
 author: Bruno Amaral
+options:
+  unlisted: false
 
 description: 
 categories: []
@@ -16,7 +18,7 @@ disableAutoCollapse: true
 
 menu:
     main:
-        Name: Sugestões
+        Name: Suggestions
         Weight: 5
 ---
 
