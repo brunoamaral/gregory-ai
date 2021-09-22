@@ -46,7 +46,9 @@
                     <div class="row">
                         <div class="col-md-10 ml-auto mr-auto">
                             <h2 class="text-center title">Latest relevant articles</h2>
-                            <p class="text-center"><strong>Last Update</strong> {{ now.Format "2 Jan, 15:04" }}</p>
+
+                            {{ $count := len (where .Site.RegularPages "Section" "articles") }}
+                            <p class="text-center">Last Update <strong>{{ now.Format "2 Jan, 15:04" }}</strong> with <strong>{{$count}}</strong> articles, since February 2021.</p>
                             <br> {{ $firstposts := (where (where .Site.RegularPages ".Params.relevant" 1) "Section" "!=" "instagram") }} 
                             {{ range (.Paginate ( where .Site.RegularPages ".Params.relevant" 1 )).Pages }} 
                             <!-- first post -->
