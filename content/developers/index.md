@@ -47,3 +47,20 @@ resources:
 `https://api.brunoamaral.net/articles/sources` : List all available sources.
 
 `https://api.brunoamaral.net/trials/keyword/{keyword}` : List all trials by keyword.
+
+## Database strucuture
+
+### Articles
+
+The JSON response contains information on scientific articles retrieved from multiple academic sources, with the following information for each article:
+
+- **article_id** - The ID of the article
+- **discovery_date** - The date this record was retrieved from its source
+- **title** - The title of the article
+- **summary** - The abstract or summary of the article
+- **link** - The link from which the article was retrieved
+- **published_date** - The date it was published
+- **source** - The source from which the article was retrieved
+- **relevant** - Whether this article is relevant or not (manually tagged by a human)
+- **table_constraints** - created automatically by SQLite
+- **sent** - A binary value that indicates if the article was sent to the admin. (The admin receives an email digest every 48 hours with the listings to mark them as relevant or not)
