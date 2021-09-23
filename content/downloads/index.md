@@ -34,7 +34,7 @@ scripts:
 cta:
   - label: <i class="fas fa-file-excel mr-1"></i> Articles in Excel
     url: /api/articles.xlsx
-    classes: btn bg-gradient-success 
+    classes: btn btn-success 
   - label: <i class="fas fa-file-excel mr-1"></i> Clinical Trials in Excel
     url: /api/trials.xlsx
     classes: btn btn-success
