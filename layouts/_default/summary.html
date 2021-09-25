@@ -8,7 +8,7 @@
 									<span class="h6 category text-info text-left {{ $category | urlize }} ">{{ $category }}</span>
 										{{ end }}
 										{{ end }}
-									{{.Date | time.Format ":date_long" }}
+									{{.Date | time.Format ":date_long" }} | {{ .Params.source }}
 									<h4 class="card-title">
 										<a href="{{ .Permalink }}">{{ .Title | safeHTML }}</a>
 									</h4>

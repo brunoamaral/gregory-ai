@@ -59,7 +59,7 @@
                                         <span class="h6 category mt-3"><a class="text-info" title="{{ i18n "category" }} {{ $category}}" href="{{ $.Site.BaseURL }}categories/{{ $category | urlize }}/">{{ $category }}</a></span> 
                                         {{ end }}
                                         <h3 class="card-title">
-                                            <a href="{{ .Permalink }}">{{ .Title }}</a>
+                                            <a href="{{ .Permalink }}">{{ .Title }}</a> | {{ .Params.source }}
                                         </h3>
                                         <p class="card-description">
                                             {{ .Summary |  htmlUnescape | plainify | truncate 230 }}
