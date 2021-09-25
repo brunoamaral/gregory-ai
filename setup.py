@@ -144,6 +144,7 @@ for line in Lines:
                 print("Found column: " + column)
 
 # TO DO: If the Database is not ok, run corresponding SQL
+# TO DO: Create traefik_proxy network before running docker-compose
 
 print("Running Node-RED, open http://127.0.0.1:1880/ on your browser to confirm Node-Red is working.")
 
