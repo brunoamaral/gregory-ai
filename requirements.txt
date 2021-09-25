@@ -66,3 +66,5 @@ urllib3==1.26.6
 wasabi==0.8.2
 websocket-client==0.59.0
 zipp==3.5.0
+sql-metadata==2.3.0
+sqlparse==0.4.2
