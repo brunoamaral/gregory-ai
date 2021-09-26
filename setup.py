@@ -133,8 +133,6 @@ print('''
 ## Updating any hugo modules that may exist
 ####
 ''')
-print("# Updating Hugo modules")
-#`hugo mod get -u;`
 
 args = ("/usr/local/bin/hugo", "mod", "get","-u")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
