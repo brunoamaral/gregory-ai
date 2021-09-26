@@ -39,7 +39,11 @@ if is_git_repo(cwd) == False or git.Repo(cwd).remotes[0].config_reader.get("url"
 
 
 
-# Check for directories
+print('''
+####
+## Check for directories
+####
+''')
 
 p = Path("docker-data")
 
@@ -56,7 +60,11 @@ else:
     print("Didn't find docker-python, creating ...")
     p.mkdir(parents=True, exist_ok=True)
 
-# Check for .env file
+print('''
+####
+## Check for .env file
+####
+''')
 f = Path(".env")
 
 if p.is_file():
@@ -68,7 +76,12 @@ else:
         f.write(env_file)
         f.close()
 
-# Check for docker-compose.yaml file
+print('''
+####
+## Check for docker-compose.yaml file
+####
+''')
+
 docker_compose = Path("docker-compose.yaml")
 
 if docker_compose.is_file():
@@ -83,27 +96,43 @@ else:
         f.write(res.text)
         f.close()
 
-# Check for docker-compose command
+print('''
+####
+## Check for docker-compose command
+####
+''')
 if is_tool("docker-compose"):
     print("\N{check mark} Found docker-compose")
 else:
     print("Didn't find docker-compose, please install it. Details at https://docs.docker.com/compose/install/")
 
-# Check for SQLite
+print('''
+####
+## Check for SQLite
+####
+''')
 
 if is_tool("sqlite3"):
     print("\N{check mark} Found Sqlite3, just in case")
 else: 
     print("Didn't find SQLite3 (optional) on the host system, proceeding")
         
-# Check for Hugo
+print('''
+####
+## Check for Hugo
+####
+''')
 if is_tool("hugo"):
     print("\N{check mark} Found Hugo")
 else:
     print("Didn't find Hugo, please install it. Details at https://gohugo.io")
     sys.exit('Hugo not installed')
 
-# Updating Hugo modules
+print('''
+####
+## Updating any hugo modules that may exist
+####
+''')
 print("# Updating Hugo modules")
 #`hugo mod get -u;`
 
@@ -112,8 +141,11 @@ popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
-
-# Check if SQLite3 db is present
+print('''
+####
+## Check if SQLite3 db is present
+####
+''')
 print('Trying to connect to docker-data/gregory.db to apply gregory_schema.sql')
 database = sqlite3.connect('./docker-data/gregory.db')
 cur = database.cursor()
@@ -123,7 +155,12 @@ with open('gregory_schema.sql') as fp:
 if database == False:
     sys.exit('SQLite database not found, create it please')
 
-# Check Database is OK
+print('''
+####
+## Check Database is OK
+####
+''')
+
 schema = open('gregory_schema.sql', 'r')
 Lines = schema.readlines()
 
@@ -145,11 +182,26 @@ for line in Lines:
 
 # TO DO: If the Database is not ok, run corresponding SQL
 # TO DO: Create traefik_proxy network before running docker-compose
+# TO DO: Edit docker-compose.yaml to make volumes an absolute path
+# TO DO: Run docker-compose up as root
 
-print("Running Node-RED, open http://127.0.0.1:1880/ on your browser to confirm Node-Red is working.")
 
-args = ("/usr/local/bin/docker-compose", "up")
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
-popen.wait()
-output = popen.stdout.read()
-print(output)
+# print("Running Node-RED, open http://127.0.0.1:1880/ on your browser to confirm Node-Red is working.")
+
+# args = ("docker-compose", "up")
+# popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
+# popen.wait()
+# output = popen.stdout.read()
+# print(output)
+
+
+print('''
+####
+## Next steps
+####
+
+- Create traefik_proxy network before running docker-compose: `docker network create traefik_proxy`
+- Edit docker-compose.yaml so that volumes have an absolute path
+- Run `sudo docker-compose up -d` to start Node-RED
+- Run build.py to deploy the website
+''')
