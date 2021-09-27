@@ -105,9 +105,12 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
 
     for (let i = 0; i < queries.length; i++) {
-        // console.log(queries[i].id)
-        searchArticles(queries[i].id)
-        searchTrials(queries[i].id)
+
+        if (queries[i].id != '') {
+            console.log('searching for ' + queries[i].id)
+            searchArticles(queries[i].id)
+            searchTrials(queries[i].id)
+        }
     };
     if (related.length > 0) {
         searchRelated(related);        
