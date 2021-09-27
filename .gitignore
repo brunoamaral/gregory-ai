@@ -10,3 +10,7 @@ workspace.code-workspace
 docker-python/
 docker-data/
 resources/
+content/developers/articles.xlsx
+content/developers/trials.xlsx
+content/developers/articles.json
+content/developers/trials.json
