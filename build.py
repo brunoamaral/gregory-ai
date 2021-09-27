@@ -15,8 +15,8 @@ import subprocess
 path = "/home/gregory/gregory"
 # Set the API Server
 ## If you are running docker-compose.yaml, this is http://localhost:18080/
-server = "https://api.brunoamaral.net/"
-website_path = "/var/www/labs.brunoamaral.eu/"
+server = "https://api.gregory-ms.com/"
+website_path = "/var/www/gregory-ms.com/"
 
 # Workflow starts
 
