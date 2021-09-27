@@ -28,7 +28,9 @@ print('''
 os.chdir(path)
 ## Optional
 g = git.cmd.Git(path)
-g.pull()
+output = g.pull()
+
+print(output)
 
 print('''
 ####
