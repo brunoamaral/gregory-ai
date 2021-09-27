@@ -108,6 +108,9 @@ document.addEventListener('DOMContentLoaded', (event) => {
         searchArticles(queries[i].id)
         searchTrials(queries[i].id)
     };
-    searchRelated(related);
+    if (related.length > 0) {
+        searchRelated(related);        
+    }
+
 
 });
