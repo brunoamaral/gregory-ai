@@ -147,7 +147,7 @@ for line in Lines:
 
 print("Running Node-RED, open http://127.0.0.1:1880/ on your browser to confirm Node-Red is working.")
 
-args = ("/usr/local/bin/docker-compose", "up")
+args = ("docker-compose", "up")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
