@@ -6,7 +6,7 @@ lastmod:
 author: Bruno Amaral
 options:
   unlisted: false
-  header: small
+  header: mini
 
 description: 
 categories: []

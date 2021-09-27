@@ -6,7 +6,7 @@ menu:
   main:
     name: Full Listing
 options:
-  header: small
+  header: mini
   showHeader: true
 
 resources:

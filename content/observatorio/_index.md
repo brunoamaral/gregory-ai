@@ -6,6 +6,7 @@ lastmod:
 author: Bruno Amaral
 options:
   unlisted: false
+  header: mini
 
 resources:
   - src: lucas-vasques-9vnACvX2748-unsplash.jpeg
