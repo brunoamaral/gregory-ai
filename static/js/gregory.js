@@ -3,7 +3,8 @@ document.addEventListener('DOMContentLoaded', (event) => {
     const queries = document.querySelectorAll('h3')
     const nounphrases = document.querySelectorAll('li.phrase')
     const commonwords = [
-        'Characteristics',
+        'characteristics',
+        'individuals',
         'ms',
         'multiple sclerosis',
         'patients',
@@ -48,7 +49,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
         // let list = document.querySelector('ol.trials.'+ term );
 
         let trialsRequest = new Request('https://api.gregory-ms.com/trials/keyword/' + term);
-        fetch(trialsRequest).then(response => response.json()).then(data => { console.log(data) })
+        // fetch(trialsRequest).then(response => response.json()).then(data => { console.log(data) })
 
         fetch(trialsRequest)
             .then(response => response.json())
