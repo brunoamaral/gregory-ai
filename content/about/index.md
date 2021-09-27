@@ -104,7 +104,7 @@ graph LR;
 
 - [ClinicalTrials](https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000)
 - 
-## Fontes por incluir
+## Sources we would like to include
 
 https://journals.bmj.com/
 
