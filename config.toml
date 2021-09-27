@@ -1,6 +1,6 @@
 theme = ["NowUI-Pro"]
 
-baseURL = "https://labs.brunoamaral.eu/"
+baseURL = "https://gregory-ms.com/"
 languageCode = "en"
 DefaultContentLanguage = "en"
 enableInlineShortcodes = true
