@@ -32,6 +32,8 @@ resources:
 
 ## API Endpoints
 
+### Articles
+
 `https://api.gregory-ms.com/articles/all` : Lists all articles.
 
 `https://api.gregory-ms.com/articles/by-date/{year}/{month}` : List articles for specified {year} and {month}. 
@@ -42,11 +44,23 @@ resources:
 
 `https://api.gregory-ms.com/articles/relevant` : List all relevant articles.
 
+#### Articles' Sources
+
 `https://api.gregory-ms.com/articles/source/{source}` : List all articles from specified {source}.
 
 `https://api.gregory-ms.com/articles/sources` : List all available sources.
 
+### Trials
+
+`https://api.gregory-ms.com/trials/all` : List all trials.
+
 `https://api.gregory-ms.com/trials/keyword/{keyword}` : List all trials by keyword.
+
+#### Trials' Sources
+
+`https://api.gregory-ms.com/trials/source/{source}` : List all trials from specified {source}.
+
+`https://api.gregory-ms.com/trials/sources` : List all available sources.
 
 ## Database strucuture
 
