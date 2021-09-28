@@ -1,6 +1,6 @@
 ---
 title: "Developers"
-subtitle: "There is an API to query the MS Database that you can use, for free."
+subtitle: "There is an API to query the MS Database that you can use for free."
 date: 2021-08-11T15:27:16+01:00
 lastmod: 
 author: Bruno Amaral
@@ -13,6 +13,7 @@ categories: []
 tags: []
 
 url: api
+layout: page
 
 menu:
   main:
@@ -29,6 +30,8 @@ resources:
   - src: lagos-techie-kwzWjTnDPLk-unsplash.jpeg
     name: header
 ---
+
+<div class="col-md-6 mx-auto">
 
 ## API Endpoints
 
@@ -78,3 +81,5 @@ The JSON response contains information on scientific articles retrieved from mul
 - **relevant** - Whether this article is relevant or not (manually tagged by a human)
 - **table_constraints** - created automatically by SQLite
 - **sent** - A binary value that indicates if the article was sent to the admin. (The admin receives an email digest every 48 hours with the listings to mark them as relevant or not)
+
+</div>
