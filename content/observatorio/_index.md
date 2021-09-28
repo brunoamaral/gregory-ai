@@ -18,7 +18,7 @@ tags: []
 menu:
   main:
     Name: Observatory
-    Weight: 1
+    Weight: 7
 draft: false
 enableDisqus : true
 enableMathJax: false

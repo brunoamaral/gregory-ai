@@ -1,10 +1,11 @@
 ---
 title: "Full Listing"
 subtitle: This is the complete list of articles in the database
-weight: 2
+
 menu:
   main:
-    name: Full Listing
+    name: Articles
+    weight: 6
 options:
   header: mini
   showHeader: true

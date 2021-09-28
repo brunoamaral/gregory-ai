@@ -3,7 +3,8 @@ title: "About and Contacts"
 date: 2021-02-24T13:00:55Z
 lastmod: 
 author: Bruno Amaral
-
+rowclasses: justify-content-center align-self-center
+layout: page
 description: 
 categories: []
 tags: []
@@ -20,7 +21,7 @@ scripts:
 menu:
   main:
     Name: About
-    Weight: 4
+    Weight: 10
 options:
   header: mini
   unlisted: false
@@ -30,7 +31,16 @@ resources:
     name: header
 ---
 
-> Too much information is as bad as not enough.
+
+<div class="col-8 mx-auto">
+
+
+
+{{< aside align="center" >}}
+Too much information is as bad as not enough.
+{{< /aside >}}
+
+---
 
 This website is meant for healthcare workers in the field of **Multiple Sclerosis** (MS) and Neurology. Think of it as a focused search engine for MS, with information on published articles and clinical trials.
 
@@ -103,7 +113,7 @@ graph LR;
 - [Sage](https://journals.sagepub.com/action/doSearch?AllField=multiple+sclerosis&SeriesKey=msja&content=articlesChapters&countTerms=true&target=default&sortBy=Ppub&startPage=&ContentItemType=research-article)
 
 - [ClinicalTrials](https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000)
-- 
+
 ## Sources we would like to include
 
 https://journals.bmj.com/
@@ -116,3 +126,6 @@ mail@brunoamaral.eu
 https://twitter.com/brunoamaral     
 
 [+351 912 875 856](tel:+351912875856)
+
+
+</div>

@@ -278,26 +278,7 @@
 			  {{- i18n "subscribe_description" -}}
 			</p>
 		  </div>
-		  <div class="card card-raised card-form-horizontal">
-			<div class="card-body">
-				<form id="footerSubscribeForm" action="{{ $.Site.Params.tinyletter }}" method="post" target="popupwindow" onsubmit="window.open('{{ $.Site.Params.tinyletter }}', 'popupwindow', 'scrollbars=yes,width=800,height=600');return true">
-				<div class="row">
-				  <div class="col-sm-8 mr-0 pr-0">
-					<div class="input-group">
-					  <div class="input-group-prepend">
-						<span class="input-group-text"><i class="now-ui-icons ui-1_email-85"></i></span>
-					  </div>
-					  <label for="subscribeEmail" class="sr-only">Enter your email</label>
-					  <input id="subscribeEmail" type="text" class="form-control" placeholder="Email ...">
-					</div>
-				  </div>
-				  <div class="col-sm-4 ml-0 pl-0">
-					<input type="submit" class="btn btn-primary btn-block" value="{{- i18n "subscribe_label" -}}">
-				  </div>
-				</div>
-			  </form>
-			</div>
-		  </div>
+		  <div class="col text-center"><a href='{{ ref . "/newsletter/index.md" }}' class="btn btn-info btn-round btn-lg font-weight-bold">How to subscribe <i class="fas fa-arrow-circle-right"></i></a></div>
 		</div>
 	  </div>
 	</div>

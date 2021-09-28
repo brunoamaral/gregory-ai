@@ -23,10 +23,6 @@ resources:
 
 url: newsletter
 
-menu:
-  main:
-    Name: Newsletter
-    Weight: 5
 ---
 
 There is a weekly newsletter with the collection of studies that seem  beneficial for the quality of life of people with Multiple Sclerosis. The newsletter is intended for use by healthcare professionals only and should not be considered as any kind of clinical suggestion.
