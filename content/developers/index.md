@@ -17,7 +17,7 @@ url: api
 menu:
   main:
     Name: Developers
-    Weight: 6
+    Weight: 5
 
 draft: false
 enableDisqus : true

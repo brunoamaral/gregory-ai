@@ -1,0 +1,62 @@
+
+<footer class="footer footer-big" data-background-color="black">
+    <div class="container">
+        <div class="content">
+            <div class="row">
+                <div class="col-md-3">
+                    <h5>{{ i18n "column_1" | upper }}</h5>
+                    <ul class="links-vertical">
+                    	{{- range .Site.Menus.column_1 -}}
+                        <li>
+                            <a href="{{ .URL }}" class="text-muted">
+                                {{ .Name }}
+                            </a>
+                        </li>
+                        {{ end }}
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <h5>{{ i18n "column_2" | upper }}</h5>
+                    <ul class="links-vertical">
+                    		{{- range .Site.Menus.column_2 -}}
+                    	    <li>
+                    	        <a href="{{ .URL }}" class="text-muted">
+                    	            {{ .Name }}
+                    	        </a>
+                    	    </li>
+                    	    {{ end }}
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <h5>{{ i18n "column_3" | upper }}</h5>
+
+                    <ul class="links-vertical">
+                    			{{- range .Site.Menus.column_3 -}}
+                    		    <li>
+                    		        <a href="{{ .URL }}" class="text-muted">
+                    		            {{ .Name }}
+                    		        </a>
+                    		    </li>
+                    		    {{ end }}
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <h5>{{ i18n "column_4" | upper }}</h5>
+                    <ul class="links-vertical">
+                    			{{- range .Site.Menus.column_3 -}}
+                    		    <li>
+                    		        <a href="{{ .URL }}" class="text-muted">
+                    		            {{ .Name }}
+                    		        </a>
+                    		    </li>
+                    		    {{ end }}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <hr>
+        <div class="copyright">
+        	Copyright &copy; {{ now.Format "2006"}}; 
+        </div>
+    </div>
+</footer>

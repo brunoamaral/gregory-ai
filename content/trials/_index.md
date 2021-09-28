@@ -21,7 +21,7 @@ disableAutoCollapse: true
 menu:
     main:
         Name: Clinical Trials
-        weight: 3
+        weight: 7
 
 resources:
   - src: science-in-hd-9kSTF9PvETM-unsplash.jpeg

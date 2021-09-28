@@ -23,7 +23,7 @@ layout: only-header
 menu:
   main:
     Name: Downloads
-    Weight: 3
+    Weight: 9
 options:
   unlisted: false
   showHeader: true

@@ -23,7 +23,7 @@ categories:
 title: "For Doctors"
 menu:
   main:
-    weight: 1
+    weight: 2
     name: Doctors
 options:
   unlisted: false
@@ -38,7 +38,7 @@ scripts:
 
 
 <div class="col-md-5 col-12 justify-content-center align-self-center align-right ">
-  <img src="images/undraw_medicine_b1ol.svg" class="w-75 align-middle d-none d-md-block" alt="medical doctors"/>
+  <img src="images/undraw_medicine_b1ol.svg" class="w-75 align-middle d-none d-md-block float-right" alt="medical doctors"/>
   </div>
   <div class="col-md-5 col-12 justify-content-center align-self-center">
   
@@ -53,20 +53,20 @@ scripts:
 </div>
 
 <div class="row justify-content-center align-self-center mb-5 p-md-5">
-  <div class="col-md-5 col-12 justify-content-center align-self-center">
+  <div class="col-md-5 col-12 align-self-center">
     <h3 class="title">Research Digest</h3>
     <p class="lead font-weight-biold">We have a weekly digest with the most recent and relevant research to keep you updated.</p>
     <p>Send us an email and ask to be subscribed.</p>
     <a href='mailto:mail@brunoamaral.eu' class="btn btn-primary btn-round btn-lg font-weight-bold">Send Email <i class="fas fa-envelope"></i></a>
     </div>
-  <div class="col-md-5 col-12 justify-content-center align-self-center">
+  <div class="col-md-5 col-12 align-self-center">
     <img src="images/undraw_subscribe_vspl.svg" class="w-75 align-middle d-none d-md-block" alt="Email newsletter">
   </div>  
 </div>
 
 
 <div class="row justify-content-center align-self-center mb-5 p-md-5">
-  <div class="col-md-5 col-12 justify-content-center align-self-center">
+  <div class="col-md-5 col-12 align-self-center">
     <img src="images/undraw_medical_research_qg4d.svg" class="w-75 align-middle d-none d-md-block" alt="Email newsletter">
   </div>  
   <div class="col-md-5 col-12 justify-content-center align-self-center">
