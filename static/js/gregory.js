@@ -3,7 +3,8 @@ document.addEventListener('DOMContentLoaded', (event) => {
     const queries = document.querySelectorAll('h3')
     const nounphrases = document.querySelectorAll('li.phrase')
     const commonwords = [
-        'Characteristics',
+        'characteristics',
+        'individuals',
         'ms',
         'multiple sclerosis',
         'patients',
@@ -23,7 +24,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
     function searchArticles(term) {
 
-        let articleRequest = new Request('https://api.brunoamaral.net/articles/keyword/' + term);
+        let articleRequest = new Request('https://api.gregory-ms.com/articles/keyword/' + term);
 
         // fetch(articleRequest).then(response => response.json()).then(data => { console.log(data) })
 
@@ -47,8 +48,8 @@ document.addEventListener('DOMContentLoaded', (event) => {
     function searchTrials(term) {
         // let list = document.querySelector('ol.trials.'+ term );
 
-        let trialsRequest = new Request('https://api.brunoamaral.net/trials/keyword/' + term);
-        fetch(trialsRequest).then(response => response.json()).then(data => { console.log(data) })
+        let trialsRequest = new Request('https://api.gregory-ms.com/trials/keyword/' + term);
+        // fetch(trialsRequest).then(response => response.json()).then(data => { console.log(data) })
 
         fetch(trialsRequest)
             .then(response => response.json())
@@ -71,7 +72,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
         // var request = new Request(url:'/',method:"POST",body:"{"keywords":["1","2"]} );
         let postdata = { "keywords": term }
             // console.log(postdata)
-        let relatedRequest = new Request("https://api.brunoamaral.net/articles/related", {
+        let relatedRequest = new Request("https://api.gregory-ms.com/articles/related", {
             method: "POST",
             body: JSON.stringify(postdata),
             headers: {
@@ -104,10 +105,16 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
 
     for (let i = 0; i < queries.length; i++) {
-        // console.log(queries[i].id)
-        searchArticles(queries[i].id)
-        searchTrials(queries[i].id)
+
+        if (queries[i].id != '') {
+            console.log('searching for ' + queries[i].id)
+            searchArticles(queries[i].id)
+            searchTrials(queries[i].id)
+        }
     };
-    searchRelated(related);
+    if (related.length > 0) {
+        searchRelated(related);        
+    }
+
 
 });

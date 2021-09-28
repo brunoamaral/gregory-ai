@@ -82,11 +82,12 @@
         "id": "2e3f3837.3647a8",
         "type": "ui_group",
         "name": "Development",
-        "tab": "c7217fb3.4a4cc",
+        "tab": "5872a177841f4138",
         "order": 1,
         "disp": true,
         "width": "6",
-        "collapse": false
+        "collapse": false,
+        "className": ""
     },
     {
         "id": "101790b7f36b6f9b",
@@ -184,6 +185,14 @@
                 "py": 0
             }
         }
+    },
+    {
+        "id": "5872a177841f4138",
+        "type": "ui_tab",
+        "name": "Home",
+        "icon": "dashboard",
+        "disabled": false,
+        "hidden": false
     },
     {
         "id": "3cc11d24.ff01a2",
@@ -4347,7 +4356,7 @@
         "fieldType": "msg",
         "format": "handlebars",
         "syntax": "mustache",
-        "template": "<h1>Digest of articles in the last 2 days</h1>\n<br>\n{{#payload}}\n\n\n\n<h2>{{{title}}}</h2>\n\n<p><strong>Discovery Date</strong>: {{discovery_date}}</p>\n<p>\n<a href=\"{{{link}}}\">{{{link}}}</a>\n</p>\n\n<p><a href=\"https://api.brunoamaral.net/articles/id/{{article_id}}/relevant/1\">Mark Relevant</a></p>\n\n<br>\n---\n<br>\n<br>\n{{/payload}}",
+        "template": "<h1>Digest of articles in the last 2 days</h1>\n<br>\n{{#payload}}\n\n\n\n<h2>{{{title}}}</h2>\n\n<p><strong>Discovery Date</strong>: {{discovery_date}}</p>\n<p>\n<a href=\"{{{link}}}\">{{{link}}}</a>\n</p>\n\n<p><a href=\"https://api.gregory-ms.com/articles/id/{{article_id}}/relevant/1\">Mark Relevant</a></p>\n\n<br>\n---\n<br>\n<br>\n{{/payload}}",
         "output": "str",
         "x": 640,
         "y": 240,
@@ -4365,7 +4374,7 @@
         "method": "POST",
         "ret": "obj",
         "paytoqs": "body",
-        "url": "https://api.eu.mailgun.net/v3/mg.brunoamaral.net/messages",
+        "url": "https://api.eu.mailgun.net/v3/gregory-ms.com/messages",
         "tls": "e3876559.c845b8",
         "persist": false,
         "proxy": "",
@@ -4480,7 +4489,7 @@
         "fieldType": "msg",
         "format": "handlebars",
         "syntax": "mustache",
-        "template": "<p>Good Morning, %recipient_fname%. </p>\n\n<p>Here are the relevant articles we have found in the last 7 days</p>\n\n{{#payload}}\n\n<h2>{{{title}}}</h2>\n\n<p><strong>Discovery Date</strong>: {{discovery_date}}</p>\n<p>\n<a href=\"{{{link}}}\">{{{link}}}</a>\n</p>\n\n---\n\n{{/payload}}\n\n<p>For the full list, please visit <a href=\"https://labs.brunoamaral.eu\">https://labs.brunoamaral.eu/tudo</a></p>\n\n<p>For adding people to this email list or further information, please contact Bruno Amaral:</p>\n\n<p><strong>Mobile</strong>: +351 912 875 856</p>\n\n<p><strong>Email</strong>: mail@brunoamaral.eu</p>\n\n<p>If you wish to unsubscribe, follow the link below.</p>\n\n<p>Best wishes, Gregory. Your friendly research bot.</p>\n",
+        "template": "<p>Good Morning, %recipient_fname%. </p>\n\n<p>Here are the relevant articles we have found in the last 7 days</p>\n\n{{#payload}}\n\n<h2>{{{title}}}</h2>\n\n<p><strong>Discovery Date</strong>: {{discovery_date}}</p>\n<p>\n<a href=\"{{{link}}}\">{{{link}}}</a>\n</p>\n\n---\n\n{{/payload}}\n\n<p>For the full list, please visit <a href=\"https://gregory-ms.com/\">https://gregory-ms.com/</a></p>\n\n<p>For adding people to this email list or further information, please contact Bruno Amaral:</p>\n\n<p><strong>Mobile</strong>: +351 912 875 856</p>\n\n<p><strong>Email</strong>: mail@brunoamaral.eu</p>\n\n<p>If you wish to unsubscribe, follow the link below.</p>\n\n<p>Best wishes, Gregory. Your friendly research bot.</p>\n",
         "output": "str",
         "x": 540,
         "y": 420,
@@ -4566,7 +4575,7 @@
         "method": "POST",
         "ret": "obj",
         "paytoqs": "body",
-        "url": "https://api.eu.mailgun.net/v3/mg.brunoamaral.net/messages",
+        "url": "https://api.eu.mailgun.net/v3/gregory-ms.com/messages",
         "tls": "e3876559.c845b8",
         "persist": false,
         "proxy": "",
@@ -6077,6 +6086,53 @@
         "wires": [
             [
                 "bc8999262add45ad"
+            ]
+        ]
+    },
+    {
+        "id": "b0ae9a1504505e09",
+        "type": "http in",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "url": "/",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 60,
+        "wires": [
+            [
+                "4fad85aaea6780f5"
+            ]
+        ]
+    },
+    {
+        "id": "a4333998a0213cbc",
+        "type": "http response",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 570,
+        "y": 60,
+        "wires": []
+    },
+    {
+        "id": "4fad85aaea6780f5",
+        "type": "template",
+        "z": "ed1d968f509a241a",
+        "name": "",
+        "field": "payload",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "Please visit <a href=\"https://gregory-ms.com\">https://gregory-ms.com</a>",
+        "output": "str",
+        "x": 340,
+        "y": 60,
+        "wires": [
+            [
+                "a4333998a0213cbc"
             ]
         ]
     }

@@ -4,8 +4,14 @@ data/trials.json
 public/
 modules/
 content/articles/*/
+content/trials/*/
 docker-data/
 workspace.code-workspace
 docker-python/
 docker-data/
 resources/
+content/developers/articles.xlsx
+content/developers/trials.xlsx
+content/developers/articles.json
+content/developers/trials.json
+node_modules
