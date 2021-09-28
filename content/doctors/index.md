@@ -35,12 +35,12 @@ scripts:
   -
 ---
 
-<div class="row justify-content-center align-self-center">
 
-<div class="col-md-4 justify-content-center align-self-center align-right ">
-  <img src="images/undraw_medicine_b1ol.svg" class="w-75 align-middle d-inline-block" alt="medical doctors"/>
+
+<div class="col-md-5 col-12 justify-content-center align-self-center align-right ">
+  <img src="images/undraw_medicine_b1ol.svg" class="w-75 align-middle d-none d-md-block" alt="medical doctors"/>
   </div>
-  <div class="col-md-4 justify-content-center align-self-center">
+  <div class="col-md-5 col-12 justify-content-center align-self-center">
   
   <h3 class="title">The observatory</h3>
   
@@ -52,24 +52,24 @@ scripts:
   </div>
 </div>
 
-<div class="row justify-content-center align-self-center mb-5 p-5">
-  <div class="col-md-4 justify-content-center align-self-center">
+<div class="row justify-content-center align-self-center mb-5 p-md-5">
+  <div class="col-md-5 col-12 justify-content-center align-self-center">
     <h3 class="title">Research Digest</h3>
     <p class="lead font-weight-biold">We have a weekly digest with the most recent and relevant research to keep you updated.</p>
     <p>Send us an email and ask to be subscribed.</p>
     <a href='mailto:mail@brunoamaral.eu' class="btn btn-primary btn-round btn-lg font-weight-bold">Send Email <i class="fas fa-envelope"></i></a>
     </div>
-  <div class="col-md-4 justify-content-center align-self-center">
-    <img src="images/undraw_subscribe_vspl.svg" class="w-75 align-middle d-inline-block" alt="Email newsletter">
+  <div class="col-md-5 col-12 justify-content-center align-self-center">
+    <img src="images/undraw_subscribe_vspl.svg" class="w-75 align-middle d-none d-md-block" alt="Email newsletter">
   </div>  
 </div>
 
 
-<div class="row justify-content-center align-self-center mt-5 mb-5 p-5">
-  <div class="col-md-4 justify-content-center align-self-center">
-    <img src="images/undraw_medical_research_qg4d.svg" class="w-75 align-middle d-inline-block" alt="Email newsletter">
+<div class="row justify-content-center align-self-center mb-5 p-md-5">
+  <div class="col-md-5 col-12 justify-content-center align-self-center">
+    <img src="images/undraw_medical_research_qg4d.svg" class="w-75 align-middle d-none d-md-block" alt="Email newsletter">
   </div>  
-  <div class="col-md-4 justify-content-center align-self-center">
+  <div class="col-md-5 col-12 justify-content-center align-self-center">
     <h3 class="title">Clinical Trials</h3>
     <p class="lead font-weight-biold">We do the best we can to identify clinical trials for Multiple Sclerosis and list them.</p>
     <a href='{{< ref "/trials/_index.md" >}}' class="btn btn-success btn-round btn-lg font-weight-bold">View latest clinical trials <i class="fas fa-arrow-circle-right"></i></a>
