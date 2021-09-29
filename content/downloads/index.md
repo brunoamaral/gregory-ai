@@ -34,14 +34,14 @@ scripts:
 cta:
   - label: <i class="fas fa-file-excel mr-1"></i> Articles in Excel
     url: /api/articles.xlsx
-    classes: btn btn-success 
+    classes: btn btn-sm btn-success 
   - label: <i class="fas fa-file-excel mr-1"></i> Clinical Trials in Excel
     url: /api/trials.xlsx
-    classes: btn btn-success
+    classes: btn btn-sm btn-success
   - label: <i class="fas fa-file-code mr-1"></i> Articles in JSON
     url: /api/articles.json
-    classes: btn-warning
+    classes: btn-sm btn-warning
   - label: <i class="fas fa-file-code mr-1"></i> Clinical Trials in JSON
     url: /api/trials.json
-    classes: btn btn-warning
+    classes: btn btn-sm btn-warning
 ---
