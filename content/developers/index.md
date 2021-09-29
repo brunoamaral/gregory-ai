@@ -39,31 +39,54 @@ resources:
 
 `https://api.gregory-ms.com/articles/all` : Lists all articles.
 
+<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/all">https://api.gregory-ms.com/articles/all</a>
+
 `https://api.gregory-ms.com/articles/by-date/{year}/{month}` : List articles for specified {year} and {month}. 
+
+<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/by-date/2021/06">https://api.gregory-ms.com/articles/by-date/2021/06</a>
 
 `https://api.gregory-ms.com/articles/id/{ID}` : List article that matches the {ID} number.
 
+<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/id/19">https://api.gregory-ms.com/articles/id/19</a>
+
 `https://api.gregory-ms.com/articles/keyword/{keyword}` : List all articles by keyword.
 
+<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/keyword/myelin">https://api.gregory-ms.com/articles/keyword/myelin</a>
+
 `https://api.gregory-ms.com/articles/relevant` : List all relevant articles.
+
+<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/relevant">https://api.gregory-ms.com/articles/relevant</a>
 
 #### Articles' Sources
 
 `https://api.gregory-ms.com/articles/source/{source}` : List all articles from specified {source}.
 
+<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/source/pubmed">https://api.gregory-ms.com/articles/source/pubmed</a>
+
 `https://api.gregory-ms.com/articles/sources` : List all available sources.
+
+<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/sources">https://api.gregory-ms.com/articles/sources</a>
 
 ### Trials
 
 `https://api.gregory-ms.com/trials/all` : List all trials.
 
+<strong>Example: </strong> <a href="https://api.gregory-ms.com/trials/all">https://api.gregory-ms.com/trials/all</a>
+
 `https://api.gregory-ms.com/trials/keyword/{keyword}` : List all trials by keyword.
+
+<strong>Example: </strong> <a href="https://api.gregory-ms.com/trials/keyword/myelin">https://api.gregory-ms.com/trials/keyword/myelin</a>
 
 #### Trials' Sources
 
 `https://api.gregory-ms.com/trials/source/{source}` : List all trials from specified {source}.
 
+<strong>Example: </strong> <a href="https://api.gregory-ms.com/trials/source/pubmed">https://api.gregory-ms.com/trials/source/pubmed</a>
+
 `https://api.gregory-ms.com/trials/sources` : List all available sources.
+
+<strong>Example: </strong> <a href="https://api.gregory-ms.com/trials/sources">https://api.gregory-ms.com/trials/sources</a>
+
 
 ## Database strucuture
 
