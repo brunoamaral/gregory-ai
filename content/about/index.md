@@ -69,7 +69,7 @@ graph LR;
     Scielo[fa:fa-newspaper Scielo.org] -->Gregory;
     TheLancet[fa:fa-newspaper The Lancet Health]-->Gregory;
     MsRelDis[fa:fa-newspaper MS and Related Disorders]-->Gregory;
-    Manual[fa:fa-keyboard Inserção Manual]-->Gregory;
+    Manual[fa:fa-keyboard Manual Input]-->Gregory;
     Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
     Gregory{fa:fa-robot Gregory}-->Newsletter(fa:fa-envelope Newsletter)
 </div>
