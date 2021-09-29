@@ -55,6 +55,10 @@ headerPhoto = ""
   url = "/"
   weight = 1
 
+  [[menu.column_3]]
+  name = 'Lisbon Collective'
+  url = "https://lisboncollective.com"
+  weight = 1
 
 [social]
   github = "https://github.com/brunoamaral/gregory"
