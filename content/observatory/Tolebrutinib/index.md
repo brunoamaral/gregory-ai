@@ -26,5 +26,5 @@ Source [The Lancet](https://www.thelancet.com/journals/laneur/article/PIIS1474-4
 
 <h3 id="Tolebrutinib">Tolebrutinib</h3>
 <ol class="articles Tolebrutinib"></ol>
-<h4>Ensaios Clínicos</h4>
+<h4>Clinical Trials</h4>
 <ol class="trials Tolebrutinib"></ol>

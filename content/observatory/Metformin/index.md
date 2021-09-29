@@ -1,6 +1,6 @@
 ---
-title: "Ocrelizumab"
-date: 2021-08-14T20:47:32+01:00
+title: "Metformin"
+date: 2021-08-14T21:32:04+01:00
 lastmod: 
 author: Bruno Amaral
 options:
@@ -17,7 +17,7 @@ disableToC: false
 disableAutoCollapse: true
 ---
 
-<h3 id="Ocrelizumab">Ocrelizumab</h3>
-<ol class="articles Ocrelizumab"></ol>
-<h4>Ensaios Clínicos</h4>
-<ol class="trials Ocrelizumab"></ol>
+<h3 id="Metformin">Metformin</h3>
+<ol class="articles Metformin"></ol>
+<h4>Clinical Trials</h4>
+<ol class="trials Metformin"></ol>

@@ -6,7 +6,7 @@ description: ""
 draft: false
 layout: page
 resources: 
-- src: images/louis-reed-pwcKF7L4-no-unsplash.jpeg
+- src: images/julia-koblitz-RlOAwXt2fEA-unsplash.jpeg
   name: "header"
 - src: "gallery/*.jpg"
   name: gallery-:counter
@@ -73,7 +73,7 @@ menu:
   <p class="lead font-weight-biold">On this page you will find a listing of promissing medicine and therapies with their associated articles and clinical trials.</p>
   
   <p>An item is added to the list based on what is identified by the MS Society Website, or when there is an associated clinical trial.</p>
-  <a href='{{< ref "/observatorio/_index.md" >}}' class="btn btn-success btn-round btn-lg font-weight-bold">Observatory <i class="fas fa-arrow-circle-right"></i></a>
+  <a href='{{< ref "/observatory/_index.md" >}}' class="btn btn-success btn-round btn-lg font-weight-bold">Observatory <i class="fas fa-arrow-circle-right"></i></a>
 </div>  
 </div>
 

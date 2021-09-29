@@ -15,7 +15,7 @@ enableMathJax: false
 disableToC: false
 disableAutoCollapse: true
 
-url: sobre
+url: about
 scripts:
   - '<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>'
 menu:
