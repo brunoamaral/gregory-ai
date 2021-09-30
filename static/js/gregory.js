@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
     const commonwords = [
         'characteristics',
         'individuals',
+        'involvement',
         'ms',
         'multiple sclerosis',
         'patients',
