@@ -5,7 +5,7 @@ Gregory aggregates searches in JSON and outputs to a Hugo static site
 
 # Live Version
 
-https://labs.brunoamaral.eu
+https://gregory-ms.com
 
 # Install
 
