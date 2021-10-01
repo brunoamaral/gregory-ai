@@ -19,7 +19,7 @@ tags:
 categories: 
   - 
 title: Sources
-
+url: /articles/source/
 options:
   unlisted: false
   showHeader: true

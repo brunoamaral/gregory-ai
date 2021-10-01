@@ -128,7 +128,7 @@ for article in jsonArticles:
             '\n  ' + article["summary"].replace("\n", "\n  ") +\
             "\nlink: \'" + article["link"] + "\'" +\
             "\npublished_date: " + str(article["published_date"]) + \
-            "\nsource: " + article["source"] + \
+            "\narticle_source: " + article["source"] + \
             "\nrelevant: " + str(article["relevant"]) + \
             "\nnounphrases: " + str(noun_phrases) + \
             "\noptions:" + \
@@ -180,7 +180,7 @@ for trial in jsonTrials:
             '\n  ' + trial["summary"].replace("\n", "\n  ") +\
             "\nlink: \'" + trial["link"] + "\'" +\
             "\npublished_date: " + str(trial["published_date"]) + \
-            "\nsource: " + trial["source"] + \
+            "\ntrial_source: " + trial["source"] + \
             "\nrelevant: " + str(trial["relevant"]) + \
             "\noptions:" + \
             "\n  unlisted: false" + \
