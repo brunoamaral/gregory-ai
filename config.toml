@@ -71,6 +71,14 @@ article_source = "article_source"
 trial_source = "trial_source"
 # source = "source"
 
+[permalinks]
+  article_source = "/articles/source/:slug"
+  trial_source = "/trials/source/:slug"
+
+  # post = "/:slug/"
+  # page = "/:slug/"
+  # category = "/:slug/"
+
 # doc: https://gohugo.io/getting-started/configuration-markup#highlight
 # syntax style: https://xyproto.github.io/splash/docs/longer/all.html
 [markup]
