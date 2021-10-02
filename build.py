@@ -1,5 +1,7 @@
 #!/usr/bin/python3
+from datetime import datetime
 from pathlib import Path
+from zipfile import ZipFile
 import git  
 import html
 import json 
@@ -44,7 +46,7 @@ res = requests.get(url)
 file_name = path + '/data/articles.json'
 with open(file_name, "w") as f:
     f.write(res.text)
-file_name = path + '/content/developers/articles.json'
+file_name = path + '/content/developers/articles_' + datetime_string + '.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
@@ -55,7 +57,7 @@ file_name = path + '/data/trials.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
-file_name = path + '/content/developers/trials.json'
+file_name = path + '/content/developers/trials_' + datetime_string + '.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
@@ -65,18 +67,46 @@ print('''
 ## SAVE EXCEL VERSIONS
 ####
 ''')
+
+## ARTICLES
 articles_json = pd.read_json('data/articles.json')
 articles_json.link = articles_json.link.apply(html.unescape)
 articles_json.summary = articles_json.summary.apply(html.unescape)
-articles_json.to_excel('content/developers/articles.xlsx')
+articles_json.to_excel('content/developers/articles_'+ datetime_string + '.xlsx')
+
+## TRIALS
 trials_json = pd.read_json('data/trials.json')
 trials_json.link = trials_json.link.apply(html.unescape)
 trials_json.summary = trials_json.summary.apply(html.unescape)
-trials_json.to_excel('content/developers/trials.xlsx')
+trials_json.to_excel('content/developers/trials_' + datetime_string + '.xlsx')
+
 
 print('''
 ####
-## GET ARTICLES
+## CREATE ZIP FILES
+####
+''')
+zipArticles = ZipFile('content/developers/articles.zip', 'w')
+# Add multiple files to the zip
+zipArticles.write('content/developers/articles_' + datetime_string + '.xlsx')
+zipArticles.write('content/developers/articles_' + datetime_string + '.json')
+zipArticles.write('content/developers/README.md')
+
+# close the Zip File
+zipArticles.close()
+
+zipTrials = ZipFile('content/developers/trials.zip', 'w')
+# Add multiple files to the zip
+zipTrials.write('content/developers/trials_' + datetime_string + '.xlsx')
+zipTrials.write('content/developers/trials_' + datetime_string + '.json')
+zipTrials.write('content/developers/README.md')
+
+# close the Zip File
+zipTrials.close()
+
+print('''
+####
+## CREATE ARTICLES
 ####
 ''')
 
@@ -131,6 +161,8 @@ for article in jsonArticles:
             "\narticle_source: " + article["source"] + \
             "\nrelevant: " + str(article["relevant"]) + \
             "\nnounphrases: " + str(noun_phrases) + \
+            "\nml_prediction_gnb: " + str(article["ml_prediction_gnb"]) + \
+            "\nml_prediction_lr: " + str(article["ml_prediction_lr"]) + \
             "\noptions:" + \
             "\n  unlisted: false" + \
             "\n---\n" + \
@@ -142,7 +174,7 @@ for article in jsonArticles:
 
 print('''
 ####
-## GET TRIALS
+## CREATE TRIALS
 ####
 ''')
 
