@@ -131,6 +131,8 @@ for article in jsonArticles:
             "\narticle_source: " + article["source"] + \
             "\nrelevant: " + str(article["relevant"]) + \
             "\nnounphrases: " + str(noun_phrases) + \
+            "\nml_prediction_gnb: " + str(article["ml_prediction_gnb"]) + \
+            "\nml_prediction_lr: " + str(article["ml_prediction_lr"]) + \
             "\noptions:" + \
             "\n  unlisted: false" + \
             "\n---\n" + \
