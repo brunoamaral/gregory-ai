@@ -1,0 +1,52 @@
+{{ $headerSize := $.Params.options.header }}
+
+{{ if eq $headerSize nil }}
+	{{ $headerSize = "small" }}
+{{ end }}
+<div class="page-header page-header-mini">
+	<div class="page-header-image d-print-none" data-parallax="true" style="background-image: url('{{ partial "header-image.html" . }}');">
+	</div>
+	<div class="content-center">
+		<div class="container">
+			<div class="
+			{{ with $.Params.options.title_align }}
+			col-md-12 text-{{.}}
+			{{ else }}
+			col-md-8 ml-auto mr-auto text-center
+			{{ end }}
+
+				">
+				{{- if (ne .Params.options.showTitle false)  }}
+				<h1 class="title" itemprop="headline d-print-block">{{ .Title }}</h1> {{ .Params.options.showTitle}}
+				{{ end }}
+				<div class="col-md-12 ml-auto mr-auto">
+                <div class="card card-raised card-form-horizontal card-plain" data-background-color="">
+                  <div class="card-body">
+                    <form method="" action="">
+                      <div class="row">
+                        <div class="col-md-10">
+                          <div class="form-group">
+                            <input type="text" value="" placeholder="Search" class="form-control bg-light text-primary">
+                          </div>
+                        </div> 
+
+                        <div class="col-md-2">
+                          <button type="button" class="btn btn-primary btn-round btn-block">Search</button>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+				{{- with .Params.subtitle }}
+					<h2 itemprop="subtitle d-print-block">{{ . }}</h2>
+				{{- end }}
+				{{- with .Params.cta }}
+					{{ range . }}
+						<a href="{{ with .url }} {{ . }}{{ end }}" class="btn btn-lg {{ with .classes }}{{ . }}{{ else }} btn-primary{{ end }}">{{ with .label }}{{ . | safeHTML }}{{ end }}</a>
+					{{ end }}
+				{{- end }}
+			</div>
+		</div>
+	</div>
+</div>
