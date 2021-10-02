@@ -1,4 +1,4 @@
-CREATE TABLE articles( article_id INTEGER NOT NULL PRIMARY KEY, discovery_date data_type TEXT, title data_type TEXT UNIQUE, summary data_type TEXT, link data_type TEXT, published_date TEXT, source data_type TEXT, relevant data_type INT, table_constraints , sent INTEGER);
+CREATE TABLE articles( article_id INTEGER NOT NULL PRIMARY KEY, discovery_date data_type TEXT, title data_type TEXT UNIQUE, summary data_type TEXT, link data_type TEXT, published_date TEXT, source data_type TEXT, relevant data_type INT, table_constraints , sent INTEGER, ml_prediction_gnb INTEGER, ml_prediction_lr INTEGER);
 CREATE TABLE categories( category_id INTEGER NOT NULL PRIMARY KEY, category_name TEXT );
 CREATE TABLE rel_articles_categories( article_id INTEGER, category_id INTEGER, FOREIGN KEY (article_id) REFERENCES articles(article_id), FOREIGN KEY (category_id) REFERENCES categories(category_id) );
 CREATE TABLE trials( trial_id INTEGER NOT NULL PRIMARY KEY, discovery_date data_type TEXT,  title TEXT type UNIQUE, summary data_type TEXT, link data_type TEXT, published_date TEXT, source data_type TEXT, relevant data_type INT, table_constraints, sent integer);

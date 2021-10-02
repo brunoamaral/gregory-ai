@@ -35,3 +35,5 @@ Information on Clinical Trials is retrieved from the following websites.
   <li class="list-inline-item btn btn-primary btn-outline-primary btn-round"><a target="_blank" href="https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000">ClinicalTrials.gov <i class="text-muted text-primary fas fa-external-link-square-alt"></i></a></li>
   <li class="list-inline-item btn btn-primary btn-outline-primary btn-round"><a target="_blank" href="https://www.novartis.com/clinicaltrials/recruiting-trials?title=multiple%20sclerosis">Novartis <i class="text-muted text-primary fas fa-external-link-square-alt"></i></a></li>
 </ul>
+
+<a class="btn btn-outline-info btn-round btn-lg font-weight-bold mx-auto" href="/trials/source/">To filter clinical trials by source visit the sources page <i class="text-muted text-info fas fa-arrow-right" style="transform .4s, box-shadow .4s"></i></a>

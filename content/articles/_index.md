@@ -15,9 +15,6 @@ resources:
     name: "header"
 ---
 
-
-
-
 Articles listed here come from the following sites, with keyword searches for `Multiple Sclerosis, autoimmune encephalomyelitis, encephalomyelitis, immune tolerance, myelin`.
 
 <ul class="list-inline">
@@ -33,4 +30,6 @@ Articles listed here come from the following sites, with keyword searches for `M
 <li class="list-inline-item"><a target="_blank" class="btn btn-primary btn-outline-primary btn-round" href='https://journals.sagepub.com/action/doSearch?AllField=multiple+sclerosis&amp;SeriesKey=msja&amp;content=articlesChapters&amp;countTerms=true&amp;target=default&amp;sortBy=Ppub&amp;startPage=&amp;ContentItemType=research-article'>Sage <i class="text-muted text-primary fas fa-external-link-square-alt"></i></a> </li>
 
 </ul>
+
+<a class="btn btn-outline-info btn-round btn-lg font-weight-bold mx-auto" href="/articles/source/">To filter articles by source visit the sources page <i class="text-muted text-info fas fa-arrow-right" style="transform .4s, box-shadow .4s"></i></a>
 
