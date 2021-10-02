@@ -94,15 +94,30 @@ resources:
 
 The JSON response contains information on scientific articles retrieved from multiple academic sources, with the following information for each article:
 
-- **article_id** - The ID of the article
-- **discovery_date** - The date this record was retrieved from its source
-- **title** - The title of the article
-- **summary** - The abstract or summary of the article
-- **link** - The link from which the article was retrieved
-- **published_date** - The date it was published
-- **source** - The source from which the article was retrieved
-- **relevant** - Whether this article is relevant or not (manually tagged by a human)
-- **table_constraints** - created automatically by SQLite
-- **sent** - A binary value that indicates if the article was sent to the admin. (The admin receives an email digest every 48 hours with the listings to mark them as relevant or not)
+- **article_id**: The ID of the article
+- **discovery_date**: The date this record was retrieved from its source
+- **link**: The link to the original content
+- **ml_prediction_gnb**: A value of 0 or 1 if the article is relevant according to a Gaussian Naive Bayes model
+- **ml_prediction_lr**: A value of 0 or 1 if the article is relevant according to a Logistic Regression model
+- **published_date**: The date it was published
+- **relevant**: Whether this article is relevant or not (tagged by a human)
+- **sent**: A binary value that indicates if the article was sent to the admin. (The admin receives an email digest every 48 hours with the listings to mark them as relevant or not)
+- **source**: The source from which the article was retrieved
+- **summary**: The abstract or summary of the article
+- **table_constraints**: created automatically by SQLite
+- **title**: The title of the article
+
+### Trials
+
+- **discovery_date**: The date this record was retrieved from its source
+- **link**: The link to the original content
+- **published_date**: The date it was published
+- **relevant**: Whether it is relevant or not (tagged by a human, and not used at the moment)
+- **sent**: A binary value that indicates if the article was sent to the admin. (The admin receives an email digest every 48 hours with the listings to mark them as relevant or not)
+- **source**: Website where the found information about this clinical trial
+- **summary**: The abstract or summary of the clinical trial
+- **table_constraints**: created automatically by SQLite
+- **title**: The title of the clinical trial
+- **trial_id**: The ID of the clinical trial
 
 </div>
