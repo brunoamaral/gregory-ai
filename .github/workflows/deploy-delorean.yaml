@@ -1,4 +1,4 @@
-name: Deploy site to DeLorean
+name: Deploy site to House
 on:
     push:
         branches:
@@ -18,7 +18,7 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-gems-
 
-            - name: SSH into DeLorean and run build 
+            - name: SSH into House and run build 
               uses: appleboy/ssh-action@master
               with:
                 host: ${{ secrets.HOST }}
