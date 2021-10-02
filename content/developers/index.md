@@ -33,64 +33,73 @@ resources:
 
 <div class="col-md-6 mx-auto">
 
-## API Endpoints
+## RSS{.title .text-primary}
 
-### Articles
+There are RSS feeds you can use for both Articles and Clinical Trials.
+
+<a class="btn btn-outline-primary" href="/articles/index.xml"><i class="fas fa-rss"></i> RSS for Articles</a> <a class="btn btn-outline-primary" href="/trials/index.xml"><i class="fas fa-rss"></i> RSS for Clinical Trials</a>
+
+
+## API Endpoints{.title .text-primary}
+
+
+### Articles{.title .text-muted}
 
 `https://api.gregory-ms.com/articles/all` : Lists all articles.
 
-<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/all">https://api.gregory-ms.com/articles/all</a>
+Example: <a href="https://api.gregory-ms.com/articles/all">https://api.gregory-ms.com/articles/all</a>
 
 `https://api.gregory-ms.com/articles/by-date/{year}/{month}` : List articles for specified {year} and {month}. 
 
-<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/by-date/2021/06">https://api.gregory-ms.com/articles/by-date/2021/06</a>
+Example: <a href="https://api.gregory-ms.com/articles/by-date/2021/06">https://api.gregory-ms.com/articles/by-date/2021/06</a>
 
 `https://api.gregory-ms.com/articles/id/{ID}` : List article that matches the {ID} number.
 
-<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/id/19">https://api.gregory-ms.com/articles/id/19</a>
+Example: <a href="https://api.gregory-ms.com/articles/id/19">https://api.gregory-ms.com/articles/id/19</a>
 
 `https://api.gregory-ms.com/articles/keyword/{keyword}` : List all articles by keyword.
 
-<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/keyword/myelin">https://api.gregory-ms.com/articles/keyword/myelin</a>
+Example: <a href="https://api.gregory-ms.com/articles/keyword/myelin">https://api.gregory-ms.com/articles/keyword/myelin</a>
 
 `https://api.gregory-ms.com/articles/relevant` : List all relevant articles.
 
-<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/relevant">https://api.gregory-ms.com/articles/relevant</a>
+Example: <a href="https://api.gregory-ms.com/articles/relevant">https://api.gregory-ms.com/articles/relevant</a>
 
-#### Articles' Sources
+
+#### Articles' Sources{.title .text-muted}
 
 `https://api.gregory-ms.com/articles/source/{source}` : List all articles from specified {source}.
 
-<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/source/pubmed">https://api.gregory-ms.com/articles/source/pubmed</a>
+Example: <a href="https://api.gregory-ms.com/articles/source/pubmed">https://api.gregory-ms.com/articles/source/pubmed</a>
 
 `https://api.gregory-ms.com/articles/sources` : List all available sources.
 
-<strong>Example: </strong> <a href="https://api.gregory-ms.com/articles/sources">https://api.gregory-ms.com/articles/sources</a>
+Example: <a href="https://api.gregory-ms.com/articles/sources">https://api.gregory-ms.com/articles/sources</a>
 
-### Trials
+### Trials{.title .text-muted}
 
 `https://api.gregory-ms.com/trials/all` : List all trials.
 
-<strong>Example: </strong> <a href="https://api.gregory-ms.com/trials/all">https://api.gregory-ms.com/trials/all</a>
+Example: <a href="https://api.gregory-ms.com/trials/all">https://api.gregory-ms.com/trials/all</a>
 
 `https://api.gregory-ms.com/trials/keyword/{keyword}` : List all trials by keyword.
 
-<strong>Example: </strong> <a href="https://api.gregory-ms.com/trials/keyword/myelin">https://api.gregory-ms.com/trials/keyword/myelin</a>
+Example: <a href="https://api.gregory-ms.com/trials/keyword/myelin">https://api.gregory-ms.com/trials/keyword/myelin</a>
 
-#### Trials' Sources
+#### Trials' Sources{.title .text-muted}
 
 `https://api.gregory-ms.com/trials/source/{source}` : List all trials from specified {source}.
 
-<strong>Example: </strong> <a href="https://api.gregory-ms.com/trials/source/pubmed">https://api.gregory-ms.com/trials/source/pubmed</a>
+Example: <a href="https://api.gregory-ms.com/trials/source/pubmed">https://api.gregory-ms.com/trials/source/pubmed</a>
 
 `https://api.gregory-ms.com/trials/sources` : List all available sources.
 
-<strong>Example: </strong> <a href="https://api.gregory-ms.com/trials/sources">https://api.gregory-ms.com/trials/sources</a>
+Example: <a href="https://api.gregory-ms.com/trials/sources">https://api.gregory-ms.com/trials/sources</a>
 
 
-## Database strucuture
+## Database strucuture{.title .text-primary}
 
-### Articles
+### Articles{.title .text-muted}
 
 The JSON response contains information on scientific articles retrieved from multiple academic sources, with the following information for each article:
 
@@ -107,7 +116,7 @@ The JSON response contains information on scientific articles retrieved from mul
 - **table_constraints**: created automatically by SQLite
 - **title**: The title of the article
 
-### Trials
+### Trials{.title .text-muted}
 
 - **discovery_date**: The date this record was retrieved from its source
 - **link**: The link to the original content
