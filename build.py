@@ -15,10 +15,14 @@ import subprocess
 
 # Set Variables
 path = "/home/gregory/gregory"
+
 # Set the API Server
 ## If you are running docker-compose.yaml, this is http://localhost:18080/
 server = "https://api.gregory-ms.com/"
 website_path = "/var/www/gregory-ms.com/"
+
+now = datetime.now()
+datetime_string = now.strftime("%d-%m-%Y_%Hh%Mm%Ss")
 
 # Workflow starts
 
