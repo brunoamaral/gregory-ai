@@ -15,9 +15,6 @@ resources:
     name: "header"
 ---
 
-
-
-
 Articles listed here come from the following sites, with keyword searches for `Multiple Sclerosis, autoimmune encephalomyelitis, encephalomyelitis, immune tolerance, myelin`.
 
 <ul class="list-inline">
@@ -34,5 +31,5 @@ Articles listed here come from the following sites, with keyword searches for `M
 
 </ul>
 
-<a class="btn btn-outline-info btn-round btn-lg font-weight-bold mx-auto" href="/articles/sources/">To filter articles by source visit the sources page <i class="text-muted text-info fas fa-arrow-right" style="transform .4s, box-shadow .4s"></i></a>
+<a class="btn btn-outline-info btn-round btn-lg font-weight-bold mx-auto" href="/articles/source/">To filter articles by source visit the sources page <i class="text-muted text-info fas fa-arrow-right" style="transform .4s, box-shadow .4s"></i></a>
 
