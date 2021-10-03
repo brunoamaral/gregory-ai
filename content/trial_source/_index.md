@@ -13,7 +13,7 @@ resources:
 - src:
   name: slide-1
 slug:
-subtitle: These are the different websites where we have found scientific articles on Multiple Sclerosis
+subtitle: These are the different websites where we have found Clinical Trials on Multiple Sclerosis
 tags: 
   - 
 categories: 
