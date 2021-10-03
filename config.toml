@@ -57,7 +57,7 @@ headerPhoto = ""
   weight = 1
 
   [[menu.column_2]]
-  name = 'Lisbon Collective'
+  name = 'Lisbon Collective <i class="fas fa-external-link-square-alt"></i>'
   url = "https://lisboncollective.com"
   weight = 1
 
