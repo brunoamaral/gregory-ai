@@ -15,3 +15,5 @@ content/developers/trials.xlsx
 content/developers/articles.json
 content/developers/trials.json
 node_modules
+content/developers/articles.zip
+.gitignore
