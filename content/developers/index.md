@@ -45,57 +45,95 @@ There are RSS feeds you can use for both Articles and Clinical Trials.
 
 ### Articles{.title .text-muted}
 
-`https://api.gregory-ms.com/articles/all` : Lists all articles.
+**List all articles**
+
+`https://api.gregory-ms.com/articles/all`
 
 Example: <a href="https://api.gregory-ms.com/articles/all">https://api.gregory-ms.com/articles/all</a>
 
-`https://api.gregory-ms.com/articles/by-date/{year}/{month}` : List articles for specified {year} and {month}. 
+**List articles for specified {year} and {month}.**    
+
+`https://api.gregory-ms.com/articles/by-date/{year}/{month}`
 
 Example: <a href="https://api.gregory-ms.com/articles/by-date/2021/06">https://api.gregory-ms.com/articles/by-date/2021/06</a>
 
-`https://api.gregory-ms.com/articles/id/{ID}` : List article that matches the {ID} number.
+**List article that matches the {ID} number.**    
+
+`https://api.gregory-ms.com/articles/id/{ID}`
+
 
 Example: <a href="https://api.gregory-ms.com/articles/id/19">https://api.gregory-ms.com/articles/id/19</a>
 
-`https://api.gregory-ms.com/articles/keyword/{keyword}` : List all articles by keyword.
+**List all articles by keyword.**    
+
+`https://api.gregory-ms.com/articles/keyword/{keyword}`
+
 
 Example: <a href="https://api.gregory-ms.com/articles/keyword/myelin">https://api.gregory-ms.com/articles/keyword/myelin</a>
 
-`https://api.gregory-ms.com/articles/relevant` : List all relevant articles.
+**List related articles by keywords**
+
+`POST https://gregory-ms.com/articles/related/`
+
+Expects a json object of keywords in the post body. 
+
+```
+{ "keywords": ['trials','gait rehabilitation','multiple sclerosis'] }
+```
+
+
+https://gregory-ms.com/articles/related/
+
+**List all relevant articles.**    
+
+These are articles that we show on the home page because they appear to offer new courses of treatment.
+
+`https://api.gregory-ms.com/articles/relevant`
 
 Example: <a href="https://api.gregory-ms.com/articles/relevant">https://api.gregory-ms.com/articles/relevant</a>
 
-
 #### Articles' Sources{.title .text-muted}
 
-`https://api.gregory-ms.com/articles/source/{source}` : List all articles from specified {source}.
+**List all articles from specified {source}.**
+
+`https://api.gregory-ms.com/articles/source/{source}`
+
 
 Example: <a href="https://api.gregory-ms.com/articles/source/pubmed">https://api.gregory-ms.com/articles/source/pubmed</a>
 
-`https://api.gregory-ms.com/articles/sources` : List all available sources.
+**List all available sources.**
+
+`https://api.gregory-ms.com/articles/sources`
 
 Example: <a href="https://api.gregory-ms.com/articles/sources">https://api.gregory-ms.com/articles/sources</a>
 
 ### Trials{.title .text-muted}
 
-`https://api.gregory-ms.com/trials/all` : List all trials.
+**List all trials.**    
+
+`https://api.gregory-ms.com/trials/all`
 
 Example: <a href="https://api.gregory-ms.com/trials/all">https://api.gregory-ms.com/trials/all</a>
 
-`https://api.gregory-ms.com/trials/keyword/{keyword}` : List all trials by keyword.
+**List all trials by keyword.**    
+
+`https://api.gregory-ms.com/trials/keyword/{keyword}`
 
 Example: <a href="https://api.gregory-ms.com/trials/keyword/myelin">https://api.gregory-ms.com/trials/keyword/myelin</a>
 
 #### Trials' Sources{.title .text-muted}
 
-`https://api.gregory-ms.com/trials/source/{source}` : List all trials from specified {source}.
+**List all trials from specified {source}.**    
+
+`https://api.gregory-ms.com/trials/source/{source}`
 
 Example: <a href="https://api.gregory-ms.com/trials/source/pubmed">https://api.gregory-ms.com/trials/source/pubmed</a>
 
-`https://api.gregory-ms.com/trials/sources` : List all available sources.
+**List all available sources.**    
+
+`https://api.gregory-ms.com/trials/sources`
 
 Example: <a href="https://api.gregory-ms.com/trials/sources">https://api.gregory-ms.com/trials/sources</a>
-
 
 ## Database Structure{.title .text-primary}
 
