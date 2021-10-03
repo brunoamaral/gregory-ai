@@ -9,7 +9,7 @@
                     	{{- range .Site.Menus.column_1 -}}
                         <li>
                             <a href="{{ .URL }}" class="text-muted">
-                                {{ .Name }}
+                                {{ .Name | safeHTML }}
                             </a>
                         </li>
                         {{ end }}
@@ -21,7 +21,7 @@
                     		{{- range .Site.Menus.column_2 -}}
                     	    <li>
                     	        <a href="{{ .URL }}" class="text-muted">
-                    	            {{ .Name }}
+                    	            {{ .Name | safeHTML }}
                     	        </a>
                     	    </li>
                     	    {{ end }}
@@ -33,8 +33,8 @@
                     <ul class="links-vertical">
                     			{{- range .Site.Menus.column_3 -}}
                     		    <li>
-                    		        <a href="{{ .URL }}" class="">
-                    		            {{ .Name }}
+                    		        <a href="{{ .URL }}" class="text-muted">
+                    		            {{ .Name | safeHTML }}
                     		        </a>
                     		    </li>
                     		    {{ end }}
