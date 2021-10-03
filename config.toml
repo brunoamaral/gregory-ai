@@ -50,11 +50,11 @@ headerPhoto = ""
 [params.options]
   hideSubscribeForm = false
 
-[menu]
-  [[menu.main]]
-  name = 'Home'
-  url = "/"
-  weight = 1
+# [menu]
+#   [[menu.main]]
+#   name = 'Home'
+#   url = "/"
+#   weight = 1
 
   [[menu.column_2]]
   name = 'Lisbon Collective <i class="fas fa-external-link-square-alt"></i>'
