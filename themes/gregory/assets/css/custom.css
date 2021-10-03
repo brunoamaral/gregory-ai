@@ -1,7 +1,0 @@
-article.article p{
-	word-wrap: break-word;
-}
-
-p > a {
-overflow-wrap: break-word;
-}
