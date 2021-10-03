@@ -97,7 +97,7 @@ Example: <a href="https://api.gregory-ms.com/trials/source/pubmed">https://api.g
 Example: <a href="https://api.gregory-ms.com/trials/sources">https://api.gregory-ms.com/trials/sources</a>
 
 
-## Database strucuture{.title .text-primary}
+## Database Structure{.title .text-primary}
 
 ### Articles{.title .text-muted}
 
