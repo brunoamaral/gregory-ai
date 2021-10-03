@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
     const queries = document.querySelectorAll('h3')
     const nounphrases = document.querySelectorAll('li.phrase')
     const commonwords = [
+        'analysis',
         'characteristics',
         'individuals',
         'involvement',
@@ -10,7 +11,8 @@ document.addEventListener('DOMContentLoaded', (event) => {
         'multiple sclerosis',
         'patients',
         'persons',
-        'recovery'
+        'recovery',
+        'safety'
     ]
     let related = [];
 
@@ -84,7 +86,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
         fetch(relatedRequest)
             .then(response => response.json())
             .then(data => {
-                console.log(data)
                 let list = document.querySelector('ol#relatedarticles')
 
                 for (const item of data) {
@@ -108,7 +109,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
     for (let i = 0; i < queries.length; i++) {
 
         if (queries[i].id != '') {
-            console.log('searching for ' + queries[i].id)
+            //console.log('searching for ' + queries[i].id)
             searchArticles(queries[i].id)
             searchTrials(queries[i].id)
         }
