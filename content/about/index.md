@@ -1,5 +1,5 @@
 ---
-title: "About and Contacts"
+title: "About"
 date: 2021-02-24T13:00:55Z
 lastmod: 
 author: Bruno Amaral
@@ -19,9 +19,9 @@ url: about
 scripts:
   - '<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>'
 menu:
-  main:
+  column_1:
     Name: About
-    Weight: 10
+    Weight: 1
 options:
   header: mini
   unlisted: false
@@ -118,14 +118,6 @@ graph LR;
 
 https://journals.bmj.com/
 
-## Contact details
-
-### Bruno Amaral    
-mail@brunoamaral.eu
-
-https://twitter.com/brunoamaral     
-
-[+351 912 875 856](tel:+351912875856)
 
 
 </div>

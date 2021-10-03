@@ -47,8 +47,8 @@
     { "id": "toggle-all-years", "translation": "Toggle all years" },
     { "id": "translations", "translation": "Translations" },
     { "id": "zero_comments", "translation": " " },
-    { "id": "column_1", "translation": " " },
-    { "id": "column_2", "translation": " " },
-    { "id": "column_3", "translation": "Supporters" },
+    { "id": "column_1", "translation": "Gregory " },
+    { "id": "column_2", "translation": "Supporters " },
+    { "id": "column_3", "translation": "" },
     { "id": "column_4", "translation": "Follow" }
 ]

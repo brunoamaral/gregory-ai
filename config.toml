@@ -49,13 +49,14 @@ headerPhoto = ""
   debug = true
 [params.options]
   hideSubscribeForm = false
+
 [menu]
   [[menu.main]]
   name = 'Home'
   url = "/"
   weight = 1
 
-  [[menu.column_3]]
+  [[menu.column_2]]
   name = 'Lisbon Collective'
   url = "https://lisboncollective.com"
   weight = 1
