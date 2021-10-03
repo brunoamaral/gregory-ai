@@ -89,9 +89,16 @@ print('''
 ####
 ## CREATE ZIP FILES
 ####
+
+### Articles
 ''')
+
 zipArticles = ZipFile('content/developers/articles.zip', 'w')
 # Add multiple files to the zip
+print('- content/developers/articles_' + datetime_string + '.xlsx')
+print('- content/developers/articles_' + datetime_string + '.json')
+print('- content/developers/README.md')
+
 zipArticles.write('content/developers/articles_' + datetime_string + '.xlsx')
 zipArticles.write('content/developers/articles_' + datetime_string + '.json')
 zipArticles.write('content/developers/README.md')
@@ -99,8 +106,13 @@ zipArticles.write('content/developers/README.md')
 # close the Zip File
 zipArticles.close()
 
+print('### Clinical Trials')
+
 zipTrials = ZipFile('content/developers/trials.zip', 'w')
 # Add multiple files to the zip
+print('- content/developers/trials_' + datetime_string + '.xlsx')
+print('- content/developers/trials_' + datetime_string + '.json')
+print('- content/developers/README.md')
 zipTrials.write('content/developers/trials_' + datetime_string + '.xlsx')
 zipTrials.write('content/developers/trials_' + datetime_string + '.json')
 zipTrials.write('content/developers/README.md')
