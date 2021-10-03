@@ -1,0 +1,13 @@
+[{{ range $index, $page := where .Site.AllRegularPages ".Params.options.unlisted" false }}
+{{- if ne $page.Type "json" -}}
+{{- if and $index (gt $index 0) -}},{{- end }}
+{
+	"uri": "{{ $page.Permalink | htmlEscape }}",
+	"external_uri": "{{$page.Params.link}}",
+	"title": {{ $page.Title | jsonify }},
+	"type": "{{$page.Section}}",
+	"source": "{{ with $page.Params.article_source }}{{.}}{{else}}{{ $page.Params.trial_source}}{{end}}",
+	"description": "{{ .Summary | htmlUnescape | plainify }}",
+}
+{{- end -}}
+{{- end -}}]

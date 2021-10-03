@@ -1,6 +1,6 @@
 ---
 title: "Developers"
-subtitle: "There is an API to query the MS Database that you can use for free."
+subtitle: "All you need to access our database"
 date: 2021-08-11T15:27:16+01:00
 lastmod: 
 author: Bruno Amaral
@@ -12,7 +12,7 @@ description:
 categories: []
 tags: []
 
-url: api
+
 layout: page
 
 menu:
@@ -97,7 +97,7 @@ Example: <a href="https://api.gregory-ms.com/trials/source/pubmed">https://api.g
 Example: <a href="https://api.gregory-ms.com/trials/sources">https://api.gregory-ms.com/trials/sources</a>
 
 
-## Database strucuture{.title .text-primary}
+## Database Structure{.title .text-primary}
 
 ### Articles{.title .text-muted}
 
