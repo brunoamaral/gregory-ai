@@ -23,7 +23,7 @@
 	
 					">
 					{{- if (ne .Params.options.showTitle false)  }}
-					<h1 class="title" itemprop="headline d-print-block">{{ .Title }}</h1> {{ .Params.options.showTitle}}
+					<h1 class="title" itemprop="headline d-print-block">{{ .Title }}</h1>
 					{{ end }}
 					{{- with .Params.subtitle }}
 						<h2 itemprop="subtitle d-print-block">{{ . }}</h2>
@@ -74,6 +74,24 @@
                         <a href='{{ ref . "patients/index.md" }}'><h4 class="info-title">For Patients</h4></a>
                       </div>
                       </a>
+                    </div>
+                  </div>
+
+                  <div class="row align-items-center">
+                    <div class="col-12">                      <h2 class="text-center title">How it works</h2></div>
+                    <div class="col-md-7">
+
+                      <h3><span class="text-muted title">Step 1</span> Search for Multiple Sclerosis</h3>
+                      <p>Gregory searches the web multiple times a day looking for Articles and Clinical Trials.</p>
+                      <p>Search terms: <em>Multiple Sclerosis, autoimmune encephalomyelitis, encephalomyelitis, immune tolerance, myelin</em></p>
+                      <h3><span class="text-muted title">Step 2</span> Index and organise</h3>
+                      <p>Each item on the database runs through a language analysis tool, to identify keywords, and a machine learning model, to identify what is relevant.</p>
+                      <h3><span class="text-muted title">Step 3</span> Filter and distribute</h3>
+                      <p><strong>Every 2 days</strong> Gregory sends an email with the recent findings to the admin team who tags which articles show promise for new treatment and better quality of life for people with Multiple Sclerosis.</p>
+                      <p><strong>Every week</strong> the articles that were tagged as relevant for patients are compiled and sent to a mailing list of doctors, researchers, and physical therapists.</p>
+                    </div>
+                    <div class="col-md-5">
+                      <img src="undraw_the_search_s0xf.svg" class="img-fluid" alt="">
                     </div>
                   </div>
                     <div class="row">
@@ -146,23 +164,12 @@
               </li>
               {{ end }}
             
-            
-            
-              <!-- <li class="page-item disabled">
-                <span class="page-link" aria-label="Previous">
-                    <span aria-hidden="true"><i class="fa fa-angle-double-left" aria-hidden="true"></i></span>
-                </span>
-              </li>
-             -->
-            
               <li class="page-item{{ if not $pag.HasPrev }} disabled{{ end }}">
                 <a {{ if $pag.HasPrev }}href="{{ $pag.Prev.URL }}"{{ end }} class="page-link" aria-label="Previous">
                     <span aria-hidden="true"><i class="fa fa-angle-double-left" aria-hidden="true"></i></span>
                 </a>
               </li>
             {{ end }}
-            
-            
               
               {{- $ellipsed := false -}}
               {{- $shouldEllipse := false -}}
