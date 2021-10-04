@@ -97,7 +97,7 @@ zipArticles = ZipFile('content/developers/articles.zip', 'w')
 # Add multiple files to the zip
 print('- content/developers/articles_' + datetime_string + '.xlsx')
 print('- content/developers/articles_' + datetime_string + '.json')
-print('- content/developers/README.md')
+print('- content/developers/README.md\n')
 
 zipArticles.write('content/developers/articles_' + datetime_string + '.xlsx')
 zipArticles.write('content/developers/articles_' + datetime_string + '.json')
@@ -112,7 +112,7 @@ zipTrials = ZipFile('content/developers/trials.zip', 'w')
 # Add multiple files to the zip
 print('- content/developers/trials_' + datetime_string + '.xlsx')
 print('- content/developers/trials_' + datetime_string + '.json')
-print('- content/developers/README.md')
+print('- content/developers/README.md\n')
 zipTrials.write('content/developers/trials_' + datetime_string + '.xlsx')
 zipTrials.write('content/developers/trials_' + datetime_string + '.json')
 zipTrials.write('content/developers/README.md')
@@ -249,3 +249,16 @@ popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
+
+print('''
+####
+## CLEAN UP FILES
+####
+''')
+
+os.remove('content/developers/articles_' + datetime_string + '.xlsx')
+os.remove('content/developers/articles_' + datetime_string + '.json')
+
+
+os.remove('content/developers/trials_' + datetime_string + '.xlsx')
+os.remove('content/developers/trials_' + datetime_string + '.json')
