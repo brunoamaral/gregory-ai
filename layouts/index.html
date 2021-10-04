@@ -83,7 +83,8 @@
                             {{ $count := len (where .Site.RegularPages "Section" "articles") }}
                             <p class="text-center">Last Update <strong>{{ now.Format "2 Jan, 15:04" }}</strong> with <strong>{{$count}}</strong> articles, since February 2021.</p>
                             <br> 
-                            <p class="text-center">                            <span class="badge badge-info text-white font-weight-normal">indicates sources</span> <span class="badge badge-success text-white font-weight-normal">indicates automatic selection</span></p>
+                            <p class="text-center">
+                              <span class="badge badge-info text-white font-weight-normal">indicates sources</span> <span class="badge badge-primary text-white font-weight-normal">human selection</span> <span class="badge badge-success text-white font-weight-normal">indicates automatic selection</span></p>
                             {{ $ml_prediction_gnb := where .Site.RegularPages ".Params.ml_prediction_gnb" "=" 1 }}
                             {{ $relevant := where .Site.RegularPages ".Params.relevant" 1}}
                                                    
@@ -112,7 +113,7 @@
 																	{{ end }}
 																</b>, {{ end }} {{ end }}
                                             <time class="published text-muted" itemprop="datePublished" datetime="{{ .Date.Format " 2006-01-02T15:04:05 " }}">{{ .Date.Format "January 2, 2006" }}</time>
-                                            <span class="badge badge-info text-white font-weight-normal">{{ .Params.article_source }}</span> {{ if eq .Params.ml_prediction_gnb 1 }}<span class="badge badge-success text-white font-weight-normal">auto</span>{{ end }}
+                                            <span class="badge badge-info text-white font-weight-normal">{{ .Params.article_source }}</span> {{ if eq .Params.ml_prediction_gnb 1 }}<span class="badge badge-success text-white font-weight-normal">auto</span>{{ end }} {{ if and (eq .Params.relevant  1) ( eq .Params.ml_prediction_gnb 0) }}<span class="badge badge-primary text-white font-weight-normal">human</span>{{ end }}
                                         </p>
                                     </div>
                                 </div>
