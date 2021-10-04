@@ -244,7 +244,7 @@ print('''
 ## BUILD THE WEBSITE
 ####
 ''')
-args = ("/usr/local/bin/hugo", "-d", website_path,"--cacheDir", path, "--cleanDestinationDir")
+args = ("/usr/local/bin/hugo", "-d", website_path,"--cacheDir", path)
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
