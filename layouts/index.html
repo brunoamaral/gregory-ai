@@ -44,7 +44,10 @@
             <div class="" id="">
                 <div class="container">
                   <div class="row">
-                    <div class="col-12 text-center"><h2 class="title">Daily information on Multiple Sclerosis</h2></div>
+                    <div class="col-12 text-center"><h2 class="title">Daily information on Multiple Sclerosis</h2>
+                      {{ $count := len (where .Site.RegularPages "Section" "articles") }}
+                      <p class="text-center">Last Update <strong>{{ now.Format "2 Jan, 15:04" }}</strong> with <strong>{{$count}}</strong> articles, since February 2021.</p>
+                  </div>
                     <div class="col-md-4">
                       <a href='{{ ref . "doctors/index.md" }}'>
                       <div class="info info-hover">
@@ -98,9 +101,6 @@
                         <div class="col-md-10 ml-auto mr-auto">
                             <h2 class="text-center title">Latest relevant articles</h2>
 
-                            {{ $count := len (where .Site.RegularPages "Section" "articles") }}
-                            <p class="text-center">Last Update <strong>{{ now.Format "2 Jan, 15:04" }}</strong> with <strong>{{$count}}</strong> articles, since February 2021.</p>
-                            <br> 
                             <p class="text-center">
                               <span class="badge badge-info text-white font-weight-normal">indicates sources</span> <span class="badge badge-primary text-white font-weight-normal">human selection</span> <span class="badge badge-success text-white font-weight-normal">indicates automatic selection</span></p>
                             {{ $ml_prediction_gnb := where .Site.RegularPages ".Params.ml_prediction_gnb" "=" 1 }}
