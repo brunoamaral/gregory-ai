@@ -51,15 +51,17 @@ headerPhoto = ""
   hideSubscribeForm = false
 
 # [menu]
-#   [[menu.main]]
-#   name = 'Home'
-#   url = "/"
-#   weight = 1
+  [[menu.main]]
+  name = 'Home'
+  url = "/"
+  weight = 1
 
   [[menu.column_2]]
   name = 'Lisbon Collective <i class="fas fa-external-link-square-alt"></i>'
   url = "https://lisboncollective.com"
-  weight = 1
+  [[menu.column_2]]
+  name ='OneOverZero <i class="fas fa-external-link-square-alt"></i>'
+  url = "https://github.com/oneoverzero"
 
 [social]
   github = "https://github.com/brunoamaral/gregory"
