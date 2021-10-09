@@ -7,7 +7,8 @@
 	"title": {{ $page.Title | jsonify }},
 	"source": "{{ with $page.Params.article_source }}{{.}}{{else}}{{ $page.Params.trial_source}}{{end}}",
 	"description": {{- .Plain | jsonify -}},
-	"type": "{{$page.Section}}"
+	"type": "{{$page.Section}}",
+	"discovery_date": {{$page.Params.discovery_date | jsonify}}
 }
 {{- end -}}
 {{- end -}}]
