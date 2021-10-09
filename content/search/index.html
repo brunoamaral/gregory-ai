@@ -1,0 +1,63 @@
+---
+date: 2018-11-13T12:57:38Z
+description: 
+draft: false
+resources: 
+- src: images/photo-1586769852836-bc069f19e1b6.jpeg
+  name: "header"
+- src: "gallery/*.jpg"
+  name: gallery-:counter
+  title: gallery-title-:counter
+slug: search
+stories:
+subtitle: 
+tags: 
+  - 
+categories: 
+  - 
+title: "Search Gregory's Database"
+url: /search
+layout: page
+options:
+  unlisted: false
+  showHeader: true
+  hideSubscribeForm: true
+  hideFooter: true
+  header: search
+  title_align: center
+
+menu:
+ main:
+  Name: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+  </svg>'
+  Weight: 10
+  post: "Seek and you will find"
+  Identifier: "search-icon"
+ column_1:
+  Name: Search
+  Weight: 2
+  post: "Seek and you will find"
+  Identifier: "search-icon"
+
+scripts:
+  - '<script src="instantsearch.js/dist/instantsearch.min.js"></script>'
+  - '<script src="search.js"></script>'
+---
+
+<div class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <div id="search" class="search">
+                <form>
+                    <div class="form-group"></div>
+                </form>
+                    <div class="search-content"></div><!-- /search-content -->
+            </div><!-- /search -->
+            <div class="">
+              <div class="search-hits d-flex "></div>
+            </div>
+        </div>
+    </div>
+    <p class="small">Search powered by <a href="https://algolia.com">Algolia</a> and photo copyright <a href="https://unsplash.com/@annietheby?utm_medium=referral&amp;utm_campaign=photographer-credit&amp;utm_content=creditBadge" target="_blank" rel="noopener noreferrer" title="Download free do whatever you want high-resolution photos from Annie Theby">Annie Theby</a> </p>
+</div>
