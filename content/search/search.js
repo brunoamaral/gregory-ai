@@ -63,7 +63,7 @@ var noResultsTemplate =
 search.addWidget(
     instantsearch.widgets.searchBox({
         container: '.form-group',
-        placeholder: 'Search',
+        placeholder: 'Start typing …',
         cssClasses: { input: 'search-input hideInput form-control' },
         autofocus: true,
         poweredBy: false,
