@@ -5,9 +5,9 @@
 	"uri": "{{ $page.Permalink | htmlEscape }}",
 	"external_uri": "{{$page.Params.link}}",
 	"title": {{ $page.Title | jsonify }},
-	"type": "{{$page.Section}}",
 	"source": "{{ with $page.Params.article_source }}{{.}}{{else}}{{ $page.Params.trial_source}}{{end}}",
-	"description": {{- .Plain | jsonify -}}
+	"description": {{- .Plain | jsonify -}},
+	"type": "{{$page.Section}}"
 }
 {{- end -}}
 {{- end -}}]
