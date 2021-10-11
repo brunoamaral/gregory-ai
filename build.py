@@ -257,8 +257,10 @@ print('''
 ''')
 
 from algoliasearch.search_client import SearchClient
+algolia_id = os.getenv('algolia_id')
+algolia_key = os.getenv('algolia_key')
 
-client = SearchClient.create('5DE3PYXB8W', '7aa5745a5d86624aaf36bc1455aaa0ee')
+client = SearchClient.create(algolia_id, algolia_key)
 index = client.init_index('gregory')
 
 index = client.init_index('articles')
