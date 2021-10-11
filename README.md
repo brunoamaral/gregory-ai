@@ -9,7 +9,7 @@ https://gregory-ms.com
 
 # Install
 
-## Requirements
+## Server Requirements
 
 - [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/)
 - [ ] [Hugo](https://gohugo.io/) 
