@@ -46,7 +46,8 @@ var hitTemplateCard = `
             </p>
             <p class="author">
                 
-                <time class="published text-muted" itemprop="datePublished" datetime=" 2021-10-01T17:56:36 ">October 1, 2021</time>
+                <time class="published text-muted" itemprop="datePublished" datetime=" {{discovery_date}} ">{{discovery_date}}</time>
+                <span class="badge badge-info text-white font-weight-normal">{{source}}</span>
             </p>
         </div>
     </div>
