@@ -32,33 +32,28 @@ var hitTemplate =
     '</div>';
 
 var hitTemplateCard = `
-
-
 <div class="card card-plain card-blog">
-                                <div class="row">
-                                    <div class="col-md-12">
-                                        
-                                        <h3 class="card-title">
-                                            <a href="{{uri}}">{{title}}</a>  
-                                        </h3>
-                                        <p class="card-description">
-                                            
-                                            <br>
-                                            <a href="{{uri}}">Continue Reading </a>
-                                        </p>
-                                        <p class="author">
-                                            
-                                            <time class="published text-muted" itemprop="datePublished" datetime=" 2021-10-01T17:56:36 ">October 1, 2021</time>
-                                            <span class="badge badge-info text-white font-weight-normal">pubmed</span>  <span class="badge badge-primary text-white font-weight-normal">human</span>
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            `;
+    <div class="row">
+        <div class="col-md-12">
+            
+            <h3 class="card-title">
+                <a href="{{uri}}">{{title}}</a>  
+            </h3>
+            <p class="card-description">
+                
+                <br>
+                <a href="{{uri}}">Continue Reading </a>
+            </p>
+            <p class="author">
+                
+                <time class="published text-muted" itemprop="datePublished" datetime=" 2021-10-01T17:56:36 ">October 1, 2021</time>
+            </p>
+        </div>
+    </div>
+</div>
+`;
 
-
-var noResultsTemplate =
-    '<div class="text-center">No results found matching <strong>{{query}}</strong>.</div>';
+var noResultsTemplate = '<div class="text-center">No results found matching <strong>{{query}}</strong>.</div>';
 
 search.addWidget(
     instantsearch.widgets.searchBox({
@@ -66,7 +61,7 @@ search.addWidget(
         placeholder: 'Start typing …',
         cssClasses: { input: 'search-input hideInput form-control' },
         autofocus: true,
-        poweredBy: false,
+        poweredBy: true,
         magnifier: false,
         reset: false
     })
