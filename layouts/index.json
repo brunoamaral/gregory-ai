@@ -2,7 +2,7 @@
 {{- if ne $page.Type "json" -}}
 {{- if and $index (gt $index 0) -}},{{- end }}
 {
-	"object_id": "{{$page.Section}}_{{with $page.Params.article_id}}{{.}} {{else}}{{$page.Params.trial_id}}{{end}}",
+	"objectID": "{{$page.Section}}_{{with $page.Params.article_id}}{{.}} {{else}}{{$page.Params.trial_id}}{{end}}",
 	"article_id": {{with $page.Params.article_id}} {{ . }}{{else}}"none"{{end}},
 	"trial_id": {{ with $page.Params.trial_id }}{{ . }}{{else}}"none"{{end}},
 	"uri": "{{ $page.Permalink | htmlEscape }}",
