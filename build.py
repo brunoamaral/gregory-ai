@@ -252,13 +252,28 @@ print(output)
 
 print('''
 ####
+## UPDATE THE SEARCH INDEX 
+####
+''')
+
+from algoliasearch.search_client import SearchClient
+
+client = SearchClient.create('5DE3PYXB8W', '7aa5745a5d86624aaf36bc1455aaa0ee')
+index = client.init_index('gregory')
+
+index = client.init_index('articles')
+batch = json.load(open(website_path + '/index.json'))
+index.save_objects(batch, {'autoGenerateObjectIDIfNotExist': True})
+
+
+print('''
+####
 ## CLEAN UP FILES
 ####
 ''')
 
 os.remove('content/developers/articles_' + datetime_string + '.xlsx')
 os.remove('content/developers/articles_' + datetime_string + '.json')
-
 
 os.remove('content/developers/trials_' + datetime_string + '.xlsx')
 os.remove('content/developers/trials_' + datetime_string + '.json')
