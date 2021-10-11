@@ -81,6 +81,8 @@ RUN chown -R node-red:root /usr/src/node-red && \
     python3-pip python3-numpy python3-pandas python3-h5py && \
     pip3 install scikit-learn tensorflow && \
     rm -r /tmp/*
+RUN pip3 install --upgrade pip
+RUN pip3 --version
 RUN pip3 install -r /python-ml/requirements.txt
 
 USER node-red
