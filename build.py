@@ -250,22 +250,22 @@ popen.wait()
 output = popen.stdout.read()
 print(output)
 
-print('''
-####
-## UPDATE THE SEARCH INDEX 
-####
-''')
+# print('''
+# ####
+# ## UPDATE THE SEARCH INDEX 
+# ####
+# ''')
 
-from algoliasearch.search_client import SearchClient
-algolia_id = os.getenv('ALGOLIA_ID')
-algolia_key = os.getenv('ALGOLIA_KEY')
+# from algoliasearch.search_client import SearchClient
+# algolia_id = os.getenv('ALGOLIA_ID')
+# algolia_key = os.getenv('ALGOLIA_KEY')
 
-client = SearchClient.create(algolia_id, algolia_key)
-index = client.init_index('gregory')
+# client = SearchClient.create(algolia_id, algolia_key)
+# index = client.init_index('gregory')
 
-index = client.init_index('gregory')
-batch = json.load(open(website_path + '/index.json'))
-index.save_objects(batch, {'autoGenerateObjectIDIfNotExist': True})
+# index = client.init_index('gregory')
+# batch = json.load(open(website_path + '/index.json'))
+# index.save_objects(batch, {'autoGenerateObjectIDIfNotExist': True})
 
 
 print('''
