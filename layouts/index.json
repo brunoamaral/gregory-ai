@@ -2,6 +2,7 @@
 {{- if ne $page.Type "json" -}}
 {{- if and $index (gt $index 0) -}},{{- end }}
 {
+	"article_id": {{ $page.Params.article_id }},
 	"uri": "{{ $page.Permalink | htmlEscape }}",
 	"external_uri": "{{$page.Params.link}}",
 	"title": {{ $page.Title | jsonify }},
