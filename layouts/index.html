@@ -138,7 +138,7 @@
 											<a href="{{ $author.Permalink }}" itemprop="author" title="{{ . }}" class="author">{{ $author.Params.name }}</a>
 																	{{ end }}
 																</b>, {{ end }} {{ end }}
-                                            <time class="published text-muted" itemprop="datePublished" datetime="{{ .Date.Format " 2006-01-02T15:04:05 " }}">{{ .Date.Format "January 2, 2006" }}</time>
+                                            <time class="published" itemprop="datePublished" datetime="{{ .Date.Format " 2006-01-02T15:04:05 " }}">{{ .Date.Format "January 2, 2006" }}</time>
                                             <span class="badge badge-info text-white font-weight-normal">{{ .Params.article_source }}</span> {{ if eq .Params.ml_prediction_gnb 1 }}<span class="badge badge-success text-white font-weight-normal">auto</span>{{ end }} {{ if and (eq .Params.relevant  1) ( eq .Params.ml_prediction_gnb 0) }}<span class="badge badge-primary text-white font-weight-normal">human</span>{{ end }}
                                         </p>
                                     </div>
