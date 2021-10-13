@@ -3,13 +3,16 @@ document.addEventListener('DOMContentLoaded', (event) => {
     const queries = document.querySelectorAll('h3')
     const nounphrases = document.querySelectorAll('li.phrase')
     const commonwords = [
+        'a systematic review',
         'analysis',
         'characteristics',
+        'clinical trials',
         'individuals',
         'involvement',
         'ms',
         'multiple sclerosis',
         'patients',
+        'people',
         'persons',
         'recovery',
         'safety'
