@@ -22,7 +22,7 @@ title: "Disclaimer"
 menu:
   column_1:
     name: Disclaimer
-
+disable_comments: true
 options:
   unlisted: false
   showHeader: true
