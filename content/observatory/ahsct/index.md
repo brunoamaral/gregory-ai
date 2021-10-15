@@ -31,6 +31,9 @@ scripts:
 ---
 
 <h3 id="aHSCT">aHSCT</h3>
+
+<p>aHSCT stands for Autologous haematopoietic stem cell transplantation</p>
+
 <ol class="articles aHSCT"></ol>
 <h4>Clinical Trials</h4>
 <ol class="trials aHSCT"></ol>
