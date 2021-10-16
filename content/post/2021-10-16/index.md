@@ -16,7 +16,10 @@ slug:
 subtitle: 
 tags: 
   - Bruno Amaral
-  - brunp-amaral
+  - Multiple Sclerosis
+  - Research
+  - Scientific Articles
+  - Machine Learning
 categories: 
   - 
 title: "A much needed update"
