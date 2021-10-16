@@ -76,6 +76,7 @@ article_source = "article_source"
 category = "categories"
 tag = "tags"
 trial_source = "trial_source"
+author = "authors"
 # source = "source"
 
 [permalinks]
