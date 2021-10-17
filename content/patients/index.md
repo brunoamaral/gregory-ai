@@ -33,7 +33,7 @@ menu:
   main:
     url: patients
     name: Patients
-    weight: 4
+    weight: 5
 ---
 
 <div class="col-md-5 col-12 justify-content-center align-self-center align-right ">

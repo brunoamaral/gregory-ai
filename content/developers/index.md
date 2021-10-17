@@ -18,7 +18,7 @@ layout: page
 menu:
   main:
     Name: Developers
-    Weight: 5
+    Weight: 6
 
 draft: false
 enableDisqus : true

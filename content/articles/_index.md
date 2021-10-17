@@ -5,7 +5,7 @@ subtitle: This is the complete list of articles in the database
 menu:
   main:
     name: Articles
-    weight: 6
+    weight: 8
 options:
   header: mini
   showHeader: true
