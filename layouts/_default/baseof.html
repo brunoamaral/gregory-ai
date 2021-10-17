@@ -1,8 +1,5 @@
 {{- $siteLogo := printf "%s%s" $.Site.BaseURL $.Site.Params.logo -}}
-{{ $author := "" }}
-{{ with .Site.Params.defaultAuthor }}
-{{- $author = .Site.GetPage (printf .Site.Params.defaultAuthor ) -}}
-{{ end }}
+{{- $author := .Site.GetPage (printf .Site.Params.defaultAuthor ) -}}
 {{- with .Params.authors -}}
 	{{ $ref := (printf "authors/%s" (index . 0)) }}
 	{{ $author = ($.Site.GetPage (printf $ref)) }}

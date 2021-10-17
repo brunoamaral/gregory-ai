@@ -23,6 +23,8 @@ headerPhoto = ""
     term = [ "HTML", "RSS"]
 
 [params]
+  author = "Bruno Amaral"
+  defaultAuthor = "authors/bruno-amaral"
   description = "An index engine for articles and clinical trials around Multiple Sclerosis"
   disqus = ""
   enableMathJax = false # enable it in Front Matter
