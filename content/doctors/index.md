@@ -76,6 +76,19 @@ scripts:
     </div>
 </div>
 
+
+
+<div class="row justify-content-center align-self-center mb-5 p-md-5">
+  <div class="col-md-5 col-12 align-self-center">
+    <h3 class="title">Download the articles</h3>
+    <p class="lead font-weight-biold">The database is free to everyone and can be downloaded in both Excel and Json files.</p>
+    <a href='/developers/articles.zip' target="_blank" class="btn btn-primary btn-round btn-lg font-weight-bold"> <i class="fas fa-file-archive"></i> Download Articles</a>
+    </div>
+  <div class="col-md-5 col-12 align-self-center">
+    <img src="images/undraw_export_files_re_99ar.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter">
+  </div>  
+</div>
+
 <!-- TO DO: listagem dos resultados mais relevantes nos últimos 30 dias com link para listagem completa  -->
 
 
