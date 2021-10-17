@@ -20,7 +20,7 @@ categories:
   - 
 title: "Disclaimer"
 menu:
-  column_1:
+  column_3:
     name: Disclaimer
 disable_comments: true
 options:
