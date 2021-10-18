@@ -29,7 +29,7 @@ options:
   hideSubscribeForm: false
   header: mini
 scripts:
-
+  - '<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>'
 menu:
   main:
     url: researchers
@@ -75,6 +75,28 @@ menu:
   <p>An item is added to the list based on what is identified by the MS Society Website, or when there is an associated clinical trial.</p>
   <a href='{{< ref "/observatory/_index.md" >}}' class="btn btn-success btn-round btn-lg font-weight-bold">Observatory <i class="fas fa-arrow-circle-right"></i></a>
 </div>  
+</div>
+
+<div class="row justify-content-center align-self-center mb-5 p-md-5">
+<div class="col-md-12"><h3 class="title text-center">Where the information comes from</h3></div>
+<div class="mermaid col-md-10 mx-auto">
+graph TD;
+    APTA[fa:fa-newspaper APTA.org] -->Gregory;
+    BioMedCentral[fa:fa-newspaper BioMedCentral.com] -->Gregory;
+    JNeurosci[fa:fa-newspaper JNeurosci.org]-->Gregory;
+    PEDro[fa:fa-newspaper PEDro.org.au] -->Gregory;
+    PubMed[fa:fa-newspaper PubMed.gov] -->Gregory;
+    Reuters[fa:fa-newspaper Reuters Health]-->Gregory;
+    Scielo[fa:fa-newspaper Scielo.org] -->Gregory;
+    TheLancet[fa:fa-newspaper The Lancet Health]-->Gregory;
+    MsRelDis[fa:fa-newspaper MS and Related Disorders]-->Gregory;
+    Manual[fa:fa-keyboard Manual Input]-->Gregory;
+    Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
+    Gregory{fa:fa-robot Gregory}-->Newsletter(fa:fa-envelope Newsletter)
+</div>
+<div class="col-md-12 text-center">
+  <a href='{{< ref "/about/index.md" >}}' class="btn btn-primary btn-round btn-lg font-weight-bold">More information on the about page <i class="fas fa-arrow-circle-right"></i></a>
+</div>
 </div>
 
 
