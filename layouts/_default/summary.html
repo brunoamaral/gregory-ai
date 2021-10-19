@@ -8,13 +8,13 @@
 									<span class="h6 category text-info text-left {{ $category | urlize }} ">{{ $category }}</span>
 										{{ end }}
 										{{ end }}
-									{{.Date | time.Format ":date_long" }}
+									{{.Date | time.Format ":date_long" }} <span class="badge badge-info text-white font-weight-normal">{{ .Params.source }}</span>
 									<h4 class="card-title">
 										<a href="{{ .Permalink }}">{{ .Title | safeHTML }}</a>
 									</h4>
 									<p class="card-description">
 
-										<a href="{{ .Permalink }}" class="btn btn-sm btn-info">{{ i18n "read_more" }}</a>
+										<a href="{{ .Permalink }}" class="btn btn-sm btn-success">{{ i18n "read_more" }}</a>
 									</p>
 										{{ range .Params.authors }}
 										{{ $author := ($.GetPage (printf "/authors/%s/" .) ) }}

@@ -1,5 +1,7 @@
 #!/usr/bin/python3
+from datetime import datetime
 from pathlib import Path
+from zipfile import ZipFile
 import git  
 import html
 import json 
@@ -13,10 +15,14 @@ import subprocess
 
 # Set Variables
 path = "/home/gregory/gregory"
+
 # Set the API Server
 ## If you are running docker-compose.yaml, this is http://localhost:18080/
 server = "https://api.gregory-ms.com/"
 website_path = "/var/www/gregory-ms.com/"
+
+now = datetime.now()
+datetime_string = now.strftime("%d-%m-%Y_%Hh%Mm%Ss")
 
 # Workflow starts
 
@@ -44,7 +50,7 @@ res = requests.get(url)
 file_name = path + '/data/articles.json'
 with open(file_name, "w") as f:
     f.write(res.text)
-file_name = path + '/content/developers/articles.json'
+file_name = path + '/content/developers/articles_' + datetime_string + '.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
@@ -55,7 +61,7 @@ file_name = path + '/data/trials.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
-file_name = path + '/content/developers/trials.json'
+file_name = path + '/content/developers/trials_' + datetime_string + '.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
@@ -65,18 +71,58 @@ print('''
 ## SAVE EXCEL VERSIONS
 ####
 ''')
+
+## ARTICLES
 articles_json = pd.read_json('data/articles.json')
 articles_json.link = articles_json.link.apply(html.unescape)
 articles_json.summary = articles_json.summary.apply(html.unescape)
-articles_json.to_excel('content/developers/articles.xlsx')
+articles_json.to_excel('content/developers/articles_'+ datetime_string + '.xlsx')
+
+## TRIALS
 trials_json = pd.read_json('data/trials.json')
 trials_json.link = trials_json.link.apply(html.unescape)
 trials_json.summary = trials_json.summary.apply(html.unescape)
-trials_json.to_excel('content/developers/trials.xlsx')
+trials_json.to_excel('content/developers/trials_' + datetime_string + '.xlsx')
+
 
 print('''
 ####
-## GET ARTICLES
+## CREATE ZIP FILES
+####
+
+### Articles
+''')
+
+zipArticles = ZipFile('content/developers/articles.zip', 'w')
+# Add multiple files to the zip
+print('- content/developers/articles_' + datetime_string + '.xlsx')
+print('- content/developers/articles_' + datetime_string + '.json')
+print('- content/developers/README.md\n')
+
+zipArticles.write('content/developers/articles_' + datetime_string + '.xlsx')
+zipArticles.write('content/developers/articles_' + datetime_string + '.json')
+zipArticles.write('content/developers/README.md')
+
+# close the Zip File
+zipArticles.close()
+
+print('### Clinical Trials')
+
+zipTrials = ZipFile('content/developers/trials.zip', 'w')
+# Add multiple files to the zip
+print('- content/developers/trials_' + datetime_string + '.xlsx')
+print('- content/developers/trials_' + datetime_string + '.json')
+print('- content/developers/README.md\n')
+zipTrials.write('content/developers/trials_' + datetime_string + '.xlsx')
+zipTrials.write('content/developers/trials_' + datetime_string + '.json')
+zipTrials.write('content/developers/README.md')
+
+# close the Zip File
+zipTrials.close()
+
+print('''
+####
+## CREATE ARTICLES
 ####
 ''')
 
@@ -128,9 +174,11 @@ for article in jsonArticles:
             '\n  ' + article["summary"].replace("\n", "\n  ") +\
             "\nlink: \'" + article["link"] + "\'" +\
             "\npublished_date: " + str(article["published_date"]) + \
-            "\nsource: " + article["source"] + \
+            "\narticle_source: " + article["source"] + \
             "\nrelevant: " + str(article["relevant"]) + \
             "\nnounphrases: " + str(noun_phrases) + \
+            "\nml_prediction_gnb: " + str(article["ml_prediction_gnb"]) + \
+            "\nml_prediction_lr: " + str(article["ml_prediction_lr"]) + \
             "\noptions:" + \
             "\n  unlisted: false" + \
             "\n---\n" + \
@@ -142,7 +190,7 @@ for article in jsonArticles:
 
 print('''
 ####
-## GET TRIALS
+## CREATE TRIALS
 ####
 ''')
 
@@ -180,7 +228,7 @@ for trial in jsonTrials:
             '\n  ' + trial["summary"].replace("\n", "\n  ") +\
             "\nlink: \'" + trial["link"] + "\'" +\
             "\npublished_date: " + str(trial["published_date"]) + \
-            "\nsource: " + trial["source"] + \
+            "\ntrial_source: " + trial["source"] + \
             "\nrelevant: " + str(trial["relevant"]) + \
             "\noptions:" + \
             "\n  unlisted: false" + \
@@ -201,3 +249,33 @@ popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
+
+# print('''
+# ####
+# ## UPDATE THE SEARCH INDEX 
+# ####
+# ''')
+
+# from algoliasearch.search_client import SearchClient
+# algolia_id = os.getenv('ALGOLIA_ID')
+# algolia_key = os.getenv('ALGOLIA_KEY')
+
+# client = SearchClient.create(algolia_id, algolia_key)
+# index = client.init_index('gregory')
+
+# index = client.init_index('gregory')
+# batch = json.load(open(website_path + '/index.json'))
+# index.save_objects(batch, {'autoGenerateObjectIDIfNotExist': True})
+
+
+print('''
+####
+## CLEAN UP FILES
+####
+''')
+
+os.remove('content/developers/articles_' + datetime_string + '.xlsx')
+os.remove('content/developers/articles_' + datetime_string + '.json')
+
+os.remove('content/developers/trials_' + datetime_string + '.xlsx')
+os.remove('content/developers/trials_' + datetime_string + '.json')

@@ -20,7 +20,7 @@
 		</div>
 		<div class="content-center">
 			<div class="container">
-				<div class="col-md-8 ml-auto mr-auto text-center">
+				<div class="col-md-10 ml-auto mr-auto text-center">
 					<h1 class="title" itemprop="headline d-print-block">{{ .Title }}</h1> 
 					{{- with .Params.subtitle }}
 						<h2 itemprop="subtitle d-print-block">{{ . }}</h2>
@@ -100,7 +100,7 @@
 				<p><strong>ID</strong>: <span id="id" data-datetime="{{.Params.article_id}}">{{ .Params.article_id }}</span></p>
 				<p><strong>Discovery Date</strong>: <span id="discovery_date" data-datetime="{{.Params.discovery_date}}">{{ .Params.discovery_date | dateFormat "02 January 2006, 15:04:05 MST" }}</span></p>
 				<p><strong>Published Date</strong>: <span id="published_date" data-datetime="{{.Params.published_date}}">{{ .Params.published_date }}</span></p>
-				<p><strong>Source</strong>: <span id="source">{{ .Params.source | safeHTML }}</span></p>
+				<p><strong>Source</strong>: <span id="source">{{ .Params.article_source | safeHTML }}</span></p>
 				<p><strong>Link</strong>: <span id="link"><a href="{{ .Params.link | htmlUnescape | safeHTML }}">{{ .Params.link | safeHTML }}</a></span></p>
 				<div class="post-text" id="abstract">
 					<h4>Abstract</h4>

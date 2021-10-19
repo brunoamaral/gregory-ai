@@ -1,17 +1,15 @@
-theme = ["NowUI-Pro"]
-
-baseURL = "https://gregory-ms.com/"
-languageCode = "en"
-DefaultContentLanguage = "en"
-enableInlineShortcodes = true
-enableEmoji = true
-# pagination = 10
-
-title = "Gregory MS"
 author = "Bruno Amaral"
+baseURL = "https://gregory-ms.com/"
 copyright = ""
-
+DefaultContentLanguage = "en"
+enableEmoji = true
+enableInlineShortcodes = true
+enableRobotsTXT = true
 googleAnalytics = ""
+languageCode = "en"
+theme = ["NowUI-Pro"]
+title = "Gregory MS"
+
 # Set the default site thumbnail
 defaultImage = ""
 # Google 
@@ -25,6 +23,8 @@ headerPhoto = ""
     term = [ "HTML", "RSS"]
 
 [params]
+  author = "Bruno Amaral"
+  defaultAuthor = "authors/bruno-amaral"
   description = "An index engine for articles and clinical trials around Multiple Sclerosis"
   disqus = ""
   enableMathJax = false # enable it in Front Matter
@@ -37,33 +37,58 @@ headerPhoto = ""
   startyear = "2021"
 
 [params.valine]
-  enable = false
-  lang = 'en' # zh-CN
   appId = ''
   appKey = ''
+  avatar = 'robohash'
+  debug = true
+  enable = false
+  enableHeaderVisitor = true
+  lang = 'en' # zh-CN
   placeholder = 'Say Something......'
   requiredFields = ['nick', 'mail']
-  avatar = 'robohash'
   visitor = true
-  enableHeaderVisitor = true
-  debug = true
 [params.options]
-  hideSubscribeForm = true
-[menu]
+  hideSubscribeForm = false
+
+# [menu]
   [[menu.main]]
   name = 'Home'
   url = "/"
   weight = 1
 
+  [[menu.column_2]]
+  name = 'Lisbon Collective <i class="fas fa-external-link-square-alt"></i>'
+  url = "https://lisboncollective.com"
+  [[menu.column_2]]
+  name ='OneOverZero <i class="fas fa-external-link-square-alt"></i>'
+  url = "https://github.com/oneoverzero"
+  [[menu.column_2]]
+  name = '<img src="/images/powered_by_project_galileo.png" alt="Support by CloudFlare, Project Galileo"/>'
+  url = 'https://www.cloudflare.com/en-gb/galileo/'
+  [[menu.column_2]]
+  name ="Bruno Amaral"
+  url = "https://brunoamaral.eu/"
 
 [social]
   github = "https://github.com/brunoamaral/gregory"
   rss = ""
 
 [taxonomies]
+article_source = "article_source"
 category = "categories"
 tag = "tags"
-source = "source"
+trial_source = "trial_source"
+author = "authors"
+# source = "source"
+
+[permalinks]
+  article_source = "/articles/source/:slug"
+  trial_source = "/trials/source/:slug"
+
+  # post = "/:slug/"
+  # page = "/:slug/"
+  # category = "/:slug/"
+
 # doc: https://gohugo.io/getting-started/configuration-markup#highlight
 # syntax style: https://xyproto.github.io/splash/docs/longer/all.html
 [markup]

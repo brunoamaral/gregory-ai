@@ -1,0 +1,67 @@
+
+<footer class="footer footer-big" data-background-color="black">
+    <div class="container">
+        <div class="content">
+            <div class="row">
+                <div class="col-md-3">
+                    <span class="h5">{{ i18n "column_1" | upper }}</span>
+                    <ul class="links-vertical">
+                    	{{- range .Site.Menus.column_1 -}}
+                        <li>
+                            <a href="{{ .URL }}" class="text-muted">
+                                {{ .Name | safeHTML }}
+                            </a>
+                        </li>
+                        {{ end }}
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <span class="h5">{{ i18n "column_2" | upper }}</span>
+                    <ul class="links-vertical">
+                    		{{- range .Site.Menus.column_2 -}}
+                    	    <li>
+                    	        <a href="{{ .URL }}" class="text-muted">
+                    	            {{ .Name | safeHTML }}
+                    	        </a>
+                    	    </li>
+                    	    {{ end }}
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <span class="h5">{{ i18n "column_3" | upper }}</span>
+
+                    <ul class="links-vertical">
+                    			{{- range .Site.Menus.column_3 -}}
+                    		    <li>
+                    		        <a href="{{ .URL }}" class="text-muted">
+                    		            {{ .Name | safeHTML }}
+                    		        </a>
+                    		    </li>
+                    		    {{ end }}
+                    </ul>
+                </div>
+                <div class="col-md-3">
+                    <span class="h5">{{ i18n "column_4" | upper }}</span>
+                    <ul class="social-buttons">
+ 
+                    		<li class="ml-1">
+                    			<a href="https://twitter.com/GregoryMS_" title="Gregory on Twitter" class="btn btn-icon btn-neutral btn-twitter btn-round">
+                    				<i class="fab fa-twitter"></i>
+                    			</a>
+                    		</li>
+                            <li class="ml-1">
+                    			<a href="https://github.com/brunoamaral/gregory" title="Gregory on Github" class="btn btn-icon btn-neutral btn-github btn-round">
+                    				<i class="fab fa-github"></i>
+                    			</a>
+                    		</li>
+
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <hr>
+        <div class="copyright">
+        	Copyright &copy; {{ now.Format "2006"}} <a href="https://brunoamaral.eu/">Bruno Amaral</a>
+        </div>
+    </div>
+</footer>
