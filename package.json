@@ -30,6 +30,7 @@
     ],
     "dependencies": {
         "autoprefixer": "^10.3.6",
+        "cssnano": "^5.0.8",
         "node-red": "2.0.6",
         "node-red-contrib-cheerio": "~1.1.0",
         "node-red-contrib-moment": "~4.0.0",

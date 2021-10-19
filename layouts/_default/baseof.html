@@ -40,7 +40,8 @@
 	{{- $nowUi := resources.Get "scss/now-ui-kit.scss" | resources.ToCSS (dict "enableSourceMap" false "outputStyle" "compressed") -}}
 
 	<!--  $style := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular $solid  -->
-	{{- $style := resources.Get "scss/now-ui-kit.scss" | resources.ToCSS (dict "enableSourceMap" false "outputStyle" "compressed") }}
+	{{- $style := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular $solid | resources.Concat "css/style.css" | resources.Fingerprint -}}
+
 
 	{{ $styles := $style | postCSS (dict "config" "./assets/css/postcss.config.js") | minify  -}}
 	{{ with ($styles  ) }}
