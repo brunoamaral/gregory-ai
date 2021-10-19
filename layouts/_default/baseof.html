@@ -39,8 +39,17 @@
 	{{- $bootstrap := resources.Get "css/bootstrap.min.css" -}}
 	{{- $nowUi := resources.Get "scss/now-ui-kit.scss" | resources.ToCSS (dict "enableSourceMap" false "outputStyle" "compressed") -}}
 
+	<!--  $style := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular $solid  -->
 	{{- $style := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular $solid | resources.Concat "css/style.css" | resources.Fingerprint -}}
-	<link href="{{- $style.Permalink -}}" rel="stylesheet">
+
+
+	{{ $styles := $style | postCSS (dict "config" "./assets/css/postcss.config.js") | minify  -}}
+	{{ with ($styles  ) }}
+	<style>
+		{{.Content | safeCSS }}
+	</style>
+	{{ end }}
+
 	{{- if or (.HasShortcode "youtube") (.HasShortcode "youtube") (.HasShortcode "youtube") -}}
 	{{- $plyr_css := resources.Get "/css/plyr/plyr.css" -}}
 	<link rel="stylesheet" href="{{- $plyr_css.RelPermalink -}}">
