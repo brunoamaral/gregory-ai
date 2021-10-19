@@ -14,6 +14,7 @@ https://gregory-ms.com
 - [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/)
 - [ ] [Hugo](https://gohugo.io/) 
 - [ ] [Mailgun](https://www.mailgun.com/)
+- [ ] [Node JS v14.18.1](https://nodejs.org/en/)
 - [ ] [SQLite](https://www.sqlite.org/index.html)
 
 ## Setup the environment
