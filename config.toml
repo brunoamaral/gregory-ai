@@ -63,7 +63,7 @@ headerPhoto = ""
   name ='OneOverZero <i class="fas fa-external-link-square-alt"></i>'
   url = "https://github.com/oneoverzero"
   [[menu.column_2]]
-  name = '<img src="/images/powered_by_project_galileo.png" alt="Support by CloudFlare, Project Galileo"/>'
+  name = '<img src="/images/powered_by_project_galileo.png" alt="Support by CloudFlare, Project Galileo" loading="lazy" />'
   url = 'https://www.cloudflare.com/en-gb/galileo/'
   [[menu.column_2]]
   name ="Bruno Amaral"
