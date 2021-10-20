@@ -51,10 +51,6 @@ scripts:
   
   </div>
 </div>
-what ?
 
-
-{{< list-by sources="PEDro APTA PubMed The Lancet BioMedCentral Scielo" >}}
-
-{{< list-by sources="PEDro Scielo" >}}
+{{< list-by sources="PEDro APTA The Lancet BioMedCentral Scielo" >}}
 
