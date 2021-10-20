@@ -74,12 +74,13 @@ headerPhoto = ""
   rss = ""
 
 [taxonomies]
+# category = "categories"
+# source = "source"
+# trial_source = "trial_source"
 article_source = "article_source"
-category = "categories"
+author = "authors"
 tag = "tags"
 trial_source = "trial_source"
-author = "authors"
-# source = "source"
 
 [permalinks]
   article_source = "/articles/source/:slug"
