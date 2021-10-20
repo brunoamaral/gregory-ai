@@ -1,0 +1,5 @@
+{{ $posts := (where $.Site.Pages ".Params.article_source" "in" (.Get "sources") ) }}
+
+{{ range sort $posts .Params.discovery_date }}
+	{{ .Render "summary" }}
+{{ end }}

@@ -79,7 +79,6 @@ category = "categories"
 tag = "tags"
 trial_source = "trial_source"
 author = "authors"
-# source = "source"
 
 [permalinks]
   article_source = "/articles/source/:slug"
