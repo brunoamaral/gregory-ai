@@ -19,7 +19,7 @@
 	{{- if eq $.Params.options.unlisted true -}}
 	<meta name="robots" content="noindex, nofollow">
 	{{- end -}}
-	<meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
+	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<!-- Fonts and icons -->
 	{{- $montserrat := resources.Get "css/Montserrat.css" -}}
 	
