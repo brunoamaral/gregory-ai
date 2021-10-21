@@ -34,10 +34,10 @@ article.post {
 // This is where we set the background image for the footer with a subscribe form
 div.subscribe-line-image{
 	// background-image: url('/newsletter/brett-jordan-LPZy4da9aRo-unsplash.jpeg');
-	background-color: #6D1017;
-	position: unset !important;
 }
-
+div#footersubscribe{
+	background-color:#ff0013;
+}
 input#subscribeEmail{
 	border-left: none;
 	border-bottom-right-radius: 0;

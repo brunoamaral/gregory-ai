@@ -272,7 +272,7 @@
 
 {{ if eq .Site.Params.options.hideSubscribeForm false }}
 {{- if (ne $.Params.options.hideSubscribeForm true | and (ne .Section "instagram")) -}}
-<div class="subscribe-line subscribe-line-image d-print-none">
+<div class="subscribe-line subscribe-line-image d-print-none" id="footersubscribe">
 	<div class="container">
 	  <div class="row">
 		<div class="col-md-6 ml-auto mr-auto">
