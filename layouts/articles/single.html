@@ -16,12 +16,12 @@
 {{ define "main" }}
 <div class="wrapper">
 	<div class="page-header page-header-mini">
-		<div class="page-header-image d-print-none" data-parallax="true" style="background-image: url('');">
+		<div class="page-header-image d-print-none" data-parallax="true" style="background-color: #2c2c2c;">
 		</div>
 		<div class="content-center">
 			<div class="container">
-				<div class="col-md-10 ml-auto mr-auto text-center">
-					<h1 class="title" itemprop="headline d-print-block">{{ .Title }}</h1> 
+				<div class="col-md-12 ml-auto mr-auto text-center">
+					<h1 class="" itemprop="headline d-print-block">{{ .Title }}</h1> 
 					{{- with .Params.subtitle }}
 						<h2 itemprop="subtitle d-print-block">{{ . }}</h2>
 					{{- end }}
