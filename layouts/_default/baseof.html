@@ -43,9 +43,7 @@
 
 	{{ $styles := $style | postCSS (dict "config" "./assets/css/postcss.config.js") | minify  -}}
 	{{ with ($styles  ) }}
-	<style>
-		{{.Content | safeCSS }}
-	</style>
+	<link rel="stylesheet" href="{{.Permalink}}">
 	{{ end }}
 	
 	{{- if or (.HasShortcode "youtube") (.HasShortcode "youtube") (.HasShortcode "youtube") -}}
