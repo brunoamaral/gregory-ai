@@ -365,7 +365,7 @@
 		{{ end }}
 		<!-- Bring it all together into one file -->
 		<!-- we are not including nouislider and  bootstrapSwitch -->
-		{{- $javascript := slice $jquery $popper $bootstrap $nowuikitjs  | resources.Concat "js/javascript.js" | resources.Minify | resources.Fingerprint -}}
+		{{- $javascript := slice $popper $bootstrap $nowuikitjs  | resources.Concat "js/javascript.js" | resources.Minify | resources.Fingerprint -}}
 		<script src="{{- $javascript.Permalink -}}" defer=""></script>
 		<script src="{{$vibrant.Permalink }}" defer="true"></script>
 		<script src="{{ $customJs.Permalink }}" defer="true"></script>
