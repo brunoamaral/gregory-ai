@@ -1,7 +1,7 @@
 module.exports = {
   plugins: {
     '@fullhuman/postcss-purgecss': {
-      content: ['themes/NowUI-Pro/layouts/**/*.html','content/**/*.html', 'content/**/*.md'],
+      content: ['layouts/**/*.html','themes/NowUI-Pro/layouts/**/*.html','content/**/*.html', 'content/**/*.md'],
       safelist: {
       greedy: ["/.animate.*/"]
       },
