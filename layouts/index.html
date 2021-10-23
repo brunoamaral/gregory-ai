@@ -118,7 +118,7 @@
                   </div>
                     <div class="row">
                         <div class="col-md-10 ml-auto mr-auto">
-                            <h2 class="text-center title">Latest relevant articles</h2>
+                            <h2 class="text-center title" id="relevantarticles">Relevant articles</h2>
 
                             <p class="text-center">
                               <span class="badge badge-info text-white font-weight-normal">indicates sources</span> <span class="badge badge-primary text-white font-weight-normal">human selection</span> <span class="badge badge-success text-white font-weight-normal">indicates automatic selection</span></p>
@@ -130,7 +130,7 @@
                             {{ range (.Paginate ($listing)).Pages }} 
                             <!-- first post -->
                             <div class="card card-plain card-blog">
-                                <div class="row">
+                                <div class="row"> 
                                     <div class="col-md-12">
                                         {{ range $index, $category := .Params.categories }}
                                         <span class="h6 category mt-3"><a class="text-info" title="{{ i18n "category" }} {{ $category}}" href="{{ $.Site.BaseURL }}categories/{{ $category | urlize }}/">{{ $category }}</a></span> 
@@ -177,14 +177,14 @@
               {{ if $pag.HasPrev }}
               {{ with $pag.First -}}
               <li class="page-item">
-                <a href="{{ .URL }}" class="page-link" aria-label="First">
+                <a href="{{ .URL }}#relevantarticles" class="page-link" aria-label="First">
                     <span aria-hidden="true"><i class="fa fa-angle-left" aria-hidden="true"></i><i class="fa fa-angle-double-left" aria-hidden="true"></i></span>
                 </a>
               </li>
               {{ end }}
             
               <li class="page-item{{ if not $pag.HasPrev }} disabled{{ end }}">
-                <a {{ if $pag.HasPrev }}href="{{ $pag.Prev.URL }}"{{ end }} class="page-link" aria-label="Previous">
+                <a {{ if $pag.HasPrev }}href="{{ $pag.Prev.URL }}#relevantarticles"{{ end }} class="page-link" aria-label="Previous">
                     <span aria-hidden="true"><i class="fa fa-angle-double-left" aria-hidden="true"></i></span>
                 </a>
               </li>
@@ -206,7 +206,7 @@
               {{- end -}}
               {{- if $showNumber }}
               <li class="page-item{{ if eq . $pag }} active{{ end }}">
-                <a class="page-link" href="{{ .URL }}">{{ .PageNumber }}</a>
+                <a class="page-link" href="{{ .URL }}#relevantarticles">{{ .PageNumber }}</a>
               </li>
               {{- else if $shouldEllipse }}
               <li class="page-item disabled">
@@ -216,14 +216,14 @@
               {{- end }}
               {{ if $pag.HasNext }}
               <li class="page-item{{ if not $pag.HasNext }} disabled{{ end }}">
-                <a {{ if $pag.HasNext }}href="{{ $pag.Next.URL }}"{{ end }} class="page-link" aria-label="Next">
+                <a {{ if $pag.HasNext }}href="{{ $pag.Next.URL }}#relevantarticles"{{ end }} class="page-link" aria-label="Next">
                     <span aria-hidden="true"><i class="fa fa-angle-double-right" aria-hidden="true"></i></span>
                 </a>
               </li>
             
               {{- with $pag.Last }}
               <li class="page-item">
-                <a href="{{ .URL }}" class="page-link" aria-label="Last">
+                <a href="{{ .URL }}#relevantarticles" class="page-link" aria-label="Last">
                     <span aria-hidden="true"><i class="fa fa-angle-double-right" aria-hidden="true"></i><i class="fa fa-angle-right" aria-hidden="true"></i></span>
                 </a>
               </li>
