@@ -41,7 +41,7 @@
 
 	{{ $styles := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular $solid | resources.Concat "css/style.css" | postCSS (dict "config" "./assets/css/postcss.config.js") | minify | fingerprint  -}}
 
-	{{ with $styles }} what?
+	{{ with $styles }}
 	<style>
 	{{.Content | safeCSS }} 
 	</style>
