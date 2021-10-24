@@ -41,12 +41,7 @@
 
 	{{ $styles := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular $solid | resources.Concat "css/style.css" | postCSS (dict "config" "./assets/css/postcss.config.js") | minify | fingerprint  -}}
 
-	{{ with $styles }}
-	<style>
-	{{.Content | safeCSS }} 
-	</style>
-	{{ end }}
-
+	<link rel="stylesheet" href="{{$styles.Permalink}}">
 
 	{{- if or (.HasShortcode "youtube") (.HasShortcode "youtube") (.HasShortcode "youtube") -}}
 	{{- $plyr_css := resources.Get "/css/plyr/plyr.css" -}}
