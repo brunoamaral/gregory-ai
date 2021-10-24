@@ -18,7 +18,7 @@ tags:
   - 
 categories: 
   - 
-title: "aHSCT"
+title: "HSCT"
 
 options:
   unlisted: false
@@ -30,10 +30,10 @@ scripts:
   -
 ---
 
-<h3 id="aHSCT">aHSCT</h3>
+<h3 id="HSCT">HSCT</h3>
 
-<p>aHSCT stands for Autologous haematopoietic stem cell transplantation</p>
+<p>HSCT stands for Haematopoietic Stem Cell Transplantation</p>
 
-<ol class="articles aHSCT"></ol>
+<ol class="articles HSCT"></ol>
 <h4>Clinical Trials</h4>
-<ol class="trials aHSCT"></ol>
+<ol class="trials HSCT"></ol>
