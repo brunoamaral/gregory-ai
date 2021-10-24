@@ -40,7 +40,13 @@
 	{{- $nowUi := resources.Get "scss/now-ui-kit.scss" | resources.ToCSS (dict "enableSourceMap" false "outputStyle" "compressed") -}}
 
 	{{ $styles := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular $solid | resources.Concat "css/style.css" | postCSS (dict "config" "./assets/css/postcss.config.js") | minify | fingerprint  -}}
-	<link rel="stylesheet" href="{{ $styles.Permalink }}">
+
+	{{ with $styles }} what?
+	<style>
+	{{.Content | safeCSS }} 
+	</style>
+	{{ end }}
+
 
 	{{- if or (.HasShortcode "youtube") (.HasShortcode "youtube") (.HasShortcode "youtube") -}}
 	{{- $plyr_css := resources.Get "/css/plyr/plyr.css" -}}
