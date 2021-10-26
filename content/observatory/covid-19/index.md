@@ -5,7 +5,7 @@ date: 2021-10-26T12:03:20+0100
 description: ""
 draft: false
 resources: 
-- src: images/
+- src: images/D6DC5B82-7FC1-4DFE-BCE4-4685B8C76791.jpg
   name: "header"
 - src: "gallery/*.jpg"
   name: gallery-:counter
