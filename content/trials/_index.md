@@ -26,6 +26,13 @@ menu:
 resources:
   - src: science-in-hd-9kSTF9PvETM-unsplash.jpeg
     name: header
+cta:
+  - label: <i class="fas fa-rss"></i> RSS 
+    url: /trials/index.xml
+    classes: btn-dark btn-sm btn-primary
+  - label: <i class="fas fa-file-archive"></i> ZIP
+    url: /developers/trials.zip
+    classes: btn-info btn-sm
 ---
 
 Information on Clinical Trials is retrieved from the following websites.
