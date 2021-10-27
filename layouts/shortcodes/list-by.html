@@ -1,5 +1,7 @@
 {{ $posts := (where $.Site.Pages ".Params.article_source" "in" (.Get "sources") ) }}
+{{ $paginator := (.Paginate $posts) }}
 
-{{ range sort $posts .Params.discovery_date }}
+{{ range $paginator.pages }}
 	{{ .Render "summary" }}
 {{ end }}
+{{ partial "pagination.html" . }}
