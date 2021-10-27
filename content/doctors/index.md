@@ -32,13 +32,13 @@ options:
   hideSubscribeForm: false
   header: mini
 scripts:
-  - '<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>'
+  - '<script src="/js/mermaid.min.js"></script>'
 ---
 
 
 
 <div class="col-md-5 col-12 justify-content-center align-self-center align-right ">
-  <img src="images/undraw_medicine_b1ol.svg" class="w-50 align-middle d-none d-md-block float-right" alt="medical doctors"/>
+  <img src="images/undraw_medicine_b1ol.svg" class="w-50 align-middle d-none d-md-block float-right" alt="medical doctors" loading="lazy"/>
   </div>
   <div class="col-md-5 col-12 justify-content-center align-self-center">
   
@@ -60,14 +60,14 @@ scripts:
     <a href='mailto:mail@brunoamaral.eu' class="btn btn-primary btn-round btn-lg font-weight-bold">Send Email <i class="fas fa-envelope"></i></a>
     </div>
   <div class="col-md-5 col-12 align-self-center">
-    <img src="images/undraw_subscribe_vspl.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter">
+    <img src="images/undraw_subscribe_vspl.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter" loading="lazy" />
   </div>  
 </div>
 
 
 <div class="row justify-content-center align-self-center mb-5 p-md-5">
   <div class="col-md-5 col-12 align-self-center">
-    <img src="images/undraw_medical_research_qg4d.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter">
+    <img src="images/undraw_medical_research_qg4d.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter" loading="lazy" />
   </div>  
   <div class="col-md-5 col-12 justify-content-center align-self-center">
     <h3 class="title">Clinical Trials</h3>
@@ -85,7 +85,7 @@ scripts:
     <a href='/developers/articles.zip' target="_blank" class="btn btn-primary btn-round btn-lg font-weight-bold"> <i class="fas fa-file-archive"></i> Download Articles</a>
     </div>
   <div class="col-md-5 col-12 align-self-center">
-    <img src="images/undraw_export_files_re_99ar.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter">
+    <img src="images/undraw_export_files_re_99ar.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter" loading="lazy" />
   </div>  
 </div>
 

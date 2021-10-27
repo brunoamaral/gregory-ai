@@ -3,10 +3,22 @@
 @import '_animate_custom.scss';
 @import '_responsive_type.scss';
 @import '../now-ui-kit/_variables.scss';
+// Accessibility 
+.badge.badge-info {
+    // background-color: #2ca8ff;
+    background-color: #026bb5;
+    border-color: #026bb5;
+}
+
+.badge.badge-success {
+    // background-color: #2ca8ff;
+    background-color: #087a02;
+    border-color: #087a02;
+}
 
 // smooth scrolling
 html {
-  scroll-behavior: smooth;
+    scroll-behavior: smooth;
 }
 
 // offset required to avoid overlap with top menu
@@ -17,52 +29,58 @@ a.anchor {
     visibility: hidden;
 }
 
-.contentgroupname-subscribe .info, .contentgroupname-subscrever .info  {
-	padding: 0 0 30px;
+.contentgroupname-subscribe .info,
+.contentgroupname-subscrever .info {
+    padding: 0 0 30px;
 }
 
-.n-logo{
-	height: 200px;
+.n-logo {
+    height: 200px;
 }
-section.article-body > ul > li{
-	font-weight: 300;
+
+section.article-body>ul>li {
+    font-weight: 300;
 }
+
 article.post {
-	word-break: break-word;
+    word-break: break-word;
 }
 
 // This is where we set the background image for the footer with a subscribe form
-div.subscribe-line-image{
-	background-image: url('/newsletter/brett-jordan-LPZy4da9aRo-unsplash.jpeg');
+div.subscribe-line-image {
+    // background-image: url('/newsletter/brett-jordan-LPZy4da9aRo-unsplash.jpeg');
 }
 
-input#subscribeEmail{
-	border-left: none;
-	border-bottom-right-radius: 0;
-	border-top-right-radius: 0;
+div#footersubscribe {
+    background-color: #ff0013;
 }
 
-input#subscribeSubmit{
-	border-top-right-radius: 30px;
-	border-bottom-right-radius: 30px;
+input#subscribeEmail {
+    border-left: none;
+    border-bottom-right-radius: 0;
+    border-top-right-radius: 0;
+}
+
+input#subscribeSubmit {
+    border-top-right-radius: 30px;
+    border-bottom-right-radius: 30px;
 }
 
 // FULL WIDTH IMAGES
 .full-width-image {
-   width: 100vw;
-   max-width: unset;
-   position: relative;
-   left: 50%;  
-   margin-left: -50vw;
+    width: 100vw;
+    max-width: unset;
+    position: relative;
+    left: 50%;
+    margin-left: -50vw;
 }
 
 .full-width-image img {
-  width: 100%;
+    width: 100%;
 }
 
 // ASIDES
-
-aside.separator:before{
+aside.separator:before {
     content: "";
     width: 100%;
     max-width: 10em;
@@ -71,138 +89,144 @@ aside.separator:before{
     display: block;
 }
 
-aside.pullquote{
-	font-size: 1.2rem;
-	margin-bottom: 2em;	
+aside.pullquote {
+    font-size: 1.2rem;
+    margin-bottom: 2em;
 }
 
-aside.pullquote.m-0.p-0{
-	width: auto;
+aside.pullquote.m-0.p-0 {
+    width: auto;
 }
+
 
 /* Small Devices, Tablets */
-@media only screen and (min-width : 768px) {
-	aside.pullquote{
-		width: 25rem;
-		margin-top: 1rem;
-		margin-bottom: 1rem;
-	}
-	div.aside > aside{
-		width: 100%;
-	}
 
-	aside.pullquote.float-left{
-		margin-left: -7vw;
-		padding-right: 1rem;
-	}
-	aside.pullquote.float-right{
-		margin-right: -7vw;
-		margin-left: 3rem;
-	}
+@media only screen and (min-width: 768px) {
+    aside.pullquote {
+        width: 25rem;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+    }
+    div.aside>aside {
+        width: 100%;
+    }
+    aside.pullquote.float-left {
+        margin-left: -7vw;
+        padding-right: 1rem;
+    }
+    aside.pullquote.float-right {
+        margin-right: -7vw;
+        margin-left: 3rem;
+    }
 }
 
-
-
 // Headers
-
-.page-header{
-	display: flex;
-	align-items: center;
+.page-header {
+    display: flex;
+    align-items: center;
 }
 
 // Search 
-
-img.search-icon{
-	width: 30px;
+img.search-icon {
+    width: 30px;
 }
 
-#page.slug-search .page-header{
-	align-items: normal; 
+#page.slug-search .page-header {
+    align-items: normal;
 }
 
-body.slug-search .content{ width: 100vw;}
+body.slug-search .content {
+    width: 100vw;
+}
 
 .search-hits {
-	max-height: auto;
+    max-height: auto;
     max-width: 100%;
     overflow: scroll;
 }
 
 // Categories
-
-.category.artificial-intelligence{
-	color: $primary-color !important;
+.category.artificial-intelligence {
+    color: $primary-color !important;
 }
 
-.category.geek{
-	color: $success-color !important;
+.category.geek {
+    color: $success-color !important;
 }
 
 // Subscribe 
-
 body.slug-follow .info {
-	padding-top:0;
+    padding-top: 0;
 }
 
-
 // BUTTONS
-.btn.btn-spotify{
-	background-color: #1DB954;
+.btn.btn-spotify {
+    background-color: #1DB954;
 }
 
 // BUTTONS NAV LANGUAGE
-#navigation > ul > li.nav-item.language-inactive > a{
-	background-color: transparent;
+#navigation>ul>li.nav-item.language-inactive>a {
+    background-color: transparent;
 }
 
 // LANGUAGE SVG
-a.nav-link.language svg { height:30px;}
-
-/* Extra Small Devices, Phones */ 
-@media only screen and (min-width : 480px) {
-
+a.nav-link.language svg {
+    height: 30px;
 }
+
+
+/* Extra Small Devices, Phones */
+
+@media only screen and (min-width: 480px) {}
+
+
 /* Small Devices, Tablets */
-@media only screen and (min-width : 768px) {
-}
+
+@media only screen and (min-width: 768px) {}
+
 
 /* Medium Devices, Desktops */
-@media only screen and (min-width : 992px) {
+
+@media only screen and (min-width: 992px) {}
 
 
-	}
+/* Large Devices, Wide Screens */
 
-/* Large Devices, Wide Screens */ 
-@media only screen and (min-width : 1200px) {
-	
-	}
-
+@media only screen and (min-width: 1200px) {}
 
 // TAGS
-/* Extra Small Devices, Phones */ 
-@media only screen and (min-width : 480px) {
-	ul.tags {
-		columns: 2;
-	}
+
+/* Extra Small Devices, Phones */
+
+@media only screen and (min-width: 480px) {
+    ul.tags {
+        columns: 2;
+    }
 }
+
+
 /* Small Devices, Tablets */
-@media only screen and (min-width : 768px) {
-	ul.tags {
-		columns: 3;
-	}
+
+@media only screen and (min-width: 768px) {
+    ul.tags {
+        columns: 3;
+    }
 }
+
 
 /* Medium Devices, Desktops */
-@media only screen and (min-width : 992px) {
-	ul.tags {
-		columns: 3;
-	}
+
+@media only screen and (min-width: 992px) {
+    ul.tags {
+        columns: 3;
+    }
 }
 
-/* Large Devices, Wide Screens */ 
-@media only screen and (min-width : 1200px) {
-	ul.tags {
-		columns: 4;
-	}
-}
 
+/* Large Devices, Wide Screens */
+
+@media only screen and (min-width: 1200px) {
+    ul.tags {
+        columns: 4;
+    }
+}

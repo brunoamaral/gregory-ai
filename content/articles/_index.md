@@ -13,6 +13,10 @@ options:
 resources:
   - src: arif-riyanto-UD9nADGj2mc-unsplash.jpeg
     name: "header"
+cta:
+  - label: <i class="fas fa-file-archive"></i> ZIP
+    url: /developers/articles.zip
+    classes: btn-sm btn-success
 ---
 
 Articles listed here come from the following sites, with keyword searches for `Multiple Sclerosis, autoimmune encephalomyelitis, encephalomyelitis, immune tolerance, myelin`.

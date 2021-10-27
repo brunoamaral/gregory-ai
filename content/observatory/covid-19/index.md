@@ -1,11 +1,11 @@
 ---
 authors:
   - bruno-amaral
-date: 2021-10-15T21:26:11+01:00
+date: 2021-10-26T12:03:20+0100
 description: ""
 draft: false
 resources: 
-- src: images/
+- src: images/D6DC5B82-7FC1-4DFE-BCE4-4685B8C76791.jpg
   name: "header"
 - src: "gallery/*.jpg"
   name: gallery-:counter
@@ -18,7 +18,7 @@ tags:
   - 
 categories: 
   - 
-title: "HSCT"
+title: "Covid-19"
 
 options:
   unlisted: false
@@ -30,10 +30,11 @@ scripts:
   -
 ---
 
-<h3 id="HSCT">HSCT</h3>
+This page is an exception, due to the large body of work being done around Multiple Sclerosis and Covid-19.
 
-<p>HSCT stands for Haematopoietic Stem Cell Transplantation</p>
+<h3 id="covid-19">Covid-19</h3>
 
-<ol class="articles HSCT"></ol>
+
+<ol class="articles covid-19"></ol>
 <h4>Clinical Trials</h4>
-<ol class="trials HSCT"></ol>
+<ol class="trials covid-19"></ol>

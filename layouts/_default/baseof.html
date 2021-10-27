@@ -19,7 +19,7 @@
 	{{- if eq $.Params.options.unlisted true -}}
 	<meta name="robots" content="noindex, nofollow">
 	{{- end -}}
-	<meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 	<!-- Fonts and icons -->
 	{{- $montserrat := resources.Get "css/Montserrat.css" -}}
 	
@@ -39,15 +39,10 @@
 	{{- $bootstrap := resources.Get "css/bootstrap.min.css" -}}
 	{{- $nowUi := resources.Get "scss/now-ui-kit.scss" | resources.ToCSS (dict "enableSourceMap" false "outputStyle" "compressed") -}}
 
-	{{- $style := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular $solid | resources.Concat "css/style.css" | resources.Fingerprint -}}
+	{{ $styles := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular $solid | resources.Concat "css/style.css" | postCSS (dict "config" "./assets/css/postcss.config.js") | minify | fingerprint  -}}
 
-	{{ $styles := $style | postCSS (dict "config" "./assets/css/postcss.config.js") | minify  -}}
-	{{ with ($styles  ) }}
-	<style>
-		{{.Content | safeCSS }}
-	</style>
-	{{ end }}
-	
+	<link rel="stylesheet" href="{{$styles.Permalink}}">
+
 	{{- if or (.HasShortcode "youtube") (.HasShortcode "youtube") (.HasShortcode "youtube") -}}
 	{{- $plyr_css := resources.Get "/css/plyr/plyr.css" -}}
 	<link rel="stylesheet" href="{{- $plyr_css.RelPermalink -}}">
@@ -272,7 +267,7 @@
 
 {{ if eq .Site.Params.options.hideSubscribeForm false }}
 {{- if (ne $.Params.options.hideSubscribeForm true | and (ne .Section "instagram")) -}}
-<div class="subscribe-line subscribe-line-image d-print-none">
+<div class="subscribe-line subscribe-line-image d-print-none" id="footersubscribe">
 	<div class="container">
 	  <div class="row">
 		<div class="col-md-6 ml-auto mr-auto">
@@ -360,10 +355,10 @@
 		{{- $bootstrapSwitch := resources.Get "/js/plugins/bootstrap-switch.js" -}}
 		<!--  Plugin for the Sliders, full documentation here: http://refreshless.com/nouislider/ -->
 		{{- $nouislider := resources.Get "/js/plugins/nouislider.min.js" -}}
-		{{- $customJs := resources.Get "/js/custom.js" -}}
+		{{- $customJs := resources.Get "/js/custom.js" | resources.Fingerprint -}}
 		<!-- Control Center for Now Ui Kit: parallax effects, scripts for the example pages etc -->
 		{{- $nowuikitjs := resources.Get "/js/now-ui-kit.js" -}}
-		{{- $vibrant := resources.Get "/js/Vibrant.js" -}} 
+		{{- $vibrant := resources.Get "/js/Vibrant.js" | resources.Fingerprint -}} 
 		{{- if or (.HasShortcode "youtube") (.HasShortcode "youtube") (.HasShortcode "youtube") -}}
 		<!-- Plyr for better html <video> and <audio> -->
 		{{- $plyr_js := resources.Get "/js/plyr/plyr.min.js" -}} 
@@ -371,11 +366,13 @@
 		{{ end }}
 		<!-- Bring it all together into one file -->
 		<!-- we are not including nouislider and  bootstrapSwitch -->
-		{{- $javascript := slice $jquery $popper $bootstrap $nowuikitjs  | resources.Concat "js/javascript.js" | resources.Minify | resources.Fingerprint -}}
+		{{- $javascript := slice $jquery $popper $bootstrap $nowuikitjs  | resources.Concat "js/javascript.js" | resources.Minify | resources.Fingerprint  -}}
 		<script src="{{- $javascript.Permalink -}}" defer=""></script>
 		<script src="{{$vibrant.Permalink }}" defer="true"></script>
 		<script src="{{ $customJs.Permalink }}" defer="true"></script>
-		<script src="/js/gregory.js" defer=""></script>
+
+		{{ $gregJs := resources.Get "/js/gregory.js" | resources.Minify | resources.Fingerprint }} 
+		<script src="{{$gregJs.Permalink}}" defer="true"></script>
 
 		{{ block "list-javascript" . }}{{ end }}
 		<!--  Plugin for the DatePicker, full documentation here: https://github.com/uxsolutions/bootstrap-datepicker -->
