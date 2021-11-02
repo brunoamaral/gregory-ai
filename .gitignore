@@ -19,3 +19,5 @@ node_modules
 public/
 resources/
 workspace.code-workspace
+.hugo_build.lock
+hugo
