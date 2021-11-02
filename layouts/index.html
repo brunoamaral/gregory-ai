@@ -11,7 +11,7 @@
 <div class="wrapper">
   
 	<div class="page-header page-header-{{ $headerSize }}">
-		<div class="page-header-image d-print-none" data-parallax="true" style="background-image: url('{{ partial "cfimg.html" (dict "context" . "img" "big-hero-6.jpeg") }}');">
+		<div class="page-header-image d-print-none" data-parallax="true" style="background-image: url('{{ partial "cfimg.html" (dict "context" . "img" "Gregory_Banner2.png") }}');">
 		</div>
 		<div class="content-center">
 			<div class="container">
@@ -169,6 +169,8 @@
                 {{ partial "pagination.html" . }}
 
             <div class="separator separator-primary"></div>
+
+            {{.Content | safeHTML }}
 
         </div>
     </div>
