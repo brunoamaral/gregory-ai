@@ -90,8 +90,7 @@ print('''
 ## CREATE ZIP FILES
 ####
 
-### Articles
-''')
+### Articles''')
 
 zipArticles = ZipFile('content/developers/articles.zip', 'w')
 # Add multiple files to the zip
