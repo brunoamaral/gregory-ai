@@ -99,14 +99,13 @@
 		{{- if ne $page.Permalink $permalink -}}<meta property="og:see_also" content="{{- $page.Permalink -}}" />{{- end -}}
 	  {{- end -}}
 	{{- end -}}{{- end -}}
-	{{- if .IsPage -}}
 	{{ if ne $author "" }}
 	{{ with $author.Params.name }}
 		<meta name="author" content="{{ . }}">
 	{{ end }}
 	
 
-	{{- with $author.Params.profiles.facebook -}}
+	{{- with $author.Params.profiles.website -}}
 	<meta property="article:author" content="{{- . -}}" />
 	<meta property="article:publisher" content="{{- . -}}" />
 	{{ end }}
@@ -114,7 +113,7 @@
 	<meta property="article:section" content="{{- .Section -}}" />
 	{{- with .Params.tags -}}{{- range first 6 . -}}
 	<meta property="article:tag" content="{{- . -}}" />
-	{{- end -}}{{- end -}}
+	{{- end -}}
 	{{ end }}
 
 		<meta property="og:site_name" content="{{ .Site.Title }} {{ i18n "by" }} {{ $.Site.Params.author }}" />
