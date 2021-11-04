@@ -8,10 +8,9 @@ window.onload = function() {
             var vibrant = new Vibrant(img);
             var swatches = vibrant.swatches()
             let nav = document.querySelector('nav.bg-dynamic')
-            if (nav !== undefined) {
-                nav.style.cssText = "background-color:" + swatches["Vibrant"].getHex() + ""
+            if (nav !== null) {
+                nav.style.cssText = `background-color:${swatches["Vibrant"].getHex()}`
             }
-
         });
     } else {
         document.querySelector('nav.bg-dynamic').classList.add('bg-primary')
