@@ -404,7 +404,7 @@
 						{{- end -}},
 			"author": {
 			   "@type": "Person",
-			   "name": {{ if ne $author "" }} {{- $author.Params.name -}} {{ end }}
+			   "name": {{ if ne $author "" }} {{- $author.Params.name -}} {{else}} "Bruno Amaral" {{ end }}
 			},
 			{{- with .Params.tags -}}"keywords": {{- . -}},{{- end -}}
 			"wordcount": {{- .WordCount -}},
