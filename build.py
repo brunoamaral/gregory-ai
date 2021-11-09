@@ -90,8 +90,7 @@ print('''
 ## CREATE ZIP FILES
 ####
 
-### Articles
-''')
+### Articles''')
 
 zipArticles = ZipFile('content/developers/articles.zip', 'w')
 # Add multiple files to the zip
@@ -168,7 +167,7 @@ for article in jsonArticles:
         articledata = "---\narticle_id: " + \
             str(article["article_id"]) + \
             "\ndiscovery_date: " + str(article["discovery_date"]) + \
-            "\ndate: " + str(article["discovery_date"]) + "Z" +\
+            "\ndate: " + str(article["discovery_date"]) +\
             "\ntitle: \'" + article["title"] + "\'" +\
             "\nsummary: |" + \
             '\n  ' + article["summary"].replace("\n", "\n  ") +\

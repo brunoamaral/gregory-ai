@@ -7,7 +7,10 @@ window.onload = function() {
         img.addEventListener('load', function() {
             var vibrant = new Vibrant(img);
             var swatches = vibrant.swatches()
-            document.querySelector('nav.bg-dynamic').style.cssText = "background-color:" + swatches["Vibrant"].getHex() + ""
+            let nav = document.querySelector('nav.bg-dynamic')
+            if (nav !== null) {
+                nav.style.cssText = `background-color:${swatches["Vibrant"].getHex()}`
+            }
         });
     } else {
         document.querySelector('nav.bg-dynamic').classList.add('bg-primary')
