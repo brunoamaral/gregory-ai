@@ -4,10 +4,10 @@ authors:
 date: 2021-09-23T20:37:07+01:00
 description: ""
 draft: false
-layout: page
+layout: physical-therapists
 rowclasses: justify-content-center align-self-center
 resources: 
-- src: images/anupam-mahapatra-Vz0RbclzG_w-unsplash.jpeg
+- src: anupam-mahapatra-Vz0RbclzG_w-unsplash.jpeg
   name: "header"
 - src: "gallery/*.jpg"
   name: gallery-:counter
@@ -37,10 +37,10 @@ scripts:
 
 
 
-<div class="col-md-5 col-12 justify-content-center align-self-center align-right ">
+<div class="col-12 justify-content-center align-self-center align-right ">
   <img src="images/undraw_working_out_6psf.svg" class="w-50 align-middle d-none d-md-block float-right" alt="medical Physical Therapists" loading="lazy" />
   </div>
-  <div class="col-md-5 col-12 justify-content-center align-self-center">
+  <div class="col-12 justify-content-center align-self-center mb-5">
   
   <h3 class="title">I Need Your Help</h3>
   
@@ -50,7 +50,13 @@ scripts:
   <a href='mailto:mail@brunoamaral.eu' class="btn btn-success btn-round btn-lg font-weight-bold"><i class="far fa-paper-plane"></i> Email</a>
   
   </div>
+
+  <div class="col-12 mt-5 pt-5">
+      <h3 class="title text-center" class="mt-5 mb-5">Recent Articles For Physical Therapists</h3>
+    <p class="lead pb-5">Listing below includes articles published in PEDro, APTA, The Lancet, BioMedCentral, and Scielo. These are the sites that have shown to have information relevant for coaches and physical therapists.</p>
+    </div>
+
 </div>
 
-{{< list-by sources="PEDro APTA The Lancet BioMedCentral Scielo" >}}
+
 
