@@ -37,8 +37,15 @@
 						{{ end }}
 
 						<div class="col-12">{{ .Content }}</div>
-{{ $posts := (where $.Site.Pages ".Params.article_source" "in" "PEDro APTA The Lancet BioMedCentral Scielo" ) }}
-{{ $paginator := (.Paginate $posts).Pages }}
+            <p class="text-center col-12"> <strong>Labels:</strong>
+              <span class="badge badge-info font-weight-normal">sources</span> <span class="badge badge-primary font-weight-normal">human selection</span> <span class="badge badge-success font-weight-normal">automatic selection</span>
+            </p>
+            {{ $ml_prediction_gnb := where .Site.RegularPages ".Params.ml_prediction_gnb" "=" 1 | intersect (where $.Site.Pages ".Params.article_source" "in" "PEDro APTA The Lancet BioMedCentral Scielo" ) }}
+            {{ $relevant := where .Site.RegularPages ".Params.relevant" 1 | intersect (where $.Site.Pages ".Params.article_source" "in" "PEDro APTA The Lancet BioMedCentral Scielo" )}}
+
+            {{ $listing := union $relevant $ml_prediction_gnb }}
+
+{{ $paginator := (.Paginate $listing).Pages }}
 
 {{ range $paginator }}
 {{ .Render "summary" }}
