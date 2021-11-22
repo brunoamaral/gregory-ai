@@ -5,7 +5,7 @@ date: 2021-11-16T23:10:55Z
 description: ""
 draft: false
 resources: 
-- src: images/michael-dziedzic-XTblNijO9IE-unsplash.jpeg
+- src: images/michael-dziedzic-XTblNijO9IE-unsplash.jpg
   name: "header"
 - src: "gallery/*.jpg"
   name: gallery-:counter
@@ -33,9 +33,9 @@ scripts:
   -
 ---
 
-<div class="col-6 mx-auto">
+<div class="col-8 mx-auto">
 
-### Hardware
+### Hardware{.title}
 
 Gregory is running on a [Digital Ocean](https://digitalocean.com) virtual private server with these specs. 
 
@@ -43,44 +43,59 @@ Gregory is running on a [Digital Ocean](https://digitalocean.com) virtual privat
 - 80 GB Disk 
 - Ubuntu 20.04 (LTS) x64
 
-On November 16<sup>th</sup> this represented the following monthly costs.
+On November 16<sup>th</sup> this represented the following costs.
 
 <table class="table table-striped">
 <thead>
 <tr>
 <th><strong>Item</strong></th>
-<th><strong>Cost per month</strong></th>
+<th><strong>Cost</strong></th>
 </tr>
 </thead>
+<tr><td>Domain cost per year</td>
+<td>$8.57	USD</td>
 <tr>
-<td>Server</td>
+<td>Server cost per month</td>
 <td>$20.00 USD</td>
 </tr>
 <tbody>
 <tr>
-<td>Backups</td>
+<td>Backups cost per month</td>
 <td>$4.00 USD</td>
 </tr>
 <tr>
-<td><strong>Total</strong></td>
-<td>$24.00 USD</td>
+<td><strong>Total cost per year</strong></td>
+<td class="text-danger font-weight-bold">$296,57 USD</td>
 </tr>
 </tbody>
 </table>
 
+
+<div class="row">
+<div class="col-md-12">
+
+
 ### Software{.title}
 
-Gregory’s brain is composed of two elements, [Node-RED](https://nodered.org) to run searches and [Python](https://www.python.org/) to execute the machine learning algorithm. 
 
-![node-red-icon-2](images/node-red-icon-2.svg)
+<p>Gregory’s brain is composed of two elements, <a href="https://nodered.org">Node-RED</a> to run searches and <a href="https://www.python.org/">Python</a> to execute the machine learning algorithm.</p>
+</div>
 
-![python-logo-generic](images/python-logo-generic.svg)
+
+
+<!-- <div class="col-md-6">
+<img src="images/node-red-icon-2.svg" alt="node-red-icon-2" class="w-50">
+<img src="images/python-logo-generic.svg" alt="python-logo-generic" class="w-50">
+</div> -->
+
+</div>
+
 
 ### Content Management Software{.title}
 
-We are using Hugo to generate the static pages that make up the website. 
+We are using [Hugo](https://gohugo.io/) to generate the static pages that make up the website. 
 
-![](images/hugo-logo-wide.svg)
+<!-- ![](images/hugo-logo-wide.svg) -->
 
 
 ```BashSession
@@ -101,29 +116,23 @@ hugo v0.88.1-5BC54738+extended linux/amd64 BuildDate=2021-09-04T09:39:19Z Vendor
 Total in 228433 ms
 ```
 
+### Design{.title}
 
+The website's Design and HTML was created by [Creative Tim](https://www.creative-tim.com/) and ported to Hugo by [Bruno Amaral](https://brunoamaral.eu/).
 
-The website's HTML was created by [Creative Tim](https://www.creative-tim.com/) and ported to Hugo by [Bruno Amaral](https://brunoamaral.eu/).
+<!-- ![](images/now_ui.jpeg) -->
 
-![](images/now_ui.jpeg)
-
-<img src="images/logo-ct-white-170d794e447f75aec55c6effdfbedced9dd268ceceece152675ff8f9891e3588.svg" style="color:#000; filter: invert(100%) ;">
+<!-- <img src="images/logo-ct-white-170d794e447f75aec55c6effdfbedced9dd268ceceece152675ff8f9891e3588.svg" style="color:#000; filter: invert(100%) ;"> -->
 
 ### Third party services{.title}
 
+**Email delivery** and management of mailing list is provided by Mailgun, using a free tier account.
 
+<!-- ![Mailgun_Secondary](images/Mailgun_Secondary.png) -->
 
-Email delivery and management of mailing list is provided by Mailgun, using a free tier account.
+**Monitoring** is done by https://healthchecks.io/
 
-![Mailgun_Secondary](images/Mailgun_Secondary.png)
-
-
-
-
-
-Monitoring is done by https://healthchecks.io/
-
-![logo-rounded](images/logo-rounded.svg)
+<!-- ![logo-rounded](images/logo-rounded.svg) -->
 
 
 
