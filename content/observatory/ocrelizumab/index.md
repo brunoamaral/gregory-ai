@@ -6,7 +6,11 @@ author: Bruno Amaral
 options:
   unlisted: false
   header: mini
+  navbar: navbar navbar-expand-lg bg-white fixed-top font-weight-bold
 
+resources:
+  - name: "header"
+    src: ocrevus-logo.png
 description: 
 categories: []
 tags: []
