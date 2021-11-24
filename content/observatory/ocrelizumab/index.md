@@ -29,14 +29,14 @@ disableAutoCollapse: true
 
 
 
+
 <iframe
-    src="https://metabase.gregory-ms.com/public/question/91772fb0-aae8-4280-be73-190042dff21a"
+    src="https://metabase.gregory-ms.com/public/question/0d406412-9b3f-4ba4-9d07-d61fcd43e2d0"
     frameborder="0"
-    width="1200"
+    width="900"
     height="600"
     allowtransparency
 ></iframe>
-
 <iframe
     src="https://metabase.gregory-ms.com/public/question/6ed283d2-3408-4853-960d-a5eba00ffbfd"
     frameborder="0"
