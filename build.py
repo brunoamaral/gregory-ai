@@ -280,14 +280,3 @@ print(output)
 # index.save_objects(batch, {'autoGenerateObjectIDIfNotExist': True})
 
 
-print('''
-####
-## CLEAN UP FILES
-####
-''')
-
-os.remove('content/developers/articles_' + datetime_string + '.xlsx')
-os.remove('content/developers/articles_' + datetime_string + '.json')
-
-os.remove('content/developers/trials_' + datetime_string + '.xlsx')
-os.remove('content/developers/trials_' + datetime_string + '.json')
