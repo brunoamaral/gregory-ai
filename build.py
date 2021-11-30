@@ -105,10 +105,8 @@ zipArticles.write('content/developers/README.md')
 # close the Zip File
 zipArticles.close()
 
-print('\n# delete temporary files')
 
-Path.unlink('content/developers/articles_' + datetime_string + '.xlsx')
-Path.unlink('content/developers/articles_' + datetime_string + '.json')
+
 print('### Clinical Trials')
 
 zipTrials = ZipFile('content/developers/trials.zip', 'w')
@@ -122,6 +120,17 @@ zipTrials.write('content/developers/README.md')
 
 # close the Zip File
 zipTrials.close()
+
+print('\n# delete temporary files')
+excel_file = Path('content/developers/articles_' + datetime_string + '.xlsx')
+json_file = Path('content/developers/articles_' + datetime_string + '.json')
+Path.unlink(excel_file)
+Path.unlink(json_file)
+
+excel_file = Path('content/developers/trials_' + datetime_string + '.xlsx')
+json_file = Path('content/developers/trials_' + datetime_string + '.json')
+Path.unlink(excel_file)
+Path.unlink(json_file)
 
 print('''
 ####
