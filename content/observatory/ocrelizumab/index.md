@@ -27,9 +27,6 @@ disableAutoCollapse: true
 
 <div class="col-md-8 mx-auto">
 
-
-
-
 <iframe
     src="https://metabase.gregory-ms.com/public/question/0d406412-9b3f-4ba4-9d07-d61fcd43e2d0"
     frameborder="0"
