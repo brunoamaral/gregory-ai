@@ -61,7 +61,7 @@ New sources we would like to add:
 
 
 # Thank you to
-
+@[Antoniolopes](https://github.com/antoniolopes) for helping with the Machine Learning script.
 @[Chbm](https://github.com/chbm) for help in keeping the code secure.    
 @[Jneves](https://github.com/jneves) for help with the build script    
 @[Melo](https://github.com/melo) for showing me [Hugo](https://github.com/gohugoio/hugo)    
