@@ -122,11 +122,14 @@
                             <h2 class="text-center title" id="relevantarticles">Relevant articles</h2>
 
                             <p class="text-center col-12"> <strong>Labels:</strong>
-                              <span class="badge badge-info font-weight-normal">sources</span> <span class="badge badge-primary font-weight-normal">human selection</span> <span class="badge badge-success font-weight-normal">automatic selection</span>
+                              <span class="badge badge-info font-weight-normal">sources</span> <span class="badge badge-primary font-weight-normal">manual selection</span> <span class="badge badge-success font-weight-normal">automatic selection</span>
                             </p>                
                             {{ $ml_prediction_gnb := where .Site.RegularPages ".Params.ml_prediction_gnb" "=" 1 }}
+
                             {{ $relevant := where .Site.RegularPages ".Params.relevant" 1}}
+
                             {{ $listing := union $relevant $ml_prediction_gnb }}
+
                             {{ $paginator := (.Paginate $listing) }}
 
                             {{ partial "pagination.html" . }}
@@ -154,7 +157,11 @@
 																	{{ end }}
 																</b>, {{ end }} {{ end }}
                                             <time class="published" itemprop="datePublished" datetime="{{ .Date.Format " 2006-01-02T15:04:05 " }}">{{ .Date.Format "January 2, 2006" }}</time>
-                                            <span class="badge badge-info text-white font-weight-normal">{{ .Params.article_source }}</span> {{ if eq .Params.ml_prediction_gnb 1 }}<span class="badge badge-success text-white font-weight-normal">auto</span>{{ end }} {{ if and (eq .Params.relevant  1) ( eq .Params.ml_prediction_gnb 0) }}<span class="badge badge-primary text-white font-weight-normal">human</span>{{ end }}
+                                            <span class="badge badge-info text-white font-weight-normal">{{ .Params.article_source }}</span> 
+                                            {{ if eq .Params.ml_prediction_gnb 1 }}
+                                              <span class="badge badge-success text-white font-weight-normal">auto</span>
+                                            {{ end }}
+                                            {{ if eq .Params.relevant  1 }}<span class="badge badge-primary text-white font-weight-normal">manual</span>{{ end }}
                                         </p>
                                     </div>
                                 </div>
