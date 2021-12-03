@@ -124,19 +124,19 @@
                             <p class="text-center col-12"> <strong>Labels:</strong>
                               <span class="badge badge-info font-weight-normal">sources</span> <span class="badge badge-primary font-weight-normal">manual selection</span> <span class="badge badge-success font-weight-normal">automatic selection</span>
                             </p>                
-                            {{ $ml_prediction_gnb := where .Site.RegularPages ".Params.ml_prediction_gnb" "=" 1 }}
+                            {{ $ml_prediction_gnb := where .Site.RegularPages ".Params.ml_prediction_gnb" 1 }}
 
                             {{ $relevant := where .Site.RegularPages ".Params.relevant" 1}}
 
-                            {{ $listing := union $relevant $ml_prediction_gnb }}
+                            {{ $listing := (union $relevant $ml_prediction_gnb ).ByDate.Reverse }}
 
                             {{ $paginator := (.Paginate $listing) }}
 
                             {{ partial "pagination.html" . }}
 
-                            {{ range $paginator.Pages }} 
+                            {{ range $paginator.Pages }}
                             <!-- first post -->
-                            <div class="card card-plain card-blog">
+                              <div class="card card-plain card-blog">
                                 <div class="row"> 
                                     <div class="col-md-12">
                                         {{ range $index, $category := .Params.categories }}
@@ -151,22 +151,30 @@
                                             <a href="{{ .Permalink }}">{{ i18n "continue_reading" }} </a>
                                         </p>
                                         <p class="author">
-                                            {{ with .Params.authors }} {{ range . }} {{ $author := ($.GetPage (printf "/authors/%s/" .) ) }} {{ with $author }} {{- i18n "by" -}}
-                                            <b>
-											<a href="{{ $author.Permalink }}" itemprop="author" title="{{ . }}" class="author">{{ $author.Params.name }}</a>
-																	{{ end }}
-																</b>, {{ end }} {{ end }}
+                                            {{ with .Params.authors }} 
+                                              {{ range . }} {{ $author := ($.GetPage (printf "/authors/%s/" .) ) }} 
+                                                {{ with $author }} {{- i18n "by" -}}
+                                                <b>
+                                                <a href="{{ $author.Permalink }}" itemprop="author" title="{{ . }}" class="author">{{ $author.Params.name }}
+                                                </a>
+																	              {{ end }}
+																                </b>, 
+                                              {{ end }} 
+                                            {{ end }}
                                             <time class="published" itemprop="datePublished" datetime="{{ .Date.Format " 2006-01-02T15:04:05 " }}">{{ .Date.Format "January 2, 2006" }}</time>
                                             <span class="badge badge-info text-white font-weight-normal">{{ .Params.article_source }}</span> 
                                             {{ if eq .Params.ml_prediction_gnb 1 }}
                                               <span class="badge badge-success text-white font-weight-normal">auto</span>
                                             {{ end }}
-                                            {{ if eq .Params.relevant  1 }}<span class="badge badge-primary text-white font-weight-normal">manual</span>{{ end }}
+                                            {{ if eq .Params.relevant  1 }}
+                                              <span class="badge badge-primary text-white font-weight-normal">manual</span>
+                                            {{ end }}
                                         </p>
                                     </div>
                                 </div>
                             </div>
                         {{ end }}
+
                             <!-- second post -->
                         </div>
                     </div>
