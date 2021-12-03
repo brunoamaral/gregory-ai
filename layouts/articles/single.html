@@ -9,7 +9,7 @@
 {{ end }}
 
 {{ define "head" }}
-	{{ if ne .Params.disable_comments true }}
+		{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
 	<link rel="preload" href="https://commento.brunoamaral.eu/css/commento.css" as="style">
 	{{ end }}
 {{ end }}
@@ -35,9 +35,11 @@
 		<div class="row">
 		<div class="col-md-12">
 			<div class="button-container">
+			{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
 			<a href="#comment" class="btn btn-primary btn-round btn-lg">
 			  <i class="far fa-comment"></i>&nbsp;{{ i18n "add_comment" }}
 			</a>
+			{{end}}
 			<a href="https://twitter.com/intent/tweet/?text={{ .Title }}&amp;url={{ .Permalink }}" class="btn btn-icon btn-lg btn-twitter btn-round" alt="post on twitter">
 				<i class="fab fa-twitter-square"></i>
 			</a>
@@ -104,7 +106,7 @@
 				<p><strong>Link</strong>: <span id="link"><a href="{{ .Params.link | htmlUnescape | safeHTML }}">{{ .Params.link | safeHTML }}</a></span></p>
 				<p><strong>Manual Selection</strong>: <span id="relevant">{{ .Params.relevant }}</span></p>
 				<p><strong>Machine Learning Gaussian Naive Bayes Model</strong>: <span id="ml_prediction_gnb">{{ .Params.ml_prediction_gnb }}</span></p>
-				
+
 				<div class="post-text" id="abstract">
 					<h4>Abstract</h4>
 					{{ .Content | safeHTML }}
@@ -209,8 +211,7 @@
 		 </div>
 		</div>
 	 </div>
-
-	 {{ if ne .Params.disable_comments true }}
+	 	{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
 	 	 <div class="section section-comments">
 	 		<div class="container">
 	 		 <div class="row">
@@ -234,7 +235,7 @@
 {{ end }}
 
 {{ define "list-javascript" }}
-	{{ if ne .Params.disable_comments true }}
+	{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
 		{{ partial "comments-js.html" . }}
 		<script defer src="https://commento.brunoamaral.eu/js/commento.js" data-no-fonts="true"></script>
 	{{ end }}

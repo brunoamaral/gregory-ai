@@ -24,6 +24,7 @@ headerPhoto = ""
 
 [params]
   author = "Bruno Amaral"
+  enableComments = false 
   defaultAuthor = "authors/bruno-amaral"
   description = "An index engine for articles and clinical trials around Multiple Sclerosis"
   disqus = ""
