@@ -102,6 +102,8 @@
 				<p><strong>Published Date</strong>: <span id="published_date" data-datetime="{{.Params.published_date}}">{{ .Params.published_date }}</span></p>
 				<p><strong>Source</strong>: <span id="source">{{ .Params.article_source | safeHTML }}</span></p>
 				<p><strong>Link</strong>: <span id="link"><a href="{{ .Params.link | htmlUnescape | safeHTML }}">{{ .Params.link | safeHTML }}</a></span></p>
+				<p><strong>Machine Learning Gaussian Naive Bayes Model</strong>: <span id="ml_prediction_gnb">{{ .Params.ml_prediction_gnb }}</span></p>
+				
 				<div class="post-text" id="abstract">
 					<h4>Abstract</h4>
 					{{ .Content | safeHTML }}
