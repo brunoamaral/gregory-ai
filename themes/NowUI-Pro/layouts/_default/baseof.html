@@ -369,10 +369,11 @@
 		{{- $bootstrapSwitch := resources.Get "/js/plugins/bootstrap-switch.js" -}}
 		<!--  Plugin for the Sliders, full documentation here: http://refreshless.com/nouislider/ -->
 		{{- $nouislider := resources.Get "/js/plugins/nouislider.min.js" -}}
-		{{- $customJs := resources.Get "/js/custom.js" -}}
+		{{- $customJs := resources.Get "/js/custom.js" | resources.Fingerprint -}}
+
 		<!-- Control Center for Now Ui Kit: parallax effects, scripts for the example pages etc -->
 		{{- $nowuikitjs := resources.Get "/js/now-ui-kit.js" -}}
-		{{- $vibrant := resources.Get "/js/Vibrant.js" -}}
+		{{- $vibrant := resources.Get "/js/Vibrant.js" | resources.Fingerprint -}}
 		{{- if or (.HasShortcode "youtube") (.HasShortcode "youtube") (.HasShortcode "youtube") -}}
 		<!-- Plyr for better html <video> and <audio> -->
 		{{- $plyr_js := resources.Get "/js/plyr/plyr.min.js" -}} 
