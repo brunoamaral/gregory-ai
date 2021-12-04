@@ -85,3 +85,9 @@ To subscribe to the weekly digest, send an email to <bruno@gregory-ms.com>
 <div class="embed-responsive embed-responsive-16by9">
 <iframe src="/post/2021-12-04/ViewerJS/#/post/2021-12-04/gregory_presentation_2021_spem.pdf" width='800' height='600' allowfullscreen webkitallowfullscreen></iframe>
 </div>
+
+### Portuguese version of the slides
+
+<div class="embed-responsive embed-responsive-16by9">
+<iframe src="/post/2021-12-04/ViewerJS/#/post/2021-12-04/Gregory_spem2021_PT.pdf" width='800' height='600' allowfullscreen webkitallowfullscreen></iframe>
+</div>
