@@ -168,7 +168,7 @@
 	<!-- Facebook Page Admin ID for Domain Insights -->
 	{{- with $.Site.Social.facebook_admin -}}<meta property="fb:admins" content="{{- . -}}" />{{- end -}}
 	{{- with $.Site.Social.facebook_app_id -}}<meta property="fb:app_id" content="{{- . -}}" />{{- end -}}
-	{{- template "_internal/google_news.html" . -}}
+
 	{{- with $.Site.Params.googleSiteVerification -}}<meta name="google-site-verification" content="{{- . -}}" />{{- end -}}
 	{{- if ne .Site.IsServer true -}}
 	{{- with $.Site.Params.googleTagManager -}}

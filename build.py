@@ -153,7 +153,7 @@ with open(articles,"r") as a:
 jsonArticles = json.loads(data)
 
 # Set which nlp module to use
-## en_core_web is more precise but uses more resources
+## en_core_web_trf is more precise but uses more resources
 # nlp = spacy.load('en_core_web_trf')
 nlp = spacy.load('en_core_web_sm')
 print("Looking for noun phrases")
