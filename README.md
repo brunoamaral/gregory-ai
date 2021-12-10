@@ -46,9 +46,9 @@ To enable them, you will need a mailgun account, or you can replace them with an
 
 # Database
 
-The path `/api/articles.json` and `/api/trials.json` includes the full database export.
+The path https://api.gregory-ms.com/articles/all and https://api.gregory-ms.com/trials/all includes the full database export.
 
-The same information is available in excel format: `/api/articles.xlsx` and `/api/trials.xlsx`.
+The same information is available in excel and json format: https://gregory-ms.com/downloads/
 
 # Roadmap
 
