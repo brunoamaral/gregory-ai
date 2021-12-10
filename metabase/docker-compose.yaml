@@ -1,0 +1,38 @@
+version: '3.3'
+
+services:
+    db:
+      image: postgres
+      restart: always
+      environment:
+        - POSTGRES_PASSWORD="${DBPASSWORD}"
+        - POSTGRES_USER=${DBNAME}
+        - POSTGRES_DB=${DBNAME}
+      ports:
+        - 5432:5432
+      volumes:
+        - ./db-data:/var/lib/postgresql/data
+      networks:
+        - postgres-network
+    metabase:
+      volumes:
+        - ${PATH_TO_GREGORY}/gregory/docker-data/:/metabase
+        - ./metabase-data:/metabase-data
+      environment:
+        - MB_DB_TYPE=postgres
+        - MB_DB_DBNAME=${DBNAME}
+        - MB_DB_PORT=5432
+        - MB_DB_USER=${DBNAME}
+        - MB_DB_PASS="${DBPASSWORD}"
+        - MB_DB_HOST=db
+      ports:
+        - 3000:3000
+      image: metabase/metabase
+      restart: always
+      depends_on:
+        - db
+      networks:
+        - postgres-network
+networks:
+  postgres-network:
+    driver: bridge
