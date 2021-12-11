@@ -267,12 +267,13 @@ print('''
 ''')
 
 payload = {
-    'resource': {'dashboard': 2},
-    'params': {},
-    'exp': round(time.time()) + (60 * 60)
+  "resource": {"dashboard": 2},
+  "params": { },
+  "exp": round(time.time()) + (60 * 60) # 60 minute expiration
 }
+
 token = jwt.encode(payload, METABASE_SECRET_KEY, algorithm='HS256')
-iframeUrl = METABASE_SITE_URL + 'embed/question/' + token + '#bordered=true&titled=true'
+iframeUrl = METABASE_SITE_URL + 'embed/dashboard/' + token + '#bordered=true&titled=true'
 
 # in the future, we should fetch a list of dashboards and sign them. For now, this is enough (2021-12-11T00:22:40+0000)
 metabase_json = {
