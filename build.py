@@ -266,9 +266,8 @@ print('''
 ####
 ''')
 
-
 payload = {
-    'resource': {'question': 1},
+    'resource': {'dashboard': 2},
     'params': {},
     'exp': round(time.time()) + (60 * 60)
 }
