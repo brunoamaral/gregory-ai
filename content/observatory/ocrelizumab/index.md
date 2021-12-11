@@ -27,6 +27,8 @@ disableAutoCollapse: true
 
 <div class="col-md-8 mx-auto">
 
+{{< metabase-embed dashboard="1" >}}
+
 <iframe
     src="https://metabase.gregory-ms.com/public/question/7411747a-cd30-40c7-a5c7-d39a2fec1a39"
     frameborder="0"
