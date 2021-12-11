@@ -262,23 +262,28 @@ for trial in jsonTrials:
 
 print('''
 ####
-## GET EMBED KEYS
+## GENERATE EMBED KEYS
 ####
 ''')
 
-payload = {
-  "resource": {"dashboard": 2},
-  "params": { },
-  "exp": round(time.time()) + (60 * 60) # 60 minute expiration
-}
+# Opening JSON file
+f = open('data/dashboards.json')
+ 
+# returns JSON object as
+# a dictionary
+dashboards = json.load(f)
+ 
+# Iterating through the json list
+metabase_json = {}
+for i in dashboards:
+    print("Generating key for dashboard: "+ i)
+    payload = { "resource": {"dashboard": i}, "params": { }, "exp": round(time.time()) + (60 * 60)}
+    token = jwt.encode(payload, METABASE_SECRET_KEY, algorithm='HS256')
+    iframeUrl = METABASE_SITE_URL + 'embed/dashboard/' + token + '#bordered=true&titled=true'
+    entry = "dashboard_" + str(i) 
+    metabase_json[str(entry)] = iframeUrl
 
-token = jwt.encode(payload, METABASE_SECRET_KEY, algorithm='HS256')
-iframeUrl = METABASE_SITE_URL + 'embed/dashboard/' + token + '#bordered=true&titled=true'
-
-# in the future, we should fetch a list of dashboards and sign them. For now, this is enough (2021-12-11T00:22:40+0000)
-metabase_json = {
-    "dashboard_1": iframeUrl 
-}
+f.close()
 
 embedsJson = GREGORY_DIR + '/data/embeds.json';
 with open(embedsJson, "w") as f:
