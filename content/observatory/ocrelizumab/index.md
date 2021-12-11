@@ -27,7 +27,7 @@ disableAutoCollapse: true
 
 <div class="col-md-10 mx-auto">
 
-{{< metabase-embed dashboard="1" width="900" height="1200" >}}
+{{< metabase-embed dashboard="1" width="1200" height="900" >}}
 
 <h4>Clinical Trials</h4>
 <ol class="trials Ocrelizumab"></ol>
