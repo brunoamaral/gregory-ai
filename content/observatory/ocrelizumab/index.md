@@ -27,25 +27,7 @@ disableAutoCollapse: true
 
 <div class="col-md-8 mx-auto">
 
-{{< metabase-embed dashboard="1" >}}
-
-<iframe
-    src="https://metabase.gregory-ms.com/public/question/7411747a-cd30-40c7-a5c7-d39a2fec1a39"
-    frameborder="0"
-    width="900"
-    height="600"
-    allowtransparency
-></iframe>
-<iframe
-    src="https://metabase.gregory-ms.com/public/question/5faecb3d-daee-4d57-97fc-89450db667fc"
-    frameborder="0"
-    width="1200"
-    height="600"
-    allowtransparency
-></iframe>
-
-
-
+{{< metabase-embed dashboard="1" width="900" height="600" >}}
 
 <h4>Clinical Trials</h4>
 <ol class="trials Ocrelizumab"></ol>
