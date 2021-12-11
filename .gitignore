@@ -21,3 +21,4 @@ resources/
 workspace.code-workspace
 .hugo_build.lock
 hugo
+.env
