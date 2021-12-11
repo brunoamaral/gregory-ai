@@ -270,7 +270,7 @@ print('''
 payload = {
     'resource': {'question': 1},
     'params': {},
-    'exp': round(time.time()) + (60 * 10)
+    'exp': round(time.time()) + (60 * 60)
 }
 token = jwt.encode(payload, METABASE_SECRET_KEY, algorithm='HS256')
 iframeUrl = METABASE_SITE_URL + 'embed/question/' + token + '#bordered=true&titled=true'
