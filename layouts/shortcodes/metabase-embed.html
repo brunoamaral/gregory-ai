@@ -17,6 +17,7 @@
 {{ end }}
 
 {{ $iframeUrl := index .Site.Data.embeds  (printf "dashboard_%s" $dashboard) }}
+
 <iframe
     src="{{$iframeUrl}}"
     frameborder="0"
