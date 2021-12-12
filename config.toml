@@ -9,7 +9,7 @@ googleAnalytics = ""
 languageCode = "en"
 theme = ["NowUI-Pro"]
 title = "Gregory MS"
-
+removePathAccents = true
 # Set the default site thumbnail
 defaultImage = ""
 # Google 
