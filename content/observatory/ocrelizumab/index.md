@@ -23,13 +23,9 @@ disableAutoCollapse: true
 ---
 
 <div class="row">
-
-
 <div class="col-md-10 mx-auto">
 
 {{< metabase-embed dashboard="2" width="1200" height="1200" >}}
 
-
 </div>
-
 </div>
