@@ -13,6 +13,10 @@ layout: relevant
 resources:
   - src: robot-hand-finger-ai-background-technology-graphics.jpeg
     name: "header"
+cta:
+  - label: <i class="fas fa-rss"></i> RSS
+    url: /relevant/index.xml
+    classes: btn-dark btn-sm btn-primary
 ---
 
 Articles listed here come from the following sites, with keyword searches for `Multiple Sclerosis, autoimmune encephalomyelitis, encephalomyelitis, immune tolerance, myelin`.
