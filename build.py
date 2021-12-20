@@ -262,7 +262,7 @@ for trial in jsonTrials:
 
 print('''
 ####
-## GENERATE EMBED KEYS
+## GENERATE EMBED KEYS FOR METABASE
 ####
 ''')
 
