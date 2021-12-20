@@ -5,35 +5,193 @@ subtitle: "I am a robot that indexes and identifies relevant research and clinic
 type: "page"
 disable_comments: true
 
-description: 
+description:
 aliases:
 
-resources: 
-- src: Gregory_Banner3.png
-  name: "header"
+resources:
+  - src: Gregory_Banner3.png
+    name: "header"
 cta:
-  - label: <i class="fab fa-twitter me-1" aria-hidden="true"></i> @GregoryMS_ 
+  - label: <i class="fab fa-twitter me-1" aria-hidden="true"></i> @GregoryMS_
     url: https://twitter.com/GregoryMS_
     classes: btn btn-sm btn-info
-  - label: <i class="fas fa-rss"></i> RSS 
+  - label: <i class="fas fa-rss"></i> RSS
     url: /articles/index.xml
     classes: btn-dark btn-sm btn-primary
 options:
-   header: small
-   headerHeight: 
-   unlisted: false
-   showHeader: true
-   hideSubscribeForm: false
-   navbar: navbar navbar-expand-lg bg-white fixed-top font-weight-bold
+  header: small
+  headerHeight:
+  unlisted: false
+  showHeader: true
+  hideSubscribeForm: false
+  navbar: navbar navbar-expand-lg bg-white fixed-top font-weight-bold
+---
 
---- 
+<div class="section">
+  <div class="container">
+    <div class="row">
+      <div class="col-12 text-center">
+        <h2 class="title">Daily information on Multiple Sclerosis</h2>
+        {{< lastupdate >}}
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-3">
+        <a href='{{< ref "doctors/index.md" >}}'>
+          <div class="info info-hover">
+            <div class="icon icon-success icon-circle">
+              <i class="fas fa-user-md"></i>
+            </div>
+            <h2 class="h4 font-weight-normal info-title">For Doctors</h2>
+          </div>
+        </a>
+      </div>
+
+      <div class="col-md-3">
+        <a href='{{< ref "researchers/index.md" >}}'>
+          <div class="info info-hover">
+            <div class="icon icon-info icon-circle">
+              <i class="fas fa-brain"></i>
+            </div>
+            <h2 class="h4 font-weight-normal info-title">For Researchers</h2>
+          </div>
+        </a>
+      </div>
+      <div class="col-md-3">
+        <a href='{{< ref "physicaltherapists/_index.md" >}}'>
+          <div class="info info-hover">
+            <div class="icon icon-warning icon-circle">
+              <i class="fas fa-walking"></i>
+            </div>
+            <h2 class="h4 font-weight-normal info-title">
+              For Physical Therapists
+            </h2>
+          </div>
+        </a>
+      </div>
+
+      <div class="col-md-3">
+        <a href='{{< ref "patients/index.md" >}}'>
+          <div class="info info-hover">
+            <div class="icon icon-primary icon-circle">
+              <i class="far fa-hospital"></i>
+            </div>
+            <h2 class="h4 font-weight-normal info-title">For Patients</h2>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <div class="row align-items-center">
+      <div class="col-12">
+        <h2 class="text-center title">How it works</h2>
+      </div>
+      <div class="col-md-7">
+        <h3>
+          <span class="text-muted title">Step 1</span> Search for Multiple
+          Sclerosis
+        </h3>
+        <p>
+          Gregory searches the web multiple times a day looking for Articles and
+          Clinical Trials.
+        </p>
+
+        <h3><span class="text-muted title">Step 2</span> Index and organise</h3>
+        <p>
+          We use text analysis and machine learning to identify relevant
+          articles to list on the home page.
+        </p>
+        <h3>
+          <span class="text-muted title">Step 3</span> Filter and distribute
+        </h3>
+        <p>
+          <strong>Every 2 days</strong> the admin team tags which articles show
+          promise for new treatment and better quality of life for people with
+          Multiple Sclerosis.
+        </p>
+        <p>
+          <strong>Every week</strong> the articles tagged as relevant for
+          patients are compiled and sent to a mailing list of doctors,
+          researchers, and physical therapists.
+        </p>
+      </div>
+      <div class="col-md-5">
+        <img
+          src="gregory_standing.svg"
+          class="img-fluid"
+          alt=""
+          loading="lazy"
+        />
+      </div>
+    </div>
+
+    <div class="separator separator-primary"></div>
+
+    <div class="row align-items-center">
+
+      <div class="col-md-5 col-12 justify-content-center align-self-center align-right">
+        <img
+          src="undraw_file_searching_re_3evy.svg" 
+          class="w-75 align-middle d-none d-md-block float-left"
+          alt="relevant articles for multiple sclerosis"
+          loading="lazy"
+        />
+      </div>
+      <div class="col-md-7 col-12 justify-content-center align-self-center">
+        <h3 class="">View the selection of articles <br>for Multiple Sclerosis</h3>
+
+        <p class="lead font-weight-bold">
+        </p>
+
+        <a
+          href='{{< ref "/relevant/_index.md" >}}'
+          class="btn btn-success btn-round btn-lg font-weight-bold"
+          >Relevant Articles <i class="fas fa-arrow-circle-right"></i
+        ></a>
+      </div>
+
+
+
+
+
+      <div class="col-md-5 col-12">
+        <h3 class="">Project news and development of new features</h3>
+
+        <p class="lead font-weight-bold">
+        </p>
+
+        <a
+          href='{{< ref "/post/_index.md" >}}'
+          class="btn btn-success btn-round btn-lg font-weight-bold"
+          >News and Updates <i class="fas fa-arrow-circle-right"></i
+        ></a>
+      </div>
+
+      <div class="col-md-5 col-12">
+        <img
+          src="undraw_add_information_j2wg.svg" 
+          class="align-middle d-none d-md-block float-left"
+          alt="updates on the roadmap and news about the project"
+          loading="lazy"
+        />
+      </div>
+
+    </div>
+
+    </div>
+  </div>
+</div>
 
 <style>
-  .page-header:before{
-  background-color:rgba(0,0,0,.1);
+  .page-header:before {
+    background-color: rgba(0, 0, 0, 0.1);
   }
-  .page-header .container, .page-header .title{
+  .page-header .container,
+  .page-header .title {
     color: #000;
   }
-  .navbar.navbar-transparent,.navbar a:not(.btn):not(.dropdown-item){color:#000;}
+  .navbar.navbar-transparent,
+  .navbar a:not(.btn):not(.dropdown-item) {
+    color: #000;
+  }
 </style>

@@ -277,7 +277,7 @@ dashboards = json.load(f)
 metabase_json = {}
 for i in dashboards:
     print("Generating key for dashboard: "+ str(i))
-    payload = { "resource": {"dashboard": i}, "params": { }, "exp": round(time.time()) + (60 * 60)}
+    payload = { "resource": {"dashboard": i}, "params": { }, "exp": round(time.time()) + (60 * 80)}
     token = jwt.encode(payload, METABASE_SECRET_KEY, algorithm='HS256')
     iframeUrl = METABASE_SITE_URL + 'embed/dashboard/' + token + '#bordered=true&titled=true'
     entry = "dashboard_" + str(i) 
@@ -300,22 +300,3 @@ popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
-
-# print('''
-# ####
-# ## UPDATE THE SEARCH INDEX 
-# ####
-# ''')
-
-# from algoliasearch.search_client import SearchClient
-# algolia_id = os.getenv('ALGOLIA_ID')
-# algolia_key = os.getenv('ALGOLIA_KEY')
-
-# client = SearchClient.create(algolia_id, algolia_key)
-# index = client.init_index('gregory')
-
-# index = client.init_index('gregory')
-# batch = json.load(open(website_path + '/index.json'))
-# index.save_objects(batch, {'autoGenerateObjectIDIfNotExist': True})
-
-
