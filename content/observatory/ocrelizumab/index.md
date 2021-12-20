@@ -5,11 +5,16 @@ lastmod:
 author: Bruno Amaral
 options:
   unlisted: false
+  header: mini
+  navbar: navbar navbar-expand-lg bg-white fixed-top font-weight-bold
 
+resources:
+  - name: "header"
+    src: ocrevus-logo.png
 description: 
 categories: []
 tags: []
-
+layout: page
 draft: false
 enableDisqus : true
 enableMathJax: false
@@ -17,7 +22,10 @@ disableToC: false
 disableAutoCollapse: true
 ---
 
-<h3 id="Ocrelizumab">Ocrelizumab</h3>
-<ol class="articles Ocrelizumab"></ol>
-<h4>Clinical Trials</h4>
-<ol class="trials Ocrelizumab"></ol>
+<div class="row">
+<div class="col-md-10 mx-auto">
+
+{{< metabase-embed dashboard="2" width="1200" height="1200" >}}
+
+</div>
+</div>

@@ -9,8 +9,8 @@
 {{ end }}
 
 {{ define "head" }}
-	{{ if ne .Params.disable_comments true }}
-	<link rel="preload" href="https://commento.brunoamaral.eu/css/commento.css" as="style">
+	{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
+		<link rel="preload" href="https://commento.brunoamaral.eu/css/commento.css" as="style">
 	{{ end }}
 {{ end }}
 {{ define "main" }}
@@ -25,9 +25,11 @@
 		<div class="row">
 		<div class="col-md-12">
 			<div class="button-container">
+			{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
 			<a href="#comment" class="btn btn-primary btn-round btn-lg">
 			  <i class="far fa-comment"></i>&nbsp;{{ i18n "add_comment" }}
 			</a>
+			{{end}}
 			<a href="https://twitter.com/intent/tweet/?text={{ .Title }}&amp;url={{ .Permalink }}" class="btn btn-icon btn-lg btn-twitter btn-round">
 				<i class="fab fa-twitter-square"></i>
 			</a>
@@ -176,7 +178,7 @@
 		</div>
 	 </div>
 
-	 {{ if ne .Params.disable_comments true }}
+	 	{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
 	 	 <div class="section section-comments">
 	 		<div class="container">
 	 		 <div class="row">
@@ -222,7 +224,7 @@
 {{ end }}
 
 {{ define "list-javascript" }}
-	{{ if ne .Params.disable_comments true }}
+	{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
 		{{ partial "comments-js.html" . }}
 		<script defer src="https://commento.brunoamaral.eu/js/commento.js" data-no-fonts="true"></script>
 	{{ end }}

@@ -169,7 +169,7 @@
 	<!-- Facebook Page Admin ID for Domain Insights -->
 	{{- with $.Site.Social.facebook_admin -}}<meta property="fb:admins" content="{{- . -}}" />{{- end -}}
 	{{- with $.Site.Social.facebook_app_id -}}<meta property="fb:app_id" content="{{- . -}}" />{{- end -}}
-	{{- template "_internal/google_news.html" . -}}
+
 	{{- with $.Site.Params.googleSiteVerification -}}<meta name="google-site-verification" content="{{- . -}}" />{{- end -}}
 	{{- if ne .Site.IsServer true -}}
 	{{- with $.Site.Params.googleTagManager -}}
@@ -369,10 +369,11 @@
 		{{- $bootstrapSwitch := resources.Get "/js/plugins/bootstrap-switch.js" -}}
 		<!--  Plugin for the Sliders, full documentation here: http://refreshless.com/nouislider/ -->
 		{{- $nouislider := resources.Get "/js/plugins/nouislider.min.js" -}}
-		{{- $customJs := resources.Get "/js/custom.js" -}}
+		{{- $customJs := resources.Get "/js/custom.js" | resources.Fingerprint -}}
+
 		<!-- Control Center for Now Ui Kit: parallax effects, scripts for the example pages etc -->
 		{{- $nowuikitjs := resources.Get "/js/now-ui-kit.js" -}}
-		{{- $vibrant := resources.Get "/js/Vibrant.js" -}}
+		{{- $vibrant := resources.Get "/js/Vibrant.js" | resources.Fingerprint -}}
 		{{- if or (.HasShortcode "youtube") (.HasShortcode "youtube") (.HasShortcode "youtube") -}}
 		<!-- Plyr for better html <video> and <audio> -->
 		{{- $plyr_js := resources.Get "/js/plyr/plyr.min.js" -}} 

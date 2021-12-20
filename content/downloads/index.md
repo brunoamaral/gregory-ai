@@ -21,7 +21,7 @@ categories:
 title: "Downloads"
 layout: only-header
 menu:
-  main:
+  column_1:
     Name: Downloads
     Weight: 9
 options:

@@ -23,7 +23,7 @@ options:
   showHeader: true
   hideSubscribeForm: true
   hideFooter: true
-  header: search
+  header: mini
   title_align: center
 
 menu:
@@ -41,23 +41,7 @@ menu:
   Identifier: "search-icon"
 
 scripts:
-  - '<script src="instantsearch.js/dist/instantsearch.min.js"></script>'
-  - '<script src="search.js"></script>'
+
 ---
 
-<div class="container">
-    <div class="row">
-        <div class="col-md-12">
-            <div id="search" class="search">
-                <form>
-                    <div class="form-group"></div>
-                </form>
-                    <div class="search-content"></div><!-- /search-content -->
-            </div><!-- /search -->
-            <div class="">
-              <div class="search-hits d-flex "></div>
-            </div>
-        </div>
-    </div>
-    <p class="small">Search powered by <a href="https://algolia.com">Algolia</a> and photo copyright <a href="https://unsplash.com/@annietheby?utm_medium=referral&amp;utm_campaign=photographer-credit&amp;utm_content=creditBadge" target="_blank" rel="noopener noreferrer" title="Download free do whatever you want high-resolution photos from Annie Theby">Annie Theby</a> </p>
-</div>
+{{< metabase-embed dashboard="5" width="1200" height="2000" >}}

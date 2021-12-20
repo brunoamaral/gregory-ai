@@ -32,13 +32,13 @@ options:
   hideSubscribeForm: false
   header: mini
 scripts:
-  -
+  - '<script src="/js/mermaid.min.js"></script>'
 ---
 
 
 
 <div class="col-md-5 col-12 justify-content-center align-self-center align-right ">
-  <img src="images/undraw_medicine_b1ol.svg" class="w-50 align-middle d-none d-md-block float-right" alt="medical doctors"/>
+  <img src="images/undraw_medicine_b1ol.svg" class="w-50 align-middle d-none d-md-block float-right" alt="medical doctors" loading="lazy"/>
   </div>
   <div class="col-md-5 col-12 justify-content-center align-self-center">
   
@@ -60,14 +60,14 @@ scripts:
     <a href='mailto:mail@brunoamaral.eu' class="btn btn-primary btn-round btn-lg font-weight-bold">Send Email <i class="fas fa-envelope"></i></a>
     </div>
   <div class="col-md-5 col-12 align-self-center">
-    <img src="images/undraw_subscribe_vspl.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter">
+    <img src="images/undraw_subscribe_vspl.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter" loading="lazy" />
   </div>  
 </div>
 
 
 <div class="row justify-content-center align-self-center mb-5 p-md-5">
   <div class="col-md-5 col-12 align-self-center">
-    <img src="images/undraw_medical_research_qg4d.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter">
+    <img src="images/undraw_medical_research_qg4d.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter" loading="lazy" />
   </div>  
   <div class="col-md-5 col-12 justify-content-center align-self-center">
     <h3 class="title">Clinical Trials</h3>
@@ -76,8 +76,40 @@ scripts:
     </div>
 </div>
 
+
+
+<div class="row justify-content-center align-self-center mb-5 p-md-5">
+  <div class="col-md-5 col-12 align-self-center">
+    <h3 class="title">Download the articles</h3>
+    <p class="lead font-weight-biold">The database is free to everyone and can be downloaded in both Excel and Json files.</p>
+    <a href='/developers/articles.zip' target="_blank" class="btn btn-primary btn-round btn-lg font-weight-bold"> <i class="fas fa-file-archive"></i> Download Articles</a>
+    </div>
+  <div class="col-md-5 col-12 align-self-center">
+    <img src="images/undraw_export_files_re_99ar.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter" loading="lazy" />
+  </div>  
+</div>
+
+<div class="row justify-content-center align-self-center mb-5 p-md-5">
+<div class="col-md-12"><h3 class="title text-center">Where the information comes from</h3></div>
+<div class="mermaid col-md-10 mx-auto">
+graph TD;
+    APTA[fa:fa-newspaper APTA.org] -->Gregory;
+    BioMedCentral[fa:fa-newspaper BioMedCentral.com] -->Gregory;
+    JNeurosci[fa:fa-newspaper JNeurosci.org]-->Gregory;
+    PEDro[fa:fa-newspaper PEDro.org.au] -->Gregory;
+    PubMed[fa:fa-newspaper PubMed.gov] -->Gregory;
+    Reuters[fa:fa-newspaper Reuters Health]-->Gregory;
+    Scielo[fa:fa-newspaper Scielo.org] -->Gregory;
+    TheLancet[fa:fa-newspaper The Lancet Health]-->Gregory;
+    MsRelDis[fa:fa-newspaper MS and Related Disorders]-->Gregory;
+    Manual[fa:fa-keyboard Manual Input]-->Gregory;
+    Gregory{fa:fa-robot Gregory}-->Website(fa:fa-globe Website)
+    Gregory{fa:fa-robot Gregory}-->Newsletter(fa:fa-envelope Newsletter)
+</div>
+<div class="col-md-12 text-center">
+  <a href='{{< ref "/about/index.md" >}}' class="btn btn-primary btn-round btn-lg font-weight-bold">More information on the about page <i class="fas fa-arrow-circle-right"></i></a>
+</div>
+</div>
+
 <!-- TO DO: listagem dos resultados mais relevantes nos últimos 30 dias com link para listagem completa  -->
-
-
-
 

@@ -203,3 +203,11 @@ print('''
 - Run `sudo docker-compose up -d` to start Node-RED
 - Run build.py to deploy the website
 ''')
+
+print('''
+####
+## Optional
+####
+
+Visit the metabase/ directory to install a docker image that will allow you to analyse the sqlite database.
+''')

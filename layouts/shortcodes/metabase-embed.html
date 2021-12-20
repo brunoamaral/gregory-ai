@@ -1,0 +1,27 @@
+
+{{ $dashboard := .Get "dashboard"}}
+
+{{ $width := "" }}
+{{ $height := "" }}
+
+{{ with .Get "width" }}
+  {{ $width = . }}
+  {{else}}
+  {{ $width = "800" }}
+{{ end }}
+
+{{ with .Get "height" }}
+  {{ $height = . }}
+  {{else}}
+  {{ $height = "600" }}
+{{ end }}
+
+{{ $iframeUrl := index .Site.Data.embeds  (printf "dashboard_%s" $dashboard) }}
+
+<iframe
+    src="{{$iframeUrl}}"
+    frameborder="0"
+    width="{{ $width  }}"
+    height="{{ $height }}"
+    allowtransparency
+></iframe>

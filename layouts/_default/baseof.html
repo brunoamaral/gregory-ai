@@ -1,8 +1,5 @@
 {{- $siteLogo := printf "%s%s" $.Site.BaseURL $.Site.Params.logo -}}
-{{ $author := "" }}
-{{ with .Site.Params.defaultAuthor }}
-{{- $author = .Site.GetPage (printf .Site.Params.defaultAuthor ) -}}
-{{ end }}
+{{- $author := .Site.GetPage (printf .Site.Params.defaultAuthor ) -}}
 {{- with .Params.authors -}}
 	{{ $ref := (printf "authors/%s" (index . 0)) }}
 	{{ $author = ($.Site.GetPage (printf $ref)) }}
@@ -22,7 +19,7 @@
 	{{- if eq $.Params.options.unlisted true -}}
 	<meta name="robots" content="noindex, nofollow">
 	{{- end -}}
-	<meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no' name='viewport' />
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 	<!-- Fonts and icons -->
 	{{- $montserrat := resources.Get "css/Montserrat.css" -}}
 	
@@ -42,8 +39,10 @@
 	{{- $bootstrap := resources.Get "css/bootstrap.min.css" -}}
 	{{- $nowUi := resources.Get "scss/now-ui-kit.scss" | resources.ToCSS (dict "enableSourceMap" false "outputStyle" "compressed") -}}
 
-	{{- $style := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular $solid | resources.Concat "css/style.css" | resources.Fingerprint -}}
-	<link href="{{- $style.Permalink -}}" rel="stylesheet">
+	{{ $styles := slice $bootstrap $nowUi $montserrat $fontawesome $brands $regular $solid | resources.Concat "css/style.css" | postCSS (dict "config" "./assets/css/postcss.config.js") | minify | fingerprint  -}}
+
+	<link rel="stylesheet" href="{{$styles.Permalink}}">
+
 	{{- if or (.HasShortcode "youtube") (.HasShortcode "youtube") (.HasShortcode "youtube") -}}
 	{{- $plyr_css := resources.Get "/css/plyr/plyr.css" -}}
 	<link rel="stylesheet" href="{{- $plyr_css.RelPermalink -}}">
@@ -100,14 +99,13 @@
 		{{- if ne $page.Permalink $permalink -}}<meta property="og:see_also" content="{{- $page.Permalink -}}" />{{- end -}}
 	  {{- end -}}
 	{{- end -}}{{- end -}}
-	{{- if .IsPage -}}
 	{{ if ne $author "" }}
 	{{ with $author.Params.name }}
 		<meta name="author" content="{{ . }}">
 	{{ end }}
 	
 
-	{{- with $author.Params.profiles.facebook -}}
+	{{- with $author.Params.profiles.website -}}
 	<meta property="article:author" content="{{- . -}}" />
 	<meta property="article:publisher" content="{{- . -}}" />
 	{{ end }}
@@ -115,7 +113,7 @@
 	<meta property="article:section" content="{{- .Section -}}" />
 	{{- with .Params.tags -}}{{- range first 6 . -}}
 	<meta property="article:tag" content="{{- . -}}" />
-	{{- end -}}{{- end -}}
+	{{- end -}}
 	{{ end }}
 
 		<meta property="og:site_name" content="{{ .Site.Title }} {{ i18n "by" }} {{ $.Site.Params.author }}" />
@@ -170,7 +168,7 @@
 	<!-- Facebook Page Admin ID for Domain Insights -->
 	{{- with $.Site.Social.facebook_admin -}}<meta property="fb:admins" content="{{- . -}}" />{{- end -}}
 	{{- with $.Site.Social.facebook_app_id -}}<meta property="fb:app_id" content="{{- . -}}" />{{- end -}}
-	{{- template "_internal/google_news.html" . -}}
+
 	{{- with $.Site.Params.googleSiteVerification -}}<meta name="google-site-verification" content="{{- . -}}" />{{- end -}}
 	{{- if ne .Site.IsServer true -}}
 	{{- with $.Site.Params.googleTagManager -}}
@@ -186,22 +184,22 @@
 	<!-- Cloudflare Web Analytics -->
 	{{/*  <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "2614aef0df2f41c8b71d86eaf40b571e"}'></script>  */}}
 	<!-- End Cloudflare Web Analytics -->
-	<link rel="apple-touch-icon" sizes="57x57" href="/static/favicon/apple-icon-57x57.png">
-	<link rel="apple-touch-icon" sizes="60x60" href="/static/favicon/apple-icon-60x60.png">
-	<link rel="apple-touch-icon" sizes="72x72" href="/static/favicon/apple-icon-72x72.png">
-	<link rel="apple-touch-icon" sizes="76x76" href="/static/favicon/apple-icon-76x76.png">
-	<link rel="apple-touch-icon" sizes="114x114" href="/static/favicon/apple-icon-114x114.png">
-	<link rel="apple-touch-icon" sizes="120x120" href="/static/favicon/apple-icon-120x120.png">
-	<link rel="apple-touch-icon" sizes="144x144" href="/static/favicon/apple-icon-144x144.png">
-	<link rel="apple-touch-icon" sizes="152x152" href="/static/favicon/apple-icon-152x152.png">
-	<link rel="apple-touch-icon" sizes="180x180" href="/static/favicon/apple-icon-180x180.png">
-	<link rel="icon" type="image/png" sizes="192x192"  href="/static/favicon/android-icon-192x192.png">
-	<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon/favicon-32x32.png">
-	<link rel="icon" type="image/png" sizes="96x96" href="/static/favicon/favicon-96x96.png">
-	<link rel="icon" type="image/png" sizes="16x16" href="/static/favicon/favicon-16x16.png">
-	<link rel="manifest" href="/static/favicon/manifest.json">
+	<link rel="apple-touch-icon" sizes="57x57" href="/favicon/apple-icon-57x57.png">
+	<link rel="apple-touch-icon" sizes="60x60" href="/favicon/apple-icon-60x60.png">
+	<link rel="apple-touch-icon" sizes="72x72" href="/favicon/apple-icon-72x72.png">
+	<link rel="apple-touch-icon" sizes="76x76" href="/favicon/apple-icon-76x76.png">
+	<link rel="apple-touch-icon" sizes="114x114" href="/favicon/apple-icon-114x114.png">
+	<link rel="apple-touch-icon" sizes="120x120" href="/favicon/apple-icon-120x120.png">
+	<link rel="apple-touch-icon" sizes="144x144" href="/favicon/apple-icon-144x144.png">
+	<link rel="apple-touch-icon" sizes="152x152" href="/favicon/apple-icon-152x152.png">
+	<link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-icon-180x180.png">
+	<link rel="icon" type="image/png" sizes="192x192"  href="/favicon/android-icon-192x192.png">
+	<link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="96x96" href="/favicon/favicon-96x96.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+	<link rel="manifest" href="/manifest.json">
 	<meta name="msapplication-TileColor" content="#ffffff">
-	<meta name="msapplication-TileImage" content="/static/favicon/ms-icon-144x144.png">
+	<meta name="msapplication-TileImage" content="/favicon/ms-icon-144x144.png">
 	<meta name="theme-color" content="#ffffff">
 	{{ block "head" . }}
 	<!-- custom head -->
@@ -216,7 +214,7 @@
 	{{- end -}}
 
 <!-- Menu -->
-  <nav class="navbar navbar-expand-lg bg-dynamic fixed-top navbar-transparent" color-on-scroll="400">
+  <nav class={{with .Params.options.navbar }}"{{.}}"{{else}}"navbar navbar-expand-lg bg-dynamic fixed-top navbar-transparent" color-on-scroll="400"{{end}}>
 	<div class="container">
 	  <div class="navbar-translate">
 		<a class="navbar-brand menu-click" href="{{- .Site.BaseURL | relLangURL -}}" rel="tooltip" title="Home" data-placement="bottom">
@@ -268,7 +266,7 @@
 
 {{ if eq .Site.Params.options.hideSubscribeForm false }}
 {{- if (ne $.Params.options.hideSubscribeForm true | and (ne .Section "instagram")) -}}
-<div class="subscribe-line subscribe-line-image d-print-none">
+<div class="subscribe-line subscribe-line-image d-print-none" id="footersubscribe">
 	<div class="container">
 	  <div class="row">
 		<div class="col-md-6 ml-auto mr-auto">
@@ -356,10 +354,10 @@
 		{{- $bootstrapSwitch := resources.Get "/js/plugins/bootstrap-switch.js" -}}
 		<!--  Plugin for the Sliders, full documentation here: http://refreshless.com/nouislider/ -->
 		{{- $nouislider := resources.Get "/js/plugins/nouislider.min.js" -}}
-		{{- $customJs := resources.Get "/js/custom.js" -}}
+		{{- $customJs := resources.Get "/js/custom.js" | resources.Fingerprint -}}
 		<!-- Control Center for Now Ui Kit: parallax effects, scripts for the example pages etc -->
 		{{- $nowuikitjs := resources.Get "/js/now-ui-kit.js" -}}
-		{{- $vibrant := resources.Get "/js/Vibrant.js" -}} 
+		{{- $vibrant := resources.Get "/js/Vibrant.js" | resources.Fingerprint -}} 
 		{{- if or (.HasShortcode "youtube") (.HasShortcode "youtube") (.HasShortcode "youtube") -}}
 		<!-- Plyr for better html <video> and <audio> -->
 		{{- $plyr_js := resources.Get "/js/plyr/plyr.min.js" -}} 
@@ -367,11 +365,13 @@
 		{{ end }}
 		<!-- Bring it all together into one file -->
 		<!-- we are not including nouislider and  bootstrapSwitch -->
-		{{- $javascript := slice $jquery $popper $bootstrap $nowuikitjs  | resources.Concat "js/javascript.js" | resources.Minify | resources.Fingerprint -}}
+		{{- $javascript := slice $jquery $popper $bootstrap $nowuikitjs  | resources.Concat "js/javascript.js" | resources.Minify | resources.Fingerprint  -}}
 		<script src="{{- $javascript.Permalink -}}" defer=""></script>
 		<script src="{{$vibrant.Permalink }}" defer="true"></script>
 		<script src="{{ $customJs.Permalink }}" defer="true"></script>
-		<script src="/js/gregory.js" defer=""></script>
+
+		{{ $gregJs := resources.Get "/js/gregory.js" | resources.Minify | resources.Fingerprint }} 
+		<script src="{{$gregJs.Permalink}}" defer="true"></script>
 
 		{{ block "list-javascript" . }}{{ end }}
 		<!--  Plugin for the DatePicker, full documentation here: https://github.com/uxsolutions/bootstrap-datepicker -->
@@ -404,7 +404,7 @@
 						{{- end -}},
 			"author": {
 			   "@type": "Person",
-			   "name": {{ if ne $author "" }} {{- $author.Params.name -}} {{ end }}
+			   "name": {{ if ne $author "" }} {{- $author.Params.name -}} {{else}} "Bruno Amaral" {{ end }}
 			},
 			{{- with .Params.tags -}}"keywords": {{- . -}},{{- end -}}
 			"wordcount": {{- .WordCount -}},

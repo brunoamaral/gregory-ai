@@ -9,11 +9,12 @@ https://gregory-ms.com
 
 # Install
 
-## Requirements
+## Server Requirements
 
 - [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/)
 - [ ] [Hugo](https://gohugo.io/) 
 - [ ] [Mailgun](https://www.mailgun.com/)
+- [ ] [Node JS v14.18.1](https://nodejs.org/en/)
 - [ ] [SQLite](https://www.sqlite.org/index.html)
 
 ## Setup the environment
@@ -45,9 +46,18 @@ To enable them, you will need a mailgun account, or you can replace them with an
 
 # Database
 
-The path `/api/articles.json` and `/api/trials.json` includes the full database export.
+The path https://api.gregory-ms.com/articles/all and https://api.gregory-ms.com/trials/all includes the full database export.
 
-The same information is available in excel format: `/api/articles.xlsx` and `/api/trials.xlsx`.
+The same information is available in excel and json format: https://gregory-ms.com/downloads/
+
+# Update the Machine Learning Algorithms
+
+1. `cd docker-python; source .venv/bin/activate`
+2. `python3 1_data_processor.py`
+3. `python3 2_train_models.py`
+4. Login to sqlite3: `sqlite3 gregory/docker-data/gregory.db`
+5. Reset the Machine Learning records with `UPDATE articles SET ml_prediction_gnb ='', ml_prediction_lr='' WHERE article_id > 0;`
+6. The Node-Red flow to review the articles runs every 10 minutes. 
 
 # Roadmap
 
@@ -60,7 +70,7 @@ New sources we would like to add:
 
 
 # Thank you to
-
+@[Antoniolopes](https://github.com/antoniolopes) for helping with the Machine Learning script.
 @[Chbm](https://github.com/chbm) for help in keeping the code secure.    
 @[Jneves](https://github.com/jneves) for help with the build script    
 @[Melo](https://github.com/melo) for showing me [Hugo](https://github.com/gohugoio/hugo)    

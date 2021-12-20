@@ -1,28 +1,36 @@
 #!/usr/bin/python3
 from datetime import datetime
+from dotenv import load_dotenv
 from pathlib import Path
 from zipfile import ZipFile
 import git  
 import html
 import json 
+import jwt
 import os
 import pandas as pd
 import pathlib
 import requests
 import spacy 
 import subprocess
-
+import time
+load_dotenv()
 
 # Set Variables
-path = "/home/gregory/gregory"
+GREGORY_DIR = os.getenv('GREGORY_DIR')
 
 # Set the API Server
 ## If you are running docker-compose.yaml, this is http://localhost:18080/
-server = "https://api.gregory-ms.com/"
-website_path = "/var/www/gregory-ms.com/"
+SERVER = os.getenv('SERVER')
+WEBSITE_PATH = os.getenv('WEBSITE_PATH')
+
 
 now = datetime.now()
 datetime_string = now.strftime("%d-%m-%Y_%Hh%Mm%Ss")
+
+# Variables to sign metabase embeds
+METABASE_SITE_URL = os.getenv('METABASE_SITE_URL')
+METABASE_SECRET_KEY = os.getenv('METABASE_SECRET_KEY')
 
 # Workflow starts
 
@@ -31,9 +39,9 @@ print('''
 ## PULL FROM GITHUB
 ####
 ''')
-os.chdir(path)
+os.chdir(GREGORY_DIR)
 ## Optional
-g = git.cmd.Git(path)
+g = git.cmd.Git(GREGORY_DIR)
 output = g.pull()
 
 print(output)
@@ -45,23 +53,23 @@ print('''
 ''')
 
 # Get Articles
-url = server + 'articles/all'
+url = SERVER + 'articles/all'
 res = requests.get(url)
-file_name = path + '/data/articles.json'
+file_name = GREGORY_DIR + '/data/articles.json'
 with open(file_name, "w") as f:
     f.write(res.text)
-file_name = path + '/content/developers/articles_' + datetime_string + '.json'
+file_name = GREGORY_DIR + '/content/developers/articles_' + datetime_string + '.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
 # Get Trials
-url = server + 'trials/all'
+url = SERVER + 'trials/all'
 res = requests.get(url)
-file_name = path + '/data/trials.json'
+file_name = GREGORY_DIR + '/data/trials.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
-file_name = path + '/content/developers/trials_' + datetime_string + '.json'
+file_name = GREGORY_DIR + '/content/developers/trials_' + datetime_string + '.json'
 with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
@@ -90,8 +98,7 @@ print('''
 ## CREATE ZIP FILES
 ####
 
-### Articles
-''')
+### Articles''')
 
 zipArticles = ZipFile('content/developers/articles.zip', 'w')
 # Add multiple files to the zip
@@ -105,6 +112,8 @@ zipArticles.write('content/developers/README.md')
 
 # close the Zip File
 zipArticles.close()
+
+
 
 print('### Clinical Trials')
 
@@ -120,6 +129,17 @@ zipTrials.write('content/developers/README.md')
 # close the Zip File
 zipTrials.close()
 
+print('\n# delete temporary files')
+excel_file = Path('content/developers/articles_' + datetime_string + '.xlsx')
+json_file = Path('content/developers/articles_' + datetime_string + '.json')
+Path.unlink(excel_file)
+Path.unlink(json_file)
+
+excel_file = Path('content/developers/trials_' + datetime_string + '.xlsx')
+json_file = Path('content/developers/trials_' + datetime_string + '.json')
+Path.unlink(excel_file)
+Path.unlink(json_file)
+
 print('''
 ####
 ## CREATE ARTICLES
@@ -127,21 +147,21 @@ print('''
 ''')
 
 # Make sure directory exists or create it
-articlesDir = path + "/content/articles/"
+articlesDir = GREGORY_DIR + "/content/articles/"
 articlesDirExists = pathlib.Path(articlesDir)
 
 if articlesDirExists.exists() == False:
     articlesDirExists.mkdir(parents=True, exist_ok=True)
 
 # Open articles.json
-articles = path + '/data/articles.json'
+articles = GREGORY_DIR + '/data/articles.json'
 with open(articles,"r") as a:
     data = a.read()
 
 jsonArticles = json.loads(data)
 
 # Set which nlp module to use
-## en_core_web is more precise but uses more resources
+## en_core_web_trf is more precise but uses more resources
 # nlp = spacy.load('en_core_web_trf')
 nlp = spacy.load('en_core_web_sm')
 print("Looking for noun phrases")
@@ -168,7 +188,7 @@ for article in jsonArticles:
         articledata = "---\narticle_id: " + \
             str(article["article_id"]) + \
             "\ndiscovery_date: " + str(article["discovery_date"]) + \
-            "\ndate: " + str(article["discovery_date"]) + "Z" +\
+            "\ndate: " + str(article["discovery_date"]) +\
             "\ntitle: \'" + article["title"] + "\'" +\
             "\nsummary: |" + \
             '\n  ' + article["summary"].replace("\n", "\n  ") +\
@@ -195,7 +215,7 @@ print('''
 ''')
 
 # Make sure directory exists or create it
-trialsDir = path + "/content/trials/"
+trialsDir = GREGORY_DIR + "/content/trials/"
 trialsDirExists = pathlib.Path(trialsDir)
 
 if trialsDirExists.exists() == False:
@@ -203,7 +223,7 @@ if trialsDirExists.exists() == False:
 
 
 # Open trials.json
-trials = path + '/data/trials.json'
+trials = GREGORY_DIR + '/data/trials.json'
 with open(trials,"r") as a:
     data = a.read()
 
@@ -239,26 +259,44 @@ for trial in jsonTrials:
         f.write(trialdata)
         f.close()
 
+
+print('''
+####
+## GENERATE EMBED KEYS FOR METABASE
+####
+''')
+
+# Opening JSON file
+f = open('data/dashboards.json')
+ 
+# returns JSON object as
+# a dictionary
+dashboards = json.load(f)
+ 
+# Iterating through the json list
+metabase_json = {}
+for i in dashboards:
+    print("Generating key for dashboard: "+ str(i))
+    payload = { "resource": {"dashboard": i}, "params": { }, "exp": round(time.time()) + (60 * 80)}
+    token = jwt.encode(payload, METABASE_SECRET_KEY, algorithm='HS256')
+    iframeUrl = METABASE_SITE_URL + 'embed/dashboard/' + token + '#bordered=true&titled=true'
+    entry = "dashboard_" + str(i) 
+    metabase_json[str(entry)] = iframeUrl
+
+f.close()
+
+embedsJson = GREGORY_DIR + '/data/embeds.json';
+with open(embedsJson, "w") as f:
+    f.write(json.dumps(metabase_json))
+    f.close()
+
 print('''
 ####
 ## BUILD THE WEBSITE
 ####
 ''')
-args = ("/usr/local/bin/hugo", "-d", website_path,"--cacheDir", path)
+args = ("/usr/local/bin/hugo", "-d", WEBSITE_PATH,"--cacheDir", GREGORY_DIR)
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
-
-print('''
-####
-## CLEAN UP FILES
-####
-''')
-
-os.remove('content/developers/articles_' + datetime_string + '.xlsx')
-os.remove('content/developers/articles_' + datetime_string + '.json')
-
-
-os.remove('content/developers/trials_' + datetime_string + '.xlsx')
-os.remove('content/developers/trials_' + datetime_string + '.json')

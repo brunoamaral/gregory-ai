@@ -33,11 +33,11 @@ menu:
   main:
     url: patients
     name: Patients
-    weight: 4
+    weight: 5
 ---
 
 <div class="col-md-5 col-12 justify-content-center align-self-center align-right ">
-  <img src="images/undraw_Logic_re_nyb4.svg" class="float-right w-50 align-middle d-none d-md-block" alt="medical doctors"/>
+  <img src="images/undraw_Logic_re_nyb4.svg" class="float-right w-50 align-middle d-none d-md-block" alt="medical doctors" loading="lazy" />
   </div>
   <div class="col-md-5 col-12 justify-content-center align-self-center">
   
