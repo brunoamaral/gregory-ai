@@ -50,6 +50,15 @@ The path https://api.gregory-ms.com/articles/all and https://api.gregory-ms.com/
 
 The same information is available in excel and json format: https://gregory-ms.com/downloads/
 
+# Update the Machine Learning Algorithms
+
+1. `cd docker-python; source .venv/bin/activate`
+2. `python3 1_data_processor.py`
+3. `python3 2_train_models.py`
+4. Login to sqlite3: `sqlite3 gregory/docker-data/gregory.db`
+5. Reset the Machine Learning records with `UPDATE articles SET ml_prediction_gnb ='', ml_prediction_lr='' WHERE article_id > 0;`
+6. The Node-Red flow to review the articles runs every 10 minutes. 
+
 # Roadmap
 
 New sources we would like to add:
