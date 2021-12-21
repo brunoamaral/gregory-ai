@@ -38,6 +38,8 @@ The following tabs have been configured to divide the flows:
 
 `data/articles.json` and `data/trials.json` are generated from a Node-Red flow available in the `flows.json` file.
 
+Node-RED is installed with a custom dockerfile from their official repository. https://github.com/node-red/node-red-docker/tree/master/docker-custom 
+
 # Mailgun
 
 Currently, we are using Mailgun to send emails to the admin and subscribers. These nodes can be found on the Email Digest tab of Node-RED and have been disabled.
