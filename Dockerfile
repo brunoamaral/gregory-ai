@@ -77,13 +77,14 @@ COPY --from=build /usr/src/node-red/prod_node_modules ./node_modules
 
 # Chown, install devtools & Clean up
 RUN chown -R node-red:root /usr/src/node-red && \
-    apt-get update && apt-get install -y build-essential python3-dev python3 \ 
+    apt-get update && apt-get install -y build-essential python-dev python3 \ 
     python3-pip python3-numpy python3-pandas python3-h5py && \
-    pip3 install scikit-learn tensorflow && \
     rm -r /tmp/*
 RUN pip3 install --upgrade pip
 RUN pip3 --version
 RUN pip3 install -r /python-ml/requirements.txt
+RUN pip3 install scikit-learn tensorflow && \
+    rm -r /tmp/*
 
 USER node-red
 
@@ -95,7 +96,6 @@ RUN npm install node-red-contrib-cheerio && \
     npm install node-red-node-feedparser && \
     npm install node-red-node-sqlite && \
     npm install node-red-node-ui-list
-
 
 # Env variables
 ENV NODE_RED_VERSION=$NODE_RED_VERSION \
