@@ -43,7 +43,7 @@ volumes:
     driver_opts:
       type: 'none'
       o: 'bind'
-      device: '${GREGORY_DIR}docker-python'
+      device: '${GREGORY_DIR}python-ml'
 
 networks:
   traefik_proxy:
