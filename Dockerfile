@@ -92,7 +92,11 @@ RUN npm install node-red-contrib-cheerio && \
     npm install node-red-dashboard && \
     npm install node-red-node-feedparser && \
     npm install node-red-node-sqlite && \
-    npm install node-red-node-ui-list
+    npm install node-red-node-ui-list && \
+    npm install node-red-contrib-persist && \
+    npm install node-red-contrib-rss && \
+    npm install node-red-contrib-meta
+
 
 # Env variables
 ENV NODE_RED_VERSION=$NODE_RED_VERSION \
