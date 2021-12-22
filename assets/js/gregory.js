@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
         'involvement',
         'ms',
         'multiple sclerosis',
+        'neurodegenerative diseases',
         'patients',
         'people',
         'persons',
