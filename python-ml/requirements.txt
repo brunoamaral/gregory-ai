@@ -20,7 +20,6 @@ docker-compose==1.29.2
 dockerpty==0.4.1
 docopt==0.6.2
 en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.2.0/en_core_web_sm-3.2.0-py3-none-any.whl
-en-core-web-trf @ https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.1.0/en_core_web_trf-3.1.0-py3-none-any.whl
 et-xmlfile==1.1.0
 filelock==3.0.12
 flatbuffers==2.0
