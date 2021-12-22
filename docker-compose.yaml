@@ -8,8 +8,8 @@ version: "3.7"
 
 services:
   node-red:
-    build: .
-    # image: nodered/node-red:latest
+    # build: .
+    image: amaralbruno/gregory:latest
     restart: always
     container_name: node-red 
     environment:
@@ -37,13 +37,13 @@ volumes:
     driver_opts:
       type: 'none'
       o: 'bind'
-      device: '${GREGORYDIR}docker-data'
+      device: '${GREGORY_DIR}docker-data'
   python:
     driver: local
     driver_opts:
       type: 'none'
       o: 'bind'
-      device: '${GREGORYDIR}docker-python'
+      device: '${GREGORY_DIR}docker-python'
 
 networks:
   traefik_proxy:
