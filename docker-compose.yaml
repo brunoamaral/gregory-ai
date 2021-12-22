@@ -37,13 +37,13 @@ volumes:
     driver_opts:
       type: 'none'
       o: 'bind'
-      device: '/home/gregory/gregory/docker-data'
+      device: '${GREGORYDIR}docker-data'
   python:
     driver: local
     driver_opts:
       type: 'none'
       o: 'bind'
-      device: '/home/gregory/gregory/docker-python'
+      device: '${GREGORYDIR}docker-python'
 
 networks:
   traefik_proxy:
