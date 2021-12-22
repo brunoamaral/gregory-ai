@@ -7,6 +7,7 @@ import pathlib
 import requests
 import sqlite3
 import subprocess
+import shutil
 import sys
 
 cwd = os.getcwd()
@@ -65,11 +66,14 @@ print('''
 ## Check for .env file
 ####
 ''')
-f = Path(".env")
+env_file = Path(".env")
 
-if p.is_file():
+if env_file.is_file():
     print("\N{check mark} Found .env file")
 else:
+    example_env = Path('example.env')
+
+    shutil.copy(str(example_env), str(env_file))  # For Python <= 3.7
     print(".env file not found, creating with empty values")
     with open(".env", "w+") as f:
         env_file = "DOMAIN_NAME=''"
