@@ -11,6 +11,10 @@ import sqlite3
 import subprocess
 import sys
 
+# TO DO: If the Database is not ok, run corresponding SQL
+# TO DO: Edit docker-compose.yaml to make volumes an absolute path
+# TO DO: Run docker-compose up as root
+
 cwd = os.getcwd()
 github = "git@github.com:brunoamaral/gregory.git"
 
@@ -37,9 +41,6 @@ if is_git_repo(cwd) == False or git.Repo(cwd).remotes[0].config_reader.get("url"
     print("Didn't find any git repository, or repository does not match Gregory. Cloning into ./gregory now, please wait...")
     git.Git(".").clone(github)
     os.chdir("./gregory")
-
-
-
 
 print('''
 ####
@@ -183,21 +184,6 @@ for line in Lines:
             if column_exists:
                 print("Found column: " + column)
 
-# TO DO: If the Database is not ok, run corresponding SQL
-# TO DO: Create traefik_proxy network before running docker-compose
-# TO DO: Edit docker-compose.yaml to make volumes an absolute path
-# TO DO: Run docker-compose up as root
-
-
-# print("Running Node-RED, open http://127.0.0.1:1880/ on your browser to confirm Node-Red is working.")
-
-# args = ("docker-compose", "up")
-# popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
-# popen.wait()
-# output = popen.stdout.read()
-# print(output)
-
-
 print('''
 ####
 ## Pulling the image from the Docker hub
@@ -232,4 +218,5 @@ print('''
 ####
 
 Visit the metabase/ directory to install a docker image that will allow you to analyse the sqlite database.
+
 ''')
