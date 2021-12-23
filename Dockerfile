@@ -38,7 +38,7 @@ RUN ./known_hosts.sh /etc/ssh/ssh_known_hosts && rm /usr/src/node-red/known_host
 
 # package.json contains Node-RED NPM module and node dependencies
 COPY package.json .
-COPY flows.json /data/
+# COPY flows.json /data/
 COPY /python-ml /python-ml
 RUN chown -R node-red:root /python-ml 
 
