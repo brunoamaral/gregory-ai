@@ -1,5 +1,5 @@
 ARG ARCH=amd64
-ARG NODE_VERSION=12
+ARG NODE_VERSION=14
 ARG OS=buster-slim
 
 #### Stage BASE ########################################################################################################
@@ -11,23 +11,23 @@ COPY scripts/*.sh /tmp/
 # Install tools, create Node-RED app and data dir, add user and set rights
 RUN set -ex && \
     apt-get update && apt-get install -y \
-    bash \
-    tzdata \
-    curl \
-    nano \
-    wget \
-    git \
-    openssl \
-    openssh-client \
-    ca-certificates && \
+        bash \
+        tzdata \
+        curl \
+        nano \
+        wget \
+        git \
+        openssl \
+        openssh-client \
+        ca-certificates && \
     mkdir -p /usr/src/node-red /data && \
     deluser --remove-home node && \
     # adduser --home /usr/src/node-red --disabled-password --no-create-home node-red --uid 1000 && \
     useradd --home-dir /usr/src/node-red --uid 1000 node-red && \
     chown -R node-red:root /data && chmod -R g+rwX /data && \
     chown -R node-red:root /usr/src/node-red && chmod -R g+rwX /usr/src/node-red
-# chown -R node-red:node-red /data && \
-# chown -R node-red:node-red /usr/src/node-red
+    # chown -R node-red:node-red /data && \
+    # chown -R node-red:node-red /usr/src/node-red
 
 # Set work directory
 WORKDIR /usr/src/node-red
@@ -38,7 +38,7 @@ RUN ./known_hosts.sh /etc/ssh/ssh_known_hosts && rm /usr/src/node-red/known_host
 
 # package.json contains Node-RED NPM module and node dependencies
 COPY package.json .
-COPY flows.json /data/
+# COPY flows.json /data/
 COPY /python-ml /python-ml
 RUN chown -R node-red:root /python-ml 
 
@@ -77,10 +77,10 @@ COPY --from=build /usr/src/node-red/prod_node_modules ./node_modules
 
 # Chown, install devtools & Clean up
 RUN chown -R node-red:root /usr/src/node-red && \
-    apt-get update && apt-get install -y build-essential python3-dev python3 \ 
+    apt-get update && apt-get install -y build-essential python-dev python3 \ 
     python3-pip python3-numpy python3-pandas python3-h5py && \
-    pip3 install scikit-learn tensorflow && \
     rm -r /tmp/*
+RUN pip3 install --upgrade pip
 RUN pip3 install -r /python-ml/requirements.txt
 
 USER node-red
@@ -92,7 +92,10 @@ RUN npm install node-red-contrib-cheerio && \
     npm install node-red-dashboard && \
     npm install node-red-node-feedparser && \
     npm install node-red-node-sqlite && \
-    npm install node-red-node-ui-list
+    npm install node-red-node-ui-list && \
+    npm install node-red-contrib-persist && \
+    npm install node-red-contrib-rss && \
+    npm install node-red-contrib-meta
 
 
 # Env variables

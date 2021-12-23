@@ -1,6 +1,6 @@
 {
     "name": "node-red-docker",
-    "version": "2.0.6",
+    "version": "2.1.4",
     "description": "Low-code programming for event-driven applications",
     "homepage": "http://nodered.org",
     "license": "Apache-2.0",
@@ -29,22 +29,9 @@
         }
     ],
     "dependencies": {
-        "autoprefixer": "^10.3.6",
-        "cssnano": "^5.0.8",
-        "node-red": "2.0.6",
-        "node-red-contrib-cheerio": "~1.1.0",
-        "node-red-contrib-moment": "~4.0.0",
-        "node-red-contrib-sqlstring": "~0.1.1",
-        "node-red-dashboard": "~3.0.4",
-        "node-red-node-feedparser": "~0.2.1",
-        "node-red-node-sqlite": "~1.0.1",
-        "node-red-node-ui-list": "~0.3.6",
-        "postcss-cli": "^9.0.0"
+        "node-red": "2.1.4"
     },
     "engines": {
         "node": ">=12"
-    },
-    "devDependencies": {
-        "@fullhuman/postcss-purgecss": "^4.0.3"
     }
 }

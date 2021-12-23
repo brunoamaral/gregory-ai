@@ -1,10 +1,12 @@
 #!/usr/bin/python3
 from pathlib import Path
 from sql_metadata import Parser
+import docker
 import git
 import os
 import pathlib
 import requests
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -65,11 +67,14 @@ print('''
 ## Check for .env file
 ####
 ''')
-f = Path(".env")
+env_file = Path(".env")
 
-if p.is_file():
+if env_file.is_file():
     print("\N{check mark} Found .env file")
 else:
+    example_env = Path('example.env')
+
+    shutil.copy(str(example_env), str(env_file))  # For Python <= 3.7
     print(".env file not found, creating with empty values")
     with open(".env", "w+") as f:
         env_file = "DOMAIN_NAME=''"
@@ -195,10 +200,27 @@ for line in Lines:
 
 print('''
 ####
+## Pulling the image from the Docker hub
+####
+''')
+client = docker.from_env()
+image = client.images.pull("amaralbruno/gregory")
+print(image.id)
+
+print('''
+####
+## Creating the docker network
+####
+''')
+network = client.networks.create('traefik_proxy')
+
+print(network.attrs)
+
+print('''
+####
 ## Next steps
 ####
-
-- Create traefik_proxy network before running docker-compose: `docker network create traefik_proxy`
+- Confirm the information on .env
 - Edit docker-compose.yaml so that volumes have an absolute path
 - Run `sudo docker-compose up -d` to start Node-RED
 - Run build.py to deploy the website
