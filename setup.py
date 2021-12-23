@@ -55,11 +55,11 @@ else:
     print("Didn't find docker-data, creating ...")
     p.mkdir(parents=True, exist_ok=True)
 
-p = Path("docker-python/")
+p = Path("python-ml/")
 if p.is_dir():
-    print("\N{check mark} Found docker-python directory")
+    print("\N{check mark} Found python-ml directory")
 else:
-    print("Didn't find docker-python, creating ...")
+    print("Didn't find python-ml, creating ...")
     p.mkdir(parents=True, exist_ok=True)
 
 print('''
