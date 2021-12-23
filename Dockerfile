@@ -77,7 +77,7 @@ COPY --from=build /usr/src/node-red/prod_node_modules ./node_modules
 
 # Chown, install devtools & Clean up
 RUN chown -R node-red:root /usr/src/node-red && \
-    apt-get update && apt-get install -y build-essential python-dev python3 \ 
+    apt-get update && apt-get install -y build-essential python-dev python3.9 \ 
     python3-pip python3-numpy python3-pandas python3-h5py && \
     rm -r /tmp/*
 RUN pip3 install --upgrade pip
