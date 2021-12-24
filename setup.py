@@ -206,10 +206,26 @@ print('''
 ####
 ## Next steps
 ####
+
+There are some things outside the scope of this setup script.
+
+## Node-RED flows to index content
+
+For each source there is a a flow (a tab on Node-RED) that runs a search and saves the results in the database. Open the file gregory_schema.sql to understand how the database tables are configured.
+
+If you wish to apply Gregory to your own research subject, you will have to delete these flows and configure your own. The ones present are just functional examples to guide you.
+
+## Email service
+
+If you need to send emails with digests or information for the Admin, you need to configure the email flow accordingly.
+
+
 - Confirm the information on .env
 - Edit docker-compose.yaml so that volumes have an absolute path
 - Run `sudo docker-compose up -d` to start Node-RED
+- Visit the Node-RED administration panel by visiting the IP of the docker container with the default port, `1880`.
 - Run build.py to deploy the website
+
 ''')
 
 print('''
