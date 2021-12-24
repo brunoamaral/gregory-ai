@@ -20,7 +20,6 @@ load_dotenv()
 GREGORY_DIR = os.getenv('GREGORY_DIR')
 
 # Set the API Server
-## If you are running docker-compose.yaml, this is http://localhost:18080/
 SERVER = os.getenv('SERVER')
 WEBSITE_PATH = os.getenv('WEBSITE_PATH')
 
