@@ -19,9 +19,11 @@ https://gregory-ms.com
 
 ## Setup the environment
 
+Run `pip3 install -r python-ml/requirements.txt`
+
 Execute `python3 setup.py`. The script will check if you have all the requirements and run the Node-RED container.
 
-Edit the build.py file's variables to reflect your environment.
+Edit the .env file's variables to reflect your environment.
 
 Finally, build the site with `python3 ./build.py`.
 
