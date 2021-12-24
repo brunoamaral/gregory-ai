@@ -167,18 +167,6 @@ print("Looking for noun phrases")
 
 for article in jsonArticles:
 
-    # Process whole documents
-    text = article["title"]
-    doc=nlp(text)
-    # Analyze syntax
-    noun_phrases = [chunk.text for chunk in doc.noun_chunks]
-    # print("Noun phrases:", [chunk.text for chunk in doc.noun_chunks])
-    # print("verbs:", [token.lemma_ for token in doc if token.pos_ == "VERB"])
-    # Find named entities, phrases and concepts
-    # for entity in doc.ents:
-    #     print(entity.text, entity. label)
-
-
     # Write a file for each record
     markdownDir = pathlib.Path(articlesDir+str(article["article_id"]))
     markdownDir.mkdir(parents=True, exist_ok=True)
@@ -195,7 +183,7 @@ for article in jsonArticles:
             "\npublished_date: " + str(article["published_date"]) + \
             "\narticle_source: " + article["source"] + \
             "\nrelevant: " + str(article["relevant"]) + \
-            "\nnounphrases: " + str(noun_phrases) + \
+            "\nnounphrases: " + str(article["noun_phrases"]) + \
             "\nml_prediction_gnb: " + str(article["ml_prediction_gnb"]) + \
             "\nml_prediction_lr: " + str(article["ml_prediction_lr"]) + \
             "\noptions:" + \
