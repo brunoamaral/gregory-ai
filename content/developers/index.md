@@ -146,6 +146,7 @@ The JSON response contains information on scientific articles retrieved from mul
 - **link**: The link to the original content
 - **ml_prediction_gnb**: A value of 0 or 1 if the article is relevant according to a Gaussian Naive Bayes model
 - **ml_prediction_lr**: A value of 0 or 1 if the article is relevant according to a Logistic Regression model
+- **noun_phrases**: Extraction of _base noun phrases_ from the title of the article. More information on [Spacy.io](https://spacy.io/usage/linguistic-features#noun-chunks).
 - **published_date**: The date it was published
 - **relevant**: Whether this article is relevant or not (tagged by a human)
 - **sent**: A binary value that indicates if the article was sent to the admin. (The admin receives an email digest every 48 hours with the listings to mark them as relevant or not)
