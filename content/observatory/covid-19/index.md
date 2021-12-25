@@ -19,6 +19,7 @@ tags:
 categories: 
   - 
 title: "Covid-19"
+layout: page
 
 options:
   unlisted: false

@@ -23,9 +23,22 @@ disableAutoCollapse: true
 ---
 
 <div class="row">
-<div class="col-md-10 mx-auto">
+<div class="col-md-12 mx-auto">
 
 {{< metabase-embed dashboard="2" width="1300" height="1250" >}}
+
+</div>
+</div>
+
+<div class="row">
+
+<div class="col-md-12 mx-auto">
+<h3>Articles for Ocrelizumab and COVID-19 response</h3>
+</div>
+
+<div class="col-md-12 mx-auto">
+
+{{< metabase-embed dashboard="14" width="1300" height="1250" >}}
 
 </div>
 </div>

@@ -19,6 +19,7 @@ tags:
 categories: 
   - 
 title: "HSCT"
+layout: page
 
 options:
   unlisted: false

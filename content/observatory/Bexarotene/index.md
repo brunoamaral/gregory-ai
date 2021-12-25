@@ -9,6 +9,7 @@ options:
 description: 
 categories: []
 tags: []
+layout: page
 
 draft: false
 enableDisqus : true
