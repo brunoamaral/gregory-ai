@@ -33,7 +33,9 @@ disableAutoCollapse: true
 <div class="row">
 
 <div class="col-md-12 mx-auto">
-<h3>Articles for Ocrelizumab and COVID-19 response</h3>
+
+### Articles for Ocrelizumab and COVID-19 response
+
 </div>
 
 <div class="col-md-12 mx-auto">
