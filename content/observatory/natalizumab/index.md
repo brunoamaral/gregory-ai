@@ -18,7 +18,7 @@ tags:
   - 
 categories: 
   - 
-title: ""
+title: "Natalizumab"
 
 options:
   unlisted: false
@@ -29,3 +29,12 @@ options:
 scripts:
   -
 ---
+
+
+<div class="row">
+<div class="col-md-10 mx-auto">
+
+{{< metabase-embed dashboard="7" width="1300" height="1250" >}}
+
+</div>
+</div>
