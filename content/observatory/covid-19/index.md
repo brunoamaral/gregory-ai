@@ -30,11 +30,10 @@ scripts:
   -
 ---
 
-This page is an exception, due to the large body of work being done around Multiple Sclerosis and Covid-19.
+<div class="row">
+<div class="col-md-10 mx-auto">
 
-<h3 id="covid-19">Covid-19</h3>
+{{< metabase-embed dashboard="12" width="1300" height="1250" >}}
 
-
-<ol class="articles covid-19"></ol>
-<h4>Clinical Trials</h4>
-<ol class="trials covid-19"></ol>
+</div>
+</div>

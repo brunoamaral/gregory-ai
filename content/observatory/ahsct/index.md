@@ -34,6 +34,10 @@ scripts:
 
 <p>HSCT stands for Haematopoietic Stem Cell Transplantation</p>
 
-<ol class="articles HSCT"></ol>
-<h4>Clinical Trials</h4>
-<ol class="trials HSCT"></ol>
+<div class="row">
+<div class="col-md-10 mx-auto">
+
+{{< metabase-embed dashboard="13" width="1300" height="1250" >}}
+
+</div>
+</div>
