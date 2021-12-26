@@ -21,35 +21,18 @@ for row in df.noun_phrases:
     try:
         row = json.loads(row)
     except:
-        print(row)
+        if row != "":
+            print(row)
         pass
     for item in row:
         words.append(item)
 
 unique_string=(',').join(words)
 print('generating image')
-cand_mask=np.array(Image.open('gregory_face_big.png'))
-color_mask =  np.array(Image.open('gregory_face_big.png'))
 gregory_coloring = np.array(Image.open("gregory_face_big.png"))
 
-cand_mask=np.where(cand_mask > 3, 255, cand_mask)
+# gregory_coloring=np.where(gregory_coloring > 3, 255, gregory_coloring)
 
-
-#create and generate our wordcloud object
-# wordcloud = WordCloud(#font_path = 'font\\GothamMedium.ttf',
-#                       background_color='white',
-#                       contour_color='black',
-#                       mask=color_mask, 
-#                       colormap='Blues',
-#                       contour_width=4).generate(unique_string)
-
-
-#plot
-# plt.imshow(wordcloud, interpolation='bilinear')
-# plt.axis('off')
-# plt.show()
-
-# old code
 wordcloud = WordCloud(
                     width = 1920,
                     height = 900,
@@ -64,7 +47,5 @@ ax.set_axis_off()
 image.add_axes(ax)
 plt.imshow(wordcloud)
 plt.axis("off")
-# (-0.5, 999.5, 499.5, -0.5)
-
 plt.savefig("tagcloud"+".png", bbox_inches='tight')
 plt.show()
