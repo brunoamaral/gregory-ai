@@ -25,7 +25,10 @@ Based on the following article, this item was added to the Observatory page.
 Source [The Lancet](https://www.thelancet.com/journals/laneur/article/PIIS1474-4422(21)00237-4/fulltext)
 
 
-<h3 id="Tolebrutinib">Tolebrutinib</h3>
-<ol class="articles Tolebrutinib"></ol>
-<h4>Clinical Trials</h4>
-<ol class="trials Tolebrutinib"></ol>
+<div class="row">
+<div class="col-md-10 mx-auto">
+
+{{< metabase-embed dashboard="15" width="1300" height="1250" >}}
+
+</div>
+</div>
