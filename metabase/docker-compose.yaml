@@ -5,9 +5,9 @@ services:
       image: postgres
       restart: always
       environment:
-        - POSTGRES_PASSWORD="${DBPASSWORD}"
-        - POSTGRES_USER=${DBNAME}
-        - POSTGRES_DB=${DBNAME}
+        - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+        - POSTGRES_USER=${POSTGRES_USER}
+        - POSTGRES_DB=${POSTGRES_DB}
       ports:
         - 5432:5432
       volumes:
@@ -16,14 +16,14 @@ services:
         - postgres-network
     metabase:
       volumes:
-        - ${PATH_TO_GREGORY}/gregory/docker-data/:/metabase
+        - ${GREGORY_DIR}docker-data/:/metabase
         - ./metabase-data:/metabase-data
       environment:
         - MB_DB_TYPE=postgres
-        - MB_DB_DBNAME=${DBNAME}
+        - MB_DB_DBNAME=${POSTGRES_USER}
         - MB_DB_PORT=5432
-        - MB_DB_USER=${DBNAME}
-        - MB_DB_PASS="${DBPASSWORD}"
+        - MB_DB_USER=${POSTGRES_USER}
+        - MB_DB_PASS=${POSTGRES_PASSWORD}
         - MB_DB_HOST=db
       ports:
         - 3000:3000
