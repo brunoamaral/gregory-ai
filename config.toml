@@ -83,6 +83,7 @@ author = "authors"
 tag = "tags"
 trial_source = "trial_source"
 
+
 [permalinks]
   article_source = "/articles/source/:slug"
   trial_source = "/trials/source/:slug"
