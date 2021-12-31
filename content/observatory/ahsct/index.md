@@ -18,7 +18,8 @@ tags:
   - 
 categories: 
   - 
-title: "HSCT"
+title: "aHSCT"
+subtitle: Autologous Hematopoietic Stem Cell Transplantation
 layout: page
 
 options:
@@ -33,7 +34,7 @@ scripts:
 
 <h3 id="HSCT">HSCT</h3>
 
-<p>HSCT stands for Haematopoietic Stem Cell Transplantation</p>
+<p>aHSCT stands for Autologous Hematopoietic Stem Cell Transplantation</p>
 
 <div class="row">
 <div class="col-md-10 mx-auto">
