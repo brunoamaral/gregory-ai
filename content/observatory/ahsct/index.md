@@ -43,3 +43,14 @@ scripts:
 
 </div>
 </div>
+
+
+# Testing new dashboard
+
+<iframe
+    src="https://metabase.gregory-ms.com/public/dashboard/4588cf11-c805-4d16-bb5a-f479aa2bcb04?category=Ahsct"
+    frameborder="0"
+    width="800"
+    height="600"
+    allowtransparency
+></iframe>
