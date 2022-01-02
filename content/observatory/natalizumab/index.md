@@ -19,13 +19,13 @@ tags:
 categories: 
   - 
 title: "Natalizumab"
-
+layout: page
 options:
   unlisted: false
   showHeader: true
   hideFooter: false
   hideSubscribeForm: false
-  header:
+  header: mini
 scripts:
   -
 ---
@@ -34,7 +34,7 @@ scripts:
 <div class="row">
 <div class="col-md-10 mx-auto">
 
-{{< metabase-embed dashboard="7" width="1300" height="1250" >}}
+{{< metabase-embed dashboard="7" width="1200" height="1250" >}}
 
 </div>
 </div>

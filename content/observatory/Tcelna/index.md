@@ -18,7 +18,10 @@ disableToC: false
 disableAutoCollapse: true
 ---
 
-<h3 id="Tcelna">Tcelna</h3>
-<ol class="articles Tcelna"></ol>
-<h4>Clinical Trials</h4>
-<ol class="trials Tcelna"></ol>
+<div class="row">
+<div class="col-md-10 mx-auto">
+
+{{< metabase-embed dashboard="19" width="1300" height="1250" >}}
+
+</div>
+</div>

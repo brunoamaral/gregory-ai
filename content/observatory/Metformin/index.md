@@ -5,7 +5,7 @@ lastmod:
 author: Bruno Amaral
 options:
   unlisted: false
-
+  header: mini
 description: 
 categories: []
 tags: []
@@ -18,7 +18,10 @@ disableToC: false
 disableAutoCollapse: true
 ---
 
-<h3 id="Metformin">Metformin</h3>
-<ol class="articles Metformin"></ol>
-<h4>Clinical Trials</h4>
-<ol class="trials Metformin"></ol>
+<div class="row">
+<div class="col-md-10 mx-auto">
+
+{{< metabase-embed dashboard="4" width="1300" height="1250" >}}
+
+</div>
+</div>

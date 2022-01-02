@@ -5,7 +5,7 @@ lastmod:
 author: Bruno Amaral
 options:
   unlisted: false
-
+  header: mini
 description: 
 categories: []
 tags: []
@@ -18,16 +18,10 @@ disableToC: false
 disableAutoCollapse: true
 ---
 
-<iframe
-    src="https://metabase.gregory-ms.com/public/dashboard/22bd8836-28dc-4745-a408-689009c89b0c"
-    frameborder="0"
-    width="900"
-    height="600"
-    allowtransparency
-></iframe>
+<div class="row">
+<div class="col-md-10 mx-auto">
 
+{{< metabase-embed dashboard="4" width="1300" height="1250" >}}
 
-<h3 id="Cladribine">Cladribine</h3>
-<ol class="articles Cladribine"></ol>
-<h4>Clinical Trials</h4>
-<ol class="trials Cladribine"></ol>
+</div>
+</div>

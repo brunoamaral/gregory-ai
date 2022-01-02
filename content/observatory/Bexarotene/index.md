@@ -5,7 +5,7 @@ lastmod:
 author: Bruno Amaral
 options:
   unlisted: false
-
+  header: mini
 description: 
 categories: []
 tags: []
