@@ -420,5 +420,8 @@
 				{{- . | safeHTML -}}
 			{{- end -}}
 		{{- end -}}
+		{{- if or (.HasShortcode "metabase-embed")  -}}
+		<script src="https://metabase.gregory-ms.com/app/iframeResizer.js"></script>
+		{{end}}
 	</body>
 </html>
