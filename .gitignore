@@ -26,3 +26,6 @@ data/embeds.json
 metabase/db-data/
 __pycache__/
 python-ml/utils/__pycache__/
+python-ml/utils/__pycache__/model_utils.cpython-37.pyc
+python-ml/utils/__pycache__/text_utils.cpython-37.pyc
+db-data/
