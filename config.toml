@@ -108,3 +108,13 @@ trial_source = "trial_source"
   [markup.goldmark.renderer]
     hardWraps = false
     unsafe = true
+[security]
+  enableInlineShortcodes = false
+  [security.exec]
+    allow = ['^dart-sass-embedded$', '^go$', '^npx$', '^postcss$']
+    osEnv = ['(?i)^(PATH|PATHEXT|APPDATA|TMP|TEMP|TERM|GETENV)$']
+  [security.funcs]
+    getenv = ['^HUGO_|SLUG']
+  [security.http]
+    methods = ['(?i)GET|POST']
+    urls = ['.*']
