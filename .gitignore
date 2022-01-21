@@ -29,3 +29,5 @@ python-ml/utils/__pycache__/
 python-ml/utils/__pycache__/model_utils.cpython-37.pyc
 python-ml/utils/__pycache__/text_utils.cpython-37.pyc
 db-data/
+python-ml/data/202*-*.csv
+python-ml/data/202*-*.json
