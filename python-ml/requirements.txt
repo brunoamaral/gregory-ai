@@ -2,6 +2,7 @@ absl-py==0.13.0
 algoliasearch==2.6.0
 appnope==0.1.2
 argcomplete==1.12.3
+asn1crypto==0.24.0
 astunparse==1.6.3
 attrs==21.2.0
 autopep8==1.5.7
@@ -15,6 +16,7 @@ cachetools==4.2.4
 catalogue==2.0.6
 certifi==2021.5.30
 cffi==1.14.6
+chardet==3.0.4
 charset-normalizer==2.0.4
 clang==5.0
 click==7.1.2
@@ -28,8 +30,10 @@ docker==5.0.1
 docker-compose==1.29.2
 dockerpty==0.4.1
 docopt==0.6.2
+en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.2.0/en_core_web_lg-3.2.0-py3-none-any.whl
+en-core-web-md @ https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.2.0/en_core_web_md-3.2.0-py3-none-any.whl
 en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.2.0/en_core_web_sm-3.2.0-py3-none-any.whl
-en-core-web-trf @ https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.1.0/en_core_web_trf-3.1.0-py3-none-any.whl
+en-core-web-trf @ https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.2.0/en_core_web_trf-3.2.0-py3-none-any.whl
 entrypoints==0.3
 et-xmlfile==1.1.0
 filelock==3.0.12
@@ -42,6 +46,7 @@ google-auth-oauthlib==0.4.6
 google-pasta==0.2.0
 grpcio==1.43.0
 h5py==3.6.0
+html5lib==1.0.1
 huggingface-hub==0.0.12
 idna==3.2
 importlib-metadata==4.6.4
@@ -57,9 +62,12 @@ jupyter-core==4.7.1
 jwt==1.3.1
 keras==2.7.0
 Keras-Preprocessing==1.1.2
+keyring==17.1.1
+keyrings.alt==3.1.1
 kiwisolver==1.3.1
 langcodes==3.3.0
 libclang==12.0.0
+lxml==4.3.2
 Markdown==3.3.6
 MarkupSafe==2.0.1
 matplotlib==3.4.3
@@ -69,6 +77,7 @@ nest-asyncio==1.5.1
 numexpr==2.8.1
 numpy==1.21.2
 oauthlib==3.1.1
+olefile==0.46
 openpyxl==3.0.7
 opt-einsum==3.3.0
 packaging==21.0
@@ -87,6 +96,7 @@ pyasn1==0.4.8
 pyasn1-modules==0.2.8
 pycodestyle==2.7.0
 pycparser==2.20
+pycrypto==2.6.1
 pydantic==1.8.2
 Pygments==2.10.0
 PyJWT==2.3.0
@@ -94,8 +104,10 @@ PyNaCl==1.4.0
 pyparsing==2.4.7
 pyrsistent==0.18.0
 python-dateutil==2.8.2
+python-debian==0.1.35
 python-dotenv==0.19.0
 pytz==2021.1
+pyxdg==0.25
 PyYAML==5.4.1
 pyzmq==22.2.1
 regex==2021.8.21
@@ -105,6 +117,7 @@ rsa==4.8
 sacremoses==0.0.45
 scikit-learn==1.0.1
 scipy==1.7.1
+SecretStorage==2.3.1
 six==1.16.0
 smart-open==5.2.0
 smmap==4.0.0
@@ -113,7 +126,7 @@ spacy==3.2.1
 spacy-alignments==0.8.3
 spacy-legacy==3.0.8
 spacy-loggers==1.0.1
-spacy-transformers==1.0.4
+spacy-transformers==1.1.4
 sql-metadata==2.2.2
 sqlparse==0.4.1
 srsly==2.4.1
@@ -138,9 +151,11 @@ traitlets==5.0.5
 transformers==4.9.2
 typer==0.3.2
 typing-extensions==3.10.0.0
+unidiff==0.5.4
 urllib3==1.26.6
 wasabi==0.8.2
 wcwidth==0.2.5
+webencodings==0.5.1
 websocket-client==0.59.0
 Werkzeug==2.0.2
 wordcloud==1.8.1
