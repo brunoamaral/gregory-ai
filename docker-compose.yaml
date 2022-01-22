@@ -47,7 +47,7 @@ volumes:
 
 networks:
   traefik_proxy:
-    external:
-      name: traefik_proxy
+    external: false
+    name: traefik_proxy
   default:
     driver: bridge
