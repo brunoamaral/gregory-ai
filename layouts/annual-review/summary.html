@@ -1,0 +1,29 @@
+<!-- TEMPLATE 1 for blog post lists -->
+<div class="col-md-6">
+	<div class="card-image">
+		<img class="img rounded" loading="lazy" src="{{ with .Resources.GetMatch "header" }}{{ $image := .Fill "400x600" }}{{ $image.RelPermalink }}{{ end }}" alt="{{ i18n (.Section | lower) }} header: {{ .Params.title }}">
+	</div>
+</div>
+						<div class="col-md-6">
+
+							<div class="card card-plain card-blog">
+
+								<div class="card-body">
+									{{ if isset .Params "categories" }}
+									{{ range $index, $category := .Params.categories }}
+									<span class="h6 category text-info text-left {{ $category | urlize }} ">{{ $category }}</span>
+										{{ end }}
+										{{ end }}
+									{{.Date | time.Format ":date_long" }} <span class="badge badge-info text-white font-weight-normal">{{ .Params.source }}</span>
+									<h4 class="card-title">
+										<a href="{{ .Permalink }}">{{ .Title | safeHTML }}</a>
+									</h4>
+									<p class="card-description">
+
+										<a href="{{ .Permalink }}" class="btn btn-sm btn-success">{{ i18n "read_more" }}</a>
+									</p>
+
+									<p></p>
+								</div>
+							</div>
+						</div>
