@@ -9,4 +9,5 @@ RUN pip install Django==4.0.3
 RUN pip install psycopg2-binary
 # RUN pip install -r requirements.txt
 # COPY django /code/
-ADD django /code/
+# ADD django/ /code/
+# RUN chmod +x /code/wait-for-postgres.sh
