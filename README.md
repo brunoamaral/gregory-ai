@@ -11,7 +11,7 @@ https://gregory-ms.com
 
 ## Server Requirements
 
-- [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/) with 2GB of swap memory
+- [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/) with 2GB of swap memory. [Adding swap for Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-add-swap-space-on-ubuntu-20-04) 
 - [ ] [Hugo](https://gohugo.io/) 
 - [ ] [Mailgun](https://www.mailgun.com/)
 - [ ] [Node JS v14.18.1](https://nodejs.org/en/)
