@@ -1,13 +1,10 @@
 #!/usr/bin/python3
 from pathlib import Path
-from sql_metadata import Parser
 import docker
 import git
 import os
-import pathlib
 import requests
 import shutil
-import sqlite3
 import subprocess
 import sys
 
@@ -112,16 +109,6 @@ if is_tool("docker-compose"):
 else:
     print("Didn't find docker-compose, please install it. Details at https://docs.docker.com/compose/install/")
 
-print('''
-####
-## Check for SQLite
-####
-''')
-
-if is_tool("sqlite3"):
-    print("\N{check mark} Found Sqlite3, just in case")
-else: 
-    print("Didn't find SQLite3 (optional) on the host system, proceeding")
         
 print('''
 ####
@@ -147,42 +134,13 @@ output = popen.stdout.read()
 print(output)
 print('''
 ####
-## Check if SQLite3 db is present
-####
-''')
-print('Trying to connect to docker-data/gregory.db to apply gregory_schema.sql')
-database = sqlite3.connect('./docker-data/gregory.db')
-cur = database.cursor()
-
-with open('gregory_schema.sql') as fp:
-    cur.executescript(fp.read())
-if database == False:
-    sys.exit('SQLite database not found, create it please')
-
-print('''
-####
-## Check Database is OK
+## Migrate PostGres schema (WIP, not working)
 ####
 ''')
 
-schema = open('gregory_schema.sql', 'r')
-Lines = schema.readlines()
 
-for line in Lines:
-    table = Parser(line)
-    for t in table.tables:
-        query ='select * from '+ t +';'
-        # This is going to break the script if it can't find the table
-        table_exists = database.execute(query).description
-        if table_exists:
-            print("\N{check mark} Found table: " + t)
-        else:
-            print("didn't find expected tables")
-        for column in table.columns:
-            query ='select '+ column +' from '+ t +';'
-            column_exists=database.execute(query).description
-            if column_exists:
-                print("Found column: " + column)
+
+
 
 print('''
 ####
@@ -233,6 +191,6 @@ print('''
 ## Optional
 ####
 
-Visit the metabase/ directory to install a docker image that will allow you to analyse the sqlite database.
+Visit the metabase/ directory to install a docker image that will allow you to analyse the database.
 
 ''')
