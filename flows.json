@@ -9625,7 +9625,7 @@
         "id": "06295a643dcb5668",
         "type": "exec",
         "z": "3645fb833bf0fede",
-        "command": "/usr/bin/python3 /python-ml/1_data_processor.py",
+        "command": "/usr/bin/python3 /python-ml/2_train_models.py",
         "addpay": "",
         "append": "",
         "useSpawn": "false",
@@ -9633,7 +9633,7 @@
         "winHide": false,
         "oldrc": false,
         "name": "",
-        "x": 810,
+        "x": 800,
         "y": 980,
         "wires": [
             [],
