@@ -21,15 +21,15 @@ CREATE TABLE "public"."articles" (
     "summary" text,
     "link" text,
     "published_date" timestamp,
+    "source" int8,
     "relevant" bool,
+    "sent_to_admin" bool,
     "ml_prediction_gnb" bool,
     "ml_prediction_lr" bool,
-    "sent_to_admin" bool,
     "sent_to_subscribers" bool,
+    "discovery_date" timestamp NOT NULL,
     "sent_to_twitter" bool,
     "noun_phrases" json,
-    "source" int8,
-    "discovery_date" timestamp NOT NULL,
     PRIMARY KEY ("article_id")
 );
 
@@ -99,6 +99,32 @@ CREATE TABLE "public"."sources" (
     "method" text NOT NULL DEFAULT 'rss'::text,
     PRIMARY KEY ("source_id")
 );
+
+DROP TABLE IF EXISTS "rel_articles_sources";
+CREATE TABLE rel_articles_sources( article_id INTEGER, source_id INTEGER, FOREIGN KEY (article_id) REFERENCES articles(article_id), FOREIGN KEY (source_id) REFERENCES sources(source_id) );
+
+DROP TABLE IF EXISTS "public"."trials";
+-- This script only contains the table creation statements and does not fully represent the table in the database. It's still missing: indices, triggers. Do not use it as a backup.
+
+-- Sequence and defined type
+CREATE SEQUENCE IF NOT EXISTS trials_trial_id_seq;
+
+-- Table Definition
+CREATE TABLE "public"."trials" (
+    "trial_id" int4 NOT NULL DEFAULT nextval('trials_trial_id_seq'::regclass),
+    "discovery_date" timestamp,
+    "title" text,
+    "summary" text,
+    "link" text,
+    "published_date" timestamp,
+    "source" int8,
+    "relevant" bool,
+    "sent" bool,
+    "sent_to_twitter" bool,
+    "sent_to_subscribers" bool,
+    PRIMARY KEY ("trial_id")
+);
+
 
 -- Column Comment
 COMMENT ON COLUMN "public"."sources"."subject" IS 'what is the subject of this source (crypto, polytics, science, etc.)';
