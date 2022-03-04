@@ -95,7 +95,11 @@ RUN npm install node-red-contrib-cheerio && \
     npm install node-red-node-ui-list && \
     npm install node-red-contrib-persist && \
     npm install node-red-contrib-rss && \
-    npm install node-red-contrib-meta
+    npm install node-red-contrib-meta \
+    npm install node-red-contrib-join-wait \
+    npm install node-red-contrib-postgresql \ 
+    npm install node-red-contrib-re-postgres \
+    npm install node-red-contrib-string 
 
 
 # Env variables
