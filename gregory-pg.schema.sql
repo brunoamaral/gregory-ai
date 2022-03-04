@@ -1,10 +1,10 @@
 -- -------------------------------------------------------------
--- TablePlus 4.5.2(402)
+-- TablePlus 4.6.0(406)
 --
 -- https://tableplus.com/
 --
--- Database: creamdb
--- Generation Time: 2022-03-03 01:15:04.8210
+-- Database: gregorybackoffice
+-- Generation Time: 2022-03-04 00:14:44.8740
 -- -------------------------------------------------------------
 
 
@@ -100,8 +100,9 @@ CREATE TABLE "public"."sources" (
     PRIMARY KEY ("source_id")
 );
 
-DROP TABLE IF EXISTS "rel_articles_sources";
-CREATE TABLE rel_articles_sources( article_id INTEGER, source_id INTEGER, FOREIGN KEY (article_id) REFERENCES articles(article_id), FOREIGN KEY (source_id) REFERENCES sources(source_id) );
+-- Column Comment
+COMMENT ON COLUMN "public"."sources"."subject" IS 'what is the subject of this source (crypto, polytics, science, etc.)';
+COMMENT ON COLUMN "public"."sources"."method" IS 'how we should fetch the data';
 
 DROP TABLE IF EXISTS "public"."trials";
 -- This script only contains the table creation statements and does not fully represent the table in the database. It's still missing: indices, triggers. Do not use it as a backup.
@@ -117,7 +118,7 @@ CREATE TABLE "public"."trials" (
     "summary" text,
     "link" text,
     "published_date" timestamp,
-    "source" int8,
+    "source" text,
     "relevant" bool,
     "sent" bool,
     "sent_to_twitter" bool,
@@ -125,13 +126,8 @@ CREATE TABLE "public"."trials" (
     PRIMARY KEY ("trial_id")
 );
 
-
--- Column Comment
-COMMENT ON COLUMN "public"."sources"."subject" IS 'what is the subject of this source (crypto, polytics, science, etc.)';
-COMMENT ON COLUMN "public"."sources"."method" IS 'how we should fetch the data';
-
 ALTER TABLE "public"."articles" ADD FOREIGN KEY ("source") REFERENCES "public"."sources"("source_id");
-ALTER TABLE "public"."rel_articles_categories" ADD FOREIGN KEY ("category_id") REFERENCES "public"."categories"("category_id");
 ALTER TABLE "public"."rel_articles_categories" ADD FOREIGN KEY ("article_id") REFERENCES "public"."articles"("article_id");
+ALTER TABLE "public"."rel_articles_categories" ADD FOREIGN KEY ("category_id") REFERENCES "public"."categories"("category_id");
 ALTER TABLE "public"."rel_articles_entities" ADD FOREIGN KEY ("article_id") REFERENCES "public"."articles"("article_id");
 ALTER TABLE "public"."rel_articles_entities" ADD FOREIGN KEY ("entity_id") REFERENCES "public"."entities"("id");
