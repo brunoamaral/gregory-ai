@@ -30,13 +30,18 @@ for i in sources:
 			summary = entry['summary_detail']['value']
 		if hasattr(entry,'summary'):
 			summary = entry['summary']
+		published = entry.get('published')
+		if published:
+			published = entry['published']
+		else:
+			published = entry['prism_coverdate']
 		with conn:
 			try:
 				cur.execute("""
 				INSERT INTO articles (discovery_date,title,summary,link,published_date,source)
 				VALUES ( current_timestamp, %(article_title)s, %(article_summary)s, %(article_link)s, %(article_pubdate)s, %(source_id)s );
 					""",
-					{'article_title': entry['title'], 'article_summary': summary, 'article_link': entry['link'], 'article_pubdate': entry['published'], 'source_link': link, 'source_id': source_id })
+					{'article_title': entry['title'], 'article_summary': summary, 'article_link': entry['link'], 'article_pubdate': published, 'source_link': link, 'source_id': source_id })
 				print(entry['title'])
 			except Exception as e: print(e)
 			finally:
