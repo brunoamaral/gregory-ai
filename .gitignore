@@ -31,3 +31,4 @@ python-ml/utils/__pycache__/text_utils.cpython-37.pyc
 db-data/
 python-ml/data/202*-*.csv
 python-ml/data/202*-*.json
+sqlite-to-postgres/
