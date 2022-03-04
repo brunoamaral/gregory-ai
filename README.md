@@ -63,17 +63,25 @@ The same information is available in excel and json format: https://gregory-ms.c
 5. Reset the Machine Learning records with `UPDATE articles SET ml_prediction_gnb ='', ml_prediction_lr='' WHERE article_id > 0;`
 6. The Node-Red flow to review the articles runs every 10 minutes. 
 
-# Roadmap
+# Migrating from SQLite to Postgres
 
-New sources we would like to add:
- - RNEC
- - FirstWord Pharma
- - [EMA](https://www.ema.europa.eu/en/human-regulatory/research-development/clinical-trials/clinical-trials-information-system-training-support) (CTIS system to be made available online on January 2022)
- - Champalimaud Foundation
- - CEIC (Doesn't seem to have any public database)
+1. delete the column `table_constrains` and `temp` from all tables
+2. dump the sqlite database, values only, table by table, and delete lines that PG will not recognize. `sqlite3 gregory.db .dump > migrate.sql`
 
+Example:
+
+```sql
+PRAGMA foreign keys=OFF;
+BEGIN TRANSACTION;
+```
+
+3. populate the `sources` and `categories` tables with your data since these are mostly static 
+4. change '' to NULL in the SQL export of articles and trials
+5. there may be other details to sanitize in your database. [Check this issue on github for some I had to deal with](https://github.com/brunoamaral/gregory/issues/62). 
+6. migrate your data to pg `psql -d ${POSTGRES_DB} -f ./docker-data/gregory.db --username=${POSTGRES_USER} --password=${POSTGRES_PASSWORD} `
 
 # Thank you to
+
 @[Antoniolopes](https://github.com/antoniolopes) for helping with the Machine Learning script.
 @[Chbm](https://github.com/chbm) for help in keeping the code secure.    
 @[Jneves](https://github.com/jneves) for help with the build script    
@@ -84,3 +92,16 @@ New sources we would like to add:
 
 And the **Lobsters** at [One Over Zero](https://github.com/oneoverzero)
 
+# Sources
+
+- APTA
+- BioMedCentral
+- FASEB
+- JNeuroSci
+- MS & Rel. Disorders
+- Nature.com
+- PEDro
+- pubmed
+- Sage Pub
+- Scielo
+- The Lancet
