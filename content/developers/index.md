@@ -51,12 +51,6 @@ There are RSS feeds you can use for both Articles and Clinical Trials.
 
 Example: <a href="https://api.gregory-ms.com/articles/all">https://api.gregory-ms.com/articles/all</a>
 
-**List articles for specified {year} and {month}.**    
-
-`https://api.gregory-ms.com/articles/by-date/{year}/{month}`
-
-Example: <a href="https://api.gregory-ms.com/articles/by-date/2021/06">https://api.gregory-ms.com/articles/by-date/2021/06</a>
-
 **List article that matches the {ID} number.**    
 
 `https://api.gregory-ms.com/articles/id/{ID}`
@@ -96,10 +90,10 @@ Example: <a href="https://api.gregory-ms.com/articles/relevant">https://api.greg
 
 **List all articles from specified {source}.**
 
-`https://api.gregory-ms.com/articles/source/{source}`
+`https://api.gregory-ms.com/articles/source/{source_id}`
 
 
-Example: <a href="https://api.gregory-ms.com/articles/source/pubmed">https://api.gregory-ms.com/articles/source/pubmed</a>
+Example: <a href="https://api.gregory-ms.com/articles/source/1">https://api.gregory-ms.com/articles/source/1</a>
 
 **List all available sources.**
 
