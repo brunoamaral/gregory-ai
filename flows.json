@@ -281,9 +281,7 @@
             "e9cf7800e5bd2027"
         ],
         "x": 14,
-        "y": 539,
-        "w": 952,
-        "h": 362
+        "y": 539
     },
     {
         "id": "e3876559.c845b8",
@@ -10468,6 +10466,364 @@
             [],
             []
         ]
+    },
+    {
+        "id": "f5c751a82aa53f6b",
+        "type": "inject",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 140,
+        "y": 500,
+        "wires": [
+            [
+                "a69e6c0e6f168ff6"
+            ]
+        ]
+    },
+    {
+        "id": "a69e6c0e6f168ff6",
+        "type": "sqlite",
+        "z": "73dc69858609cde2",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "select trial_id,published_date,discovery_date from trials where published_date = '' limit 1;",
+        "name": "",
+        "x": 330,
+        "y": 500,
+        "wires": [
+            [
+                "5cc55f5e649cf407",
+                "37091faefc948117"
+            ]
+        ]
+    },
+    {
+        "id": "5cc55f5e649cf407",
+        "type": "debug",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1010,
+        "y": 440,
+        "wires": []
+    },
+    {
+        "id": "dac10b58551da14c",
+        "type": "template",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE trials\nSET published_date = \"{{payload.discovery_date}}\"\n    \nWHERE\n    trial_id = {{payload.trial_id}};",
+        "output": "str",
+        "x": 680,
+        "y": 500,
+        "wires": [
+            [
+                "5cc55f5e649cf407",
+                "68d7878fc0a5c894"
+            ]
+        ]
+    },
+    {
+        "id": "37091faefc948117",
+        "type": "split",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 550,
+        "y": 500,
+        "wires": [
+            [
+                "dac10b58551da14c"
+            ]
+        ]
+    },
+    {
+        "id": "68d7878fc0a5c894",
+        "type": "sqlite",
+        "z": "73dc69858609cde2",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 890,
+        "y": 500,
+        "wires": [
+            [
+                "5cc55f5e649cf407"
+            ]
+        ]
+    },
+    {
+        "id": "a8ebb947b8f2e0ba",
+        "type": "inject",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 140,
+        "y": 720,
+        "wires": [
+            [
+                "a1a2bd110c70c860"
+            ]
+        ]
+    },
+    {
+        "id": "a1a2bd110c70c860",
+        "type": "sqlite",
+        "z": "73dc69858609cde2",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "select article_id,discovery_date from articles where published_date = ''limit 1;",
+        "name": "",
+        "x": 320,
+        "y": 720,
+        "wires": [
+            [
+                "1cd7045e51628575"
+            ]
+        ]
+    },
+    {
+        "id": "076c83dbf5890312",
+        "type": "debug",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 970,
+        "y": 780,
+        "wires": []
+    },
+    {
+        "id": "1cd7045e51628575",
+        "type": "split",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 490,
+        "y": 720,
+        "wires": [
+            [
+                "aa296140b5a6d984"
+            ]
+        ]
+    },
+    {
+        "id": "aa296140b5a6d984",
+        "type": "template",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nSET published_date = \"{{payload.discovery_date}}\"\n    \nWHERE\n    article_id = {{payload.article_id}};",
+        "output": "str",
+        "x": 620,
+        "y": 720,
+        "wires": [
+            [
+                "076c83dbf5890312",
+                "3cfbce3447b60f03"
+            ]
+        ]
+    },
+    {
+        "id": "3cfbce3447b60f03",
+        "type": "sqlite",
+        "z": "73dc69858609cde2",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 890,
+        "y": 720,
+        "wires": [
+            [
+                "076c83dbf5890312"
+            ]
+        ]
+    },
+    {
+        "id": "4fa361a894cd1c86",
+        "type": "inject",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "1",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 110,
+        "y": 960,
+        "wires": [
+            [
+                "9b25d44f0da4663c"
+            ]
+        ]
+    },
+    {
+        "id": "9b25d44f0da4663c",
+        "type": "sqlite",
+        "z": "73dc69858609cde2",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "SELECT * FROM  \"articles\" WHERE \"published_date\" LIKE '%Wed Dec 15 2%' ORDER BY \"article_id\" LIMIT 1 OFFSET 0;",
+        "name": "",
+        "x": 300,
+        "y": 960,
+        "wires": [
+            [
+                "791fe1f3446e64a5"
+            ]
+        ]
+    },
+    {
+        "id": "791fe1f3446e64a5",
+        "type": "split",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 470,
+        "y": 960,
+        "wires": [
+            [
+                "335196ee587790ed",
+                "14708325fe40518a"
+            ]
+        ]
+    },
+    {
+        "id": "335196ee587790ed",
+        "type": "template",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nSET published_date = \"{{payload.discovery_date}}\"\n    \nWHERE\n    article_id = {{payload.article_id}};",
+        "output": "str",
+        "x": 660,
+        "y": 920,
+        "wires": [
+            [
+                "14708325fe40518a"
+            ]
+        ]
+    },
+    {
+        "id": "14708325fe40518a",
+        "type": "debug",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 930,
+        "y": 1020,
+        "wires": []
+    },
+    {
+        "id": "2aae130e7eac9498",
+        "type": "sqlite",
+        "z": "73dc69858609cde2",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 930,
+        "y": 940,
+        "wires": [
+            [
+                "14708325fe40518a"
+            ]
+        ]
+    },
+    {
+        "id": "2878de0777df24fd",
+        "type": "comment",
+        "z": "73dc69858609cde2",
+        "name": "helpers to migrate to Postgres",
+        "info": "",
+        "x": 150,
+        "y": 400,
+        "wires": []
     },
     {
         "id": "87115a20c1c2cf99",
