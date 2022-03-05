@@ -17,9 +17,9 @@ CREATE SEQUENCE IF NOT EXISTS articles_article_id_seq;
 -- Table Definition
 CREATE TABLE "public"."articles" (
     "article_id" int4 NOT NULL DEFAULT nextval('articles_article_id_seq'::regclass),
-    "title" text,
+    "title" text UNIQUE,
     "summary" text,
-    "link" text,
+    "link" text UNIQUE,
     "published_date" timestamp,
     "source" int8,
     "relevant" bool,
@@ -42,7 +42,7 @@ CREATE SEQUENCE IF NOT EXISTS categories_category_id_seq;
 -- Table Definition
 CREATE TABLE "public"."categories" (
     "category_id" int4 NOT NULL DEFAULT nextval('categories_category_id_seq'::regclass),
-    "category_name" text,
+    "category_name" text UNIQUE,
     PRIMARY KEY ("category_id")
 );
 
@@ -123,9 +123,9 @@ CREATE SEQUENCE IF NOT EXISTS trials_trial_id_seq;
 CREATE TABLE "public"."trials" (
     "trial_id" int4 NOT NULL DEFAULT nextval('trials_trial_id_seq'::regclass),
     "discovery_date" timestamp,
-    "title" text NOT NULL,
+    "title" text NOT NULL UNIQUE,
     "summary" text,
-    "link" text,
+    "link" text UNIQUE,
     "published_date" timestamp,
     "source" text,
     "relevant" bool,
