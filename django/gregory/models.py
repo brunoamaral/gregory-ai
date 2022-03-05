@@ -25,7 +25,7 @@ class Articles(models.Model):
 	noun_phrases = models.TextField(blank=True, null=True)  # This field type is a guess.
 
 	def __str__(self):
-		return self.article_id
+		return str(self.article_id)
 
 	class Meta:
 		managed = False
