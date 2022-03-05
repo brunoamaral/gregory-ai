@@ -24,9 +24,13 @@ class Articles(models.Model):
 	sent_to_twitter = models.BooleanField(blank=True, null=True)
 	noun_phrases = models.TextField(blank=True, null=True)  # This field type is a guess.
 
+	def __str__(self):
+		return self.article_id
+
 	class Meta:
 		managed = False
 		db_table = 'articles'
+		verbose_name_plural = 'articles'
 
 
 class Categories(models.Model):
@@ -36,6 +40,7 @@ class Categories(models.Model):
 	class Meta:
 		managed = False
 		db_table = 'categories'
+		verbose_name_plural = 'categories'
 
 
 class Entities(models.Model):
@@ -45,6 +50,7 @@ class Entities(models.Model):
 	class Meta:
 		managed = False
 		db_table = 'entities'
+		verbose_name_plural = 'entities'
 
 
 class RelArticlesCategories(models.Model):
@@ -82,10 +88,13 @@ class Sources(models.Model):
 	subject = models.TextField()
 	method = models.TextField()
 
+	def __str__(self):
+		return self.name
+
 	class Meta:
 		managed = False
 		db_table = 'sources'
-
+		verbose_name_plural = 'sources'
 
 class Trials(models.Model):
 	trial_id = models.AutoField(primary_key=True)
@@ -100,6 +109,10 @@ class Trials(models.Model):
 	sent_to_twitter = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 
+	def __str__(self):
+		return str(self.trial_id) + ': ' + self.title
+
 	class Meta:
 		managed = False
 		db_table = 'trials'
+		verbose_name_plural = 'trials'
