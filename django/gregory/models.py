@@ -22,7 +22,7 @@ class Articles(models.Model):
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	discovery_date = models.DateTimeField()
 	sent_to_twitter = models.BooleanField(blank=True, null=True)
-	noun_phrases = models.TextField(blank=True, null=True)  # This field type is a guess.
+	noun_phrases = models.JSONField(blank=True, null=True)  # This field type is a guess.
 
 	def __str__(self):
 		return str(self.article_id)

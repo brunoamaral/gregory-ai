@@ -4,7 +4,7 @@
 -- https://tableplus.com/
 --
 -- Database: gregorybackoffice
--- Generation Time: 2022-03-04 00:14:44.8740
+-- Generation Time: 2022-03-05 12:30:42.0840
 -- -------------------------------------------------------------
 
 
@@ -29,7 +29,7 @@ CREATE TABLE "public"."articles" (
     "sent_to_subscribers" bool,
     "discovery_date" timestamp NOT NULL,
     "sent_to_twitter" bool,
-    "noun_phrases" json,
+    "noun_phrases" jsonb,
     PRIMARY KEY ("article_id")
 );
 
@@ -83,6 +83,15 @@ CREATE TABLE "public"."rel_articles_entities" (
     PRIMARY KEY ("id")
 );
 
+DROP TABLE IF EXISTS "public"."rel_articles_sources";
+-- This script only contains the table creation statements and does not fully represent the table in the database. It's still missing: indices, triggers. Do not use it as a backup.
+
+-- Table Definition
+CREATE TABLE "public"."rel_articles_sources" (
+    "article_id" int4,
+    "source_id" int4
+);
+
 DROP TABLE IF EXISTS "public"."sources";
 -- This script only contains the table creation statements and does not fully represent the table in the database. It's still missing: indices, triggers. Do not use it as a backup.
 
@@ -114,7 +123,7 @@ CREATE SEQUENCE IF NOT EXISTS trials_trial_id_seq;
 CREATE TABLE "public"."trials" (
     "trial_id" int4 NOT NULL DEFAULT nextval('trials_trial_id_seq'::regclass),
     "discovery_date" timestamp,
-    "title" text,
+    "title" text NOT NULL,
     "summary" text,
     "link" text,
     "published_date" timestamp,
@@ -131,3 +140,5 @@ ALTER TABLE "public"."rel_articles_categories" ADD FOREIGN KEY ("article_id") RE
 ALTER TABLE "public"."rel_articles_categories" ADD FOREIGN KEY ("category_id") REFERENCES "public"."categories"("category_id");
 ALTER TABLE "public"."rel_articles_entities" ADD FOREIGN KEY ("article_id") REFERENCES "public"."articles"("article_id");
 ALTER TABLE "public"."rel_articles_entities" ADD FOREIGN KEY ("entity_id") REFERENCES "public"."entities"("id");
+ALTER TABLE "public"."rel_articles_sources" ADD FOREIGN KEY ("article_id") REFERENCES "public"."articles"("article_id");
+ALTER TABLE "public"."rel_articles_sources" ADD FOREIGN KEY ("source_id") REFERENCES "public"."sources"("source_id");
