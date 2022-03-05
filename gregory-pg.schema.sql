@@ -4,7 +4,7 @@
 -- https://tableplus.com/
 --
 -- Database: gregorybackoffice
--- Generation Time: 2022-03-05 12:30:42.0840
+-- Generation Time: 2022-03-05 16:54:23.5230
 -- -------------------------------------------------------------
 
 
@@ -83,15 +83,6 @@ CREATE TABLE "public"."rel_articles_entities" (
     PRIMARY KEY ("id")
 );
 
-DROP TABLE IF EXISTS "public"."rel_articles_sources";
--- This script only contains the table creation statements and does not fully represent the table in the database. It's still missing: indices, triggers. Do not use it as a backup.
-
--- Table Definition
-CREATE TABLE "public"."rel_articles_sources" (
-    "article_id" int4,
-    "source_id" int4
-);
-
 DROP TABLE IF EXISTS "public"."sources";
 -- This script only contains the table creation statements and does not fully represent the table in the database. It's still missing: indices, triggers. Do not use it as a backup.
 
@@ -135,10 +126,5 @@ CREATE TABLE "public"."trials" (
     PRIMARY KEY ("trial_id")
 );
 
-ALTER TABLE "public"."articles" ADD FOREIGN KEY ("source") REFERENCES "public"."sources"("source_id");
-ALTER TABLE "public"."rel_articles_categories" ADD FOREIGN KEY ("article_id") REFERENCES "public"."articles"("article_id");
 ALTER TABLE "public"."rel_articles_categories" ADD FOREIGN KEY ("category_id") REFERENCES "public"."categories"("category_id");
-ALTER TABLE "public"."rel_articles_entities" ADD FOREIGN KEY ("article_id") REFERENCES "public"."articles"("article_id");
 ALTER TABLE "public"."rel_articles_entities" ADD FOREIGN KEY ("entity_id") REFERENCES "public"."entities"("id");
-ALTER TABLE "public"."rel_articles_sources" ADD FOREIGN KEY ("article_id") REFERENCES "public"."articles"("article_id");
-ALTER TABLE "public"."rel_articles_sources" ADD FOREIGN KEY ("source_id") REFERENCES "public"."sources"("source_id");
