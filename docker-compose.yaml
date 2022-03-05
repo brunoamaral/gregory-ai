@@ -53,7 +53,7 @@ services:
     container_name: admin
     build: 
       context: django/
-      dockerfile: /Users/brunoamaral/Labs/gregory/Dockerfile.django
+      dockerfile: Dockerfile.django
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - ./django:/code
