@@ -1,17 +1,11 @@
 [
     {
-        "id": "34a10b359ff590c7",
+        "id": "08b45a8525563f9d",
         "type": "tab",
-        "label": "PubMed",
+        "label": "RSS sources",
         "disabled": false,
-        "info": ""
-    },
-    {
-        "id": "e50e21cb6997b936",
-        "type": "tab",
-        "label": "Reuters",
-        "disabled": true,
-        "info": ""
+        "info": "",
+        "env": []
     },
     {
         "id": "2428494105fda90c",
@@ -60,13 +54,6 @@
         "type": "tab",
         "label": "MS and Rel. Disorders",
         "disabled": false,
-        "info": ""
-    },
-    {
-        "id": "b86ce62c06906565",
-        "type": "tab",
-        "label": "!Journals.SagePub (not working)",
-        "disabled": true,
         "info": ""
     },
     {
@@ -119,13 +106,6 @@
         "info": ""
     },
     {
-        "id": "9297a3d188e4e9d4",
-        "type": "tab",
-        "label": "Gregory | SQLite CRUD",
-        "disabled": true,
-        "info": ""
-    },
-    {
         "id": "27add5de02c88e84",
         "type": "tab",
         "label": "Contact form",
@@ -140,6 +120,13 @@
         "disabled": false,
         "info": "",
         "env": []
+    },
+    {
+        "id": "b86ce62c06906565",
+        "type": "tab",
+        "label": "!Journals.SagePub (not working)",
+        "disabled": true,
+        "info": ""
     },
     {
         "id": "acf883d8.84eea",
@@ -272,9 +259,7 @@
             "930cf22afddf0c30"
         ],
         "x": 14,
-        "y": 519,
-        "w": 952,
-        "h": 362
+        "y": 519
     },
     {
         "id": "e3876559.c845b8",
@@ -581,268 +566,74 @@
         ]
     },
     {
-        "id": "385b62b5f01a9ead",
-        "type": "feedparse",
-        "z": "34a10b359ff590c7",
-        "name": "PubMed : MS ",
-        "url": "https://pubmed.ncbi.nlm.nih.gov/rss/search/10guX6I3SqrbUeeLKSTD6FCRM44ewnrN2MKKTQLLPMHB4xNsZU/?limit=15&utm_campaign=pubmed-2&fc=20210216052009",
-        "interval": "60",
-        "x": 110,
-        "y": 80,
-        "wires": [
-            [
-                "fbe586b97eb484a7"
-            ]
-        ]
-    },
-    {
-        "id": "fbe586b97eb484a7",
-        "type": "change",
-        "z": "34a10b359ff590c7",
-        "name": "set source pubmed",
-        "rules": [
+        "id": "28ba7ee438cbcfa4",
+        "type": "inject",
+        "z": "08b45a8525563f9d",
+        "name": "",
+        "props": [
             {
-                "t": "set",
-                "p": "source",
-                "pt": "msg",
-                "to": "8",
-                "tot": "num"
+                "p": "payload"
             },
             {
-                "t": "set",
-                "p": "article.url",
-                "pt": "msg",
-                "to": "topic",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "date",
-                "pt": "msg",
-                "to": "article.pubdate",
-                "tot": "msg"
+                "p": "topic",
+                "vt": "str"
             }
         ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 290,
-        "y": 80,
-        "wires": [
-            [
-                "ae3665cc497fa00b"
-            ]
-        ]
-    },
-    {
-        "id": "821a8c1d58b20660",
-        "type": "subflow:acf883d8.84eea",
-        "z": "34a10b359ff590c7",
-        "name": "",
-        "env": [],
-        "x": 760,
-        "y": 80,
-        "wires": [
-            [
-                "874044b10fabf965"
-            ]
-        ]
-    },
-    {
-        "id": "ae3665cc497fa00b",
-        "type": "moment",
-        "z": "34a10b359ff590c7",
-        "name": "",
+        "repeat": "3600",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
         "topic": "",
-        "input": "article.pubdate",
-        "inputType": "msg",
-        "inTz": "Europe/Lisbon",
-        "adjAmount": 0,
-        "adjType": "days",
-        "adjDir": "add",
-        "format": "",
-        "locale": "POSIX",
-        "output": "article.pubdate",
-        "outputType": "msg",
-        "outTz": "Europe/Lisbon",
-        "x": 520,
+        "payload": "",
+        "payloadType": "date",
+        "x": 200,
         "y": 80,
         "wires": [
             [
-                "821a8c1d58b20660"
+                "178d96d209f1f2eb"
             ]
         ]
     },
     {
-        "id": "874044b10fabf965",
-        "type": "postgres",
-        "z": "34a10b359ff590c7",
-        "postgresdb": "168f4567fd86d95c",
+        "id": "178d96d209f1f2eb",
+        "type": "exec",
+        "z": "08b45a8525563f9d",
+        "command": "/usr/bin/python3 /python-ml/feedreader.py",
+        "addpay": "",
+        "append": "",
+        "useSpawn": "false",
+        "timer": "",
+        "winHide": false,
+        "oldrc": false,
         "name": "",
-        "output": false,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": false,
-        "x": 960,
+        "x": 460,
         "y": 80,
-        "wires": []
-    },
-    {
-        "id": "b059781a4a84d038",
-        "type": "switch",
-        "z": "e50e21cb6997b936",
-        "name": "filter if title contains MS",
-        "property": "article.title",
-        "propertyType": "msg",
-        "rules": [
-            {
-                "t": "regex",
-                "v": ".*(multiple sclerosis ).*",
-                "vt": "str",
-                "case": true
-            },
-            {
-                "t": "regex",
-                "v": ".*( MS ).*",
-                "vt": "str",
-                "case": false
-            }
-        ],
-        "checkall": "true",
-        "repair": false,
-        "outputs": 2,
-        "x": 330,
-        "y": 160,
         "wires": [
             [
-                "73f388c86be5dfa0"
+                "1e0c96573eaa60c6"
             ],
             [
-                "73f388c86be5dfa0"
-            ]
-        ]
-    },
-    {
-        "id": "73f388c86be5dfa0",
-        "type": "change",
-        "z": "e50e21cb6997b936",
-        "name": "set source reuters",
-        "rules": [
-            {
-                "t": "set",
-                "p": "article.source",
-                "pt": "msg",
-                "to": "reuters",
-                "tot": "str"
-            },
-            {
-                "t": "set",
-                "p": "article.url",
-                "pt": "msg",
-                "to": "topic",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 590,
-        "y": 160,
-        "wires": [
+                "1e0c96573eaa60c6"
+            ],
             [
-                "2d1de19583160f79"
+                "1e0c96573eaa60c6"
             ]
         ]
     },
     {
-        "id": "53bbb83f4d02bd93",
-        "type": "subflow:acf883d8.84eea",
-        "z": "e50e21cb6997b936",
-        "name": "",
-        "env": [],
-        "x": 440,
-        "y": 220,
-        "wires": [
-            []
-        ]
-    },
-    {
-        "id": "0b64d62567c2cd00",
-        "type": "feedparse",
-        "z": "e50e21cb6997b936",
-        "name": "Reuters",
-        "url": "https://www.reutersagency.com/feed/?best-topics=health",
-        "interval": "10",
-        "x": 130,
-        "y": 160,
-        "wires": [
-            [
-                "b059781a4a84d038"
-            ]
-        ]
-    },
-    {
-        "id": "2d1de19583160f79",
-        "type": "moment",
-        "z": "e50e21cb6997b936",
-        "name": "format pubdate",
-        "topic": "",
-        "input": "article.pubdate",
-        "inputType": "msg",
-        "inTz": "Europe/Lisbon",
-        "adjAmount": 0,
-        "adjType": "days",
-        "adjDir": "add",
-        "format": "",
-        "locale": "en-US",
-        "output": "payload",
-        "outputType": "msg",
-        "outTz": "Europe/Lisbon",
-        "x": 780,
-        "y": 160,
-        "wires": [
-            [
-                "53bbb83f4d02bd93"
-            ]
-        ]
-    },
-    {
-        "id": "c9e59e92aba9eb68",
-        "type": "subflow:822a1abe384d181e",
-        "z": "e50e21cb6997b936",
-        "name": "",
-        "x": 630,
-        "y": 220,
-        "wires": [
-            [
-                "9a84eb385c7a69d4"
-            ]
-        ]
-    },
-    {
-        "id": "9a84eb385c7a69d4",
+        "id": "1e0c96573eaa60c6",
         "type": "debug",
-        "z": "e50e21cb6997b936",
+        "z": "08b45a8525563f9d",
         "name": "",
-        "active": false,
+        "active": true,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
         "complete": "false",
         "statusVal": "",
         "statusType": "auto",
-        "x": 790,
-        "y": 220,
+        "x": 730,
+        "y": 80,
         "wires": []
     },
     {
@@ -5233,771 +5024,10 @@
         ]
     },
     {
-        "id": "d9d649b557d10771",
-        "type": "http request",
-        "z": "b86ce62c06906565",
-        "name": "journals.sagepub",
-        "method": "GET",
-        "ret": "txt",
-        "paytoqs": "ignore",
-        "url": "https://journals.sagepub.com/action/doSearch?AllField=multiple+sclerosis&SeriesKey=msja&content=articlesChapters&countTerms=true&target=default&sortBy=Ppub&startPage=&ContentItemType=research-article",
-        "tls": "",
-        "persist": false,
-        "proxy": "",
-        "authType": "",
-        "senderr": false,
-        "x": 350,
-        "y": 80,
-        "wires": [
-            [
-                "2d26aabd19e46970",
-                "4b6c3e9e170e37ea"
-            ]
-        ]
-    },
-    {
-        "id": "3ce9b540da30b614",
-        "type": "inject",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "source",
-                "v": "9",
-                "vt": "num"
-            }
-        ],
-        "repeat": "12000",
-        "crontab": "",
-        "once": true,
-        "onceDelay": "99",
-        "topic": "",
-        "payload": "",
-        "payloadType": "date",
-        "x": 170,
-        "y": 80,
-        "wires": [
-            [
-                "d9d649b557d10771"
-            ]
-        ]
-    },
-    {
-        "id": "fe1747c821af436b",
-        "type": "split",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "splt": "\\n",
-        "spltType": "str",
-        "arraySplt": 1,
-        "arraySpltType": "len",
-        "stream": false,
-        "addname": "article.key",
-        "x": 790,
-        "y": 80,
-        "wires": [
-            [
-                "cdb2d4ef2deb6787"
-            ]
-        ]
-    },
-    {
-        "id": "cdb2d4ef2deb6787",
-        "type": "change",
-        "z": "b86ce62c06906565",
-        "name": "set source SagePub",
-        "rules": [
-            {
-                "t": "set",
-                "p": "article",
-                "pt": "msg",
-                "to": "payload",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "article.url",
-                "pt": "msg",
-                "to": "\"https://journals.sagepub.com\" & payload.link",
-                "tot": "jsonata"
-            },
-            {
-                "t": "set",
-                "p": "article.source",
-                "pt": "msg",
-                "to": "Sage Pub",
-                "tot": "str"
-            },
-            {
-                "t": "set",
-                "p": "article.description",
-                "pt": "msg",
-                "to": "not available",
-                "tot": "str"
-            },
-            {
-                "t": "set",
-                "p": "article.title",
-                "pt": "msg",
-                "to": "$trim(article.title)",
-                "tot": "jsonata"
-            },
-            {
-                "t": "set",
-                "p": "payload.pubdate",
-                "pt": "msg",
-                "to": "$split($trim($replace(article.pubdate, \", First Published \", \" \")),\".\",1)",
-                "tot": "jsonata"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 960,
-        "y": 80,
-        "wires": [
-            [
-                "7ebc76ff78b0ed0a"
-            ]
-        ]
-    },
-    {
-        "id": "7ebc76ff78b0ed0a",
-        "type": "change",
-        "z": "b86ce62c06906565",
-        "name": "fix pubdate",
-        "rules": [
-            {
-                "t": "set",
-                "p": "payload.pubdate",
-                "pt": "msg",
-                "to": "$replace($replace(payload.pubdate[0],\" \", \"-\"),\",\",\"\")",
-                "tot": "jsonata"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 1150,
-        "y": 80,
-        "wires": [
-            [
-                "9ef74ad7d2efd2c5"
-            ]
-        ]
-    },
-    {
-        "id": "2fa83b34fe97062f",
-        "type": "subflow:acf883d8.84eea",
-        "z": "b86ce62c06906565",
-        "name": "Insert SQL",
-        "env": [],
-        "x": 810,
-        "y": 180,
-        "wires": [
-            [
-                "1824593762bc0e59",
-                "f86a1ec2f72306b7"
-            ]
-        ]
-    },
-    {
-        "id": "2d26aabd19e46970",
-        "type": "cheerio",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "tag": ".searchResultItem",
-        "ret": "object",
-        "as": "single",
-        "map": [
-            {
-                "search": "h2",
-                "ret": "text",
-                "replace": "title",
-                "attr": ""
-            },
-            {
-                "search": "h2>span>a",
-                "ret": "attribute",
-                "replace": "link",
-                "attr": "href"
-            },
-            {
-                "search": "div.hlFld-Abstract.preview-abstract",
-                "ret": "text",
-                "replace": "description",
-                "attr": ""
-            },
-            {
-                "search": "span.publication-meta",
-                "ret": "text",
-                "replace": "pubdate",
-                "attr": ""
-            }
-        ],
-        "xmlMode": false,
-        "decodeEntities": false,
-        "lowerCaseTags": false,
-        "lowerCaseAttributeNames": true,
-        "recognizeCDATA": false,
-        "recognizeSelfClosing": false,
-        "x": 570,
-        "y": 80,
-        "wires": [
-            [
-                "fe1747c821af436b",
-                "4b6c3e9e170e37ea"
-            ]
-        ]
-    },
-    {
-        "id": "9ef74ad7d2efd2c5",
-        "type": "moment",
-        "z": "b86ce62c06906565",
-        "name": "format pubdate",
-        "topic": "",
-        "input": "payload.pubdate",
-        "inputType": "msg",
-        "inTz": "Europe/Lisbon",
-        "adjAmount": 0,
-        "adjType": "days",
-        "adjDir": "add",
-        "format": "",
-        "locale": "en-US",
-        "output": "article.pubdate",
-        "outputType": "msg",
-        "outTz": "Europe/Lisbon",
-        "x": 640,
-        "y": 180,
-        "wires": [
-            [
-                "2fa83b34fe97062f"
-            ]
-        ]
-    },
-    {
-        "id": "636814b1a66060a9",
-        "type": "subflow:822a1abe384d181e",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "x": 1450,
-        "y": 300,
-        "wires": [
-            [
-                "d6e894e01c01a60d"
-            ]
-        ]
-    },
-    {
-        "id": "d6e894e01c01a60d",
-        "type": "debug",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 1740,
-        "y": 340,
-        "wires": []
-    },
-    {
-        "id": "e804c73811e4a00f",
-        "type": "comment",
-        "z": "b86ce62c06906565",
-        "name": "ADD SAGEPUB SUMMARY",
-        "info": "",
-        "x": 200,
-        "y": 240,
-        "wires": []
-    },
-    {
-        "id": "e8b0bcc933a0a25b",
-        "type": "split",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "splt": "\\n",
-        "spltType": "str",
-        "arraySplt": 1,
-        "arraySpltType": "len",
-        "stream": false,
-        "addname": "",
-        "x": 540,
-        "y": 280,
-        "wires": [
-            [
-                "8ac915a7fea20ed7"
-            ]
-        ]
-    },
-    {
-        "id": "dc9c9507dc1a5636",
-        "type": "http request",
-        "z": "b86ce62c06906565",
-        "name": "SAGEPUB",
-        "method": "GET",
-        "ret": "txt",
-        "paytoqs": "ignore",
-        "url": "",
-        "tls": "e3876559.c845b8",
-        "persist": false,
-        "proxy": "",
-        "authType": "",
-        "x": 860,
-        "y": 320,
-        "wires": [
-            [
-                "f3d0d5b970850bd7"
-            ]
-        ]
-    },
-    {
-        "id": "e9127979d212e6f4",
-        "type": "change",
-        "z": "b86ce62c06906565",
-        "name": "set fields",
-        "rules": [
-            {
-                "t": "set",
-                "p": "url",
-                "pt": "msg",
-                "to": "payload.link",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "article_id",
-                "pt": "msg",
-                "to": "payload.article_id",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 690,
-        "y": 320,
-        "wires": [
-            [
-                "dc9c9507dc1a5636"
-            ]
-        ]
-    },
-    {
-        "id": "2a796f8004890512",
-        "type": "template",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "field": "topic",
-        "fieldType": "msg",
-        "format": "handlebars",
-        "syntax": "mustache",
-        "template": "UPDATE articles\nset summary = \"{{{payload.summary}}}\"\nwhere article_id = {{article_id}};",
-        "output": "str",
-        "x": 1130,
-        "y": 320,
-        "wires": [
-            [
-                "636814b1a66060a9"
-            ]
-        ]
-    },
-    {
-        "id": "0f5e3c4bfdc9df1c",
-        "type": "inject",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
-        "repeat": "7200",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payloadType": "date",
-        "x": 140,
-        "y": 360,
-        "wires": [
-            [
-                "bf70227a598274c8"
-            ]
-        ]
-    },
-    {
-        "id": "8ac915a7fea20ed7",
-        "type": "delay",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "pauseType": "rate",
-        "timeout": "5",
-        "timeoutUnits": "seconds",
-        "rate": "1",
-        "nbRateUnits": "30",
-        "rateUnits": "second",
-        "randomFirst": "1",
-        "randomLast": "5",
-        "randomUnits": "seconds",
-        "drop": false,
-        "allowrate": false,
-        "outputs": 1,
-        "x": 530,
-        "y": 340,
-        "wires": [
-            [
-                "e9127979d212e6f4"
-            ]
-        ]
-    },
-    {
-        "id": "f3d0d5b970850bd7",
-        "type": "cheerio",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "tag": "body",
-        "ret": "object",
-        "as": "multi",
-        "map": [
-            {
-                "search": "div.hlFld-Abstract",
-                "ret": "text",
-                "replace": "summary",
-                "attr": ""
-            }
-        ],
-        "xmlMode": false,
-        "decodeEntities": false,
-        "lowerCaseTags": false,
-        "lowerCaseAttributeNames": false,
-        "recognizeCDATA": false,
-        "recognizeSelfClosing": false,
-        "x": 1000,
-        "y": 320,
-        "wires": [
-            [
-                "2a796f8004890512"
-            ]
-        ]
-    },
-    {
-        "id": "bf70227a598274c8",
-        "type": "sqlite",
-        "z": "b86ce62c06906565",
-        "mydb": "9ccc1658.e12858",
-        "sqlquery": "fixed",
-        "sql": "SELECT * FROM articles \nWHERE source = \"Sage Pub\" \nAND summary =\"not available\";",
-        "name": "",
-        "x": 380,
-        "y": 280,
-        "wires": [
-            [
-                "e8b0bcc933a0a25b"
-            ]
-        ]
-    },
-    {
-        "id": "2e929cc9a8721fe1",
-        "type": "debug",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "article_id",
-        "targetType": "msg",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 800,
-        "y": 700,
-        "wires": []
-    },
-    {
-        "id": "ad30093742a3f4e7",
-        "type": "sqlite",
-        "z": "b86ce62c06906565",
-        "mydb": "9ccc1658.e12858",
-        "sqlquery": "fixed",
-        "sql": "select article_id,link from articles where source = \"Sage Pub\" and published_date = \"\" limit 1;",
-        "name": "",
-        "x": 350,
-        "y": 540,
-        "wires": [
-            [
-                "5676e3ac9177ad4b"
-            ]
-        ]
-    },
-    {
-        "id": "5676e3ac9177ad4b",
-        "type": "change",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "rules": [
-            {
-                "t": "set",
-                "p": "article_id",
-                "pt": "msg",
-                "to": "payload[0].article_id",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "payload",
-                "pt": "msg",
-                "to": "payload[0].link",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "url",
-                "pt": "msg",
-                "to": "payload",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 540,
-        "y": 540,
-        "wires": [
-            [
-                "dad9e32dbb540021"
-            ]
-        ]
-    },
-    {
-        "id": "3eeda7a8a3aac7a9",
-        "type": "sqlite",
-        "z": "b86ce62c06906565",
-        "mydb": "9ccc1658.e12858",
-        "sqlquery": "msg.topic",
-        "sql": "",
-        "name": "",
-        "x": 590,
-        "y": 700,
-        "wires": [
-            [
-                "2e929cc9a8721fe1"
-            ]
-        ]
-    },
-    {
-        "id": "caada881b7c7dfa9",
-        "type": "comment",
-        "z": "b86ce62c06906565",
-        "name": "populate missing values of published date not working",
-        "info": "",
-        "x": 310,
-        "y": 480,
-        "wires": []
-    },
-    {
-        "id": "dad9e32dbb540021",
-        "type": "http request",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "method": "GET",
-        "ret": "txt",
-        "paytoqs": false,
-        "url": "",
-        "persist": false,
-        "authType": "",
-        "senderr": false,
-        "x": 130,
-        "y": 620,
-        "wires": [
-            [
-                "ec8f71035f5551b8"
-            ]
-        ]
-    },
-    {
-        "id": "ec8f71035f5551b8",
-        "type": "cheerio",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "tag": ".publicationContentEpubDate.dates",
-        "ret": "html",
-        "as": "single",
-        "map": [
-            {
-                "search": "",
-                "ret": "html",
-                "replace": "",
-                "attr": ""
-            }
-        ],
-        "xmlMode": false,
-        "decodeEntities": false,
-        "lowerCaseTags": false,
-        "lowerCaseAttributeNames": false,
-        "recognizeCDATA": false,
-        "recognizeSelfClosing": false,
-        "x": 390,
-        "y": 620,
-        "wires": [
-            [
-                "e7b46a42906e8062"
-            ]
-        ]
-    },
-    {
-        "id": "e7b46a42906e8062",
-        "type": "string",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "methods": [
-            {
-                "name": "trim",
-                "params": []
-            },
-            {
-                "name": "delLeftMost",
-                "params": [
-                    {
-                        "type": "str",
-                        "value": "<b>First Published </b> "
-                    }
-                ]
-            }
-        ],
-        "prop": "payload[0]",
-        "propout": "payload",
-        "object": "msg",
-        "objectout": "msg",
-        "x": 610,
-        "y": 620,
-        "wires": [
-            [
-                "a3d88ffb176d599b",
-                "f86a1ec2f72306b7"
-            ]
-        ]
-    },
-    {
-        "id": "a3d88ffb176d599b",
-        "type": "moment",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "topic": "",
-        "input": "payload",
-        "inputType": "msg",
-        "inTz": "Europe/Lisbon",
-        "adjAmount": "1",
-        "adjType": "days",
-        "adjDir": "add",
-        "format": "",
-        "locale": "POSIX",
-        "output": "",
-        "outputType": "msg",
-        "outTz": "Europe/Lisbon",
-        "x": 180,
-        "y": 700,
-        "wires": [
-            [
-                "7b754cb89275c3dd"
-            ]
-        ]
-    },
-    {
-        "id": "7b754cb89275c3dd",
-        "type": "template",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "field": "topic",
-        "fieldType": "msg",
-        "format": "handlebars",
-        "syntax": "mustache",
-        "template": "update articles set published_date ='{{payload}}' where article_id  = {{article_id}};",
-        "output": "str",
-        "x": 380,
-        "y": 700,
-        "wires": [
-            [
-                "3eeda7a8a3aac7a9"
-            ]
-        ]
-    },
-    {
-        "id": "f86a1ec2f72306b7",
-        "type": "debug",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 810,
-        "y": 540,
-        "wires": []
-    },
-    {
-        "id": "1824593762bc0e59",
-        "type": "postgres",
-        "z": "b86ce62c06906565",
-        "postgresdb": "168f4567fd86d95c",
-        "name": "",
-        "output": false,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": false,
-        "x": 1060,
-        "y": 220,
-        "wires": []
-    },
-    {
-        "id": "4b6c3e9e170e37ea",
-        "type": "debug",
-        "z": "b86ce62c06906565",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 460,
-        "y": 200,
-        "wires": []
-    },
-    {
         "id": "1562388da3252879",
         "type": "feedparse",
         "z": "6143695246b35bf7",
+        "d": true,
         "name": "FASEB",
         "url": "https://faseb.onlinelibrary.wiley.com/action/showFeed?ui=0&mi=2h5krp8&type=search&feed=rss&query=%2526content%253DarticlesChapters%2526field1%253DAllField%2526publication%253D15306860%2526target%253Ddefault%2526text1%253DMultiple%252BSclerosis%252BOR%252Bautoimmune%252Bencephalomyelitis%252BOR%252Bencephalomyelitis%252BOR%252Bimmune%252Btolerance%252BOR%252Bmyelin",
         "interval": "67",
@@ -10630,6 +9660,7 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "",
+        "payload": "",
         "payloadType": "date",
         "x": 140,
         "y": 500,
@@ -10645,7 +9676,7 @@
         "z": "73dc69858609cde2",
         "mydb": "9ccc1658.e12858",
         "sqlquery": "fixed",
-        "sql": "select trial_id,published_date,discovery_date from trials where published_date = '' limit 1;",
+        "sql": "select trial_id,published_date,discovery_date from trials where published_date = '' ;",
         "name": "",
         "x": 330,
         "y": 500,
@@ -10761,7 +9792,7 @@
         "z": "73dc69858609cde2",
         "mydb": "9ccc1658.e12858",
         "sqlquery": "fixed",
-        "sql": "select article_id,discovery_date from articles where published_date = ''limit 1;",
+        "sql": "select article_id,discovery_date from articles where published_date = '';",
         "name": "",
         "x": 320,
         "y": 720,
@@ -10862,6 +9893,7 @@
         "once": true,
         "onceDelay": 0.1,
         "topic": "",
+        "payload": "",
         "payloadType": "date",
         "x": 110,
         "y": 960,
@@ -10877,7 +9909,7 @@
         "z": "73dc69858609cde2",
         "mydb": "9ccc1658.e12858",
         "sqlquery": "fixed",
-        "sql": "SELECT * FROM  \"articles\" WHERE \"published_date\" LIKE '%Wed Dec 15 2%' ORDER BY \"article_id\" LIMIT 1 OFFSET 0;",
+        "sql": "SELECT * FROM  \"articles\" WHERE \"published_date\" LIKE '%Wed Dec 15 2%' ORDER BY \"article_id\"  ;",
         "name": "",
         "x": 300,
         "y": 960,
@@ -10970,681 +10002,6 @@
         "wires": []
     },
     {
-        "id": "87115a20c1c2cf99",
-        "type": "http in",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "url": "/gregory/crud",
-        "method": "get",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 270,
-        "y": 200,
-        "wires": [
-            [
-                "66e44c034ef2ef26"
-            ]
-        ]
-    },
-    {
-        "id": "fc34c29fb99e7989",
-        "type": "http response",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "statusCode": "",
-        "headers": {},
-        "x": 1220,
-        "y": 200,
-        "wires": []
-    },
-    {
-        "id": "b00f84561ffb733a",
-        "type": "http in",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "url": "/search",
-        "method": "get",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 250,
-        "y": 320,
-        "wires": [
-            [
-                "04353f99a1069a9b",
-                "402978af07b91f0b"
-            ]
-        ]
-    },
-    {
-        "id": "04353f99a1069a9b",
-        "type": "function",
-        "z": "9297a3d188e4e9d4",
-        "name": "search-query",
-        "func": "msg.topic=\"select  article_id, discovery_date, title, summary, link, published_date, source, relevant, ml_prediction_lr,ml_prediction_gnb, sent from articles ORDER BY article_id desc\";\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 490,
-        "y": 320,
-        "wires": [
-            [
-                "f744f26b37f36a46",
-                "0a5f1e358aaf2c6a"
-            ]
-        ]
-    },
-    {
-        "id": "f4ecdbcb802e308e",
-        "type": "http response",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "statusCode": "",
-        "headers": {},
-        "x": 1230,
-        "y": 320,
-        "wires": []
-    },
-    {
-        "id": "5e59d8fa2752e970",
-        "type": "function",
-        "z": "9297a3d188e4e9d4",
-        "name": "search-response",
-        "func": "return msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "x": 885,
-        "y": 320,
-        "wires": [
-            [
-                "912b76475830da4a",
-                "f4ecdbcb802e308e"
-            ]
-        ]
-    },
-    {
-        "id": "4244430e6c810183",
-        "type": "http in",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "url": "/insert",
-        "method": "post",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 250,
-        "y": 525,
-        "wires": [
-            [
-                "0796222b8323caf0",
-                "7e2472cb7c275402"
-            ]
-        ]
-    },
-    {
-        "id": "a2555ea476373741",
-        "type": "function",
-        "z": "9297a3d188e4e9d4",
-        "name": "insert-response",
-        "func": "msg.payload=msg.result;\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "x": 875,
-        "y": 525,
-        "wires": [
-            [
-                "7e3aa65b45f2ae52"
-            ]
-        ]
-    },
-    {
-        "id": "0796222b8323caf0",
-        "type": "function",
-        "z": "9297a3d188e4e9d4",
-        "name": "insert-query",
-        "func": "msg.topic=\"INSERT INTO articles (discovery_date,link,published_date,relevant,source,summary,title) VALUES ('\" + msg.payload.discovery_date + \"','\" + msg.payload.link + \"','\" + msg.payload.published_date + \"','\" + msg.payload.relevant + \"','\" + msg.payload.source + \"','\" + msg.payload.summary + \"','\" + msg.payload.title + \"');\"\nreturn msg;\n",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "x": 490,
-        "y": 525,
-        "wires": [
-            [
-                "5ca303ce2df4958f",
-                "e8d1f32c7a7249e8"
-            ]
-        ]
-    },
-    {
-        "id": "7e3aa65b45f2ae52",
-        "type": "http response",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "x": 1220,
-        "y": 525,
-        "wires": []
-    },
-    {
-        "id": "25e521fd09e329e0",
-        "type": "function",
-        "z": "9297a3d188e4e9d4",
-        "name": "lastname-query",
-        "func": "msg.topic=\"SELECT article_id, title as value FROM articles\";\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "x": 500,
-        "y": 420,
-        "wires": [
-            [
-                "800e1f13f846157a"
-            ]
-        ]
-    },
-    {
-        "id": "e8104c57db23c57d",
-        "type": "function",
-        "z": "9297a3d188e4e9d4",
-        "name": "lastname-response",
-        "func": "return msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "x": 885,
-        "y": 420,
-        "wires": [
-            [
-                "24db2a5350d0af26",
-                "8a948f4cad0df6ac"
-            ]
-        ]
-    },
-    {
-        "id": "5cbbbe5cf566f1b3",
-        "type": "http in",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "url": "/search/prijmeni",
-        "method": "get",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 270,
-        "y": 440,
-        "wires": [
-            [
-                "25e521fd09e329e0",
-                "99f7f3e9fea11a82"
-            ]
-        ]
-    },
-    {
-        "id": "24db2a5350d0af26",
-        "type": "http response",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "statusCode": "",
-        "headers": {},
-        "x": 1220,
-        "y": 420,
-        "wires": []
-    },
-    {
-        "id": "a7bf8a58bb2c9827",
-        "type": "http in",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "url": "/delete",
-        "method": "post",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 250,
-        "y": 800,
-        "wires": [
-            [
-                "b33ef94bf85452a0",
-                "cdb10d89fb6efbec"
-            ]
-        ]
-    },
-    {
-        "id": "68967d7e44cf8d7c",
-        "type": "function",
-        "z": "9297a3d188e4e9d4",
-        "name": "delete-response",
-        "func": "msg.payload=msg.result;\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "x": 875,
-        "y": 800,
-        "wires": [
-            [
-                "ad13e04697ff461d"
-            ]
-        ]
-    },
-    {
-        "id": "b33ef94bf85452a0",
-        "type": "function",
-        "z": "9297a3d188e4e9d4",
-        "name": "delete-query",
-        "func": "msg.topic=\"DELETE FROM articles WHERE article_id='\" + msg.payload.id + \"'\";\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "x": 490,
-        "y": 800,
-        "wires": [
-            [
-                "3f4d2ed459313b9c",
-                "e46a5949cc52847c"
-            ]
-        ]
-    },
-    {
-        "id": "ad13e04697ff461d",
-        "type": "http response",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "x": 1220,
-        "y": 800,
-        "wires": []
-    },
-    {
-        "id": "ca94f475a8197f86",
-        "type": "http in",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "url": "/update",
-        "method": "post",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 250,
-        "y": 695,
-        "wires": [
-            [
-                "1ebd221ec50c3406"
-            ]
-        ]
-    },
-    {
-        "id": "c40b6669579edff4",
-        "type": "function",
-        "z": "9297a3d188e4e9d4",
-        "name": "update-response",
-        "func": "msg.payload=msg.result;\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "x": 995,
-        "y": 695,
-        "wires": [
-            [
-                "f553d93e8e287a57",
-                "a708a0e3f89b5d35"
-            ]
-        ]
-    },
-    {
-        "id": "ca8e2ee51918d82d",
-        "type": "function",
-        "z": "9297a3d188e4e9d4",
-        "name": "update-query",
-        "func": "msg.topic=\"UPDATE articles SET discovery_date = '\" + msg.payload.discovery_date + \"', link = '\" +  msg.payload.link + \"', published_date = '\" + msg.payload.published_date + \"', relevant = '\" + msg.payload.relevant + \"', source = '\" + msg.payload.source + \"', summary = '\" + msg.payload.summary + \"', title ='\" + msg.payload.title + \"', sent = '\" + msg.payload.sent +\"' WHERE article_id='\" + msg.payload.article_id + \"';\";\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 600,
-        "y": 680,
-        "wires": [
-            [
-                "6a4e1ad79bb6d972",
-                "69123a8ae21c34ce"
-            ]
-        ]
-    },
-    {
-        "id": "f553d93e8e287a57",
-        "type": "http response",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "x": 1330,
-        "y": 695,
-        "wires": []
-    },
-    {
-        "id": "f744f26b37f36a46",
-        "type": "sqlite",
-        "z": "9297a3d188e4e9d4",
-        "mydb": "9ccc1658.e12858",
-        "sqlquery": "msg.topic",
-        "sql": "",
-        "name": "wtest",
-        "x": 670,
-        "y": 300,
-        "wires": [
-            [
-                "5e59d8fa2752e970",
-                "e89c32d96669ac43"
-            ]
-        ]
-    },
-    {
-        "id": "800e1f13f846157a",
-        "type": "sqlite",
-        "z": "9297a3d188e4e9d4",
-        "mydb": "9ccc1658.e12858",
-        "sqlquery": "msg.topic",
-        "sql": "",
-        "name": "wtest",
-        "x": 670,
-        "y": 420,
-        "wires": [
-            [
-                "e8104c57db23c57d"
-            ]
-        ]
-    },
-    {
-        "id": "5ca303ce2df4958f",
-        "type": "sqlite",
-        "z": "9297a3d188e4e9d4",
-        "mydb": "9ccc1658.e12858",
-        "sqlquery": "msg.topic",
-        "sql": "",
-        "name": "wtest",
-        "x": 670,
-        "y": 525,
-        "wires": [
-            [
-                "a2555ea476373741"
-            ]
-        ]
-    },
-    {
-        "id": "6a4e1ad79bb6d972",
-        "type": "sqlite",
-        "z": "9297a3d188e4e9d4",
-        "mydb": "9ccc1658.e12858",
-        "sqlquery": "msg.topic",
-        "sql": "",
-        "name": "wtest",
-        "x": 780,
-        "y": 695,
-        "wires": [
-            [
-                "c40b6669579edff4",
-                "e9f2ee41f30e5c0d"
-            ]
-        ]
-    },
-    {
-        "id": "3f4d2ed459313b9c",
-        "type": "sqlite",
-        "z": "9297a3d188e4e9d4",
-        "mydb": "9ccc1658.e12858",
-        "sqlquery": "msg.topic",
-        "sql": "",
-        "name": "wtest",
-        "x": 670,
-        "y": 800,
-        "wires": [
-            [
-                "68967d7e44cf8d7c",
-                "f3d51440186bae4f"
-            ]
-        ]
-    },
-    {
-        "id": "912b76475830da4a",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 1110,
-        "y": 240,
-        "wires": []
-    },
-    {
-        "id": "0a5f1e358aaf2c6a",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 690,
-        "y": 380,
-        "wires": []
-    },
-    {
-        "id": "99f7f3e9fea11a82",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 490,
-        "y": 460,
-        "wires": []
-    },
-    {
-        "id": "7e2472cb7c275402",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 487,
-        "y": 571,
-        "wires": []
-    },
-    {
-        "id": "1ebd221ec50c3406",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": false,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 490,
-        "y": 746,
-        "wires": []
-    },
-    {
-        "id": "402978af07b91f0b",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 320,
-        "y": 380,
-        "wires": []
-    },
-    {
-        "id": "cdb10d89fb6efbec",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 490,
-        "y": 886,
-        "wires": []
-    },
-    {
-        "id": "e46a5949cc52847c",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 730,
-        "y": 886,
-        "wires": []
-    },
-    {
-        "id": "f3d51440186bae4f",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 980,
-        "y": 886,
-        "wires": []
-    },
-    {
-        "id": "8a948f4cad0df6ac",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 1230,
-        "y": 460,
-        "wires": []
-    },
-    {
-        "id": "e89c32d96669ac43",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 850,
-        "y": 240,
-        "wires": []
-    },
-    {
-        "id": "e8d1f32c7a7249e8",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 690,
-        "y": 580,
-        "wires": []
-    },
-    {
-        "id": "69123a8ae21c34ce",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "topic",
-        "targetType": "msg",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 790,
-        "y": 640,
-        "wires": []
-    },
-    {
-        "id": "66e44c034ef2ef26",
-        "type": "template",
-        "z": "9297a3d188e4e9d4",
-        "name": "web-template",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "handlebars",
-        "syntax": "mustache",
-        "template": "<!DOCTYPE html>\n<html lang=\"en\">\n   <head>\n      <!-- The jQuery library is a prerequisite for all jqSuite products -->\n      <script type=\"text/ecmascript\" src=\"https://www.guriddo.net/demo/js/jquery.min.js\"></script> \n      <!-- We support more than 40 localizations -->\n      <script type=\"text/ecmascript\" src=\"https://www.guriddo.net/demo/js/trirand/i18n/grid.locale-en.js\"></script>\n      <!-- This is the Javascript file of jqGrid -->   \n      <script type=\"text/ecmascript\" src=\"https://www.guriddo.net/demo/js/trirand/jquery.jqGrid.min.js\"></script>\n      <!-- This is the localization file of the grid controlling messages, labels, etc.\n      <!-- A link to a jQuery UI ThemeRoller theme, more than 22 built-in and many more custom -->\n      <link rel=\"stylesheet\" type=\"text/css\" media=\"screen\" href=\"https://struts.jgeppert.com/struts2-jquery-grid-showcase/themes/showcase/jquery-ui.css\" />\n      <!-- The link to the CSS that the grid needs -->\n      <link rel=\"stylesheet\" type=\"text/css\" media=\"screen\" href=\"https://www.guriddo.net/demo/css/trirand/ui.jqgrid.css\" />\n      <meta charset=\"utf-8\" />\n      <title>CRUD with jqGrid</title>\n      <script type=\"text/javascript\"></script>\n      \n   </head>\n   <body>\n      <table id=\"jqGrid\"></table>\n      <div id=\"jqGridPager\"></div>\n      <script type=\"text/javascript\"> \n         $(document).ready(function () {\n             $(\"#jqGrid\").jqGrid({\n                 url: '/search',\n                 mtype: \"GET\",\n                 datatype: \"json\",\n                 autowidth: true,\n                 \n                 colModel: [\n                 // article_id,discovery_date,link,published_date,relevant,source,summary,title,sent\n                     { label: 'article_id', name: 'article_id', key: true, search: false, width: 10},\n                     { label: 'discovery_date', name: 'discovery_date', width: 50, editable: true, formoptions: { colpos: 1, rowpos: 1 } },\n                     { label: 'link', name: 'link', width: 150, editable: true, formoptions: { colpos: 1, rowpos: 1 } },\n                     { label: 'published_date', name: 'published_date', width: 50, editable: true, formoptions: { colpos: 1, rowpos: 1 } },\n                     { label: 'relevant', name: 'relevant', editable: true, width:25, formoptions: { colpos: 2, rowpos: 1 } },\n                     { label: 'source', name: 'source', editable: true, width:50, formoptions: { colpos: 2, rowpos: 1 } },\n                     { label: 'ml_prediction_gnb', name: 'ml_prediction_gnb', editable: true, width:10, formoptions: { colpos: 2, rowpos: 1 } },\n                     { label: 'ml_prediction_lr', name: 'ml_prediction_lr', editable: true,width:10, formoptions: { colpos: 2, rowpos: 1 } },\n                     { label: 'title', name: 'title', width: 150, editable: true, formoptions: { colpos: 1, rowpos: 1 } },\n                     { label: 'summary', name: 'summary', width: 15, editable: true, formoptions: { colpos: 1, rowpos: 1 } }\n],\n                 width: 500,\n                 height: 'auto',\n                 rowNum: 30,\n                 loadonce: true,\n                 viewrecords: true,\n                 onSelectRow: editRow, // the javascript function to call on row click. will ues to to put the row in edit mode                 \n                 pager: \"#jqGridPager\"\n             });\n             \n             $('#jqGrid').navGrid('#jqGridPager',\n                 // The buttons to appear on the toolbar of the grid\n                 { edit: true, add: true, del: true, search: true, refresh: true, position: \"left\", cloneToTop: true },\n                 \n                 // Options for the Edit Dialog\n                 {\n                     url: '/update',\n                     editCaption: \"The Edit Dialog\",\n                     recreateForm: true,\n\t\t\t\t\t //checkOnUpdate : true,\n\t\t\t\t\t //checkOnSubmit : true,\n\t\t\t\t\t beforeSubmit : function( postdata, form , oper) {\n\t\t\t\t\t\t if(confirm('Are you sure you want to update this information?') ) {\n\t\t\t\t\t\t\t // Do something\n\t\t\t\t\t\t \t return [true,'/update'];\n\t\t\t\t\t\t } else {\n\t\t\t\t\t\t\treturn [false, 'Update failed!'];\n\t\t\t\t\t\t }\n\t\t\t\t\t },\n                     afterSubmit: function () {\n                         $(this).jqGrid(\"setGridParam\", {datatype: 'json'});\n                         return [true];\n                     },\n                     closeAfterEdit: true,\n                     errorTextFormat: function (data) {\n                         return 'Error: ' + data.responseText\n                     }\n                 },\n                 // Options for the Add Dialog\n                 {\n                     url: '/insert',\n                     addCaption: \"Add Dialog\",\n                     afterSubmit: function () {\n                         $(this).jqGrid(\"setGridParam\", {datatype: 'json'});\n                         return [true];\n                     },\n                     closeAfterAdd: true,\n                     recreateForm: true,\n                     errorTextFormat: function (data) {\n                         return 'Error: ' + data.responseText\n                     }\n                 },\n                 // Options for the Delete Dialog\n                 {   \n                     url: '/delete',\n                     errorTextFormat: function (data) {\n                         return 'Error: ' + data.responseText\n                     }\n             });\n           //$(\"#jqGrid\").jqGrid('filterToolbar', { stringResult: true, searchOnEnter: true });\n            \n            var lastSelection;\n            editparameters = {\n\t            \"keys\" : false,\n\t            \"oneditfunc\" : null,\n\t            \"successfunc\" : null,\n\t            \"url\" : '/update',\n                \"extraparam\" : {},\n\t            \"aftersavefunc\" : null,\n\t            \"errorfunc\": null,\n\t            \"afterrestorefunc\" : null,\n\t            \"restoreAfterError\" : true,\n\t            \"mtype\" : \"POST\"\n            }\n            function editRow(id) {\n                if (id && id !== lastSelection) {\n                    var grid = $(\"#jqGrid\");\n                    grid.jqGrid('restoreRow',lastSelection);\n                    grid.jqGrid('editRow',id, {\n\t\t\t\t\t\tkeys: true,\n\t\t\t\t\t\tonEnter : function(rowid, options, event) {\n\t\t\t\t\t\t\tif (confirm(\"Save the row with ID: \"+rowid) === true) {\n\t\t\t\t\t\t\t   $(this).jqGrid(\"saveRow\", rowid, editparameters );\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t});\n                    lastSelection = id;\n                }\n            }\n           \n         });\n      </script>\n   </body>\n</html>",
-        "x": 500,
-        "y": 200,
-        "wires": [
-            [
-                "fc34c29fb99e7989"
-            ]
-        ]
-    },
-    {
-        "id": "534507c76ba74f39",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 690,
-        "y": 760,
-        "wires": []
-    },
-    {
-        "id": "a708a0e3f89b5d35",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 1200,
-        "y": 640,
-        "wires": []
-    },
-    {
-        "id": "e9f2ee41f30e5c0d",
-        "type": "debug",
-        "z": "9297a3d188e4e9d4",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "x": 1000,
-        "y": 640,
-        "wires": []
-    },
-    {
         "id": "0fdc482676b45961",
         "type": "http in",
         "z": "27add5de02c88e84",
@@ -11653,8 +10010,8 @@
         "method": "post",
         "upload": false,
         "swaggerDoc": "",
-        "x": 210,
-        "y": 180,
+        "x": 120,
+        "y": 60,
         "wires": [
             [
                 "f6c934b7d92ce89f",
@@ -11686,8 +10043,8 @@
         "name": "",
         "statusCode": "200",
         "headers": {},
-        "x": 770,
-        "y": 160,
+        "x": 380,
+        "y": 60,
         "wires": []
     },
     {
@@ -11918,5 +10275,767 @@
                 "e2fef85a349544d2"
             ]
         ]
+    },
+    {
+        "id": "d9d649b557d10771",
+        "type": "http request",
+        "z": "b86ce62c06906565",
+        "name": "journals.sagepub",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://journals.sagepub.com/action/doSearch?AllField=multiple+sclerosis&SeriesKey=msja&content=articlesChapters&countTerms=true&target=default&sortBy=Ppub&startPage=&ContentItemType=research-article",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "senderr": false,
+        "x": 350,
+        "y": 80,
+        "wires": [
+            [
+                "2d26aabd19e46970",
+                "4b6c3e9e170e37ea"
+            ]
+        ]
+    },
+    {
+        "id": "3ce9b540da30b614",
+        "type": "inject",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "source",
+                "v": "9",
+                "vt": "num"
+            }
+        ],
+        "repeat": "12000",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "99",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 80,
+        "wires": [
+            [
+                "d9d649b557d10771"
+            ]
+        ]
+    },
+    {
+        "id": "fe1747c821af436b",
+        "type": "split",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "article.key",
+        "x": 790,
+        "y": 80,
+        "wires": [
+            [
+                "cdb2d4ef2deb6787"
+            ]
+        ]
+    },
+    {
+        "id": "cdb2d4ef2deb6787",
+        "type": "change",
+        "z": "b86ce62c06906565",
+        "name": "set source SagePub",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article",
+                "pt": "msg",
+                "to": "payload",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article.url",
+                "pt": "msg",
+                "to": "\"https://journals.sagepub.com\" & payload.link",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "Sage Pub",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.description",
+                "pt": "msg",
+                "to": "not available",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "article.title",
+                "pt": "msg",
+                "to": "$trim(article.title)",
+                "tot": "jsonata"
+            },
+            {
+                "t": "set",
+                "p": "payload.pubdate",
+                "pt": "msg",
+                "to": "$split($trim($replace(article.pubdate, \", First Published \", \" \")),\".\",1)",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 960,
+        "y": 80,
+        "wires": [
+            [
+                "7ebc76ff78b0ed0a"
+            ]
+        ]
+    },
+    {
+        "id": "7ebc76ff78b0ed0a",
+        "type": "change",
+        "z": "b86ce62c06906565",
+        "name": "fix pubdate",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload.pubdate",
+                "pt": "msg",
+                "to": "$replace($replace(payload.pubdate[0],\" \", \"-\"),\",\",\"\")",
+                "tot": "jsonata"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1150,
+        "y": 80,
+        "wires": [
+            [
+                "9ef74ad7d2efd2c5"
+            ]
+        ]
+    },
+    {
+        "id": "2fa83b34fe97062f",
+        "type": "subflow:acf883d8.84eea",
+        "z": "b86ce62c06906565",
+        "name": "Insert SQL",
+        "env": [],
+        "x": 810,
+        "y": 180,
+        "wires": [
+            [
+                "1824593762bc0e59",
+                "f86a1ec2f72306b7"
+            ]
+        ]
+    },
+    {
+        "id": "2d26aabd19e46970",
+        "type": "cheerio",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "tag": ".searchResultItem",
+        "ret": "object",
+        "as": "single",
+        "map": [
+            {
+                "search": "h2",
+                "ret": "text",
+                "replace": "title",
+                "attr": ""
+            },
+            {
+                "search": "h2>span>a",
+                "ret": "attribute",
+                "replace": "link",
+                "attr": "href"
+            },
+            {
+                "search": "div.hlFld-Abstract.preview-abstract",
+                "ret": "text",
+                "replace": "description",
+                "attr": ""
+            },
+            {
+                "search": "span.publication-meta",
+                "ret": "text",
+                "replace": "pubdate",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": true,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 570,
+        "y": 80,
+        "wires": [
+            [
+                "fe1747c821af436b",
+                "4b6c3e9e170e37ea"
+            ]
+        ]
+    },
+    {
+        "id": "9ef74ad7d2efd2c5",
+        "type": "moment",
+        "z": "b86ce62c06906565",
+        "name": "format pubdate",
+        "topic": "",
+        "input": "payload.pubdate",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "en-US",
+        "output": "article.pubdate",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 640,
+        "y": 180,
+        "wires": [
+            [
+                "2fa83b34fe97062f"
+            ]
+        ]
+    },
+    {
+        "id": "636814b1a66060a9",
+        "type": "subflow:822a1abe384d181e",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "x": 1450,
+        "y": 300,
+        "wires": [
+            [
+                "d6e894e01c01a60d"
+            ]
+        ]
+    },
+    {
+        "id": "d6e894e01c01a60d",
+        "type": "debug",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1740,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "e804c73811e4a00f",
+        "type": "comment",
+        "z": "b86ce62c06906565",
+        "name": "ADD SAGEPUB SUMMARY",
+        "info": "",
+        "x": 200,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "e8b0bcc933a0a25b",
+        "type": "split",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 540,
+        "y": 280,
+        "wires": [
+            [
+                "8ac915a7fea20ed7"
+            ]
+        ]
+    },
+    {
+        "id": "dc9c9507dc1a5636",
+        "type": "http request",
+        "z": "b86ce62c06906565",
+        "name": "SAGEPUB",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 860,
+        "y": 320,
+        "wires": [
+            [
+                "f3d0d5b970850bd7"
+            ]
+        ]
+    },
+    {
+        "id": "e9127979d212e6f4",
+        "type": "change",
+        "z": "b86ce62c06906565",
+        "name": "set fields",
+        "rules": [
+            {
+                "t": "set",
+                "p": "url",
+                "pt": "msg",
+                "to": "payload.link",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "article_id",
+                "pt": "msg",
+                "to": "payload.article_id",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 690,
+        "y": 320,
+        "wires": [
+            [
+                "dc9c9507dc1a5636"
+            ]
+        ]
+    },
+    {
+        "id": "2a796f8004890512",
+        "type": "template",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nset summary = \"{{{payload.summary}}}\"\nwhere article_id = {{article_id}};",
+        "output": "str",
+        "x": 1130,
+        "y": 320,
+        "wires": [
+            [
+                "636814b1a66060a9"
+            ]
+        ]
+    },
+    {
+        "id": "0f5e3c4bfdc9df1c",
+        "type": "inject",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "7200",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 140,
+        "y": 360,
+        "wires": [
+            [
+                "bf70227a598274c8"
+            ]
+        ]
+    },
+    {
+        "id": "8ac915a7fea20ed7",
+        "type": "delay",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "30",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 530,
+        "y": 340,
+        "wires": [
+            [
+                "e9127979d212e6f4"
+            ]
+        ]
+    },
+    {
+        "id": "f3d0d5b970850bd7",
+        "type": "cheerio",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "tag": "body",
+        "ret": "object",
+        "as": "multi",
+        "map": [
+            {
+                "search": "div.hlFld-Abstract",
+                "ret": "text",
+                "replace": "summary",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": false,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 1000,
+        "y": 320,
+        "wires": [
+            [
+                "2a796f8004890512"
+            ]
+        ]
+    },
+    {
+        "id": "bf70227a598274c8",
+        "type": "sqlite",
+        "z": "b86ce62c06906565",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "SELECT * FROM articles \nWHERE source = \"Sage Pub\" \nAND summary =\"not available\";",
+        "name": "",
+        "x": 380,
+        "y": 280,
+        "wires": [
+            [
+                "e8b0bcc933a0a25b"
+            ]
+        ]
+    },
+    {
+        "id": "2e929cc9a8721fe1",
+        "type": "debug",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "article_id",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 800,
+        "y": 700,
+        "wires": []
+    },
+    {
+        "id": "ad30093742a3f4e7",
+        "type": "sqlite",
+        "z": "b86ce62c06906565",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "select article_id,link from articles where source = \"Sage Pub\" and published_date = \"\" limit 1;",
+        "name": "",
+        "x": 350,
+        "y": 540,
+        "wires": [
+            [
+                "5676e3ac9177ad4b"
+            ]
+        ]
+    },
+    {
+        "id": "5676e3ac9177ad4b",
+        "type": "change",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article_id",
+                "pt": "msg",
+                "to": "payload[0].article_id",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload[0].link",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "url",
+                "pt": "msg",
+                "to": "payload",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 540,
+        "y": 540,
+        "wires": [
+            [
+                "dad9e32dbb540021"
+            ]
+        ]
+    },
+    {
+        "id": "3eeda7a8a3aac7a9",
+        "type": "sqlite",
+        "z": "b86ce62c06906565",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 590,
+        "y": 700,
+        "wires": [
+            [
+                "2e929cc9a8721fe1"
+            ]
+        ]
+    },
+    {
+        "id": "caada881b7c7dfa9",
+        "type": "comment",
+        "z": "b86ce62c06906565",
+        "name": "populate missing values of published date not working",
+        "info": "",
+        "x": 310,
+        "y": 480,
+        "wires": []
+    },
+    {
+        "id": "dad9e32dbb540021",
+        "type": "http request",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": false,
+        "url": "",
+        "persist": false,
+        "authType": "",
+        "senderr": false,
+        "x": 130,
+        "y": 620,
+        "wires": [
+            [
+                "ec8f71035f5551b8"
+            ]
+        ]
+    },
+    {
+        "id": "ec8f71035f5551b8",
+        "type": "cheerio",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "tag": ".publicationContentEpubDate.dates",
+        "ret": "html",
+        "as": "single",
+        "map": [
+            {
+                "search": "",
+                "ret": "html",
+                "replace": "",
+                "attr": ""
+            }
+        ],
+        "xmlMode": false,
+        "decodeEntities": false,
+        "lowerCaseTags": false,
+        "lowerCaseAttributeNames": false,
+        "recognizeCDATA": false,
+        "recognizeSelfClosing": false,
+        "x": 390,
+        "y": 620,
+        "wires": [
+            [
+                "e7b46a42906e8062"
+            ]
+        ]
+    },
+    {
+        "id": "e7b46a42906e8062",
+        "type": "string",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "methods": [
+            {
+                "name": "trim",
+                "params": []
+            },
+            {
+                "name": "delLeftMost",
+                "params": [
+                    {
+                        "type": "str",
+                        "value": "<b>First Published </b> "
+                    }
+                ]
+            }
+        ],
+        "prop": "payload[0]",
+        "propout": "payload",
+        "object": "msg",
+        "objectout": "msg",
+        "x": 610,
+        "y": 620,
+        "wires": [
+            [
+                "a3d88ffb176d599b",
+                "f86a1ec2f72306b7"
+            ]
+        ]
+    },
+    {
+        "id": "a3d88ffb176d599b",
+        "type": "moment",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "topic": "",
+        "input": "payload",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": "1",
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "POSIX",
+        "output": "",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 180,
+        "y": 700,
+        "wires": [
+            [
+                "7b754cb89275c3dd"
+            ]
+        ]
+    },
+    {
+        "id": "7b754cb89275c3dd",
+        "type": "template",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "update articles set published_date ='{{payload}}' where article_id  = {{article_id}};",
+        "output": "str",
+        "x": 380,
+        "y": 700,
+        "wires": [
+            [
+                "3eeda7a8a3aac7a9"
+            ]
+        ]
+    },
+    {
+        "id": "f86a1ec2f72306b7",
+        "type": "debug",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 810,
+        "y": 540,
+        "wires": []
+    },
+    {
+        "id": "1824593762bc0e59",
+        "type": "postgres",
+        "z": "b86ce62c06906565",
+        "postgresdb": "168f4567fd86d95c",
+        "name": "",
+        "output": false,
+        "perrow": false,
+        "rowspermsg": "1",
+        "return_on_error": false,
+        "limit_queries": "0",
+        "limit_by": "payload",
+        "limit_value": "1",
+        "limit_drop_intermediate": false,
+        "limit_drop_if_in_queue": false,
+        "outputs": false,
+        "x": 1060,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "4b6c3e9e170e37ea",
+        "type": "debug",
+        "z": "b86ce62c06906565",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 460,
+        "y": 200,
+        "wires": []
     }
 ]
