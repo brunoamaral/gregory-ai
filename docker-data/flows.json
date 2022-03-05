@@ -4640,7 +4640,8 @@
         "y": 80,
         "wires": [
             [
-                "2d26aabd19e46970"
+                "2d26aabd19e46970",
+                "f86a1ec2f72306b7"
             ]
         ]
     },
@@ -6441,6 +6442,109 @@
         "statusType": "auto",
         "x": 1250,
         "y": 240,
+        "wires": []
+    },
+    {
+        "id": "1214adfc81ae6c5b",
+        "type": "change",
+        "z": "0e63a1d341727118",
+        "name": "set source ClinicalTrials",
+        "rules": [
+            {
+                "t": "set",
+                "p": "article.source",
+                "pt": "msg",
+                "to": "ClinicalTrials.gov",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 410,
+        "y": 420,
+        "wires": [
+            [
+                "125e35d3528ec5b0"
+            ]
+        ]
+    },
+    {
+        "id": "9655fd650e8c20eb",
+        "type": "template",
+        "z": "0e63a1d341727118",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "sql",
+        "syntax": "mustache",
+        "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (strftime(\"%Y-%m-%dT%H:%M:%SZ\", \"NOW\"),\"{{article.title}}\",\"{{article.description}}\",\"{{{topic}}}\",\"{{payload}}\",\"{{article.source}}\",NULL)",
+        "output": "str",
+        "x": 880,
+        "y": 420,
+        "wires": [
+            [
+                "bee29066274435ab"
+            ]
+        ]
+    },
+    {
+        "id": "5be7b056bb4e0551",
+        "type": "feedparse",
+        "z": "0e63a1d341727118",
+        "name": "clinicaltrialsregister.eu",
+        "url": "http://www.clinicaltrialsregister.eu/ctr-search/rest/feed/bydates?query=multiple+sclerosis",
+        "interval": "999",
+        "x": 180,
+        "y": 420,
+        "wires": [
+            [
+                "1214adfc81ae6c5b"
+            ]
+        ]
+    },
+    {
+        "id": "125e35d3528ec5b0",
+        "type": "moment",
+        "z": "0e63a1d341727118",
+        "name": "format pubdate",
+        "topic": "",
+        "input": "article.date",
+        "inputType": "msg",
+        "inTz": "Europe/Lisbon",
+        "adjAmount": 0,
+        "adjType": "days",
+        "adjDir": "add",
+        "format": "",
+        "locale": "en-US",
+        "output": "payload",
+        "outputType": "msg",
+        "outTz": "Europe/Lisbon",
+        "x": 620,
+        "y": 420,
+        "wires": [
+            [
+                "9655fd650e8c20eb"
+            ]
+        ]
+    },
+    {
+        "id": "bee29066274435ab",
+        "type": "debug",
+        "z": "0e63a1d341727118",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "topic",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1040,
+        "y": 440,
         "wires": []
     },
     {
@@ -8681,7 +8785,7 @@
         "fieldType": "msg",
         "format": "handlebars",
         "syntax": "mustache",
-        "template": "<!doctype html>\n<html>\n  <head>\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">\n    <title>Gregory MS update</title>\n    <style>\n@media only screen and (max-width: 620px) {\n  table.body h1 {\n    font-size: 28px !important;\n    margin-bottom: 10px !important;\n  }\n\n  table.body p,\ntable.body ul,\ntable.body ol,\ntable.body td,\ntable.body span,\ntable.body a {\n    font-size: 16px !important;\n  }\n\n  table.body .wrapper,\ntable.body .article {\n    padding: 10px !important;\n  }\n\n  table.body .content {\n    padding: 0 !important;\n  }\n\n  table.body .container {\n    padding: 0 !important;\n    width: 100% !important;\n  }\n\n  table.body .main {\n    border-left-width: 0 !important;\n    border-radius: 0 !important;\n    border-right-width: 0 !important;\n  }\n\n  table.body .btn table {\n    width: 100% !important;\n  }\n\n  table.body .btn a {\n    width: 100% !important;\n  }\n\n  table.body .img-responsive {\n    height: auto !important;\n    max-width: 100% !important;\n    width: auto !important;\n  }\n}\n@media all {\n  .ExternalClass {\n    width: 100%;\n  }\n\n  .ExternalClass,\n.ExternalClass p,\n.ExternalClass span,\n.ExternalClass font,\n.ExternalClass td,\n.ExternalClass div {\n    line-height: 100%;\n  }\n\n  .apple-link a {\n    color: inherit !important;\n    font-family: inherit !important;\n    font-size: inherit !important;\n    font-weight: inherit !important;\n    line-height: inherit !important;\n    text-decoration: none !important;\n  }\n\n  #MessageViewBody a {\n    color: inherit;\n    text-decoration: none;\n    font-size: inherit;\n    font-family: inherit;\n    font-weight: inherit;\n    line-height: inherit;\n  }\n\n  .btn-primary table td:hover {\n    background-color: #34495e !important;\n  }\n\n  .btn-primary a:hover {\n    background-color: #34495e !important;\n    border-color: #34495e !important;\n  }\n}\n</style>\n  </head>\n  <body class=\"\" style=\"background-color: #f6f6f6; font-family: sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; line-height: 1.4; margin: 0; padding: 0; -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%;\">\n    <span class=\"preheader\" style=\"color: transparent; display: none; height: 0; max-height: 0; max-width: 0; opacity: 0; overflow: hidden; mso-hide: all; visibility: hidden; width: 0;\">This is preheader text. Some clients will show this text as a preview.</span>\n    <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"body\" style=\"border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; background-color: #f6f6f6; width: 100%;\" width=\"100%\" bgcolor=\"#f6f6f6\">\n      <tr>\n        <td style=\"font-family: sans-serif; font-size: 14px; vertical-align: top;\" valign=\"top\">&nbsp;</td>\n        <td class=\"container\" style=\"font-family: sans-serif; font-size: 14px; vertical-align: top; display: block; max-width: 580px; padding: 10px; width: 580px; margin: 0 auto;\" width=\"580\" valign=\"top\">\n          <div class=\"content\" style=\"box-sizing: border-box; display: block; margin: 0 auto; max-width: 580px; padding: 10px;\">\n\n            <!-- START CENTERED WHITE CONTAINER -->\n            <table role=\"presentation\" class=\"main\" style=\"border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; background: #ffffff; border-radius: 3px; width: 100%;\" width=\"100%\">\n\n              <!-- START MAIN CONTENT AREA -->\n              <tr>\n                <td class=\"wrapper\" style=\"font-family: sans-serif; font-size: 14px; vertical-align: top; box-sizing: border-box; padding: 20px;\" valign=\"top\">\n                  <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: 100%;\" width=\"100%\">\n                    <tr>\n                      <td style=\"font-family: sans-serif; font-size: 14px; vertical-align: top;\" valign=\"top\">\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">Good Morning, %recipient_fname%, </p>\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">Here are the relevant articles we have found in the last 7 days</p>\n\n                        <h2 style=\"color: #000000; font-family: sans-serif; font-weight: 400; line-height: 1.4; margin: 0; margin-bottom: 30px;\">New Articles</h2>\n                        {{#articles}}\n\n                        <h2 style=\"color: #000000; font-family: sans-serif; font-weight: 400; line-height: 1.4; margin: 0; margin-bottom: 30px;\">{{{title}}}</h2>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\"><strong>Discovery Date</strong>: {{discovery_date}}</p>\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">\n                        <a href=\"{{{link}}}\" style=\"color: #3498db; text-decoration: underline;\">{{{link}}}</a>\n                        </p>\n\n                        ---\n\n                        {{/articles}}\n\n                        <h2 style=\"color: #000000; font-family: sans-serif; font-weight: 400; line-height: 1.4; margin: 0; margin-bottom: 30px;\">New Trials</h2>\n\n                        {{#trials}}\n\n                        <h2 style=\"color: #000000; font-family: sans-serif; font-weight: 400; line-height: 1.4; margin: 0; margin-bottom: 30px;\">{{{title}}}</h2>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\"><strong>Discovery Date</strong>: {{discovery_date}}</p>\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">\n                        <a href=\"{{link}}\" style=\"color: #3498db; text-decoration: underline;\">{{{link}}}</a>\n                        </p>\n\n                        ---\n\n                        {{/trials}}\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">For the full list, please visit <a href=\"https://gregory-ms.com/\" style=\"color: #3498db; text-decoration: underline;\">https://gregory-ms.com/</a></p>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">For adding people to this email list or further information, please contact Bruno Amaral:</p>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\"><strong>Mobile</strong>: +351 912 875 856</p>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\"><strong>Email</strong>: mail@brunoamaral.eu</p>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">If you wish to unsubscribe, follow the link below.</p>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">Best wishes fomyour friendly research bot.<br><strong>Gregory</strong></p>\n\n                      </td>\n                    </tr>\n                  </table>\n                </td>\n              </tr>\n\n            <!-- END MAIN CONTENT AREA -->\n            </table>\n            <!-- END CENTERED WHITE CONTAINER -->\n\n            <!-- START FOOTER -->\n            <div class=\"footer\" style=\"clear: both; margin-top: 10px; text-align: center; width: 100%;\">\n              <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: 100%;\" width=\"100%\">\n                <tr>\n                  <td class=\"content-block\" style=\"font-family: sans-serif; vertical-align: top; padding-bottom: 10px; padding-top: 10px; color: #999999; font-size: 12px; text-align: center;\" valign=\"top\" align=\"center\">\n                    <span class=\"apple-link\" style=\"color: #999999; font-size: 12px; text-align: center;\">Gregory MS</span>\n                    <br> For more information visit <a href=\"https://gregory-ms.com/\" style=\"text-decoration: underline; color: #999999; font-size: 12px; text-align: center;\">https://gregory-ms.com/</a>.\n                  </td>\n                </tr>\n                <tr>\n                  <td class=\"content-block powered-by\" style=\"font-family: sans-serif; vertical-align: top; padding-bottom: 10px; padding-top: 10px; color: #999999; font-size: 12px; text-align: center;\" valign=\"top\" align=\"center\">\n                    Powered by <a href=\"http://htmlemail.io\" style=\"color: #999999; font-size: 12px; text-align: center; text-decoration: none;\">HTMLemail</a>.\n                  </td>\n                </tr>\n              </table>\n            </div>\n            <!-- END FOOTER -->\n\n          </div>\n        </td>\n        <td style=\"font-family: sans-serif; font-size: 14px; vertical-align: top;\" valign=\"top\">&nbsp;</td>\n      </tr>\n    </table>\n  </body>\n</html>",
+        "template": "<!doctype html>\n<html>\n  <head>\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">\n    <title>Gregory MS update</title>\n    <style>\n@media only screen and (max-width: 620px) {\n  table.body h1 {\n    font-size: 28px !important;\n    margin-bottom: 10px !important;\n  }\n\n  table.body p,\ntable.body ul,\ntable.body ol,\ntable.body td,\ntable.body span,\ntable.body a {\n    font-size: 16px !important;\n  }\n\n  table.body .wrapper,\ntable.body .article {\n    padding: 10px !important;\n  }\n\n  table.body .content {\n    padding: 0 !important;\n  }\n\n  table.body .container {\n    padding: 0 !important;\n    width: 100% !important;\n  }\n\n  table.body .main {\n    border-left-width: 0 !important;\n    border-radius: 0 !important;\n    border-right-width: 0 !important;\n  }\n\n  table.body .btn table {\n    width: 100% !important;\n  }\n\n  table.body .btn a {\n    width: 100% !important;\n  }\n\n  table.body .img-responsive {\n    height: auto !important;\n    max-width: 100% !important;\n    width: auto !important;\n  }\n}\n@media all {\n  .ExternalClass {\n    width: 100%;\n  }\n\n  .ExternalClass,\n.ExternalClass p,\n.ExternalClass span,\n.ExternalClass font,\n.ExternalClass td,\n.ExternalClass div {\n    line-height: 100%;\n  }\n\n  .apple-link a {\n    color: inherit !important;\n    font-family: inherit !important;\n    font-size: inherit !important;\n    font-weight: inherit !important;\n    line-height: inherit !important;\n    text-decoration: none !important;\n  }\n\n  #MessageViewBody a {\n    color: inherit;\n    text-decoration: none;\n    font-size: inherit;\n    font-family: inherit;\n    font-weight: inherit;\n    line-height: inherit;\n  }\n\n  .btn-primary table td:hover {\n    background-color: #34495e !important;\n  }\n\n  .btn-primary a:hover {\n    background-color: #34495e !important;\n    border-color: #34495e !important;\n  }\n}\n</style>\n  </head>\n  <body class=\"\" style=\"background-color: #f6f6f6; font-family: sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; line-height: 1.4; margin: 0; padding: 0; -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%;\">\n    <span class=\"preheader\" style=\"color: transparent; display: none; height: 0; max-height: 0; max-width: 0; opacity: 0; overflow: hidden; mso-hide: all; visibility: hidden; width: 0;\">List of articles and new trials this week.</span>\n    <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"body\" style=\"border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; background-color: #f6f6f6; width: 100%;\" width=\"100%\" bgcolor=\"#f6f6f6\">\n      <tr>\n        <td style=\"font-family: sans-serif; font-size: 14px; vertical-align: top;\" valign=\"top\">&nbsp;</td>\n        <td class=\"container\" style=\"font-family: sans-serif; font-size: 14px; vertical-align: top; display: block; max-width: 580px; padding: 10px; width: 580px; margin: 0 auto;\" width=\"580\" valign=\"top\">\n          <div class=\"content\" style=\"box-sizing: border-box; display: block; margin: 0 auto; max-width: 580px; padding: 10px;\">\n\n            <!-- START CENTERED WHITE CONTAINER -->\n            <table role=\"presentation\" class=\"main\" style=\"border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; background: #ffffff; border-radius: 3px; width: 100%;\" width=\"100%\">\n\n              <!-- START MAIN CONTENT AREA -->\n              <tr>\n                <td class=\"wrapper\" style=\"font-family: sans-serif; font-size: 14px; vertical-align: top; box-sizing: border-box; padding: 20px;\" valign=\"top\">\n                  <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: 100%;\" width=\"100%\">\n                    <tr>\n                      <td style=\"font-family: sans-serif; font-size: 14px; vertical-align: top;\" valign=\"top\">\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">Good Morning, %recipient_fname%, </p>\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">Here are the relevant articles we have found in the last 7 days</p>\n\n                        <h2 style=\"color: #0f74c0; font-family: sans-serif; font-weight: 700; line-height: 1.4; margin: 0; margin-bottom: 30px;\">New Articles</h2>\n                        {{#articles}}\n\n                        <h2 style=\"color: #000000; font-family: sans-serif; font-weight: 400; line-height: 1.4; margin: 0; margin-bottom: 30px;\">{{{title}}}</h2>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\"><strong>Discovery Date</strong>: {{discovery_date}}</p>\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">\n                        <a href=\"{{{link}}}\" style=\"color: #3498db; text-decoration: underline;\">{{{link}}}</a>\n                        </p>\n\n                        <hr>\n\n                        {{/articles}}\n\n                        <h2 style=\"color: #0f74c0; font-family: sans-serif; font-weight: 700; line-height: 1.4; margin: 0; margin-bottom: 30px;\">New Trials</h2>\n\n                        {{#trials}}\n\n                        <h2 style=\"color: #000000; font-family: sans-serif; font-weight: 400; line-height: 1.4; margin: 0; margin-bottom: 30px;\">{{{title}}}</h2>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\"><strong>Discovery Date</strong>: {{discovery_date}}</p>\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">\n                        <a href=\"{{link}}\" style=\"color: #3498db; text-decoration: underline;\">{{{link}}}</a>\n                        </p>\n\n                        <hr>\n\n                        {{/trials}}\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">For the full list, please visit <a href=\"https://gregory-ms.com/\" style=\"color: #3498db; text-decoration: underline;\">https://gregory-ms.com/</a></p>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">For adding people to this email list or further information, please contact Bruno Amaral:</p>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\"><strong>Mobile</strong>: +351 912 875 856</p>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\"><strong>Email</strong>: mail@brunoamaral.eu</p>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">If you wish to unsubscribe, follow the link below.</p>\n\n                        <p style=\"font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;\">Best wishes fomyour friendly research bot.<br><strong>Gregory</strong></p>\n\n                      </td>\n                    </tr>\n                  </table>\n                </td>\n              </tr>\n\n            <!-- END MAIN CONTENT AREA -->\n            </table>\n            <!-- END CENTERED WHITE CONTAINER -->\n\n            <!-- START FOOTER -->\n            <div class=\"footer\" style=\"clear: both; margin-top: 10px; text-align: center; width: 100%;\">\n              <table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: 100%;\" width=\"100%\">\n                <tr>\n                  <td class=\"content-block\" style=\"font-family: sans-serif; vertical-align: top; padding-bottom: 10px; padding-top: 10px; color: #999999; font-size: 12px; text-align: center;\" valign=\"top\" align=\"center\">\n                    <span class=\"apple-link\" style=\"color: #999999; font-size: 12px; text-align: center;\">Gregory MS</span>\n                    <br> For more information visit <a href=\"https://gregory-ms.com/\" style=\"text-decoration: underline; color: #999999; font-size: 12px; text-align: center;\">https://gregory-ms.com/</a>.\n                  </td>\n                </tr>\n                <tr>\n                  <td class=\"content-block powered-by\" style=\"font-family: sans-serif; vertical-align: top; padding-bottom: 10px; padding-top: 10px; color: #999999; font-size: 12px; text-align: center;\" valign=\"top\" align=\"center\">\n                    Powered by <a href=\"http://htmlemail.io\" style=\"color: #999999; font-size: 12px; text-align: center; text-decoration: none;\">HTMLemail</a>.\n                  </td>\n                </tr>\n              </table>\n            </div>\n            <!-- END FOOTER -->\n\n          </div>\n        </td>\n        <td style=\"font-family: sans-serif; font-size: 14px; vertical-align: top;\" valign=\"top\">&nbsp;</td>\n      </tr>\n    </table>\n  </body>\n</html>",
         "output": "str",
         "x": 800,
         "y": 760,
@@ -8946,10 +9050,15 @@
         "y": 260,
         "wires": [
             [
-                "342bd369d2e46572"
+                "342bd369d2e46572",
+                "9416ca2afd5af084"
             ],
-            [],
-            []
+            [
+                "9416ca2afd5af084"
+            ],
+            [
+                "9416ca2afd5af084"
+            ]
         ]
     },
     {
@@ -9014,7 +9123,8 @@
         "y": 200,
         "wires": [
             [
-                "147fc09265d87c6d"
+                "147fc09265d87c6d",
+                "9416ca2afd5af084"
             ],
             []
         ]
@@ -9167,7 +9277,6 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "",
-        "payload": "",
         "payloadType": "date",
         "x": 120,
         "y": 260,
@@ -9443,6 +9552,103 @@
                 "359543a807cae46a"
             ]
         ]
+    },
+    {
+        "id": "9416ca2afd5af084",
+        "type": "debug",
+        "z": "3645fb833bf0fede",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 980,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "d387f4edde9edd4c",
+        "type": "inject",
+        "z": "3645fb833bf0fede",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "259200",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 110,
+        "y": 980,
+        "wires": [
+            [
+                "3ae07dc9802b9fa2"
+            ]
+        ]
+    },
+    {
+        "id": "3ae07dc9802b9fa2",
+        "type": "exec",
+        "z": "3645fb833bf0fede",
+        "command": "/usr/bin/python3 /python-ml/1_data_processor.py",
+        "addpay": "",
+        "append": "",
+        "useSpawn": "false",
+        "timer": "",
+        "winHide": false,
+        "oldrc": false,
+        "name": "",
+        "x": 390,
+        "y": 980,
+        "wires": [
+            [
+                "06295a643dcb5668"
+            ],
+            [],
+            []
+        ]
+    },
+    {
+        "id": "06295a643dcb5668",
+        "type": "exec",
+        "z": "3645fb833bf0fede",
+        "command": "/usr/bin/python3 /python-ml/2_train_models.py",
+        "addpay": "",
+        "append": "",
+        "useSpawn": "false",
+        "timer": "",
+        "winHide": false,
+        "oldrc": false,
+        "name": "",
+        "x": 800,
+        "y": 980,
+        "wires": [
+            [],
+            [],
+            []
+        ]
+    },
+    {
+        "id": "520e21f8c3e9fe1d",
+        "type": "comment",
+        "z": "3645fb833bf0fede",
+        "name": "retrain models every 72h",
+        "info": "",
+        "x": 140,
+        "y": 940,
+        "wires": []
     },
     {
         "id": "d0a67570c56bb22a",
@@ -10261,6 +10467,364 @@
             [],
             []
         ]
+    },
+    {
+        "id": "f5c751a82aa53f6b",
+        "type": "inject",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 140,
+        "y": 500,
+        "wires": [
+            [
+                "a69e6c0e6f168ff6"
+            ]
+        ]
+    },
+    {
+        "id": "a69e6c0e6f168ff6",
+        "type": "sqlite",
+        "z": "73dc69858609cde2",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "select trial_id,published_date,discovery_date from trials where published_date = '' limit 1;",
+        "name": "",
+        "x": 330,
+        "y": 500,
+        "wires": [
+            [
+                "5cc55f5e649cf407",
+                "37091faefc948117"
+            ]
+        ]
+    },
+    {
+        "id": "5cc55f5e649cf407",
+        "type": "debug",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1010,
+        "y": 440,
+        "wires": []
+    },
+    {
+        "id": "dac10b58551da14c",
+        "type": "template",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE trials\nSET published_date = \"{{payload.discovery_date}}\"\n    \nWHERE\n    trial_id = {{payload.trial_id}};",
+        "output": "str",
+        "x": 680,
+        "y": 500,
+        "wires": [
+            [
+                "5cc55f5e649cf407",
+                "68d7878fc0a5c894"
+            ]
+        ]
+    },
+    {
+        "id": "37091faefc948117",
+        "type": "split",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 550,
+        "y": 500,
+        "wires": [
+            [
+                "dac10b58551da14c"
+            ]
+        ]
+    },
+    {
+        "id": "68d7878fc0a5c894",
+        "type": "sqlite",
+        "z": "73dc69858609cde2",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 890,
+        "y": 500,
+        "wires": [
+            [
+                "5cc55f5e649cf407"
+            ]
+        ]
+    },
+    {
+        "id": "a8ebb947b8f2e0ba",
+        "type": "inject",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 140,
+        "y": 720,
+        "wires": [
+            [
+                "a1a2bd110c70c860"
+            ]
+        ]
+    },
+    {
+        "id": "a1a2bd110c70c860",
+        "type": "sqlite",
+        "z": "73dc69858609cde2",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "select article_id,discovery_date from articles where published_date = ''limit 1;",
+        "name": "",
+        "x": 320,
+        "y": 720,
+        "wires": [
+            [
+                "1cd7045e51628575"
+            ]
+        ]
+    },
+    {
+        "id": "076c83dbf5890312",
+        "type": "debug",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 970,
+        "y": 780,
+        "wires": []
+    },
+    {
+        "id": "1cd7045e51628575",
+        "type": "split",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 490,
+        "y": 720,
+        "wires": [
+            [
+                "aa296140b5a6d984"
+            ]
+        ]
+    },
+    {
+        "id": "aa296140b5a6d984",
+        "type": "template",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nSET published_date = \"{{payload.discovery_date}}\"\n    \nWHERE\n    article_id = {{payload.article_id}};",
+        "output": "str",
+        "x": 620,
+        "y": 720,
+        "wires": [
+            [
+                "076c83dbf5890312",
+                "3cfbce3447b60f03"
+            ]
+        ]
+    },
+    {
+        "id": "3cfbce3447b60f03",
+        "type": "sqlite",
+        "z": "73dc69858609cde2",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 890,
+        "y": 720,
+        "wires": [
+            [
+                "076c83dbf5890312"
+            ]
+        ]
+    },
+    {
+        "id": "4fa361a894cd1c86",
+        "type": "inject",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "1",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payloadType": "date",
+        "x": 110,
+        "y": 960,
+        "wires": [
+            [
+                "9b25d44f0da4663c"
+            ]
+        ]
+    },
+    {
+        "id": "9b25d44f0da4663c",
+        "type": "sqlite",
+        "z": "73dc69858609cde2",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "fixed",
+        "sql": "SELECT * FROM  \"articles\" WHERE \"published_date\" LIKE '%Wed Dec 15 2%' ORDER BY \"article_id\" LIMIT 1 OFFSET 0;",
+        "name": "",
+        "x": 300,
+        "y": 960,
+        "wires": [
+            [
+                "791fe1f3446e64a5"
+            ]
+        ]
+    },
+    {
+        "id": "791fe1f3446e64a5",
+        "type": "split",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "splt": "\\n",
+        "spltType": "str",
+        "arraySplt": 1,
+        "arraySpltType": "len",
+        "stream": false,
+        "addname": "",
+        "x": 470,
+        "y": 960,
+        "wires": [
+            [
+                "335196ee587790ed",
+                "14708325fe40518a"
+            ]
+        ]
+    },
+    {
+        "id": "335196ee587790ed",
+        "type": "template",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "field": "topic",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "UPDATE articles\nSET published_date = \"{{payload.discovery_date}}\"\n    \nWHERE\n    article_id = {{payload.article_id}};",
+        "output": "str",
+        "x": 660,
+        "y": 920,
+        "wires": [
+            [
+                "14708325fe40518a"
+            ]
+        ]
+    },
+    {
+        "id": "14708325fe40518a",
+        "type": "debug",
+        "z": "73dc69858609cde2",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 930,
+        "y": 1020,
+        "wires": []
+    },
+    {
+        "id": "2aae130e7eac9498",
+        "type": "sqlite",
+        "z": "73dc69858609cde2",
+        "mydb": "9ccc1658.e12858",
+        "sqlquery": "msg.topic",
+        "sql": "",
+        "name": "",
+        "x": 930,
+        "y": 940,
+        "wires": [
+            [
+                "14708325fe40518a"
+            ]
+        ]
+    },
+    {
+        "id": "2878de0777df24fd",
+        "type": "comment",
+        "z": "73dc69858609cde2",
+        "name": "helpers to migrate to Postgres",
+        "info": "",
+        "x": 150,
+        "y": 400,
+        "wires": []
     },
     {
         "id": "87115a20c1c2cf99",
