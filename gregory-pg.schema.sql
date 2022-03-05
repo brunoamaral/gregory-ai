@@ -42,7 +42,7 @@ CREATE SEQUENCE IF NOT EXISTS categories_category_id_seq;
 -- Table Definition
 CREATE TABLE "public"."categories" (
     "category_id" int4 NOT NULL DEFAULT nextval('categories_category_id_seq'::regclass),
-    "category_name" text UNIQUE,
+    "category_name" text UNIQUE NOT NULL,
     PRIMARY KEY ("category_id")
 );
 
