@@ -11,7 +11,6 @@ import os
 import pandas as pd
 import pathlib
 import requests
-import spacy 
 import subprocess
 import time
 load_dotenv()
