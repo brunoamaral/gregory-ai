@@ -162,7 +162,6 @@ for article in jsonArticles:
     title = article["title"].replace("'", "\\'").replace("\"",'\\"')
 
     if article["noun_phrases"] == None:
-        print('yeah, none')
         article["noun_phrases"] = ''
         
     # Write a file for each record
