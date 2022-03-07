@@ -159,7 +159,12 @@ with open(articles,"r") as a:
 jsonArticles = json.loads(data)
 
 for article in jsonArticles:
+    title = article["title"].replace("'", "\\'").replace("\"",'\\"')
 
+    if article["noun_phrases"] == None:
+        print('yeah, none')
+        article["noun_phrases"] = ''
+        
     # Write a file for each record
     markdownDir = pathlib.Path(articlesDir+str(article["article_id"]))
     markdownDir.mkdir(parents=True, exist_ok=True)
@@ -169,7 +174,7 @@ for article in jsonArticles:
             str(article["article_id"]) + \
             "\ndiscovery_date: " + str(article["discovery_date"]) + \
             "\ndate: " + str(article["discovery_date"]) +\
-            "\ntitle: \'" + article["title"] + "\'" +\
+            "\ntitle: \"" + title + "\"" +\
             "\nsummary: |" + \
             '\n  ' + article["summary"].replace("\n", "\n  ") +\
             "\nlink: \'" + article["link"] + "\'" +\
