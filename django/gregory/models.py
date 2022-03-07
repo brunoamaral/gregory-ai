@@ -33,8 +33,8 @@ class Articles(models.Model):
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	discovery_date = models.DateTimeField()
 	sent_to_twitter = models.BooleanField(blank=True, null=True)
-	noun_phrases = models.JSONField(blank=True, null=True)  
-	# categories = models.ManyToManyField(Categories)
+	noun_phrases = models.JSONField(blank=True, null=True)
+	#categories = models.ManyToManyField(RelArticlesCategories)
 
 	def __str__(self):
 		return str(self.article_id)
@@ -42,6 +42,7 @@ class Articles(models.Model):
 	class Meta:
 		managed = False
 		db_table = 'articles'
+		unique_together = (('title', 'link'),)
 		verbose_name_plural = 'articles'
 
 
@@ -59,7 +60,7 @@ class Entities(models.Model):
 
 
 class RelArticlesCategories(models.Model):
-	article = models.ForeignKey(Articles, models.DO_NOTHING)
+	article = models.ForeignKey(Articles, models.DO_NOTHING)	
 	category = models.ForeignKey(Categories, models.DO_NOTHING)
 
 	class Meta:
@@ -120,4 +121,5 @@ class Trials(models.Model):
 	class Meta:
 		managed = False
 		db_table = 'trials'
+		unique_together = (('title', 'link'),)
 		verbose_name_plural = 'trials'
