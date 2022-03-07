@@ -222,7 +222,7 @@ for trial in jsonTrials:
         trialdata = "---\ntrial_id: " + \
             str(trial["trial_id"]) + \
             "\ndiscovery_date: " + str(trial["discovery_date"]) + \
-            "\ndate: " + str(trial["discovery_date"]) + "Z" +\
+            "\ndate: " + str(trial["discovery_date"]) +\
             "\ntitle: \'" + trial["title"] + "\'" +\
             "\nsummary: |" + \
             '\n  ' + trial["summary"].replace("\n", "\n  ") +\
