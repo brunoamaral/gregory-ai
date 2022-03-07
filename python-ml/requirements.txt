@@ -36,6 +36,7 @@ en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_
 en-core-web-trf @ https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.2.0/en_core_web_trf-3.2.0-py3-none-any.whl
 entrypoints==0.3
 et-xmlfile==1.1.0
+feedparser==6.0.8
 filelock==3.0.12
 flatbuffers==2.0
 gast==0.4.0
@@ -44,6 +45,7 @@ GitPython==3.1.18
 google-auth==2.3.3
 google-auth-oauthlib==0.4.6
 google-pasta==0.2.0
+greenlet==1.1.2
 grpcio==1.43.0
 h5py==3.6.0
 html5lib==1.0.1
@@ -91,6 +93,7 @@ Pillow==8.3.1
 preshed==3.0.5
 prompt-toolkit==3.0.20
 protobuf==3.19.1
+psycopg2-binary==2.9.3
 ptyprocess==0.7.0
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
@@ -118,6 +121,7 @@ sacremoses==0.0.45
 scikit-learn==1.0.1
 scipy==1.7.1
 SecretStorage==2.3.1
+sgmllib3k==1.0.0
 six==1.16.0
 smart-open==5.2.0
 smmap==4.0.0
@@ -128,6 +132,7 @@ spacy-legacy==3.0.8
 spacy-loggers==1.0.1
 spacy-transformers==1.1.4
 sql-metadata==2.2.2
+SQLAlchemy==1.4.31
 sqlparse==0.4.1
 srsly==2.4.1
 stopwords==1.0.0

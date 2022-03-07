@@ -32,7 +32,7 @@ services:
       depends_on:
         - db
       networks:
-        - postgres-network
+        - traefik_proxy
 networks:
-  postgres-network:
+  traefik_proxy:
     driver: bridge

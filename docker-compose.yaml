@@ -7,6 +7,21 @@
 version: "3.7"
 
 services:
+  db:
+    image: postgres
+    restart: always
+    container_name: db
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - 5432:5432
+    volumes:
+      - ./db-data:/var/lib/postgresql/data
+    networks:
+      - traefik_proxy
+
   node-red:
     # build: .
     image: amaralbruno/gregory:latest
@@ -14,6 +29,11 @@ services:
     container_name: node-red 
     environment:
       - TZ=Europe/Lisbon
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - DB_HOST=${DB_HOST}
+
     ports:
       - "1880:1880"
     networks:
@@ -29,7 +49,26 @@ services:
       - "traefik.http.services.nodered.loadbalancer.server.port=1880"
       - "traefik.http.routers.nodered.rule=Host(`${DOMAIN_NAME}`)&&PathPrefix(`/nodered/`)"
       # - "traefik.http.routers.nodered.rule=Host(`gregory.${DOMAIN_NAME}`)"
-
+  admin:
+    container_name: admin
+    build: 
+      context: django/
+      dockerfile: Dockerfile.django
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./django:/code
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - DB_HOST=${DB_HOST}
+      - SECRET_KEY=${SECRET_KEY}
+    networks:
+      - traefik_proxy
+    depends_on:
+      - db
 
 volumes:
   flows:
