@@ -7,6 +7,8 @@ from .models import Articles, Categories, Trials, Sources, Entities
 class ArticleAdmin(admin.ModelAdmin):
     # a list of displayed columns name.
     list_display = ['article_id', 'title']
+    readonly_fields = ['ml_prediction_gnb','ml_prediction_lr','categories','entities']
+
 
 class TrialAdmin(admin.ModelAdmin):
     # a list of displayed columns name.
