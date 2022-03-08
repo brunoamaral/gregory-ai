@@ -8,6 +8,7 @@ class ArticleAdmin(admin.ModelAdmin):
     # a list of displayed columns name.
     list_display = ['article_id', 'title']
     readonly_fields = ['ml_prediction_gnb','ml_prediction_lr','categories','entities']
+    search_fields = ['article_id', 'title' ]
 
 
 class TrialAdmin(admin.ModelAdmin):
