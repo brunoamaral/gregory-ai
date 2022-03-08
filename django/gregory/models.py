@@ -24,7 +24,7 @@ class Articles(models.Model):
 	article_id = models.AutoField(primary_key=True)
 	title = models.TextField(blank=True, null=True)
 	summary = models.TextField(blank=True, null=True)
-	link = models.URLField(blank=True, null=True)
+	link = models.URLField(blank=True, null=True, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
 	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True)
 	relevant = models.BooleanField(blank=True, null=True)
