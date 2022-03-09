@@ -9,8 +9,6 @@ class Categories(models.Model):
 	category_id = models.AutoField(primary_key=True)
 	category_name = models.TextField(blank=True, null=True)
 
-	# article = models.ManyToManyField('Articles', through='RelArticlesCategories',related_name='article',related_query_name='rel_articles_categories.article_id')
-
 	def __str__(self):
 		return self.category_name
 
@@ -18,7 +16,6 @@ class Categories(models.Model):
 		managed = True
 		verbose_name_plural = 'categories'
 		db_table = 'categories'
-
 
 class Articles(models.Model):
 	article_id = models.AutoField(primary_key=True)
@@ -32,18 +29,11 @@ class Articles(models.Model):
 	ml_prediction_gnb = models.BooleanField(blank=True, null=True)
 	ml_prediction_lr = models.BooleanField(blank=True, null=True)
 	noun_phrases = models.JSONField(blank=True, null=True)
-	# category = models.ManyToManyField(Categories, ,related_query_name='rel_articles_categories.category_id')
+	categories = models.ManyToManyField(Categories)
+	entities = models.ManyToManyField('Entities')
 	sent_to_admin = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	sent_to_twitter = models.BooleanField(blank=True, null=True)
-	categories = models.ManyToManyField(Categories, 
-		# through='RelArticlesCategories',
-		# through_fields=('article_id', 'category_id'),
-		# related_query_name='rel_articles_categories.category_id',
-		# related_name='+',
-		)
-	entities = models.ManyToManyField('Entities')
-
 
 	def __str__(self):
 		return str(self.article_id)
@@ -66,7 +56,6 @@ class Entities(models.Model):
 		db_table = 'entities'
 
 
-
 class Sources(models.Model):
 	source_id = models.AutoField(primary_key=True)
 	name = models.TextField(blank=True, null=True)
@@ -83,6 +72,7 @@ class Sources(models.Model):
 		managed = True
 		verbose_name_plural = 'sources'
 		db_table = 'sources'
+
 
 class Trials(models.Model):
 	trial_id = models.AutoField(primary_key=True)
