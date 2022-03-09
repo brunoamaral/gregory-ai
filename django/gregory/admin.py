@@ -16,7 +16,7 @@ class TrialAdmin(admin.ModelAdmin):
 
 class SourceAdmin(admin.ModelAdmin):
     # a list of displayed columns name.
-    list_display = ['name','subject']
+    list_display = ['name','subject','source_for']
 
 admin.site.register(Articles,ArticleAdmin)
 admin.site.register(Trials, TrialAdmin)

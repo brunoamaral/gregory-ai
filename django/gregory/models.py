@@ -51,7 +51,11 @@ class Entities(models.Model):
 
 
 class Sources(models.Model):
+	TABLES = [('articles', 'Articles'),('trials','Trials')]
+
+
 	source_id = models.AutoField(primary_key=True)
+	source_for = models.CharField(choices=TABLES, max_length=50, default='articles')
 	name = models.TextField(blank=True, null=True)
 	link = models.TextField(blank=True, null=True)
 	language = models.TextField()
@@ -75,7 +79,7 @@ class Trials(models.Model):
 	summary = models.TextField(blank=True, null=True)
 	link = models.URLField(blank=True, null=True, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
-	source = models.TextField(blank=True, null=True)
+	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True)
 	relevant = models.BooleanField(blank=True, null=True)
 	sent = models.BooleanField(blank=True, null=True)
 	sent_to_twitter = models.BooleanField(blank=True, null=True)
