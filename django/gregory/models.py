@@ -79,7 +79,7 @@ class Trials(models.Model):
 	discovery_date = models.DateTimeField(blank=True, null=True)
 	title = models.TextField()
 	summary = models.TextField(blank=True, null=True)
-	link = models.TextField(blank=True, null=True)
+	link = models.URLField(blank=True, null=True, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
 	source = models.TextField(blank=True, null=True)
 	relevant = models.BooleanField(blank=True, null=True)
