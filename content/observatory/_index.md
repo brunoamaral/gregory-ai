@@ -30,3 +30,5 @@ disableAutoCollapse: true
 Most of the therapies listed were identified by the [MS Society](https://www.mssociety.org.uk/research/explore-our-research/emerging-research-and-treatments/explore-treatments-in-trials) as relevant, others were added based on Gregory's findings. 
 
 In each section we list the published articles and any clinical trials that include the new drug in the title. In cases where the relevancy of the new drug didn't come from the MS Society, we also mention it in the page.s
+
+{{< metabase-embed dashboard="1" width="1300" height="1250" >}}
