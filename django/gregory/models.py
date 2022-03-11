@@ -1,7 +1,8 @@
 from django.db import models
 class Categories(models.Model):
 	category_id = models.AutoField(primary_key=True)
-	category_name = models.TextField(blank=True, null=True)
+	category_name = models.CharField(blank=True, null=True,max_length=200)
+	category_description = models.TextField(blank=True, null=True)
 
 	def __str__(self):
 		return self.category_name
