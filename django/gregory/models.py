@@ -14,9 +14,9 @@ class Categories(models.Model):
 
 class Articles(models.Model):
 	article_id = models.AutoField(primary_key=True)
-	title = models.TextField(blank=True, null=True)
+	title = models.TextField(blank=False, null=False)
 	summary = models.TextField(blank=True, null=True)
-	link = models.URLField(blank=True, null=True, max_length=2000)
+	link = models.URLField(blank=False, null=False, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
 	discovery_date = models.DateTimeField()
 	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True)
@@ -76,9 +76,9 @@ class Sources(models.Model):
 class Trials(models.Model):
 	trial_id = models.AutoField(primary_key=True)
 	discovery_date = models.DateTimeField(blank=True, null=True)
-	title = models.TextField()
+	title = models.TextField(blank=False,null=False)
 	summary = models.TextField(blank=True, null=True)
-	link = models.URLField(blank=True, null=True, max_length=2000)
+	link = models.URLField(blank=False, null=False, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
 	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True)
 	relevant = models.BooleanField(blank=True, null=True)
