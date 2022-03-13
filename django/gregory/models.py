@@ -14,7 +14,7 @@ class Categories(models.Model):
 
 class Articles(models.Model):
 	article_id = models.AutoField(primary_key=True)
-	title = models.TextField(blank=False, null=False)
+	title = models.TextField(blank=False, null=False, unique=True)
 	summary = models.TextField(blank=True, null=True)
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
@@ -35,7 +35,7 @@ class Articles(models.Model):
 
 	class Meta:
 		managed = True
-		unique_together = (('title', 'link'),)
+		# unique_together = (('title', 'link'),)
 		verbose_name_plural = 'articles'
 		db_table = 'articles'
 
