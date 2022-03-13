@@ -29,6 +29,7 @@ class Articles(models.Model):
 	sent_to_admin = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	sent_to_twitter = models.BooleanField(blank=True, null=True)
+	doi = models.CharField(max_length=280, blank=True, null=True)
 
 	def __str__(self):
 		return str(self.article_id)
