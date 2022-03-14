@@ -71,7 +71,6 @@ services:
       - db
   metabase:
     volumes:
-      - /home/gregory/gregory/docker-data/:/metabase
       - ./metabase-data:/metabase-data
     environment:
       - MB_DB_TYPE=postgres
