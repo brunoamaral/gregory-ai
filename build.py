@@ -179,10 +179,10 @@ for article in jsonArticles:
             "\nlink: \'" + article["link"] + "\'" +\
             "\npublished_date: " + str(article["published_date"]) + \
             "\narticle_source: " + article["source"] + \
-            "\nrelevant: " + str(article["relevant"]) + \
+            "\nrelevant: " + str(article["relevant"]).lower() + \
             "\nnounphrases: " + str(article["noun_phrases"]) + \
-            "\nml_prediction_gnb: " + str(article["ml_prediction_gnb"]) + \
-            "\nml_prediction_lr: " + str(article["ml_prediction_lr"]) + \
+            "\nml_prediction_gnb: " + str(article["ml_prediction_gnb"]).lower() + \
+            "\nml_prediction_lr: " + str(article["ml_prediction_lr"]).lower() + \
             "\noptions:" + \
             "\n  unlisted: false" + \
             "\n---\n" + \
@@ -233,7 +233,7 @@ for trial in jsonTrials:
             "\nlink: \'" + trial["link"] + "\'" +\
             "\npublished_date: " + str(trial["published_date"]) + \
             "\ntrial_source: " + trial["source"] + \
-            "\nrelevant: " + str(trial["relevant"]) + \
+            "\nrelevant: " + str(trial["relevant"]).lower() + \
             "\noptions:" + \
             "\n  unlisted: false" + \
             "\n---\n" + \

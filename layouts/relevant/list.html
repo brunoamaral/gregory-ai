@@ -1,4 +1,4 @@
-{{ define "bodyclasses" }}root{{ end }} {{ define "description" }}
+{{ define "bodyclasses" }}root list relevant{{ end }} {{ define "description" }}
 
 <meta name="description" content="{{ $.Site.Params.description }}" />
 <meta name="twitter:description" content="{{ $.Site.Params.description }}" /> {{ end }} 
@@ -30,17 +30,17 @@
                             <p class="text-center col-12"> <strong>Labels:</strong>
                               <span class="badge badge-info font-weight-normal">sources</span> <span class="badge badge-primary font-weight-normal">manual selection</span> <span class="badge badge-success font-weight-normal">automatic selection</span>
                             </p>                
-                            {{ $ml_prediction_gnb := where .Site.RegularPages ".Params.ml_prediction_gnb" 1 }}
+                            {{ $ml_prediction_gnb := where .Site.RegularPages ".Params.ml_prediction_gnb" true }}
 
-                            {{ $relevant := where .Site.RegularPages ".Params.relevant" 1}}
-
+                            {{ $relevant := where .Site.RegularPages ".Params.relevant" true }}
+                            
                             {{ $listing := (union $relevant $ml_prediction_gnb ).ByDate.Reverse }}
 
                             {{ $paginator := (.Paginate $listing) }}
 
                             {{ partial "pagination.html" . }}
 
-                            {{ range $paginator.Pages }}
+                            {{ range $paginator.Pages }} 
                             <!-- first post -->
                               <div class="card card-plain card-blog">
                                 <div class="row"> 
@@ -69,10 +69,10 @@
                                             {{ end }}
                                             <time class="published" itemprop="datePublished" datetime="{{ .Date.Format " 2006-01-02T15:04:05 " }}">{{ .Date.Format "January 2, 2006" }}</time>
                                             <span class="badge badge-info text-white font-weight-normal">{{ .Params.article_source }}</span> 
-                                            {{ if eq .Params.ml_prediction_gnb 1 }}
+                                            {{ if eq .Params.ml_prediction_gnb true }}
                                               <span class="badge badge-success text-white font-weight-normal">auto</span>
                                             {{ end }}
-                                            {{ if eq .Params.relevant  1 }}
+                                            {{ if eq .Params.relevant  true }}
                                               <span class="badge badge-primary text-white font-weight-normal">manual</span>
                                             {{ end }}
                                         </p>
