@@ -50,6 +50,8 @@ class Entities(models.Model):
 		managed = True
 		verbose_name_plural = 'entities'
 		db_table = 'entities'
+		unique_together = (('entity', 'label'),)
+
 
 
 class Sources(models.Model):
