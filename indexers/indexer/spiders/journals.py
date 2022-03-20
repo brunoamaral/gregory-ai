@@ -1,12 +1,13 @@
 import scrapy
 
 
-class JournalsSpider(scrapy.Spider):
-	name = "journals"
+class TrialsSpider(scrapy.Spider):
+	name = "trials"
 
 	def start_requests(self):
 		urls = [
-			'https://journals.sagepub.com/action/doSearch?AllField=multiple+sclerosis&SeriesKey=msja&content=articlesChapters&countTerms=true&target=default&sortBy=Ppub&startPage=&ContentItemType=research-article'
+			'https://www.cuf.pt/cuf-academic-center/ensaios-clinicos?combine=&unidade=&estado=All&patologia=2346&especialidade=',
+#			'https://journals.sagepub.com/action/doSearch?AllField=multiple+sclerosis&SeriesKey=msja&content=articlesChapters&countTerms=true&target=default&sortBy=Ppub&startPage=&ContentItemType=research-article'
 		]
 		for url in urls:
 			yield scrapy.Request(url=url, callback=self.parse)
