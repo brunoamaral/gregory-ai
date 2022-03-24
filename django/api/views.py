@@ -34,6 +34,15 @@ class TrialViewSet(viewsets.ModelViewSet):
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+class AllTrialViewSet(generics.ListAPIView):
+	"""
+	List all clinical trials by discovery date
+	"""
+	pagination_class = None
+	queryset = Trials.objects.all().order_by('-discovery_date')
+	serializer_class = TrialSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
 
 class SourceViewSet(viewsets.ModelViewSet):
 	"""
