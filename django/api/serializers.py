@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User, Group
 from django.db.models.fields import SlugField
 from rest_framework import serializers
-from gregory.models import Articles, Trials
+from gregory.models import Articles, Trials, Sources
 
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
@@ -15,4 +15,9 @@ class TrialSerializer(serializers.HyperlinkedModelSerializer):
 		model = Trials
 		fields = ['trial_id','title','summary','published_date','link']
 
+
+class SourceSerializer(serializers.HyperlinkedModelSerializer):
+	class Meta:
+		model = Sources
+		fields = ['name','source_id','source_for']
 

@@ -21,11 +21,14 @@ from api import views
 router = routers.DefaultRouter()
 router.register(r'articles', views.ArticleViewSet, views.RelevantList)
 router.register(r'trials', views.TrialViewSet)
+router.register(r'sources', views.SourceViewSet)
 
 
 urlpatterns = [
 	path('admin/', admin.site.urls),
 	re_path('^articles/relevant/$', views.RelevantList.as_view()),
+	re_path('^articles/source/(?P<source>.+)/$', views.ArticlesBySourceList.as_view()),
+	re_path('^trials/source/(?P<source>.+)/$', views.TrialsBySourceList.as_view()),
 
 	path('', include(router.urls)),
 
