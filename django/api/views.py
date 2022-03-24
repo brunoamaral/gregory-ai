@@ -62,13 +62,23 @@ class RelevantList(generics.ListAPIView):
 		"""
 		return Articles.objects.filter(relevant="True")
 
-class ArticlesBySourceList(generics.ListAPIView):
+class UnsentList(generics.ListAPIView):
+	"""
+	Lists the articles that have not been sent to subscribers
+	"""
 	serializer_class = ArticleSerializer
 
 	def get_queryset(self):
-		"""
-		Lists the articles that come from the specified source_id
-		"""
+		return Articles.objects.all().exclude(sent_to_subscribers =True)
+
+class ArticlesBySourceList(generics.ListAPIView):
+	"""
+	Lists the articles that come from the specified source_id
+	"""
+	serializer_class = ArticleSerializer
+
+	def get_queryset(self):
+
 		source = self.kwargs['source']
 		return Articles.objects.filter(source=source)
 
