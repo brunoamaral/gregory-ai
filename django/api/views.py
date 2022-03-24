@@ -15,6 +15,16 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+class AllArticleViewSet(generics.ListAPIView):
+	"""
+	List all articles 
+	"""
+	pagination_class = None
+	queryset = Articles.objects.all().order_by('-published_date')
+	serializer_class = ArticleSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+
 
 class TrialViewSet(viewsets.ModelViewSet):
 	"""
