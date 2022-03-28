@@ -24,7 +24,7 @@ models = [GNB, LSVC, MNB, LR]
 pipelines = {}
 
 for model in models:
-    pipelines[model] = load('/python-ml/models/model_' + model + '.joblib')
+    pipelines[model] = load('models/model_' + model + '.joblib')
 
 # Now let's fetch a new set of data
 today = date.today()
@@ -32,8 +32,8 @@ year_month = today.strftime("%Y/%m")
 
 dataset_url = argv[1]
 
-dataset_file_json = '/python-ml/data/' + today.strftime("%Y-%B") + '.json'
-dataset_file_csv = '/python-ml/data/' + today.strftime("%Y-%B") + '.csv'
+dataset_file_json = 'data/' + today.strftime("%Y-%B") + '.json'
+dataset_file_csv = 'data/' + today.strftime("%Y-%B") + '.csv'
 
 r = requests.get(dataset_url)
 with open(dataset_file_json, 'w') as outfile:
@@ -67,6 +67,11 @@ dataset = dataset[["terms", "relevant", "article_id"]]
 # There are several records in the "relevant" column as NaN. Let's convert them to zeros
 dataset["relevant"] = dataset["relevant"].fillna(value=0)
 
+# change true/false to 1/0
+dataset["relevant"] = dataset["relevant"].astype(int)
+
+
+
 # Save the dataset
 dataset.to_csv(dataset_file_csv, index=False)
 
@@ -89,7 +94,7 @@ models = [GNB,LR]
 pipelines = {}
 
 for model in models:
-    pipelines[model] = load('/python-ml/models/model_' + model + '.joblib')
+    pipelines[model] = load('models/model_' + model + '.joblib')
 
 
 def predictor(dataset):
