@@ -112,7 +112,7 @@ class ArticlesPredictionNone(generics.ListAPIView):
 	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
-		return Articles.objects.annotate(summary_len=Length('summary')).filter( summary_len__gt = 360)
+		return Articles.objects.annotate(summary_len=Length('summary')).filter( summary_len__gt = 360).filter(ml_prediction_gnb=None)
 
 class ArticlesCount(viewsets.ModelViewSet):
 	"""
