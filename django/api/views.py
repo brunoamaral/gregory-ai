@@ -102,8 +102,6 @@ class ArticlesByKeyword(generics.ListAPIView):
 	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [filters.SearchFilter]
 	search_fields = ['title','summary']
-	def get_queryset(self):
-		return Articles.objects.filter(title='.*ocrevus.*')
 ###
 # TRIALS
 ### 
