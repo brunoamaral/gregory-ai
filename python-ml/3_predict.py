@@ -10,6 +10,7 @@ import html
 from utils.text_utils import cleanHTML
 from utils.text_utils import cleanText
 from joblib import load
+from pandas.io.json import json_normalize #package for flattening json in pandas df
 
 # These are the different model names
 GNB = "gnb"
@@ -29,7 +30,6 @@ for model in models:
 today = date.today()
 year_month = today.strftime("%Y/%m")
 
-# dataset_url = 'https://api.brunoamaral.net/articles/by-date/' + year_month
 dataset_url = argv[1]
 
 dataset_file_json = '/python-ml/data/' + today.strftime("%Y-%B") + '.json'
@@ -39,8 +39,8 @@ r = requests.get(dataset_url)
 with open(dataset_file_json, 'w') as outfile:
     json.dump(r.json(), outfile)
 
-dataset = pd.read_json(dataset_file_json)
-
+data = pd.read_json(dataset_file_json)
+dataset = pd.json_normalize(data=data['results'])
 valid_columns = ["title", "summary", "relevant", "article_id"]
 
 # Strip the dataset to only those columns
