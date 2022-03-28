@@ -113,6 +113,7 @@ class ArticlesPredictionNone(generics.ListAPIView):
 	def get_queryset(self):
 		return Articles.objects.filter(ml_prediction_gnb = None )
 
+
 class ArticlesCount(viewsets.ModelViewSet):
 	"""
 	List all articles in the database by published date

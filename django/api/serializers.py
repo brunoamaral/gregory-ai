@@ -19,7 +19,7 @@ class TrialSerializer(serializers.HyperlinkedModelSerializer):
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:
 		model = Sources
-		fields = ['name','source_id','source_for']
+		fields = ['name','source_id','source_for','link']
 
 class CountArticlesSerializer(serializers.ModelSerializer):
 	articles_count = serializers.SerializerMethodField()
