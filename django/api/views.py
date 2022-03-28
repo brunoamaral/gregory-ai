@@ -1,10 +1,11 @@
+from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer
+from django.db.models.functions import Length
 from django.db.models.query import QuerySet
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from gregory.models import Articles, Trials, Sources
 from rest_framework import viewsets, permissions, generics, filters
-from django.http import HttpResponse
 import json
-from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer
 
 ###
 # ARTICLES
@@ -105,14 +106,13 @@ class ArticlesByKeyword(generics.ListAPIView):
 
 class ArticlesPredictionNone(generics.ListAPIView):
 	"""
-	List articles where the Machine Learning prediction is Null
+	List articles where the Machine Learning prediction is Null and summary over 360 characters
 	"""
 	serializer_class = ArticleSerializer
 	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
-		return Articles.objects.filter(ml_prediction_gnb = None )
-
+		return Articles.objects.annotate(summary_len=Length('summary')).filter( summary_len__gt = 360)
 
 class ArticlesCount(viewsets.ModelViewSet):
 	"""
