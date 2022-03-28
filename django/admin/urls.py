@@ -33,5 +33,6 @@ urlpatterns = [
 	re_path('^trials/source/(?P<source>.+)/$', views.TrialsBySourceList.as_view()),
 	re_path('^articles/unsent/$', views.UnsentList.as_view()),
 	path('articles/related/', views.RelatedArticles.as_view({'get': 'list'})),
+	path('articles/count/', views.ArticlesCount.as_view({'get': 'list'})),
 	path('', include(router.urls)),
 ]

@@ -3,8 +3,8 @@ from django.shortcuts import get_object_or_404, render
 from gregory.models import Articles, Trials, Sources
 from rest_framework import viewsets, permissions, generics, filters
 from django.http import HttpResponse
-
-from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer
+import json
+from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer
 
 ###
 # ARTICLES
@@ -17,11 +17,11 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [filters.SearchFilter]
-	search_fields  = ['title','summary']
+	search_fields  = ['$title','$summary']
 
 class RelatedArticles(viewsets.ModelViewSet):
 	"""
-	Search related articles by the noun_phrases field
+	Search related articles by the noun_phrases field. This search accepts regular expressions such as /articles/related/?search=<noun_phrase>|<noun_phrase>
 	"""
 	queryset = Articles.objects.all().order_by('-published_date')
 	serializer_class = ArticleSerializer
@@ -102,20 +102,41 @@ class ArticlesByKeyword(generics.ListAPIView):
 	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [filters.SearchFilter]
 	search_fields = ['title','summary']
+
+
+class ArticlesCount(viewsets.ModelViewSet):
+	"""
+	List all articles in the database by published date
+	"""
+
+	queryset = Articles.objects.raw('select count(*),article_id from articles group by article_id limit 1;')
+	serializer_class = CountArticlesSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	pagination_classes = None
+
+	# def get_queryset(self):
+	# 	return HttpResponse(Articles.objects.count())
+	# def list(self, request, *args, **kwargs):
+	# 	queryset = self.filter_queryset(self.get_queryset())
+	# 	# If you want response all the results, without pagination, 
+	# 	# stop calling the self.paginate_queryset method, use queryset directly
+	# 	page = self.paginate_queryset(queryset) or queryset
+	# 	serializer = self.get_serializer(page, many=True)
+	# 	return HttpResponse(json.dumps(serializer.data))
+
 ###
 # TRIALS
 ### 
 
 class TrialViewSet(viewsets.ModelViewSet):
 	"""
-	List all clinical trials by discovery date
+	List all clinical trials by discovery date. Accepts regular expressions in search.
 	"""
 	queryset = Trials.objects.all().order_by('-discovery_date')
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [filters.SearchFilter]
-	search_fields  = ['title','summary']
-
+	search_fields  = ['$title','$summary']
 
 class AllTrialViewSet(generics.ListAPIView):
 	"""
@@ -136,6 +157,16 @@ class TrialsBySourceList(generics.ListAPIView):
 		"""
 		source = self.kwargs['source']
 		return Trials.objects.filter(source=source)
+
+# class TrialsByKeyword(generics.ListAPIView):
+# 	"""
+# 	List clinical trials by keyword
+# 	"""
+# 	serializer_class = TrialSerializer
+# 	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
+# 	filter_backends = [filters.SearchFilter]
+# 	search_fields = ['$title','$summary']
+
 
 
 ###

@@ -21,3 +21,12 @@ class SourceSerializer(serializers.HyperlinkedModelSerializer):
 		model = Sources
 		fields = ['name','source_id','source_for']
 
+class CountArticlesSerializer(serializers.ModelSerializer):
+	articles_count = serializers.SerializerMethodField()
+
+	class Meta:
+		model = Articles
+		fields = ( 'articles_count',)   
+
+	def get_articles_count(self, obj):
+		return Articles.objects.all().count()
