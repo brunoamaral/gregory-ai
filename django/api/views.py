@@ -103,6 +103,15 @@ class ArticlesByKeyword(generics.ListAPIView):
 	filter_backends = [filters.SearchFilter]
 	search_fields = ['title','summary']
 
+class ArticlesPredictionNone(generics.ListAPIView):
+	"""
+	List articles where the Machine Learning prediction is Null
+	"""
+	serializer_class = ArticleSerializer
+	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		return Articles.objects.filter(ml_prediction_gnb = None )
 
 class ArticlesCount(viewsets.ModelViewSet):
 	"""
