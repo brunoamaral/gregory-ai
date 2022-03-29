@@ -221,10 +221,11 @@ for trial in jsonTrials:
     # Write a file for each record
     markdownDir = pathlib.Path(trialsDir+str(trial["trial_id"]))
     markdownDir.mkdir(parents=True, exist_ok=True)
+    if trial["summary"] is None:
+        trial["summmary"] = "No summary available"
 
     with open(str(markdownDir)+"/index.md", "w+") as f:
-        if trial["summary"] == None:
-            trial["summmary"] = ""
+
             
         trialdata = "---\ntrial_id: " + \
             str(trial["trial_id"]) + \
