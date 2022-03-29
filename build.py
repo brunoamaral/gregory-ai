@@ -87,7 +87,7 @@ articles_json.to_excel('content/developers/articles_'+ datetime_string + '.xlsx'
 ## TRIALS
 trials_json = pd.read_json('data/trials.json')
 trials_json.link = trials_json.link.apply(html.unescape)
-trials_json.summary = trials_json.summary.apply(html.unescape)
+# trials_json.summary = trials_json.summary.apply(html.unescape)
 trials_json.to_excel('content/developers/trials_' + datetime_string + '.xlsx')
 
 
