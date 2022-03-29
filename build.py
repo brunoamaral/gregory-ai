@@ -51,7 +51,7 @@ print('''
 ''')
 
 # Get Articles
-url = SERVER + 'articles/all'
+url = SERVER + 'articles/all?format=json'
 res = requests.get(url)
 file_name = GREGORY_DIR + '/data/articles.json'
 with open(file_name, "w") as f:
@@ -61,7 +61,7 @@ with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
 # Get Trials
-url = SERVER + 'trials/all'
+url = SERVER + 'trials/all?format=json'
 res = requests.get(url)
 file_name = GREGORY_DIR + '/data/trials.json'
 with open(file_name, "w") as f:
