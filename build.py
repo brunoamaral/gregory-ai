@@ -221,19 +221,16 @@ for trial in jsonTrials:
     # Write a file for each record
     markdownDir = pathlib.Path(trialsDir+str(trial["trial_id"]))
     markdownDir.mkdir(parents=True, exist_ok=True)
-    if trial["summary"] is None:
-        trial["summmary"] = "No summary available"
 
     with open(str(markdownDir)+"/index.md", "w+") as f:
 
-            
         trialdata = "---\ntrial_id: " + \
             str(trial["trial_id"]) + \
             "\ndiscovery_date: " + str(trial["discovery_date"]) + \
             "\ndate: " + str(trial["discovery_date"]) +\
             "\ntitle: \'" + trial["title"] + "\'" +\
             "\nsummary: |" + \
-            '\n  ' + trial["summary"].replace("\n", "\n  ") +\
+            '\n  ' + str(trial["summary"]).replace("\n", "\n  ") +\
             "\nlink: \'" + trial["link"] + "\'" +\
             "\npublished_date: " + str(trial["published_date"]) + \
             "\ntrial_source: " + trial["source"] + \
@@ -241,7 +238,7 @@ for trial in jsonTrials:
             "\noptions:" + \
             "\n  unlisted: false" + \
             "\n---\n" + \
-            html.unescape(trial["summary"])
+            html.unescape(str(trial["summary"]))
         # add content to file
 
         f.write(trialdata)
