@@ -11,9 +11,11 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 		fields = ['article_id','title','summary','link','published_date','source','relevant','ml_prediction_gnb','ml_prediction_lr','discovery_date','noun_phrases','doi']
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
+	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
+
 	class Meta:
 		model = Trials
-		fields = ['trial_id','title','summary','published_date','discovery_date','link']
+		fields = ['trial_id','title','summary','published_date','discovery_date','link','source']
 
 
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
