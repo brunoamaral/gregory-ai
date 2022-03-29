@@ -51,6 +51,7 @@ services:
       # - "traefik.http.routers.nodered.rule=Host(`gregory.${DOMAIN_NAME}`)"
   admin:
     container_name: admin
+    restart: always
     build: 
       context: django/
       dockerfile: Dockerfile.django
