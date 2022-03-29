@@ -9,6 +9,7 @@ import json
 import jwt
 import os
 import pandas as pd
+import numpy as np
 import pathlib
 import requests
 import subprocess
@@ -86,8 +87,9 @@ articles_json.to_excel('content/developers/articles_'+ datetime_string + '.xlsx'
 
 ## TRIALS
 trials_json = pd.read_json('data/trials.json')
+trials_json = trials_json.replace(np.nan, '', regex=True)
 trials_json.link = trials_json.link.apply(html.unescape)
-# trials_json.summary = trials_json.summary.apply(html.unescape)
+trials_json.summary = trials_json.summary.apply(html.unescape)
 trials_json.to_excel('content/developers/trials_' + datetime_string + '.xlsx')
 
 
@@ -214,9 +216,6 @@ with open(trials,"r") as a:
 jsonTrials = json.loads(data)
 
 for trial in jsonTrials:
-
-    # Process whole documents
-    text = trial["title"]
 
     # Write a file for each record
     markdownDir = pathlib.Path(trialsDir+str(trial["trial_id"]))
