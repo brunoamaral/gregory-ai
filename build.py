@@ -223,6 +223,9 @@ for trial in jsonTrials:
     markdownDir.mkdir(parents=True, exist_ok=True)
 
     with open(str(markdownDir)+"/index.md", "w+") as f:
+        if trial["summary"] == None:
+            trial["summmary"] = ""
+            
         trialdata = "---\ntrial_id: " + \
             str(trial["trial_id"]) + \
             "\ndiscovery_date: " + str(trial["discovery_date"]) + \
