@@ -9,6 +9,7 @@ import json
 import jwt
 import os
 import pandas as pd
+import numpy as np
 import pathlib
 import requests
 import subprocess
@@ -51,7 +52,7 @@ print('''
 ''')
 
 # Get Articles
-url = SERVER + 'articles/all'
+url = SERVER + 'articles/all?format=json'
 res = requests.get(url)
 file_name = GREGORY_DIR + '/data/articles.json'
 with open(file_name, "w") as f:
@@ -61,7 +62,7 @@ with open(file_name, "w") as f:
     f.write(res.text)
     f.close()
 # Get Trials
-url = SERVER + 'trials/all'
+url = SERVER + 'trials/all?format=json'
 res = requests.get(url)
 file_name = GREGORY_DIR + '/data/trials.json'
 with open(file_name, "w") as f:
@@ -86,6 +87,7 @@ articles_json.to_excel('content/developers/articles_'+ datetime_string + '.xlsx'
 
 ## TRIALS
 trials_json = pd.read_json('data/trials.json')
+trials_json = trials_json.replace(np.nan, '', regex=True)
 trials_json.link = trials_json.link.apply(html.unescape)
 trials_json.summary = trials_json.summary.apply(html.unescape)
 trials_json.to_excel('content/developers/trials_' + datetime_string + '.xlsx')
@@ -215,21 +217,19 @@ jsonTrials = json.loads(data)
 
 for trial in jsonTrials:
 
-    # Process whole documents
-    text = trial["title"]
-
     # Write a file for each record
     markdownDir = pathlib.Path(trialsDir+str(trial["trial_id"]))
     markdownDir.mkdir(parents=True, exist_ok=True)
 
     with open(str(markdownDir)+"/index.md", "w+") as f:
+
         trialdata = "---\ntrial_id: " + \
             str(trial["trial_id"]) + \
             "\ndiscovery_date: " + str(trial["discovery_date"]) + \
             "\ndate: " + str(trial["discovery_date"]) +\
             "\ntitle: \'" + trial["title"] + "\'" +\
             "\nsummary: |" + \
-            '\n  ' + trial["summary"].replace("\n", "\n  ") +\
+            '\n  ' + str(trial["summary"]).replace("\n", "\n  ") +\
             "\nlink: \'" + trial["link"] + "\'" +\
             "\npublished_date: " + str(trial["published_date"]) + \
             "\ntrial_source: " + trial["source"] + \
@@ -237,7 +237,7 @@ for trial in jsonTrials:
             "\noptions:" + \
             "\n  unlisted: false" + \
             "\n---\n" + \
-            html.unescape(trial["summary"])
+            html.unescape(str(trial["summary"]))
         # add content to file
 
         f.write(trialdata)
