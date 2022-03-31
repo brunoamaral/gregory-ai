@@ -7,6 +7,13 @@ WORKDIR /code
 RUN pip install --upgrade pip
 RUN pip install Django==4.0.3
 RUN pip install psycopg2-binary
+RUN pip install asgiref
+RUN pip install django-filter
+RUN pip install djangorestframework
+RUN pip install Markdown
+RUN pip install sqlparse
+RUN pip install pytz
+
 # RUN pip install -r requirements.txt
 # COPY django /code/
 # ADD django/ /code/
