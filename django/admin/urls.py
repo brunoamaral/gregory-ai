@@ -26,6 +26,7 @@ router.register(r'sources', views.SourceViewSet)
 
 urlpatterns = [
 	path('admin/', admin.site.urls),
+	path('api-auth/', include('rest_framework.urls')),
 	path('articles/all/', views.AllArticleViewSet.as_view()),
 	path('trials/all/', views.AllTrialViewSet.as_view()),
 	re_path('^articles/relevant/$', views.RelevantList.as_view()),
