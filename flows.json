@@ -311,7 +311,9 @@
             "1fc6d688700df5e6"
         ],
         "x": 14,
-        "y": 519
+        "y": 519,
+        "w": 952,
+        "h": 362
     },
     {
         "id": "e3876559.c845b8",
@@ -5301,52 +5303,6 @@
         "wires": []
     },
     {
-        "id": "c9f187055d63250f",
-        "type": "change",
-        "z": "02847583794d9f3b",
-        "name": "set source ClinicalTrials",
-        "rules": [
-            {
-                "t": "set",
-                "p": "article.source",
-                "pt": "msg",
-                "to": "ClinicalTrials.gov",
-                "tot": "str"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 410,
-        "y": 320,
-        "wires": [
-            [
-                "b903aa7573ccb4c7"
-            ]
-        ]
-    },
-    {
-        "id": "2528f0a11eb8bb9c",
-        "type": "template",
-        "z": "02847583794d9f3b",
-        "name": "",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "sql",
-        "syntax": "mustache",
-        "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (current_timestamp,'{{article.title}}','{{article.description}}','{{{topic}}}','{{article.pubdate}}','{{article.source}}',NULL)",
-        "output": "str",
-        "x": 880,
-        "y": 320,
-        "wires": [
-            [
-                "5374561e784d98af"
-            ]
-        ]
-    },
-    {
         "id": "bf49889256cc6783",
         "type": "http request",
         "z": "02847583794d9f3b",
@@ -5387,6 +5343,7 @@
         "once": true,
         "onceDelay": "200",
         "topic": "",
+        "payload": "",
         "payloadType": "date",
         "x": 190,
         "y": 160,
@@ -5405,7 +5362,7 @@
         "fieldType": "msg",
         "format": "sql",
         "syntax": "mustache",
-        "template": "INSERT INTO trials (discovery_date, title, summary, link, published_date, source, relevant)\n\t\tVALUES(CURRENT_TIMESTAMP, '{{payload.title}}', NULL, 'https://www.novartis.com/{{{payload.link}}}', NULL, 'Novartis', NULL)",
+        "template": "INSERT INTO trials (discovery_date, title, summary, link, published_date, source, relevant)\n\t\tVALUES(CURRENT_TIMESTAMP, '{{payload.title}}', NULL, 'https://www.novartis.com/{{{payload.link}}}', NULL, 13, NULL)",
         "output": "str",
         "x": 880,
         "y": 160,
@@ -5475,6 +5432,7 @@
         "once": true,
         "onceDelay": "42",
         "topic": "",
+        "payload": "",
         "payloadType": "date",
         "x": 190,
         "y": 240,
@@ -5493,7 +5451,7 @@
         "fieldType": "msg",
         "format": "sql",
         "syntax": "mustache",
-        "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (current_timestamp,'{{payload.title}}',NULL,'https://www.cuf.pt{{{payload.link}}}',NULL,'CUF',NULL)",
+        "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (current_timestamp,'{{payload.title}}',NULL,'https://www.cuf.pt{{{payload.link}}}',NULL,14,NULL)",
         "output": "str",
         "x": 880,
         "y": 240,
@@ -5531,21 +5489,6 @@
         "x": 130,
         "y": 120,
         "wires": []
-    },
-    {
-        "id": "01d5e150222bc34a",
-        "type": "feedparse",
-        "z": "02847583794d9f3b",
-        "name": "Clinical Trials.gov",
-        "url": "https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000",
-        "interval": "61",
-        "x": 160,
-        "y": 320,
-        "wires": [
-            [
-                "c9f187055d63250f"
-            ]
-        ]
     },
     {
         "id": "555696bf1ae29a39",
@@ -5620,118 +5563,6 @@
         ]
     },
     {
-        "id": "b903aa7573ccb4c7",
-        "type": "moment",
-        "z": "02847583794d9f3b",
-        "name": "format pubdate",
-        "topic": "",
-        "input": "article.date",
-        "inputType": "msg",
-        "inTz": "Europe/Lisbon",
-        "adjAmount": 0,
-        "adjType": "days",
-        "adjDir": "add",
-        "format": "",
-        "locale": "en-US",
-        "output": "article.pubdate",
-        "outputType": "msg",
-        "outTz": "Europe/Lisbon",
-        "x": 620,
-        "y": 320,
-        "wires": [
-            [
-                "2528f0a11eb8bb9c"
-            ]
-        ]
-    },
-    {
-        "id": "43e26a640856f4ef",
-        "type": "change",
-        "z": "02847583794d9f3b",
-        "name": "set source ClinicalTrialsEU",
-        "rules": [
-            {
-                "t": "set",
-                "p": "article.source",
-                "pt": "msg",
-                "to": "clinicaltrialsregister.eu",
-                "tot": "str"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 420,
-        "y": 420,
-        "wires": [
-            [
-                "aa85cfc59bcbbab3"
-            ]
-        ]
-    },
-    {
-        "id": "37e0b11c5bff75a1",
-        "type": "template",
-        "z": "02847583794d9f3b",
-        "name": "",
-        "field": "topic",
-        "fieldType": "msg",
-        "format": "sql",
-        "syntax": "mustache",
-        "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (current_timestamp,'{{article.title}}','{{article.description}}','{{{topic}}}','{{article.pubdate}}','{{article.source}}',NULL)",
-        "output": "str",
-        "x": 880,
-        "y": 420,
-        "wires": [
-            [
-                "5374561e784d98af"
-            ]
-        ]
-    },
-    {
-        "id": "258817319d3d46c1",
-        "type": "feedparse",
-        "z": "02847583794d9f3b",
-        "d": true,
-        "name": "clinicaltrialsregister.eu",
-        "url": "http://www.clinicaltrialsregister.eu/ctr-search/rest/feed/bydates?query=multiple+sclerosis",
-        "interval": "999",
-        "x": 180,
-        "y": 420,
-        "wires": [
-            [
-                "43e26a640856f4ef"
-            ]
-        ]
-    },
-    {
-        "id": "aa85cfc59bcbbab3",
-        "type": "moment",
-        "z": "02847583794d9f3b",
-        "name": "format pubdate",
-        "topic": "",
-        "input": "article.date",
-        "inputType": "msg",
-        "inTz": "Europe/Lisbon",
-        "adjAmount": 0,
-        "adjType": "days",
-        "adjDir": "add",
-        "format": "",
-        "locale": "en-US",
-        "output": "payload",
-        "outputType": "msg",
-        "outTz": "Europe/Lisbon",
-        "x": 640,
-        "y": 420,
-        "wires": [
-            [
-                "37e0b11c5bff75a1"
-            ]
-        ]
-    },
-    {
         "id": "5374561e784d98af",
         "type": "postgres",
         "z": "02847583794d9f3b",
@@ -5747,8 +5578,8 @@
         "limit_drop_intermediate": false,
         "limit_drop_if_in_queue": false,
         "outputs": false,
-        "x": 1140,
-        "y": 260,
+        "x": 1040,
+        "y": 200,
         "wires": []
     },
     {
@@ -6722,7 +6553,7 @@
                 "p": "payload"
             }
         ],
-        "repeat": "3600",
+        "repeat": "1200",
         "crontab": "",
         "once": true,
         "onceDelay": "600",
@@ -6745,41 +6576,13 @@
         "property": "payload",
         "action": "",
         "pretty": false,
-        "x": 1010,
-        "y": 220,
+        "x": 1030,
+        "y": 240,
         "wires": [
             [
                 "2867e9a54b2143ec"
             ]
         ]
-    },
-    {
-        "id": "a741115d813feedc",
-        "type": "http in",
-        "z": "8950ec157392345e",
-        "name": "",
-        "url": "/articles/prediction/none",
-        "method": "get",
-        "upload": false,
-        "swaggerDoc": "",
-        "x": 140,
-        "y": 80,
-        "wires": [
-            [
-                "c107e577f9ebd33f"
-            ]
-        ]
-    },
-    {
-        "id": "27a99f99c83b877e",
-        "type": "http response",
-        "z": "8950ec157392345e",
-        "name": "",
-        "statusCode": "",
-        "headers": {},
-        "x": 850,
-        "y": 80,
-        "wires": []
     },
     {
         "id": "2867e9a54b2143ec",
@@ -6792,8 +6595,8 @@
         "syntax": "mustache",
         "template": "{{#payload.models.gnb}}\nUPDATE articles SET ml_prediction_gnb = {{prediction}} WHERE article_id = {{article_id}};\n{{/payload.models.gnb}}\n\n{{#payload.models.lr}}\nUPDATE articles SET ml_prediction_lr = {{prediction}} WHERE article_id = {{article_id}};\n{{/payload.models.lr}}",
         "output": "str",
-        "x": 700,
-        "y": 280,
+        "x": 760,
+        "y": 300,
         "wires": [
             [
                 "10e5748177d0c296"
@@ -6812,7 +6615,7 @@
         "winHide": false,
         "oldrc": false,
         "name": "",
-        "x": 780,
+        "x": 800,
         "y": 220,
         "wires": [
             [
@@ -6836,11 +6639,11 @@
         "proxy": "",
         "authType": "",
         "senderr": false,
-        "x": 240,
-        "y": 220,
+        "x": 280,
+        "y": 160,
         "wires": [
             [
-                "c3cfc9d10df5f89a"
+                "3e45be64d91c22e0"
             ]
         ]
     },
@@ -6849,17 +6652,17 @@
         "type": "switch",
         "z": "8950ec157392345e",
         "name": "check for resullts",
-        "property": "payload",
+        "property": "payload.count",
         "propertyType": "msg",
         "rules": [
             {
                 "t": "neq",
-                "v": "[]",
+                "v": "0",
                 "vt": "str"
             },
             {
                 "t": "eq",
-                "v": "[]",
+                "v": "0",
                 "vt": "str"
             }
         ],
@@ -6867,7 +6670,7 @@
         "repair": false,
         "outputs": 2,
         "x": 510,
-        "y": 220,
+        "y": 260,
         "wires": [
             [
                 "7574734d78dad5ef"
@@ -6950,7 +6753,7 @@
         "y": 420,
         "wires": [
             [
-                "73113a55d8f90b8d"
+                "c9c4277138be4d26"
             ]
         ]
     },
@@ -7313,49 +7116,6 @@
         "wires": []
     },
     {
-        "id": "c107e577f9ebd33f",
-        "type": "template",
-        "z": "8950ec157392345e",
-        "name": "",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "sql",
-        "syntax": "mustache",
-        "template": "SELECT * FROM  articles\nWHERE ( (summary != 'not available') AND (summary IS NOT NULL) AND (summary != '') )\nAND ml_prediction_gnb IS NULL ;\n\n",
-        "output": "str",
-        "x": 340,
-        "y": 80,
-        "wires": [
-            [
-                "4bdfaf5149dd9c76"
-            ]
-        ]
-    },
-    {
-        "id": "4bdfaf5149dd9c76",
-        "type": "postgres",
-        "z": "8950ec157392345e",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 500,
-        "y": 80,
-        "wires": [
-            [
-                "27a99f99c83b877e"
-            ]
-        ]
-    },
-    {
         "id": "017d8cbed06d6613",
         "type": "postgres",
         "z": "8950ec157392345e",
@@ -7376,33 +7136,6 @@
         "wires": [
             [
                 "3fee5ebe107b156e"
-            ]
-        ]
-    },
-    {
-        "id": "73113a55d8f90b8d",
-        "type": "change",
-        "z": "8950ec157392345e",
-        "name": "",
-        "rules": [
-            {
-                "t": "set",
-                "p": "payload",
-                "pt": "msg",
-                "to": " select * from articles where ml_prediction_gnb = true order by article_id desc limit 10;",
-                "tot": "str"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 390,
-        "y": 420,
-        "wires": [
-            [
-                "017d8cbed06d6613"
             ]
         ]
     },
@@ -7500,8 +7233,8 @@
         "limit_drop_intermediate": false,
         "limit_drop_if_in_queue": false,
         "outputs": true,
-        "x": 1040,
-        "y": 280,
+        "x": 1100,
+        "y": 300,
         "wires": [
             [
                 "d7dfd61e7e28ee64"
@@ -7527,8 +7260,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 870,
-        "y": 280,
+        "x": 930,
+        "y": 300,
         "wires": [
             [
                 "be5b216fbcd4acaa"
@@ -7547,14 +7280,50 @@
         "complete": "false",
         "statusVal": "",
         "statusType": "auto",
-        "x": 1190,
-        "y": 280,
+        "x": 950,
+        "y": 340,
         "wires": []
+    },
+    {
+        "id": "3e45be64d91c22e0",
+        "type": "json",
+        "z": "8950ec157392345e",
+        "name": "",
+        "property": "payload",
+        "action": "",
+        "pretty": false,
+        "x": 470,
+        "y": 160,
+        "wires": [
+            [
+                "c3cfc9d10df5f89a"
+            ]
+        ]
+    },
+    {
+        "id": "c9c4277138be4d26",
+        "type": "template",
+        "z": "8950ec157392345e",
+        "name": "",
+        "field": "payload",
+        "fieldType": "msg",
+        "format": "sql",
+        "syntax": "mustache",
+        "template": " select * from articles where ml_prediction_gnb = true order by article_id desc limit 10;",
+        "output": "str",
+        "x": 360,
+        "y": 420,
+        "wires": [
+            [
+                "017d8cbed06d6613"
+            ]
+        ]
     },
     {
         "id": "45097a07633b6b70",
         "type": "function",
         "z": "d92bbc0c206c5bfc",
+        "d": true,
         "name": "Prepare Notion DB payload",
         "func": "var data = msg.payload[0]\nvar title = msg.payload[0].title\nvar url = msg.payload[0].link\n\n\n\nvar postData = {\n\t\"parent\": { \"database_id\": \"4fa1dc37-a3bf-43be-9c8d-35b41e539f8d\" },\n\t\"properties\": {\n\t\t\"Name\": {\n\t\t\t\"title\": [\n\t\t\t\t{\n\t\t\t\t\t\"text\": {\n\t\t\t\t\t\t\"content\": title\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t],\n\t\t},\n\t\t\"Status\": {\n\t\t    \"select\": {\n\t\t        \"name\": \"Auto\"\n\t\t    }\n\t\t},\n        \"Link\": {\n            \"url\": url\n        }\n\t\t\n}}\n\n\n\n//\t\t\"Context\": {\n//\t\t\t\"select\": {\n//\t\t\t\t\"name\": context\n//\t\t\t}\n//\t\t},\n//\t\t\"Client\": {\n//\t\t    \"select\": {\n//\t\t        \"name\": client\n//\t\t    }\n//\t\t}\n\nmsg.payload = postData\nreturn msg;",
         "outputs": 1,
@@ -7566,7 +7335,8 @@
         "y": 280,
         "wires": [
             [
-                "675ba1c48b1c62d0"
+                "675ba1c48b1c62d0",
+                "b5405e354503bac3"
             ]
         ]
     },
@@ -7574,6 +7344,7 @@
         "id": "675ba1c48b1c62d0",
         "type": "http request",
         "z": "d92bbc0c206c5bfc",
+        "d": true,
         "name": "create page",
         "method": "POST",
         "ret": "txt",
@@ -7596,6 +7367,7 @@
         "id": "766b663c01f94543",
         "type": "json",
         "z": "d92bbc0c206c5bfc",
+        "d": true,
         "name": "",
         "property": "payload",
         "action": "",
@@ -7603,28 +7375,30 @@
         "x": 1070,
         "y": 280,
         "wires": [
-            []
+            [
+                "b5405e354503bac3"
+            ]
         ]
     },
     {
         "id": "451f09a2af4d6e01",
         "type": "feedparse",
         "z": "d92bbc0c206c5bfc",
+        "d": true,
         "name": "",
-        "url": "https://api.gregory-ms.com/machine-learning/feed",
+        "url": "https://dash.gregory-ms.com/machine-learning/feed",
         "interval": "2",
         "x": 210,
         "y": 220,
         "wires": [
-            [
-                "57cfea48fa20802c"
-            ]
+            []
         ]
     },
     {
         "id": "57cfea48fa20802c",
         "type": "change",
         "z": "d92bbc0c206c5bfc",
+        "d": true,
         "name": "",
         "rules": [
             {
@@ -7652,6 +7426,7 @@
         "id": "102dbb9361d4ea7c",
         "type": "rbe",
         "z": "d92bbc0c206c5bfc",
+        "d": true,
         "name": "",
         "func": "rbe",
         "gap": "",
@@ -7660,8 +7435,8 @@
         "septopics": true,
         "property": "guid",
         "topi": "topic",
-        "x": 270,
-        "y": 280,
+        "x": 230,
+        "y": 340,
         "wires": [
             [
                 "6d80af87a80174dd"
@@ -7672,6 +7447,7 @@
         "id": "d2b644450513d5d7",
         "type": "comment",
         "z": "d92bbc0c206c5bfc",
+        "d": true,
         "name": "Publish Articles on Twitter",
         "info": "",
         "x": 130,
@@ -7682,6 +7458,7 @@
         "id": "16e9023b5711d25b",
         "type": "comment",
         "z": "d92bbc0c206c5bfc",
+        "d": true,
         "name": "Save tweet in the content calendar so that Automate.io can publish it",
         "info": "",
         "x": 790,
@@ -7692,12 +7469,13 @@
         "id": "6d80af87a80174dd",
         "type": "delay",
         "z": "d92bbc0c206c5bfc",
+        "d": true,
         "name": "",
         "pauseType": "rate",
         "timeout": "5",
         "timeoutUnits": "minutes",
         "rate": "1",
-        "nbRateUnits": "5",
+        "nbRateUnits": "4",
         "rateUnits": "minute",
         "randomFirst": "5",
         "randomLast": "6",
@@ -7729,7 +7507,7 @@
         ],
         "repeat": "259200",
         "crontab": "",
-        "once": false,
+        "once": true,
         "onceDelay": 0.1,
         "topic": "",
         "payload": "SELECT COUNT(*) FROM articles;",
@@ -7873,14 +7651,14 @@
         "id": "4e563f981d9636be",
         "type": "template",
         "z": "d92bbc0c206c5bfc",
-        "name": "SQLite template",
+        "name": "SQL",
         "field": "payload",
         "fieldType": "msg",
         "format": "handlebars",
         "syntax": "mustache",
         "template": "UPDATE trials\nSET sent_to_twitter = true\nWHERE trial_id = {{trial_id}};",
         "output": "str",
-        "x": 940,
+        "x": 910,
         "y": 940,
         "wires": [
             [
@@ -7920,7 +7698,7 @@
         "y": 860,
         "wires": [
             [
-                "b421505d4539e628"
+                "b794036c1fb192c6"
             ],
             []
         ]
@@ -7930,14 +7708,14 @@
         "type": "function",
         "z": "d92bbc0c206c5bfc",
         "name": "Prepare Notion DB payload",
-        "func": "var data = msg.payload[0]\nvar title = `#ClinicalTrial ${msg.payload[0].title} `\nvar url = msg.payload[0].link\n\nvar postData = {\n\t\"parent\": { \"database_id\": \"4fa1dc37-a3bf-43be-9c8d-35b41e539f8d\" },\n\t\"properties\": {\n\t\t\"Name\": {\n\t\t\t\"title\": [\n\t\t\t\t{\n\t\t\t\t\t\"text\": {\n\t\t\t\t\t\t\"content\": title\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t],\n\t\t},\n\t\t\"Status\": {\n\t\t    \"select\": {\n\t\t        \"name\": \"Auto\"\n\t\t    }\n\t\t},\n        \"Link\": {\n            \"url\": url\n        }\n\t\t\n}}\n\n\n\n//\t\t\"Context\": {\n//\t\t\t\"select\": {\n//\t\t\t\t\"name\": context\n//\t\t\t}\n//\t\t},\n//\t\t\"Client\": {\n//\t\t    \"select\": {\n//\t\t        \"name\": client\n//\t\t    }\n//\t\t}\n\nmsg.payload = postData\nreturn msg;",
+        "func": "var data = msg.payload\nvar title = `#ClinicalTrial ${msg.payload.title} `\nvar url = msg.payload.link\n\nvar postData = {\n\t\"parent\": { \"database_id\": \"4fa1dc37-a3bf-43be-9c8d-35b41e539f8d\" },\n\t\"properties\": {\n\t\t\"Name\": {\n\t\t\t\"title\": [\n\t\t\t\t{\n\t\t\t\t\t\"text\": {\n\t\t\t\t\t\t\"content\": title\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t],\n\t\t},\n\t\t\"Status\": {\n\t\t    \"select\": {\n\t\t        \"name\": \"Auto\"\n\t\t    }\n\t\t},\n        \"Link\": {\n            \"url\": url\n        }\n\t\t\n}}\n\n\n\n//\t\t\"Context\": {\n//\t\t\t\"select\": {\n//\t\t\t\t\"name\": context\n//\t\t\t}\n//\t\t},\n//\t\t\"Client\": {\n//\t\t    \"select\": {\n//\t\t        \"name\": client\n//\t\t    }\n//\t\t}\n\nmsg.payload = postData\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 440,
-        "y": 940,
+        "x": 700,
+        "y": 860,
         "wires": [
             [
                 "8af055d9ff5c39e3"
@@ -7958,8 +7736,8 @@
         "proxy": "",
         "authType": "bearer",
         "senderr": false,
-        "x": 650,
-        "y": 940,
+        "x": 910,
+        "y": 860,
         "wires": [
             [
                 "c2453000a42e1c9a"
@@ -7979,33 +7757,6 @@
         "wires": [
             [
                 "4e563f981d9636be"
-            ]
-        ]
-    },
-    {
-        "id": "b421505d4539e628",
-        "type": "change",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "rules": [
-            {
-                "t": "move",
-                "p": "payload[0].trial_id",
-                "pt": "msg",
-                "to": "trial_id",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 180,
-        "y": 940,
-        "wires": [
-            [
-                "b794036c1fb192c6"
             ]
         ]
     },
@@ -8038,14 +7789,14 @@
         "id": "39ae3d72bd4507be",
         "type": "template",
         "z": "d92bbc0c206c5bfc",
-        "name": "SQLite template",
-        "field": "topic",
+        "name": "SQL",
+        "field": "payload",
         "fieldType": "msg",
         "format": "handlebars",
         "syntax": "mustache",
         "template": "UPDATE articles\nSET sent_to_twitter = true\nWHERE article_id = {{article_id}};",
         "output": "str",
-        "x": 960,
+        "x": 930,
         "y": 1140,
         "wires": [
             [
@@ -8081,7 +7832,7 @@
         "checkall": "true",
         "repair": false,
         "outputs": 2,
-        "x": 530,
+        "x": 710,
         "y": 1060,
         "wires": [
             [
@@ -8095,7 +7846,7 @@
         "type": "function",
         "z": "d92bbc0c206c5bfc",
         "name": "Prepare Notion DB payload",
-        "func": "var data = msg.payload[0]\nvar title = `New article discovered, is it relevant? ${msg.payload[0].title} `\nvar url = msg.payload[0].link\n\nvar postData = {\n\t\"parent\": { \"database_id\": \"4fa1dc37-a3bf-43be-9c8d-35b41e539f8d\" },\n\t\"properties\": {\n\t\t\"Name\": {\n\t\t\t\"title\": [\n\t\t\t\t{\n\t\t\t\t\t\"text\": {\n\t\t\t\t\t\t\"content\": title\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t],\n\t\t},\n\t\t\"Status\": {\n\t\t    \"select\": {\n\t\t        \"name\": \"Auto\"\n\t\t    }\n\t\t},\n        \"Link\": {\n            \"url\": url\n        }\n\t\t\n}}\n\n\n\n//\t\t\"Context\": {\n//\t\t\t\"select\": {\n//\t\t\t\t\"name\": context\n//\t\t\t}\n//\t\t},\n//\t\t\"Client\": {\n//\t\t    \"select\": {\n//\t\t        \"name\": client\n//\t\t    }\n//\t\t}\n\nmsg.payload = postData\nreturn msg;",
+        "func": "var data = msg.payload\nvar title = `New article discovered, is it relevant? ${msg.payload.title} `\nvar url = msg.payload.link\n\nvar postData = {\n\t\"parent\": { \"database_id\": \"4fa1dc37-a3bf-43be-9c8d-35b41e539f8d\" },\n\t\"properties\": {\n\t\t\"Name\": {\n\t\t\t\"title\": [\n\t\t\t\t{\n\t\t\t\t\t\"text\": {\n\t\t\t\t\t\t\"content\": title\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t],\n\t\t},\n\t\t\"Status\": {\n\t\t    \"select\": {\n\t\t        \"name\": \"Auto\"\n\t\t    }\n\t\t},\n        \"Link\": {\n            \"url\": url\n        }\n\t\t\n}}\n\n\n\n//\t\t\"Context\": {\n//\t\t\t\"select\": {\n//\t\t\t\t\"name\": context\n//\t\t\t}\n//\t\t},\n//\t\t\"Client\": {\n//\t\t    \"select\": {\n//\t\t        \"name\": client\n//\t\t    }\n//\t\t}\n\nmsg.payload = postData\nreturn msg;",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -8155,7 +7906,7 @@
         "rules": [
             {
                 "t": "move",
-                "p": "payload[0].article_id",
+                "p": "payload.article_id",
                 "pt": "msg",
                 "to": "article_id",
                 "tot": "msg"
@@ -8166,7 +7917,7 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 190,
+        "x": 180,
         "y": 1140,
         "wires": [
             [
@@ -8258,7 +8009,7 @@
         "limit_drop_intermediate": false,
         "limit_drop_if_in_queue": false,
         "outputs": false,
-        "x": 1100,
+        "x": 1040,
         "y": 940,
         "wires": []
     },
@@ -8278,7 +8029,7 @@
         "limit_drop_intermediate": false,
         "limit_drop_if_in_queue": false,
         "outputs": false,
-        "x": 1140,
+        "x": 1060,
         "y": 1140,
         "wires": []
     },
@@ -8289,7 +8040,7 @@
         "postgresdb": "857f821ab371a10e",
         "name": "",
         "output": true,
-        "perrow": false,
+        "perrow": true,
         "rowspermsg": "1",
         "return_on_error": false,
         "limit_queries": "0",
@@ -8302,7 +8053,7 @@
         "y": 1060,
         "wires": [
             [
-                "f24018c473e3c710"
+                "5f3769db596578af"
             ]
         ]
     },
@@ -8315,7 +8066,7 @@
         "fieldType": "msg",
         "format": "sql",
         "syntax": "mustache",
-        "template": "SELECT\n\tarticle_id,\n\tml_prediction_gnb,\n\tsent_to_twitter\nFROM\n\tarticles\nWHERE\n\tml_prediction_gnb = TRUE\n\tAND sent_to_twitter IS NULL\n\tOR sent_to_twitter = FALSE\nLIMIT 1;",
+        "template": "SELECT\n\tarticle_id,\n\tml_prediction_gnb,\n\tsent_to_twitter\nFROM\n\tarticles\nWHERE\n\tml_prediction_gnb = TRUE\n\tAND sent_to_twitter IS NULL\n\tOR sent_to_twitter = FALSE;",
         "output": "str",
         "x": 240,
         "y": 1060,
@@ -8334,13 +8085,119 @@
         "fieldType": "msg",
         "format": "sql",
         "syntax": "mustache",
-        "template": "SELECT\n\t*\nFROM\n\ttrials\nWHERE\n\tsent_to_twitter IS NULL\n\tOR sent_to_twitter = false\nLIMIT 1;",
+        "template": "SELECT\n\t*\nFROM\n\ttrials\nWHERE\n\tsent_to_twitter IS NULL\n\tOR sent_to_twitter = false;",
         "output": "str",
         "x": 240,
         "y": 860,
         "wires": [
             [
                 "f68fe76d3b14feaa"
+            ]
+        ]
+    },
+    {
+        "id": "b5405e354503bac3",
+        "type": "debug",
+        "z": "d92bbc0c206c5bfc",
+        "d": true,
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 930,
+        "y": 440,
+        "wires": []
+    },
+    {
+        "id": "952445cd6a38597e",
+        "type": "feedparse",
+        "z": "d92bbc0c206c5bfc",
+        "d": true,
+        "name": "",
+        "url": "https://api.gregory-ms.com/feed/machine-learning",
+        "interval": "2",
+        "x": 210,
+        "y": 400,
+        "wires": [
+            [
+                "44aae1e409356de7"
+            ]
+        ]
+    },
+    {
+        "id": "44aae1e409356de7",
+        "type": "string",
+        "z": "d92bbc0c206c5bfc",
+        "d": true,
+        "name": "",
+        "methods": [
+            {
+                "name": "replaceAll",
+                "params": [
+                    {
+                        "type": "str",
+                        "value": "https://gregory-ms.com/articles/"
+                    },
+                    {
+                        "type": "str",
+                        "value": ""
+                    }
+                ]
+            },
+            {
+                "name": "replaceAll",
+                "params": [
+                    {
+                        "type": "str",
+                        "value": "/"
+                    },
+                    {
+                        "type": "str",
+                        "value": ""
+                    }
+                ]
+            }
+        ],
+        "prop": "article.guid",
+        "propout": "guid",
+        "object": "msg",
+        "objectout": "msg",
+        "x": 470,
+        "y": 400,
+        "wires": [
+            [
+                "b5405e354503bac3",
+                "102dbb9361d4ea7c"
+            ]
+        ]
+    },
+    {
+        "id": "5f3769db596578af",
+        "type": "delay",
+        "z": "d92bbc0c206c5bfc",
+        "name": "",
+        "pauseType": "delay",
+        "timeout": "20",
+        "timeoutUnits": "minutes",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 570,
+        "y": 1060,
+        "wires": [
+            [
+                "f24018c473e3c710"
             ]
         ]
     },
