@@ -38,9 +38,9 @@ urlpatterns = [
 	path('articles/related/', RelatedArticles.as_view({'get': 'list'})),
 	path('articles/count/', ArticlesCount.as_view({'get': 'list'})),
 	path('', include(router.urls)),
-	path('latest/articles/feed/', LatestArticlesFeed()),
-	path('latest/trials/feed/', LatestTrialsFeed()),
-	path('machine-learning/feed/', MachineLearningFeed()),
-	path('articles/prediction/none/feed/', ToPredictFeed()),
+	path('feed/latest/articles/', LatestArticlesFeed()),
+	path('feed/latest/trials/', LatestTrialsFeed()),
+	path('feed/machine-learning/', MachineLearningFeed()),
+	path('feed/articles/prediction/none/', ToPredictFeed()),
 
 ]
