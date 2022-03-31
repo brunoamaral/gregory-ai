@@ -11,7 +11,7 @@ import html
 SOURCE_DATA_LOCAL = "/python-ml/data/source.json"
 
 # The URL for retrieving the JSON file
-SOURCE_DATA_URL = "https://api.gregory-ms.com/articles/all"
+SOURCE_DATA_URL = "https://api.gregory-ms.com/articles/all?format=json"
 
 # Check if the source data file exists locally (no need to get it from server if already available locally)
 # if(not os.path.isfile(SOURCE_DATA_LOCAL)):
