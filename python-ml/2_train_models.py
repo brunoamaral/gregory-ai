@@ -13,7 +13,7 @@ from utils.model_utils import DenseTransformer
 from joblib import dump
 
 # The CSV file that has the source data
-SOURCE_DATA_CSV = "./data/source.csv"
+SOURCE_DATA_CSV = "/python-ml/data/source.csv"
 
 # Let's load the CSV file into a Pandas dataset
 dataset = pd.read_csv(SOURCE_DATA_CSV)
@@ -98,4 +98,4 @@ for model, pipeline in pipelines.items():
     pipeline.fit(input, output)
 
     # Save the pipeline for later use (`compress` argument is to save as one single file with the entire pipeline)
-    dump(pipeline, './models/model_' + model + '.joblib', compress=1)
+    dump(pipeline, '/python-ml/models/model_' + model + '.joblib', compress=1)

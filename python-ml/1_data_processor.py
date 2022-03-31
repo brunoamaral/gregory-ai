@@ -8,17 +8,17 @@ import html
 
 
 # The path to the the local JSON file
-SOURCE_DATA_LOCAL = "./data/source.json"
+SOURCE_DATA_LOCAL = "/python-ml/data/source.json"
 
 # The URL for retrieving the JSON file
-SOURCE_DATA_URL = "https://api.gregory-ms.com/articles/all"
+SOURCE_DATA_URL = "https://api.gregory-ms.com/articles/all?format=json"
 
 # Check if the source data file exists locally (no need to get it from server if already available locally)
-if(not os.path.isfile(SOURCE_DATA_LOCAL)):
+# if(not os.path.isfile(SOURCE_DATA_LOCAL)):
     # If not available locally retrieve it and save it locally
-    r = requests.get(SOURCE_DATA_URL)
-    with open(SOURCE_DATA_LOCAL, 'w') as outfile:
-        json.dump(r.json(), outfile)
+r = requests.get(SOURCE_DATA_URL)
+with open(SOURCE_DATA_LOCAL, 'w') as outfile:
+    json.dump(r.json(), outfile)
 
 # Read the JSON data into a pandas dataframe
 dataset = pd.read_json(SOURCE_DATA_LOCAL)
@@ -53,6 +53,6 @@ dataset = dataset[["terms", "relevant"]]
 # There are several records in the "relevant" column as NaN. Let's convert them to zeros
 dataset["relevant"] = dataset["relevant"].fillna(value = 0)
 
-SOURCE_DATA_CSV = "./data/source.csv"
+SOURCE_DATA_CSV = "/python-ml/data/source.csv"
 
 dataset.to_csv(SOURCE_DATA_CSV, index=False)

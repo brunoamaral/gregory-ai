@@ -14,7 +14,7 @@ class Categories(models.Model):
 
 class Articles(models.Model):
 	article_id = models.AutoField(primary_key=True)
-	title = models.TextField(blank=False, null=False)
+	title = models.TextField(blank=False, null=False, unique=True)
 	summary = models.TextField(blank=True, null=True)
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
@@ -29,13 +29,14 @@ class Articles(models.Model):
 	sent_to_admin = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	sent_to_twitter = models.BooleanField(blank=True, null=True)
+	doi = models.CharField(max_length=280, blank=True, null=True)
 
 	def __str__(self):
 		return str(self.article_id)
 
 	class Meta:
 		managed = True
-		unique_together = (('title', 'link'),)
+		# unique_together = (('title', 'link'),)
 		verbose_name_plural = 'articles'
 		db_table = 'articles'
 
@@ -78,7 +79,7 @@ class Sources(models.Model):
 class Trials(models.Model):
 	trial_id = models.AutoField(primary_key=True)
 	discovery_date = models.DateTimeField(blank=True, null=True)
-	title = models.TextField(blank=False,null=False)
+	title = models.TextField(blank=False,null=False, unique=True)
 	summary = models.TextField(blank=True, null=True)
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
@@ -93,7 +94,6 @@ class Trials(models.Model):
 
 	class Meta:
 		managed = True
-		unique_together = (('title', 'link'),)
 		verbose_name_plural = 'trials'
 		db_table = 'trials'
 

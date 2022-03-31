@@ -43,40 +43,23 @@ There are RSS feeds you can use for both Articles and Clinical Trials.
 ## API Endpoints{.title .text-primary}
 
 
+The API is served using Django Rest Framework and can be accessed at <https://api.gregory-ms.com/>. 
+
 ### Articles{.title .text-muted}
 
 **List all articles**
 
-`https://api.gregory-ms.com/articles/all`
+`https://api.gregory-ms.com/articles/all?format=json`
 
-Example: <a href="https://api.gregory-ms.com/articles/all">https://api.gregory-ms.com/articles/all</a>
+Example: <a href="https://api.gregory-ms.com/articles/all?format=json">https://api.gregory-ms.com/articles/all?format=json</a>
 
 **List article that matches the {ID} number.**    
 
 `https://api.gregory-ms.com/articles/id/{ID}`
 
 
-Example: <a href="https://api.gregory-ms.com/articles/id/19">https://api.gregory-ms.com/articles/id/19</a>
+Example: <a href="https://api.gregory-ms.com/articles/19">https://api.gregory-ms.com/articles/19</a>
 
-**List all articles by keyword.**    
-
-`https://api.gregory-ms.com/articles/keyword/{keyword}`
-
-
-Example: <a href="https://api.gregory-ms.com/articles/keyword/myelin">https://api.gregory-ms.com/articles/keyword/myelin</a>
-
-**List related articles by keywords**
-
-`POST https://gregory-ms.com/articles/related/`
-
-Expects a json object of keywords in the post body. 
-
-```
-{ "keywords": ['trials','gait rehabilitation','multiple sclerosis'] }
-```
-
-
-https://gregory-ms.com/articles/related/
 
 **List all relevant articles.**    
 
@@ -90,44 +73,31 @@ Example: <a href="https://api.gregory-ms.com/articles/relevant">https://api.greg
 
 **List all articles from specified {source}.**
 
-`https://api.gregory-ms.com/articles/source/{source_id}`
-
+`https://api.gregory-ms.com/articles/source/{source_id}/`
 
 Example: <a href="https://api.gregory-ms.com/articles/source/1">https://api.gregory-ms.com/articles/source/1</a>
 
 **List all available sources.**
 
-`https://api.gregory-ms.com/articles/sources`
+`https://api.gregory-ms.com/sources/`
 
-Example: <a href="https://api.gregory-ms.com/articles/sources">https://api.gregory-ms.com/articles/sources</a>
+Example: <a href="https://api.gregory-ms.com/sources/">https://api.gregory-ms.com/sources/</a>
 
 ### Trials{.title .text-muted}
 
 **List all trials.**    
 
-`https://api.gregory-ms.com/trials/all`
+`https://api.gregory-ms.com/trials/all?format=json`
 
 Example: <a href="https://api.gregory-ms.com/trials/all">https://api.gregory-ms.com/trials/all</a>
-
-**List all trials by keyword.**    
-
-`https://api.gregory-ms.com/trials/keyword/{keyword}`
-
-Example: <a href="https://api.gregory-ms.com/trials/keyword/myelin">https://api.gregory-ms.com/trials/keyword/myelin</a>
 
 #### Trials' Sources{.title .text-muted}
 
 **List all trials from specified {source}.**    
 
-`https://api.gregory-ms.com/trials/source/{source}`
+`https://api.gregory-ms.com/trials/source/{source_id}`
 
-Example: <a href="https://api.gregory-ms.com/trials/source/pubmed">https://api.gregory-ms.com/trials/source/pubmed</a>
-
-**List all available sources.**    
-
-`https://api.gregory-ms.com/trials/sources`
-
-Example: <a href="https://api.gregory-ms.com/trials/sources">https://api.gregory-ms.com/trials/sources</a>
+Example: <a href="https://api.gregory-ms.com/trials/source/12/">https://api.gregory-ms.com/trials/source/12/</a>
 
 ## Database Structure{.title .text-primary}
 

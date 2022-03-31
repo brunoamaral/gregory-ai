@@ -60,7 +60,7 @@ The same information is available in excel and json format: https://gregory-ms.c
 2. `python3 1_data_processor.py`
 3. `python3 2_train_models.py`
 4. Login to sqlite3: `sqlite3 gregory/docker-data/gregory.db`
-5. Reset the Machine Learning records with `UPDATE articles SET ml_prediction_gnb ='', ml_prediction_lr='' WHERE article_id > 0;`
+5. Reset the Machine Learning records with `UPDATE articles SET ml_prediction_gnb = NULL, ml_prediction_lr = NULL WHERE article_id > 0;`
 6. The Node-Red flow to review the articles runs every 10 minutes.
 
 

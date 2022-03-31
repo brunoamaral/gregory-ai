@@ -132,14 +132,6 @@ popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
-print('''
-####
-## Migrate PostGres schema (WIP, not working)
-####
-''')
-
-
-
 
 
 print('''
@@ -159,6 +151,16 @@ print('''
 network = client.networks.create('traefik_proxy')
 
 print(network.attrs)
+
+print('''
+####
+## Migrate PostGres schema (WIP, not working)
+####
+
+
+Please login to the shell of the admin container and run `python manage.py migrate` to setup the postgres database
+''')
+
 
 print('''
 ####

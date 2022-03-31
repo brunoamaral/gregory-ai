@@ -51,6 +51,7 @@ services:
       # - "traefik.http.routers.nodered.rule=Host(`gregory.${DOMAIN_NAME}`)"
   admin:
     container_name: admin
+    restart: always
     build: 
       context: django/
       dockerfile: Dockerfile.django
@@ -71,7 +72,6 @@ services:
       - db
   metabase:
     volumes:
-      - /home/gregory/gregory/docker-data/:/metabase
       - ./metabase-data:/metabase-data
     environment:
       - MB_DB_TYPE=postgres
