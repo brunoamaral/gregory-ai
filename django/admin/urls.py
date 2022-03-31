@@ -16,25 +16,31 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path, re_path
 from rest_framework import routers
-from api import views
+from api.views import *
+from rss.views import *
 
 router = routers.DefaultRouter()
-router.register(r'articles', views.ArticleViewSet, views.RelevantList)
-router.register(r'trials', views.TrialViewSet)
-router.register(r'sources', views.SourceViewSet)
+router.register(r'articles', ArticleViewSet, RelevantList)
+router.register(r'trials', TrialViewSet)
+router.register(r'sources', SourceViewSet)
 
 
 urlpatterns = [
 	path('admin/', admin.site.urls),
 	path('api-auth/', include('rest_framework.urls')),
-	path('articles/all/', views.AllArticleViewSet.as_view()),
-	path('trials/all/', views.AllTrialViewSet.as_view()),
-	re_path('^articles/relevant/$', views.RelevantList.as_view()),
-	path('articles/prediction/none/', views.ArticlesPredictionNone.as_view()),
-	re_path('^articles/source/(?P<source>.+)/$', views.ArticlesBySourceList.as_view()),
-	re_path('^trials/source/(?P<source>.+)/$', views.TrialsBySourceList.as_view()),
-	re_path('^articles/unsent/$', views.UnsentList.as_view()),
-	path('articles/related/', views.RelatedArticles.as_view({'get': 'list'})),
-	path('articles/count/', views.ArticlesCount.as_view({'get': 'list'})),
+	path('articles/all/', AllArticleViewSet.as_view()),
+	path('trials/all/', AllTrialViewSet.as_view()),
+	re_path('^articles/relevant/$', RelevantList.as_view()),
+	path('articles/prediction/none/', ArticlesPredictionNone.as_view()),
+	re_path('^articles/source/(?P<source>.+)/$', ArticlesBySourceList.as_view()),
+	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
+	re_path('^articles/unsent/$', UnsentList.as_view()),
+	path('articles/related/', RelatedArticles.as_view({'get': 'list'})),
+	path('articles/count/', ArticlesCount.as_view({'get': 'list'})),
 	path('', include(router.urls)),
+	path('latest/articles/feed/', LatestArticlesFeed()),
+	path('latest/trials/feed/', LatestTrialsFeed()),
+	path('machine-learning/feed/', MachineLearningFeed()),
+	path('articles/prediction/none/feed/', ToPredictFeed()),
+
 ]
