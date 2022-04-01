@@ -24,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['0.0.0.0','localhost','167.71.38.42','api.gregory-ms.com','manage.gregory-ms.com']
 CSRF_TRUSTED_ORIGINS = ['https://api.gregory-ms.com','https://manage.gregory-ms.com']
