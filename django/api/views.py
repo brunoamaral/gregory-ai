@@ -106,13 +106,18 @@ class ArticlesByKeyword(generics.ListAPIView):
 
 class ArticlesPredictionNone(generics.ListAPIView):
 	"""
-	List articles where the Machine Learning prediction is Null and summary over 360 characters
+	List articles where the Machine Learning prediction is Null and summary length greater than 0 characters.    
+	To override the default summary length pass the summary_length argument to the url as `/articles/prediction/none/?summary_length=42` 
 	"""
 	serializer_class = ArticleSerializer
 	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
-		return Articles.objects.annotate(summary_len=Length('summary')).filter( summary_len__gt = 360).filter(ml_prediction_gnb=None)
+		queryset = Articles.objects.annotate(summary_len=Length('summary')).filter( summary_len__gt = 0).filter(ml_prediction_gnb=None)
+		summary_length = self.request.query_params.get('summary_length')
+		if summary_length is not None:
+			queryset = Articles.objects.annotate(summary_len=Length('summary')).filter( summary_len__gt = summary_length).filter(ml_prediction_gnb=None)
+		return queryset
 
 class ArticlesCount(viewsets.ModelViewSet):
 	"""
