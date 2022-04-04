@@ -35,9 +35,15 @@ resources:
 
 ## RSS{.title .text-primary}
 
-There are RSS feeds you can use for both Articles and Clinical Trials.
+There are RSS a number of RSS feeds you can use to access the database in real time:
 
-<a class="btn btn-outline-primary" href="/articles/index.xml"><i class="fas fa-rss"></i> RSS for Articles</a> <a class="btn btn-outline-primary" href="/trials/index.xml"><i class="fas fa-rss"></i> RSS for Clinical Trials</a>
+
+<a class="btn btn-outline-primary" href="https://api.gregory-ms.com/feed/latest/articles/"><i class="fas fa-rss"></i> Latest Articles</a>
+
+<a class="btn btn-outline-primary" href="https://api.gregory-ms.com/feed/latest/trials/"><i class="fas fa-rss"></i> Latest Trials</a>
+
+<a class="btn btn-outline-primary" href="https://api.gregory-ms.com/feed/machine-learning/"><i class="fas fa-rss"></i> Machine Learning Prediction</a>
+
 
 
 ## API Endpoints{.title .text-primary}
