@@ -3,7 +3,7 @@ from django.db.models.functions import Length
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
-from gregory.models import Articles, Trials, Sources
+from gregory.models import Articles, Trials, Sources, Authors
 from rest_framework import viewsets, permissions, generics, filters
 import json
 

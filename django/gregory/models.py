@@ -11,6 +11,9 @@ class Authors(models.Model):
 	class Meta:
 		verbose_name_plural = 'authors'
 		db_table = 'authors'
+	@property
+	def full_name(self):
+		return self.given_name+" "+self.family_name
 
 	
 class Categories(models.Model):
