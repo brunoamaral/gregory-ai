@@ -26,12 +26,16 @@ works = Works(etiquette=my_etiquette)
 
 for article in articles:
 	w = works.doi(article[1])
-	if w['author'] is not None:
+	if w is not None and 'author' in w and w['author'] is not None:
 		authors = w['author']
 		article_id = article[0]
 		for author in authors:
-			author_first_name = author['given']
-			author_family_name = author['family']
+			author_first_name = None
+			if 'given' in author:
+				author_first_name = author['given']
+			author_family_name = None
+			if 'family' in author:
+				author_family_name = author['family']
 			author_orcid = None
 			if 'ORCID' in author:
 				author_orcid = author['ORCID']
