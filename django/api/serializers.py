@@ -20,11 +20,15 @@ class TrialSerializer(serializers.HyperlinkedModelSerializer):
 		fields = ['trial_id','title','summary','published_date','discovery_date','link','source','relevant']
 		read_only_fields = ('discovery_date',)
 		
-
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:
 		model = Sources
 		fields = ['name','source_id','source_for','link']
+
+class AuthorSerializer(serializers.HyperlinkedModelSerializer):
+	class Meta:
+		model = Authors
+		fields = ['given_name','family_name','ORCID']
 
 class CountArticlesSerializer(serializers.ModelSerializer):
 	articles_count = serializers.SerializerMethodField()

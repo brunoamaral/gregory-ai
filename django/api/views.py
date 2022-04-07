@@ -1,4 +1,4 @@
-from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer
+from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer
 from django.db.models.functions import Length
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
@@ -194,6 +194,19 @@ class SourceViewSet(viewsets.ModelViewSet):
 	"""
 	queryset = Sources.objects.all().order_by('name')
 	serializer_class = SourceSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+
+###
+# AUTHORS
+### 
+
+class AuthorsViewSet(viewsets.ModelViewSet):
+	"""
+	List all authors
+	"""
+	queryset = Authors.objects.all().order_by('author_id')
+	serializer_class = AuthorSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
