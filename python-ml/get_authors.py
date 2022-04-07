@@ -1,3 +1,4 @@
+from _typeshed import NoneType
 from crossref.restful import Works, Etiquette
 import os
 import psycopg2
@@ -26,36 +27,37 @@ works = Works(etiquette=my_etiquette)
 
 for article in articles:
 	w = works.doi(article[1])
-	authors = w['author']
-	article_id = article[0]
-	for author in authors:
-		author_first_name = author['given']
-		author_family_name = author['family']
-		author_orcid = None
-		if 'ORCID' in author:
-			author_orcid = author['ORCID']
+	if w['author'] is not NoneType:
+		authors = w['author']
+		article_id = article[0]
+		for author in authors:
+			author_first_name = author['given']
+			author_family_name = author['family']
+			author_orcid = None
+			if 'ORCID' in author:
+				author_orcid = author['ORCID']
 
-		# check if author name + author family name exists in database
-		author_query = """SELECT "author_id" FROM authors WHERE given_name = %s AND family_name = %s ;"""
-		cur = conn.cursor()
-		cur.execute(author_query, (author_first_name,author_family_name))
-		author_id = cur.fetchone()
-		if author_id == None:
-			# if ent.label_ in authors_list:
-			## add to database
-			add_author = """INSERT INTO "public"."authors" ("given_name", "family_name", "ORCID") VALUES (%s, %s, %s) RETURNING author_id;"""
-			cur.execute(add_author, (author_first_name,author_family_name,author_orcid))
-			conn.commit()
-			author_id = cur.fetchone()[0]
-			cur.execute("""INSERT INTO "public"."articles_authors" ("authors_id","articles_id") VALUES  (%s,%s); """, (author_id, article_id))
-			conn.commit()
-		else:
-			# does this relationship exist?
-			cur.execute("""SELECT count(*) from "public"."articles_authors" WHERE articles_id = %s AND id = %s;""", (article_id,author_id[0]))
-			count = cur.fetchone()[0]
-			if count == 0:
-				# if we have the data, insert the relation of article + entity
-				cur.execute("""INSERT INTO "public"."articles_authors" ("authors_id","articles_id") VALUES  (%s,%s); """, (author_id[0], article_id))
+			# check if author name + author family name exists in database
+			author_query = """SELECT "author_id" FROM authors WHERE given_name = %s AND family_name = %s ;"""
+			cur = conn.cursor()
+			cur.execute(author_query, (author_first_name,author_family_name))
+			author_id = cur.fetchone()
+			if author_id == None:
+				# if ent.label_ in authors_list:
+				## add to database
+				add_author = """INSERT INTO "public"."authors" ("given_name", "family_name", "ORCID") VALUES (%s, %s, %s) RETURNING author_id;"""
+				cur.execute(add_author, (author_first_name,author_family_name,author_orcid))
+				conn.commit()
+				author_id = cur.fetchone()[0]
+				cur.execute("""INSERT INTO "public"."articles_authors" ("authors_id","articles_id") VALUES  (%s,%s); """, (author_id, article_id))
 				conn.commit()
 			else:
-				print('relationship exists. Author: ', author_id[0], " article_id: ", article_id)
+				# does this relationship exist?
+				cur.execute("""SELECT count(*) from "public"."articles_authors" WHERE articles_id = %s AND id = %s;""", (article_id,author_id[0]))
+				count = cur.fetchone()[0]
+				if count == 0:
+					# if we have the data, insert the relation of article + entity
+					cur.execute("""INSERT INTO "public"."articles_authors" ("authors_id","articles_id") VALUES  (%s,%s); """, (author_id[0], article_id))
+					conn.commit()
+				else:
+					print('relationship exists. Author: ', author_id[0], " article_id: ", article_id)
