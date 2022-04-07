@@ -56,7 +56,7 @@ for article in articles:
 				conn.commit()
 			else:
 				# does this relationship exist?
-				cur.execute("""SELECT count(*) from "public"."articles_authors" WHERE articles_id = %s AND author_id = %s;""", (article_id,author_id[0]))
+				cur.execute("""SELECT count(*) from "public"."articles_authors" WHERE articles_id = %s AND authors_id = %s;""", (article_id,author_id[0]))
 				count = cur.fetchone()[0]
 				if count == 0:
 					# if we have the data, insert the relation of article + entity
