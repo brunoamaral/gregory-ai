@@ -46,14 +46,15 @@ for article in articles:
 			cur.execute(author_query, (author_first_name,author_family_name))
 			author_id = cur.fetchone()
 			if author_id == None:
-				# if ent.label_ in authors_list:
+				# if author in authors_list:
 				## add to database
-				add_author = """INSERT INTO "public"."authors" ("given_name", "family_name", "ORCID") VALUES (%s, %s, %s) RETURNING author_id;"""
-				cur.execute(add_author, (author_first_name,author_family_name,author_orcid))
-				conn.commit()
-				author_id = cur.fetchone()[0]
-				cur.execute("""INSERT INTO "public"."articles_authors" ("authors_id","articles_id") VALUES  (%s,%s); """, (author_id, article_id))
-				conn.commit()
+				if author_first_name is not None and author_family_name is not None:
+					add_author = """INSERT INTO "public"."authors" ("given_name", "family_name", "ORCID") VALUES (%s, %s, %s) RETURNING author_id;"""
+					cur.execute(add_author, (author_first_name,author_family_name,author_orcid))
+					conn.commit()
+					author_id = cur.fetchone()[0]
+					cur.execute("""INSERT INTO "public"."articles_authors" ("authors_id","articles_id") VALUES  (%s,%s); """, (author_id, article_id))
+					conn.commit()
 			else:
 				# does this relationship exist?
 				cur.execute("""SELECT count(*) from "public"."articles_authors" WHERE articles_id = %s AND authors_id = %s;""", (article_id,author_id[0]))
