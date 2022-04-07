@@ -1,4 +1,14 @@
 from django.db import models
+class Authors(models.Model):
+	author_id = models.AutoField(primary_key=True)
+	given_name = models.CharField(blank=False,null=False, max_length=150)
+	family_name = models.CharField(blank=False,null=False, max_length=150)
+	ORCID = models.CharField(blank=True,null=True, max_length=150)
+	class Meta:
+		verbose_name_plural = 'authors'
+		db_table = 'authors'
+
+	
 class Categories(models.Model):
 	category_id = models.AutoField(primary_key=True)
 	category_name = models.CharField(blank=True, null=True,max_length=200)
@@ -25,6 +35,7 @@ class Articles(models.Model):
 	ml_prediction_lr = models.BooleanField(blank=True, null=True)
 	noun_phrases = models.JSONField(blank=True, null=True)
 	categories = models.ManyToManyField(Categories)
+	authors = models.ManyToManyField(Authors)
 	entities = models.ManyToManyField('Entities')
 	sent_to_admin = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
