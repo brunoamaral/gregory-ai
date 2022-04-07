@@ -1,4 +1,3 @@
-from _typeshed import NoneType
 from crossref.restful import Works, Etiquette
 import os
 import psycopg2
@@ -27,7 +26,7 @@ works = Works(etiquette=my_etiquette)
 
 for article in articles:
 	w = works.doi(article[1])
-	if w['author'] is not NoneType:
+	if w['author'] is not None:
 		authors = w['author']
 		article_id = article[0]
 		for author in authors:
@@ -53,7 +52,7 @@ for article in articles:
 				conn.commit()
 			else:
 				# does this relationship exist?
-				cur.execute("""SELECT count(*) from "public"."articles_authors" WHERE articles_id = %s AND id = %s;""", (article_id,author_id[0]))
+				cur.execute("""SELECT count(*) from "public"."articles_authors" WHERE articles_id = %s AND author_id = %s;""", (article_id,author_id[0]))
 				count = cur.fetchone()[0]
 				if count == 0:
 					# if we have the data, insert the relation of article + entity
