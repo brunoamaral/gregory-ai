@@ -4,6 +4,10 @@ class Authors(models.Model):
 	given_name = models.CharField(blank=False,null=False, max_length=150)
 	family_name = models.CharField(blank=False,null=False, max_length=150)
 	ORCID = models.CharField(blank=True,null=True, max_length=150)
+	def __str__(self):
+		full_name = (self.given_name,self.family_name)
+		object_name = ' '.join(full_name)
+		return str(object_name)
 	class Meta:
 		verbose_name_plural = 'authors'
 		db_table = 'authors'
@@ -65,8 +69,6 @@ class Entities(models.Model):
 
 class Sources(models.Model):
 	TABLES = [('articles', 'Articles'),('trials','Trials')]
-
-
 	source_id = models.AutoField(primary_key=True)
 	source_for = models.CharField(choices=TABLES, max_length=50, default='articles')
 	name = models.TextField(blank=True, null=True)
