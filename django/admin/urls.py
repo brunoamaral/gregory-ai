@@ -25,6 +25,7 @@ router = routers.DefaultRouter()
 router.register(r'articles', ArticleViewSet, RelevantList)
 router.register(r'trials', TrialViewSet)
 router.register(r'sources', SourceViewSet)
+router.register(r'authors',AuthorsViewSet)
 
 
 urlpatterns = [
