@@ -36,6 +36,7 @@ urlpatterns = [
 	re_path('^articles/relevant/$', RelevantList.as_view()),
 	path('articles/prediction/none/', ArticlesPredictionNone.as_view()),
 	re_path('^articles/source/(?P<source>.+)/$', ArticlesBySourceList.as_view()),
+	re_path('^articles/author/(?P<author>.+)/$', ArticlesByAuthorList.as_view()),
 	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
 	re_path('^articles/unsent/$', UnsentList.as_view()),
 	path('articles/related/', RelatedArticles.as_view({'get': 'list'})),

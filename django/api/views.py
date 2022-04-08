@@ -68,6 +68,17 @@ class ArticlesBySourceList(generics.ListAPIView):
 		source = self.kwargs['source']
 		return Articles.objects.filter(source=source)
 
+class ArticlesByAuthorList(generics.ListAPIView):
+	"""
+	Lists the articles that include the specified author_id
+	"""
+	serializer_class = ArticleSerializer
+
+	def get_queryset(self):
+
+		author = self.kwargs['author']
+		return Articles.objects.filter(authors=author)
+
 # class ArticleRelevant(generics.RetrieveUpdateAPIView):
 # 	"""
 # 	Change the value of relevancy of the article
