@@ -55,10 +55,11 @@ services:
     build: 
       context: django/
       dockerfile: Dockerfile.django
-    command: python manage.py runserver 0.0.0.0:8000
-    # command: gunicorn -b 0.0.0.0:8000 admin.wsgi
+    # command: python manage.py runserver 0.0.0.0:8000
+    command: gunicorn -b 0.0.0.0:8000 admin.wsgi
     volumes:
       - ./django:/code
+      - python:/python-ml
     ports:
       - "8000:8000"
     environment:
