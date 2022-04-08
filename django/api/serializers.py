@@ -10,7 +10,7 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:
 		model = Articles
 		fields = ['article_id','title','summary','link','published_date','source','authors','relevant','ml_prediction_gnb','ml_prediction_lr','discovery_date','noun_phrases','doi']
-		read_only_fields = ('discovery_date',)
+		read_only_fields = ('discovery_date','ml_prediction_gnb','ml_prediction_lr','noun_phrases')
 		
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
