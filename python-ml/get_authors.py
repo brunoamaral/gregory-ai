@@ -16,7 +16,10 @@ except:
 	print("I am unable to connect to the database")
 
 cur = conn.cursor()
-cur.execute("SELECT article_id,doi FROM articles WHERE doi IS NOT NULL;")
+cur.execute("""SELECT 
+    "articles"."article_id","articles"."doi"
+FROM articles
+WHERE NOT EXISTS (select articles_id from articles_authors where articles.article_id = articles_authors.articles_id) and doi is not null;""")
 articles = cur.fetchall()
 
 my_etiquette = Etiquette('Gregory MS', 'v8', 'https://gregory-ms.com', 'bruno@gregory-ms.com')
