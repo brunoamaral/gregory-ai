@@ -58,7 +58,10 @@ for article in articles:
 					author_id = cur.fetchone()[0]
 					cur.execute("""INSERT INTO "public"."articles_authors" ("authors_id","articles_id") VALUES  (%s,%s); """, (author_id, article_id))
 					conn.commit()
+					print("Author did not exist, created:",author_first_name,author_family_name)
+					print("Associated author",author_first_name,author_family_name,"to article",article_id )
 			else:
+				print("Author", author_first_name, author_family_name,"exists.")
 				# does this relationship exist?
 				cur.execute("""SELECT count(*) from "public"."articles_authors" WHERE articles_id = %s AND authors_id = %s;""", (article_id,author_id[0]))
 				count = cur.fetchone()[0]
@@ -66,5 +69,7 @@ for article in articles:
 					# if we have the data, insert the relation of article + entity
 					cur.execute("""INSERT INTO "public"."articles_authors" ("authors_id","articles_id") VALUES  (%s,%s); """, (author_id[0], article_id))
 					conn.commit()
+
+					print("Added relationship between",author_first_name, author_family_name, "and article", article_id)
 				else:
 					print('relationship exists. Author: ', author_id[0], " article_id: ", article_id)
