@@ -73,3 +73,6 @@ for article in articles:
 					print("Added relationship between",author_first_name, author_family_name, "and article", article_id)
 				else:
 					print('relationship exists. Author: ', author_id[0], " article_id: ", article_id)
+		else:
+			print("Data for DOI",article[1])
+			print(w)
