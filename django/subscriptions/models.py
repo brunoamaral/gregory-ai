@@ -10,6 +10,7 @@ class Subscribers(models.Model):
 	email = models.EmailField(max_length=254, unique=True, null=False,blank=False)
 	profile = models.CharField(choices=PROFILEOPTIONS, max_length=50, default='')
 	active = models.BooleanField(default=True)
+	is_admin = models.BooleanField(default=False)
 
 	def __str__(self):
 		return str(self.email) 
