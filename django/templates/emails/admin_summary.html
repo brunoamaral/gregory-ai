@@ -1,0 +1,30 @@
+<html>
+	<body>
+		<h1>Digest of articles in the last 2 days</h1>
+<br>
+
+LOOP STARTT HERE
+{%for article in articles%}
+<h2>{{article.title}}</h2>
+
+<p><strong>Discovery Date</strong>: {{article.discovery_date}}</p>
+
+<ul>
+		<li>ML GNB: {{article.ml_prediction_gnb}} </li>
+		<li>ML LR: {{article.ml_prediction_lr }} </li>
+</ul>
+
+<p>
+<a href=" {{article.link}} ">{{article.link}} </a>
+</p>
+
+<p><a href="https://api.gregory-ms.com/articles/{{article.article_id}}/">EDIT</a></p>
+
+<br>
+---
+<br>
+<br>
+{% endfor %}
+
+	</body>
+</html>
