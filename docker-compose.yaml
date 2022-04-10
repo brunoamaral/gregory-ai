@@ -75,6 +75,7 @@ services:
       - EMAIL_USE_TLS=${EMAIL_USE_TLS}
       - EMAIL_DOMAIN=${EMAIL_DOMAIN}
       - EMAIL_MAILGUN_API_URL=${EMAIL_MAILGUN_API_URL}
+      - EMAIL_MAILGUN_API=${EMAIL_MAILGUN_API}
 
     networks:
       - traefik_proxy
