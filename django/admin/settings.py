@@ -41,6 +41,7 @@ INSTALLED_APPS = [
 	'django.contrib.sessions',
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
+	"django_cron",
 ]
 
 MIDDLEWARE = [
@@ -148,3 +149,7 @@ EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS')
 EMAIL_MAILGUN=os.environ.get('EMAIL_MAILGUN')
 EMAIL_DOMAIN=os.environ.get('EMAIL_DOMAIN')
 EMAIL_MAILGUN_API_URL=os.environ.get('EMAIL_MAILGUN_API_URL')
+
+CRON_CLASSES = [
+    "subscriptions.mercury.MyCronJob",
+]
