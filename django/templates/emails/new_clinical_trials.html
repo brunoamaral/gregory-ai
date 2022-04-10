@@ -1,0 +1,21 @@
+<html>
+	<body>
+		<h1>Digest of trials in the last 2 days</h1>
+		<br />
+		{% for trial in trials %}
+
+		<br />
+		<h2>{{trial.title}}</h2>
+
+		<p><strong>Discovery Date</strong>: {{trial.discovery_date}}</p>
+		<p>
+			<a href="{{trial.link}}">{{trial.link}}</a>
+		</p>
+
+		<br />
+		---
+		<br />
+		<br />
+		{% endof %}
+	</body>
+</html>
