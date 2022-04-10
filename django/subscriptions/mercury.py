@@ -86,3 +86,27 @@ class WeeklySummary(CronJobBase):
 					trial.sent_to_subscribers = True
 			trials.bulk_update(trials,['sent_to_subscribers'])
 	pass
+
+class TrialsNotification(CronJobBase):
+	RUN_EVERY_MINS = 10 # every 10 minutes
+	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
+	code = 'subscriptions.trials_notification'
+
+	def do(self):
+		trials = Trials.objects.filter(~Q(sent_real_time_notification=True))
+		if len(trials) > 0:
+			subscribers = []
+			for email in Subscribers.objects.filter(lists__list_name='Clinical Trials').values():
+				subscribers.append(email['email'])
+
+			summary = {
+			"trials":trials
+			}
+			html = get_template('emails/trial_notification.html').render(summary)
+			text= strip_tags(html)
+			result = send_simple_message(to="clinical.trials@gregory-ms.com",bcc=subscribers,subject='There is a new clinical trial',html=html, text=text)
+			if result.status_code == 200:
+				for trial in trials:
+						trial.sent_real_time_notification = True
+				trials.bulk_update(trials,['sent_real_time_notification'])
+	pass

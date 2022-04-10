@@ -152,5 +152,6 @@ EMAIL_MAILGUN_API_URL=os.environ.get('EMAIL_MAILGUN_API_URL')
 
 CRON_CLASSES = [
     "subscriptions.mercury.AdminSummary",
-		"subscriptions.mercury.WeeklySummary"
+		"subscriptions.mercury.WeeklySummary",
+		"subscriptions.mercury.TrialsNotification"
 ]
