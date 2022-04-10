@@ -61,8 +61,7 @@ class AdminSummary(CronJobBase):
 	pass
 
 class WeeklySummary(CronJobBase):
-	# RUN_EVERY_MINS = 2880 # every 2 days
-	RUN_EVERY_MINS = 1
+	RUN_EVERY_MINS = 10080 # every 7 days
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'subscriptions.weekly_summary'    
 
