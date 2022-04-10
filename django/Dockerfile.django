@@ -14,7 +14,8 @@ RUN pip install Markdown
 RUN pip install sqlparse
 RUN pip install pytz
 RUN pip install gunicorn
-
+RUN pip install requests
+RUN pip install django4-cron
 
 # RUN pip install -r requirements.txt
 # COPY django /code/

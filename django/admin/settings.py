@@ -33,6 +33,7 @@ CSRF_TRUSTED_ORIGINS = ['https://api.gregory-ms.com','https://manage.gregory-ms.
 
 INSTALLED_APPS = [
 	'gregory.apps.GregoryConfig',
+	'subscriptions.apps.SubscriptionsConfig',
 	'rest_framework',
 	'django.contrib.admin',
 	'django.contrib.auth',
@@ -40,6 +41,7 @@ INSTALLED_APPS = [
 	'django.contrib.sessions',
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
+	"django_cron",
 ]
 
 MIDDLEWARE = [
@@ -137,3 +139,19 @@ REST_FRAMEWORK = {
 	# 'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
 }
 
+# MAILGUN SMTP
+
+EMAIL_HOST = os.environ.get('EMAIL_HOST')
+EMAIL_PORT = os.environ.get('EMAIL_PORT')
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS')
+EMAIL_MAILGUN_API=os.environ.get('EMAIL_MAILGUN_API')
+EMAIL_DOMAIN=os.environ.get('EMAIL_DOMAIN')
+EMAIL_MAILGUN_API_URL=os.environ.get('EMAIL_MAILGUN_API_URL')
+
+CRON_CLASSES = [
+    "subscriptions.mercury.AdminSummary",
+		"subscriptions.mercury.WeeklySummary",
+		"subscriptions.mercury.TrialsNotification"
+]
