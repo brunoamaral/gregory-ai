@@ -1,7 +1,18 @@
 # Gregory
 Gregory aggregates searches in JSON and outputs to a Hugo static site
 
-[TOC]
+# Sources for searches
+
+- APTA
+- BioMedCentral
+- FASEB
+- JNeuroSci
+- MS & Rel. Disorders
+- PEDro
+- pubmed
+- Sage Pub
+- Scielo
+- The Lancet
 
 # Live Version
 
@@ -11,11 +22,9 @@ https://gregory-ms.com
 
 ## Server Requirements
 
-- [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/) with 2GB of swap memory. [Adding swap for Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-add-swap-space-on-ubuntu-20-04) 
+- [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/) with 2GB of swap memory to be able to build the MachineLearning Models. [Adding swap for Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-add-swap-space-on-ubuntu-20-04) 
 - [ ] [Hugo](https://gohugo.io/) 
 - [ ] [Mailgun](https://www.mailgun.com/)
-- [ ] [Node JS v14.18.1](https://nodejs.org/en/)
-- [ ] [SQLite](https://www.sqlite.org/index.html)
 
 ## Setup the environment
 
@@ -64,29 +73,7 @@ The same information is available in excel and json format: https://gregory-ms.c
 6. The Node-Red flow to review the articles runs every 10 minutes.
 
 
-# Updating to version 7
 
-1. update the code and start the containers leaving out node-red
-2. migrate your data from sqlite to the postgres
-3. start the admin service (django) and run `python manage.py migrate`
-4. start node-red and update your flows
-
-## Migrating from SQLite to Postgres
-
-1. delete the column `table_constrains` and `temp` from all tables
-2. dump the sqlite database, values only, table by table, and delete lines that PG will not recognize. `sqlite3 gregory.db .dump > migrate.sql`
-
-Example:
-
-```sql
-PRAGMA foreign keys=OFF;
-BEGIN TRANSACTION;
-```
-
-3. populate the `sources` and `categories` tables with your data since these are mostly static 
-4. change '' to NULL in the SQL export of articles and trials
-5. there may be other details to sanitize in your database. [Check this issue on github for some I had to deal with](https://github.com/brunoamaral/gregory/issues/62). 
-6. migrate your data to pg `psql -d ${POSTGRES_DB} -f ./docker-data/gregory.db --username=${POSTGRES_USER} --password=${POSTGRES_PASSWORD} `
 
 ## Running django
 
@@ -94,6 +81,7 @@ Once the db container is running, start the admin container and run the followin
 
 ```bash
 sudo docker exec -it admin /bin/bash
+python manage.py makemigrations
 python manage.py migrate
 python manage.py createsuperuser
 ```
@@ -113,16 +101,3 @@ Now you can login at https://YOUR-SUB.DOMAIN/admin or wherever your reverse prox
 
 And the **Lobsters** at [One Over Zero](https://github.com/oneoverzero)
 
-# Sources
-
-- APTA
-- BioMedCentral
-- FASEB
-- JNeuroSci
-- MS & Rel. Disorders
-- Nature.com
-- PEDro
-- pubmed
-- Sage Pub
-- Scielo
-- The Lancet
