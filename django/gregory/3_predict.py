@@ -24,7 +24,7 @@ models = [GNB, LSVC, MNB, LR]
 pipelines = {}
 
 for model in models:
-    pipelines[model] = load('/python-ml/models/model_' + model + '.joblib')
+    pipelines[model] = load('models/model_' + model + '.joblib')
 
 # Now let's fetch a new set of data
 today = date.today()
@@ -94,7 +94,7 @@ models = [GNB,LR]
 pipelines = {}
 
 for model in models:
-    pipelines[model] = load('/python-ml/models/model_' + model + '.joblib')
+    pipelines[model] = load('models/model_' + model + '.joblib')
 
 
 def predictor(dataset):

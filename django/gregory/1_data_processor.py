@@ -8,7 +8,7 @@ import html
 
 
 # The path to the the local JSON file
-SOURCE_DATA_LOCAL = "/python-ml/data/source.json"
+SOURCE_DATA_LOCAL = "data/source.json"
 
 # The URL for retrieving the JSON file
 SOURCE_DATA_URL = "https://api.gregory-ms.com/articles/all?format=json"
@@ -53,6 +53,6 @@ dataset = dataset[["terms", "relevant"]]
 # There are several records in the "relevant" column as NaN. Let's convert them to zeros
 dataset["relevant"] = dataset["relevant"].fillna(value = 0)
 
-SOURCE_DATA_CSV = "/python-ml/data/source.csv"
+SOURCE_DATA_CSV = "data/source.csv"
 
 dataset.to_csv(SOURCE_DATA_CSV, index=False)
