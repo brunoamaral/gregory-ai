@@ -18,6 +18,7 @@ RUN pip install requests
 RUN pip install django4-cron
 RUN pip install python-dotenv
 RUN pip install crossrefapi
+RUN pip install python-dotenv
 
 # RUN pip install -r requirements.txt
 # COPY django /code/

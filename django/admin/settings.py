@@ -41,7 +41,8 @@ INSTALLED_APPS = [
 	'django.contrib.sessions',
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
-	"django_cron",
+	'django_cron',
+	'db_maintenance',
 ]
 
 MIDDLEWARE = [
@@ -151,7 +152,8 @@ EMAIL_DOMAIN=os.environ.get('EMAIL_DOMAIN')
 EMAIL_MAILGUN_API_URL=os.environ.get('EMAIL_MAILGUN_API_URL')
 
 CRON_CLASSES = [
-    "subscriptions.mercury.AdminSummary",
-		"subscriptions.mercury.WeeklySummary",
-		"subscriptions.mercury.TrialsNotification"
+    'subscriptions.mercury.AdminSummary',
+		'subscriptions.mercury.WeeklySummary',
+		'subscriptions.mercury.TrialsNotification',
+		'db_maintenance.authors.GetAuthors'
 ]
