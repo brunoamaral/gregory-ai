@@ -84,6 +84,7 @@ class WeeklySummary(CronJobBase):
 			result = send_simple_message(to="weekly.subscribers@gregory-ms.com",bcc=subscribers,subject='Weekly Summary',html=html, text=text)
 			if result.status_code == 200:
 				# disable while we beta-test
+				print('testing')
 				# for article in articles:
 				# 	article.sent_to_subscribers = True
 				# articles.bulk_update(articles,['sent_to_subscribers'])
