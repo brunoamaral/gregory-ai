@@ -19,6 +19,8 @@ RUN pip install django4-cron
 RUN pip install python-dotenv
 RUN pip install crossrefapi
 RUN pip install python-dotenv
+RUN pip install -U spacy
+RUN python -m spacy download en_core_web_sm
 
 # RUN pip install -r requirements.txt
 # COPY django /code/
