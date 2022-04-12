@@ -155,5 +155,7 @@ CRON_CLASSES = [
     'subscriptions.mercury.AdminSummary',
 		'subscriptions.mercury.WeeklySummary',
 		'subscriptions.mercury.TrialsNotification',
-		'db_maintenance.authors.GetAuthors'
+		'db_maintenance.authors.GetAuthors',
+		'gregory.noun_phrases.NounPhrases',
+		'gregory.feedreader.FeedReaderTask'
 ]
