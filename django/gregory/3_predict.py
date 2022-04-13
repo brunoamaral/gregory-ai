@@ -1,5 +1,5 @@
 from joblib import load
-from utils.model_utils import DenseTransformer
+from gregory.utils.model_utils import DenseTransformer
 import json
 from sys import argv
 from datetime import date
@@ -7,10 +7,11 @@ import requests
 import json
 import pandas as pd
 import html
-from utils.text_utils import cleanHTML
-from utils.text_utils import cleanText
+from gregory.utils.text_utils import cleanHTML
+from gregory.utils.text_utils import cleanText
 from joblib import load
 from pandas.io.json import json_normalize #package for flattening json in pandas df
+from gregory.models import Articles
 
 # These are the different model names
 GNB = "gnb"
@@ -24,27 +25,19 @@ models = [GNB, LSVC, MNB, LR]
 pipelines = {}
 
 for model in models:
-    pipelines[model] = load('models/model_' + model + '.joblib')
+    pipelines[model] = load('ml_models/model_' + model + '.joblib')
 
 # Now let's fetch a new set of data
 today = date.today()
 year_month = today.strftime("%Y/%m")
 
-dataset_url = argv[1]
-
 dataset_file_json = 'data/' + today.strftime("%Y-%B") + '.json'
 dataset_file_csv = 'data/' + today.strftime("%Y-%B") + '.csv'
 
-r = requests.get(dataset_url)
-with open(dataset_file_json, 'w') as outfile:
-    json.dump(r.json(), outfile)
-
-data = pd.read_json(dataset_file_json)
+data = pd.DataFrame(list(Articles.objects.filter(ml_prediction_gnb=None).values("title", "summary", "relevant", "article_id")[:20]))
 dataset = pd.json_normalize(data=data['results'])
-valid_columns = ["title", "summary", "relevant", "article_id"]
+# KeyError: 'results'
 
-# Strip the dataset to only those columns
-dataset = dataset[valid_columns]
 
 # Clean the title column with the cleanText utility
 dataset["title"] = dataset["title"].apply(cleanText)
@@ -67,6 +60,11 @@ dataset = dataset[["terms", "relevant", "article_id"]]
 # There are several records in the "relevant" column as NaN. Let's convert them to zeros
 dataset["relevant"] = dataset["relevant"].fillna(value=0)
 
+# A value is trying to be set on a copy of a slice from a DataFrame.
+# Try using .loc[row_indexer,col_indexer] = value instead
+
+# See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+
 # change true/false to 1/0
 dataset["relevant"] = dataset["relevant"].astype(int)
 
@@ -81,11 +79,6 @@ dataset = pd.read_csv(dataset_file_csv)
 # Replace any NaN with zero
 dataset['relevant'] = dataset['relevant'].fillna(value=0)
 
-# These are the different model names
-GNB = "gnb"
-LSVC = "lsvc"
-MNB = "mnb"
-LR = "lr"
 
 # Models to use from the list above
 models = [GNB,LR]
@@ -94,18 +87,16 @@ models = [GNB,LR]
 pipelines = {}
 
 for model in models:
-    pipelines[model] = load('models/model_' + model + '.joblib')
+    pipelines[model] = load('ml_models/model_' + model + '.joblib')
 
 
 def predictor(dataset):
-
     data = {"O": []}
     result = {}
     result["models"] = {}
     for model in models:
         data[model] = []    
         result["models"][model] = []
-
     for index, row in dataset.iterrows():
         input = row['terms']
         output = row['relevant']
@@ -119,11 +110,15 @@ def predictor(dataset):
                 "article_id": row['article_id'],
                 "prediction": str(int(prediction))
             })
-
     return result,data
 
 data = predictor(dataset)
+# /usr/local/lib/python3.10/site-packages/sklearn/utils/validation.py:593: FutureWarning: np.matrix usage is deprecated in 1.0 and will raise a TypeError in 1.2. 
+# Please convert to a numpy array with np.asarray. For more information see: https://numpy.org/doc/stable/reference/generated/numpy.matrix.html
 
 # The predictor returns two elements, result and data. 
 # "result" is index 0 and is a JSON object
 print(json.dumps(data[0]))
+
+# TO DO 
+# - [ ] save the result in the database
