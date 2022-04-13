@@ -69,7 +69,7 @@ class WeeklySummary(CronJobBase):
 	code = 'subscriptions.weekly_summary'    
 
 	def do(self):
-		if datetime.datetime.today().weekday() == 2: # only run on wednesdays
+		if datetime.datetime.today().weekday() == 1: # only run on Tuesdays
 			subscribers = []
 			for email in Subscribers.objects.filter(lists__list_name='Weekly Summary').values():
 				subscribers.append(email['email'])
@@ -83,14 +83,12 @@ class WeeklySummary(CronJobBase):
 			text= strip_tags(html)
 			result = send_simple_message(to="weekly.subscribers@gregory-ms.com",bcc=subscribers,subject='Weekly Summary',html=html, text=text)
 			if result.status_code == 200:
-				# disable while we beta-test
-				print('testing')
-				# for article in articles:
-				# 	article.sent_to_subscribers = True
-				# articles.bulk_update(articles,['sent_to_subscribers'])
-				# for trial in trials:
-				# 		trial.sent_to_subscribers = True
-				# trials.bulk_update(trials,['sent_to_subscribers'])
+				for article in articles:
+					article.sent_to_subscribers = True
+				articles.bulk_update(articles,['sent_to_subscribers'])
+				for trial in trials:
+						trial.sent_to_subscribers = True
+				trials.bulk_update(trials,['sent_to_subscribers'])
 	pass
 
 class TrialsNotification(CronJobBase):
