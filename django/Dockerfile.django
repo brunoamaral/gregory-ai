@@ -25,6 +25,7 @@ RUN pip install feedparser
 RUN pip install pandas
 RUN pip install stop-words
 RUN pip install beautifulsoup4
+RUN pip install -U scikit-learn
 
 # RUN pip install -r requirements.txt
 # COPY django /code/

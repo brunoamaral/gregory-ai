@@ -9,7 +9,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import accuracy_score
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression
-from utils.model_utils import DenseTransformer
+from gregory.utils.model_utils import DenseTransformer
 from joblib import dump
 
 # The CSV file that has the source data
@@ -96,6 +96,5 @@ for model, pipeline in pipelines.items():
     # Before saving, let's train the model with the entire dataset first
     print("Training the " + model + " model with the entire dataset...")
     pipeline.fit(input, output)
-
     # Save the pipeline for later use (`compress` argument is to save as one single file with the entire pipeline)
-    dump(pipeline, 'models/model_' + model + '.joblib', compress=1)
+    dump(pipeline, 'ml_models/model_' + model + '.joblib', compress=1)
