@@ -1,3 +1,7 @@
+###
+# We don't need to plug this into the django-cron, it's meant to be used sporadically 
+###
+
 import json
 import psycopg2
 import pandas as pd
