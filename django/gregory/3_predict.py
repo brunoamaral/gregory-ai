@@ -1,11 +1,11 @@
 from joblib import load
-from utils.model_utils import DenseTransformer
+from tony.model_utils import DenseTransformer
 from sys import argv
 from datetime import date
 import pandas as pd
 import html
-from utils.text_utils import cleanHTML
-from utils.text_utils import cleanText
+from tony.text_utils import cleanHTML
+from tony.text_utils import cleanText
 from joblib import load
 from pandas.io.json import json_normalize #package for flattening json in pandas df
 from models import Articles
