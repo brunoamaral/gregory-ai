@@ -4,7 +4,7 @@ import pandas as pd
 import html
 from joblib import load
 from pandas.io.json import json_normalize #package for flattening json in pandas df
-from models import Articles
+from .models import Articles
 from django_cron import CronJobBase, Schedule
 
 import re
