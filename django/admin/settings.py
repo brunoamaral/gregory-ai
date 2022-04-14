@@ -24,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = False 
 
 ALLOWED_HOSTS = ['0.0.0.0','localhost','167.71.38.42','api.gregory-ms.com','manage.gregory-ms.com']
 CSRF_TRUSTED_ORIGINS = ['https://api.gregory-ms.com','https://manage.gregory-ms.com']
@@ -159,7 +159,7 @@ CRON_CLASSES = [
 		'db_maintenance.rebuild_categories.RebuildCats',
 		'gregory.noun_phrases.NounPhrases',
 		'gregory.feedreader.FeedReaderTask',
-		'gregory.1_data_processor.DataProcessor',
-		'gregory.2_train_models.TrainModels',
-		'gregory.3_predict.RunPredictor'
+#		'gregory.1_data_processor.DataProcessor',
+#		'gregory.2_train_models.TrainModels',
+#		'gregory.3_predict.RunPredictor'
 ]
