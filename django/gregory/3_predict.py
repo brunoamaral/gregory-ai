@@ -1,6 +1,4 @@
 from joblib import load
-from tony.model_utils import DenseTransformer
-from sys import argv
 from datetime import date
 import pandas as pd
 import html
@@ -11,6 +9,60 @@ from pandas.io.json import json_normalize #package for flattening json in pandas
 from models import Articles
 from django_cron import CronJobBase, Schedule
 
+import re
+import stopwords
+from bs4 import BeautifulSoup
+
+# Define some cleaning procedures:
+REPLACE_BY_SPACE_RE = re.compile('[/(){}\[\]\|@,;]')
+BAD_SYMBOLS_RE = re.compile('[^0-9a-z #+_]')
+STOPWORDS = set(stopwords.get_stopwords("en"))
+
+# Util function to clean text
+def cleanText(text):
+    """
+        Cleans the input text by applying the following:
+        
+            * change to lowercase text
+            * replace common symbols with a space
+            * replace invalid symbols with empty char
+            * remove stopwords from text
+        
+        Arguments
+        ---------
+        text: a string
+        
+        Output
+        ------
+        return: modified initial string
+    """
+
+    # change to lowercase text
+    text = text.lower()
+
+    # replace REPLACE_BY_SPACE_RE symbols by space in text. substitute the matched string in REPLACE_BY_SPACE_RE with space.
+    text = REPLACE_BY_SPACE_RE.sub(' ', text)
+
+    # remove symbols which are in BAD_SYMBOLS_RE from text. substitute the matched string in BAD_SYMBOLS_RE with nothing. 
+    text = BAD_SYMBOLS_RE.sub('', text)
+
+    # remove stopwords from text
+    text = ' '.join(word for word in text.split() if word not in STOPWORDS)
+
+    return text
+
+
+def cleanHTML(input):
+    return BeautifulSoup(input, 'html.parser').get_text()
+
+from sklearn.base import TransformerMixin
+
+# This is an util function to be used in the GaussianNB pipeline
+class DenseTransformer(TransformerMixin):
+    def fit(self, X, y=None, **fit_params):
+        return self
+    def transform(self, X, y=None, **fit_params):
+        return X.todense()
 class RunPredictor(CronJobBase):
 	RUN_EVERY_MINS = 120 # every 2 hours
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
