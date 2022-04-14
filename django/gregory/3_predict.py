@@ -1,17 +1,14 @@
 from joblib import load
-from gregory.utils.model_utils import DenseTransformer
-import json
+from utils.model_utils import DenseTransformer
 from sys import argv
 from datetime import date
-import requests
-import json
 import pandas as pd
 import html
-from gregory.utils.text_utils import cleanHTML
-from gregory.utils.text_utils import cleanText
+from utils.text_utils import cleanHTML
+from utils.text_utils import cleanText
 from joblib import load
 from pandas.io.json import json_normalize #package for flattening json in pandas df
-from gregory.models import Articles
+from models import Articles
 from django_cron import CronJobBase, Schedule
 
 class RunPredictor(CronJobBase):
