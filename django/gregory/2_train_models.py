@@ -19,7 +19,7 @@ class TrainModels(CronJobBase):
 	code = 'gregory.train_models'    # a unique code
 	def do(self):    
 		# The CSV file that has the source data
-		SOURCE_DATA_CSV = "data/source.csv"
+		SOURCE_DATA_CSV = "/code/gregory/data/source.csv"
 
 		# Let's load the CSV file into a Pandas dataset
 		dataset = pd.read_csv(SOURCE_DATA_CSV)
@@ -103,4 +103,4 @@ class TrainModels(CronJobBase):
 			print("Training the " + model + " model with the entire dataset...")
 			pipeline.fit(input, output)
 			# Save the pipeline for later use (`compress` argument is to save as one single file with the entire pipeline)
-			dump(pipeline, 'ml_models/model_' + model + '.joblib', compress=1)
+			dump(pipeline, '/code/gregory/ml_models/model_' + model + '.joblib', compress=1)
