@@ -2,8 +2,6 @@ from joblib import load
 from datetime import date
 import pandas as pd
 import html
-from tony.text_utils import cleanHTML
-from tony.text_utils import cleanText
 from joblib import load
 from pandas.io.json import json_normalize #package for flattening json in pandas df
 from models import Articles
