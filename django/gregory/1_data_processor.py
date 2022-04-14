@@ -53,6 +53,7 @@ class DataProcessor(CronJobBase):
 		# See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
 		##
 
-		SOURCE_DATA_CSV = "data/source.csv"
+		SOURCE_DATA_CSV = "/code/gregory/data/source.csv"
 		dataset.to_csv(SOURCE_DATA_CSV, index=False)
+		print(dataset)
 	pass
