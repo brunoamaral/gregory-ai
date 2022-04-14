@@ -12,10 +12,12 @@ from gregory.utils.text_utils import cleanText
 from joblib import load
 from pandas.io.json import json_normalize #package for flattening json in pandas df
 from gregory.models import Articles
+from django_cron import CronJobBase, Schedule
+
 class RunPredictor(CronJobBase):
-	RUN_EVERY_MINS = 2880 # every 2 days
+	RUN_EVERY_MINS = 120 # every 2 hours
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
-	code = 'gregory.train_models'    # a unique code
+	code = 'gregory.predict'    # a unique code
 	def do(self):    
 		# These are the different model names
 		GNB = "gnb"
@@ -29,16 +31,16 @@ class RunPredictor(CronJobBase):
 		pipelines = {}
 
 		for model in models:
-			pipelines[model] = load('ml_models/model_' + model + '.joblib')
+			pipelines[model] = load('/code/gregory/ml_models/model_' + model + '.joblib')
 
 		# Now let's fetch a new set of data
 		today = date.today()
-		year_month = today.strftime("%Y/%m")
+		# year_month = today.strftime("%Y/%m")
 
-		dataset_file_json = 'data/' + today.strftime("%Y-%B") + '.json'
-		dataset_file_csv = 'data/' + today.strftime("%Y-%B") + '.csv'
+		# dataset_file_json = '/code/gregory/data/' + today.strftime("%Y-%B") + '.json'
+		dataset_file_csv = '/code/gregory/data/' + today.strftime("%Y-%B") + '.csv'
 
-		dataset = pd.DataFrame(list(Articles.objects.filter(ml_prediction_gnb=None).values("title", "summary", "relevant", "article_id")[:20]))
+		dataset = pd.DataFrame(list(Articles.objects.filter(ml_prediction_gnb=None).values("title", "summary", "relevant", "article_id")[:2]))
 		# i think we don't need the line below
 		# dataset = pd.json_normalize(data=data['results'])
 		# KeyError: 'results'
@@ -84,7 +86,6 @@ class RunPredictor(CronJobBase):
 		# Replace any NaN with zero
 		dataset['relevant'] = dataset['relevant'].fillna(value=0)
 
-
 		# Models to use from the list above
 		models = [GNB,LR]
 
@@ -92,8 +93,7 @@ class RunPredictor(CronJobBase):
 		pipelines = {}
 
 		for model in models:
-			pipelines[model] = load('ml_models/model_' + model + '.joblib')
-
+			pipelines[model] = load('/code/gregory/ml_models/model_' + model + '.joblib')
 
 		def predictor(dataset):
 			data = {"O": []}
@@ -118,8 +118,19 @@ class RunPredictor(CronJobBase):
 			return result,data
 
 		data = predictor(dataset)
-		# ValueError: invalid literal for int() with base 10: 'True'
-		print(json.dumps(data[0]))
-
-		# TO DO 
-		# - [ ] save the result in the database
+		for model in data[0]['models']:
+			for item in data[0]['models'][model]:
+				print(model)
+				article = Articles.objects.get(pk=item['article_id'])
+				print(article,model,item['prediction'])
+				if item['prediction'] == '1':
+					if model == 'gnb':
+						article.ml_prediction_gnb = True
+					if model == 'lr':
+						article.ml_prediction_lr = True
+				if item['prediction'] == '0':
+					if model == 'gnb':
+						article.ml_prediction_gnb = False
+					if model == 'lr':
+						article.ml_prediction_lr = False
+				article.save()
