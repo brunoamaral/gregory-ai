@@ -5,7 +5,7 @@ from django.conf import settings
 from django_cron import CronJobBase, Schedule
 
 class RebuildCats(CronJobBase):
-	RUN_EVERY_MINS = 1
+	RUN_EVERY_MINS = 30
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'db_maintenance.rebuild_categories'
 	def do(self):

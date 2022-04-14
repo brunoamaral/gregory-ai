@@ -23,7 +23,7 @@ RUN pip install -U spacy
 RUN python -m spacy download en_core_web_sm
 RUN pip install feedparser
 RUN pip install pandas
-RUN pip install stop-words
+RUN pip install stopwords
 RUN pip install beautifulsoup4
 RUN pip install -U scikit-learn
 
