@@ -54,7 +54,7 @@ services:
     restart: always
     build: 
       context: django/
-      dockerfile: Dockerfile.django
+      dockerfile: Dockerfile
     # command: python manage.py runserver 0.0.0.0:8000
     command: gunicorn -b 0.0.0.0:8000 admin.wsgi
     volumes:
@@ -82,6 +82,7 @@ services:
     depends_on:
       - db
   metabase:
+    container_name: metabase
     volumes:
       - ./metabase-data:/metabase-data
     environment:
