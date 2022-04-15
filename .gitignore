@@ -41,3 +41,6 @@ python-ml/utils/__pycache__/model_utils.cpython-37.pyc
 python-ml/utils/__pycache__/text_utils.cpython-37.pyc
 venv3
 django/static
+django/data/
+django/gregory/data/
+django/gregory/ml_models/
