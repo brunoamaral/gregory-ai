@@ -1,9 +1,9 @@
 from django_cron import CronJobBase, Schedule
 import pandas as pd
-from gregory.utils.text_utils import cleanText
-from gregory.utils.text_utils import cleanHTML
+from .utils.text_utils import cleanText
+from .utils.text_utils import cleanHTML
 import html
-from gregory.models import Articles
+from .models import Articles
 
 
 class DataProcessor(CronJobBase):
