@@ -9,7 +9,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import accuracy_score
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression
-from gregory.utils.model_utils import DenseTransformer
+from .utils.model_utils import DenseTransformer
 from joblib import dump
 from django_cron import CronJobBase, Schedule
 
