@@ -14,10 +14,10 @@ from joblib import dump
 from django_cron import CronJobBase, Schedule
 
 class TrainModels(CronJobBase):
-	RUN_EVERY_MINS = 2880 # every 2 days
+	RUN_EVERY_MINS = 1 # every 2 days
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'gregory.train_models'    # a unique code
-	def do(self):    
+	def do(self):
 		# The CSV file that has the source data
 		SOURCE_DATA_CSV = "/code/gregory/data/source.csv"
 
@@ -104,3 +104,4 @@ class TrainModels(CronJobBase):
 			pipeline.fit(input, output)
 			# Save the pipeline for later use (`compress` argument is to save as one single file with the entire pipeline)
 			dump(pipeline, '/code/gregory/ml_models/model_' + model + '.joblib', compress=1)
+	pass
