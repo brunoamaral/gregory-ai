@@ -159,7 +159,7 @@ CRON_CLASSES = [
 		'db_maintenance.rebuild_categories.RebuildCats',
 		'gregory.noun_phrases.NounPhrases',
 		'gregory.feedreader.FeedReaderTask',
-#		'gregory.1_data_processor.DataProcessor',
-#		'gregory.2_train_models.TrainModels',
-#		'gregory.3_predict.RunPredictor'
+		# 'gregory.1_data_processor.DataProcessor',
+		# 'gregory.2_train_models.TrainModels',
+		'gregory.3_predict.RunPredictor'
 ]
