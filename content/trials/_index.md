@@ -44,12 +44,10 @@ cta:
 <div class="col-md-12 col-12 justify-content-center align-self-center">
 <h3>Notification of new clinical trials</h3>
 
-<p>Everyone has access to a service that will send an email everytime a new clinical trial is posted on <a href="https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000">ClinicalTrials.gov</a> or in <a href="https://www.clinicaltrialsregister.eu/ctr-search/rest/feed/bydates?query=multiple+AND+sclerosis">Clinicaltrialsregister.eu</a></p>
+<p>Everyone has access to a service that will send an email everytime a new clinical trial is posted on <a href="https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000">ClinicalTrials.gov</a> or in <a href="https://www.clinicaltrialsregister.eu/ctr-search/rest/feed/bydates?query=multiple+AND+sclerosis">Clinicaltrialsregister.eu</a>. Available in beta stage but free forever.</p>
 
 <a href="mailto:gregory@gregory-ms.com?subject=SubscribeToClinicalTrials%20" class="btn btn-danger btn-round btn-lg font-weight-bold">Subscribe by sending an email to Gregory<i class="fas fa-at"></i>gregory-ms.com</a>
-
 </div>
-
 </div>
 
 <div class="w-100 mt-5 mb-5"></div>
