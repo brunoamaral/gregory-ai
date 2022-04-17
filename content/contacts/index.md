@@ -35,7 +35,9 @@ resources:
 <div class="col-8 mx-auto">
 
 
+### Gregory MS Team
 
+gregory@gregory-ms.com
 
 ### Bruno Amaral{.title .text-info}
 
