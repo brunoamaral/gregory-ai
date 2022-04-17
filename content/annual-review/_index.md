@@ -19,7 +19,7 @@ disableToC: false
 disableAutoCollapse: true
 
 menu:
-    main:
+    column_3:
         Name: Annual Reports
         weight: 8
 

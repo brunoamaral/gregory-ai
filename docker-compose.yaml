@@ -54,11 +54,12 @@ services:
     restart: always
     build: 
       context: django/
-      dockerfile: Dockerfile.django
+      dockerfile: Dockerfile
     # command: python manage.py runserver 0.0.0.0:8000
     command: gunicorn -b 0.0.0.0:8000 admin.wsgi
     volumes:
       - ./django:/code
+      - python:/python-ml
     ports:
       - "8000:8000"
     environment:
@@ -67,11 +68,21 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - DB_HOST=${DB_HOST}
       - SECRET_KEY=${SECRET_KEY}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS}
+      - EMAIL_DOMAIN=${EMAIL_DOMAIN}
+      - EMAIL_MAILGUN_API_URL=${EMAIL_MAILGUN_API_URL}
+      - EMAIL_MAILGUN_API=${EMAIL_MAILGUN_API}
+
     networks:
       - traefik_proxy
     depends_on:
       - db
   metabase:
+    container_name: metabase
     volumes:
       - ./metabase-data:/metabase-data
     environment:
