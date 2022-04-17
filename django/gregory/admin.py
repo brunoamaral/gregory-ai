@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 # Register your models here.
-from .models import Articles, Categories, Trials, Sources, Entities
+from .models import Articles, Categories, Trials, Sources, Entities, Authors
 
 # this class define which department columns will be shown in the department admin web site.
 class ArticleAdmin(admin.ModelAdmin):
@@ -23,3 +23,4 @@ admin.site.register(Trials, TrialAdmin)
 admin.site.register(Sources,SourceAdmin)
 admin.site.register(Categories)
 admin.site.register(Entities)
+admin.site.register(Authors)

@@ -12,7 +12,6 @@ data/articles.json
 data/trials.json
 dev.py
 docker-data/
-docker-data/
 docker-python/
 modules/
 node_modules
@@ -37,6 +36,4 @@ python-ml/models/model_gnb.joblib
 python-ml/models/model_lr.joblib
 python-ml/models/model_lsvc.joblib
 python-ml/models/model_mnb.joblib
-python-ml/utils/__pycache__/model_utils.cpython-37.pyc
-python-ml/utils/__pycache__/text_utils.cpython-37.pyc
 venv3

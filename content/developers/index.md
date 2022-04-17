@@ -35,9 +35,15 @@ resources:
 
 ## RSS{.title .text-primary}
 
-There are RSS feeds you can use for both Articles and Clinical Trials.
+There are RSS a number of RSS feeds you can use to access the database in real time:
 
-<a class="btn btn-outline-primary" href="/articles/index.xml"><i class="fas fa-rss"></i> RSS for Articles</a> <a class="btn btn-outline-primary" href="/trials/index.xml"><i class="fas fa-rss"></i> RSS for Clinical Trials</a>
+
+<a class="btn btn-outline-primary" href="https://api.gregory-ms.com/feed/latest/articles/"><i class="fas fa-rss"></i> Latest Articles</a>
+
+<a class="btn btn-outline-primary" href="https://api.gregory-ms.com/feed/latest/trials/"><i class="fas fa-rss"></i> Latest Trials</a>
+
+<a class="btn btn-outline-primary" href="https://api.gregory-ms.com/feed/machine-learning/"><i class="fas fa-rss"></i> Machine Learning Prediction</a>
+
 
 
 ## API Endpoints{.title .text-primary}
@@ -103,33 +109,13 @@ Example: <a href="https://api.gregory-ms.com/trials/source/12/">https://api.greg
 
 ### Articles{.title .text-muted}
 
-The JSON response contains information on scientific articles retrieved from multiple academic sources, with the following information for each article:
+The JSON response contains information on scientific articles retrieved from multiple academic sources.
 
-- **article_id**: The ID of the article
-- **discovery_date**: The date this record was retrieved from its source
-- **link**: The link to the original content
-- **ml_prediction_gnb**: A value of 0 or 1 if the article is relevant according to a Gaussian Naive Bayes model
-- **ml_prediction_lr**: A value of 0 or 1 if the article is relevant according to a Logistic Regression model
-- **noun_phrases**: Extraction of _base noun phrases_ from the title of the article. More information on [Spacy.io](https://spacy.io/usage/linguistic-features#noun-chunks).
-- **published_date**: The date it was published
-- **relevant**: Whether this article is relevant or not (tagged by a human)
-- **sent**: A binary value that indicates if the article was sent to the admin. (The admin receives an email digest every 48 hours with the listings to mark them as relevant or not)
-- **source**: The source from which the article was retrieved
-- **summary**: The abstract or summary of the article
-- **table_constraints**: created automatically by SQLite
-- **title**: The title of the article
+Available fields can be found at https://api.gregory-ms.com/articles/ by clicking the options button.
+
 
 ### Trials{.title .text-muted}
 
-- **discovery_date**: The date this record was retrieved from its source
-- **link**: The link to the original content
-- **published_date**: The date it was published
-- **relevant**: Whether it is relevant or not (tagged by a human, and not used at the moment)
-- **sent**: A binary value that indicates if the article was sent to the admin. (The admin receives an email digest every 48 hours with the listings to mark them as relevant or not)
-- **source**: Website where the found information about this clinical trial
-- **summary**: The abstract or summary of the clinical trial
-- **table_constraints**: created automatically by SQLite
-- **title**: The title of the clinical trial
-- **trial_id**: The ID of the clinical trial
+Data available at https://api.gregory-ms.com/trials/ by clicking the options button.
 
 </div>

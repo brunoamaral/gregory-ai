@@ -266,7 +266,7 @@
 			  {{- i18n "subscribe_description" -}}
 			</p>
 		  </div>
-		  <div class="col text-center"><a href='{{ ref . "/newsletter/index.md" }}' class="btn btn-info btn-round btn-lg font-weight-bold">How to subscribe <i class="fas fa-arrow-circle-right"></i></a></div>
+		  <div class="col text-center"><a href='https://ko-fi.com/gregoryms' class="btn btn-info btn-round btn-lg font-weight-bold">I want to donate now <i class="fas fa-arrow-circle-right"></i></a></div>
 		</div>
 	  </div>
 	</div>
@@ -423,6 +423,8 @@
 		{{- if or (.HasShortcode "metabase-embed")  -}}
 		<script src="https://metabase.gregory-ms.com/app/iframeResizer.js"></script>
 		{{end}}
+		{{- if eq .Site.IsServer false -}}
 		<script async defer data-website-id="ba098fd5-be22-4a28-aafa-a4e9d8222496" src="https://analytics.gregory-ms.com/umami.js"></script>
+		{{ end }}
 	</body>
 </html>
