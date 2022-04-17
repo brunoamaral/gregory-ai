@@ -2,10 +2,10 @@
 title: "Relevant Listing"
 subtitle: 
 
-menu:
-  main:
-    name: Relevant
-    weight: 8
+# menu:
+#   main:
+#     name: Relevant
+#     weight: 8
 options:
   header: mini
   showHeader: true

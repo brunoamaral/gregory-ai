@@ -19,7 +19,7 @@ cta:
     classes: btn-sm btn-success
 ---
 
-Articles listed here come from the following sites, with keyword searches for `Multiple Sclerosis, autoimmune encephalomyelitis, encephalomyelitis, immune tolerance, myelin`.
+Articles listed come from the following sites, using keyword searches for `Multiple Sclerosis, autoimmune encephalomyelitis, encephalomyelitis, immune tolerance, myelin`.
 
 <ul class="list-inline">
 <li class="list-inline-item"><a target="_blank" class="btn btn-primary btn-outline-primary btn-round" href='https://www.apta.org/search?Q=&quot;Multiple+Sclerosis&quot;+OR+&quot;autoimmune+encephalomyelitis&quot;+OR+encephalomyelitis+OR+&quot;immune+tolerance&quot;+OR+myelin&amp;searcharticletypes=8834&amp;searchconditionandsymptoms=&amp;searchloc=APTA'>APTA <i class="text-muted text-primary fas fa-external-link-square-alt"></i></a> </li>
@@ -35,5 +35,5 @@ Articles listed here come from the following sites, with keyword searches for `M
 
 </ul>
 
-<a class="btn btn-outline-info btn-round btn-lg font-weight-bold mx-auto" href="/articles/source/">To filter articles by source visit the sources page <i class="text-muted text-info fas fa-arrow-right" style="transform .4s, box-shadow .4s"></i></a>
+<a class="btn btn-outline-info btn-round btn-lg font-weight-bold mx-auto" href="/relevant/">Filter by relevant articles <i class="text-muted text-info fas fa-arrow-right" style="transform .4s, box-shadow .4s"></i></a>
 
