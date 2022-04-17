@@ -69,7 +69,7 @@ menu:
 <div class="w-100 mt-5 mb-5"></div>
 
 
-<div class="col-md-5 offset-2 col-12 justify-content-center align-self-center align-right mt-5 ">
+<div class="col-md-5 offset-2 col-12 justify-content-center align-self-center align-right">
 <p>If you want to contribute to the server costs, you can send your donation through the Ko-Fi page below.</p>
 
 <p>We also encourage you to look at the <a href="/annual-review/">Annual Report</a> section where we keep track of donations and expenses.</p>
