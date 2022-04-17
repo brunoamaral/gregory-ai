@@ -32,4 +32,6 @@ Most of the therapies listed were identified by the [MS Society](https://www.mss
 
 Hover each chart to download the results, click each title or article id number to read more information.
 
+<a href="https://metabase.gregory-ms.com/public/dashboard/39cbe602-4d42-46af-bfe4-0de04ef5e5f9" target="_blank">Open dashboard in new tab</a>
+
 {{< metabase-embed dashboard="1" width="1300" height="1250" >}}
