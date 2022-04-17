@@ -18,7 +18,7 @@ for email in Subscribers.objects.filter(lists__list_name='Articles').values():
 
 
 
-def send_simple_message( sender="Greg <greg@mg.gregory-ms.com>", to=None,bcc=None,subject='no subject', text=None,html=None, email_mailgun_api_url=settings.EMAIL_MAILGUN_API_URL, email_mailgun_api=settings.EMAIL_MAILGUN_API):
+def send_simple_message( sender="Gregory MS <gregory@mg.gregory-ms.com>", to=None,bcc=None,subject='no subject', text=None,html=None, email_mailgun_api_url=settings.EMAIL_MAILGUN_API_URL, email_mailgun_api=settings.EMAIL_MAILGUN_API):
 	status = requests.post(
 			email_mailgun_api_url,
 			auth=("api", email_mailgun_api),
