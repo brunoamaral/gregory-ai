@@ -25,7 +25,7 @@ options:
   unlisted: false
   showHeader: true
   hideFooter: false
-  hideSubscribeForm: true
+  hideSubscribeForm: false
   header: mini
 scripts:
 
