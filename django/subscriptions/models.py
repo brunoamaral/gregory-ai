@@ -2,7 +2,7 @@ from django.db import models
 
 # Create your models here.
 class Subscribers(models.Model):
-	PROFILEOPTIONS = [('patient', 'Patient'),('doctor','Doctor')]
+	PROFILEOPTIONS = [('patient', 'Patient'),('doctor','Doctor'),('clinical centre','Clinical Centre')]
 
 	subscriber_id = models.AutoField(primary_key=True)
 	first_name = models.CharField(max_length=150, null=False, blank=False)
