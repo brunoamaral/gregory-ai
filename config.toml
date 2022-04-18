@@ -69,6 +69,10 @@ headerPhoto = ""
   [[menu.column_2]]
   name ="Bruno Amaral"
   url = "https://brunoamaral.eu/"
+  [[menu.column_3]]
+  name = "Website stats"
+  url = "https://analytics.gregory-ms.com/"
+  weight = 9
 
 [social]
   github = "https://github.com/brunoamaral/gregory"
