@@ -220,7 +220,7 @@
 		<ul class="navbar-nav">
 
 			{{- range .Site.Menus.main -}}
-				<li class="nav-item {{ if (or ( $.Page.IsMenuCurrent "main" .) ( $.Page.HasMenuCurrent "main" .)) }} active {{- end -}}"><a href="{{- .URL | absLangURL -}}" title="{{- .Post -}}" class="nav-link top-menu menu-click {{- .Identifier | urlize -}} ">{{- .Name | safeHTML -}}</a></li>
+				<li class="nav-item {{ if (or ( $.Page.IsMenuCurrent "main" .) ( $.Page.HasMenuCurrent "main" .)) }} active {{- end -}}"><a href="{{- .URL | absLangURL -}}" title="{{- .Post -}}" class="nav-link top-menu menu-click  umami--click--topnav-{{- .Name | urlize | lower -}} ">{{- .Name | safeHTML -}}</a></li>
 			{{- end -}}  <!-- end range .Site.Menus.main -->
 
 			{{- if .Site.IsMultiLingual -}}
@@ -266,7 +266,7 @@
 			  {{- i18n "subscribe_description" -}}
 			</p>
 		  </div>
-		  <div class="col text-center"><a href='https://ko-fi.com/gregoryms' class="btn btn-info btn-round btn-lg font-weight-bold">I want to donate now <i class="fas fa-arrow-circle-right"></i></a></div>
+		  <div class="col text-center"><a href='https://ko-fi.com/gregoryms' class="btn btn-info btn-round btn-lg font-weight-bold umami--click--donate-button">I want to donate now <i class="fas fa-arrow-circle-right"></i></a></div>
 		</div>
 	  </div>
 	</div>
