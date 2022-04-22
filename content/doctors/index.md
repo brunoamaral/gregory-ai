@@ -57,7 +57,7 @@ scripts:
     <h3 class="title">Research Digest</h3>
     <p class="lead font-weight-biold">We have a weekly digest with the most recent and relevant research to keep you updated.</p>
     <p>Send us an email and ask to be subscribed.</p>
-    <a href='mailto:mail@brunoamaral.eu' class="btn btn-primary btn-round btn-lg font-weight-bold">Send Email <i class="fas fa-envelope"></i></a>
+    <a href='mailto:mail@brunoamaral.eu' class="btn btn-primary btn-round btn-lg font-weight-bold umami--click--doctors-page-send-email">Send Email <i class="fas fa-envelope"></i></a>
     </div>
   <div class="col-md-5 col-12 align-self-center">
     <img src="images/undraw_subscribe_vspl.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter" loading="lazy" />
@@ -72,7 +72,7 @@ scripts:
   <div class="col-md-5 col-12 justify-content-center align-self-center">
     <h3 class="title">Clinical Trials</h3>
     <p class="lead font-weight-biold">We do the best we can to identify clinical trials for Multiple Sclerosis and list them.</p>
-    <a href='{{< ref "/trials/_index.md" >}}' class="btn btn-success btn-round btn-lg font-weight-bold">View latest clinical trials <i class="fas fa-arrow-circle-right"></i></a>
+    <a href='{{< ref "/trials/_index.md" >}}' class="btn btn-success btn-round btn-lg font-weight-bold umami--click--doctors-page-view-trials">View latest clinical trials <i class="fas fa-arrow-circle-right"></i></a>
     </div>
 </div>
 
@@ -82,7 +82,7 @@ scripts:
   <div class="col-md-5 col-12 align-self-center">
     <h3 class="title">Download the articles</h3>
     <p class="lead font-weight-biold">The database is free to everyone and can be downloaded in both Excel and Json files.</p>
-    <a href='/developers/articles.zip' target="_blank" class="btn btn-primary btn-round btn-lg font-weight-bold"> <i class="fas fa-file-archive"></i> Download Articles</a>
+    <a href='/developers/articles.zip' target="_blank" class="btn btn-primary btn-round btn-lg font-weight-bold umami--click--doctors-page-download-articles-zip"> <i class="fas fa-file-archive"></i> Download Articles</a>
     </div>
   <div class="col-md-5 col-12 align-self-center">
     <img src="images/undraw_export_files_re_99ar.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter" loading="lazy" />
@@ -107,7 +107,7 @@ graph TD;
     Gregory{fa:fa-robot Gregory}-->Newsletter(fa:fa-envelope Newsletter)
 </div>
 <div class="col-md-12 text-center">
-  <a href='{{< ref "/about/index.md" >}}' class="btn btn-primary btn-round btn-lg font-weight-bold">More information on the about page <i class="fas fa-arrow-circle-right"></i></a>
+  <a href='{{< ref "/about/index.md" >}}' class="btn btn-primary btn-round btn-lg font-weight-bold umami--click--doctors-page-link-about-page">More information on the about page <i class="fas fa-arrow-circle-right"></i></a>
 </div>
 </div>
 
