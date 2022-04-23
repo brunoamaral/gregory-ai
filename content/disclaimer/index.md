@@ -34,7 +34,7 @@ scripts:
   -
 ---
 
-Gregory MS is an Open Project built by [Bruno Amaral](https://brunoamaral.eu), who does not have any kind of medical training.
+**Gregory MS** is an Open Project built by [Bruno Amaral](https://brunoamaral.eu), who does not have any kind of medical training.
 
 Therefore, please keep in mind none of the content found on this site is a prescription, recommendation, or even a suggestion. The information found here is meant to assist medical teams and researchers. 
 

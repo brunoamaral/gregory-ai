@@ -31,7 +31,7 @@ To be included in this email list please contact me :
 
 ### Bruno Amaral
 
-mail@brunoamaral.eu
+<a href="mailto:bruno@gregory-ms.com" class="umami--click--email-bruno-newsletter-page">bruno@gregory-ms.com</a>
 
 https://twitter.com/brunoamaral
 

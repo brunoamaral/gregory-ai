@@ -111,5 +111,3 @@ graph TD;
 </div>
 </div>
 
-<!-- TO DO: listagem dos resultados mais relevantes nos últimos 30 dias com link para listagem completa  -->
-
