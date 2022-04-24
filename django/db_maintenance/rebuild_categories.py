@@ -24,10 +24,8 @@ class RebuildCats(CronJobBase):
 		cur.execute("SELECT category_name,category_terms,category_id FROM categories;")
 		categories = cur.fetchall()
 		for cat in categories:
-			cat_name = cat[0]
 			terms = cat[1]
 			cat_id = cat[2]
-			print(terms)
 			# [(['string', 'cenas', 'coisas'],)]
 			for term in terms:
 				cur.execute("""INSERT INTO articles_categories (articles_id,categories_id)
