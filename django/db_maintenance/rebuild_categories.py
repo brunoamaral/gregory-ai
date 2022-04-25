@@ -21,11 +21,15 @@ class RebuildCats(CronJobBase):
 			print("I am unable to connect to the database")
 		cur = conn.cursor()
 		cur.execute("DELETE FROM articles_categories ;")
-		cur.execute("SELECT category_name,category_id FROM categories;")
+		cur.execute("SELECT category_name,category_terms,category_id FROM categories;")
 		categories = cur.fetchall()
 		for cat in categories:
-			cur.execute("""INSERT INTO articles_categories (articles_id,categories_id)
-			SELECT "articles"."article_id", "categories"."category_id" FROM "categories" INNER JOIN "articles" ON "articles"."title" LIKE %s AND "categories"."category_id" = %s 
-			""", ('%'+cat[0].lower()+'%',cat[1]))
-		cur.connection.commit()
+			terms = cat[1]
+			cat_id = cat[2]
+			# [(['string', 'cenas', 'coisas'],)]
+			for term in terms:
+				cur.execute("""INSERT INTO articles_categories (articles_id,categories_id)
+				SELECT "articles"."article_id", "categories"."category_id" FROM "categories" INNER JOIN "articles" ON "articles"."title" LIKE %s AND "categories"."category_id" = %s 
+				""", ('%'+term.lower()+'%',cat_id))
+				cur.connection.commit()
 	pass
