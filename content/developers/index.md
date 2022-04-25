@@ -38,11 +38,11 @@ resources:
 There are RSS a number of RSS feeds you can use to access the database in real time:
 
 
-<a class="btn btn-outline-primary" href="https://api.gregory-ms.com/feed/latest/articles/"><i class="fas fa-rss"></i> Latest Articles</a>
+<a class="btn btn-outline-primary umami--click--developers-rss-latest-articles" href="https://api.gregory-ms.com/feed/latest/articles/"><i class="fas fa-rss"></i> Latest Articles</a>
 
-<a class="btn btn-outline-primary" href="https://api.gregory-ms.com/feed/latest/trials/"><i class="fas fa-rss"></i> Latest Trials</a>
+<a class="btn btn-outline-primary umami--click--developers-rss-l" href="https://api.gregory-ms.com/feed/latest/trials/"><i class="fas fa-rss"></i> Latest Trials</a>
 
-<a class="btn btn-outline-primary" href="https://api.gregory-ms.com/feed/machine-learning/"><i class="fas fa-rss"></i> Machine Learning Prediction</a>
+<a class="btn btn-outline-primary umami--click--developers-rss-latest-trials" href="https://api.gregory-ms.com/feed/machine-learning/"><i class="fas fa-rss"></i> Machine Learning Prediction</a>
 
 
 
@@ -57,14 +57,12 @@ The API is served using Django Rest Framework and can be accessed at <https://ap
 
 `https://api.gregory-ms.com/articles/all?format=json`
 
-Example: <a href="https://api.gregory-ms.com/articles/all?format=json">https://api.gregory-ms.com/articles/all?format=json</a>
-
 **List article that matches the {ID} number.**    
 
 `https://api.gregory-ms.com/articles/id/{ID}`
 
 
-Example: <a href="https://api.gregory-ms.com/articles/19">https://api.gregory-ms.com/articles/19</a>
+Example: <a class="umami--click--developers-api-latest-trials-example" href="https://api.gregory-ms.com/articles/19">https://api.gregory-ms.com/articles/19</a>
 
 
 **List all relevant articles.**    
@@ -73,21 +71,16 @@ These are articles that we show on the home page because they appear to offer ne
 
 `https://api.gregory-ms.com/articles/relevant`
 
-Example: <a href="https://api.gregory-ms.com/articles/relevant">https://api.gregory-ms.com/articles/relevant</a>
-
 #### Articles' Sources{.title .text-muted}
 
 **List all articles from specified {source}.**
 
 `https://api.gregory-ms.com/articles/source/{source_id}/`
 
-Example: <a href="https://api.gregory-ms.com/articles/source/1">https://api.gregory-ms.com/articles/source/1</a>
 
 **List all available sources.**
 
 `https://api.gregory-ms.com/sources/`
-
-Example: <a href="https://api.gregory-ms.com/sources/">https://api.gregory-ms.com/sources/</a>
 
 ### Trials{.title .text-muted}
 
@@ -103,7 +96,7 @@ Example: <a href="https://api.gregory-ms.com/trials/all">https://api.gregory-ms.
 
 `https://api.gregory-ms.com/trials/source/{source_id}`
 
-Example: <a href="https://api.gregory-ms.com/trials/source/12/">https://api.gregory-ms.com/trials/source/12/</a>
+Example: <a class="umami--click--developers-api-all-trials-by-source-example" href="https://api.gregory-ms.com/trials/source/12/">https://api.gregory-ms.com/trials/source/12/</a>
 
 ## Database Structure{.title .text-primary}
 
