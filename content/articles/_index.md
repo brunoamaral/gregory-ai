@@ -35,5 +35,5 @@ Articles listed come from the following sites, using keyword searches for `Multi
 
 </ul>
 
-<a class="btn btn-outline-info btn-round btn-lg font-weight-bold mx-auto" href="/relevant/">Filter by relevant articles <i class="text-muted text-info fas fa-arrow-right" style="transform .4s, box-shadow .4s"></i></a>
+<a class="btn btn-outline-info btn-round btn-lg font-weight-bold mx-auto umami--click--relevant-articles-on-articles-page" href="/relevant/">Filter by relevant articles <i class="text-muted text-info fas fa-arrow-right" style="transform .4s, box-shadow .4s"></i></a>
 

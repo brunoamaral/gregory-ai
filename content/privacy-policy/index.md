@@ -38,5 +38,6 @@ scripts:
 
 <div class="col-md-7 ml-auto text-right">
 				<h1 class="title" itemprop="headline">Privacy Policy</h1>
-				<h4 class="description" itemprop="subtitle d-print-block">If you're a visitor I don't save any of your data.<br>If you subscribe to the email digest I save your name and email.</h4>
+				<h4 class="description" itemprop="subtitle d-print-block">If you're a visitor I don't save any of your data. You can see everything that we collect from our visitors in the <a class="umami--click--analytics-disclaimer-page" href="https://analytics.gregory-ms.com/">Analytics Page</a>
+        <br>If you subscribe to the email digest I save your name and email.</h4>
 <br></div>

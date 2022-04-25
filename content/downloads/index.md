@@ -34,8 +34,8 @@ scripts:
 cta:
   - label: <i class="fas fa-file-archive"></i> Articles
     url: /developers/articles.zip
-    classes: btn btn-lg btn-success font-weight-bold
+    classes: btn btn-lg btn-success font-weight-bold umami--click--downloads-page-download-articles-zip
   - label: <i class="fas fa-file-archive"></i> Clinical Trials
     url: /developers/trials.zip
-    classes: btn btn-lg btn-info font-weight-bold
+    classes: btn btn-lg btn-info font-weight-bold umami--click--downloads-page-download-trials-zip
 ---
