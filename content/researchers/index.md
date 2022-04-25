@@ -45,8 +45,8 @@ menu:
   <h3 class="title">Current Research</h3>
   
   <p class="lead font-weight-biold">You can browse the most up to date research articles, download our database, and receive a free newsletter with the most relevant articles.</p>
-      <a href='{{< ref "/articles/_index.md" >}}' class="btn btn-primary btn-round btn-lg font-weight-bold">View articles <i class="fas fa-arrow-circle-right"></i></a>
-      <a href='{{< ref "/downloads/_index.md" >}}' class="btn btn-success btn-round btn-lg font-weight-bold">Download the database <i class="fas fa-download"></i></a>
+      <a href='{{< ref "/articles/_index.md" >}}' class="btn btn-primary btn-round btn-lg font-weight-bold umami--click--view-articles-researchers-page">View articles <i class="fas fa-arrow-circle-right"></i></a>
+      <a href='{{< ref "/downloads/_index.md" >}}' class="btn btn-success btn-round btn-lg font-weight-bold umami--click--downloads-researchers-page">Download the database <i class="fas fa-download"></i></a>
   </div>
 </div>
 
@@ -55,7 +55,7 @@ menu:
     <h3 class="title">Research Digest</h3>
     <p class="lead font-weight-biold">We have a weekly digest with the most recent and relevant research to keep you updated.</p>
     <p>Send us an email and ask to be subscribed.</p>
-    <a href='mailto:mail@brunoamaral.eu' class="btn btn-primary btn-round btn-lg font-weight-bold">Send Email <i class="fas fa-envelope"></i></a>
+    <a href='mailto:bruno@gregory-ms.com' class="btn btn-primary btn-round btn-lg font-weight-bold umami--click--send-email-brunoo-researchers-page">Send Email <i class="fas fa-envelope"></i></a>
     </div>
   <div class="col-md-5 col-12 justify-content-center align-self-center">
     <img src="images/undraw_subscribe_vspl.svg" class="w-50 align-middle d-none d-md-block" alt="Email newsletter" loading="lazy"/>
@@ -73,7 +73,7 @@ menu:
   <p class="lead font-weight-biold">On this page you will find a listing of promissing medicine and therapies with their associated articles and clinical trials.</p>
   
   <p>An item is added to the list based on what is identified by the MS Society Website, or when there is an associated clinical trial.</p>
-  <a href='{{< ref "/observatory/_index.md" >}}' class="btn btn-success btn-round btn-lg font-weight-bold">Observatory <i class="fas fa-arrow-circle-right"></i></a>
+  <a href='{{< ref "/observatory/_index.md" >}}' class="btn btn-success btn-round btn-lg font-weight-bold umami--click--observatory-researchers-page">Observatory <i class="fas fa-arrow-circle-right"></i></a>
 </div>  
 </div>
 
@@ -95,23 +95,6 @@ graph TD;
     Gregory{fa:fa-robot Gregory}-->Newsletter(fa:fa-envelope Newsletter)
 </div>
 <div class="col-md-12 text-center">
-  <a href='{{< ref "/about/index.md" >}}' class="btn btn-primary btn-round btn-lg font-weight-bold">More information on the about page <i class="fas fa-arrow-circle-right"></i></a>
+  <a href='{{< ref "/about/index.md" >}}' class="btn btn-primary btn-round btn-lg font-weight-bold umami--click--more-info-on-sources-researchers-page">More information on the about page <i class="fas fa-arrow-circle-right"></i></a>
 </div>
 </div>
-
-
-<!-- TO DO : 
-
-Listagem dos resultados mais recentes nos últimos 30 dias
-
-listagem dos resultados mais relevantes 
-
-link para o observatorio
-
-cta para newsletter
-
--->
-
-
-
-

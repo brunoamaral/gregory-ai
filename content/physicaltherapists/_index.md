@@ -47,7 +47,7 @@ scripts:
   <p class="lead font-weight-biold">We have been receiving enquiries about information for physical therapy for people with Multiple Sclerosis.</p>
   
   <p>We don't have the knowledge needed to find out what is important for this page. If you would like to help, or know someone who could, send us an email so we can talk.</p>
-  <a href='mailto:mail@brunoamaral.eu' class="btn btn-success btn-round btn-lg font-weight-bold"><i class="far fa-paper-plane"></i> Email</a>
+  <a href='mailto:mail@brunoamaral.eu' class="btn btn-success btn-round btn-lg font-weight-bold umami--click--physical-therapists-email"><i class="far fa-paper-plane"></i> Email</a>
   
   </div>
 

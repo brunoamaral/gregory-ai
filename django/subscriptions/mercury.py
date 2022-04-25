@@ -92,7 +92,7 @@ class WeeklySummary(CronJobBase):
 	pass
 
 class TrialsNotification(CronJobBase):
-	RUN_EVERY_MINS = 10 # every 10 minutes
+	RUN_EVERY_MINS = 620 # every 12 hours
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'subscriptions.trials_notification'
 

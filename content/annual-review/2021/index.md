@@ -30,7 +30,7 @@ scripts:
   -
 ---
 
-<a class="btn btn-success" href="./Gregory_MS_Annual_Review_2021.pdf">Download PDF</a>
+<a class="btn btn-success umami--click--download-pdf-2021" href="./Gregory_MS_Annual_Review_2021.pdf">Download PDF</a>
 
 <iframe src="./Gregory_MS_Annual_Review_2021.pdf" width="100%" height="700px">
 </iframe>

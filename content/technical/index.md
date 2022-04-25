@@ -81,21 +81,12 @@ On November 16<sup>th</sup> this represented the following costs.
 <p>Gregory’s brain is composed of two elements, <a href="https://nodered.org">Node-RED</a> to run searches and <a href="https://www.python.org/">Python</a> to execute the machine learning algorithm.</p>
 </div>
 
-
-
-<!-- <div class="col-md-6">
-<img src="images/node-red-icon-2.svg" alt="node-red-icon-2" class="w-50">
-<img src="images/python-logo-generic.svg" alt="python-logo-generic" class="w-50">
-</div> -->
-
 </div>
 
 
 ### Content Management Software{.title}
 
 We are using [Hugo](https://gohugo.io/) to generate the static pages that make up the website. 
-
-<!-- ![](images/hugo-logo-wide.svg) -->
 
 
 ```BashSession
@@ -120,19 +111,12 @@ Total in 228433 ms
 
 The website's Design and HTML was created by [Creative Tim](https://www.creative-tim.com/) and ported to Hugo by [Bruno Amaral](https://brunoamaral.eu/).
 
-<!-- ![](images/now_ui.jpeg) -->
-
-<!-- <img src="images/logo-ct-white-170d794e447f75aec55c6effdfbedced9dd268ceceece152675ff8f9891e3588.svg" style="color:#000; filter: invert(100%) ;"> -->
-
 ### Third party services{.title}
 
-**Email delivery** and management of mailing list is provided by Mailgun, using a free tier account.
+**Email delivery** and management of mailing list is provided by [Mailgun](https://mailgun.com/), using a free tier account.
 
-<!-- ![Mailgun_Secondary](images/Mailgun_Secondary.png) -->
 
 **Monitoring** is done by https://healthchecks.io/
-
-<!-- ![logo-rounded](images/logo-rounded.svg) -->
 
 
 
