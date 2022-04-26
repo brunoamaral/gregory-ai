@@ -24,12 +24,13 @@ class RebuildCats(CronJobBase):
 		cur.execute("SELECT category_name,category_terms,category_id FROM categories;")
 		categories = cur.fetchall()
 		for cat in categories:
-			terms = cat[1]
+			terms = f"(%{'%|%'.join(cat[1]).lower()}%)"
 			cat_id = cat[2]
+
 			# [(['string', 'cenas', 'coisas'],)]
-			for term in terms:
-				cur.execute("""INSERT INTO articles_categories (articles_id,categories_id)
-				SELECT "articles"."article_id", "categories"."category_id" FROM "categories" INNER JOIN "articles" ON "articles"."title" LIKE %s AND "categories"."category_id" = %s 
-				""", ('%'+term.lower()+'%',cat_id))
-				cur.connection.commit()
+			cur.execute("""INSERT INTO articles_categories (articles_id,categories_id)
+			SELECT "articles"."article_id", "categories"."category_id" FROM "categories" INNER JOIN "articles" ON "articles"."title" similar to %s AND "categories"."category_id" = %s 
+			""", (terms,cat_id))
+
+			cur.connection.commit()
 	pass
