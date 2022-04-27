@@ -46,5 +46,6 @@ urlpatterns = [
 	path('feed/latest/trials/', LatestTrialsFeed()),
 	path('feed/machine-learning/', MachineLearningFeed()),
 	path('feed/articles/prediction/none/', ToPredictFeed()),
+	path('feed/twitter/', Twitter()),
 
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
