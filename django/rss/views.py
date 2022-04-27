@@ -102,14 +102,14 @@ class Twitter(Feed):
 		return item.title
 
 	def item_description(self, item):
-		return item.summary
+		return None
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
 		object_type = 'trials/'
 		if hasattr(item, 'article_id'):
 			object_type = 'articles/'
-		return 'https://gregory-ms.com/' + object_type + str(item.pk) + '/' 
+		return item.link 
 
 	def item_pubdate(self,item):
 		"""
