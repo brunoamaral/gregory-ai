@@ -88,7 +88,9 @@ class Twitter(Feed):
 		from django.db.models import Q
 		from operator import attrgetter
 
-		articles_list = Articles.objects.filter(ml_prediction_gnb=True)[:10]
+		criterion1 = Q(relevant=True)
+		criterion2 = Q(ml_prediction_gnb=True)
+		articles_list = Articles.objects.filter(criterion1 or criterion2)[:10]
 		trials_list = Trials.objects.filter(~Q(sent_to_twitter=True))[:10]
 		result_list = sorted( chain(articles_list, trials_list),key=attrgetter('discovery_date'),reverse=True)
 		return result_list
