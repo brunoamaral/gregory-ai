@@ -73,7 +73,7 @@ class WeeklySummary(CronJobBase):
 			subscribers = []
 			for email in Subscribers.objects.filter(lists__list_name='Weekly Summary').values():
 				subscribers.append(email['email'])
-			articles = Articles.objects.filter(~Q(sent_to_subscribers=True))
+			articles = Articles.objects.filter(relevant=True).filter(~Q(sent_to_subscribers=True))
 			trials = Trials.objects.filter(~Q(sent_to_subscribers=True))
 			summary = {
 			"articles": articles,
