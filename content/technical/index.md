@@ -39,73 +39,26 @@ scripts:
 
 Gregory is running on a [Digital Ocean](https://digitalocean.com) virtual private server with these specs. 
 
+- 2 vCPU
 - 4 GB Memory 
 - 80 GB Disk 
 - Ubuntu 20.04 (LTS) x64
 
-On November 16<sup>th</sup> this represented the following costs.
-
-<table class="table table-striped">
-<thead>
-<tr>
-<th><strong>Item</strong></th>
-<th><strong>Cost</strong></th>
-</tr>
-</thead>
-<tr><td>Domain cost per year</td>
-<td>$8.57	USD</td>
-<tr>
-<td>Server cost per month</td>
-<td>$20.00 USD</td>
-</tr>
-<tbody>
-<tr>
-<td>Backups cost per month</td>
-<td>$4.00 USD</td>
-</tr>
-<tr>
-<td><strong>Total cost per year</strong></td>
-<td class="text-danger font-weight-bold">$296,57 USD</td>
-</tr>
-</tbody>
-</table>
-
+Up to date information on the cost of running the server can be found in the [Annual Reports](https://gregory-ms.com/annual-review/).
 
 <div class="row">
 <div class="col-md-12">
 
-
 ### Software{.title}
 
-
-<p>Gregory’s brain is composed of two elements, <a href="https://nodered.org">Node-RED</a> to run searches and <a href="https://www.python.org/">Python</a> to execute the machine learning algorithm.</p>
+<p>Gregory’s brain is composed of three elements, <a href="https://nodered.org">Node-RED</a> to run searches and <a href="https://www.djangoproject.com/">Django</a> to run machine learning algorithms, produce the API, send notifications, and other emails.</p>
 </div>
 
 </div>
-
 
 ### Content Management Software{.title}
 
 We are using [Hugo](https://gohugo.io/) to generate the static pages that make up the website. 
-
-
-```BashSession
-Start building sites … 
-hugo v0.88.1-5BC54738+extended linux/amd64 BuildDate=2021-09-04T09:39:19Z VendorInfo=gohugoio
-
-                   |  EN   
--------------------+-------
-  Pages            | 6055  
-  Paginator pages  | 1465  
-  Non-page files   |  205  
-  Static files     | 1739  
-  Processed images |   42  
-  Aliases          |   26  
-  Sitemaps         |    1  
-  Cleaned          |    0  
-
-Total in 228433 ms
-```
 
 ### Design{.title}
 
@@ -113,14 +66,10 @@ The website's Design and HTML was created by [Creative Tim](https://www.creative
 
 ### Third party services{.title}
 
-**Email delivery** and management of mailing list is provided by [Mailgun](https://mailgun.com/), using a free tier account.
-
+**Email delivery** and management of mailing list is provided by [Mailgun](https://mailgun.com/), using a flex tier account.
 
 **Monitoring** is done by https://healthchecks.io/
 
-
-
 {{< copyright >}}
-
 
 </div>
