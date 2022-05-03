@@ -18,6 +18,9 @@ cta:
     url: /relevant/index.xml
     classes: btn-dark btn-sm btn-primary
     targetblank: true
+  - label: <i class="fas fa-file-archive"></i> Download Database
+    url: /developers/articles.zip
+    classes: btn btn-lg btn-success font-weight-bold umami--click--downloads-page-download-articles-zip
 ---
 
 Articles listed here come from the following sites, with keyword searches for `Multiple Sclerosis, autoimmune encephalomyelitis, encephalomyelitis, immune tolerance, myelin`.
