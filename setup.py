@@ -135,21 +135,15 @@ print(output)
 
 print('''
 ####
-## Pulling the image from the Docker hub
+## Running docker-compose up -d --build
 ####
 ''')
-client = docker.from_env()
-image = client.images.pull("amaralbruno/gregory")
-print(image.id)
 
-print('''
-####
-## Creating the docker network
-####
-''')
-network = client.networks.create('traefik_proxy')
-
-print(network.attrs)
+args = ("docker-compose","up","-d","--build")
+popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
+popen.wait()
+output = popen.stdout.read()
+print(output)
 
 print('''
 ####
@@ -176,21 +170,5 @@ If you wish to apply Gregory to your own research subject, you will have to dele
 
 ## Email service
 
-If you need to send emails with digests or information for the Admin, you need to configure the email flow accordingly.
-
-- Confirm the information on .env
-- Edit docker-compose.yaml so that volumes have an absolute path
-- Run `sudo docker-compose up -d` to start Node-RED
-- Visit the Node-RED administration panel by visiting the IP of the docker container with the default port, `1880`.
-- Run build.py to deploy the website
-
-''')
-
-print('''
-####
-## Optional
-####
-
-Visit the metabase/ directory to install a docker image that will allow you to analyse the database.
-
+We use mailgun to send emails, check the .env file for the settings.
 ''')
