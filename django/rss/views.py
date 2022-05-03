@@ -100,7 +100,7 @@ class Twitter(Feed):
 		if hasattr(item, 'article_id'):
 			object_type = '#Article '
 
-		item.title = object_type + item.title
+		item.title = object_type + item.title[:100] + '...'
 		return item.title
 
 	def item_description(self, item):
