@@ -27,7 +27,7 @@ class RebuildCats(CronJobBase):
 			terms = f"(%{'%|%'.join(cat[1]).lower()}%)"
 			cat_id = cat[2]
 			cur.execute("""INSERT INTO articles_categories (articles_id,categories_id)
-			SELECT "articles"."article_id", "categories"."category_id" FROM "categories" INNER JOIN "articles" ON "articles"."title" similar to %s AND "categories"."category_id" = %s 
+			SELECT "articles"."article_id", "categories"."category_id" FROM "categories" INNER JOIN "articles" ON lower("articles"."title") similar to %s AND "categories"."category_id" = %s 
 			""", (terms,cat_id))
 
 			cur.connection.commit()
