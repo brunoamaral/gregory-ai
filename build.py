@@ -216,6 +216,7 @@ with open(trials,"r") as a:
 jsonTrials = json.loads(data)
 
 for trial in jsonTrials:
+    title = trial["title"].replace("'", "\\'").replace("\"",'\\"')
 
     # Write a file for each record
     markdownDir = pathlib.Path(trialsDir+str(trial["trial_id"]))
