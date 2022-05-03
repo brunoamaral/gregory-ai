@@ -47,7 +47,7 @@ scripts:
   <p class="lead font-weight-biold">On this page you will find a listing of promissing medicine and therapies with their associated articles and clinical trials.</p>
   
   <p>An item is added to the list based on what is identified by the MS Society Website, or when there is an associated clinical trial.</p>
-  <a href='{{< ref "/observatory/_index.md" >}}' class="btn btn-success btn-round btn-lg font-weight-bold">Observatory <i class="fas fa-arrow-circle-right"></i></a>
+  <a href='{{< ref "/observatory/_index.md" >}}' class="btn btn-success btn-round btn-lg font-weight-bold umami--click--doctors-page-observatory">Observatory <i class="fas fa-arrow-circle-right"></i></a>
   
   </div>
 </div>
