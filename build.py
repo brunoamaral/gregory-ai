@@ -174,7 +174,7 @@ for index, row in trials.iterrows():
 			str(row["trial_id"]) + \
 			"\ndiscovery_date: " + str(row["discovery_date"]) + \
 			"\ndate: " + str(row["discovery_date"]) +\
-			"\ntitle: \'" + row["title"] + "\'" +\
+			"\ntitle: \'" + title + "\'" +\
 			"\nsummary: |" + \
 			'\n  ' + str(row["summary"]).replace("\n", "\n  ") +\
 			"\nlink: \'" + row["link"] + "\'" +\
