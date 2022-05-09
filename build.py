@@ -162,8 +162,8 @@ if trialsDirExists.exists() == False:
 # Open trials.json
 
 for index, row in trials.iterrows():
-	title = row["title"].replace("'", "\\'").replace("\"",'\\"')
-
+	title = row["title"].replace("'", "\\'").replace("\"",'\\"').replace(":", "\\:")
+	
 	# Write a file for each record
 	markdownDir = pathlib.Path(trialsDir+str(row["trial_id"]))
 	markdownDir.mkdir(parents=True, exist_ok=True)
