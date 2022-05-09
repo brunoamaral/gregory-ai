@@ -163,7 +163,7 @@ if trialsDirExists.exists() == False:
 
 for index, row in trials.iterrows():
 	title = row["title"].replace("'", "\\'").replace("\"",'\\"').replace(":", "\\:")
-	
+
 	# Write a file for each record
 	markdownDir = pathlib.Path(trialsDir+str(row["trial_id"]))
 	markdownDir.mkdir(parents=True, exist_ok=True)
@@ -174,7 +174,7 @@ for index, row in trials.iterrows():
 			str(row["trial_id"]) + \
 			"\ndiscovery_date: " + str(row["discovery_date"]) + \
 			"\ndate: " + str(row["discovery_date"]) +\
-			"\ntitle: \'" + title + "\'" +\
+			"\ntitle: \"" + title + "\"" +\
 			"\nsummary: |" + \
 			'\n  ' + str(row["summary"]).replace("\n", "\n  ") +\
 			"\nlink: \'" + row["link"] + "\'" +\
