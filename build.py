@@ -64,8 +64,9 @@ try:
 	conn = psycopg2.connect("dbname='"+ postgres_db +"' user='" + postgres_user + "' host='" + db_host + "' password='" + postgres_password + "'")
 except:
 	print("I am unable to connect to the database")
-query_articles = 'SELECT * FROM "articles" ORDER BY article_id DESC;'
-query_trials = 'SELECT * FROM "trials" ORDER BY trial_id DESC;'
+query_articles = 'SELECT "public"."articles"."article_id" AS "article_id", "public"."articles"."title" AS "title", "public"."articles"."summary" AS "summary", "public"."articles"."link" AS "link", "public"."articles"."published_date" AS "published_date", "public"."articles"."source" AS "source", "public"."articles"."relevant" AS "relevant", "public"."articles"."ml_prediction_gnb" AS "ml_prediction_gnb", "public"."articles"."ml_prediction_lr" AS "ml_prediction_lr", "public"."articles"."discovery_date" AS "discovery_date", "public"."articles"."noun_phrases" AS "noun_phrases", "public"."articles"."doi" AS "doi", "Sources"."name" AS "Sources__name", "Sources"."link" AS "Sources__link" FROM "public"."articles" LEFT JOIN "public"."sources" "Sources" ON "public"."articles"."source" = "Sources"."source_id" ORDER BY article_id;'
+
+query_trials = 'SELECT "public"."trials"."trial_id" AS "trial_id", "public"."trials"."discovery_date" AS "discovery_date", "public"."trials"."title" AS "title", "public"."trials"."summary" AS "summary", "public"."trials"."link" AS "link", "public"."trials"."published_date" AS "published_date", "public"."trials"."source" AS "source", "public"."trials"."relevant" AS "relevant", "Sources"."source_id" AS "Sources__source_id", "Sources"."name" AS "Sources__name", "Sources"."link" AS "Sources__link" FROM "public"."trials" LEFT JOIN "public"."sources" "Sources" ON "public"."trials"."source" = "Sources"."source_id" ORDER BY trial_id DESC;'
 
 print('''
 ####
@@ -130,7 +131,7 @@ for index, row in articles.iterrows():
 			'\n  ' + row["summary"].replace("\n", "\n  ") +\
 			"\nlink: \'" + row["link"] + "\'" +\
 			"\npublished_date: " + str(row["published_date"]) + \
-			"\narticle_source: " + str(row["source"]) + \
+			"\narticle_source: " + str(row["Sources__name"]) + \
 			"\nrelevant: " + str(row["relevant"]).lower() + \
 			"\nnounphrases: " + str(row["noun_phrases"]) + \
 			"\nml_prediction_gnb: " + str(row["ml_prediction_gnb"]).lower() + \
@@ -178,7 +179,7 @@ for index, row in trials.iterrows():
 			'\n  ' + str(row["summary"]).replace("\n", "\n  ") +\
 			"\nlink: \'" + row["link"] + "\'" +\
 			"\npublished_date: " + str(row["published_date"]) + \
-			"\ntrial_source: " + str(row["source"]) + \
+			"\ntrial_source: " + str(row["Sources__name"]) + \
 			"\nrelevant: " + str(row["relevant"]).lower() + \
 			"\noptions:" + \
 			"\n  unlisted: false" + \
