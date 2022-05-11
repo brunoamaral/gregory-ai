@@ -76,8 +76,11 @@ scripts:
     </div>
 </div>
 
-
-{{< metabase-embed dashboard="8" width="1300" height="1250" >}}
+<div class="row justify-content-center align-self-center mb-5 p-md-5">
+  <div class="col-12 align-self-center">
+{{< metabase-embed dashboard="8" width="1300" height="1000" >}}
+  </div>
+</div>
 
 <div class="row justify-content-center align-self-center mb-5 p-md-5">
   <div class="col-md-5 col-12 align-self-center">
