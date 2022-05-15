@@ -84,27 +84,21 @@ class Twitter(Feed):
 	description = "Real time results for relevant research on Multiple Sclerosis."
 
 	def items(self):
-		import itertools
+		from itertools import chain
 		from django.db.models import Q
 		from operator import attrgetter
 
-		articles_list_1 = Articles.objects.filter(relevant=True).order_by('-article_id')
-		articles_list_2 = Articles.objects.filter(ml_prediction_gnb=True).order_by('-article_id')
-		# articles_list = Articles.objects.filter(criterion1 or criterion2)[:10]
-		trials_list = Trials.objects.all().order_by('-trial_id')[:10]
-		result_list = sorted( itertools.chain(articles_list_1[:10],articles_list_2[:10], trials_list),key=attrgetter('discovery_date'),reverse=True)
+		criterion1 = Q(relevant=True)
+		criterion2 = Q(ml_prediction_gnb=True)
+		articles_list = Articles.objects.filter(criterion1 or criterion2)[:10]
+		trials_list = Trials.objects.filter(~Q(sent_to_twitter=True))[:10]
+		result_list = sorted( chain(articles_list, trials_list),key=attrgetter('discovery_date'),reverse=True)
 		return result_list
 	
 	def item_title(self, item):
 		object_type = '#ClinicalTrial '
 		if hasattr(item, 'article_id'):
-			if item.ml_prediction_gnb == True:
-				object_type = '#Article #ML '
-			if item.relevant == True:
-				object_type = '#Article #Manual '
-			if item.relevant == True and item.ml_prediction_gnb == True:
-				object_type = '#Article #Manual #ML '
-
+			object_type = '#Article '
 
 		item.title = object_type + item.title[:100] + '...'
 		return item.title
