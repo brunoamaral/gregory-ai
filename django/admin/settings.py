@@ -164,3 +164,4 @@ CRON_CLASSES = [
 		# 'gregory.2_train_models.TrainModels',
 		'gregory.3_predict.RunPredictor'
 ]
+WEBSITE_DOMAIN = 'https://gregory-ms.com/'

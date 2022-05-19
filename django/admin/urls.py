@@ -20,6 +20,8 @@ from django.urls import include, path, re_path
 from rest_framework import routers
 from api.views import *
 from rss.views import *
+from subscriptions.views import subscribe_view
+
 
 router = routers.DefaultRouter()
 router.register(r'articles', ArticleViewSet, RelevantList)
@@ -47,5 +49,6 @@ urlpatterns = [
 	path('feed/machine-learning/', MachineLearningFeed()),
 	path('feed/articles/prediction/none/', ToPredictFeed()),
 	path('feed/twitter/', Twitter()),
+	path('subscriptions/new/', subscribe_view)
 
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
