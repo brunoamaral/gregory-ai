@@ -106,6 +106,7 @@ class Trials(models.Model):
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	sent_to_admin = models.BooleanField(blank=True,null=True, default=False)
 	sent_real_time_notification = models.BooleanField(blank=True,null=True,default=False)
+	categories = models.ManyToManyField(Categories)
 	def __str__(self):
 		return str(self.trial_id) 
 

@@ -35,3 +35,7 @@ Hover each chart to download the results, click each title or article id number 
 <a href="https://metabase.gregory-ms.com/public/dashboard/39cbe602-4d42-46af-bfe4-0de04ef5e5f9" target="_blank" class="umami--click--open-dashboard-new-tab">Open dashboard in new tab</a>
 
 {{< metabase-embed dashboard="1" width="1300" height="1250" >}}
+
+## Author Search
+
+{{< metabase-embed dashboard="10" width="1300" height="1250" >}}
