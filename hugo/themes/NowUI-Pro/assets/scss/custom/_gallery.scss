@@ -1,0 +1,49 @@
+/**/
+/* GALLERY */
+/**/
+
+.gallery{
+  width: 100%;
+  display: block;
+  margin:0 auto;
+}
+
+/* Extra Small Devices, Phones */ 
+@media only screen and (min-width : 480px) {
+  .gallery {
+    column-count: 1;
+    column-gap: 3px;
+  }
+}
+/* Small Devices, Tablets */
+@media only screen and (min-width : 768px) {
+  .gallery {
+    column-count: 3;
+    column-gap: 3px;
+  }
+}
+
+/* Medium Devices, Desktops */
+@media only screen and (min-width : 992px) {
+  .gallery { /* Masonry container */
+      column-count: 4;
+      column-gap: 3px;
+  }
+}
+
+/* Large Devices, Wide Screens */ 
+@media only screen and (min-width : 1200px) {
+  .gallery{
+    column-count: 5;
+    column-gap: 0.2rem;
+    width: 100%;
+  }
+}
+
+
+.gallery-item { /* Masonry bricks or child elements */
+    background-color: #eee;
+    display: inline-block;
+    margin: 0 0 0.2rem;
+    width: auto;
+}

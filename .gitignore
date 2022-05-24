@@ -20,7 +20,6 @@ public/
 resources/
 workspace.code-workspace
 .hugo_build.lock
-hugo
 .env
 data/embeds.json
 metabase/db-data/

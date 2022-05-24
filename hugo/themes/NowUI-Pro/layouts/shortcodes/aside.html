@@ -1,0 +1,20 @@
+{{ $align := .Get "align" }}
+{{ $img := .Get "img" }}
+{{ $text := .Inner }}
+{{ $classes := .Get "classes"}}
+{{ with $img }}
+<div class="row">
+	<div class="aside col-md-6 {{ with $classes }}{{.}}{{end}} {{ if eq $align "right" }}order-last{{ else }}order-first{{ end }}">
+		<aside class="separator m-md-0 p-md-2 mt-xs-5">
+			{{ $text }}
+		</aside>
+	</div>
+	<div class="col-md-6 align-self-center {{ if eq $align "right" }}order-first{{ else }}order-last{{ end }}">
+		<img src="{{ $img }}" class="image img img-raised rounded mb-3  animate animation__fadeIn{{ if eq $align "left" }}Right{{else}}Left{{end}}" alt="" loading="lazy">
+	</div>
+</div>
+{{ else }}
+	<aside class="pullquote separator {{ with $classes }}{{.}}{{end}} float-{{ $align }}">
+		{{ $text }}
+	</aside>
+{{ end }}

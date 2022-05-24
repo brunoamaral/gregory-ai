@@ -1,0 +1,8 @@
+<ul class="tags">
+		{{ range $.Site.Taxonomies.tags }}
+		{{ if and (ne .Count "") (gt .Count 1) }}
+		<li><a href="{{ .Page.Permalink | absLangURL }}" title="{{ i18n "posts_tagged_with" }} {{ .Page.Title }}">{{ .Page.Title }}</a> {{ .Count }}</li>
+		{{ end }}
+		{{ end }}
+</ul>
+

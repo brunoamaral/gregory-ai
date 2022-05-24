@@ -1,0 +1,204 @@
+baseurl = "https://now-ui.lisboncollective.com/"
+copyright = "Bruno Amaral 2021"
+disqusShortname = "brunoamaral-eu"
+enableGitInfo = true
+enableRobotsTXT = true
+googleAnalytics = ""
+languageCode = "en-us"
+publishdir = "/var/www/now-ui.lisboncollective.com"
+pygmentsCodefences=true
+pygmentsOptions=""
+# pygmentsStyle="monokai"
+pygmentsUseClasses=true
+rssLimit = 30
+theme = ["NowUI-Pro"]
+timeout=20000
+title = "NowUI Pro Demo"
+
+[markup]
+  defaultMarkdownHandler = "goldmark"
+  [markup.asciidocExt]
+    backend = "html5"
+    extensions = []
+    failureLevel = "fatal"
+    noHeaderOrFooter = true
+    preserveTOC = false
+    safeMode = "unsafe"
+    sectionNumbers = false
+    trace = false
+    verbose = false
+    workingFolderCurrent = false
+    [markup.asciidocExt.attributes]
+  [markup.blackFriday]
+    angledQuotes = false
+    footnoteAnchorPrefix = ""
+    footnoteReturnLinkContents = ""
+    fractions = true
+    hrefTargetBlank = false
+    latexDashes = true
+    nofollowLinks = false
+    noreferrerLinks = false
+    plainIDAnchors = true
+    skipHTML = false
+    smartDashes = true
+    smartypants = true
+    smartypantsQuotesNBSP = false
+    taskLists = true
+  [markup.goldmark]
+    [markup.goldmark.extensions]
+      definitionList = true
+      footnote = true
+      linkify = false
+      strikethrough = true
+      table = true
+      taskList = true
+      typographer = true
+    [markup.goldmark.parser]
+      autoHeadingID = true
+      autoHeadingIDType = "github"
+      [markup.goldmark.parser.attribute]
+        block = true
+        title = true
+    [markup.goldmark.renderer]
+      hardWraps = false
+      unsafe = true
+      xhtml = false
+  [markup.highlight]
+    anchorLineNos = false
+    codeFences = true
+    guessSyntax = false
+    hl_Lines = ""
+    lineAnchors = ""
+    lineNoStart = 1
+    lineNos = false
+    lineNumbersInTable = true
+    noClasses = true
+    style = "monokai"
+    tabWidth = 4
+  [markup.tableOfContents]
+    endLevel = 3
+    ordered = false
+    startLevel = 2
+
+[params]
+# The name of the main author
+author = "Bruno Amaral"
+defaultAuthor = "authors/default-author"
+# Set the default site thumbnail
+defaultImage = ""
+# Google 
+googleSiteVerification = ""
+googleTagManager = ""
+headerPhoto = ""
+logo = ""
+subtitle = ""
+summary = ""
+tinyletter = ""
+
+[params.apis]
+googlemaps = ""
+
+[privacy]
+  [privacy.disqus]
+    disable = false
+  [privacy.googleAnalytics]
+    anonymizeIP = true
+    disable = false
+    respectDoNotTrack = true
+    useSessionStorage = false
+  [privacy.instagram]
+    disable = false
+    simple = true
+  [privacy.speakerDeck]
+    disable = false
+  [privacy.twitter]
+    disable = false
+    enableDNT = true
+  [privacy.vimeo]
+    disable = false
+  [privacy.youtube]
+    disable = false
+    privacyEnhanced = true
+
+[mediaTypes]
+[mediaTypes."application/json"]
+suffixes = ["json"]
+
+[outputs]
+	home = [ "HTML", "RSS", "JSON", "Search" ]
+	section = [ "HTML", "RSS"]
+	term = [ "HTML", "RSS"]
+
+[outputFormats.Reveal]
+baseName = "index"
+mediaType = "text/html"
+isHTML = true
+
+[outputFormats.Search]
+baseName = "index"
+mediaType = "application/json"
+path = "search"
+
+
+[permalinks]
+	post = "/post/:slug/"
+  story = "/:sections/:slug"
+[sitemap]
+	changefreq = "weekly"
+	priority = 0.5
+	filename = "sitemap.xml"
+
+[taxonomies]
+	tag = "tags"
+	category = "categories"
+  author = "authors"
+
+[social]
+	facebook_admin = "620982784"
+	facebook_app_id = "275213602982"
+
+DefaultContentLanguage = "en"
+
+[Languages]
+
+[Languages.en]
+weight = 1
+LanguageName = "English"
+
+[Languages.en.params]
+algoliaapikey = ""
+algoliaappid = ""
+algoliaindex = ""
+description = "Demo for NowUI Pro."
+subtitle = "Full featured Bootstrap Theme for Hugo site generator"
+
+# [Languages.pt]
+# weight = 2
+# LanguageName = "Portuguese"
+# subtitle = ""
+# description = ""
+
+
+
+
+[imaging]
+# See https://github.com/disintegration/imaging
+# Imaging supports image resizing using various resampling filters. The most notable ones:
+
+# NearestNeighbor - Fastest resampling filter, no antialiasing.
+# Box - Simple and fast averaging filter appropriate for downscaling. When upscaling it's similar to NearestNeighbor.
+# Linear - Bilinear filter, smooth and reasonably fast.
+# MitchellNetravali - А smooth bicubic filter.
+# CatmullRom - A sharp bicubic filter.
+# Gaussian - Blurring filter that uses gaussian function, useful for noise removal.
+# Lanczos - High-quality resampling filter for photographic images yielding sharp results, but it's slower than cubic filters.
+resampleFilter = "lanczos"
+
+# Defatult JPEG quality setting. Default is 75.
+quality = 85
+
+# Anchor used when cropping pictures.
+# Default is "smart" which does Smart Cropping, using https://github.com/muesli/smartcrop
+# Smart Cropping is content aware and tries to find the best crop for each image.
+# Valid values are Smart, Center, TopLeft, Top, TopRight, Left, Right, BottomLeft, Bottom, BottomRight
+anchor = "smart"

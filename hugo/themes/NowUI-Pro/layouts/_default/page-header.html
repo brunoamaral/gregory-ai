@@ -1,0 +1,34 @@
+{{/* 
+This template renders the content inside the page header.
+
+Usage:
+
+Place the following in the frontmatter:
+```
+layout: page-header
+```
+
+ */}}
+
+{{ define "bodyclasses" }}page page_header page-header.html{{ end }}
+
+{{ define "bodyid" }}{{ .Section }}{{ end }}
+
+{{ define "data-attributes" }}
+	data-contentgrouptype="{{ .Section }}" data-contentgroupname="{{ .Title }}"
+{{ end }}
+
+{{ define "main" }}
+{{ $headerImage := (.Resources.GetMatch "header").RelPermalink }}
+<div class="page-header header-filter" filter-color="black">
+	<div class="page-header-image" style="background-image:url({{- $headerImage -}})"></div>
+
+
+	<div class="container">
+		<div class="row">
+				{{ .Content }}
+		</div>
+	  </div>
+	</div>
+</div>
+{{ end }}

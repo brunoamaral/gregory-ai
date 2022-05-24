@@ -1,0 +1,44 @@
+{{ $ref := (.Get "ref") }}
+{{ $align := (.Get "align")}}
+{{ $page := "" }}
+{{ range .Page.Sites }}
+    {{ if eq (print (.GetPage $ref).File) $ref }}
+        {{ $page = (.GetPage $ref) }}
+    {{ end }}
+{{ end }}
+{{ with $page }}
+<div class="card card-plain card-blog">
+    <div class="row">
+        <div class="col-md-7 {{ if eq $align "right"}}order-last{{else}}order-first{{end}}">
+            {{ if isset .Params "categories" }}
+                {{ range $index, $category := .Params.categories }}
+                <h6 class="category text-info media-2_sound-wave {{ $category | urlize }} ">{{ $category }}</h6>
+                {{ end }}
+            {{ end }}
+            <h3 class="card-title">
+                <a href="{{ $page.Permalink }}">{{ .Title }}</a>
+            </h3>
+            <p class="card-description">
+                {{ .Summary }}<a href="{{ $page.Permalink }}"> {{ i18n "read_more"}} </a>
+            </p>
+            {{ range $page.Params.authors }}
+            {{ $author := ($.Site.GetPage (printf "/authors/%s/" .)) }}
+            <p class="author">
+                {{ i18n "by" }} <a href="{{ $author.Permalink }}"><b>{{ $author.Params.name }}</b></a>, {{ $page.Params.date.Format "January 2, 2006" }}
+            </p>
+            {{ end }}
+    </div>
+        <div class="col-md-5">
+            <div class="card-image">
+                {{ $image := ""}}
+                {{ with $page.Resources.GetMatch "header" }}
+                    {{ $image := (.Fill "400x400").Permalink }}
+                {{ else }}
+                    {{ $image = .Site.Params.defaultImage }}
+                {{ end }}
+                <img class="img rounded img-raised" src="{{ $image }}" alt="header" />
+            </div>
+        </div>
+    </div>
+</div>
+{{ end }}

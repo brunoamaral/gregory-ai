@@ -1,0 +1,33 @@
+{{ define "bodyclasses" }}terms{{ end }}
+
+{{ define "data-attributes" }}
+	data-contentgrouptype="terms" data-contentgroupname="the-stories" data-articletitle="subhomepage"
+{{ end }}
+
+{{ define "description" }}
+	{{ partial "description.html" . }}
+{{ end }}
+{{ define "main" }}
+<div class="wrapper">
+	{{ partial "header-small.html" . }}
+	<div class="section">
+		<div class="container">
+
+					<section id="taxonomy {{ .Data.Plural }}">
+						<article class="">
+
+							<ul class="{{ .Data.Plural }}">{{ $data := .Data }}
+							{{ range .Data.Terms.Alphabetical }}
+								<li><a href="{{ .Page.Permalink | absLangURL }}">{{ .Page.Title }}</a> {{ .Count }}</li>
+							{{ end }}
+							</ul>
+
+						</article>
+					</section>
+
+			<div class="separator separator-primary"></div>
+		</div>
+	</div>
+  </div>
+
+{{ end }}

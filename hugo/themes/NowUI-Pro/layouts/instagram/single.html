@@ -1,0 +1,52 @@
+{{ define "bodyclasses" }}single instagram single.html contentgrouptype-instagrams contentgroupname-{{ .RelPermalink }}{{ end }}
+
+{{ define "bodyid" }}instagram{{ end }}
+
+{{ define "main" }}
+{{ $headerImage := ""}}
+{{ with .Resources.GetMatch "header" }}
+	{{ $headerImage = .RelPermalink }}
+{{ end }}
+<div class="page-header header-filter" filter-color="black">
+		<div class="page-header-image" style="background-image:url({{- $headerImage -}})"></div>
+		<div class="container ">
+			<div class="content">
+			<div class="row">
+				<div class="col-md-6 mx-auto">
+							<!-- Post -->
+							<div class="card-deck">
+								<article class="card">
+									<section class="card-body">
+										<img src="{{- $headerImage -}}" alt="
+										{{- with .Params.tags -}}
+													{{- $lenght := sub (len .) 1 -}}
+													{{- range $index, $tag := . -}}
+														{{ . }} {{- if lt $index $lenght -}}, {{- end -}}
+													{{- end -}}
+													{{- end -}}">
+									</section>
+									<footer>
+
+									</footer>
+								</article>
+							</div>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col-md-6 mx-auto">{{ with .PrevInSection }}
+							<a href="{{ .RelPermalink }}" class="btn btn-primary big previous">{{ i18n "older_photos" }}</a>
+						{{ else }}
+							<a href="#" class="disabled btn btn-light big previous">{{ i18n "older_photos" }}</a>
+						{{ end }}
+						{{ with .NextInSection }}
+								<a href="{{ .RelPermalink }}" class="btn btn-primary big next">{{ i18n "newer_photos" }}</a>
+						{{ else }}
+								<a href="#" class="disabled btn btn-light big next">{{ i18n "newer_photos" }}</a>
+						{{ end }}
+					</div>
+			</div>
+</div>
+			</div>
+		</div>
+</div>
+{{ end }}

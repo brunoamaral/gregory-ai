@@ -1,0 +1,35 @@
+{{ define "bodyclasses" }} instagram list-html contentgrouptype-instagrams contentgroupname-{{ .RelPermalink }} {{ end }}
+
+{{ define "description" }}
+	{{ if $.Page.Params.subtitle }}
+	<meta name="description" content="{{ $.Page.Params.subtitle }}" />
+	<meta name="twitter:description" content="{{ $.Page.Params.subtitle }}"/>        
+	<meta name="og:description" content="{{ $.Page.Params.subtitle }}"/>
+	{{ else if $.Page.Params.description }}
+	<meta name="description" content="{{ .Params.description }}" />
+	<meta name="twitter:description" content="{{ .Params.description }}"/>
+	<meta name="og:description" content="{{ .Params.description }}"/>
+	{{ end }}
+{{ end }}
+
+{{ define "main" }}
+<div class="wrapper">
+	{{ partial "header-small.html" . }}
+	<div class="section">
+		<div class="container">
+			<a name="content"></a>
+			<section id="category-list">
+				<div class="card-deck">
+					<div class="row">
+						{{range (.Paginate (where .Data.Pages ".Params.options.unlisted" "!=" true ) 9).Pages }}					
+							{{ .Render "summary"}}
+						{{ end }}
+						{{ partial "pagination.html" . }}
+					</div>
+				</div>
+			</section>
+			<div class="separator separator-primary"></div>
+		</div>
+	</div>
+</div>
+{{ end }}

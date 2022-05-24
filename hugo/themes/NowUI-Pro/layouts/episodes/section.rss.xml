@@ -1,0 +1,67 @@
+<rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" version="2.0">
+    <channel>
+        <title>{{ .Site.Title }} - {{ .Site.Params.subtitle }}</title>
+        <link>{{ .Permalink }}</link>
+        <language>{{ .Site.LanguageCode }}</language>
+        <copyright>{{ .Site.Copyright }}</copyright>
+        <description>{{ .Site.Params.description }}</description>
+
+        <itunes:title>{{ .Site.Title }} - {{ .Site.Params.subtitle }}</itunes:title>
+        <itunes:author>{{ .Site.Params.author }}</itunes:author>
+        <itunes:summary>{{ .Site.Params.description }}</itunes:summary>
+        <itunes:explicit>{{ .Site.Params.podcast.explicit }}</itunes:explicit>
+        <itunes:type>{{ .Site.Params.podcast.type }}</itunes:type>
+        <itunes:image href="{{ .Site.Params.podcast.cover }}"></itunes:image>
+
+        <itunes:category text="{{ .Site.Params.podcast.category }}">
+          <itunes:category text="{{ .Site.Params.podcast.subcategory }}" />
+        </itunes:category>
+
+        <itunes:category text="{{ .Site.Params.podcast.category_2 }}"></itunes:category>
+
+        <itunes:owner>
+            <itunes:name>{{ .Site.Params.author }}</itunes:name>
+            <itunes:email>{{ .Site.Params.author_email }}</itunes:email>
+        </itunes:owner>
+
+
+        {{ range first 50 .Data.Pages }}
+            {{ if eq .Section "episodios"}}
+                <item>
+                    {{ $audio_file := "" }}
+                    {{ $sizeInBytes := "" }}
+                    {{ $mediatype := ""}}
+                    {{ with .Resources.GetMatch "audio-file" }}
+                        {{ $audio_file = .Permalink }}
+                        {{ $sizeInBytes = len .Content }}
+                        {{ $mediatype = .MediaType }}
+                    {{ end }}
+
+                    {{ $image := ""}}
+                    {{ with .Resources.GetMatch "header" }}
+                        {{ $image = (.Resize "2000x").Permalink }}
+                        {{else}}
+                        {{ $image = .Site.Params.podcast.cover }}
+                    {{ end }}
+
+                    <title>{{ .Title }}</title>
+                    <description>{{ `<![CDATA[ ` | safeHTML }}{{ .Params.description | safeHTML }} ]]></description>
+
+                    <guid>usz{{ .Params.podcast.episode }}</guid>
+                    <link>{{ .Permalink }}</link>
+                    <pubDate>{{ .Date.Format "Mon, 02 Jan 2006 15:04:05 -0700" | safeHTML }} </pubDate>
+
+                    <enclosure url="{{ $audio_file }}" length="{{ $sizeInBytes }}" type="{{ $mediatype }}" />
+
+                    <itunes:title>{{ .Title }}</itunes:title>
+                    <itunes:episode>{{ .Params.podcast.episode }}</itunes:episode>
+                    <itunes:author>{{ .Site.Params.author }}</itunes:author>
+                    <itunes:duration>{{ .Params.podcast.duration }}</itunes:duration>
+                    <itunes:explicit>{{ .Params.podcast.explicit }}</itunes:explicit>
+                    <itunes:image href="{{ $image }}"></itunes:image>
+
+                </item>
+            {{ end }}
+        {{ end }}
+    </channel>
+</rss>

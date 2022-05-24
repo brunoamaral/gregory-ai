@@ -1,0 +1,34 @@
+{{ $headerImage := "0" }}
+
+{{- if not (eq (.Params.options.showHeader) false) }}
+		{{- with .Resources.GetMatch "header" -}}
+			{{- if eq .MediaType.SubType "gif" -}}
+					{{ $headerImage = .RelPermalink }}
+			{{- else }}
+				{{- $image := .Resize "2000x" -}}
+				{{ $headerImage = $image.RelPermalink }}
+			{{- end }}
+		{{- else }}
+			{{ $headerImage = $.Site.Params.headerPhoto }}
+		{{- end -}}
+	{{- end -}}
+
+<div class="page-header header-filter">
+	<div class="page-header-image" style="background-image: url('{{- $headerImage -}}');"></div>
+	<div class="container">
+		<div class="row">
+			<div class="col-md-7 ml-auto text-right">
+				<h1 class="title" itemprop="headline">{{ .Title }}</h1>
+				<h4 class="description" itemprop="subtitle d-print-block">{{- with .Params.subtitle }}{{ . }}{{ end }}</h4>
+				<br>
+				{{- with .Params.cta }}
+				<div class="buttons">
+						{{ range . }}
+								<a href="{{ with .url }} {{ . }}{{ end }}" class="btn btn-lg {{ with .classes }}{{ . }}{{ else }}btn-neutral{{ end }}">{{ with .label }}{{ . | safeHTML }}{{ end }}</a>
+						{{ end }}
+					</div>
+				{{- end -}}
+			</div>
+		</div>
+	</div>
+</div>

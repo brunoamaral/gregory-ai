@@ -1,0 +1,59 @@
+{{ define "bodyclasses" }}archives {{ end }}
+
+{{ define "data-attributes" }}
+	data-contentgrouptype="page" data-contentgroupname="the-archives" data-articletitle="subhomepage"
+{{ end }}
+
+{{ define "description" }}
+	<meta name="description" content="{{ $.Page.Params.description }}" />
+	<meta name="twitter:description" content="{{ $.Page.Params.description }}"/>
+{{ end }}
+{{ define "main" }}
+<div class="wrapper">
+	{{ partial "header-small.html" . }}
+	<div class="section">
+		<div class="container">
+
+		{{.Content}}
+					<section id="archive-by-date">
+					<div id="collapse">
+						<p>
+							<a data-toggle="collapse" data-target=".collapse" class="btn btn-info">{{ i18n "toggle-all-years" }}</a>
+						</p>
+						<div class="row">
+							<div class="col-md-12">
+								<div id="accordion" role="tablist" aria-multiselectable="true" class="card-collapse">
+									{{ $posts := .Site.RegularPages }}
+									{{ range .Site.Home.Translations }}
+										{{ $posts = $posts | lang.Merge .Site.RegularPages }}
+									{{ end }}
+									{{ range (where (where $posts ".Params.options.unlisted" false) "Section" "!=" "instagram").GroupByPublishDate "2006"}}
+										<div class="card card-plain">
+											<div class="card-header" role="tab" id="{{ .Key }}">
+												<h2 class="archive-year title" id="{{.Key | urlize}}">
+													<a data-toggle="collapse" data-parent="#accordion" href="#collapse{{.Key}}" aria-expanded="true" aria-controls="collapse{{.Key}}">
+												</h2>
+												{{ .Key }}
+												<i class="now-ui-icons arrows-1_minimal-down"></i>
+												</a>
+											</div>
+											<div id="collapse{{.Key}}" class="collapse" role="tabpanel" aria-labelledby="{{ .Key }}">
+												<div class="card-body">
+													{{ range sort .Pages "PublishDate" "desc" }}
+													<a href="{{.Permalink}}"><strong>{{.Title}}</strong> <time datetime={{.PublishDate}}>{{.PublishDate.Format "January 2, 2006"}}</time></a><br>
+													{{end}}
+												</div>
+											</div>
+										</div>
+									{{ end }}
+								</div><!-- end accordion -->
+							</div>
+						</div>
+					</div>
+					</section>
+
+			<div class="separator separator-primary"></div>
+		</div>
+	</div>
+</div>
+{{ end }}

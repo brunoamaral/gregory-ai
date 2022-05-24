@@ -1,0 +1,33 @@
+{{ $headerSize := $.Params.options.header }}
+
+{{ if eq $headerSize nil }}
+	{{ $headerSize = "small" }}
+{{ end }}
+<div class="page-header page-header-{{ $headerSize }}">
+	<div class="page-header-image d-print-none" data-parallax="true" style="background-image: url('{{ partial "header-image.html" . }}');">
+	</div>
+	<div class="content-center">
+		<div class="container">
+			<div class="
+			{{ with $.Params.title_align }}
+			col-md-12 text-{{.}}
+			{{ else }}
+			col-md-8 ml-auto mr-auto text-center
+			{{ end }}
+
+				">
+				{{- if (ne .Params.options.showTitle false)  }}
+				<h1 class="title" itemprop="headline d-print-block">{{ .Title }}</h1> {{ .Params.options.showTitle}}
+				{{ end }}
+				{{- with .Params.subtitle }}
+					<h2 itemprop="subtitle d-print-block">{{ . }}</h2>
+				{{- end }}
+				{{- with .Params.cta }}
+					{{ range . }}
+						<a href="{{ with .url }} {{ . }}{{ end }}" class="btn btn-lg {{ with .classes }}{{ . }}{{ else }} btn-primary{{ end }}">{{ with .label }}{{ . | safeHTML }}{{ end }}</a>
+					{{ end }}
+				{{- end }}
+			</div>
+		</div>
+	</div>
+</div>

@@ -1,0 +1,5 @@
+{{ range $.Site.Taxonomies.categories }}
+	{{ if ne .Page.Title "" }}
+		<a href="{{ .Page.Permalink | absLangURL }}" class="btn btn-primary" title="{{ i18n "posts_categorized_as" }} {{ .Page.Title }}"><strong>{{ .Page.Title }}</strong> ({{ .Count }})</a>
+	{{ end }}
+{{ end }}

@@ -1,0 +1,9 @@
+[{{ range $index, $page := where .Site.AllRegularPages ".Params.options.unlisted" false }}
+{{- if ne $page.Type "json" -}}
+{{- if and $index (gt $index 0) -}},{{- end }}
+{
+	"uri": "{{ $page.Permalink | htmlEscape }}",
+	"title": {{ $page.Title | jsonify }}
+}
+{{- end -}}
+{{- end -}}]

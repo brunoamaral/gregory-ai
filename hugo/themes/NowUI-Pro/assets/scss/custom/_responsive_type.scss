@@ -1,0 +1,21 @@
+/* Extra Small Devices, Phones */ 
+@media only screen and (min-width : 320px) {
+	.page-header h1 { font-size: 2.5em;}
+	.page-header h2 { font-size: 1.5em;}
+	article > p { word-wrap: break-word;}
+}
+/* Small Devices, Tablets */
+@media only screen and (min-width : 768px) {
+	// .page-header h1 { font-size: 3.5em;}
+	// .page-header h2 { font-size: 2.5em;}
+}
+
+/* Medium Devices, Desktops */
+@media only screen and (min-width : 992px) {
+
+}
+
+/* Large Devices, Wide Screens */ 
+@media only screen and (min-width : 1200px) {
+
+}

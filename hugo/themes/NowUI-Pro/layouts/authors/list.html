@@ -1,0 +1,90 @@
+{{ define "bodyclasses" }}profile-page profile-list _default/profile-list-html contentgrouptype-{{ .Data.Singular }} contentgroupname-{{ .Title | urlize }} {{ end }}
+
+{{ define "description" }}
+
+{{ end }}
+
+{{ define "main" }}
+{{ $name := .Params.name }}
+<div class="wrapper">
+<div class="page-header clear-filter page-header-small" filter-color="orange">
+	<div class="page-header-image" data-parallax="true" style="background-image: url({{ partial "header-image" . }}); transform: translate3d(0px, 0px, 0px);">
+	</div>
+	<div class="container">
+		<div class="photo-container">
+				{{- with .Resources.GetMatch "avatar" -}}
+					{{- if eq .MediaType.SubType "gif" -}}
+						<img class="img img-raised" src="{{- .RelPermalink -}}" alt="{{ i18n "photo_of" }}{{ $name }}" />
+					{{- else }}
+						{{- $avatar := .Fill "400x400" -}}
+						<img class="img img-raised" src="{{- $avatar.RelPermalink -}}" alt="{{ i18n "photo_of" }}{{ $name }}" />
+					{{- end }}
+				{{- end -}}
+		</div>
+		<h3 class="title">{{ $name }}</h3>
+		{{ with .Params.subtitle }}
+			<p class="category">{{ . }}</p>			
+		{{ end }}
+<!-- 		<div class="content">
+		<div class="social-description">
+			<h2>26</h2>
+			<p>Comments</p>
+		</div>
+		<div class="social-description">
+			<h2>26</h2>
+			<p>Comments</p>
+		</div>
+		<div class="social-description">
+			<h2>48</h2>
+			<p>Bookmarks</p>
+		</div>
+		</div> -->
+	</div>
+	</div>
+
+		<div class="section">
+			<div class="container">
+				<div class="button-container">
+					<a href="" class="btn btn-primary btn-round btn-lg">{{ i18n "follow" }}</a>
+					{{ with .Params.profiles }}
+					{{ $map := (index . ) }}
+					{{ range $key, $val := . }}
+						<a href="{{ $val }}" class="btn btn-default btn-round btn-lg btn-icon" rel="tooltip" title="" data-original-title="Follow me on {{ $key }}">
+							<i class="fab fa-{{ $key }}"></i>
+						</a>
+					{{ end }}
+					{{ end }}
+					</div>
+				<h3 class="title">{{ i18n "about_me" }}</h3>
+				<h5 class="description text-center" id="content">{{ .Content }}</h5>
+				<section id="category-list" class="card-group">
+						<div class="row">
+							{{ range (.Paginator 9).Pages }}
+								{{ .Render "summary" }}
+							{{ end }}
+							{{ partial "pagination.html" . }}
+						</div>
+				</section>
+			<div class="separator separator-primary"></div>
+{{ $posts := slice }}
+
+			{{ range where .Site.RegularPages "Type" "post" }}
+				{{ if in .Params.tags  $name }}
+					{{ $posts = $posts | append . }}
+				{{ end }}
+			{{ end }}
+
+			{{ $paginator := .Paginate (where .Pages "Type" "posts") 5 }}
+
+				<div class="row">
+					<div class="col-8 ml-auto mr-auto text-center"><a href="{{ printf "/tags/%s" ($name | urlize) }}" class="btn btn-info">{{ i18n "mentions" }}: "{{ $name }}"</a></div>
+				</div>
+
+			</div>
+		</div>
+</div>
+{{ end }}
+
+{{ define "list-javascript" }}
+
+{{ end }}

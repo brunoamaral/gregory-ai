@@ -1,0 +1,12 @@
+<script src="https://commento.brunoamaral.eu/js/count.js"></script>
+<script type="text/javascript">
+	window.displayCommentsCount = function(count) {
+		if(count == 0) {
+			return '{{ i18n "zero_comments" | safeJS }}';
+		} else if(count == 1) {
+		return '| {{ i18n "one_comment" | safeJS }}';
+		} else {
+		return '| ' + count + ' {{ i18n "plural_comments" | safeJS }}';
+		}
+	}
+</script>

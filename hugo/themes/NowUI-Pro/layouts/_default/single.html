@@ -1,0 +1,237 @@
+{{ define "bodyclasses" }}blog-post article single _default/single.html{{ end }}
+
+{{ define "data-attributes" }}
+	data-contentgrouptype="{{ .Section }}" data-contentgroupname="{{ .CurrentSection.Title }}" data-articletitle="{{ .Title }}"
+{{ end }}
+
+{{ define "description" }}
+	{{ partial "description.html" . }}
+{{ end }}
+
+{{ define "head" }}
+	{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
+		<link rel="preload" href="https://commento.brunoamaral.eu/css/commento.css" as="style">
+	{{ end }}
+{{ end }}
+{{ define "main" }}
+<div class="wrapper">
+	{{ if or (eq .Params.options.header "small") (eq .Params.options.header "mini") (eq .Params.options.header nil ) }}
+		{{ partial "header-small.html" . }}
+	{{ else if eq $.Params.options.header "full"  }}
+		{{ partial "header-full.html" . }}
+	{{ end }}
+	<div class="section">
+	<div class="container">
+		<div class="row">
+		<div class="col-md-12">
+			<div class="button-container">
+			{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
+			<a href="#comment" class="btn btn-primary btn-round btn-lg">
+			  <i class="far fa-comment"></i>&nbsp;{{ i18n "add_comment" }}
+			</a>
+			{{end}}
+			<a href="https://twitter.com/intent/tweet/?text={{ .Title }}&amp;url={{ .Permalink }}" class="btn btn-icon btn-lg btn-twitter btn-round">
+				<i class="fab fa-twitter-square"></i>
+			</a>
+			<a href="https://facebook.com/sharer/sharer.php?u={{ .Permalink }}" class="btn btn-icon btn-lg btn-facebook btn-round">
+				<i class="fab fa-facebook-square"></i>
+			</a>
+<!-- 			<a href="https://www.tumblr.com/widgets/share/tool?posttype=link&amp;title={{ .Title }}&amp;caption={{ .Title }}&amp;content={{ .Permalink }}&amp;canonicalUrl={{ .Permalink }}&amp;shareSource=tumblr_share_button" class="btn btn-icon btn-lg btn-tumblr btn-round">
+				<i class="fab fa-tumblr-square"></i>
+			 </a>
+ -->			
+<!-- 			<a href="https://pinterest.com/pin/create/button/?url={{ .Permalink }}&amp;media={{ .Permalink }}&amp;description={{ .Title }}" class="btn btn-icon btn-lg btn-pinterest btn-round">
+				<i class="fab fa-pinterest-square"></i>
+			</a> -->
+			<a href="https://www.linkedin.com/shareArticle?mini=true&amp;url={{ .Permalink }}&amp;title={{ .Title }}&amp;summary={{ .Title }}&amp;source={{ .Permalink }}" class="btn btn-lg btn-icon btn-linkedin btn-round">
+				<i class="fab fa-linkedin"></i>
+			</a>
+			<a href="mailto:?subject={{ .Title }}&amp;body={{ .Permalink }}" class="btn btn-icon btn-lg btn-email btn-round">
+							<svg style="width: 23px; position: absolute; top: 50%; left: 50%; transform: translate(-12px, -12px); line-height: 1.5626rem;" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="envelope" class="svg-inline--fa fa-envelope fa-w-16" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M502.3 190.8c3.9-3.1 9.7-.2 9.7 4.7V400c0 26.5-21.5 48-48 48H48c-26.5 0-48-21.5-48-48V195.6c0-5 5.7-7.8 9.7-4.7 22.4 17.4 52.1 39.5 154.1 113.6 21.1 15.4 56.7 47.8 92.2 47.6 35.7.3 72-32.8 92.3-47.6 102-74.1 131.6-96.3 154-113.7zM256 320c23.2.4 56.6-29.2 73.4-41.4 132.7-96.3 142.8-104.7 173.4-128.7 5.8-4.5 9.2-11.5 9.2-18.9v-19c0-26.5-21.5-48-48-48H48C21.5 64 0 85.5 0 112v19c0 7.4 3.4 14.3 9.2 18.9 30.6 23.9 40.7 32.4 173.4 128.7 16.8 12.2 50.2 41.8 73.4 41.4z"></path></svg>
+			</a>
+<!-- 			<a href="https://reddit.com/submit/?url={{ .Permalink }}&amp;resubmit=true&amp;title={{ .Title }}" class="btn btn-lg btn-icon btn-reddit btn-round">
+				<i class="fab fa-reddit"></i>
+			</a> -->
+ 			<a href="whatsapp://send?text={{ .Title }}%20{{ .Permalink }}" class="btn btn-lg btn-icon btn-whatsapp btn-round">
+				<i class="fab fa-whatsapp"></i>
+			</a>
+
+			<a href="https://telegram.me/share/url?text={{ .Title }}&amp;url={{ .Permalink }}" class="btn btn-lg btn-icon btn-telegram btn-round">
+				<i class="fab fa-telegram"></i>
+			</a>
+<!-- 			<a href="" class="btn btn-lg btn-icon btn-copy btn-round">
+				<svg style="width: 20px; position: absolute; top: 50%; left: 50%; transform: translate(-10px, -13px); line-height: 1.5626rem;" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="copy" class="svg-inline--fa fa-copy fa-w-14" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M320 448v40c0 13.255-10.745 24-24 24H24c-13.255 0-24-10.745-24-24V120c0-13.255 10.745-24 24-24h72v296c0 30.879 25.121 56 56 56h168zm0-344V0H152c-13.255 0-24 10.745-24 24v368c0 13.255 10.745 24 24 24h272c13.255 0 24-10.745 24-24V128H344c-13.2 0-24-10.8-24-24zm120.971-31.029L375.029 7.029A24 24 0 0 0 358.059 0H352v96h96v-6.059a24 24 0 0 0-7.029-16.97z"></path></svg>
+			</a> -->
+			
+			</div>
+		 </div>
+		</div>
+	 </div>
+	 <div class="section">
+		<div class="container">
+		 <div class="row">
+			<article class="col-md-8 ml-auto mr-auto">
+				<header>
+					<div class="meta text-center">
+						<div class="row mb-5">
+							<time class="published col-6 text-right border-primary border-right align-middle" itemprop="datePublished" datetime="{{ .Date.Format "2006-01-02T15:04:05" }}">{{ .Date.Format "January 2, 2006" }}</time>
+							<span class="readingtime col-6 text-left align-middle">{{ .ReadingTime }} {{ i18n "min_read" }}</span>
+						{{ if .IsTranslated }} 
+							<div class="col-12">
+								<span>
+									{{ range .Translations }}
+										<a href="{{ .Permalink }}">{{ .Language.LanguageName }}</a>
+									{{ end}}
+								</span>
+								</div>
+						{{ end }}
+						</div>
+					</div>
+				</header>
+				<span id="article" class="anchor"></span>
+				{{ .Content }}
+			</article>
+		 </div>
+		</div>
+	 </div>
+	 </div>
+	 <div class="section section-blog-info">
+		<div class="container">
+		 <div class="row">
+			<div class="col-md-8 ml-auto mr-auto post">
+			 <div class="row">
+
+				<div class="col-md-6">
+					{{ with .Params.tags }}
+					{{ $lenght := sub (len .) 1}}
+					 <div class="blog-tags"> 
+						{{ i18n "tags" }}:
+						{{ range $index, $tag := . }}
+							<span class="label label-primary"><a href="{{ "tags" | absLangURL }}/{{ . | urlize }}">{{ . }}</a></span> {{- if lt $index $lenght -}}, {{ end }}
+						{{ end }}
+					 </div>
+					 {{ end }}
+				</div>
+
+				<div class="col-md-6">
+				 <a href="https://twitter.com/intent/tweet/?text={{ .Title }} &amp;url={{ .Permalink }}" class="btn btn-icon btn-twitter btn-round pull-right">
+					<i class="fab fa-twitter"></i> 
+				 </a>
+				 <a href="https://facebook.com/sharer/sharer.php?u={{ .Permalink }}" class="btn btn-icon btn-facebook btn-round pull-right">
+					<i class="fab fa-facebook-square"></i>
+				</a>
+								<a href="https://www.linkedin.com/shareArticle?mini=true&amp;url={{ .Permalink }}&amp;title={{ .Title }}&amp;summary={{ .Title }}&amp;source={{ .Permalink }}" class="btn  btn-icon pull-right btn-linkedin btn-round">
+									<i class="fab fa-linkedin"></i>
+								</a>
+								<a href="mailto:?subject={{ .Title }}&amp;body={{ .Permalink }}" class="btn btn-icon pull-right  btn-email btn-round">
+												<svg style="width: 23px; position: absolute; top: 50%; left: 50%; transform: translate(-12px, -12px); line-height: 1.5626rem;" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="envelope" class="svg-inline--fa fa-envelope fa-w-16" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M502.3 190.8c3.9-3.1 9.7-.2 9.7 4.7V400c0 26.5-21.5 48-48 48H48c-26.5 0-48-21.5-48-48V195.6c0-5 5.7-7.8 9.7-4.7 22.4 17.4 52.1 39.5 154.1 113.6 21.1 15.4 56.7 47.8 92.2 47.6 35.7.3 72-32.8 92.3-47.6 102-74.1 131.6-96.3 154-113.7zM256 320c23.2.4 56.6-29.2 73.4-41.4 132.7-96.3 142.8-104.7 173.4-128.7 5.8-4.5 9.2-11.5 9.2-18.9v-19c0-26.5-21.5-48-48-48H48C21.5 64 0 85.5 0 112v19c0 7.4 3.4 14.3 9.2 18.9 30.6 23.9 40.7 32.4 173.4 128.7 16.8 12.2 50.2 41.8 73.4 41.4z"></path></svg>
+								</a>
+					<!-- 			<a href="https://reddit.com/submit/?url={{ .Permalink }}&amp;resubmit=true&amp;title={{ .Title }}" class="btn  btn-icon pull-right btn-reddit btn-round">
+									<i class="fab fa-reddit"></i>
+								</a> -->
+					 			<a href="whatsapp://send?text={{ .Title }}%20{{ .Permalink }}" class="btn  btn-icon pull-right btn-whatsapp btn-round">
+									<i class="fab fa-whatsapp"></i>
+								</a>
+
+								<a href="https://telegram.me/share/url?text={{ .Title }}&amp;url={{ .Permalink }}" class="btn  btn-icon pull-right btn-telegram btn-round">
+									<i class="fab fa-telegram"></i>
+								</a>
+
+				 </a>
+				</div>
+			 </div>
+			 <hr />
+			 {{ with .Params.authors }}
+			 {{- range . }}
+			 {{ $author := $.Site.GetPage (printf "authors/%s/" .)}}
+			 <div class="card card-profile card-plain">
+				<div class="row">
+				 <div class="col-md-2">
+					<div class="card-avatar">
+					 <a href="{{ $author.Permalink }}">
+					 	{{- with $author.Resources.GetMatch "avatar" -}}
+					 	{{ $avatarimage := ""}}
+					 		{{- if eq .MediaType.SubType "gif" -}}
+					 			{{- $avatarimage = .RelPermalink -}}
+					 		{{- else }}
+					 			{{- $avatarimage = (.Fill "300x300").RelPermalink -}}
+					 		{{- end }}
+					 		<img alt="{{ $author.Params.name }}" class="img img-raised" src="{{- $avatarimage -}}">
+					 	{{- end -}}
+					 </a>
+					 <div class="ripple-container"></div>
+					</div>
+				 </div>
+				 <div class="col-md-8">
+					<h4 class="card-title">{{ $author.Params.name }}</h4>
+					<p class="description">{{ $author.Content }}</p>
+				 </div>
+				 <div class="col-md-2">
+					<a href="{{ $author.Permalink }}" class="btn btn-default pull-right btn-round">Follow</a>
+				 </div>
+				</div>
+			 </div>
+			 {{ end }}
+			 {{ end }}
+			</div>
+		 </div>
+		</div>
+	 </div>
+
+	 	{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
+	 	 <div class="section section-comments">
+	 		<div class="container">
+	 		 <div class="row">
+	 			<div class="col-md-8 ml-auto mr-auto">
+	 			 <div class="media-area">
+	 				<h3 class="title text-center"><a href="{{ .Permalink }}#commento"></a></h3>
+	 				<span id="comment" class="anchor"></span>
+	 				<div id="commento"></div>
+	 			 </div>
+	 			 <!-- end media-post -->
+	 			</div>
+	 		 </div>
+	 		</div>
+	 	 </div>
+	 {{ end }}
+
+	 {{ if eq .Section "story" }}
+	 <section id="category-list" class="">
+		<div class="container">
+			<div class="row">
+				<div class="col-md-12">
+					<h2 class="title">{{ .CurrentSection.Title }}</h2> 
+					{{ with .CurrentSection.Params.subtitle }}
+					<h3>{{ . }}</h3>							
+					{{ end }}
+					<p>{{ i18n "select_one_of_the_pages_in_this_story" }}</p>
+
+					<div class="card-deck">
+						<div class="row">
+						{{ range where .CurrentSection.Pages ".Params.options.unlisted" false }}
+							{{ .Render "summary" }}
+						{{end}}
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	 </section>
+	{{ end }} 
+
+	{{ partial "pagination.html" }}
+	</div>	
+{{ end }}
+
+{{ define "list-javascript" }}
+	{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
+		{{ partial "comments-js.html" . }}
+		<script defer src="https://commento.brunoamaral.eu/js/commento.js" data-no-fonts="true"></script>
+	{{ end }}
+	<!-- Plyr for better html <video> and <audio> -->
+	{{- $plyr_js := resources.Get "/js/plyr/plyr.min.js" -}} 
+	<script src="{{- $plyr_js.Permalink }}"></script>
+	<script type="text/javascript" defer="true">
+		const players = Plyr.setup('.player', {blankVideo: '/plyr/blank.mp4', iconUrl: '/plyr/plyr.svg'});
+	</script>
+{{ end }}
