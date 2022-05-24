@@ -1,7 +1,7 @@
 from django import forms
 from django.forms import ModelForm
 
-from .models import Subscribers,Lists
+from .models import Subscribers
 
 class SubscribersForm(ModelForm):
 		# marca = forms.CharField(max_length=100  )
@@ -13,18 +13,14 @@ class SubscribersForm(ModelForm):
 
 	class Meta:
 		model = Subscribers
-		# fields = [
-		# 	'first_name',
-		# 	'last_name',
-		# 	'email',
-		# 	'profile',
-		# 	'list_id',
-		# ]
+		fields = [
+			'first_name',
+			'last_name',
+			'email',
+			'profile',
+			'subscriptions',
+		]
 		exclude = ['subscriber_id','active','is_admin']
 
-class ListsForm(ModelForm):
-	class Meta:
-		model = Lists
-		fields = ['list_id']
 
 

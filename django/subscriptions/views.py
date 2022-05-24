@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from admin import settings
-from subscriptions.forms import SubscribersForm, ListsForm
+from subscriptions.forms import SubscribersForm
 from subscriptions.models import Subscribers, Lists
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponseRedirect
@@ -18,27 +18,10 @@ def subscribe_view(request):
 		last_name = subscriber_form.cleaned_data['last_name']
 		email = subscriber_form.cleaned_data['email']
 		profile = subscriber_form.cleaned_data['profile']
-		subscriber = Subscribers.objects.create(
-			first_name=first_name,
-			last_name=last_name,
-			email=email,
-			profile=profile,
-		)
-		# if subscriber exists:
-		# 	update list 
-		# else:
-		# create
-		subscriber = subscriber.save()
-		subscriber = Subscribers.objects.get(email=email)
-		listForm = ListsForm(request.POST)
-		if listForm.is_valid():
-			list_id = listForm.cleaned_data['list_id']
-			list = Lists.objects.get(int(list_id))
-			subscriber.lists_set.add(list)
-		# if subscriber == 'OK':
-		# 	return HttpResponseRedirect(settings.WEBSITE_DOMAIN + 'thank-you/')
-		# else:
-		# 	return HttpResponseRedirect('error/')
-	# return HttpResponseRedirect(settings.WEBSITE_DOMAIN + 'patients/#success')
+		subscriptions = subscriber_form.cleaned_data['subscriptions']
+		subscriber, created = Subscribers.objects.get_or_create( email=email, defaults={'first_name': first_name, 'last_name': last_name, 'profile':profile},)
+
+		subscriber.subscriptions.add(subscriptions)
+	
 	return HttpResponseRedirect('http://localhost:1313/' 'patients/#success')
 	
