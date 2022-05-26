@@ -45,3 +45,11 @@ django/gregory/data/
 django/gregory/ml_models/
 postgres-data/
 nodered-data/
+hugo/data/
+hugo/content/articles
+hugo/content/trials
+hugo/content/developers/articles.zip
+hugo/content/developers/trials.zip
+hugo/data/embeds.json
+hugo/hugo_stats.json
+python-ml/data/source.json
