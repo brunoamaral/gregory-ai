@@ -28,7 +28,6 @@ hugo/content/developers/articles.zip
 hugo/content/developers/trials.zip
 hugo/content/trials
 hugo/data/
-hugo/data/embeds.json
 hugo/hugo_stats.json
 metabase/db-data/
 metabase-data/
