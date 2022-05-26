@@ -53,3 +53,5 @@ hugo/content/developers/trials.zip
 hugo/data/embeds.json
 hugo/hugo_stats.json
 python-ml/data/source.json
+hugo/data/embeds.json
+hugo/content/developers/articles.zip
