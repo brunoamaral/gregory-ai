@@ -7,14 +7,13 @@ import git
 import html
 import json 
 import jwt
+import numpy as np
 import os
 import pandas as pd
-import numpy as np
 import pathlib
-import requests
+import sqlalchemy
 import subprocess
 import time
-import psycopg2
 load_dotenv()
 
 # Set Variables
@@ -60,12 +59,14 @@ postgres_user = os.getenv('POSTGRES_USER')
 postgres_password = os.getenv('POSTGRES_PASSWORD')
 postgres_db = os.getenv('POSTGRES_DB')
 
-print(postgres_db,postgres_user,db_host,postgres_password)
+postgres_connection_url = 'postgresql://' + postgres_user + ':' + postgres_password + '@' + db_host + ':5432/' + postgres_db
+engine = sqlalchemy.create_engine(postgres_connection_url)
 
-try:
-	conn = psycopg2.connect("dbname='"+ postgres_db +"' user='" + postgres_user + "' host='" + db_host + "' password='" + postgres_password + "'")
-except:
-	print("I am unable to connect to the database")
+# try:
+# 	conn = psycopg2.connect("dbname='"+ postgres_db +"' user='" + postgres_user + "' host='" + db_host + "' password='" + postgres_password + "'")
+# except:
+# 	print("I am unable to connect to the database")
+
 query_articles = 'SELECT "public"."articles"."article_id" AS "article_id", "public"."articles"."title" AS "title", "public"."articles"."summary" AS "summary", "public"."articles"."link" AS "link", "public"."articles"."published_date" AS "published_date", "public"."articles"."source" AS "source", "public"."articles"."relevant" AS "relevant", "public"."articles"."ml_prediction_gnb" AS "ml_prediction_gnb", "public"."articles"."ml_prediction_lr" AS "ml_prediction_lr", "public"."articles"."discovery_date" AS "discovery_date", "public"."articles"."noun_phrases" AS "noun_phrases", "public"."articles"."doi" AS "doi", "Sources"."name" AS "Sources__name", "Sources"."link" AS "Sources__link" FROM "public"."articles" LEFT JOIN "public"."sources" "Sources" ON "public"."articles"."source" = "Sources"."source_id" ORDER BY article_id;'
 
 query_trials = 'SELECT "public"."trials"."trial_id" AS "trial_id", "public"."trials"."discovery_date" AS "discovery_date", "public"."trials"."title" AS "title", "public"."trials"."summary" AS "summary", "public"."trials"."link" AS "link", "public"."trials"."published_date" AS "published_date", "public"."trials"."source" AS "source", "public"."trials"."relevant" AS "relevant", "Sources"."source_id" AS "Sources__source_id", "Sources"."name" AS "Sources__name", "Sources"."link" AS "Sources__link" FROM "public"."trials" LEFT JOIN "public"."sources" "Sources" ON "public"."trials"."source" = "Sources"."source_id" ORDER BY trial_id DESC;'
@@ -77,17 +78,18 @@ print('''
 ''')
 
 ## ARTICLES
-articles = pd.read_sql_query(query_articles, conn)
+articles = pd.read_sql_query(query_articles, engine)
 articles['published_date'] = articles['published_date'].dt.tz_localize(None)
 articles['discovery_date'] = articles['discovery_date'].dt.tz_localize(None)
 
 articles.link = articles.link.apply(html.unescape)
+articles.summary = articles.summary.replace(np.nan, '', regex=True)
 articles.summary = articles.summary.apply(html.unescape)
 articles.to_excel('content/developers/articles_'+ datetime_string + '.xlsx')
 articles.to_json('content/developers/articles_'+ datetime_string + '.json')
 
 ## TRIALS
-trials = pd.read_sql_query(query_trials, conn)
+trials = pd.read_sql_query(query_trials, engine)
 trials['published_date'] = trials['published_date'].dt.tz_localize(None)
 trials['discovery_date'] = trials['discovery_date'].dt.tz_localize(None)
 
@@ -244,6 +246,9 @@ print('''
 ####
 ''')
 
+
+
+
 # Opening JSON file
 f = open('data/dashboards.json')
  
@@ -263,7 +268,8 @@ for i in dashboards:
 
 f.close()
 
-embedsJson = GREGORY_DIR + '/data/embeds.json';
+embedsJson = GREGORY_DIR + 'data/embeds.json';
+
 with open(embedsJson, "w") as f:
 	f.write(json.dumps(metabase_json))
 	f.close()
