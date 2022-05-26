@@ -18,7 +18,7 @@ services:
     ports:
       - 5432:5432
     volumes:
-      - ./db-data:/var/lib/postgresql/data
+      - ./postgres-data:/var/lib/postgresql/data
     networks:
       - traefik_proxy
 
@@ -107,7 +107,7 @@ volumes:
     driver_opts:
       type: 'none'
       o: 'bind'
-      device: '${GREGORY_DIR}docker-data'
+      device: '${GREGORY_DIR}nodered-data'
   python:
     driver: local
     driver_opts:
