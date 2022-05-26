@@ -31,6 +31,7 @@ hugo/data/
 hugo/data/embeds.json
 hugo/hugo_stats.json
 metabase/db-data/
+metabase-data/
 modules/
 node_modules
 nodered-data/
