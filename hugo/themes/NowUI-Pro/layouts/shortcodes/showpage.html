@@ -1,0 +1,24 @@
+{{ $ref := (.Get "ref") }}
+{{ $page := "" }}
+{{ $col := (.Get "col") }}
+{{ range .Page.Sites }}
+	{{ if eq (print (.GetPage $ref).File) $ref }}
+		{{ $page = (.GetPage $ref) }}
+	{{ end }}
+{{ end }}
+{{ with $page }}
+<div class="{{- with $col -}}{{- . -}}{{- else -}}col-md-4{{- end -}}">
+	<div class="card card-background card-showpage card-raised" data-background-color="" style="background-image: url('{{- with .Resources.GetMatch "header" }}{{ $image := .Fill "350x283" }}{{ $image.Permalink }}{{ end }}')">
+		<div class="info">
+			<div class="icon icon-white">
+				<i class="now-ui-icons business_bulb-63"></i>
+			</div>
+			<div class="description">
+				<h4 class="info-title"><a href="{{.Permalink}}">{{ .Title }}</a></h4>
+				<p>{{ .Params.subtitle }} </p>
+				<a href="{{ .Permalink }}" class="ml-3">{{ i18n "read_more" }}</a>
+			</div>
+		</div>
+	</div>
+</div>
+{{ end }}

@@ -18,7 +18,7 @@ services:
     ports:
       - 5432:5432
     volumes:
-      - ./db-data:/var/lib/postgresql/data
+      - ./postgres-data:/var/lib/postgresql/data
     networks:
       - traefik_proxy
 
@@ -55,8 +55,8 @@ services:
     build: 
       context: django/
       dockerfile: Dockerfile
-    # command: python manage.py runserver 0.0.0.0:8000
-    command: gunicorn -b 0.0.0.0:8000 admin.wsgi
+    command: python manage.py runserver 0.0.0.0:8000
+    # command: gunicorn -b 0.0.0.0:8000 admin.wsgi
     volumes:
       - ./django:/code
       - python:/python-ml
@@ -107,7 +107,7 @@ volumes:
     driver_opts:
       type: 'none'
       o: 'bind'
-      device: '${GREGORY_DIR}docker-data'
+      device: '${GREGORY_DIR}nodered-data'
   python:
     driver: local
     driver_opts:

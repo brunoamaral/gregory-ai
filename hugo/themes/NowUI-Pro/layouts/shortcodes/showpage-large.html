@@ -1,0 +1,35 @@
+{{ $ref := (.Get "ref") }}
+{{ $page := "" }}
+{{ $col := (.Get "col") }}
+{{ $cta := (.Get "cta") }}
+{{ range .Page.Sites }}
+	{{ if eq (print (.GetPage $ref).File) $ref }}
+		{{ $page = (.GetPage $ref) }}
+	{{ end }}
+{{ end }}
+{{ with $page }}
+
+<div class="{{ with $col }}{{ . }}{{ else }}col-md-6{{ end }} px-0">
+			<div class="card card-background card-background-product card-no-shadow" style="background-image: url('{{- with .Resources.GetMatch "header" }}{{ $image := .Fill "720x370" }}{{ $image.Permalink }}{{ end }}')">
+				<div class="card-body">
+					<h6 class="category">{{ .Params.category }}</h6>
+					<h3 class="card-title">
+						{{ .Title }}
+					</h3>
+					<p class="card-description">
+						{{ with .Params.Subtitle }}
+							{{ . }}
+						{{ else }} {{ with .Params.Description }}
+							{{ . }}
+						{{ else }}
+						{{ plainify .Summary  | htmlUnescape | truncate 200}}
+						{{ end }}
+						{{ end }}
+					</p>
+					<a href="{{ .Permalink }}" class="btn btn-danger btn-round">
+						<i class="now-ui-icons ui-1_send"></i> {{ with $cta }} {{ . }} {{else}}{{ i18n "read_story" }}{{ end }}
+					</a>
+				</div>
+			</div>
+</div>
+{{ end }}

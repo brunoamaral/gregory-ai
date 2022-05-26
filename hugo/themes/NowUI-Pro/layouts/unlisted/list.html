@@ -1,0 +1,23 @@
+{{ define "bodyclasses" }} unlisted list{{ end }}
+
+{{ define "main" }}
+	<div class="wrapper">
+		{{ partial "header-small.html" . }}
+		<div class="section">
+			<div class="container">
+				<section id="category-list">
+					<div class="row">
+
+							{{ range where .Site.RegularPages ".Params.options.unlisted" true }}
+								{{ .Render "summary"}}
+							{{ end }}
+
+					</div>
+				</section>
+				<div class="separator separator-primary"></div>
+			</div>
+		</div>
+	</div>
+{{ partial "pagination.html" . }}
+		
+{{ end }}

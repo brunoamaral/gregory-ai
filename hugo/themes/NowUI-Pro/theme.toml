@@ -1,0 +1,12 @@
+name = "Now UI Free"
+license = "N/A"
+licenselink = ""
+description = "A port of Creative Tim's Now UI Pro theme for Hugo"
+tags = ["blog", "bootstrap"]
+features = ["blog"]
+min_version = 0.83
+
+[author]
+	name = "Bruno Amaral"
+	homepage = "http://brunoamaral.eu/"
+

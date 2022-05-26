@@ -1,0 +1,37 @@
+{{ define "bodyclasses" }}single instagram tumblr/instagram.html contentgrouptype-tumblr contentgroupname-{{ .RelPermalink }}{{ end }}
+
+{{ define "bodyid" }}tumblr{{ end }}
+
+{{ define "main" }}
+{{ $headerImage := (.Resources.GetMatch "header").RelPermalink }}
+<div class="page-header header-filter" filter-color="black">
+		<div class="page-header-image" style="background-image:url({{- $headerImage -}})"></div>
+		<div class="content">
+			<div class="container">
+				<div class="col-md-8 ml-auto mr-auto">
+
+							<!-- Post -->
+							<div class="card-deck">
+								<article class="card">
+									<section class="card-body">
+										<img src="{{- $headerImage -}}" alt="">
+									</section>
+									<footer>
+										{{ with .PrevInSection }}
+											<a href="{{ .RelPermalink }}" class="btn btn-primary big previous">{{ i18n "older_photos" }}</a>
+										{{ else }}
+											<a href="#" class="disabled btn btn-light big previous">{{ i18n "older_photos" }}</a>
+										{{ end }}
+										{{ with .NextInSection }}
+												<a href="{{ .RelPermalink }}" class="btn btn-primary big next">{{ i18n "newer_photos" }}</a>
+										{{ else }}
+												<a href="#" class="disabled btn btn-light big next">{{ i18n "newer_photos" }}</a>
+										{{ end }}
+									</footer>
+								</article>
+							</div>
+				</div>
+			</div>
+		</div>
+</div>
+{{ end }}

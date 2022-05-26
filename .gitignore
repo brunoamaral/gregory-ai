@@ -20,7 +20,6 @@ public/
 resources/
 workspace.code-workspace
 .hugo_build.lock
-hugo
 .env
 data/embeds.json
 metabase/db-data/
@@ -44,3 +43,16 @@ django/static
 django/data/
 django/gregory/data/
 django/gregory/ml_models/
+postgres-data/
+nodered-data/
+hugo/data/
+hugo/content/articles
+hugo/content/trials
+hugo/content/developers/articles.zip
+hugo/content/developers/trials.zip
+hugo/data/embeds.json
+hugo/hugo_stats.json
+python-ml/data/source.json
+hugo/data/embeds.json
+hugo/content/developers/articles.zip
+hugo/content/developers/trials.zip

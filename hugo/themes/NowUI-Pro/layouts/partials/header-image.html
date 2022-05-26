@@ -1,0 +1,17 @@
+{{- if not (eq (.Params.options.showHeader) false) }}
+	{{- with .Resources.GetMatch "header" -}}
+		{{- if eq .MediaType.SubType "gif" -}}
+			{{- .RelPermalink -}}
+		{{- else }}
+			
+			{{- if eq hugo.IsProduction true -}}
+			{{- (printf "/cdn-cgi/image/width=1920,quality=75%s" .RelPermalink ) -}}
+			{{else}}
+			{{- .RelPermalink -}}
+			{{end}}
+
+		{{- end }}
+	{{- else }}
+		{{- $.Site.Params.headerPhoto -}}
+	{{- end -}}
+{{- end -}} 

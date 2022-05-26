@@ -1,0 +1,30 @@
+<!-- Pagination -->
+
+<!-- 
+We are checking if the user is on the homepage to see which pagination link to show him.
+If he's on the homepage, we direct him to the section that lists all posts.
+
+It's an ugly hack, I'm sorry. :( 
+-->
+<div class="col-12">
+	<div class="d-flex">
+		{{ if or .Paginator.HasPrev .Paginator.HasNext }}
+			<ul class="actions pagination list-inline mx-auto justify-content-center">
+			{{ if .Paginator.HasPrev }}
+				<li class="list-inline-item"><a href="{{ .Paginator.Prev.URL | relLangURL }}" class="btn btn-primary btn-md previous">{{ i18n "newer_posts" }}</a></li>
+			{{ else }}
+				<li class="list-inline-item"><a href="#" class="disabled btn btn-primary btn-md previous">{{ i18n "newer_posts" }}</a></li>
+			{{ end }}
+			{{ if .Paginator.HasNext }}
+				{{ if .IsHome }}
+					<li class="list-inline-item"><a href="{{ .LanguagePrefix }}/post/" class="btn btn-primary btn-md next">{{ i18n "older_posts" }}</a></li>
+				{{ else }}
+					<li class="list-inline-item"><a href="{{ .Paginator.Next.URL | relLangURL }}" class="btn btn-primary btn-md next">{{ i18n "older_posts" }}</a></li>
+				{{ end }}
+			{{ else }}
+				<li class="list-inline-item"><a href="#" class="disabled btn btn-primary btn-md next">{{ i18n "older_posts" }}</a></li>
+			{{ end }}
+			</ul>
+		{{ end }}
+	</div>
+</div>

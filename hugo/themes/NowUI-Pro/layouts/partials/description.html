@@ -1,0 +1,14 @@
+{{ if .Params.description }}
+	<meta name="description" content="{{ .Params.description }}" />
+	<meta name="twitter:description" content="{{ .Params.description }}"/>
+	<meta property="og:description" content="{{ .Params.description }}"/>
+{{ else if .Params.summary }}
+	<meta name="description" content="{{ .Params.summary }}" />
+	<meta name="twitter:description" content="{{ .Params.summary }}"/>
+	<meta property="og:description" content="{{ .Params.summary }}"/>
+	
+{{ else if $.Page.Params.subtitle }}
+	<meta name="description" content="{{ $.Page.Params.subtitle }}" /> 
+	<meta name="twitter:description" content="{{ $.Page.Params.subtitle }}"/>
+	<meta property="og:description" content="{{ $.Page.Params.subtitle }}"/>
+{{ end }}

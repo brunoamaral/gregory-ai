@@ -1,5 +1,0 @@
-{{- if eq hugo.IsProduction true -}} 
-    {{- (printf "/cdn-cgi/image/width=1920,quality=75/%s" .img ) -}} 
-{{else}} 
-    {{- .img -}} 
-{{- end -}}
