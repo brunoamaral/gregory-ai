@@ -1,6 +1,7 @@
 __pycache__/
 ./.env
 .env
+env
 .gitignore
 .hugo_build.lock
 .vscode/
