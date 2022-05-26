@@ -60,6 +60,8 @@ postgres_user = os.getenv('POSTGRES_USER')
 postgres_password = os.getenv('POSTGRES_PASSWORD')
 postgres_db = os.getenv('POSTGRES_DB')
 
+print(postgres_db,postgres_user,db_host,postgres_password)
+
 try:
 	conn = psycopg2.connect("dbname='"+ postgres_db +"' user='" + postgres_user + "' host='" + db_host + "' password='" + postgres_password + "'")
 except:
