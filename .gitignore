@@ -43,3 +43,5 @@ django/static
 django/data/
 django/gregory/data/
 django/gregory/ml_models/
+postgres-data/
+nodered-data/
