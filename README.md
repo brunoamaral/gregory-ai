@@ -1,6 +1,17 @@
 # Gregory
 
-Gregory aggregates searches in JSON and outputs to a Hugo static site
+Gregory is an AI system that uses machine learning and natural language processing to track
+clinical research and identify papers which bring improvements for patients.
+
+Sources for research can be added by RSS feed or manually. 
+
+The output can be seen in a static site, using `build.py` or via the api provided by the Django Rest Framework.
+
+The docker compose file also includes a Metabase container to build dashboards and manage notifications. 
+
+Sources can also be added to monitor Clinical Trials, in which case Gregory can notify a list of email subscribers.
+
+For other integrations, the Django app provides RSS feeds with a live update of relevant research and new clinical trials posted.
 
 # Sources for searches
 
@@ -19,6 +30,8 @@ Gregory aggregates searches in JSON and outputs to a Hugo static site
 
 <https://gregory-ms.com>
 
+<https://api.gregory-ms.com>
+
 # Install
 
 ## Server Requirements
@@ -27,15 +40,15 @@ Gregory aggregates searches in JSON and outputs to a Hugo static site
 - [ ] [Hugo](https://gohugo.io/)
 - [ ] [Mailgun](https://www.mailgun.com/)
 
-## Setup the environment
+## Install
 
 1. Edit the .env file to reflect your settins and credentials.
 2. Execute `python3 setup.py`. The script will check if you have all the requirements and run the Node-RED container.
-3. Run `sudo docker-compose up -d` to fetch the required images and run the
+3. Run `sudo docker-compose up -d` to fetch the required images and run
 
 The final website is built by running `python3 ./build.py`.
 
-## Running django
+4. Install django
 
 Once the db container is running, start the admin container and run the following:
 
@@ -52,7 +65,7 @@ Now you can login at <https://YOUR-SUB.DOMAIN/admin> or wherever your reverse pr
 
 ## Node-RED
 
-We are using [Node-RED](https://nodered.org/) to collect articles and clinical trials.
+We are using [Node-RED](https://nodered.org/) to collect articles from sources without an RSS.
 
 Node-RED is installed with a custom dockerfile that includes some Machine Learning and Artificial Intelligence python modules, in case we need them. It is derived from the [Node-Red repository](https://github.com/node-red/node-red-docker/tree/master/docker-custom).  
 
