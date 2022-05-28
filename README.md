@@ -67,8 +67,6 @@ Now you can login at <https://YOUR-SUB.DOMAIN/admin> or wherever your reverse pr
 
 We are using [Node-RED](https://nodered.org/) to collect articles from sources without an RSS.
 
-Node-RED is installed with a custom dockerfile that includes some Machine Learning and Artificial Intelligence python modules, in case we need them. It is derived from the [Node-Red repository](https://github.com/node-red/node-red-docker/tree/master/docker-custom).  
-
 ## Django and Postgres
 
 The database and the API are managed using the `admin` container that comes with [Django](https://www.djangoproject.com/) and the [Django Rest Framework](https://www.django-rest-framework.org/) installed.
