@@ -23,5 +23,5 @@ def subscribe_view(request):
 
 		subscriber.subscriptions.add(subscriptions)
 	
-	return HttpResponseRedirect('http://localhost:1313/' 'patients/#success')
+	return HttpResponseRedirect('https://gregory-ms.com/' 'patients/#success')
 	
