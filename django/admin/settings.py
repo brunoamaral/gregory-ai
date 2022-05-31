@@ -43,6 +43,7 @@ INSTALLED_APPS = [
 	'django.contrib.staticfiles',
 	'django_cron',
 	'db_maintenance',
+	'indexers',
 ]
 
 MIDDLEWARE = [
