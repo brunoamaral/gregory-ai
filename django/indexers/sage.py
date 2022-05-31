@@ -12,11 +12,13 @@ for i in input:
 		title = i['title']
 		link = i['link']
 		doi = i['doi']
+		source = 9
 		article = Articles.objects.create(
 			title = title,
 			link = link,
 			doi = doi,
-			discovery_date = discovery_date
+			discovery_date = discovery_date,
+			source = source,
 		)
 	except:
 		print('not unique?')
