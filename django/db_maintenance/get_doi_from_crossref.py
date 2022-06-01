@@ -3,7 +3,7 @@ from django_cron import CronJobBase, Schedule
 from gregory.models import Articles
 
 class GetDoiCrossRef(CronJobBase):
-	RUN_EVERY_MINS = 600 # every 12h
+	RUN_EVERY_MINS = 600 # every 10h
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'db_maintenance.get_doi_crossref'    # a unique code
 
