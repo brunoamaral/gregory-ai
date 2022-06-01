@@ -163,7 +163,9 @@ CRON_CLASSES = [
 		'gregory.feedreader.FeedReaderTask',
 		# 'gregory.1_data_processor.DataProcessor',
 		# 'gregory.2_train_models.TrainModels',
-		'gregory.3_predict.RunPredictor'
+		'gregory.3_predict.RunPredictor',
+		'db_maintenance.get_doi_from_crossref.GetDoiCrossRef',
+		'db_maintenance.get_published_date_and_summary_crossref.GetDateSummaryCrossRef',
 ]
 WEBSITE_DOMAIN = 'https://gregory-ms.com/'
 
