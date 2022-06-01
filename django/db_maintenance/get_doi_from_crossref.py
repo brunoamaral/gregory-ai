@@ -16,7 +16,9 @@ class GetDoiCrossRef(CronJobBase):
 			i = 0
 			work = works.query(bibliographic=article.title).sort('relevance')
 			for w in work:
-				title = w['title'][0]
+				title = ''
+				if hasattr(w,'title'):
+					title = w['title'][0]
 				if title.lower() == article.title.lower():
 					article.doi = w['DOI']
 					article.save()
