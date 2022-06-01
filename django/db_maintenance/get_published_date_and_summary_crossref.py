@@ -38,6 +38,6 @@ class GetDateSummaryCrossRef(CronJobBase):
 				w = works.doi(article.doi)
 				try:
 						article.summary = w['abstract']
+						article.save()
 				except:
 						pass
-				article.save()
