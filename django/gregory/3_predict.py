@@ -35,7 +35,7 @@ class RunPredictor(CronJobBase):
 		# dataset_file_json = '/code/gregory/data/' + today.strftime("%Y-%B") + '.json'
 		dataset_file_csv = '/code/gregory/data/' + today.strftime("%Y-%B") + '.csv'
 
-		dataset = pd.DataFrame(list(Articles.objects.filter(ml_prediction_gnb=None).values("title", "summary", "relevant", "article_id")))
+		dataset = pd.DataFrame(list(Articles.objects.filter(ml_prediction_gnb=None,summary__gt=50).values("title", "summary", "relevant", "article_id")))
 		if len(dataset) > 0:
 			# i think we don't need the line below
 			# dataset = pd.json_normalize(data=data['results'])
