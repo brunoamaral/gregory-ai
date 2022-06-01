@@ -32,3 +32,12 @@ class GetDateSummaryCrossRef(CronJobBase):
 					except:
 						pass
 				article.save()
+		articles = Articles.objects.filter(summary=None)
+		for article in articles:
+			if hasattr(article,'doi') and article.doi != None:
+				w = works.doi(article.doi)
+				try:
+						article.summary = w['abstract']
+				except:
+						pass
+				article.save()
