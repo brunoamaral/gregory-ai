@@ -8,7 +8,7 @@ import pytz
 class GetDateSummaryCrossRef(CronJobBase):
 	RUN_EVERY_MINS = 300 # every 5h
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
-	code = 'db_maintenance.get_crossref'    # a unique code
+	code = 'db_maintenance.get_date_abstract_from_crossref'    # a unique code
 
 	def do(self):
 		my_etiquette = Etiquette('Gregory MS', 'v8', 'https://gregory-ms.com', 'bruno@gregory-ms.com')
