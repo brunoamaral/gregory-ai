@@ -21,7 +21,7 @@ class GetDateSummaryCrossRef(CronJobBase):
 				issued = w['issued']['date-parts'][0]
 				published_date = datetime( year=issued[0], month=issued[1], day=issued[2], tzinfo=timezone)
 				article.published_date = published_date
-				if len(article.summary) < 50 or article.summary == None:
+				if article.summary == None:
 					try:
 						article.summary = w['abstract']
 					except:
