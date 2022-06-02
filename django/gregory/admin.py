@@ -6,7 +6,7 @@ from .models import Articles, Categories, Trials, Sources, Entities, Authors
 # this class define which department columns will be shown in the department admin web site.
 class ArticleAdmin(admin.ModelAdmin):
 	# a list of displayed columns name.
-	list_display = ['article_id', 'title']
+	list_display = ['article_id', 'title','source']
 	readonly_fields = ['ml_prediction_gnb','ml_prediction_lr','categories','entities']
 	search_fields = ['article_id', 'title','doi' ]
 
