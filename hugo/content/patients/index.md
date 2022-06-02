@@ -91,8 +91,12 @@ menu:
 <a id="success"></a>
 <div class="col-md-12 ml-auto mr-auto">
               <div class="card card-contact card-raised">
-                <!-- <form role="form" id="contact-form1" method="post" enctype="application/x-www-form-urlencoded" action="https://api.gregory-ms.com/subscriptions/new/"> -->
-                <form role="form" id="contact-form1" method="post" action="http://localhost:8000/subscriptions/new/">
+                                <div class="card-header text-center">
+                    <h4 class="card-title font-weight-bold">Notification of new clinical trials</h4>
+                    <p class="p-3">Everyone has access to a free service that sends an email everytime a new clinical trial is posted on <a href="https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000">ClinicalTrials.gov</a> or in <a href="https://www.clinicaltrialsregister.eu/ctr-search/rest/feed/bydates?query=multiple+AND+sclerosis">Clinicaltrialsregister.eu</a></p>
+                  </div>
+                <!-- <form role="form" id="contact-form1" method="post" enctype="application/x-www-form-urlencoded" action="https://api.gregory-ms.com/subscriptions/new/">
+                <form role="form" id="contact-form1" method="post" action="https://api.gregory-ms.com/subscriptions/new/">
                   <div class="card-header text-center">
                     <h4 class="card-title font-weight-bold">Notification of new clinical trials</h4>
                     <p class="p-3">Everyone has access to a free service that sends an email everytime a new clinical trial is posted on <a href="https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000">ClinicalTrials.gov</a> or in <a href="https://www.clinicaltrialsregister.eu/ctr-search/rest/feed/bydates?query=multiple+AND+sclerosis">Clinicaltrialsregister.eu</a></p>
@@ -146,7 +150,7 @@ menu:
                       </div>
                     </div>
                   </div>
-                </form>
+                </form> -->
               </div>
             </div>
 
