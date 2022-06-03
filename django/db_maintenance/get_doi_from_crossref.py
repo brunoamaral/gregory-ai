@@ -1,6 +1,7 @@
 from crossref.restful import Works, Etiquette
 from django_cron import CronJobBase, Schedule
 from gregory.models import Articles
+import re 
 
 class GetDoiCrossRef(CronJobBase):
 	RUN_EVERY_MINS = 600 # every 10h
@@ -16,10 +17,11 @@ class GetDoiCrossRef(CronJobBase):
 			i = 0
 			work = works.query(bibliographic=article.title).sort('relevance')
 			for w in work:
-				title = ''
+				crossref_title = ''
+				article_title = re.sub(' +', ' ',article.title)
 				if hasattr(w,'title'):
-					title = w['title'][0]
-				if title.lower() == article.title.lower():
+					crossref_title = re.sub(' +', ' ',w['title'][0])
+				if crossref_title.lower() == article_title.lower():
 					article.doi = w['DOI']
 					article.save()
 				else:

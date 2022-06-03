@@ -42,12 +42,12 @@ print('''
 ####
 ''')
 
-p = Path("docker-data")
+p = Path("nodered-data")
 
 if p.is_dir():
-	print("\N{check mark} Found docker-data directory")
+	print("\N{check mark} Found nodered-data directory")
 else:
-	print("Didn't find docker-data, creating ...")
+	print("Didn't find nodered-data, creating ...")
 	p.mkdir(parents=True, exist_ok=True)
 
 p = Path("python-ml/")
