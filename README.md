@@ -32,7 +32,7 @@ For other integrations, the Django app provides RSS feeds with a live update of 
 
 <https://api.gregory-ms.com>
 
-# Install
+# Running Gregory for Production
 
 ## Server Requirements
 
@@ -60,6 +60,30 @@ python manage.py createsuperuser
 ```
 
 Now you can login at <https://YOUR-SUB.DOMAIN/admin> or wherever your reverse proxy is listening on.
+
+# Running Gregory for Frontend Development
+
+## MacOS
+
+```bash
+brew install hugo;
+git clone git@github.com:brunoamaral/gregory.git;
+cd gregory 
+hugo server 
+```
+
+## Running with Hugo, Django, NodeRed, and Metabase
+
+Edit the env.example file to fit your configuration and rename to .env
+
+```bash
+sudo docker compose up -d
+python3 -m venv env
+source env/bin/activate
+pip install -r requirements.txt
+./build.py
+hugo server
+```
 
 # How everything fits together
 
