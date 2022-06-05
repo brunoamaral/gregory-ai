@@ -39,8 +39,8 @@ services:
     networks:
       - traefik_proxy
     volumes:
-      - flows:/data
-      - python:/python-ml
+      - ./nodered-data:/data
+      - ./python-ml:/python-ml
     # The labels below are used to configure Traefik. Traefik is a reverse proxy and more information can be found here: https://traefik.io/
     labels:
       - "traefik.enable=true"
@@ -59,7 +59,7 @@ services:
     # command: gunicorn -b 0.0.0.0:8000 admin.wsgi
     volumes:
       - ./django:/code
-      - python:/python-ml
+      - ./python-ml:/python-ml
     ports:
       - "8000:8000"
     environment:
@@ -101,19 +101,6 @@ services:
     #   - db
     networks:
       - traefik_proxy
-volumes:
-  flows:
-    driver: local
-    driver_opts:
-      type: 'none'
-      o: 'bind'
-      device: '${GREGORY_DIR}nodered-data'
-  python:
-    driver: local
-    driver_opts:
-      type: 'none'
-      o: 'bind'
-      device: '${GREGORY_DIR}python-ml'
 
 networks:
   traefik_proxy:
