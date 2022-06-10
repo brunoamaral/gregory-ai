@@ -68,7 +68,7 @@ Now you can login at <https://YOUR-SUB.DOMAIN/admin> or wherever your reverse pr
 ```bash
 brew install hugo;
 git clone git@github.com:brunoamaral/gregory.git;
-cd gregory 
+cd gregory/hugo
 hugo server 
 ```
 
