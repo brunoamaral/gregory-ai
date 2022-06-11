@@ -3,8 +3,8 @@ module.exports = {
         '@fullhuman/postcss-purgecss': {
             content: ['./layouts/**/*.html', './themes/NowUI-Pro/layouts/**/*.html', './content/**/*.html', './content/**/*.md'],
             safelist: {
-                greedy: [/.animate.*/]
-
+              standard: [/nav-open/],
+              greedy: [/.animate.*/]
             },
             fontFace: false,
             variables: false
