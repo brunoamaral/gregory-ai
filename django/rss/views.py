@@ -52,7 +52,7 @@ class MachineLearningFeed(Feed):
 		return item.title
 
 	def item_description(self, item):
-		return item.summary
+		return item.link
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
