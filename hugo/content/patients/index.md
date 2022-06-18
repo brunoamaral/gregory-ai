@@ -128,12 +128,12 @@ menu:
                       </div>
                     </div>
                     <div class="form-group">
-                      <label>I am...</label>
+                      <label>I am a...</label>
                       <div class="input-group">
                         <select id="profile" name="profile" class="form-control">
-                          <option value="patient">A patient</option>
-                          <option value="doctor">A doctor</option>
-                          <option value="clinical centre">A clinical centre</option>
+                          <option value="patient">patient</option>
+                          <option value="doctor">doctor</option>
+                          <option value="clinical centre">clinical centre</option>
                         </select>
                       </div>
                     </div>
