@@ -98,6 +98,7 @@ scripts:
                       <div class="input-group">
                         <select id="profile" name="profile" class="form-control">
                           <option value="doctor">doctor</option>
+                          <option value="researcher">researcher</option>
                           <option value="clinical centre">clinical centre</option>
                           <option value="patient">patient</option>
                         </select>
