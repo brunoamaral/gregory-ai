@@ -17,7 +17,8 @@
 	<div class="page-header-image" style="background-image: url('{{- $headerImage -}}');"></div>
 	<div class="container">
 		<div class="row">
-			<div class="col-md-7 ml-auto text-right">
+			
+			<div class="{{ with .Params.options.fullheaderColClasses  }}{{.}}{{else}}col-md-7 ml-auto text-right{{end}}">
 				<h1 class="title" itemprop="headline">{{ .Title }}</h1>
 				<h4 class="description" itemprop="subtitle d-print-block">{{- with .Params.subtitle }}{{ . }}{{ end }}</h4>
 				<br>

@@ -25,11 +25,11 @@ def subscribe_view(request):
 		subscriber.profile = profile
 		subscriber.subscriptions.add(list)
 		subscriber.save()
-		return HttpResponseRedirect('https://gregory-ms.com/patients/#success')
+		return HttpResponseRedirect('https://gregory-ms.com/thank-you/')
 	else:
 		logger.error("Django log...")
 		logger.error(subscriber_form.is_valid())
 		logger.error(subscriber_form.errors)
 		logger.error(subscriber_form.cleaned_data['list'])
 		logger.error(subscriber_form.cleaned_data)
-		return HttpResponseRedirect('https://gregory-ms.com/patients/#fail')
+		return HttpResponseRedirect('https://gregory-ms.com/error/')

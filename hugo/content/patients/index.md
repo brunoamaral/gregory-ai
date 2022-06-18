@@ -88,41 +88,6 @@ menu:
 <img src="images/undraw_mail_re_duel.svg" class="w-50 float-right">
 </div>
 <div class="col-md-5 col-12 justify-content-center align-self-center ">
-<a id="success"></a>
-<a id="error"></a>
-
-<div class="modal fade  modal-success" id="modalsuccess" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" style="display: none;" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header justify-content-center">
-        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">
-          <i class="now-ui-icons ui-1_simple-remove"></i>
-        </button>
-        <p>Thank you for subscribing!</p>
-      </div>
-      <div class="modal-body bg-light">
-        <p class="text-dark">For any changes or questions, send an email to </p>
-        <a href="mailto:bruno@gregory-ms.com" class="btn btn-primary btn-block btn-round btn-sm mx-auto col-7">bruno@gregory-ms.com</a>
-      </div>
-    </div>
-  </div>
-</div>
-<div class="modal fade  modal-danger" id="modalerror" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" style="display: none;" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header justify-content-center">
-        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">
-          <i class="now-ui-icons ui-1_simple-remove"></i>
-        </button>
-        <p>Something went wrong</p>
-      </div>
-      <div class="modal-body bg-light">
-        <p class="text-dark">Please check the subscribtion form or send us an email.</p>
-        <a href="mailto:bruno@gregory-ms.com" class="btn btn-primary btn-block btn-round btn-sm mx-auto col-7">bruno@gregory-ms.com</a>
-      </div>
-    </div>
-  </div>
-</div>
   <div class="col-md-12 ml-auto mr-auto">
               <div class="card card-contact card-raised">
                 <form role="form" id="contact-form1" method="post" action="https://api.gregory-ms.com/subscriptions/new/">
@@ -184,14 +149,3 @@ menu:
             </div>
 </div>
 </div>
-
-<script type="text/javascript">
-window.addEventListener('DOMContentLoaded', (event) => {
-  if (window.location.href.endsWith('#error')){
-    $('#modalerror').modal('show','backdrop')
-  }
-  if (window.location.href.endsWith('#success')){
-    $('#modalsuccess').modal('show','backdrop')
-  }
-});
-</script>
