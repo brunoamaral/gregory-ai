@@ -184,7 +184,8 @@ menu:
             </div>
 </div>
 </div>
-<script>
+
+<script type="text/javascript">
 window.addEventListener('DOMContentLoaded', (event) => {
   if (window.location.href.endsWith('#error')){
     $('#modalerror').modal('show','backdrop')
