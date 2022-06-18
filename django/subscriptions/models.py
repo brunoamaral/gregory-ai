@@ -22,7 +22,7 @@ class Subscribers(models.Model):
 	profile = models.CharField(choices=PROFILEOPTIONS, max_length=50, default='')
 	active = models.BooleanField(default=True)
 	is_admin = models.BooleanField(default=False)
-	subscriptions = models.ManyToManyField(Lists, null=True, blank=True)
+	subscriptions = models.ManyToManyField(Lists, blank=True)
 
 
 	def __str__(self):

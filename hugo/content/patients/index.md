@@ -89,13 +89,42 @@ menu:
 </div>
 <div class="col-md-5 col-12 justify-content-center align-self-center ">
 <a id="success"></a>
-<div class="col-md-12 ml-auto mr-auto">
+<a id="error"></a>
+
+<div class="modal fade  modal-success" id="modalsuccess" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" style="display: none;" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header justify-content-center">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">
+          <i class="now-ui-icons ui-1_simple-remove"></i>
+        </button>
+        <p>Thank you for subscribing!</p>
+      </div>
+      <div class="modal-body bg-light">
+        <p class="text-dark">For any changes or questions, send an email to </p>
+        <a href="mailto:bruno@gregory-ms.com" class="btn btn-primary btn-block btn-round btn-sm mx-auto col-7">bruno@gregory-ms.com</a>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal fade  modal-danger" id="modalerror" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" style="display: none;" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header justify-content-center">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">
+          <i class="now-ui-icons ui-1_simple-remove"></i>
+        </button>
+        <p>Something went wrong</p>
+      </div>
+      <div class="modal-body bg-light">
+        <p class="text-dark">Please check the subscribtion form or send us an email.</p>
+        <a href="mailto:bruno@gregory-ms.com" class="btn btn-primary btn-block btn-round btn-sm mx-auto col-7">bruno@gregory-ms.com</a>
+      </div>
+    </div>
+  </div>
+</div>
+  <div class="col-md-12 ml-auto mr-auto">
               <div class="card card-contact card-raised">
-                                <div class="card-header text-center">
-                    <h4 class="card-title font-weight-bold">Notification of new clinical trials</h4>
-                    <p class="p-3">Everyone has access to a free service that sends an email everytime a new clinical trial is posted on <a href="https://clinicaltrials.gov/ct2/results/rss.xml?rcv_d=14&lup_d=&sel_rss=new14&cond=Multiple+Sclerosis&count=10000">ClinicalTrials.gov</a> or in <a href="https://www.clinicaltrialsregister.eu/ctr-search/rest/feed/bydates?query=multiple+AND+sclerosis">Clinicaltrialsregister.eu</a>. To register, send an email to <a href="bruno@gregory-ms.com">bruno@gregory-ms.com</a></p>
-                  </div>
-                <!-- <form role="form" id="contact-form1" method="post" enctype="application/x-www-form-urlencoded" action="https://api.gregory-ms.com/subscriptions/new/">
                 <form role="form" id="contact-form1" method="post" action="https://api.gregory-ms.com/subscriptions/new/">
                   <div class="card-header text-center">
                     <h4 class="card-title font-weight-bold">Notification of new clinical trials</h4>
@@ -145,15 +174,23 @@ menu:
                     </div>
                     <div class="row">
                       <div class="col-md-12 ml-auto mr-auto text-center">
-                        <input type="hidden" value="1" name="subscriptions" id="subscriptions">
+                        <input value="1" name="list" id="list" type="hidden">
                         <button type="submit" class="btn btn-primary btn-round mr-auto ml-auto">Subscribe</button>
                       </div>
                     </div>
                   </div>
-                </form> -->
+                </form>
               </div>
             </div>
-
 </div>
-
 </div>
+<script>
+window.addEventListener('DOMContentLoaded', (event) => {
+  if (window.location.href.endsWith('#error')){
+    $('#modalerror').modal('show','backdrop')
+  }
+  if (window.location.href.endsWith('#success')){
+    $('#modalsuccess').modal('show','backdrop')
+  }
+});
+</script>
