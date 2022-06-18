@@ -13,7 +13,7 @@ class Lists(models.Model):
 		return str(self.list_name)
 			
 class Subscribers(models.Model):
-	PROFILEOPTIONS = [('patient', 'Patient'),('doctor','Doctor'),('clinical centre','Clinical Centre')]
+	PROFILEOPTIONS = [('patient', 'Patient'),('doctor','Doctor'),('clinical centre','Clinical Centre'),('researcher','Researcher')]
 
 	subscriber_id = models.AutoField(primary_key=True)
 	first_name = models.CharField(max_length=150, null=False, blank=False)
