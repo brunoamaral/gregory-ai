@@ -11,6 +11,7 @@ import numpy as np
 import os
 import pandas as pd
 import pathlib
+from shutil import which
 import sqlalchemy
 import subprocess
 import time
@@ -279,7 +280,7 @@ print('''
 ## BUILD THE WEBSITE
 ####
 ''')
-args = ("/usr/local/bin/hugo", "-d", WEBSITE_PATH,"--cacheDir", GREGORY_DIR)
+args = (which('hugo'), "-d", WEBSITE_PATH,"--cacheDir", GREGORY_DIR)
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
