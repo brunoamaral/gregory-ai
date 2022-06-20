@@ -172,8 +172,8 @@ hugo server
 
 - @[Antoniolopes](https://github.com/antoniolopes) for helping with the Machine Learning script.
 - @[Chbm](https://github.com/chbm) for help in keeping the code secure.
-- @[Malduarte](https://github.com/malduarte) for help with the migration from sqlite to postgres.
 - @[Jneves](https://github.com/jneves) for help with the build script
+- @[Malduarte](https://github.com/malduarte) for help with the migration from sqlite to postgres.
 - @[Melo](https://github.com/melo) for showing me [Hugo](https://github.com/gohugoio/hugo)
 - @[Nurv](https://github.com/nurv) for the suggestion in using Spacy.io
 - @[Rcarmo](https://github.com/rcarmo) for showing me [Node-RED](https://github.com/node-red/node-red)
