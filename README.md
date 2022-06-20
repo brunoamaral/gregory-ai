@@ -34,6 +34,7 @@ Rest API: <https://api.gregory-ms.com>
 
 ### Server Requirements
 
+- [ ] Python 3.9
 - [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/) with 2GB of swap memory to be able to build the MachineLearning Models. ([Adding swap for Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-add-swap-space-on-ubuntu-20-04))
 - [ ] [Hugo](https://gohugo.io/)
 - [ ] [Mailgun](https://www.mailgun.com/) (optional)
