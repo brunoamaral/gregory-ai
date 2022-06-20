@@ -62,7 +62,7 @@ if p.is_dir():
 	print("\N{check mark} Found django directory")
 else:
 	print("Didn't find django, aborting ...")
-	break
+
 print('''
 ####
 ## Check for .env file
