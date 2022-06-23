@@ -2,7 +2,7 @@ from gregory.models import Articles, Sources
 from datetime import datetime
 import json
 
-f = open('/code/indexers/input/sagepub-1995-2010.json')
+f = open('/code/indexers/input/sagepub.json')
 input = json.load(f)
 
 discovery_date = datetime.now()
