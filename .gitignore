@@ -50,3 +50,4 @@ resources/
 sqlite-to-postgres/
 venv3
 workspace.code-workspace
+hugo/data/embeds.json
