@@ -65,7 +65,18 @@ Gregory needs to run a series of tasks to fetch missing information and apply th
 */5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
 ```
 
-6. **Build** by running `python3 ./build.py`.
+6. **Configure** hugo
+
+You need to install some node modules for hugo to build and process the css. Simply run this.
+
+```bash
+cd hugo && npm i && cd ..;
+```
+
+In the `hugo` dir you will find a `config.toml` file that needs to be configured with your domain.
+
+
+7. **Build** by running `python3 ./build.py`.
 
 ## How everything fits together
 
