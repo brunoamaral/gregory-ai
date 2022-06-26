@@ -7,6 +7,7 @@ import requests
 import shutil
 import subprocess
 import sys
+from shutil import which
 
 # TO DO: Run docker-compose up as root
 
@@ -62,7 +63,7 @@ if p.is_dir():
 	print("\N{check mark} Found django directory")
 else:
 	print("Didn't find django, aborting ...")
-	break
+
 print('''
 ####
 ## Check for .env file
@@ -126,7 +127,7 @@ print('''
 ####
 ''')
 
-args = ("/usr/local/bin/hugo", "mod", "get","-u")
+args = (which('hugo'), "mod", "get","-u")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
