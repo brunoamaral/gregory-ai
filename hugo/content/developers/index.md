@@ -7,12 +7,9 @@ author: Bruno Amaral
 options:
   unlisted: false
   header: mini
-
-description: 
+description: Gregory MS, information for developers researching multiple sclerosis
 categories: []
 tags: []
-
-
 layout: page
 
 menu:
@@ -110,5 +107,13 @@ Available fields can be found at https://api.gregory-ms.com/articles/ by clickin
 ### Trials{.title .text-muted}
 
 Data available at https://api.gregory-ms.com/trials/ by clicking the options button.
+
+## Resources
+
+[GitHub repository](https://github.com/brunoamaral/gregory)
+
+[Mobility Report from Apple Watch Data](https://github.com/brunoamaral/mobility-report)
+
+The **Mobility report** is meant to be used as a snapshot of the patient's mobility and walking assymetry using [Apple's HealthKit](https://developer.apple.com/documentation/healthkit) data from the Apple Watch.
 
 </div>
