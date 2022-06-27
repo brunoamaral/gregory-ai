@@ -280,7 +280,8 @@ print('''
 ## BUILD THE WEBSITE
 ####
 ''')
-args = (which('hugo'), "-d", WEBSITE_PATH,"--cacheDir", GREGORY_DIR)
+hugo_path = str(which('hugo'))
+args = (hugo_path, "-d", WEBSITE_PATH,"--cacheDir", GREGORY_DIR)
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
