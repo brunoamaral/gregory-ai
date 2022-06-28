@@ -24,7 +24,6 @@ GREGORY_DIR = os.getenv('GREGORY_DIR')
 SERVER = os.getenv('SERVER')
 WEBSITE_PATH = os.getenv('WEBSITE_PATH')
 
-
 now = datetime.now()
 datetime_string = now.strftime("%d-%m-%Y_%Hh%Mm%Ss")
 
@@ -280,7 +279,12 @@ print('''
 ## BUILD THE WEBSITE
 ####
 ''')
-hugo_path = str(which('hugo'))
+
+hugo_path = os.getenv('HUGO_PATH')
+
+if hugo_path == None:
+	hugo_path = str(which('hugo'))
+
 args = (hugo_path, "-d", WEBSITE_PATH,"--cacheDir", GREGORY_DIR)
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()

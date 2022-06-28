@@ -115,8 +115,11 @@ print('''
 ## Check for Hugo
 ####
 ''')
-if is_tool("hugo"):
-	print("\N{check mark} Found Hugo")
+
+hugo_path = os.getenv('HUGO_PATH')
+
+if hugo_path == True or is_tool('hugo') == True:
+	print("\N{check mark} Found Hugo in path or environment variable")
 else:
 	print("Didn't find Hugo, please install it. Details at https://gohugo.io")
 	sys.exit('Hugo not installed')
