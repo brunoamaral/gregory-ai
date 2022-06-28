@@ -1,10 +1,11 @@
 ---
+title: News and updates
 menu:
-  column_1:
-    name: Change log
-    weight: 3
+  main:
+    name: News
+    weight: 9
 resources:
-  - src: clint-patterson--jCY4oEMA3o-unsplash.jpeg
+  - src: pexels-brotin-biswas-518543.jpeg
     name: header
 options:
   header: mini

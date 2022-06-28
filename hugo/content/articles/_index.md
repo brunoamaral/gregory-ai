@@ -4,8 +4,8 @@ subtitle: This is the complete list of articles in the database
 
 menu:
   main:
-    name: Articles
-    weight: 8
+    name: Papers
+    weight: 6
 options:
   header: mini
   showHeader: true

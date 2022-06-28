@@ -13,9 +13,9 @@ tags: []
 layout: page
 
 menu:
-  main:
+  column_1:
     Name: Developers
-    Weight: 6
+    Weight: 3
 
 draft: false
 enableDisqus : true

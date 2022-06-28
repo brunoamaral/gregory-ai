@@ -1,0 +1,30 @@
+<!-- TEMPLATE 1 for blog post lists -->
+						<div class="col-md-6">
+							<div class="card card-plain card-blog">
+							
+								<div class="card-body">
+									{{ if isset .Params "categories" }}
+									{{ range $index, $category := .Params.categories }}
+									<span class="h6 category text-info text-left {{ $category | urlize }} ">{{ $category }}</span>
+										{{ end }}
+										{{ end }}
+									{{.Date | time.Format ":date_long" }} <span class="badge badge-info text-white font-weight-normal">{{ .Params.source }}</span>
+									<h4 class="card-title">
+										<a href="{{ .Permalink }}">{{ .Title | safeHTML }}</a>
+									</h4>
+									<p class="card-description">
+
+										<a href="{{ .Permalink }}" class="btn btn-sm btn-success">{{ i18n "read_more" }}</a>
+									</p>
+									<p class="author">
+										{{ with .Params.authors }} {{ range . }} {{ $author := ($.GetPage (printf "/authors/%s/" .) ) }} {{ with $author }} {{- i18n "by" -}}
+										<b>
+										<a href="{{ $author.Permalink }}" itemprop="author" title="{{ . }}" class="author">{{ $author.Params.name }}</a>
+																{{ end }}
+															</b>, {{ end }} {{ end }}
+										<span class="badge badge-info text-white font-weight-normal">{{ .Params.article_source }}</span> {{ if eq .Params.ml_prediction_gnb 1 }}<span class="badge badge-success text-white font-weight-normal">auto</span>{{ end }} {{ if and (eq .Params.relevant  1) ( eq .Params.ml_prediction_gnb 0) }}<span class="badge badge-primary text-white font-weight-normal">human</span>{{ end }}
+									</p>
+									<p></p>
+								</div>
+							</div>
+						</div>
