@@ -30,10 +30,32 @@ resources:
 
 <div class="col-md-6 mx-auto">
 
-## RSS{.title .text-primary}
+There are two ways you can use this site, through the several subscription options or installing locally for your own goals.
+
+## Installing Gregory MS
+
+[This software is open source and available on GitHub, with instructions to install it using docker images](https://github.com/brunoamaral/gregory#install).
+
+### Hardware requirements{.title}
+
+Gregory is running on a [Digital Ocean](https://digitalocean.com) virtual private server.
+
+- 2 vCPU
+- 4 GB Memory 
+- 80 GB Disk 
+- Ubuntu 20.04 (LTS) x64
+
+### Software requirements{.title}
+
+- Python 3.9
+- [Hugo](https://gohugo.io/)
+
+
+## Access the information{.title}
+
+### RSS{.title .text-primary}
 
 There are RSS a number of RSS feeds you can use to access the database in real time:
-
 
 <a class="btn btn-outline-primary umami--click--developers-rss-latest-articles" href="https://api.gregory-ms.com/feed/latest/articles/"><i class="fas fa-rss"></i> Latest Articles</a>
 
@@ -41,10 +63,7 @@ There are RSS a number of RSS feeds you can use to access the database in real t
 
 <a class="btn btn-outline-primary umami--click--developers-rss-latest-trials" href="https://api.gregory-ms.com/feed/machine-learning/"><i class="fas fa-rss"></i> Machine Learning Prediction</a>
 
-
-
-## API Endpoints{.title .text-primary}
-
+### API Endpoints{.title .text-primary}
 
 The API is served using Django Rest Framework and can be accessed at <https://api.gregory-ms.com/>. 
 
@@ -58,11 +77,10 @@ The API is served using Django Rest Framework and can be accessed at <https://ap
 
 `https://api.gregory-ms.com/articles/id/{ID}`
 
-
 Example: <a class="umami--click--developers-api-latest-trials-example" href="https://api.gregory-ms.com/articles/19">https://api.gregory-ms.com/articles/19</a>
 
 
-**List all relevant articles.**    
+**List all relevant articles.**
 
 These are articles that we show on the home page because they appear to offer new courses of treatment.
 

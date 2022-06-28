@@ -3,7 +3,7 @@ authors:
   - bruno-amaral
 date: 2021-11-16T23:10:55Z
 description: ""
-draft: false
+draft: true
 resources: 
 - src: images/michael-dziedzic-XTblNijO9IE-unsplash.jpg
   name: "header"
