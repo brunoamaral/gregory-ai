@@ -11,7 +11,7 @@ theme = ["NowUI-Pro"]
 title = "Gregory MS"
 removePathAccents = true
 # Set the default site thumbnail
-defaultImage = ""
+
 # Google 
 googleSiteVerification = ""
 googleTagManager = ""
@@ -23,6 +23,7 @@ headerPhoto = ""
     term = [ "HTML", "RSS"]
 
 [params]
+  defaultImage = "/gregory-thumb.png"
   author = "Bruno Amaral"
   enableComments = false 
   defaultAuthor = "authors/bruno-amaral"
