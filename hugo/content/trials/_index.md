@@ -39,7 +39,7 @@ cta:
 <div class="w-100 mt-5 mb-5"></div>
 <div class="row">
 <div class="col-md-6 justify-content-center align-self-center align-right ">
-<img src="undraw_mail_re_duel.svg" class="w-75 float-right">
+<img src="/trials/undraw_mail_re_duel.svg" class="w-75 float-right">
 </div>
 <div class="col-md-6 ml-auto mr-auto">
 	<div class="card card-contact card-raised">
