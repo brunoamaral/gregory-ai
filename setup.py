@@ -196,7 +196,7 @@ print('''
 ####
 
 
-Please login to the shell of the admin container and run `python manage.py migrate` to setup the postgres database
+Please login to the shell of the admin container and run `python manage.py makemigrations && python manage.py migrate && python manage.py createsuperuser` to setup the postgres database
 ''')
 
 
