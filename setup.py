@@ -8,11 +8,67 @@ import shutil
 import subprocess
 import sys
 from shutil import which
-
+from dotenv import load_dotenv
+load_dotenv()
 # TO DO: Run docker-compose up as root
 
 cwd = os.getcwd()
 github = "git@github.com:brunoamaral/gregory.git"
+
+print('''
+####
+## Check for .env file
+####
+''')
+env_file = Path(".env")
+
+if env_file.is_file():
+	print("\N{check mark} Found .env file")
+else:
+	print('''
+	####
+	## Configure Gregory MS
+	####
+
+	Did not find a .env file, we need to set some configuration variables. If in doubt, you can input blank and configure the .env file later.
+	''')
+
+	configs = {
+	"DB_HOST" : os.getenv('DB_HOST'),
+	"DOMAIN_NAME" : os.getenv('DOMAIN_NAME'),
+	"EMAIL_DOMAIN" : os.getenv('EMAIL_DOMAIN'),
+	"EMAIL_HOST_PASSWORD" : os.getenv('EMAIL_HOST_PASSWORD'), 
+	"EMAIL_HOST_USER" : os.getenv('EMAIL_HOST_USER'), 
+	"EMAIL_HOST" : os.getenv('EMAIL_HOST'), 
+	"EMAIL_MAILGUN_API_URL" : os.getenv('EMAIL_MAILGUN_API_URL'),
+	"EMAIL_MAILGUN_API" : os.getenv('EMAIL_MAILGUN_API'),
+	"EMAIL_PORT" : os.getenv('EMAIL_PORT'), 
+	"EMAIL_USE_TLS" : os.getenv('EMAIL_USE_TLS'), 
+	"GREGORY_DIR" : os.getenv('GREGORY_DIR'),
+	"HUGO_PATH" : os.getenv('HUGO_PATH'),
+	"METABASE_SECRET_KEY" : os.getenv('METABASE_SECRET_KEY'),
+	"METABASE_SITE_URL" : os.getenv('METABASE_SITE_URL'),
+	"POSTGRES_DB" : os.getenv('POSTGRES_DB'),
+	"POSTGRES_PASSWORD" : os.getenv('POSTGRES_PASSWORD'),
+	"POSTGRES_USER" : os.getenv('POSTGRES_USER'),
+	"SECRET_KEY" : os.getenv('SECRET_KEY'),
+	"SERVER" : os.getenv('SERVER'),
+	"WEBSITE_PATH" : os.getenv('WEBSITE_PATH'),
+	}
+
+	for key,value in configs.items():
+		if value == None:
+			value = input('please enter value for ' + key + ': ')
+			configs[key] = value
+	with open('.env','a') as file:
+		for key,value in configs.items():
+			line = key + '=\'' + value + '\'\n'
+			file.write(line)
+		file.close()
+	print('Settings written to .env file, please check if everything looks correct.')
+	input("Press Enter to continue...")
+
+
 
 def is_tool(name):
 	"""Check whether `name` is on PATH and marked as executable."""
@@ -63,21 +119,6 @@ if p.is_dir():
 	print("\N{check mark} Found django directory")
 else:
 	print("Didn't find django, aborting ...")
-
-print('''
-####
-## Check for .env file
-####
-''')
-env_file = Path(".env")
-
-if env_file.is_file():
-	print("\N{check mark} Found .env file")
-else:
-	example_env = Path('example.env')
-
-	shutil.copy(str(example_env), str(env_file))  # For Python <= 3.7
-	print(".env file not found, please create it with variables from example.env")
 
 print('''
 ####
