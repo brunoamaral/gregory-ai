@@ -181,10 +181,11 @@ print(output)
 print('''
 ####
 ## Running docker-compose up -d --build
+## This will launch Django, NodeRed, and Postgres
 ####
 ''')
 
-args = ("docker-compose","up","-d","--build")
+args = ("sudo","docker-compose","up","-d","--build")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
@@ -196,7 +197,7 @@ print('''
 ####
 
 
-Please login to the shell of the admin container and run `python manage.py migrate` to setup the postgres database
+Please login to the shell of the django container called *admin* and run `python manage.py makemigrations && python manage.py migrate && python manage.py createsuperuser` to setup the postgres database
 ''')
 
 
