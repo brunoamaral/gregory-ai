@@ -19,6 +19,8 @@ class TrialSerializer(serializers.HyperlinkedModelSerializer):
 		model = Trials
 		fields = ['trial_id','title','summary','published_date','discovery_date','link','source','relevant']
 		read_only_fields = ('discovery_date',)
+		exclude = ('authors',)
+
 		
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:
