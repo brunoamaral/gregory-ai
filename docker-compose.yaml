@@ -1,9 +1,3 @@
-################################################################################
-# Node-RED Stack or Compose
-################################################################################
-# docker stack deploy node-red --compose-file docker-compose-node-red.yml
-# docker-compose -f docker-compose-node-red.yml -p myNoderedProject up
-################################################################################
 version: "3.7"
 
 services:
@@ -55,8 +49,8 @@ services:
     build: 
       context: django/
       dockerfile: Dockerfile
-    command: python manage.py runserver 0.0.0.0:8000
-    # command: gunicorn -b 0.0.0.0:8000 admin.wsgi
+    # command: python manage.py runserver 0.0.0.0:8000
+    command: gunicorn -b 0.0.0.0:8000 admin.wsgi
     volumes:
       - ./django:/code
       - ./python-ml:/python-ml
@@ -95,10 +89,9 @@ services:
     ports:
       - 3000:3000
     image: metabase/metabase
-    # image: gregory/metabase
     restart: always
-    # depends_on:
-    #   - db
+    depends_on:
+      - db
     networks:
       - traefik_proxy
 
