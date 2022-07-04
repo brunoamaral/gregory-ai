@@ -6,7 +6,7 @@ from datetime import datetime
 import pytz
 
 class GetDateSummaryCrossRef(CronJobBase):
-	RUN_EVERY_MINS = 90 # every 1h30m
+	RUN_EVERY_MINS = 120
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'db_maintenance.get_date_abstract_from_crossref'    # a unique code
 
