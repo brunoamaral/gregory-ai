@@ -11,7 +11,7 @@ from gregory.models import Articles,Trials
 from django.db.models import Q
 
 class GetAuthors(CronJobBase):
-	RUN_EVERY_MINS = 60 # every hour
+	RUN_EVERY_MINS = 150
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'db_maintenance.get_authors'    # a unique code
 
