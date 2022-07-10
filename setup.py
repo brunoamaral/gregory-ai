@@ -1,10 +1,8 @@
 #!/usr/bin/python3
 from pathlib import Path
-import docker
 import git
 import os
 import requests
-import shutil
 import subprocess
 import sys
 from shutil import which
@@ -62,7 +60,7 @@ else:
 			configs[key] = value
 	with open('.env','a') as file:
 		for key,value in configs.items():
-			line = key + '=\'' + value + '\'\n'
+			line = key + '=' + value + '\n'
 			file.write(line)
 		file.close()
 	print('Settings written to .env file, please check if everything looks correct.')
@@ -88,10 +86,10 @@ if is_tool("git"):
 else:
 	sys.exit("Git was not found and I can't install Gregory without it. Exiting.")
 
-if is_git_repo(cwd) == False or git.Repo(cwd).remotes[0].config_reader.get("url") != github:
-	print("Didn't find any git repository, or repository does not match Gregory. Cloning into ./gregory now, please wait...")
-	git.Git(".").clone(github)
-	os.chdir("./gregory")
+# if is_git_repo(cwd) == False or git.Repo(cwd).remotes[0].config_reader.get("url") != github:
+# 	print("Didn't find any git repository, or repository does not match Gregory. Cloning into ./gregory now, please wait...")
+# 	git.Git(".").clone(github)
+# 	os.chdir("./gregory")
 
 print('''
 ####
@@ -195,7 +193,6 @@ print('''
 ####
 ## Migrate PostGres schema (WIP, not working)
 ####
-
 
 Trying to run `python manage.py makemigrations && python manage.py migrate && python manage.py createsuperuser` to setup the postgres database and django.
 If this command fails
