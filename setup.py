@@ -1,12 +1,14 @@
 #!/usr/bin/python3
+from dotenv import load_dotenv
 from pathlib import Path
+from shutil import which
 import git
 import os
+import psycopg2
 import requests
 import subprocess
 import sys
-from shutil import which
-from dotenv import load_dotenv
+
 load_dotenv()
 # TO DO: Run docker-compose up as root
 
@@ -214,6 +216,30 @@ popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
+
+
+print('''
+####
+## Creating the Metabase database
+####
+
+We assume that the `db` container is running.
+''')
+
+db_host = os.getenv('DB_HOST')
+postgres_user = os.getenv('POSTGRES_USER')
+postgres_password = os.getenv('POSTGRES_PASSWORD')
+postgres_db = os.getenv('POSTGRES_DB')
+
+try:
+	conn = psycopg2.connect("dbname='"+ postgres_db +"' user='" + postgres_user + "' host='" + db_host + "' password='" + postgres_password + "'")
+except:
+	print("I am unable to connect to the database")
+
+cur = conn.cursor()
+cur.execute("CREATE DATABASE metabase;")
+conn.close()
+
 print('''
 ####
 ## Next steps
