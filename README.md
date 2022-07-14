@@ -41,11 +41,13 @@ Rest API: <https://api.gregory-ms.com>
 
 ### Install
 
-1. **Edit the .env file** to reflect your settins and credentials.
-2. **Execute** `python3 setup.py`. The script will check if you have all the requirements and run the Node-RED container.
-3. **Run the containers** `sudo docker-compose up -d` 
+1. **Install python dependencies locally**
+2. **Edit the .env file** to reflect your settins and credentials.
+3. **Execute** `python3 setup.py`. The script will check if you have all the requirements and run the Node-RED container.
+4. **Run the containers** `sudo docker-compose up -d` 
+5. **Create the database** for the metabase module (optional)
 
-4. **Install** django
+6. **Install** django
 
 Run the following inside the **admin** container:
 
@@ -57,7 +59,7 @@ python manage.py createsuperuser
 
 Now you can login at <https://YOUR-SUB.DOMAIN/admin> or wherever your reverse proxy is listening on.
 
-5. **Configure** database maintenance tasks
+7. **Configure** database maintenance tasks
 
 Gregory needs to run a series of tasks to fetch missing information and apply the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
 
@@ -65,7 +67,7 @@ Gregory needs to run a series of tasks to fetch missing information and apply th
 */5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
 ```
 
-6. **Configure** hugo
+8. **Configure** hugo
 
 You need to install some node modules for hugo to build and process the css. Simply run this.
 
@@ -76,7 +78,7 @@ cd hugo && npm i && cd ..;
 In the `hugo` dir you will find a `config.toml` file that needs to be configured with your domain.
 
 
-7. **Build** by running `python3 ./build.py`.
+9. **Build** by running `python3 ./build.py`.
 
 ## How everything fits together
 
