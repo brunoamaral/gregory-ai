@@ -17,8 +17,7 @@ services:
       - traefik_proxy
 
   node-red:
-    # build: .
-    image: amaralbruno/gregory:latest
+    image: nodered/node-red:latest
     restart: always
     container_name: node-red 
     environment:
@@ -27,15 +26,13 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_DB=${POSTGRES_DB}
       - DB_HOST=${DB_HOST}
-
     ports:
       - "1880:1880"
     networks:
       - traefik_proxy
-
     volumes:
       - ./nodered-data:/data
-      - ./python-ml:/python-ml
+
   admin:
     container_name: admin
     restart: always
