@@ -67,7 +67,28 @@ Gregory needs to run a series of tasks to fetch missing information and apply th
 */5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
 ```
 
-8. **Configure** hugo
+8. **Setup NodeRED** by installing the required nodes
+
+You can visit the NodeRED editor and install the modules with the graphic interface to manage the pallete, or you can login to the container and run the following:
+
+```
+npm install node-red-contrib-cheerio && \
+npm install node-red-contrib-moment && \
+npm install node-red-contrib-sqlstring && \
+npm install node-red-dashboard && \
+npm install node-red-node-feedparser && \
+npm install node-red-node-sqlite && \
+npm install node-red-node-ui-list && \
+npm install node-red-contrib-persist && \
+npm install node-red-contrib-rss && \
+npm install node-red-contrib-meta \
+npm install node-red-contrib-join-wait \
+npm install node-red-contrib-postgresql \ 
+npm install node-red-contrib-re-postgres \
+npm install node-red-contrib-string 
+```
+
+9.  **Configure** hugo
 
 You need to install some node modules for hugo to build and process the css. Simply run this.
 
@@ -78,7 +99,7 @@ cd hugo && npm i && cd ..;
 In the `hugo` dir you will find a `config.toml` file that needs to be configured with your domain.
 
 
-9. **Build** by running `python3 ./build.py`.
+10. **Build** by running `python3 ./build.py`.
 
 ## How everything fits together
 
