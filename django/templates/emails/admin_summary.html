@@ -3,7 +3,7 @@
 	<head>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-		<title>Gregory MS update</title>
+		<title>{{ title }} update</title>
 		<style>
 @media only screen and (max-width: 620px) {
 	table.body h1 {
@@ -130,7 +130,7 @@ table.body .article {
 													<li>ML GNB: {{article.ml_prediction_gnb}} </li>
 													<li>ML LR: {{article.ml_prediction_lr }} </li>
 												</ul>
-												<p><a href="https://api.gregory-ms.com/articles/{{article.article_id}}/">EDIT</a></p>
+												<p><a href="https://api.{{site.domain}}/articles/{{article.article_id}}/">EDIT</a></p>
 
 
 
@@ -153,17 +153,8 @@ table.body .article {
 												<hr>
 
 												{% endfor %}
-												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">For the full list, please visit <a href="https://gregory-ms.com/" style="color: #3498db; text-decoration: underline;">https://gregory-ms.com/</a></p>
-
-												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">For adding people to this email list or further information, please contact Bruno Amaral:</p>
-
-												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;"><strong>Mobile</strong>: +351 912 875 856</p>
-
-												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;"><strong>Email</strong>: mail@brunoamaral.eu</p>
-
-												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">If you wish to unsubscribe, follow the link below.</p>
-
-												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">Best wishes fom your friendly research bot.<br><strong>Gregory</strong></p>
+												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">For the full list, please visit <a href="https://{{site.domain}}/" style="color: #3498db; text-decoration: underline;">https://{{site.domain}}/</a></p>
+												{{email_footer | safe}}
 
 											</td>
 										</tr>
@@ -181,7 +172,7 @@ table.body .article {
 								<tr>
 									<td class="content-block" style="font-family: sans-serif; vertical-align: top; padding-bottom: 10px; padding-top: 10px; color: #999999; font-size: 12px; text-align: center;" valign="top" align="center">
 										<span class="apple-link" style="color: #999999; font-size: 12px; text-align: center;">Gregory MS</span>
-										<br> For more information visit <a href="https://gregory-ms.com/" style="text-decoration: underline; color: #999999; font-size: 12px; text-align: center;">https://gregory-ms.com/</a>.
+										<br> For more information visit <a href="https://{{site.domain}}/" style="text-decoration: underline; color: #999999; font-size: 12px; text-align: center;">https://{{site.domain}}/</a>.
 									</td>
 								</tr>
 								<tr>

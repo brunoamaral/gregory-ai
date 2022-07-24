@@ -3,7 +3,7 @@
 	<head>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-		<title>Gregory MS update</title>
+		<title>{{ title }} update</title>
 		<style>
 @media only screen and (max-width: 620px) {
 	table.body h1 {
@@ -131,15 +131,7 @@ table.body .article {
 												{% endfor %}
 												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">For the full list, please visit <a href="https://gregory-ms.com/" style="color: #3498db; text-decoration: underline;">https://gregory-ms.com/</a></p>
 
-												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">For adding people to this email list or further information, please contact Bruno Amaral:</p>
-
-												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;"><strong>Mobile</strong>: +351 912 875 856</p>
-
-												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;"><strong>Email</strong>: mail@brunoamaral.eu</p>
-
-												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">If you wish to unsubscribe, follow the link below.</p>
-
-												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">Best wishes fomyour friendly research bot.<br><strong>Gregory</strong></p>
+												{{email_footer | safe}}
 
 											</td>
 										</tr>
