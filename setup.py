@@ -259,5 +259,5 @@ If you wish to apply Gregory to your own research subject, you will have to dele
 
 ## Email service
 
-We use mailgun to send emails, check the .env file for the settings.
+We use mailgun to send emails, check the .env file for the settings and remember to configure your DNS.
 ''')
