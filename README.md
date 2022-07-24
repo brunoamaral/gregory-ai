@@ -125,6 +125,8 @@ Sent every Tuesday, lists the relevant articles discovered in the last week.
 
 Sent every 12 hours if a new clinical trial was posted.
 
+The title email footer for these emails needs to be set in the Custom Settings section of the admin backoffice.
+
 Django also allows you to add new sources from where to fetch articles. Take a look at `/admin/gregory/sources/ `
 
 ![image-20220619195841565](images/image-20220619195841565.png)
