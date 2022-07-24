@@ -1,10 +1,10 @@
 from django.contrib import admin
 
 # Register your models here.
-from .models import CustomSettings
+from .models import CustomSetting
 
-class CustomSettingsAdmin(admin.ModelAdmin):
+class CustomSettingAdmin(admin.ModelAdmin):
 	list_display = ['site','title',]
 
 
-admin.site.register(CustomSettings,CustomSettingsAdmin)
+admin.site.register(CustomSetting,CustomSettingAdmin)
