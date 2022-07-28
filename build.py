@@ -2,6 +2,8 @@
 from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
+from shutil import which
+from slugify import slugify
 from zipfile import ZipFile
 import git  
 import html
@@ -11,7 +13,6 @@ import numpy as np
 import os
 import pandas as pd
 import pathlib
-from shutil import which
 import sqlalchemy
 import subprocess
 import time
@@ -118,9 +119,18 @@ for index, row in articles.iterrows():
 
 	title = row["title"].replace("'", "\\'").replace("\"",'\\"')
 
+	url = None
 	if row["noun_phrases"] == None:
 		row["noun_phrases"] = ''
-		
+		url = "url: /articles/" + str(row["article_id"]) + "/"
+	else:
+		url = list(map(lambda x: x.lower(), row["noun_phrases"]))
+		url = slugify('-'.join(url))
+		url = "\nurl: /articles/" + str(row["article_id"]) + "/" + str(url) + "/" + \
+			"\naliases: " + \
+			"\n  - /articles/" + str(row["article_id"]) + "/"
+	
+
 	# Write a file for each record
 	markdownDir = pathlib.Path(articlesDir+str(row["article_id"]))
 	markdownDir.mkdir(parents=True, exist_ok=True)
@@ -142,6 +152,7 @@ for index, row in articles.iterrows():
 			"\nml_prediction_lr: " + str(row["ml_prediction_lr"]).lower() + \
 			"\noptions:" + \
 			"\n  unlisted: false" + \
+			"\n" + url + \
 			"\n---\n" + \
 			html.unescape(row["summary"])
 		# add content to file
