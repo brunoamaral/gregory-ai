@@ -125,7 +125,7 @@ for index, row in articles.iterrows():
 		url = "url: /articles/" + str(row["article_id"]) + "/"
 	else:
 		url = list(map(lambda x: x.lower(), row["noun_phrases"]))
-		url = slugify('-'.join(url))
+		url = slugify('-'.join(url))[:250]
 		url = "\nurl: /articles/" + str(row["article_id"]) + "/" + str(url) + "/" + \
 			"\naliases: " + \
 			"\n  - /articles/" + str(row["article_id"]) + "/"
