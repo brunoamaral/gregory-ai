@@ -141,6 +141,12 @@ The current website is also using some embeded dashboards whose keys are produce
 
 <img src="images/image-20220619200017849.png" alt="image-20220619200017849" style="zoom:33%;" />
 
+Including dashboards in your content:
+
+1. Add the dashboard ID to `data/dashboards.json`
+2. In your content, use the shortcode `{{ metabase-embed dashboard="10" width="1300" height="1250" }}`
+3. Run `build.py`
+
 ### Mailgun
 
 Email are sent from the `admin`  container using Mailgun.
