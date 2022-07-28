@@ -8,13 +8,13 @@ enableRobotsTXT = true
 googleAnalytics = ""
 languageCode = "en"
 theme = ["NowUI-Pro"]
-title = "Gregory MS"
+title = "Multiple Sclerosis research by Gregory MS"
 removePathAccents = true
 # Set the default site thumbnail
 
 # Google 
 googleSiteVerification = ""
-googleTagManager = ""
+# googleTagManager = ""
 headerPhoto = ""
 
 [outputs]
