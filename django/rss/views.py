@@ -2,7 +2,7 @@ from django.shortcuts import render
 
 # Create your views here.
 from django.contrib.syndication.views import Feed
-from gregory.models import Articles, Trials
+from gregory.models import Articles, Trials, Sources, Categories
 
 class LatestArticlesFeed(Feed):
 	title = "Gregory MS - latest research articles"
@@ -11,6 +11,50 @@ class LatestArticlesFeed(Feed):
 
 	def items(self):
 		return Articles.objects.order_by('-discovery_date')[:5]
+
+	def item_title(self, item):
+		return item.title
+
+	def item_description(self, item):
+		return item.summary
+
+	# # item_link is only needed if NewsItem has no get_absolute_url method.
+	def item_link(self, item):
+		return 'https://gregory-ms.com/articles/' + str(item.pk) + '/' 
+
+class ArticlesBySubjectFeed(Feed):
+	title = "Gregory MS - latest research articles by Subject"
+	link = "/articles/"
+	description = "Real time results for research on Multiple Sclerosis."
+	def get_object(self, request, subject):
+			subject = subject.replace('-', ' ')
+			subject = Sources.objects.filter(subject__iregex=subject)
+			return subject
+
+	def items(self, subject):
+		return Articles.objects.filter(source__in=subject).order_by('-discovery_date')[:5]
+
+	def item_title(self, item):
+		return item.title
+
+	def item_description(self, item):
+		return item.summary
+
+	# # item_link is only needed if NewsItem has no get_absolute_url method.
+	def item_link(self, item):
+		return 'https://gregory-ms.com/articles/' + str(item.pk) + '/' 
+
+class ArticlesByCategoryFeed(Feed):
+	title = "Gregory MS - latest research articles by Subject"
+	link = "/articles/"
+	description = "Real time results for research on Multiple Sclerosis."
+	def get_object(self, request, category):
+			category = category.replace('-', ' ')
+			category = Categories.objects.filter(category_name__iregex=category)
+			return category
+
+	def items(self, category):
+		return Articles.objects.filter(categories=category.first()).order_by('-discovery_date')[:5]
 
 	def item_title(self, item):
 		return item.title
