@@ -194,13 +194,13 @@ print('''
 Trying to run `python manage.py makemigrations && python manage.py migrate && python manage.py createsuperuser` to setup the postgres database and django.
 If this command fails
 ''')
-args = ("sudo","docker","exec","-it","admin","python manage.py makemigrations")
+args = ("sudo","docker","exec","admin","./manage.py", "makemigrations")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
 
-args = ("sudo","docker","exec","-it","admin","python manage.py migrate")
+args = ("sudo","docker","exec","admin","./manage.py", "migrate")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
