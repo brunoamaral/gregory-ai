@@ -9,10 +9,11 @@ from subscriptions.models import Subscribers,Lists
 import datetime 
 import requests
 from django.contrib.sites.models import Site
+from django.conf import settings
 
 ## Get custom settings from DB
-customsettings = CustomSetting.objects.get(site=1)
-site = Site.objects.get(pk=1)
+customsettings = CustomSetting.objects.get(site=settings.SITE_ID)
+site = Site.objects.get(pk=settings.SITE_ID)
 
 list_clinical_trials = []
 for email in Subscribers.objects.filter(subscriptions__list_name='Clinical Trials').values():
@@ -24,7 +25,7 @@ for email in Subscribers.objects.filter(subscriptions__list_name='Articles').val
 
 
 
-def send_simple_message( sender="Gregory MS <gregory@mg.gregory-ms.com>", to=None,bcc=None,subject='no subject', text=None,html=None, email_mailgun_api_url=settings.EMAIL_MAILGUN_API_URL, email_mailgun_api=settings.EMAIL_MAILGUN_API):
+def send_simple_message( sender='Gregory MS <gregory@mg.'+ site.domain + '>', to=None,bcc=None,subject='no subject', text=None,html=None, email_mailgun_api_url=settings.EMAIL_MAILGUN_API_URL, email_mailgun_api=settings.EMAIL_MAILGUN_API):
 	status = requests.post(
 			email_mailgun_api_url,
 			auth=("api", email_mailgun_api),
@@ -98,7 +99,7 @@ class WeeklySummary(CronJobBase):
 				}
 				html = get_template('emails/weekly_summary.html').render(summary)
 				text= strip_tags(html)
-				result = send_simple_message(to="weekly.subscribers@gregory-ms.com",bcc=subscribers,subject='Weekly Summary',html=html, text=text)
+				result = send_simple_message(to='weekly.subscribers@'+ site.domain, bcc=subscribers,subject='Weekly Summary',html=html, text=text)
 				if result.status_code == 200:
 					for article in articles:
 						article.sent_to_subscribers = True
@@ -130,7 +131,7 @@ class TrialsNotification(CronJobBase):
 			}
 			html = get_template('emails/trial_notification.html').render(summary)
 			text= strip_tags(html)
-			result = send_simple_message(to="clinical.trials@gregory-ms.com",bcc=subscribers,subject='There is a new clinical trial',html=html, text=text)
+			result = send_simple_message(to='clinical.trials@'+ site.domain, bcc=subscribers,subject='There is a new clinical trial',html=html, text=text)
 			if result.status_code == 200:
 				for trial in trials:
 						trial.sent_real_time_notification = True

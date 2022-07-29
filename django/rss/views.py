@@ -2,10 +2,17 @@ from django.shortcuts import render
 
 # Create your views here.
 from django.contrib.syndication.views import Feed
+from django.conf import settings
 from gregory.models import Articles, Trials, Sources, Categories
+from django.contrib.sites.models import Site
+from sitesettings.models import *
+
+
+customsettings = CustomSetting.objects.get(site=settings.SITE_ID)
+site = Site.objects.get(pk=settings.SITE_ID)
 
 class LatestArticlesFeed(Feed):
-	title = "Gregory MS - latest research articles"
+	title = customsettings.title + " latest research articles"
 	link = "/articles/"
 	description = "Real time results for research on Multiple Sclerosis."
 
@@ -20,10 +27,10 @@ class LatestArticlesFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://gregory-ms.com/articles/' + str(item.pk) + '/' 
+		return 'https://'+ site.domain + '/articles/' + str(item.pk) + '/' 
 
 class ArticlesBySubjectFeed(Feed):
-	title = "Gregory MS - latest research articles by Subject"
+	title = customsettings.title + " latest research articles by Subject"
 	link = "/articles/"
 	description = "Real time results for research on Multiple Sclerosis."
 	def get_object(self, request, subject):
@@ -42,10 +49,10 @@ class ArticlesBySubjectFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://gregory-ms.com/articles/' + str(item.pk) + '/' 
+		return 'https://'+ site.domain + '/articles/' + str(item.pk) + '/' 
 
 class ArticlesByCategoryFeed(Feed):
-	title = "Gregory MS - latest research articles by Subject"
+	title = customsettings.title + " latest research articles by Subject"
 	link = "/articles/"
 	description = "Real time results for research on Multiple Sclerosis."
 	def get_object(self, request, category):
@@ -64,10 +71,10 @@ class ArticlesByCategoryFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://gregory-ms.com/articles/' + str(item.pk) + '/' 
+		return 'https://'+ site.domain + '/articles/' + str(item.pk) + '/' 
 
 class LatestTrialsFeed(Feed):
-	title = "Gregory MS - latest clinical trials"
+	title = customsettings.title + " latest clinical trials"
 	link = "/trials/"
 	description = "Real time results for research on Multiple Sclerosis."
 
@@ -82,10 +89,10 @@ class LatestTrialsFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://gregory-ms.com/trials/' + str(item.pk) + '/'
+		return 'https://'+ site.domain + '/trials/' + str(item.pk) + '/'
 
 class MachineLearningFeed(Feed):
-	title = "Gregory MS - Relevant articles by machine learning"
+	title = customsettings.title + " Relevant articles by machine learning"
 	link = "/articles/"
 	description = "Real time results for research on Multiple Sclerosis."
 
@@ -100,10 +107,10 @@ class MachineLearningFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://gregory-ms.com/articles/' + str(item.pk) + '/' 
+		return 'https://'+ site.domain + '/articles/' + str(item.pk) + '/' 
 
 class ToPredictFeed(Feed):
-	title = "Gregory MS - Relevant articles by machine learning"
+	title = customsettings.title + " Relevant articles by machine learning"
 	link = "/articles/"
 	description = "Real time results for research on Multiple Sclerosis."
 
@@ -118,12 +125,12 @@ class ToPredictFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://gregory-ms.com/articles/' + str(item.pk) + '/' 
+		return 'https://'+ site.domain + '/articles/' + str(item.pk) + '/' 
 
 
 class Twitter(Feed):
 
-	title = "Gregory MS - post to twitter"
+	title = customsettings.title + " post to twitter"
 	link = "/feed/twitter/"
 	description = "Real time results for relevant research on Multiple Sclerosis."
 
