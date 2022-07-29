@@ -84,27 +84,30 @@ class WeeklySummary(CronJobBase):
 	def do(self):
 		if datetime.datetime.today().weekday() == 1: # only run on Tuesdays
 			subscribers = []
-			for email in Subscribers.objects.filter(subscriptions__list_name='Weekly Summary').values():
-				subscribers.append(email['email'])
-			articles = Articles.objects.filter(relevant=True).filter(~Q(sent_to_subscribers=True))
-			trials = Trials.objects.filter(~Q(sent_to_subscribers=True))
-			summary = {
-			"articles": articles,
-			"trials":trials,
-			"title": customsettings.title,
-			"email_footer": customsettings.email_footer,
-			"site": site,
-			}
-			html = get_template('emails/weekly_summary.html').render(summary)
-			text= strip_tags(html)
-			result = send_simple_message(to="weekly.subscribers@gregory-ms.com",bcc=subscribers,subject='Weekly Summary',html=html, text=text)
-			if result.status_code == 200:
-				for article in articles:
-					article.sent_to_subscribers = True
-				articles.bulk_update(articles,['sent_to_subscribers'])
-				for trial in trials:
-						trial.sent_to_subscribers = True
-				trials.bulk_update(trials,['sent_to_subscribers'])
+			if Subscribers.objects.filter(subscriptions__list_name='Weekly Summary').count() > 0:
+				for email in Subscribers.objects.filter(subscriptions__list_name='Weekly Summary').values():
+					subscribers.append(email['email'])
+				articles = Articles.objects.filter(relevant=True).filter(~Q(sent_to_subscribers=True))
+				trials = Trials.objects.filter(~Q(sent_to_subscribers=True))
+				summary = {
+				"articles": articles,
+				"trials":trials,
+				"title": customsettings.title,
+				"email_footer": customsettings.email_footer,
+				"site": site,
+				}
+				html = get_template('emails/weekly_summary.html').render(summary)
+				text= strip_tags(html)
+				result = send_simple_message(to="weekly.subscribers@gregory-ms.com",bcc=subscribers,subject='Weekly Summary',html=html, text=text)
+				if result.status_code == 200:
+					for article in articles:
+						article.sent_to_subscribers = True
+					articles.bulk_update(articles,['sent_to_subscribers'])
+					for trial in trials:
+							trial.sent_to_subscribers = True
+					trials.bulk_update(trials,['sent_to_subscribers'])
+			else:
+				print('Error, no subscribers found for new articles')
 	pass
 
 class TrialsNotification(CronJobBase):
@@ -114,7 +117,7 @@ class TrialsNotification(CronJobBase):
 
 	def do(self):
 		trials = Trials.objects.filter(~Q(sent_real_time_notification=True))
-		if len(trials) > 0:
+		if len(trials) > 0 and Subscribers.filter(subscriptions__list_name='Clinical Trials').count() > 0:
 			subscribers = []
 			for email in Subscribers.objects.filter(subscriptions__list_name='Clinical Trials').values():
 				subscribers.append(email['email'])
@@ -132,4 +135,6 @@ class TrialsNotification(CronJobBase):
 				for trial in trials:
 						trial.sent_real_time_notification = True
 				trials.bulk_update(trials,['sent_real_time_notification'])
+		else:
+			print('Error, no subscribers found for new clinical trials')
 	pass
