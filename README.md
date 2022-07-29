@@ -67,6 +67,8 @@ Gregory needs to run a series of tasks to fetch missing information and apply th
 */5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
 ```
 
+Remember to add a first subscriber and admin in http://YOUR-DOMAIN.com/admin/subscriptions/subscribers/ to avoid breaking the script: <https://github.com/brunoamaral/gregory/issues/179>.
+
 8. **Setup NodeRED** by installing the required nodes
 
 You can visit the NodeRED editor and install the modules with the graphic interface to manage the pallete, or you can login to the container and run the following:

@@ -88,11 +88,6 @@ if is_tool("git"):
 else:
 	sys.exit("Git was not found and I can't install Gregory without it. Exiting.")
 
-# if is_git_repo(cwd) == False or git.Repo(cwd).remotes[0].config_reader.get("url") != github:
-# 	print("Didn't find any git repository, or repository does not match Gregory. Cloning into ./gregory now, please wait...")
-# 	git.Git(".").clone(github)
-# 	os.chdir("./gregory")
-
 print('''
 ####
 ## Check for directories
