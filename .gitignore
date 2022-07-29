@@ -11,6 +11,7 @@ db-data/
 dev.py
 django/data/
 django/gregory/data/
+django/gregory/migrations/
 django/gregory/ml_models/
 django/static
 docker-data/
