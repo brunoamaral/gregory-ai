@@ -38,13 +38,25 @@ class ArticlesByCategory(viewsets.ModelViewSet):
 	def get_queryset(self):
 		category = self.kwargs.get('category', None)
 		category = Categories.objects.filter(category_name__iregex=category)
-		return Articles.objects.filter(categories=category.first())
+		return Articles.objects.filter(categories=category.first()).order_by('-article_id')
 
-	# queryset = Articles.objects.filter().order_by('-published_date')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
+class ArticlesBySubject(viewsets.ModelViewSet):
+	"""
+	Search articles by the subject field. Usage /articles/subject/<subject>/.
+	Subject should be lower case and spaces should be replaced by dashes, for example: Multiple Sclerosis becomes multiple-sclerosis.
+	"""
+	def get_queryset(self):
+		subject = self.kwargs.get('subject', None)
+		subject = subject.replace('-', ' ')
+		subject = Sources.objects.filter(subject__iregex=subject)
+		return Articles.objects.filter(source__in=subject).order_by('-article_id')
+
+	serializer_class = ArticleSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
 class AllArticleViewSet(generics.ListAPIView):
