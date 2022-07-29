@@ -60,12 +60,15 @@ else:
 			configs[key] = value
 	with open('.env','a') as file:
 		for key,value in configs.items():
-			line = key + '=' + value + '\n'
+			line = key + '=' + str(value) + '\n'
 			file.write(line)
 		file.close()
 	print('Settings written to .env file, please check if everything looks correct.')
 	input("Press Enter to continue...")
+	print('Setting environment variables...')
 
+	for key,value in configs.items():
+		os.environ[key] = str(value)
 
 
 def is_tool(name):
