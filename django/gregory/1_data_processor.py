@@ -4,6 +4,7 @@ from .utils.text_utils import cleanText
 from .utils.text_utils import cleanHTML
 import html
 from .models import Articles
+from django.db.models.functions import Length
 
 
 class DataProcessor(CronJobBase):
@@ -13,7 +14,7 @@ class DataProcessor(CronJobBase):
 
 	def do(self):
 		# Read the JSON data into a pandas dataframe
-		dataset = pd.DataFrame(list(Articles.objects.all().values()))
+		dataset = pd.DataFrame(list(Articles.objects.annotate(summary_len=Length('summary')).filter(summary_len__gt=50).values()))
 
 		# Give some info on the dataset
 		# dataset.info()
