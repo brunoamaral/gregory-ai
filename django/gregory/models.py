@@ -32,6 +32,7 @@ class Categories(models.Model):
 		db_table = 'categories'
 
 class Articles(models.Model):
+	KINDS = [('science paper', 'Science Paper'),('news article','News Article')]
 	article_id = models.AutoField(primary_key=True)
 	title = models.TextField(blank=False, null=False, unique=True)
 	link = models.URLField(blank=False, null=False, max_length=2000)
@@ -50,6 +51,9 @@ class Articles(models.Model):
 	sent_to_admin = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	sent_to_twitter = models.BooleanField(blank=True, null=True)
+	kind = models.CharField(choices=KINDS, max_length=50,default='science paper')
+
+
 
 	def __str__(self):
 		return str(self.article_id)
@@ -73,15 +77,14 @@ class Entities(models.Model):
 
 
 class Sources(models.Model):
-	TABLES = [('articles', 'Articles'),('trials','Trials')]
+	TABLES = [('science paper', 'Science Paper'),('trials','Trials'),('news article','News Article')]
 	source_id = models.AutoField(primary_key=True)
-	source_for = models.CharField(choices=TABLES, max_length=50, default='articles')
+	source_for = models.CharField(choices=TABLES, max_length=50, default='science paper')
 	name = models.TextField(blank=True, null=True)
 	link = models.TextField(blank=True, null=True)
 	language = models.TextField()
 	subject = models.TextField()
 	method = models.TextField()
-	
 
 	def __str__(self):
 		return self.name

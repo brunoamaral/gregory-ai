@@ -11,6 +11,7 @@ db-data/
 dev.py
 django/data/
 django/gregory/data/
+django/*/migrations/
 django/gregory/ml_models/
 django/static
 docker-data/
@@ -51,3 +52,4 @@ sqlite-to-postgres/
 venv3
 workspace.code-workspace
 hugo/data/embeds.json
+django/indexers/input/*.json
