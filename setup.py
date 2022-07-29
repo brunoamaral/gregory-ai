@@ -10,8 +10,6 @@ import subprocess
 import sys
 
 load_dotenv()
-# TO DO: Run docker-compose up as root
-
 cwd = os.getcwd()
 github = "git@github.com:brunoamaral/gregory.git"
 
@@ -194,19 +192,20 @@ print('''
 Trying to run `python manage.py makemigrations && python manage.py migrate && python manage.py createsuperuser` to setup the postgres database and django.
 If this command fails
 ''')
-args = ("sudo","docker","exec","admin","./manage.py", "makemigrations")
+
+args = ("sudo","docker","exec","-it","admin","./manage.py", "makemigrations")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
 
-args = ("sudo","docker","exec","admin","./manage.py", "migrate")
+args = ("sudo","docker","exec","-it","admin","./manage.py", "migrate")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
 
-args = ("sudo","docker","exec","-it","admin","python manage.py createsuperuser")
+args = ("sudo","docker","exec","-it","admin","./manage.py", "createsuperuser")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
