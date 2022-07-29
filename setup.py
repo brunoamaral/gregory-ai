@@ -32,7 +32,7 @@ else:
 	''')
 
 	configs = {
-	"DB_HOST" : os.getenv('DB_HOST'),
+	"DB_HOST" : 'db',
 	"DOMAIN_NAME" : os.getenv('DOMAIN_NAME'),
 	"EMAIL_DOMAIN" : os.getenv('EMAIL_DOMAIN'),
 	"EMAIL_HOST_PASSWORD" : os.getenv('EMAIL_HOST_PASSWORD'), 
@@ -40,8 +40,8 @@ else:
 	"EMAIL_HOST" : os.getenv('EMAIL_HOST'), 
 	"EMAIL_MAILGUN_API_URL" : os.getenv('EMAIL_MAILGUN_API_URL'),
 	"EMAIL_MAILGUN_API" : os.getenv('EMAIL_MAILGUN_API'),
-	"EMAIL_PORT" : os.getenv('EMAIL_PORT'), 
-	"EMAIL_USE_TLS" : os.getenv('EMAIL_USE_TLS'), 
+	"EMAIL_PORT" : 587, 
+	"EMAIL_USE_TLS" : 'true', 
 	"GREGORY_DIR" : os.getenv('GREGORY_DIR'),
 	"HUGO_PATH" : os.getenv('HUGO_PATH'),
 	"METABASE_SECRET_KEY" : os.getenv('METABASE_SECRET_KEY'),
