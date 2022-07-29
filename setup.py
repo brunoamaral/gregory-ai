@@ -10,8 +10,6 @@ import subprocess
 import sys
 
 load_dotenv()
-# TO DO: Run docker-compose up as root
-
 cwd = os.getcwd()
 github = "git@github.com:brunoamaral/gregory.git"
 
@@ -34,7 +32,7 @@ else:
 	''')
 
 	configs = {
-	"DB_HOST" : os.getenv('DB_HOST'),
+	"DB_HOST" : 'db',
 	"DOMAIN_NAME" : os.getenv('DOMAIN_NAME'),
 	"EMAIL_DOMAIN" : os.getenv('EMAIL_DOMAIN'),
 	"EMAIL_HOST_PASSWORD" : os.getenv('EMAIL_HOST_PASSWORD'), 
@@ -42,8 +40,8 @@ else:
 	"EMAIL_HOST" : os.getenv('EMAIL_HOST'), 
 	"EMAIL_MAILGUN_API_URL" : os.getenv('EMAIL_MAILGUN_API_URL'),
 	"EMAIL_MAILGUN_API" : os.getenv('EMAIL_MAILGUN_API'),
-	"EMAIL_PORT" : os.getenv('EMAIL_PORT'), 
-	"EMAIL_USE_TLS" : os.getenv('EMAIL_USE_TLS'), 
+	"EMAIL_PORT" : 587, 
+	"EMAIL_USE_TLS" : 'true', 
 	"GREGORY_DIR" : os.getenv('GREGORY_DIR'),
 	"HUGO_PATH" : os.getenv('HUGO_PATH'),
 	"METABASE_SECRET_KEY" : os.getenv('METABASE_SECRET_KEY'),
@@ -194,19 +192,20 @@ print('''
 Trying to run `python manage.py makemigrations && python manage.py migrate && python manage.py createsuperuser` to setup the postgres database and django.
 If this command fails
 ''')
-args = ("sudo","docker","exec","-it","admin","python manage.py makemigrations")
+
+args = ("sudo","docker","exec","-it","admin","./manage.py", "makemigrations")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
 
-args = ("sudo","docker","exec","-it","admin","python manage.py migrate")
+args = ("sudo","docker","exec","-it","admin","./manage.py", "migrate")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
 
-args = ("sudo","docker","exec","-it","admin","python manage.py createsuperuser")
+args = ("sudo","docker","exec","-it","admin","./manage.py", "createsuperuser")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
@@ -218,10 +217,10 @@ print('''
 ## Creating the Metabase database
 ####
 
-We assume that the `db` container is running.
+We assume that the `db` container is running and that we can access it from localhost:5432.
 ''')
 
-db_host = os.getenv('DB_HOST')
+db_host = 'localhost'
 postgres_user = os.getenv('POSTGRES_USER')
 postgres_password = os.getenv('POSTGRES_PASSWORD')
 postgres_db = os.getenv('POSTGRES_DB')
