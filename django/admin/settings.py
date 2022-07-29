@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 import os 
 
 from pathlib import Path
+SITE_ID = 1
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,10 +25,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False 
+DEBUG = True 
 
-ALLOWED_HOSTS = ['0.0.0.0','localhost','167.71.38.42','api.gregory-ms.com','manage.gregory-ms.com']
-CSRF_TRUSTED_ORIGINS = ['https://api.gregory-ms.com','https://manage.gregory-ms.com']
+ALLOWED_HOSTS = ['0.0.0.0','localhost','api.'+ os.environ.get('DOMAIN_NAME'),'manage.'+ os.environ.get('DOMAIN_NAME')]
+CSRF_TRUSTED_ORIGINS = ['https://api.'+ os.environ.get('DOMAIN_NAME'),'https://manage.'+ os.environ.get('DOMAIN_NAME')]
 
 # Application definition
 
@@ -41,8 +42,11 @@ INSTALLED_APPS = [
 	'django.contrib.sessions',
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
+	'django.contrib.sites',
+	'sitesettings',
 	'django_cron',
 	'db_maintenance',
+	'indexers',
 ]
 
 MIDDLEWARE = [
@@ -54,6 +58,7 @@ MIDDLEWARE = [
 	'django.contrib.messages.middleware.MessageMiddleware',
 	'django.middleware.clickjacking.XFrameOptionsMiddleware',
 	'django.middleware.gzip.GZipMiddleware',
+	'django.contrib.sites.middleware.CurrentSiteMiddleware',
 ]
 
 ROOT_URLCONF = 'admin.urls'
@@ -156,10 +161,31 @@ CRON_CLASSES = [
 		'subscriptions.mercury.WeeklySummary',
 		'subscriptions.mercury.TrialsNotification',
 		'db_maintenance.authors.GetAuthors',
-		'db_maintenance.rebuild_categories.RebuildCats',
+		'db_maintenance.rebuild_categories.RebuildCatsArticles',
+		'db_maintenance.rebuild_categories.RebuildCatsTrials',
 		'gregory.noun_phrases.NounPhrases',
 		'gregory.feedreader.FeedReaderTask',
 		# 'gregory.1_data_processor.DataProcessor',
 		# 'gregory.2_train_models.TrainModels',
-		'gregory.3_predict.RunPredictor'
+		'gregory.3_predict.RunPredictor',
+		'db_maintenance.get_doi_from_crossref.GetDoiCrossRef',
+		'db_maintenance.get_published_date_and_summary_crossref.GetDateSummaryCrossRef',
 ]
+WEBSITE_DOMAIN = 'https://gregory-ms.com/'
+
+
+# LOGS
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}

@@ -39,8 +39,8 @@ RUN ./known_hosts.sh /etc/ssh/ssh_known_hosts && rm /usr/src/node-red/known_host
 # package.json contains Node-RED NPM module and node dependencies
 COPY package.json .
 # COPY flows.json /data/
-COPY /python-ml /python-ml
-RUN chown -R node-red:root /python-ml 
+# COPY /python-ml /python-ml
+# RUN chown -R node-red:root /python-ml 
 
 #### Stage BUILD #######################################################################################################
 FROM base AS build
@@ -81,7 +81,7 @@ RUN chown -R node-red:root /usr/src/node-red && \
     python3-pip python3-numpy python3-pandas python3-h5py && \
     rm -r /tmp/*
 RUN pip3 install --upgrade pip
-RUN pip3 install -r /python-ml/requirements.txt
+RUN pip3 install -r requirements.txt
 
 USER node-red
 

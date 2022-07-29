@@ -3,8 +3,8 @@ from django.contrib.postgres.fields import ArrayField
 
 class Authors(models.Model):
 	author_id = models.AutoField(primary_key=True)
-	given_name = models.CharField(blank=False,null=False, max_length=150)
 	family_name = models.CharField(blank=False,null=False, max_length=150)
+	given_name = models.CharField(blank=False,null=False, max_length=150)
 	ORCID = models.CharField(blank=True,null=True, max_length=150)
 	def __str__(self):
 		full_name = (self.given_name,self.family_name)
@@ -20,8 +20,8 @@ class Authors(models.Model):
 	
 class Categories(models.Model):
 	category_id = models.AutoField(primary_key=True)
-	category_name = models.CharField(blank=True, null=True,max_length=200)
 	category_description = models.TextField(blank=True, null=True)
+	category_name = models.CharField(blank=True, null=True,max_length=200)
 	category_terms = ArrayField(models.CharField(blank=False, null=False, max_length=100),verbose_name='Terms to include in category (comma separated)')
 	def __str__(self):
 		return self.category_name
@@ -34,22 +34,22 @@ class Categories(models.Model):
 class Articles(models.Model):
 	article_id = models.AutoField(primary_key=True)
 	title = models.TextField(blank=False, null=False, unique=True)
-	summary = models.TextField(blank=True, null=True)
 	link = models.URLField(blank=False, null=False, max_length=2000)
-	published_date = models.DateTimeField(blank=True, null=True)
-	discovery_date = models.DateTimeField()
+	doi = models.CharField(max_length=280, blank=True, null=True)
+	summary = models.TextField(blank=True, null=True)
 	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True)
+	published_date = models.DateTimeField(blank=True, null=True)
+	discovery_date = models.DateTimeField(auto_now_add=True)
+	authors = models.ManyToManyField(Authors, blank=True)
+	categories = models.ManyToManyField(Categories)
+	entities = models.ManyToManyField('Entities')
 	relevant = models.BooleanField(blank=True, null=True)
 	ml_prediction_gnb = models.BooleanField(blank=True, null=True)
 	ml_prediction_lr = models.BooleanField(blank=True, null=True)
 	noun_phrases = models.JSONField(blank=True, null=True)
-	categories = models.ManyToManyField(Categories)
-	authors = models.ManyToManyField(Authors)
-	entities = models.ManyToManyField('Entities')
 	sent_to_admin = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	sent_to_twitter = models.BooleanField(blank=True, null=True)
-	doi = models.CharField(max_length=280, blank=True, null=True)
 
 	def __str__(self):
 		return str(self.article_id)
@@ -106,6 +106,7 @@ class Trials(models.Model):
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	sent_to_admin = models.BooleanField(blank=True,null=True, default=False)
 	sent_real_time_notification = models.BooleanField(blank=True,null=True,default=False)
+	categories = models.ManyToManyField(Categories)
 	def __str__(self):
 		return str(self.trial_id) 
 

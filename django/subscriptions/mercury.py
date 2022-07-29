@@ -1,19 +1,25 @@
-from django.conf import settings
-from subscriptions.models import Subscribers,Lists
 from django_cron import CronJobBase, Schedule
-from django.template.loader import get_template
-from gregory.models import Articles,Trials
+from django.conf import settings
 from django.db.models import Q
+from django.template.loader import get_template
 from django.utils.html import strip_tags
-import requests
+from gregory.models import Articles,Trials
+from sitesettings.models import *
+from subscriptions.models import Subscribers,Lists
 import datetime 
+import requests
+from django.contrib.sites.models import Site
+
+## Get custom settings from DB
+customsettings = CustomSetting.objects.get(site=1)
+site = Site.objects.get(pk=1)
 
 list_clinical_trials = []
-for email in Subscribers.objects.filter(lists__list_name='Clinical Trials').values():
+for email in Subscribers.objects.filter(subscriptions__list_name='Clinical Trials').values():
 	list_clinical_trials.append(email['email'])
 
 list_articles = []
-for email in Subscribers.objects.filter(lists__list_name='Articles').values():
+for email in Subscribers.objects.filter(subscriptions__list_name='Articles').values():
 	list_articles.append(email['email'])
 
 
@@ -47,7 +53,10 @@ class AdminSummary(CronJobBase):
 		summary = {
 		"articles": articles,
 		"trials":trials,
-		"admin": admin
+		"admin": admin,
+		"title": customsettings.title,
+		"email_footer": customsettings.email_footer,
+		"site": site,
 		}
 		admin=str(summary['admin'].email)
 		html = get_template('emails/admin_summary.html').render(summary)
@@ -71,13 +80,16 @@ class WeeklySummary(CronJobBase):
 	def do(self):
 		if datetime.datetime.today().weekday() == 1: # only run on Tuesdays
 			subscribers = []
-			for email in Subscribers.objects.filter(lists__list_name='Weekly Summary').values():
+			for email in Subscribers.objects.filter(subscriptions__list_name='Weekly Summary').values():
 				subscribers.append(email['email'])
-			articles = Articles.objects.filter(~Q(sent_to_subscribers=True))
+			articles = Articles.objects.filter(relevant=True).filter(~Q(sent_to_subscribers=True))
 			trials = Trials.objects.filter(~Q(sent_to_subscribers=True))
 			summary = {
 			"articles": articles,
-			"trials":trials
+			"trials":trials,
+			"title": customsettings.title,
+			"email_footer": customsettings.email_footer,
+			"site": site,
 			}
 			html = get_template('emails/weekly_summary.html').render(summary)
 			text= strip_tags(html)
@@ -100,11 +112,14 @@ class TrialsNotification(CronJobBase):
 		trials = Trials.objects.filter(~Q(sent_real_time_notification=True))
 		if len(trials) > 0:
 			subscribers = []
-			for email in Subscribers.objects.filter(lists__list_name='Clinical Trials').values():
+			for email in Subscribers.objects.filter(subscriptions__list_name='Clinical Trials').values():
 				subscribers.append(email['email'])
 
 			summary = {
-			"trials":trials
+			"trials":trials,
+			"title": customsettings.title,
+			"email_footer": customsettings.email_footer,
+			"site": site,
 			}
 			html = get_template('emails/trial_notification.html').render(summary)
 			text= strip_tags(html)

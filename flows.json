@@ -56,13 +56,6 @@
         "info": ""
     },
     {
-        "id": "d92bbc0c206c5bfc",
-        "type": "tab",
-        "label": "Twitter",
-        "disabled": false,
-        "info": ""
-    },
-    {
         "id": "a38a4dce4a95b8aa",
         "type": "tab",
         "label": "!Journals.SagePub (not working)",
@@ -5216,7 +5209,7 @@
         "syntax": "mustache",
         "template": "INSERT INTO trials (discovery_date, title, summary, link, published_date, source, relevant)\n\t\tVALUES(CURRENT_TIMESTAMP, '{{payload.title}}', NULL, 'https://www.novartis.com/{{{payload.link}}}', NULL, 13, NULL)",
         "output": "str",
-        "x": 880,
+        "x": 900,
         "y": 160,
         "wires": [
             [
@@ -5235,11 +5228,11 @@
         "arraySpltType": "len",
         "stream": false,
         "addname": "article.key",
-        "x": 730,
+        "x": 650,
         "y": 160,
         "wires": [
             [
-                "c204ece5aa88ae64"
+                "033ec197e68058e0"
             ]
         ]
     },
@@ -5305,8 +5298,8 @@
         "syntax": "mustache",
         "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (current_timestamp,'{{payload.title}}',NULL,'https://www.cuf.pt{{{payload.link}}}',NULL,14,NULL)",
         "output": "str",
-        "x": 880,
-        "y": 240,
+        "x": 960,
+        "y": 260,
         "wires": [
             [
                 "5374561e784d98af"
@@ -5324,11 +5317,11 @@
         "arraySpltType": "len",
         "stream": false,
         "addname": "article.key",
-        "x": 730,
+        "x": 690,
         "y": 240,
         "wires": [
             [
-                "be6a66a22f99b2d9"
+                "ec153ddbc09ec1a8"
             ]
         ]
     },
@@ -5370,7 +5363,7 @@
         "lowerCaseAttributeNames": true,
         "recognizeCDATA": false,
         "recognizeSelfClosing": false,
-        "x": 580,
+        "x": 520,
         "y": 160,
         "wires": [
             [
@@ -5435,885 +5428,67 @@
         "wires": []
     },
     {
-        "id": "45097a07633b6b70",
-        "type": "function",
-        "z": "d92bbc0c206c5bfc",
-        "d": true,
-        "name": "Prepare Notion DB payload",
-        "func": "var data = msg.payload[0]\nvar title = msg.payload[0].title\nvar url = msg.payload[0].link\n\n\n\nvar postData = {\n\t\"parent\": { \"database_id\": \"4fa1dc37-a3bf-43be-9c8d-35b41e539f8d\" },\n\t\"properties\": {\n\t\t\"Name\": {\n\t\t\t\"title\": [\n\t\t\t\t{\n\t\t\t\t\t\"text\": {\n\t\t\t\t\t\t\"content\": title\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t],\n\t\t},\n\t\t\"Status\": {\n\t\t    \"select\": {\n\t\t        \"name\": \"Auto\"\n\t\t    }\n\t\t},\n        \"Link\": {\n            \"url\": url\n        }\n\t\t\n}}\n\n\n\n//\t\t\"Context\": {\n//\t\t\t\"select\": {\n//\t\t\t\t\"name\": context\n//\t\t\t}\n//\t\t},\n//\t\t\"Client\": {\n//\t\t    \"select\": {\n//\t\t        \"name\": client\n//\t\t    }\n//\t\t}\n\nmsg.payload = postData\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 660,
-        "y": 280,
-        "wires": [
-            [
-                "675ba1c48b1c62d0",
-                "b5405e354503bac3"
-            ]
-        ]
-    },
-    {
-        "id": "675ba1c48b1c62d0",
-        "type": "http request",
-        "z": "d92bbc0c206c5bfc",
-        "d": true,
-        "name": "create page",
-        "method": "POST",
-        "ret": "txt",
-        "paytoqs": "ignore",
-        "url": "https://api.notion.com/v1/pages",
-        "tls": "e3876559.c845b8",
-        "persist": false,
-        "proxy": "",
-        "authType": "bearer",
-        "senderr": false,
-        "x": 930,
-        "y": 280,
-        "wires": [
-            [
-                "766b663c01f94543"
-            ]
-        ]
-    },
-    {
-        "id": "766b663c01f94543",
-        "type": "json",
-        "z": "d92bbc0c206c5bfc",
-        "d": true,
+        "id": "033ec197e68058e0",
+        "type": "switch",
+        "z": "02847583794d9f3b",
         "name": "",
-        "property": "payload",
-        "action": "",
-        "pretty": false,
-        "x": 1070,
-        "y": 280,
-        "wires": [
-            [
-                "b5405e354503bac3"
-            ]
-        ]
-    },
-    {
-        "id": "451f09a2af4d6e01",
-        "type": "feedparse",
-        "z": "d92bbc0c206c5bfc",
-        "d": true,
-        "name": "",
-        "url": "https://dash.gregory-ms.com/machine-learning/feed",
-        "interval": "2",
-        "x": 210,
-        "y": 220,
-        "wires": [
-            []
-        ]
-    },
-    {
-        "id": "57cfea48fa20802c",
-        "type": "change",
-        "z": "d92bbc0c206c5bfc",
-        "d": true,
-        "name": "",
+        "property": "payload.title",
+        "propertyType": "msg",
         "rules": [
             {
-                "t": "set",
-                "p": "guid",
-                "pt": "msg",
-                "to": "article.guid",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 130,
-        "y": 280,
-        "wires": [
-            [
-                "102dbb9361d4ea7c"
-            ]
-        ]
-    },
-    {
-        "id": "102dbb9361d4ea7c",
-        "type": "rbe",
-        "z": "d92bbc0c206c5bfc",
-        "d": true,
-        "name": "",
-        "func": "rbe",
-        "gap": "",
-        "start": "",
-        "inout": "out",
-        "septopics": true,
-        "property": "guid",
-        "topi": "topic",
-        "x": 230,
-        "y": 340,
-        "wires": [
-            [
-                "6d80af87a80174dd"
-            ]
-        ]
-    },
-    {
-        "id": "d2b644450513d5d7",
-        "type": "comment",
-        "z": "d92bbc0c206c5bfc",
-        "d": true,
-        "name": "Publish Articles on Twitter",
-        "info": "",
-        "x": 130,
-        "y": 180,
-        "wires": []
-    },
-    {
-        "id": "16e9023b5711d25b",
-        "type": "comment",
-        "z": "d92bbc0c206c5bfc",
-        "d": true,
-        "name": "Save tweet in the content calendar so that Automate.io can publish it",
-        "info": "",
-        "x": 790,
-        "y": 220,
-        "wires": []
-    },
-    {
-        "id": "6d80af87a80174dd",
-        "type": "delay",
-        "z": "d92bbc0c206c5bfc",
-        "d": true,
-        "name": "",
-        "pauseType": "rate",
-        "timeout": "5",
-        "timeoutUnits": "minutes",
-        "rate": "1",
-        "nbRateUnits": "4",
-        "rateUnits": "minute",
-        "randomFirst": "5",
-        "randomLast": "6",
-        "randomUnits": "minutes",
-        "drop": false,
-        "allowrate": false,
-        "outputs": 1,
-        "x": 420,
-        "y": 280,
-        "wires": [
-            [
-                "45097a07633b6b70"
-            ]
-        ]
-    },
-    {
-        "id": "9bc6c7bba7adfd60",
-        "type": "inject",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
+                "t": "cont",
+                "v": "Multiple Sclerosis",
+                "vt": "str"
             },
             {
-                "p": "topic",
+                "t": "cont",
+                "v": "multiple sclerosis",
                 "vt": "str"
             }
         ],
-        "repeat": "259200",
-        "crontab": "",
-        "once": true,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "SELECT COUNT(*) FROM articles;",
-        "payloadType": "str",
-        "x": 110,
-        "y": 620,
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 770,
+        "y": 160,
         "wires": [
             [
-                "ba0316ca621bfd92"
+                "c204ece5aa88ae64"
+            ],
+            [
+                "c204ece5aa88ae64"
             ]
         ]
     },
     {
-        "id": "d2a475670a8bd9da",
-        "type": "change",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "rules": [
-            {
-                "t": "set",
-                "p": "payload",
-                "pt": "msg",
-                "to": "payload[0][\"COUNT(*)\"]",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 430,
-        "y": 620,
-        "wires": [
-            [
-                "10825c977838e47a"
-            ]
-        ]
-    },
-    {
-        "id": "4ffe4c1e48afbac8",
-        "type": "function",
-        "z": "d92bbc0c206c5bfc",
-        "name": "Prepare Notion DB payload",
-        "func": "\nvar post = `I have found ${msg.payload} articles.`\n\nvar url = 'https://gregory-ms.com/articles/'\n\n\nvar postData = {\n\t\"parent\": { \"database_id\": \"4fa1dc37-a3bf-43be-9c8d-35b41e539f8d\" },\n\t\"properties\": {\n\t\t\"Name\": {\n\t\t\t\"title\": [\n\t\t\t\t{\n\t\t\t\t\t\"text\": {\n\t\t\t\t\t\t\"content\": post\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t],\n\t\t},\n\t\t\"Status\": {\n\t\t    \"select\": {\n\t\t        \"name\": \"Auto\"\n\t\t    }\n\t\t},\n\t\t\"Link\": {\n            \"url\": url\n        }\n\t\t\n}}\n\n\n\n//\t\t\"Context\": {\n//\t\t\t\"select\": {\n//\t\t\t\t\"name\": context\n//\t\t\t}\n//\t\t},\n//\t\t\"Client\": {\n//\t\t    \"select\": {\n//\t\t        \"name\": client\n//\t\t    }\n//\t\t}\n\nmsg.payload = postData\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 830,
-        "y": 620,
-        "wires": [
-            [
-                "73ee42edd63f545a"
-            ]
-        ]
-    },
-    {
-        "id": "73ee42edd63f545a",
-        "type": "http request",
-        "z": "d92bbc0c206c5bfc",
-        "name": "create page",
-        "method": "POST",
-        "ret": "txt",
-        "paytoqs": "ignore",
-        "url": "https://api.notion.com/v1/pages",
-        "tls": "e3876559.c845b8",
-        "persist": false,
-        "proxy": "",
-        "authType": "bearer",
-        "senderr": false,
-        "x": 800,
-        "y": 680,
-        "wires": [
-            [
-                "84850bbc1afa9475"
-            ]
-        ]
-    },
-    {
-        "id": "84850bbc1afa9475",
-        "type": "json",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "property": "payload",
-        "action": "",
-        "pretty": false,
-        "x": 940,
-        "y": 680,
-        "wires": [
-            []
-        ]
-    },
-    {
-        "id": "10825c977838e47a",
-        "type": "rbe",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "func": "rbe",
-        "gap": "",
-        "start": "",
-        "inout": "out",
-        "septopics": true,
-        "property": "payload",
-        "topi": "topic",
-        "x": 620,
-        "y": 620,
-        "wires": [
-            [
-                "4ffe4c1e48afbac8"
-            ]
-        ]
-    },
-    {
-        "id": "190c1ca8b37decab",
-        "type": "inject",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            }
-        ],
-        "repeat": "2220",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "",
-        "payloadType": "str",
-        "x": 110,
-        "y": 860,
-        "wires": [
-            [
-                "50827597b1308ad8"
-            ]
-        ]
-    },
-    {
-        "id": "4e563f981d9636be",
-        "type": "template",
-        "z": "d92bbc0c206c5bfc",
-        "name": "SQL",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "handlebars",
-        "syntax": "mustache",
-        "template": "UPDATE trials\nSET sent_to_twitter = true\nWHERE trial_id = {{trial_id}};",
-        "output": "str",
-        "x": 910,
-        "y": 940,
-        "wires": [
-            [
-                "8b0380f96c2c3f59"
-            ]
-        ]
-    },
-    {
-        "id": "351176ef25f86e2a",
-        "type": "comment",
-        "z": "d92bbc0c206c5bfc",
-        "name": "Post new clinical trials",
-        "info": "",
-        "x": 140,
-        "y": 800,
-        "wires": []
-    },
-    {
-        "id": "9d85be505a29c03d",
+        "id": "ec153ddbc09ec1a8",
         "type": "switch",
-        "z": "d92bbc0c206c5bfc",
+        "z": "02847583794d9f3b",
         "name": "",
-        "property": "payload",
+        "property": "payload.title",
         "propertyType": "msg",
         "rules": [
             {
-                "t": "nempty"
+                "t": "cont",
+                "v": "Multiple Sclerosis",
+                "vt": "str"
             },
             {
-                "t": "empty"
+                "t": "cont",
+                "v": "multiple sclerosis",
+                "vt": "str"
             }
         ],
         "checkall": "true",
         "repair": false,
         "outputs": 2,
-        "x": 510,
-        "y": 860,
-        "wires": [
-            [
-                "b794036c1fb192c6"
-            ],
-            []
-        ]
-    },
-    {
-        "id": "b794036c1fb192c6",
-        "type": "function",
-        "z": "d92bbc0c206c5bfc",
-        "name": "Prepare Notion DB payload",
-        "func": "var data = msg.payload\nvar title = `#ClinicalTrial ${msg.payload.title} `\nvar url = msg.payload.link\n\nvar postData = {\n\t\"parent\": { \"database_id\": \"4fa1dc37-a3bf-43be-9c8d-35b41e539f8d\" },\n\t\"properties\": {\n\t\t\"Name\": {\n\t\t\t\"title\": [\n\t\t\t\t{\n\t\t\t\t\t\"text\": {\n\t\t\t\t\t\t\"content\": title\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t],\n\t\t},\n\t\t\"Status\": {\n\t\t    \"select\": {\n\t\t        \"name\": \"Auto\"\n\t\t    }\n\t\t},\n        \"Link\": {\n            \"url\": url\n        }\n\t\t\n}}\n\n\n\n//\t\t\"Context\": {\n//\t\t\t\"select\": {\n//\t\t\t\t\"name\": context\n//\t\t\t}\n//\t\t},\n//\t\t\"Client\": {\n//\t\t    \"select\": {\n//\t\t        \"name\": client\n//\t\t    }\n//\t\t}\n\nmsg.payload = postData\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 700,
-        "y": 860,
-        "wires": [
-            [
-                "8af055d9ff5c39e3"
-            ]
-        ]
-    },
-    {
-        "id": "8af055d9ff5c39e3",
-        "type": "http request",
-        "z": "d92bbc0c206c5bfc",
-        "name": "create page",
-        "method": "POST",
-        "ret": "txt",
-        "paytoqs": "ignore",
-        "url": "https://api.notion.com/v1/pages",
-        "tls": "e3876559.c845b8",
-        "persist": false,
-        "proxy": "",
-        "authType": "bearer",
-        "senderr": false,
-        "x": 910,
-        "y": 860,
-        "wires": [
-            [
-                "c2453000a42e1c9a"
-            ]
-        ]
-    },
-    {
-        "id": "c2453000a42e1c9a",
-        "type": "json",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "property": "payload",
-        "action": "",
-        "pretty": false,
-        "x": 790,
-        "y": 940,
-        "wires": [
-            [
-                "4e563f981d9636be"
-            ]
-        ]
-    },
-    {
-        "id": "21ec2168735324ef",
-        "type": "inject",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            }
-        ],
-        "repeat": "1020",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "SELECT article_id,ml_prediction_gnb,sent_to_twitter FROM articles WHERE ml_prediction_gnb = true and sent_to_twitter is null or sent_to_twitter = false limit 1;",
-        "payloadType": "str",
-        "x": 110,
-        "y": 1060,
-        "wires": [
-            [
-                "24452f950ea261cb"
-            ]
-        ]
-    },
-    {
-        "id": "39ae3d72bd4507be",
-        "type": "template",
-        "z": "d92bbc0c206c5bfc",
-        "name": "SQL",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "handlebars",
-        "syntax": "mustache",
-        "template": "UPDATE articles\nSET sent_to_twitter = true\nWHERE article_id = {{article_id}};",
-        "output": "str",
-        "x": 930,
-        "y": 1140,
-        "wires": [
-            [
-                "fd3e7381ad602768"
-            ]
-        ]
-    },
-    {
-        "id": "6b8cf9dc0ef9d225",
-        "type": "comment",
-        "z": "d92bbc0c206c5bfc",
-        "name": "Post new articles",
-        "info": "",
-        "x": 120,
-        "y": 1000,
-        "wires": []
-    },
-    {
-        "id": "f24018c473e3c710",
-        "type": "switch",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "property": "payload",
-        "propertyType": "msg",
-        "rules": [
-            {
-                "t": "nempty"
-            },
-            {
-                "t": "empty"
-            }
-        ],
-        "checkall": "true",
-        "repair": false,
-        "outputs": 2,
-        "x": 710,
-        "y": 1060,
-        "wires": [
-            [
-                "dea896e4f9031940"
-            ],
-            []
-        ]
-    },
-    {
-        "id": "c974059772567661",
-        "type": "function",
-        "z": "d92bbc0c206c5bfc",
-        "name": "Prepare Notion DB payload",
-        "func": "var data = msg.payload\nvar title = `New article discovered, is it relevant? ${msg.payload.title} `\nvar url = msg.payload.link\n\nvar postData = {\n\t\"parent\": { \"database_id\": \"4fa1dc37-a3bf-43be-9c8d-35b41e539f8d\" },\n\t\"properties\": {\n\t\t\"Name\": {\n\t\t\t\"title\": [\n\t\t\t\t{\n\t\t\t\t\t\"text\": {\n\t\t\t\t\t\t\"content\": title\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t],\n\t\t},\n\t\t\"Status\": {\n\t\t    \"select\": {\n\t\t        \"name\": \"Auto\"\n\t\t    }\n\t\t},\n        \"Link\": {\n            \"url\": url\n        }\n\t\t\n}}\n\n\n\n//\t\t\"Context\": {\n//\t\t\t\"select\": {\n//\t\t\t\t\"name\": context\n//\t\t\t}\n//\t\t},\n//\t\t\"Client\": {\n//\t\t    \"select\": {\n//\t\t        \"name\": client\n//\t\t    }\n//\t\t}\n\nmsg.payload = postData\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 460,
-        "y": 1140,
-        "wires": [
-            [
-                "999e7ee74238730d"
-            ]
-        ]
-    },
-    {
-        "id": "999e7ee74238730d",
-        "type": "http request",
-        "z": "d92bbc0c206c5bfc",
-        "name": "create page",
-        "method": "POST",
-        "ret": "txt",
-        "paytoqs": "ignore",
-        "url": "https://api.notion.com/v1/pages",
-        "tls": "e3876559.c845b8",
-        "persist": false,
-        "proxy": "",
-        "authType": "bearer",
-        "senderr": false,
-        "x": 670,
-        "y": 1140,
-        "wires": [
-            [
-                "d4fe05c94ae7f5fe"
-            ]
-        ]
-    },
-    {
-        "id": "d4fe05c94ae7f5fe",
-        "type": "json",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "property": "payload",
-        "action": "",
-        "pretty": false,
         "x": 810,
-        "y": 1140,
+        "y": 240,
         "wires": [
             [
-                "39ae3d72bd4507be"
-            ]
-        ]
-    },
-    {
-        "id": "dea896e4f9031940",
-        "type": "change",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "rules": [
-            {
-                "t": "move",
-                "p": "payload.article_id",
-                "pt": "msg",
-                "to": "article_id",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 180,
-        "y": 1140,
-        "wires": [
-            [
-                "c974059772567661"
-            ]
-        ]
-    },
-    {
-        "id": "669fcb8867e60fe6",
-        "type": "comment",
-        "z": "d92bbc0c206c5bfc",
-        "name": "Count articles and publish on twitter",
-        "info": "",
-        "x": 180,
-        "y": 560,
-        "wires": []
-    },
-    {
-        "id": "1379010ac08b7cb0",
-        "type": "comment",
-        "z": "d92bbc0c206c5bfc",
-        "name": "EXAMPLE ONLY, do not use please",
-        "info": "",
-        "x": 160,
-        "y": 60,
-        "wires": []
-    },
-    {
-        "id": "ba0316ca621bfd92",
-        "type": "postgres",
-        "z": "d92bbc0c206c5bfc",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 260,
-        "y": 620,
-        "wires": [
-            [
-                "d2a475670a8bd9da"
-            ]
-        ]
-    },
-    {
-        "id": "f68fe76d3b14feaa",
-        "type": "postgres",
-        "z": "d92bbc0c206c5bfc",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 380,
-        "y": 860,
-        "wires": [
-            [
-                "9d85be505a29c03d"
-            ]
-        ]
-    },
-    {
-        "id": "8b0380f96c2c3f59",
-        "type": "postgres",
-        "z": "d92bbc0c206c5bfc",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": false,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": false,
-        "x": 1040,
-        "y": 940,
-        "wires": []
-    },
-    {
-        "id": "fd3e7381ad602768",
-        "type": "postgres",
-        "z": "d92bbc0c206c5bfc",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": false,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": false,
-        "x": 1060,
-        "y": 1140,
-        "wires": []
-    },
-    {
-        "id": "40c8ea26f00f36b3",
-        "type": "postgres",
-        "z": "d92bbc0c206c5bfc",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": true,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 400,
-        "y": 1060,
-        "wires": [
-            [
-                "5f3769db596578af"
-            ]
-        ]
-    },
-    {
-        "id": "24452f950ea261cb",
-        "type": "template",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "sql",
-        "syntax": "mustache",
-        "template": "SELECT\n\tarticle_id,\n\tml_prediction_gnb,\n\tsent_to_twitter\nFROM\n\tarticles\nWHERE\n\tml_prediction_gnb = TRUE\n\tAND sent_to_twitter IS NULL\n\tOR sent_to_twitter = FALSE;",
-        "output": "str",
-        "x": 240,
-        "y": 1060,
-        "wires": [
-            [
-                "40c8ea26f00f36b3"
-            ]
-        ]
-    },
-    {
-        "id": "50827597b1308ad8",
-        "type": "template",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "sql",
-        "syntax": "mustache",
-        "template": "SELECT\n\t*\nFROM\n\ttrials\nWHERE\n\tsent_to_twitter IS NULL\n\tOR sent_to_twitter = false;",
-        "output": "str",
-        "x": 240,
-        "y": 860,
-        "wires": [
-            [
-                "f68fe76d3b14feaa"
-            ]
-        ]
-    },
-    {
-        "id": "b5405e354503bac3",
-        "type": "debug",
-        "z": "d92bbc0c206c5bfc",
-        "d": true,
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 930,
-        "y": 440,
-        "wires": []
-    },
-    {
-        "id": "952445cd6a38597e",
-        "type": "feedparse",
-        "z": "d92bbc0c206c5bfc",
-        "d": true,
-        "name": "",
-        "url": "https://api.gregory-ms.com/feed/machine-learning",
-        "interval": "2",
-        "x": 210,
-        "y": 400,
-        "wires": [
-            [
-                "44aae1e409356de7"
-            ]
-        ]
-    },
-    {
-        "id": "44aae1e409356de7",
-        "type": "string",
-        "z": "d92bbc0c206c5bfc",
-        "d": true,
-        "name": "",
-        "methods": [
-            {
-                "name": "replaceAll",
-                "params": [
-                    {
-                        "type": "str",
-                        "value": "https://gregory-ms.com/articles/"
-                    },
-                    {
-                        "type": "str",
-                        "value": ""
-                    }
-                ]
-            },
-            {
-                "name": "replaceAll",
-                "params": [
-                    {
-                        "type": "str",
-                        "value": "/"
-                    },
-                    {
-                        "type": "str",
-                        "value": ""
-                    }
-                ]
-            }
-        ],
-        "prop": "article.guid",
-        "propout": "guid",
-        "object": "msg",
-        "objectout": "msg",
-        "x": 470,
-        "y": 400,
-        "wires": [
-            [
-                "b5405e354503bac3",
-                "102dbb9361d4ea7c"
-            ]
-        ]
-    },
-    {
-        "id": "5f3769db596578af",
-        "type": "delay",
-        "z": "d92bbc0c206c5bfc",
-        "name": "",
-        "pauseType": "delay",
-        "timeout": "20",
-        "timeoutUnits": "minutes",
-        "rate": "1",
-        "nbRateUnits": "1",
-        "rateUnits": "second",
-        "randomFirst": "1",
-        "randomLast": "5",
-        "randomUnits": "seconds",
-        "drop": false,
-        "allowrate": false,
-        "outputs": 1,
-        "x": 570,
-        "y": 1060,
-        "wires": [
-            [
-                "f24018c473e3c710"
-            ]
+                "be6a66a22f99b2d9"
+            ],
+            []
         ]
     },
     {
