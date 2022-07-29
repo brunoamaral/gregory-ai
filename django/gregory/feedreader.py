@@ -86,10 +86,6 @@ class FeedReaderTask(CronJobBase):
 		cur.execute("SELECT source_id,name,link,subject FROM sources WHERE method = 'rss' and source_for = 'trials';")
 		sources = cur.fetchall()
 
-		# This disables the SSL verification. The only reason why we are doing this is because of issue #55 <https://github.com/brunoamaral/gregory/issues/55> 
-		if hasattr(ssl, '_create_unverified_context'):
-			ssl._create_default_https_context = ssl._create_unverified_context
-
 		for i in sources:
 			link = i[2]
 			source_id = i[0]
