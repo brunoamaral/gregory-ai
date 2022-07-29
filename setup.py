@@ -249,7 +249,7 @@ You can find an example configuration in `nginx-example-configuration/nginx.conf
 
 Import the file flows.json into NodeRED. There is a a flow (a tab on Node-RED) for each data source that runs a search and saves the results in the database. 
 
-If you wish to apply Gregory to your own research subject, you will have to delete these flows and configure your own. The ones present are just functional examples to guide you.
+If you wish to apply Gregory to your own research subject, you will have to edit these flows or configure your own. The ones present are just functional examples to guide you.
 
 ## Email service
 
