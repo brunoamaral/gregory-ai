@@ -47,22 +47,26 @@ class AdminSummary(CronJobBase):
 	code = 'subscriptions.admin_summary'    # a unique code
 
 	def do(self):
-		admin = Subscribers.objects.get(is_admin=True)
+		admins = Subscribers.objects.filter(is_admin=True)
 		articles = Articles.objects.filter(~Q(sent_to_admin=True))
 		trials = Trials.objects.filter(~Q(sent_to_admin=True))
-		summary = {
-		"articles": articles,
-		"trials":trials,
-		"admin": admin,
-		"title": customsettings.title,
-		"email_footer": customsettings.email_footer,
-		"site": site,
-		}
-		admin=str(summary['admin'].email)
-		html = get_template('emails/admin_summary.html').render(summary)
-		text= strip_tags(html)
-		result = send_simple_message(to=admin,subject='Admin Summary',html=html, text=text)
-		if result.status_code == 200:
+		results = []
+		for admin in admins: 
+			admin=str(admin.email)
+			summary = {
+			"articles": articles,
+			"trials":trials,
+			"admin": admin,
+			"title": customsettings.title,
+			"email_footer": customsettings.email_footer,
+			"site": site,
+			}
+			to = admin.email
+			html = get_template('emails/admin_summary.html').render(summary)
+			text= strip_tags(html)
+			result = send_simple_message(to=to,subject='Admin Summary',html=html, text=text)
+			results.append(result.status_code)
+		if 200 in results:
 			for article in articles:
 				article.sent_to_admin = True
 			articles.bulk_update(articles,['sent_to_admin'])
