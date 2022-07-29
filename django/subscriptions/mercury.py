@@ -9,10 +9,11 @@ from subscriptions.models import Subscribers,Lists
 import datetime 
 import requests
 from django.contrib.sites.models import Site
+from django.conf import settings
 
 ## Get custom settings from DB
-customsettings = CustomSetting.objects.get(site=1)
-site = Site.objects.get(pk=1)
+customsettings = CustomSetting.objects.get(site=settings.SITE_ID)
+site = Site.objects.get(pk=settings.SITE_ID)
 
 list_clinical_trials = []
 for email in Subscribers.objects.filter(subscriptions__list_name='Clinical Trials').values():

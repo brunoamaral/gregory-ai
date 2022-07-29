@@ -2,14 +2,14 @@ from django.shortcuts import render
 
 # Create your views here.
 from django.contrib.syndication.views import Feed
-from django.admin.settings import SITE_ID
+from django.conf import settings
 from gregory.models import Articles, Trials, Sources, Categories
 from django.contrib.sites.models import Site
 from sitesettings.models import *
 
 
-customsettings = CustomSetting.objects.get(site=SITE_ID)
-site = Site.objects.get(pk=SITE_ID)
+customsettings = CustomSetting.objects.get(site=settings.SITE_ID)
+site = Site.objects.get(pk=settings.SITE_ID)
 
 class LatestArticlesFeed(Feed):
 	title = customsettings.title + " latest research articles"
