@@ -81,6 +81,7 @@ class Sources(models.Model):
 	language = models.TextField()
 	subject = models.TextField()
 	method = models.TextField()
+	ignore_ssl = models.BinaryField(blank=False,null=False,default=False)
 	
 
 	def __str__(self):
