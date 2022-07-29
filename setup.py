@@ -217,10 +217,10 @@ print('''
 ## Creating the Metabase database
 ####
 
-We assume that the `db` container is running.
+We assume that the `db` container is running and that we can access it from localhost:5432.
 ''')
 
-db_host = os.getenv('DB_HOST')
+db_host = 'localhost'
 postgres_user = os.getenv('POSTGRES_USER')
 postgres_password = os.getenv('POSTGRES_PASSWORD')
 postgres_db = os.getenv('POSTGRES_DB')
