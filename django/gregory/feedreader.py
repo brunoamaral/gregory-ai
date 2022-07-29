@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import os
 import ssl
 from django_cron import CronJobBase, Schedule
-
+import requests
 load_dotenv()
 ## GET ENV
 db_host = os.getenv('DB_HOST')
@@ -37,7 +37,12 @@ class FeedReaderTask(CronJobBase):
 			source_id = i[0]
 			source_name = i[1]
 			link = i[2]
-			d = feedparser.parse(link)
+			d = None
+			if i.ignore_ssl == False:
+				d = feedparser.parse(link)
+			else:
+				response = requests.get(link, verify=False)
+				d = feedparser.parse(response)
 			for entry in d['entries']:
 				summary = ''
 				if hasattr(entry,'summary_detail'):
@@ -88,7 +93,12 @@ class FeedReaderTask(CronJobBase):
 		for i in sources:
 			link = i[2]
 			source_id = i[0]
-			d = feedparser.parse(link)
+			d = None
+			if i.ignore_ssl == False:
+				d = feedparser.parse(link)
+			else:
+				response = requests.get(link, verify=False)
+				d = feedparser.parse(response)
 			for entry in d['entries']:
 				summary = ''
 				if hasattr(entry,'summary_detail'):
