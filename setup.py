@@ -32,7 +32,7 @@ else:
 	''')
 
 	configs = {
-	"DB_HOST" : os.getenv('DB_HOST'),
+	"DB_HOST" : 'db',
 	"DOMAIN_NAME" : os.getenv('DOMAIN_NAME'),
 	"EMAIL_DOMAIN" : os.getenv('EMAIL_DOMAIN'),
 	"EMAIL_HOST_PASSWORD" : os.getenv('EMAIL_HOST_PASSWORD'), 
@@ -220,7 +220,7 @@ print('''
 We assume that the `db` container is running.
 ''')
 
-db_host = os.getenv('DB_HOST')
+db_host = 'db'
 postgres_user = os.getenv('POSTGRES_USER')
 postgres_password = os.getenv('POSTGRES_PASSWORD')
 postgres_db = os.getenv('POSTGRES_DB')
