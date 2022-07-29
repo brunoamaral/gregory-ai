@@ -17,8 +17,7 @@ services:
       - traefik_proxy
 
   node-red:
-    # build: .
-    image: amaralbruno/gregory:latest
+    image: nodered/node-red:latest
     restart: always
     container_name: node-red 
     environment:
@@ -27,29 +26,20 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_DB=${POSTGRES_DB}
       - DB_HOST=${DB_HOST}
-
     ports:
       - "1880:1880"
     networks:
       - traefik_proxy
-
     volumes:
       - ./nodered-data:/data
-      - ./python-ml:/python-ml
-    # The labels below are used to configure Traefik. Traefik is a reverse proxy and more information can be found here: https://traefik.io/
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.nodered.tls=true"
-      - "traefik.http.routers.nodered.tls.certResolver=default"
-      - "traefik.http.services.nodered.loadbalancer.server.port=1880"
-      - "traefik.http.routers.nodered.rule=Host(`${DOMAIN_NAME}`)&&PathPrefix(`/nodered/`)"
-      # - "traefik.http.routers.nodered.rule=Host(`gregory.${DOMAIN_NAME}`)"
+
   admin:
     container_name: admin
     restart: always
     build: 
       context: django/
       dockerfile: Dockerfile
+    # used for local development
     # command: python manage.py runserver 0.0.0.0:8000
     command: gunicorn -b 0.0.0.0:8000 admin.wsgi
     volumes:

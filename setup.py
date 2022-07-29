@@ -247,13 +247,17 @@ print('''
 
 There are some things outside the scope of this setup script.
 
-## Node-RED flows to index content
+## Setup Nginx
 
-For each source there is a a flow (a tab on Node-RED) that runs a search and saves the results in the database. Open the file gregory_schema.sql to understand how the database tables are configured.
+You can find an example configuration in `nginx-example-configuration/nginx.conf`.
+
+## Setup Node-RED flows to index content
+
+Import the file flows.json into NodeRED. There is a a flow (a tab on Node-RED) for each data source that runs a search and saves the results in the database. 
 
 If you wish to apply Gregory to your own research subject, you will have to delete these flows and configure your own. The ones present are just functional examples to guide you.
 
 ## Email service
 
-We use mailgun to send emails, check the .env file for the settings.
+We use mailgun to send emails, check the .env file for the settings and remember to configure your DNS.
 ''')

@@ -20,7 +20,7 @@ tags:
   - 
 categories: 
   - 
-title: "For Researchers"
+title: "For Multiple Sclerosis Researchers"
 
 options:
   unlisted: false
@@ -42,7 +42,7 @@ menu:
   </div>
   <div class="col-md-5 col-12 justify-content-center align-self-center">
   
-  <h3 class="title">Current Research</h3>
+  <h3 class="title">Current Multiple Sclerosis Research</h3>
   
   <p class="lead font-weight-biold">You can browse the most up to date research articles, download our database, and receive a free newsletter with the most relevant articles.</p>
       <a href='{{< ref "/articles/_index.md" >}}' class="btn btn-primary btn-round btn-lg font-weight-bold umami--click--view-articles-researchers-page">View articles <i class="fas fa-arrow-circle-right"></i></a>
@@ -56,7 +56,7 @@ menu:
                 <div class="card card-contact card-raised">
                   <form role="form" id="contact-form1" method="post" action="https://api.gregory-ms.com/subscriptions/new/">
                     <div class="card-header text-center">
-                      <h4 class="card-title font-weight-bold">Weekly digest of relevant papers</h4>
+                      <h4 class="card-title font-weight-bold">Weekly digest of relevant papers on Multiple Sclerosis</h4>
                       <p class="p-3">Every tuesday, and email with the latest research filtered by Machine Learning and human review.</p>
                     </div>
                     <div class="card-body">
@@ -124,7 +124,7 @@ menu:
   </div>
   <div class="col-md-5 col-12 justify-content-center align-self-center">
   
-  <h3 class="title">The observatory</h3>
+  <h3 class="title">The Multiple Sclerosis observatory of current research</h3>
   
   <p class="lead font-weight-biold">On this page you will find a listing of promissing medicine and therapies with their associated articles and clinical trials.</p>
   

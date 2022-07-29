@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 import os 
 
 from pathlib import Path
+SITE_ID = 1
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,7 +27,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True 
 
-ALLOWED_HOSTS = ['0.0.0.0','localhost','167.71.38.42','api.'+ os.environ.get('DOMAIN_NAME'),'manage.'+ os.environ.get('DOMAIN_NAME')]
+ALLOWED_HOSTS = ['0.0.0.0','localhost','api.'+ os.environ.get('DOMAIN_NAME'),'manage.'+ os.environ.get('DOMAIN_NAME')]
 CSRF_TRUSTED_ORIGINS = ['https://api.'+ os.environ.get('DOMAIN_NAME'),'https://manage.'+ os.environ.get('DOMAIN_NAME')]
 
 # Application definition
@@ -41,6 +42,8 @@ INSTALLED_APPS = [
 	'django.contrib.sessions',
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
+	'django.contrib.sites',
+	'sitesettings',
 	'django_cron',
 	'db_maintenance',
 	'indexers',
@@ -55,6 +58,7 @@ MIDDLEWARE = [
 	'django.contrib.messages.middleware.MessageMiddleware',
 	'django.middleware.clickjacking.XFrameOptionsMiddleware',
 	'django.middleware.gzip.GZipMiddleware',
+	'django.contrib.sites.middleware.CurrentSiteMiddleware',
 ]
 
 ROOT_URLCONF = 'admin.urls'
