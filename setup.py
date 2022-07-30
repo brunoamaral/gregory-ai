@@ -6,7 +6,7 @@ import git
 import os
 import psycopg
 import requests
-import subprocess
+from subprocess import Popen,PIPE
 import sys
 import time
 
@@ -169,7 +169,7 @@ print('''
 ''')
 
 args = (which('hugo'), "mod", "get","-u")
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
+popen = Popen(args, stdout=PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
@@ -182,7 +182,7 @@ print('''
 ''')
 
 args = ("sudo","docker-compose","up","-d","db")
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
+popen = Popen(args, stdout=PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
@@ -226,37 +226,37 @@ print('''
 ''')
 
 args = ("sudo","docker-compose","up","-d","--build")
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
+popen = Popen(args, stdout=PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
 
-print('''
-####
-## Migrate PostGres schema (WIP, not working)
-####
+# print('''
+# ####
+# ## Migrate PostGres schema (WIP, not working)
+# ####
 
-Trying to run `python manage.py makemigrations && python manage.py migrate && python manage.py createsuperuser` to setup the postgres database and django.
-If this command fails
-''')
+# Trying to run `python manage.py makemigrations && python manage.py migrate && python manage.py createsuperuser` to setup the postgres database and django.
+# If this command fails
+# ''')
 
-args = ("sudo","docker","exec","-it","admin","./manage.py", "makemigrations")
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
-popen.wait()
-output = popen.stdout.read()
-print(output)
+# args = ("sudo","docker","exec","-it","admin","./manage.py", "makemigrations")
+# popen = Popen(args, universal_newlines=True, stdout=PIPE)
+# popen.wait()
+# output = popen.stdout.read()
+# print(output)
 
-args = ("sudo","docker","exec","-it","admin","./manage.py", "migrate")
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
-popen.wait()
-output = popen.stdout.read()
-print(output)
+# args = ("sudo","docker","exec","-it","admin","./manage.py", "migrate")
+# popen = Popen(args, universal_newlines=True, stdout=PIPE)
+# popen.wait()
+# output = popen.stdout.read()
+# print(output)
 
-args = ("sudo","docker","exec","-it","admin","./manage.py", "createsuperuser")
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
-popen.wait()
-output = popen.stdout.read()
-print(output)
+# args = ("sudo","docker","exec","-it","admin","./manage.py", "createsuperuser")
+# popen = Popen(args, universal_newlines=True, stdout=PIPE)
+# popen.wait()
+# output = popen.stdout.read()
+# print(output)
 
 
 print('''
@@ -265,6 +265,14 @@ print('''
 ####
 
 There are some things outside the scope of this setup script.
+
+## Setup Django
+
+1. run `sudo docker exec -it admin ./manage.py makemigrations`
+
+2. run `sudo docker exec -it admin ./manage.py migrate`
+
+3. run `sudo docker exec -it admin ./manage.py createsuperuser` 
 
 ## Setup Nginx
 
