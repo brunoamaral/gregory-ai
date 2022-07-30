@@ -4,10 +4,11 @@ from pathlib import Path
 from shutil import which
 import git
 import os
-import psycopg2
+import psycopg
 import requests
 import subprocess
 import sys
+import time
 
 load_dotenv()
 cwd = os.getcwd()
@@ -173,11 +174,54 @@ popen.wait()
 output = popen.stdout.read()
 print(output)
 
+print('''
+####
+## Running docker-compose up -d db
+## This will launch Postgres
+####
+''')
+
+args = ("sudo","docker-compose","up","-d","db")
+popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
+popen.wait()
+output = popen.stdout.read()
+print(output)
+
+print('''
+Give Postgres 20 seconds to finish setting up...
+''')
+for i in range(20,0,-1):
+    sys.stdout.write(str(i)+' ')
+    sys.stdout.flush()
+    time.sleep(1)
+
+
+print('''
+####
+## Creating the Metabase database
+####
+
+We assume that the `db` container is running and that we can access it from localhost:5432.
+''')
+
+db_host = 'localhost'
+postgres_user = os.getenv('POSTGRES_USER')
+postgres_password = os.getenv('POSTGRES_PASSWORD')
+postgres_db = os.getenv('POSTGRES_DB')
+
+try:
+	conn = psycopg.connect(dbname=postgres_db, user=postgres_user,host=db_host,password=postgres_password,autocommit=True)
+	cur = conn.cursor()
+	cur.execute("CREATE DATABASE metabase;")
+	conn.close()
+except:
+	print("I am unable to connect to postgres. Please create the `metabase` database manually and restart the containers.")
+
 
 print('''
 ####
 ## Running docker-compose up -d --build
-## This will launch Django, NodeRed, and Postgres
+## This will launch Django, NodeRed, and Metabase
 ####
 ''')
 
@@ -214,28 +258,6 @@ popen.wait()
 output = popen.stdout.read()
 print(output)
 
-
-print('''
-####
-## Creating the Metabase database
-####
-
-We assume that the `db` container is running and that we can access it from localhost:5432.
-''')
-
-db_host = 'localhost'
-postgres_user = os.getenv('POSTGRES_USER')
-postgres_password = os.getenv('POSTGRES_PASSWORD')
-postgres_db = os.getenv('POSTGRES_DB')
-
-try:
-	conn = psycopg2.connect("dbname='"+ postgres_db +"' user='" + postgres_user + "' host='" + db_host + "' password='" + postgres_password + "'")
-except:
-	print("I am unable to connect to the database")
-
-cur = conn.cursor()
-cur.execute("CREATE DATABASE metabase;")
-conn.close()
 
 print('''
 ####
