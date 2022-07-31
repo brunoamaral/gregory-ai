@@ -277,4 +277,47 @@ If you wish to apply Gregory to your own research subject, you will have to edit
 ## Email service
 
 We use mailgun to send emails, check the .env file for the settings and remember to configure your DNS.
+
+## Configure your RSS Sources
+
+Visit https://api.''' + os.getenv('DOMAIN_NAME') + '''/admin to configure
+
+5. **Setup** database maintenance tasks
+
+Gregory needs to run a series of tasks to fetch missing information and apply the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
+
+```cron
+*/5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
+```
+
+### Setup NodeRED by installing the required nodes
+
+You can visit the NodeRED editor and install the modules with the graphic interface to manage the pallete, or you can login to the container and run the following:
+
+```
+npm install node-red-contrib-cheerio && \
+npm install node-red-contrib-moment && \
+npm install node-red-contrib-sqlstring && \
+npm install node-red-dashboard && \
+npm install node-red-node-feedparser && \
+npm install node-red-node-sqlite && \
+npm install node-red-node-ui-list && \
+npm install node-red-contrib-persist && \
+npm install node-red-contrib-rss && \
+npm install node-red-contrib-meta \
+npm install node-red-contrib-join-wait \
+npm install node-red-contrib-postgresql \ 
+npm install node-red-contrib-re-postgres \
+npm install node-red-contrib-string 
+```
+
+### Configure and run hugo (optional)
+
+```bash
+cd hugo && npm i && cd ..;
+```
+
+In the `hugo` dir you will find a `config.toml` file that needs to be configured with your domain.
+
+**Build the website** by running `python3 ./build.py`.
 ''')

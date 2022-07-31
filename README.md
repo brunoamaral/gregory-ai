@@ -39,7 +39,7 @@ Rest API: <https://api.gregory-ms.com>
 - [ ] [Hugo](https://gohugo.io/)
 - [ ] [Mailgun](https://www.mailgun.com/) (optional)
 
-### Install
+### Installing Gregory
 
 1. **Install python dependencies locally**
 2. **Edit the .env file** to reflect your settins and credentials.
@@ -76,23 +76,15 @@ WEBSITE_PATH=/var/www/DOMAIN.com/
 
 
 
-3. **Execute** `python3 setup.py`. The script will check if you have all the requirements and run the Node-RED container.
-4. **Run the containers** `sudo docker-compose up -d` 
-5. **Create the database** for the metabase module (optional)
+3. **Execute** `python3 setup.py`. 
 
-6. **Install** django
+The script will check if you have all the requirements and run help you setup the containers
 
-Run the following inside the **admin** container:
+Once finished, login at <https://api.DOMAIN.TLD/admin> or wherever your reverse proxy is listening on.
 
-```bash
-python manage.py makemigrations
-python manage.py migrate
-python manage.py createsuperuser
-```
+4. **Configure** your RSS Sources in the Django admin page
 
-Now you can login at <https://YOUR-SUB.DOMAIN/admin> or wherever your reverse proxy is listening on.
-
-7. **Configure** database maintenance tasks
+5. **Setup** database maintenance tasks
 
 Gregory needs to run a series of tasks to fetch missing information and apply the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
 
@@ -102,7 +94,7 @@ Gregory needs to run a series of tasks to fetch missing information and apply th
 
 Remember to add a first subscriber and admin in http://YOUR-DOMAIN.com/admin/subscriptions/subscribers/ to avoid breaking the script: <https://github.com/brunoamaral/gregory/issues/179>.
 
-8. **Setup NodeRED** by installing the required nodes
+6. **Setup NodeRED** by installing the required nodes
 
 You can visit the NodeRED editor and install the modules with the graphic interface to manage the pallete, or you can login to the container and run the following:
 
@@ -123,7 +115,7 @@ npm install node-red-contrib-re-postgres \
 npm install node-red-contrib-string 
 ```
 
-9.  **Configure** hugo
+7.  **Install** hugo
 
 You need to install some node modules for hugo to build and process the css. Simply run this.
 
@@ -133,8 +125,7 @@ cd hugo && npm i && cd ..;
 
 In the `hugo` dir you will find a `config.toml` file that needs to be configured with your domain.
 
-
-10. **Build** by running `python3 ./build.py`.
+8. **Build** the website by running `python3 ./build.py`.
 
 ## How everything fits together
 
