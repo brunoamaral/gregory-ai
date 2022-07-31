@@ -92,30 +92,7 @@ Gregory needs to run a series of tasks to fetch missing information and apply th
 */5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
 ```
 
-Remember to add a first subscriber and admin in http://YOUR-DOMAIN.com/admin/subscriptions/subscribers/ to avoid breaking the script: <https://github.com/brunoamaral/gregory/issues/179>.
-
-6. **Setup NodeRED** by installing the required nodes
-
-You can visit the NodeRED editor and install the modules with the graphic interface to manage the pallete, or you can login to the container and run the following:
-
-```
-npm install node-red-contrib-cheerio && \
-npm install node-red-contrib-moment && \
-npm install node-red-contrib-sqlstring && \
-npm install node-red-dashboard && \
-npm install node-red-node-feedparser && \
-npm install node-red-node-sqlite && \
-npm install node-red-node-ui-list && \
-npm install node-red-contrib-persist && \
-npm install node-red-contrib-rss && \
-npm install node-red-contrib-meta \
-npm install node-red-contrib-join-wait \
-npm install node-red-contrib-postgresql \ 
-npm install node-red-contrib-re-postgres \
-npm install node-red-contrib-string 
-```
-
-7.  **Install** hugo
+1.  **Install** hugo
 
 You need to install some node modules for hugo to build and process the css. Simply run this.
 
@@ -125,13 +102,9 @@ cd hugo && npm i && cd ..;
 
 In the `hugo` dir you will find a `config.toml` file that needs to be configured with your domain.
 
-8. **Build** the website by running `python3 ./build.py`.
+7. **Build** the website by running `python3 ./build.py`.
 
 ## How everything fits together
-
-### Node-RED
-
-We use [Node-RED](https://nodered.org/) to collect articles from sources without an RSS. These flows need to be added manually and configured to write to the postres database. If your node-red container does not show a series of flows, import the `flows.json` file from this repository.
 
 ### Django and Postgres
 
@@ -156,6 +129,10 @@ The title email footer for these emails needs to be set in the Custom Settings s
 Django also allows you to add new sources from where to fetch articles. Take a look at `/admin/gregory/sources/ `
 
 ![image-20220619195841565](images/image-20220619195841565.png)
+
+### Node-RED
+
+We use [Node-RED](https://nodered.org/) to collect articles from sources without an RSS. These flows need to be added manually and configured to write to the postres database. If your node-red container does not show a series of flows, import the `flows.json` file from this repository.
 
 ### Metabase
 
@@ -195,9 +172,11 @@ As an alternative, you can configure Django to use any other email server.
 The following RSS feeds are configured in Django:
 
 1. Latest articles, `/feed/latest/articles/`
-2. Latest clinical trials, `/feed/latest/trials/`
-3. Latest relevant articles by Machine Learning, `/feed/machine-learning/`
-4. Twitter feed,  `/feed/twitter/`. This includes all relevant articles by manual selection and machine learning prediction. It's read by [Zapier](https://zapier.com/) so that we can post on twitter automatically. 
+2. Latest articles by subject, `/feed/articles/subject/<subject>/`
+3. Latest articles by category, `/feed/articles/category/<category>/`
+4. Latest clinical trials, `/feed/latest/trials/`
+5. Latest relevant articles by Machine Learning, `/feed/machine-learning/`
+6. Twitter feed,  `/feed/twitter/`. This includes all relevant articles by manual selection and machine learning prediction. It's read by [Zapier](https://zapier.com/) so that we can post on twitter automatically.
 
 ## How to update the Machine Learning Algorithms
 
