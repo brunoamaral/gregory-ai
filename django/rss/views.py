@@ -2,10 +2,13 @@ from django.shortcuts import render
 
 # Create your views here.
 from django.contrib.syndication.views import Feed
-from gregory.models import Articles, Trials
+from django.conf import settings
+from gregory.models import Articles, Trials, Sources, Categories
+
+
 
 class LatestArticlesFeed(Feed):
-	title = "Gregory MS - latest research articles"
+	title = "Latest research articles"
 	link = "/articles/"
 	description = "Real time results for research on Multiple Sclerosis."
 
@@ -20,10 +23,54 @@ class LatestArticlesFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://gregory-ms.com/articles/' + str(item.pk) + '/' 
+		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
+
+class ArticlesBySubjectFeed(Feed):
+	title = "Latest research articles by Subject"
+	link = "/articles/"
+	description = "Real time results for research on Multiple Sclerosis."
+	def get_object(self, request, subject):
+			subject = subject.replace('-', ' ')
+			subject = Sources.objects.filter(subject__iregex=subject)
+			return subject
+
+	def items(self, subject):
+		return Articles.objects.filter(source__in=subject).order_by('-discovery_date')[:5]
+
+	def item_title(self, item):
+		return item.title
+
+	def item_description(self, item):
+		return item.summary
+
+	# # item_link is only needed if NewsItem has no get_absolute_url method.
+	def item_link(self, item):
+		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
+
+class ArticlesByCategoryFeed(Feed):
+	title = "Latest research articles by Subject"
+	link = "/articles/"
+	description = "Real time results for research on Multiple Sclerosis."
+	def get_object(self, request, category):
+			category = category.replace('-', ' ')
+			category = Categories.objects.filter(category_name__iregex=category)
+			return category
+
+	def items(self, category):
+		return Articles.objects.filter(categories=category.first()).order_by('-discovery_date')[:5]
+
+	def item_title(self, item):
+		return item.title
+
+	def item_description(self, item):
+		return item.summary
+
+	# # item_link is only needed if NewsItem has no get_absolute_url method.
+	def item_link(self, item):
+		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
 
 class LatestTrialsFeed(Feed):
-	title = "Gregory MS - latest clinical trials"
+	title = "Latest clinical trials"
 	link = "/trials/"
 	description = "Real time results for research on Multiple Sclerosis."
 
@@ -38,10 +85,10 @@ class LatestTrialsFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://gregory-ms.com/trials/' + str(item.pk) + '/'
+		return 'https://'+ settings.WEBSITE_DOMAIN + '/trials/' + str(item.pk) + '/'
 
 class MachineLearningFeed(Feed):
-	title = "Gregory MS - Relevant articles by machine learning"
+	title = "Relevant articles by machine learning"
 	link = "/articles/"
 	description = "Real time results for research on Multiple Sclerosis."
 
@@ -56,12 +103,12 @@ class MachineLearningFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://gregory-ms.com/articles/' + str(item.pk) + '/' 
+		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
 
 class ToPredictFeed(Feed):
-	title = "Gregory MS - Relevant articles by machine learning"
+	title = "Relevant articles by machine learning"
 	link = "/articles/"
-	description = "Real time results for research on Multiple Sclerosis."
+	description = "Real time prediction results"
 
 	def items(self):
 		return Articles.objects.filter(ml_prediction_gnb=None)[:20]
@@ -74,14 +121,14 @@ class ToPredictFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://gregory-ms.com/articles/' + str(item.pk) + '/' 
+		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
 
 
 class Twitter(Feed):
 
-	title = "Gregory MS - post to twitter"
+	title = "post to twitter"
 	link = "/feed/twitter/"
-	description = "Real time results for relevant research on Multiple Sclerosis."
+	description = "Real time results for relevant research"
 
 	def items(self):
 		import itertools

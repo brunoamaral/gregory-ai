@@ -28,7 +28,7 @@ class SourceSerializer(serializers.HyperlinkedModelSerializer):
 class AuthorSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:
 		model = Authors
-		fields = ['given_name','family_name','ORCID']
+		fields = ['author_id','given_name','family_name','ORCID']
 
 class CountArticlesSerializer(serializers.ModelSerializer):
 	articles_count = serializers.SerializerMethodField()

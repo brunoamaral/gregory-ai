@@ -3,7 +3,7 @@ from django.db.models.functions import Length
 from django.db.models.query import QuerySet
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
-from gregory.models import Articles, Trials, Sources, Authors
+from gregory.models import Articles, Trials, Sources, Authors, Categories
 from rest_framework import viewsets, permissions, generics, filters
 import json
 
@@ -29,6 +29,35 @@ class RelatedArticles(viewsets.ModelViewSet):
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [filters.SearchFilter]
 	search_fields  = ['$noun_phrases']
+
+
+class ArticlesByCategory(viewsets.ModelViewSet):
+	"""
+	Search articles by the category field. Usage /articles/category/<category>/
+	"""
+	def get_queryset(self):
+		category = self.kwargs.get('category', None)
+		category = Categories.objects.filter(category_name__iregex=category)
+		return Articles.objects.filter(categories=category.first()).order_by('-article_id')
+
+	serializer_class = ArticleSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+
+class ArticlesBySubject(viewsets.ModelViewSet):
+	"""
+	Search articles by the subject field. Usage /articles/subject/<subject>/.
+	Subject should be lower case and spaces should be replaced by dashes, for example: Multiple Sclerosis becomes multiple-sclerosis.
+	"""
+	def get_queryset(self):
+		subject = self.kwargs.get('subject', None)
+		subject = subject.replace('-', ' ')
+		subject = Sources.objects.filter(subject__iregex=subject)
+		return Articles.objects.filter(source__in=subject).order_by('-article_id')
+
+	serializer_class = ArticleSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
 
 class AllArticleViewSet(generics.ListAPIView):
 	"""

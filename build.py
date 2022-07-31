@@ -1,4 +1,15 @@
 #!/usr/bin/python3
+
+#####
+# This script build a static site using https://gohugo.io/
+#
+# 1. Pull code from GitHub
+# 2. Generate markdown files from DB
+# 3. Generate zip files with DB dump
+# 4. Generate Metabase embed keys for dashboards
+# 5. Run hugo build
+#####
+
 from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
@@ -20,9 +31,6 @@ load_dotenv()
 
 # Set Variables
 GREGORY_DIR = os.getenv('GREGORY_DIR')
-
-# Set the API Server
-SERVER = os.getenv('SERVER')
 WEBSITE_PATH = os.getenv('WEBSITE_PATH')
 
 now = datetime.now()

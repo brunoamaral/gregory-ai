@@ -14,7 +14,7 @@ services:
     volumes:
       - ./postgres-data:/var/lib/postgresql/data
     networks:
-      - traefik_proxy
+      - gregory_network
 
   node-red:
     image: nodered/node-red:latest
@@ -29,7 +29,7 @@ services:
     ports:
       - "1880:1880"
     networks:
-      - traefik_proxy
+      - gregory_network
     volumes:
       - ./nodered-data:/data
 
@@ -48,7 +48,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DB_HOST=${DB_HOST}
+      - DB_HOST=db
       - DOMAIN_NAME=${DOMAIN_NAME}
       - EMAIL_DOMAIN=${EMAIL_DOMAIN}
       - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
@@ -64,7 +64,7 @@ services:
       - SECRET_KEY=${SECRET_KEY}
 
     networks:
-      - traefik_proxy
+      - gregory_network
     depends_on:
       - db
   metabase:
@@ -85,11 +85,11 @@ services:
     depends_on:
       - db
     networks:
-      - traefik_proxy
+      - gregory_network
 
 networks:
-  traefik_proxy:
+  gregory_network:
     external: false
-    name: traefik_proxy
+    name: gregory_network
   default:
     driver: bridge

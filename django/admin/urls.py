@@ -31,24 +31,29 @@ router.register(r'trials', TrialViewSet)
 
 
 urlpatterns = [
+	path('', include(router.urls)),
 	path('admin/', admin.site.urls),
 	path('api-auth/', include('rest_framework.urls')),
 	path('articles/all/', AllArticleViewSet.as_view()),
-	path('trials/all/', AllTrialViewSet.as_view()),
-	re_path('^articles/relevant/$', RelevantList.as_view()),
-	path('articles/prediction/none/', ArticlesPredictionNone.as_view()),
-	re_path('^articles/source/(?P<source>.+)/$', ArticlesBySourceList.as_view()),
-	re_path('^articles/author/(?P<author>.+)/$', ArticlesByAuthorList.as_view()),
-	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
-	re_path('^articles/unsent/$', UnsentList.as_view()),
-	path('articles/related/', RelatedArticles.as_view({'get': 'list'})),
 	path('articles/count/', ArticlesCount.as_view({'get': 'list'})),
-	path('', include(router.urls)),
+	path('articles/prediction/none/', ArticlesPredictionNone.as_view()),
+	path('articles/related/', RelatedArticles.as_view({'get': 'list'})),
+	path('feed/articles/prediction/none/', ToPredictFeed()),
+	path('feed/articles/subject/<str:subject>/', ArticlesBySubjectFeed()),
+	path('feed/articles/category/<str:category>/', ArticlesByCategoryFeed()),
 	path('feed/latest/articles/', LatestArticlesFeed()),
 	path('feed/latest/trials/', LatestTrialsFeed()),
 	path('feed/machine-learning/', MachineLearningFeed()),
-	path('feed/articles/prediction/none/', ToPredictFeed()),
 	path('feed/twitter/', Twitter()),
-	path('subscriptions/new/', subscribe_view)
+	path('subscriptions/new/', subscribe_view),
+	path('trials/all/', AllTrialViewSet.as_view()),
+	re_path('^articles/author/(?P<author>.+)/$', ArticlesByAuthorList.as_view()),
+	re_path('^articles/category/(?P<category>.+)/$', ArticlesByCategory.as_view({'get':'list'})),
+	re_path('^articles/relevant/$', RelevantList.as_view()),
+	re_path('^articles/source/(?P<source>.+)/$', ArticlesBySourceList.as_view()),
+	re_path('^articles/subject/(?P<subject>.+)/$', ArticlesBySubject.as_view({'get':'list'})),
+	re_path('^articles/unsent/$', UnsentList.as_view()),
+	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
+
 
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

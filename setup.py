@@ -4,14 +4,14 @@ from pathlib import Path
 from shutil import which
 import git
 import os
-import psycopg2
+import psycopg
 import requests
-import subprocess
+from subprocess import Popen,PIPE
 import sys
+import time
+import shutil
 
 load_dotenv()
-# TO DO: Run docker-compose up as root
-
 cwd = os.getcwd()
 github = "git@github.com:brunoamaral/gregory.git"
 
@@ -26,15 +26,15 @@ if env_file.is_file():
 	print("\N{check mark} Found .env file")
 else:
 	print('''
-	####
-	## Configure Gregory MS
-	####
+####
+## Configure Gregory MS
+####
 
-	Did not find a .env file, we need to set some configuration variables. If in doubt, you can input blank and configure the .env file later.
+Did not find a .env file, we need to set some configuration variables. If in doubt, you can input blank and configure the .env file later.
 	''')
 
 	configs = {
-	"DB_HOST" : os.getenv('DB_HOST'),
+	"DB_HOST" : 'db',
 	"DOMAIN_NAME" : os.getenv('DOMAIN_NAME'),
 	"EMAIL_DOMAIN" : os.getenv('EMAIL_DOMAIN'),
 	"EMAIL_HOST_PASSWORD" : os.getenv('EMAIL_HOST_PASSWORD'), 
@@ -42,8 +42,8 @@ else:
 	"EMAIL_HOST" : os.getenv('EMAIL_HOST'), 
 	"EMAIL_MAILGUN_API_URL" : os.getenv('EMAIL_MAILGUN_API_URL'),
 	"EMAIL_MAILGUN_API" : os.getenv('EMAIL_MAILGUN_API'),
-	"EMAIL_PORT" : os.getenv('EMAIL_PORT'), 
-	"EMAIL_USE_TLS" : os.getenv('EMAIL_USE_TLS'), 
+	"EMAIL_PORT" : 587, 
+	"EMAIL_USE_TLS" : 'true', 
 	"GREGORY_DIR" : os.getenv('GREGORY_DIR'),
 	"HUGO_PATH" : os.getenv('HUGO_PATH'),
 	"METABASE_SECRET_KEY" : os.getenv('METABASE_SECRET_KEY'),
@@ -52,7 +52,6 @@ else:
 	"POSTGRES_PASSWORD" : os.getenv('POSTGRES_PASSWORD'),
 	"POSTGRES_USER" : os.getenv('POSTGRES_USER'),
 	"SECRET_KEY" : os.getenv('SECRET_KEY'),
-	"SERVER" : os.getenv('SERVER'),
 	"WEBSITE_PATH" : os.getenv('WEBSITE_PATH'),
 	}
 
@@ -62,12 +61,15 @@ else:
 			configs[key] = value
 	with open('.env','a') as file:
 		for key,value in configs.items():
-			line = key + '=' + value + '\n'
+			line = key + '=' + str(value) + '\n'
 			file.write(line)
 		file.close()
 	print('Settings written to .env file, please check if everything looks correct.')
 	input("Press Enter to continue...")
+	print('Setting environment variables...')
 
+	for key,value in configs.items():
+		os.environ[key] = str(value)
 
 
 def is_tool(name):
@@ -167,50 +169,31 @@ print('''
 ''')
 
 args = (which('hugo'), "mod", "get","-u")
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
-popen.wait()
-output = popen.stdout.read()
-print(output)
-
-
-print('''
-####
-## Running docker-compose up -d --build
-## This will launch Django, NodeRed, and Postgres
-####
-''')
-
-args = ("sudo","docker-compose","up","-d","--build")
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
+popen = Popen(args, stdout=PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
 
 print('''
 ####
-## Migrate PostGres schema (WIP, not working)
+## Running docker-compose up -d db
+## This will launch Postgres
 ####
-
-Trying to run `python manage.py makemigrations && python manage.py migrate && python manage.py createsuperuser` to setup the postgres database and django.
-If this command fails
 ''')
-args = ("sudo","docker","exec","-it","admin","python manage.py makemigrations")
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
+
+args = ("sudo","docker-compose","up","-d","db")
+popen = Popen(args, stdout=PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
 
-args = ("sudo","docker","exec","-it","admin","python manage.py migrate")
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
-popen.wait()
-output = popen.stdout.read()
-print(output)
-
-args = ("sudo","docker","exec","-it","admin","python manage.py createsuperuser")
-popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
-popen.wait()
-output = popen.stdout.read()
-print(output)
+print('''
+Give Postgres 20 seconds to finish setting up...
+''')
+for i in range(20,0,-1):
+		sys.stdout.write(str(i)+' ')
+		sys.stdout.flush()
+		time.sleep(1)
 
 
 print('''
@@ -218,22 +201,74 @@ print('''
 ## Creating the Metabase database
 ####
 
-We assume that the `db` container is running.
+We assume that the `db` container is running and that we can access it from localhost:5432.
 ''')
 
-db_host = os.getenv('DB_HOST')
+db_host = 'localhost'
 postgres_user = os.getenv('POSTGRES_USER')
 postgres_password = os.getenv('POSTGRES_PASSWORD')
 postgres_db = os.getenv('POSTGRES_DB')
 
 try:
-	conn = psycopg2.connect("dbname='"+ postgres_db +"' user='" + postgres_user + "' host='" + db_host + "' password='" + postgres_password + "'")
+	conn = psycopg.connect(dbname=postgres_db, user=postgres_user,host=db_host,password=postgres_password,autocommit=True)
+	cur = conn.cursor()
+	cur.execute("CREATE DATABASE metabase;")
+	conn.close()
 except:
-	print("I am unable to connect to the database")
+	print("I am unable to connect to postgres. Please create the `metabase` database manually and restart the containers.")
 
-cur = conn.cursor()
-cur.execute("CREATE DATABASE metabase;")
-conn.close()
+def runshell(*args):
+		p = Popen(*args, shell=True, stdout=sys.stdout, stderr=sys.stderr, stdin=sys.stdin)
+		p.wait()
+
+print('''
+####
+## Running docker-compose up -d admin --build
+## This will launch Django
+####
+''')
+
+args = ("sudo","docker-compose","up","-d","admin","--build")
+popen = Popen(args, stdout=PIPE, universal_newlines=True)
+popen.wait()
+output = popen.stdout.read()
+print(output)
+
+print('''
+####
+## Running Django setup
+####
+''')
+		
+print('## `./manage.py makemigrations`')
+runshell('sudo docker exec -it admin ./manage.py makemigrations')
+print('## `./manage.py migrate`')
+runshell('sudo docker exec -it admin ./manage.py migrate')
+print('## `./manage.py createsuperuser`')
+runshell('sudo docker exec -it admin ./manage.py createsuperuser')
+
+print('''
+####
+## Installing Node-RED and nodes required by flows.json
+####
+''')
+args = ("sudo","docker-compose","up","-d","node-red")
+popen = Popen(args, stdout=PIPE, universal_newlines=True)
+popen.wait()
+output = popen.stdout.read()
+print(output)
+
+runshell('sudo docker exec -it node-red npm install {node-red-contrib-cheerio,node-red-contrib-moment,node-red-contrib-sqlstring,node-red-dashboard,node-red-node-feedparser,node-red-node-sqlite,node-red-node-ui-list,node-red-contrib-persist,node-red-contrib-rss,node-red-contrib-meta,node-red-contrib-join-wait,node-red-contrib-postgresql,node-red-contrib-re-postgres,node-red-contrib-string}')
+
+original = r'flows.json'
+target = r'nodered-data/flows.json'
+shutil.copyfile(original, target)
+
+print('### Restarting Node-RED container')
+runshell('sudo docker restart node-red')
+
+print('### Starting Metabase container')
+runshell('sudo docker-compose up -d metabase')
 
 print('''
 ####
@@ -246,13 +281,35 @@ There are some things outside the scope of this setup script.
 
 You can find an example configuration in `nginx-example-configuration/nginx.conf`.
 
-## Setup Node-RED flows to index content
+## Configure your Node-RED flows 
 
-Import the file flows.json into NodeRED. There is a a flow (a tab on Node-RED) for each data source that runs a search and saves the results in the database. 
+Visit https://nodered.''' + os.getenv('DOMAIN_NAME') + ''''/ or http://localhost:1880/ to check and configure Node-RED flows for your research. This is meant to help with sites that don't have an RSS Feed.
 
-If you wish to apply Gregory to your own research subject, you will have to delete these flows and configure your own. The ones present are just functional examples to guide you.
+## Configure your RSS Sources
+
+Visit https://api.''' + os.getenv('DOMAIN_NAME') + '''/admin or http://localhost:8000/ to configure your publication sources (journals, news websites, clinical trials, etc.)
+
 
 ## Email service
 
 We use mailgun to send emails, check the .env file for the settings and remember to configure your DNS.
+
+
+## Setup database maintenance tasks
+
+Gregory needs to run a series of tasks to fetch missing information and apply the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
+
+```cron
+*/5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
+```
+
+## Configure and run hugo (optional)
+
+```bash
+cd hugo && npm i && cd ..;
+```
+
+In the `hugo` dir you will find a `config.toml` file that needs to be configured with your domain.
+
+**Build the website** by running `python3 ./build.py`.
 ''')
