@@ -31,9 +31,6 @@ load_dotenv()
 
 # Set Variables
 GREGORY_DIR = os.getenv('GREGORY_DIR')
-
-# Set the API Server
-SERVER = os.getenv('SERVER')
 WEBSITE_PATH = os.getenv('WEBSITE_PATH')
 
 now = datetime.now()

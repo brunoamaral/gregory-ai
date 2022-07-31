@@ -51,7 +51,6 @@ else:
 	"POSTGRES_PASSWORD" : os.getenv('POSTGRES_PASSWORD'),
 	"POSTGRES_USER" : os.getenv('POSTGRES_USER'),
 	"SECRET_KEY" : os.getenv('SECRET_KEY'),
-	"SERVER" : os.getenv('SERVER'),
 	"WEBSITE_PATH" : os.getenv('WEBSITE_PATH'),
 	}
 
