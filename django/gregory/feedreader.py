@@ -2,15 +2,13 @@ import feedparser
 from dateutil.parser import parse
 from datetime import datetime
 from dotenv import load_dotenv
-import ssl
 from .models import Articles,Trials,Sources
 from django_cron import CronJobBase, Schedule
 import requests
-load_dotenv()
 
 
 class FeedReaderTask(CronJobBase):
-	RUN_EVERY_MINS = 30
+	RUN_EVERY_MINS = 1 #30
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'gregory.feedreadertask'    # a unique code
 
@@ -21,15 +19,15 @@ class FeedReaderTask(CronJobBase):
 		sources = Sources.objects.filter(method='rss',source_for='science paper')
 
 		for i in sources:
-			source_id = i[0]
-			source_name = i[1]
-			link = i[2]
+			source_name = i.name
+			source_for = i.source_for
+			link = i.link
 			d = None
 			if i.ignore_ssl == False:
 				d = feedparser.parse(link)
 			else:
 				response = requests.get(link, verify=False)
-				d = feedparser.parse(response)
+				d = feedparser.parse(response.content)
 			for entry in d['entries']:
 				summary = ''
 				if hasattr(entry,'summary_detail'):
@@ -65,14 +63,15 @@ class FeedReaderTask(CronJobBase):
 		sources = Sources.objects.filter(method='rss',source_for='trials')
 
 		for i in sources:
-			link = i[2]
-			source_id = i[0]
+			source_name = i.name
+			source_for = i.source_for
+			link = i.link
 			d = None
 			if i.ignore_ssl == False:
 				d = feedparser.parse(link)
 			else:
 				response = requests.get(link, verify=False)
-				d = feedparser.parse(response)
+				d = feedparser.parse(response.content)
 			for entry in d['entries']:
 				summary = ''
 				if hasattr(entry,'summary_detail'):
@@ -83,6 +82,6 @@ class FeedReaderTask(CronJobBase):
 				if published:
 					published = parse(entry['published'])
 				try:
-						trial = Trials.objects.create( discovery_date=datetime.now(), title = entry['title'], summary = summary, link = entry['link'], published_date = published, source = i) 
+					trial = Trials.objects.create( discovery_date=datetime.now(), title = entry['title'], summary = summary, link = entry['link'], published_date = published)
 				except:
-						pass
+					pass
