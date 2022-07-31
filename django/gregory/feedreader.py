@@ -2,11 +2,9 @@ import feedparser
 from dateutil.parser import parse
 from datetime import datetime
 from dotenv import load_dotenv
-import ssl
 from .models import Articles,Trials,Sources
 from django_cron import CronJobBase, Schedule
-
-load_dotenv()
+import requests
 
 
 class FeedReaderTask(CronJobBase):
@@ -24,7 +22,12 @@ class FeedReaderTask(CronJobBase):
 			source_name = i.name
 			source_for = i.source_for
 			link = i.link
-			d = feedparser.parse(link)
+			d = None
+			if i.ignore_ssl == False:
+				d = feedparser.parse(link)
+			else:
+				response = requests.get(link, verify=False)
+				d = feedparser.parse(response.content)
 			for entry in d['entries']:
 				summary = ''
 				if hasattr(entry,'summary_detail'):
@@ -59,14 +62,16 @@ class FeedReaderTask(CronJobBase):
 
 		sources = Sources.objects.filter(method='rss',source_for='trials')
 
-		# This disables the SSL verification. The only reason why we are doing this is because of issue #55 <https://github.com/brunoamaral/gregory/issues/55> 
-		if hasattr(ssl, '_create_unverified_context'):
-			ssl._create_default_https_context = ssl._create_unverified_context
-
 		for i in sources:
-			source_id = i.source_id
+			source_name = i.name
+			source_for = i.source_for
 			link = i.link
-			d = feedparser.parse(link)
+			d = None
+			if i.ignore_ssl == False:
+				d = feedparser.parse(link)
+			else:
+				response = requests.get(link, verify=False)
+				d = feedparser.parse(response.content)
 			for entry in d['entries']:
 				summary = ''
 				if hasattr(entry,'summary_detail'):
@@ -77,8 +82,6 @@ class FeedReaderTask(CronJobBase):
 				if published:
 					published = parse(entry['published'])
 				try:
-						trial = Trials.objects.create( discovery_date=datetime.now(), title = entry['title'], summary = summary, link = entry['link'], published_date = published, source = i) 
+					trial = Trials.objects.create( discovery_date=datetime.now(), title = entry['title'], summary = summary, link = entry['link'], published_date = published)
 				except:
-						pass
-
-		pass
+					pass
