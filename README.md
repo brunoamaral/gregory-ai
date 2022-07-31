@@ -42,7 +42,7 @@ Rest API: <https://api.gregory-ms.com>
 ### Installing Gregory
 
 1. **Install python dependencies locally**
-2. **Edit the .env file** to reflect your settins and credentials.
+2. **Edit the .env file** to reflect your settings and credentials.
 
 ```bash
 DOMAIN_NAME=DOMAIN.COM
