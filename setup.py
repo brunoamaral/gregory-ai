@@ -9,6 +9,7 @@ import requests
 from subprocess import Popen,PIPE
 import sys
 import time
+import shutil
 
 load_dotenv()
 cwd = os.getcwd()
@@ -25,11 +26,11 @@ if env_file.is_file():
 	print("\N{check mark} Found .env file")
 else:
 	print('''
-	####
-	## Configure Gregory MS
-	####
+####
+## Configure Gregory MS
+####
 
-	Did not find a .env file, we need to set some configuration variables. If in doubt, you can input blank and configure the .env file later.
+Did not find a .env file, we need to set some configuration variables. If in doubt, you can input blank and configure the .env file later.
 	''')
 
 	configs = {
@@ -216,39 +217,28 @@ try:
 except:
 	print("I am unable to connect to postgres. Please create the `metabase` database manually and restart the containers.")
 
+def runshell(*args):
+		p = Popen(*args, shell=True, stdout=sys.stdout, stderr=sys.stderr, stdin=sys.stdin)
+		p.wait()
 
 print('''
 ####
-## Running docker-compose up -d --build
-## This will launch Django, NodeRed, and Metabase
+## Running docker-compose up -d admin --build
+## This will launch Django
 ####
 ''')
 
-args = ("sudo","docker-compose","up","-d","--build")
+args = ("sudo","docker-compose","up","-d","admin","--build")
 popen = Popen(args, stdout=PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
-
-# print('''
-# ####
-# ## Migrate PostGres schema (WIP, not working)
-# ####
-
-# Trying to run `python manage.py makemigrations && python manage.py migrate && python manage.py createsuperuser` to setup the postgres database and django.
-# If this command fails
-# ''')
-
-
 
 print('''
 ####
 ## Running Django setup
 ####
 ''')
-def runshell(*args):
-		p = Popen(*args, shell=True, stdout=sys.stdout, stderr=sys.stderr, stdin=sys.stdin)
-		p.wait()
 		
 print('## `./manage.py makemigrations`')
 runshell('sudo docker exec -it admin ./manage.py makemigrations')
@@ -256,6 +246,29 @@ print('## `./manage.py migrate`')
 runshell('sudo docker exec -it admin ./manage.py migrate')
 print('## `./manage.py createsuperuser`')
 runshell('sudo docker exec -it admin ./manage.py createsuperuser')
+
+print('''
+####
+## Installing Node-RED and nodes required by flows.json
+####
+''')
+args = ("sudo","docker-compose","up","-d","node-red")
+popen = Popen(args, stdout=PIPE, universal_newlines=True)
+popen.wait()
+output = popen.stdout.read()
+print(output)
+
+runshell('sudo docker exec -it node-red npm install {node-red-contrib-cheerio,node-red-contrib-moment,node-red-contrib-sqlstring,node-red-dashboard,node-red-node-feedparser,node-red-node-sqlite,node-red-node-ui-list,node-red-contrib-persist,node-red-contrib-rss,node-red-contrib-meta,node-red-contrib-join-wait,node-red-contrib-postgresql,node-red-contrib-re-postgres,node-red-contrib-string}')
+
+original = r'flows.json'
+target = r'nodered-data/flows.json'
+shutil.copyfile(original, target)
+
+print('### Restarting Node-RED container')
+runshell('sudo docker restart node-red')
+
+print('### Starting Metabase container')
+runshell('sudo docker-compose up -d metabase')
 
 print('''
 ####
@@ -268,21 +281,21 @@ There are some things outside the scope of this setup script.
 
 You can find an example configuration in `nginx-example-configuration/nginx.conf`.
 
-## Setup Node-RED flows to index content
+## Configure your Node-RED flows 
 
-Import the file flows.json into NodeRED. There is a a flow (a tab on Node-RED) for each data source that runs a search and saves the results in the database. 
+Visit https://nodered.''' + os.getenv('DOMAIN_NAME') + ''''/ or http://localhost:1880/ to check and configure Node-RED flows for your research. This is meant to help with sites that don't have an RSS Feed.
 
-If you wish to apply Gregory to your own research subject, you will have to edit these flows or configure your own. The ones present are just functional examples to guide you.
+## Configure your RSS Sources
+
+Visit https://api.''' + os.getenv('DOMAIN_NAME') + '''/admin or http://localhost:8000/ to configure your publication sources (journals, news websites, clinical trials, etc.)
+
 
 ## Email service
 
 We use mailgun to send emails, check the .env file for the settings and remember to configure your DNS.
 
-## Configure your RSS Sources
 
-Visit https://api.''' + os.getenv('DOMAIN_NAME') + '''/admin to configure
-
-5. **Setup** database maintenance tasks
+## Setup database maintenance tasks
 
 Gregory needs to run a series of tasks to fetch missing information and apply the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
 
@@ -290,28 +303,7 @@ Gregory needs to run a series of tasks to fetch missing information and apply th
 */5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
 ```
 
-### Setup NodeRED by installing the required nodes
-
-You can visit the NodeRED editor and install the modules with the graphic interface to manage the pallete, or you can login to the container and run the following:
-
-```
-npm install node-red-contrib-cheerio && \
-npm install node-red-contrib-moment && \
-npm install node-red-contrib-sqlstring && \
-npm install node-red-dashboard && \
-npm install node-red-node-feedparser && \
-npm install node-red-node-sqlite && \
-npm install node-red-node-ui-list && \
-npm install node-red-contrib-persist && \
-npm install node-red-contrib-rss && \
-npm install node-red-contrib-meta \
-npm install node-red-contrib-join-wait \
-npm install node-red-contrib-postgresql \ 
-npm install node-red-contrib-re-postgres \
-npm install node-red-contrib-string 
-```
-
-### Configure and run hugo (optional)
+## Configure and run hugo (optional)
 
 ```bash
 cd hugo && npm i && cd ..;
