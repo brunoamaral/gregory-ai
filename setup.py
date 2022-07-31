@@ -191,9 +191,9 @@ print('''
 Give Postgres 20 seconds to finish setting up...
 ''')
 for i in range(20,0,-1):
-    sys.stdout.write(str(i)+' ')
-    sys.stdout.flush()
-    time.sleep(1)
+		sys.stdout.write(str(i)+' ')
+		sys.stdout.flush()
+		time.sleep(1)
 
 
 print('''
@@ -240,24 +240,23 @@ print(output)
 # If this command fails
 # ''')
 
-# args = ("sudo","docker","exec","-it","admin","./manage.py", "makemigrations")
-# popen = Popen(args, universal_newlines=True, stdout=PIPE)
-# popen.wait()
-# output = popen.stdout.read()
-# print(output)
 
-# args = ("sudo","docker","exec","-it","admin","./manage.py", "migrate")
-# popen = Popen(args, universal_newlines=True, stdout=PIPE)
-# popen.wait()
-# output = popen.stdout.read()
-# print(output)
 
-# args = ("sudo","docker","exec","-it","admin","./manage.py", "createsuperuser")
-# popen = Popen(args, universal_newlines=True, stdout=PIPE)
-# popen.wait()
-# output = popen.stdout.read()
-# print(output)
-
+print('''
+####
+## Running Django setup
+####
+''')
+def runshell(*args):
+		p = Popen(*args, shell=True, stdout=sys.stdout, stderr=sys.stderr, stdin=sys.stdin)
+		p.wait()
+		
+print('## `./manage.py makemigrations`')
+runshell('sudo docker exec -it admin ./manage.py makemigrations')
+print('## `./manage.py migrate`')
+runshell('sudo docker exec -it admin ./manage.py migrate')
+print('## `./manage.py createsuperuser`')
+runshell('sudo docker exec -it admin ./manage.py createsuperuser')
 
 print('''
 ####
@@ -265,14 +264,6 @@ print('''
 ####
 
 There are some things outside the scope of this setup script.
-
-## Setup Django
-
-1. run `sudo docker exec -it admin ./manage.py makemigrations`
-
-2. run `sudo docker exec -it admin ./manage.py migrate`
-
-3. run `sudo docker exec -it admin ./manage.py createsuperuser` 
 
 ## Setup Nginx
 
