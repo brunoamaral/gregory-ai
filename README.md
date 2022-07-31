@@ -92,7 +92,7 @@ Gregory needs to run a series of tasks to fetch missing information and apply th
 */5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
 ```
 
-1.  **Install** hugo
+6.  **Install** hugo
 
 You need to install some node modules for hugo to build and process the css. Simply run this.
 
