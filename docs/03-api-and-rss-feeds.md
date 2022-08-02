@@ -16,3 +16,17 @@
 
 ### Available API endpoints
 
+- Articles http://api.gregory-ms.com/articles/
+- Authors http://api.gregory-ms.com/authors/
+- Sources http://api.gregory-ms.com/sources/
+- Trials http://api.gregory-ms.com/trials/
+
+
+- Articles By Author https://api.gregory-ms.com/articles/author/<author_id>/
+- Articles By Category https://api.gregory-ms.com/articles/category/<category>/
+- Articles By Source https://api.gregory-ms.com/articles/articles/source/<source>/
+- Articles By Subject https://api.gregory-ms.com/articles/subject/<subject>/
+- Related Articles  https://api.gregory-ms.com/articles/related/ 
+- Relevant List https://api.gregory-ms.com/articles/relevant/
+- Trials By Source List https://api.gregory-ms.com/trials/source/<source>/
+- Unsent List https://api.gregory-ms.com/articles/unsent/
