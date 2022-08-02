@@ -1,5 +1,4 @@
-
-# Install 
+# Install
 
 ## Server Requirements
 
@@ -42,8 +41,6 @@ SECRET_KEY='Yeah well, you know, that is just, like, your DJANGO SECRET_KEY, man
 # This is the path where Hugo will write your static files
 WEBSITE_PATH=/var/www/DOMAIN.com/
 ```
-
-
 
 3. **Execute** `python3 setup.py`. 
 
