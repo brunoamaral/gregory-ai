@@ -59,8 +59,16 @@
         "id": "a38a4dce4a95b8aa",
         "type": "tab",
         "label": "!Journals.SagePub (not working)",
-        "disabled": false,
+        "disabled": true,
         "info": ""
+    },
+    {
+        "id": "d37ec6d25d6bf29f",
+        "type": "tab",
+        "label": "Tests",
+        "disabled": false,
+        "info": "",
+        "env": []
     },
     {
         "id": "acf883d8.84eea",
@@ -471,7 +479,7 @@
         "fieldType": "msg",
         "format": "sql",
         "syntax": "mustache",
-        "template": "INSERT INTO \"public\".\"articles\" (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (current_timestamp,'{{article.title}}','{{article.description}}','{{{article.url}}}',{{article.pubdate}},{{source}},NULL);",
+        "template": "INSERT INTO \"public\".\"articles\" (discovery_date,title,summary,link,published_date,source,relevant,kind)\nVALUES (current_timestamp,'{{article.title}}','{{article.description}}','{{{article.url}}}',{{article.pubdate}},{{source}},NULL,'science paper');",
         "output": "str",
         "x": 550,
         "y": 60,
@@ -544,7 +552,7 @@
         "fieldType": "msg",
         "format": "sql",
         "syntax": "mustache",
-        "template": "INSERT INTO \"public\".\"articles\" (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (current_timestamp,'{{article.title}}','{{article.description}}','{{{article.url}}}','{{article.pubdate}}',{{source}},NULL);",
+        "template": "INSERT INTO \"public\".\"articles\" (discovery_date,title,summary,link,published_date,source,relevant,kind)\nVALUES (current_timestamp,'{{article.title}}','{{article.description}}','{{{article.url}}}','{{article.pubdate}}',{{source}},NULL,'science paper');",
         "output": "str",
         "x": 550,
         "y": 120,
@@ -766,107 +774,6 @@
         ]
     },
     {
-        "id": "8e7b15889529f4f4",
-        "type": "meta",
-        "z": "fbfe0ebdc384782c",
-        "name": "meta",
-        "x": 250,
-        "y": 600,
-        "wires": [
-            [
-                "2eb17ee3869a3ccb"
-            ]
-        ]
-    },
-    {
-        "id": "5f084f05af68eb63",
-        "type": "change",
-        "z": "fbfe0ebdc384782c",
-        "name": "",
-        "rules": [
-            {
-                "t": "set",
-                "p": "article_id",
-                "pt": "msg",
-                "to": "payload.article_id",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "payload",
-                "pt": "msg",
-                "to": "payload.link",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 700,
-        "y": 520,
-        "wires": [
-            [
-                "8e7b15889529f4f4"
-            ]
-        ]
-    },
-    {
-        "id": "2eb17ee3869a3ccb",
-        "type": "moment",
-        "z": "fbfe0ebdc384782c",
-        "name": "",
-        "topic": "",
-        "input": "payload[\"article:published_time\"]",
-        "inputType": "msg",
-        "inTz": "Europe/Lisbon",
-        "adjAmount": 0,
-        "adjType": "days",
-        "adjDir": "add",
-        "format": "",
-        "locale": "POSIX",
-        "output": "datetime",
-        "outputType": "msg",
-        "outTz": "Europe/Lisbon",
-        "x": 420,
-        "y": 600,
-        "wires": [
-            [
-                "4b9666c990c578ed"
-            ]
-        ]
-    },
-    {
-        "id": "4b9666c990c578ed",
-        "type": "template",
-        "z": "fbfe0ebdc384782c",
-        "name": "",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "handlebars",
-        "syntax": "mustache",
-        "template": "update articles set published_date ='{{datetime}}' where article_id  = {{article_id}};",
-        "output": "str",
-        "x": 600,
-        "y": 600,
-        "wires": [
-            [
-                "b16686d1c962b161"
-            ]
-        ]
-    },
-    {
-        "id": "267995acb085440f",
-        "type": "comment",
-        "z": "fbfe0ebdc384782c",
-        "name": "populate missing values of published date",
-        "info": "",
-        "x": 200,
-        "y": 460,
-        "wires": []
-    },
-    {
         "id": "779a3abc3eba4715",
         "type": "postgres",
         "z": "fbfe0ebdc384782c",
@@ -887,126 +794,6 @@
         "wires": [
             [
                 "268867a5b0b100a8"
-            ]
-        ]
-    },
-    {
-        "id": "2d3019fc07d3ac5a",
-        "type": "inject",
-        "z": "fbfe0ebdc384782c",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "source",
-                "v": "1",
-                "vt": "num"
-            }
-        ],
-        "repeat": "7200",
-        "crontab": "",
-        "once": true,
-        "onceDelay": "180",
-        "topic": "",
-        "payload": "select article_id,link from articles where source = 1 and published_date is null order by article_id desc limit 10;",
-        "payloadType": "str",
-        "x": 110,
-        "y": 520,
-        "wires": [
-            [
-                "e54489b7e4692638"
-            ]
-        ]
-    },
-    {
-        "id": "e54489b7e4692638",
-        "type": "postgres",
-        "z": "fbfe0ebdc384782c",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 240,
-        "y": 520,
-        "wires": [
-            [
-                "a4e9f736958acfd4"
-            ]
-        ]
-    },
-    {
-        "id": "a4e9f736958acfd4",
-        "type": "split",
-        "z": "fbfe0ebdc384782c",
-        "name": "",
-        "splt": "\\n",
-        "spltType": "str",
-        "arraySplt": 1,
-        "arraySpltType": "len",
-        "stream": false,
-        "addname": "article.key",
-        "x": 370,
-        "y": 520,
-        "wires": [
-            [
-                "70886bc51fe28e28"
-            ]
-        ]
-    },
-    {
-        "id": "b16686d1c962b161",
-        "type": "postgres",
-        "z": "fbfe0ebdc384782c",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 760,
-        "y": 600,
-        "wires": [
-            []
-        ]
-    },
-    {
-        "id": "70886bc51fe28e28",
-        "type": "delay",
-        "z": "fbfe0ebdc384782c",
-        "name": "",
-        "pauseType": "rate",
-        "timeout": "5",
-        "timeoutUnits": "seconds",
-        "rate": "1",
-        "nbRateUnits": "1",
-        "rateUnits": "second",
-        "randomFirst": "1",
-        "randomLast": "5",
-        "randomUnits": "seconds",
-        "drop": false,
-        "allowrate": false,
-        "outputs": 1,
-        "x": 530,
-        "y": 520,
-        "wires": [
-            [
-                "5f084f05af68eb63"
             ]
         ]
     },
@@ -1141,11 +928,12 @@
         "arraySpltType": "len",
         "stream": false,
         "addname": "article.key",
-        "x": 370,
+        "x": 250,
         "y": 120,
         "wires": [
             [
-                "870f0c26744f2ad9"
+                "870f0c26744f2ad9",
+                "280de5f5274a4d6d"
             ]
         ]
     },
@@ -1168,12 +956,12 @@
         "type": "cheerio",
         "z": "7cb4a59faa141113",
         "name": "",
-        "tag": "li.c-list-group__item",
+        "tag": "article.c-listing__content",
         "ret": "object",
         "as": "single",
         "map": [
             {
-                "search": "h3.c-listing__title",
+                "search": "article > h3",
                 "ret": "text",
                 "replace": "title",
                 "attr": ""
@@ -1203,7 +991,7 @@
         "lowerCaseAttributeNames": true,
         "recognizeCDATA": false,
         "recognizeSelfClosing": false,
-        "x": 500,
+        "x": 510,
         "y": 60,
         "wires": [
             [
@@ -1226,8 +1014,8 @@
         "checkall": "true",
         "repair": false,
         "outputs": 1,
-        "x": 490,
-        "y": 120,
+        "x": 170,
+        "y": 160,
         "wires": [
             [
                 "eabccdc8c2689377"
@@ -1253,8 +1041,8 @@
         "from": "",
         "to": "",
         "reg": false,
-        "x": 640,
-        "y": 120,
+        "x": 620,
+        "y": 160,
         "wires": [
             [
                 "abb572a1fcee3c9a"
@@ -1315,7 +1103,7 @@
         "type": "debug",
         "z": "7cb4a59faa141113",
         "name": "",
-        "active": true,
+        "active": false,
         "tosidebar": true,
         "console": true,
         "tostatus": false,
@@ -1323,8 +1111,8 @@
         "targetType": "msg",
         "statusVal": "",
         "statusType": "auto",
-        "x": 700,
-        "y": 260,
+        "x": 1000,
+        "y": 120,
         "wires": []
     },
     {
@@ -1541,201 +1329,6 @@
         ]
     },
     {
-        "id": "9486b3b0e8707d47",
-        "type": "inject",
-        "z": "aeea6501e40186b3",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "source",
-                "v": "7",
-                "vt": "num"
-            }
-        ],
-        "repeat": "3600",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "SELECT * FROM articles  WHERE source = 7 AND summary ='not available' ;",
-        "payloadType": "str",
-        "x": 110,
-        "y": 380,
-        "wires": [
-            [
-                "a279f0697d268269"
-            ]
-        ]
-    },
-    {
-        "id": "7787f23ea85e1aa2",
-        "type": "comment",
-        "z": "aeea6501e40186b3",
-        "name": "ADD PEDro SUMMARY",
-        "info": "",
-        "x": 160,
-        "y": 340,
-        "wires": []
-    },
-    {
-        "id": "1d0c57bab91a7c65",
-        "type": "split",
-        "z": "aeea6501e40186b3",
-        "name": "",
-        "splt": "\\n",
-        "spltType": "str",
-        "arraySplt": 1,
-        "arraySpltType": "len",
-        "stream": false,
-        "addname": "",
-        "x": 410,
-        "y": 420,
-        "wires": [
-            [
-                "50170b360e492ebd"
-            ]
-        ]
-    },
-    {
-        "id": "07e60c04730d19f7",
-        "type": "http request",
-        "z": "aeea6501e40186b3",
-        "name": "PEDro",
-        "method": "GET",
-        "ret": "txt",
-        "paytoqs": "ignore",
-        "url": "",
-        "tls": "",
-        "persist": false,
-        "proxy": "",
-        "authType": "",
-        "x": 830,
-        "y": 420,
-        "wires": [
-            [
-                "46f2cedc759c173a"
-            ]
-        ]
-    },
-    {
-        "id": "ab968b8c763cae69",
-        "type": "change",
-        "z": "aeea6501e40186b3",
-        "name": "set fields",
-        "rules": [
-            {
-                "t": "set",
-                "p": "url",
-                "pt": "msg",
-                "to": "payload.link",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "article_id",
-                "pt": "msg",
-                "to": "payload.article_id",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "rejectUnauthorized",
-                "pt": "msg",
-                "to": "false",
-                "tot": "bool"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 700,
-        "y": 420,
-        "wires": [
-            [
-                "07e60c04730d19f7"
-            ]
-        ]
-    },
-    {
-        "id": "50170b360e492ebd",
-        "type": "delay",
-        "z": "aeea6501e40186b3",
-        "name": "",
-        "pauseType": "rate",
-        "timeout": "5",
-        "timeoutUnits": "seconds",
-        "rate": "1",
-        "nbRateUnits": "1",
-        "rateUnits": "second",
-        "randomFirst": "1",
-        "randomLast": "5",
-        "randomUnits": "seconds",
-        "drop": false,
-        "allowrate": false,
-        "outputs": 1,
-        "x": 550,
-        "y": 420,
-        "wires": [
-            [
-                "ab968b8c763cae69"
-            ]
-        ]
-    },
-    {
-        "id": "ee08bc3cf4604953",
-        "type": "split",
-        "z": "aeea6501e40186b3",
-        "name": "",
-        "splt": "\\n",
-        "spltType": "str",
-        "arraySplt": 1,
-        "arraySpltType": "len",
-        "stream": false,
-        "addname": "",
-        "x": 390,
-        "y": 500,
-        "wires": [
-            [
-                "556ed0c52fa3cc91"
-            ]
-        ]
-    },
-    {
-        "id": "46f2cedc759c173a",
-        "type": "cheerio",
-        "z": "aeea6501e40186b3",
-        "name": "",
-        "tag": "#search-content > table > tbody",
-        "ret": "text",
-        "as": "single",
-        "map": [
-            {
-                "search": "",
-                "ret": "text",
-                "replace": "",
-                "attr": ""
-            }
-        ],
-        "xmlMode": false,
-        "decodeEntities": false,
-        "lowerCaseTags": false,
-        "lowerCaseAttributeNames": false,
-        "recognizeCDATA": false,
-        "recognizeSelfClosing": false,
-        "x": 170,
-        "y": 500,
-        "wires": [
-            [
-                "ee08bc3cf4604953"
-            ]
-        ]
-    },
-    {
         "id": "39d23195a734d98f",
         "type": "postgres",
         "z": "aeea6501e40186b3",
@@ -1760,128 +1353,11 @@
         ]
     },
     {
-        "id": "38a92eab1a1e691a",
-        "type": "postgres",
-        "z": "aeea6501e40186b3",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 260,
-        "y": 420,
-        "wires": [
-            [
-                "1d0c57bab91a7c65"
-            ]
-        ]
-    },
-    {
-        "id": "cf83235e7f5f0d21",
-        "type": "postgres",
-        "z": "aeea6501e40186b3",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": false,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": false,
-        "x": 980,
-        "y": 500,
-        "wires": []
-    },
-    {
-        "id": "556ed0c52fa3cc91",
-        "type": "string",
-        "z": "aeea6501e40186b3",
-        "name": "",
-        "methods": [
-            {
-                "name": "trim",
-                "params": []
-            },
-            {
-                "name": "collapseWhitespace",
-                "params": []
-            }
-        ],
-        "prop": "payload",
-        "propout": "payload",
-        "object": "msg",
-        "objectout": "msg",
-        "x": 510,
-        "y": 500,
-        "wires": [
-            [
-                "c29af70ef2c54589"
-            ]
-        ]
-    },
-    {
-        "id": "c29af70ef2c54589",
-        "type": "change",
-        "z": "aeea6501e40186b3",
-        "name": "",
-        "rules": [
-            {
-                "t": "set",
-                "p": "payload",
-                "pt": "msg",
-                "to": "$replace(payload, \"'\", \"''\")\t",
-                "tot": "jsonata"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 670,
-        "y": 500,
-        "wires": [
-            [
-                "b64d0da950e809a3"
-            ]
-        ]
-    },
-    {
-        "id": "b64d0da950e809a3",
-        "type": "template",
-        "z": "aeea6501e40186b3",
-        "name": "",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "handlebars",
-        "syntax": "mustache",
-        "template": "UPDATE articles\nset summary = '{{{payload}}}'\nwhere article_id = {{article_id}};",
-        "output": "str",
-        "x": 840,
-        "y": 500,
-        "wires": [
-            [
-                "cf83235e7f5f0d21"
-            ]
-        ]
-    },
-    {
         "id": "44e9aa6db539eec0",
         "type": "debug",
         "z": "aeea6501e40186b3",
         "name": "",
-        "active": true,
+        "active": false,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
@@ -1891,25 +1367,6 @@
         "x": 920,
         "y": 220,
         "wires": []
-    },
-    {
-        "id": "a279f0697d268269",
-        "type": "template",
-        "z": "aeea6501e40186b3",
-        "name": "",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "sql",
-        "syntax": "mustache",
-        "template": "SELECT \"public\".\"articles\".\"article_id\" AS \"article_id\", \"public\".\"articles\".\"title\" AS \"title\", \"public\".\"articles\".\"summary\" AS \"summary\", \"public\".\"articles\".\"link\" AS \"link\", \"public\".\"articles\".\"published_date\" AS \"published_date\", \"public\".\"articles\".\"source\" AS \"source\", \"public\".\"articles\".\"relevant\" AS \"relevant\", \"public\".\"articles\".\"sent_to_admin\" AS \"sent_to_admin\", \"public\".\"articles\".\"ml_prediction_gnb\" AS \"ml_prediction_gnb\", \"public\".\"articles\".\"ml_prediction_lr\" AS \"ml_prediction_lr\", \"public\".\"articles\".\"sent_to_subscribers\" AS \"sent_to_subscribers\", \"public\".\"articles\".\"discovery_date\" AS \"discovery_date\", \"public\".\"articles\".\"sent_to_twitter\" AS \"sent_to_twitter\", \"public\".\"articles\".\"noun_phrases\" AS \"noun_phrases\"\nFROM \"public\".\"articles\"\nWHERE (\"public\".\"articles\".\"summary\" IS NULL\n    OR \"public\".\"articles\".\"summary\" = '') and \"public\".\"articles\".\"source\" = 7\n\n",
-        "output": "str",
-        "x": 120,
-        "y": 420,
-        "wires": [
-            [
-                "38a92eab1a1e691a"
-            ]
-        ]
     },
     {
         "id": "16c74b04ea56243b",
@@ -2128,6 +1585,7 @@
         "id": "0857be770f1bbdad",
         "type": "inject",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "props": [
             {
@@ -2158,6 +1616,7 @@
         "id": "ed8d431381f046f4",
         "type": "comment",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "ADD Scielo SUMMARY",
         "info": "",
         "x": 150,
@@ -2168,6 +1627,7 @@
         "id": "0d491f35d51cd040",
         "type": "split",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "splt": "\\n",
         "spltType": "str",
@@ -2187,6 +1647,7 @@
         "id": "f63d6870bd2f82b7",
         "type": "http request",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "Scielo",
         "method": "GET",
         "ret": "txt",
@@ -2208,6 +1669,7 @@
         "id": "647d5f2d255e7a1f",
         "type": "change",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "set fields",
         "rules": [
             {
@@ -2249,6 +1711,7 @@
         "id": "083e26adaa6673bf",
         "type": "html",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "property": "payload",
         "outproperty": "payload",
@@ -2267,6 +1730,7 @@
         "id": "fe2acbafa53382f9",
         "type": "switch",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "property": "payload.name",
         "propertyType": "msg",
@@ -2292,6 +1756,7 @@
         "id": "186cdb8de3d342d0",
         "type": "template",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "field": "payload",
         "fieldType": "msg",
@@ -2311,6 +1776,7 @@
         "id": "50e111cc807aa4be",
         "type": "delay",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "pauseType": "rate",
         "timeout": "5",
@@ -2336,6 +1802,7 @@
         "id": "1916b8ea7d656f6b",
         "type": "debug",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "active": false,
         "tosidebar": true,
@@ -2353,6 +1820,7 @@
         "id": "7d5369c36ff1a2af",
         "type": "meta",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "meta",
         "x": 990,
         "y": 540,
@@ -2366,6 +1834,7 @@
         "id": "1fb6ccd808217d5e",
         "type": "change",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "rules": [
             {
@@ -2400,6 +1869,7 @@
         "id": "ecc10206620eecfd",
         "type": "moment",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "topic": "",
         "input": "payload.citation_publication_date",
@@ -2425,6 +1895,7 @@
         "id": "ce71281f9a00917c",
         "type": "template",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "field": "payload",
         "fieldType": "msg",
@@ -2445,6 +1916,7 @@
         "id": "3af3349113dc5323",
         "type": "comment",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "populate missing values of published date",
         "info": "",
         "x": 220,
@@ -2455,6 +1927,7 @@
         "id": "b5d58352b3464af3",
         "type": "inject",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "props": [
             {
@@ -2484,6 +1957,7 @@
         "id": "7d5bf28bdcbfe1a3",
         "type": "switch",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "property": "payload.citation_publication_date",
         "propertyType": "msg",
@@ -2519,6 +1993,7 @@
         "id": "a523665ed44e244f",
         "type": "split",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "splt": "\\n",
         "spltType": "str",
@@ -2538,6 +2013,7 @@
         "id": "b273368dd3741e5c",
         "type": "delay",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "pauseType": "rate",
         "timeout": "5",
@@ -2563,6 +2039,7 @@
         "id": "38475ff80432a228",
         "type": "moment",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "topic": "",
         "input": "payload.citation_date",
@@ -2612,6 +2089,7 @@
         "id": "b9a906dcf5056c64",
         "type": "postgres",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "postgresdb": "857f821ab371a10e",
         "name": "",
         "output": true,
@@ -2636,6 +2114,7 @@
         "id": "53ef99b338989fea",
         "type": "change",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "rules": [
             {
@@ -2663,6 +2142,7 @@
         "id": "fdd98779d3ee6ecc",
         "type": "postgres",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "postgresdb": "857f821ab371a10e",
         "name": "",
         "output": true,
@@ -2685,6 +2165,7 @@
         "id": "96a066f99627e707",
         "type": "postgres",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "postgresdb": "857f821ab371a10e",
         "name": "",
         "output": true,
@@ -2709,6 +2190,7 @@
         "id": "28285f6183cc8235",
         "type": "postgres",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "postgresdb": "857f821ab371a10e",
         "name": "",
         "output": true,
@@ -2747,6 +2229,7 @@
         "id": "8ecb9d6ec8fa64e7",
         "type": "template",
         "z": "d9d95b7db82b44be",
+        "d": true,
         "name": "",
         "field": "payload",
         "fieldType": "msg",
@@ -2771,7 +2254,7 @@
         "ret": "txt",
         "paytoqs": "ignore",
         "url": "https://www.thelancet.com/action/doSearch?text1=%22Multiple+Sclerosis%22+OR+%22autoimmune+encephalomyelitis%22+OR+encephalomyelitis+OR+%22immune+tolerance%22+OR+myelin&field1=AbstractTitleKeywordFilterField&startPage=0&sortBy=Earliest",
-        "tls": "",
+        "tls": "e3876559.c845b8",
         "persist": false,
         "proxy": "",
         "authType": "",
@@ -2780,7 +2263,8 @@
         "y": 60,
         "wires": [
             [
-                "62b4fe6ef6a3b08b"
+                "62b4fe6ef6a3b08b",
+                "b18fbe614c0c97da"
             ]
         ]
     },
@@ -2788,6 +2272,7 @@
         "id": "58630f8e493b6e27",
         "type": "inject",
         "z": "4e972c81ceb89218",
+        "d": true,
         "name": "",
         "props": [
             {
@@ -2799,18 +2284,19 @@
                 "vt": "num"
             }
         ],
-        "repeat": "10800",
+        "repeat": "",
         "crontab": "",
-        "once": true,
+        "once": false,
         "onceDelay": "67",
         "topic": "",
         "payload": "",
         "payloadType": "date",
-        "x": 130,
+        "x": 120,
         "y": 60,
         "wires": [
             [
-                "5ac626db3ff4e0e2"
+                "5ac626db3ff4e0e2",
+                "b18fbe614c0c97da"
             ]
         ]
     },
@@ -2983,307 +2469,6 @@
         ]
     },
     {
-        "id": "36c51afaea3bb051",
-        "type": "comment",
-        "z": "4e972c81ceb89218",
-        "name": "ADD The Lancet SUMMARY",
-        "info": "",
-        "x": 160,
-        "y": 360,
-        "wires": []
-    },
-    {
-        "id": "cdbd73e1055c51d1",
-        "type": "split",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "splt": "\\n",
-        "spltType": "str",
-        "arraySplt": 1,
-        "arraySpltType": "len",
-        "stream": false,
-        "addname": "",
-        "x": 570,
-        "y": 460,
-        "wires": [
-            [
-                "5f974a9997cc0375"
-            ]
-        ]
-    },
-    {
-        "id": "a33c5196ca5555e0",
-        "type": "http request",
-        "z": "4e972c81ceb89218",
-        "name": "The Lancet",
-        "method": "GET",
-        "ret": "txt",
-        "paytoqs": "ignore",
-        "url": "",
-        "tls": "e3876559.c845b8",
-        "persist": false,
-        "proxy": "",
-        "authType": "",
-        "senderr": false,
-        "x": 1030,
-        "y": 460,
-        "wires": [
-            [
-                "a0d44014f16be501",
-                "0ace08793d06e047"
-            ]
-        ]
-    },
-    {
-        "id": "a0d44014f16be501",
-        "type": "html",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "property": "payload",
-        "outproperty": "payload",
-        "tag": "meta",
-        "ret": "attr",
-        "as": "multi",
-        "x": 650,
-        "y": 520,
-        "wires": [
-            [
-                "6f3566a185e26cc8"
-            ]
-        ]
-    },
-    {
-        "id": "93eaa9c3a6e3acad",
-        "type": "change",
-        "z": "4e972c81ceb89218",
-        "name": "set fields",
-        "rules": [
-            {
-                "t": "set",
-                "p": "url",
-                "pt": "msg",
-                "to": "payload.link",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "article_id",
-                "pt": "msg",
-                "to": "payload.article_id",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 880,
-        "y": 460,
-        "wires": [
-            [
-                "a33c5196ca5555e0"
-            ]
-        ]
-    },
-    {
-        "id": "6f3566a185e26cc8",
-        "type": "switch",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "property": "payload.name",
-        "propertyType": "msg",
-        "rules": [
-            {
-                "t": "eq",
-                "v": "citation_abstract",
-                "vt": "str"
-            }
-        ],
-        "checkall": "true",
-        "repair": false,
-        "outputs": 1,
-        "x": 790,
-        "y": 520,
-        "wires": [
-            [
-                "1652dc1ce5310899"
-            ]
-        ]
-    },
-    {
-        "id": "5f974a9997cc0375",
-        "type": "delay",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "pauseType": "rate",
-        "timeout": "5",
-        "timeoutUnits": "seconds",
-        "rate": "1",
-        "nbRateUnits": "30",
-        "rateUnits": "second",
-        "randomFirst": "1",
-        "randomLast": "5",
-        "randomUnits": "seconds",
-        "drop": false,
-        "allowrate": false,
-        "outputs": 1,
-        "x": 720,
-        "y": 460,
-        "wires": [
-            [
-                "93eaa9c3a6e3acad"
-            ]
-        ]
-    },
-    {
-        "id": "b317793505c7aee8",
-        "type": "change",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "rules": [
-            {
-                "t": "set",
-                "p": "article_id",
-                "pt": "msg",
-                "to": "payload.article_id",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "payload",
-                "pt": "msg",
-                "to": "payload.link",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "url",
-                "pt": "msg",
-                "to": "payload",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 140,
-        "y": 720,
-        "wires": [
-            [
-                "1760feaa6eb2d6bc"
-            ]
-        ]
-    },
-    {
-        "id": "4fa06f29b9f04c49",
-        "type": "template",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "handlebars",
-        "syntax": "mustache",
-        "template": "update articles set published_date ='{{payload}}' where article_id  = {{article_id}};",
-        "output": "str",
-        "x": 440,
-        "y": 780,
-        "wires": [
-            [
-                "589e96c954db4745"
-            ]
-        ]
-    },
-    {
-        "id": "8fb82ce2d5ba4e36",
-        "type": "comment",
-        "z": "4e972c81ceb89218",
-        "name": "populate missing values of published date. working",
-        "info": "",
-        "x": 230,
-        "y": 560,
-        "wires": []
-    },
-    {
-        "id": "1760feaa6eb2d6bc",
-        "type": "http request",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "method": "GET",
-        "ret": "txt",
-        "paytoqs": "ignore",
-        "url": "",
-        "tls": "e3876559.c845b8",
-        "persist": false,
-        "proxy": "",
-        "authType": "",
-        "senderr": false,
-        "x": 310,
-        "y": 720,
-        "wires": [
-            [
-                "ec1c3cb81b3302c3"
-            ]
-        ]
-    },
-    {
-        "id": "ec1c3cb81b3302c3",
-        "type": "cheerio",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "tag": "span.article-header__publish-date__value",
-        "ret": "html",
-        "as": "single",
-        "map": [
-            {
-                "search": "",
-                "ret": "text",
-                "replace": "published_date",
-                "attr": ""
-            }
-        ],
-        "xmlMode": false,
-        "decodeEntities": false,
-        "lowerCaseTags": false,
-        "lowerCaseAttributeNames": false,
-        "recognizeCDATA": false,
-        "recognizeSelfClosing": false,
-        "x": 580,
-        "y": 720,
-        "wires": [
-            [
-                "a5403439eadceab0"
-            ]
-        ]
-    },
-    {
-        "id": "a5403439eadceab0",
-        "type": "moment",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "topic": "",
-        "input": "payload[0]",
-        "inputType": "msg",
-        "inTz": "Europe/Lisbon",
-        "adjAmount": 0,
-        "adjType": "days",
-        "adjDir": "add",
-        "format": "",
-        "locale": "POSIX",
-        "output": "",
-        "outputType": "msg",
-        "outTz": "Europe/Lisbon",
-        "x": 240,
-        "y": 780,
-        "wires": [
-            [
-                "4fa06f29b9f04c49"
-            ]
-        ]
-    },
-    {
         "id": "e2987f9bbb5e2e06",
         "type": "postgres",
         "z": "4e972c81ceb89218",
@@ -3314,261 +2499,14 @@
         "name": "",
         "active": true,
         "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 710,
-        "y": 140,
-        "wires": []
-    },
-    {
-        "id": "d461d643987ff0e0",
-        "type": "inject",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "source",
-                "v": "11",
-                "vt": "num"
-            }
-        ],
-        "repeat": "7200",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "",
-        "payloadType": "str",
-        "x": 110,
-        "y": 460,
-        "wires": [
-            [
-                "ca34decd5e586cc4"
-            ]
-        ]
-    },
-    {
-        "id": "ce7d7cf23cc43b47",
-        "type": "postgres",
-        "z": "4e972c81ceb89218",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 380,
-        "y": 460,
-        "wires": [
-            [
-                "cdbd73e1055c51d1"
-            ]
-        ]
-    },
-    {
-        "id": "1652dc1ce5310899",
-        "type": "template",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "handlebars",
-        "syntax": "mustache",
-        "template": "UPDATE articles\nset summary = '{{{payload.content}}}'\nwhere article_id = {{article_id}};",
-        "output": "str",
-        "x": 920,
-        "y": 520,
-        "wires": [
-            [
-                "5b4890259355ecb0"
-            ]
-        ]
-    },
-    {
-        "id": "5b4890259355ecb0",
-        "type": "postgres",
-        "z": "4e972c81ceb89218",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 1060,
-        "y": 520,
-        "wires": [
-            []
-        ]
-    },
-    {
-        "id": "c40031a96fa96a99",
-        "type": "inject",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "SELECT \tarticle_id, \tlink FROM \tarticles WHERE \tsource = 11 \tAND published_date IS NULL ORDER BY \tarticle_id DESC LIMIT 10;",
-        "payloadType": "str",
-        "x": 130,
-        "y": 620,
-        "wires": [
-            [
-                "f1468e3b08df7035"
-            ]
-        ]
-    },
-    {
-        "id": "f1468e3b08df7035",
-        "type": "postgres",
-        "z": "4e972c81ceb89218",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 280,
-        "y": 620,
-        "wires": [
-            [
-                "e3fa09c531d5324e"
-            ]
-        ]
-    },
-    {
-        "id": "589e96c954db4745",
-        "type": "postgres",
-        "z": "4e972c81ceb89218",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": false,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": false,
-        "x": 580,
-        "y": 780,
-        "wires": []
-    },
-    {
-        "id": "728888e1900b9d97",
-        "type": "delay",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "pauseType": "rate",
-        "timeout": "5",
-        "timeoutUnits": "seconds",
-        "rate": "1",
-        "nbRateUnits": "5",
-        "rateUnits": "second",
-        "randomFirst": "1",
-        "randomLast": "5",
-        "randomUnits": "seconds",
-        "drop": false,
-        "allowrate": false,
-        "outputs": 1,
-        "x": 580,
-        "y": 620,
-        "wires": [
-            [
-                "b317793505c7aee8"
-            ]
-        ]
-    },
-    {
-        "id": "e3fa09c531d5324e",
-        "type": "split",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "splt": "\\n",
-        "spltType": "str",
-        "arraySplt": 1,
-        "arraySpltType": "len",
-        "stream": false,
-        "addname": "",
-        "x": 410,
-        "y": 620,
-        "wires": [
-            [
-                "728888e1900b9d97"
-            ]
-        ]
-    },
-    {
-        "id": "ca34decd5e586cc4",
-        "type": "template",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "sql",
-        "syntax": "mustache",
-        "template": "SELECT\n\t*\nFROM\n\tarticles\nWHERE\n\tsummary IS NULL\n\tAND source = 11;",
-        "output": "str",
-        "x": 240,
-        "y": 460,
-        "wires": [
-            [
-                "ce7d7cf23cc43b47"
-            ]
-        ]
-    },
-    {
-        "id": "0ace08793d06e047",
-        "type": "debug",
-        "z": "4e972c81ceb89218",
-        "name": "",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
+        "console": true,
         "tostatus": false,
         "complete": "true",
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 1180,
-        "y": 440,
+        "x": 690,
+        "y": 140,
         "wires": []
     },
     {
@@ -3796,7 +2734,7 @@
         "type": "debug",
         "z": "ef4efdb19a1e5bd7",
         "name": "",
-        "active": true,
+        "active": false,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
@@ -3806,308 +2744,6 @@
         "x": 1700,
         "y": 300,
         "wires": []
-    },
-    {
-        "id": "9fd72db1f3db5c46",
-        "type": "comment",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "ADD JNeuroSci SUMMARY",
-        "info": "",
-        "x": 180,
-        "y": 240,
-        "wires": []
-    },
-    {
-        "id": "90d58d715eddcb2f",
-        "type": "split",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "",
-        "splt": "\\n",
-        "spltType": "str",
-        "arraySplt": 1,
-        "arraySpltType": "len",
-        "stream": false,
-        "addname": "",
-        "x": 410,
-        "y": 300,
-        "wires": [
-            [
-                "9cbe2130b8fb505a"
-            ]
-        ]
-    },
-    {
-        "id": "4a94f12318d9eb62",
-        "type": "http request",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "JNeuroSci",
-        "method": "GET",
-        "ret": "txt",
-        "paytoqs": "ignore",
-        "url": "",
-        "tls": "e3876559.c845b8",
-        "persist": false,
-        "proxy": "",
-        "authType": "",
-        "x": 630,
-        "y": 360,
-        "wires": [
-            [
-                "6475340e72616d90"
-            ]
-        ]
-    },
-    {
-        "id": "eaf87e474419e220",
-        "type": "change",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "set fields",
-        "rules": [
-            {
-                "t": "set",
-                "p": "url",
-                "pt": "msg",
-                "to": "payload.link",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "article_id",
-                "pt": "msg",
-                "to": "payload.article_id",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 460,
-        "y": 360,
-        "wires": [
-            [
-                "4a94f12318d9eb62"
-            ]
-        ]
-    },
-    {
-        "id": "6475340e72616d90",
-        "type": "html",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "",
-        "property": "payload",
-        "outproperty": "payload",
-        "tag": "meta",
-        "ret": "attr",
-        "as": "multi",
-        "x": 270,
-        "y": 400,
-        "wires": [
-            [
-                "9f74bd3b8d9361ce"
-            ]
-        ]
-    },
-    {
-        "id": "9f74bd3b8d9361ce",
-        "type": "switch",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "",
-        "property": "payload.name",
-        "propertyType": "msg",
-        "rules": [
-            {
-                "t": "eq",
-                "v": "citation_abstract",
-                "vt": "str"
-            }
-        ],
-        "checkall": "true",
-        "repair": false,
-        "outputs": 1,
-        "x": 410,
-        "y": 400,
-        "wires": [
-            [
-                "0fe65a93cac4e795"
-            ]
-        ]
-    },
-    {
-        "id": "0fe65a93cac4e795",
-        "type": "template",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "handlebars",
-        "syntax": "mustache",
-        "template": "UPDATE articles\nset summary = '{{{payload.content}}}'\nwhere article_id = {{article_id}};",
-        "output": "str",
-        "x": 540,
-        "y": 400,
-        "wires": [
-            [
-                "f796ffebb8bb5857"
-            ]
-        ]
-    },
-    {
-        "id": "9cbe2130b8fb505a",
-        "type": "delay",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "",
-        "pauseType": "rate",
-        "timeout": "5",
-        "timeoutUnits": "seconds",
-        "rate": "1",
-        "nbRateUnits": "30",
-        "rateUnits": "second",
-        "randomFirst": "1",
-        "randomLast": "5",
-        "randomUnits": "seconds",
-        "drop": false,
-        "allowrate": false,
-        "outputs": 1,
-        "x": 300,
-        "y": 360,
-        "wires": [
-            [
-                "eaf87e474419e220"
-            ]
-        ]
-    },
-    {
-        "id": "3ce23c7106fa6d78",
-        "type": "meta",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "meta",
-        "x": 470,
-        "y": 620,
-        "wires": [
-            [
-                "688974edc2268b38"
-            ]
-        ]
-    },
-    {
-        "id": "5528798257ebe1fb",
-        "type": "change",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "",
-        "rules": [
-            {
-                "t": "set",
-                "p": "article_id",
-                "pt": "msg",
-                "to": "payload.article_id",
-                "tot": "msg"
-            },
-            {
-                "t": "set",
-                "p": "payload",
-                "pt": "msg",
-                "to": "payload.link",
-                "tot": "msg"
-            }
-        ],
-        "action": "",
-        "property": "",
-        "from": "",
-        "to": "",
-        "reg": false,
-        "x": 320,
-        "y": 620,
-        "wires": [
-            [
-                "3ce23c7106fa6d78"
-            ]
-        ]
-    },
-    {
-        "id": "688974edc2268b38",
-        "type": "moment",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "",
-        "topic": "",
-        "input": "payload.citation_publication_date",
-        "inputType": "msg",
-        "inTz": "Europe/Lisbon",
-        "adjAmount": 0,
-        "adjType": "days",
-        "adjDir": "add",
-        "format": "",
-        "locale": "POSIX",
-        "output": "datetime",
-        "outputType": "msg",
-        "outTz": "Europe/Lisbon",
-        "x": 160,
-        "y": 700,
-        "wires": [
-            [
-                "16de3d8b5125c6d9"
-            ]
-        ]
-    },
-    {
-        "id": "16de3d8b5125c6d9",
-        "type": "template",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "",
-        "field": "payload",
-        "fieldType": "msg",
-        "format": "handlebars",
-        "syntax": "mustache",
-        "template": "update articles set published_date ='{{datetime}}' where article_id  = {{article_id}};",
-        "output": "str",
-        "x": 340,
-        "y": 700,
-        "wires": [
-            [
-                "92ba5df59ec0e04d"
-            ]
-        ]
-    },
-    {
-        "id": "12d588fe9c466e64",
-        "type": "comment",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "populate missing values of published date : working",
-        "info": "",
-        "x": 250,
-        "y": 480,
-        "wires": []
-    },
-    {
-        "id": "fb3ae4d6ac19aa08",
-        "type": "inject",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "source",
-                "v": "4",
-                "vt": "str"
-            }
-        ],
-        "repeat": "3600",
-        "crontab": "",
-        "once": true,
-        "onceDelay": "137",
-        "topic": "",
-        "payload": "select article_id,link from articles where source = 4 and published_date is null limit 10;",
-        "payloadType": "str",
-        "x": 130,
-        "y": 540,
-        "wires": [
-            [
-                "745116eca0a8eaec"
-            ]
-        ]
     },
     {
         "id": "c20cd969dca2a0dc",
@@ -4134,171 +2770,6 @@
         ]
     },
     {
-        "id": "ac35739c89026d8a",
-        "type": "inject",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
-        "repeat": "7200",
-        "crontab": "",
-        "once": true,
-        "onceDelay": "123",
-        "topic": "",
-        "payload": "SELECT \tarticle_id, \tlink FROM \tarticles WHERE \tsource = 4 \tAND published_date IS NULL ORDER BY \tarticle_id DESC LIMIT 10;",
-        "payloadType": "str",
-        "x": 130,
-        "y": 300,
-        "wires": [
-            [
-                "01e917fae909285d"
-            ]
-        ]
-    },
-    {
-        "id": "01e917fae909285d",
-        "type": "postgres",
-        "z": "ef4efdb19a1e5bd7",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 280,
-        "y": 300,
-        "wires": [
-            [
-                "90d58d715eddcb2f"
-            ]
-        ]
-    },
-    {
-        "id": "f796ffebb8bb5857",
-        "type": "postgres",
-        "z": "ef4efdb19a1e5bd7",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 720,
-        "y": 400,
-        "wires": [
-            []
-        ]
-    },
-    {
-        "id": "745116eca0a8eaec",
-        "type": "postgres",
-        "z": "ef4efdb19a1e5bd7",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 270,
-        "y": 540,
-        "wires": [
-            [
-                "d6eb356fc230c772"
-            ]
-        ]
-    },
-    {
-        "id": "92ba5df59ec0e04d",
-        "type": "postgres",
-        "z": "ef4efdb19a1e5bd7",
-        "postgresdb": "857f821ab371a10e",
-        "name": "",
-        "output": true,
-        "perrow": false,
-        "rowspermsg": "1",
-        "return_on_error": false,
-        "limit_queries": "0",
-        "limit_by": "payload",
-        "limit_value": "1",
-        "limit_drop_intermediate": false,
-        "limit_drop_if_in_queue": false,
-        "outputs": true,
-        "x": 520,
-        "y": 700,
-        "wires": [
-            []
-        ]
-    },
-    {
-        "id": "d6eb356fc230c772",
-        "type": "split",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "",
-        "splt": "\\n",
-        "spltType": "str",
-        "arraySplt": 1,
-        "arraySpltType": "len",
-        "stream": false,
-        "addname": "",
-        "x": 410,
-        "y": 540,
-        "wires": [
-            [
-                "3e2df0b26c223ff1"
-            ]
-        ]
-    },
-    {
-        "id": "3e2df0b26c223ff1",
-        "type": "delay",
-        "z": "ef4efdb19a1e5bd7",
-        "name": "",
-        "pauseType": "rate",
-        "timeout": "5",
-        "timeoutUnits": "seconds",
-        "rate": "1",
-        "nbRateUnits": "10",
-        "rateUnits": "second",
-        "randomFirst": "1",
-        "randomLast": "5",
-        "randomUnits": "seconds",
-        "drop": false,
-        "allowrate": false,
-        "outputs": 1,
-        "x": 140,
-        "y": 620,
-        "wires": [
-            [
-                "5528798257ebe1fb"
-            ]
-        ]
-    },
-    {
         "id": "4d175d7b9998c97b",
         "type": "debug",
         "z": "ef4efdb19a1e5bd7",
@@ -4318,6 +2789,7 @@
         "id": "c22a488e48d215a7",
         "type": "inject",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "props": [
             {
@@ -4353,7 +2825,7 @@
         "ret": "txt",
         "paytoqs": "ignore",
         "url": "https://www.msard-journal.com/action/doSearch?text1=Multiple+Sclerosis&field1=AbstractTitleKeywordFilterField&startPage=0&sortBy=Earliest",
-        "tls": "",
+        "tls": "e3876559.c845b8",
         "persist": false,
         "proxy": "",
         "authType": "",
@@ -4362,7 +2834,8 @@
         "y": 101.66666412353516,
         "wires": [
             [
-                "8725784d152fc0f0"
+                "8725784d152fc0f0",
+                "ef6f50d84f41c525"
             ]
         ]
     },
@@ -4381,7 +2854,8 @@
         "y": 100,
         "wires": [
             [
-                "cae37559e966fc39"
+                "cae37559e966fc39",
+                "ef6f50d84f41c525"
             ]
         ]
     },
@@ -4484,7 +2958,7 @@
         "y": 160,
         "wires": [
             [
-                "6a4b2b25fc9caa6c"
+                "ef6f50d84f41c525"
             ]
         ]
     },
@@ -4565,6 +3039,7 @@
         "id": "656b10c881649b88",
         "type": "comment",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "ADD MS & Rel. Disorders SUMMARY",
         "info": "",
         "x": 210,
@@ -4575,6 +3050,7 @@
         "id": "bea6a6b0ce7da242",
         "type": "split",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "splt": "\\n",
         "spltType": "str",
@@ -4594,6 +3070,7 @@
         "id": "f47a31e0afae83d5",
         "type": "http request",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "MS & Rel. Disorders",
         "method": "GET",
         "ret": "txt",
@@ -4615,6 +3092,7 @@
         "id": "39e049819087ad20",
         "type": "html",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "property": "payload",
         "outproperty": "payload",
@@ -4633,6 +3111,7 @@
         "id": "8f762127f07cd094",
         "type": "change",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "set fields",
         "rules": [
             {
@@ -4667,6 +3146,7 @@
         "id": "bc39a0e926541175",
         "type": "switch",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "property": "payload.name",
         "propertyType": "msg",
@@ -4692,6 +3172,7 @@
         "id": "bfc122a6867eb2a8",
         "type": "template",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "field": "payload",
         "fieldType": "msg",
@@ -4711,6 +3192,7 @@
         "id": "1e75c2f9dd2e5bca",
         "type": "inject",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "props": [
             {
@@ -4741,6 +3223,7 @@
         "id": "aa551072b85a081d",
         "type": "delay",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "pauseType": "rate",
         "timeout": "5",
@@ -4766,6 +3249,7 @@
         "id": "56f4c89ba2540166",
         "type": "change",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "rules": [
             {
@@ -4800,6 +3284,7 @@
         "id": "891232a85cb31822",
         "type": "comment",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "populate missing values of published date not working",
         "info": "",
         "x": 260,
@@ -4810,6 +3295,7 @@
         "id": "9b9553c093668632",
         "type": "cheerio",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "tag": "span.article-header__publish-date__value",
         "ret": "html",
@@ -4840,6 +3326,7 @@
         "id": "924ba527a3e1b51b",
         "type": "moment",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "topic": "",
         "input": "payload[0]",
@@ -4865,6 +3352,7 @@
         "id": "6134c4eb1d3ecc37",
         "type": "template",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "field": "payload",
         "fieldType": "msg",
@@ -4884,8 +3372,9 @@
         "id": "1cec06948586d710",
         "type": "debug",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
-        "active": true,
+        "active": false,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
@@ -4901,6 +3390,7 @@
         "id": "c52dd5f969ec7110",
         "type": "http request",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "method": "GET",
         "ret": "txt",
@@ -4933,7 +3423,7 @@
         "limit_drop_intermediate": false,
         "limit_drop_if_in_queue": false,
         "outputs": true,
-        "x": 880,
+        "x": 980,
         "y": 160,
         "wires": [
             [
@@ -4945,6 +3435,7 @@
         "id": "c9aa0231892c063e",
         "type": "postgres",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "postgresdb": "857f821ab371a10e",
         "name": "",
         "output": true,
@@ -4969,6 +3460,7 @@
         "id": "75ad5a3290077654",
         "type": "postgres",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "postgresdb": "857f821ab371a10e",
         "name": "",
         "output": true,
@@ -4993,6 +3485,7 @@
         "id": "8f1aa6fc3a4775f2",
         "type": "inject",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "props": [
             {
@@ -5023,6 +3516,7 @@
         "id": "9746abb39b1d24ff",
         "type": "postgres",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "postgresdb": "857f821ab371a10e",
         "name": "",
         "output": true,
@@ -5047,6 +3541,7 @@
         "id": "60f7933be1caaa7c",
         "type": "split",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "splt": "\\n",
         "spltType": "str",
@@ -5066,6 +3561,7 @@
         "id": "8c98ac204ecd894a",
         "type": "delay",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "pauseType": "rate",
         "timeout": "5",
@@ -5091,6 +3587,7 @@
         "id": "93e107ca4215b3fe",
         "type": "change",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
         "rules": [
             {
@@ -5123,19 +3620,21 @@
         "tosidebar": true,
         "console": false,
         "tostatus": false,
-        "complete": "false",
+        "complete": "true",
+        "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 1050,
-        "y": 160,
+        "x": 990,
+        "y": 240,
         "wires": []
     },
     {
         "id": "95f377f293ef434c",
         "type": "debug",
         "z": "229c44d5bbf84eb1",
+        "d": true,
         "name": "",
-        "active": true,
+        "active": false,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
@@ -5209,7 +3708,7 @@
         "syntax": "mustache",
         "template": "INSERT INTO trials (discovery_date, title, summary, link, published_date, source, relevant)\n\t\tVALUES(CURRENT_TIMESTAMP, '{{payload.title}}', NULL, 'https://www.novartis.com/{{{payload.link}}}', NULL, 13, NULL)",
         "output": "str",
-        "x": 900,
+        "x": 920,
         "y": 160,
         "wires": [
             [
@@ -5299,7 +3798,7 @@
         "template": "INSERT INTO trials (discovery_date,title,summary,link,published_date,source,relevant)\nVALUES (current_timestamp,'{{payload.title}}',NULL,'https://www.cuf.pt{{{payload.link}}}',NULL,14,NULL)",
         "output": "str",
         "x": 960,
-        "y": 260,
+        "y": 240,
         "wires": [
             [
                 "5374561e784d98af"
@@ -5423,8 +3922,8 @@
         "limit_drop_intermediate": false,
         "limit_drop_if_in_queue": false,
         "outputs": false,
-        "x": 1040,
-        "y": 200,
+        "x": 1100,
+        "y": 180,
         "wires": []
     },
     {
@@ -5444,14 +3943,23 @@
                 "t": "cont",
                 "v": "multiple sclerosis",
                 "vt": "str"
+            },
+            {
+                "t": "regex",
+                "v": "multiple sclerosis",
+                "vt": "str",
+                "case": true
             }
         ],
         "checkall": "true",
         "repair": false,
-        "outputs": 2,
+        "outputs": 3,
         "x": 770,
         "y": 160,
         "wires": [
+            [
+                "c204ece5aa88ae64"
+            ],
             [
                 "c204ece5aa88ae64"
             ],
@@ -5769,7 +4277,7 @@
         "z": "a38a4dce4a95b8aa",
         "d": true,
         "name": "",
-        "active": true,
+        "active": false,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
@@ -5997,7 +4505,7 @@
         "z": "a38a4dce4a95b8aa",
         "d": true,
         "name": "",
-        "active": true,
+        "active": false,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
@@ -6233,7 +4741,7 @@
         "z": "a38a4dce4a95b8aa",
         "d": true,
         "name": "",
-        "active": true,
+        "active": false,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
@@ -6272,7 +4780,7 @@
         "z": "a38a4dce4a95b8aa",
         "d": true,
         "name": "",
-        "active": true,
+        "active": false,
         "tosidebar": true,
         "console": false,
         "tostatus": false,
@@ -6282,6 +4790,128 @@
         "statusType": "auto",
         "x": 460,
         "y": 200,
+        "wires": []
+    },
+    {
+        "id": "cf58cbbd861bef73",
+        "type": "inject",
+        "z": "d37ec6d25d6bf29f",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 270,
+        "y": 200,
+        "wires": [
+            [
+                "046c19d0e7e5dea4"
+            ]
+        ]
+    },
+    {
+        "id": "2988442f6732efa4",
+        "type": "http request",
+        "z": "d37ec6d25d6bf29f",
+        "name": "",
+        "method": "POST",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "https://api.eu.mailgun.net/v3/gregory-ms.com/messages",
+        "tls": "e3876559.c845b8",
+        "persist": false,
+        "proxy": "",
+        "authType": "basic",
+        "senderr": false,
+        "x": 760,
+        "y": 200,
+        "wires": [
+            [
+                "6bef9cacb548532b"
+            ]
+        ]
+    },
+    {
+        "id": "046c19d0e7e5dea4",
+        "type": "change",
+        "z": "d37ec6d25d6bf29f",
+        "name": "",
+        "rules": [
+            {
+                "t": "delete",
+                "p": "payload",
+                "pt": "msg"
+            },
+            {
+                "t": "set",
+                "p": "payload.from",
+                "pt": "msg",
+                "to": "nodered <greg@gregory-ms.com>",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "subject",
+                "pt": "msg",
+                "to": "testing",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "text",
+                "pt": "msg",
+                "to": "it works",
+                "tot": "str"
+            },
+            {
+                "t": "set",
+                "p": "to",
+                "pt": "msg",
+                "to": "bruno@lisboncollective.com",
+                "tot": "str"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 490,
+        "y": 220,
+        "wires": [
+            [
+                "2988442f6732efa4",
+                "6bef9cacb548532b"
+            ]
+        ]
+    },
+    {
+        "id": "6bef9cacb548532b",
+        "type": "debug",
+        "z": "d37ec6d25d6bf29f",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 890,
+        "y": 320,
         "wires": []
     }
 ]

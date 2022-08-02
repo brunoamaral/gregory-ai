@@ -167,9 +167,14 @@ EMAIL_MAILGUN_API_URL="https://api.eu.mailgun.net/v3/YOURDOMAIN/messages"
 
 As an alternative, you can configure Django to use any other email server.
 
-### RSS feeds
+### RSS feeds and API
 
-The following RSS feeds are configured in Django:
+Gregory has the concept of 'subject'. In this case, Multiple Sclerosis is the only subject configured. A Subject is a group of Sources and their respective articles. There are also categories that can be created. A category is a group of articles whose title matches at least one keyword in list for that category. Categories can include articles across subjects.
+
+There are options to filter lists of articles by their category or subject in the format `articles/category/<category>` and `articles/subject/<subject>` where <category> and <subject> is the lowercase name with spaces replaced by dashes.
+
+
+#### Available RSS feeds
 
 1. Latest articles, `/feed/latest/articles/`
 2. Latest articles by subject, `/feed/articles/subject/<subject>/`
