@@ -21,6 +21,10 @@ A **Category** is a group of articles whose title matches at least one keyword i
 1. source for (will be used for the "kind" field in articles, can be one of "science paper", "news", "trials")
 1. ignore ssl (whether we should bypass SSL certificate verification or not)
 
+You can add sources through the Django Backoffice found at `/admin/`, the example below shows how to add PubMed as an RSS source.
+
+![image-20220619195841565.png](images/image-20220619195841565.png)
+
 ## Articles
 
 1. article id
