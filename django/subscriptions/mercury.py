@@ -118,7 +118,7 @@ class TrialsNotification(CronJobBase):
 
 	def do(self):
 		trials = Trials.objects.filter(~Q(sent_real_time_notification=True))
-		if len(trials) > 0 and Subscribers.filter(subscriptions__list_name='Clinical Trials').count() > 0:
+		if len(trials) > 0 and Subscribers.objects.filter(subscriptions__list_name='Clinical Trials').count() > 0:
 			subscribers = []
 			for email in Subscribers.objects.filter(subscriptions__list_name='Clinical Trials').values():
 				subscribers.append(email['email'])
