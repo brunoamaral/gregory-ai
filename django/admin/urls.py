@@ -18,7 +18,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path, re_path
 from rest_framework import routers
-from api.views import AllArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,RelevantList,ArticlesBySourceList,ArticlesBySubject,UnsentList,TrialsBySourceList,RelatedArticles, ArticlesCount
+from api.views import ArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,RelevantList,ArticlesBySourceList,ArticlesBySubject,UnsentList,TrialsBySourceList, ArticlesCount,AuthorsViewSet,SourceViewSet,TrialViewSet
 from rss.views import *
 from subscriptions.views import subscribe_view
 
@@ -34,7 +34,7 @@ urlpatterns = [
 	path('', include(router.urls)),
 	path('admin/', admin.site.urls),
 	path('api-auth/', include('rest_framework.urls')),
-	path('articles/all/', AllArticleViewSet.as_view()),
+	# path('articles/all/', AllArticleViewSet.as_view()),
 	# path('articles/prediction/none/', ArticlesPredictionNone.as_view()),
 	# path('feed/articles/prediction/none/', ToPredictFeed()),
 	# path('trials/all/', AllTrialViewSet.as_view()),
