@@ -74,6 +74,10 @@ class Entities(models.Model):
 		verbose_name_plural = 'entities'
 		db_table = 'entities'
 
+class Subject(models.Model):
+		subject_name = models.CharField(blank=False,null=False, max_length=50)
+		description = models.TextField(blank=True,null=True)
+
 
 class Sources(models.Model):
 	TABLES = [('science paper', 'Science Paper'),('trials','Trials'),('news article','News Article')]
