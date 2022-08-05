@@ -50,7 +50,6 @@ class Articles(models.Model):
 	noun_phrases = models.JSONField(blank=True, null=True)
 	sent_to_admin = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
-	sent_to_twitter = models.BooleanField(blank=True, null=True)
 	kind = models.CharField(choices=KINDS, max_length=50,default='science paper')
 
 
@@ -106,7 +105,6 @@ class Trials(models.Model):
 	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True)
 	relevant = models.BooleanField(blank=True, null=True)
 	sent = models.BooleanField(blank=True, null=True)
-	sent_to_twitter = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	sent_to_admin = models.BooleanField(blank=True,null=True, default=False)
 	sent_real_time_notification = models.BooleanField(blank=True,null=True,default=False)
