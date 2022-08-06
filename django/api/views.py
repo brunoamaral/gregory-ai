@@ -52,7 +52,7 @@ class ArticlesBySubject(viewsets.ModelViewSet):
 	def get_queryset(self):
 		subject = self.kwargs.get('subject', None)
 		subject = subject.replace('-', ' ')
-		subject = Sources.objects.filter(subject__iregex=subject)
+		subject = Sources.objects.filter(subject__subject_name__iregex=subject)
 		return Articles.objects.filter(source__in=subject).order_by('-article_id')
 
 	serializer_class = ArticleSerializer
