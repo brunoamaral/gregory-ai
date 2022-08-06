@@ -31,6 +31,44 @@ class Categories(models.Model):
 		verbose_name_plural = 'categories'
 		db_table = 'categories'
 
+
+class Entities(models.Model):
+	entity = models.TextField()
+	label = models.TextField()
+
+
+	class Meta:
+		managed = True
+		verbose_name_plural = 'entities'
+		db_table = 'entities'
+
+class Subject(models.Model):
+		subject_name = models.CharField(blank=False,null=False, max_length=50)
+		description = models.TextField(blank=True, null=True)
+
+		def __str__(self):
+			return str(self.subject_name)
+
+
+class Sources(models.Model):
+	TABLES = [('science paper', 'Science Paper'),('trials','Trials'),('news article','News Article')]
+	source_id = models.AutoField(primary_key=True)
+	source_for = models.CharField(choices=TABLES, max_length=50, default='science paper')
+	name = models.TextField(blank=True, null=True)
+	link = models.TextField(blank=True, null=True)
+	language = models.TextField()
+	subject = models.ForeignKey(Subject,on_delete=models.PROTECT,null=True,blank=True,unique=False)
+	method = models.TextField()
+	ignore_ssl = models.BooleanField(default=False)
+
+	def __str__(self):
+		return self.name
+
+	class Meta:
+		managed = True
+		verbose_name_plural = 'sources'
+		db_table = 'sources'
+
 class Articles(models.Model):
 	KINDS = [('science paper', 'Science Paper'),('news article','News Article')]
 	article_id = models.AutoField(primary_key=True)
@@ -38,7 +76,7 @@ class Articles(models.Model):
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	doi = models.CharField(max_length=280, blank=True, null=True)
 	summary = models.TextField(blank=True, null=True)
-	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True)
+	source = models.ForeignKey(Sources, models.DO_NOTHING, db_column='source', blank=True, null=True,unique=False)
 	published_date = models.DateTimeField(blank=True, null=True)
 	discovery_date = models.DateTimeField(auto_now_add=True)
 	authors = models.ManyToManyField(Authors, blank=True)
@@ -63,38 +101,6 @@ class Articles(models.Model):
 		verbose_name_plural = 'articles'
 		db_table = 'articles'
 
-
-class Entities(models.Model):
-	entity = models.TextField()
-	label = models.TextField()
-
-
-	class Meta:
-		managed = True
-		verbose_name_plural = 'entities'
-		db_table = 'entities'
-
-
-class Sources(models.Model):
-	TABLES = [('science paper', 'Science Paper'),('trials','Trials'),('news article','News Article')]
-	source_id = models.AutoField(primary_key=True)
-	source_for = models.CharField(choices=TABLES, max_length=50, default='science paper')
-	name = models.TextField(blank=True, null=True)
-	link = models.TextField(blank=True, null=True)
-	language = models.TextField()
-	subject = models.TextField()
-	method = models.TextField()
-	ignore_ssl = models.BooleanField(default=False)
-
-	def __str__(self):
-		return self.name
-
-	class Meta:
-		managed = True
-		verbose_name_plural = 'sources'
-		db_table = 'sources'
-
-
 class Trials(models.Model):
 	trial_id = models.AutoField(primary_key=True)
 	discovery_date = models.DateTimeField(blank=True, null=True)
@@ -102,7 +108,7 @@ class Trials(models.Model):
 	summary = models.TextField(blank=True, null=True)
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
-	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True)
+	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True, unique=False)
 	relevant = models.BooleanField(blank=True, null=True)
 	sent = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
