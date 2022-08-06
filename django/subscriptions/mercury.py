@@ -62,7 +62,7 @@ class AdminSummary(CronJobBase):
 			"email_footer": customsettings.email_footer,
 			"site": site,
 			}
-			to = admin.email
+			to = admin
 			html = get_template('emails/admin_summary.html').render(summary)
 			text= strip_tags(html)
 			result = send_simple_message(to=to,subject='Admin Summary',html=html, text=text)
