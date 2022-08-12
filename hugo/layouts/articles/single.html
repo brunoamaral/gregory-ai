@@ -12,7 +12,7 @@
 		{{ if or (eq .Params.disable_comments false) ( eq .Site.Params.enableComments true) }}
 	<link rel="preload" href="https://commento.brunoamaral.eu/css/commento.css" as="style">
 	{{ end }}
-	<link rel="shortlink" type="text/html" href="{{ $.Site.BaseURL | replaceRE "/$" ""}}{{.}}">
+	<link rel="shortlink" type="text/html" href="{{ printf "%sarticles/%d" $.Site.BaseURL $.Page.Params.article_id }}">
 {{ end }}
 {{ define "main" }}
 <div class="wrapper">
