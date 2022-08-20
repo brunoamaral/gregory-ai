@@ -24,8 +24,6 @@ class GetDoiCrossRef(CronJobBase):
 						article_title = re.sub(r' ','',article_title ).lower()
 						crossref_title = re.sub(r'[^A-Za-z0-9 ]+', '', w['title'][0])
 						crossref_title = re.sub(r' ','',crossref_title).lower()
-						# print(crossref_title)
-						# print(article_title)
 						if crossref_title == article_title:
 							print(article.article_id)
 							article.doi = w['DOI']
