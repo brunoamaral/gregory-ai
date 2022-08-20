@@ -4,28 +4,6 @@ When Gregory was "born" in February 2021, the goal was to aggregate searches acr
 
 Today, Gregory is an Artificial Intelligence (AI) system that uses Machine Learning (ML) to index articles from any number of sources. Its focus is on scientific research, but can be used for any number of purposes where the main obstacle is to filter information. 
 
-An example of Gregory's workflow:
-
-```mermaid
-flowchart LR;
-    SourcesA(fa:fa-newspaper Source A) --> Harvester{{"Harvester"}};
-    SourcesB(fa:fa-newspaper Source B) --> Harvester{{"Harvester"}};
-    SourcesC(fa:fa-newspaper Source C) --> Harvester{{"Harvester"}};
-    Harvester --> DB[("Database")];
-    DB --> TML{{"ML Training"}};
-    TML --> Model("ML Model");
-    Model --> PML{{"ML Prediction"}};
-    DB --> PML;
-    PML --> Rel("Relevant");
-    PML --> NRel("Not Relevant");
-    Rel --> RF{{"Human Feedback"}};
-		NRel --> RF;
-    RF --> DB;
-    Rel --> PD{{"Digest"}};
-    PD --> site("Website")
-    PD --> email("Email")
-```
-
 A practical implementation can be found at [Gregory-MS.com](https://gregory-ms.com), where we have indexed over 13,000 articles on Multiple Sclerosis Research to assist Neurologists and Researchers.
 
 ## Use Cases
