@@ -171,7 +171,7 @@ CRON_CLASSES = [
 		'db_maintenance.get_doi_from_crossref.GetDoiCrossRef',
 		'db_maintenance.get_published_date_and_summary_crossref.GetDateSummaryCrossRef',
 ]
-WEBSITE_DOMAIN = 'https://gregory-ms.com/'
+WEBSITE_DOMAIN = 'gregory-ms.com'
 
 
 # LOGS
