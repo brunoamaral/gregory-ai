@@ -67,7 +67,7 @@ class ArticlesByCategoryFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
+		return 'https://' + settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
 
 class LatestTrialsFeed(Feed):
 	title = "Latest clinical trials"
@@ -85,7 +85,7 @@ class LatestTrialsFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://'+ settings.WEBSITE_DOMAIN + '/trials/' + str(item.pk) + '/'
+		return 'https://api.' + settings.WEBSITE_DOMAIN + '/trials/' + str(item.pk) + '/'
 
 class MachineLearningFeed(Feed):
 	title = "Relevant articles by machine learning"
