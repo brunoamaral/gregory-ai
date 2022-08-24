@@ -12,9 +12,20 @@ A practical implementation can be found at [Gregory-MS.com](https://gregory-ms.c
 
 Gregory can act as a research assistant by fetching the latest articles and organising them into categories. These categories can then be plotted in a chart to see which need further research, and which are “too crowded”.
 
+#### Jobs to be done
+
+- Literature review
+- Map out areas of current research
+- Identify Research trends
+
 ### For healthcare professionals of any specialty
 
 Using the right sources, it’s possible to have Gregory stay up to date with what is being published about any disease, condition, or medication. Turn it into an observatory for one or more subjects.
+
+#### Jobs to be done
+
+- Get relevant information in real time
+- Track research around specific therapeutics
 
 ### For everyone filtering for important news
 
@@ -24,6 +35,11 @@ By creating an email list, teams can receive a digest of the relevant articles f
 
 This allows you to chart the news and identify trends with greater ease.
 
+#### Jobs to be done
+
+- Real time notification of relevant news (no Fear Of Missing Out)
+- Identify trends
+
 ### Build a central point of knowledge
 
 Developers can use the Application Protocol Interface (API) to connect Gregory to any system, displaying the articles filtered by any query, or embedding the charts.
@@ -32,9 +48,15 @@ Developers can use the Application Protocol Interface (API) to connect Gregory t
 
 The email notifications can be sent to any email address, without the need for a registered user account.
 
+#### Jobs to be done
+
+- Send newsletters or other digests to teams
+- Feed a website with curated information in real time
+
 ## How it works
 
-An example of Gregory's workflow:
+
+Gregory's workflow:
 
 ```mermaid
 flowchart LR;
