@@ -52,3 +52,5 @@ venv3
 workspace.code-workspace
 hugo/data/embeds.json
 django/indexers/input/*.json
+hugo/content/developers/articles.zip
+hugo/content/developers/trials.zip

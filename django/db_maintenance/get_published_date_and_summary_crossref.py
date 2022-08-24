@@ -18,13 +18,28 @@ class GetDateSummaryCrossRef(CronJobBase):
 		for article in articles:
 			if hasattr(article,'doi') and article.doi != None:
 				w = works.doi(article.doi)
-				issued = w['issued']['date-parts'][0]
-				try:
-					published_date = datetime( year=issued[0], month=issued[1], day=issued[2], tzinfo=timezone)
-					article.published_date = published_date
-					article.save()
-				except:
+				if 'issued' in w:
+					issued = w['issued']['date-parts'][0]
+					print(issued)
+					year,month,day = None,1,1
+					try:
+						year = issued[0]
+					except:
 						pass
+					try:
+						month=issued[1]
+					except:
+						pass
+					try:
+						day=issued[2]
+					except:
+						pass
+					try:
+						published_date = datetime( year=year, month=month, day=day, tzinfo=timezone)
+						article.published_date = published_date
+						article.save()
+					except:
+							pass
 
 				if article.summary == None:
 					try:

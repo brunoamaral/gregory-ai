@@ -1,5 +1,5 @@
 ---
-title: "Relevant Listing"
+title: "Current Relevant Research for MS"
 subtitle: 
 
 # menu:
@@ -20,7 +20,7 @@ cta:
     targetblank: true
   - label: <i class="fas fa-file-archive"></i> Download Database
     url: /developers/articles.zip
-    classes: btn btn-lg btn-success font-weight-bold umami--click--downloads-page-download-articles-zip
+    classes: btn btn-sm btn-success font-weight-bold umami--click--downloads-page-download-articles-zip
 ---
 
 Articles listed here come from the following sites, with keyword searches for `Multiple Sclerosis, autoimmune encephalomyelitis, encephalomyelitis, immune tolerance, myelin`.

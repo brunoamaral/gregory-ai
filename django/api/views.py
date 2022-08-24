@@ -33,7 +33,7 @@ class RelatedArticles(viewsets.ModelViewSet):
 
 class ArticlesByCategory(viewsets.ModelViewSet):
 	"""
-	Search articles by the category field. Usage /articles/category/<category>/
+	Search articles by the category field. Usage /articles/category/{{category}}/
 	"""
 	def get_queryset(self):
 		category = self.kwargs.get('category', None)
@@ -46,13 +46,13 @@ class ArticlesByCategory(viewsets.ModelViewSet):
 
 class ArticlesBySubject(viewsets.ModelViewSet):
 	"""
-	Search articles by the subject field. Usage /articles/subject/<subject>/.
+	Search articles by the subject field. Usage /articles/subject/{{subject}}/.
 	Subject should be lower case and spaces should be replaced by dashes, for example: Multiple Sclerosis becomes multiple-sclerosis.
 	"""
 	def get_queryset(self):
 		subject = self.kwargs.get('subject', None)
 		subject = subject.replace('-', ' ')
-		subject = Sources.objects.filter(subject__iregex=subject)
+		subject = Sources.objects.filter(subject__subject_name__iregex=subject)
 		return Articles.objects.filter(source__in=subject).order_by('-article_id')
 
 	serializer_class = ArticleSerializer
