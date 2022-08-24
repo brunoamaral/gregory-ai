@@ -1,11 +1,9 @@
 from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer
 from django.db.models.functions import Length
 from django.db.models.query import QuerySet
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, render
 from gregory.models import Articles, Trials, Sources, Authors, Categories
 from rest_framework import viewsets, permissions, generics, filters
-import json
+from django.db.models import Q
 
 ###
 # ARTICLES
@@ -69,13 +67,14 @@ class AllArticleViewSet(generics.ListAPIView):
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 class RelevantList(generics.ListAPIView):
+	"""
+	List relevant articles, by manual selection and Machine Learning using the Gausian Naive Bayes Model.
+	"""
+	model = Articles
 	serializer_class = ArticleSerializer
 
 	def get_queryset(self):
-		"""
-		Lists the articles that the admin has marked as relevant
-		"""
-		return Articles.objects.filter(relevant="True")
+		return Articles.objects.filter(Q(relevant=True) | Q(ml_prediction_gnb=True)).order_by('-published_date')
 
 class UnsentList(generics.ListAPIView):
 	"""
