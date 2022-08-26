@@ -1,10 +1,10 @@
 # Gregory, an AI to assist research and monitor science
 
-When Gregory was "born" in February 2021, the goal was to aggregate searches across a number of sites like [PubMed](https://pubmed.ncbi.nlm.nih.gov/), [FASEB](https://faseb.onlinelibrary.wiley.com/), [ClinicalTrials.gov](https://clinicaltrials.gov/), and a few others. 
+Gregory is an Artificial Intelligence (AI) to index and identify relevant content from any number of sources.
 
-Today, Gregory is an Artificial Intelligence (AI) system that uses Machine Learning (ML) to index articles from any number of sources. Its focus is on scientific research, but can be used for any number of purposes where the main obstacle is to filter information. 
+It uses Machine Learning (ML) to predict relevancy. And includes a [Metabase](https://metabase.com/) instance to classify and quantify information.
 
-A practical implementation can be found at [Gregory-MS.com](https://gregory-ms.com), where we have indexed over 13,000 articles on Multiple Sclerosis Research to assist Neurologists and Researchers.
+A full version is available at [Gregory-MS.com](https://gregory-ms.com), where we have indexed over 13,000 articles on Multiple Sclerosis Research to assist Neurologists and Researchers.
 
 ## Use Cases
 
@@ -29,8 +29,7 @@ Using the right sources, it’s possible to have Gregory stay up to date with wh
 
 ### For everyone filtering for important news
 
-Using the machine learning algorithm, Gregory can help cut the noise from the river of news by learning what is important in a particular context. 
-
+With the machine learning algorithm, Gregory learns what is important to its users and cut the noise from the river of news . 
 By creating an email list, teams can receive a digest of the relevant articles found, or real time notifications.
 
 This allows you to chart the news and identify trends with greater ease.
@@ -60,15 +59,15 @@ Gregory's workflow:
 
 ```mermaid
 flowchart LR;
-    SourcesA(fa:fa-newspaper Source A) --> DB[("Gregory Database")];
-    SourcesB(fa:fa-newspaper Source B) --> DB;
-    SourcesC(fa:fa-newspaper Source C) --> DB;
-    DB --> Model("Machine Learning Prediction");
-    Model --> RF{{"Human Feedback"}};
-    RF --> Model;
-    RF --> PD{{"Digest"}};
-    PD --> site("Website")
-    PD --> email("Email")
+ SourcesA(fa:fa-newspaper Source A) --> DB[("Gregory Database")];
+ SourcesB(fa:fa-newspaper Source B) --> DB;
+ SourcesC(fa:fa-newspaper Source C) --> DB;
+ DB --> Model("Machine Learning Prediction");
+ Model --> RF{{"Human Feedback"}};
+ RF --> Model;
+ RF --> PD{{"Digest"}};
+ PD --> site("Website")
+ PD --> email("Email")
 ```
 
 
