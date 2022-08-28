@@ -54,3 +54,5 @@ hugo/data/embeds.json
 django/indexers/input/*.json
 hugo/content/developers/articles.zip
 hugo/content/developers/trials.zip
+hugo/content/developers/articles.zip
+hugo/content/developers/trials.zip
