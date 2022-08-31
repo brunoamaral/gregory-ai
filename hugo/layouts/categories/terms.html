@@ -18,7 +18,7 @@
 
 							<ul class="{{ .Data.Plural }}">
 							{{ range .Data.Terms.Alphabetical }}
-								<li><a href="{{ .Page.Permalink | absLangURL }}">{{ .Page.Title }}</a> {{ .Count }} {{ with .Page.Params.subtitle }} {{.}}{{ end }} </li>
+								<li><a href="{{ .Page.Permalink | absLangURL }}">{{ .Page.Title }}</a> ({{ .Count }}) : {{ with .Page.Params.subtitle }} {{.}}{{ end }} </li>
 							{{ end }}
 							</ul>
 
