@@ -195,7 +195,7 @@ for index, row in articles.iterrows():
 			"\noptions:" + \
 			"\n  unlisted: false" + \
 			"\n" + url + \
-			"\ncategories: " + str(row['Categories__category_name'].split()) + \
+			"\ncategories: " + str(row['Categories__category_name']) + \
 			"\n---\n" + \
 			html.unescape(row["summary"])
 		# add content to file
@@ -339,7 +339,7 @@ hugo_path = os.getenv('HUGO_PATH')
 if hugo_path == None:
 	hugo_path = str(which('hugo'))
 
-args = (hugo_path, "-d", WEBSITE_PATH,"--cacheDir", GREGORY_DIR)
+args = (hugo_path, "-d", WEBSITE_PATH,"--cacheDir", GREGORY_DIR,"--cleanDestinationDir")
 popen = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
