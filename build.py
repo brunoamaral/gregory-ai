@@ -76,9 +76,11 @@ engine = sqlalchemy.create_engine(postgres_connection_url)
 # except:
 # 	print("I am unable to connect to the database")
 
-query_articles = 'SELECT "public"."articles"."article_id" AS "article_id", "public"."articles"."title" AS "title", "public"."articles"."summary" AS "summary", "public"."articles"."link" AS "link", "public"."articles"."published_date" AS "published_date", "public"."articles"."source" AS "source", "public"."articles"."relevant" AS "relevant", "public"."articles"."ml_prediction_gnb" AS "ml_prediction_gnb", "public"."articles"."ml_prediction_lr" AS "ml_prediction_lr", "public"."articles"."discovery_date" AS "discovery_date", "public"."articles"."noun_phrases" AS "noun_phrases", "public"."articles"."doi" AS "doi", "Sources"."name" AS "Sources__name", "Sources"."link" AS "Sources__link" FROM "public"."articles" LEFT JOIN "public"."sources" "Sources" ON "public"."articles"."source" = "Sources"."source_id" ORDER BY article_id;'
+query_articles = 'SELECT "public"."articles"."article_id" AS "article_id", "public"."articles"."title" AS "title", "public"."articles"."summary" AS "summary", "public"."articles"."link" AS "link", "public"."articles"."published_date" AS "published_date", "public"."articles"."source" AS "source", "public"."articles"."relevant" AS "relevant", "public"."articles"."ml_prediction_gnb" AS "ml_prediction_gnb", "public"."articles"."ml_prediction_lr" AS "ml_prediction_lr", "public"."articles"."discovery_date" AS "discovery_date", "public"."articles"."noun_phrases" AS "noun_phrases", "public"."articles"."doi" AS "doi", "public"."articles"."kind" AS "kind", "Sources"."source_id" AS "Sources__source_id", "Sources"."name" AS "Sources__name", "Sources"."link" AS "Sources__link", "Sources"."language" AS "Sources__language", "Sources"."source_for" AS "Sources__source_for", "Sources"."subject_id" AS "Sources__subject_id", "Articles Categories"."id" AS "Articles Categories__id", "Articles Categories"."articles_id" AS "Articles Categories__articles_id", "Articles Categories"."categories_id" AS "Articles Categories__categories_id", "Categories"."category_id" AS "Categories__category_id", "Categories"."category_name" AS "Categories__category_name" FROM "public"."articles" LEFT JOIN "public"."sources" "Sources" ON "public"."articles"."source" = "Sources"."source_id" LEFT JOIN "public"."articles_categories" "Articles Categories" ON "public"."articles"."article_id" = "Articles Categories"."articles_id" LEFT JOIN "public"."categories" "Categories" ON "Articles Categories"."categories_id" = "Categories"."category_id" ORDER BY	"public"."articles"."article_id" ASC;'
 
 query_trials = 'SELECT "public"."trials"."trial_id" AS "trial_id", "public"."trials"."discovery_date" AS "discovery_date", "public"."trials"."title" AS "title", "public"."trials"."summary" AS "summary", "public"."trials"."link" AS "link", "public"."trials"."published_date" AS "published_date", "public"."trials"."source" AS "source", "public"."trials"."relevant" AS "relevant", "Sources"."source_id" AS "Sources__source_id", "Sources"."name" AS "Sources__name", "Sources"."link" AS "Sources__link" FROM "public"."trials" LEFT JOIN "public"."sources" "Sources" ON "public"."trials"."source" = "Sources"."source_id" ORDER BY trial_id DESC;'
+
+query_categories = 'SELECT "public"."categories"."category_id" AS "category_id", "public"."categories"."category_name" AS "category_name", "public"."categories"."category_description" AS "category_description", "public"."categories"."category_terms" AS "category_terms" FROM "public"."categories";'
 
 print('''
 ####
@@ -97,6 +99,9 @@ articles.summary = articles.summary.apply(html.unescape)
 articles.to_excel('content/developers/articles_'+ datetime_string + '.xlsx')
 articles.to_json('content/developers/articles_'+ datetime_string + '.json')
 
+## CATEGORIES
+categories = pd.read_sql_query(query_categories, engine)
+
 ## TRIALS
 trials = pd.read_sql_query(query_trials, engine)
 trials['published_date'] = trials['published_date'].dt.tz_localize(None)
@@ -108,6 +113,33 @@ trials.summary = trials.summary.apply(html.unescape)
 trials.to_excel('content/developers/trials_' + datetime_string + '.xlsx')
 trials.to_json('content/developers/trials_' + datetime_string + '.json')
 
+
+print('''
+####
+## CREATE CATEGORIES
+####
+''')
+categoriesDir = GREGORY_DIR + "/content/categories/"
+categoriesDirExists = pathlib.Path(categoriesDir)
+
+for index, row in categories.iterrows():
+	title = row["category_name"]
+
+	if row["category_description"] == None:
+		row["category_description"] = ''
+	description = row["category_description"]
+	categoryDir = pathlib.Path(categoriesDir + slugify(str(row["category_name"])))
+	categoryDir.mkdir(parents=True, exist_ok=True)
+	with open(str(categoryDir)+"/_index.md", "w+") as f:
+		category_data = "---" + \
+			"\ntitle: \"" + title + "\"" + \
+			"\nsubtitle: \"" + description + "\"" + \
+			"\n---\n" + \
+			html.unescape(row["category_description"])
+		# add content to file
+
+		f.write(category_data)
+		f.close()
 
 
 print('''
@@ -138,6 +170,8 @@ for index, row in articles.iterrows():
 			"\naliases: " + \
 			"\n  - /articles/" + str(row["article_id"]) + "/"
 	
+	if row['Categories__category_name'] == None:
+		row['Categories__category_name']=''
 
 	# Write a file for each record
 	markdownDir = pathlib.Path(articlesDir+str(row["article_id"]))
@@ -161,6 +195,7 @@ for index, row in articles.iterrows():
 			"\noptions:" + \
 			"\n  unlisted: false" + \
 			"\n" + url + \
+			"\ncategories: " + str(row['Categories__category_name'].split()) + \
 			"\n---\n" + \
 			html.unescape(row["summary"])
 		# add content to file

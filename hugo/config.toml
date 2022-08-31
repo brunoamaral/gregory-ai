@@ -80,7 +80,7 @@ headerPhoto = ""
   rss = ""
 
 [taxonomies]
-# category = "categories"
+category = "categories"
 # source = "source"
 # trial_source = "trial_source"
 article_source = "article_source"
