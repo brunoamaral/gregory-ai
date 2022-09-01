@@ -195,7 +195,7 @@ for index, row in articles.iterrows():
 			"\noptions:" + \
 			"\n  unlisted: false" + \
 			"\n" + url + \
-			"\ncategories: \"" + str(row['Categories__category_name']) + "\"" + \
+			"\ncategories: " + str(row['Categories__category_name']) + \
 			"\n---\n" + \
 			html.unescape(row["summary"])
 		# add content to file
