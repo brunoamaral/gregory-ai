@@ -33,6 +33,7 @@ hugo/content/developers/trials.zip
 hugo/content/trials
 hugo/content/trials/*/
 hugo/data/
+hugo/data/embeds.json
 hugo/hugo_stats.json
 metabase-data/
 metabase/db-data/
