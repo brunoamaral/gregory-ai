@@ -4,7 +4,7 @@
 # This script build a static site using https://gohugo.io/
 #
 # 1. Pull code from GitHub
-# 2. Generate markdown files from DB
+# 2. Generate markdown files for articles and clinical trials from DB
 # 3. Generate zip files with DB dump
 # 4. Generate Metabase embed keys for dashboards
 # 5. Run hugo build
