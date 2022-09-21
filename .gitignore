@@ -5,7 +5,7 @@ venv
 .DS_Store
 *.xlsx
 *.zip
-hugo/**/*.json
+hugo/content/developers/**/*.json
 .gitignore
 .hugo_build.lock
 .vscode/
