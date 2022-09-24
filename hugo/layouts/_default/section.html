@@ -63,14 +63,6 @@
 			  {{ end }}
 			
 			
-			
-			  <!-- <li class="page-item disabled">
-				<span class="page-link" aria-label="Previous">
-					<span aria-hidden="true"><i class="fa fa-angle-double-left" aria-hidden="true"></i></span>
-				</span>
-			  </li>
-			 -->
-			
 			  <li class="page-item{{ if not $pag.HasPrev }} disabled{{ end }}">
 				<a {{ if $pag.HasPrev }}href="{{ $pag.Prev.URL }}"{{ end }} class="page-link" aria-label="Previous">
 					<span aria-hidden="true"><i class="fa fa-angle-double-left" aria-hidden="true"></i></span>
