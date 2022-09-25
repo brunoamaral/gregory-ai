@@ -3,7 +3,7 @@ from django_cron import CronJobBase, Schedule
 from gregory.models import Articles
 import re 
 
-from unpaywall import unpaywall_utils
+from .unpaywall import unpaywall_utils
 
 class GetDoiCrossRef(CronJobBase):
 	RUN_EVERY_MINS = 300 # every 5h
@@ -15,7 +15,6 @@ class GetDoiCrossRef(CronJobBase):
 		works = Works(etiquette=my_etiquette)
 		articles = Articles.objects.filter(doi=None)
 		for article in articles:
-			print(article.article_id)
 			if article.article_id != 237:
 				i = 0
 				work = works.query(bibliographic=article.title).sort('relevance')
@@ -27,7 +26,6 @@ class GetDoiCrossRef(CronJobBase):
 						crossref_title = re.sub(r'[^A-Za-z0-9 ]+', '', w['title'][0])
 						crossref_title = re.sub(r' ','',crossref_title).lower()
 						if crossref_title == article_title:
-							print(article.article_id)
 							article.doi = w['DOI']
 							article.save()
 						i += 1
