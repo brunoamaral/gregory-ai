@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='articles',
             name='access',
-            field=models.CharField(choices=[('unknown','Unknown'),('open', 'Open'), ('restricted', 'Restricted')], default='unkown', max_length=50),
+            field=models.CharField(choices=[('unknown','Unknown'),('open', 'Open'), ('restricted', 'Restricted')], default='unknown', max_length=50),
         ),
     ]
