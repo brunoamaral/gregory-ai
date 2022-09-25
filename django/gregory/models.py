@@ -71,6 +71,7 @@ class Sources(models.Model):
 
 class Articles(models.Model):
 	KINDS = [('science paper', 'Science Paper'),('news article','News Article')]
+	ACCESS_OPTIONS = [('unknown','Unknown'),('open','Open'),('restricted','Restricted')]
 	article_id = models.AutoField(primary_key=True)
 	title = models.TextField(blank=False, null=False, unique=True)
 	link = models.URLField(blank=False, null=False, max_length=2000)
@@ -89,6 +90,7 @@ class Articles(models.Model):
 	sent_to_admin = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	kind = models.CharField(choices=KINDS, max_length=50,default='science paper')
+	access = models.CharField(choices=ACCESS_OPTIONS, max_length=50, default='unknown')
 
 
 
