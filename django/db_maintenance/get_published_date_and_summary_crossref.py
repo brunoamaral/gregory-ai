@@ -20,7 +20,6 @@ class GetDateSummaryCrossRef(CronJobBase):
 				w = works.doi(article.doi)
 				if 'issued' in w:
 					issued = w['issued']['date-parts'][0]
-					print(issued)
 					year,month,day = None,1,1
 					try:
 						year = issued[0]
