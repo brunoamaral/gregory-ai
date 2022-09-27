@@ -45,15 +45,15 @@ class GetDoiCrossRef(CronJobBase):
 					article.access = 'restricted'
 				article.save()
 
-		print('filling in the published_in field...')
-		articles = Articles.objects.filter(published_in__isnull=True,doi__isnull=False)
+		print('filling in the publisher field...')
+		articles = Articles.objects.filter(publisher__isnull=True,doi__isnull=False)
 		print('found articles that need publisher information',articles.count())
 		for article in articles:
 			if bool(article.doi):
 				work = works.doi(article.doi)
 				if work:
 					print(work['publisher'])
-					article.published_in = work['publisher']
+					article.publisher = work['publisher']
 					article.save()
 				else:
 					print(article.article_id)
