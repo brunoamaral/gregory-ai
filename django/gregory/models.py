@@ -91,7 +91,7 @@ class Articles(models.Model):
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	kind = models.CharField(choices=KINDS, max_length=50,default='science paper')
 	access = models.CharField(choices=ACCESS_OPTIONS, max_length=50, default='unknown')
-
+	published_in = models.CharField(max_length=150, blank=True, null=True, default=None)
 
 
 	def __str__(self):

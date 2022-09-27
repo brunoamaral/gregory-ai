@@ -34,12 +34,26 @@ class GetDoiCrossRef(CronJobBase):
 						
 		CLIENT_EMAIL = "bruno@gregory-ms.com"
 		articles = Articles.objects.filter(doi__isnull=False,access='unknown',kind='science paper')
+		print('found articles with no access information,',articles.count())
 		for article in articles:
-			if unpaywall_utils.checkIfDOIIsOpenAccess(article.doi, CLIENT_EMAIL):
-				article.access = 'open'
-				# if article.access == 'open':
-				# 	pdf_url = unpaywall_utils.getOpenAccessURLForDOI(article.doi, CLIENT_EMAIL)
-			else:
-				article.access = 'restricted'
-			article.save()
+			if bool(article.doi):
+				if unpaywall_utils.checkIfDOIIsOpenAccess(article.doi, CLIENT_EMAIL):
+					article.access = 'open'
+					# if article.access == 'open':
+					# 	pdf_url = unpaywall_utils.getOpenAccessURLForDOI(article.doi, CLIENT_EMAIL)
+				else:
+					article.access = 'restricted'
+				article.save()
 
+		print('filling in the published_in field...')
+		articles = Articles.objects.filter(published_in__isnull=True,doi__isnull=False)
+		print('found articles that need publisher information',articles.count())
+		for article in articles:
+			if bool(article.doi):
+				work = works.doi(article.doi)
+				if work:
+					print(work['publisher'])
+					article.published_in = work['publisher']
+					article.save()
+				else:
+					print(article.article_id)
