@@ -15,7 +15,7 @@ class GetDoiCrossRef(CronJobBase):
 		works = Works(etiquette=my_etiquette)
 		articles = Articles.objects.filter(doi=None)
 		for article in articles:
-			if article.article_id != 237:
+			if article.title != '':
 				i = 0
 				work = works.query(bibliographic=article.title).sort('relevance')
 				for w in work:
@@ -29,7 +29,7 @@ class GetDoiCrossRef(CronJobBase):
 							article.doi = w['DOI']
 							article.save()
 						i += 1
-						if i == 3:
+						if i == 5:
 							break
 						
 		CLIENT_EMAIL = "bruno@gregory-ms.com"
