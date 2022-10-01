@@ -2,6 +2,8 @@ from crossref.restful import Works, Etiquette
 from django_cron import CronJobBase, Schedule
 from gregory.models import Articles
 import re 
+import pytz
+from datetime import datetime
 
 from .unpaywall import unpaywall_utils
 
@@ -58,3 +60,45 @@ class GetDoiCrossRef(CronJobBase):
 					article.save()
 				else:
 					print(article.article_id)
+		articles = Articles.objects.filter(published_date=None,doi__isnull=False)
+		timezone = pytz.timezone('UTC')
+		for article in articles:
+			w = works.doi(article.doi)
+			if w != None and 'issued' in w:
+				issued = w['issued']['date-parts'][0]
+				year,month,day = None,1,1
+				print(issued)
+				try:
+					year = issued[0]
+				except:
+					pass
+				try:
+					month=issued[1]
+				except:
+					pass
+				try:
+					day=issued[2]
+				except:
+					pass
+				try:
+					published_date = datetime( year=year, month=month, day=day, tzinfo=timezone)
+					article.published_date = published_date
+					article.save()
+				except:
+						pass
+
+			if article.summary == None:
+				try:
+					article.summary = w['abstract']
+				except:
+					pass
+			article.save()
+		articles = Articles.objects.filter(summary=None)
+		for article in articles:
+			if hasattr(article,'doi') and article.doi != None:
+				w = works.doi(article.doi)
+				try:
+						article.summary = w['abstract']
+						article.save()
+				except:
+						pass
