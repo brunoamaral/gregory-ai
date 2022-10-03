@@ -35,7 +35,7 @@ class GetDoiCrossRef(CronJobBase):
 							break
 						
 		CLIENT_EMAIL = "bruno@gregory-ms.com"
-		articles = Articles.objects.filter(doi__isnull=False,access='unknown',kind='science paper')
+		articles = Articles.objects.filter(doi__isnull=False,access__isnull=True,kind='science paper')
 		print('found articles with no access information,',articles.count())
 		for article in articles:
 			if bool(article.doi):
