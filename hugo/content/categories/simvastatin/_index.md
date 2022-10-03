@@ -1,4 +1,0 @@
----
-title: "Simvastatin"
-subtitle: ""
----

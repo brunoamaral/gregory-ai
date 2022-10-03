@@ -1,4 +1,0 @@
----
-title: "Oligodendrocytes"
-subtitle: ""
----
