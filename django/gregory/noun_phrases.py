@@ -21,7 +21,6 @@ class NounPhrases(CronJobBase):
 				# Analyze syntax
 				noun_phrases = [chunk.text for chunk in doc.noun_chunks]
 				article.noun_phrases = noun_phrases
-				print(article.article_id)
 				article.save()
 	pass
 
