@@ -121,7 +121,7 @@ class MachineLearningFeed(Feed):
 	description = "Real time results for research on Multiple Sclerosis."
 
 	def items(self):
-		return Articles.objects.filter(ml_prediction_gnb=True)[:20]
+		return Articles.objects.filter(ml_prediction_gnb=True).order_by('-discovery_date')[:20]
 	
 	def item_title(self, item):
 		return item.title
