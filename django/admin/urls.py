@@ -18,7 +18,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path, re_path
 from rest_framework import routers
-from api.views import ArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,RelevantList,ArticlesBySourceList,ArticlesBySubject,UnsentList,TrialsBySourceList, ArticlesCount,AuthorsViewSet,SourceViewSet,TrialViewSet
+from api.views import ArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,ArticlesBySourceList,ArticlesBySubject,AuthorsViewSet,OpenAccessArticles,RelevantList,UnsentList,TrialsBySourceList,SourceViewSet,TrialViewSet
 from rss.views import *
 from subscriptions.views import subscribe_view
 
@@ -41,6 +41,7 @@ urlpatterns = [
 	# path('articles/related/', RelatedArticles.as_view({'get': 'list'})),
 	path('feed/articles/category/<str:category>/', ArticlesByCategoryFeed()),
 	path('feed/articles/subject/<str:subject>/', ArticlesBySubjectFeed()),
+	path('feed/articles/open/',OpenAccessFeed()),
 	path('feed/latest/articles/', LatestArticlesFeed()),
 	path('feed/latest/trials/', LatestTrialsFeed()),
 	path('feed/machine-learning/', MachineLearningFeed()),
@@ -50,6 +51,7 @@ urlpatterns = [
 	re_path('^articles/category/(?P<category>.+)/$', ArticlesByCategory.as_view({'get':'list'})),
 	re_path('^articles/source/(?P<source>.+)/$', ArticlesBySourceList.as_view()),
 	re_path('^articles/subject/(?P<subject>.+)/$', ArticlesBySubject.as_view({'get':'list'})),
+	re_path('^articles/open/$', OpenAccessArticles.as_view()),
 	re_path('^articles/unsent/$', UnsentList.as_view()),
 	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
 	path('', include(router.urls)),

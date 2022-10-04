@@ -215,3 +215,28 @@ class Twitter(Feed):
 		pubdate.
 		"""
 		return item.discovery_date
+
+class OpenAccessFeed(Feed):
+	title = "Articles listed as open access on unpaywall.org"
+	link = "/articles/"
+	description = ""
+
+	def items(self):
+		return Articles.objects.filter(access='open').order_by('-discovery_date')[:20]
+	
+	def item_title(self, item):
+		return item.title
+
+	def item_description(self, item):
+		return item.summary
+
+	def item_pubdate(self, item):
+		"""
+		Takes an item, as returned by items(), and returns the item's
+		pubdate.
+		"""
+		return item.published_date
+
+	# # item_link is only needed if NewsItem has no get_absolute_url method.
+	def item_link(self, item):
+		return item.link

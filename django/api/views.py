@@ -178,6 +178,17 @@ class ArticlesCount(viewsets.ModelViewSet):
 	# 	serializer = self.get_serializer(page, many=True)
 	# 	return HttpResponse(json.dumps(serializer.data))
 
+class OpenAccessArticles(generics.ListAPIView):
+	"""
+	List all articles in the database that are registered as open access on unpaywall.org
+	"""
+	serializer_class = ArticleSerializer
+	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		queryset = Articles.objects.filter(access='open')
+		return queryset 
+	
 ###
 # TRIALS
 ### 
