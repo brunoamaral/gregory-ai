@@ -25,6 +25,13 @@ class LatestArticlesFeed(Feed):
 	def item_link(self, item):
 		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
 
+	def item_pubdate(self, item):
+		"""
+		Takes an item, as returned by items(), and returns the item's
+		pubdate.
+		"""
+		return item.published_date
+
 class ArticlesBySubjectFeed(Feed):
 	title = "Latest research articles by Subject"
 	link = "/articles/"
@@ -46,6 +53,13 @@ class ArticlesBySubjectFeed(Feed):
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
 		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
+
+	def item_pubdate(self, item):
+		"""
+		Takes an item, as returned by items(), and returns the item's
+		pubdate.
+		"""
+		return item.published_date
 
 class ArticlesByCategoryFeed(Feed):
 	title = "Latest research articles by Subject"
@@ -69,6 +83,13 @@ class ArticlesByCategoryFeed(Feed):
 	def item_link(self, item):
 		return 'https://' + settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
 
+	def item_pubdate(self, item):
+		"""
+		Takes an item, as returned by items(), and returns the item's
+		pubdate.
+		"""
+		return item.published_date
+
 class LatestTrialsFeed(Feed):
 	title = "Latest clinical trials"
 	link = "/trials/"
@@ -87,6 +108,13 @@ class LatestTrialsFeed(Feed):
 	def item_link(self, item):
 		return 'https://api.' + settings.WEBSITE_DOMAIN + '/trials/' + str(item.pk) + '/'
 
+	def item_pubdate(self, item):
+		"""
+		Takes an item, as returned by items(), and returns the item's
+		pubdate.
+		"""
+		return item.published_date
+
 class MachineLearningFeed(Feed):
 	title = "Relevant articles by machine learning"
 	link = "/articles/"
@@ -100,6 +128,13 @@ class MachineLearningFeed(Feed):
 
 	def item_description(self, item):
 		return item.link
+
+	def item_pubdate(self, item):
+		"""
+		Takes an item, as returned by items(), and returns the item's
+		pubdate.
+		"""
+		return item.published_date
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
@@ -122,6 +157,14 @@ class ToPredictFeed(Feed):
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
 		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
+
+	def item_pubdate(self, item):
+		"""
+		Takes an item, as returned by items(), and returns the item's
+		pubdate.
+		"""
+		return item.published_date
+
 
 
 class Twitter(Feed):
