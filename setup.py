@@ -228,7 +228,7 @@ print('''
 ####
 ''')
 
-args = ("sudo","docker-compose","up","-d","admin","--build")
+args = ("sudo","docker-compose","up","--build","-d","admin")
 popen = Popen(args, stdout=PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
@@ -252,6 +252,7 @@ print('''
 ## Installing Node-RED and nodes required by flows.json
 ####
 ''')
+
 args = ("sudo","docker-compose","up","-d","node-red")
 popen = Popen(args, stdout=PIPE, universal_newlines=True)
 popen.wait()
