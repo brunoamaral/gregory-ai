@@ -20,7 +20,7 @@ tags:
   - 
 categories: 
   - 
-title: "For Patients"
+title: "For Multiple Sclerosis Patients"
 options:
   unlisted: false
   showHeader: true

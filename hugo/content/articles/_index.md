@@ -1,6 +1,6 @@
 ---
 title: "Full Listing"
-subtitle: This is the complete list of articles in the database
+subtitle: This is the complete list of Multiple Sclerosis articles in the database
 
 menu:
   main:
