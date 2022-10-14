@@ -58,8 +58,6 @@ EMAIL_PORT=587
 EMAIL_USE_TLS='True'
 # Where you cloned the repository>
 GREGORY_DIR=
-# Usually /usr/bin/hugo or /usr/local/bin/hugo. Run `which hugo` to find out
-HUGO_PATH=
 # Leave this blank and come back to them when you're finished installing Metabase.
 METABASE_SECRET_KEY=
 # Where do you want to host Metabase?
@@ -69,8 +67,6 @@ POSTGRES_DB=
 POSTGRES_PASSWORD=
 POSTGRES_USER=
 SECRET_KEY='Yeah well, you know, that is just, like, your DJANGO SECRET_KEY, man' # you should set this manually https://docs.djangoproject.com/en/4.0/ref/settings/#secret-key
-# This is the path where Hugo will write your static files
-WEBSITE_PATH=/var/www/DOMAIN.com/
 ```
 
 
