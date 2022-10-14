@@ -56,7 +56,11 @@ class GetDoiCrossRef(CronJobBase):
 				if work:
 					print(work['publisher'])
 					article.publisher = work['publisher']
-					article.container_title = work['container-title'][0]
+					try:
+						article.container_title = work['container-title'][0]
+					except IndexError:
+						print(work['container-title'])
+						pass
 					article.save()
 				else:
 					print(article.article_id)
