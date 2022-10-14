@@ -36,7 +36,6 @@ Rest API: <https://api.gregory-ms.com>
 
 - [ ] Python 3.9
 - [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/) with 2GB of swap memory to be able to build the MachineLearning Models. ([Adding swap for Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-add-swap-space-on-ubuntu-20-04))
-- [ ] [Hugo](https://gohugo.io/)
 - [ ] [Mailgun](https://www.mailgun.com/) (optional)
 
 ### Installing Gregory
@@ -91,18 +90,6 @@ Gregory needs to run a series of tasks to fetch missing information and apply th
 ```cron
 */5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
 ```
-
-6.  **Install** hugo
-
-You need to install some node modules for hugo to build and process the css. Simply run this.
-
-```bash
-cd hugo && npm i && cd ..;
-```
-
-In the `hugo` dir you will find a `config.toml` file that needs to be configured with your domain.
-
-7. **Build** the website by running `python3 ./build.py`.
 
 ## How everything fits together
 
@@ -173,7 +160,6 @@ Gregory has the concept of 'subject'. In this case, Multiple Sclerosis is the on
 
 There are options to filter lists of articles by their category or subject in the format `articles/category/<category>` and `articles/subject/<subject>` where <category> and <subject> is the lowercase name with spaces replaced by dashes.
 
-
 #### Available RSS feeds
 
 1. Latest articles, `/feed/latest/articles/`
@@ -195,28 +181,13 @@ It's useful to re-train the machine learning models once you have a good number 
 
 ## Running for local development
 
-### Frontend
-
-**MacOS**
-
-```bash
-brew install hugo;
-git clone git@github.com:brunoamaral/gregory.git;
-cd gregory/hugo
-hugo server 
-```
-
-### Backend
-
 Edit the env.example file to fit your configuration and rename to .env
 
 ```bash
-sudo docker compose up -d
+sudo docker-compose up -d
 python3 -m venv env
 source env/bin/activate
 pip install -r requirements.txt
-./build.py
-hugo server
 ```
 
 
