@@ -14,10 +14,9 @@ class GetDoiCrossRef(CronJobBase):
 	code = 'db_maintenance.get_doi_crossref'    # a unique code
 
 	def do(self):
-		CLIENT_EMAIL = "bruno@gregory-ms.com"
-		CLIENT_WEBSITE = 'https://' + os.environ.get('DOMAIN_NAME') + '/'
 		SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
-		my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, CLIENT_EMAIL)
+		CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
+		my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
 		works = Works(etiquette=my_etiquette)
 		articles = Articles.objects.filter(doi=None)
 		for article in articles:
@@ -42,7 +41,7 @@ class GetDoiCrossRef(CronJobBase):
 		print('found articles with no access information,',articles.count())
 		for article in articles:
 			if bool(article.doi):
-				if unpaywall_utils.checkIfDOIIsOpenAccess(article.doi, CLIENT_EMAIL):
+				if unpaywall_utils.checkIfDOIIsOpenAccess(article.doi, SITE.admin_email):
 					article.access = 'open'
 					# if article.access == 'open':
 					# 	pdf_url = unpaywall_utils.getOpenAccessURLForDOI(article.doi, CLIENT_EMAIL)

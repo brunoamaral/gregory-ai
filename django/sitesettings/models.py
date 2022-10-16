@@ -7,3 +7,4 @@ class CustomSetting(models.Model):
 	site = models.ForeignKey(Site, on_delete=models.PROTECT)
 	title = models.CharField(max_length=280,blank=False, null=False, unique=True)
 	email_footer = models.TextField(blank=True,null=True)
+	admin_email = models.EmailField(max_length=254, unique=False, null=True,blank=True)
