@@ -16,7 +16,8 @@ class GetDoiCrossRef(CronJobBase):
 	def do(self):
 		CLIENT_EMAIL = "bruno@gregory-ms.com"
 		CLIENT_WEBSITE = 'https://' + os.environ.get('DOMAIN_NAME') + '/'
-		my_etiquette = Etiquette('Gregory MS', 'v8', CLIENT_WEBSITE, CLIENT_EMAIL)
+		SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
+		my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, CLIENT_EMAIL)
 		works = Works(etiquette=my_etiquette)
 		articles = Articles.objects.filter(doi=None)
 		for article in articles:
