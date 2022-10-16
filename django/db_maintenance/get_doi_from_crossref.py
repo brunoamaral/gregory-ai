@@ -4,8 +4,9 @@ from gregory.models import Articles
 import re 
 import pytz
 from datetime import datetime
-
+import os
 from .unpaywall import unpaywall_utils
+from sitesettings.models import *
 
 class GetDoiCrossRef(CronJobBase):
 	RUN_EVERY_MINS = 60 
@@ -13,7 +14,9 @@ class GetDoiCrossRef(CronJobBase):
 	code = 'db_maintenance.get_doi_crossref'    # a unique code
 
 	def do(self):
-		my_etiquette = Etiquette('Gregory MS', 'v8', 'https://gregory-ms.com', 'bruno@gregory-ms.com')
+		CLIENT_EMAIL = "bruno@gregory-ms.com"
+		CLIENT_WEBSITE = 'https://' + os.environ.get('DOMAIN_NAME') + '/'
+		my_etiquette = Etiquette('Gregory MS', 'v8', CLIENT_WEBSITE, CLIENT_EMAIL)
 		works = Works(etiquette=my_etiquette)
 		articles = Articles.objects.filter(doi=None)
 		for article in articles:
@@ -34,7 +37,6 @@ class GetDoiCrossRef(CronJobBase):
 						if i == 5:
 							break
 						
-		CLIENT_EMAIL = "bruno@gregory-ms.com"
 		articles = Articles.objects.filter(doi__isnull=False,access__isnull=True,kind='science paper')
 		print('found articles with no access information,',articles.count())
 		for article in articles:
