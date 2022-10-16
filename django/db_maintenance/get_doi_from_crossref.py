@@ -63,6 +63,7 @@ class GetDoiCrossRef(CronJobBase):
 				else:
 					print(article.article_id)
 		articles = Articles.objects.filter(published_date=None,doi__isnull=False)
+		print('found articles that need publish date information',articles.count())
 		timezone = pytz.timezone('UTC')
 		for article in articles:
 			w = works.doi(article.doi)
@@ -96,6 +97,7 @@ class GetDoiCrossRef(CronJobBase):
 					pass
 			article.save()
 		articles = Articles.objects.filter(summary=None)
+		print('found articles that need abstract',articles.count())
 		for article in articles:
 			if hasattr(article,'doi') and article.doi != None:
 				w = works.doi(article.doi)
