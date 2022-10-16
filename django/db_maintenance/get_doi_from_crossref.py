@@ -4,8 +4,9 @@ from gregory.models import Articles
 import re 
 import pytz
 from datetime import datetime
-
+import os
 from .unpaywall import unpaywall_utils
+from sitesettings.models import *
 
 class GetDoiCrossRef(CronJobBase):
 	RUN_EVERY_MINS = 60 
@@ -13,7 +14,9 @@ class GetDoiCrossRef(CronJobBase):
 	code = 'db_maintenance.get_doi_crossref'    # a unique code
 
 	def do(self):
-		my_etiquette = Etiquette('Gregory MS', 'v8', 'https://gregory-ms.com', 'bruno@gregory-ms.com')
+		SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
+		CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
+		my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
 		works = Works(etiquette=my_etiquette)
 		articles = Articles.objects.filter(doi=None)
 		for article in articles:
@@ -34,12 +37,11 @@ class GetDoiCrossRef(CronJobBase):
 						if i == 5:
 							break
 						
-		CLIENT_EMAIL = "bruno@gregory-ms.com"
 		articles = Articles.objects.filter(doi__isnull=False,access__isnull=True,kind='science paper')
 		print('found articles with no access information,',articles.count())
 		for article in articles:
 			if bool(article.doi):
-				if unpaywall_utils.checkIfDOIIsOpenAccess(article.doi, CLIENT_EMAIL):
+				if unpaywall_utils.checkIfDOIIsOpenAccess(article.doi, SITE.admin_email):
 					article.access = 'open'
 					# if article.access == 'open':
 					# 	pdf_url = unpaywall_utils.getOpenAccessURLForDOI(article.doi, CLIENT_EMAIL)
@@ -65,6 +67,7 @@ class GetDoiCrossRef(CronJobBase):
 				else:
 					print(article.article_id)
 		articles = Articles.objects.filter(published_date=None,doi__isnull=False)
+		print('found articles that need publish date information',articles.count())
 		timezone = pytz.timezone('UTC')
 		for article in articles:
 			w = works.doi(article.doi)
@@ -98,6 +101,7 @@ class GetDoiCrossRef(CronJobBase):
 					pass
 			article.save()
 		articles = Articles.objects.filter(summary=None)
+		print('found articles that need abstract',articles.count())
 		for article in articles:
 			if hasattr(article,'doi') and article.doi != None:
 				w = works.doi(article.doi)
