@@ -6,6 +6,17 @@ from .models import Articles,Trials,Sources
 from django_cron import CronJobBase, Schedule
 import requests
 
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
+
+def remove_utm(url):
+	u = urlparse(url)
+	query = parse_qs(u.query, keep_blank_values=True)
+	query.pop('utm_source', None)
+	query.pop('utm_medium', None)
+	query.pop('utm_campaign', None)
+	query.pop('utm_content', None)
+	u = u._replace(query=urlencode(query, True))
+	return urlunparse(u)
 
 class FeedReaderTask(CronJobBase):
 	RUN_EVERY_MINS = 30
@@ -39,6 +50,7 @@ class FeedReaderTask(CronJobBase):
 					published = parse(entry['published'])
 				else:
 					published = parse(entry['prism_coverdate'])
+				link = remove_utm(entry['link'])
 				###
 				# This is a bad solution but it will have to do for now
 				###
@@ -48,12 +60,9 @@ class FeedReaderTask(CronJobBase):
 				if source_name == 'FASEB':
 					doi = entry['prism_doi']
 				try:
-					science_paper = Articles.objects.create(
-					discovery_date=datetime.now(), title = entry['title'], summary = summary, link = entry['link'], published_date = published, source = i, doi = doi, kind = source_for )
+					science_paper = Articles.objects.create(discovery_date=datetime.now(), title = entry['title'], summary = summary, link = link, published_date = published, source = i, doi = doi, kind = source_for )
 				except:
 					pass
-
-
 
 
 		###
@@ -81,7 +90,8 @@ class FeedReaderTask(CronJobBase):
 				published = entry.get('published')
 				if published:
 					published = parse(entry['published'])
+				link = remove_utm(entry['link'])
 				try:
-					trial = Trials.objects.create( discovery_date=datetime.now(), title = entry['title'], summary = summary, link = entry['link'], published_date = published)
+					trial = Trials.objects.create( discovery_date=datetime.now(), title = entry['title'], summary = summary, link = link, published_date = published)
 				except:
 					pass
