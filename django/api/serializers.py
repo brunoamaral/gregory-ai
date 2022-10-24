@@ -5,7 +5,6 @@ from gregory.models import Articles, Trials, Sources, Authors
 
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
-	# authors = serializers.SlugRelatedField(many=True,read_only=True, slug_field='author_id')
 	class Meta:
 		model = Articles
 		depth = 1
