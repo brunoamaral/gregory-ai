@@ -73,12 +73,14 @@ class FeedReaderTask(CronJobBase):
 
 				try:
 					science_paper = Articles.objects.create(discovery_date=datetime.now(), title = entry['title'], summary = summary, link = link, published_date = published, source = i, doi = doi, kind = source_for )
+					# check for type of access
 					if bool(science_paper.doi):
 						if unpaywall_utils.checkIfDOIIsOpenAccess(science_paper.doi, SITE.admin_email):
 							science_paper.access = 'open'
 						else:
 							science_paper.access = 'restricted'
-					
+
+					# get publisher information
 					work = works.doi(science_paper.doi)
 					if work:
 						science_paper.publisher = work['publisher']
@@ -87,6 +89,7 @@ class FeedReaderTask(CronJobBase):
 						except IndexError:
 							pass
 
+						# get author information
 						if 'author' in work and work['author'] is not None:
 							authors = work['author']
 							for author in authors:
@@ -109,6 +112,7 @@ class FeedReaderTask(CronJobBase):
 										science_paper.authors.add(author_obj)
 
 					science_paper.save()
+					## TO DO: run predictor engine on the new article
 				except:
 					pass
 
