@@ -22,7 +22,7 @@ class GetAuthors(CronJobBase):
 		articles = Articles.objects.filter(authors__isnull=True)
 		my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
 		works = Works(etiquette=my_etiquette)
-
+		articles = Articles.objects.filter(authors__isnull=True,doi__isnull=False)
 		for article in articles:
 			w = works.doi(article.doi)
 			if w is not None and 'author' in w and w['author'] is not None:
