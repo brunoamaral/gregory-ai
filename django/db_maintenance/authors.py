@@ -28,20 +28,21 @@ class GetAuthors(CronJobBase):
 			if w is not None and 'author' in w and w['author'] is not None:
 				authors = w['author']
 				for author in authors:
-					given_name = None
-					if 'given' in author:
-						given_name = author['given']
-					family_name = None
-					if 'family' in author:
-						family_name = author['family']
-					orcid = None
-					if 'ORCID' in author:
-						orcid = author['ORCID']
-
-					# get or create author
-					author_obj = Authors.objects.get_or_create(given_name=given_name,family_name=family_name,ORCID=orcid)
-					author_obj = author_obj[0]
-					## add to database
-					if author_obj.author_id is not None:
-						# make relationship
-						article.authors.add(author_obj)
+					if 'given' in author and 'family' in author:
+						given_name = None
+						if 'given' in author:
+							given_name = author['given']
+						family_name = None
+						if 'family' in author:
+							family_name = author['family']
+						orcid = None
+						if 'ORCID' in author:
+							orcid = author['ORCID']
+						print(given_name,family_name,orcid)
+						# get or create author
+						author_obj = Authors.objects.get_or_create(given_name=given_name,family_name=family_name,ORCID=orcid)
+						author_obj = author_obj[0]
+						## add to database
+						if author_obj.author_id is not None:
+							# make relationship
+							article.authors.add(author_obj)
