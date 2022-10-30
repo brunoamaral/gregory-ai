@@ -2,11 +2,20 @@ import feedparser
 from dateutil.parser import parse
 from datetime import datetime
 from dotenv import load_dotenv
-from .models import Articles,Trials,Sources
+from .models import Articles,Trials,Sources,Authors
 from django_cron import CronJobBase, Schedule
 import requests
 
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
+from db_maintenance.unpaywall import unpaywall_utils
+from sitesettings.models import *
+from crossref.restful import Works, Etiquette
+import os
+
+SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
+CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
+my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
+works = Works(etiquette=my_etiquette)
 
 def remove_utm(url):
 	u = urlparse(url)
@@ -59,8 +68,45 @@ class FeedReaderTask(CronJobBase):
 					doi = entry['dc_identifier'].replace('doi:','')
 				if source_name == 'FASEB':
 					doi = entry['prism_doi']
+
 				try:
 					science_paper = Articles.objects.create(discovery_date=datetime.now(), title = entry['title'], summary = summary, link = link, published_date = published, source = i, doi = doi, kind = source_for )
+					if bool(science_paper.doi):
+						if unpaywall_utils.checkIfDOIIsOpenAccess(science_paper.doi, SITE.admin_email):
+							science_paper.access = 'open'
+						else:
+							science_paper.access = 'restricted'
+					
+					work = works.doi(science_paper.doi)
+					if work:
+						science_paper.publisher = work['publisher']
+						try:
+							science_paper.container_title = work['container-title'][0]
+						except IndexError:
+							pass
+
+						if 'author' in work and work['author'] is not None:
+							authors = work['author']
+							for author in authors:
+								if 'given' in author and 'family' in author:
+									given_name = None
+									if 'given' in author:
+										given_name = author['given']
+									family_name = None
+									if 'family' in author:
+										family_name = author['family']
+									orcid = None
+									if 'ORCID' in author:
+										orcid = author['ORCID']
+									# get or create author
+									author_obj = Authors.objects.get_or_create(given_name=given_name,family_name=family_name,ORCID=orcid)
+									author_obj = author_obj[0]
+									## add to database
+									if author_obj.author_id is not None:
+										# make relationship
+										science_paper.authors.add(author_obj)
+
+					science_paper.save()
 				except:
 					pass
 
