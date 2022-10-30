@@ -19,7 +19,6 @@ class GetAuthors(CronJobBase):
 		load_dotenv()
 		SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 		CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
-		articles = Articles.objects.filter(authors__isnull=True)
 		my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
 		works = Works(etiquette=my_etiquette)
 		articles = Articles.objects.filter(authors__isnull=True,doi__isnull=False)
@@ -38,7 +37,6 @@ class GetAuthors(CronJobBase):
 						orcid = None
 						if 'ORCID' in author:
 							orcid = author['ORCID']
-						print(given_name,family_name,orcid)
 						# get or create author
 						author_obj = Authors.objects.get_or_create(given_name=given_name,family_name=family_name,ORCID=orcid)
 						author_obj = author_obj[0]
