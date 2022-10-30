@@ -55,6 +55,8 @@ class FeedReaderTask(CronJobBase):
 				if hasattr(entry,'summary'):
 					summary = entry['summary']
 				published = entry.get('published')
+				if source_name == 'PubMed' and hasattr(entry,'content'):
+					summary = entry['content'][0]['value']
 				if published:
 					published = parse(entry['published'])
 				else:
