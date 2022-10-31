@@ -80,14 +80,11 @@ class FeedReaderTask(CronJobBase):
 						else:
 							science_paper.access = 'restricted'
 
-					# get publisher information
-					work = works.doi(science_paper.doi)
-					if work:
-						science_paper.publisher = work['publisher']
-						try:
-							science_paper.container_title = work['container-title'][0]
-						except IndexError:
-							pass
+						# get publisher information
+						publisher_journal = greg.get_publisher_and_journal(science_paper.doi)
+						science_paper.publisher = publisher_journal[0]
+						science_paper.container_title = publisher_journal[1]
+						science_paper.save()
 
 						# get author information
 						if 'author' in work and work['author'] is not None:

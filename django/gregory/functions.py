@@ -18,11 +18,11 @@ def get_access_info(article_doi):
 		return article_access
 
 
-def get_publisher_and_journal(article_doi):
+def get_publisher_and_journal(doi):
 	'''
 	returns publisher and container-title as a tuple
 	'''
-	work = works.doi(article_doi)
+	work = works.doi(doi)
 	publisher = None
 	journal = None
 	if work:
