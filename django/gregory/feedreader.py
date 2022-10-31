@@ -11,6 +11,7 @@ from db_maintenance.unpaywall import unpaywall_utils
 from sitesettings.models import *
 from crossref.restful import Works, Etiquette
 import os
+import gregory.functions as greg
 
 SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
@@ -87,6 +88,7 @@ class FeedReaderTask(CronJobBase):
 						science_paper.save()
 
 						# get author information
+						work = works.doi(science_paper.doi)
 						if 'author' in work and work['author'] is not None:
 							authors = work['author']
 							for author in authors:
