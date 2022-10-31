@@ -8,10 +8,10 @@ CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
 my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
 works = Works(etiquette=my_etiquette)
 
-def get_access_info(article_doi):
+def get_access_info(doi):
 		article_access = None
-		if bool(article_doi):
-				if unpaywall_utils.checkIfDOIIsOpenAccess(article_doi, SITE.admin_email):
+		if bool(doi):
+				if unpaywall_utils.checkIfDOIIsOpenAccess(doi, SITE.admin_email):
 					article_access = 'open'
 				else:
 					article_access = 'restricted'
