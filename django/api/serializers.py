@@ -8,7 +8,7 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:
 		model = Articles
 		depth = 1
-		fields = ['article_id','title','summary','link','published_date','source','authors','relevant','ml_prediction_gnb','ml_prediction_lr','discovery_date','noun_phrases','doi','access']
+		fields = ['article_id','title','summary','link','published_date','source','publisher','container_title','authors','relevant','ml_prediction_gnb','ml_prediction_lr','discovery_date','noun_phrases','doi','access']
 		read_only_fields = ('discovery_date','ml_prediction_gnb','ml_prediction_lr','noun_phrases')
 		
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
