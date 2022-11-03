@@ -99,7 +99,7 @@ class FeedReaderTask(CronJobBase):
 									# make relationship
 									science_paper.authors.add(author_obj)
 					science_paper.save()
-					## TO DO: run predictor engine on the new article
+					greg.predict(science_paper)
 				except:
 					pass
 
