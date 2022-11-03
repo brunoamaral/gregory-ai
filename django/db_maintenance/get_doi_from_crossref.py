@@ -8,6 +8,7 @@ import os
 from .unpaywall import unpaywall_utils
 from sitesettings.models import *
 import gregory.functions as greg
+from gregory.classes import SciencePaper
 
 class GetDoiCrossRef(CronJobBase):
 	RUN_EVERY_MINS = 60 
@@ -27,7 +28,8 @@ class GetDoiCrossRef(CronJobBase):
 		articles = Articles.objects.filter(doi__isnull=False,access__isnull=True,kind='science paper')
 		print('found articles with no access information,',articles.count())
 		for article in articles:
-			article.access = greg.get_access_info(article.doi)
+			paper = SciencePaper(article.doi)
+			article.access = paper.access
 			article.save()
 
 		# Get publisher and journal
@@ -35,17 +37,17 @@ class GetDoiCrossRef(CronJobBase):
 		articles = Articles.objects.filter(publisher__isnull=True,doi__isnull=False)
 		print('found articles that need publisher information',articles.count())
 		for article in articles:
-			publisher_journal = greg.get_publisher_and_journal(article.doi)
-			article.publisher = publisher_journal[0]
-			article.container_title = publisher_journal[1]
+			paper = SciencePaper(article.doi)
+			article.publisher = paper.publisher
+			article.container_title = paper.journal
 			article.save()
 
 		# Get published date
 		articles = Articles.objects.filter(published_date=None,doi__isnull=False)
 		print('found articles that need publish date information',articles.count())
-		timezone = pytz.timezone('UTC')
 		for article in articles:
-			article.published_date = greg.get_published_date(article.doi)
+			paper = SciencePaper(article.doi)
+			article.published_date = paper.published_date
 			article.save()
 
 		# Get abstracts
