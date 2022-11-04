@@ -67,9 +67,11 @@ class FeedReaderTask(CronJobBase):
 				###
 				# This is a bad solution but it will have to do for now
 				###
-				doi = None 
+				doi = None
 				if source_name == 'PubMed':
-					doi = entry['dc_identifier'].replace('doi:','')
+					doi = None
+					if entry['dc_identifier'].startswith('doi:'):
+						doi = entry['dc_identifier'].replace('doi:','')
 				if source_name == 'FASEB':
 					doi = entry['prism_doi']
 				## BAD solution, should populate paper.access and other fields as None, come back in the future
