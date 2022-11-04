@@ -13,7 +13,7 @@ class SciencePaper:
 		works = Works(etiquette=my_etiquette)
 		work = works.doi(doi)
 		self.doi = doi
-		self.link = work['link'][0]['URL']
+		self.link = None if 'link' not in work or len(work['link']) == 0 or work['link'] == None or work['link'][0]['URL'] == None else work['link'][0]['URL']
 		article_access = None
 		if title == None:
 			self.title = work['title'][0]
