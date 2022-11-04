@@ -2,7 +2,6 @@ from crossref.restful import Works, Etiquette
 from sitesettings.models import CustomSetting
 import re
 import os
-from models import Articles
 from joblib import load
 from .utils.model_utils import DenseTransformer
 from datetime import date
@@ -59,7 +58,7 @@ def predict(articles=Articles.objects.filter(ml_prediction_gnb=None,summary__gt=
 	# dataset_file_json = '/code/gregory/data/' + today.strftime("%Y-%B") + '.json'
 	dataset_file_csv = '/code/gregory/data/' + today.strftime("%Y-%B") + '.csv'
 
-	dataset = pd.DataFrame(list(articles)
+	dataset = pd.DataFrame(list(articles))
 	if len(dataset) > 0:
 		# i think we don't need the line below
 		# dataset = pd.json_normalize(data=data['results'])
