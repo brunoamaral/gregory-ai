@@ -13,8 +13,11 @@ class SciencePaper:
 		client_website = 'https://' + site.site.domain + '/'
 		my_etiquette = Etiquette(site.title, 'v8', client_website, site.admin_email)
 		works = Works(etiquette=my_etiquette)
-		work = works.doi(doi)
-		self.doi = doi
+		work = None
+		self.doi = None
+		if doi != None:
+			work = works.doi(doi)
+			self.doi = doi
 		self.link = None
 		try: 
 			self.link = work['link'][0]['URL']
@@ -35,15 +38,17 @@ class SciencePaper:
 				article_access = 'restricted'
 		self.access = article_access
 		self.publisher = None
-		try:
-			self.publisher = work['publisher']
-		except:
-			pass
+		if work != None and 'publisher' in work:
+			if isinstance(work['publisher'],list):
+				self.publisher = work['publisher'][0]
+			else:
+				self.publisher = work['publisher']
 		self.journal = None
-		try:
+		if work != None and 'container-title' in work:
+			if isinstance(work['container-title'], list):
 				self.journal = work['container-title'][0]
-		except:
-				pass
+			else:
+				self.journal = work['container-title']
 		self.published_date = None
 		if work != None and 'issued' in work:
 			issued = work['issued']['date-parts'][0]
@@ -66,8 +71,9 @@ class SciencePaper:
 				pass
 		self.abstract = None
 		try:
-				self.abstract = work['abstract']
+			self.abstract = work['abstract']
 		except:
+			pass
 		if self.abstract != None:
 			self.abstract = html.unescape(self.abstract)
 			soup = BeautifulSoup(self.abstract,'html.parser')
