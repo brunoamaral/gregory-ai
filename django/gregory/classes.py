@@ -6,6 +6,8 @@ class SciencePaper:
 		from crossref.restful import Works, Etiquette
 		import os
 		import pytz
+		import html
+		from bs4 import BeautifulSoup
 		timezone = pytz.timezone('UTC')
 		site = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 		client_website = 'https://' + site.site.domain + '/'
@@ -66,7 +68,13 @@ class SciencePaper:
 		try:
 				self.abstract = work['abstract']
 		except:
-				pass
+		if self.abstract != None:
+			self.abstract = html.unescape(self.abstract)
+			soup = BeautifulSoup(self.abstract,'html.parser')
+			for tag in soup():
+				for attribute in ["class", "id", "name", "style"]:
+					del tag[attribute]
+			self.abstract = str(soup)
 		self.authors = None
 		try:
 			self.authors = work['author']
