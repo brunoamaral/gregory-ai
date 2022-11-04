@@ -74,7 +74,7 @@ class FeedReaderTask(CronJobBase):
 					doi = entry['prism_doi']
 				## BAD solution, should populate paper.access and other fields as None, come back in the future
 				paper = None
-				if doi != None:
+				if doi != None and doi.startswith('10.'):
 					paper = SciencePaper(doi)
 				try:
 					science_paper = Articles.objects.create(discovery_date=datetime.now(), title = entry['title'], summary = summary, link = link, published_date = published, source = i, doi = doi, kind = source_for, access=paper.access, container_title=paper.journal, publisher=paper.publisher)
