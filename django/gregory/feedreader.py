@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 from .models import Articles,Trials,Sources,Authors
 from django_cron import CronJobBase, Schedule
 import requests
-
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 from db_maintenance.unpaywall import unpaywall_utils
 from sitesettings.models import *
@@ -69,47 +68,39 @@ class FeedReaderTask(CronJobBase):
 				###
 				doi = None
 				if source_name == 'PubMed':
-					doi = None
 					if entry['dc_identifier'].startswith('doi:'):
 						doi = entry['dc_identifier'].replace('doi:','')
 				if source_name == 'FASEB':
 					doi = entry['prism_doi']
-				## BAD solution, should populate paper.access and other fields as None, come back in the future
-				paper = None
-				try:
-					paper = SciencePaper(doi)
-				except:
-					pass
+				paper = SciencePaper(doi)
 				try:
 					science_paper = Articles.objects.create(discovery_date=datetime.now(), title = entry['title'], summary = summary, link = link, published_date = published, source = i, doi = doi, kind = source_for)
-					if bool(science_paper.doi):
-						if paper.access != None:
-							science_paper.access=paper.access
-						if paper.journal != None:
-							science_paper.container_title = paper.journal
-						if paper.publisher != None:
-							science_paper.publisher = paper.publisher
+					if paper != None:
+						science_paper.access=paper.access
+						science_paper.container_title = paper.journal
+						science_paper.publisher = paper.publisher
+						if paper.abstract != None:
+							science_paper.summary = paper.abstract
 						science_paper.save()
-						if paper.authors != None:
-							# get author information
-							for author in paper.authors:
-								if 'given' in author and 'family' in author:
-									given_name = None
-									if 'given' in author:
-										given_name = author['given']
-									family_name = None
-									if 'family' in author:
-										family_name = author['family']
-									orcid = None
-									if 'ORCID' in author:
-										orcid = author['ORCID']
-									# get or create author
-									author_obj = Authors.objects.get_or_create(given_name=given_name,family_name=family_name,ORCID=orcid)
-									author_obj = author_obj[0]
-									## add to database
-									if author_obj.author_id is not None:
-										# make relationship
-										science_paper.authors.add(author_obj)
+						# get author information
+						for author in paper.authors:
+							if 'given' in author and 'family' in author:
+								given_name = None
+								if 'given' in author:
+									given_name = author['given']
+								family_name = None
+								if 'family' in author:
+									family_name = author['family']
+								orcid = None
+								if 'ORCID' in author:
+									orcid = author['ORCID']
+								# get or create author
+								author_obj = Authors.objects.get_or_create(given_name=given_name,family_name=family_name,ORCID=orcid)
+								author_obj = author_obj[0]
+								## add to database
+								if author_obj.author_id is not None:
+									# make relationship
+									science_paper.authors.add(author_obj)
 						science_paper.save()
 						# greg.predict(science_paper)
 				except:
