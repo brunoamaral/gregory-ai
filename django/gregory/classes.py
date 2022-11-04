@@ -13,19 +13,30 @@ class SciencePaper:
 		works = Works(etiquette=my_etiquette)
 		work = works.doi(doi)
 		self.doi = doi
-		self.link = None if 'link' not in work or len(work['link']) == 0 or work['link'] == None or work['link'][0]['URL'] == None else work['link'][0]['URL']
-		article_access = None
+		self.link = None
+		try: 
+			self.link = work['link'][0]['URL']
+		except: 
+			pass
 		if title == None:
-			self.title = work['title'][0]
+			try:
+				self.title = work['title'][0]
+			except:
+				pass
 		else:
 			self.title = title
+		article_access = None
 		if bool(doi):
 			if unpaywall_utils.checkIfDOIIsOpenAccess(doi, site.admin_email):
 				article_access = 'open'
 			else:
 				article_access = 'restricted'
 		self.access = article_access
-		self.publisher = work['publisher']
+		self.publisher = None
+		try:
+			self.publisher = work['publisher']
+		except:
+			pass
 		self.journal = None
 		try:
 				self.journal = work['container-title'][0]
@@ -56,9 +67,11 @@ class SciencePaper:
 				self.abstract = work['abstract']
 		except:
 				pass
-		self.authors = []
-		if 'author' in work and work['author'] is not None:
+		self.authors = None
+		try:
 			self.authors = work['author']
+		except:
+			pass
 	def __str__(self):
 		return f"{self.doi}, {self.title}"
 	def __repr__(self):
