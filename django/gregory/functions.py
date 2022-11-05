@@ -57,8 +57,7 @@ def predict(articles=Articles.objects.filter(ml_prediction_gnb=None,summary__gt=
 
 	# dataset_file_json = '/code/gregory/data/' + today.strftime("%Y-%B") + '.json'
 	dataset_file_csv = '/code/gregory/data/' + today.strftime("%Y-%B") + '.csv'
-
-	dataset = pd.DataFrame(list(articles))
+	dataset = pd.DataFrame(list(articles.values()))
 	if len(dataset) > 0:
 		# i think we don't need the line below
 		# dataset = pd.json_normalize(data=data['results'])
@@ -151,5 +150,4 @@ def predict(articles=Articles.objects.filter(ml_prediction_gnb=None,summary__gt=
 					if model == 'lr':
 						article.ml_prediction_lr = False
 				article.save()
-pass
-		
+	return

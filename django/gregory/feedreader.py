@@ -102,7 +102,8 @@ class FeedReaderTask(CronJobBase):
 									# make relationship
 									science_paper.authors.add(author_obj)
 						science_paper.save()
-						# greg.predict(science_paper)
+						# the articles variable needs to be a queryset list in order to be turned into a pandas dataframe
+						greg.predict(articles=Articles.objects.filter(pk=science_paper.article_id))
 				except:
 					pass
 
