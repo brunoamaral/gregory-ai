@@ -54,6 +54,9 @@ class GetDoiCrossRef(CronJobBase):
 		articles = Articles.objects.filter(summary=None)
 		print('found articles that need abstract',articles.count())
 		for article in articles:
-			article.summary = greg.get_abstract(article.doi)
-			article.save()
+			science_paper = SciencePaper(article.doi)
+			print(science_paper.abstract)
+			if science_paper.abstract != None:
+				article.summary = science_paper.abstract
+				article.save()
 			
