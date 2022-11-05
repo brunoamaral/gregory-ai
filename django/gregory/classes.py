@@ -46,7 +46,10 @@ class SciencePaper:
 		self.journal = None
 		if work != None and 'container-title' in work:
 			if isinstance(work['container-title'], list):
-				self.journal = work['container-title'][0]
+				if len(work['container-title']) > 0:
+					self.journal = work['container-title'][0]
+				else:
+					self.journal = ''
 			else:
 				self.journal = work['container-title']
 		self.published_date = None
