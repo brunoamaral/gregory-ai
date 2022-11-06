@@ -4,6 +4,7 @@ from django.db.models.query import QuerySet
 from gregory.models import Articles, Trials, Sources, Authors, Categories
 from rest_framework import viewsets, permissions, generics, filters
 from django.db.models import Q
+from rest_framework.decorators import api_view
 
 
 # Stuff needed for the API with authorization
@@ -15,8 +16,8 @@ from api.utils.exceptions import (APIAccessDeniedError,
 										APIInvalidIPAddressError,
 										APINoAPIKeyError)
 from api.utils.responses import (ACCESS_DENIED, INVALID_API_KEY,
-									   INVALID_IP_ADDRESS, NO_API_KEY,
-									   UNEXPECTED, returnData, returnError)
+										 INVALID_IP_ADDRESS, NO_API_KEY,
+										 UNEXPECTED, returnData, returnError)
 
 
 # Example of a view of the API that checks for authorization
@@ -75,7 +76,55 @@ def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_
 	log.error_message = error_message
 	log.save()
 
+###
+# API Post
+###
 
+@api_view(['POST'])
+def post_article(request, pk):
+		"""
+		Allows authenticated clients to add new articles to the database
+		"""
+		call_type = request.method + " " + request.path
+		ip_addr = getIPAddress(request)
+
+		try:
+			api_key = getAPIKey(request)
+
+			# This checks if this API key and IP address are authorized to access
+			# this API endpoint. If so, the valid client access scheme is returned
+			access_scheme = checkValidAccess(api_key, ip_addr)
+
+			# At this point, the API client is authorized
+			print(request)
+			# Do something...
+
+			# Prepare some data to be returned to the API client
+			data = {
+				'name': 'Some API Name',
+				'version': '0.1b'
+			}
+
+			# This creates an access log for this client in the DB
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, None)
+			# Actually return the data to the API client
+			return returnData(data)
+		except APINoAPIKeyError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 401, str(exception))
+			return returnError(NO_API_KEY, str(exception), 401)
+		except APIInvalidAPIKeyError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 401, str(exception))
+			return returnError(INVALID_API_KEY, str(exception), 401)
+		except APIInvalidIPAddressError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 401, str(exception))
+			return returnError(INVALID_IP_ADDRESS, str(exception), 401)
+		except APIAccessDeniedError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception))
+			return returnError(ACCESS_DENIED, str(exception), 403)
+		except Exception as exception:
+			print(traceback.format_exc())
+			generateAccessSchemeLog(call_type, ip_addr, None, 500, str(exception))
+			return returnError(UNEXPECTED, str(exception), 500)
 
 ###
 # ARTICLES
