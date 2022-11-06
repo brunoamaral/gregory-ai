@@ -1,11 +1,15 @@
 from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer
 from django.db.models.functions import Length
-from django.db.models.query import QuerySet
 from gregory.models import Articles, Trials, Sources, Authors, Categories
 from rest_framework import viewsets, permissions, generics, filters
 from django.db.models import Q
 from rest_framework.decorators import api_view
+import json
+from datetime import datetime
+import os
+from sitesettings.models import CustomSetting
 
+site = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 
 # Stuff needed for the API with authorization
 import traceback
@@ -18,52 +22,6 @@ from api.utils.exceptions import (APIAccessDeniedError,
 from api.utils.responses import (ACCESS_DENIED, INVALID_API_KEY,
 										 INVALID_IP_ADDRESS, NO_API_KEY,
 										 UNEXPECTED, returnData, returnError)
-
-
-# Example of a view of the API that checks for authorization
-def view_with_authorization_check(request):
-	call_type = request.method + " " + request.path
-	ip_addr = getIPAddress(request)
-
-	try:
-		api_key = getAPIKey(request)
-
-		# This checks if this API key and IP address are authorized to access
-		# this API endpoint. If so, the valid client access scheme is returned
-		access_scheme = checkValidAccess(api_key, ip_addr)
-
-		# At this point, the API client is authorized
-		
-		# Do something...
-
-		# Prepare some data to be returned to the API client
-		data = {
-			'name': 'Some API Name',
-			'version': '0.1b'
-		}
-
-		# This creates an access log for this client in the DB
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, None)
-
-		# Actually return the data to the API client
-		return returnData(data)
-
-	except APINoAPIKeyError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, None, 401, str(exception))
-		return returnError(NO_API_KEY, str(exception), 401)
-	except APIInvalidAPIKeyError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, None, 401, str(exception))
-		return returnError(INVALID_API_KEY, str(exception), 401)
-	except APIInvalidIPAddressError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, None, 401, str(exception))
-		return returnError(INVALID_IP_ADDRESS, str(exception), 401)
-	except APIAccessDeniedError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception))
-		return returnError(ACCESS_DENIED, str(exception), 403)
-	except Exception as exception:
-		print(traceback.format_exc())
-		generateAccessSchemeLog(call_type, ip_addr, None, 500, str(exception))
-		return returnError(UNEXPECTED, str(exception), 500)
 
 
 # Util function that creates an instance of the access log model
@@ -81,7 +39,7 @@ def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_
 ###
 
 @api_view(['POST'])
-def post_article(request, pk):
+def post_article(request):
 		"""
 		Allows authenticated clients to add new articles to the database
 		"""
@@ -96,13 +54,31 @@ def post_article(request, pk):
 			access_scheme = checkValidAccess(api_key, ip_addr)
 
 			# At this point, the API client is authorized
-			print(request)
-			# Do something...
-
+			post_data = json.loads(request.body)
+			print(post_data)
+			new_article = {
+				"title": post_data['title'],
+				"link": post_data['link'],
+				"doi": post_data['doi'],
+				"summary": post_data['summary'],
+				"source": post_data['source'],
+				"published_date": post_data['published_date'],
+				"discovery_date": datetime.now(),
+				# Not sure if and how we should post the authors
+				# "authors": post_data['authors'],
+				"relevant": post_data['relevant'],
+				"kind": post_data['kind'],
+				"access": post_data['access'],
+				"publisher": post_data['publisher'],
+				"container_title": post_data['container_title']
+			}
+			print(new_article)
 			# Prepare some data to be returned to the API client
 			data = {
-				'name': 'Some API Name',
-				'version': '0.1b'
+				'name': site.title,
+				'version': '0.1b',
+				"request": json.loads(request.body),
+				'code': '200 / 201'
 			}
 
 			# This creates an access log for this client in the DB
