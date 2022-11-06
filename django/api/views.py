@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 import os
 from sitesettings.models import CustomSetting
+from gregory.classes import SciencePaper
 
 site = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 
@@ -57,27 +58,47 @@ def post_article(request):
 			post_data = json.loads(request.body)
 			print(post_data)
 			new_article = {
-				"title": post_data['title'],
-				"link": post_data['link'],
+				"title": None if 'title' not in post_data or post_data['title'] == '' else post_data['title'],
+				"link": None if 'link' not in post_data or post_data['link'] == '' else post_data['link'],
 				"doi": post_data['doi'],
-				"summary": post_data['summary'],
-				"source": post_data['source'],
-				"published_date": post_data['published_date'],
+				"summary": None if 'summary' not in post_data or post_data['summary'] == '' else post_data['summary'],
+				# not sure if source is mandatory
+				"source": None if 'source' not in post_data or post_data['source'] == '' else post_data['source'],
+				"published_date": None if 'published_date' not in post_data or post_data['published_date'] == '' else post_data['published_date'],
 				"discovery_date": datetime.now(),
 				# Not sure if and how we should post the authors
 				# "authors": post_data['authors'],
-				"relevant": post_data['relevant'],
-				"kind": post_data['kind'],
-				"access": post_data['access'],
-				"publisher": post_data['publisher'],
-				"container_title": post_data['container_title']
+				"kind": None if 'kind' not in post_data or post_data['kind'] == '' else post_data['kind'],
+				"access": None if 'access' not in post_data or post_data['access'] == '' else post_data['access'],
+				"publisher": None if 'publisher' not in post_data or post_data['publisher'] == '' else post_data['publisher'],
+				"container_title": None if 'container_title' not in post_data or post_data['container_title'] == '' else post_data['container_title']
 			}
-			print(new_article)
+
+			science_paper = None
+			print(new_article['kind'],new_article['doi'])
+			if new_article['kind'] == 'science paper' and new_article['doi'] != None:
+				science_paper = SciencePaper(new_article['doi'])
+				if new_article['title'] == None:
+					new_article['title'] = science_paper.title
+				if new_article['link'] == None:
+					new_article['link'] = science_paper.link
+				if new_article['summary'] == None:
+					new_article['summary'] = science_paper.abstract
+				if new_article['published_date'] == None:
+					new_article['published_date'] = science_paper.published_date
+				if new_article['access'] == None:
+					new_article['access'] = science_paper.access
+				if new_article['publisher'] == None:
+					new_article['publisher'] = science_paper.publisher
+				if new_article['container_title'] == None:
+					new_article['container_title'] = science_paper.journal
+
 			# Prepare some data to be returned to the API client
 			data = {
-				'name': site.title,
+				'name': site.title + '| API',
 				'version': '0.1b',
-				"request": json.loads(request.body),
+				"data_received": json.loads(request.body),
+				'data_processed_from_doi': new_article,
 				'code': '200 / 201'
 			}
 
