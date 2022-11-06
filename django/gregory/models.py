@@ -93,7 +93,7 @@ class Articles(models.Model):
 	access = models.CharField(choices=ACCESS_OPTIONS, max_length=50, default=None, null=True)
 	publisher = models.CharField(max_length=150, blank=True, null=True, default=None)
 	container_title = models.CharField(max_length=150, blank=True, null=True, default=None)
-
+	crossref_check = models.DateTimeField(blank=True, null=True)
 
 	def __str__(self):
 		return str(self.article_id)
