@@ -1,6 +1,5 @@
 import feedparser
 from dateutil.parser import parse
-from datetime import datetime
 from dotenv import load_dotenv
 from .models import Articles,Trials,Sources,Authors
 from django_cron import CronJobBase, Schedule
@@ -12,7 +11,8 @@ from crossref.restful import Works, Etiquette
 import os
 import gregory.functions as greg
 from gregory.classes import SciencePaper
-
+from django.utils import timezone
+import pytz
 SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
 my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
@@ -74,7 +74,7 @@ class FeedReaderTask(CronJobBase):
 					doi = entry['prism_doi']
 				paper = SciencePaper(doi)
 				try:
-					science_paper = Articles.objects.create(discovery_date=datetime.now(), title = entry['title'], summary = summary, link = link, published_date = published, source = i, doi = doi, kind = source_for)
+					science_paper = Articles.objects.create(discovery_date=timezone.now(), title = entry['title'], summary = summary, link = link, published_date = published, source = i, doi = doi, kind = source_for)
 					if paper != None:
 						science_paper.access=paper.access
 						science_paper.container_title = paper.journal
@@ -133,6 +133,6 @@ class FeedReaderTask(CronJobBase):
 					published = parse(entry['published'])
 				link = remove_utm(entry['link'])
 				try:
-					trial = Trials.objects.create( discovery_date=datetime.now(), title = entry['title'], summary = summary, link = link, published_date = published)
+					trial = Trials.objects.create( discovery_date=timezone.now(), title = entry['title'], summary = summary, link = link, published_date = published)
 				except:
 					pass
