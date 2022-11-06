@@ -1,14 +1,14 @@
 from crossref.restful import Works, Etiquette
 from dotenv import load_dotenv
-
 from django.conf import settings
 from django_cron import CronJobBase, Schedule
 from django.template.loader import get_template
 from gregory.models import Articles,Authors
 from django.db.models import Q
-
 import os
 from sitesettings.models import *
+from django.utils import timezone
+import pytz
 
 class GetAuthors(CronJobBase):
 	RUN_EVERY_MINS = 150
@@ -21,7 +21,7 @@ class GetAuthors(CronJobBase):
 		CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
 		my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
 		works = Works(etiquette=my_etiquette)
-		articles = Articles.objects.filter(authors__isnull=True,doi__isnull=False)
+		articles = Articles.objects.filter(authors__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(authors__isnull=True,doi__isnull=False,crossref_check__isnull=True)
 		for article in articles:
 			w = works.doi(article.doi)
 			if w is not None and 'author' in w and w['author'] is not None:
@@ -44,3 +44,5 @@ class GetAuthors(CronJobBase):
 						if author_obj.author_id is not None:
 							# make relationship
 							article.authors.add(author_obj)
+			article.crossref_check = timezone.now()
+			article.save()
