@@ -56,16 +56,14 @@ def post_article(request):
 
 			# At this point, the API client is authorized
 			post_data = json.loads(request.body)
-			print(post_data)
 			new_article = {
 				"title": None if 'title' not in post_data or post_data['title'] == '' else post_data['title'],
 				"link": None if 'link' not in post_data or post_data['link'] == '' else post_data['link'],
 				"doi": post_data['doi'],
 				"summary": None if 'summary' not in post_data or post_data['summary'] == '' else post_data['summary'],
 				# not sure if source is mandatory
-				"source": None if 'source' not in post_data or post_data['source'] == '' else post_data['source'],
+				"source_id": None if 'source_id' not in post_data or post_data['source_id'] == '' else post_data['source_id'],
 				"published_date": None if 'published_date' not in post_data or post_data['published_date'] == '' else post_data['published_date'],
-				"discovery_date": datetime.now(),
 				# Not sure if and how we should post the authors
 				# "authors": post_data['authors'],
 				"kind": None if 'kind' not in post_data or post_data['kind'] == '' else post_data['kind'],
@@ -75,7 +73,6 @@ def post_article(request):
 			}
 
 			science_paper = None
-			print(new_article['kind'],new_article['doi'])
 			if new_article['kind'] == 'science paper' and new_article['doi'] != None:
 				science_paper = SciencePaper(new_article['doi'])
 				if new_article['title'] == None:
@@ -92,18 +89,41 @@ def post_article(request):
 					new_article['publisher'] = science_paper.publisher
 				if new_article['container_title'] == None:
 					new_article['container_title'] = science_paper.journal
+				else:
+					print("Raise an error due to missing required fields")
 
+			article_on_gregory = Articles.objects.filter(doi=new_article['doi']) 
+			result = 200
+			save_article = None
+			error_message = None
+			if article_on_gregory.count() == 0:
+				try:
+					source = Sources.objects.get(pk=new_article['source_id'])
+				except:
+					error_message = 'error fetching source'
+				try:
+					save_article = Articles.objects.create(discovery_date=datetime.now(), title = new_article['title'], summary = new_article['summary'], link = new_article['link'], published_date = new_article['published_date'], source = source, doi = new_article['doi'], kind = new_article['kind'])
+					result = 201
+				except:
+					error_message = 'error creating object'
+					result = 403
+			else:
+					error_message = 'article exists with article_id ' + str(article_on_gregory[0].article_id)
+					result = 400
+			
 			# Prepare some data to be returned to the API client
 			data = {
 				'name': site.title + '| API',
 				'version': '0.1b',
 				"data_received": json.loads(request.body),
 				'data_processed_from_doi': new_article,
-				'code': '200 / 201'
+				'article_id': save_article.article_id,
+				'code': result,
+				'error_message': error_message
 			}
 
 			# This creates an access log for this client in the DB
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, None)
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, result, None)
 			# Actually return the data to the API client
 			return returnData(data)
 		except APINoAPIKeyError as exception:
