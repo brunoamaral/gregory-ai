@@ -1,9 +1,155 @@
 from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer
 from django.db.models.functions import Length
-from django.db.models.query import QuerySet
 from gregory.models import Articles, Trials, Sources, Authors, Categories
 from rest_framework import viewsets, permissions, generics, filters
 from django.db.models import Q
+from rest_framework.decorators import api_view
+import json
+from datetime import datetime
+import os
+from sitesettings.models import CustomSetting
+from gregory.classes import SciencePaper
+
+site = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
+
+# Stuff needed for the API with authorization
+import traceback
+from api.utils.utils import (checkValidAccess, getAPIKey, getIPAddress)
+from api.models import APIAccessSchemeLog
+from api.utils.exceptions import (APIAccessDeniedError,
+										APIInvalidAPIKeyError,
+										APIInvalidIPAddressError,
+										APINoAPIKeyError, SourceNotFoundError, FieldNotFoundError, ArticleExistsError, ArticleNotSavedError)
+from api.utils.responses import (ACCESS_DENIED, INVALID_API_KEY,
+										 INVALID_IP_ADDRESS, NO_API_KEY,
+										 UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError)
+
+
+# Util function that creates an instance of the access log model
+def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_message):
+	log = APIAccessSchemeLog()
+	log.call_type = call_type
+	log.ip_addr = ip_addr
+	log.api_access_scheme = access_scheme
+	log.http_code = http_code
+	log.error_message = error_message
+	log.save()
+
+###
+# API Post
+###
+
+@api_view(['POST'])
+def post_article(request):
+		"""
+		Allows authenticated clients to add new articles to the database
+		"""
+		call_type = request.method + " " + request.path
+		ip_addr = getIPAddress(request)
+
+		try:
+			api_key = getAPIKey(request)
+
+			# This checks if this API key and IP address are authorized to access
+			# this API endpoint. If so, the valid client access scheme is returned
+			access_scheme = checkValidAccess(api_key, ip_addr)
+
+			# At this point, the API client is authorized
+			post_data = json.loads(request.body)
+			# Check for fields
+			if 'kind' not in post_data or post_data['kind'] == None:
+				raise FieldNotFoundError('field `kind` was not found in the payload')
+			if 'doi' not in post_data or post_data['doi'] == None:
+				raise FieldNotFoundError('field `doi` was not found in the payload')
+			if 'source_id' not in post_data or post_data['source_id'] == None:
+					raise FieldNotFoundError('source_id field not found in payload')
+			
+			new_article = {
+				"title": None if 'title' not in post_data or post_data['title'] == '' else post_data['title'],
+				"link": None if 'link' not in post_data or post_data['link'] == '' else post_data['link'],
+				"doi": post_data['doi'],
+				"summary": None if 'summary' not in post_data or post_data['summary'] == '' else post_data['summary'],
+				# not sure if source is mandatory
+				"source_id": None if 'source_id' not in post_data or post_data['source_id'] == '' else post_data['source_id'],
+				"published_date": None if 'published_date' not in post_data or post_data['published_date'] == '' else post_data['published_date'],
+				# Not sure if and how we should post the authors
+				# "authors": post_data['authors'],
+				"kind": None if 'kind' not in post_data or post_data['kind'] == '' else post_data['kind'],
+				"access": None if 'access' not in post_data or post_data['access'] == '' else post_data['access'],
+				"publisher": None if 'publisher' not in post_data or post_data['publisher'] == '' else post_data['publisher'],
+				"container_title": None if 'container_title' not in post_data or post_data['container_title'] == '' else post_data['container_title']
+			}
+
+
+			science_paper = None			
+			if new_article['kind'] == 'science paper' and new_article['doi'] != None:
+				science_paper = SciencePaper(new_article['doi'])
+				if new_article['title'] == None:
+					new_article['title'] = science_paper.title
+				if new_article['link'] == None:
+					new_article['link'] = science_paper.link
+				if new_article['summary'] == None:
+					new_article['summary'] = science_paper.abstract
+				if new_article['published_date'] == None:
+					new_article['published_date'] = science_paper.published_date
+				if new_article['access'] == None:
+					new_article['access'] = science_paper.access
+				if new_article['publisher'] == None:
+					new_article['publisher'] = science_paper.publisher
+				if new_article['container_title'] == None:
+					new_article['container_title'] = science_paper.journal
+			
+
+			article_on_gregory = Articles.objects.filter(doi=new_article['doi']) 
+			if article_on_gregory.count() > 0:
+				raise ArticleExistsError('There is already an article with the specified DOI')
+
+			source = Sources.objects.get(pk=new_article['source_id'])
+			if source.pk == None:
+				raise SourceNotFoundError('source_id was not found')
+
+			save_article = Articles.objects.create(discovery_date=datetime.now(), title = new_article['title'], summary = new_article['summary'], link = new_article['link'], published_date = new_article['published_date'], source = source, doi = new_article['doi'], kind = new_article['kind'])
+			if save_article.pk == None:
+				raise ArticleNotSavedError('Could not create the article')
+			
+			# Prepare some data to be returned to the API client
+			data = {
+				'name': site.title + '| API',
+				'version': '0.1b',
+				"data_received": json.loads(request.body),
+				'data_processed_from_doi': new_article,
+				'article_id': save_article.article_id,
+			}
+
+			# This creates an access log for this client in the DB
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, data, None)
+			# Actually return the data to the API client
+			return returnData(data)
+		except APINoAPIKeyError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 401, str(exception))
+			return returnError(NO_API_KEY, str(exception), 401)
+		except APIInvalidAPIKeyError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 401, str(exception))
+			return returnError(INVALID_API_KEY, str(exception), 401)
+		except APIInvalidIPAddressError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 401, str(exception))
+			return returnError(INVALID_IP_ADDRESS, str(exception), 401)
+		except APIAccessDeniedError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception))
+			return returnError(ACCESS_DENIED, str(exception), 403)
+		except FieldNotFoundError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
+			return returnError(FIELD_NOT_FOUND, str(exception), 200)
+		except ArticleExistsError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
+			return returnError(ARTICLE_EXISTS, str(exception), 200)
+		except ArticleNotSavedError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
+			return returnError(ARTICLE_NOT_SAVED, str(exception), 200)
+		except Exception as exception:
+			print(traceback.format_exc())
+			generateAccessSchemeLog(call_type, ip_addr, None, 500, str(exception))
+			return returnError(UNEXPECTED, str(exception), 500)
 
 ###
 # ARTICLES
