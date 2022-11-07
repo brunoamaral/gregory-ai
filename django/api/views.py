@@ -62,7 +62,7 @@ def post_article(request):
 			if 'doi' not in post_data or post_data['doi'] == None:
 				raise FieldNotFoundError('field `doi` was not found in the payload')
 			if 'source_id' not in post_data or post_data['source_id'] == None:
-					raise SourceNotFoundError('source_id field not found in payload')
+					raise FieldNotFoundError('source_id field not found in payload')
 			
 			new_article = {
 				"title": None if 'title' not in post_data or post_data['title'] == '' else post_data['title'],
@@ -105,7 +105,7 @@ def post_article(request):
 				raise ArticleExistsError('There is already an article with the specified DOI')
 
 			source = Sources.objects.get(pk=new_article['source_id'])
-			if source.count() == 0:
+			if source.pk == None:
 				raise SourceNotFoundError('source_id was not found')
 
 			save_article = Articles.objects.create(discovery_date=datetime.now(), title = new_article['title'], summary = new_article['summary'], link = new_article['link'], published_date = new_article['published_date'], source = source, doi = new_article['doi'], kind = new_article['kind'])
@@ -122,7 +122,7 @@ def post_article(request):
 			}
 
 			# This creates an access log for this client in the DB
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, result, None)
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, data, None)
 			# Actually return the data to the API client
 			return returnData(data)
 		except APINoAPIKeyError as exception:
@@ -137,16 +137,15 @@ def post_article(request):
 		except APIAccessDeniedError as exception:
 			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception))
 			return returnError(ACCESS_DENIED, str(exception), 403)
-		except SourceNotFoundError as exception:
-			print(traceback.format_exc())
-			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
-			return returnError(SOURCE_NOT_FOUND, str(exception),200)
 		except FieldNotFoundError as exception:
 			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
 			return returnError(FIELD_NOT_FOUND, str(exception), 200)
 		except ArticleExistsError as exception:
 			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
 			return returnError(ARTICLE_EXISTS, str(exception), 200)
+		except ArticleNotSavedError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
+			return returnError(ARTICLE_NOT_SAVED, str(exception), 200)
 		except Exception as exception:
 			print(traceback.format_exc())
 			generateAccessSchemeLog(call_type, ip_addr, None, 500, str(exception))
