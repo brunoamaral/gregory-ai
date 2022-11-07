@@ -19,10 +19,10 @@ from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (APIAccessDeniedError,
 										APIInvalidAPIKeyError,
 										APIInvalidIPAddressError,
-										APINoAPIKeyError)
+										APINoAPIKeyError, SourceNotFoundError, FieldNotFoundError, ArticleExistsError, ArticleNotSavedError)
 from api.utils.responses import (ACCESS_DENIED, INVALID_API_KEY,
 										 INVALID_IP_ADDRESS, NO_API_KEY,
-										 UNEXPECTED, returnData, returnError)
+										 UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError)
 
 
 # Util function that creates an instance of the access log model
@@ -56,6 +56,14 @@ def post_article(request):
 
 			# At this point, the API client is authorized
 			post_data = json.loads(request.body)
+			# Check for fields
+			if 'kind' not in post_data or post_data['kind'] == None:
+				raise FieldNotFoundError('field `kind` was not found in the payload')
+			if 'doi' not in post_data or post_data['doi'] == None:
+				raise FieldNotFoundError('field `doi` was not found in the payload')
+			if 'source_id' not in post_data or post_data['source_id'] == None:
+					raise SourceNotFoundError('source_id field not found in payload')
+			
 			new_article = {
 				"title": None if 'title' not in post_data or post_data['title'] == '' else post_data['title'],
 				"link": None if 'link' not in post_data or post_data['link'] == '' else post_data['link'],
@@ -72,7 +80,8 @@ def post_article(request):
 				"container_title": None if 'container_title' not in post_data or post_data['container_title'] == '' else post_data['container_title']
 			}
 
-			science_paper = None
+
+			science_paper = None			
 			if new_article['kind'] == 'science paper' and new_article['doi'] != None:
 				science_paper = SciencePaper(new_article['doi'])
 				if new_article['title'] == None:
@@ -89,27 +98,19 @@ def post_article(request):
 					new_article['publisher'] = science_paper.publisher
 				if new_article['container_title'] == None:
 					new_article['container_title'] = science_paper.journal
-				else:
-					print("Raise an error due to missing required fields")
+			
 
 			article_on_gregory = Articles.objects.filter(doi=new_article['doi']) 
-			result = 200
-			save_article = None
-			error_message = None
-			if article_on_gregory.count() == 0:
-				try:
-					source = Sources.objects.get(pk=new_article['source_id'])
-				except:
-					error_message = 'error fetching source'
-				try:
-					save_article = Articles.objects.create(discovery_date=datetime.now(), title = new_article['title'], summary = new_article['summary'], link = new_article['link'], published_date = new_article['published_date'], source = source, doi = new_article['doi'], kind = new_article['kind'])
-					result = 201
-				except:
-					error_message = 'error creating object'
-					result = 403
-			else:
-					error_message = 'article exists with article_id ' + str(article_on_gregory[0].article_id)
-					result = 400
+			if article_on_gregory.count() > 0:
+				raise ArticleExistsError('There is already an article with the specified DOI')
+
+			source = Sources.objects.get(pk=new_article['source_id'])
+			if source.count() == 0:
+				raise SourceNotFoundError('source_id was not found')
+
+			save_article = Articles.objects.create(discovery_date=datetime.now(), title = new_article['title'], summary = new_article['summary'], link = new_article['link'], published_date = new_article['published_date'], source = source, doi = new_article['doi'], kind = new_article['kind'])
+			if save_article.pk == None:
+				raise ArticleNotSavedError('Could not create the article')
 			
 			# Prepare some data to be returned to the API client
 			data = {
@@ -118,8 +119,6 @@ def post_article(request):
 				"data_received": json.loads(request.body),
 				'data_processed_from_doi': new_article,
 				'article_id': save_article.article_id,
-				'code': result,
-				'error_message': error_message
 			}
 
 			# This creates an access log for this client in the DB
@@ -138,6 +137,16 @@ def post_article(request):
 		except APIAccessDeniedError as exception:
 			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception))
 			return returnError(ACCESS_DENIED, str(exception), 403)
+		except SourceNotFoundError as exception:
+			print(traceback.format_exc())
+			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
+			return returnError(SOURCE_NOT_FOUND, str(exception),200)
+		except FieldNotFoundError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
+			return returnError(FIELD_NOT_FOUND, str(exception), 200)
+		except ArticleExistsError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
+			return returnError(ARTICLE_EXISTS, str(exception), 200)
 		except Exception as exception:
 			print(traceback.format_exc())
 			generateAccessSchemeLog(call_type, ip_addr, None, 500, str(exception))
