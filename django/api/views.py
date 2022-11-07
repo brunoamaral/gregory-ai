@@ -68,6 +68,7 @@ def post_article(request):
 				"title": None if 'title' not in post_data or post_data['title'] == '' else post_data['title'],
 				"link": None if 'link' not in post_data or post_data['link'] == '' else post_data['link'],
 				"doi": post_data['doi'],
+				"access": None if 'access' not in post_data or post_data['access'] == '' else post_data['access'],
 				"summary": None if 'summary' not in post_data or post_data['summary'] == '' else post_data['summary'],
 				# not sure if source is mandatory
 				"source_id": None if 'source_id' not in post_data or post_data['source_id'] == '' else post_data['source_id'],
@@ -98,6 +99,8 @@ def post_article(request):
 					new_article['publisher'] = science_paper.publisher
 				if new_article['container_title'] == None:
 					new_article['container_title'] = science_paper.journal
+				if new_article['access'] == None:
+					new_article['access'] == science_paper.access
 			
 
 			article_on_gregory = Articles.objects.filter(doi=new_article['doi']) 
