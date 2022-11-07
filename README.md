@@ -1,23 +1,23 @@
 # Gregory MS
 
-Gregory is an AI system that uses machine learning and natural language processing to track
-clinical research and identify papers which bring improvements for patients.
+Gregory is an AI system that uses Machine Learning and Natural Language Processing to track
+clinical research and identify papers which improves the wellbeing of patients.
 
-Sources for research can be added by RSS feed or manually. 
+Sources for research can be added by RSS feed or manually.
 
 The output can be seen in a static site, using `build.py` or via the api provided by the Django Rest Framework.
 
-The docker compose file also includes a Metabase container to build dashboards and manage notifications. 
+The docker compose file also includes a Metabase container which is used to build dashboards and manage notifications.
 
 Sources can also be added to monitor Clinical Trials, in which case Gregory can notify a list of email subscribers.
 
-For other integrations, the Django app provides RSS feeds with a live update of relevant research and new clinical trials posted.
+For other integrations, the Django app provides RSS feeds with a live update of relevant research and newly posted clinical trials.
 
-Website: <https://gregory-ms.com>
+#### Website: <https://gregory-ms.com>
 
-Rest API: <https://api.gregory-ms.com> 
+#### Rest API: <https://api.gregory-ms.com>
 
-## Current sources for searches
+### Current sources for searches
 
 1. APTA
 2. BioMedCentral
@@ -69,19 +69,17 @@ POSTGRES_USER=
 SECRET_KEY='Yeah well, you know, that is just, like, your DJANGO SECRET_KEY, man' # you should set this manually https://docs.djangoproject.com/en/4.0/ref/settings/#secret-key
 ```
 
+3. **Execute** `python3 setup.py`.
 
-
-3. **Execute** `python3 setup.py`. 
-
-The script will check if you have all the requirements and run help you setup the containers
+The script checks if you have all the requirements and run to help you setup the containers.
 
 Once finished, login at <https://api.DOMAIN.TLD/admin> or wherever your reverse proxy is listening on.
 
-4. **Configure** your RSS Sources in the Django admin page
+4. **Configure** your RSS Sources in the Django admin page.
 
-5. **Setup** database maintenance tasks
+5. **Setup** database maintenance tasks.
 
-Gregory needs to run a series of tasks to fetch missing information and apply the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
+Gregory needs to run a series of tasks to fetch missing information before applying the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
 
 ```cron
 */5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
@@ -97,17 +95,17 @@ The following subscriptions are available:
 
 **Admin digest**
 
-Sent every 48 hours with the latest articles and their machine learning prediction. Allows the admin access to an Edit link where the article can be edited and tagged as relevant.
+This is sent every 48 hours with the latest articles and their machine learning prediction. Allows the admin access to an Edit link where the article can be edited and tagged as relevant.
 
 **Weekly digest**
 
-Sent every Tuesday, lists the relevant articles discovered in the last week.
+This is sent every Tuesday, it lists the relevant articles discovered in the last week.
 
 **Clinical Trials**
 
-Sent every 12 hours if a new clinical trial was posted.
+This is sent every 12 hours if a new clinical trial was posted.
 
-The title email footer for these emails needs to be set in the Custom Settings section of the admin backoffice.
+The title of the email footer for these emails needs to be set in the Custom Settings section of the admin backoffice.
 
 Django also allows you to add new sources from where to fetch articles. Take a look at `/admin/gregory/sources/ `
 
@@ -115,7 +113,7 @@ Django also allows you to add new sources from where to fetch articles. Take a l
 
 ### Node-RED
 
-We use [Node-RED](https://nodered.org/) to collect articles from sources without an RSS. These flows need to be added manually and configured to write to the postres database. If your node-red container does not show a series of flows, import the `flows.json` file from this repository.
+We use [Node-RED](https://nodered.org/) to collect articles from sources without an RSS. These flows needs to be added manually and configured to write to the postres database. If your node-red container does not show a series of flows, import the `flows.json` file from this repository.
 
 ### Metabase
 
@@ -123,7 +121,7 @@ A database is only as good as it's ability to answer questions. We have a separa
 
 It's available at <http://localhost:3000/>
 
-The current website is also using some embeded dashboards whose keys are produced each time you run `build.py`. An example can be found in the [MS Observatory Page](https://gregory-ms.com/observatory/)
+The current website also uses some embeded dashboards whose keys are produced each time you run `build.py`. An example can be found in the [MS Observatory Page](https://gregory-ms.com/observatory/)
 
 <img src="images/image-20220619200017849.png" alt="image-20220619200017849" style="zoom:33%;" />
 
@@ -135,7 +133,7 @@ Including dashboards in your content:
 
 ### Mailgun
 
-Email are sent from the `admin`  container using Mailgun.
+Emails are sent from the `admin` container using Mailgun.
 
 To enable them, you will need a mailgun account, or you can replace them with another way to send emails.
 
@@ -163,11 +161,11 @@ There are options to filter lists of articles by their category or subject in th
 3. Latest articles by category, `/feed/articles/category/<category>/`
 4. Latest clinical trials, `/feed/latest/trials/`
 5. Latest relevant articles by Machine Learning, `/feed/machine-learning/`
-6. Twitter feed,  `/feed/twitter/`. This includes all relevant articles by manual selection and machine learning prediction. It's read by [Zapier](https://zapier.com/) so that we can post on twitter automatically.
+6. Twitter feed, `/feed/twitter/`. This includes all relevant articles by manual selection and machine learning prediction. It's read by [Zapier](https://zapier.com/) so that we can post on twitter automatically.
 
 ## How to update the Machine Learning Algorithms
 
-This is not working right now  and there is a [pull request to setup an automatic process to keep the machine learning models up to date](https://github.com/brunoamaral/gregory/pull/110).
+This is not working right now and there is a [pull request to setup an automatic process to keep the machine learning models up to date](https://github.com/brunoamaral/gregory/pull/110).
 
 It's useful to re-train the machine learning models once you have a good number of articles flagged as relevant.
 
@@ -185,8 +183,6 @@ python3 -m venv env
 source env/bin/activate
 pip install -r requirements.txt
 ```
-
-
 
 ## Thank you to
 
