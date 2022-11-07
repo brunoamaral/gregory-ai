@@ -113,7 +113,7 @@ Django also allows you to add new sources from where to fetch articles. Take a l
 
 ### Node-RED
 
-We use [Node-RED](https://nodered.org/) to collect articles from sources without an RSS. These flows needs to be added manually and configured to write to the postres database. If your node-red container does not show a series of flows, import the `flows.json` file from this repository.
+We use [Node-RED](https://nodered.org/) to collect articles from sources without an RSS. These flows need to be added manually and configured to write to the postres database. If your node-red container does not show a series of flows, import the `flows.json` file from this repository.
 
 ### Metabase
 
