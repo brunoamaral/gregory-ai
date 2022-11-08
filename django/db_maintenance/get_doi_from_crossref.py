@@ -58,7 +58,7 @@ class GetDoiCrossRef(CronJobBase):
 			article.save()
 
 		# Get abstracts
-		articles = Articles.objects.filter(summary=None,authors__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(summary=None,authors__isnull=True,doi__isnull=False,crossref_check__isnull=True)
+		articles = Articles.objects.filter(summary=None,authors__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(summary=None,authors__isnull=True,doi__isnull=False,crossref_check__isnull=True) | Articles.objects.filter(doi__isnull=False,summary='not available', crossref_check__isnull=True)
 		print('found articles that need abstract',articles.count())
 		for article in articles:
 			science_paper = SciencePaper(article.doi)
