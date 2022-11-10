@@ -30,6 +30,8 @@ class SciencePaper:
 		work = None
 		if self.doi != None:
 			work = works.doi(self.doi)
+		else:
+			return 'No DOI provided'
 		if self.link == None:
 			try: 
 				self.link = work['link'][0]['URL']
@@ -97,3 +99,34 @@ class SciencePaper:
 				self.authors = work['author']
 			except:
 				pass
+
+	def find_doi(self,title=None):
+		import re
+		import os
+		from sitesettings.models import CustomSetting
+		from crossref.restful import Works, Etiquette
+		self.doi = None
+		self.title = title
+		site = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
+		client_website = 'https://' + site.site.domain + '/'
+		my_etiquette = Etiquette(site.title, 'v8', client_website, site.admin_email)
+		works = Works(etiquette=my_etiquette)
+		work = None
+		if title != None:
+			i = 0
+			work = works.query(bibliographic=title).sort('relevance')
+			for w in work:
+				if 'title' in w:
+					crossref_title = ''
+					article_title = re.sub(r'[^A-Za-z0-9 ]+', '', title)
+					article_title = re.sub(r' ','',article_title ).lower()
+					crossref_title = re.sub(r'[^A-Za-z0-9 ]+', '', w['title'][0])
+					crossref_title = re.sub(r' ','',crossref_title).lower()
+					if crossref_title == article_title:
+						self.doi = w['DOI']
+						print(f'found DOI: {self.doi}\nfrom title: {self.title}\n\nrun .refresh(var.doi) to populate metadata')
+						return self.doi
+					i += 1
+					if i == 5:
+						return f'Did not find a match in the the first {i} results'
+
