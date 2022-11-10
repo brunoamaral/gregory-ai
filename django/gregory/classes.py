@@ -13,9 +13,11 @@ class SciencePaper:
 		return f"{self.doi}, {self.title}"
 	def __repr__(self):
 		return f"{self.doi}, \"{self.title}\""
-	def clean_abstract(abstract=self.abstract):
+	def clean_abstract(self=None,abstract=None):
 		from bs4 import BeautifulSoup
 		import html
+		if abstract == None and self.abstract != None:
+			abstract = self.abstract
 		if abstract != None:
 			abstract = html.unescape(abstract)
 			soup = BeautifulSoup(abstract,'html.parser')
@@ -23,8 +25,7 @@ class SciencePaper:
 				for attribute in ["class", "id", "name", "style"]:
 					del tag[attribute]
 			return str(soup)
-		else:
-			return 'Missing abstract'
+
 	def refresh(self):
 		from db_maintenance.unpaywall import unpaywall_utils
 		from crossref.restful import Works, Etiquette
