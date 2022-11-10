@@ -13,13 +13,23 @@ class SciencePaper:
 		return f"{self.doi}, {self.title}"
 	def __repr__(self):
 		return f"{self.doi}, \"{self.title}\""
+	def clean_abstract(abstract=self.abstract):
+		from bs4 import BeautifulSoup
+		import html
+		if abstract != None:
+			abstract = html.unescape(abstract)
+			soup = BeautifulSoup(abstract,'html.parser')
+			for tag in soup():
+				for attribute in ["class", "id", "name", "style"]:
+					del tag[attribute]
+			return str(soup)
+		else:
+			return 'Missing abstract'
 	def refresh(self):
 		from db_maintenance.unpaywall import unpaywall_utils
 		from crossref.restful import Works, Etiquette
 		import os
 		import pytz
-		import html
-		from bs4 import BeautifulSoup
 		from datetime import datetime
 		timezone = pytz.timezone('UTC')
 		from sitesettings.models import CustomSetting
@@ -87,13 +97,6 @@ class SciencePaper:
 				self.abstract = work['abstract']
 			except:
 				pass
-		if self.abstract != None:
-			self.abstract = html.unescape(self.abstract)
-			soup = BeautifulSoup(self.abstract,'html.parser')
-			for tag in soup():
-				for attribute in ["class", "id", "name", "style"]:
-					del tag[attribute]
-			self.abstract = str(soup)
 		if self.authors == None:
 			try:
 				self.authors = work['author']
