@@ -50,6 +50,7 @@ class FeedReaderTask(CronJobBase):
 				response = requests.get(link, verify=False)
 				d = feedparser.parse(response.content)
 			for entry in d['entries']:
+				title = entry['title']
 				summary = ''
 				if hasattr(entry,'summary_detail'):
 					summary = entry['summary_detail']['value']
@@ -67,22 +68,25 @@ class FeedReaderTask(CronJobBase):
 				# This is a bad solution but it will have to do for now
 				###
 				doi = None
+				access = None
+				journal = None
+				publisher = None
 				if source_name == 'PubMed':
 					if entry['dc_identifier'].startswith('doi:'):
 						doi = entry['dc_identifier'].replace('doi:','')
 				if source_name == 'FASEB':
 					doi = entry['prism_doi']
-				paper = SciencePaper(doi=doi)
-				paper.refresh()
+				if doi != None:
+					paper = SciencePaper(doi=doi, abstract=summary, published_date=published, title=title, link=link)
+					paper.refresh()
+					summary = paper.abstract
+					link = paper.link
+					access = paper.access
+					journal = paper.journal
+					publisher = paper.journal
 				try:
-					science_paper = Articles.objects.create(discovery_date=timezone.now(), title = entry['title'], summary = summary, link = link, published_date = published, source = i, doi = doi, kind = source_for)
+					science_paper = Articles.objects.create(discovery_date=timezone.now(), title = title, summary = SciencePaper.clean_abstract(abstract=summary), link = link, published_date = published, access = access, publisher = publisher, container_title = journal, source = i, doi = doi, kind = source_for)
 					if paper != None:
-						science_paper.access=paper.access
-						science_paper.container_title = paper.journal
-						science_paper.publisher = paper.publisher
-						if paper.abstract != None:
-							science_paper.summary = paper.abstract
-						science_paper.save()
 						# get author information
 						for author in paper.authors:
 							if 'given' in author and 'family' in author:
