@@ -32,7 +32,8 @@ class GetDoiCrossRef(CronJobBase):
 		articles = Articles.objects.filter(doi__isnull=False,access='unknown',kind='science paper',crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(doi__isnull=False,access__isnull=True,kind='science paper', crossref_check__isnull = True)
 		print('found articles with no access information,',articles.count())
 		for article in articles:
-			paper = SciencePaper(article.doi)
+			paper = SciencePaper(doi=article.doi)
+			paper.refresh()
 			article.crossref_check = timezone.now()
 			article.access = paper.access
 			article.save()
@@ -42,7 +43,8 @@ class GetDoiCrossRef(CronJobBase):
 		articles = Articles.objects.filter(publisher__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(publisher__isnull=True,doi__isnull=False,crossref_check__isnull=True)
 		print('found articles that need publisher information',articles.count())
 		for article in articles:
-			paper = SciencePaper(article.doi)
+			paper = SciencePaper(doi=article.doi)
+			paper.refresh()
 			article.publisher = paper.publisher
 			article.container_title = paper.journal
 			article.crossref_check = timezone.now()
@@ -52,7 +54,8 @@ class GetDoiCrossRef(CronJobBase):
 		articles = Articles.objects.filter(published_date__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(published_date__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__isnull=True)
 		print('found articles that need publish date information',articles.count())
 		for article in articles:
-			paper = SciencePaper(article.doi)
+			paper = SciencePaper(doi=article.doi)
+			paper.refresh()
 			article.crossref_check = timezone.now()
 			article.published_date = paper.published_date
 			article.save()
@@ -61,7 +64,8 @@ class GetDoiCrossRef(CronJobBase):
 		articles = Articles.objects.filter(summary=None,authors__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(summary=None,authors__isnull=True,doi__isnull=False,crossref_check__isnull=True) | Articles.objects.filter(doi__isnull=False,summary='not available', crossref_check__isnull=True)
 		print('found articles that need abstract',articles.count())
 		for article in articles:
-			science_paper = SciencePaper(article.doi)
+			science_paper = SciencePaper(doi=article.doi)
+			paper.refresh()
 			article.crossref_check = timezone.now()
 			article.save()
 			if science_paper.abstract != None:

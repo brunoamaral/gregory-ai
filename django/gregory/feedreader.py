@@ -72,7 +72,8 @@ class FeedReaderTask(CronJobBase):
 						doi = entry['dc_identifier'].replace('doi:','')
 				if source_name == 'FASEB':
 					doi = entry['prism_doi']
-				paper = SciencePaper(doi)
+				paper = SciencePaper(doi=doi)
+				paper.refresh()
 				try:
 					science_paper = Articles.objects.create(discovery_date=timezone.now(), title = entry['title'], summary = summary, link = link, published_date = published, source = i, doi = doi, kind = source_for)
 					if paper != None:
