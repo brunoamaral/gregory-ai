@@ -84,7 +84,8 @@ def post_article(request):
 
 			science_paper = None			
 			if new_article['kind'] == 'science paper' and new_article['doi'] != None:
-				science_paper = SciencePaper(new_article['doi'])
+				science_paper = SciencePaper(doi=new_article['doi'])
+				science_paper.refresh()
 				if new_article['title'] == None:
 					new_article['title'] = science_paper.title
 				if new_article['link'] == None:
