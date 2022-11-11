@@ -16,10 +16,17 @@ site = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 import traceback
 from api.utils.utils import (checkValidAccess, getAPIKey, getIPAddress)
 from api.models import APIAccessSchemeLog
-from api.utils.exceptions import (APIAccessDeniedError,
+from api.utils.exceptions import (
+										APIAccessDeniedError,
 										APIInvalidAPIKeyError,
 										APIInvalidIPAddressError,
-										APINoAPIKeyError, SourceNotFoundError, FieldNotFoundError, ArticleExistsError, ArticleNotSavedError)
+										APINoAPIKeyError, 
+										ArticleExistsError, 
+										ArticleNotSavedError,
+										DoiNotFound, 
+										FieldNotFoundError, 
+										SourceNotFoundError, 
+										)
 from api.utils.responses import (ACCESS_DENIED, INVALID_API_KEY,
 										 INVALID_IP_ADDRESS, NO_API_KEY,
 										 UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError)
@@ -32,7 +39,12 @@ def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_
 	log.ip_addr = ip_addr
 	log.api_access_scheme = access_scheme
 	log.http_code = http_code
-	log.error_message = error_message
+	if error_message != None and len(error_message) > 499:
+		log.error_message = error_message[0:499]
+	if error_message == None:
+		log.error_message = error_message
+	else:
+		log.error_message = error_message
 	log.save()
 
 ###
@@ -59,18 +71,18 @@ def post_article(request):
 			# Check for fields
 			if 'kind' not in post_data or post_data['kind'] == None:
 				raise FieldNotFoundError('field `kind` was not found in the payload')
-			if 'doi' not in post_data or post_data['doi'] == None:
-				raise FieldNotFoundError('field `doi` was not found in the payload')
+			if 'title' not in post_data and 'doi' not in post_data:
+				if post_data['title'] == None and post_data['doi'] == None:
+					raise FieldNotFoundError('field `doi` and `title` not in the payload. You need at least one.')
 			if 'source_id' not in post_data or post_data['source_id'] == None:
 					raise FieldNotFoundError('source_id field not found in payload')
 			
 			new_article = {
 				"title": None if 'title' not in post_data or post_data['title'] == '' else post_data['title'],
 				"link": None if 'link' not in post_data or post_data['link'] == '' else post_data['link'],
-				"doi": post_data['doi'],
+				"doi": None if 'doi' not in post_data or post_data['doi'] == '' else post_data['doi'],
 				"access": None if 'access' not in post_data or post_data['access'] == '' else post_data['access'],
 				"summary": None if 'summary' not in post_data or post_data['summary'] == '' else post_data['summary'],
-				# not sure if source is mandatory
 				"source_id": None if 'source_id' not in post_data or post_data['source_id'] == '' else post_data['source_id'],
 				"published_date": None if 'published_date' not in post_data or post_data['published_date'] == '' else post_data['published_date'],
 				# Not sure if and how we should post the authors
@@ -82,35 +94,49 @@ def post_article(request):
 			}
 
 
-			science_paper = None			
-			if new_article['kind'] == 'science paper' and new_article['doi'] != None:
-				science_paper = SciencePaper(doi=new_article['doi'])
-				science_paper.refresh()
-				if new_article['title'] == None:
-					new_article['title'] = science_paper.title
-				if new_article['link'] == None:
-					new_article['link'] = science_paper.link
-				if new_article['summary'] == None:
-					new_article['summary'] = science_paper.abstract
-				if new_article['published_date'] == None:
-					new_article['published_date'] = science_paper.published_date
-				if new_article['access'] == None:
-					new_article['access'] = science_paper.access
-				if new_article['publisher'] == None:
-					new_article['publisher'] = science_paper.publisher
-				if new_article['container_title'] == None:
-					new_article['container_title'] = science_paper.journal
-				if new_article['access'] == None:
-					new_article['access'] == science_paper.access
-			
+			science_paper = None
+			if new_article['kind'] == 'science paper':
+				science_paper = SciencePaper(doi=new_article['doi'],title=new_article['title'])
+			if science_paper.doi == None:
+				science_paper.doi = science_paper.find_doi(title=science_paper.title)
+				print(science_paper.doi)
 
-			article_on_gregory = Articles.objects.filter(doi=new_article['doi']) 
-			if article_on_gregory.count() > 0:
+			if science_paper.doi != None:
+				science_paper.refresh()
+			if new_article['doi'] == None:
+				new_article['doi'] = science_paper.doi
+			if new_article['title'] == None:
+				new_article['title'] = science_paper.title
+			if new_article['link'] == None:
+				new_article['link'] = science_paper.link
+			if new_article['summary'] == None:
+				new_article['summary'] = science_paper.clean_abstract()
+			print('here...', new_article)
+			if new_article['published_date'] == None:
+				new_article['published_date'] = science_paper.published_date
+			if new_article['access'] == None:
+				new_article['access'] = science_paper.access
+			if new_article['publisher'] == None:
+				new_article['publisher'] = science_paper.publisher
+			if new_article['container_title'] == None:
+				new_article['container_title'] = science_paper.journal
+			if new_article['access'] == None:
+				new_article['access'] == science_paper.access
+			
+			article_on_gregory = None
+			if new_article['doi'] != None:
+				article_on_gregory = Articles.objects.filter(doi=new_article['doi'])
+			if article_on_gregory != None and article_on_gregory.count() > 0:
 				raise ArticleExistsError('There is already an article with the specified DOI')
+
+			if new_article['title'] != None:
+				article_on_gregory = Articles.objects.filter(title=new_article['title'])
+			if article_on_gregory != None and article_on_gregory.count() > 0:
+				raise ArticleExistsError('There is already an article with the specified Title')
 
 			source = Sources.objects.get(pk=new_article['source_id'])
 			if source.pk == None:
-				raise SourceNotFoundError('source_id was not found')
+				raise SourceNotFoundError('source_id was not found in the database')
 
 			save_article = Articles.objects.create(discovery_date=datetime.now(), title = new_article['title'], summary = new_article['summary'], link = new_article['link'], published_date = new_article['published_date'], source = source, doi = new_article['doi'], kind = new_article['kind'],
 			publisher=new_article['publisher'], container_title=new_article['container_title'])
@@ -121,13 +147,13 @@ def post_article(request):
 			data = {
 				'name': site.title + '| API',
 				'version': '0.1b',
-				"data_received": json.loads(request.body),
+				# "data_received": json.loads(request.body),
 				'data_processed_from_doi': new_article,
 				'article_id': save_article.article_id,
 			}
 
 			# This creates an access log for this client in the DB
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, data, None)
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, data)
 			# Actually return the data to the API client
 			return returnData(data)
 		except APINoAPIKeyError as exception:
