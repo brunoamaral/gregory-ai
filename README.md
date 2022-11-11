@@ -48,6 +48,7 @@ DOMAIN_NAME=DOMAIN.COM
 # Set this to the subdomain you configured with Mailgun. Example: mg.domain.com
 EMAIL_DOMAIN=
 # The SMTP server and credentials you are using. For example: smtp.eu.mailgun.org
+# These variables are only needed if you plan to send notification emails
 EMAIL_HOST=
 EMAIL_HOST_PASSWORD=
 EMAIL_HOST_PASSWORD=
@@ -56,7 +57,7 @@ EMAIL_HOST_USER=
 EMAIL_MAILGUN_API_URL=
 EMAIL_PORT=587
 EMAIL_USE_TLS='True'
-# Where you cloned the repository>
+# Where you cloned the repository
 GREGORY_DIR=
 # Leave this blank and come back to them when you're finished installing Metabase.
 METABASE_SECRET_KEY=

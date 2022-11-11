@@ -31,6 +31,8 @@ else:
 ####
 
 Did not find a .env file, we need to set some configuration variables. If in doubt, you can input blank and configure the .env file later.
+
+Some variables are optional: EMAIL_*, HUGO_PATH, METABASE_*
 	''')
 
 	configs = {
