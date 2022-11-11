@@ -173,14 +173,14 @@ def post_article(request):
 			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception))
 			return returnError(ACCESS_DENIED, str(exception), 403)
 		except FieldNotFoundError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, None, 202, str(exception))
 			return returnError(FIELD_NOT_FOUND, str(exception), 200)
 		except ArticleExistsError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, None, 204, str(exception))
 			return returnError(ARTICLE_EXISTS, str(exception), 200)
 		except ArticleNotSavedError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, None, 200, str(exception))
-			return returnError(ARTICLE_NOT_SAVED, str(exception), 200)
+			generateAccessSchemeLog(call_type, ip_addr, None, 204, str(exception))
+			return returnError(ARTICLE_NOT_SAVED, str(exception), 204)
 		except Exception as exception:
 			print(traceback.format_exc())
 			generateAccessSchemeLog(call_type, ip_addr, None, 500, str(exception))
