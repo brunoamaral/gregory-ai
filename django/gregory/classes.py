@@ -105,6 +105,8 @@ class SciencePaper:
 				pass
 
 	def find_doi(self,title=None):
+		if title == None:
+			return 'Missing required title field'
 		import re
 		import os
 		from sitesettings.models import CustomSetting
@@ -128,9 +130,8 @@ class SciencePaper:
 					crossref_title = re.sub(r' ','',crossref_title).lower()
 					if crossref_title == article_title:
 						self.doi = w['DOI']
-						print(f'found DOI: {self.doi}\nfrom title: {self.title}\n\nrun .refresh(var.doi) to populate metadata')
 						return self.doi
 					i += 1
 					if i == 5:
-						return f'Did not find a match in the the first {i} results'
+						return None
 
