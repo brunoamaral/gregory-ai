@@ -40,3 +40,6 @@ class ArticleExistsError(APIError):
 class ArticleNotSavedError(APIError):
 	def __init__(self, message):
 		super().__init__(message)
+class DoiNotFound(APIError):
+	def __init__(self, message):
+		super().__init__(message)
