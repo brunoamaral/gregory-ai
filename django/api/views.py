@@ -147,13 +147,17 @@ def post_article(request):
 			data = {
 				'name': site.title + '| API',
 				'version': '0.1b',
-				# "data_received": json.loads(request.body),
+				"data_received": json.loads(request.body),
 				'data_processed_from_doi': new_article,
 				'article_id': save_article.article_id,
 			}
-
+			log_data = {
+				'name': site.title + '| API',
+				'version': '0.1b',
+				"data_received": json.loads(request.body),
+			}
 			# This creates an access log for this client in the DB
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, data)
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, log_data)
 			# Actually return the data to the API client
 			return returnData(data)
 		except APINoAPIKeyError as exception:
