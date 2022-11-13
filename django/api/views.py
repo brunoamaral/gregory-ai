@@ -111,7 +111,6 @@ def post_article(request):
 				new_article['link'] = science_paper.link
 			if new_article['summary'] == None:
 				new_article['summary'] = science_paper.clean_abstract()
-			print('here...', new_article)
 			if new_article['published_date'] == None:
 				new_article['published_date'] = science_paper.published_date
 			if new_article['access'] == None:
