@@ -33,7 +33,7 @@ from api.utils.responses import (ACCESS_DENIED, INVALID_API_KEY,
 
 
 # Util function that creates an instance of the access log model
-def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_message):
+def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_message, post_data):
 	log = APIAccessSchemeLog()
 	log.call_type = call_type
 	log.ip_addr = ip_addr
@@ -45,6 +45,7 @@ def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_
 		log.error_message = error_message
 	else:
 		log.error_message = error_message
+	log.payload_received = post_data
 	log.save()
 
 ###
@@ -58,7 +59,7 @@ def post_article(request):
 		"""
 		call_type = request.method + " " + request.path
 		ip_addr = getIPAddress(request)
-
+		post_data = json.loads(request.body)
 		try:
 			api_key = getAPIKey(request)
 
@@ -67,7 +68,6 @@ def post_article(request):
 			access_scheme = checkValidAccess(api_key, ip_addr)
 
 			# At this point, the API client is authorized
-			post_data = json.loads(request.body)
 			# Check for fields
 			if 'kind' not in post_data or post_data['kind'] == None:
 				raise FieldNotFoundError('field `kind` was not found in the payload')
@@ -160,29 +160,29 @@ def post_article(request):
 			# Actually return the data to the API client
 			return returnData(data)
 		except APINoAPIKeyError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
 			return returnError(NO_API_KEY, str(exception), 401)
 		except APIInvalidAPIKeyError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
 			return returnError(INVALID_API_KEY, str(exception), 401)
 		except APIInvalidIPAddressError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
 			return returnError(INVALID_IP_ADDRESS, str(exception), 401)
 		except APIAccessDeniedError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
 			return returnError(ACCESS_DENIED, str(exception), 403)
 		except FieldNotFoundError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 202, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 202, str(exception), str(post_data))
 			return returnError(FIELD_NOT_FOUND, str(exception), 200)
 		except ArticleExistsError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 204, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 204, str(exception), str(post_data))
 			return returnError(ARTICLE_EXISTS, str(exception), 200)
 		except ArticleNotSavedError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 204, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 204, str(exception), str(post_data))
 			return returnError(ARTICLE_NOT_SAVED, str(exception), 204)
 		except Exception as exception:
 			print(traceback.format_exc())
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
 			return returnError(UNEXPECTED, str(exception), 500)
 
 ###

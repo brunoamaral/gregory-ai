@@ -75,5 +75,8 @@ class APIAccessSchemeLog(models.Model):
     # In case of error, this field holds the error text
     error_message = models.CharField(max_length=500, blank=True, null=True)
 
+    # save the payload for debugging
+    payload_received = models.CharField(max_length=1700, blank=True, null=True)
+    
     def __str__(self):
         return "[" + self.access_date.strftime("%Y-%m-%d %H:%M:%S") + "] " + self.call_type + " (from " + self.ip_addr + "): " + str(self.http_code)
