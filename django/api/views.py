@@ -160,29 +160,29 @@ def post_article(request):
 			# Actually return the data to the API client
 			return returnData(data)
 		except APINoAPIKeyError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, None, 401, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception))
 			return returnError(NO_API_KEY, str(exception), 401)
 		except APIInvalidAPIKeyError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, None, 401, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception))
 			return returnError(INVALID_API_KEY, str(exception), 401)
 		except APIInvalidIPAddressError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, None, 401, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception))
 			return returnError(INVALID_IP_ADDRESS, str(exception), 401)
 		except APIAccessDeniedError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception))
 			return returnError(ACCESS_DENIED, str(exception), 403)
 		except FieldNotFoundError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, None, 202, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 202, str(exception))
 			return returnError(FIELD_NOT_FOUND, str(exception), 200)
 		except ArticleExistsError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, None, 204, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 204, str(exception))
 			return returnError(ARTICLE_EXISTS, str(exception), 200)
 		except ArticleNotSavedError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, None, 204, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 204, str(exception))
 			return returnError(ARTICLE_NOT_SAVED, str(exception), 204)
 		except Exception as exception:
 			print(traceback.format_exc())
-			generateAccessSchemeLog(call_type, ip_addr, None, 500, str(exception))
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception))
 			return returnError(UNEXPECTED, str(exception), 500)
 
 ###
