@@ -191,9 +191,9 @@ def post_article(request):
 ### 
 class ArticleViewSet(viewsets.ModelViewSet):
 	"""
-	List all articles in the database by published date
+	List all articles in the database by descending article_id
 	"""
-	queryset = Articles.objects.all().order_by('-published_date')
+	queryset = Articles.objects.all().order_by('-article_id')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [filters.SearchFilter]
