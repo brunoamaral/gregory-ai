@@ -7,7 +7,7 @@ class APIAcccessSchemeAdmin(admin.ModelAdmin):
 
 class APILogAdmin(admin.ModelAdmin):
 	list_display = ['call_type','ip_addr','api_access_scheme','access_date','http_code','error_message']
-
+	list_filter = ('http_code',)
 admin.site.register(APIAccessScheme,APIAcccessSchemeAdmin)
 admin.site.register(APIAccessSchemeLog,APILogAdmin)
 # Register your models here.
