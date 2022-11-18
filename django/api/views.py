@@ -153,7 +153,7 @@ def post_article(request):
 			log_data = {
 				'name': site.title + '| API',
 				'version': '0.1b',
-				"data_received": json.loads(request.body),
+				"article_id": save_article.pk,
 			}
 			# This creates an access log for this client in the DB
 			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, log_data)
