@@ -238,7 +238,7 @@ class ArticlesBySubject(viewsets.ModelViewSet):
 
 class ArticlesByJournal(viewsets.ModelViewSet):
 	"""
-	Search articles by the subject field. Usage /articles/journal/{{journal}}/.
+	Search articles by the journal field. Usage /articles/journal/{{journal}}/.
 	Journal should be lower case and spaces should be replaced by dashes, for example: 	"The Lancet Neurology" becomes the-lancet-neurology.
 	"""
 	def get_queryset(self):
