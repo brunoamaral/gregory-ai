@@ -20,6 +20,7 @@ class GetDoiCrossRef(CronJobBase):
 	def do(self):
 		# Find DOI
 		articles = Articles.objects.filter(kind='science paper',doi__isnull=True,crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(kind='science paper',doi__isnull=True,crossref_check__isnull=True)
+		print('Found articles without DOI', articles.count())
 		for article in articles:
 			doi = greg.get_doi(article.title)
 			article.crossref_check = timezone.now()
@@ -30,7 +31,7 @@ class GetDoiCrossRef(CronJobBase):
 
 		# Get access info
 		articles = Articles.objects.filter(doi__isnull=False,access='unknown',kind='science paper',crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(doi__isnull=False,access__isnull=True,kind='science paper', crossref_check__isnull = True)
-		print('found articles with no access information,',articles.count())
+		print('Found articles with no access information,',articles.count())
 		for article in articles:
 			paper = SciencePaper(doi=article.doi)
 			paper.refresh()
@@ -39,9 +40,9 @@ class GetDoiCrossRef(CronJobBase):
 			article.save()
 
 		# Get publisher and journal
-		print('filling in the publisher field...')
+		print('Filling in the publisher field...')
 		articles = Articles.objects.filter(publisher__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(publisher__isnull=True,doi__isnull=False,crossref_check__isnull=True)
-		print('found articles that need publisher information',articles.count())
+		print('Found articles that need publisher information',articles.count())
 		for article in articles:
 			paper = SciencePaper(doi=article.doi)
 			paper.refresh()
@@ -52,7 +53,7 @@ class GetDoiCrossRef(CronJobBase):
 
 		# Get published date
 		articles = Articles.objects.filter(published_date__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(published_date__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__isnull=True)
-		print('found articles that need publish date information',articles.count())
+		print('Found articles that need publish date information',articles.count())
 		for article in articles:
 			paper = SciencePaper(doi=article.doi)
 			paper.refresh()
