@@ -236,13 +236,25 @@ class ArticlesBySubject(viewsets.ModelViewSet):
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+class ArticlesByJournal(viewsets.ModelViewSet):
+	"""
+	Search articles by the journal field. Usage /articles/journal/{{journal}}/.
+	Journal should be lower case and spaces should be replaced by dashes, for example: 	"The Lancet Neurology" becomes the-lancet-neurology.
+	"""
+	def get_queryset(self):
+		journal = self.kwargs.get('journal', None)
+		journal = journal.replace('-', ' ')
+		return Articles.objects.filter(container_title__iregex=journal).order_by('-article_id')
+
+	serializer_class = ArticleSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 class AllArticleViewSet(generics.ListAPIView):
 	"""
 	List all articles 
 	"""
 	pagination_class = None
-	queryset = Articles.objects.all().order_by('-published_date')
+	queryset = Articles.objects.all().order_by('-article_id')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
