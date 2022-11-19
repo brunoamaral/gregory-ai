@@ -243,7 +243,7 @@ class ArticlesByJournal(viewsets.ModelViewSet):
 	"""
 	def get_queryset(self):
 		journal = self.kwargs.get('journal', None)
-		journal = journal.replace('-', ' ')
+		journal = '^' + journal.replace('-', ' ') + '$'
 		return Articles.objects.filter(container_title__iregex=journal).order_by('-article_id')
 
 	serializer_class = ArticleSerializer
