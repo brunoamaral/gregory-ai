@@ -72,11 +72,10 @@ def summarizeAbstract(row):
 	
 	return ""
 
-test_sample = dataset.sample(n=100)
-test_sample['summary'] = test_sample.apply(lambda row: summarizeAbstract(row), axis=1)
+dataset['get_takeaways'] = dataset.apply(lambda row: summarizeAbstract(row), axis=1)
 
-test_sample.info()
-
-
-test_sample.to_csv('data/results.csv', index=False, quoting=csv.QUOTE_NONNUMERIC)
+for index, row in df.iterrows():
+	article = Articles.objects.get(row['article_id'])
+	article.takeaways = row['get_takeaways']
+	article.save()
 
