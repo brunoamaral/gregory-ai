@@ -1,10 +1,9 @@
 from bs4 import BeautifulSoup
 from transformers import pipeline
-import csv
 import html
 import pandas as pd
 import time
-from models import Articles
+from gregory.models import Articles
 
 # Read the Django data into a pandas dataframe
 dataset = pd.DataFrame(list(Articles.objects.filter(takeaways=None,summary__gt=25,kind="science paper").values("article_id", "summary",)))
@@ -44,10 +43,9 @@ summarizer = pipeline("summarization")
 
 print("Summarizer model ready for use")
 
-
 # Minimum length of the summary (in words/tokens?)
 MIN_LENGTH = 25
-MAX_LENGTH = 100
+MAX_LENGTH = 500
 
 # Calculates the max length of the summary (in words) considering the size of the input text
 def getSummaryMaxLengthForText(text):
@@ -64,12 +62,9 @@ def summarizeAbstract(row):
 	if max_length > MIN_LENGTH:
 		print("Summarizing abstract #", str(row['article_id']), "with lengths [", str(MIN_LENGTH), ",", str(max_length), "]")
 		summary = summarizer(row['abstract'], min_length=MIN_LENGTH, max_length=max_length)
-
 		end = time.time()
 		print(" => Ellapsed time: ", end - start, "sec.")
-
 		return summary[0]['summary_text']
-	
 	return ""
 
 dataset['get_takeaways'] = dataset.apply(lambda row: summarizeAbstract(row), axis=1)
