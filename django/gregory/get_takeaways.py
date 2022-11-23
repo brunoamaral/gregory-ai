@@ -66,7 +66,7 @@ def summarizeAbstract(row):
 		print(" => Ellapsed time: ", end - start, "sec.")
 		return summary[0]['summary_text']
 	return ""
-print(dataset)
+
 dataset['get_takeaways'] = dataset.apply(lambda row: summarizeAbstract(row), axis=1)
 
 for index, row in dataset.iterrows():
