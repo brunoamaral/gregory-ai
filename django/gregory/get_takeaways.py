@@ -57,7 +57,6 @@ def getSummaryMaxLengthForText(text):
 # Util function that summarizes the article's abstract
 def summarizeAbstract(row):
 	start = time.time()
-	print(row['article_id'])
 	max_length = getSummaryMaxLengthForText(row['abstract'])
 	if max_length > MIN_LENGTH:
 		print("Summarizing abstract #", str(row['article_id']), "with lengths [", str(MIN_LENGTH), ",", str(max_length), "]")
