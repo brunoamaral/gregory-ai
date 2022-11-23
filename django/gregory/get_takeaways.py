@@ -70,7 +70,7 @@ def summarizeAbstract(row):
 dataset['get_takeaways'] = dataset.apply(lambda row: summarizeAbstract(row), axis=1)
 
 for index, row in dataset.iterrows():
-	article = Articles.objects.get(row['article_id'])
+	article = Articles.objects.get(pk=row['article_id'])
 	article.takeaways = row['get_takeaways']
 	article.save()
 
