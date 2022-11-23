@@ -6,7 +6,7 @@ import time
 from gregory.models import Articles
 
 # Read the Django data into a pandas dataframe
-dataset = pd.DataFrame(list(Articles.objects.filter(takeaways=None,summary__gt=25,kind="science paper").values("article_id", "summary",)))
+dataset = pd.DataFrame(list(Articles.objects.filter(takeaways=None,summary__gt=25,kind="science paper")[:100].values("article_id", "summary",)))
 
 # List of columns that we actually need from the dataset. 'summary' represents the article's abstract.
 valid_columns = ["article_id", "summary"]
@@ -57,7 +57,7 @@ def getSummaryMaxLengthForText(text):
 # Util function that summarizes the article's abstract
 def summarizeAbstract(row):
 	start = time.time()
-	
+	print(row['article_id'])
 	max_length = getSummaryMaxLengthForText(row['abstract'])
 	if max_length > MIN_LENGTH:
 		print("Summarizing abstract #", str(row['article_id']), "with lengths [", str(MIN_LENGTH), ",", str(max_length), "]")
@@ -66,11 +66,11 @@ def summarizeAbstract(row):
 		print(" => Ellapsed time: ", end - start, "sec.")
 		return summary[0]['summary_text']
 	return ""
-
+print(dataset)
 dataset['get_takeaways'] = dataset.apply(lambda row: summarizeAbstract(row), axis=1)
 
 for index, row in dataset.iterrows():
-	article = Articles.objects.get(pk=row['article_id'])
+	article = Articles.objects.get(row['article_id'])
 	article.takeaways = row['get_takeaways']
 	article.save()
 
