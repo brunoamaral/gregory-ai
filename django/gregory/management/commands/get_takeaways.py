@@ -48,7 +48,7 @@ class Command(BaseCommand):
 
 		# Minimum length of the summary (in words/tokens?)
 		MIN_LENGTH = 25
-		MAX_LENGTH = 200
+		MAX_LENGTH = 100
 
 		# Calculates the max length of the summary (in words) considering the size of the input text
 		def getSummaryMaxLengthForText(text):
