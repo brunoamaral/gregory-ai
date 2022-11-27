@@ -200,7 +200,11 @@ class Twitter(Feed):
 		return item.title
 
 	def item_description(self, item):
-		return None
+		if hasattr(item,'takeaways') and item.takeaways != None:
+			item.description = item.takeaways
+		else:
+			item.description = None
+		return item.description
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
