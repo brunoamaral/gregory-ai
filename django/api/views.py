@@ -156,7 +156,7 @@ def post_article(request):
 				"article_id": save_article.pk,
 			}
 			# This creates an access log for this client in the DB
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, log_data)
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, '', log_data)
 			# Actually return the data to the API client
 			return returnData(data)
 		except APINoAPIKeyError as exception:
