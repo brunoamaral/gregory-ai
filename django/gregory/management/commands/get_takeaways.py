@@ -23,8 +23,6 @@ class Command(BaseCommand):
 		# Take only the rows in which the 'abstract' column is not null
 		dataset = dataset[dataset['abstract'].notna()]
 
-		dataset.sample(n=5)
-
 		# Util function to clean HTML
 		def cleanHTML(input):
 				return BeautifulSoup(input, 'html.parser').get_text()
