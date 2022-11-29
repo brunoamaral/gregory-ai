@@ -5,7 +5,8 @@ from rest_framework import viewsets, permissions, generics, filters
 from django.db.models import Q
 from rest_framework.decorators import api_view
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
+
 import os
 from sitesettings.models import CustomSetting
 from gregory.classes import SciencePaper
@@ -296,6 +297,19 @@ class newsletterByWeek(viewsets.ModelViewSet):
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
+class lastXdays(viewsets.ModelViewSet):
+	"""
+	Search relevant articles. /articles/relevant/week/\{week\}/.
+	For a given number of days, returns articles flagged as relevant by the admin team or the Machine Learning models.
+	"""
+	def get_queryset(self):
+		days_to_subtract = self.kwargs.get('days', None)
+		days = datetime.today() - timedelta(days=days_to_subtract)
+		articles = Articles.objects.filter(Q(discovery_date__gte=days), Q(ml_prediction_gnb=True) | Q(relevant=True))
+		return articles
+
+	serializer_class = ArticleSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 class ArticlesBySourceList(generics.ListAPIView):
 	"""
 	Lists the articles that come from the specified source_id
