@@ -306,7 +306,7 @@ class lastXdays(viewsets.ModelViewSet):
 	def get_queryset(self):
 		days_to_subtract = self.kwargs.get('days', None)
 		days = datetime.today() - timedelta(days=days_to_subtract)
-		articles = Articles.objects.filter(Q(discovery_date__gte=days)).filter(Q(ml_prediction_gnb=True) | Q(relevant=True))
+		articles = Articles.objects.filter(Q(discovery_date__gte=days.astimezone())).filter(Q(ml_prediction_gnb=True) | Q(relevant=True))
 		return articles
 
 	serializer_class = ArticleSerializer
