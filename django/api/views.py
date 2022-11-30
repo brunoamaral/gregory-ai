@@ -5,7 +5,8 @@ from rest_framework import viewsets, permissions, generics, filters
 from django.db.models import Q
 from rest_framework.decorators import api_view
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
+
 import os
 from sitesettings.models import CustomSetting
 from gregory.classes import SciencePaper
@@ -31,6 +32,10 @@ from api.utils.responses import (ACCESS_DENIED, INVALID_API_KEY,
 										 INVALID_IP_ADDRESS, NO_API_KEY,
 										 UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError)
 
+def getDateRangeFromWeek(p_year,p_week):
+	firstdayofweek = datetime.strptime(f'{p_year}-W{int(p_week )- 1}-1', "%Y-W%W-%w").date()
+	lastdayofweek = firstdayofweek + timedelta(days=6.9)
+	return (firstdayofweek,lastdayofweek)
 
 # Util function that creates an instance of the access log model
 def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_message, post_data):
@@ -277,6 +282,36 @@ class UnsentList(generics.ListAPIView):
 	def get_queryset(self):
 		return Articles.objects.all().exclude(sent_to_subscribers = True)
 
+class newsletterByWeek(viewsets.ModelViewSet):
+	"""
+	Search relevant articles. /articles/relevant/week/\{week\}/.
+	For a given week number, returns articles flagged as relevant by the admin team or the Machine Learning models.
+	"""
+	def get_queryset(self):
+		p_week = self.kwargs.get('week')
+		p_year = self.kwargs.get('year')
+		print(p_week, 'here')
+		week = getDateRangeFromWeek(p_year=p_year,p_week=p_week)
+		articles = Articles.objects.filter(Q(discovery_date__gte=week[0].isoformat(),discovery_date__lte=week[1].isoformat()), Q(ml_prediction_gnb=True) | Q(relevant=True))
+		return articles
+
+	serializer_class = ArticleSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+
+class lastXdays(viewsets.ModelViewSet):
+	"""
+	Search relevant articles. /articles/relevant/week/\{week\}/.
+	For a given number of days, returns articles flagged as relevant by the admin team or the Machine Learning models.
+	"""
+	def get_queryset(self):
+		days_to_subtract = self.kwargs.get('days', None)
+		days = datetime.today() - timedelta(days=days_to_subtract)
+		articles = Articles.objects.filter(Q(discovery_date__gte=days), Q(ml_prediction_gnb=True) | Q(relevant=True))
+		return articles
+
+	serializer_class = ArticleSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 class ArticlesBySourceList(generics.ListAPIView):
 	"""
 	Lists the articles that come from the specified source_id
