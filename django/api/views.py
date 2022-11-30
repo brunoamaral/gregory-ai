@@ -284,7 +284,7 @@ class UnsentList(generics.ListAPIView):
 
 class newsletterByWeek(viewsets.ModelViewSet):
 	"""
-	Search relevant articles. /articles/relevant/week/\{week\}/.
+	Search relevant articles. /articles/relevant/week/\{year\}/\{week\}/.
 	For a given week number, returns articles flagged as relevant by the admin team or the Machine Learning models.
 	"""
 	def get_queryset(self):
@@ -292,7 +292,7 @@ class newsletterByWeek(viewsets.ModelViewSet):
 		p_year = self.kwargs.get('year')
 		print(p_week, 'here')
 		week = getDateRangeFromWeek(p_year=p_year,p_week=p_week)
-		articles = Articles.objects.filter(Q(discovery_date__gte=week[0].isoformat(),discovery_date__lte=week[1].isoformat()), Q(ml_prediction_gnb=True) | Q(relevant=True))
+		articles = Articles.objects.filter(Q(discovery_date__gte=week[0].isoformat(),discovery_date__lte=week[1].isoformat())).filter(Q(ml_prediction_gnb=True) | Q(relevant=True))
 		return articles
 
 	serializer_class = ArticleSerializer
@@ -301,13 +301,13 @@ class newsletterByWeek(viewsets.ModelViewSet):
 
 class lastXdays(viewsets.ModelViewSet):
 	"""
-	Search relevant articles. /articles/relevant/week/\{week\}/.
+	Search relevant articles. /articles/relevant/last/\{days\}/.
 	For a given number of days, returns articles flagged as relevant by the admin team or the Machine Learning models.
 	"""
 	def get_queryset(self):
 		days_to_subtract = self.kwargs.get('days', None)
 		days = datetime.today() - timedelta(days=days_to_subtract)
-		articles = Articles.objects.filter(Q(discovery_date__gte=days), Q(ml_prediction_gnb=True) | Q(relevant=True))
+		articles = Articles.objects.filter(Q(discovery_date__gte=days)).filter(Q(ml_prediction_gnb=True) | Q(relevant=True))
 		return articles
 
 	serializer_class = ArticleSerializer
