@@ -88,7 +88,7 @@ class WeeklySummary(CronJobBase):
 			if Subscribers.objects.filter(subscriptions__list_name='Weekly Summary').count() > 0:
 				for email in Subscribers.objects.filter(subscriptions__list_name='Weekly Summary').values():
 					subscribers.append(email['email'])
-				articles = Articles.objects.filter(relevant=True).filter(~Q(sent_to_subscribers=True))
+				articles = Articles.objects.filter(Q(ml_prediction_gnb=True) | Q(relevant=True)).filter(~Q(sent_to_subscribers=True))
 				trials = Trials.objects.filter(~Q(sent_to_subscribers=True))
 				summary = {
 				"articles": articles,
