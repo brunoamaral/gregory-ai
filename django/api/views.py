@@ -33,7 +33,7 @@ from api.utils.responses import (ACCESS_DENIED, INVALID_API_KEY,
 										 UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError)
 
 def getDateRangeFromWeek(p_year,p_week):
-	firstdayofweek = datetime.strptime(f'{p_year}-W{int(p_week )- 1}-1', "%Y-W%W-%w").date()
+	firstdayofweek = datetime.strptime(f'{p_year}-W{int(p_week )- 1}-1', "%Y-W%W-%w")
 	lastdayofweek = firstdayofweek + timedelta(days=6.9)
 	return (firstdayofweek,lastdayofweek)
 
@@ -284,15 +284,14 @@ class UnsentList(generics.ListAPIView):
 
 class newsletterByWeek(viewsets.ModelViewSet):
 	"""
-	Search relevant articles. /articles/relevant/week/\{week\}/.
+	Search relevant articles. /articles/relevant/week/\{year\}/\{week\}/.
 	For a given week number, returns articles flagged as relevant by the admin team or the Machine Learning models.
 	"""
 	def get_queryset(self):
 		p_week = self.kwargs.get('week')
 		p_year = self.kwargs.get('year')
-		print(p_week, 'here')
 		week = getDateRangeFromWeek(p_year=p_year,p_week=p_week)
-		articles = Articles.objects.filter(Q(discovery_date__gte=week[0].isoformat(),discovery_date__lte=week[1].isoformat()), Q(ml_prediction_gnb=True) | Q(relevant=True))
+		articles = Articles.objects.filter(Q(discovery_date__gte=week[0].astimezone(),discovery_date__lte=week[1].astimezone())).filter(Q(ml_prediction_gnb=True) | Q(relevant=True))
 		return articles
 
 	serializer_class = ArticleSerializer
@@ -301,13 +300,13 @@ class newsletterByWeek(viewsets.ModelViewSet):
 
 class lastXdays(viewsets.ModelViewSet):
 	"""
-	Search relevant articles. /articles/relevant/week/\{week\}/.
+	Search relevant articles. /articles/relevant/last/\{days\}/.
 	For a given number of days, returns articles flagged as relevant by the admin team or the Machine Learning models.
 	"""
 	def get_queryset(self):
 		days_to_subtract = self.kwargs.get('days', None)
 		days = datetime.today() - timedelta(days=days_to_subtract)
-		articles = Articles.objects.filter(Q(discovery_date__gte=days), Q(ml_prediction_gnb=True) | Q(relevant=True))
+		articles = Articles.objects.filter(Q(discovery_date__gte=days.astimezone())).filter(Q(ml_prediction_gnb=True) | Q(relevant=True))
 		return articles
 
 	serializer_class = ArticleSerializer
