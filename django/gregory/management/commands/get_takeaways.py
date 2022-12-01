@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand, CommandError
 class Command(BaseCommand):
 	def handle(self, *args, **options):
 		# Read the Django data into a pandas dataframe
-		dataset = pd.DataFrame(list(Articles.objects.filter(takeaways=None,summary__gt=25,kind="science paper")[:100].values("article_id", "summary",)))
+		dataset = pd.DataFrame(list(Articles.objects.filter(takeaways=None,summary__gte=25,summary__lte=1500,kind="science paper")[:100].values("article_id", "summary",)))
 
 		# List of columns that we actually need from the dataset. 'summary' represents the article's abstract.
 		valid_columns = ["article_id", "summary"]
