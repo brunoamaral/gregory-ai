@@ -5,11 +5,12 @@ import pandas as pd
 import time
 from gregory.models import Articles
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models.functions import Length
 
 class Command(BaseCommand):
 	def handle(self, *args, **options):
 		# Read the Django data into a pandas dataframe
-		dataset = pd.DataFrame(list(Articles.objects.filter(takeaways=None,summary__gte=25,summary__lte=1500,kind="science paper")[:100].values("article_id", "summary",)))
+		dataset = pd.DataFrame(list(Articles.objects.annotate(abstract_length=Length('summary')).filter(abstract_length__gte=25).filter(abstract_length__lte=1500).filter(kind='science paper').filter(takeaways=None))[:100].values("article_id", "summary",))
 
 		# List of columns that we actually need from the dataset. 'summary' represents the article's abstract.
 		valid_columns = ["article_id", "summary"]
