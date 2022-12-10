@@ -86,7 +86,7 @@ class WeeklySummary(CronJobBase):
 		if datetime.datetime.today().weekday() == 1: # only run on Tuesdays
 			subscribers = []
 			if Subscribers.objects.filter(subscriptions__list_name='Weekly Summary').count() > 0:
-				for email in Subscribers.objects.filter(subscriptions__list_name='Weekly Summary').values():
+				for email in Subscribers.objects.filter(subscriptions__list_name='Weekly Summary',active=True).values():
 					subscribers.append(email['email'])
 				articles = Articles.objects.filter(Q(ml_prediction_gnb=True) | Q(relevant=True)).filter(~Q(sent_to_subscribers=True))
 				trials = Trials.objects.filter(~Q(sent_to_subscribers=True))
@@ -120,7 +120,7 @@ class TrialsNotification(CronJobBase):
 		trials = Trials.objects.filter(~Q(sent_real_time_notification=True))
 		if len(trials) > 0 and Subscribers.objects.filter(subscriptions__list_name='Clinical Trials').count() > 0:
 			subscribers = []
-			for email in Subscribers.objects.filter(subscriptions__list_name='Clinical Trials').values():
+			for email in Subscribers.objects.filter(subscriptions__list_name='Clinical Trials',active=True).values():
 				subscribers.append(email['email'])
 
 			summary = {
