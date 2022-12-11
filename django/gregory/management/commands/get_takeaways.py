@@ -12,6 +12,9 @@ class Command(BaseCommand):
 		# Read the Django data into a pandas dataframe
 		dataset = pd.DataFrame(list(Articles.objects.annotate(abstract_length=Length('summary')).filter(abstract_length__gte=25).filter(abstract_length__lte=3000).filter(kind='science paper').filter(takeaways=None)[:100].values("article_id", "summary",)))
 
+		if dataset.empty == True:
+			print('Nothing to analyse, dataset is empty.')
+			exit() 
 		# List of columns that we actually need from the dataset. 'summary' represents the article's abstract.
 		valid_columns = ["article_id", "summary"]
 
