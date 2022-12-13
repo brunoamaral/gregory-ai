@@ -175,7 +175,6 @@ class Twitter(Feed):
 
 	def items(self):
 		import itertools
-		from django.db.models import Q
 		from operator import attrgetter
 
 		articles_list_1 = Articles.objects.filter(relevant=True).order_by('-article_id')
@@ -200,8 +199,17 @@ class Twitter(Feed):
 		return item.title
 
 	def item_description(self, item):
+		object_type = '#ClinicalTrial '
+		if hasattr(item, 'article_id'):
+			if item.ml_prediction_gnb == True:
+				object_type = '#Article #ML '
+			if item.relevant == True:
+				object_type = '#Article #Manual '
+			if item.relevant == True and item.ml_prediction_gnb == True:
+				object_type = '#Article #Manual #ML '
+
 		if hasattr(item,'takeaways') and item.takeaways != None:
-			item.description = item.takeaways
+			item.description = object_type + item.takeaways
 		else:
 			item.description = None
 		return item.description
