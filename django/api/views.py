@@ -284,7 +284,7 @@ class UnsentList(generics.ListAPIView):
 
 class newsletterByWeek(viewsets.ModelViewSet):
 	"""
-	Search relevant articles. /articles/relevant/week/\{year\}/\{week\}/.
+	Search relevant articles. /articles/relevant/week/{year}/{week}/.
 	For a given week number, returns articles flagged as relevant by the admin team or the Machine Learning models.
 	"""
 	def get_queryset(self):
@@ -300,7 +300,7 @@ class newsletterByWeek(viewsets.ModelViewSet):
 
 class lastXdays(viewsets.ModelViewSet):
 	"""
-	Search relevant articles. /articles/relevant/last/\{days\}/.
+	Search relevant articles. /articles/relevant/last/{days}/.
 	For a given number of days, returns articles flagged as relevant by the admin team or the Machine Learning models.
 	"""
 	def get_queryset(self):
