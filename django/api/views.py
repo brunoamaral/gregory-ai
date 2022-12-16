@@ -104,7 +104,6 @@ def post_article(request):
 				science_paper = SciencePaper(doi=new_article['doi'],title=new_article['title'])
 			if science_paper.doi == None:
 				science_paper.doi = science_paper.find_doi(title=science_paper.title)
-				print(science_paper.doi)
 
 			if science_paper.doi != None:
 				science_paper.refresh()
