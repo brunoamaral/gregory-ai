@@ -270,7 +270,7 @@ class RelevantList(generics.ListAPIView):
 	serializer_class = ArticleSerializer
 
 	def get_queryset(self):
-		return Articles.objects.filter(Q(relevant=True) | Q(ml_prediction_gnb=True)).order_by('-published_date')
+		return Articles.objects.filter(Q(relevant=True) | Q(ml_prediction_gnb=True)).order_by('-article_id')
 
 class UnsentList(generics.ListAPIView):
 	"""
