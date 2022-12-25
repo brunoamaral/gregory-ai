@@ -43,6 +43,7 @@ class Command(BaseCommand):
 
 		# There are several records in the "relevant" column as NaN. Let's convert them to zeros
 		dataset.loc[:, "relevant"] = dataset["relevant"].fillna(value = 0)
+		dataset["relevant"] = dataset["relevant"].astype(int)
 
 		SOURCE_DATA_CSV = "/code/gregory/data/source.csv"
 		dataset.to_csv(SOURCE_DATA_CSV, index=False)
