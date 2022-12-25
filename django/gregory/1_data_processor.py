@@ -13,8 +13,11 @@ class DataProcessor(CronJobBase):
 
 	def do(self):
 		# Read the JSON data into a pandas dataframe
-		dataset = pd.DataFrame(list(Articles.objects.all().values()))
-
+		queryset = Articles.objects.filter(title__isnull=False,summary__isnull=False).values()
+		dataset = pd.DataFrame(list(queryset))
+		# if queryset is None:
+		# 	print('empty queryset')
+		# 	return
 		# Give some info on the dataset
 		# dataset.info()
 
