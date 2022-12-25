@@ -43,15 +43,7 @@ class DataProcessor(CronJobBase):
 		dataset = dataset[["terms", "relevant"]]
 
 		# There are several records in the "relevant" column as NaN. Let's convert them to zeros
-		dataset["relevant"] = dataset["relevant"].fillna(value = 0)
-		##
-		# WARNING
-		# >>> dataset["relevant"] = dataset["relevant"].fillna(value = 0)
-		# <console>:1: SettingWithCopyWarning:
-		# A value is trying to be set on a copy of a slice from a DataFrame.
-		# Try using .loc[row_indexer,col_indexer] = value instead
-		# See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-		##
+		dataset.loc[:, "relevant"] = dataset["relevant"].fillna(value = 0)
 
 		SOURCE_DATA_CSV = "/code/gregory/data/source.csv"
 		dataset.to_csv(SOURCE_DATA_CSV, index=False)
