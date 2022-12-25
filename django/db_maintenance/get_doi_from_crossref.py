@@ -1,10 +1,5 @@
-from crossref.restful import Works, Etiquette
 from django_cron import CronJobBase, Schedule
 from gregory.models import Articles
-import re 
-import pytz
-import os
-from .unpaywall import unpaywall_utils
 from sitesettings.models import *
 import gregory.functions as greg
 from gregory.classes import SciencePaper
