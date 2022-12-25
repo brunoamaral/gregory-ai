@@ -1,17 +1,13 @@
-from django_cron import CronJobBase, Schedule
+from django.core.management.base import BaseCommand, CommandError
 import pandas as pd
-from .utils.text_utils import cleanText
-from .utils.text_utils import cleanHTML
+from gregory.utils.text_utils import cleanText
+from gregory.utils.text_utils import cleanHTML
 import html
-from .models import Articles
+from gregory.models import Articles
 
 
-class DataProcessor(CronJobBase):
-	RUN_EVERY_MINS = 2880 # every 2 days
-	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
-	code = 'gregory.data_processor'    # a unique code
-
-	def do(self):
+class Command(BaseCommand):
+	def handle(self, *args, **options):
 		# Read the JSON data into a pandas dataframe
 		queryset = Articles.objects.filter(title__isnull=False,summary__isnull=False).values()
 		dataset = pd.DataFrame(list(queryset))
