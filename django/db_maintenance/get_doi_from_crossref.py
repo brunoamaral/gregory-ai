@@ -30,7 +30,7 @@ class GetDoiCrossRef(CronJobBase):
 				article.save()
 
 		# Get access info
-		articles = Articles.objects.filter(doi__isnull=False,access='unknown',kind='science paper',crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(doi__isnull=False,access__isnull=True,kind='science paper', crossref_check__isnull = True)
+		articles = Articles.objects.filter(doi__isnull=False,access__isnull=True,kind='science paper',crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(doi__isnull=False,access__isnull=True,kind='science paper', crossref_check__isnull = True)
 		print('Found articles with no access information,',articles.count())
 		for article in articles:
 			paper = SciencePaper(doi=article.doi)
