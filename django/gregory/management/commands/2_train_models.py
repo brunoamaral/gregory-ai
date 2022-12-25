@@ -1,3 +1,4 @@
+from django.core.management.base import BaseCommand, CommandError
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -9,15 +10,13 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import accuracy_score
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression
-from .utils.model_utils import DenseTransformer
+from gregory.utils.model_utils import DenseTransformer
 from joblib import dump
-from django_cron import CronJobBase, Schedule
+import numpy as np
 
-class TrainModels(CronJobBase):
-	RUN_EVERY_MINS = 2880 # every 2 days
-	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
-	code = 'gregory.train_models'    # a unique code
-	def do(self):    
+
+class Command(BaseCommand):
+	def handle(self, *args, **options):
 		# The CSV file that has the source data
 		SOURCE_DATA_CSV = "/code/gregory/data/source.csv"
 
@@ -104,3 +103,4 @@ class TrainModels(CronJobBase):
 			pipeline.fit(input, output)
 			# Save the pipeline for later use (`compress` argument is to save as one single file with the entire pipeline)
 			dump(pipeline, '/code/gregory/ml_models/model_' + model + '.joblib', compress=1)
+		pass
