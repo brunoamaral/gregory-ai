@@ -4,7 +4,7 @@ from pathlib import Path
 from shutil import which
 import git
 import os
-import psycopg
+import psycopg2
 import requests
 from subprocess import Popen,PIPE
 import sys
@@ -212,7 +212,7 @@ postgres_password = os.getenv('POSTGRES_PASSWORD')
 postgres_db = os.getenv('POSTGRES_DB')
 
 try:
-	conn = psycopg.connect(dbname=postgres_db, user=postgres_user,host=db_host,password=postgres_password,autocommit=True)
+	conn = psycopg2.connect(dbname=postgres_db, user=postgres_user,host=db_host,password=postgres_password,autocommit=True)
 	cur = conn.cursor()
 	cur.execute("CREATE DATABASE metabase;")
 	conn.close()
