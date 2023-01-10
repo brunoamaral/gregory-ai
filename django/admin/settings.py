@@ -28,7 +28,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 DEBUG = False 
 
 ALLOWED_HOSTS = ['0.0.0.0','localhost','api.'+ os.environ.get('DOMAIN_NAME'),'manage.'+ os.environ.get('DOMAIN_NAME')]
-CSRF_TRUSTED_ORIGINS = [os.environ.get('DOMAIN_NAME'), 'https://api.'+ os.environ.get('DOMAIN_NAME'),'https://manage.'+ os.environ.get('DOMAIN_NAME')]
+CSRF_TRUSTED_ORIGINS = [ 'https://' + os.environ.get('DOMAIN_NAME'), 'https://api.'+ os.environ.get('DOMAIN_NAME'),'https://manage.'+ os.environ.get('DOMAIN_NAME')]
 
 # Application definition
 
