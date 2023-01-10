@@ -4,14 +4,9 @@ from gregory.models import Articles, Trials, Sources, Authors, Categories
 from rest_framework import viewsets, permissions, generics, filters
 from django.db.models import Q
 from rest_framework.decorators import api_view
-import json
 from datetime import datetime, timedelta
 
-import os
-from sitesettings.models import CustomSetting
 from gregory.classes import SciencePaper
-
-site = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 
 # Stuff needed for the API with authorization
 import traceback
@@ -148,14 +143,14 @@ def post_article(request):
 			
 			# Prepare some data to be returned to the API client
 			data = {
-				'name': site.title + '| API',
+				'name': 'Gregory | API',
 				'version': '0.1b',
 				"data_received": json.loads(request.body),
 				'data_processed_from_doi': new_article,
 				'article_id': save_article.article_id,
 			}
 			log_data = {
-				'name': site.title + '| API',
+				'name': 'Gregory | API',
 				'version': '0.1b',
 				"article_id": save_article.pk,
 			}
