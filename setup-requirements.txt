@@ -3,7 +3,7 @@ charset-normalizer==2.1.1
 gitdb==4.0.10
 GitPython==3.1.29
 idna==3.4
-psycopg==3.1.4
+psycopg2-binary==2.9.5
 python-dotenv==0.21.0
 requests==2.28.1
 smmap==5.0.0
