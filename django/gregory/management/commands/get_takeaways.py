@@ -7,6 +7,13 @@ from gregory.models import Articles
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models.functions import Length
 
+def remove_last_sentence(text: str) -> str:
+		sentences = text.split('. ')
+		if len(sentences) == 1:
+				return text
+		else:
+				return '. '.join(sentences[:-1])
+
 class Command(BaseCommand):
 	def handle(self, *args, **options):
 		# Read the Django data into a pandas dataframe
@@ -50,7 +57,7 @@ class Command(BaseCommand):
 
 		# Minimum length of the summary (in words/tokens?)
 		MIN_LENGTH = 25
-		MAX_LENGTH = 100
+		MAX_LENGTH = 150
 
 		# Calculates the max length of the summary (in words) considering the size of the input text
 		def getSummaryMaxLengthForText(text):
@@ -68,7 +75,7 @@ class Command(BaseCommand):
 				summary = summarizer(row['abstract'], min_length=MIN_LENGTH, max_length=max_length)
 				end = time.time()
 				print(" => Ellapsed time: ", end - start, "sec.")
-				return summary[0]['summary_text']
+				return remove_last_sentence(summary[0]['summary_text'])
 			return ""
 
 		dataset['get_takeaways'] = dataset.apply(lambda row: summarizeAbstract(row), axis=1)
