@@ -1,6 +1,7 @@
 __pycache__/
 ./.env
 .env
+env311/
 venv
 .venv
 .DS_Store
