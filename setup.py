@@ -4,7 +4,7 @@ from pathlib import Path
 from shutil import which
 import git
 import os
-import psycopg
+import psycopg2
 import requests
 from subprocess import Popen,PIPE
 import sys
@@ -32,7 +32,7 @@ else:
 
 Did not find a .env file, we need to set some configuration variables. If in doubt, you can input blank and configure the .env file later.
 
-Some variables are optional: EMAIL_*, HUGO_PATH, METABASE_*
+Some variables are optional: EMAIL_*, METABASE_*
 	''')
 
 	configs = {
@@ -47,14 +47,12 @@ Some variables are optional: EMAIL_*, HUGO_PATH, METABASE_*
 	"EMAIL_PORT" : 587, 
 	"EMAIL_USE_TLS" : 'true', 
 	"GREGORY_DIR" : os.getenv('GREGORY_DIR'),
-	"HUGO_PATH" : os.getenv('HUGO_PATH'),
 	"METABASE_SECRET_KEY" : os.getenv('METABASE_SECRET_KEY'),
 	"METABASE_SITE_URL" : os.getenv('METABASE_SITE_URL'),
 	"POSTGRES_DB" : os.getenv('POSTGRES_DB'),
 	"POSTGRES_PASSWORD" : os.getenv('POSTGRES_PASSWORD'),
 	"POSTGRES_USER" : os.getenv('POSTGRES_USER'),
 	"SECRET_KEY" : os.getenv('SECRET_KEY'),
-	"WEBSITE_PATH" : os.getenv('WEBSITE_PATH'),
 	}
 
 	for key,value in configs.items():
@@ -149,20 +147,6 @@ if is_tool("docker-compose"):
 else:
 	print("Didn't find docker-compose, please install it. Details at https://docs.docker.com/compose/install/")
 
-		
-print('''
-####
-## Check for Hugo
-####
-''')
-
-hugo_path = os.getenv('HUGO_PATH')
-
-if hugo_path == True or is_tool('hugo') == True:
-	print("\N{check mark} Found Hugo in path or environment variable")
-else:
-	print("Didn't find Hugo, please install it. Details at https://gohugo.io")
-	sys.exit('Hugo not installed')
 
 print('''
 ####
@@ -212,7 +196,7 @@ postgres_password = os.getenv('POSTGRES_PASSWORD')
 postgres_db = os.getenv('POSTGRES_DB')
 
 try:
-	conn = psycopg.connect(dbname=postgres_db, user=postgres_user,host=db_host,password=postgres_password,autocommit=True)
+	conn = psycopg2.connect(dbname=postgres_db, user=postgres_user,host=db_host,password=postgres_password,autocommit=True)
 	cur = conn.cursor()
 	cur.execute("CREATE DATABASE metabase;")
 	conn.close()

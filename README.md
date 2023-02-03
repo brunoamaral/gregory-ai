@@ -1,4 +1,4 @@
-# Gregory MS
+# Gregory AI
 
 Gregory is an AI system that uses Machine Learning and Natural Language Processing to track
 clinical research and identify papers which improves the wellbeing of patients.
@@ -13,7 +13,24 @@ Sources can also be added to monitor Clinical Trials, in which case Gregory can 
 
 For other integrations, the Django app provides RSS feeds with a live update of relevant research and newly posted clinical trials.
 
-#### Website: <https://gregory-ms.com>
+## Features
+
+1. Machine Learning to identify relevant research
+2. Configure RSS feeds to gather search results from PubMed and other websites
+3. Configure searches on any public website
+4. Integration with mailgun.com to send emails
+5. Automatic emails to the admin team with results in the last 48hours
+6. Subscriber management
+7. Configure email lists for different stakeholders
+8. Public and Private API to integrate with other software solutions and websites
+9. Configure categories to organize search results based on keywords in title
+10. Configure different “subjects” to have keep different research areas segmented
+11. Identify authors and their ORCID
+12. Generate different RSS feeds
+
+### Current Use case for Multiple Sclerosis
+
+<https://gregory-ms.com>
 
 #### Rest API: <https://api.gregory-ms.com>
 
