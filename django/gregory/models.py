@@ -101,7 +101,7 @@ class Articles(models.Model):
 
 	class Meta:
 		managed = True
-		# unique_together = (('title', 'link'),)
+		unique_together = (('title', 'link'),)
 		verbose_name_plural = 'articles'
 		db_table = 'articles'
 
