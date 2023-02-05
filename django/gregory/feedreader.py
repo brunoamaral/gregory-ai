@@ -9,6 +9,7 @@ from db_maintenance.unpaywall import unpaywall_utils
 from sitesettings.models import *
 from crossref.restful import Works, Etiquette
 import os
+import re
 import gregory.functions as greg
 from gregory.classes import SciencePaper
 from django.utils import timezone
@@ -140,9 +141,11 @@ class FeedReaderTask(CronJobBase):
 				eudract = None
 				euct = None
 				nct = None
-				if "clinicaltrialsregister" in link:
-					eudract = link.split("/")[-2]
-					euct = link.split("/")[-2]
+				if "clinicaltrialsregister.eu" in link:
+					match = re.search(r'eudract_number\%3A(\d{4}-\d{6}-\d{2})', link)
+					if match:
+						eudract = match.group(1)
+						euct = match.group(1)
 				if 'clinicaltrials.gov' in link:
 					nct = entry['guid']
 				identifiers = {"eudract": eudract, "euct": euct, "nct": nct}
