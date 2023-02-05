@@ -137,7 +137,16 @@ class FeedReaderTask(CronJobBase):
 				if published:
 					published = parse(entry['published'])
 				link = remove_utm(entry['link'])
+				eudract = None
+				euct = None
+				nct = None
+				if "clinicaltrialsregister" in link:
+					eudract = link.split("/")[-2]
+					euct = link.split("/")[-2]
+				if 'clinicaltrials.gov' in link:
+					nct = entry['guid']
+				identifiers = {"eudract": eudract, "euct": euct, "nct": nct}
 				try:
-					trial = Trials.objects.create( discovery_date=timezone.now(), title = entry['title'], summary = summary, link = link, published_date = published)
+					trial = Trials.objects.create( discovery_date=timezone.now(), title = entry['title'], summary = summary, link = link, published_date = published, identifiers=identifiers)
 				except:
 					pass
