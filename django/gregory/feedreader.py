@@ -150,6 +150,6 @@ class FeedReaderTask(CronJobBase):
 					nct = entry['guid']
 				identifiers = {"eudract": eudract, "euct": euct, "nct": nct}
 				try:
-					trial = Trials.objects.create( discovery_date=timezone.now(), title = entry['title'], summary = summary, link = link, published_date = published, identifiers=identifiers)
+					trial = Trials.objects.create( discovery_date=timezone.now(), title = entry['title'], summary = summary, link = link, published_date = published, identifiers=identifiers, source = i)
 				except:
 					pass
