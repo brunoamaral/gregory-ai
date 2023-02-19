@@ -19,16 +19,6 @@ CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
 my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
 works = Works(etiquette=my_etiquette)
 
-def remove_utm(url):
-	u = urlparse(url)
-	query = parse_qs(u.query, keep_blank_values=True)
-	query.pop('utm_source', None)
-	query.pop('utm_medium', None)
-	query.pop('utm_campaign', None)
-	query.pop('utm_content', None)
-	u = u._replace(query=urlencode(query, True))
-	return urlunparse(u)
-
 class FeedReaderTask(CronJobBase):
 	RUN_EVERY_MINS = 30
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
@@ -137,7 +127,7 @@ class FeedReaderTask(CronJobBase):
 				published = entry.get('published')
 				if published:
 					published = parse(entry['published'])
-				link = remove_utm(entry['link'])
+				link = greg.remove_utm(entry['link'])
 				eudract = None
 				euct = None
 				nct = None
