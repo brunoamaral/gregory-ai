@@ -11,7 +11,7 @@ from crossref.restful import Works, Etiquette
 import os
 import re
 import gregory.functions as greg
-from gregory.classes import SciencePaper
+from gregory.classes import SciencePaper, ClinicalTrial
 from django.utils import timezone
 import pytz
 SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
@@ -149,7 +149,9 @@ class FeedReaderTask(CronJobBase):
 				if 'clinicaltrials.gov' in link:
 					nct = entry['guid']
 				identifiers = {"eudract": eudract, "euct": euct, "nct": nct}
+				clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
+				clinical_trial.clean_summary()
 				try:
-					trial = Trials.objects.create( discovery_date=timezone.now(), title = entry['title'], summary = summary, link = link, published_date = published, identifiers=identifiers, source = i)
+					trial = Trials.objects.create( discovery_date=timezone.now(), title = clinical_trial.title, summary = clinical_trial.summary, link = clinical_trial.link, published_date = clinical_trial.published_date, identifiers=clinical_trial.identifiers, source = i)
 				except:
 					pass
