@@ -161,3 +161,10 @@ class ClinicalTrial:
 				for attribute in ["class", "id", "name", "style"]:
 					del tag[attribute]
 			return str(soup)
+
+	def clean_url(self=None):
+		from gregory.functions import remove_utm
+		if self.link != None:
+			self.link = remove_utm(self.link)
+		else:
+			print('no url found')
