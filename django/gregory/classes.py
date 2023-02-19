@@ -143,3 +143,36 @@ class SciencePaper:
 					if i == 5:
 						return None
 
+
+class ClinicalTrial:
+	def __init__(self, title=None, summary=None, link=None, published_date=None, relevant=None, identifiers=None):
+		self.title = title
+		self.summary = summary
+		self.link = link
+		self.published_date = published_date
+		self.relevant = relevant
+		self.identifiers = identifiers
+	def __str__(self):
+		return f"{self.title}, {self.identifiers}"
+	def __repr__(self):
+		return f"{self.title}, \"{self.identifiers}\""
+
+	def clean_summary(self=None,summary=None):
+		from bs4 import BeautifulSoup
+		import html
+		if summary == None and self.summary != None:
+			summary = self.summary
+		if summary != None:
+			summary = html.unescape(summary)
+			soup = BeautifulSoup(summary,'html.parser')
+			for tag in soup():
+				for attribute in ["class", "id", "name", "style"]:
+					del tag[attribute]
+			return str(soup)
+
+	def clean_url(self=None):
+		from gregory.functions import remove_utm
+		if self.link != None:
+			self.link = remove_utm(self.link)
+		else:
+			print('no url found')
