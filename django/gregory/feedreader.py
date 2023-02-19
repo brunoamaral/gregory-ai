@@ -54,7 +54,7 @@ class FeedReaderTask(CronJobBase):
 					published = parse(entry['published'])
 				else:
 					published = parse(entry['prism_coverdate'])
-				link = remove_utm(entry['link'])
+				link = greg.remove_utm(entry['link'])
 				###
 				# This is a bad solution but it will have to do for now
 				###
