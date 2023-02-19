@@ -11,23 +11,13 @@ from crossref.restful import Works, Etiquette
 import os
 import re
 import gregory.functions as greg
-from gregory.classes import SciencePaper
+from gregory.classes import SciencePaper, ClinicalTrial
 from django.utils import timezone
 import pytz
 SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
 my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
 works = Works(etiquette=my_etiquette)
-
-def remove_utm(url):
-	u = urlparse(url)
-	query = parse_qs(u.query, keep_blank_values=True)
-	query.pop('utm_source', None)
-	query.pop('utm_medium', None)
-	query.pop('utm_campaign', None)
-	query.pop('utm_content', None)
-	u = u._replace(query=urlencode(query, True))
-	return urlunparse(u)
 
 class FeedReaderTask(CronJobBase):
 	RUN_EVERY_MINS = 30
@@ -64,7 +54,7 @@ class FeedReaderTask(CronJobBase):
 					published = parse(entry['published'])
 				else:
 					published = parse(entry['prism_coverdate'])
-				link = remove_utm(entry['link'])
+				link = greg.remove_utm(entry['link'])
 				###
 				# This is a bad solution but it will have to do for now
 				###
@@ -137,7 +127,7 @@ class FeedReaderTask(CronJobBase):
 				published = entry.get('published')
 				if published:
 					published = parse(entry['published'])
-				link = remove_utm(entry['link'])
+				link = greg.remove_utm(entry['link'])
 				eudract = None
 				euct = None
 				nct = None
@@ -149,7 +139,9 @@ class FeedReaderTask(CronJobBase):
 				if 'clinicaltrials.gov' in link:
 					nct = entry['guid']
 				identifiers = {"eudract": eudract, "euct": euct, "nct": nct}
+				clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
+				clinical_trial.clean_summary()
 				try:
-					trial = Trials.objects.create( discovery_date=timezone.now(), title = entry['title'], summary = summary, link = link, published_date = published, identifiers=identifiers, source = i)
+					trial = Trials.objects.create( discovery_date=timezone.now(), title = clinical_trial.title, summary = clinical_trial.summary, link = clinical_trial.link, published_date = clinical_trial.published_date, identifiers=clinical_trial.identifiers, source = i)
 				except:
 					pass
