@@ -126,7 +126,7 @@ class FeedReaderTask(CronJobBase):
 					summary = entry['summary']
 				published = entry.get('published')
 				if published:
-					published = parse(entry['published'])
+					published = parse(entry['published']).astimezone(pytz.utc)
 				link = greg.remove_utm(entry['link'])
 				eudract = None
 				euct = None
