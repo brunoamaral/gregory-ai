@@ -1,11 +1,8 @@
 import feedparser
 from dateutil.parser import parse
-from dotenv import load_dotenv
 from .models import Articles,Trials,Sources,Authors
 from django_cron import CronJobBase, Schedule
 import requests
-from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
-from db_maintenance.unpaywall import unpaywall_utils
 from sitesettings.models import *
 from crossref.restful import Works, Etiquette
 import os
