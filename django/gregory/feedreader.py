@@ -11,6 +11,8 @@ import gregory.functions as greg
 from gregory.classes import SciencePaper, ClinicalTrial
 from django.utils import timezone
 import pytz
+from django.db.models import Q
+
 SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
 my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
@@ -138,7 +140,19 @@ class FeedReaderTask(CronJobBase):
 				identifiers = {"eudract": eudract, "euct": euct, "nct": nct}
 				clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
 				clinical_trial.clean_summary()
-				try:
-					trial = Trials.objects.create( discovery_date=timezone.now(), title = clinical_trial.title, summary = clinical_trial.summary, link = clinical_trial.link, published_date = clinical_trial.published_date, identifiers=clinical_trial.identifiers, source = i)
-				except:
-					pass
+
+				nct = clinical_trial.identifiers['nct']
+				eduract = clinical_trial.identifiers['eduract']
+				euct = clinical_trial.identifiers['euct']
+				if Trials.objects.filter(Q(identifiers__nct=nct)).exists() or Trials.objects.filter(Q(identifiers__eduract=eduract)).exists() or Trials.objects.filter(Q(identifiers__euct=euct)).exists():
+						# nct already exists in the database
+						print('clinical trial already in db:', clinical_trial)
+						# should check if there are new identifier numbers to add to that entry
+						pass
+				else:
+						# nct is not in the database
+					try:
+						trial = Trials.objects.create( discovery_date=timezone.now(), title = clinical_trial.title, summary = clinical_trial.summary, link = clinical_trial.link, published_date = clinical_trial.published_date, identifiers=clinical_trial.identifiers, source = i)
+					except:
+						pass
+
