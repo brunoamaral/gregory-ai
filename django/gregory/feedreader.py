@@ -11,12 +11,15 @@ import gregory.functions as greg
 from gregory.classes import SciencePaper, ClinicalTrial
 from django.utils import timezone
 import pytz
+from dateutil import tz
 from django.db.models import Q
 
 SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
 my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
 works = Works(etiquette=my_etiquette)
+
+tzinfos = {'EST': tz.gettz('America/New_York')}
 
 class FeedReaderTask(CronJobBase):
 	RUN_EVERY_MINS = 30
@@ -125,7 +128,7 @@ class FeedReaderTask(CronJobBase):
 					summary = entry['summary']
 				published = entry.get('published')
 				if published:
-					published = parse(entry['published']).astimezone(pytz.utc)
+					published = parse(entry['published'], tzinfos=tzinfos).astimezone(pytz.utc)
 				link = greg.remove_utm(entry['link'])
 				eudract = None
 				euct = None
