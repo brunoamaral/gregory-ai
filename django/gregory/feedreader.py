@@ -22,7 +22,7 @@ works = Works(etiquette=my_etiquette)
 tzinfos = {'EST': tz.gettz('America/New_York')}
 
 class FeedReaderTask(CronJobBase):
-	RUN_EVERY_MINS = 30
+	RUN_EVERY_MINS = 1
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'gregory.feedreadertask'    # a unique code
 
@@ -140,22 +140,44 @@ class FeedReaderTask(CronJobBase):
 						euct = match.group(1)
 				if 'clinicaltrials.gov' in link:
 					nct = entry['guid']
-				identifiers = {"eudract": eudract, "euct": euct, "nct": nct}
-				clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
+
+				clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = {"eudract": eudract, "euct": euct, "nct": nct},)
 				clinical_trial.clean_summary()
 
-				nct = clinical_trial.identifiers['nct']
-				eduract = clinical_trial.identifiers['eduract']
-				euct = clinical_trial.identifiers['euct']
-				if Trials.objects.filter(Q(identifiers__nct=nct)).exists() or Trials.objects.filter(Q(identifiers__eduract=eduract)).exists() or Trials.objects.filter(Q(identifiers__euct=euct)).exists():
-						# nct already exists in the database
-						print('clinical trial already in db:', clinical_trial)
-						# should check if there are new identifier numbers to add to that entry
-						pass
-				else:
-						# nct is not in the database
+				exists = False
+				if (clinical_trial.identifiers['nct'] is not None) and Trials.objects.filter(identifiers__nct=clinical_trial.identifiers['nct']).exclude(identifiers__nct__isnull=True).exists():
+					# do something if nct identifier is not None and exists in Trials table
+					exists = True
+				if (clinical_trial.identifiers['eudract'] is not None) and Trials.objects.filter(identifiers__eudract=clinical_trial.identifiers['eudract']).exclude(identifiers__eudract__isnull=True).exists():
+					# do something if eudract identifier is not None and exists in Trials table
+					exists = True
+				if (clinical_trial.identifiers['euct'] is not None) and Trials.objects.filter(identifiers__euct=clinical_trial.identifiers['euct']).exclude(identifiers__euct__isnull=True).exists():
+					# do something if euct identifier is not None and exists in Trials table
+					exists = True
+				
+
+				if exists == True:
+					print('clinical trial already in db:', clinical_trial)
+					# should check if there are new identifier numbers to add to that entry
+					# Fetch the trial object from the database
+					trial = Trials.objects.filter(Q(identifiers__nct=clinical_trial.identifiers['nct']) | Q(identifiers__eudract=clinical_trial.identifiers['eudract']) | Q(identifiers__euct=clinical_trial.identifiers['euct'])).first()
+					# Check if the trial object exists in the database
+					if trial is not None:
+							print('found',trial.identifiers)
+							# Check if the value of the nct identifier already exists in the object
+							if clinical_trial.identifiers['nct'] is not None and trial.identifiers.get('nct') != clinical_trial.identifiers['nct']:
+									trial.identifiers['nct'] = clinical_trial.identifiers['nct']
+							# Check if the value of the eudract identifier already exists in the object
+							if clinical_trial.identifiers['eudract'] is not None and trial.identifiers.get('eudract') != clinical_trial.identifiers['eudract']:
+									trial.identifiers['eudract'] = clinical_trial.identifiers['eudract']
+							# Check if the value of the euct identifier already exists in the object
+							if clinical_trial.identifiers['euct'] is not None and trial.identifiers.get('euct') != clinical_trial.identifiers['euct']:
+									trial.identifiers['euct'] = clinical_trial.identifiers['euct']
+							trial.save()
+							print('saved')
+
+				if exists == False:
 					try:
 						trial = Trials.objects.create( discovery_date=timezone.now(), title = clinical_trial.title, summary = clinical_trial.summary, link = clinical_trial.link, published_date = clinical_trial.published_date, identifiers=clinical_trial.identifiers, source = i)
-					except:
-						pass
-
+					except Exception as e:
+							print(f"Error creating Trials object: {e}")
