@@ -1,20 +1,19 @@
-from django_cron import CronJobBase, Schedule
+from django.core.management.base import BaseCommand, CommandError
 import pandas as pd
-from .utils.text_utils import cleanText
-from .utils.text_utils import cleanHTML
+from gregory.utils.text_utils import cleanText
+from gregory.utils.text_utils import cleanHTML
 import html
-from .models import Articles
+from gregory.models import Articles
 
 
-class DataProcessor(CronJobBase):
-	RUN_EVERY_MINS = 2880 # every 2 days
-	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
-	code = 'gregory.data_processor'    # a unique code
-
-	def do(self):
+class Command(BaseCommand):
+	def handle(self, *args, **options):
 		# Read the JSON data into a pandas dataframe
-		dataset = pd.DataFrame(list(Articles.objects.all().values()))
-
+		queryset = Articles.objects.filter(title__isnull=False,summary__isnull=False).values()
+		dataset = pd.DataFrame(list(queryset))
+		# if queryset is None:
+		# 	print('empty queryset')
+		# 	return
 		# Give some info on the dataset
 		# dataset.info()
 
@@ -43,15 +42,8 @@ class DataProcessor(CronJobBase):
 		dataset = dataset[["terms", "relevant"]]
 
 		# There are several records in the "relevant" column as NaN. Let's convert them to zeros
-		dataset["relevant"] = dataset["relevant"].fillna(value = 0)
-		##
-		# WARNING
-		# >>> dataset["relevant"] = dataset["relevant"].fillna(value = 0)
-		# <console>:1: SettingWithCopyWarning:
-		# A value is trying to be set on a copy of a slice from a DataFrame.
-		# Try using .loc[row_indexer,col_indexer] = value instead
-		# See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-		##
+		dataset.loc[:, "relevant"] = dataset["relevant"].fillna(value = 0)
+		dataset["relevant"] = dataset["relevant"].astype(int)
 
 		SOURCE_DATA_CSV = "/code/gregory/data/source.csv"
 		dataset.to_csv(SOURCE_DATA_CSV, index=False)
