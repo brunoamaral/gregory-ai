@@ -4,7 +4,7 @@ from sitesettings.models import *
 import gregory.functions as greg
 from gregory.classes import SciencePaper
 from django.utils import timezone
-
+from django.db.models import Q
 
 
 class GetDoiCrossRef(CronJobBase):
@@ -47,7 +47,14 @@ class GetDoiCrossRef(CronJobBase):
 			article.save()
 
 		# Get published date
-		articles = Articles.objects.filter(published_date__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(published_date__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__isnull=True)
+
+
+		articles = (
+				Articles.objects
+				.filter(published_date__isnull=True, doi__isnull=False, crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now() - timezone.timedelta(days=30))
+				| Articles.objects
+				.filter(published_date__isnull=True, doi__isnull=False, crossref_check__lte=timezone.now(), crossref_check__isnull=True)
+		).exclude(Q(doi=''))
 		print('Found articles that need publish date information',articles.count())
 		for article in articles:
 			paper = SciencePaper(doi=article.doi)
