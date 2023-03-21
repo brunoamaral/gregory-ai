@@ -1,15 +1,10 @@
-from crossref.restful import Works, Etiquette
 from django_cron import CronJobBase, Schedule
 from gregory.models import Articles
-import re 
-import pytz
-import os
-from .unpaywall import unpaywall_utils
 from sitesettings.models import *
 import gregory.functions as greg
 from gregory.classes import SciencePaper
 from django.utils import timezone
-
+from django.db.models import Q
 
 
 class GetDoiCrossRef(CronJobBase):
@@ -30,7 +25,7 @@ class GetDoiCrossRef(CronJobBase):
 				article.save()
 
 		# Get access info
-		articles = Articles.objects.filter(doi__isnull=False,access__isnull=True,kind='science paper',crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(doi__isnull=False,access__isnull=True,kind='science paper', crossref_check__isnull = True)
+		articles = Articles.objects.filter(doi__isnull=False, doi__gt='', access__isnull=True, kind='science paper', crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(doi__isnull=False, doi__gt='', access__isnull=True, kind='science paper', crossref_check__isnull=True)
 		print('Found articles with no access information,',articles.count())
 		for article in articles:
 			paper = SciencePaper(doi=article.doi)
@@ -52,7 +47,14 @@ class GetDoiCrossRef(CronJobBase):
 			article.save()
 
 		# Get published date
-		articles = Articles.objects.filter(published_date__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(published_date__isnull=True,doi__isnull=False,crossref_check__lte=timezone.now(), crossref_check__isnull=True)
+
+
+		articles = (
+				Articles.objects
+				.filter(published_date__isnull=True, doi__isnull=False, crossref_check__lte=timezone.now(), crossref_check__gt=timezone.now() - timezone.timedelta(days=30))
+				| Articles.objects
+				.filter(published_date__isnull=True, doi__isnull=False, crossref_check__lte=timezone.now(), crossref_check__isnull=True)
+		).exclude(Q(doi=''))
 		print('Found articles that need publish date information',articles.count())
 		for article in articles:
 			paper = SciencePaper(doi=article.doi)

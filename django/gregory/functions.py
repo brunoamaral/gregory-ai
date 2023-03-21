@@ -12,6 +12,18 @@ from .utils.text_utils import cleanText
 from joblib import load
 from .models import Articles
 from django_cron import CronJobBase, Schedule
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
+
+def remove_utm(url):
+	u = urlparse(url)
+	query = parse_qs(u.query, keep_blank_values=True)
+	query.pop('utm_source', None)
+	query.pop('utm_medium', None)
+	query.pop('utm_campaign', None)
+	query.pop('utm_content', None)
+	u = u._replace(query=urlencode(query, True))
+	return urlunparse(u)
+
 
 def get_doi(title):
 	doi = None
