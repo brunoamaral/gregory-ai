@@ -22,6 +22,7 @@ docker-python/
 env
 env3.10
 env311
+env311/
 hugo/content/articles
 hugo/content/articles/*/
 hugo/content/developers/*.xlsx
@@ -29,7 +30,6 @@ hugo/content/developers/*.zip
 hugo/content/developers/**/*.json
 hugo/content/developers/articles.json
 hugo/content/developers/articles.xlsx
-hugo/content/developers/articles.zip
 hugo/content/developers/articles.zip
 hugo/content/developers/trials.json
 hugo/content/developers/trials.xlsx
@@ -52,6 +52,7 @@ python-ml/data/source.json
 python-ml/models/
 python-ml/utils/__pycache__/
 resources/
+venv
 venv3
 venv311
 workspace.code-workspace
