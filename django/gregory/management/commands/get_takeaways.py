@@ -36,7 +36,7 @@ class Command(BaseCommand):
 					abstract_length__lte=3000,
 					kind='science paper',
 					takeaways=None
-			)[:1]
+			)[:20]
 
 			if not queryset:
 					print('Nothing to analyse, queryset is empty.')
