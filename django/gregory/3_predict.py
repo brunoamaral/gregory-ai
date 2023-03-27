@@ -30,18 +30,9 @@ class RunPredictor(CronJobBase):
 
 		# Now let's fetch a new set of data
 		today = date.today()
-		# year_month = today.strftime("%Y/%m")
-
-		# dataset_file_json = '/code/gregory/data/' + today.strftime("%Y-%B") + '.json'
-		dataset_file_csv = '/code/gregory/data/' + today.strftime("%Y-%B") + '.csv'
 
 		dataset = pd.DataFrame(list(Articles.objects.filter(ml_prediction_gnb=None,summary__gt=50).values("title", "summary", "relevant", "article_id")))
 		if len(dataset) > 0:
-			# i think we don't need the line below
-			# dataset = pd.json_normalize(data=data['results'])
-			# KeyError: 'results'
-
-
 			# Clean the title column with the cleanText utility
 			dataset["title"] = dataset["title"].apply(cleanText)
 
@@ -70,12 +61,6 @@ class RunPredictor(CronJobBase):
 
 			# change true/false to 1/0
 			dataset["relevant"] = dataset["relevant"].astype(int)
-
-			# Save the dataset
-			dataset.to_csv(dataset_file_csv, index=False)
-
-			# Load the source data into a Pandas dataframe
-			dataset = pd.read_csv(dataset_file_csv)
 
 			# Replace any NaN with zero
 			dataset['relevant'] = dataset['relevant'].fillna(value=0)
@@ -114,15 +99,14 @@ class RunPredictor(CronJobBase):
 			data = predictor(dataset)
 			for model in data[0]['models']:
 				for item in data[0]['models'][model]:
-					# print(model)
 					article = Articles.objects.get(pk=item['article_id'])
-					# print(article,model,item['prediction'],type(item['prediction']))
+					print(article.article_id,model,item['prediction'])
 					if item['prediction'] == '1' or item['prediction'] == "['True']":
 						if model == 'gnb':
 							article.ml_prediction_gnb = True
 						if model == 'lr':
 							article.ml_prediction_lr = True
-					if item['prediction'] == "['0']":
+					if item['prediction'] == "['0']" or item['prediction'] == "['False']":
 						if model == 'gnb':
 							article.ml_prediction_gnb = False
 						if model == 'lr':
