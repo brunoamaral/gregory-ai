@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 from dotenv import load_dotenv
 from pathlib import Path
-from shutil import which
+from shutil import which,copyfile
 from subprocess import Popen, PIPE, CalledProcessError
 import git
 import os
@@ -251,7 +251,7 @@ except CalledProcessError as e:
 		print("Error executing docker-compose command:")
 		print(e.output)
 		sys.exit(e.returncode)
-
+os.chdir('..')
 
 print('''
 ####
@@ -282,7 +282,7 @@ runshell('sudo docker exec -it node-red npm install {node-red-contrib-cheerio,no
 
 original = r'flows.json'
 target = r'nodered-data/flows.json'
-shutil.copyfile(original, target)
+copyfile(original, target)
 
 print('### Restarting Node-RED container')
 runshell('sudo docker restart node-red')
