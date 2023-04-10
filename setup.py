@@ -147,19 +147,6 @@ if is_tool("docker-compose"):
 else:
 	print("Didn't find docker-compose, please install it. Details at https://docs.docker.com/compose/install/")
 
-
-print('''
-####
-## Updating any hugo modules that may exist
-####
-''')
-
-args = (which('hugo'), "mod", "get","-u")
-popen = Popen(args, stdout=PIPE, universal_newlines=True)
-popen.wait()
-output = popen.stdout.read()
-print(output)
-
 print('''
 ####
 ## Running docker-compose up -d db
@@ -177,10 +164,9 @@ print('''
 Give Postgres 20 seconds to finish setting up...
 ''')
 for i in range(20,0,-1):
-		sys.stdout.write(str(i)+' ')
-		sys.stdout.flush()
-		time.sleep(1)
-
+	sys.stdout.write(str(i)+' ')
+	sys.stdout.flush()
+	time.sleep(1)
 
 print('''
 ####
@@ -204,8 +190,8 @@ except:
 	print("I am unable to connect to postgres. Please create the `metabase` database manually and restart the containers.")
 
 def runshell(*args):
-		p = Popen(*args, shell=True, stdout=sys.stdout, stderr=sys.stderr, stdin=sys.stdin)
-		p.wait()
+	p = Popen(*args, shell=True, stdout=sys.stdout, stderr=sys.stderr, stdin=sys.stdin)
+	p.wait()
 
 print('''
 ####
@@ -264,6 +250,11 @@ print('''
 
 There are some things outside the scope of this setup script.
 
+## Setup your site
+
+1. Go to the admin dashboard and change the example.com site to match your domain
+2. Go to custom settings and set the Site and Title fields.
+
 ## Setup Nginx
 
 You can find an example configuration in `nginx-example-configuration/nginx.conf`.
@@ -290,13 +281,5 @@ Gregory needs to run a series of tasks to fetch missing information and apply th
 */5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
 ```
 
-## Configure and run hugo (optional)
 
-```bash
-cd hugo && npm i && cd ..;
-```
-
-In the `hugo` dir you will find a `config.toml` file that needs to be configured with your domain.
-
-**Build the website** by running `python3 ./build.py`.
 ''')
