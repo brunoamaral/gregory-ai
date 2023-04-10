@@ -92,14 +92,16 @@ The script checks if you have all the requirements and run to help you setup the
 
 Once finished, login at <https://api.DOMAIN.TLD/admin> or wherever your reverse proxy is listening on.
 
-4. **Configure** your RSS Sources in the Django admin page.
-
-5. **Setup** database maintenance tasks.
-
+4. Go to the admin dashboard and change the example.com site to match your domain
+5. Go to custom settings and set the Site and Title fields.
+6. **Configure** your RSS Sources in the Django admin page.
+7. **Setup** database maintenance tasks.
 Gregory needs to run a series of tasks to fetch missing information before applying the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
 
 ```cron
-*/5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
+*/3 * * * * /usr/bin/docker exec -t admin ./manage.py runcrons
+#*/10 * * * * /usr/bin/docker exec -t admin ./manage.py get_takeaways
+*/5 * * * * /usr/bin/flock -n /tmp/get_takeaways /usr/bin/docker exec admin ./manage.py get_takeaways
 ```
 
 ## How everything fits together
