@@ -1,15 +1,14 @@
 #!/usr/bin/python3
 from dotenv import load_dotenv
 from pathlib import Path
-from shutil import which
+from shutil import which,copyfile
+from subprocess import Popen, PIPE, CalledProcessError
 import git
 import os
 import psycopg2
 import requests
-from subprocess import Popen,PIPE
 import sys
 import time
-import shutil
 
 load_dotenv()
 cwd = os.getcwd()
@@ -200,11 +199,45 @@ print('''
 ####
 ''')
 
-args = ("sudo","docker-compose","up","--build","-d","admin")
-popen = Popen(args, stdout=PIPE, universal_newlines=True)
-popen.wait()
-output = popen.stdout.read()
-print(output)
+# Change to the django/ directory where the Dockerfile is located
+os.chdir("django")
+
+# Use the standard docker command to build the image
+try:
+		build_args = ("docker", "build", "-t", "admin", ".")
+		build_popen = Popen(build_args, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+		build_stdout, build_stderr = build_popen.communicate()
+
+		if build_popen.returncode != 0:
+				print("Error building the Docker image:")
+				print(build_stderr)
+				sys.exit(build_popen.returncode)
+		else:
+				print("Docker image built successfully")
+				print(build_stdout)
+except CalledProcessError as e:
+		print("Error executing docker build command:")
+		print(e.output)
+		sys.exit(e.returncode)
+
+# Run the docker-compose command
+try:
+		compose_args = ("sudo", "docker-compose", "up", "-d", "admin")
+		compose_popen = Popen(compose_args, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+		compose_stdout, compose_stderr = compose_popen.communicate()
+
+		if compose_popen.returncode != 0:
+				print("Error running docker-compose:")
+				print(compose_stderr)
+				sys.exit(compose_popen.returncode)
+		else:
+				print("Docker-compose up -d admin executed successfully")
+				print(compose_stdout)
+except CalledProcessError as e:
+		print("Error executing docker-compose command:")
+		print(e.output)
+		sys.exit(e.returncode)
+os.chdir('..')
 
 print('''
 ####
@@ -235,7 +268,7 @@ runshell('sudo docker exec -it node-red npm install {node-red-contrib-cheerio,no
 
 original = r'flows.json'
 target = r'nodered-data/flows.json'
-shutil.copyfile(original, target)
+copyfile(original, target)
 
 print('### Restarting Node-RED container')
 runshell('sudo docker restart node-red')
