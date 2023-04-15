@@ -52,13 +52,14 @@ class Subject(models.Model):
 
 class Sources(models.Model):
 	TABLES = [('science paper', 'Science Paper'),('trials','Trials'),('news article','News Article')]
+	METHODS = [('rss', 'RSS'), ('scrape', 'Scrape'), ('manual', 'Manual submission')]
 	source_id = models.AutoField(primary_key=True)
 	source_for = models.CharField(choices=TABLES, max_length=50, default='science paper')
 	name = models.TextField(blank=True, null=True)
 	link = models.TextField(blank=True, null=True)
 	language = models.TextField()
 	subject = models.ForeignKey(Subject,on_delete=models.PROTECT,null=True,blank=True,unique=False)
-	method = models.TextField()
+	method = models.CharField(choices=METHODS, max_length=10, default='rss')
 	ignore_ssl = models.BooleanField(default=False)
 
 	def __str__(self):
