@@ -3,7 +3,8 @@ from django.shortcuts import render
 # Create your views here.
 from django.contrib.syndication.views import Feed
 from django.conf import settings
-from gregory.models import Articles, Trials, Sources, Categories
+from gregory.models import Articles, Authors, Trials, Sources, Categories
+from django.urls import reverse
 
 
 
@@ -252,3 +253,47 @@ class OpenAccessFeed(Feed):
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
 		return item.link
+	
+
+class ArticlesByAuthorFeed(Feed):
+	title = "Articles by Author"
+	link = "/feed/articles/"
+	description = "RSS feed for articles by a specific author. Use `/feed/articles/author/<author_id>/`"
+
+	def __init__(self, **kwargs):
+		self.author_id = kwargs.get('author_id')
+		super().__init__(**kwargs)
+
+	def get(self, request, *args, **kwargs):
+		self.author_id = kwargs.get('author_id')
+		return super().get(request, *args, **kwargs)
+
+	def get_object(self, request, author_id, *args, **kwargs):
+		return Authors.objects.get(pk=author_id)
+
+	def items(self, obj):
+		return Articles.objects.filter(authors=obj)
+
+	def item_title(self, item):
+		return item.title
+
+	def item_description(self, item):
+		return item.summary
+
+	def item_link(self, item):
+		return item.link
+
+	def item_guid(self, item):
+		return item.link
+
+	def item_pubdate(self, item):
+		return item.published_date
+
+	def item_author_name(self, item):
+		return ', '.join([author.full_name for author in item.authors.all()])
+
+	def item_categories(self, item):
+		return [category.category_name for category in item.categories.all()]
+
+	def link(self, obj):
+		return reverse('articles_by_author_feed', kwargs={'author_id': obj.pk})
