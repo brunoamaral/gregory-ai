@@ -36,18 +36,17 @@ class Entities(models.Model):
 	entity = models.TextField()
 	label = models.TextField()
 
-
 	class Meta:
 		managed = True
 		verbose_name_plural = 'entities'
 		db_table = 'entities'
 
 class Subject(models.Model):
-		subject_name = models.CharField(blank=False,null=False, max_length=50)
-		description = models.TextField(blank=True, null=True)
+	subject_name = models.CharField(blank=False,null=False, max_length=50)
+	description = models.TextField(blank=True, null=True)
 
-		def __str__(self):
-			return str(self.subject_name)
+	def __str__(self):
+		return str(self.subject_name)
 
 
 class Sources(models.Model):
