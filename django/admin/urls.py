@@ -40,6 +40,7 @@ urlpatterns = [
 	# path('feed/articles/prediction/none/', ToPredictFeed()),
 	# path('trials/all/', AllTrialViewSet.as_view()),
 	# path('articles/related/', RelatedArticles.as_view({'get': 'list'})),
+	path('feed/articles/author/<int:author_id>/', ArticlesByAuthorFeed(), name='articles_by_author_feed'),
 	path('feed/articles/category/<str:category>/', ArticlesByCategoryFeed()),
 	path('feed/articles/subject/<str:subject>/', ArticlesBySubjectFeed()),
 	path('feed/articles/open/',OpenAccessFeed()),
