@@ -6,7 +6,7 @@ from rest_framework import viewsets, permissions, generics, filters
 from django.db.models import Q
 from rest_framework.decorators import api_view
 from datetime import datetime, timedelta
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404
 from gregory.classes import SciencePaper
 
 # Stuff needed for the API with authorization
@@ -480,19 +480,28 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	serializer_class = AuthorSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-
-
-
 def first_names(request):
-    query = request.GET.get('q', '')
-    if len(query) >= 3:
-        first_names = Authors.objects.filter(given_name__istartswith=query).values_list('given_name', flat=True).distinct()
-        return JsonResponse(list(first_names), safe=False)
-    return JsonResponse([], safe=False)
+	query = request.GET.get('q', '')
+	if len(query) >= 3:
+			first_names = Authors.objects.filter(given_name__istartswith=query).values_list('given_name', flat=True).distinct()
+			return JsonResponse(list(first_names), safe=False)
+	return JsonResponse([], safe=False)
 
 def last_names(request):
-    query = request.GET.get('q', '')
-    if len(query) >= 3:
-        last_names = Authors.objects.filter(family_name__istartswith=query).values_list('family_name', flat=True).distinct()
-        return JsonResponse(list(last_names), safe=False)
-    return JsonResponse([], safe=False)
+	query = request.GET.get('q', '')
+	if len(query) >= 3:
+			last_names = Authors.objects.filter(family_name__istartswith=query).values_list('family_name', flat=True).distinct()
+			return JsonResponse(list(last_names), safe=False)
+	return JsonResponse([], safe=False)
+
+def get_author_id(request):
+	first_name = request.GET.get('first_name', '')
+	last_name = request.GET.get('last_name', '')
+
+	if first_name and last_name:
+			try:
+					author = Authors.objects.get(given_name__iexact=first_name, family_name__iexact=last_name)
+					return JsonResponse({'author_id': author.author_id})
+			except Authors.DoesNotExist:
+					raise Http404("Author not found.")
+	return JsonResponse({'error': 'Both first_name and last_name are required.'}, status=400)

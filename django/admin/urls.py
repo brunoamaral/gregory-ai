@@ -18,7 +18,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path, re_path
 from rest_framework import routers
-from api.views import ArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,ArticlesBySourceList,ArticlesByJournal,ArticlesBySubject,AuthorsViewSet,OpenAccessArticles,RelevantList,UnsentList,TrialsBySourceList,SourceViewSet,TrialViewSet,post_article,newsletterByWeek,lastXdays, first_names,last_names
+from api.views import ArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,ArticlesBySourceList,ArticlesByJournal,ArticlesBySubject,AuthorsViewSet,OpenAccessArticles,RelevantList,UnsentList,TrialsBySourceList,SourceViewSet,TrialViewSet,post_article,newsletterByWeek,lastXdays, first_names,last_names,get_author_id
 from rss.views import *
 from subscriptions.views import subscribe_view
 
@@ -61,6 +61,7 @@ urlpatterns = [
 	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
 	path('authors/first_names/', first_names, name='first_names'),
 	path('authors/last_names/', last_names, name='last_names'),
+	path('get_author_id/', get_author_id, name='get_author_id'),
 	path('', include(router.urls)),
 
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
