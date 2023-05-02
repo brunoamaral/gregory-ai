@@ -115,7 +115,10 @@ table.body .article {
 										<tr>
 											<td style="font-family: sans-serif; font-size: 14px; vertical-align: top;" valign="top">
 												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">Good Morning, {{ user.first_name }}, </p>
-												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">Here are the relevant articles we have found in the last 7 days</p>
+												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">
+													{{email_header_text}}
+												</p>
+												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">Here is the list of relevant articles we have found in the last 7 days</p>
 
 												<h2 style="color: #0f74c0; font-family: sans-serif; font-weight: 700; line-height: 1.4; margin: 0; margin-bottom: 30px;">New Articles</h2>
 												{% for article in articles %}
