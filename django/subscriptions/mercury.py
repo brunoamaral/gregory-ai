@@ -10,6 +10,8 @@ import datetime
 import requests
 from django.contrib.sites.models import Site
 from django.conf import settings
+import os
+import openai
 
 ## Get custom settings from DB
 customsettings = CustomSetting.objects.get(site=settings.SITE_ID)
@@ -22,8 +24,6 @@ for email in Subscribers.objects.filter(subscriptions__list_name='Clinical Trial
 list_articles = []
 for email in Subscribers.objects.filter(subscriptions__list_name='Articles').values():
 	list_articles.append(email['email'])
-
-
 
 def send_simple_message( sender='Gregory MS <gregory@mg.'+ site.domain + '>', to=None,bcc=None,subject='no subject', text=None,html=None, email_mailgun_api_url=settings.EMAIL_MAILGUN_API_URL, email_mailgun_api=settings.EMAIL_MAILGUN_API):
 	status = requests.post(
@@ -38,9 +38,6 @@ def send_simple_message( sender='Gregory MS <gregory@mg.'+ site.domain + '>', to
 						}
 						)
 	return status 
-
-
-
 
 class AdminSummary(CronJobBase):
 	RUN_EVERY_MINS = 2880 # every 2 days
@@ -80,35 +77,50 @@ class WeeklySummary(CronJobBase):
 	# RUN_EVERY_MINS = 1440 # every day
 	RUN_AT_TIMES = ['8:00']
 	schedule = Schedule(run_at_times=RUN_AT_TIMES)
-	code = 'subscriptions.weekly_summary'    
+	code = 'subscriptions.weekly_summary'
+
+	def generate_summary(self, article_summaries):
+		openai.api_key = settings.OPENAI_API_KEY
+		response = openai.Completion.create(
+			engine="text-davinci-003",
+			prompt="Please provide a summary of the following article article abstracts:\n\n" + article_summaries,
+			max_tokens=100,
+			n=1,
+			stop=None,
+			temperature=0.7,
+		)
+		return response.choices[0].text.strip()
 
 	def do(self):
 		if datetime.datetime.today().weekday() == 1: # only run on Tuesdays
-			subscribers = []
-			if Subscribers.objects.filter(subscriptions__list_name='Weekly Summary').count() > 0:
-				for email in Subscribers.objects.filter(subscriptions__list_name='Weekly Summary',active=True).values():
-					subscribers.append(email['email'])
-				articles = Articles.objects.filter(Q(ml_prediction_gnb=True) | Q(relevant=True)).filter(~Q(sent_to_subscribers=True))
-				trials = Trials.objects.filter(~Q(sent_to_subscribers=True))
-				summary = {
-				"articles": articles,
-				"trials":trials,
-				"title": customsettings.title,
-				"email_footer": customsettings.email_footer,
-				"site": site,
-				}
-				html = get_template('emails/weekly_summary.html').render(summary)
-				text= strip_tags(html)
-				result = send_simple_message(to='weekly.subscribers@'+ site.domain, bcc=subscribers,subject='Weekly Summary',html=html, text=text)
-				if result.status_code == 200:
-					for article in articles:
-						article.sent_to_subscribers = True
-					articles.bulk_update(articles,['sent_to_subscribers'])
-					for trial in trials:
+				subscribers = []
+				if Subscribers.objects.filter(subscriptions__list_name='Weekly Summary').count() > 0:
+					for email in Subscribers.objects.filter(subscriptions__list_name='Weekly Summary',active=True).values():
+						subscribers.append(email['email'])
+					articles = Articles.objects.filter(Q(ml_prediction_gnb=True) | Q(relevant=True)).filter(~Q(sent_to_subscribers=True))
+					trials = Trials.objects.filter(~Q(sent_to_subscribers=True))
+					article_summaries = '\n'.join([article.summary for article in articles])
+					email_header_text = self.generate_summary(article_summaries)
+					summary = {
+						"articles": articles,
+						"trials": trials,
+						"title": customsettings.title,
+						"email_footer": customsettings.email_footer,
+						"site": site,
+						"email_header_text": email_header_text,
+					}
+					html = get_template('emails/weekly_summary.html').render(summary)
+					text = strip_tags(html)
+					result = send_simple_message(to='weekly.subscribers@' + site.domain, bcc=subscribers, subject='Weekly Summary', html=html, text=text)
+					if result.status_code == 200:
+						for article in articles:
+							article.sent_to_subscribers = True
+						articles.bulk_update(articles, ['sent_to_subscribers'])
+						for trial in trials:
 							trial.sent_to_subscribers = True
-					trials.bulk_update(trials,['sent_to_subscribers'])
-			else:
-				print('Error, no subscribers found for new articles')
+						trials.bulk_update(trials, ['sent_to_subscribers'])
+				else:
+					print('Error, no subscribers found for new articles')
 	pass
 
 class TrialsNotification(CronJobBase):
