@@ -23,7 +23,7 @@ class Categories(models.Model):
 	category_id = models.AutoField(primary_key=True)
 	category_description = models.TextField(blank=True, null=True)
 	category_name = models.CharField(blank=True, null=True,max_length=200)
-	category_slug = models.SlugField(blank=True, null=True) # new field
+	category_slug = models.SlugField(blank=True, null=True, unique=True) # new field with unique=True
 	category_terms = ArrayField(models.CharField(blank=False, null=False, max_length=100),default=list,verbose_name='Terms to include in category (comma separated)')
 	
 	def save(self, *args, **kwargs):
