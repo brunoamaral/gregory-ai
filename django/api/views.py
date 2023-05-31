@@ -1,5 +1,5 @@
 import json
-from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer
+from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, CategorySerializer
 from django.db.models.functions import Length
 from gregory.models import Articles, Trials, Sources, Authors, Categories
 from rest_framework import viewsets, permissions, generics, filters
@@ -211,12 +211,17 @@ class RelatedArticles(viewsets.ModelViewSet):
 
 class ArticlesByCategory(viewsets.ModelViewSet):
 	"""
-	Search articles by the category field. Usage /articles/category/{{category}}/
+	Search articles by the category field. Usage /articles/category/{{category_slug}}/
 	"""
 	def get_queryset(self):
-		category = self.kwargs.get('category', None)
-		category = Categories.objects.filter(category_name__iregex=category)
-		return Articles.objects.filter(categories=category.first()).order_by('-article_id')
+			category_slug = self.kwargs.get('category_slug', None)
+			category = Categories.objects.filter(category_slug=category_slug).first()
+
+			if category is None:
+				# Returning an empty queryset
+				return Articles.objects.none()
+
+			return Articles.objects.filter(categories=category).order_by('-article_id')
 
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -410,6 +415,18 @@ class OpenAccessArticles(generics.ListAPIView):
 		queryset = Articles.objects.filter(access='open')
 		return queryset 
 	
+###
+# CATEGORIES
+###
+
+class CategoryViewSet(viewsets.ModelViewSet):
+	"""
+	List all categories in the database.
+	"""
+	queryset = Categories.objects.all()
+	serializer_class = CategorySerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
 ###
 # TRIALS
 ### 

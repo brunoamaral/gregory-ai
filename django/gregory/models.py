@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
+from django.utils.text import slugify
 
 class Authors(models.Model):
 	author_id = models.AutoField(primary_key=True)
@@ -22,7 +23,14 @@ class Categories(models.Model):
 	category_id = models.AutoField(primary_key=True)
 	category_description = models.TextField(blank=True, null=True)
 	category_name = models.CharField(blank=True, null=True,max_length=200)
+	category_slug = models.SlugField(blank=True, null=True, unique=True) # new field with unique=True
 	category_terms = ArrayField(models.CharField(blank=False, null=False, max_length=100),default=list,verbose_name='Terms to include in category (comma separated)')
+	
+	def save(self, *args, **kwargs):
+		if not self.category_slug:
+			self.category_slug = slugify(self.category_name)
+		super().save(*args, **kwargs)
+
 	def __str__(self):
 		return self.category_name
 
