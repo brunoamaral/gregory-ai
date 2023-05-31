@@ -18,7 +18,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path, re_path
 from rest_framework import routers
-from api.views import ArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,ArticlesBySourceList,ArticlesByJournal,ArticlesBySubject,AuthorsViewSet,OpenAccessArticles,RelevantList,UnsentList,TrialsBySourceList,SourceViewSet,TrialViewSet,post_article,newsletterByWeek,lastXdays
+from api.views import ArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,ArticlesBySourceList,ArticlesByJournal,ArticlesBySubject,AuthorsViewSet,OpenAccessArticles,RelevantList,UnsentList,TrialsBySourceList,SourceViewSet,TrialViewSet,post_article,newsletterByWeek,lastXdays,CategoryViewSet
 from rss.views import *
 from subscriptions.views import subscribe_view
 
@@ -26,6 +26,7 @@ from subscriptions.views import subscribe_view
 router = routers.DefaultRouter()
 router.register(r'articles', ArticleViewSet, RelevantList)
 router.register(r'authors',AuthorsViewSet)
+router.register(r'categories', CategoryViewSet)  # New line to register CategoryViewSet
 router.register(r'sources', SourceViewSet)
 router.register(r'trials', TrialViewSet)
 
@@ -58,6 +59,7 @@ urlpatterns = [
 	re_path('^articles/unsent/$', UnsentList.as_view()),
 	path('articles/relevant/week/<int:year>/<int:week>/', newsletterByWeek.as_view({'get':'list'})),
 	path('articles/relevant/last/<int:days>/', lastXdays.as_view({'get':'list'})),
+	path('categories/', CategoryViewSet.as_view({'get':'list'})),
 	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
 	path('', include(router.urls)),
 

@@ -1,5 +1,5 @@
 import json
-from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer
+from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, CategorySerializer
 from django.db.models.functions import Length
 from gregory.models import Articles, Trials, Sources, Authors, Categories
 from rest_framework import viewsets, permissions, generics, filters
@@ -218,8 +218,8 @@ class ArticlesByCategory(viewsets.ModelViewSet):
 			category = Categories.objects.filter(category_slug=category_slug).first()
 
 			if category is None:
-					# Returning an empty queryset
-					return Articles.objects.none()
+				# Returning an empty queryset
+				return Articles.objects.none()
 
 			return Articles.objects.filter(categories=category).order_by('-article_id')
 
@@ -415,6 +415,18 @@ class OpenAccessArticles(generics.ListAPIView):
 		queryset = Articles.objects.filter(access='open')
 		return queryset 
 	
+###
+# CATEGORIES
+###
+
+class CategoryViewSet(viewsets.ModelViewSet):
+	"""
+	List all categories in the database.
+	"""
+	queryset = Categories.objects.all()
+	serializer_class = CategorySerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
 ###
 # TRIALS
 ### 

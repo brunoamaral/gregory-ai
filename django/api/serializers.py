@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User, Group
 from django.db.models.fields import SlugField
 from rest_framework import serializers
-from gregory.models import Articles, Trials, Sources, Authors
+from gregory.models import Articles, Trials, Sources, Authors, Categories
 
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
@@ -10,7 +10,16 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 		depth = 1
 		fields = ['article_id','title','summary','link','published_date','source','publisher','container_title','authors','relevant','ml_prediction_gnb','ml_prediction_lr','discovery_date','noun_phrases','doi','access','takeaways']
 		read_only_fields = ('discovery_date','ml_prediction_gnb','ml_prediction_lr','noun_phrases','takeaways')
-		
+
+class CategorySerializer(serializers.ModelSerializer):
+	"""
+	Serializer for the Category model.
+	"""
+	class Meta:
+		model = Categories
+		fields = ['category_id', 'category_description', 'category_name', 'category_slug', 'category_terms']
+
+
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
 
