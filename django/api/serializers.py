@@ -22,10 +22,11 @@ class CategorySerializer(serializers.ModelSerializer):
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
+	categories = CategorySerializer(many=True, read_only=True)
 
 	class Meta:
 		model = Trials
-		fields = ['trial_id','title','summary','published_date','discovery_date','link','source','relevant','identifiers']
+		fields = ['trial_id','title','summary','published_date','discovery_date','link','source','relevant','identifiers','categories']
 		read_only_fields = ('discovery_date',)
 		
 class SourceSerializer(serializers.HyperlinkedModelSerializer):

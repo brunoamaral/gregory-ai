@@ -461,6 +461,22 @@ class TrialsBySourceList(generics.ListAPIView):
 		source = self.kwargs['source']
 		return Trials.objects.filter(source=source)
 
+class TrialsByCategory(viewsets.ModelViewSet):
+	"""
+	Search Trials by the category field. Usage /trials/category/{{category_slug}}/
+	"""
+	def get_queryset(self):
+			category_slug = self.kwargs.get('category_slug', None)
+			category = Categories.objects.filter(category_slug=category_slug).first()
+
+			if category is None:
+				# Returning an empty queryset
+				return Trials.objects.none()
+
+			return Trials.objects.filter(categories=category).order_by('-trial_id')
+
+	serializer_class = TrialSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
 ###
