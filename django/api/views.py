@@ -461,15 +461,6 @@ class TrialsBySourceList(generics.ListAPIView):
 		source = self.kwargs['source']
 		return Trials.objects.filter(source=source)
 
-# class TrialsByKeyword(generics.ListAPIView):
-# 	"""
-# 	List clinical trials by keyword
-# 	"""
-# 	serializer_class = TrialSerializer
-# 	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
-# 	filter_backends = [filters.SearchFilter]
-# 	search_fields = ['$title','$summary']
-
 
 
 ###
