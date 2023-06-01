@@ -18,7 +18,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path, re_path
 from rest_framework import routers
-from api.views import ArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,ArticlesBySourceList,ArticlesByJournal,ArticlesBySubject,AuthorsViewSet,OpenAccessArticles,RelevantList,UnsentList,TrialsBySourceList,SourceViewSet,TrialViewSet,post_article,newsletterByWeek,lastXdays,CategoryViewSet
+from api.views import ArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,ArticlesBySourceList,ArticlesByJournal,ArticlesBySubject,AuthorsViewSet,OpenAccessArticles,RelevantList,UnsentList,TrialsBySourceList,SourceViewSet,TrialViewSet,post_article,newsletterByWeek,lastXdays,CategoryViewSet,TrialsByCategory
 from rss.views import *
 from subscriptions.views import subscribe_view
 
@@ -60,6 +60,7 @@ urlpatterns = [
 	path('articles/relevant/week/<int:year>/<int:week>/', newsletterByWeek.as_view({'get':'list'})),
 	path('articles/relevant/last/<int:days>/', lastXdays.as_view({'get':'list'})),
 	path('categories/', CategoryViewSet.as_view({'get':'list'})),
+	re_path('^trials/category/(?P<category_slug>[-\w]+)/$', TrialsByCategory.as_view({'get':'list'})),
 	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
 	path('', include(router.urls)),
 

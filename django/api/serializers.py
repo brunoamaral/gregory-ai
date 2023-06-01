@@ -3,14 +3,6 @@ from django.db.models.fields import SlugField
 from rest_framework import serializers
 from gregory.models import Articles, Trials, Sources, Authors, Categories
 
-class ArticleSerializer(serializers.HyperlinkedModelSerializer):
-	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
-	class Meta:
-		model = Articles
-		depth = 1
-		fields = ['article_id','title','summary','link','published_date','source','publisher','container_title','authors','relevant','ml_prediction_gnb','ml_prediction_lr','discovery_date','noun_phrases','doi','access','takeaways']
-		read_only_fields = ('discovery_date','ml_prediction_gnb','ml_prediction_lr','noun_phrases','takeaways')
-
 class CategorySerializer(serializers.ModelSerializer):
 	"""
 	Serializer for the Category model.
@@ -19,13 +11,22 @@ class CategorySerializer(serializers.ModelSerializer):
 		model = Categories
 		fields = ['category_id', 'category_description', 'category_name', 'category_slug', 'category_terms']
 
+class ArticleSerializer(serializers.HyperlinkedModelSerializer):
+	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
+	categories = CategorySerializer(many=True, read_only=True)
+	class Meta:
+		model = Articles
+		depth = 1
+		fields = ['article_id','title','summary','link','published_date','source','publisher','container_title','authors','relevant','ml_prediction_gnb','ml_prediction_lr','discovery_date','noun_phrases','doi','access','takeaways','categories']
+		read_only_fields = ('discovery_date','ml_prediction_gnb','ml_prediction_lr','noun_phrases','takeaways')
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
+	categories = CategorySerializer(many=True, read_only=True)
 
 	class Meta:
 		model = Trials
-		fields = ['trial_id','title','summary','published_date','discovery_date','link','source','relevant','identifiers']
+		fields = ['trial_id','title','summary','published_date','discovery_date','link','source','relevant','identifiers','categories']
 		read_only_fields = ('discovery_date',)
 		
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
