@@ -43,6 +43,7 @@ INSTALLED_APPS = [
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
 	'django.contrib.sites',
+	'simple_history',
 	'sitesettings',
 	'django_cron',
 	'db_maintenance',
