@@ -12,6 +12,7 @@ from gregory.classes import SciencePaper, ClinicalTrial
 from django.utils import timezone
 import pytz
 from django.db.models import Q
+from django.core.exceptions import MultipleObjectsReturned
 
 SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
@@ -141,18 +142,32 @@ class FeedReaderTask(CronJobBase):
 				clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
 				clinical_trial.clean_summary()
 				try:
-						trial, created = Trials.objects.update_or_create(
-								Q(identifiers__nct=clinical_trial.identifiers.get('nct')) |
-								Q(identifiers__eudract=clinical_trial.identifiers.get('eudract')) |
-								Q(identifiers__euct=clinical_trial.identifiers.get('euct')),
-								defaults={
-										'title': clinical_trial.title,
-										'summary': clinical_trial.summary,
-										'link': clinical_trial.link,
-										'published_date': clinical_trial.published_date,
-										'identifiers': clinical_trial.identifiers,
-										'source': i
-								}
+					trial = Trials.objects.get(
+						Q(identifiers__nct=clinical_trial.identifiers.get('nct')) |
+						Q(identifiers__eudract=clinical_trial.identifiers.get('eudract')) |
+						Q(identifiers__euct=clinical_trial.identifiers.get('euct'))
+					)
+				except Trials.DoesNotExist:
+					# If the trial doesn't exist, create a new one
+					trial = Trials.objects.create(
+						discovery_date=timezone.now(),
+						title=clinical_trial.title,
+						summary=clinical_trial.summary,
+						link=clinical_trial.link,
+						published_date=clinical_trial.published_date,
+						identifiers=clinical_trial.identifiers,
+						source=i
+					)
+				except MultipleObjectsReturned:
+						print("Warning: multiple Trials entries found for identifier. Please resolve manually.")
+				else:
+						# If the trial exists, update it
+						Trials.objects.filter(pk=trial.pk).update(
+							title=clinical_trial.title,
+							summary=clinical_trial.summary,
+							link=clinical_trial.link,
+							published_date=clinical_trial.published_date,
+							identifiers=clinical_trial.identifiers,
+							source=i
 						)
-				except:
-						pass
+				pass
