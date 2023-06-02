@@ -11,6 +11,8 @@ import gregory.functions as greg
 from gregory.classes import SciencePaper, ClinicalTrial
 from django.utils import timezone
 import pytz
+from django.db.models import Q
+
 SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
 my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
@@ -118,12 +120,12 @@ class FeedReaderTask(CronJobBase):
 			for entry in d['entries']:
 				summary = ''
 				if hasattr(entry,'summary_detail'):
-					summary = entry['summary_detail']['value']
+						summary = entry['summary_detail']['value']
 				if hasattr(entry,'summary'):
-					summary = entry['summary']
+						summary = entry['summary']
 				published = entry.get('published')
 				if published:
-					published = parse(entry['published']).astimezone(pytz.utc)
+						published = parse(entry['published']).astimezone(pytz.utc)
 				link = greg.remove_utm(entry['link'])
 				eudract = None
 				euct = None
@@ -139,6 +141,18 @@ class FeedReaderTask(CronJobBase):
 				clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
 				clinical_trial.clean_summary()
 				try:
-					trial = Trials.objects.create( discovery_date=timezone.now(), title = clinical_trial.title, summary = clinical_trial.summary, link = clinical_trial.link, published_date = clinical_trial.published_date, identifiers=clinical_trial.identifiers, source = i)
+						trial, created = Trials.objects.update_or_create(
+								Q(identifiers__nct=clinical_trial.identifiers.get('nct')) |
+								Q(identifiers__eudract=clinical_trial.identifiers.get('eudract')) |
+								Q(identifiers__euct=clinical_trial.identifiers.get('euct')),
+								defaults={
+										'title': clinical_trial.title,
+										'summary': clinical_trial.summary,
+										'link': clinical_trial.link,
+										'published_date': clinical_trial.published_date,
+										'identifiers': clinical_trial.identifiers,
+										'source': i
+								}
+						)
 				except:
-					pass
+						pass
