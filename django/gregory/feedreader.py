@@ -13,6 +13,10 @@ from django.utils import timezone
 import pytz
 from django.db.models import Q
 from django.core.exceptions import MultipleObjectsReturned
+from django.db import IntegrityError
+from dateutil.tz import gettz
+
+tzinfos = {"EDT": gettz("America/New_York")}
 
 SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
@@ -20,7 +24,7 @@ my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
 works = Works(etiquette=my_etiquette)
 
 class FeedReaderTask(CronJobBase):
-	RUN_EVERY_MINS = 30
+	RUN_EVERY_MINS = 3
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'gregory.feedreadertask'    # a unique code
 
@@ -51,9 +55,9 @@ class FeedReaderTask(CronJobBase):
 				if source_name == 'PubMed' and hasattr(entry,'content'):
 					summary = entry['content'][0]['value']
 				if published:
-					published = parse(entry['published'])
+					published = parse(entry['published'], tzinfos=tzinfos).astimezone(pytz.utc)
 				else:
-					published = parse(entry['prism_coverdate'])
+					published = parse(entry['prism_coverdate'], tzinfos=tzinfos).astimezone(pytz.utc)
 				link = greg.remove_utm(entry['link'])
 				###
 				# This is a bad solution but it will have to do for now
@@ -121,12 +125,12 @@ class FeedReaderTask(CronJobBase):
 			for entry in d['entries']:
 				summary = ''
 				if hasattr(entry,'summary_detail'):
-						summary = entry['summary_detail']['value']
+					summary = entry['summary_detail']['value']
 				if hasattr(entry,'summary'):
-						summary = entry['summary']
+					summary = entry['summary']
 				published = entry.get('published')
 				if published:
-						published = parse(entry['published']).astimezone(pytz.utc)
+					published = parse(entry['published'], tzinfos=tzinfos).astimezone(pytz.utc)
 				link = greg.remove_utm(entry['link'])
 				eudract = None
 				euct = None
@@ -152,15 +156,20 @@ class FeedReaderTask(CronJobBase):
 					trial = Trials.objects.get(q_objects)
 				except Trials.DoesNotExist:
 					# If the trial doesn't exist, create a new one
-					trial = Trials.objects.create(
-						discovery_date=timezone.now(),
-						title=clinical_trial.title,
-						summary=clinical_trial.summary,
-						link=clinical_trial.link,
-						published_date=clinical_trial.published_date,
-						identifiers=clinical_trial.identifiers,
-						source=i
-					)
+					try:
+						print(f'trying to create {clinical_trial.identifiers}...')
+						trial = Trials.objects.create(
+							discovery_date=timezone.now(),
+							title=clinical_trial.title,
+							summary=clinical_trial.summary,
+							link=clinical_trial.link,
+							published_date=clinical_trial.published_date,
+							identifiers=clinical_trial.identifiers,
+							source=i
+						)
+						print(f'created {trial.trial_id}?')
+					except IntegrityError as e:
+						print(f"An integrity error occurred: {str(e)}")				
 				except MultipleObjectsReturned as e:
 					duplicate_trials = Trials.objects.filter(
 						Q(identifiers__nct=clinical_trial.identifiers.get('nct')) |
