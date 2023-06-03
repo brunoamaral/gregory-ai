@@ -142,11 +142,14 @@ class FeedReaderTask(CronJobBase):
 				clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
 				clinical_trial.clean_summary()
 				try:
-					trial = Trials.objects.get(
-						Q(identifiers__nct=clinical_trial.identifiers.get('nct')) |
-						Q(identifiers__eudract=clinical_trial.identifiers.get('eudract')) |
-						Q(identifiers__euct=clinical_trial.identifiers.get('euct'))
-					)
+					q_objects = Q()
+					if clinical_trial.identifiers.get('nct'):
+						q_objects |= Q(identifiers__nct=clinical_trial.identifiers.get('nct'))
+					if clinical_trial.identifiers.get('eudract'):
+						q_objects |= Q(identifiers__eudract=clinical_trial.identifiers.get('eudract'))
+					if clinical_trial.identifiers.get('euct'):
+						q_objects |= Q(identifiers__euct=clinical_trial.identifiers.get('euct'))
+					trial = Trials.objects.get(q_objects)
 				except Trials.DoesNotExist:
 					# If the trial doesn't exist, create a new one
 					trial = Trials.objects.create(
@@ -158,8 +161,15 @@ class FeedReaderTask(CronJobBase):
 						identifiers=clinical_trial.identifiers,
 						source=i
 					)
-				except MultipleObjectsReturned:
-						print("Warning: multiple Trials entries found for identifier. Please resolve manually.")
+				except MultipleObjectsReturned as e:
+					duplicate_trials = Trials.objects.filter(
+						Q(identifiers__nct=clinical_trial.identifiers.get('nct')) |
+						Q(identifiers__eudract=clinical_trial.identifiers.get('eudract')) |
+						Q(identifiers__euct=clinical_trial.identifiers.get('euct'))
+					)
+					duplicate_ids = [trial.trial_id for trial in duplicate_trials]
+					print("Warning: multiple Trials entries found for identifier. The IDs of the duplicates are: ", duplicate_ids, ". Please resolve manually.")
+
 				else:
 						# If the trial exists, update it
 						Trials.objects.filter(pk=trial.pk).update(
