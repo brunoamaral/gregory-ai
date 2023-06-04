@@ -1,9 +1,9 @@
 import feedparser
 from dateutil.parser import parse
-from .models import Articles,Trials,Sources,Authors
+from .models import Articles, Trials, Sources, Authors
 from django_cron import CronJobBase, Schedule
 import requests
-from sitesettings.models import *
+from sitesettings.models import CustomSetting
 from crossref.restful import Works, Etiquette
 import os
 import re
@@ -104,7 +104,8 @@ class FeedReaderTask(CronJobBase):
 						science_paper.save()
 						# the articles variable needs to be a queryset list in order to be turned into a pandas dataframe
 						greg.predict(articles=Articles.objects.filter(pk=science_paper.article_id))
-				except:
+				except Exception as e:
+					# print(f"An error occurred: {str(e)}")
 					pass
 
 		###
@@ -171,6 +172,7 @@ class FeedReaderTask(CronJobBase):
 					except IntegrityError as e:
 						print(f"An integrity error occurred: {str(e)}")				
 				except MultipleObjectsReturned as e:
+					print(f"Multiple entries were found for the same trial identifiers: {str(e)}")
 					duplicate_trials = Trials.objects.filter(
 						Q(identifiers__nct=clinical_trial.identifiers.get('nct')) |
 						Q(identifiers__eudract=clinical_trial.identifiers.get('eudract')) |
@@ -181,12 +183,16 @@ class FeedReaderTask(CronJobBase):
 
 				else:
 						# If the trial exists, update it
-						Trials.objects.filter(pk=trial.pk).update(
-							title=clinical_trial.title,
-							summary=clinical_trial.summary,
-							link=clinical_trial.link,
-							published_date=clinical_trial.published_date,
-							identifiers=clinical_trial.identifiers,
-							source=i
-						)
+						try:
+							Trials.objects.filter(pk=trial.pk).update(
+								title=clinical_trial.title,
+								summary=clinical_trial.summary,
+								link=clinical_trial.link,
+								published_date=clinical_trial.published_date,
+								identifiers=clinical_trial.identifiers,
+								source=i
+							)
+						except Exception as e:
+							print(f"An error occurred: {str(e)}")
+							pass
 				pass
