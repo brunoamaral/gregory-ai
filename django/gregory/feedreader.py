@@ -24,7 +24,7 @@ my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
 works = Works(etiquette=my_etiquette)
 
 class FeedReaderTask(CronJobBase):
-	RUN_EVERY_MINS = 3
+	RUN_EVERY_MINS = 30
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'gregory.feedreadertask'    # a unique code
 
