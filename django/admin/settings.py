@@ -48,7 +48,7 @@ INSTALLED_APPS = [
 	'django_cron',
 	'db_maintenance',
 	'indexers',
-	'api'
+	'api',
 ]
 
 MIDDLEWARE = [

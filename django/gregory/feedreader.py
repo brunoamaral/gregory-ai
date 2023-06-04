@@ -182,17 +182,17 @@ class FeedReaderTask(CronJobBase):
 					print("Warning: multiple Trials entries found for identifier. The IDs of the duplicates are: ", duplicate_ids, ". Please resolve manually.")
 
 				else:
-						# If the trial exists, update it
-						try:
-							Trials.objects.filter(pk=trial.pk).update(
-								title=clinical_trial.title,
-								summary=clinical_trial.summary,
-								link=clinical_trial.link,
-								published_date=clinical_trial.published_date,
-								identifiers=clinical_trial.identifiers,
-								source=i
-							)
-						except Exception as e:
-							print(f"An error occurred: {str(e)}")
-							pass
+        # If the trial exists, update it
+					try:
+						trial = Trials.objects.get(pk=trial.pk)
+						trial.title = clinical_trial.title
+						trial.summary = clinical_trial.summary
+						trial.link = clinical_trial.link
+						trial.published_date = clinical_trial.published_date
+						trial.identifiers = clinical_trial.identifiers
+						trial.source = i
+						trial.save()						
+					except Exception as e:
+						print(f"An error occurred: {str(e)}")
+						pass
 				pass
