@@ -1,16 +1,23 @@
-import feedparser
-from dateutil.parser import parse
-from .models import Articles,Trials,Sources,Authors
-from django_cron import CronJobBase, Schedule
-import requests
-from sitesettings.models import *
+from .models import Articles, Trials, Sources, Authors
 from crossref.restful import Works, Etiquette
-import os
-import re
-import gregory.functions as greg
-from gregory.classes import SciencePaper, ClinicalTrial
+from dateutil.parser import parse
+from dateutil.tz import gettz
+from django_cron import CronJobBase, Schedule
+from django.core.exceptions import MultipleObjectsReturned
+from django.db import IntegrityError
+from django.db.models import Q
 from django.utils import timezone
+from gregory.classes import SciencePaper, ClinicalTrial
+from sitesettings.models import CustomSetting
+import feedparser
+import gregory.functions as greg
+import os
 import pytz
+import re
+import requests
+
+tzinfos = {"EDT": gettz("America/New_York")}
+
 SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
 my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
@@ -48,9 +55,9 @@ class FeedReaderTask(CronJobBase):
 				if source_name == 'PubMed' and hasattr(entry,'content'):
 					summary = entry['content'][0]['value']
 				if published:
-					published = parse(entry['published'])
+					published = parse(entry['published'], tzinfos=tzinfos).astimezone(pytz.utc)
 				else:
-					published = parse(entry['prism_coverdate'])
+					published = parse(entry['prism_coverdate'], tzinfos=tzinfos).astimezone(pytz.utc)
 				link = greg.remove_utm(entry['link'])
 				###
 				# This is a bad solution but it will have to do for now
@@ -97,7 +104,8 @@ class FeedReaderTask(CronJobBase):
 						science_paper.save()
 						# the articles variable needs to be a queryset list in order to be turned into a pandas dataframe
 						greg.predict(articles=Articles.objects.filter(pk=science_paper.article_id))
-				except:
+				except Exception as e:
+					# print(f"An error occurred: {str(e)}")
 					pass
 
 		###
@@ -123,7 +131,7 @@ class FeedReaderTask(CronJobBase):
 					summary = entry['summary']
 				published = entry.get('published')
 				if published:
-					published = parse(entry['published']).astimezone(pytz.utc)
+					published = parse(entry['published'], tzinfos=tzinfos).astimezone(pytz.utc)
 				link = greg.remove_utm(entry['link'])
 				eudract = None
 				euct = None
@@ -139,6 +147,52 @@ class FeedReaderTask(CronJobBase):
 				clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
 				clinical_trial.clean_summary()
 				try:
-					trial = Trials.objects.create( discovery_date=timezone.now(), title = clinical_trial.title, summary = clinical_trial.summary, link = clinical_trial.link, published_date = clinical_trial.published_date, identifiers=clinical_trial.identifiers, source = i)
-				except:
-					pass
+					q_objects = Q()
+					if clinical_trial.identifiers.get('nct'):
+						q_objects |= Q(identifiers__nct=clinical_trial.identifiers.get('nct'))
+					if clinical_trial.identifiers.get('eudract'):
+						q_objects |= Q(identifiers__eudract=clinical_trial.identifiers.get('eudract'))
+					if clinical_trial.identifiers.get('euct'):
+						q_objects |= Q(identifiers__euct=clinical_trial.identifiers.get('euct'))
+					trial = Trials.objects.get(q_objects)
+				except Trials.DoesNotExist:
+					# If the trial doesn't exist, create a new one
+					try:
+						print(f'trying to create {clinical_trial.identifiers}...')
+						trial = Trials.objects.create(
+							discovery_date=timezone.now(),
+							title=clinical_trial.title,
+							summary=clinical_trial.summary,
+							link=clinical_trial.link,
+							published_date=clinical_trial.published_date,
+							identifiers=clinical_trial.identifiers,
+							source=i
+						)
+						print(f'created {trial.trial_id}?')
+					except IntegrityError as e:
+						print(f"An integrity error occurred: {str(e)}")				
+				except MultipleObjectsReturned as e:
+					print(f"Multiple entries were found for the same trial identifiers: {str(e)}")
+					duplicate_trials = Trials.objects.filter(
+						Q(identifiers__nct=clinical_trial.identifiers.get('nct')) |
+						Q(identifiers__eudract=clinical_trial.identifiers.get('eudract')) |
+						Q(identifiers__euct=clinical_trial.identifiers.get('euct'))
+					)
+					duplicate_ids = [trial.trial_id for trial in duplicate_trials]
+					print("Warning: multiple Trials entries found for identifier. The IDs of the duplicates are: ", duplicate_ids, ". Please resolve manually.")
+
+				else:
+        # If the trial exists, update it
+					try:
+						trial = Trials.objects.get(pk=trial.pk)
+						trial.title = clinical_trial.title
+						trial.summary = clinical_trial.summary
+						trial.link = clinical_trial.link
+						trial.published_date = clinical_trial.published_date
+						trial.identifiers = clinical_trial.identifiers
+						trial.source = i
+						trial.save()						
+					except Exception as e:
+						print(f"An error occurred: {str(e)}")
+						pass
+				pass

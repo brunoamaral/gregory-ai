@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.utils.text import slugify
+from simple_history.models import HistoricalRecords
 
 class Authors(models.Model):
 	author_id = models.AutoField(primary_key=True)
@@ -126,8 +127,9 @@ class Trials(models.Model):
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	sent_to_admin = models.BooleanField(blank=True,null=True, default=False)
 	sent_real_time_notification = models.BooleanField(blank=True,null=True,default=False)
-	categories = models.ManyToManyField(Categories)
+	categories = models.ManyToManyField(Categories,blank=True)
 	identifiers = models.JSONField(blank=True,null=True)
+	history = HistoricalRecords()
 	def __str__(self):
 		return str(self.trial_id) 
 
