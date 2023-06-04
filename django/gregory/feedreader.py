@@ -1,20 +1,20 @@
-import feedparser
-from dateutil.parser import parse
 from .models import Articles, Trials, Sources, Authors
-from django_cron import CronJobBase, Schedule
-import requests
-from sitesettings.models import CustomSetting
 from crossref.restful import Works, Etiquette
-import os
-import re
-import gregory.functions as greg
-from gregory.classes import SciencePaper, ClinicalTrial
-from django.utils import timezone
-import pytz
-from django.db.models import Q
+from dateutil.parser import parse
+from dateutil.tz import gettz
+from django_cron import CronJobBase, Schedule
 from django.core.exceptions import MultipleObjectsReturned
 from django.db import IntegrityError
-from dateutil.tz import gettz
+from django.db.models import Q
+from django.utils import timezone
+from gregory.classes import SciencePaper, ClinicalTrial
+from sitesettings.models import CustomSetting
+import feedparser
+import gregory.functions as greg
+import os
+import pytz
+import re
+import requests
 
 tzinfos = {"EDT": gettz("America/New_York")}
 
