@@ -61,7 +61,7 @@ urlpatterns = [
 	path('articles/relevant/last/<int:days>/', lastXdays.as_view({'get':'list'})),
 	path('categories/', CategoryViewSet.as_view({'get':'list'})),
     # returns the cumulative count of articles and clinical trials for a given category
-	path('categories/<str:category_slug>/monthly-counts', MonthlyCountsView.as_view()),
+	path('categories/<str:category_slug>/monthly-counts/', MonthlyCountsView.as_view()),
 	re_path('^trials/category/(?P<category_slug>[-\w]+)/$', TrialsByCategory.as_view({'get':'list'})),
 	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
 	path('', include(router.urls)),
