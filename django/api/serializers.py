@@ -3,14 +3,30 @@ from django.db.models.fields import SlugField
 from rest_framework import serializers
 from gregory.models import Articles, Trials, Sources, Authors, Categories
 
-class CategorySerializer(serializers.ModelSerializer):
-	"""
-	Serializer for the Category model.
-	"""
-	class Meta:
-		model = Categories
-		fields = ['category_id', 'category_description', 'category_name', 'category_slug', 'category_terms']
+from django.db.models import Count
+from django.db.models.functions import TruncMonth
 
+class CategorySerializer(serializers.ModelSerializer):
+	monthly_article_counts = serializers.SerializerMethodField()
+	monthly_trial_counts = serializers.SerializerMethodField()
+
+	class Meta:
+			model = Categories
+			fields = ['category_id', 'category_description', 'category_name', 'category_slug', 'category_terms', 'monthly_article_counts', 'monthly_trial_counts']
+
+	def get_monthly_article_counts(self, obj):
+			articles = Articles.objects.filter(categories=obj)
+			articles = articles.annotate(month=TruncMonth('published_date'))
+			counts = articles.values('month').annotate(count=Count('article_id')).order_by('month')
+			counts = list(counts.values('month', 'count'))
+			return counts
+
+	def get_monthly_trial_counts(self, obj):
+			trials = Trials.objects.filter(categories=obj)
+			trials = trials.annotate(month=TruncMonth('published_date'))
+			counts = trials.values('month').annotate(count=Count('trial_id')).order_by('month')
+			counts = list(counts.values('month', 'count'))
+			return counts
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
 	categories = CategorySerializer(many=True, read_only=True)
