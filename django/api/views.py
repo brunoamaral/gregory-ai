@@ -1,13 +1,14 @@
-import json
 from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, CategorySerializer
-from django.db.models.functions import Length
+from django.db.models.functions import Length, TruncMonth
 from gregory.models import Articles, Trials, Sources, Authors, Categories
 from rest_framework import viewsets, permissions, generics, filters
 from django.db.models import Q
 from rest_framework.decorators import api_view
 from datetime import datetime, timedelta
+from django.shortcuts import get_object_or_404
+from rest_framework.response import Response
+from django.db.models import Count
 
-from gregory.classes import SciencePaper
 
 # Stuff needed for the API with authorization
 import traceback
@@ -426,6 +427,29 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	queryset = Categories.objects.all()
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+class MonthlyCountsView(generics.ListAPIView):
+	def get(self, request, category_slug):
+			category = get_object_or_404(Categories, category_slug=category_slug)
+
+			# Monthly article counts
+			articles = Articles.objects.filter(categories=category)
+			articles = articles.annotate(month=TruncMonth('published_date'))
+			article_counts = articles.values('month').annotate(count=Count('article_id')).order_by('month')
+			article_counts = list(article_counts.values('month', 'count'))
+
+			# Monthly trial counts
+			trials = Trials.objects.filter(categories=category)
+			trials = trials.annotate(month=TruncMonth('published_date'))
+			trial_counts = trials.values('month').annotate(count=Count('trial_id')).order_by('month')
+			trial_counts = list(trial_counts.values('month', 'count'))
+
+			data = {
+					'monthly_article_counts': article_counts,
+					'monthly_trial_counts': trial_counts,
+			}
+
+			return Response(data)
 
 ###
 # TRIALS
