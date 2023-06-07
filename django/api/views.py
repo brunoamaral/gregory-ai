@@ -431,7 +431,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class MonthlyCountsView(generics.ListAPIView):
 	def get(self, request, category_slug):
 			category = get_object_or_404(Categories, category_slug=category_slug)
-
 			# Monthly article counts
 			articles = Articles.objects.filter(categories=category)
 			articles = articles.annotate(month=TruncMonth('published_date'))
@@ -445,8 +444,10 @@ class MonthlyCountsView(generics.ListAPIView):
 			trial_counts = list(trial_counts.values('month', 'count'))
 
 			data = {
-					'monthly_article_counts': article_counts,
-					'monthly_trial_counts': trial_counts,
+				'category_name': category.category_name,
+				'category_slug': category.category_slug,
+				'monthly_article_counts': article_counts,
+				'monthly_trial_counts': trial_counts,
 			}
 
 			return Response(data)
