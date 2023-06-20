@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from django.db.models import Count
 import json
+from gregory.classes import SciencePaper
 
 # Stuff needed for the API with authorization
 import traceback
