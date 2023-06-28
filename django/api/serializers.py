@@ -4,10 +4,14 @@ from rest_framework import serializers
 from gregory.models import Articles, Trials, Sources, Authors, Categories
 
 class CategorySerializer(serializers.ModelSerializer):
+	count_of_articles = serializers.SerializerMethodField()
 
 	class Meta:
-			model = Categories
-			fields = ['category_id', 'category_description', 'category_name', 'category_slug', 'category_terms']
+		model = Categories
+		fields = ['category_id', 'category_description', 'category_name', 'category_slug', 'category_terms','count_of_articles']
+
+	def get_count_of_articles(self, obj):
+		return obj.article_count()
 
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
