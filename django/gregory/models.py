@@ -35,6 +35,9 @@ class Categories(models.Model):
 	def __str__(self):
 		return self.category_name
 
+	def article_count(self):
+		return self.articles_set.count()
+	
 	class Meta:
 		managed = True
 		verbose_name_plural = 'categories'
