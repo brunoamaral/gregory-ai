@@ -21,6 +21,9 @@ from rest_framework import routers
 from api.views import ArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,ArticlesBySourceList,ArticlesByJournal,ArticlesBySubject,AuthorsViewSet,OpenAccessArticles,RelevantList,UnsentList,TrialsBySourceList,SourceViewSet,TrialViewSet,post_article,newsletterByWeek,lastXdays,CategoryViewSet,TrialsByCategory,MonthlyCountsView
 from rss.views import *
 from subscriptions.views import subscribe_view
+from django.urls import path
+from api.views import LoginView
+from rest_framework.authtoken import views
 
 
 router = routers.DefaultRouter()
@@ -64,6 +67,8 @@ urlpatterns = [
 	path('categories/<str:category_slug>/monthly-counts/', MonthlyCountsView.as_view()),
 	re_path('^trials/category/(?P<category_slug>[-\w]+)/$', TrialsByCategory.as_view({'get':'list'})),
 	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
+	path('api/token/', LoginView.as_view(), name='token_obtain_pair'),
+	path('api/token/get/', views.obtain_auth_token),
 	path('', include(router.urls)),
 
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

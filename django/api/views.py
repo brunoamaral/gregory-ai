@@ -531,3 +531,14 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
+###
+# AUTHORIZATION
+###
+# The class below generates a new token at every successful call.
+# But that token is not saved in the database and associated with the user.
+# is that a problem?
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework import permissions
+
+class LoginView(TokenObtainPairView):
+	permission_classes = (permissions.AllowAny,)
