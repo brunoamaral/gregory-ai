@@ -1,15 +1,18 @@
 from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, CategorySerializer
-from django.db.models.functions import Length, TruncMonth
-from gregory.models import Articles, Trials, Sources, Authors, Categories
-from rest_framework import viewsets, permissions, generics, filters
-from django.db.models import Q
-from rest_framework.decorators import api_view
 from datetime import datetime, timedelta
-from django.shortcuts import get_object_or_404
-from rest_framework.response import Response
 from django.db.models import Count
-import json
+from django.db.models import Q
+from django.db.models.functions import Length, TruncMonth
+from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper
+from gregory.models import Articles, Trials, Sources, Authors, Categories
+from rest_framework import permissions
+from rest_framework import viewsets, permissions, generics, filters
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework.views import APIView
+import json
 
 # Stuff needed for the API with authorization
 import traceback
@@ -537,8 +540,12 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 # The class below generates a new token at every successful call.
 # But that token is not saved in the database and associated with the user.
 # is that a problem?
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework import permissions
 
 class LoginView(TokenObtainPairView):
 	permission_classes = (permissions.AllowAny,)
+
+class ProtectedEndpointView(APIView):
+	permission_classes = [permissions.IsAuthenticated]
+
+	def get(self, request):
+		return Response({"message": "You have accessed the protected endpoint!"})

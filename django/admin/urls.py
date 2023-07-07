@@ -22,7 +22,7 @@ from api.views import ArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,Art
 from rss.views import *
 from subscriptions.views import subscribe_view
 from django.urls import path
-from api.views import LoginView
+from api.views import LoginView,ProtectedEndpointView
 from rest_framework.authtoken import views
 
 
@@ -69,6 +69,7 @@ urlpatterns = [
 	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
 	path('api/token/', LoginView.as_view(), name='token_obtain_pair'),
 	path('api/token/get/', views.obtain_auth_token),
+	path('protected_endpoint/', ProtectedEndpointView.as_view(), name='protected_endpoint'),
 	path('', include(router.urls)),
 
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
