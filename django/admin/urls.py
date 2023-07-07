@@ -39,11 +39,6 @@ urlpatterns = [
 	path('articles/post/',post_article),
 	path('admin/', admin.site.urls),
 	path('api-auth/', include('rest_framework.urls')),
-	# path('articles/all/', AllArticleViewSet.as_view()),
-	# path('articles/prediction/none/', ArticlesPredictionNone.as_view()),
-	# path('feed/articles/prediction/none/', ToPredictFeed()),
-	# path('trials/all/', AllTrialViewSet.as_view()),
-	# path('articles/related/', RelatedArticles.as_view({'get': 'list'})),
 	path('feed/articles/author/<int:author_id>/', ArticlesByAuthorFeed(), name='articles_by_author_feed'),
 	path('feed/articles/category/<str:category>/', ArticlesByCategoryFeed()),
 	path('feed/articles/subject/<str:subject>/', ArticlesBySubjectFeed()),
@@ -63,7 +58,7 @@ urlpatterns = [
 	path('articles/relevant/week/<int:year>/<int:week>/', newsletterByWeek.as_view({'get':'list'})),
 	path('articles/relevant/last/<int:days>/', lastXdays.as_view({'get':'list'})),
 	path('categories/', CategoryViewSet.as_view({'get':'list'})),
-    # returns the cumulative count of articles and clinical trials for a given category
+  # returns the cumulative count of articles and clinical trials for a given category
 	path('categories/<str:category_slug>/monthly-counts/', MonthlyCountsView.as_view()),
 	re_path('^trials/category/(?P<category_slug>[-\w]+)/$', TrialsByCategory.as_view({'get':'list'})),
 	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
