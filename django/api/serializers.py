@@ -34,7 +34,7 @@ class TrialSerializer(serializers.HyperlinkedModelSerializer):
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:
 		model = Sources
-		fields = ['name','source_id','source_for','link']
+		fields = ['name','description','source_id','source_for','link']
 
 class AuthorSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:

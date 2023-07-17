@@ -72,6 +72,7 @@ class Sources(models.Model):
 	subject = models.ForeignKey(Subject,on_delete=models.PROTECT,null=True,blank=True,unique=False)
 	method = models.CharField(choices=METHODS, max_length=10, default='rss')
 	ignore_ssl = models.BooleanField(default=False)
+	description = models.TextField(blank=True, null=True)
 
 	def __str__(self):
 		return self.name
