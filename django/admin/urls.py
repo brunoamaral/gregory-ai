@@ -33,6 +33,7 @@ from subscriptions.views import subscribe_view
 
 # Initialize the router and register some endpoints
 router = routers.DefaultRouter()
+router.register(r'articles', ArticleViewSet)
 router.register(r'authors', AuthorsViewSet)
 router.register(r'categories', CategoryViewSet)  # Register CategoryViewSet
 router.register(r'sources', SourceViewSet)
