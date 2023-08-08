@@ -37,10 +37,13 @@ class SourceSerializer(serializers.HyperlinkedModelSerializer):
 		fields = ['name','description','source_id','source_for','link']
 
 class AuthorSerializer(serializers.HyperlinkedModelSerializer):
+	articles_count = serializers.SerializerMethodField()
 	class Meta:
 		model = Authors
-		fields = ['author_id','given_name','family_name','ORCID']
-
+		fields = ['author_id','given_name','family_name','ORCID', 'articles_count']
+	def get_articles_count(self, obj):
+		return obj.articles_set.count()
+	
 class CountArticlesSerializer(serializers.ModelSerializer):
 	articles_count = serializers.SerializerMethodField()
 
