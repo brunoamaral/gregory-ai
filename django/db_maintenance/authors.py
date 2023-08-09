@@ -40,10 +40,18 @@ class GetAuthors(CronJobBase):
 						# get or create author
 						author_obj = None
 						if orcid:
-							author_obj, created = Authors.objects.get_or_create(given_name=given_name, family_name=family_name, ORCID=orcid)
+							authors_matched = Authors.objects.filter(given_name=given_name, family_name=family_name, ORCID=orcid)
 						else:
-							author_obj, created = Authors.objects.get_or_create(given_name=given_name, family_name=family_name)
-						## add to database
+							authors_matched = Authors.objects.filter(given_name=given_name, family_name=family_name)
+
+						count = authors_matched.count()
+						if count == 1:
+							author_obj = authors_matched.first()
+						elif count > 1:
+							print("More than one author matched: ", authors_matched.values())
+							#author_obj = authors_matched.first() # or handle this situation in a different way if needed
+						else: # count == 0
+							author_obj = Authors.objects.create(given_name=given_name, family_name=family_name, ORCID=orcid if orcid else None)						## add to database
 						if author_obj.author_id is not None:
 							# make relationship
 							article.authors.add(author_obj)
