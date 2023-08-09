@@ -11,7 +11,7 @@ from django.utils import timezone
 import pytz
 
 class GetAuthors(CronJobBase):
-	RUN_EVERY_MINS = 1
+	RUN_EVERY_MINS = 10
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'db_maintenance.get_authors'    # a unique code
 
@@ -39,14 +39,22 @@ class GetAuthors(CronJobBase):
 							orcid = author['ORCID']
 						# get or create author
 						author_obj = None
-						authors_matched = Authors.objects.filter(given_name=given_name, family_name=family_name, ORCID=orcid)
-						if authors_matched.count() == 1:
-							author_obj = authors_matched.first()
-						elif authors_matched.count() > 1:
-							print("More than one author matched: ", authors_matched.values())
-							author_obj = authors_matched.first() # or handle this situation in a different way if needed
-						else: # count == 0
-							author_obj = Authors.objects.create(given_name=given_name, family_name=family_name, ORCID=orcid if orcid else None)						## add to database
+						if orcid:
+							authors_matched = Authors.objects.filter(ORCID=orcid)
+							if authors_matched.count() == 1:
+								author_obj = authors_matched.first()
+							else: # count == 0
+								author_obj = Authors.objects.create(given_name=given_name, family_name=family_name, ORCID=orcid)
+						else:
+							authors_matched = Authors.objects.filter(given_name=given_name, family_name=family_name)
+							if authors_matched.count() == 1:
+								author_obj = authors_matched.first()
+							elif authors_matched.count() > 1:
+								print("More than one author matched: ", authors_matched.values())
+								author_obj = authors_matched.first() # or handle this situation in a different way if needed
+							else: # count == 0
+								author_obj = Authors.objects.create(given_name=given_name, family_name=family_name)
+						## add to database
 						if author_obj.author_id is not None:
 							# make relationship
 							article.authors.add(author_obj)
