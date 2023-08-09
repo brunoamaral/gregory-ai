@@ -38,8 +38,11 @@ class GetAuthors(CronJobBase):
 						if 'ORCID' in author:
 							orcid = author['ORCID']
 						# get or create author
-						author_obj = Authors.objects.get_or_create(given_name=given_name,family_name=family_name,ORCID=orcid)
-						author_obj = author_obj[0]
+						author_obj = None
+						if orcid:
+							author_obj, created = Authors.objects.get_or_create(ORCID=orcid)
+						else:
+							author_obj, created = Authors.objects.get_or_create(given_name=given_name, family_name=family_name, ORCID__isnull=True)
 						## add to database
 						if author_obj.author_id is not None:
 							# make relationship
