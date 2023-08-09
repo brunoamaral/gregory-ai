@@ -7,7 +7,7 @@ class Authors(models.Model):
 	author_id = models.AutoField(primary_key=True)
 	family_name = models.CharField(blank=False,null=False, max_length=150)
 	given_name = models.CharField(blank=False,null=False, max_length=150)
-	ORCID = models.CharField(blank=True,null=True, max_length=150)
+	ORCID = models.CharField(blank=True, null=True, max_length=150, unique=True)
 	def __str__(self):
 		full_name = (self.given_name,self.family_name)
 		object_name = ' '.join(full_name)
