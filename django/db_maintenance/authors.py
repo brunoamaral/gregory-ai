@@ -11,7 +11,7 @@ from django.utils import timezone
 import pytz
 
 class GetAuthors(CronJobBase):
-	RUN_EVERY_MINS = 150
+	RUN_EVERY_MINS = 1
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'db_maintenance.get_authors'    # a unique code
 
@@ -42,7 +42,7 @@ class GetAuthors(CronJobBase):
 						if orcid:
 							author_obj, created = Authors.objects.get_or_create(ORCID=orcid)
 						else:
-							author_obj, created = Authors.objects.get_or_create(given_name=given_name, family_name=family_name, ORCID__isnull=True)
+							author_obj, created = Authors.objects.get_or_create(given_name=given_name, family_name=family_name, ORCID=orcid)
 						## add to database
 						if author_obj.author_id is not None:
 							# make relationship
