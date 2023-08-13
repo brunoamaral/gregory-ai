@@ -1,12 +1,15 @@
 from django.core.management.base import BaseCommand
 from django.db.models import Count, Q
+from django.utils import timezone
 from gregory.models import Authors
 import orcid
-from django.utils import timezone
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 class Command(BaseCommand):
-	orcid_key = 'APP-BY595UTQI48Z371S'
-	orcid_secret = '8cdae218-ca27-453f-8f68-b46395163c87'
+	orcid_key = os.environ.get('ORCID_ClientID')
+	orcid_secret = os.environ.get('ORCID_ClientSecret')
 
 	def handle(self, *args, **kwargs):
 		orcid_api = orcid.PublicAPI(self.orcid_key, self.orcid_secret, sandbox=False)
@@ -16,7 +19,7 @@ class Command(BaseCommand):
 				Q(orcid_check__lte=six_months_ago) | Q(orcid_check__isnull=True),
 				ORCID__isnull=False,
 				country__isnull=True
-		).order_by('-num_articles')[:10]
+		).order_by('-num_articles')[:1000]
 
 		for author in authors:
 			author_orcid_number = author.ORCID.replace('http://orcid.org/', '')
