@@ -31,7 +31,7 @@ else:
 
 Did not find a .env file, we need to set some configuration variables. If in doubt, you can input blank and configure the .env file later.
 
-Some variables are optional: EMAIL_*, METABASE_*
+Some variables are optional: EMAIL_*, METABASE_*, ORCID_*
 	''')
 
 	configs = {
@@ -52,7 +52,9 @@ Some variables are optional: EMAIL_*, METABASE_*
 	"POSTGRES_PASSWORD" : os.getenv('POSTGRES_PASSWORD'),
 	"POSTGRES_USER" : os.getenv('POSTGRES_USER'),
 	"SECRET_KEY" : os.getenv('SECRET_KEY'),
-	}
+	"ORCID_ClientID": os.getenv('ORCID_ClientID'),
+	"ORCID_ClientSecret":	os.getenv('ORCID_ClientSecret')
+}
 
 	for key,value in configs.items():
 		if value == None:
