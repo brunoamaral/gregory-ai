@@ -40,7 +40,7 @@ class AuthorSerializer(serializers.HyperlinkedModelSerializer):
 	articles_count = serializers.SerializerMethodField()
 	class Meta:
 		model = Authors
-		fields = ['author_id','given_name','family_name','ORCID', 'articles_count']
+		fields = ['author_id','given_name','family_name','ORCID', 'country', 'articles_count']
 	def get_articles_count(self, obj):
 		return obj.articles_set.count()
 	
