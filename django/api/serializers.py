@@ -13,9 +13,22 @@ class CategorySerializer(serializers.ModelSerializer):
 	def get_count_of_articles(self, obj):
 		return obj.article_count()
 
+class ArticleAuthorSerializer(serializers.ModelSerializer):
+	country = serializers.SerializerMethodField()
+
+	class Meta:
+		model = Authors
+		fields = ['author_id', 'given_name', 'family_name', 'ORCID', 'country']
+
+	def get_country(self, obj):
+		if obj.country:
+			return obj.country.code  # or obj.country.name depending on what you want to display
+		return None
+
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
 	categories = CategorySerializer(many=True, read_only=True)
+	authors = ArticleAuthorSerializer(many=True, read_only=True)  # Update this line to use the new serializer
 	class Meta:
 		model = Articles
 		depth = 1
@@ -38,12 +51,16 @@ class SourceSerializer(serializers.HyperlinkedModelSerializer):
 
 class AuthorSerializer(serializers.HyperlinkedModelSerializer):
 	articles_count = serializers.SerializerMethodField()
+	country = serializers.SerializerMethodField()
 	class Meta:
 		model = Authors
 		fields = ['author_id','given_name','family_name','ORCID', 'country', 'articles_count']
 	def get_articles_count(self, obj):
 		return obj.articles_set.count()
-	
+	def get_country(self, obj):
+		if obj.country:
+			return obj.country.code  # or obj.country.name depending on what you want to display
+		return None
 class CountArticlesSerializer(serializers.ModelSerializer):
 	articles_count = serializers.SerializerMethodField()
 
