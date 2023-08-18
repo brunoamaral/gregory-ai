@@ -195,9 +195,9 @@ def post_article(request):
 ### 
 class ArticleViewSet(viewsets.ModelViewSet):
 	"""
-	List all articles in the database by descending article_id
+	List all articles in the database by earliest discovery_date
 	"""
-	queryset = Articles.objects.all().order_by('-published_date')
+	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [filters.SearchFilter]
@@ -207,7 +207,7 @@ class RelatedArticles(viewsets.ModelViewSet):
 	"""
 	Search related articles by the noun_phrases field. This search accepts regular expressions such as /articles/related/?search=<noun_phrase>|<noun_phrase>
 	"""
-	queryset = Articles.objects.all().order_by('-published_date')
+	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [filters.SearchFilter]
@@ -226,7 +226,7 @@ class ArticlesByCategory(viewsets.ModelViewSet):
 				# Returning an empty queryset
 				return Articles.objects.none()
 
-			return Articles.objects.filter(categories=category).order_by('-published_date')
+			return Articles.objects.filter(categories=category).order_by('-discovery_date')
 
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -241,7 +241,7 @@ class ArticlesBySubject(viewsets.ModelViewSet):
 		subject = self.kwargs.get('subject', None)
 		subject = subject.replace('-', ' ')
 		subject = Sources.objects.filter(subject__subject_name__iregex=subject)
-		return Articles.objects.filter(source__in=subject).order_by('-published_date')
+		return Articles.objects.filter(source__in=subject).order_by('-discovery_date')
 
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -254,7 +254,7 @@ class ArticlesByJournal(viewsets.ModelViewSet):
 	def get_queryset(self):
 		journal = self.kwargs.get('journal', None)
 		journal = '^' + journal.replace('-', ' ') + '$'
-		return Articles.objects.filter(container_title__iregex=journal).order_by('-published_date')
+		return Articles.objects.filter(container_title__iregex=journal).order_by('-discovery_date')
 
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -264,7 +264,7 @@ class AllArticleViewSet(generics.ListAPIView):
 	List all articles 
 	"""
 	pagination_class = None
-	queryset = Articles.objects.all().order_by('-published_date')
+	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
@@ -276,7 +276,7 @@ class RelevantList(generics.ListAPIView):
 	serializer_class = ArticleSerializer
 
 	def get_queryset(self):
-		return Articles.objects.filter(Q(relevant=True) | Q(ml_prediction_gnb=True)).order_by('-published_date')
+		return Articles.objects.filter(Q(relevant=True) | Q(ml_prediction_gnb=True)).order_by('-discovery_date')
 
 class UnsentList(generics.ListAPIView):
 	"""
