@@ -70,7 +70,7 @@ urlpatterns = [
 	re_path('^articles/source/(?P<source>.+)/$', ArticlesBySourceList.as_view()),
 	re_path('^articles/subject/(?P<subject>.+)/$', ArticlesBySubject.as_view({'get':'list'})),
 	re_path('^articles/journal/(?P<journal>.+)/$', ArticlesByJournal.as_view({'get':'list'})),
-	re_path('^articles/open/$', OpenAccessArticles.as_view()),
+	re_path('^articles/open-access/$', OpenAccessArticles.as_view()),
 	re_path('^articles/unsent/$', UnsentList.as_view()),
 
 	# Relevant articles routes
