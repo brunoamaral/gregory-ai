@@ -335,8 +335,8 @@ class ArticlesByAuthorList(generics.ListAPIView):
 
 	def get_queryset(self):
 
-		author = self.kwargs['author']
-		return Articles.objects.filter(authors=author)
+		author_id = self.kwargs['author_id']
+		return Articles.objects.filter(authors=author_id)
 
 # class ArticleRelevant(generics.RetrieveUpdateAPIView):
 # 	"""
