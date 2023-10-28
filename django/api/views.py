@@ -252,9 +252,9 @@ class ArticlesByJournal(viewsets.ModelViewSet):
 	Journal should be lower case and spaces should be replaced by dashes, for example: 	"The Lancet Neurology" becomes the-lancet-neurology.
 	"""
 	def get_queryset(self):
-		journal = self.kwargs.get('journal', None)
-		journal = '^' + journal.replace('-', ' ') + '$'
-		return Articles.objects.filter(container_title__iregex=journal).order_by('-discovery_date')
+		journal_slug = self.kwargs.get('journal_slug', None)
+		journal_slug = '^' + journal_slug.replace('-', ' ') + '$'
+		return Articles.objects.filter(container_title__iregex=journal_slug).order_by('-discovery_date')
 
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
