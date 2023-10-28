@@ -324,8 +324,8 @@ class ArticlesBySourceList(generics.ListAPIView):
 
 	def get_queryset(self):
 
-		source = self.kwargs['source']
-		return Articles.objects.filter(source=source)
+		source_id = self.kwargs['source_id']
+		return Articles.objects.filter(source=source_id)
 
 class ArticlesByAuthorList(generics.ListAPIView):
 	"""

@@ -66,7 +66,7 @@ urlpatterns = [
 	# More articles routes
 	path('articles/author/<int:author_id>/', ArticlesByAuthorList.as_view()),
 	re_path('^articles/category/(?P<category_slug>[-\w]+)/$', ArticlesByCategory.as_view({'get':'list'})),
-	re_path('^articles/source/(?P<source>.+)/$', ArticlesBySourceList.as_view()),
+	path('articles/source/<int:source_id>', ArticlesBySourceList.as_view()),
 	re_path('^articles/subject/(?P<subject>.+)/$', ArticlesBySubject.as_view({'get':'list'})),
 	re_path('^articles/journal/(?P<journal>.+)/$', ArticlesByJournal.as_view({'get':'list'})),
 	re_path('^articles/open-access/$', OpenAccessArticles.as_view()),
