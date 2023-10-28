@@ -27,7 +27,7 @@ from api.views import (
 )
 from rss.views import (
     ArticlesByAuthorFeed, ArticlesByCategoryFeed, ArticlesBySubjectFeed, OpenAccessFeed,
-    LatestArticlesFeed, LatestTrialsFeed, MachineLearningFeed, Twitter
+    LatestArticlesFeed, LatestTrialsFeed, MachineLearningFeed, 
 )
 from subscriptions.views import subscribe_view
 
@@ -60,7 +60,7 @@ urlpatterns = [
     path('feed/latest/articles/', LatestArticlesFeed()),
     path('feed/latest/trials/', LatestTrialsFeed()),
     path('feed/machine-learning/', MachineLearningFeed()),
-    path('feed/twitter/', Twitter()),
+
 
     # Subscriptions route
     path('subscriptions/new/', subscribe_view),
