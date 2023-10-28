@@ -1,26 +1,45 @@
-# RSS feeds and API
+# API and RSS feeds
 
-#### Available RSS feeds
+## Authentication
 
-1. Latest articles, `/feed/latest/articles/`
-2. Latest articles by subject, `/feed/articles/subject/<subject>/`
-3. Latest articles by category, `/feed/articles/category/<category>/`
-4. Latest articles in open access, `/feed/articles/open/`
-5. Latest clinical trials, `/feed/latest/trials/`
-6. Latest relevant articles by Machine Learning, `/feed/machine-learning/`
-7. Twitter feed,  `/feed/twitter/`. This includes all relevant articles by manual selection and machine learning prediction. It's read by [Zapier](https://zapier.com/) so that we can post on twitter automatically.
+- **API Authentication:** `/api-auth/`
+- **Obtain Token:** `/api/token/`
+- **Get Token:** `/api/token/get/`
 
-### Available API endpoints
+## Articles
 
-- Articles http://api.gregory-ms.com/articles/
-- Articles By Author https://api.gregory-ms.com/articles/author/{{author_id}}/
-- Articles By Category https://api.gregory-ms.com/articles/category/{{category}}/
-- Articles By Source https://api.gregory-ms.com/articles/articles/source/{{source}}/
-- Articles By Subject https://api.gregory-ms.com/articles/subject/{{subject}}/
-- Articles with open access https://api.gregory-ms.com/articles/open/
-- Authors http://api.gregory-ms.com/authors/
-- Relevant List https://api.gregory-ms.com/articles/relevant/
-- Sources http://api.gregory-ms.com/sources/
-- Trials By Source List https://api.gregory-ms.com/trials/source/{{source}}/
-- Trials http://api.gregory-ms.com/trials/
-- Unsent List https://api.gregory-ms.com/articles/unsent/
+- **List All Articles (via router):** `/articles/`
+- **Get Relevant Articles:** `/articles/relevant/`
+- **Post an Article:** `/articles/post/`
+- **Get Articles by an Author:** `/articles/author/{author_id}/`
+- **Get Articles by a Category:** `/articles/category/{category_slug}/`
+- **Get Articles by a Source:** `/articles/source/{source}/`
+- **Get Articles by a Subject:** `/articles/subject/{subject}/`
+- **Get Articles by a Journal:** `/articles/journal/{journal}/`
+- **Get Open Access Articles:** `/articles/open-access/`
+- **Get Unsent Articles:** `/articles/unsent/`
+- **Get Relevant Articles by Week:** `/articles/relevant/week/{year}/{week}/`
+- **Get Relevant Articles from the Last X Days:** `/articles/relevant/last/{days}/`
+
+## Categories
+
+- **List All Categories:** `/categories/`
+- **Get Monthly Counts for a Category:** `/categories/{category_slug}/monthly-counts/`
+
+## Trials
+
+- **List All Trials (via router):** `/trials/`
+- **Get Trials by a Category:** `/trials/category/{category_slug}/`
+- **Get Trials by a Source:** `/trials/source/{source}/`
+
+## RSS Feeds
+
+- **Get Articles by an Author:** `/feed/articles/author/{author_id}/`
+- **Get Articles by a Category:** `/feed/articles/category/{category}/`
+- **Get Articles by a Subject:** `/feed/articles/subject/{subject}/`
+- **Get Open Access Articles:** `/feed/articles/open-access/`
+- **Get Latest Articles:** `/feed/latest/articles/`
+- **Get Latest Trials:** `/feed/latest/trials/`
+- **Get Relevant Articles by Machine Learning:** `/feed/machine-learning/`
+
+You might want to use tools such as Postman or similar to test these endpoints, ensuring they provide the expected functionality.
