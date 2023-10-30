@@ -29,7 +29,7 @@ class Categories(models.Model):
 	category_description = models.TextField(blank=True, null=True)
 	category_name = models.CharField(blank=True, null=True,max_length=200)
 	category_slug = models.SlugField(blank=True, null=True, unique=True) # new field with unique=True
-	category_terms = ArrayField(models.CharField(blank=False, null=False, max_length=100),default=list,verbose_name='Terms to include in category (comma separated)')
+	category_terms = ArrayField(models.CharField(blank=False, null=False, max_length=100),default=list,verbose_name='Terms to include in category (comma separated)', help_text="Add terms separated by commas.")
 	
 	def save(self, *args, **kwargs):
 		if not self.category_slug:
@@ -79,7 +79,7 @@ class Sources(models.Model):
 	description = models.TextField(blank=True, null=True)
 
 	def __str__(self):
-		return self.name
+		return self.name or ""
 
 	class Meta:
 		managed = True
