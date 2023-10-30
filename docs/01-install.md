@@ -51,17 +51,7 @@ Once finished, login at <https://api.DOMAIN.TLD/admin> or wherever your reverse 
 Gregory needs to run a series of tasks to fetch missing information and apply the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
 
 ```cron
-*/5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
+*/10 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
+*/5 * * * * /usr/bin/flock -n /tmp/get_takeaways /usr/bin/docker exec admin ./manage.py get_takeaways
+*/5 * * * * /usr/bin/flock -n /tmp/update_orcid /usr/bin/docker exec -it admin python manage.py update_orcid
 ```
-
-6.  **Install** hugo
-
-You need to install some node modules for hugo to build and process the css. Simply run this.
-
-```bash
-cd hugo && npm i && cd ..;
-```
-
-In the `hugo` dir you will find a `config.toml` file that needs to be configured with your domain.
-
-7. **Build** the website by running `python3 ./build.py`.
