@@ -10,7 +10,7 @@ from .models import Articles
 from django_cron import CronJobBase, Schedule
 
 class RunPredictor(CronJobBase):
-	RUN_EVERY_MINS = 15
+	RUN_EVERY_MINS = 5
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'gregory.predict'    # a unique code
 	def do(self):
