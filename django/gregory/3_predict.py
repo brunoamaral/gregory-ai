@@ -119,12 +119,12 @@ class RunPredictor(CronJobBase):
 					# print(model)
 					article = Articles.objects.get(pk=item['article_id'])
 					# print(article,model,item['prediction'],type(item['prediction']))
-					if item['prediction'] == '1' or item['prediction'] == "['True']":
+					if item['prediction'] == '1' or item['prediction'] == '[1]' or item['prediction'] == "['True']":
 						if model == 'gnb':
 							article.ml_prediction_gnb = True
 						if model == 'lr':
 							article.ml_prediction_lr = True
-					if item['prediction'] == "['0']":
+					if item['prediction'] == "[0]":
 						if model == 'gnb':
 							article.ml_prediction_gnb = False
 						if model == 'lr':
