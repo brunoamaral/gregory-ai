@@ -13,7 +13,9 @@ class RunPredictor(CronJobBase):
 	RUN_EVERY_MINS = 15
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'gregory.predict'    # a unique code
-	def do(self):    
+	def do(self):
+		import sys
+		sys.path.append('/code/gregory')
 		# These are the different model names
 		GNB = "gnb"
 		LSVC = "lsvc"
