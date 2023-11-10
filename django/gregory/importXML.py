@@ -1,10 +1,12 @@
+import datetime
+from django.utils import timezone
+from dateutil import tz
 import xml.etree.ElementTree as ET
 from gregory.models import Trials  # Replace with your actual model
 from django.db import IntegrityError
 from django.utils.dateparse import parse_datetime, parse_date
 from dateutil.parser import parse
 import re
-import json
 
 def get_text(trial, tag_name):
     """
@@ -15,15 +17,18 @@ def get_text(trial, tag_name):
 
 def robust_parse_date(date_str):
     """
-    Attempt to parse a date string into a date object, handling various formats.
+    Attempt to parse a date string into a timezone-aware date object, handling various formats.
     """
     if not date_str:
         return None
+
     try:
-        return parse(date_str).date()
+        naive_date = parse(date_str).date()
+        # Assuming the date should be treated as UTC. Adjust if you have different timezone requirements.
+        aware_datetime = timezone.make_aware(datetime.datetime.combine(naive_date, datetime.time(0, 0)), timezone.utc)
+        return aware_datetime
     except ValueError:
         return None
-
 def get_or_create_trial(trial_data):
     """
     Get or create a Trials record.
