@@ -1,169 +1,110 @@
 import xml.etree.ElementTree as ET
 from gregory.models import Trials  # Replace with your actual model
 from django.db import IntegrityError
-import re
 from django.utils.dateparse import parse_datetime, parse_date
+from dateutil.parser import parse
+import re
+import json
+
+def get_text(trial, tag_name):
+    """
+    Extract text from an XML element.
+    """
+    element = trial.find(tag_name)
+    return element.text.strip() if element is not None and element.text is not None else None
+
+def robust_parse_date(date_str):
+    """
+    Attempt to parse a date string into a date object, handling various formats.
+    """
+    if not date_str:
+        return None
+    try:
+        return parse(date_str).date()
+    except ValueError:
+        return None
+
+def get_or_create_trial(trial_data):
+    """
+    Get or create a Trials record.
+    """
+    trial_id = trial_data.pop('trialid', None)
+    existing_entry_by_title = Trials.objects.filter(title=trial_data['title']).first()
+
+    # Update existing record found by title
+    if existing_entry_by_title:
+        if trial_id:
+            # Update identifiers if trial_id is present
+            match = re.match(r"([a-zA-Z-]+)([0-9]+)", trial_id, re.I)
+            prefix = match.groups()[0].lower() if match else None
+            # Remove trailing '-' if present
+            if prefix and prefix.endswith('-'):
+                prefix = prefix[:-1]
+            trial_data['identifiers'] = {prefix: trial_id}
+            if prefix:
+                trial_data['identifiers'] = {prefix: trial_id}
+
+        for key, value in trial_data.items():
+            setattr(existing_entry_by_title, key, value)
+        existing_entry_by_title.save()
+        return
+
+    # If no entry is found by title and trial_id is provided, check by trial_id
+    if trial_id:
+        match = re.match(r"([a-zA-Z-]+)([0-9]+)", trial_id, re.I)
+        prefix = match.groups()[0].lower() if match else None
+        if prefix:
+            trial_data['identifiers'] = {prefix: trial_id}
+            query = {f'identifiers__{prefix}': trial_id}
+            existing_entry_by_id = Trials.objects.filter(**query).first()
+
+            if existing_entry_by_id:
+                for key, value in trial_data.items():
+                    setattr(existing_entry_by_id, key, value)
+                existing_entry_by_id.save()
+                return
+
+    # Create a new record if no existing record is found
+    try:
+        Trials.objects.create(**trial_data)
+    except IntegrityError as e:
+        print("Error occurred:", e)
+
 
 def update_or_create_from_xml(xml_file_path):
-		tree = ET.parse(xml_file_path)
-		root = tree.getroot()
+    tree = ET.parse(xml_file_path)
+    root = tree.getroot()
 
-		for trial in root.findall('Trial'):
-				# Extracting required fields
-				def get_text(tag_name):
-						element = trial.find(tag_name)
-						return element.text.strip() if element is not None and element.text is not None else None
+    for trial in root.findall('Trial'):
+        trial_data = {}
+        # Extract trial fields
+        for field in ['Internal_Number', 'Last_Refreshed_on', 'Scientific_title', 'Primary_sponsor', 
+                      'Retrospective_flag', 'Source_Register', 'Recruitment_Status', 'other_records', 
+                      'Inclusion_agemin', 'Inclusion_agemax', 'Inclusion_gender', 'Target_size', 
+                      'Study_type', 'Study_design', 'Phase', 'Countries', 'Contact_Firstname', 
+                      'Contact_Lastname', 'Contact_Address', 'Contact_Email', 'Contact_Tel', 
+                      'Contact_Affiliation', 'Inclusion_Criteria', 'Exclusion_Criteria', 'Condition', 
+                      'Intervention', 'Primary_outcome', 'Secondary_outcome', 'Secondary_ID', 
+                      'Source_Support', 'Ethics_review_status', 'Ethics_review_contact_name', 
+                      'Ethics_review_contact_address', 'Ethics_review_contact_phone', 'Ethics_review_contact_email']:
+            trial_data[field.lower()] = get_text(trial, field)
 
-				# Extract trial fields
-				public_title = get_text('Public_title')
-				trial_id = get_text('TrialID')
-				# Extract and parse other fields
-				export_date = parse_datetime(get_text('Export_date'))
-				internal_number = get_text('Internal_Number')
-				last_refreshed_on = parse_date(get_text('Last_Refreshed_on'))
-				scientific_title = get_text('Scientific_title')
-				primary_sponsor = get_text('Primary_sponsor')
-				retrospective_flag = get_text('Retrospective_flag')
-				date_registration_raw = get_text('Date_re_rawgistration')
-				date_registration = parse_date(date_registration_raw) if date_registration_raw else None
-				source_register = get_text('Source_Register')
-				recruitment_status = get_text('Recruitment_Status')
-				other_records = get_text('other_records')
-				inclusion_agemin = get_text('Inclusion_agemin')
-				inclusion_agemax = get_text('Inclusion_agemax')
-				inclusion_gender = get_text('Inclusion_gender')
-				date_enrollement_raw = get_text('Date_enrollement')
-				date_enrollement = parse_date(date_enrollement_raw) if date_enrollement_raw else None
-				target_size = get_text('Target_size')
-				study_type = get_text('Study_type')
-				study_design = get_text('Study_design')
-				phase = get_text('Phase')
-				countries = get_text('Countries')
-				contact_firstname = get_text('Contact_Firstname')
-				contact_lastname = get_text('Contact_Lastname')
-				contact_address = get_text('Contact_Address')
-				contact_email = get_text('Contact_Email')
-				contact_tel = get_text('Contact_Tel')
-				contact_affiliation = get_text('Contact_Affiliation')
-				inclusion_criteria = get_text('Inclusion_Criteria')
-				exclusion_criteria = get_text('Exclusion_Criteria')
-				condition = get_text('Condition')
-				intervention = get_text('Intervention')
-				primary_outcome = get_text('Primary_outcome')
-				secondary_outcome = get_text('Secondary_outcome')
-				secondary_id = get_text('Secondary_ID')
-				source_support = get_text('Source_Support')
-				ethics_review_status = get_text('Ethics_review_status')
-				ethics_review_approval_date_raw = get_text('Ethics_review_approval_date')
-				ethics_review_approval_date = parse_date(ethics_review_approval_date_raw) if ethics_review_approval_date_raw else None
-				ethics_review_contact_name = get_text('Ethics_review_contact_name')
-				ethics_review_contact_address = get_text('Ethics_review_contact_address')
-				ethics_review_contact_phone = get_text('Ethics_review_contact_phone')
-				ethics_review_contact_email = get_text('Ethics_review_contact_email')
-				results_date_completed_raw = get_text('results_date_completed')
-				results_date_completed = parse_date(results_date_completed_raw) if results_date_completed_raw else None
+        # Special field mappings
+        trial_data['title'] = get_text(trial, 'Public_title')
+        trial_data['link'] = get_text(trial, 'web_address')
+        trial_data['trialid'] = get_text(trial, 'TrialID')
 
-				results_url_link = get_text('results_url_link')
+        # Parse dates with robust_parse_date
+        for date_field in ['Export_date', 'Date_enrollement', 'Ethics_review_approval_date', 
+                           'results_date_completed', 'Last_Refreshed_on']:
+            raw_date = get_text(trial, date_field)
+            trial_data[date_field.lower()] = robust_parse_date(raw_date)
 
-				# Create the identifiers dictionary
-				match = re.match(r"([a-zA-Z-]+)([0-9]+)", trial_id, re.I)
-				prefix = match.groups()[0].lower() if match else None
-				if prefix and prefix.endswith('-'): prefix = prefix[:-1]
-				identifiers = {prefix: trial_id} if prefix else {}
+        # Mapping 'Date_registration' to 'published_date'
+        date_registration_raw = get_text(trial, 'Date_registration')
+        trial_data['published_date'] = robust_parse_date(date_registration_raw)
 
-				try:
-						# Try creating a new record
-						Trials.objects.create(
-								title=public_title,
-								identifiers=identifiers,
-								export_date=export_date,
-								internal_number=internal_number,
-								last_refreshed_on=last_refreshed_on,
-								scientific_title=scientific_title,
-								primary_sponsor=primary_sponsor,
-								retrospective_flag=retrospective_flag,
-								date_registration=date_registration,
-								source_register=source_register,
-								recruitment_status=recruitment_status,
-								other_records=other_records,
-								inclusion_agemin=inclusion_agemin,
-								inclusion_agemax=inclusion_agemax,
-								inclusion_gender=inclusion_gender,
-								date_enrollement=date_enrollement,
-								target_size=target_size,
-								study_type=study_type,
-								study_design=study_design,
-								phase=phase,
-								countries=countries,
-								contact_firstname=contact_firstname,
-								contact_lastname=contact_lastname,
-								contact_address=contact_address,
-								contact_email=contact_email,
-								contact_tel=contact_tel,
-								contact_affiliation=contact_affiliation,
-								inclusion_criteria=inclusion_criteria,
-								exclusion_criteria=exclusion_criteria,
-								condition=condition,
-								intervention=intervention,
-								primary_outcome=primary_outcome,
-								secondary_outcome=secondary_outcome,
-								secondary_id=secondary_id,
-								source_support=source_support,
-								ethics_review_status=ethics_review_status,
-								ethics_review_approval_date=ethics_review_approval_date,
-								ethics_review_contact_name=ethics_review_contact_name,
-								ethics_review_contact_address=ethics_review_contact_address,
-								ethics_review_contact_phone=ethics_review_contact_phone,
-								ethics_review_contact_email=ethics_review_contact_email,
-								results_date_completed = parse_date(results_date_completed_raw) if results_date_completed_raw else None,
-								results_url_link=results_url_link,
-						)
-				except IntegrityError:
-						# If there's a duplicate key error, find and update the existing record
-						existing_entry = Trials.objects.get(title=public_title)
-						existing_entry.identifiers = identifiers
-						existing_entry.export_date = export_date
-						existing_entry.internal_number = internal_number
-						existing_entry.last_refreshed_on = last_refreshed_on
-						existing_entry.scientific_title = scientific_title
-						existing_entry.primary_sponsor = primary_sponsor
-						existing_entry.retrospective_flag = retrospective_flag
-						existing_entry.date_registration = date_registration
-						existing_entry.source_register = source_register
-						existing_entry.recruitment_status = recruitment_status
-						existing_entry.other_records = other_records
-						existing_entry.inclusion_agemin = inclusion_agemin
-						existing_entry.inclusion_agemax = inclusion_agemax
-						existing_entry.inclusion_gender = inclusion_gender
-						existing_entry.date_enrollement = date_enrollement
-						existing_entry.target_size = target_size
-						existing_entry.study_type = study_type
-						existing_entry.study_design = study_design
-						existing_entry.phase = phase
-						existing_entry.countries = countries
-						existing_entry.contact_firstname = contact_firstname
-						existing_entry.contact_lastname = contact_lastname
-						existing_entry.contact_address = contact_address
-						existing_entry.contact_email = contact_email
-						existing_entry.contact_tel = contact_tel
-						existing_entry.contact_affiliation = contact_affiliation
-						existing_entry.inclusion_criteria = inclusion_criteria
-						existing_entry.exclusion_criteria = exclusion_criteria
-						existing_entry.condition = condition
-						existing_entry.intervention = intervention
-						existing_entry.primary_outcome = primary_outcome
-						existing_entry.secondary_outcome = secondary_outcome
-						existing_entry.secondary_id = secondary_id
-						existing_entry.source_support = source_support
-						existing_entry.ethics_review_status = ethics_review_status
-						existing_entry.ethics_review_approval_date = ethics_review_approval_date
-						existing_entry.ethics_review_contact_name = ethics_review_contact_name
-						existing_entry.ethics_review_contact_address = ethics_review_contact_address
-						existing_entry.ethics_review_contact_phone = ethics_review_contact_phone
-						existing_entry.ethics_review_contact_email = ethics_review_contact_email
-						existing_entry.results_date_completed = parse_date(results_date_completed_raw) if results_date_completed_raw else None
-						existing_entry.results_url_link = results_url_link
-						existing_entry.save()
+        get_or_create_trial(trial_data)
 
 # Usage
 # xml_file_path = 'path/to/your/xml/file.xml'
