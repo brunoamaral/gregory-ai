@@ -8,6 +8,9 @@ from django.utils.dateparse import parse_datetime, parse_date
 from dateutil.parser import parse
 import re
 
+###
+# Update data from the https://www.who.int/clinical-trials-registry-platform via XML (https://trialsearch.who.int/Default.aspx)
+###
 def get_text(trial, tag_name):
     """
     Extract text from an XML element.
