@@ -16,7 +16,11 @@ import pytz
 import re
 import requests
 
-tzinfos = {"EDT": gettz("America/New_York")}
+tzinfos = {
+    "EDT": gettz("America/New_York"),  # Eastern Daylight Time
+    "EST": gettz("America/New_York"),  # Eastern Standard Time
+    # Add other timezones as needed
+}
 
 SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
 CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
@@ -143,7 +147,11 @@ class FeedReaderTask(CronJobBase):
 						euct = match.group(1)
 				if 'clinicaltrials.gov' in link:
 					nct = entry['guid']
-				identifiers = {"eudract": eudract, "euct": euct, "nct": nct}
+				identifiers = {
+					"eudract": "EUDRACT" + eudract if eudract is not None else None,
+					"euct": "EUCT" + euct if euct is not None else None,
+					"nct": nct
+				}
 				clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
 				clinical_trial.clean_summary()
 				try:
