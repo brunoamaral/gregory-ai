@@ -1,45 +1,52 @@
 # API and RSS feeds
 
-## Authentication
+Gregory's API is open and doesn't require authentication unless you need to use it to add Articles or Clinical Trials.
 
-- **API Authentication:** `/api-auth/`
-- **Obtain Token:** `/api/token/`
-- **Get Token:** `/api/token/get/`
+1. **Admin Routes:**
+   - `admin/`: Admin site routes.
+2. **API Authentication:**
+   - `api-auth/`: Default REST framework authentication routes.
+3. **Article Routes:**
+   - `articles/relevant/`: Access relevant articles.
+   - `articles/post/`: Endpoint for posting an article.
+4. **Feed Routes:**
+   - `feed/articles/author/<int:author_id>/`: Feed for articles by a specific author.
+   - `feed/articles/category/<str:category>/`: Feed for articles in a specific category.
+   - `feed/articles/subject/<str:subject>/`: Feed for articles on a specific subject.
+   - `feed/articles/open-access/`: Feed for open-access articles.
+   - `feed/latest/articles/`: Feed for the latest articles.
+   - `feed/latest/trials/`: Feed for the latest trials.
+   - `feed/machine-learning/`: Feed for machine learning related articles.
+5. **Subscriptions Route:**
+   - `subscriptions/new/`: Endpoint for new subscriptions.
+6. **More Articles Routes:**
+   - `articles/author/<int:author_id>/`: List articles by a specific author.
+   - `articles/category/<category_slug>/`: List articles in a specific category.
+   - `articles/source/<int:source_id>`: List articles from a specific source.
+   - `articles/subject/<subject>/`: List articles on a specific subject.
+   - `articles/journal/<journal_slug>/`: List articles from a specific journal.
+   - `articles/open-access/`: List open-access articles.
+   - `articles/unsent/`: List unsent articles.
+7. **Relevant Articles Routes:**
+   - `articles/relevant/week/<int:year>/<int:week>/`: Articles relevant for a specific week.
+   - `articles/relevant/last/<int:days>/`: Articles relevant in the last X days.
+8. **Category Routes:**
+   - `categories/`: List all categories.
+   - `categories/<category_slug>/monthly-counts/`: Monthly counts for a specific category.
+9. **Trial Routes:**
+   - `trials/category/<category_slug>/`: List trials in a specific category.
+   - `trials/source/<source>/`: List trials from a specific source.
+10. **Token Routes:**
+    - `api/token/`: Obtain a new token pair.
+    - `api/token/get/`: Obtain an authentication token.
+11. **Protected Endpoint Route:**
+    - `protected_endpoint/`: A protected endpoint.
+12. **Router Registered Routes:**
+    - `articles/`: Routes for `ArticleViewSet`.
+    - `authors/`: Routes for `AuthorsViewSet`.
+    - `categories/`: Routes for `CategoryViewSet`.
+    - `sources/`: Routes for `SourceViewSet`.
+    - `trials/`: Routes for `TrialViewSet`.
 
-## Articles
-
-- **List All Articles (via router):** `/articles/`
-- **Get Relevant Articles:** `/articles/relevant/`
-- **Post an Article:** `/articles/post/`
-- **Get Articles by an Author:** `/articles/author/{author_id}/`
-- **Get Articles by a Category:** `/articles/category/{category_slug}/`
-- **Get Articles by a Source:** `/articles/source/{source}/`
-- **Get Articles by a Subject:** `/articles/subject/{subject}/`
-- **Get Articles by a Journal:** `/articles/journal/{journal}/`
-- **Get Open Access Articles:** `/articles/open-access/`
-- **Get Unsent Articles:** `/articles/unsent/`
-- **Get Relevant Articles by Week:** `/articles/relevant/week/{year}/{week}/`
-- **Get Relevant Articles from the Last X Days:** `/articles/relevant/last/{days}/`
-
-## Categories
-
-- **List All Categories:** `/categories/`
-- **Get Monthly Counts for a Category:** `/categories/{category_slug}/monthly-counts/`
-
-## Trials
-
-- **List All Trials (via router):** `/trials/`
-- **Get Trials by a Category:** `/trials/category/{category_slug}/`
-- **Get Trials by a Source:** `/trials/source/{source}/`
-
-## RSS Feeds
-
-- **Get Articles by an Author:** `/feed/articles/author/{author_id}/`
-- **Get Articles by a Category:** `/feed/articles/category/{category}/`
-- **Get Articles by a Subject:** `/feed/articles/subject/{subject}/`
-- **Get Open Access Articles:** `/feed/articles/open-access/`
-- **Get Latest Articles:** `/feed/latest/articles/`
-- **Get Latest Trials:** `/feed/latest/trials/`
-- **Get Relevant Articles by Machine Learning:** `/feed/machine-learning/`
 
 You might want to use tools such as Postman or similar to test these endpoints, ensuring they provide the expected functionality.
