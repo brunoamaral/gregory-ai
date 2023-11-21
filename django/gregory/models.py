@@ -8,8 +8,7 @@ class Authors(models.Model):
 	author_id = models.AutoField(primary_key=True)
 	family_name = models.CharField(blank=False,null=False, max_length=150)
 	given_name = models.CharField(blank=False,null=False, max_length=150)
-	ORCID = models.CharField(blank=True, null=True, max_length=150, unique=True)
-	country = CountryField(blank=True, null=True)  # New field
+	ORCID = models.CharField(blank=True, null=True, max_length=150, unique=TrText	country = CountryField(blank=True, null=True)  # New field
 	orcid_check = models.DateTimeField(blank=True, null=True)
 
 	def __str__(self):
@@ -108,9 +107,7 @@ class Articles(models.Model):
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	kind = models.CharField(choices=KINDS, max_length=50,default='science paper')
 	access = models.CharField(choices=ACCESS_OPTIONS, max_length=50, default=None, null=True)
-	publisher = models.CharField(max_length=150, blank=True, null=True, default=None)
-	container_title = models.CharField(max_length=150, blank=True, null=True, default=None)
-	crossref_check = models.DateTimeField(blank=True, null=True)
+	publisher = models.CharField(max_length=150, blank=True, null=True, default=NoText	container_title = models.CharField(max_length=150, blank=True, null=True, default=NoText	crossref_check = models.DateTimeField(blank=True, null=True)
 	takeaways = models.TextField(blank=True, null=True)
 	
 	def __str__(self):
@@ -160,7 +157,7 @@ class Trials(models.Model):
 	study_design = models.TextField(null=True,blank=True)
 	phase = models.TextField(null=True,blank=True)
 	countries = models.TextField(null=True,blank=True)
-	contact_firstname = models.CharField(max_length=150,null=True,blank=True)
+	contact_firstname = models.TextField(null=True,blank=True)
 	contact_lastname = models.TextField(null=True,blank=True)
 	contact_address = models.TextField(null=True,blank=True)
 	contact_email = models.EmailField(null=True,blank=True,max_length=500)
