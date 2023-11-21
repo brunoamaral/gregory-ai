@@ -160,7 +160,7 @@ class Trials(models.Model):
 	study_design = models.TextField(null=True,blank=True)
 	phase = models.TextField(null=True,blank=True)
 	countries = models.TextField(null=True,blank=True)
-	contact_firstname = models.CharField(max_length=150,null=True,blank=True)
+	contact_firstname = models.TextField(null=True,blank=True)
 	contact_lastname = models.TextField(null=True,blank=True)
 	contact_address = models.TextField(null=True,blank=True)
 	contact_email = models.EmailField(null=True,blank=True,max_length=500)
