@@ -178,7 +178,7 @@ class Trials(models.Model):
 	ethics_review_approval_date = models.DateField(null=True,blank=True)
 	ethics_review_contact_name = models.EmailField(null=True,blank=True,max_length=500)
 	ethics_review_contact_address = models.TextField(null=True,blank=True)
-	ethics_review_contact_phone = models.CharField(max_length=50,null=True,blank=True)
+	ethics_review_contact_phone = models.CharField(max_length=100,null=True,blank=True)
 	ethics_review_contact_email = models.EmailField(null=True,blank=True,max_length=500)
 	results_date_completed = models.DateField(null=True,blank=True)
 	results_url_link = models.URLField(null=True,blank=True)
