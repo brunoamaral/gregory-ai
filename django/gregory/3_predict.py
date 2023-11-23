@@ -124,10 +124,14 @@ class RunPredictor(CronJobBase):
 							article.ml_prediction_gnb = True
 						if model == 'lr':
 							article.ml_prediction_lr = True
+						if model == 'lsvc':
+							article.ml_prediction_lsvc = True
 					if item['prediction'] == "[0]":
 						if model == 'gnb':
 							article.ml_prediction_gnb = False
 						if model == 'lr':
 							article.ml_prediction_lr = False
+						if model == 'lsvc':
+							article.ml_prediction_lsvc = True
 					article.save()
 	pass
