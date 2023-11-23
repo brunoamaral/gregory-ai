@@ -7,7 +7,7 @@ from .models import Articles, Categories, Trials, Sources, Entities, Authors, Su
 class ArticleAdmin(admin.ModelAdmin):
 	# a list of displayed columns name.
 	list_display = ['article_id', 'title','source']
-	readonly_fields = ['ml_prediction_gnb','ml_prediction_lr','categories','entities']
+	readonly_fields = ['ml_prediction_gnb','ml_prediction_lr','ml_prediction_lsvc','categories','entities']
 	search_fields = ['article_id', 'title','doi' ]
 	list_filter = ('relevant',)
 
