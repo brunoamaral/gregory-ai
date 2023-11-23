@@ -83,7 +83,7 @@ class RunPredictor(CronJobBase):
 			dataset['relevant'] = dataset['relevant'].fillna(value=0)
 
 			# Models to use from the list above
-			models = [GNB,LR]
+			models = [GNB,LR,LSVC]
 
 			# This is the dict that will store the pipelines
 			pipelines = {}
@@ -124,10 +124,14 @@ class RunPredictor(CronJobBase):
 							article.ml_prediction_gnb = True
 						if model == 'lr':
 							article.ml_prediction_lr = True
-					if item['prediction'] == "[0]":
+						if model == 'lsvc':
+							article.ml_prediction_lsvc = True
+					if item['prediction'] == "[0]" or item['prediction'] == "['0']":
 						if model == 'gnb':
 							article.ml_prediction_gnb = False
 						if model == 'lr':
 							article.ml_prediction_lr = False
+						if model == 'lsvc':
+							article.ml_prediction_lsvc = False
 					article.save()
 	pass
