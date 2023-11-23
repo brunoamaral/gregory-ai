@@ -5,9 +5,24 @@ from .models import Articles, Categories, Trials, Sources, Entities, Authors, Su
 
 # this class define which department columns will be shown in the department admin web site.
 class ArticleAdmin(admin.ModelAdmin):
-	# a list of displayed columns name.
+	fieldsets = (
+		('Article Information', {
+            'fields': (
+                'title', 'link', 'doi', 'summary', 'source',
+                'published_date', 'discovery_date', 'authors', 'categories',
+                'entities', 'relevant', 'noun_phrases', 'sent_to_admin',
+                'sent_to_subscribers', 'kind', 'access', 'publisher',
+                'container_title', 'crossref_check', 'takeaways'
+            ),
+            'description': 'This section contains general information about the article'
+        }),
+			('Machine Learning Predictions', {  # This is the title of the fieldset
+					'fields': ('ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc'),
+					'description': 'Grouping machine learning prediction indicators',  # Optional: You can provide a description for the fieldset
+			}),
+	)
 	list_display = ['article_id', 'title','source']
-	readonly_fields = ['ml_prediction_gnb','ml_prediction_lr','ml_prediction_lsvc','categories','entities']
+	readonly_fields = ['ml_prediction_gnb','ml_prediction_lr','ml_prediction_lsvc','categories','entities','discovery_date']
 	search_fields = ['article_id', 'title','doi' ]
 	list_filter = ('relevant',)
 
