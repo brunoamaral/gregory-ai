@@ -43,7 +43,8 @@ def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_
 	log = APIAccessSchemeLog()
 	log.call_type = call_type
 	log.ip_addr = ip_addr
-	log.api_access_scheme = access_scheme
+	if access_scheme is not None:
+		log.api_access_scheme = access_scheme
 	log.http_code = http_code
 	if error_message != None and len(error_message) > 499:
 		log.error_message = error_message[0:499]
@@ -63,6 +64,7 @@ def post_article(request):
 		"""
 		Allows authenticated clients to add new articles to the database
 		"""
+		access_scheme = None  # Define access_scheme at the start
 		call_type = request.method + " " + request.path
 		ip_addr = getIPAddress(request)
 		post_data = json.loads(request.body)
@@ -174,7 +176,10 @@ def post_article(request):
 			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
 			return returnError(INVALID_IP_ADDRESS, str(exception), 401)
 		except APIAccessDeniedError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+			if access_scheme is not None:
+					generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+			else:
+					generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception), str(post_data))
 			return returnError(ACCESS_DENIED, str(exception), 403)
 		except FieldNotFoundError as exception:
 			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 202, str(exception), str(post_data))
