@@ -103,6 +103,7 @@ class Articles(models.Model):
 	relevant = models.BooleanField(blank=True, null=True)
 	ml_prediction_gnb = models.BooleanField(blank=True, null=True)
 	ml_prediction_lr = models.BooleanField(blank=True, null=True)
+	ml_prediction_lsvc = models.BooleanField(blank=True,null=True)
 	noun_phrases = models.JSONField(blank=True, null=True)
 	sent_to_admin = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
