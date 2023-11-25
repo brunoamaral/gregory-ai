@@ -338,33 +338,6 @@ class ArticlesByAuthorList(generics.ListAPIView):
 		author_id = self.kwargs['author_id']
 		return Articles.objects.filter(authors=author_id).order_by('-published_date')
 
-# class ArticleRelevant(generics.RetrieveUpdateAPIView):
-# 	"""
-# 	Change the value of relevancy of the article
-# 	"""
-# 	http_method_names = ['get','put']
-# 	serializer_class = ArticleSerializer
-# 	lookup_field = 'article_id'
-# 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-# 	def get_queryset(self):
-# 		return Articles.objects.filter(article_id = self.kwargs['article_id'])
-
-# 	def update(self,request,article_id=None,*args, **kwargs):
-# 		instance = self.get_object()
-# 		value = self.request.data.get("value", None)  # read data from request
-
-# 		if value == 1:
-# 			value = True
-# 		elif value == 0:
-# 			value = False
-# 		data = {"relevant": value}
-# 		serializer = ArticleSerializer(instance,data,partial=True)
-# 		if serializer.is_valid():
-# 			serializer.save()
-# 			return HttpResponse(serializer.data)
-# 		else: 
-# 			return HttpResponse(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 class ArticlesByKeyword(generics.ListAPIView):
 	"""
 	List articles by keyword
