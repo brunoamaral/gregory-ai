@@ -336,7 +336,7 @@ class ArticlesByAuthorList(generics.ListAPIView):
 	def get_queryset(self):
 
 		author_id = self.kwargs['author_id']
-		return Articles.objects.filter(authors=author_id)
+		return Articles.objects.filter(authors=author_id).order_by('-published_date')
 
 # class ArticleRelevant(generics.RetrieveUpdateAPIView):
 # 	"""
