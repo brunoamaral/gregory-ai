@@ -72,6 +72,7 @@ class Command(BaseCommand):
 							return
 
 			try:
+					trial_data['discovery_date'] = timezone.now()  # Set the discovery date to current time
 					Trials.objects.create(**trial_data)
 			except IntegrityError as e:
 					print("Error occurred:", e)
