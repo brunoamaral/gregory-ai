@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 import xml.etree.ElementTree as ET
-from gregory.models import Trials
+from gregory.models import Trials, Sources
 from django.db import IntegrityError
 from django.utils.dateparse import parse_datetime, parse_date
 from dateutil.parser import parse
@@ -77,6 +77,12 @@ class Command(BaseCommand):
 					print("Error occurred:", e)
 
 	def update_or_create_from_xml(self, xml_file_path):
+			# Check if the source 'WHO XML import' exists
+			source = Sources.objects.filter(name='WHO XML import').first()
+			if not source:
+				self.stdout.write(self.style.ERROR("Source 'WHO XML import' not found in the database. Please add it and try again."))
+				return  # Stop the command if the source doesn't exist
+
 			tree = ET.parse(xml_file_path)
 			root = tree.getroot()
 
@@ -96,6 +102,7 @@ class Command(BaseCommand):
 					trial_data['title'] = self.get_text(trial, 'Public_title')
 					trial_data['link'] = self.get_text(trial, 'web_address')
 					trial_data['trialid'] = self.get_text(trial, 'TrialID')
+					trial_data['source'] = source
 
 					for date_field in ['Export_date', 'Date_enrollement', 'Ethics_review_approval_date', 
 						'results_date_completed', 'Last_Refreshed_on']:
