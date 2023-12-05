@@ -63,6 +63,7 @@ def post_article(request):
 		"""
 		Allows authenticated clients to add new articles to the database
 		"""
+		access_scheme = None
 		call_type = request.method + " " + request.path
 		ip_addr = getIPAddress(request)
 		post_data = json.loads(request.body)
