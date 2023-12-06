@@ -5,11 +5,10 @@ from django.template.loader import get_template
 from django.utils.html import strip_tags
 from gregory.models import Articles,Trials
 from sitesettings.models import *
-from subscriptions.models import Subscribers,Lists
+from subscriptions.models import Subscribers
 import datetime 
 import requests
 from django.contrib.sites.models import Site
-from django.conf import settings
 import os
 import openai
 
