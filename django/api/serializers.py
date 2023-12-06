@@ -1,10 +1,16 @@
 from rest_framework import serializers
 from gregory.models import Articles, Trials, Sources, Authors, Categories
+from sitesettings.models import *
+from django.contrib.sites.models import Site
+from django.conf import settings
+
+customsettings = CustomSetting.objects.get(site=settings.SITE_ID)
+site = Site.objects.get(pk=settings.SITE_ID)
 
 class CategorySerializer(serializers.ModelSerializer):
 		class Meta:
-				model = Categories
-				fields = ['category_id', 'category_description', 'category_name', 'category_slug', 'category_terms', 'article_count']
+			model = Categories
+			fields = ['category_id', 'category_description', 'category_name', 'category_slug', 'category_terms', 'article_count']
 
 class ArticleAuthorSerializer(serializers.ModelSerializer):
 	country = serializers.SerializerMethodField()
@@ -58,22 +64,22 @@ class AuthorSerializer(serializers.ModelSerializer):
 		articles_list = serializers.SerializerMethodField()
 
 		class Meta:
-				model = Authors
-				fields = ['author_id', 'given_name', 'family_name', 'ORCID', 'country', 'articles_count', 'articles_list']
+			model = Authors
+			fields = ['author_id', 'given_name', 'family_name', 'ORCID', 'country', 'articles_count', 'articles_list']
 
 		def get_articles_count(self, obj):
-				return obj.articles_set.count()
+			return obj.articles_set.count()
 		def get_country(self, obj):
-				# Return the country code or name
-				return obj.country.code if obj.country else None
+			# Return the country code or name
+			return obj.country.code if obj.country else None
 		def get_articles_list(self, obj):
-			base_url = "https://api.gregory-ms.com/articles/author/"
+			base_url = f"https://api.{site.domain}/articles/author/"
 			return base_url + str(obj.author_id)
 
 class CountArticlesSerializer(serializers.ModelSerializer):
 		class Meta:
-				model = Articles
-				fields = ('articles_count',)
+			model = Articles
+			fields = ('articles_count',)
 
 		def get_articles_count(self, obj):
-				return Articles.objects.count()
+			return Articles.objects.count()
