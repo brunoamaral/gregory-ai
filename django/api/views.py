@@ -1,13 +1,18 @@
-import json
 from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, CategorySerializer
-from django.db.models.functions import Length
-from gregory.models import Articles, Trials, Sources, Authors, Categories
-from rest_framework import viewsets, permissions, generics, filters
-from django.db.models import Q
-from rest_framework.decorators import api_view
 from datetime import datetime, timedelta
-
+from django.db.models import Count
+from django.db.models import Q
+from django.db.models.functions import Length, TruncMonth
+from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper
+from gregory.models import Articles, Trials, Sources, Authors, Categories
+from rest_framework import permissions
+from rest_framework import viewsets, permissions, generics, filters
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework.views import APIView
+import json
 
 # Stuff needed for the API with authorization
 import traceback
@@ -58,6 +63,7 @@ def post_article(request):
 		"""
 		Allows authenticated clients to add new articles to the database
 		"""
+		access_scheme = None
 		call_type = request.method + " " + request.path
 		ip_addr = getIPAddress(request)
 		post_data = json.loads(request.body)
@@ -156,7 +162,7 @@ def post_article(request):
 				"article_id": save_article.pk,
 			}
 			# This creates an access log for this client in the DB
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, '', log_data)
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, 'Article created', log_data)
 			# Actually return the data to the API client
 			return returnData(data)
 		except APINoAPIKeyError as exception:
@@ -190,9 +196,9 @@ def post_article(request):
 ### 
 class ArticleViewSet(viewsets.ModelViewSet):
 	"""
-	List all articles in the database by descending article_id
+	List all articles in the database by earliest discovery_date
 	"""
-	queryset = Articles.objects.all().order_by('-article_id')
+	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [filters.SearchFilter]
@@ -202,7 +208,7 @@ class RelatedArticles(viewsets.ModelViewSet):
 	"""
 	Search related articles by the noun_phrases field. This search accepts regular expressions such as /articles/related/?search=<noun_phrase>|<noun_phrase>
 	"""
-	queryset = Articles.objects.all().order_by('-published_date')
+	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [filters.SearchFilter]
@@ -221,7 +227,7 @@ class ArticlesByCategory(viewsets.ModelViewSet):
 				# Returning an empty queryset
 				return Articles.objects.none()
 
-			return Articles.objects.filter(categories=category).order_by('-article_id')
+			return Articles.objects.filter(categories=category).order_by('-discovery_date')
 
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -236,7 +242,7 @@ class ArticlesBySubject(viewsets.ModelViewSet):
 		subject = self.kwargs.get('subject', None)
 		subject = subject.replace('-', ' ')
 		subject = Sources.objects.filter(subject__subject_name__iregex=subject)
-		return Articles.objects.filter(source__in=subject).order_by('-article_id')
+		return Articles.objects.filter(source__in=subject).order_by('-discovery_date')
 
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -247,9 +253,9 @@ class ArticlesByJournal(viewsets.ModelViewSet):
 	Journal should be lower case and spaces should be replaced by dashes, for example: 	"The Lancet Neurology" becomes the-lancet-neurology.
 	"""
 	def get_queryset(self):
-		journal = self.kwargs.get('journal', None)
-		journal = '^' + journal.replace('-', ' ') + '$'
-		return Articles.objects.filter(container_title__iregex=journal).order_by('-article_id')
+		journal_slug = self.kwargs.get('journal_slug', None)
+		journal_slug = '^' + journal_slug.replace('-', ' ') + '$'
+		return Articles.objects.filter(container_title__iregex=journal_slug).order_by('-discovery_date')
 
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -259,7 +265,7 @@ class AllArticleViewSet(generics.ListAPIView):
 	List all articles 
 	"""
 	pagination_class = None
-	queryset = Articles.objects.all().order_by('-article_id')
+	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
@@ -271,7 +277,7 @@ class RelevantList(generics.ListAPIView):
 	serializer_class = ArticleSerializer
 
 	def get_queryset(self):
-		return Articles.objects.filter(Q(relevant=True) | Q(ml_prediction_gnb=True)).order_by('-article_id')
+		return Articles.objects.filter(Q(relevant=True) | Q(ml_prediction_gnb=True)).order_by('-discovery_date')
 
 class UnsentList(generics.ListAPIView):
 	"""
@@ -319,8 +325,8 @@ class ArticlesBySourceList(generics.ListAPIView):
 
 	def get_queryset(self):
 
-		source = self.kwargs['source']
-		return Articles.objects.filter(source=source)
+		source_id = self.kwargs['source_id']
+		return Articles.objects.filter(source=source_id)
 
 class ArticlesByAuthorList(generics.ListAPIView):
 	"""
@@ -330,35 +336,8 @@ class ArticlesByAuthorList(generics.ListAPIView):
 
 	def get_queryset(self):
 
-		author = self.kwargs['author']
-		return Articles.objects.filter(authors=author)
-
-# class ArticleRelevant(generics.RetrieveUpdateAPIView):
-# 	"""
-# 	Change the value of relevancy of the article
-# 	"""
-# 	http_method_names = ['get','put']
-# 	serializer_class = ArticleSerializer
-# 	lookup_field = 'article_id'
-# 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-# 	def get_queryset(self):
-# 		return Articles.objects.filter(article_id = self.kwargs['article_id'])
-
-# 	def update(self,request,article_id=None,*args, **kwargs):
-# 		instance = self.get_object()
-# 		value = self.request.data.get("value", None)  # read data from request
-
-# 		if value == 1:
-# 			value = True
-# 		elif value == 0:
-# 			value = False
-# 		data = {"relevant": value}
-# 		serializer = ArticleSerializer(instance,data,partial=True)
-# 		if serializer.is_valid():
-# 			serializer.save()
-# 			return HttpResponse(serializer.data)
-# 		else: 
-# 			return HttpResponse(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+		author_id = self.kwargs['author_id']
+		return Articles.objects.filter(authors=author_id).order_by('-published_date')
 
 class ArticlesByKeyword(generics.ListAPIView):
 	"""
@@ -427,6 +406,30 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+class MonthlyCountsView(generics.ListAPIView):
+	def get(self, request, category_slug):
+			category = get_object_or_404(Categories, category_slug=category_slug)
+			# Monthly article counts
+			articles = Articles.objects.filter(categories=category)
+			articles = articles.annotate(month=TruncMonth('published_date'))
+			article_counts = articles.values('month').annotate(count=Count('article_id')).order_by('month')
+			article_counts = list(article_counts.values('month', 'count'))
+
+			# Monthly trial counts
+			trials = Trials.objects.filter(categories=category)
+			trials = trials.annotate(month=TruncMonth('published_date'))
+			trial_counts = trials.values('month').annotate(count=Count('trial_id')).order_by('month')
+			trial_counts = list(trial_counts.values('month', 'count'))
+
+			data = {
+				'category_name': category.category_name,
+				'category_slug': category.category_slug,
+				'monthly_article_counts': article_counts,
+				'monthly_trial_counts': trial_counts,
+			}
+
+			return Response(data)
+
 ###
 # TRIALS
 ### 
@@ -461,15 +464,22 @@ class TrialsBySourceList(generics.ListAPIView):
 		source = self.kwargs['source']
 		return Trials.objects.filter(source=source)
 
-# class TrialsByKeyword(generics.ListAPIView):
-# 	"""
-# 	List clinical trials by keyword
-# 	"""
-# 	serializer_class = TrialSerializer
-# 	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
-# 	filter_backends = [filters.SearchFilter]
-# 	search_fields = ['$title','$summary']
+class TrialsByCategory(viewsets.ModelViewSet):
+	"""
+	Search Trials by the category field. Usage /trials/category/{{category_slug}}/
+	"""
+	def get_queryset(self):
+			category_slug = self.kwargs.get('category_slug', None)
+			category = Categories.objects.filter(category_slug=category_slug).first()
 
+			if category is None:
+				# Returning an empty queryset
+				return Trials.objects.none()
+
+			return Trials.objects.filter(categories=category).order_by('-trial_id')
+
+	serializer_class = TrialSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
 ###
@@ -498,3 +508,18 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
+###
+# AUTHORIZATION
+###
+# The class below generates a new token at every successful call.
+# But that token is not saved in the database and associated with the user.
+# is that a problem?
+
+class LoginView(TokenObtainPairView):
+	permission_classes = (permissions.AllowAny,)
+
+class ProtectedEndpointView(APIView):
+	permission_classes = [permissions.IsAuthenticated]
+
+	def get(self, request):
+		return Response({"message": "You have accessed the protected endpoint!"})

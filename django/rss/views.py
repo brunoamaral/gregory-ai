@@ -167,68 +167,6 @@ class ToPredictFeed(Feed):
 		return item.published_date
 
 
-
-class Twitter(Feed):
-
-	title = "post to twitter"
-	link = "/feed/twitter/"
-	description = "Real time results for relevant research"
-
-	def items(self):
-		import itertools
-		from operator import attrgetter
-
-		articles_list_1 = Articles.objects.filter(relevant=True).order_by('-article_id')
-		articles_list_2 = Articles.objects.filter(ml_prediction_gnb=True).order_by('-article_id')
-		# articles_list = Articles.objects.filter(criterion1 or criterion2)[:10]
-		trials_list = Trials.objects.all().order_by('-trial_id')[:10]
-		result_list = sorted( itertools.chain(articles_list_1[:10],articles_list_2[:10], trials_list),key=attrgetter('discovery_date'),reverse=True)
-		return result_list
-	
-	def item_title(self, item):
-		object_type = '#ClinicalTrial '
-		if hasattr(item, 'article_id'):
-			if item.ml_prediction_gnb == True:
-				object_type = '#Article #ML '
-			if item.relevant == True:
-				object_type = '#Article #Manual '
-			if item.relevant == True and item.ml_prediction_gnb == True:
-				object_type = '#Article #Manual #ML '
-
-
-		item.title = object_type + item.title[:100] + '...'
-		return item.title
-
-	def item_description(self, item):
-		object_type = '#ClinicalTrial '
-		if hasattr(item, 'article_id'):
-			if item.ml_prediction_gnb == True:
-				object_type = '#Article #ML '
-			if item.relevant == True:
-				object_type = '#Article #Manual '
-			if item.relevant == True and item.ml_prediction_gnb == True:
-				object_type = '#Article #Manual #ML '
-
-		if hasattr(item,'takeaways') and item.takeaways != None:
-			item.description = object_type + item.takeaways
-		else:
-			item.description = None
-		return item.description
-
-	# # item_link is only needed if NewsItem has no get_absolute_url method.
-	def item_link(self, item):
-		object_type = 'trials/'
-		if hasattr(item, 'article_id'):
-			object_type = 'articles/'
-		return item.link 
-
-	def item_pubdate(self,item):
-		"""
-		Takes an item, as returned by items(), and returns the item's
-		pubdate.
-		"""
-		return item.discovery_date
-
 class OpenAccessFeed(Feed):
 	title = "Articles listed as open access on unpaywall.org"
 	link = "/articles/"

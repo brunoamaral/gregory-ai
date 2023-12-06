@@ -18,49 +18,80 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path, re_path
 from rest_framework import routers
-from api.views import ArticleViewSet,ArticlesByAuthorList,ArticlesByCategory,ArticlesBySourceList,ArticlesByJournal,ArticlesBySubject,AuthorsViewSet,OpenAccessArticles,RelevantList,UnsentList,TrialsBySourceList,SourceViewSet,TrialViewSet,post_article,newsletterByWeek,lastXdays,CategoryViewSet
-from rss.views import *
+from rest_framework.authtoken import views
+from api.views import (
+	ArticleViewSet, ArticlesByAuthorList, ArticlesByCategory, ArticlesBySourceList,
+	ArticlesByJournal, ArticlesBySubject, AuthorsViewSet, OpenAccessArticles, 
+	RelevantList, UnsentList, TrialsBySourceList, SourceViewSet, TrialViewSet, 
+	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView
+)
+from rss.views import (
+	ArticlesByAuthorFeed, ArticlesByCategoryFeed, ArticlesBySubjectFeed, OpenAccessFeed,
+	LatestArticlesFeed, LatestTrialsFeed, MachineLearningFeed, 
+)
 from subscriptions.views import subscribe_view
 
-
+# Initialize the router and register some endpoints
 router = routers.DefaultRouter()
-router.register(r'articles', ArticleViewSet, RelevantList)
-router.register(r'authors',AuthorsViewSet)
-router.register(r'categories', CategoryViewSet)  # New line to register CategoryViewSet
+router.register(r'articles', ArticleViewSet)
+router.register(r'authors', AuthorsViewSet)
+router.register(r'categories', CategoryViewSet)
 router.register(r'sources', SourceViewSet)
 router.register(r'trials', TrialViewSet)
 
-
+# Define URL patterns
 urlpatterns = [
-	path('articles/relevant/', RelevantList.as_view()),
-	path('articles/post/',post_article),
+	# Admin routes
 	path('admin/', admin.site.urls),
+
+	# API auth route
 	path('api-auth/', include('rest_framework.urls')),
-	# path('articles/all/', AllArticleViewSet.as_view()),
-	# path('articles/prediction/none/', ArticlesPredictionNone.as_view()),
-	# path('feed/articles/prediction/none/', ToPredictFeed()),
-	# path('trials/all/', AllTrialViewSet.as_view()),
-	# path('articles/related/', RelatedArticles.as_view({'get': 'list'})),
+
+	# Article routes
+	path('articles/relevant/', RelevantList.as_view()),
+	path('articles/post/', post_article),
+
+	# Feed routes
 	path('feed/articles/author/<int:author_id>/', ArticlesByAuthorFeed(), name='articles_by_author_feed'),
 	path('feed/articles/category/<str:category>/', ArticlesByCategoryFeed()),
 	path('feed/articles/subject/<str:subject>/', ArticlesBySubjectFeed()),
-	path('feed/articles/open/',OpenAccessFeed()),
+	path('feed/articles/open-access/',OpenAccessFeed()),  # Renamed for clarity
 	path('feed/latest/articles/', LatestArticlesFeed()),
 	path('feed/latest/trials/', LatestTrialsFeed()),
 	path('feed/machine-learning/', MachineLearningFeed()),
-	path('feed/twitter/', Twitter()),
+
+	# Subscriptions route
 	path('subscriptions/new/', subscribe_view),
-	re_path('^articles/author/(?P<author>.+)/$', ArticlesByAuthorList.as_view()),
+
+	# More articles routes
+	path('articles/author/<int:author_id>/', ArticlesByAuthorList.as_view()),
 	re_path('^articles/category/(?P<category_slug>[-\w]+)/$', ArticlesByCategory.as_view({'get':'list'})),
-	re_path('^articles/source/(?P<source>.+)/$', ArticlesBySourceList.as_view()),
+	path('articles/source/<int:source_id>', ArticlesBySourceList.as_view()),
 	re_path('^articles/subject/(?P<subject>.+)/$', ArticlesBySubject.as_view({'get':'list'})),
-	re_path('^articles/journal/(?P<journal>.+)/$', ArticlesByJournal.as_view({'get':'list'})),
-	re_path('^articles/open/$', OpenAccessArticles.as_view()),
+	re_path('^articles/journal/(?P<journal_slug>.+)/$', ArticlesByJournal.as_view({'get':'list'})),
+	re_path('^articles/open-access/$', OpenAccessArticles.as_view()),
 	re_path('^articles/unsent/$', UnsentList.as_view()),
+
+	# Relevant articles routes
 	path('articles/relevant/week/<int:year>/<int:week>/', newsletterByWeek.as_view({'get':'list'})),
 	path('articles/relevant/last/<int:days>/', lastXdays.as_view({'get':'list'})),
+
+	# Category routes
 	path('categories/', CategoryViewSet.as_view({'get':'list'})),
+	path('categories/<str:category_slug>/monthly-counts/', MonthlyCountsView.as_view()),
+
+	# Trial routes
+	re_path('^trials/category/(?P<category_slug>[-\w]+)/$', TrialsByCategory.as_view({'get':'list'})),
 	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
+
+	# Token routes
+	path('api/token/', LoginView.as_view(), name='token_obtain_pair'),
+	path('api/token/get/', views.obtain_auth_token),
+
+	# Protected endpoint route
+	path('protected_endpoint/', ProtectedEndpointView.as_view(), name='protected_endpoint'),
+
+	# Include router routes
 	path('', include(router.urls)),
 
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
