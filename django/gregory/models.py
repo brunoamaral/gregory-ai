@@ -145,7 +145,6 @@ class Trials(models.Model):
 	sent = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	sent_to_admin = models.BooleanField(blank=True,null=True, default=False)
-	sent_real_time_notification = models.BooleanField(blank=True,null=True,default=False)
 	categories = models.ManyToManyField(Categories,blank=True)
 	identifiers = models.JSONField(blank=True,null=True)
 	history = HistoricalRecords()
