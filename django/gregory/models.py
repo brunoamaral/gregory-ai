@@ -135,7 +135,7 @@ class Articles(models.Model):
 class Trials(models.Model):
 	trial_id = models.AutoField(primary_key=True)
 	discovery_date = models.DateTimeField(blank=True, null=True)
-	last_updated = models.DateTimeField(auto_now=True)
+	last_updated = models.DateTimeField(auto_now=True, null=True)
 	title = models.TextField(blank=False,null=False, unique=True)
 	summary = models.TextField(blank=True, null=True)
 	link = models.URLField(blank=False, null=False, max_length=2000)
