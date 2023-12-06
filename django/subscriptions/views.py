@@ -1,11 +1,8 @@
-from django.shortcuts import render
-from admin import settings
 from subscriptions.forms import SubscribersForm
 from subscriptions.models import Subscribers, Lists
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponseRedirect
 import logging
-import os
 # Create your views here.
 
 @csrf_exempt
