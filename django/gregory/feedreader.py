@@ -21,6 +21,12 @@ CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
 my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
 works = Works(etiquette=my_etiquette)
 
+tzinfos = {
+    "EDT": gettz("America/New_York"),  # Eastern Daylight Time
+    "EST": gettz("America/New_York"),  # Eastern Standard Time
+    # Add other timezones as needed
+}
+
 class FeedReaderTask(CronJobBase):
 	RUN_EVERY_MINS = 30
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
