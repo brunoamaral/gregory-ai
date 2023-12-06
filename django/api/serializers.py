@@ -1,5 +1,3 @@
-from django.contrib.auth.models import User, Group
-from django.db.models.fields import SlugField
 from rest_framework import serializers
 from gregory.models import Articles, Trials, Sources, Authors, Categories
 
@@ -54,20 +52,28 @@ class SourceSerializer(serializers.HyperlinkedModelSerializer):
 		model = Sources
 		fields = ['source_id','source_for','name','description','link','language']
 
-class AuthorSerializer(serializers.HyperlinkedModelSerializer):
-	articles_count = serializers.SerializerMethodField()
-	country = serializers.SerializerMethodField()
-	class Meta:
-		model = Authors
+class AuthorSerializer(serializers.ModelSerializer):
+		articles_count = serializers.SerializerMethodField()
+		country = serializers.SerializerMethodField()
+		articles_list = serializers.SerializerMethodField()
+
+		class Meta:
+				model = Authors
+				fields = ['author_id', 'given_name', 'family_name', 'ORCID', 'country', 'articles_count', 'articles_list']
+
+		def get_articles_count(self, obj):
+				return obj.articles_set.count()
 		def get_country(self, obj):
 				# Return the country code or name
 				return obj.country.code if obj.country else None
+		def get_articles_list(self, obj):
+			base_url = "https://api.gregory-ms.com/articles/author/"
+			return base_url + str(obj.author_id)
+
 class CountArticlesSerializer(serializers.ModelSerializer):
-	articles_count = serializers.SerializerMethodField()
+		class Meta:
+				model = Articles
+				fields = ('articles_count',)
 
-	class Meta:
-		model = Articles
-		fields = ( 'articles_count',)   
-
-	def get_articles_count(self, obj):
-		return Articles.objects.all().count()
+		def get_articles_count(self, obj):
+				return Articles.objects.count()
