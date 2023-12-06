@@ -14,7 +14,7 @@ dev.py
 django/data/
 django/gregory/data/
 django/gregory/migrations/
-django/gregory/ml_models/
+django/gregory/ml_models/*
 django/indexers/input/*.json
 django/static
 docker-data/
@@ -56,3 +56,4 @@ venv
 venv3
 venv311
 workspace.code-workspace
+postgres-data_old

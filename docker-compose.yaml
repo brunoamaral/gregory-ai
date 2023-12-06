@@ -58,6 +58,8 @@ services:
       - EMAIL_MAILGUN_API=${EMAIL_MAILGUN_API}
       - EMAIL_PORT=${EMAIL_PORT}
       - EMAIL_USE_TLS=${EMAIL_USE_TLS}
+      - ORCID_ClientID=${ORCID_ClientID}
+      - ORCID_ClientSecret=${ORCID_ClientSecret}
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_USER=${POSTGRES_USER}
