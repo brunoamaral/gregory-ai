@@ -167,7 +167,6 @@ class FeedReaderTask(CronJobBase):
 				).first()
 				if existing_trial:
 					# Update the existing trial
-					existing_trial.discovery_date = timezone.now()
 					existing_trial.title = clinical_trial.title
 					existing_trial.summary = clinical_trial.summary
 					existing_trial.link = clinical_trial.link
