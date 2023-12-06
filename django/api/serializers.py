@@ -1,17 +1,16 @@
-from django.contrib.auth.models import User, Group
-from django.db.models.fields import SlugField
 from rest_framework import serializers
 from gregory.models import Articles, Trials, Sources, Authors, Categories
+from sitesettings.models import *
+from django.contrib.sites.models import Site
+from django.conf import settings
+
+customsettings = CustomSetting.objects.get(site=settings.SITE_ID)
+site = Site.objects.get(pk=settings.SITE_ID)
 
 class CategorySerializer(serializers.ModelSerializer):
-	count_of_articles = serializers.SerializerMethodField()
-
-	class Meta:
-		model = Categories
-		fields = ['category_id', 'category_description', 'category_name', 'category_slug', 'category_terms','count_of_articles']
-
-	def get_count_of_articles(self, obj):
-		return obj.article_count()
+		class Meta:
+			model = Categories
+			fields = ['category_id', 'category_description', 'category_name', 'category_slug', 'category_terms', 'article_count']
 
 class ArticleAuthorSerializer(serializers.ModelSerializer):
 	country = serializers.SerializerMethodField()
@@ -21,14 +20,14 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
 		fields = ['author_id', 'given_name', 'family_name', 'ORCID', 'country']
 
 	def get_country(self, obj):
-		if obj.country:
-			return obj.country.code  # or obj.country.name depending on what you want to display
-		return None
+		# Return the country code or name
+		return obj.country.code if obj.country else None
+
 
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
-	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
+	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
 	categories = CategorySerializer(many=True, read_only=True)
-	authors = ArticleAuthorSerializer(many=True, read_only=True)  # Update this line to use the new serializer
+	authors = ArticleAuthorSerializer(many=True, read_only=True)
 	class Meta:
 		model = Articles
 		depth = 1
@@ -36,7 +35,7 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 		read_only_fields = ('discovery_date','ml_prediction_gnb','ml_prediction_lr','ml_prediction_lsvc','noun_phrases','takeaways')
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
-	source = serializers.SlugRelatedField(many=False, read_only=True, slug_field='name')
+	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
 	categories = CategorySerializer(many=True, read_only=True)
 
 	class Meta:
@@ -57,26 +56,30 @@ class TrialSerializer(serializers.HyperlinkedModelSerializer):
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:
 		model = Sources
-		fields = ['name','description','source_id','source_for','link']
+		fields = ['source_id','source_for','name','description','link','language']
 
-class AuthorSerializer(serializers.HyperlinkedModelSerializer):
-	articles_count = serializers.SerializerMethodField()
-	country = serializers.SerializerMethodField()
-	class Meta:
-		model = Authors
-		fields = ['author_id','given_name','family_name','ORCID', 'country', 'articles_count']
-	def get_articles_count(self, obj):
-		return obj.articles_set.count()
-	def get_country(self, obj):
-		if obj.country:
-			return obj.country.code  # or obj.country.name depending on what you want to display
-		return None
+class AuthorSerializer(serializers.ModelSerializer):
+		articles_count = serializers.SerializerMethodField()
+		country = serializers.SerializerMethodField()
+		articles_list = serializers.SerializerMethodField()
+
+		class Meta:
+			model = Authors
+			fields = ['author_id', 'given_name', 'family_name', 'ORCID', 'country', 'articles_count', 'articles_list']
+
+		def get_articles_count(self, obj):
+			return obj.articles_set.count()
+		def get_country(self, obj):
+			# Return the country code or name
+			return obj.country.code if obj.country else None
+		def get_articles_list(self, obj):
+			base_url = f"https://api.{site.domain}/articles/author/"
+			return base_url + str(obj.author_id)
+
 class CountArticlesSerializer(serializers.ModelSerializer):
-	articles_count = serializers.SerializerMethodField()
+		class Meta:
+			model = Articles
+			fields = ('articles_count',)
 
-	class Meta:
-		model = Articles
-		fields = ( 'articles_count',)   
-
-	def get_articles_count(self, obj):
-		return Articles.objects.all().count()
+		def get_articles_count(self, obj):
+			return Articles.objects.count()
