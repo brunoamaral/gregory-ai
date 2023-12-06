@@ -16,9 +16,9 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
 		fields = ['author_id', 'given_name', 'family_name', 'ORCID', 'country']
 
 	def get_country(self, obj):
-		if obj.country:
-			return obj.country.code  # or obj.country.name depending on what you want to display
-		return None
+		# Return the country code or name
+		return obj.country.code if obj.country else None
+
 
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
@@ -59,13 +59,9 @@ class AuthorSerializer(serializers.HyperlinkedModelSerializer):
 	country = serializers.SerializerMethodField()
 	class Meta:
 		model = Authors
-		fields = ['author_id','given_name','family_name','ORCID', 'country', 'articles_count']
-	def get_articles_count(self, obj):
-		return obj.articles_set.count()
-	def get_country(self, obj):
-		if obj.country:
-			return obj.country.code  # or obj.country.name depending on what you want to display
-		return None
+		def get_country(self, obj):
+				# Return the country code or name
+				return obj.country.code if obj.country else None
 class CountArticlesSerializer(serializers.ModelSerializer):
 	articles_count = serializers.SerializerMethodField()
 
