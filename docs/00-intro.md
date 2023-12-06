@@ -4,7 +4,20 @@ Gregory is an Artificial Intelligence (AI) to index and identify relevant conten
 
 It uses Machine Learning (ML) to predict relevancy. And includes a [Metabase](https://metabase.com/) instance to classify and quantify information.
 
-A full version is available at [Gregory-MS.com](https://gregory-ms.com), where we have indexed over 13,000 articles on Multiple Sclerosis Research to assist Neurologists and Researchers.
+A full version is available at [Gregory-MS.com](https://gregory-ms.com), where we have indexed over 16,000 articles on Multiple Sclerosis Research to assist Neurologists and Researchers.
+
+## Features
+
+- Machine Learning prediction of relevant content
+- Key takeaways extracted using Artificial Intelligence
+- Configure RSS feeds to gather search results for any keyword
+- Configure searches on any public website, not just medical publications
+- Set up automatic email notifications
+- Manage and segment subscribers
+- Public and Private API  
+- Customize your own categories to get personalized search results
+- Breakdown broader subjects into different segments
+- Identify and subscribe to authors
 
 ## Use Cases
 
@@ -71,17 +84,4 @@ flowchart LR;
 ```
 
 
-
-## Features
-
-- Index scientific papers, news articles, and clinical trials
-- Index any content from RSS feeds and other sources
-- Index content by subject
-- Index content by category
-- Send email to the admin team with content that needs to be flagged for relevancy
-- Run a Machine Learning prediction on new content to categorise for relevancy
-- Send weekly digest of relevant content to subscribers
-- Send notification of new content via email
-- Output RSS feeds of articles per source, category, subject, and relevancy
-- Output an RSS feed of clinical trials
 
