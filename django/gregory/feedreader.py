@@ -16,16 +16,16 @@ import pytz
 import re
 import requests
 
+SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
+CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
+my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
+works = Works(etiquette=my_etiquette)
+
 tzinfos = {
     "EDT": gettz("America/New_York"),  # Eastern Daylight Time
     "EST": gettz("America/New_York"),  # Eastern Standard Time
     # Add other timezones as needed
 }
-
-SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
-CLIENT_WEBSITE = 'https://' + SITE.site.domain + '/'
-my_etiquette = Etiquette(SITE.title, 'v8', CLIENT_WEBSITE, SITE.admin_email)
-works = Works(etiquette=my_etiquette)
 
 class FeedReaderTask(CronJobBase):
 	RUN_EVERY_MINS = 30
@@ -154,6 +154,28 @@ class FeedReaderTask(CronJobBase):
 				}
 				clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
 				clinical_trial.clean_summary()
+
+				# Get the identifiers
+				nct = clinical_trial.identifiers.get('nct')
+				euct = clinical_trial.identifiers.get('euct')
+				eudract = clinical_trial.identifiers.get('eudract')
+				# Find if there's already a trial with the same identifiers
+				existing_trial = Trials.objects.filter(
+						Q(identifiers__nct=nct) |
+						Q(identifiers__euct=euct) |
+						Q(identifiers__eudract=eudract)
+				).first()
+				if existing_trial:
+					# Update the existing trial
+					existing_trial.title = clinical_trial.title
+					existing_trial.summary = clinical_trial.summary
+					existing_trial.link = clinical_trial.link
+					existing_trial.published_date = clinical_trial.published_date
+					existing_trial.identifiers = clinical_trial.identifiers
+					existing_trial.source = i
+					existing_trial.save()
+			else:
+				# Create a new trial
 				try:
 					q_objects = Q()
 					if clinical_trial.identifiers.get('nct'):
