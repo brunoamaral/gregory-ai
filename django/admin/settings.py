@@ -28,7 +28,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 DEBUG = True 
 
 ALLOWED_HOSTS = ['0.0.0.0','localhost','api.'+ os.environ.get('DOMAIN_NAME'),'manage.'+ os.environ.get('DOMAIN_NAME')]
-CSRF_TRUSTED_ORIGINS = ['https://api.'+ os.environ.get('DOMAIN_NAME'),'https://manage.'+ os.environ.get('DOMAIN_NAME')]
+CSRF_TRUSTED_ORIGINS = ['https://' + os.environ.get('DOMAIN_NAME'), 'https://api.'+ os.environ.get('DOMAIN_NAME'),'https://manage.'+ os.environ.get('DOMAIN_NAME')]
 
 # Application definition
 
@@ -36,6 +36,8 @@ INSTALLED_APPS = [
 	'gregory.apps.GregoryConfig',
 	'subscriptions.apps.SubscriptionsConfig',
 	'rest_framework',
+	'rest_framework.authtoken',
+	'rest_framework_simplejwt',
 	'django.contrib.admin',
 	'django.contrib.auth',
 	'django.contrib.contenttypes',
@@ -43,10 +45,12 @@ INSTALLED_APPS = [
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
 	'django.contrib.sites',
+	'simple_history',
 	'sitesettings',
 	'django_cron',
 	'db_maintenance',
 	'indexers',
+	'api',
 ]
 
 MIDDLEWARE = [
@@ -143,6 +147,11 @@ REST_FRAMEWORK = {
 	'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
 	'PAGE_SIZE': 10,
 	# 'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
+	'DEFAULT_AUTHENTICATION_CLASSES': (
+		'rest_framework.authentication.BasicAuthentication',
+		'rest_framework.authentication.SessionAuthentication',
+		'rest_framework_simplejwt.authentication.JWTAuthentication',
+	)
 }
 
 # MAILGUN SMTP
@@ -169,7 +178,6 @@ CRON_CLASSES = [
 		# 'gregory.2_train_models.TrainModels',
 		'gregory.3_predict.RunPredictor',
 		'db_maintenance.get_doi_from_crossref.GetDoiCrossRef',
-		'db_maintenance.get_published_date_and_summary_crossref.GetDateSummaryCrossRef',
 ]
 WEBSITE_DOMAIN = 'gregory-ms.com'
 

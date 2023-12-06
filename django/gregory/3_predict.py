@@ -10,10 +10,12 @@ from .models import Articles
 from django_cron import CronJobBase, Schedule
 
 class RunPredictor(CronJobBase):
-	RUN_EVERY_MINS = 20
+	RUN_EVERY_MINS = 5
 	schedule = Schedule(run_every_mins=RUN_EVERY_MINS)
 	code = 'gregory.predict'    # a unique code
-	def do(self):    
+	def do(self):
+		import sys
+		sys.path.append('/code/gregory')
 		# These are the different model names
 		GNB = "gnb"
 		LSVC = "lsvc"
@@ -81,7 +83,7 @@ class RunPredictor(CronJobBase):
 			dataset['relevant'] = dataset['relevant'].fillna(value=0)
 
 			# Models to use from the list above
-			models = [GNB,LR]
+			models = [GNB,LR,LSVC]
 
 			# This is the dict that will store the pipelines
 			pipelines = {}
@@ -117,15 +119,19 @@ class RunPredictor(CronJobBase):
 					# print(model)
 					article = Articles.objects.get(pk=item['article_id'])
 					# print(article,model,item['prediction'],type(item['prediction']))
-					if item['prediction'] == '1' or item['prediction'] == "['True']":
+					if item['prediction'] == '1' or item['prediction'] == '[1]' or item['prediction'] == "['True']":
 						if model == 'gnb':
 							article.ml_prediction_gnb = True
 						if model == 'lr':
 							article.ml_prediction_lr = True
-					if item['prediction'] == "['0']":
+						if model == 'lsvc':
+							article.ml_prediction_lsvc = True
+					if item['prediction'] == "[0]" or item['prediction'] == "['0']":
 						if model == 'gnb':
 							article.ml_prediction_gnb = False
 						if model == 'lr':
 							article.ml_prediction_lr = False
+						if model == 'lsvc':
+							article.ml_prediction_lsvc = False
 					article.save()
 	pass

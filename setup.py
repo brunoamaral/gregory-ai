@@ -1,15 +1,14 @@
 #!/usr/bin/python3
 from dotenv import load_dotenv
 from pathlib import Path
-from shutil import which
+from shutil import which,copyfile
+from subprocess import Popen, PIPE, CalledProcessError
 import git
 import os
-import psycopg
+import psycopg2
 import requests
-from subprocess import Popen,PIPE
 import sys
 import time
-import shutil
 
 load_dotenv()
 cwd = os.getcwd()
@@ -31,6 +30,8 @@ else:
 ####
 
 Did not find a .env file, we need to set some configuration variables. If in doubt, you can input blank and configure the .env file later.
+
+Some variables are optional: EMAIL_*, METABASE_*, ORCID_*
 	''')
 
 	configs = {
@@ -45,15 +46,15 @@ Did not find a .env file, we need to set some configuration variables. If in dou
 	"EMAIL_PORT" : 587, 
 	"EMAIL_USE_TLS" : 'true', 
 	"GREGORY_DIR" : os.getenv('GREGORY_DIR'),
-	"HUGO_PATH" : os.getenv('HUGO_PATH'),
 	"METABASE_SECRET_KEY" : os.getenv('METABASE_SECRET_KEY'),
 	"METABASE_SITE_URL" : os.getenv('METABASE_SITE_URL'),
 	"POSTGRES_DB" : os.getenv('POSTGRES_DB'),
 	"POSTGRES_PASSWORD" : os.getenv('POSTGRES_PASSWORD'),
 	"POSTGRES_USER" : os.getenv('POSTGRES_USER'),
 	"SECRET_KEY" : os.getenv('SECRET_KEY'),
-	"WEBSITE_PATH" : os.getenv('WEBSITE_PATH'),
-	}
+	"ORCID_ClientID": os.getenv('ORCID_ClientID'),
+	"ORCID_ClientSecret":	os.getenv('ORCID_ClientSecret')
+}
 
 	for key,value in configs.items():
 		if value == None:
@@ -147,33 +148,6 @@ if is_tool("docker-compose"):
 else:
 	print("Didn't find docker-compose, please install it. Details at https://docs.docker.com/compose/install/")
 
-		
-print('''
-####
-## Check for Hugo
-####
-''')
-
-hugo_path = os.getenv('HUGO_PATH')
-
-if hugo_path == True or is_tool('hugo') == True:
-	print("\N{check mark} Found Hugo in path or environment variable")
-else:
-	print("Didn't find Hugo, please install it. Details at https://gohugo.io")
-	sys.exit('Hugo not installed')
-
-print('''
-####
-## Updating any hugo modules that may exist
-####
-''')
-
-args = (which('hugo'), "mod", "get","-u")
-popen = Popen(args, stdout=PIPE, universal_newlines=True)
-popen.wait()
-output = popen.stdout.read()
-print(output)
-
 print('''
 ####
 ## Running docker-compose up -d db
@@ -191,10 +165,9 @@ print('''
 Give Postgres 20 seconds to finish setting up...
 ''')
 for i in range(20,0,-1):
-		sys.stdout.write(str(i)+' ')
-		sys.stdout.flush()
-		time.sleep(1)
-
+	sys.stdout.write(str(i)+' ')
+	sys.stdout.flush()
+	time.sleep(1)
 
 print('''
 ####
@@ -210,7 +183,7 @@ postgres_password = os.getenv('POSTGRES_PASSWORD')
 postgres_db = os.getenv('POSTGRES_DB')
 
 try:
-	conn = psycopg.connect(dbname=postgres_db, user=postgres_user,host=db_host,password=postgres_password,autocommit=True)
+	conn = psycopg2.connect(dbname=postgres_db, user=postgres_user,host=db_host,password=postgres_password,autocommit=True)
 	cur = conn.cursor()
 	cur.execute("CREATE DATABASE metabase;")
 	conn.close()
@@ -218,8 +191,8 @@ except:
 	print("I am unable to connect to postgres. Please create the `metabase` database manually and restart the containers.")
 
 def runshell(*args):
-		p = Popen(*args, shell=True, stdout=sys.stdout, stderr=sys.stderr, stdin=sys.stdin)
-		p.wait()
+	p = Popen(*args, shell=True, stdout=sys.stdout, stderr=sys.stderr, stdin=sys.stdin)
+	p.wait()
 
 print('''
 ####
@@ -228,11 +201,45 @@ print('''
 ####
 ''')
 
-args = ("sudo","docker-compose","up","-d","admin","--build")
-popen = Popen(args, stdout=PIPE, universal_newlines=True)
-popen.wait()
-output = popen.stdout.read()
-print(output)
+# Change to the django/ directory where the Dockerfile is located
+os.chdir("django")
+
+# Use the standard docker command to build the image
+try:
+		build_args = ("docker", "build", "-t", "admin", ".")
+		build_popen = Popen(build_args, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+		build_stdout, build_stderr = build_popen.communicate()
+
+		if build_popen.returncode != 0:
+				print("Error building the Docker image:")
+				print(build_stderr)
+				sys.exit(build_popen.returncode)
+		else:
+				print("Docker image built successfully")
+				print(build_stdout)
+except CalledProcessError as e:
+		print("Error executing docker build command:")
+		print(e.output)
+		sys.exit(e.returncode)
+
+# Run the docker-compose command
+try:
+		compose_args = ("sudo", "docker-compose", "up", "-d", "admin")
+		compose_popen = Popen(compose_args, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+		compose_stdout, compose_stderr = compose_popen.communicate()
+
+		if compose_popen.returncode != 0:
+				print("Error running docker-compose:")
+				print(compose_stderr)
+				sys.exit(compose_popen.returncode)
+		else:
+				print("Docker-compose up -d admin executed successfully")
+				print(compose_stdout)
+except CalledProcessError as e:
+		print("Error executing docker-compose command:")
+		print(e.output)
+		sys.exit(e.returncode)
+os.chdir('..')
 
 print('''
 ####
@@ -252,6 +259,7 @@ print('''
 ## Installing Node-RED and nodes required by flows.json
 ####
 ''')
+
 args = ("sudo","docker-compose","up","-d","node-red")
 popen = Popen(args, stdout=PIPE, universal_newlines=True)
 popen.wait()
@@ -262,7 +270,7 @@ runshell('sudo docker exec -it node-red npm install {node-red-contrib-cheerio,no
 
 original = r'flows.json'
 target = r'nodered-data/flows.json'
-shutil.copyfile(original, target)
+copyfile(original, target)
 
 print('### Restarting Node-RED container')
 runshell('sudo docker restart node-red')
@@ -276,6 +284,11 @@ print('''
 ####
 
 There are some things outside the scope of this setup script.
+
+## Setup your site
+
+1. Go to the admin dashboard and change the example.com site to match your domain
+2. Go to custom settings and set the Site and Title fields.
 
 ## Setup Nginx
 
@@ -303,13 +316,5 @@ Gregory needs to run a series of tasks to fetch missing information and apply th
 */5 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
 ```
 
-## Configure and run hugo (optional)
 
-```bash
-cd hugo && npm i && cd ..;
-```
-
-In the `hugo` dir you will find a `config.toml` file that needs to be configured with your domain.
-
-**Build the website** by running `python3 ./build.py`.
 ''')
