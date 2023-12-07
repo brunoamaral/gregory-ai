@@ -36,6 +36,9 @@ class Command(BaseCommand):
 					return None
 
 	def merge_identifiers(self, existing_identifiers, trial_id):
+			if not isinstance(existing_identifiers, dict):
+        # Handle the case where existing_identifiers is not a dictionary
+				existing_identifiers = {}
 			match = re.match(r"([a-zA-Z-]+)([0-9]+)", trial_id, re.I)
 			prefix = match.groups()[0].lower() if match else None
 			if prefix and prefix.endswith('-'):
@@ -47,6 +50,7 @@ class Command(BaseCommand):
 	def get_or_create_trial(self, trial_data):
 			trial_id = trial_data.pop('trialid', None)
 			existing_entry_by_title = Trials.objects.filter(title=trial_data['title']).first()
+			prefix = ''.join(filter(str.isalpha, trial_id)).lower() if trial_id else None
 
 			if existing_entry_by_title:
 					if trial_id:
@@ -67,7 +71,7 @@ class Command(BaseCommand):
 
 					if existing_entry_by_id:
 							for key, value in trial_data.items():
-									setattr(existing_entry_by_id, key, value)
+								setattr(existing_entry_by_id, key, value)
 							existing_entry_by_id.save()
 							return
 

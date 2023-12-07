@@ -66,6 +66,7 @@ MIDDLEWARE = [
 	'django.middleware.clickjacking.XFrameOptionsMiddleware',
 	'django.middleware.gzip.GZipMiddleware',
 	'django.contrib.sites.middleware.CurrentSiteMiddleware',
+	'simple_history.middleware.HistoryRequestMiddleware',
 ]
 
 ROOT_URLCONF = 'admin.urls'
