@@ -135,6 +135,7 @@ class Articles(models.Model):
 class Trials(models.Model):
 	trial_id = models.AutoField(primary_key=True)
 	discovery_date = models.DateTimeField(blank=True, null=True)
+	last_updated = models.DateTimeField(auto_now=True, null=True)
 	title = models.TextField(blank=False,null=False, unique=True)
 	summary = models.TextField(blank=True, null=True)
 	link = models.URLField(blank=False, null=False, max_length=2000)
@@ -144,7 +145,6 @@ class Trials(models.Model):
 	sent = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	sent_to_admin = models.BooleanField(blank=True,null=True, default=False)
-	sent_real_time_notification = models.BooleanField(blank=True,null=True,default=False)
 	categories = models.ManyToManyField(Categories,blank=True)
 	identifiers = models.JSONField(blank=True,null=True)
 	history = HistoricalRecords()
