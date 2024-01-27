@@ -24,6 +24,7 @@ class ArticleAdmin(admin.ModelAdmin):
 	readonly_fields = ['ml_prediction_gnb','ml_prediction_lr','ml_prediction_lsvc','categories','entities','discovery_date']
 	search_fields = ['article_id', 'title','doi' ]
 	list_filter = ('relevant',)
+	raw_id_fields = ("authors",)  # Add other fields if needed
 
 
 class TrialAdmin(admin.ModelAdmin):
