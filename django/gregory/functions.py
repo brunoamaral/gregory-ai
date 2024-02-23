@@ -11,7 +11,6 @@ from .utils.text_utils import cleanHTML
 from .utils.text_utils import cleanText
 from joblib import load
 from .models import Articles
-from django_cron import CronJobBase, Schedule
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 def remove_utm(url):
