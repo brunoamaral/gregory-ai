@@ -3,7 +3,6 @@ from gregory.models import Articles, Trials, Sources, Authors
 from crossref.restful import Works, Etiquette
 from dateutil.parser import parse
 from dateutil.tz import gettz
-from django_cron import CronJobBase, Schedule
 from django.core.exceptions import MultipleObjectsReturned
 from django.db import IntegrityError
 from django.db.models import Q
@@ -16,6 +15,7 @@ import os
 import pytz
 import re
 import requests
+from simple_history.utils import update_change_reason
 class Command(BaseCommand):
     help = 'Fetches and updates articles and trials from RSS feeds.'
 
@@ -109,56 +109,129 @@ class Command(BaseCommand):
     # GET TRIALS
     ###
     def update_trials_from_feeds(self):
-        sources = Sources.objects.filter(method='rss', source_for='trials')
-        for source in sources:
-            link = source.link
-            d = None
-            if not source.ignore_ssl:
-                d = feedparser.parse(link)
+      sources = Sources.objects.filter(method='rss',source_for='trials')
+
+      for i in sources:
+        source_name = i.name
+        source_for = i.source_for
+        link = i.link
+        d = None
+        if i.ignore_ssl == False:
+          d = feedparser.parse(link)
+        else:
+          response = requests.get(link, verify=False)
+          d = feedparser.parse(response.content)
+        for entry in d['entries']:
+          summary = ''
+          if hasattr(entry,'summary_detail'):
+            summary = entry['summary_detail']['value']
+          if hasattr(entry,'summary'):
+            summary = entry['summary']
+          published = entry.get('published')
+          if published:
+            published = parse(entry['published'], tzinfos=self.tzinfos).astimezone(pytz.utc)
+          link = greg.remove_utm(entry['link'])
+          eudract = None
+          euct = None
+          nct = None
+          if "clinicaltrialsregister.eu" in link:
+            match = re.search(r'eudract_number\%3A(\d{4}-\d{6}-\d{2})', link)
+            if match:
+              eudract = match.group(1)
+              euct = match.group(1)
+          if 'clinicaltrials.gov' in link:
+            nct = entry['guid']
+          identifiers = {
+            "eudract": "EUDRACT" + eudract if eudract is not None else None,
+            "euct": "EUCT" + euct if euct is not None else None,
+            "nct": nct
+          }
+          clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
+          clinical_trial.clean_summary()
+
+          # Get the identifiers
+          nct = clinical_trial.identifiers.get('nct')
+          euct = clinical_trial.identifiers.get('euct')
+          eudract = clinical_trial.identifiers.get('eudract')
+          # Find if there's already a trial with the same identifiers
+          existing_trial = Trials.objects.filter(
+              Q(identifiers__nct=nct) |
+              Q(identifiers__euct=euct) |
+              Q(identifiers__eudract=eudract)
+          ).first()
+          if existing_trial:
+            # Capture the initial state of the trial
+            initial_state = {
+                'title': existing_trial.title,
+                'summary': existing_trial.summary,
+                'link': existing_trial.link,
+                'published_date': existing_trial.published_date,
+                'identifiers': existing_trial.identifiers,
+            }
+            # Update the existing trial fields
+            existing_trial.title = clinical_trial.title
+            existing_trial.summary = clinical_trial.summary
+            existing_trial.link = clinical_trial.link
+            existing_trial.published_date = clinical_trial.published_date
+            existing_trial.identifiers = clinical_trial.identifiers
+            existing_trial.source = i
+            existing_trial.save()
+            if any(initial_state[field] != getattr(existing_trial, field) for field in initial_state):
+              existing_trial.save()
+              change_reason = "Updated from RSS feed."
+              update_change_reason(existing_trial, change_reason)
+              print(f"Trial {existing_trial.pk} updated.")
             else:
-                response = requests.get(link, verify=False)  # Be cautious with verify=False
-                d = feedparser.parse(response.content)
+                print(f"No changes detected for Trial {existing_trial.pk}.")
+        else:
+          # Create a new trial
+          try:
+            q_objects = Q()
+            if clinical_trial.identifiers.get('nct'):
+              q_objects |= Q(identifiers__nct=clinical_trial.identifiers.get('nct'))
+            if clinical_trial.identifiers.get('eudract'):
+              q_objects |= Q(identifiers__eudract=clinical_trial.identifiers.get('eudract'))
+            if clinical_trial.identifiers.get('euct'):
+              q_objects |= Q(identifiers__euct=clinical_trial.identifiers.get('euct'))
+            trial = Trials.objects.get(q_objects)
+          except Trials.DoesNotExist:
+            # If the trial doesn't exist, create a new one
+            try:
+              print(f'trying to create {clinical_trial.identifiers}...')
+              trial = Trials.objects.create(
+                discovery_date=timezone.now(),
+                title=clinical_trial.title,
+                summary=clinical_trial.summary,
+                link=clinical_trial.link,
+                published_date=clinical_trial.published_date,
+                identifiers=clinical_trial.identifiers,
+                source=i
+              )
+              print(f'created {trial.trial_id}?')
+            except IntegrityError as e:
+              print(f"An integrity error occurred: {str(e)}")				
+          except MultipleObjectsReturned as e:
+            print(f"Multiple entries were found for the same trial identifiers: {str(e)}")
+            duplicate_trials = Trials.objects.filter(
+              Q(identifiers__nct=clinical_trial.identifiers.get('nct')) |
+              Q(identifiers__eudract=clinical_trial.identifiers.get('eudract')) |
+              Q(identifiers__euct=clinical_trial.identifiers.get('euct'))
+            )
+            duplicate_ids = [trial.trial_id for trial in duplicate_trials]
+            print("Warning: multiple Trials entries found for identifier. The IDs of the duplicates are: ", duplicate_ids, ". Please resolve manually.")
 
-            for entry in d['entries']:
-                summary = entry.get('summary_detail', {}).get('value', '') or entry.get('summary', '')
-                published = entry.get('published')
-                if published:
-                    published = parse(entry['published'], tzinfos=self.tzinfos).astimezone(pytz.utc)
-                link = greg.remove_utm(entry['link'])
-                eudract, euct, nct = None, None, None
-
-                if "clinicaltrialsregister.eu" in link:
-                    match = re.search(r'eudract_number\%3A(\d{4}-\d{6}-\d{2})', link)
-                    if match:
-                        eudract = match.group(1)
-                        euct = match.group(1)
-                if 'clinicaltrials.gov' in link:
-                    nct = entry.get('guid')
-                
-                identifiers = {
-                    "eudract": eudract,
-                    "euct": euct,
-                    "nct": nct
-                }
-
-                try:
-                    # Check if a trial with the same title already exists
-                    existing_trial = Trials.objects.get(title=entry['title'])
-                    print(f"Trial with title '{existing_trial.title}' already exists. Skipping.")
-                except Trials.DoesNotExist:
-                    # No existing trial with the same title, proceed to create
-                    try:
-                        trial = Trials.objects.create(
-                            discovery_date=timezone.now(),
-                            title=entry['title'],
-                            summary=summary,
-                            link=link,
-                            published_date=published,
-                            identifiers=identifiers,
-                            source=source
-                        )
-                        print(f"Created trial with ID {trial.trial_id}.")
-                    except IntegrityError as e:
-                        print(f"An integrity error occurred while creating trial '{entry['title']}': {e}")
-                except Trials.MultipleObjectsReturned:
-                    print(f"Multiple trials found with title '{entry['title']}'. Please review.")
+          else:
+          # If the trial exists, update it
+            try:
+              trial = Trials.objects.get(pk=trial.pk)
+              trial.title = clinical_trial.title
+              trial.summary = clinical_trial.summary
+              trial.link = clinical_trial.link
+              trial.published_date = clinical_trial.published_date
+              trial.identifiers = clinical_trial.identifiers
+              trial.source = i
+              trial.save()						
+            except Exception as e:
+              print(f"An error occurred: {str(e)}")
+              pass
+          pass
