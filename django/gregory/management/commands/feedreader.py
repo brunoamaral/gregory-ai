@@ -93,7 +93,7 @@ class Command(BaseCommand):
                     for author_info in crossref_paper.authors:
                       given_name = author_info.get('given')
                       family_name = author_info.get('family')
-                      orcid = author_info.get('ORCID', '')
+                      orcid = author_info.get('ORCID', None)
                       try:
                         if orcid:  # If ORCID is present, use it as the primary key for author lookup/creation
                           author_obj, author_created = Authors.objects.get_or_create(
