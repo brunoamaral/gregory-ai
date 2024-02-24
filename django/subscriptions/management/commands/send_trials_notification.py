@@ -7,6 +7,7 @@ from sitesettings.models import CustomSetting
 from subscriptions.models import Subscribers
 import requests
 from django.contrib.sites.models import Site
+from django.conf import settings
 
 class Command(BaseCommand):
     help = 'Sends real-time notifications for new clinical trials to subscribers.'
@@ -51,9 +52,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('No new trials or subscribers found for notifications.'))
 
     def send_simple_message(self, to, bcc, subject, html, text, site, customsettings):
-        sender = f'Gregory MS <gregory@mg.{site.domain}>'
-        email_mailgun_api_url = customsettings.email_mailgun_api_url
-        email_mailgun_api = customsettings.email_mailgun_api
+        sender='Gregory MS <gregory@mg.' + Site.objects.get_current().domain + '>'
+        email_mailgun_api_url = settings.EMAIL_MAILGUN_API_URL
+        email_mailgun_api = settings.EMAIL_MAILGUN_API
 
         response = requests.post(
             email_mailgun_api_url,
