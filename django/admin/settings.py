@@ -47,7 +47,6 @@ INSTALLED_APPS = [
 	'django.contrib.sites',
 	'simple_history',
 	'sitesettings',
-	'django_cron',
 	'db_maintenance',
 	'indexers',
 	'api',
@@ -166,20 +165,6 @@ EMAIL_MAILGUN_API=os.environ.get('EMAIL_MAILGUN_API')
 EMAIL_DOMAIN=os.environ.get('EMAIL_DOMAIN')
 EMAIL_MAILGUN_API_URL=os.environ.get('EMAIL_MAILGUN_API_URL')
 
-CRON_CLASSES = [
-    'subscriptions.mercury.AdminSummary',
-		'subscriptions.mercury.WeeklySummary',
-		'subscriptions.mercury.TrialsNotification',
-		'db_maintenance.authors.GetAuthors',
-		'db_maintenance.rebuild_categories.RebuildCatsArticles',
-		'db_maintenance.rebuild_categories.RebuildCatsTrials',
-		'gregory.noun_phrases.NounPhrases',
-		'gregory.feedreader.FeedReaderTask',
-		# 'gregory.1_data_processor.DataProcessor',
-		# 'gregory.2_train_models.TrainModels',
-		'gregory.3_predict.RunPredictor',
-		'db_maintenance.get_doi_from_crossref.GetDoiCrossRef',
-]
 WEBSITE_DOMAIN = 'gregory-ms.com'
 
 
