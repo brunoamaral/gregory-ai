@@ -1,10 +1,12 @@
+from django.conf import settings
+from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 from django.template.loader import get_template
 from django.utils.html import strip_tags
 from gregory.models import Articles, Trials
-from sitesettings.models import CustomSetting
+from sitesettings.models import *
 from subscriptions.models import Subscribers
-from django.contrib.sites.models import Site
 import datetime
 import requests
 
@@ -19,17 +21,17 @@ class Command(BaseCommand):
         articles = Articles.objects.filter(~Q(sent_to_admin=True))
         trials = Trials.objects.filter(~Q(sent_to_admin=True))
         results = []
-        for admin in admins: 
-            admin_email = str(admin.email)
+        for admin in admins:
+            print(f"sending to {admin.email}")
             summary = {
                 "articles": articles,
                 "trials": trials,
-                "admin": admin_email,
+                "admin": admin.email,
                 "title": customsettings.title,
                 "email_footer": customsettings.email_footer,
                 "site": site,
             }
-            to = admin_email
+            to = admin.email
             html = get_template('emails/admin_summary.html').render(summary)
             text = strip_tags(html)
             result = self.send_simple_message(to=to, subject='Admin Summary', html=html, text=text)
@@ -42,9 +44,10 @@ class Command(BaseCommand):
                 trial.sent_to_admin = True
             Trials.objects.bulk_update(trials, ['sent_to_admin'])
 
-    def send_simple_message(self, sender='Gregory MS <gregory@mg.' + Site.objects.get_current().domain + '>', to=None, bcc=None, subject='no subject', text=None, html=None):
+    def send_simple_message(self, sender='Gregory MS <gregory@mg.' + Site.objects.get_current().domain + '>', to=None,bcc=None,subject='no subject', text=None,html=None, email_mailgun_api_url=settings.EMAIL_MAILGUN_API_URL, email_mailgun_api=settings.EMAIL_MAILGUN_API):
         email_mailgun_api_url = settings.EMAIL_MAILGUN_API_URL
         email_mailgun_api = settings.EMAIL_MAILGUN_API
+        print(f"data=sender: {sender}, to: {to}, bcc: {bcc}, subject: {subject}, text: {text}, html: {html}")
         status = requests.post(
             email_mailgun_api_url,
             auth=("api", email_mailgun_api),
