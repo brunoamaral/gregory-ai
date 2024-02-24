@@ -16,13 +16,14 @@ import pytz
 import re
 import requests
 from simple_history.utils import update_change_reason
+
 class Command(BaseCommand):
     help = 'Fetches and updates articles and trials from RSS feeds.'
 
     def handle(self, *args, **options):
         self.setup()
         self.update_articles_from_feeds()
-        self.update_trials_from_feeds()
+        # self.update_trials_from_feeds()
 
     def setup(self):
         self.SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
@@ -38,76 +39,84 @@ class Command(BaseCommand):
           response = requests.get(link, verify=False)
           return feedparser.parse(response.content)
 
+    def handle_database_error(self, action, error):
+        """Generic error handler for database operations."""
+        # Log the error or print it. Replace print with logging in production code.
+        print(f"An error occurred during {action}: {str(error)}")
+
     def update_articles_from_feeds(self):
       sources = Sources.objects.filter(method='rss', source_for='science paper')
       for source in sources:
           feed = self.fetch_feed(source.link, source.ignore_ssl)
           for entry in feed['entries']:
-            title = entry['title']
-            summary = ''
-            if hasattr(entry,'summary_detail'):
-              summary = entry['summary_detail']['value']
-            if hasattr(entry,'summary'):
-              summary = entry['summary']
-            published = entry.get('published')
- 
-            if 'pubmed' in source.link and hasattr(entry,'content'):
-              summary = entry['content'][0]['value']
-            if published:
-              published = parse(entry['published'], tzinfos=self.tzinfos).astimezone(pytz.utc)
-            else:
-              published = parse(entry['prism_coverdate'], tzinfos=self.tzinfos).astimezone(pytz.utc)
-            link = greg.remove_utm(entry['link'])
-            ###
-            # This is a bad solution but it will have to do for now
-            ###
-            doi = None
-            access = None
-            journal = None
-            publisher = None
- 
-            if 'pubmed' in source.link:
-              if entry['dc_identifier'].startswith('doi:'):
-                doi = entry['dc_identifier'].replace('doi:','')
- 
-            if 'faseb' in source.link:
-              doi = entry['prism_doi']
-            if doi != None:
-              paper = SciencePaper(doi=doi, abstract=summary, published_date=published, title=title, link=link)
-              paper.refresh()
-              summary = paper.abstract
-              link = paper.link
-              access = paper.access
-              journal = paper.journal
-              publisher = paper.journal
-            try:
-              science_paper = Articles.objects.create(discovery_date=timezone.now(), title = title, summary = SciencePaper.clean_abstract(abstract=summary), link = link, published_date = published, access = access, publisher = publisher, container_title = journal, source = i, doi = doi, kind = source_for)
-              if paper != None:
-                # get author information
-                for author in paper.authors:
-                  if 'given' in author and 'family' in author:
-                    given_name = None
-                    if 'given' in author:
-                      given_name = author['given']
-                    family_name = None
-                    if 'family' in author:
-                      family_name = author['family']
-                    orcid = None
-                    if 'ORCID' in author:
-                      orcid = author['ORCID']
-                    # get or create author
-                    author_obj = Authors.objects.get_or_create(given_name=given_name,family_name=family_name,ORCID=orcid)
-                    author_obj = author_obj[0]
-                    ## add to database
-                    if author_obj.author_id is not None:
-                      # make relationship
-                      science_paper.authors.add(author_obj)
-                science_paper.save()
-                # the articles variable needs to be a queryset list in order to be turned into a pandas dataframe
+              title = entry['title']
+              summary = entry.get('summary', '')
+              if hasattr(entry, 'summary_detail'):
+                  summary = entry['summary_detail']['value']
+              published = entry.get('published')
+              if 'pubmed' in source.link and hasattr(entry, 'content'):
+                  summary = entry['content'][0]['value']
+              published_date = parse(entry.get('published') or entry.get('prism_coverdate'), tzinfos=self.tzinfos).astimezone(pytz.utc)
+              link = greg.remove_utm(entry['link'])
+              doi = None
+              if 'pubmed' in source.link and entry.get('dc_identifier', '').startswith('doi:'):
+                  doi = entry['dc_identifier'].replace('doi:', '')
+              elif 'faseb' in source.link:
+                  doi = entry.get('prism_doi', '')
+
+              if doi:
+                  crossref_paper = SciencePaper(doi=doi)
+                  crossref_paper.refresh()
+                  # Check if the article exists in the database
+                  science_paper, created = Articles.objects.get_or_create(doi=doi, defaults={
+                      'title': crossref_paper.title,
+                      'summary': crossref_paper.abstract,
+                      'link': link,
+                      'published_date': published_date,
+                      'source': source,
+                      'container_title': crossref_paper.journal,
+                      'publisher': crossref_paper.publisher,
+                      'access': crossref_paper.access
+                      # other fields like access, journal, publisher can be added here as defaults
+                  })
+
+                  if not created:                      
+                      if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),
+                              science_paper.link != link, science_paper.published_date != published_date]):
+                          science_paper.title = title
+                          science_paper.summary = SciencePaper.clean_abstract(abstract=summary)
+                          science_paper.link = link
+                          science_paper.published_date = published_date
+                          science_paper.save()
+              else:
+                print('no DOI, trying to create article')
+                science_paper, created = Articles.objects.get_or_create(title=title, defaults={
+                    'title': title,
+                    'summary': abstract,
+                    'link': link,
+                    'published_date': published_date,
+                    'source': source
+                    # other fields like access, journal, publisher can be added here as defaults
+                })
+                if not created:                      
+                  if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),
+                        science_paper.link != link, science_paper.published_date != published_date]):
+                    science_paper.title = title
+                    science_paper.summary = SciencePaper.clean_abstract(abstract=summary)
+                    science_paper.link = link
+                    science_paper.published_date = published_date
+                    science_paper.save()
+
+                  # last step, run ML relevance predictor
+              should_run_prediction = (
+                science_paper.ml_prediction_gnb is None or
+                science_paper.ml_prediction_lr is None
+                # science_paper.ml_prediction_lsvc is None
+              )
+              if should_run_prediction:
+                print(science_paper)
                 greg.predict(articles=Articles.objects.filter(pk=science_paper.article_id))
-            except Exception as e:
-              # print(f"An error occurred: {str(e)}")
-              pass
+
 
     ###
     # GET TRIALS
@@ -172,7 +181,6 @@ class Command(BaseCommand):
             existing_trial.source = source
             existing_trial.save()
             if any(initial_state[field] != getattr(existing_trial, field) for field in initial_state):
-              existing_trial.save()
               change_reason = "Updated from RSS feed."
               update_change_reason(existing_trial, change_reason)
               print(f"Trial {existing_trial.pk} updated.")
@@ -200,7 +208,7 @@ class Command(BaseCommand):
                 link=clinical_trial.link,
                 published_date=clinical_trial.published_date,
                 identifiers=clinical_trial.identifiers,
-                source=i
+                source=source
               )
               print(f'created {trial.trial_id}?')
             except IntegrityError as e:
