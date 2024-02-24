@@ -192,11 +192,23 @@ class Command(BaseCommand):
           euct = clinical_trial.identifiers.get('euct')
           eudract = clinical_trial.identifiers.get('eudract')
           # Find if there's already a trial with the same identifiers
-          existing_trial = Trials.objects.filter(
-              Q(identifiers__nct=nct) |
-              Q(identifiers__euct=euct) |
-              Q(identifiers__eudract=eudract)
-          ).first()
+          print(f"trying to find {clinical_trial} in db...")
+          query = Q()
+          for key, value in identifiers.items():
+              if value:
+                  query |= Q(**{f'identifiers__{key}': value})
+
+          # Use the dynamically constructed query to filter existing trials
+          existing_trial = Trials.objects.filter(query).first()
+          if not existing_trial:
+              print(f"Didn't find trial by identifier, trying title match...")
+              existing_trial = Trials.objects.filter(title=entry['title']).first()
+              if existing_trial:
+                  print(f"Found existing trial by title: {existing_trial.pk}")
+              else:
+                  print("No existing trial found by title.")
+          else:
+              print(f"Found existing trial by identifier: {existing_trial.pk}")          
           if existing_trial:
             # Capture the initial state of the trial
             initial_state = {
