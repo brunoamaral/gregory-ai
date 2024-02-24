@@ -20,14 +20,17 @@ class Command(BaseCommand):
     help = 'Fetches and updates articles and trials from RSS feeds.'
 
     def handle(self, *args, **options):
-        self.SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
-        self.CLIENT_WEBSITE = 'https://' + self.SITE.site.domain + '/'
-        self.my_etiquette = Etiquette(self.SITE.title, 'v8', self.CLIENT_WEBSITE, self.SITE.admin_email)
-        self.works = Works(etiquette=self.my_etiquette)
-        self.tzinfos = {"EDT": gettz("America/New_York"), "EST": gettz("America/New_York")}
-        
+        self.setup()
         self.update_articles_from_feeds()
         self.update_trials_from_feeds()
+
+    def setup(self):
+        self.SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
+        self.CLIENT_WEBSITE = f'https://{self.SITE.site.domain}/'
+        my_etiquette = Etiquette(self.SITE.title, 'v8', self.CLIENT_WEBSITE, self.SITE.admin_email)
+        self.works = Works(etiquette=my_etiquette)
+        self.tzinfos = {"EDT": gettz("America/New_York"), "EST": gettz("America/New_York")}
+
 
     def update_articles_from_feeds(self):
         sources = Sources.objects.filter(method='rss', source_for='science paper')
