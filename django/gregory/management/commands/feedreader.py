@@ -180,9 +180,9 @@ class Command(BaseCommand):
           if 'clinicaltrials.gov' in link:
             nct = entry['guid']
           identifiers = {
-            "eudract": "EUDRACT" + eudract if eudract is not None else None,
-            "euct": "EUCT" + euct if euct is not None else None,
-            "nct": nct
+            "eudract": eudract if eudract is not None else None,
+            "euct": euct if euct is not None else None,
+            "nct": nct if nct is not None else None
           }
           clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
           clinical_trial.clean_summary()
