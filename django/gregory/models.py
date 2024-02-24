@@ -11,6 +11,7 @@ class Authors(models.Model):
 	ORCID = models.CharField(blank=True, null=True, max_length=150, unique=True)
 	country = CountryField(blank=True, null=True)  # New field
 	orcid_check = models.DateTimeField(blank=True, null=True)
+	history = HistoricalRecords()
 
 	def __str__(self):
 		full_name = (self.given_name,self.family_name)
@@ -122,7 +123,7 @@ class Articles(models.Model):
 	container_title = models.CharField(max_length=150, blank=True, null=True, default=None)
 	crossref_check = models.DateTimeField(blank=True, null=True)
 	takeaways = models.TextField(blank=True, null=True)
-	
+	history = HistoricalRecords()
 	def __str__(self):
 		return str(self.article_id)
 

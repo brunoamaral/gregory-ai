@@ -2,7 +2,7 @@ version: "3.7"
 
 services:
   db:
-    image: postgres
+    image: postgres:15
     restart: always
     container_name: db
     environment:
@@ -44,7 +44,6 @@ services:
     # command: gunicorn --workers 4 --threads 2 --log-level debug -b 0.0.0.0:8000 admin.wsgi
     volumes:
       - ./django:/code
-      - ./python-ml:/python-ml
     ports:
       - "8000:8000"
     environment:
