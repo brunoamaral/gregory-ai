@@ -50,7 +50,7 @@ class Command(BaseCommand):
             if hasattr(entry,'summary'):
               summary = entry['summary']
             published = entry.get('published')
-            if source_name == 'PubMed' and hasattr(entry,'content'):
+            if 'pubmed' in source.link and hasattr(entry,'content'):
               summary = entry['content'][0]['value']
             if published:
               published = parse(entry['published'], tzinfos=self.tzinfos).astimezone(pytz.utc)
@@ -64,10 +64,12 @@ class Command(BaseCommand):
             access = None
             journal = None
             publisher = None
-            if source_name == 'PubMed':
+ 
+            if 'pubmed' in source.link:
               if entry['dc_identifier'].startswith('doi:'):
                 doi = entry['dc_identifier'].replace('doi:','')
-            if source_name == 'FASEB':
+ 
+            if 'faseb' in source.link:
               doi = entry['prism_doi']
             if doi != None:
               paper = SciencePaper(doi=doi, abstract=summary, published_date=published, title=title, link=link)
