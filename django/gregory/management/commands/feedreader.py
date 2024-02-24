@@ -50,6 +50,7 @@ class Command(BaseCommand):
             if hasattr(entry,'summary'):
               summary = entry['summary']
             published = entry.get('published')
+ 
             if 'pubmed' in source.link and hasattr(entry,'content'):
               summary = entry['content'][0]['value']
             if published:
@@ -168,7 +169,7 @@ class Command(BaseCommand):
             existing_trial.link = clinical_trial.link
             existing_trial.published_date = clinical_trial.published_date
             existing_trial.identifiers = clinical_trial.identifiers
-            existing_trial.source = i
+            existing_trial.source = source
             existing_trial.save()
             if any(initial_state[field] != getattr(existing_trial, field) for field in initial_state):
               existing_trial.save()
@@ -223,7 +224,7 @@ class Command(BaseCommand):
               trial.link = clinical_trial.link
               trial.published_date = clinical_trial.published_date
               trial.identifiers = clinical_trial.identifiers
-              trial.source = i
+              trial.source = source
               trial.save()						
             except Exception as e:
               print(f"An error occurred: {str(e)}")
