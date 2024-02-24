@@ -88,6 +88,40 @@ class Command(BaseCommand):
                           science_paper.link = link
                           science_paper.published_date = published_date
                           science_paper.save()
+                  # Process author information
+                  if crossref_paper is not None:  # Assuming `paper` contains the article's metadata including author information
+                    for author_info in crossref_paper.authors:
+                      given_name = author_info.get('given')
+                      family_name = author_info.get('family')
+                      orcid = author_info.get('ORCID', '')
+                      try:
+                        if orcid:  # If ORCID is present, use it as the primary key for author lookup/creation
+                          author_obj, author_created = Authors.objects.get_or_create(
+                              ORCID=orcid,
+                              defaults={
+                                  'given_name': given_name,
+                                  'family_name': family_name
+                                  }
+                              )
+                        else:  # If no ORCID is provided, fallback to using given_name and family_name for lookup/creation
+                          author_obj, author_created = Authors.objects.get_or_create(
+                              given_name=given_name,
+                              family_name=family_name,
+                              defaults={'ORCID': orcid}  # orcid will be an empty string if not provided, which is fine
+                          )
+                      except MultipleObjectsReturned:
+                        # Handle the case where multiple authors are returned
+                        authors = Authors.objects.filter(given_name=given_name, family_name=family_name)
+                        print(f"Multiple authors found for {given_name} {family_name}:")
+                        for author in authors:
+                            print(f"Author ID: {author.author_id}, ORCID: {author.ORCID}")
+                        # Use the first author with an ORCID, if available
+                        author_obj = next((author for author in authors if author.ORCID), authors.first())
+
+
+                        # Link the author to the article if not already linked
+                      if not science_paper.authors.filter(pk=author_obj.pk).exists():
+                        science_paper.authors.add(author_obj)
               else:
                 print('no DOI, trying to create article')
                 science_paper, created = Articles.objects.get_or_create(title=title, defaults={
