@@ -23,7 +23,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.setup()
         self.update_articles_from_feeds()
-        # self.update_trials_from_feeds()
+        self.update_trials_from_feeds()
 
     def setup(self):
         self.SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
@@ -186,11 +186,6 @@ class Command(BaseCommand):
           }
           clinical_trial = ClinicalTrial(title = entry['title'], summary = summary, link = link, published_date = published, identifiers = identifiers,)
           clinical_trial.clean_summary()
-
-          # Get the identifiers
-          nct = clinical_trial.identifiers.get('nct')
-          euct = clinical_trial.identifiers.get('euct')
-          eudract = clinical_trial.identifiers.get('eudract')
           # Find if there's already a trial with the same identifiers
           print(f"trying to find {clinical_trial} in db...")
           query = Q()
@@ -218,14 +213,26 @@ class Command(BaseCommand):
                 'published_date': existing_trial.published_date,
                 'identifiers': existing_trial.identifiers,
             }
-            # Update the existing trial fields
-            existing_trial.title = clinical_trial.title
-            existing_trial.summary = clinical_trial.summary
-            existing_trial.link = clinical_trial.link
-            existing_trial.published_date = clinical_trial.published_date
-            existing_trial.identifiers = clinical_trial.identifiers
-            existing_trial.source = source
-            existing_trial.save()
+            try:
+                # Attempt to update the existing trial fields including the title
+                existing_trial.title = clinical_trial.title
+                existing_trial.summary = clinical_trial.summary
+                existing_trial.link = clinical_trial.link
+                existing_trial.published_date = clinical_trial.published_date
+                existing_trial.identifiers = clinical_trial.identifiers
+                existing_trial.source = source
+                existing_trial.save()
+            except IntegrityError:
+                # If an IntegrityError occurs, update all except the title
+                existing_trial.summary = clinical_trial.summary
+                existing_trial.link = clinical_trial.link
+                existing_trial.published_date = clinical_trial.published_date
+                existing_trial.identifiers = clinical_trial.identifiers
+                existing_trial.source = source
+                
+                # Explicitly save only the fields that were updated to avoid the IntegrityError
+                existing_trial.save(update_fields=['summary', 'link', 'published_date', 'identifiers', 'source'])
+                print("Updated trial information, excluding the title due to IntegrityError.")
             if any(initial_state[field] != getattr(existing_trial, field) for field in initial_state):
               change_reason = "Updated from RSS feed."
               update_change_reason(existing_trial, change_reason)
