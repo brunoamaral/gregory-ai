@@ -31,20 +31,18 @@ class Command(BaseCommand):
         self.works = Works(etiquette=my_etiquette)
         self.tzinfos = {"EDT": gettz("America/New_York"), "EST": gettz("America/New_York")}
 
+    def fetch_feed(self, link, ignore_ssl):
+      if not ignore_ssl:
+          return feedparser.parse(link)
+      else:
+          response = requests.get(link, verify=False)
+          return feedparser.parse(response.content)
 
     def update_articles_from_feeds(self):
-        sources = Sources.objects.filter(method='rss', source_for='science paper')
-        for i in sources:
-          source_name = i.name
-          source_for = i.source_for
-          link = i.link
-          d = None
-          if i.ignore_ssl == False:
-            d = feedparser.parse(link)
-          else:
-            response = requests.get(link, verify=False)
-            d = feedparser.parse(response.content)
-          for entry in d['entries']:
+      sources = Sources.objects.filter(method='rss', source_for='science paper')
+      for source in sources:
+          feed = self.fetch_feed(source.link, source.ignore_ssl)
+          for entry in feed['entries']:
             title = entry['title']
             summary = ''
             if hasattr(entry,'summary_detail'):
@@ -112,19 +110,10 @@ class Command(BaseCommand):
     # GET TRIALS
     ###
     def update_trials_from_feeds(self):
-      sources = Sources.objects.filter(method='rss',source_for='trials')
-
-      for i in sources:
-        source_name = i.name
-        source_for = i.source_for
-        link = i.link
-        d = None
-        if i.ignore_ssl == False:
-          d = feedparser.parse(link)
-        else:
-          response = requests.get(link, verify=False)
-          d = feedparser.parse(response.content)
-        for entry in d['entries']:
+      sources = Sources.objects.filter(method='rss', source_for='trials')
+      for source in sources:
+        feed = self.fetch_feed(source.link, source.ignore_ssl)
+        for entry in feed['entries']:
           summary = ''
           if hasattr(entry,'summary_detail'):
             summary = entry['summary_detail']['value']
