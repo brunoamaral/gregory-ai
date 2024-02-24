@@ -47,6 +47,7 @@ class Command(BaseCommand):
                             author_obj = Authors.objects.get(given_name=given_name, family_name=family_name)
                         except Authors.DoesNotExist:
                             # Create a new author if none found
+                            print(f"Creating author: {given_name} {family_name} with ORCID: {orcid}")
                             author_obj = Authors.objects.create(given_name=given_name, family_name=family_name, ORCID=orcid)
                         except Authors.MultipleObjectsReturned:
                             self.stdout.write(f"Multiple authors found for {given_name} {family_name}, unable to uniquely identify. Skipping.")
