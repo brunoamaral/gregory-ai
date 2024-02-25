@@ -67,10 +67,12 @@ class Command(BaseCommand):
               if doi:
                   crossref_paper = SciencePaper(doi=doi)
                   crossref_paper.refresh()
+                  title = crossref_paper.title if crossref_paper.title else entry['title']
+                  summary = crossref_paper.abstract if crossref_paper.abstract else entry.get('summary')
                   # Check if the article exists in the database
                   science_paper, created = Articles.objects.get_or_create(doi=doi, defaults={
-                      'title': crossref_paper.title,
-                      'summary': crossref_paper.abstract,
+                      'title': title,
+                      'summary': summary,
                       'link': link,
                       'published_date': published_date,
                       'source': source,
