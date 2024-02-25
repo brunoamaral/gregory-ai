@@ -152,8 +152,7 @@ class Command(BaseCommand):
                 # science_paper.ml_prediction_lsvc is None
               )
               if should_run_prediction:
-                print(science_paper, f"skipped for now")
-                # greg.predict(articles=Articles.objects.filter(pk=science_paper.article_id))
+                greg.predict(articles=Articles.objects.filter(pk=science_paper.article_id))
 
 
     ###
