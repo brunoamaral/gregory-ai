@@ -47,7 +47,7 @@ class Command(BaseCommand):
     def send_simple_message(self, sender='Gregory MS <gregory@mg.' + Site.objects.get_current().domain + '>', to=None,bcc=None,subject='no subject', text=None,html=None, email_mailgun_api_url=settings.EMAIL_MAILGUN_API_URL, email_mailgun_api=settings.EMAIL_MAILGUN_API):
         email_mailgun_api_url = settings.EMAIL_MAILGUN_API_URL
         email_mailgun_api = settings.EMAIL_MAILGUN_API
-        print(f"data=sender: {sender}, to: {to}, bcc: {bcc}, subject: {subject}, text: {text}, html: {html}")
+        print(f"data=sender: {sender}, to: {to}, bcc: {bcc}")
         status = requests.post(
             email_mailgun_api_url,
             auth=("api", email_mailgun_api),
