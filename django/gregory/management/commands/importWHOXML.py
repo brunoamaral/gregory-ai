@@ -30,7 +30,7 @@ class Command(BaseCommand):
 
 			try:
 					naive_date = parse(date_str).date()
-					aware_datetime = timezone.make_aware(datetime.datetime.combine(naive_date, datetime.time(0, 0)), timezone.utc)
+					aware_datetime = timezone.make_aware(datetime.datetime.combine(naive_date, datetime.time(0, 0)), datetime.timezone.utc)
 					return aware_datetime
 			except ValueError:
 					return None
