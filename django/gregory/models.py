@@ -145,7 +145,7 @@ class Trials(models.Model):
 	relevant = models.BooleanField(blank=True, null=True)
 	sent = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True) # Used to keep track of the weekly emails
-	sent_real_time_notification = models.BooleanField(blank=True, null=True) # Used to keep track of the emails sent every 12h
+	sent_real_time_notification = models.BooleanField(default=False, blank=True) # Used to keep track of the emails sent every 12h
 	sent_to_admin = models.BooleanField(blank=True,null=True, default=False)
 	categories = models.ManyToManyField(Categories,blank=True)
 	identifiers = models.JSONField(blank=True,null=True)
