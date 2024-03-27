@@ -39,10 +39,13 @@ class SourceAdmin(admin.ModelAdmin):
 class SubjectAdmin(admin.ModelAdmin):
 	list_display = ['subject_name','description']
 
+class AuthorsAdmin(admin.ModelAdmin):
+	search_fields = ['family_name', 'given_name' ]
+
 admin.site.register(Articles,ArticleAdmin)
-admin.site.register(Trials, TrialAdmin)
-admin.site.register(Sources,SourceAdmin)
+admin.site.register(Authors,AuthorsAdmin)
 admin.site.register(Categories)
 admin.site.register(Entities)
-admin.site.register(Authors)
+admin.site.register(Sources,SourceAdmin)
 admin.site.register(Subject)
+admin.site.register(Trials, TrialAdmin)
