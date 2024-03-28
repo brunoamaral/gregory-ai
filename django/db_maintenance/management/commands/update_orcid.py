@@ -6,6 +6,7 @@ import orcid
 import os
 from dotenv import load_dotenv
 from simple_history.utils import update_change_reason
+import requests
 
 load_dotenv()
 
