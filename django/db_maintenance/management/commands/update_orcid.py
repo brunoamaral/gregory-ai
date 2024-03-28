@@ -17,14 +17,15 @@ class Command(BaseCommand):
 	def handle(self, *args, **kwargs):
 		orcid_api = orcid.PublicAPI(self.orcid_key, self.orcid_secret, sandbox=False)
 		token = orcid_api.get_search_token_from_orcid()
-		six_months_ago = timezone.now() - timezone.timedelta(days=180)
+		three_months_ago = timezone.now() - timezone.timedelta(days=90)
 		authors = Authors.objects.annotate(num_articles=Count('articles')).filter(
-						Q(orcid_check__lte=six_months_ago) | Q(orcid_check__isnull=True),
+						Q(orcid_check__lte=three_months_ago) | Q(orcid_check__isnull=True),
 						ORCID__isnull=False,
 						country__isnull=True
 		).order_by('-num_articles')[:1000]
 
 		for author in authors:
+			try:
 				initial_country = author.country  # Capture the initial state
 				author_orcid_number = author.ORCID.replace('http://orcid.org/', '')
 				record = orcid_api.read_record_public(author_orcid_number, 'record', token)
@@ -45,3 +46,8 @@ class Command(BaseCommand):
 				# Optionally, use update_change_reason to record why the change was made
 				if initial_country != author.country:  # Check if the country was actually updated
 						update_change_reason(author, change_reason)
+			except requests.exceptions.HTTPError as e:
+				print(f"Failed to update author with ORCID: {author_orcid_number}. Error: {e}")
+				# Optionally, you can log the error to a file or a logging system here
+				continue  # This will skip the rest of the current iteration and move to the next author
+
