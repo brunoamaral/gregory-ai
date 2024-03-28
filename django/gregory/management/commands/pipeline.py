@@ -5,7 +5,7 @@ class Command(BaseCommand):
 	help = 'Runs a list of specified management commands.'
 
 	def handle(self, *args, **options):
-		commands_to_run = ['feedreader', 'update_articles_info', 'get_takeaways', 'get_authors', 'update_orcid', '3_predict']
+		commands_to_run = ['feedreader', 'update_articles_info', 'get_authors', 'update_orcid', 'rebuild_categories', '3_predict', 'get_takeaways']
 
 		for cmd in commands_to_run:
 			self.stdout.write(self.style.SUCCESS(f'Running command: {cmd}'))
