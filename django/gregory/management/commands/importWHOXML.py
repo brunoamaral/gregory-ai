@@ -1,13 +1,11 @@
-from django.core.management.base import BaseCommand
-import xml.etree.ElementTree as ET
-from gregory.models import Trials, Sources
-from django.db import IntegrityError
-from django.utils.dateparse import parse_datetime, parse_date
 from dateutil.parser import parse
-import re
-import datetime
+from django.core.management.base import BaseCommand
+from django.db import IntegrityError
 from django.utils import timezone
-from dateutil import tz
+from gregory.models import Trials, Sources
+import datetime
+import re
+import xml.etree.ElementTree as ET
 
 class Command(BaseCommand):
 	help = 'Update or create trials from an XML file from https://trialsearch.who.int/Default.aspx'

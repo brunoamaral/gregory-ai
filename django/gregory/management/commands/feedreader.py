@@ -145,16 +145,6 @@ class Command(BaseCommand):
                     science_paper.published_date = published_date
                     science_paper.save()
 
-                  # last step, run ML relevance predictor
-              should_run_prediction = (
-                science_paper.ml_prediction_gnb is None or
-                science_paper.ml_prediction_lr is None
-                # science_paper.ml_prediction_lsvc is None
-              )
-              if should_run_prediction:
-                greg.predict(articles=Articles.objects.filter(pk=science_paper.article_id))
-
-
     ###
     # GET TRIALS
     ###
