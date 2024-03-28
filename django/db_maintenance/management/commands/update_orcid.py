@@ -25,6 +25,7 @@ class Command(BaseCommand):
 		).order_by('-num_articles')[:1000]
 
 		for author in authors:
+			try:
 				initial_country = author.country  # Capture the initial state
 				author_orcid_number = author.ORCID.replace('http://orcid.org/', '')
 				record = orcid_api.read_record_public(author_orcid_number, 'record', token)
@@ -45,3 +46,8 @@ class Command(BaseCommand):
 				# Optionally, use update_change_reason to record why the change was made
 				if initial_country != author.country:  # Check if the country was actually updated
 						update_change_reason(author, change_reason)
+			except requests.exceptions.HTTPError as e:
+				print(f"Failed to update author with ORCID: {author_orcid_number}. Error: {e}")
+				# Optionally, you can log the error to a file or a logging system here
+				continue  # This will skip the rest of the current iteration and move to the next author
+
