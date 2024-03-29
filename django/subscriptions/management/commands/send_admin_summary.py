@@ -44,9 +44,10 @@ class Command(BaseCommand):
                 trial.sent_to_admin = True
             Trials.objects.bulk_update(trials, ['sent_to_admin'])
 
-    def send_simple_message(self, sender='Gregory MS <gregory@mg.' + Site.objects.get_current().domain + '>', to=None,bcc=None,subject='no subject', text=None,html=None, email_mailgun_api_url=settings.EMAIL_MAILGUN_API_URL, email_mailgun_api=settings.EMAIL_MAILGUN_API):
-        email_mailgun_api_url = settings.EMAIL_MAILGUN_API_URL
-        email_mailgun_api = settings.EMAIL_MAILGUN_API
+    def send_simple_message(self, to, bcc=None, subject=None, text=None, html=None, 
+                            sender=f'Gregory MS <gregory@mg.{Site.objects.get_current().domain}>',
+                            email_mailgun_api_url=settings.EMAIL_MAILGUN_API_URL, 
+                            email_mailgun_api=settings.EMAIL_MAILGUN_API):
         print(f"data=sender: {sender}, to: {to}, bcc: {bcc}")
         status = requests.post(
             email_mailgun_api_url,
