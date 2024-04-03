@@ -2,7 +2,7 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
-
+from gregory.utils.model_utils import DenseTransformer
 
 def main():
     """Run administrative tasks."""
