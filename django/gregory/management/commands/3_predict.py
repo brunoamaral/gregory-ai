@@ -42,6 +42,7 @@ class Command(BaseCommand):
 
             # Prediction
             for model in models:
+                print(f"Predicting relevancy using {model}...")
                 for _, row in dataset.iterrows():
                     prediction = pipelines[model].predict([row['terms']])
                     article = Articles.objects.get(pk=row['article_id'])
@@ -49,4 +50,5 @@ class Command(BaseCommand):
                         setattr(article, f'ml_prediction_{model}', True)
                     else:
                         setattr(article, f'ml_prediction_{model}', False)
+                    print(article)
                     article.save()
