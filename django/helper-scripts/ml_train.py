@@ -116,9 +116,9 @@ def get_articles(url, api_key):
         print(f"An error occurred: {e}")
         return None
 
+source_data_csv = f"source.csv"
 if args.load_from_csv == True: # load data from csv file into a pandas dataframe 
     print("Loading data from source.csv")
-    source_data_csv = f"source.csv"
     articles_df = pd.read_csv(source_data_csv)
     
 else: 
