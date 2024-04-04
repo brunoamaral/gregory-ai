@@ -48,9 +48,7 @@ class Command(BaseCommand):
 
 	def update_article_details(self):
 		# Select articles that need updating but have a DOI
-		articles = Articles.objects.filter(
-			Q(doi__isnull=False, doi__gt='') &
-			(Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary=None) | Q(summary='not available')) &
+		articles = Articles.objects.filter((Q(doi__isnull=False, doi__gt='') & Q(crossref_check__isnull=True) | Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary=None) | Q(summary='not available')) &
 			Q(kind='science paper')
 		).distinct()
 
@@ -98,8 +96,6 @@ class Command(BaseCommand):
 			updated_info.append('abstract')
 
 		if update_fields:
-			article.crossref_check = timezone.now()
-			update_fields.append('crossref_check')
 			article.save(update_fields=update_fields)
 			
 			# Log the changes using Django Simple History
