@@ -108,11 +108,15 @@ class Command(BaseCommand):
                                     }
                                 )
                           else:  # If no ORCID is provided, fallback to using given_name and family_name for lookup/creation
-                            author_obj, author_created = Authors.objects.get_or_create(
+                            if not given_name or not family_name:
+                              self.stdout.write(f"Missing given name or family name, skipping this author. {crossref_paper.doi}")
+                              continue
+                            else:
+                              author_obj, author_created = Authors.objects.get_or_create(
                                 given_name=given_name,
                                 family_name=family_name,
                                 defaults={'ORCID': orcid}  # orcid will be an empty string if not provided, which is fine
-                            )
+                              )
                         except MultipleObjectsReturned:
                           # Handle the case where multiple authors are returned
                           authors = Authors.objects.filter(given_name=given_name, family_name=family_name)
