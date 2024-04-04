@@ -47,7 +47,6 @@ INSTALLED_APPS = [
 	'django.contrib.sites',
 	'simple_history',
 	'sitesettings',
-	'db_maintenance',
 	'indexers',
 	'api',
 ]
