@@ -35,7 +35,7 @@ class SciencePaper:
 
 
 	def refresh(self):
-		from db_maintenance.unpaywall import unpaywall_utils
+		from gregory.unpaywall import unpaywall_utils
 		from crossref.restful import Works, Etiquette
 		import os
 		import pytz
