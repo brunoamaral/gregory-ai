@@ -62,10 +62,14 @@ class SciencePaper:
 			except:
 				pass
 		if self.doi != None and self.access == None:
-			if unpaywall_utils.checkIfDOIIsOpenAccess(self.doi, site.admin_email):
-				self.access = 'open'
+			if site.admin_email == None:
+				print("No site admin email found")
 			else:
-				self.access = 'restricted'
+				if unpaywall_utils.checkIfDOIIsOpenAccess(self.doi, site.admin_email):
+					self.access = 'open'
+				else:
+					self.access = 'restricted'
+			
 		if self.publisher == None:
 			if work != None and 'publisher' in work:
 				if isinstance(work['publisher'],list):
