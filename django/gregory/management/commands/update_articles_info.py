@@ -48,8 +48,10 @@ class Command(BaseCommand):
 
 	def update_article_details(self):
 		# Select articles that need updating but have a DOI
-		articles = Articles.objects.filter((Q(doi__isnull=False, doi__gt='') & Q(crossref_check__isnull=True) | Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary=None) | Q(summary='not available')) &
-			Q(kind='science paper')
+		articles = Articles.objects.filter(
+				Q(doi__isnull=False, doi__gt=''),
+				(Q(crossref_check__isnull=True) | Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary=None) | Q(summary='not available')) &
+				Q(kind='science paper')
 		).distinct()
 
 		for article in articles:
