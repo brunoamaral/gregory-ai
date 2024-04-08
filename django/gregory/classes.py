@@ -62,6 +62,7 @@ class SciencePaper:
 			except:
 				pass
 		if self.doi != None and self.access == None:
+			print(site.admin_email, type(site.admin_email))
 			if site.admin_email == None:
 				print("No site admin email found")
 			else:
