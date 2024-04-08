@@ -16,8 +16,7 @@ def getDataByDOI(doi: str, client_email: str):
         response = requests.request("GET", url, headers=headers, data={})
         return json.loads(response.text)
     else:
-        raise Exception("DOI and Client Email cannot be empty!")
-
+        raise Exception(f"DOI and Client Email cannot be empty! {doi}, {client_email}")
 
 def checkIfDOIIsOpenAccess(doi: str, client_email: str):
     data = getDataByDOI(doi, client_email)
