@@ -53,12 +53,15 @@ class Command(BaseCommand):
 		).distinct()
 
 		for article in articles:
-			paper = SciencePaper(doi=article.doi)
-			# Refresh once per article
-			if not self.try_refresh_paper(paper):
-				# Handle the failure (e.g., skip this article, log the issue)
-				self.stdout.write(f"Skipping article '{article.title}' due to connection issues.")
-				continue  # Use continue instead of return to proceed with the next article
+			if article.doi != None:
+				paper = SciencePaper(doi=article.doi)
+				# Refresh once per article
+				if not self.try_refresh_paper(paper):
+					# Handle the failure (e.g., skip this article, log the issue)
+					self.stdout.write(f"Skipping article '{article.title}' due to connection issues.")
+					continue  # Use continue instead of return to proceed with the next article
+			else:
+				print(f"empty DOI for article_id {article}")
 
 			# Update fields from the refreshed paper object
 			self.update_article_from_paper(article, paper)
