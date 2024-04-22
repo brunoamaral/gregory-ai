@@ -11,25 +11,9 @@ class Command(BaseCommand):
 	help = 'Updates articles with DOI, access, publisher, journal, publish date, and abstracts with minimal API calls.'
 
 	def handle(self, *args, **kwargs):
-		# Update articles with DOI
-		self.update_doi()
-
 		# Fetch and update articles details with minimal API calls
 		self.update_article_details()
-
 		self.stdout.write(self.style.SUCCESS('Successfully updated articles information with minimal API calls.'))
-
-	def update_doi(self):
-		articles = Articles.objects.filter(kind='science paper', doi__isnull=True, crossref_check__lte=timezone.now()-timezone.timedelta(days=3), crossref_check__gt=timezone.now()-timezone.timedelta(days=30)) | Articles.objects.filter(kind='science paper', doi__isnull=True, crossref_check__isnull=True)
-		for article in articles:
-			self.stdout.write(f"Processing article '{article.title}'.")
-			doi = greg.get_doi(article.title)
-			article.crossref_check = timezone.now()
-			article.save()
-			if doi:
-				self.stdout.write(f"Found DOI: {doi}.")
-				article.doi = doi
-				article.save()
 
 	def try_refresh_paper(self, paper, retries=3, delay=5):
 		"""Attempt to refresh the paper data with retries and a delay."""

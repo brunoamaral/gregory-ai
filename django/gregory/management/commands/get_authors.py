@@ -39,6 +39,9 @@ class Command(BaseCommand):
                             if author_obj.given_name != given_name or author_obj.family_name != family_name:
                                 author_obj.given_name = given_name
                                 author_obj.family_name = family_name
+                                if not given_name or not family_name:
+                                    self.stdout.write(f"Check 2: Missing given name or family name, skipping this author. Article DOI: {article.doi}.")
+                                    continue
                                 author_obj.save()
                                 self.stdout.write(f"Updated author {author_obj.full_name} with ORCID: {orcid}.")
                     else:
