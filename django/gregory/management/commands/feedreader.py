@@ -79,7 +79,8 @@ class Command(BaseCommand):
                       'source': source,
                       'container_title': crossref_paper.journal,
                       'publisher': crossref_paper.publisher,
-                      'access': crossref_paper.access
+                      'access': crossref_paper.access,
+                      'crossref_check': timezone.now()
                       # other fields like access, journal, publisher can be added here as defaults
                   })
 
@@ -137,7 +138,8 @@ class Command(BaseCommand):
                     'summary': abstract,
                     'link': link,
                     'published_date': published_date,
-                    'source': source
+                    'source': source,
+                    'crossref_check': None
                     # other fields like access, journal, publisher can be added here as defaults
                 })
                 if not created:                      

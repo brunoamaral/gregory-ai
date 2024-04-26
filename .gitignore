@@ -11,11 +11,19 @@ data/embeds.json
 data/trials.json
 db-data/
 dev.py
+django/2024-04-02_source.csv
 django/data/
 django/gregory/data/
 django/gregory/migrations/
 django/gregory/ml_models/*
+django/helper-scripts/import-articles.py
+django/helper-scripts/who.py
 django/indexers/input/*.json
+django/model_gnb.joblib
+django/model_lr.joblib
+django/model_lsvc.joblib
+django/model_mnb.joblib
+django/source.csv
 django/static
 docker-data/
 docker-python/
@@ -44,6 +52,7 @@ metabase/db-data/
 modules/
 node_modules
 nodered-data/
+postgres-data_old
 postgres-data/
 public/
 python-ml/data/202*-*.csv
@@ -56,4 +65,3 @@ venv
 venv3
 venv311
 workspace.code-workspace
-postgres-data_old
