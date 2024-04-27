@@ -47,6 +47,7 @@ class Categories(models.Model):
 		managed = True
 		verbose_name_plural = 'categories'
 		db_table = 'categories'
+		unique_together = (('slug','team'),)
 
 
 class Entities(models.Model):
