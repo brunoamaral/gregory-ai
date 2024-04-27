@@ -32,7 +32,9 @@ defusedxml==0.7.1
 Django==5.0.3
 django-common-helpers==0.9.2
 django-countries==7.6
+django-extensions==3.2.3
 django-filter==24.2
+django-organizations==2.4.1
 django-reversion==5.0.12
 django-simple-history==3.5.0
 django4-cron==0.5.1
