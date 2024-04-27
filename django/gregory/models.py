@@ -63,7 +63,7 @@ class Subject(models.Model):
 	description = models.TextField(blank=True, null=True)
 	team = models.ForeignKey(
 			'Team', 
-			# on_delete=models.CASCADE,  # Not sure which would be the best option here
+			on_delete=models.CASCADE,  # Not sure which would be the best option here
 			null=False,
 			blank=False,  
 			related_name='subjects'  # Helps in querying from the Team model, e.g., team.subjects.all()
@@ -90,6 +90,13 @@ class Sources(models.Model):
 	method = models.CharField(choices=METHODS, max_length=10, default='rss')
 	ignore_ssl = models.BooleanField(default=False)
 	description = models.TextField(blank=True, null=True)
+	team = models.ForeignKey(
+		'Team', 
+		on_delete=models.CASCADE,  # Not sure which would be the best option here
+		null=False,
+		blank=False,  
+		related_name='sources'  # Helps in querying from the Team model, e.g., team.sources.all()
+	)
 
 	def __str__(self):
 		return self.name or ""
@@ -136,6 +143,8 @@ class Articles(models.Model):
 	crossref_check = models.DateTimeField(blank=True, null=True)
 	takeaways = models.TextField(blank=True, null=True)
 	history = HistoricalRecords()
+	subjects = models.ManyToManyField(Subject, blank=False)  # Ensuring that article has one or more subjects 
+	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
 	def __str__(self):
 		return str(self.article_id)
 

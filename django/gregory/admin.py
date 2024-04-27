@@ -7,7 +7,7 @@ class ArticleAdmin(admin.ModelAdmin):
 	fieldsets = (
 		('Article Information', {
             'fields': (
-                'title', 'link', 'doi', 'summary', 'source',
+                'title', 'link', 'doi', 'summary', 'teams', 'source',
                 'published_date', 'discovery_date', 'authors', 'categories',
                 'entities', 'relevant', 'noun_phrases', 'sent_to_admin',
                 'sent_to_subscribers', 'kind', 'access', 'publisher',
