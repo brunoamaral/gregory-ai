@@ -15,6 +15,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.conf import settings
+import organizations
+from organizations.backends import invitation_backend
+
 from django.conf.urls.static import static
 from django.urls import include, path, re_path
 from rest_framework import routers
@@ -43,7 +46,9 @@ router.register(r'trials', TrialViewSet)
 urlpatterns = [
 	# Admin routes
 	path('admin/', admin.site.urls),
-
+	# Organization routes
+	re_path(r'^accounts/', include('organizations.urls')),
+	re_path(r'^invitations/', include(invitation_backend().get_urls())),
 	# API auth route
 	path('api-auth/', include('rest_framework.urls')),
 
