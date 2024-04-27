@@ -31,7 +31,7 @@ class Categories(models.Model):
 	category_name = models.CharField(blank=True, null=True,max_length=200)
 	category_slug = models.SlugField(blank=True, null=True, unique=True) # new field with unique=True
 	category_terms = ArrayField(models.CharField(blank=False, null=False, max_length=100),default=list,verbose_name='Terms to include in category (comma separated)', help_text="Add terms separated by commas.")
-	
+	team = models.ForeignKey('Team', on_delete=models.CASCADE, blank=False, null=False, related_name="team")
 	def save(self, *args, **kwargs):
 		if not self.category_slug:
 			self.category_slug = slugify(self.category_name)
