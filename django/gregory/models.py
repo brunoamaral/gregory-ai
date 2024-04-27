@@ -59,11 +59,23 @@ class Entities(models.Model):
 		db_table = 'entities'
 
 class Subject(models.Model):
-	subject_name = models.CharField(blank=False,null=False, max_length=50)
+	subject_name = models.CharField(blank=False, null=False, max_length=50)
 	description = models.TextField(blank=True, null=True)
+	team = models.ForeignKey(
+			'Team', 
+			# on_delete=models.CASCADE,  # Not sure which would be the best option here
+			null=False,
+			blank=False,  
+			related_name='subjects'  # Helps in querying from the Team model, e.g., team.subjects.all()
+	)
 
 	def __str__(self):
-		return str(self.subject_name)
+			return str(self.subject_name)
+	
+	class Meta:
+			managed = True
+			verbose_name_plural = 'subjects'
+			db_table = 'subjects'
 
 
 class Sources(models.Model):
@@ -203,3 +215,12 @@ class Trials(models.Model):
 		verbose_name_plural = 'trials'
 		db_table = 'trials'
 
+from organizations.models import Organization, OrganizationUser
+
+class Team(Organization):
+	class Meta:
+		proxy = True
+
+class TeamMember(OrganizationUser):
+	class Meta:
+		proxy = True
