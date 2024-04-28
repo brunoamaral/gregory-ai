@@ -71,8 +71,8 @@ class Subject(models.Model):
 	)
 
 	def __str__(self):
-			return str(self.subject_name)
-	
+		return str(self.team) + " - " + self.subject_name
+
 	class Meta:
 			managed = True
 			verbose_name_plural = 'subjects'
