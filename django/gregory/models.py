@@ -172,6 +172,7 @@ class Trials(models.Model):
 	categories = models.ManyToManyField(Categories,blank=True)
 	identifiers = models.JSONField(blank=True,null=True)
 	teams = models.ManyToManyField('Team', related_name='trials')  # Allows an clinical trial to belong to one or more teams
+	subjects = models.ManyToManyField('Subject', related_name='trials') # Allows a clinical trial to belong to one or more subjects
 	history = HistoricalRecords()
 	# WHO Fields
 	export_date = models.DateTimeField(null=True,blank=True)
