@@ -171,6 +171,7 @@ class Trials(models.Model):
 	sent_to_admin = models.BooleanField(blank=True,null=True, default=False)
 	categories = models.ManyToManyField(Categories,blank=True)
 	identifiers = models.JSONField(blank=True,null=True)
+	teams = models.ManyToManyField('Team', related_name='trials')  # Allows an clinical trial to belong to one or more teams
 	history = HistoricalRecords()
 	# WHO Fields
 	export_date = models.DateTimeField(null=True,blank=True)
