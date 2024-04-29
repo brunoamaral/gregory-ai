@@ -26,7 +26,8 @@ from api.views import (
 	ArticleViewSet, ArticlesByAuthorList, ArticlesByCategory, ArticlesBySourceList,
 	ArticlesByJournal, ArticlesBySubject, AuthorsViewSet, OpenAccessArticles, 
 	RelevantList, UnsentList, TrialsBySourceList, SourceViewSet, TrialViewSet, 
-	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView
+	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView,
+	ArticlesByTeam, ArticlesBySubject
 )
 from rss.views import (
 	ArticlesByAuthorFeed, ArticlesByCategoryFeed, ArticlesBySubjectFeed, OpenAccessFeed,
@@ -80,6 +81,11 @@ urlpatterns = [
 	# Relevant articles routes
 	path('articles/relevant/week/<int:year>/<int:week>/', newsletterByWeek.as_view({'get':'list'})),
 	path('articles/relevant/last/<int:days>/', lastXdays.as_view({'get':'list'})),
+
+	# Articles by team and subject
+	path('articles/team/<int:team_id>/', ArticlesByTeam.as_view({'get': 'list'}), name='articles-by-team'),
+	path('articles/subject/<int:subject_id>/', ArticlesBySubject.as_view({'get': 'list'}), name='articles-by-subject'),
+
 
 	# Category routes
 	path('categories/', CategoryViewSet.as_view({'get':'list'})),
