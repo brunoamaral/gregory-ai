@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from gregory.models import Articles, Trials, Sources, Authors, Categories
+from gregory.models import Articles, Trials, Sources, Authors, Categories, Subject, Team
+from organizations.models import Organization
 from sitesettings.models import *
 from django.contrib.sites.models import Site
 from django.conf import settings
@@ -7,6 +8,15 @@ from django.conf import settings
 customsettings = CustomSetting.objects.get(site=settings.SITE_ID)
 site = Site.objects.get(pk=settings.SITE_ID)
 
+class TeamSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Team
+        fields = ['id', 'name']  # Adjust the fields according to your model
+
+class SubjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Subject
+        fields = ['subject_name', 'description']  # Adjust these fields too
 class CategorySerializer(serializers.ModelSerializer):
 		class Meta:
 			model = Categories
@@ -28,11 +38,18 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
 	categories = CategorySerializer(many=True, read_only=True)
 	authors = ArticleAuthorSerializer(many=True, read_only=True)
+	teams = TeamSerializer(many=True, read_only=True)
+	subjects = SubjectSerializer(many=True, read_only=True)
+
 	class Meta:
 		model = Articles
 		depth = 1
-		fields = ['article_id','title','summary','link','published_date','source','publisher','container_title','authors','relevant','ml_prediction_gnb','ml_prediction_lr','ml_prediction_lsvc','discovery_date','noun_phrases','doi','access','takeaways','categories']
-		read_only_fields = ('discovery_date','ml_prediction_gnb','ml_prediction_lr','ml_prediction_lsvc','noun_phrases','takeaways')
+		fields = [
+				'article_id', 'title', 'summary', 'link', 'published_date', 'source', 'teams', 'subjects', 
+				'publisher', 'container_title', 'authors', 'relevant', 'ml_prediction_gnb', 'ml_prediction_lr', 
+				'ml_prediction_lsvc', 'discovery_date', 'noun_phrases', 'doi', 'access', 'takeaways', 'categories'
+		]
+		read_only_fields = ('discovery_date', 'ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc', 'noun_phrases', 'takeaways')
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(read_only=True, slug_field='name')

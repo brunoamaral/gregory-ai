@@ -237,20 +237,35 @@ class ArticlesByCategory(viewsets.ModelViewSet):
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
-class ArticlesBySubject(viewsets.ModelViewSet):
-	"""
-	Search articles by the subject field. Usage /articles/subject/{{subject}}/.
-	Subject should be lower case and spaces should be replaced by dashes, for example: Multiple Sclerosis becomes multiple-sclerosis.
-	"""
-	def get_queryset(self):
-		subject = self.kwargs.get('subject', None)
-		subject = subject.replace('-', ' ')
-		subject = Sources.objects.filter(subject__subject_name__iregex=subject)
-		return Articles.objects.filter(source__in=subject).order_by('-discovery_date')
+# class ArticlesBySubject(viewsets.ModelViewSet):
+# 	"""
+# 	Search articles by the subject field. Usage /articles/subject/{{subject}}/.
+# 	Subject should be lower case and spaces should be replaced by dashes, for example: Multiple Sclerosis becomes multiple-sclerosis.
+# 	"""
+# 	def get_queryset(self):
+# 		subject = self.kwargs.get('subject', None)
+# 		subject = subject.replace('-', ' ')
+# 		subject = Sources.objects.filter(subject__subject_name__iregex=subject)
+# 		return Articles.objects.filter(source__in=subject).order_by('-discovery_date')
 
+# 	serializer_class = ArticleSerializer
+# 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+class ArticlesByTeam(viewsets.ModelViewSet):
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+	def get_queryset(self):
+			team_id = self.kwargs.get('team_id')
+			return Articles.objects.filter(teams__id=team_id).order_by('-discovery_date')
+
+class ArticlesBySubject(viewsets.ModelViewSet):
+    serializer_class = ArticleSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        subject_id = self.kwargs.get('subject_id')
+        return Articles.objects.filter(subjects__id=subject_id).order_by('-discovery_date')
 class ArticlesByJournal(viewsets.ModelViewSet):
 	"""
 	Search articles by the journal field. Usage /articles/journal/{{journal}}/.
