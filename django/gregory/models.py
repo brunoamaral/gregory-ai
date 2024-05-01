@@ -144,7 +144,7 @@ class Articles(models.Model):
 	crossref_check = models.DateTimeField(blank=True, null=True)
 	takeaways = models.TextField(blank=True, null=True)
 	history = HistoricalRecords()
-	subjects = models.ManyToManyField(Subject, blank=False)  # Ensuring that article has one or more subjects 
+	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
 	def __str__(self):
 		return str(self.article_id)

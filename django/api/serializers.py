@@ -11,12 +11,12 @@ site = Site.objects.get(pk=settings.SITE_ID)
 class TeamSerializer(serializers.ModelSerializer):
     class Meta:
         model = Team
-        fields = ['id', 'name']  # Adjust the fields according to your model
+        fields = ['id', 'name']
 
 class SubjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subject
-        fields = ['subject_name', 'description']  # Adjust these fields too
+        fields = ['subject_name', 'description']  
 class CategorySerializer(serializers.ModelSerializer):
 		class Meta:
 			model = Categories
