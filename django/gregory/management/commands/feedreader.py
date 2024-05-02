@@ -301,6 +301,7 @@ class Command(BaseCommand):
               trial.source = source
               trial.teams.add(source.team)
               trial.subjects.add(source.subject)
+              trial.sources.add(source)
               trial.save()						
             except Exception as e:
               print(f"An error occurred: {str(e)}")
