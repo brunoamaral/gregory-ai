@@ -115,7 +115,7 @@ class Articles(models.Model):
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	doi = models.CharField(max_length=280, blank=True, null=True)
 	summary = models.TextField(blank=True, null=True)
-	source = models.ForeignKey(Sources, models.DO_NOTHING, db_column='source', blank=True, null=True,unique=False, related_name='old_source')
+	source = models.ForeignKey(Sources, models.DO_NOTHING, db_column='source', blank=True, null=True,unique=False, related_name='articles_source')
 	sources = models.ManyToManyField(Sources, blank=True)
 	published_date = models.DateTimeField(blank=True, null=True)
 	discovery_date = models.DateTimeField(auto_now_add=True)
@@ -164,7 +164,8 @@ class Trials(models.Model):
 	summary = models.TextField(blank=True, null=True)
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
-	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True, unique=False)
+	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True, unique=False, related_name='trials_source')
+	sources = models.ManyToManyField('Sources', blank=True)
 	relevant = models.BooleanField(blank=True, null=True)
 	sent = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True) # Used to keep track of the weekly emails
