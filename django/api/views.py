@@ -133,6 +133,7 @@ def post_article(request):
 			if new_article['doi'] != None:
 				article_on_gregory = Articles.objects.filter(doi=new_article['doi'])
 			if article_on_gregory != None and article_on_gregory.count() > 0:
+				article_on_gregory.sources.add(source)
 				raise ArticleExistsError('There is already an article with the specified DOI')
 
 			if new_article['title'] != None:
@@ -144,11 +145,16 @@ def post_article(request):
 			if source.pk == None:
 				raise SourceNotFoundError('source_id was not found in the database')
 
-			save_article = Articles.objects.create(discovery_date=datetime.now(), title = new_article['title'], summary = new_article['summary'], link = new_article['link'], published_date = new_article['published_date'], 
-			# Source Will Be Removed
-			source = source, 
-			doi = new_article['doi'], kind = new_article['kind'],
-			publisher=new_article['publisher'], container_title=new_article['container_title'])
+			save_article = Articles.objects.create(
+				discovery_date=datetime.now(),
+				title = new_article['title'],
+				summary = new_article['summary'],
+				link = new_article['link'],
+				published_date = new_article['published_date'], 
+				# Source Will Be Removed
+				source = source, 
+				doi = new_article['doi'], kind = new_article['kind'],
+				publisher=new_article['publisher'], container_title=new_article['container_title'])
 			if save_article.pk == None:
 				raise ArticleNotSavedError('Could not create the article')
 			save_article.sources.add(source)
