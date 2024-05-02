@@ -155,6 +155,7 @@ class Command(BaseCommand):
                     science_paper.published_date = published_date
                     science_paper.teams.add(source.team)
                     science_paper.subjects.add(source.subject)
+                    science_paper.sources.add(source)
                     science_paper.save()
 
     ###
@@ -238,6 +239,7 @@ class Command(BaseCommand):
                 existing_trial.source = source
                 existing_trial.teams.add(source.team)
                 existing_trial.subjects.add(source.subject)
+                existing_trial.sources.add(source)
                 # Explicitly save only the fields that were updated to avoid the IntegrityError
                 existing_trial.save(update_fields=['summary', 'link', 'published_date', 'identifiers', 'source'])
                 print("Updated trial information, excluding the title due to IntegrityError.")
@@ -273,6 +275,7 @@ class Command(BaseCommand):
               )
               trial.teams.add(source.team)
               trial.subjects.add(source.subject)
+              trial.sources.add(source)
               print(f'created {trial.trial_id}?')
             except IntegrityError as e:
               print(f"An integrity error occurred: {str(e)}")				

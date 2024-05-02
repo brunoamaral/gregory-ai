@@ -144,11 +144,14 @@ def post_article(request):
 			if source.pk == None:
 				raise SourceNotFoundError('source_id was not found in the database')
 
-			save_article = Articles.objects.create(discovery_date=datetime.now(), title = new_article['title'], summary = new_article['summary'], link = new_article['link'], published_date = new_article['published_date'], source = source, doi = new_article['doi'], kind = new_article['kind'],
+			save_article = Articles.objects.create(discovery_date=datetime.now(), title = new_article['title'], summary = new_article['summary'], link = new_article['link'], published_date = new_article['published_date'], 
+			# Source Will Be Removed
+			source = source, 
+			doi = new_article['doi'], kind = new_article['kind'],
 			publisher=new_article['publisher'], container_title=new_article['container_title'])
 			if save_article.pk == None:
 				raise ArticleNotSavedError('Could not create the article')
-			
+			save_article.sources.add(source)
 			# Prepare some data to be returned to the API client
 			data = {
 				'name': 'Gregory | API',
