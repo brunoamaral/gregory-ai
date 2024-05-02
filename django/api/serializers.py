@@ -35,7 +35,7 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
 
 
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
-	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
+	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field='name')
 	categories = CategorySerializer(many=True, read_only=True)
 	authors = ArticleAuthorSerializer(many=True, read_only=True)
 	teams = TeamSerializer(many=True, read_only=True)
@@ -45,7 +45,7 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 		model = Articles
 		depth = 1
 		fields = [
-				'article_id', 'title', 'summary', 'link', 'published_date', 'source', 'teams', 'subjects', 
+				'article_id', 'title', 'summary', 'link', 'published_date', 'sources', 'teams', 'subjects', 
 				'publisher', 'container_title', 'authors', 'relevant', 'ml_prediction_gnb', 'ml_prediction_lr', 
 				'ml_prediction_lsvc', 'discovery_date', 'noun_phrases', 'doi', 'access', 'takeaways', 'categories'
 		]
