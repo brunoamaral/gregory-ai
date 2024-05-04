@@ -133,8 +133,12 @@ def post_article(request):
 			if new_article['doi'] != None:
 				article_on_gregory = Articles.objects.filter(doi=new_article['doi'])
 			if article_on_gregory != None and article_on_gregory.count() > 0:
-				article_on_gregory.sources.add(source)
-				raise ArticleExistsError('There is already an article with the specified DOI')
+				for article in article_on_gregory:
+					new_source = Sources.objects.get(pk=new_article['source_id'])
+					article.sources.add(new_source)
+					article.teams.add(new_source.team)
+					article.subjects.add(new_source.subject)
+				raise ArticleExistsError('There is already an article with the specified DOI. If the source, team, or subject were different, the article was updated.')
 
 			if new_article['title'] != None:
 				article_on_gregory = Articles.objects.filter(title=new_article['title'])
