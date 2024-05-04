@@ -31,7 +31,7 @@ class Categories(models.Model):
 	category_name = models.CharField(blank=True, null=True,max_length=200)
 	category_slug = models.SlugField(blank=True, null=True, unique=True) # new field with unique=True
 	category_terms = ArrayField(models.CharField(blank=False, null=False, max_length=100),default=list,verbose_name='Terms to include in category (comma separated)', help_text="Add terms separated by commas.")
-	
+	team = models.ForeignKey('Team', on_delete=models.CASCADE, blank=False, null=False, related_name="team")
 	def save(self, *args, **kwargs):
 		if not self.category_slug:
 			self.category_slug = slugify(self.category_name)
@@ -47,6 +47,7 @@ class Categories(models.Model):
 		managed = True
 		verbose_name_plural = 'categories'
 		db_table = 'categories'
+		unique_together = (('category_slug','team'),)
 
 
 class Entities(models.Model):
@@ -59,11 +60,23 @@ class Entities(models.Model):
 		db_table = 'entities'
 
 class Subject(models.Model):
-	subject_name = models.CharField(blank=False,null=False, max_length=50)
+	subject_name = models.CharField(blank=False, null=False, max_length=50)
 	description = models.TextField(blank=True, null=True)
+	team = models.ForeignKey(
+			'Team', 
+			on_delete=models.CASCADE,  # Not sure which would be the best option here
+			null=False,
+			blank=False,  
+			related_name='subjects'  # Helps in querying from the Team model, e.g., team.subjects.all()
+	)
 
 	def __str__(self):
-		return str(self.subject_name)
+		return str(self.team) + " - " + self.subject_name
+
+	class Meta:
+			managed = True
+			verbose_name_plural = 'subjects'
+			db_table = 'subjects'
 
 
 class Sources(models.Model):
@@ -78,6 +91,13 @@ class Sources(models.Model):
 	method = models.CharField(choices=METHODS, max_length=10, default='rss')
 	ignore_ssl = models.BooleanField(default=False)
 	description = models.TextField(blank=True, null=True)
+	team = models.ForeignKey(
+		'Team', 
+		on_delete=models.CASCADE,  # Not sure which would be the best option here
+		null=False,
+		blank=False,  
+		related_name='sources'  # Helps in querying from the Team model, e.g., team.sources.all()
+	)
 
 	def __str__(self):
 		return self.name or ""
@@ -95,7 +115,8 @@ class Articles(models.Model):
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	doi = models.CharField(max_length=280, blank=True, null=True)
 	summary = models.TextField(blank=True, null=True)
-	source = models.ForeignKey(Sources, models.DO_NOTHING, db_column='source', blank=True, null=True,unique=False)
+	source = models.ForeignKey(Sources, models.DO_NOTHING, db_column='source', blank=True, null=True,unique=False, related_name='articles_source')
+	sources = models.ManyToManyField(Sources, blank=True)
 	published_date = models.DateTimeField(blank=True, null=True)
 	discovery_date = models.DateTimeField(auto_now_add=True)
 	authors = models.ManyToManyField(Authors, blank=True)
@@ -103,17 +124,17 @@ class Articles(models.Model):
 	entities = models.ManyToManyField('Entities')
 	relevant = models.BooleanField(blank=True, null=True)
 	ml_prediction_gnb = models.BooleanField(blank=True, null=True, 
-			verbose_name="Gaussian Naive Bayes Prediction",
-			help_text="Indicates the Machine Learning prediction made using Gaussian Naive Bayes."
+		verbose_name="Gaussian Naive Bayes Prediction",
+		help_text="Indicates the Machine Learning prediction made using Gaussian Naive Bayes."
 	)
 	ml_prediction_lr = models.BooleanField(blank=True, null=True,
-			verbose_name="Logistic Regression Prediction",
-			help_text="Indicates the Machine Learning prediction made using Logistic Regression."
-)
+		verbose_name="Logistic Regression Prediction",
+		help_text="Indicates the Machine Learning prediction made using Logistic Regression."
+	)
 	ml_prediction_lsvc = models.BooleanField(blank=True,null=True,
-			verbose_name="Linear Support Vector Classification Prediction",
-			help_text="Indicates the Machine Learning prediction made using Linear Support Vector Classification."
-)
+		verbose_name="Linear Support Vector Classification Prediction",
+		help_text="Indicates the Machine Learning prediction made using Linear Support Vector Classification."
+	)
 	noun_phrases = models.JSONField(blank=True, null=True)
 	sent_to_admin = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
@@ -124,6 +145,8 @@ class Articles(models.Model):
 	crossref_check = models.DateTimeField(blank=True, null=True)
 	takeaways = models.TextField(blank=True, null=True)
 	history = HistoricalRecords()
+	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
+	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
 	def __str__(self):
 		return str(self.article_id)
 
@@ -141,7 +164,8 @@ class Trials(models.Model):
 	summary = models.TextField(blank=True, null=True)
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
-	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True, unique=False)
+	source = models.ForeignKey('Sources', models.DO_NOTHING, db_column='source', blank=True, null=True, unique=False, related_name='trials_source')
+	sources = models.ManyToManyField('Sources', blank=True)
 	relevant = models.BooleanField(blank=True, null=True)
 	sent = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True) # Used to keep track of the weekly emails
@@ -149,6 +173,8 @@ class Trials(models.Model):
 	sent_to_admin = models.BooleanField(blank=True,null=True, default=False)
 	categories = models.ManyToManyField(Categories,blank=True)
 	identifiers = models.JSONField(blank=True,null=True)
+	teams = models.ManyToManyField('Team', related_name='trials')  # Allows an clinical trial to belong to one or more teams
+	subjects = models.ManyToManyField('Subject', related_name='trials') # Allows a clinical trial to belong to one or more subjects
 	history = HistoricalRecords()
 	# WHO Fields
 	export_date = models.DateTimeField(null=True,blank=True)
@@ -203,3 +229,12 @@ class Trials(models.Model):
 		verbose_name_plural = 'trials'
 		db_table = 'trials'
 
+from organizations.models import Organization, OrganizationUser
+
+class Team(Organization):
+	class Meta:
+		proxy = True
+
+class TeamMember(OrganizationUser):
+	class Meta:
+		proxy = True

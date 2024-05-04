@@ -15,6 +15,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.conf import settings
+import organizations
+from organizations.backends import invitation_backend
+
 from django.conf.urls.static import static
 from django.urls import include, path, re_path
 from rest_framework import routers
@@ -23,7 +26,8 @@ from api.views import (
 	ArticleViewSet, ArticlesByAuthorList, ArticlesByCategory, ArticlesBySourceList,
 	ArticlesByJournal, ArticlesBySubject, AuthorsViewSet, OpenAccessArticles, 
 	RelevantList, UnsentList, TrialsBySourceList, SourceViewSet, TrialViewSet, 
-	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView
+	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView,
+	ArticlesByTeam, ArticlesBySubject
 )
 from rss.views import (
 	ArticlesByAuthorFeed, ArticlesByCategoryFeed, ArticlesBySubjectFeed, OpenAccessFeed,
@@ -43,7 +47,9 @@ router.register(r'trials', TrialViewSet)
 urlpatterns = [
 	# Admin routes
 	path('admin/', admin.site.urls),
-
+	# Organization routes
+	re_path(r'^accounts/', include('organizations.urls')),
+	re_path(r'^invitations/', include(invitation_backend().get_urls())),
 	# API auth route
 	path('api-auth/', include('rest_framework.urls')),
 
@@ -67,7 +73,6 @@ urlpatterns = [
 	path('articles/author/<int:author_id>/', ArticlesByAuthorList.as_view()),
 	re_path('^articles/category/(?P<category_slug>[-\w]+)/$', ArticlesByCategory.as_view({'get':'list'})),
 	path('articles/source/<int:source_id>', ArticlesBySourceList.as_view()),
-	re_path('^articles/subject/(?P<subject>.+)/$', ArticlesBySubject.as_view({'get':'list'})),
 	re_path('^articles/journal/(?P<journal_slug>.+)/$', ArticlesByJournal.as_view({'get':'list'})),
 	re_path('^articles/open-access/$', OpenAccessArticles.as_view()),
 	re_path('^articles/unsent/$', UnsentList.as_view()),
@@ -75,6 +80,11 @@ urlpatterns = [
 	# Relevant articles routes
 	path('articles/relevant/week/<int:year>/<int:week>/', newsletterByWeek.as_view({'get':'list'})),
 	path('articles/relevant/last/<int:days>/', lastXdays.as_view({'get':'list'})),
+
+	# Articles by team and subject
+	path('articles/team/<int:team_id>/', ArticlesByTeam.as_view({'get': 'list'}), name='articles-by-team'),
+	path('articles/subject/<int:subject_id>/', ArticlesBySubject.as_view({'get': 'list'}), name='articles-by-subject'),
+
 
 	# Category routes
 	path('categories/', CategoryViewSet.as_view({'get':'list'})),

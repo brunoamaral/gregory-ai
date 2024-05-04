@@ -133,7 +133,12 @@ def post_article(request):
 			if new_article['doi'] != None:
 				article_on_gregory = Articles.objects.filter(doi=new_article['doi'])
 			if article_on_gregory != None and article_on_gregory.count() > 0:
-				raise ArticleExistsError('There is already an article with the specified DOI')
+				for article in article_on_gregory:
+					new_source = Sources.objects.get(pk=new_article['source_id'])
+					article.sources.add(new_source)
+					article.teams.add(new_source.team)
+					article.subjects.add(new_source.subject)
+				raise ArticleExistsError('There is already an article with the specified DOI. If the source, team, or subject were different, the article was updated.')
 
 			if new_article['title'] != None:
 				article_on_gregory = Articles.objects.filter(title=new_article['title'])
@@ -144,11 +149,19 @@ def post_article(request):
 			if source.pk == None:
 				raise SourceNotFoundError('source_id was not found in the database')
 
-			save_article = Articles.objects.create(discovery_date=datetime.now(), title = new_article['title'], summary = new_article['summary'], link = new_article['link'], published_date = new_article['published_date'], source = source, doi = new_article['doi'], kind = new_article['kind'],
-			publisher=new_article['publisher'], container_title=new_article['container_title'])
+			save_article = Articles.objects.create(
+				discovery_date=datetime.now(),
+				title = new_article['title'],
+				summary = new_article['summary'],
+				link = new_article['link'],
+				published_date = new_article['published_date'], 
+				# Source Will Be Removed
+				source = source, 
+				doi = new_article['doi'], kind = new_article['kind'],
+				publisher=new_article['publisher'], container_title=new_article['container_title'])
 			if save_article.pk == None:
 				raise ArticleNotSavedError('Could not create the article')
-			
+			save_article.sources.add(source)
 			# Prepare some data to be returned to the API client
 			data = {
 				'name': 'Gregory | API',
@@ -236,21 +249,21 @@ class ArticlesByCategory(viewsets.ModelViewSet):
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-
-class ArticlesBySubject(viewsets.ModelViewSet):
-	"""
-	Search articles by the subject field. Usage /articles/subject/{{subject}}/.
-	Subject should be lower case and spaces should be replaced by dashes, for example: Multiple Sclerosis becomes multiple-sclerosis.
-	"""
-	def get_queryset(self):
-		subject = self.kwargs.get('subject', None)
-		subject = subject.replace('-', ' ')
-		subject = Sources.objects.filter(subject__subject_name__iregex=subject)
-		return Articles.objects.filter(source__in=subject).order_by('-discovery_date')
-
+class ArticlesByTeam(viewsets.ModelViewSet):
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+	def get_queryset(self):
+		team_id = self.kwargs.get('team_id')
+		return Articles.objects.filter(teams__id=team_id).order_by('-discovery_date')
+
+class ArticlesBySubject(viewsets.ModelViewSet):
+	serializer_class = ArticleSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		subject_id = self.kwargs.get('subject_id')
+		return Articles.objects.filter(subjects__id=subject_id).order_by('-discovery_date')
 class ArticlesByJournal(viewsets.ModelViewSet):
 	"""
 	Search articles by the journal field. Usage /articles/journal/{{journal}}/.

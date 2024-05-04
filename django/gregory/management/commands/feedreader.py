@@ -83,7 +83,9 @@ class Command(BaseCommand):
                       'crossref_check': timezone.now()
                       # other fields like access, journal, publisher can be added here as defaults
                   })
-
+                  if created:
+                    science_paper.teams.add(source.team)
+                    science_paper.subjects.add(source.subject)
                   if not created:                      
                       if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),
                               science_paper.link != link, science_paper.published_date != published_date]):
@@ -91,6 +93,8 @@ class Command(BaseCommand):
                           science_paper.summary = SciencePaper.clean_abstract(abstract=summary)
                           science_paper.link = link
                           science_paper.published_date = published_date
+                          science_paper.teams.add(source.team)
+                          science_paper.subjects.add(source.subject)
                           science_paper.save()
                   # Process author information
                   if crossref_paper is not None:  # Assuming `paper` contains the article's metadata including author information
@@ -149,6 +153,9 @@ class Command(BaseCommand):
                     science_paper.summary = SciencePaper.clean_abstract(abstract=summary)
                     science_paper.link = link
                     science_paper.published_date = published_date
+                    science_paper.teams.add(source.team)
+                    science_paper.subjects.add(source.subject)
+                    science_paper.sources.add(source)
                     science_paper.save()
 
     ###
@@ -220,6 +227,8 @@ class Command(BaseCommand):
                 existing_trial.published_date = clinical_trial.published_date
                 existing_trial.identifiers = clinical_trial.identifiers
                 existing_trial.source = source
+                existing_trial.teams.add(source.team)
+                existing_trial.subjects.add(source.subject)
                 existing_trial.save()
             except IntegrityError:
                 # If an IntegrityError occurs, update all except the title
@@ -228,7 +237,9 @@ class Command(BaseCommand):
                 existing_trial.published_date = clinical_trial.published_date
                 existing_trial.identifiers = clinical_trial.identifiers
                 existing_trial.source = source
-                
+                existing_trial.teams.add(source.team)
+                existing_trial.subjects.add(source.subject)
+                existing_trial.sources.add(source)
                 # Explicitly save only the fields that were updated to avoid the IntegrityError
                 existing_trial.save(update_fields=['summary', 'link', 'published_date', 'identifiers', 'source'])
                 print("Updated trial information, excluding the title due to IntegrityError.")
@@ -262,6 +273,9 @@ class Command(BaseCommand):
                 identifiers=clinical_trial.identifiers,
                 source=source
               )
+              trial.teams.add(source.team)
+              trial.subjects.add(source.subject)
+              trial.sources.add(source)
               print(f'created {trial.trial_id}?')
             except IntegrityError as e:
               print(f"An integrity error occurred: {str(e)}")				
@@ -285,6 +299,9 @@ class Command(BaseCommand):
               trial.published_date = clinical_trial.published_date
               trial.identifiers = clinical_trial.identifiers
               trial.source = source
+              trial.teams.add(source.team)
+              trial.subjects.add(source.subject)
+              trial.sources.add(source)
               trial.save()						
             except Exception as e:
               print(f"An error occurred: {str(e)}")

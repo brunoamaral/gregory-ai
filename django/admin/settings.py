@@ -45,6 +45,7 @@ INSTALLED_APPS = [
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
 	'django.contrib.sites',
+	'organizations',
 	'simple_history',
 	'sitesettings',
 	'indexers',
