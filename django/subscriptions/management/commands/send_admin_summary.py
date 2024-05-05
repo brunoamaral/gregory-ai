@@ -41,12 +41,12 @@ class Command(BaseCommand):
                     text = strip_tags(html)
                     result = self.send_simple_message(to=to, subject='Admin Summary', html=html, text=text)
                     results.append(result.status_code)
-                    # carefull, this will not keep track of a single failed delivery of the email
-                    if 200 in results:
-                        for article in articles:
-                            article.sent_to_teams.add(team)
-                        for trial in trials:
-                            trial.sent_to_teams.add(team)
+                # carefull, this will not keep track of a single failed delivery of the email
+                if 200 in results:
+                    for article in articles:
+                        article.sent_to_teams.add(team)
+                    for trial in trials:
+                        trial.sent_to_teams.add(team)
 
     def send_simple_message(self, to, bcc=None, subject=None, text=None, html=None, 
                             sender=f'Gregory MS <gregory@mg.{Site.objects.get_current().domain}>',
