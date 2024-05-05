@@ -136,7 +136,6 @@ class Articles(models.Model):
 		help_text="Indicates the Machine Learning prediction made using Linear Support Vector Classification."
 	)
 	noun_phrases = models.JSONField(blank=True, null=True)
-	sent_to_admin = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	kind = models.CharField(choices=KINDS, max_length=50,default='science paper')
 	access = models.CharField(choices=ACCESS_OPTIONS, max_length=50, default=None, null=True)
@@ -147,6 +146,7 @@ class Articles(models.Model):
 	history = HistoricalRecords()
 	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
+	sent_to_teams = models.ManyToManyField('Team', related_name='sent_articles')
 	def __str__(self):
 		return str(self.article_id)
 
@@ -170,7 +170,6 @@ class Trials(models.Model):
 	sent = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True) # Used to keep track of the weekly emails
 	sent_real_time_notification = models.BooleanField(default=False, blank=True) # Used to keep track of the emails sent every 12h
-	sent_to_admin = models.BooleanField(blank=True,null=True, default=False)
 	categories = models.ManyToManyField(Categories,blank=True)
 	identifiers = models.JSONField(blank=True,null=True)
 	teams = models.ManyToManyField('Team', related_name='trials')  # Allows an clinical trial to belong to one or more teams
@@ -220,6 +219,7 @@ class Trials(models.Model):
 	ethics_review_contact_email = models.EmailField(null=True,blank=True,max_length=500)
 	results_date_completed = models.DateField(null=True,blank=True)
 	results_url_link = models.URLField(null=True,blank=True)
+	sent_to_teams = models.ManyToManyField('Team', related_name='sent_trials')
 
 	def __str__(self):
 		return str(self.trial_id) 
@@ -235,6 +235,11 @@ class Team(Organization):
 	class Meta:
 		proxy = True
 
+	@property
+	def members(self):
+		# Assuming TeamMember links back to Organization via an 'organization' field
+		# and each TeamMember instance has a related 'user' object
+		return [member.user for member in TeamMember.objects.filter(organization=self)]
 class TeamMember(OrganizationUser):
 	class Meta:
 		proxy = True
