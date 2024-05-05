@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Q
 from django.template.loader import get_template
 from django.utils.html import strip_tags
-from gregory.models import Articles, Trials
+from gregory.models import Articles, Trials, Team, Subject
 from sitesettings.models import *
 from subscriptions.models import Subscribers
 import datetime
@@ -20,7 +20,7 @@ class Command(BaseCommand):
         teams = Team.objects.all()
         for team in teams:
             members = team.members
-            subjects = team.subjects
+            subjects = team.subjects.all()
             for subject in subjects:
                 # fetch the articles and trials that were not sent to the team it will be something like the following but we need to find a better way to track if the article was sent to that user
                 articles = Articles.objects.filter(subjects=subject).exclude(sent_to_teams=team)
