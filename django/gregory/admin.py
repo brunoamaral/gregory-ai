@@ -9,7 +9,7 @@ class ArticleAdmin(admin.ModelAdmin):
             'fields': (
                 'title', 'link', 'doi', 'summary', 'teams', 'subjects', 'source','sources',
                 'published_date', 'discovery_date', 'authors', 'categories',
-                'entities', 'relevant', 'noun_phrases', 'sent_to_admin',
+                'entities', 'relevant', 'noun_phrases', 'sent_to_teams',
                 'sent_to_subscribers', 'kind', 'access', 'publisher',
                 'container_title', 'crossref_check', 'takeaways'
             ),
