@@ -148,7 +148,6 @@ def post_article(request):
 			source = Sources.objects.get(pk=new_article['source_id'])
 			if source.pk == None:
 				raise SourceNotFoundError('source_id was not found in the database')
-
 			save_article = Articles.objects.create(
 				discovery_date=datetime.now(),
 				title = new_article['title'],
@@ -159,6 +158,10 @@ def post_article(request):
 				source = source, 
 				doi = new_article['doi'], kind = new_article['kind'],
 				publisher=new_article['publisher'], container_title=new_article['container_title'])
+			save_article.sources.add(source)
+			save_article.teams.add(source.team)
+			save_article.subjects.add(source.subject)
+
 			if save_article.pk == None:
 				raise ArticleNotSavedError('Could not create the article')
 			save_article.sources.add(source)
