@@ -135,6 +135,7 @@ class Articles(models.Model):
 		verbose_name="Linear Support Vector Classification Prediction",
 		help_text="Indicates the Machine Learning prediction made using Linear Support Vector Classification."
 	)
+	ml_predictions = models.ManyToManyField('MLPredictions', blank=True)
 	noun_phrases = models.JSONField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	kind = models.CharField(choices=KINDS, max_length=50,default='science paper')
@@ -220,7 +221,7 @@ class Trials(models.Model):
 	results_date_completed = models.DateField(null=True,blank=True)
 	results_url_link = models.URLField(null=True,blank=True)
 	sent_to_teams = models.ManyToManyField('Team', related_name='sent_trials')
-
+	ml_predictions = models.ManyToManyField('MLPredictions', blank=True)
 	def __str__(self):
 		return str(self.trial_id) 
 
@@ -243,3 +244,22 @@ class Team(Organization):
 class TeamMember(OrganizationUser):
 	class Meta:
 		proxy = True
+
+class MLPredictions(models.Model):
+	created_date = models.DateTimeField(auto_now_add=True)
+	subject = models.ForeignKey('Subject', on_delete=models.CASCADE, related_name='ml_subject_predictions')
+	gnb = models.BooleanField(blank=True, null=True,
+		verbose_name="Gaussian Naive Bayes Prediction",
+		help_text="Indicates the Machine Learning prediction made using Gaussian Naive Bayes."
+	)
+	lr = models.BooleanField(blank=True, null=True,
+		verbose_name="Logistic Regression Prediction",
+		help_text="Indicates the Machine Learning prediction made using Logistic Regression."
+	)
+	lsvc = models.BooleanField(blank=True,null=True,
+		verbose_name="Linear Support Vector Classification Prediction",
+		help_text="Indicates the Machine Learning prediction made using Linear Support Vector Classification."
+	)
+	mnb = models.BooleanField(blank=True, null=True,
+		verbose_name = 'Multinomial Naive Bayes',
+		help_text='indicates the Machine Learning prediction using Multinomial Naive Bayes.')
