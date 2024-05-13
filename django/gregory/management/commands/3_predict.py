@@ -12,7 +12,7 @@ import feedparser
 import requests
 from dateutil.parser import parse
 from dateutil.tz import gettz
-from django.db.models import Q
+from django.db.models import Q, Subquery, OuterRef
 
 class Command(BaseCommand):
 	help = 'Run prediction models on articles.'
@@ -36,11 +36,20 @@ class Command(BaseCommand):
 					print(f"Model file not found: {model_path}")
 					continue
 
+			# Define a queryset for MLPredictions that are related to the specific subject
+			predictions_for_subject = MLPredictions.objects.filter(
+				subject=subject,
+				ml_predictions=OuterRef('pk')
+			)
+			# Query articles where there is no matching MLPredictions entry for the subject
 			articles_queryset = Articles.objects.filter(
-				Q(ml_predictions__subject=subject) | Q(ml_predictions__isnull=True),
-				Q(summary__len__gt=50),
-				subjects=subject
+				Q(ml_predictions__isnull=True) |  # No ml_predictions at all
+				~Q(ml_predictions__in=Subquery(predictions-for_subject.values('id')))  # Exclude articles with predictions for the subject
+			).filter(
+				summary__len__gt=50,  # Articles with a summary longer than 50 characters
+				subjects=subject  # Articles that match the specific subject
 			).distinct()
+			
 			dataset = pd.DataFrame(list(articles_queryset.values("title", "summary", "relevant", "article_id")))
 
 			if not dataset.empty:
