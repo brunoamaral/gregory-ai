@@ -12,7 +12,8 @@ import feedparser
 import requests
 from dateutil.parser import parse
 from dateutil.tz import gettz
-from django.db.models import Q, Subquery, OuterRef
+from django.db.models import Q, Exists, OuterRef
+
 
 class Command(BaseCommand):
 	help = 'Run prediction models on articles.'
@@ -36,20 +37,20 @@ class Command(BaseCommand):
 					print(f"Model file not found: {model_path}")
 					continue
 
-			# Define a queryset for MLPredictions that are related to the specific subject
+			# Define a queryset for MLPredictions related to the specific subject
 			predictions_for_subject = MLPredictions.objects.filter(
 				subject=subject,
-				ml_predictions=OuterRef('pk')
+				articles=OuterRef('pk')
 			)
 			# Query articles where there is no matching MLPredictions entry for the subject
-			articles_queryset = Articles.objects.filter(
-				Q(ml_predictions__isnull=True) |  # No ml_predictions at all
-				~Q(ml_predictions__in=Subquery(predictions-for_subject.values('id')))  # Exclude articles with predictions for the subject
+			articles_queryset = Articles.objects.annotate(
+				has_predictions=Exists(predictions_for_subject)
 			).filter(
-				summary__len__gt=50,  # Articles with a summary longer than 50 characters
-				subjects=subject  # Articles that match the specific subject
+				has_predictions=False,  # Filter articles that do not have predictions for the subject
+				summary__gt=50,    # Ensure summary length greater than 50 characters
+				subjects=subject        # Match the specific subject
 			).distinct()
-			
+
 			dataset = pd.DataFrame(list(articles_queryset.values("title", "summary", "relevant", "article_id")))
 
 			if not dataset.empty:
@@ -60,23 +61,28 @@ class Command(BaseCommand):
 				dataset["relevant"] = dataset["relevant"].fillna(value=0).astype(int)
 				dataset['relevant'] = dataset['relevant'].fillna(value=0)
 
-			# Iterate through the dataset
-			for _, row in dataset.iterrows():
-				article = Articles.objects.get(pk=row['article_id'])
-				new_predictions = {}
-				new_predictions['subject'] = subject
-				# Run predictions for each model and store in new_predictions dict
-				for model in models:
-					prediction = pipelines[model].predict([row['terms']])
-					new_predictions[f'{model}'] = prediction[0] == 1
-				# Create a new MLPrediction object and save it
-				ml_prediction_instance = MLPredictions(
-					**new_predictions  # Unpack predictions dictionary to fields
-				)
-				ml_prediction_instance.save()
+				# Iterate through the dataset
+				for _, row in dataset.iterrows():
+					article = Articles.objects.get(pk=row['article_id'])
+					new_predictions = {}
+					new_predictions['subject'] = subject
 
-				# Link the new prediction to the article and save the article
-				article.ml_predictions.add(ml_prediction_instance)
-				article.save()
+					# Run predictions for each model and store in new_predictions dict
+					for model in models:
+						if model in pipelines:  # Check if the model was successfully loaded
+							prediction = pipelines[model].predict([row['terms']])
+							new_predictions[model] = prediction[0] == 1
+						else:
+							print(f"Skipping predictions for model '{model}' as it was not loaded.")
 
-				print(f'Predictions saved for Article ID {article.pk}')
+					# Create a new MLPrediction object and save it
+					ml_prediction_instance = MLPredictions(
+						**new_predictions  # Unpack predictions dictionary to fields
+					)
+					ml_prediction_instance.save()
+
+					# Link the new prediction to the article and save the article
+					article.ml_predictions.add(ml_prediction_instance)
+					article.save()
+
+					print(f'Predictions saved for Article ID {article.pk}')
