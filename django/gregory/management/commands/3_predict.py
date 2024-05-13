@@ -12,6 +12,7 @@ import feedparser
 import requests
 from dateutil.parser import parse
 from dateutil.tz import gettz
+from django.db.models import Q
 
 class Command(BaseCommand):
 	help = 'Run prediction models on articles.'
@@ -34,7 +35,12 @@ class Command(BaseCommand):
 				else:
 					print(f"Model file not found: {model_path}")
 					continue
-			articles_queryset = Articles.objects.filter(ml_predictions__isnull=True, summary__gt=50, subjects=subject)
+
+			articles_queryset = Articles.objects.filter(
+				Q(ml_predictions__subject=subject) | Q(ml_predictions__isnull=True),
+				Q(summary__len__gt=50),
+				subjects=subject
+			).distinct()
 			dataset = pd.DataFrame(list(articles_queryset.values("title", "summary", "relevant", "article_id")))
 
 			if not dataset.empty:
