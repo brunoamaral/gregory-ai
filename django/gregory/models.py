@@ -266,7 +266,7 @@ class MLPredictions(models.Model):
 	)
 
 class ArticleSubjectRelevance(models.Model):
-	article = models.ForeignKey('Articles', on_delete=models.CASCADE)
+	article = models.ForeignKey(Articles, related_name='article_subject_relevances', on_delete=models.CASCADE)
 	subject = models.ForeignKey('Subject', on_delete=models.CASCADE)
 	is_relevant = models.BooleanField(default=False, help_text="Indicates if the article is relevant for the subject.")
 
@@ -277,3 +277,5 @@ class ArticleSubjectRelevance(models.Model):
 	def __str__(self):
 			relevance_status = "Relevant" if self.is_relevant else "Not Relevant"
 			return f"{self.article.title} - {self.subject.subject_name}: {relevance_status}"
+
+

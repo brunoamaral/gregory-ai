@@ -19,7 +19,8 @@ class ArticleSubjectRelevanceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ArticleSubjectRelevance
-        fields = ['id', 'subject', 'subject_id', 'is_relevant']
+        fields = ['subject', 'subject_id', 'is_relevant']
+
 class MLPredictionsSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = MLPredictions
