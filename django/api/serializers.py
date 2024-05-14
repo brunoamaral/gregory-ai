@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from gregory.models import Articles, Trials, Sources, Authors, Categories, Subject, Team, MLPredictions, ArticleSubjectRelevance
 from organizations.models import Organization
-from sitesettings.models import *
+from sitesettings.models import CustomSetting
 from django.contrib.sites.models import Site
 from django.conf import settings
 
@@ -11,7 +11,8 @@ site = Site.objects.get(pk=settings.SITE_ID)
 class SubjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subject
-        fields = ['id','subject_name', 'description'] 
+        fields = ['id', 'subject_name', 'description']
+
 class ArticleSubjectRelevanceSerializer(serializers.ModelSerializer):
     subject = SubjectSerializer(read_only=True)
     subject_id = serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all(), source='subject', write_only=True)
