@@ -1,9 +1,13 @@
 from django.contrib import admin
 # Register your models here.
-from .models import Articles, Categories, Trials, Sources, Entities, Authors, Subject, MLPredictions
+from .models import Articles, Categories, Trials, Sources, Entities, Authors, Subject, MLPredictions,ArticleSubjectRelevance
 
-# this class define which department columns will be shown in the department admin web site.
+class ArticleSubjectRelevanceInline(admin.TabularInline):
+	model = ArticleSubjectRelevance
+	extra = 1
+
 class ArticleAdmin(admin.ModelAdmin):
+	inlines = [ArticleSubjectRelevanceInline]
 	fieldsets = (
 		('Article Information', {
             'fields': (
@@ -15,7 +19,7 @@ class ArticleAdmin(admin.ModelAdmin):
             ),
             'description': 'This section contains general information about the article'
         }),
-			('Machine Learning Predictions', {  # This is the title of the fieldset
+			('Machine Learning Predictions', { 
 					'fields': ('ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc','ml_predictions'),
 					'description': 'Grouping machine learning prediction indicators',  # Optional: You can provide a description for the fieldset
 			}),
@@ -50,3 +54,4 @@ admin.site.register(Sources,SourceAdmin)
 admin.site.register(Subject)
 admin.site.register(Trials, TrialAdmin)
 admin.site.register(MLPredictions)
+# 
