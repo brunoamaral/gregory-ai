@@ -262,4 +262,18 @@ class MLPredictions(models.Model):
 	)
 	mnb = models.BooleanField(blank=True, null=True,
 		verbose_name = 'Multinomial Naive Bayes',
-		help_text='indicates the Machine Learning prediction using Multinomial Naive Bayes.')
+		help_text='indicates the Machine Learning prediction using Multinomial Naive Bayes.'
+	)
+
+class ArticleSubjectRelevance(models.Model):
+	article = models.ForeignKey('Articles', on_delete=models.CASCADE)
+	subject = models.ForeignKey('Subject', on_delete=models.CASCADE)
+	is_relevant = models.BooleanField(default=False, help_text="Indicates if the article is relevant for the subject.")
+
+	class Meta:
+			unique_together = ('article', 'subject')
+			verbose_name_plural = 'article subject relevances'
+
+	def __str__(self):
+			relevance_status = "Relevant" if self.is_relevant else "Not Relevant"
+			return f"{self.article.title} - {self.subject.subject_name}: {relevance_status}"
