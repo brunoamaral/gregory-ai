@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from gregory.models import Articles, Trials, Sources, Authors, Categories, Subject, Team, MLPredictions
+from gregory.models import Articles, Trials, Sources, Authors, Categories, Subject, Team, MLPredictions, ArticleSubjectRelevance
 from organizations.models import Organization
 from sitesettings.models import *
 from django.contrib.sites.models import Site
@@ -8,20 +8,28 @@ from django.conf import settings
 customsettings = CustomSetting.objects.get(site=settings.SITE_ID)
 site = Site.objects.get(pk=settings.SITE_ID)
 
+class SubjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Subject
+        fields = ['id','subject_name', 'description'] 
+class ArticleSubjectRelevanceSerializer(serializers.ModelSerializer):
+    subject = SubjectSerializer(read_only=True)
+    subject_id = serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all(), source='subject', write_only=True)
+
+    class Meta:
+        model = ArticleSubjectRelevance
+        fields = ['id', 'subject', 'subject_id', 'is_relevant']
 class MLPredictionsSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = MLPredictions
-		fields = ['gnb', 'lr', 'lsvc', 'created_date', 'subject']
+		fields = ['gnb', 'lr', 'lsvc', 'mnb', 'created_date', 'subject']
 
 class TeamSerializer(serializers.ModelSerializer):
     class Meta:
         model = Team
         fields = ['id', 'name']
 
-class SubjectSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Subject
-        fields = ['subject_name', 'description']  
+ 
 class CategorySerializer(serializers.ModelSerializer):
 		class Meta:
 			model = Categories
@@ -46,14 +54,17 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	teams = TeamSerializer(many=True, read_only=True)
 	subjects = SubjectSerializer(many=True, read_only=True)
 	ml_predictions = MLPredictionsSerializer(many=True, read_only=True, source='ml_predictions.all')
+	article_subject_relevances = ArticleSubjectRelevanceSerializer(many=True, required=False)
+
 	class Meta:
 		model = Articles
 		depth = 1
 		fields = [
 				'article_id', 'title', 'summary', 'link', 'published_date', 'sources', 'teams', 
 				'subjects', 'publisher', 'container_title', 'authors', 'relevant', 
-				'ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc', 'discovery_date', 
-				'noun_phrases', 'doi', 'access', 'takeaways', 'categories', 'ml_predictions'  # Include ml_predictions here
+				'ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc', 'discovery_date',
+				'article_subject_relevances', 
+				'noun_phrases', 'doi', 'access', 'takeaways', 'categories', 'ml_predictions',
 		]
 		read_only_fields = ('discovery_date', 'ml_predictions', 'ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc', 'noun_phrases', 'takeaways')
 
