@@ -1,36 +1,51 @@
 from django.contrib import admin
 # Register your models here.
 from .models import Articles, Categories, Trials, Sources, Entities, Authors, Subject, MLPredictions,ArticleSubjectRelevance
+from .widgets import MLPredictionsWidget
+from django import forms
+from .fields import MLPredictionsField
 
 class ArticleSubjectRelevanceInline(admin.TabularInline):
 	model = ArticleSubjectRelevance
 	extra = 1
 
+class ArticleAdminForm(forms.ModelForm):
+	ml_predictions_display = MLPredictionsField(required=False)
+	class Meta:
+		model = Articles
+		fields = '__all__'
+		widgets = {
+				'ml_predictions': MLPredictionsWidget(),
+		}
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		if self.instance and self.instance.pk:
+			self.fields['ml_predictions_display'].initial = self.instance.ml_predictions.all()
+
 class ArticleAdmin(admin.ModelAdmin):
+	form = ArticleAdminForm  # Use the custom form here
 	inlines = [ArticleSubjectRelevanceInline]
 	fieldsets = (
 		('Article Information', {
-            'fields': (
-                'title', 'link', 'doi', 'summary', 'teams', 'subjects', 'source','sources',
-                'published_date', 'discovery_date', 'authors', 'categories',
-                'entities', 'relevant', 'noun_phrases', 'sent_to_teams',
-                'sent_to_subscribers', 'kind', 'access', 'publisher',
-                'container_title', 'crossref_check', 'takeaways',
-            ),
-            'description': 'This section contains general information about the article'
-        }),
-			('Machine Learning Predictions', { 
-					'fields': ('ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc','ml_predictions'),
-					'description': 'Grouping machine learning prediction indicators',  # Optional: You can provide a description for the fieldset
-			}),
+				'fields': (
+					'title', 'link', 'doi', 'summary', 'teams', 'subjects', 'source', 'sources',
+					'published_date', 'discovery_date', 'authors', 'categories',
+					'entities', 'relevant', 'noun_phrases', 'sent_to_teams',
+					'sent_to_subscribers', 'kind', 'access', 'publisher',
+					'container_title', 'crossref_check', 'takeaways',
+				),
+				'description': 'This section contains general information about the article'
+		}),
+		('Machine Learning Predictions', { 
+				'fields': ('ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc', 'ml_predictions_display'),
+				'description': 'Grouping machine learning prediction indicators',
+		}),
 	)
-	list_display = ['article_id', 'title','source']
-	readonly_fields = ['ml_prediction_gnb','ml_prediction_lr','ml_prediction_lsvc','categories','entities','discovery_date']
-	search_fields = ['article_id', 'title','doi' ]
+	list_display = ['article_id', 'title', 'source']
+	readonly_fields = ['ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc', 'categories', 'entities', 'discovery_date']
+	search_fields = ['article_id', 'title', 'doi']
 	list_filter = ('relevant',)
-	raw_id_fields = ("authors",)  # Add other fields if needed
-
-
+	raw_id_fields = ("authors",)
 class TrialAdmin(admin.ModelAdmin):
 	# a list of displayed columns name.
 	list_display = ['trial_id', 'title', 'last_updated']
@@ -54,4 +69,3 @@ admin.site.register(Sources,SourceAdmin)
 admin.site.register(Subject)
 admin.site.register(Trials, TrialAdmin)
 admin.site.register(MLPredictions)
-# 

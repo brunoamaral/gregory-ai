@@ -1,0 +1,25 @@
+{% load static %}
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Subject</th>
+            <th>Gaussian Naive Bayes</th>
+            <th>Logistic Regression</th>
+            <th>Linear Support Vector Classification</th>
+            <th>Multinomial Naive Bayes</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for prediction in predictions %}
+        <tr>
+            <td>{{ prediction.id }}</td>
+            <td>{{ prediction.subject }}</td>
+            <td>{{ prediction.gnb }}</td>
+            <td>{{ prediction.lr }}</td>
+            <td>{{ prediction.lsvc }}</td>
+            <td>{{ prediction.mnb }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
