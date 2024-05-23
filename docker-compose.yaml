@@ -68,25 +68,6 @@ services:
       - gregory_network
     depends_on:
       - db
-  metabase:
-    container_name: metabase
-    volumes:
-      - ./metabase-data:/metabase-data
-    environment:
-      - MB_DB_TYPE=postgres
-      - MB_DB_DBNAME=metabase
-      - MB_DB_PORT=5432
-      - MB_DB_USER=${POSTGRES_USER}
-      - MB_DB_PASS=${POSTGRES_PASSWORD}
-      - MB_DB_HOST=${DB_HOST}
-    ports:
-      - 3000:3000
-    image: metabase/metabase
-    restart: always
-    depends_on:
-      - db
-    networks:
-      - gregory_network
 
 networks:
   gregory_network:
