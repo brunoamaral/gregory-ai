@@ -34,19 +34,6 @@ For other integrations, the Django app provides RSS feeds with a live update of 
 
 #### Rest API: <https://api.gregory-ms.com>
 
-### Current sources for searches
-
-1. APTA
-2. BioMedCentral
-3. FASEB
-4. JNeuroSci
-5. MS & Rel. Disorders
-6. PEDro
-7. pubmed
-8. Sage Pub
-9. Scielo
-10. The Lancet
-
 ## Running in Production
 
 ### Server Requirements
@@ -133,22 +120,6 @@ Django also allows you to add new sources from where to fetch articles. Take a l
 ### Node-RED
 
 We use [Node-RED](https://nodered.org/) to collect articles from sources without an RSS. These flows need to be added manually and configured to write to the postres database. If your node-red container does not show a series of flows, import the `flows.json` file from this repository.
-
-### Metabase
-
-A database is only as good as it's ability to answer questions. We have a separate `metabase` container in the docker-compose.yaml file that connects directly to Gregory's database.
-
-It's available at <http://localhost:3000/>
-
-The current website also uses some embeded dashboards whose keys are produced each time you run `build.py`. An example can be found in the [MS Observatory Page](https://gregory-ms.com/observatory/)
-
-<img src="images/image-20220619200017849.png" alt="image-20220619200017849" style="zoom:33%;" />
-
-Including dashboards in your content:
-
-1. Add the dashboard ID to `data/dashboards.json`
-2. In your content, use the shortcode `{{ metabase-embed dashboard="10" width="1300" height="1250" }}`
-3. Run `build.py`
 
 ### Mailgun
 
