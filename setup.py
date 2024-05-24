@@ -31,7 +31,7 @@ else:
 
 Did not find a .env file, we need to set some configuration variables. If in doubt, you can input blank and configure the .env file later.
 
-Some variables are optional: EMAIL_*, METABASE_*, ORCID_*
+Some variables are optional: EMAIL_*, ORCID_*
 	''')
 
 	configs = {
@@ -46,8 +46,6 @@ Some variables are optional: EMAIL_*, METABASE_*, ORCID_*
 	"EMAIL_PORT" : 587, 
 	"EMAIL_USE_TLS" : 'true', 
 	"GREGORY_DIR" : os.getenv('GREGORY_DIR'),
-	"METABASE_SECRET_KEY" : os.getenv('METABASE_SECRET_KEY'),
-	"METABASE_SITE_URL" : os.getenv('METABASE_SITE_URL'),
 	"POSTGRES_DB" : os.getenv('POSTGRES_DB'),
 	"POSTGRES_PASSWORD" : os.getenv('POSTGRES_PASSWORD'),
 	"POSTGRES_USER" : os.getenv('POSTGRES_USER'),
