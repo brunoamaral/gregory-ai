@@ -1,11 +1,11 @@
-from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, CategorySerializer
+from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, CategorySerializer, TeamSerializer
 from datetime import datetime, timedelta
 from django.db.models import Count
 from django.db.models import Q
 from django.db.models.functions import Length, TruncMonth
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper
-from gregory.models import Articles, Trials, Sources, Authors, Categories
+from gregory.models import Articles, Trials, Sources, Authors, Categories,Team
 from rest_framework import permissions
 from rest_framework import viewsets, permissions, generics, filters
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -543,3 +543,15 @@ class ProtectedEndpointView(APIView):
 
 	def get(self, request):
 		return Response({"message": "You have accessed the protected endpoint!"})
+
+###
+# TEAMS
+###
+
+class TeamsViewSet(viewsets.ModelViewSet):
+	"""
+	List all teams
+	"""
+	queryset = Team.objects.all().order_by('id')
+	serializer_class = TeamSerializer
+	permission_classes  = [permissions.IsAuthenticatedOrReadOnly]

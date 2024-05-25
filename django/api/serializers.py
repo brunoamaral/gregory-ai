@@ -126,3 +126,9 @@ class CountArticlesSerializer(serializers.ModelSerializer):
 
     def get_articles_count(self, obj):
         return Articles.objects.count()
+
+
+class TeamSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Team
+        fields = '__all__'

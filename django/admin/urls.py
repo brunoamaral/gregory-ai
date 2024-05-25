@@ -27,7 +27,7 @@ from api.views import (
 	ArticlesByJournal, ArticlesBySubject, AuthorsViewSet, OpenAccessArticles, 
 	RelevantList, UnsentList, TrialsBySourceList, SourceViewSet, TrialViewSet, 
 	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView,
-	ArticlesByTeam, ArticlesBySubject
+	ArticlesByTeam, ArticlesBySubject, TeamsViewSet
 )
 from rss.views import (
 	ArticlesByAuthorFeed, ArticlesByCategoryFeed, ArticlesBySubjectFeed, OpenAccessFeed,
@@ -42,6 +42,7 @@ router.register(r'authors', AuthorsViewSet)
 router.register(r'categories', CategoryViewSet)
 router.register(r'sources', SourceViewSet)
 router.register(r'trials', TrialViewSet)
+router.register(r'teams', TeamsViewSet)
 
 # Define URL patterns
 urlpatterns = [
@@ -100,6 +101,9 @@ urlpatterns = [
 
 	# Protected endpoint route
 	path('protected_endpoint/', ProtectedEndpointView.as_view(), name='protected_endpoint'),
+
+	# Team Routes
+	path('teams/', TeamsViewSet.as_view({'get':'list'})),
 
 	# Include router routes
 	path('', include(router.urls)),
