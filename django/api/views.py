@@ -584,10 +584,18 @@ class TrialsByTeam(viewsets.ModelViewSet):
 	"""
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
 		return Trials.objects.filter(teams__id=team_id).order_by('-discovery_date')
 
+class SubjectsByTeam(viewsets.ModelViewSet):
+	"""
+	List all research subjects for a specific team by ID
+	"""
+	serializer_class = SubjectsSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
-		return Articles.objects.filter(teams__id=team_id).order_by('-discovery_date')
+		return Subject.objects.filter(team__id=team_id).order_by('-id')
