@@ -49,6 +49,25 @@ class Categories(models.Model):
 		db_table = 'categories'
 		unique_together = (('category_slug','team'),)
 
+class TeamCategory(models.Model):
+	team = models.ForeignKey('Team', on_delete=models.CASCADE, related_name='team_categories')
+	category_name = models.CharField(max_length=200)
+	category_description = models.TextField(blank=True, null=True)
+	category_slug = models.SlugField(blank=True, null=True, unique=True)
+	category_terms = ArrayField(models.CharField(max_length=100), default=list, verbose_name='Terms to include in category (comma separated)', help_text="Add terms separated by commas.")
+
+	def save(self, *args, **kwargs):
+		if not self.category_slug:
+				self.category_slug = slugify(self.category_name)
+		super().save(*args, **kwargs)
+
+	def __str__(self):
+		return f"{self.team.name} - {self.category_name}"
+
+	class Meta:
+		unique_together = (('team', 'category_slug'),)
+		verbose_name_plural = 'team categories'
+		db_table = 'team_categories'
 
 class Entities(models.Model):
 	entity = models.TextField()
@@ -121,6 +140,7 @@ class Articles(models.Model):
 	discovery_date = models.DateTimeField(auto_now_add=True)
 	authors = models.ManyToManyField(Authors, blank=True)
 	categories = models.ManyToManyField(Categories)
+	team_categories = models.ManyToManyField('TeamCategory', related_name='articles')
 	entities = models.ManyToManyField('Entities')
 	relevant = models.BooleanField(blank=True, null=True)
 	ml_prediction_gnb = models.BooleanField(blank=True, null=True, 
@@ -147,7 +167,7 @@ class Articles(models.Model):
 	history = HistoricalRecords()
 	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
-	sent_to_teams = models.ManyToManyField('Team', related_name='sent_articles', null=True, blank=True)   # Allows an article to be sent to one or more teams
+	sent_to_teams = models.ManyToManyField('Team', related_name='sent_articles')   # Allows an article to be sent to one or more teams
 	def __str__(self):
 		return str(self.article_id)
 
@@ -172,6 +192,7 @@ class Trials(models.Model):
 	sent_to_subscribers = models.BooleanField(blank=True, null=True) # Used to keep track of the weekly emails
 	sent_real_time_notification = models.BooleanField(default=False, blank=True) # Used to keep track of the emails sent every 12h
 	categories = models.ManyToManyField(Categories,blank=True)
+	team_categories = models.ManyToManyField('TeamCategory', related_name='trials')
 	identifiers = models.JSONField(blank=True,null=True)
 	teams = models.ManyToManyField('Team', related_name='trials')  # Allows an clinical trial to belong to one or more teams
 	subjects = models.ManyToManyField('Subject', related_name='trials') # Allows a clinical trial to belong to one or more subjects

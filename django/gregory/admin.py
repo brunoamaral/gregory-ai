@@ -1,6 +1,6 @@
 from django.contrib import admin
 # Register your models here.
-from .models import Articles, Categories, Trials, Sources, Entities, Authors, Subject, MLPredictions,ArticleSubjectRelevance
+from .models import Articles, Categories, Trials, Sources, Entities, Authors, Subject, MLPredictions,ArticleSubjectRelevance,TeamCategory
 from .widgets import MLPredictionsWidget
 from django import forms
 from .fields import MLPredictionsField
@@ -61,6 +61,11 @@ class SubjectAdmin(admin.ModelAdmin):
 class AuthorsAdmin(admin.ModelAdmin):
 	search_fields = ['family_name', 'given_name' ]
 
+@admin.register(TeamCategory)
+class TeamCategoryAdmin(admin.ModelAdmin):
+	list_display = ('team', 'category_name', 'category_slug')
+	search_fields = ('category_name', 'team__name')
+	
 admin.site.register(Articles,ArticleAdmin)
 admin.site.register(Authors,AuthorsAdmin)
 admin.site.register(Categories)
