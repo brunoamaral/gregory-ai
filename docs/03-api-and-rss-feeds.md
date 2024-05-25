@@ -1,4 +1,4 @@
-# API and RSS feeds
+# RSS feeds
 
 Gregory's API is open and doesn't require authentication unless you need to use it to add Articles or Clinical Trials.
 
@@ -19,34 +19,83 @@ Gregory's API is open and doesn't require authentication unless you need to use 
    - `feed/machine-learning/`: Feed for machine learning related articles.
 5. **Subscriptions Route:**
    - `subscriptions/new/`: Endpoint for new subscriptions.
-6. **More Articles Routes:**
-   - `articles/author/<int:author_id>/`: List articles by a specific author.
-   - `articles/category/<category_slug>/`: List articles in a specific category.
-   - `articles/source/<int:source_id>`: List articles from a specific source.
-   - `articles/subject/<subject>/`: List articles on a specific subject.
-   - `articles/journal/<journal_slug>/`: List articles from a specific journal.
-   - `articles/open-access/`: List open-access articles.
-   - `articles/unsent/`: List unsent articles.
-7. **Relevant Articles Routes:**
-   - `articles/relevant/week/<int:year>/<int:week>/`: Articles relevant for a specific week.
-   - `articles/relevant/last/<int:days>/`: Articles relevant in the last X days.
-8. **Category Routes:**
-   - `categories/`: List all categories.
-   - `categories/<category_slug>/monthly-counts/`: Monthly counts for a specific category.
-9. **Trial Routes:**
-   - `trials/category/<category_slug>/`: List trials in a specific category.
-   - `trials/source/<source>/`: List trials from a specific source.
-10. **Token Routes:**
-    - `api/token/`: Obtain a new token pair.
-    - `api/token/get/`: Obtain an authentication token.
-11. **Protected Endpoint Route:**
-    - `protected_endpoint/`: A protected endpoint.
-12. **Router Registered Routes:**
-    - `articles/`: Routes for `ArticleViewSet`.
-    - `authors/`: Routes for `AuthorsViewSet`.
-    - `categories/`: Routes for `CategoryViewSet`.
-    - `sources/`: Routes for `SourceViewSet`.
-    - `trials/`: Routes for `TrialViewSet`.
 
+# API EndPoints
 
-You might want to use tools such as Postman or similar to test these endpoints, ensuring they provide the expected functionality.
+| Model                   | API Endpoint                             | Description                                         | Status                                                   |
+| ----------------------- | ---------------------------------------- | --------------------------------------------------- | -------------------------------------------------------- |
+| Authors                 | GET /authors/                            | List all authors                                    | ✅                                       |
+| Authors                 | POST /authors/                           | Create a new author                                 | 🛑                                              |
+| Authors                 | GET /authors/{id}/                       | Retrieve a specific author by ID                    | ✅                                       |
+| Authors                 | PUT /authors/{id}/                       | Update a specific author by ID                      | 🛑                                              |
+| Authors                 | DELETE /authors/{id}/                    | Delete a specific author by ID                      | 🛑                                              |
+| Categories              | GET /categories/                         | List all categories                                 | ✅                                                        |
+| Categories              | POST /categories/                        | Create a new category                               | 🛑                                              |
+| Categories              | GET /categories/{id}/                    | Retrieve a specific category by ID                  | ✅                                                        |
+| Categories              | PUT /categories/{id}/                    | Update a specific category by ID                    | 🛑                                              |
+| Categories              | DELETE /categories/{id}/                 | Delete a specific category by ID                    | 🛑                                              |
+| Categories              | GET /categories/<str:category_slug>/monthly-counts/ | Get monthly counts of articles and trials for a specific category by slug | |
+| Team Categories         | GET /team-categories/                    | List all team categories                            |                                                          |
+| Team Categories         | POST /team-categories/                   | Create a new team category                          | 🛑                                              |
+| Team Categories         | GET /team-categories/{id}/               | Retrieve a specific team category by ID             |                                                          |
+| Team Categories         | PUT /team-categories/{id}/               | Update a specific team category by ID               | 🛑                                              |
+| Team Categories         | DELETE /team-categories/{id}/            | Delete a specific team category by ID               | 🛑                                              |
+| Entities                | GET /entities/                           | List all entities                                   | 🛑                                              |
+| Entities                | POST /entities/                          | Create a new entity                                 | 🛑                                              |
+| Entities                | GET /entities/{id}/                      | Retrieve a specific entity by ID                    | 🛑                                              |
+| Entities                | PUT /entities/{id}/                      | Update a specific entity by ID                      | 🛑                                              |
+| Entities                | DELETE /entities/{id}/                   | Delete a specific entity by ID                      | 🛑                                              |
+| Subjects                | GET /subjects/                           | List all subjects                                   | ✅                                       |
+| Subjects                | POST /subjects/                          | Create a new subject                                | 🛑                                              |
+| Subjects                | GET /subjects/{id}/                      | Retrieve a specific subject by ID                   | ✅                                       |
+| Subjects                | PUT /subjects/{id}/                      | Update a specific subject by ID                     | 🛑                                              |
+| Subjects                | DELETE /subjects/{id}/                   | Delete a specific subject by ID                     | 🛑                                              |
+| Sources                 | GET /sources/                            | List all sources                                    | ✅ needs to migrate to new sources model |
+| Sources                 | POST /sources/                           | Create a new source                                 | 🛑                                              |
+| Sources                 | GET /sources/{id}/                       | Retrieve a specific source by ID                    | ✅ needs to migrate to new sources model |
+| Sources                 | PUT /sources/{id}/                       | Update a specific source by ID                      | 🛑                                              |
+| Sources                 | DELETE /sources/{id}/                    | Delete a specific source by ID                      | 🛑                                              |
+| Articles                | GET /articles/                           | List all articles                                   | ✅                                       |
+| Articles                | POST /articles/                          | Create a new article                                | ✅                                       |
+| Articles                | GET /articles/{id}/                      | Retrieve a specific article by ID                   | ✅                                       |
+| Articles                | PUT /articles/{id}/                      | Update a specific article by ID                     | 🛑                                              |
+| Articles                | DELETE /articles/{id}/                   | Delete a specific article by ID                     | 🛑                                              |
+| Articles                | GET /articles/relevant/                  | List relevant articles                              |                                                          |
+| Articles                | POST /articles/post/                     | Post a new article                                  |                                                          |
+| Articles                | GET /articles/author/{author_id}/        | List articles by author                             |                                                          |
+| Articles                | GET /articles/category/{category_slug}/  | List articles by category                           |                                                          |
+| Articles                | GET /articles/source/{source_id}/        | List articles by source                             |                                                          |
+| Articles                | GET /articles/journal/{journal_slug}/    | List articles by journal                            |                                                          |
+| Articles                | GET /articles/open-access/               | List open access articles                           |                                                          |
+| Articles                | GET /articles/unsent/                    | List unsent articles                                |                                                          |
+| Articles                | GET /articles/relevant/week/{year}/{week}/| List relevant articles for a specific week          |                                                          |
+| Articles                | GET /articles/relevant/last/{days}/      | List relevant articles for the last number of days  |                                                          |
+| Trials                  | GET /trials/                             | List all trials                                     | ✅                                       |
+| Trials                  | POST /trials/                            | Create a new trial                                  | 🛑                                              |
+| Trials                  | GET /trials/{id}/                        | Retrieve a specific trial by ID                     | ✅                                       |
+| Trials                  | PUT /trials/{id}/                        | Update a specific trial by ID                       | 🛑                                              |
+| Trials                  | DELETE /trials/{id}/                     | Delete a specific trial by ID                       | 🛑                                              |
+| Trials                  | GET /trials/category/{category_slug}/    | List trials by category                             |                                                          |
+| Trials                  | GET /trials/source/{source}/             | List trials by source                               |                                                          |
+| Teams                   | GET /teams/                              | List all teams                                      | ✅                                       |
+| Teams                   | POST /teams/                             | Create a new team                                   |                                                          |
+| Teams                   | GET /teams/{id}/                         | Retrieve a specific team by ID                      | ✅                                       |
+| Teams                   | PUT /teams/{id}/                         | Update a specific team by ID                        |                                                          |
+| Teams                   | DELETE /teams/{id}/                      | Delete a specific team by ID                        |                                                          |
+| Teams                   | GET /teams/{id}/articles                 | List all articles for a specific team by ID         | ✅                                       |
+| Teams                   | GET /teams/{id}/trials                   | List all clinical trials for a specific team by ID  | ✅                                       |
+| Teams                   | GET /teams/{id}/subjects                 | List all subjects for specific team by ID           | ✅                                       |
+| Teams                   | GET /teams/{id}/sources                  | List all sources for specific team by ID            | ✅                                       |
+| Teams                   | GET /teams/{id}/categories               | List all categories for specific team by ID         | ✅                                       |
+| MLPredictions           | GET /ml-predictions/                     | List all ML predictions                             | 🛑                                              |
+| MLPredictions           | POST /ml-predictions/                    | Create a new ML prediction                          | 🛑                                              |
+| MLPredictions           | GET /ml-predictions/{id}/                | Retrieve a specific ML prediction by ID             | 🛑                                              |
+| MLPredictions           | PUT /ml-predictions/{id}/                | Update a specific ML prediction by ID               | 🛑                                              |
+| MLPredictions           | DELETE /ml-predictions/{id}/             | Delete a specific ML prediction by ID               | 🛑                                              |
+| ArticleSubjectRelevance | GET /article-subject-relevances/         | List all article subject relevances                 | 🛑                                              |
+| ArticleSubjectRelevance | POST /article-subject-relevances/        | Create a new article subject relevance              | 🛑                                              |
+| ArticleSubjectRelevance | GET /article-subject-relevances/{id}/    | Retrieve a specific article subject relevance by ID | 🛑                                              |
+| ArticleSubjectRelevance | PUT /article-subject-relevances/{id}/    | Update a specific article subject relevance by ID   | 🛑                                              |
+| ArticleSubjectRelevance | DELETE /article-subject-relevances/{id}/ | Delete a specific article subject relevance by ID   | 🛑                                              |
+
+This table now includes the additional endpoints defined in your `urls.py` file, ensuring that all your API endpoints are accurately tracked.

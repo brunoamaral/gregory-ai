@@ -1,11 +1,11 @@
-from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, CategorySerializer
+from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, CategorySerializer, TeamSerializer,SubjectsSerializer
 from datetime import datetime, timedelta
 from django.db.models import Count
 from django.db.models import Q
 from django.db.models.functions import Length, TruncMonth
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper
-from gregory.models import Articles, Trials, Sources, Authors, Categories
+from gregory.models import Articles, Trials, Sources, Authors, Categories,Team,Subject
 from rest_framework import permissions
 from rest_framework import viewsets, permissions, generics, filters
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -543,3 +543,82 @@ class ProtectedEndpointView(APIView):
 
 	def get(self, request):
 		return Response({"message": "You have accessed the protected endpoint!"})
+
+###
+# TEAMS
+###
+
+class TeamsViewSet(viewsets.ModelViewSet):
+	"""
+	List all teams
+	"""
+	queryset = Team.objects.all().order_by('id')
+	serializer_class = TeamSerializer
+	permission_classes  = [permissions.IsAuthenticatedOrReadOnly]
+
+###
+# SUBJECTS
+###
+
+class SubjectsViewSet(viewsets.ModelViewSet):
+	"""
+	List all subjects
+	"""
+	queryset = Subject.objects.all().order_by('id')
+	serializer_class = SubjectsSerializer
+	permission_classes  = [permissions.IsAuthenticatedOrReadOnly]
+
+class ArticlesByTeam(viewsets.ModelViewSet):
+		"""
+		List all articles for a specific team by ID
+		"""
+		serializer_class = ArticleSerializer
+		permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+		def get_queryset(self):
+				team_id = self.kwargs.get('team_id')
+				return Articles.objects.filter(teams__id=team_id).order_by('-discovery_date')
+class TrialsByTeam(viewsets.ModelViewSet):
+	"""
+	List all clinical trials for a specific team by ID
+	"""
+	serializer_class = TrialSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		team_id = self.kwargs.get('team_id')
+		return Trials.objects.filter(teams__id=team_id).order_by('-discovery_date')
+
+class SubjectsByTeam(viewsets.ModelViewSet):
+	"""
+	List all research subjects for a specific team by ID
+	"""
+	serializer_class = SubjectsSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		team_id = self.kwargs.get('team_id')
+		return Subject.objects.filter(team__id=team_id).order_by('-id')
+
+class SourcesByTeam(viewsets.ModelViewSet):
+	"""
+	List all sources for a specific team by ID
+	"""
+	serializer_class = SourceSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		team_id = self.kwargs.get('team_id')
+		return Sources.objects.filter(team__id=team_id).order_by('-source_id')
+
+
+class CategoriesByTeam(viewsets.ModelViewSet):
+	"""
+	List all categories for a specific team by ID
+	"""
+	serializer_class = CategorySerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		team_id = self.kwargs.get('team_id')
+		return Categories.objects.filter(team__id=team_id).order_by('-category_id')
