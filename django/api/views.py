@@ -610,3 +610,15 @@ class SourcesByTeam(viewsets.ModelViewSet):
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
 		return Sources.objects.filter(team__id=team_id).order_by('-source_id')
+
+
+class CategoriesByTeam(viewsets.ModelViewSet):
+	"""
+	List all categories for a specific team by ID
+	"""
+	serializer_class = CategorySerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		team_id = self.kwargs.get('team_id')
+		return Categories.objects.filter(team__id=team_id).order_by('-category_id')

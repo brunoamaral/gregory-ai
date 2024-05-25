@@ -27,7 +27,7 @@ from api.views import (
 	ArticlesByJournal, ArticlesBySubject, AuthorsViewSet, OpenAccessArticles, 
 	RelevantList, UnsentList, TrialsBySourceList, SourceViewSet, TrialViewSet, 
 	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView,
-	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, TrialsByTeam, SubjectsByTeam, SourcesByTeam
+	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, TrialsByTeam, SubjectsByTeam, SourcesByTeam,CategoriesByTeam,
 )
 from rss.views import (
 	ArticlesByAuthorFeed, ArticlesByCategoryFeed, ArticlesBySubjectFeed, OpenAccessFeed,
@@ -66,6 +66,8 @@ urlpatterns = [
 	path('teams/<int:team_id>/subjects/', SubjectsByTeam.as_view({'get': 'list'}), name='subjects-by-team'),
 	# Sources by team
 	path('teams/<int:team_id>/sources/', SourcesByTeam.as_view({'get': 'list'}), name='sources-by-team'),
+	# Category by team
+	path('teams/<int:team_id>/categories/', CategoriesByTeam.as_view({'get': 'list'}), name='categories-by-team'),
 	# Articles by team and subject
 	path('articles/team/<int:team_id>/', ArticlesByTeam.as_view({'get': 'list'}), name='articles-by-team'),
 	path('articles/subject/<int:subject_id>/', ArticlesBySubject.as_view({'get': 'list'}), name='articles-by-subject'),
