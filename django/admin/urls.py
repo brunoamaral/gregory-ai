@@ -27,7 +27,7 @@ from api.views import (
 	ArticlesByJournal, ArticlesBySubject, AuthorsViewSet, OpenAccessArticles, 
 	RelevantList, UnsentList, TrialsBySourceList, SourceViewSet, TrialViewSet, 
 	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView,
-	ArticlesByTeam, ArticlesBySubject, TeamsViewSet
+	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet
 )
 from rss.views import (
 	ArticlesByAuthorFeed, ArticlesByCategoryFeed, ArticlesBySubjectFeed, OpenAccessFeed,
@@ -43,6 +43,7 @@ router.register(r'categories', CategoryViewSet)
 router.register(r'sources', SourceViewSet)
 router.register(r'trials', TrialViewSet)
 router.register(r'teams', TeamsViewSet)
+router.register(r'subjects', SubjectsViewSet)
 
 # Define URL patterns
 urlpatterns = [
@@ -57,6 +58,11 @@ urlpatterns = [
 	# Article routes
 	path('articles/relevant/', RelevantList.as_view()),
 	path('articles/post/', post_article),
+	# Articles by team
+	path('teams/<int:team_id>/articles/', ArticlesByTeam.as_view({'get': 'list'}), name='articles-by-team'),
+	# Articles by team and subject
+	path('articles/team/<int:team_id>/', ArticlesByTeam.as_view({'get': 'list'}), name='articles-by-team'),
+	path('articles/subject/<int:subject_id>/', ArticlesBySubject.as_view({'get': 'list'}), name='articles-by-subject'),
 
 	# Feed routes
 	path('feed/articles/author/<int:author_id>/', ArticlesByAuthorFeed(), name='articles_by_author_feed'),

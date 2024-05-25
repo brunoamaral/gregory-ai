@@ -7,7 +7,11 @@ from django.conf import settings
 
 customsettings = CustomSetting.objects.get(site=settings.SITE_ID)
 site = Site.objects.get(pk=settings.SITE_ID)
-
+class SubjectsSerializer(serializers.ModelSerializer):
+	team_id = serializers.IntegerField(source='team.id', read_only=True)
+	class Meta:
+		model = Subject
+		fields = ['id','subject_name', 'description', 'team_id']
 class TeamCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = TeamCategory
