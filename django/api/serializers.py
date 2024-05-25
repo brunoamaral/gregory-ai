@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from gregory.models import Articles, Trials, Sources, Authors, Categories, Subject, Team, MLPredictions, ArticleSubjectRelevance
+from gregory.models import Articles, Trials, Sources, Authors, Categories, Subject, Team, MLPredictions, ArticleSubjectRelevance,TeamCategory
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
 from django.contrib.sites.models import Site
@@ -8,6 +8,10 @@ from django.conf import settings
 customsettings = CustomSetting.objects.get(site=settings.SITE_ID)
 site = Site.objects.get(pk=settings.SITE_ID)
 
+class TeamCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TeamCategory
+        fields = ['id', 'category_name', 'category_description', 'category_slug', 'category_terms']
 class SubjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subject
@@ -50,6 +54,7 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
     sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field='name')
     categories = CategorySerializer(many=True, read_only=True)
+    team_categories = TeamCategorySerializer(many=True, read_only=True)
     authors = ArticleAuthorSerializer(many=True, read_only=True)
     teams = TeamSerializer(many=True, read_only=True)
     subjects = SubjectSerializer(many=True, read_only=True,)
@@ -64,13 +69,14 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
             'subjects', 'publisher', 'container_title', 'authors', 'relevant', 
             'ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc', 'discovery_date',
             'article_subject_relevances', 
-            'noun_phrases', 'doi', 'access', 'takeaways', 'categories', 'ml_predictions',
+            'noun_phrases', 'doi', 'access', 'takeaways', 'categories', 'team_categories', 'ml_predictions',
         ]
         read_only_fields = ('discovery_date', 'ml_predictions', 'ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc', 'noun_phrases', 'takeaways')
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
     source = serializers.SlugRelatedField(read_only=True, slug_field='name')
     categories = CategorySerializer(many=True, read_only=True)
+    team_categories = TeamCategorySerializer(many=True, read_only=True)
 
     class Meta:
         model = Trials
