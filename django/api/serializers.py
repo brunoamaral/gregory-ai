@@ -99,7 +99,7 @@ class TrialSerializer(serializers.HyperlinkedModelSerializer):
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Sources
-        fields = ['source_id', 'source_for', 'name', 'description', 'link', 'language']
+        fields = ['source_id', 'source_for', 'name', 'description', 'link', 'language', 'subject_id', 'team_id']
 
 class AuthorSerializer(serializers.ModelSerializer):
     articles_count = serializers.SerializerMethodField()
