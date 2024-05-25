@@ -86,6 +86,8 @@ class Command(BaseCommand):
                   if created:
                     science_paper.teams.add(source.team)
                     science_paper.subjects.add(source.subject)
+                    science_paper.sources.add(source)
+                    science_paper.save()
                   if not created:                      
                       if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),
                               science_paper.link != link, science_paper.published_date != published_date]):
@@ -93,6 +95,7 @@ class Command(BaseCommand):
                           science_paper.summary = SciencePaper.clean_abstract(abstract=summary)
                           science_paper.link = link
                           science_paper.published_date = published_date
+                          science_paper.sources.add(source)
                           science_paper.teams.add(source.team)
                           science_paper.subjects.add(source.subject)
                           science_paper.save()
@@ -227,6 +230,7 @@ class Command(BaseCommand):
                 existing_trial.published_date = clinical_trial.published_date
                 existing_trial.identifiers = clinical_trial.identifiers
                 existing_trial.source = source
+                existing_trial.sources.add(source)
                 existing_trial.teams.add(source.team)
                 existing_trial.subjects.add(source.subject)
                 existing_trial.save()
