@@ -569,12 +569,22 @@ class SubjectsViewSet(viewsets.ModelViewSet):
 	permission_classes  = [permissions.IsAuthenticatedOrReadOnly]
 
 class ArticlesByTeam(viewsets.ModelViewSet):
-    """
-    List all articles for a specific team by ID
-    """
-    serializer_class = ArticleSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+		"""
+		List all articles for a specific team by ID
+		"""
+		serializer_class = ArticleSerializer
+		permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-    def get_queryset(self):
-        team_id = self.kwargs.get('team_id')
-        return Articles.objects.filter(teams__id=team_id).order_by('-discovery_date')
+		def get_queryset(self):
+				team_id = self.kwargs.get('team_id')
+				return Articles.objects.filter(teams__id=team_id).order_by('-discovery_date')
+class TrialsByTeam(viewsets.ModelViewSet):
+	"""
+	List all clinical trials for a specific team by ID
+	"""
+	serializer_class = TrialSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		team_id = self.kwargs.get('team_id')
+		return Articles.objects.filter(teams__id=team_id).order_by('-discovery_date')
