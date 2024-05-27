@@ -140,7 +140,7 @@ class Articles(models.Model):
 	discovery_date = models.DateTimeField(auto_now_add=True)
 	authors = models.ManyToManyField(Authors, blank=True)
 	categories = models.ManyToManyField(Categories)
-	team_categories = models.ManyToManyField('TeamCategory', related_name='articles')
+	team_categories = models.ManyToManyField('TeamCategory', related_name='articles', blank=True)
 	entities = models.ManyToManyField('Entities')
 	relevant = models.BooleanField(blank=True, null=True)
 	ml_prediction_gnb = models.BooleanField(blank=True, null=True, 
@@ -167,7 +167,7 @@ class Articles(models.Model):
 	history = HistoricalRecords()
 	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
-	sent_to_teams = models.ManyToManyField('Team', related_name='sent_articles')   # Allows an article to be sent to one or more teams
+	sent_to_teams = models.ManyToManyField('Team', related_name='sent_articles', blank=True)   # Allows an article to be sent to one or more teams
 	def __str__(self):
 		return str(self.article_id)
 
