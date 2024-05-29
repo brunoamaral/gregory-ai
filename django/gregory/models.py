@@ -143,18 +143,6 @@ class Articles(models.Model):
 	team_categories = models.ManyToManyField('TeamCategory', related_name='articles', blank=True)
 	entities = models.ManyToManyField('Entities')
 	relevant = models.BooleanField(blank=True, null=True)
-	ml_prediction_gnb = models.BooleanField(blank=True, null=True, 
-		verbose_name="Gaussian Naive Bayes Prediction",
-		help_text="Indicates the Machine Learning prediction made using Gaussian Naive Bayes."
-	)
-	ml_prediction_lr = models.BooleanField(blank=True, null=True,
-		verbose_name="Logistic Regression Prediction",
-		help_text="Indicates the Machine Learning prediction made using Logistic Regression."
-	)
-	ml_prediction_lsvc = models.BooleanField(blank=True,null=True,
-		verbose_name="Linear Support Vector Classification Prediction",
-		help_text="Indicates the Machine Learning prediction made using Linear Support Vector Classification."
-	)
 	ml_predictions = models.ManyToManyField('MLPredictions', blank=True)
 	noun_phrases = models.JSONField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True)
