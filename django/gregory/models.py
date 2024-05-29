@@ -164,6 +164,7 @@ class Articles(models.Model):
 		unique_together = (('title', 'link'),)
 		verbose_name_plural = 'articles'
 		db_table = 'articles'
+		ordering = ['-discovery_date']
 
 class Trials(models.Model):
 	trial_id = models.AutoField(primary_key=True)
