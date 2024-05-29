@@ -67,8 +67,7 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 		fields = [
 			'article_id', 'title', 'summary', 'link', 'published_date', 'sources', 'teams', 
 			'subjects', 'publisher', 'container_title', 'authors', 'relevant', 
-			'ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc', 'discovery_date',
-			'article_subject_relevances', 
+			'discovery_date', 'article_subject_relevances', 
 			'noun_phrases', 'doi', 'access', 'takeaways', 'categories', 'team_categories', 'ml_predictions',
 		]
 		read_only_fields = ('discovery_date', 'ml_predictions', 'ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc', 'noun_phrases', 'takeaways')
