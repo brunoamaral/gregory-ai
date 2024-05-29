@@ -42,6 +42,7 @@ class ArticleAdmin(admin.ModelAdmin):
 		}),
 	)
 	list_display = ['article_id', 'title', 'source']
+	ordering = ['-discovery_date']
 	readonly_fields = ['categories', 'entities', 'discovery_date']
 	search_fields = ['article_id', 'title', 'doi']
 	list_filter = ('relevant',)
