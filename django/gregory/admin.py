@@ -36,13 +36,13 @@ class ArticleAdmin(admin.ModelAdmin):
 				),
 				'description': 'This section contains general information about the article'
 		}),
-		('Machine Learning Predictions', { 
-				'fields': ('ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc', 'ml_predictions_display'),
+		('Machine Learning Relevancy Predictions per Subject', { 
+				'fields': ('ml_predictions_display',),
 				'description': 'Grouping machine learning prediction indicators',
 		}),
 	)
 	list_display = ['article_id', 'title', 'source']
-	readonly_fields = ['ml_prediction_gnb', 'ml_prediction_lr', 'ml_prediction_lsvc', 'categories', 'entities', 'discovery_date']
+	readonly_fields = ['categories', 'entities', 'discovery_date']
 	search_fields = ['article_id', 'title', 'doi']
 	list_filter = ('relevant',)
 	raw_id_fields = ("authors",)
