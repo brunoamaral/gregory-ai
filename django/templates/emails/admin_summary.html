@@ -126,11 +126,16 @@ table.body .article {
 												<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">
 													<a href="{{article.link}}" style="color: #3498db; text-decoration: underline;">{{article.link}}</a>
 												</p>
-												<ul>
-													<li>ML GNB: {{article.ml_prediction_gnb}} </li>
-													<li>ML LR: {{article.ml_prediction_lr }} </li>
-													<li>ML LSVC: {{article.ml_prediction_lsvc }} </li>
-												</ul>
+													{% for prediction in article.ml_predictions.all %}
+														<strong>Subject:</strong> {{ prediction.subject.subject_name }}
+														<ul>
+														<li>ML GNB: {{ prediction.gnb }} </li>
+														<li>ML LR: {{ prediction.lr }} </li>
+														<li>ML LSVC: {{ prediction.lsvc }} </li>
+														<li>ML MNB: {{ prediction.mnb }} </li>
+														</ul>
+													{% endfor %}	
+	
 												<h3>Key takeaways</h3>
 												<p>{{article.takeaways}}</p>
 												<p><a href="https://api.{{site.domain}}/admin/gregory/articles/{{article.article_id}}/change/">EDIT</a></p>

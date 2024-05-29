@@ -4,11 +4,12 @@ from django.core.management.base import BaseCommand
 from django.db.models import Q
 from django.template.loader import get_template
 from django.utils.html import strip_tags
-from gregory.models import Articles, Trials, Team, Subject
+from gregory.models import Articles, Trials, Team, Subject, MLPredictions
 from sitesettings.models import *
 from subscriptions.models import Subscribers
 import datetime
 import requests
+from django.db.models import Prefetch
 
 class Command(BaseCommand):
     help = 'Sends an admin summary every 2 days.'
@@ -23,7 +24,9 @@ class Command(BaseCommand):
             subjects = team.subjects.all()
             for subject in subjects:
                 # fetch the articles and trials that were not sent to the team it will be something like the following but we need to find a better way to track if the article was sent to that user
-                articles = Articles.objects.filter(subjects=subject).exclude(sent_to_teams=team)
+                articles = Articles.objects.filter(subjects=subject).exclude(sent_to_teams=team).prefetch_related(
+                    Prefetch('ml_predictions', queryset=MLPredictions.objects.select_related('subject'))
+                )
                 trials = Trials.objects.filter(subjects=subject).exclude(sent_to_teams=team)
                 results = []
                 for member in members:
