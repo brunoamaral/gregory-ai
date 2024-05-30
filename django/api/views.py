@@ -492,6 +492,21 @@ class TrialsByCategory(viewsets.ModelViewSet):
 
 			return Trials.objects.filter(teams=team_id, team_categories=category).order_by('-trial_id')
 
+class TrialsBySubject(viewsets.ModelViewSet):
+	"""
+	Search Trials by the subject field and team ID. Usage /teams/<team_id>/trials/subject/<subject_id>/
+	"""
+	serializer_class = TrialSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		team_id = self.kwargs['team_id']
+		subject_id = self.kwargs['subject_id']
+		get_object_or_404(Subject, id=subject_id, team_id=team_id)
+
+		return Trials.objects.filter(teams=team_id, subjects=subject_id).order_by('-trial_id')
+
+
 ###
 # SOURCES
 ### 

@@ -26,7 +26,7 @@ from api.views import (
 	RelevantList, UnsentList, TrialsBySourceList, SourceViewSet, TrialViewSet, 
 	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView,
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, TrialsByTeam, SubjectsByTeam, SourcesByTeam, CategoriesByTeam,
- ArticlesByCategoryAndTeam,ArticlesBySource
+ ArticlesByCategoryAndTeam,ArticlesBySource,TrialsBySubject
 )
 from rss.views import (
 	ArticlesByAuthorFeed, ArticlesByCategoryFeed, ArticlesBySubjectFeed, OpenAccessFeed,
@@ -94,6 +94,7 @@ urlpatterns = [
 	## List clinical trials per category
 	path('teams/<int:team_id>/trials/category/<str:category_slug>/', TrialsByCategory.as_view({'get':'list'})),
 	## List clinical trials per subject
+	path('teams/<int:team_id>/trials/subject/<int:subject_id>/', TrialsBySubject.as_view({'get':'list'})),
 	## List clinical trials per source
 	## List categories
 	path('teams/<int:team_id>/categories/', CategoriesByTeam.as_view({'get': 'list'}), name='categories-by-team'),
