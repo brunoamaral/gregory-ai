@@ -468,15 +468,16 @@ class AllTrialViewSet(generics.ListAPIView):
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
-class TrialsBySourceList(generics.ListAPIView):
-	serializer_class = ArticleSerializer
+class TrialsBySource(generics.ListAPIView):
+	serializer_class = TrialSerializer
 
 	def get_queryset(self):
 		"""
 		Lists the clinical trials that come from the specified source_id
 		"""
-		source = self.kwargs['source']
-		return Trials.objects.filter(source=source)
+		team_id = self.kwargs['team_id']
+		source_id = self.kwargs['source_id']
+		return Trials.objects.filter(teams__id=team_id, source__source_id=source_id)
 
 class TrialsByCategory(viewsets.ModelViewSet):
 	"""

@@ -23,7 +23,7 @@ from rest_framework.authtoken import views
 from api.views import (
 	ArticleViewSet, ArticlesByAuthorList, ArticlesByCategory,
 	ArticlesByJournal, ArticlesBySubject, AuthorsViewSet, OpenAccessArticles, 
-	RelevantList, UnsentList, TrialsBySourceList, SourceViewSet, TrialViewSet, 
+	RelevantList, UnsentList, TrialsBySource, SourceViewSet, TrialViewSet, 
 	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView,
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, TrialsByTeam, SubjectsByTeam, SourcesByTeam, CategoriesByTeam,
  ArticlesByCategoryAndTeam,ArticlesBySource,TrialsBySubject
@@ -96,6 +96,7 @@ urlpatterns = [
 	## List clinical trials per subject
 	path('teams/<int:team_id>/trials/subject/<int:subject_id>/', TrialsBySubject.as_view({'get':'list'})),
 	## List clinical trials per source
+	path('teams/<int:team_id>/trials/source/<int:source_id>/', TrialsBySource.as_view(), name='trials-by-source'),	
 	## List categories
 	path('teams/<int:team_id>/categories/', CategoriesByTeam.as_view({'get': 'list'}), name='categories-by-team'),
 	## List monthly counts per category
@@ -109,7 +110,6 @@ urlpatterns = [
 	# Old API routes
 	# List all Clinical Trials 
 	
-	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
 	# Articles routes
 	path('articles/author/<int:author_id>/', ArticlesByAuthorList.as_view()),
 	path('articles/relevant/', RelevantList.as_view()),
