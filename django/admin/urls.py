@@ -92,6 +92,7 @@ urlpatterns = [
 	## List clinical trials
 	path('teams/<int:team_id>/trials/', TrialsByTeam.as_view({'get': 'list'}), name='trials-by-team'),
 	## List clinical trials per category
+	path('teams/<int:team_id>/trials/category/<str:category_slug>/', TrialsByCategory.as_view({'get':'list'})),
 	## List clinical trials per subject
 	## List clinical trials per source
 	## List categories
@@ -106,7 +107,7 @@ urlpatterns = [
 	
 	# Old API routes
 	# List all Clinical Trials 
-	re_path('^trials/category/(?P<category_slug>[-\w]+)/$', TrialsByCategory.as_view({'get':'list'})),
+	
 	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
 	# Articles routes
 	path('articles/author/<int:author_id>/', ArticlesByAuthorList.as_view()),

@@ -482,19 +482,15 @@ class TrialsByCategory(viewsets.ModelViewSet):
 	"""
 	Search Trials by the category field. Usage /trials/category/{{category_slug}}/
 	"""
-	def get_queryset(self):
-			category_slug = self.kwargs.get('category_slug', None)
-			category = TeamCategory.objects.filter(category_slug=category_slug).first()
-
-			if category is None:
-				# Returning an empty queryset
-				return Trials.objects.none()
-
-			return Trials.objects.filter(categories=category).order_by('-trial_id')
-
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+	def get_queryset(self):
+			team_id = self.kwargs['team_id']
+			category_slug = self.kwargs.get('category_slug', None)
+			category = get_object_or_404(TeamCategory, category_slug=category_slug, team_id=team_id)
+
+			return Trials.objects.filter(teams=team_id, team_categories=category).order_by('-trial_id')
 
 ###
 # SOURCES
