@@ -1,38 +1,32 @@
-from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, CategorySerializer, TeamSerializer,SubjectsSerializer
+from api.serializers import (
+		ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, 
+		CategorySerializer, TeamSerializer, SubjectsSerializer, ArticlesByCategoryAndTeamSerializer
+)
 from datetime import datetime, timedelta
-from django.db.models import Count
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.db.models.functions import Length, TruncMonth
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper
-from gregory.models import Articles, Trials, Sources, Authors, Categories,Team,Subject
-from rest_framework import permissions
-from rest_framework import viewsets, permissions, generics, filters
-from rest_framework_simplejwt.views import TokenObtainPairView
+from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, TeamCategory
+from rest_framework import permissions, viewsets, generics, filters
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView
 import json
-
-# Stuff needed for the API with authorization
 import traceback
-from api.utils.utils import (checkValidAccess, getAPIKey, getIPAddress)
+
+from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
-										APIAccessDeniedError,
-										APIInvalidAPIKeyError,
-										APIInvalidIPAddressError,
-										APINoAPIKeyError, 
-										ArticleExistsError, 
-										ArticleNotSavedError,
-										DoiNotFound, 
-										FieldNotFoundError, 
-										SourceNotFoundError, 
-										)
-from api.utils.responses import (ACCESS_DENIED, INVALID_API_KEY,
-										 INVALID_IP_ADDRESS, NO_API_KEY,
-										 UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError)
-
+		APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError,
+		APINoAPIKeyError, ArticleExistsError, ArticleNotSavedError, DoiNotFound, 
+		FieldNotFoundError, SourceNotFoundError
+)
+from api.utils.responses import (
+		ACCESS_DENIED, INVALID_API_KEY, INVALID_IP_ADDRESS, NO_API_KEY,
+		UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError
+)
 def getDateRangeFromWeek(p_year,p_week):
 	firstdayofweek = datetime.strptime(f'{p_year}-W{int(p_week )- 1}-1', "%Y-W%W-%w")
 	lastdayofweek = firstdayofweek + timedelta(days=6.9)
@@ -265,8 +259,9 @@ class ArticlesBySubject(viewsets.ModelViewSet):
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
+		team_id = self.kwargs.get('team_id')
 		subject_id = self.kwargs.get('subject_id')
-		return Articles.objects.filter(subjects__id=subject_id).order_by('-discovery_date')
+		return Articles.objects.filter(subjects__id=subject_id, teams=team_id).order_by('-discovery_date')
 class ArticlesByJournal(viewsets.ModelViewSet):
 	"""
 	Search articles by the journal field. Usage /articles/journal/{{journal}}/.
@@ -337,16 +332,14 @@ class lastXdays(viewsets.ModelViewSet):
 
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-class ArticlesBySourceList(generics.ListAPIView):
-	"""
-	Lists the articles that come from the specified source_id
-	"""
+class ArticlesBySource(viewsets.ModelViewSet):
 	serializer_class = ArticleSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
-
-		source_id = self.kwargs['source_id']
-		return Articles.objects.filter(source=source_id)
+		team_id = self.kwargs.get('team_id')
+		source_id = self.kwargs.get('source_id')
+		return Articles.objects.filter(teams__id=team_id, sources__source_id=source_id).order_by('-discovery_date')
 
 class ArticlesByAuthorList(generics.ListAPIView):
 	"""
@@ -422,30 +415,31 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	"""
 	List all categories in the database.
 	"""
-	queryset = Categories.objects.all()
+	queryset = TeamCategory.objects.all()
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-class MonthlyCountsView(generics.ListAPIView):
-	def get(self, request, category_slug):
-			category = get_object_or_404(Categories, category_slug=category_slug)
+class MonthlyCountsView(APIView):
+	def get(self, request, team_id, category_slug):
+			team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
+			
 			# Monthly article counts
-			articles = Articles.objects.filter(categories=category)
+			articles = Articles.objects.filter(team_categories=team_category)
 			articles = articles.annotate(month=TruncMonth('published_date'))
 			article_counts = articles.values('month').annotate(count=Count('article_id')).order_by('month')
 			article_counts = list(article_counts.values('month', 'count'))
 
 			# Monthly trial counts
-			trials = Trials.objects.filter(categories=category)
+			trials = Trials.objects.filter(team_categories=team_category)
 			trials = trials.annotate(month=TruncMonth('published_date'))
 			trial_counts = trials.values('month').annotate(count=Count('trial_id')).order_by('month')
 			trial_counts = list(trial_counts.values('month', 'count'))
 
 			data = {
-				'category_name': category.category_name,
-				'category_slug': category.category_slug,
-				'monthly_article_counts': article_counts,
-				'monthly_trial_counts': trial_counts,
+					'category_name': team_category.category_name,
+					'category_slug': team_category.category_slug,
+					'monthly_article_counts': article_counts,
+					'monthly_trial_counts': trial_counts,
 			}
 
 			return Response(data)
@@ -474,32 +468,44 @@ class AllTrialViewSet(generics.ListAPIView):
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
-class TrialsBySourceList(generics.ListAPIView):
-	serializer_class = ArticleSerializer
+class TrialsBySource(generics.ListAPIView):
+	serializer_class = TrialSerializer
 
 	def get_queryset(self):
 		"""
 		Lists the clinical trials that come from the specified source_id
 		"""
-		source = self.kwargs['source']
-		return Trials.objects.filter(source=source)
+		team_id = self.kwargs['team_id']
+		source_id = self.kwargs['source_id']
+		return Trials.objects.filter(teams__id=team_id, source__source_id=source_id)
 
 class TrialsByCategory(viewsets.ModelViewSet):
 	"""
 	Search Trials by the category field. Usage /trials/category/{{category_slug}}/
 	"""
-	def get_queryset(self):
-			category_slug = self.kwargs.get('category_slug', None)
-			category = Categories.objects.filter(category_slug=category_slug).first()
-
-			if category is None:
-				# Returning an empty queryset
-				return Trials.objects.none()
-
-			return Trials.objects.filter(categories=category).order_by('-trial_id')
-
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+			team_id = self.kwargs['team_id']
+			category_slug = self.kwargs.get('category_slug', None)
+			category = get_object_or_404(TeamCategory, category_slug=category_slug, team_id=team_id)
+
+			return Trials.objects.filter(teams=team_id, team_categories=category).order_by('-trial_id')
+
+class TrialsBySubject(viewsets.ModelViewSet):
+	"""
+	Search Trials by the subject field and team ID. Usage /teams/<team_id>/trials/subject/<subject_id>/
+	"""
+	serializer_class = TrialSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		team_id = self.kwargs['team_id']
+		subject_id = self.kwargs['subject_id']
+		get_object_or_404(Subject, id=subject_id, team_id=team_id)
+
+		return Trials.objects.filter(teams=team_id, subjects=subject_id).order_by('-trial_id')
 
 
 ###
@@ -611,7 +617,6 @@ class SourcesByTeam(viewsets.ModelViewSet):
 		team_id = self.kwargs.get('team_id')
 		return Sources.objects.filter(team__id=team_id).order_by('-source_id')
 
-
 class CategoriesByTeam(viewsets.ModelViewSet):
 	"""
 	List all categories for a specific team by ID
@@ -621,4 +626,20 @@ class CategoriesByTeam(viewsets.ModelViewSet):
 
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
-		return Categories.objects.filter(team__id=team_id).order_by('-category_id')
+		return TeamCategory.objects.filter(team__id=team_id).order_by('-id')
+
+
+class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
+		"""
+		List all articles for a specific category and team.
+		"""
+		serializer_class = ArticleSerializer
+		permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+		def get_queryset(self):
+				team_id = self.kwargs.get('team_id')
+				category_slug = self.kwargs.get('category_slug')
+				team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
+				return Articles.objects.filter(team_categories=team_category).prefetch_related(
+						'team_categories', 'sources', 'authors', 'teams', 'subjects', 'ml_predictions'
+				)

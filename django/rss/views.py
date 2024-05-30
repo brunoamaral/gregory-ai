@@ -3,7 +3,7 @@ from django.shortcuts import render
 # Create your views here.
 from django.contrib.syndication.views import Feed
 from django.conf import settings
-from gregory.models import Articles, Authors, Trials, Sources, Categories
+from gregory.models import Articles, Authors, Trials, Sources, TeamCategory
 from django.urls import reverse
 
 
@@ -65,14 +65,18 @@ class ArticlesBySubjectFeed(Feed):
 class ArticlesByCategoryFeed(Feed):
 	title = "Latest research articles by Subject"
 	link = "/articles/"
-	description = "Real time results for research on Multiple Sclerosis."
-	def get_object(self, request, category):
-			category = category.replace('-', ' ')
-			category = Categories.objects.filter(category_name__iregex=category)
-			return category
+	description = "Real-time results for research on Multiple Sclerosis."
 
-	def items(self, category):
-		return Articles.objects.filter(categories=category.first()).order_by('-discovery_date')[:5]
+	def get_object(self, request, team_id, category_slug):
+		# Retrieve the team category based on team_id and category_slug
+		category = TeamCategory.objects.filter(team__id=team_id, category_slug=category_slug).first()
+		if not category:
+			raise Http404("Category does not exist")
+		return category
+
+	def items(self, obj):
+		# Return the latest articles for the given category
+		return Articles.objects.filter(team_categories=obj).order_by('-discovery_date')[:10]
 
 	def item_title(self, item):
 		return item.title
@@ -80,9 +84,9 @@ class ArticlesByCategoryFeed(Feed):
 	def item_description(self, item):
 		return item.summary
 
-	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://' + settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
+		# item_link is only needed if NewsItem has no get_absolute_url method.
+		return 'https://' + settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/'
 
 	def item_pubdate(self, item):
 		"""
