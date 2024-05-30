@@ -82,6 +82,7 @@ urlpatterns = [
 	path('teams/', TeamsViewSet.as_view({'get':'list'})),
 	## List articles
 	path('teams/<int:team_id>/articles/', ArticlesByTeam.as_view({'get': 'list'}), name='articles-by-team'),
+	## List article per ID
 	## List articles per subject
 	path('teams/<int:team_id>/articles/subject/<int:subject_id>/', ArticlesBySubject.as_view({'get': 'list'}), name='articles-by-subject'),
 	## List articles per category: OK
@@ -108,9 +109,8 @@ urlpatterns = [
 	
 	
 	# Old API routes
-	# List all Clinical Trials 
 	
-	# Articles routes
+	## Articles routes
 	path('articles/author/<int:author_id>/', ArticlesByAuthorList.as_view()),
 	path('articles/relevant/', RelevantList.as_view()),
 	path('articles/relevant/last/<int:days>/', lastXdays.as_view({'get': 'list'})),
@@ -119,11 +119,6 @@ urlpatterns = [
 	re_path('^articles/journal/(?P<journal_slug>.+)/$', ArticlesByJournal.as_view({'get':'list'})),
 	re_path('^articles/open-access/$', OpenAccessArticles.as_view()),
 	re_path('^articles/unsent/$', UnsentList.as_view()),
-
-
-	# Categories routes
-
-
 
 	# Include router routes
 	path('', include(router.urls)),
