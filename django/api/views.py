@@ -419,26 +419,27 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-class MonthlyCountsView(generics.ListAPIView):
-	def get(self, request, category_slug):
-			category = get_object_or_404(TeamCategory, category_slug=category_slug)
+class MonthlyCountsView(APIView):
+	def get(self, request, team_id, category_slug):
+			team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
+			
 			# Monthly article counts
-			articles = Articles.objects.filter(categories=category)
+			articles = Articles.objects.filter(team_categories=team_category)
 			articles = articles.annotate(month=TruncMonth('published_date'))
 			article_counts = articles.values('month').annotate(count=Count('article_id')).order_by('month')
 			article_counts = list(article_counts.values('month', 'count'))
 
 			# Monthly trial counts
-			trials = Trials.objects.filter(categories=category)
+			trials = Trials.objects.filter(team_categories=team_category)
 			trials = trials.annotate(month=TruncMonth('published_date'))
 			trial_counts = trials.values('month').annotate(count=Count('trial_id')).order_by('month')
 			trial_counts = list(trial_counts.values('month', 'count'))
 
 			data = {
-				'category_name': category.category_name,
-				'category_slug': category.category_slug,
-				'monthly_article_counts': article_counts,
-				'monthly_trial_counts': trial_counts,
+					'category_name': team_category.category_name,
+					'category_slug': team_category.category_slug,
+					'monthly_article_counts': article_counts,
+					'monthly_trial_counts': trial_counts,
 			}
 
 			return Response(data)

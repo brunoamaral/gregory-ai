@@ -96,6 +96,8 @@ urlpatterns = [
 	## List clinical trials per source
 	## List categories
 	path('teams/<int:team_id>/categories/', CategoriesByTeam.as_view({'get': 'list'}), name='categories-by-team'),
+	## List monthly counts per category
+	path('teams/<int:team_id>/categories/<str:category_slug>/monthly-counts/', MonthlyCountsView.as_view()),
 	## List subjects
 	path('teams/<int:team_id>/subjects/', SubjectsByTeam.as_view({'get': 'list'}), name='subjects-by-team'),
 	## List sources
@@ -118,8 +120,8 @@ urlpatterns = [
 
 
 	# Categories routes
-	path('categories/', CategoryViewSet.as_view({'get':'list'})),
-	path('categories/<str:category_slug>/monthly-counts/', MonthlyCountsView.as_view()),
+
+
 
 	# Include router routes
 	path('', include(router.urls)),
