@@ -53,7 +53,6 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
 
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field='name')
-	categories = TeamCategorySerializer(many=True, read_only=True)
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 	authors = ArticleAuthorSerializer(many=True, read_only=True)
 	teams = TeamSerializer(many=True, read_only=True)
@@ -68,13 +67,12 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 			'article_id', 'title', 'summary', 'link', 'published_date', 'sources', 'teams', 
 			'subjects', 'publisher', 'container_title', 'authors', 'relevant', 
 			'discovery_date', 'article_subject_relevances', 
-			'noun_phrases', 'doi', 'access', 'takeaways', 'categories', 'team_categories', 'ml_predictions',
+			'noun_phrases', 'doi', 'access', 'takeaways', 'team_categories', 'ml_predictions',
 		]
 		read_only_fields = ('discovery_date', 'ml_predictions', 'noun_phrases', 'takeaways')
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
-	categories = TeamCategorySerializer(many=True, read_only=True)
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 
 	class Meta:
