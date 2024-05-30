@@ -7,6 +7,11 @@ from django.conf import settings
 
 customsettings = CustomSetting.objects.get(site=settings.SITE_ID)
 site = Site.objects.get(pk=settings.SITE_ID)
+
+class TeamSerializer(serializers.ModelSerializer):
+	class Meta:
+		model = Team
+		fields = '__all__'
 class SubjectsSerializer(serializers.ModelSerializer):
 	team_id = serializers.IntegerField(source='team.id', read_only=True)
 	class Meta:
@@ -121,11 +126,6 @@ class CountArticlesSerializer(serializers.ModelSerializer):
 	def get_articles_count(self, obj):
 		return Articles.objects.count()
 
-
-class TeamSerializer(serializers.ModelSerializer):
-	class Meta:
-		model = Team
-		fields = '__all__'
 
 class ArticlesByCategoryAndTeamSerializer(serializers.ModelSerializer):
     articles = ArticleSerializer(many=True, read_only=True)
