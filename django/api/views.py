@@ -624,7 +624,7 @@ class CategoriesByTeam(viewsets.ModelViewSet):
 
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
-		return Categories.objects.filter(team__id=team_id).order_by('-category_id')
+		return TeamCategory.objects.filter(team__id=team_id).order_by('-id')
 
 
 class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
