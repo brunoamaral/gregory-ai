@@ -54,23 +54,8 @@ urlpatterns = [
 	path('api/token/', LoginView.as_view(), name='token_obtain_pair'),
 	path('api/token/get/', views.obtain_auth_token),
 
-	# Articles routes
-	path('articles/author/<int:author_id>/', ArticlesByAuthorList.as_view()),
+	# API routes
 	path('articles/post/', post_article),
-	path('articles/relevant/', RelevantList.as_view()),
-	path('articles/relevant/last/<int:days>/', lastXdays.as_view({'get': 'list'})),
-	path('articles/relevant/week/<int:year>/<int:week>/', newsletterByWeek.as_view({'get': 'list'})),
-	re_path('^articles/category/(?P<category_slug>[-\w]+)/$', ArticlesByCategory.as_view({'get':'list'})),
-	re_path('^articles/journal/(?P<journal_slug>.+)/$', ArticlesByJournal.as_view({'get':'list'})),
-	re_path('^articles/open-access/$', OpenAccessArticles.as_view()),
-	re_path('^articles/unsent/$', UnsentList.as_view()),
-	path('articles/source/<int:source_id>/', ArticlesBySourceList.as_view()),
-	path('articles/subject/<int:subject_id>/', ArticlesBySubject.as_view({'get': 'list'}), name='articles-by-subject'),
-	path('articles/team/<int:team_id>/', ArticlesByTeam.as_view({'get': 'list'}), name='articles-by-team'),
-
-	# Categories routes
-	path('categories/', CategoryViewSet.as_view({'get':'list'})),
-	path('categories/<str:category_slug>/monthly-counts/', MonthlyCountsView.as_view()),
 
 	# Feed routes
 	path('feed/articles/author/<int:author_id>/', ArticlesByAuthorFeed(), name='articles_by_author_feed'),
@@ -91,21 +76,48 @@ urlpatterns = [
 	# Subscriptions route
 	path('subscriptions/new/', subscribe_view),
 
-	# Team routes
+	# Team API
+	## List Teams
 	path('teams/', TeamsViewSet.as_view({'get':'list'})),
+	## List articles
 	path('teams/<int:team_id>/articles/', ArticlesByTeam.as_view({'get': 'list'}), name='articles-by-team'),
+	## List articles per subject
 	## List articles per category: OK
 	path('teams/<int:team_id>/articles/category/<str:category_slug>/', ArticlesByCategoryAndTeam.as_view({'get': 'list'}), name='articles-by-category-and-team'),
 	## List articles per source
-	path('teams/<int:team_id>/categories/', CategoriesByTeam.as_view({'get': 'list'}), name='categories-by-team'),
-	path('teams/<int:team_id>/categories/<str:category_slug>/', ArticlesByCategoryAndTeam.as_view({'get': 'list'}), name='articles-by-category-and-team'),
-	path('teams/<int:team_id>/sources/', SourcesByTeam.as_view({'get': 'list'}), name='sources-by-team'),
-	path('teams/<int:team_id>/subjects/', SubjectsByTeam.as_view({'get': 'list'}), name='subjects-by-team'),
+	## List articles per journal
+	## List clinical trials
 	path('teams/<int:team_id>/trials/', TrialsByTeam.as_view({'get': 'list'}), name='trials-by-team'),
-
-	# Trials routes
+	## List clinical trials per category
+	## List clinical trials per subject
+	## List clinical trials per source
+	## List categories
+	path('teams/<int:team_id>/categories/', CategoriesByTeam.as_view({'get': 'list'}), name='categories-by-team'),
+	## List subjects
+	path('teams/<int:team_id>/subjects/', SubjectsByTeam.as_view({'get': 'list'}), name='subjects-by-team'),
+	## List sources
+	path('teams/<int:team_id>/sources/', SourcesByTeam.as_view({'get': 'list'}), name='sources-by-team'),
+	
+	
+	# Old API routes
+	# List all Clinical Trials 
 	re_path('^trials/category/(?P<category_slug>[-\w]+)/$', TrialsByCategory.as_view({'get':'list'})),
 	re_path('^trials/source/(?P<source>.+)/$', TrialsBySourceList.as_view()),
+	# Articles routes
+	path('articles/author/<int:author_id>/', ArticlesByAuthorList.as_view()),
+	path('articles/relevant/', RelevantList.as_view()),
+	path('articles/relevant/last/<int:days>/', lastXdays.as_view({'get': 'list'})),
+	path('articles/relevant/week/<int:year>/<int:week>/', newsletterByWeek.as_view({'get': 'list'})),
+	re_path('^articles/category/(?P<category_slug>[-\w]+)/$', ArticlesByCategory.as_view({'get':'list'})),
+	re_path('^articles/journal/(?P<journal_slug>.+)/$', ArticlesByJournal.as_view({'get':'list'})),
+	re_path('^articles/open-access/$', OpenAccessArticles.as_view()),
+	re_path('^articles/unsent/$', UnsentList.as_view()),
+	path('articles/source/<int:source_id>/', ArticlesBySourceList.as_view()),
+	path('articles/subject/<int:subject_id>/', ArticlesBySubject.as_view({'get': 'list'}), name='articles-by-subject'),
+
+	# Categories routes
+	path('categories/', CategoryViewSet.as_view({'get':'list'})),
+	path('categories/<str:category_slug>/monthly-counts/', MonthlyCountsView.as_view()),
 
 	# Include router routes
 	path('', include(router.urls)),
