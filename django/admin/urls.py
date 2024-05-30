@@ -25,7 +25,8 @@ from api.views import (
 	ArticlesByJournal, ArticlesBySubject, AuthorsViewSet, OpenAccessArticles, 
 	RelevantList, UnsentList, TrialsBySourceList, SourceViewSet, TrialViewSet, 
 	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView,
-	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, TrialsByTeam, SubjectsByTeam, SourcesByTeam, CategoriesByTeam, ArticlesByCategoryAndTeam
+	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, TrialsByTeam, SubjectsByTeam, SourcesByTeam, CategoriesByTeam,
+ ArticlesByCategoryAndTeam
 )
 from rss.views import (
 	ArticlesByAuthorFeed, ArticlesByCategoryFeed, ArticlesBySubjectFeed, OpenAccessFeed,

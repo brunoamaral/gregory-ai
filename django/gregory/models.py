@@ -24,7 +24,6 @@ class Authors(models.Model):
 	def full_name(self):
 		return self.given_name+" "+self.family_name
 
-
 class TeamCategory(models.Model):
 	team = models.ForeignKey('Team', on_delete=models.CASCADE, related_name='team_categories')
 	category_name = models.CharField(max_length=200)
