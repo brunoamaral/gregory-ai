@@ -40,6 +40,9 @@ class TeamCategory(models.Model):
 	def __str__(self):
 		return f"{self.team.name} - {self.category_name}"
 
+	def article_count(self):
+		return self.articles.count()
+
 	class Meta:
 		unique_together = (('team', 'category_slug'),)
 		verbose_name_plural = 'team categories'
