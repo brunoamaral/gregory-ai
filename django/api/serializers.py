@@ -38,7 +38,7 @@ class TeamSerializer(serializers.ModelSerializer):
 class CategorySerializer(serializers.ModelSerializer):
 	class Meta:
 		model = TeamCategory
-		fields = ['category_id', 'category_description', 'category_name', 'category_slug', 'category_terms', 'article_count']
+		fields = ['id', 'category_description', 'category_name', 'category_slug', 'category_terms', 'article_count']
 
 class ArticleAuthorSerializer(serializers.ModelSerializer):
 	country = serializers.SerializerMethodField()
