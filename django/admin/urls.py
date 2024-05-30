@@ -21,12 +21,12 @@ from rest_framework import routers
 from rest_framework.authtoken import views
 
 from api.views import (
-	ArticleViewSet, ArticlesByAuthorList, ArticlesByCategory, ArticlesBySourceList,
+	ArticleViewSet, ArticlesByAuthorList, ArticlesByCategory,
 	ArticlesByJournal, ArticlesBySubject, AuthorsViewSet, OpenAccessArticles, 
 	RelevantList, UnsentList, TrialsBySourceList, SourceViewSet, TrialViewSet, 
 	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView,
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, TrialsByTeam, SubjectsByTeam, SourcesByTeam, CategoriesByTeam,
- ArticlesByCategoryAndTeam
+ ArticlesByCategoryAndTeam,ArticlesBySource
 )
 from rss.views import (
 	ArticlesByAuthorFeed, ArticlesByCategoryFeed, ArticlesBySubjectFeed, OpenAccessFeed,
@@ -86,6 +86,7 @@ urlpatterns = [
 	## List articles per category: OK
 	path('teams/<int:team_id>/articles/category/<str:category_slug>/', ArticlesByCategoryAndTeam.as_view({'get': 'list'}), name='articles-by-category-and-team'),
 	## List articles per source
+	path('teams/<int:team_id>/articles/source/<int:source_id>/', ArticlesBySource.as_view({'get': 'list'}), name='articles-by-category-and-team'),
 	## List articles per journal
 	## List clinical trials
 	path('teams/<int:team_id>/trials/', TrialsByTeam.as_view({'get': 'list'}), name='trials-by-team'),
@@ -113,7 +114,7 @@ urlpatterns = [
 	re_path('^articles/journal/(?P<journal_slug>.+)/$', ArticlesByJournal.as_view({'get':'list'})),
 	re_path('^articles/open-access/$', OpenAccessArticles.as_view()),
 	re_path('^articles/unsent/$', UnsentList.as_view()),
-	path('articles/source/<int:source_id>/', ArticlesBySourceList.as_view()),
+	path('articles/source/<int:source_id>/', ArticlesBySource.as_view({'get': 'list'})),
 	path('articles/subject/<int:subject_id>/', ArticlesBySubject.as_view({'get': 'list'}), name='articles-by-subject'),
 
 	# Categories routes

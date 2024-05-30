@@ -331,16 +331,14 @@ class lastXdays(viewsets.ModelViewSet):
 
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-class ArticlesBySourceList(generics.ListAPIView):
-	"""
-	Lists the articles that come from the specified source_id
-	"""
+class ArticlesBySource(viewsets.ModelViewSet):
 	serializer_class = ArticleSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
-
-		source_id = self.kwargs['source_id']
-		return Articles.objects.filter(source=source_id)
+		team_id = self.kwargs.get('team_id')
+		source_id = self.kwargs.get('source_id')
+		return Articles.objects.filter(teams__id=team_id, sources__source_id=source_id).order_by('-discovery_date')
 
 class ArticlesByAuthorList(generics.ListAPIView):
 	"""
