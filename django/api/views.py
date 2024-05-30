@@ -5,7 +5,7 @@ from django.db.models import Q
 from django.db.models.functions import Length, TruncMonth
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper
-from gregory.models import Articles, Trials, Sources, Authors, Categories,Team,Subject
+from gregory.models import Articles, Trials, Sources, Authors,Team,Subject,TeamCategory
 from rest_framework import permissions
 from rest_framework import viewsets, permissions, generics, filters
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -422,13 +422,13 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	"""
 	List all categories in the database.
 	"""
-	queryset = Categories.objects.all()
+	queryset = TeamCategory.objects.all()
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 class MonthlyCountsView(generics.ListAPIView):
 	def get(self, request, category_slug):
-			category = get_object_or_404(Categories, category_slug=category_slug)
+			category = get_object_or_404(TeamCategory, category_slug=category_slug)
 			# Monthly article counts
 			articles = Articles.objects.filter(categories=category)
 			articles = articles.annotate(month=TruncMonth('published_date'))
@@ -490,7 +490,7 @@ class TrialsByCategory(viewsets.ModelViewSet):
 	"""
 	def get_queryset(self):
 			category_slug = self.kwargs.get('category_slug', None)
-			category = Categories.objects.filter(category_slug=category_slug).first()
+			category = TeamCategory.objects.filter(category_slug=category_slug).first()
 
 			if category is None:
 				# Returning an empty queryset

@@ -24,30 +24,6 @@ class Authors(models.Model):
 	def full_name(self):
 		return self.given_name+" "+self.family_name
 
-	
-class Categories(models.Model):
-	category_id = models.AutoField(primary_key=True)
-	category_description = models.TextField(blank=True, null=True)
-	category_name = models.CharField(blank=True, null=True,max_length=200)
-	category_slug = models.SlugField(blank=True, null=True, unique=True) # new field with unique=True
-	category_terms = ArrayField(models.CharField(blank=False, null=False, max_length=100),default=list,verbose_name='Terms to include in category (comma separated)', help_text="Add terms separated by commas.")
-	team = models.ForeignKey('Team', on_delete=models.CASCADE, blank=False, null=False, related_name="team")
-	def save(self, *args, **kwargs):
-		if not self.category_slug:
-			self.category_slug = slugify(self.category_name)
-		super().save(*args, **kwargs)
-
-	def __str__(self):
-		return self.category_name
-
-	def article_count(self):
-		return self.articles_set.count()
-	
-	class Meta:
-		managed = True
-		verbose_name_plural = 'categories'
-		db_table = 'categories'
-		unique_together = (('category_slug','team'),)
 
 class TeamCategory(models.Model):
 	team = models.ForeignKey('Team', on_delete=models.CASCADE, related_name='team_categories')
@@ -139,7 +115,6 @@ class Articles(models.Model):
 	published_date = models.DateTimeField(blank=True, null=True)
 	discovery_date = models.DateTimeField(auto_now_add=True)
 	authors = models.ManyToManyField(Authors, blank=True)
-	categories = models.ManyToManyField(Categories)
 	team_categories = models.ManyToManyField('TeamCategory', related_name='articles', blank=True)
 	entities = models.ManyToManyField('Entities')
 	relevant = models.BooleanField(blank=True, null=True)
@@ -180,7 +155,6 @@ class Trials(models.Model):
 	sent = models.BooleanField(blank=True, null=True)
 	sent_to_subscribers = models.BooleanField(blank=True, null=True) # Used to keep track of the weekly emails
 	sent_real_time_notification = models.BooleanField(default=False, blank=True) # Used to keep track of the emails sent every 12h
-	categories = models.ManyToManyField(Categories,blank=True)
 	team_categories = models.ManyToManyField('TeamCategory', related_name='trials')
 	identifiers = models.JSONField(blank=True,null=True)
 	teams = models.ManyToManyField('Team', related_name='trials')  # Allows an clinical trial to belong to one or more teams

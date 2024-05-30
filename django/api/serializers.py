@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from gregory.models import Articles, Trials, Sources, Authors, Categories, Subject, Team, MLPredictions, ArticleSubjectRelevance,TeamCategory,Subject
+from gregory.models import Articles, Trials, Sources, Authors, Subject, Team, MLPredictions, ArticleSubjectRelevance,TeamCategory,Subject
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
 from django.contrib.sites.models import Site
@@ -37,7 +37,7 @@ class TeamSerializer(serializers.ModelSerializer):
 
 class CategorySerializer(serializers.ModelSerializer):
 	class Meta:
-		model = Categories
+		model = TeamCategory
 		fields = ['category_id', 'category_description', 'category_name', 'category_slug', 'category_terms', 'article_count']
 
 class ArticleAuthorSerializer(serializers.ModelSerializer):
@@ -53,7 +53,7 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
 
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field='name')
-	categories = CategorySerializer(many=True, read_only=True)
+	categories = TeamCategorySerializer(many=True, read_only=True)
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 	authors = ArticleAuthorSerializer(many=True, read_only=True)
 	teams = TeamSerializer(many=True, read_only=True)
@@ -74,14 +74,14 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
-	categories = CategorySerializer(many=True, read_only=True)
+	categories = TeamCategorySerializer(many=True, read_only=True)
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 
 	class Meta:
 		model = Trials
 		fields = [
 			'trial_id', 'title', 'summary', 'published_date', 'discovery_date', 'link', 'source', 'relevant', 
-			'identifiers', 'categories', 'team_categories', 'export_date', 'internal_number', 'last_refreshed_on', 
+			'identifiers', 'team_categories', 'export_date', 'internal_number', 'last_refreshed_on', 
 			'scientific_title', 'primary_sponsor', 'retrospective_flag', 'date_registration', 
 			'source_register', 'recruitment_status', 'other_records', 'inclusion_agemin', 
 			'inclusion_agemax', 'inclusion_gender', 'date_enrollement', 'target_size', 
