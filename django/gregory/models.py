@@ -71,9 +71,9 @@ class Subject(models.Model):
 		return str(self.team) + " - " + self.subject_name
 
 	class Meta:
-			managed = True
-			verbose_name_plural = 'subjects'
-			db_table = 'subjects'
+		managed = True
+		verbose_name_plural = 'subjects'
+		db_table = 'subjects'
 
 
 class Sources(models.Model):
@@ -257,11 +257,11 @@ class ArticleSubjectRelevance(models.Model):
 	is_relevant = models.BooleanField(default=False, help_text="Indicates if the article is relevant for the subject.")
 
 	class Meta:
-			unique_together = ('article', 'subject')
-			verbose_name_plural = 'article subject relevances'
+		unique_together = ('article', 'subject')
+		verbose_name_plural = 'article subject relevances'
 
 	def __str__(self):
-			relevance_status = "Relevant" if self.is_relevant else "Not Relevant"
-			return f"{self.article.title} - {self.subject.subject_name}: {relevance_status}"
+		relevance_status = "Relevant" if self.is_relevant else "Not Relevant"
+		return f"{self.article.title} - {self.subject.subject_name}: {relevance_status}"
 
 
