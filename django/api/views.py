@@ -259,8 +259,9 @@ class ArticlesBySubject(viewsets.ModelViewSet):
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
+		team_id = self.kwargs.get('team_id')
 		subject_id = self.kwargs.get('subject_id')
-		return Articles.objects.filter(subjects__id=subject_id).order_by('-discovery_date')
+		return Articles.objects.filter(subjects__id=subject_id, teams=team_id).order_by('-discovery_date')
 class ArticlesByJournal(viewsets.ModelViewSet):
 	"""
 	Search articles by the journal field. Usage /articles/journal/{{journal}}/.
