@@ -94,6 +94,9 @@ urlpatterns = [
 	# Team routes
 	path('teams/', TeamsViewSet.as_view({'get':'list'})),
 	path('teams/<int:team_id>/articles/', ArticlesByTeam.as_view({'get': 'list'}), name='articles-by-team'),
+	## List articles per category: OK
+	path('teams/<int:team_id>/articles/category/<str:category_slug>/', ArticlesByCategoryAndTeam.as_view({'get': 'list'}), name='articles-by-category-and-team'),
+	## List articles per source
 	path('teams/<int:team_id>/categories/', CategoriesByTeam.as_view({'get': 'list'}), name='categories-by-team'),
 	path('teams/<int:team_id>/categories/<str:category_slug>/', ArticlesByCategoryAndTeam.as_view({'get': 'list'}), name='articles-by-category-and-team'),
 	path('teams/<int:team_id>/sources/', SourcesByTeam.as_view({'get': 'list'}), name='sources-by-team'),

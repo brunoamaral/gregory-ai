@@ -132,3 +132,11 @@ class TeamSerializer(serializers.ModelSerializer):
 		model = Team
 		fields = '__all__'
 
+class ArticlesByCategoryAndTeamSerializer(serializers.ModelSerializer):
+    articles = ArticleSerializer(many=True, read_only=True)
+    team = TeamSerializer(read_only=True)
+    category = TeamCategorySerializer(read_only=True, source='self')
+
+    class Meta:
+        model = TeamCategory
+        fields = ['id', 'team', 'category', 'articles']

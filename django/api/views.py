@@ -1,4 +1,8 @@
-from api.serializers import ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, CategorySerializer, TeamSerializer,SubjectsSerializer
+from api.serializers import (
+	ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, 
+	CategorySerializer, TeamSerializer,SubjectsSerializer,
+	ArticlesByCategoryAndTeamSerializer
+)
 from datetime import datetime, timedelta
 from django.db.models import Count
 from django.db.models import Q
@@ -611,7 +615,6 @@ class SourcesByTeam(viewsets.ModelViewSet):
 		team_id = self.kwargs.get('team_id')
 		return Sources.objects.filter(team__id=team_id).order_by('-source_id')
 
-
 class CategoriesByTeam(viewsets.ModelViewSet):
 	"""
 	List all categories for a specific team by ID
@@ -622,3 +625,19 @@ class CategoriesByTeam(viewsets.ModelViewSet):
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
 		return Categories.objects.filter(team__id=team_id).order_by('-category_id')
+
+
+class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
+    """
+    List all articles for a specific category and team.
+    """
+    serializer_class = ArticleSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        team_id = self.kwargs.get('team_id')
+        category_slug = self.kwargs.get('category_slug')
+        team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
+        return Articles.objects.filter(team_categories=team_category).prefetch_related(
+            'team_categories', 'sources', 'authors', 'teams', 'subjects', 'ml_predictions'
+        )
