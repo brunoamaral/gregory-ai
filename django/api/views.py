@@ -1,42 +1,32 @@
 from api.serializers import (
-	ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, 
-	CategorySerializer, TeamSerializer,SubjectsSerializer,
-	ArticlesByCategoryAndTeamSerializer
+		ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, 
+		CategorySerializer, TeamSerializer, SubjectsSerializer, ArticlesByCategoryAndTeamSerializer
 )
 from datetime import datetime, timedelta
-from django.db.models import Count
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.db.models.functions import Length, TruncMonth
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper
-from gregory.models import Articles, Trials, Sources, Authors,Team,Subject,TeamCategory
-from rest_framework import permissions
-from rest_framework import viewsets, permissions, generics, filters
-from rest_framework_simplejwt.views import TokenObtainPairView
+from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, TeamCategory
+from rest_framework import permissions, viewsets, generics, filters
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenObtainPairView
 import json
-
-# Stuff needed for the API with authorization
 import traceback
-from api.utils.utils import (checkValidAccess, getAPIKey, getIPAddress)
+
+from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
-										APIAccessDeniedError,
-										APIInvalidAPIKeyError,
-										APIInvalidIPAddressError,
-										APINoAPIKeyError, 
-										ArticleExistsError, 
-										ArticleNotSavedError,
-										DoiNotFound, 
-										FieldNotFoundError, 
-										SourceNotFoundError, 
-										)
-from api.utils.responses import (ACCESS_DENIED, INVALID_API_KEY,
-										 INVALID_IP_ADDRESS, NO_API_KEY,
-										 UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError)
-
+		APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError,
+		APINoAPIKeyError, ArticleExistsError, ArticleNotSavedError, DoiNotFound, 
+		FieldNotFoundError, SourceNotFoundError
+)
+from api.utils.responses import (
+		ACCESS_DENIED, INVALID_API_KEY, INVALID_IP_ADDRESS, NO_API_KEY,
+		UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError
+)
 def getDateRangeFromWeek(p_year,p_week):
 	firstdayofweek = datetime.strptime(f'{p_year}-W{int(p_week )- 1}-1', "%Y-W%W-%w")
 	lastdayofweek = firstdayofweek + timedelta(days=6.9)
@@ -628,16 +618,16 @@ class CategoriesByTeam(viewsets.ModelViewSet):
 
 
 class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
-    """
-    List all articles for a specific category and team.
-    """
-    serializer_class = ArticleSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+		"""
+		List all articles for a specific category and team.
+		"""
+		serializer_class = ArticleSerializer
+		permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-    def get_queryset(self):
-        team_id = self.kwargs.get('team_id')
-        category_slug = self.kwargs.get('category_slug')
-        team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
-        return Articles.objects.filter(team_categories=team_category).prefetch_related(
-            'team_categories', 'sources', 'authors', 'teams', 'subjects', 'ml_predictions'
-        )
+		def get_queryset(self):
+				team_id = self.kwargs.get('team_id')
+				category_slug = self.kwargs.get('category_slug')
+				team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
+				return Articles.objects.filter(team_categories=team_category).prefetch_related(
+						'team_categories', 'sources', 'authors', 'teams', 'subjects', 'ml_predictions'
+				)
