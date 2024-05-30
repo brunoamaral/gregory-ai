@@ -30,11 +30,6 @@ class MLPredictionsSerializer(serializers.ModelSerializer):
 		model = MLPredictions
 		fields = ['gnb', 'lr', 'lsvc', 'mnb', 'created_date', 'subject']
 
-class TeamSerializer(serializers.ModelSerializer):
-	class Meta:
-		model = Team
-		fields = ['id', 'name']
-
 class CategorySerializer(serializers.ModelSerializer):
 	class Meta:
 		model = TeamCategory
