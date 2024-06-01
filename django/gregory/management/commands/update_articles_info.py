@@ -1,6 +1,5 @@
 from django.core.management.base import BaseCommand
 from gregory.models import Articles
-import gregory.functions as greg
 from gregory.classes import SciencePaper
 from django.utils import timezone
 from django.db.models import Q
