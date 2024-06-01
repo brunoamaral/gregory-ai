@@ -71,7 +71,7 @@ class Command(BaseCommand):
 					for model in models:
 						if model in pipelines:  # Check if the model was successfully loaded
 							prediction = pipelines[model].predict([row['terms']])
-							new_predictions[model] = prediction[0] == 1
+							new_predictions[f'{model}'] = prediction[0] == 1
 						else:
 							print(f"Skipping predictions for model '{model}' as it was not loaded.")
 
