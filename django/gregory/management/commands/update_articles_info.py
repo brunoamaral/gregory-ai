@@ -20,7 +20,7 @@ class Command(BaseCommand):
 			try:
 				paper.refresh()
 				return True  # Success
-			except requests.exceptions.ConnectionError as e:
+			except requests.exceptions.RequestException as e:
 				self.stdout.write(f"Attempt {attempt + 1} failed: {e}")
 				if attempt < retries - 1:
 					self.stdout.write(f"Retrying in {delay} seconds...")
@@ -32,13 +32,13 @@ class Command(BaseCommand):
 	def update_article_details(self):
 		# Select articles that need updating but have a DOI
 		articles = Articles.objects.filter(
-				Q(doi__isnull=False, doi__gt=''),
-				(Q(crossref_check__isnull=True) | Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary=None) | Q(summary='not available')) &
-				Q(kind='science paper')
+			Q(doi__isnull=False, doi__gt=''),
+			(Q(crossref_check__isnull=True) | Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary__isnull=True) | Q(summary='not available')) &
+			Q(kind='science paper')
 		).distinct()
 
 		for article in articles:
-			if article.doi != None:
+			if article.doi:
 				paper = SciencePaper(doi=article.doi)
 				# Refresh once per article
 				if not self.try_refresh_paper(paper):
@@ -46,7 +46,7 @@ class Command(BaseCommand):
 					self.stdout.write(f"Skipping article '{article.title}' due to connection issues.")
 					continue  # Use continue instead of return to proceed with the next article
 			else:
-				print(f"empty DOI for article_id {article}")
+				self.stdout.write(f"Empty DOI for article_id {article.id}")
 
 			# Update fields from the refreshed paper object
 			self.update_article_from_paper(article, paper)
