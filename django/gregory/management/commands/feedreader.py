@@ -76,7 +76,6 @@ class Command(BaseCommand):
                       'summary': summary,
                       'link': link,
                       'published_date': published_date,
-                      'source': source,
                       'container_title': crossref_paper.journal,
                       'publisher': crossref_paper.publisher,
                       'access': crossref_paper.access,
@@ -275,7 +274,6 @@ class Command(BaseCommand):
                 link=clinical_trial.link,
                 published_date=clinical_trial.published_date,
                 identifiers=clinical_trial.identifiers,
-                source=source
               )
               trial.teams.add(source.team)
               trial.subjects.add(source.subject)
@@ -302,7 +300,6 @@ class Command(BaseCommand):
               trial.link = clinical_trial.link
               trial.published_date = clinical_trial.published_date
               trial.identifiers = clinical_trial.identifiers
-              trial.source = source
               trial.teams.add(source.team)
               trial.subjects.add(source.subject)
               trial.sources.add(source)

@@ -148,8 +148,6 @@ def post_article(request):
 				summary = new_article['summary'],
 				link = new_article['link'],
 				published_date = new_article['published_date'], 
-				# Source Will Be Removed
-				source = source, 
 				doi = new_article['doi'], kind = new_article['kind'],
 				publisher=new_article['publisher'], container_title=new_article['container_title'])
 			save_article.sources.add(source)
