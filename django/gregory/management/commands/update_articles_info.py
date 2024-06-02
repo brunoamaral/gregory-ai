@@ -4,6 +4,7 @@ from gregory.classes import SciencePaper
 from django.utils import timezone
 from django.db.models import Q
 import requests
+from datetime import datetime, timedelta
 import time
 
 class Command(BaseCommand):
@@ -31,12 +32,13 @@ class Command(BaseCommand):
 
 	def update_article_details(self):
 		# Select articles that need updating but have a DOI
+		twelve_months_ago = datetime.now() - timedelta(days=365)
 		articles = Articles.objects.filter(
-			Q(doi__isnull=False, doi__gt=''),
-			(Q(crossref_check__isnull=True) | Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary__isnull=True) | Q(summary='not available')) &
-			Q(kind='science paper')
+				Q(doi__isnull=False, doi__gt='') &
+				(Q(crossref_check__isnull=True) | Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary__isnull=True) | Q(summary='not available')) &
+				Q(kind='science paper') &
+				Q(discovery_date__gte=twelve_months_ago)
 		).distinct()
-
 		for article in articles:
 			if article.doi:
 				paper = SciencePaper(doi=article.doi)
@@ -79,9 +81,13 @@ class Command(BaseCommand):
 			updated_info.append('published date')
 
 		if (article.summary is None or article.summary == 'not available') and hasattr(paper, 'abstract'):
-			article.summary = paper.abstract
-			update_fields.append('summary')
-			updated_info.append('abstract')
+			if paper.abstract:
+				self.stdout.write(f"{paper.abstract}")
+				article.summary = paper.abstract
+				update_fields.append('summary')
+				updated_info.append('abstract')
+			else:
+				self.stdout.write(f"No abstract found for article '{article.title}' with DOI {article.doi}.")
 
 		if update_fields:
 			article.save(update_fields=update_fields)
