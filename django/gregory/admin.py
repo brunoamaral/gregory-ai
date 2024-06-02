@@ -28,7 +28,7 @@ class ArticleAdmin(admin.ModelAdmin):
 	fieldsets = (
 		('Article Information', {
 				'fields': (
-					'title', 'link', 'doi', 'summary', 'teams', 'subjects', 'source', 'sources',
+					'title', 'link', 'doi', 'summary', 'teams', 'subjects', 'sources',
 					'published_date', 'discovery_date', 'authors','team_categories',
 					'entities', 'relevant', 'noun_phrases', 'sent_to_teams',
 					'sent_to_subscribers', 'kind', 'access', 'publisher',
@@ -41,7 +41,7 @@ class ArticleAdmin(admin.ModelAdmin):
 				'description': 'Grouping machine learning prediction indicators',
 		}),
 	)
-	list_display = ['article_id', 'title', 'source']
+	list_display = ['article_id', 'title']
 	ordering = ['-discovery_date']
 	readonly_fields = ['entities', 'discovery_date']
 	search_fields = ['article_id', 'title', 'doi']
@@ -50,7 +50,7 @@ class ArticleAdmin(admin.ModelAdmin):
 class TrialAdmin(admin.ModelAdmin):
 	# a list of displayed columns name.
 	list_display = ['trial_id', 'title', 'last_updated']
-	fields = ['discovery_date','last_updated','title','summary','link','published_date','source','sources','teams','subjects','relevant','team_categories','identifiers','export_date','internal_number','last_refreshed_on','scientific_title','primary_sponsor','retrospective_flag','date_registration','source_register','recruitment_status','other_records','inclusion_agemin','inclusion_agemax','inclusion_gender','date_enrollement','target_size','study_type','study_design','phase','countries','contact_firstname','contact_lastname','contact_address','contact_email','contact_tel','contact_affiliation','inclusion_criteria','exclusion_criteria','condition','intervention','primary_outcome','secondary_outcome','secondary_id','source_support','ethics_review_status','ethics_review_approval_date','ethics_review_contact_name','ethics_review_contact_address','ethics_review_contact_phone','ethics_review_contact_email','results_date_completed','results_url_link']
+	fields = ['discovery_date','last_updated','title','summary','link','published_date','sources','teams','subjects','relevant','team_categories','identifiers','export_date','internal_number','last_refreshed_on','scientific_title','primary_sponsor','retrospective_flag','date_registration','source_register','recruitment_status','other_records','inclusion_agemin','inclusion_agemax','inclusion_gender','date_enrollement','target_size','study_type','study_design','phase','countries','contact_firstname','contact_lastname','contact_address','contact_email','contact_tel','contact_affiliation','inclusion_criteria','exclusion_criteria','condition','intervention','primary_outcome','secondary_outcome','secondary_id','source_support','ethics_review_status','ethics_review_approval_date','ethics_review_contact_name','ethics_review_contact_address','ethics_review_contact_phone','ethics_review_contact_email','results_date_completed','results_url_link']
 	readonly_fields = ['last_updated', 'team_categories']
 class SourceAdmin(admin.ModelAdmin):
 	# a list of displayed columns name.
