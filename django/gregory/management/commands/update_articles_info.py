@@ -4,7 +4,8 @@ from gregory.classes import SciencePaper
 from django.utils import timezone
 from django.db.models import Q
 import requests
-from datetime import datetime, timedelta
+from datetime import timedelta
+from django.utils import timezone
 import time
 
 class Command(BaseCommand):
@@ -32,12 +33,12 @@ class Command(BaseCommand):
 
 	def update_article_details(self):
 		# Select articles that need updating but have a DOI
-		twelve_months_ago = datetime.now() - timedelta(days=365)
+		twelve_months_ago = timezone.now() - timedelta(days=365)
 		articles = Articles.objects.filter(
-				Q(doi__isnull=False, doi__gt='') &
-				(Q(crossref_check__isnull=True) | Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary__isnull=True) | Q(summary='not available')) &
-				Q(kind='science paper') &
-				Q(discovery_date__gte=twelve_months_ago)
+			Q(doi__isnull=False, doi__gt='') &
+			(Q(crossref_check__isnull=True) | Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary__isnull=True) | Q(summary='not available')) &
+			Q(kind='science paper') &
+			Q(discovery_date__gte=twelve_months_ago)
 		).distinct()
 		for article in articles:
 			if article.doi:
