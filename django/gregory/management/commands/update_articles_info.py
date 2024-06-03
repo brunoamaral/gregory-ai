@@ -33,12 +33,12 @@ class Command(BaseCommand):
 
 	def update_article_details(self):
 		# Select articles that need updating but have a DOI
-		twelve_months_ago = timezone.now() - timedelta(days=365)
+		three_months_ago = timezone.now() - timedelta(days=90)
 		articles = Articles.objects.filter(
 			Q(doi__isnull=False, doi__gt='') &
 			(Q(crossref_check__isnull=True) | Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary__isnull=True) | Q(summary='not available')) &
 			Q(kind='science paper') &
-			Q(discovery_date__gte=twelve_months_ago)
+			Q(discovery_date__gte=three_months_ago)
 		).distinct()
 		for article in articles:
 			if article.doi:
@@ -91,6 +91,7 @@ class Command(BaseCommand):
 				self.stdout.write(f"No abstract found for article '{article.title}' with DOI {article.doi}.")
 
 		if update_fields:
+			article.crossref_check = timezone.now()
 			article.save(update_fields=update_fields)
 			
 			# Log the changes using Django Simple History
