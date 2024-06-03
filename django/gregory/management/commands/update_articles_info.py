@@ -4,6 +4,8 @@ from gregory.classes import SciencePaper
 from django.utils import timezone
 from django.db.models import Q
 import requests
+from datetime import timedelta
+from django.utils import timezone
 import time
 
 class Command(BaseCommand):
@@ -20,7 +22,7 @@ class Command(BaseCommand):
 			try:
 				paper.refresh()
 				return True  # Success
-			except requests.exceptions.ConnectionError as e:
+			except requests.exceptions.RequestException as e:
 				self.stdout.write(f"Attempt {attempt + 1} failed: {e}")
 				if attempt < retries - 1:
 					self.stdout.write(f"Retrying in {delay} seconds...")
@@ -31,14 +33,15 @@ class Command(BaseCommand):
 
 	def update_article_details(self):
 		# Select articles that need updating but have a DOI
+		three_months_ago = timezone.now() - timedelta(days=90)
 		articles = Articles.objects.filter(
-				Q(doi__isnull=False, doi__gt=''),
-				(Q(crossref_check__isnull=True) | Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary=None) | Q(summary='not available')) &
-				Q(kind='science paper')
+			Q(doi__isnull=False, doi__gt='') &
+			(Q(crossref_check__isnull=True) | Q(access__isnull=True) | Q(publisher__isnull=True) | Q(published_date__isnull=True) | Q(summary__isnull=True) | Q(summary='not available')) &
+			Q(kind='science paper') &
+			Q(discovery_date__gte=three_months_ago)
 		).distinct()
-
 		for article in articles:
-			if article.doi != None:
+			if article.doi:
 				paper = SciencePaper(doi=article.doi)
 				# Refresh once per article
 				if not self.try_refresh_paper(paper):
@@ -46,7 +49,7 @@ class Command(BaseCommand):
 					self.stdout.write(f"Skipping article '{article.title}' due to connection issues.")
 					continue  # Use continue instead of return to proceed with the next article
 			else:
-				print(f"empty DOI for article_id {article}")
+				self.stdout.write(f"Empty DOI for article_id {article.id}")
 
 			# Update fields from the refreshed paper object
 			self.update_article_from_paper(article, paper)
@@ -79,11 +82,16 @@ class Command(BaseCommand):
 			updated_info.append('published date')
 
 		if (article.summary is None or article.summary == 'not available') and hasattr(paper, 'abstract'):
-			article.summary = paper.abstract
-			update_fields.append('summary')
-			updated_info.append('abstract')
+			if paper.abstract:
+				self.stdout.write(f"{paper.abstract}")
+				article.summary = paper.abstract
+				update_fields.append('summary')
+				updated_info.append('abstract')
+			else:
+				self.stdout.write(f"No abstract found for article '{article.title}' with DOI {article.doi}.")
 
 		if update_fields:
+			article.crossref_check = timezone.now()
 			article.save(update_fields=update_fields)
 			
 			# Log the changes using Django Simple History
