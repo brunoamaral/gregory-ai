@@ -25,8 +25,12 @@ class Command(BaseCommand):
 
 		if subscribers_email_list:
 			articles = Articles.objects.filter(
-				Q(ml_prediction_gnb=True) | Q(relevant=True)
-			).exclude(sent_to_subscribers=True)
+				Q(ml_predictions__gnb=True) |
+				Q(ml_predictions__lr=True) |
+				Q(ml_predictions__lsvc=True) |
+				Q(ml_predictions__mnb=True) |
+				Q(article_subject_relevances__is_relevant=True)
+			).exclude(sent_to_subscribers=True).distinct()
 			
 			trials = Trials.objects.exclude(sent_to_subscribers=True)
 
