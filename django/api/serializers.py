@@ -66,10 +66,10 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 		fields = [
 			'article_id', 'title', 'summary', 'link', 'published_date', 'sources', 'teams', 
 			'subjects', 'publisher', 'container_title', 'authors', 
-			'discovery_date', 'article_subject_relevances', 
-			'noun_phrases', 'doi', 'access', 'takeaways', 'team_categories', 'ml_predictions',
+			'discovery_date', 'article_subject_relevances',
+			'doi', 'access', 'takeaways', 'team_categories', 'ml_predictions',
 		]
-		read_only_fields = ('discovery_date', 'ml_predictions', 'noun_phrases', 'takeaways')
+		read_only_fields = ('discovery_date', 'ml_predictions', 'takeaways')
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
