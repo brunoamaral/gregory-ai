@@ -45,7 +45,7 @@ class ArticleAdmin(admin.ModelAdmin):
 	ordering = ['-discovery_date']
 	readonly_fields = ['entities', 'discovery_date']
 	search_fields = ['article_id', 'title', 'doi']
-	list_filter = ('relevant',)
+	list_filter = ('subjects',)
 	raw_id_fields = ("authors",)
 class TrialAdmin(admin.ModelAdmin):
 	# a list of displayed columns name.
