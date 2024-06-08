@@ -70,26 +70,34 @@ class Command(BaseCommand):
 									crossref_paper.refresh()
 									title = crossref_paper.title if crossref_paper.title else entry['title']
 									summary = crossref_paper.abstract if crossref_paper.abstract else entry.get('summary')
-									# Check if the article exists in the database
-									science_paper, created = Articles.objects.get_or_create(doi=doi, defaults={
-											'title': title,
-											'summary': summary,
-											'link': link,
-											'published_date': published_date,
-											'container_title': crossref_paper.journal,
-											'publisher': crossref_paper.publisher,
-											'access': crossref_paper.access,
-											'crossref_check': timezone.now()
-											# other fields like access, journal, publisher can be added here as defaults
-									})
+
+									# Check if an article with the same DOI or title exists
+									existing_article = Articles.objects.filter(Q(doi=doi) | Q(title=title)).first()
+									if existing_article:
+										science_paper = existing_article
+										created = False
+									else:
+										science_paper = Articles.objects.create(
+											doi=doi,
+											title=title,
+											summary=summary,
+											link=link,
+											published_date=published_date,
+											container_title=crossref_paper.journal,
+											publisher=crossref_paper.publisher,
+											access=crossref_paper.access,
+											crossref_check=timezone.now()
+										)
+										created = True
+
 									if created:
 										science_paper.teams.add(source.team)
 										science_paper.subjects.add(source.subject)
 										science_paper.sources.add(source)
 										science_paper.save()
-									if not created:                      
+									else:
 											if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),
-															science_paper.link != link, science_paper.published_date != published_date]):
+													science_paper.link != link, science_paper.published_date != published_date]):
 													science_paper.title = title
 													science_paper.summary = SciencePaper.clean_abstract(abstract=summary)
 													science_paper.link = link
@@ -98,6 +106,7 @@ class Command(BaseCommand):
 													science_paper.teams.add(source.team)
 													science_paper.subjects.add(source.subject)
 													science_paper.save()
+
 									# Process author information
 									if crossref_paper is not None:  # Assuming `paper` contains the article's metadata including author information
 										if crossref_paper.authors is not None:
@@ -133,22 +142,27 @@ class Command(BaseCommand):
 													# Use the first author with an ORCID, if available
 													author_obj = next((author for author in authors if author.ORCID), authors.first())
 
-
 													# Link the author to the article if not already linked
 												if not science_paper.authors.filter(pk=author_obj.pk).exists():
 													science_paper.authors.add(author_obj)
 							else:
 								print('no DOI, trying to create article')
-								science_paper, created = Articles.objects.get_or_create(title=title, defaults={
-										'title': title,
-										'summary': abstract,
-										'link': link,
-										'published_date': published_date,
-										'source': source,
-										'crossref_check': None
-										# other fields like access, journal, publisher can be added here as defaults
-								})
-								if not created:                      
+								existing_article = Articles.objects.filter(title=title).first()
+								if existing_article:
+											science_paper = existing_article
+											created = False
+								else:
+											science_paper = Articles.objects.create(
+												title=title,
+												summary=summary,
+												link=link,
+												published_date=published_date,
+												source=source,
+												crossref_check=None
+											)
+											created = True
+
+								if not created:
 									if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),
 												science_paper.link != link, science_paper.published_date != published_date]):
 										science_paper.title = title
