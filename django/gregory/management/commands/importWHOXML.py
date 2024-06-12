@@ -49,6 +49,7 @@ class Command(BaseCommand):
 			trial_id = trial_data.pop('trialid', None)
 			existing_entry_by_title = Trials.objects.filter(title=trial_data['title']).first()
 			prefix = ''.join(filter(str.isalpha, trial_id)).lower() if trial_id else None
+			source = Sources.objects.filter(name='WHO XML import').first()
 
 			if existing_entry_by_title:
 					if trial_id:
@@ -75,7 +76,10 @@ class Command(BaseCommand):
 
 			try:
 					trial_data['discovery_date'] = timezone.now()  # Set the discovery date to current time
-					Trials.objects.create(**trial_data)
+					new_trial = Trials.objects.create(**trial_data)
+					new_trial.sources.add(source)
+					new_trial.save()
+
 			except IntegrityError as e:
 					print("Error occurred:", e)
 
@@ -105,7 +109,6 @@ class Command(BaseCommand):
 					trial_data['title'] = self.get_text(trial, 'Public_title')
 					trial_data['link'] = self.get_text(trial, 'web_address')
 					trial_data['trialid'] = self.get_text(trial, 'TrialID')
-					trial_data['source'] = source
 
 					for date_field in ['Export_date', 'Date_enrollement', 'Ethics_review_approval_date', 
 						'results_date_completed', 'Last_Refreshed_on']:
