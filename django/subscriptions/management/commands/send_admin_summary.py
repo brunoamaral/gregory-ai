@@ -42,7 +42,7 @@ class Command(BaseCommand):
                     to = member.email  # Fixed from admin.email to member.email
                     html = get_template('emails/admin_summary.html').render(summary)
                     text = strip_tags(html)
-                    result = self.send_simple_message(to=to, subject='Admin Summary', html=html, text=text)
+                    result = self.send_simple_message(to=to, subject=f'{subject} | Admin Summary', html=html, text=text)
                     results.append(result.status_code)
                 # carefull, this will not keep track of a single failed delivery of the email
                 if 200 in results:
