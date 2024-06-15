@@ -26,7 +26,7 @@ class Authors(models.Model):
 
 class TeamCategory(models.Model):
 	team = models.ForeignKey('Team', on_delete=models.CASCADE, related_name='team_categories')
-	subjecs = models.ForeignKey('Subject', on_delete=models.CASCADE, related_name='team_subjects', null=True, blank=True)
+	subjecs = models.ManyToManyField('Subject', related_name='team_subjects', null=True, blank=True)
 	category_name = models.CharField(max_length=200)
 	category_description = models.TextField(blank=True, null=True)
 	category_slug = models.SlugField(blank=True, null=True, unique=True)
