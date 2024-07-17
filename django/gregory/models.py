@@ -26,7 +26,7 @@ class Authors(models.Model):
 
 class TeamCategory(models.Model):
 	team = models.ForeignKey('Team', on_delete=models.CASCADE, related_name='team_categories')
-	subjects = models.ManyToManyField('Subject', related_name='team_subjects', null=True, blank=True)
+	subjects = models.ManyToManyField('Subject', related_name='team_subjects', blank=True)
 	category_name = models.CharField(max_length=200)
 	category_description = models.TextField(blank=True, null=True)
 	category_slug = models.SlugField(blank=True, null=True, unique=True)
@@ -63,7 +63,7 @@ class Subject(models.Model):
 	team = models.ForeignKey(
 			'Team', 
 			on_delete=models.CASCADE,  # Not sure which would be the best option here
-			null=False,
+			null=True,
 			blank=False,  
 			related_name='subjects'  # Helps in querying from the Team model, e.g., team.subjects.all()
 	)
@@ -92,7 +92,7 @@ class Sources(models.Model):
 	team = models.ForeignKey(
 		'Team', 
 		on_delete=models.CASCADE,  # Not sure which would be the best option here
-		null=False,
+		null=True,
 		blank=False,  
 		related_name='sources'  # Helps in querying from the Team model, e.g., team.sources.all()
 	)
