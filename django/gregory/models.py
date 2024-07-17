@@ -63,7 +63,7 @@ class Subject(models.Model):
 	team = models.ForeignKey(
 			'Team', 
 			on_delete=models.CASCADE,  # Not sure which would be the best option here
-			null=False,
+			null=True,
 			blank=False,  
 			related_name='subjects'  # Helps in querying from the Team model, e.g., team.subjects.all()
 	)
