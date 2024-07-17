@@ -95,14 +95,6 @@ print('''
 ####
 ''')
 
-p = Path("nodered-data")
-
-if p.is_dir():
-	print("\N{check mark} Found nodered-data directory")
-else:
-	print("Didn't find nodered-data, creating ...")
-	p.mkdir(parents=True, exist_ok=True)
-
 p = Path("python-ml/")
 if p.is_dir():
 	print("\N{check mark} Found python-ml directory")
@@ -169,31 +161,6 @@ for i in range(20,0,-1):
 
 print('''
 ####
-## Creating the Metabase database
-####
-
-We assume that the `db` container is running and that we can access it from localhost:5432.
-''')
-
-db_host = 'localhost'
-postgres_user = os.getenv('POSTGRES_USER')
-postgres_password = os.getenv('POSTGRES_PASSWORD')
-postgres_db = os.getenv('POSTGRES_DB')
-
-try:
-	conn = psycopg2.connect(dbname=postgres_db, user=postgres_user,host=db_host,password=postgres_password,autocommit=True)
-	cur = conn.cursor()
-	cur.execute("CREATE DATABASE metabase;")
-	conn.close()
-except:
-	print("I am unable to connect to postgres. Please create the `metabase` database manually and restart the containers.")
-
-def runshell(*args):
-	p = Popen(*args, shell=True, stdout=sys.stdout, stderr=sys.stderr, stdin=sys.stdin)
-	p.wait()
-
-print('''
-####
 ## Running docker-compose up -d admin --build
 ## This will launch Django
 ####
@@ -209,16 +176,16 @@ try:
 		build_stdout, build_stderr = build_popen.communicate()
 
 		if build_popen.returncode != 0:
-				print("Error building the Docker image:")
-				print(build_stderr)
-				sys.exit(build_popen.returncode)
+			print("Error building the Docker image:")
+			print(build_stderr)
+			sys.exit(build_popen.returncode)
 		else:
-				print("Docker image built successfully")
-				print(build_stdout)
+			print("Docker image built successfully")
+			print(build_stdout)
 except CalledProcessError as e:
-		print("Error executing docker build command:")
-		print(e.output)
-		sys.exit(e.returncode)
+	print("Error executing docker build command:")
+	print(e.output)
+	sys.exit(e.returncode)
 
 # Run the docker-compose command
 try:
@@ -254,30 +221,6 @@ runshell('docker exec -it admin ./manage.py createsuperuser')
 
 print('''
 ####
-## Installing Node-RED and nodes required by flows.json
-####
-''')
-
-args = ("docker-compose","up","-d","node-red"
-popen = Popen(args, stdout=PIPE, universal_newlines=True)
-popen.wait()
-output = popen.stdout.read()
-print(output)
-
-runshell('docker exec -it node-red npm install {node-red-contrib-cheerio,node-red-contrib-moment,node-red-contrib-sqlstring,node-red-dashboard,node-red-node-feedparser,node-red-node-sqlite,node-red-node-ui-list,node-red-contrib-persist,node-red-contrib-rss,node-red-contrib-meta,node-red-contrib-join-wait,node-red-contrib-postgresql,node-red-contrib-re-postgres,node-red-contrib-string}')
-
-original = r'flows.json'
-target = r'nodered-data/flows.json'
-copyfile(original, target)
-
-print('### Restarting Node-RED container')
-runshell('docker restart node-red')
-
-print('### Starting Metabase container')
-runshell('docker-compose up -d metabase')
-
-print('''
-####
 ## Next steps
 ####
 
@@ -291,10 +234,6 @@ There are some things outside the scope of this setup script.
 ## Setup Nginx
 
 You can find an example configuration in `nginx-example-configuration/nginx.conf`.
-
-## Configure your Node-RED flows 
-
-Visit https://nodered.''' + os.getenv('DOMAIN_NAME') + ''''/ or http://localhost:1880/ to check and configure Node-RED flows for your research. This is meant to help with sites that don't have an RSS Feed.
 
 ## Configure your RSS Sources
 
