@@ -153,7 +153,7 @@ print('''
 ####
 ''')
 
-args = ("sudo","docker-compose","up","-d","db")
+args = ("docker-compose","up","-d","db")
 popen = Popen(args, stdout=PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
@@ -222,7 +222,7 @@ except CalledProcessError as e:
 
 # Run the docker-compose command
 try:
-		compose_args = ("sudo", "docker-compose", "up", "-d", "admin")
+		compose_args = ("docker-compose", "up", "-d", "admin")
 		compose_popen = Popen(compose_args, stdout=PIPE, stderr=PIPE, universal_newlines=True)
 		compose_stdout, compose_stderr = compose_popen.communicate()
 
@@ -246,11 +246,11 @@ print('''
 ''')
 		
 print('## `./manage.py makemigrations`')
-runshell('sudo docker exec -it admin ./manage.py makemigrations')
+runshell('docker exec -it admin ./manage.py makemigrations')
 print('## `./manage.py migrate`')
-runshell('sudo docker exec -it admin ./manage.py migrate')
+runshell('docker exec -it admin ./manage.py migrate')
 print('## `./manage.py createsuperuser`')
-runshell('sudo docker exec -it admin ./manage.py createsuperuser')
+runshell('docker exec -it admin ./manage.py createsuperuser')
 
 print('''
 ####
@@ -258,23 +258,23 @@ print('''
 ####
 ''')
 
-args = ("sudo","docker-compose","up","-d","node-red")
+args = ("docker-compose","up","-d","node-red"
 popen = Popen(args, stdout=PIPE, universal_newlines=True)
 popen.wait()
 output = popen.stdout.read()
 print(output)
 
-runshell('sudo docker exec -it node-red npm install {node-red-contrib-cheerio,node-red-contrib-moment,node-red-contrib-sqlstring,node-red-dashboard,node-red-node-feedparser,node-red-node-sqlite,node-red-node-ui-list,node-red-contrib-persist,node-red-contrib-rss,node-red-contrib-meta,node-red-contrib-join-wait,node-red-contrib-postgresql,node-red-contrib-re-postgres,node-red-contrib-string}')
+runshell('docker exec -it node-red npm install {node-red-contrib-cheerio,node-red-contrib-moment,node-red-contrib-sqlstring,node-red-dashboard,node-red-node-feedparser,node-red-node-sqlite,node-red-node-ui-list,node-red-contrib-persist,node-red-contrib-rss,node-red-contrib-meta,node-red-contrib-join-wait,node-red-contrib-postgresql,node-red-contrib-re-postgres,node-red-contrib-string}')
 
 original = r'flows.json'
 target = r'nodered-data/flows.json'
 copyfile(original, target)
 
 print('### Restarting Node-RED container')
-runshell('sudo docker restart node-red')
+runshell('docker restart node-red')
 
 print('### Starting Metabase container')
-runshell('sudo docker-compose up -d metabase')
+runshell('docker-compose up -d metabase')
 
 print('''
 ####
