@@ -52,7 +52,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('No new trials or subscribers found for notifications.'))
 
     def send_simple_message(self, to, bcc, subject, html, text, site, customsettings):
-        sender='Gregory MS <gregory@mg.' + Site.objects.get_current().domain + '>'
+        sender='GregoryAI <gregory@mg.' + Site.objects.get_current().domain + '>'
         email_mailgun_api_url = settings.EMAIL_MAILGUN_API_URL
         email_mailgun_api = settings.EMAIL_MAILGUN_API
 
