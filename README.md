@@ -1,3 +1,5 @@
+[TOC]
+
 # Gregory AI
 
 Gregory is an AI system that uses Machine Learning and Natural Language Processing to track
@@ -28,7 +30,7 @@ For other integrations, the Django app provides RSS feeds with a live update of 
 11. Identify authors and their ORCID
 12. Generate different RSS feeds
 
-### Current Use case for Multiple Sclerosis
+### Current Use Case for Multiple Sclerosis
 
 <https://gregory-ms.com>
 
@@ -43,9 +45,44 @@ For other integrations, the Django app provides RSS feeds with a live update of 
 
 ### Installing Gregory
 
-1. **Install python dependencies locally**
-2. **Edit the .env file** to reflect your settings and credentials.
+#### 1. Clone and Install
+1. Clone the repository:
+	```bash
+	git clone <repository_url>
+	cd <repository_directory>
+	docker compose up -d 
+	docker exec admin python manage.py makemigrations
+	docker exec admin python manage.py migrate
+	```
+#### 2. Setup DNS for `api.domain.etc`
 
+1. Log in to your DNS provider.
+2. Add a new A record for `api.domain.etc` pointing to your server's IP address.
+
+#### 3. Setup DNS for Mailgun `mg.domain.etc`
+1. Log in to your DNS provider.
+2. Add the following DNS records provided by Mailgun for `mg.domain.etc`:
+	- TXT record
+	- MX record
+	- CNAME record
+
+#### 4. Get Mailgun API Keys and Add to `.env`
+1. Log in to your Mailgun account.
+2. Navigate to `API Keys`.
+3. Copy the private API key.
+4. Add the key to your `.env` file.
+
+#### 5. Get ORCID API Keys and Add to `.env`
+1. Log in to your ORCID account.
+2. Navigate to `Developer Tools` and create an API client.
+3. Copy the client ID and client secret.
+4. Add the following to your `.env` file:
+	```env
+	ORCID_CLIENT_ID=your_orcid_client_id
+	ORCID_CLIENT_SECRET=your_orcid_client_secret
+	```
+
+##### 5.1 make sure your .env file is complete
 ```bash
 DOMAIN_NAME=DOMAIN.COM
 # Set this to the subdomain you configured with Mailgun. Example: mg.domain.com
@@ -62,10 +99,6 @@ EMAIL_PORT=587
 EMAIL_USE_TLS='True'
 # Where you cloned the repository
 GREGORY_DIR=
-# Leave this blank and come back to them when you're finished installing Metabase.
-METABASE_SECRET_KEY=
-# Where do you want to host Metabase?
-METABASE_SITE_URL='https://metabase.DOMAIN.COM/'
 # Set your postgres DB and credentials
 POSTGRES_DB=
 POSTGRES_PASSWORD=
@@ -73,7 +106,76 @@ POSTGRES_USER=
 SECRET_KEY='Yeah well, you know, that is just, like, your DJANGO SECRET_KEY, man' # you should set this manually https://docs.djangoproject.com/en/4.0/ref/settings/#secret-key
 ```
 
-3. **Execute** `python3 setup.py`.
+#### 6. Configure Server
+
+##### 6.1. Nginx
+1. Install Nginx:
+	```bash
+	sudo apt-get update
+	sudo apt-get install nginx
+	```
+2. Configure Nginx for your application:
+	```bash
+	sudo nano /etc/nginx/sites-available/default
+	```
+	- Add your server block configuration.
+3. Test and restart Nginx:
+	```bash
+	sudo nginx -t
+	sudo systemctl restart nginx
+	```
+
+##### 6.2. Certbot
+1. Install Certbot:
+	```bash
+	sudo apt-get install certbot python3-certbot-nginx
+	```
+2. Obtain and install SSL certificate:
+	```bash
+	sudo certbot --nginx -d domain.etc -d www.domain.etc
+	```
+
+##### 6.3. Firewall
+1. Allow necessary ports:
+	```bash
+	sudo ufw allow 'Nginx Full'
+	sudo ufw enable
+	```
+
+#### 7. Configure Gregory
+
+##### 7.1. Create a Site
+1. Log in to the Gregory dashboard.
+2. Navigate to `Sites` and click `Create Site`.
+
+##### 7.2. Create a Team
+1. Navigate to `Teams` and click `Create Team`.
+
+##### 7.3. Add a User to the Team
+1. Navigate to `Teams`, select the team, and click `Add User`.
+2. Enter the user's email and assign a role.
+
+##### 7.4. Add a Source, such as PubMed
+
+1. Navigate to `Sources` and click `Add Source`.
+2. Select `RSS` method and provide the necessary configuration.
+
+#### 8. Add cronjobs to run the pipeline and send emails
+
+```cron
+# Every 2 days at 8:00
+0 8 */2 * * /usr/bin/docker exec admin python manage.py send_admin_summary
+
+# Every Tuesday at 8:05
+5 8 * * 2 docker exec admin python manage.py send_weekly_summary
+
+# every 12  hours, at minute 25
+25 */12 * * * /usr/bin/flock -n /tmp/pipeline /usr/bin/docker exec admin ./manage.py pipeline
+```
+
+
+
+1. **Execute** `python3 setup.py`.
 
 The script checks if you have all the requirements and run to help you setup the containers.
 
@@ -93,7 +195,7 @@ Gregory needs to run a series of tasks to fetch missing information before apply
 
 ## How everything fits together
 
-### Django and Postgres
+### Django
 
 Most of the logic is inside Django, the **admin** container provides the [Django Rest Framework](https://www.django-rest-framework.org/), manages subscriptions, and sends emails.
 
@@ -116,10 +218,6 @@ The title of the email footer for these emails needs to be set in the Custom Set
 Django also allows you to add new sources from where to fetch articles. Take a look at `/admin/gregory/sources/ `
 
 ![image-20220619195841565](images/image-20220619195841565.png)
-
-### Node-RED
-
-We use [Node-RED](https://nodered.org/) to collect articles from sources without an RSS. These flows need to be added manually and configured to write to the postres database. If your node-red container does not show a series of flows, import the `flows.json` file from this repository.
 
 ### Mailgun
 
