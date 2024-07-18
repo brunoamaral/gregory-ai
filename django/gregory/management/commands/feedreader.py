@@ -157,9 +157,9 @@ class Command(BaseCommand):
 												summary=summary,
 												link=link,
 												published_date=published_date,
-												source=source,
 												crossref_check=None
 											)
+											science_paper.sources.add(source)
 											created = True
 
 								if not created:
