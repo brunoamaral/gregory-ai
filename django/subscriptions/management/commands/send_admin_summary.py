@@ -52,7 +52,7 @@ class Command(BaseCommand):
                         trial.sent_to_teams.add(team)
 
     def send_simple_message(self, to, bcc=None, subject=None, text=None, html=None, 
-                            sender=f'Gregory MS <gregory@mg.{Site.objects.get_current().domain}>',
+                            sender=f'GregoryAI <gregory@mg.{Site.objects.get_current().domain}>',
                             email_mailgun_api_url=settings.EMAIL_MAILGUN_API_URL, 
                             email_mailgun_api=settings.EMAIL_MAILGUN_API):
         print(f"data=sender: {sender}, to: {to}, bcc: {bcc}")

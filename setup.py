@@ -26,7 +26,7 @@ if env_file.is_file():
 else:
 	print('''
 ####
-## Configure Gregory MS
+## Configure GregoryAI
 ####
 
 Did not find a .env file, we need to set some configuration variables. If in doubt, you can input blank and configure the .env file later.
