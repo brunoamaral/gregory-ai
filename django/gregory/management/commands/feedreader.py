@@ -159,7 +159,9 @@ class Command(BaseCommand):
 												published_date=published_date,
 												crossref_check=None
 											)
+											science_paper.teams.add(source.team)
 											science_paper.sources.add(source)
+											science_paper.subjects.add(source.subject)
 											created = True
 
 								if not created:
