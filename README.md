@@ -1,6 +1,6 @@
 [TOC]
 
-# Gregory AI
+# GregoryAI
 
 Gregory is an AI system that uses Machine Learning and Natural Language Processing to track
 clinical research and identify papers which improves the wellbeing of patients.

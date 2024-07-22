@@ -62,7 +62,7 @@ class Command(BaseCommand):
 			self.stdout.write(self.style.WARNING('No subscribers found for the Weekly Summary.'))
 
 	def send_simple_message(self, to, subject, html, text, site, customsettings):
-		sender = f'Gregory MS <gregory@mg.{site.domain}>'
+		sender = f'GregoryAI <gregory@mg.{site.domain}>'
 		response = requests.post(
 			settings.EMAIL_MAILGUN_API_URL,
 			auth=("api", settings.EMAIL_MAILGUN_API),
