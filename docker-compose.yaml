@@ -16,8 +16,8 @@ services:
     networks:
       - gregory_network
 
-  admin:
-    container_name: admin
+  gregory:
+    container_name: gregory
     restart: always
     build: 
       context: django/
