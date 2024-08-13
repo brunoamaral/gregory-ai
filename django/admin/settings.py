@@ -25,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True 
+DEBUG = False 
 
 ALLOWED_HOSTS = ['0.0.0.0','localhost','api.'+ os.environ.get('DOMAIN_NAME'),'manage.'+ os.environ.get('DOMAIN_NAME')]
 CSRF_TRUSTED_ORIGINS = ['https://' + os.environ.get('DOMAIN_NAME'), 'https://api.'+ os.environ.get('DOMAIN_NAME'),'https://manage.'+ os.environ.get('DOMAIN_NAME')]
