@@ -291,11 +291,12 @@ class RelevantList(generics.ListAPIView):
 
 	def get_queryset(self):
 		return Articles.objects.filter(
-				Q(relevant=True) | 
-				Q(ml_predictions__gnb=True) | 
-				Q(ml_predictions__lr=True) |
-				Q(ml_predictions__lsvc=True) |
-				Q(ml_predictions__mnb=True)
+			Q(relevant=True) | 
+			Q(ml_predictions__gnb=True) | 
+			Q(ml_predictions__lr=True) |
+			Q(ml_predictions__lsvc=True) |
+			Q(ml_predictions__mnb=True) |
+			Q(article_subject_relevances__is_relevant=True)
 		).distinct().order_by('-discovery_date')
 
 class UnsentList(generics.ListAPIView):
