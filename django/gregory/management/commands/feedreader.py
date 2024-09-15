@@ -47,6 +47,7 @@ class Command(BaseCommand):
 		def update_articles_from_feeds(self):
 			sources = Sources.objects.filter(method='rss', source_for='science paper')
 			for source in sources:
+					print(f'# Processing articles from {source}')
 					feed = self.fetch_feed(source.link, source.ignore_ssl)
 					for entry in feed['entries']:
 							title = entry['title']
