@@ -3,10 +3,11 @@ from .models import Subscribers, Lists
 
 # Register your models here.
 class SubscriberAdmin(admin.ModelAdmin):
-	list_display = ['subscriber_id', 'first_name', 'last_name', 'email', 'number_of_subscriptions']
+	list_display = ['subscriber_id', 'first_name', 'last_name', 'email', 'active', 'number_of_subscriptions']
+	list_filter = ['active', 'profile']
 
 	def number_of_subscriptions(self, obj):
-			return obj.subscriptions.count()
+		return obj.subscriptions.count()
 	number_of_subscriptions.short_description = 'Number of Subscriptions'
 
 class ListsAdmin(admin.ModelAdmin):
