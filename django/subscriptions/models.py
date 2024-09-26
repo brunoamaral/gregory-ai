@@ -33,7 +33,9 @@ class Subscribers(models.Model):
 		managed = True
 		verbose_name_plural = 'subscribers'
 		db_table = 'subscribers'
-
+		constraints = [
+			UniqueConstraint(Lower('email'), name='unique_lower_email')
+		]
 	def __str__(self):
 		return str(self.email)
 
