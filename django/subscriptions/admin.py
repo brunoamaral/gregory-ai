@@ -5,7 +5,8 @@ from .models import Subscribers, Lists
 class SubscriberAdmin(admin.ModelAdmin):
 	list_display = ['subscriber_id', 'first_name', 'last_name', 'email', 'active', 'number_of_subscriptions']
 	list_filter = ['active', 'profile']
-
+	search_fields = ['first_name', 'last_name', 'email']
+	
 	def number_of_subscriptions(self, obj):
 		return obj.subscriptions.count()
 	number_of_subscriptions.short_description = 'Number of Subscriptions'
