@@ -51,50 +51,64 @@ class Command(BaseCommand):
 					existing_identifiers[prefix] = trial_id
 			return existing_identifiers
 
-	def get_or_create_trial(self, trial_data, source):
+	def get_or_create_trial(self, trial_data, source, subject):
 			trial_id = trial_data.pop('trialid', None)
 			existing_entry_by_title = Trials.objects.filter(title=trial_data['title']).first()
 			prefix = ''.join(filter(str.isalpha, trial_id)).lower() if trial_id else None
 
+			trial = None  # The trial instance we are updating or creating
+
 			if existing_entry_by_title:
+					trial = existing_entry_by_title
 					if trial_id:
-							existing_identifiers = existing_entry_by_title.identifiers or {}
+							existing_identifiers = trial.identifiers or {}
 							trial_data['identifiers'] = self.merge_identifiers(existing_identifiers, trial_id)
 					for key, value in trial_data.items():
-							setattr(existing_entry_by_title, key, value)
-					existing_entry_by_title.save()
-					# Add the source if not already associated
-					if source not in existing_entry_by_title.sources.all():
-							existing_entry_by_title.sources.add(source)
-					return
+							setattr(trial, key, value)
+					trial.save()
+			else:
+					if trial_id:
+							existing_identifiers = {}
+							trial_data['identifiers'] = self.merge_identifiers(existing_identifiers, trial_id)
+							query = {f'identifiers__{prefix}': trial_id}
+							existing_entry_by_id = Trials.objects.filter(**query).first()
+							if existing_entry_by_id:
+									trial = existing_entry_by_id
+									for key, value in trial_data.items():
+										setattr(trial, key, value)
+									trial.save()
+							else:
+									try:
+											trial_data['discovery_date'] = timezone.now()
+											trial = Trials.objects.create(**trial_data)
+									except IntegrityError as e:
+											print("Error occurred:", e)
+											return
+					else:
+							try:
+									trial_data['discovery_date'] = timezone.now()
+									trial = Trials.objects.create(**trial_data)
+							except IntegrityError as e:
+									print("Error occurred:", e)
+									return
 
-			if trial_id:
-					existing_identifiers = {}
-					trial_data['identifiers'] = self.merge_identifiers(existing_identifiers, trial_id)
-					query = {f'identifiers__{prefix}': trial_id}
-					existing_entry_by_id = Trials.objects.filter(**query).first()
-					if existing_entry_by_id:
-							for key, value in trial_data.items():
-								setattr(existing_entry_by_id, key, value)
-							existing_entry_by_id.save()
-							# Add the source if not already associated
-							if source not in existing_entry_by_id.sources.all():
-									existing_entry_by_id.sources.add(source)
-							return
-
-			try:
-					trial_data['discovery_date'] = timezone.now()
-					new_trial = Trials.objects.create(**trial_data)
-					new_trial.sources.add(source)
-					new_trial.save()
-			except IntegrityError as e:
-					print("Error occurred:", e)
+			# Associate the trial with the source and subject
+			if source not in trial.sources.all():
+				trial.sources.add(source)
+			if subject not in trial.subjects.all():
+				trial.subjects.add(subject)
+			trial.save()
 
 	def update_or_create_from_xml(self, xml_file_path, source_id):
 		try:
 			source = Sources.objects.get(pk=source_id)
 		except Sources.DoesNotExist:
 				self.stdout.write(self.style.ERROR(f"Source with ID {source_id} not found in the database. Please add it and try again."))
+				return
+
+		subject = source.subject
+		if subject is None:
+				self.stdout.write(self.style.ERROR(f"Source with ID {source_id} does not have an associated subject. Please assign a subject to the source and try again."))
 				return
 
 		tree = ET.parse(xml_file_path)
@@ -125,4 +139,4 @@ class Command(BaseCommand):
 					date_registration_raw = self.get_text(trial, 'Date_registration')
 					trial_data['published_date'] = self.robust_parse_date(date_registration_raw)
 
-					self.get_or_create_trial(trial_data, source)
+					self.get_or_create_trial(trial_data, source, subject)
