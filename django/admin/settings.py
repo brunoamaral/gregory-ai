@@ -154,7 +154,7 @@ REST_FRAMEWORK = {
 	)
 }
 
-# MAILGUN SMTP
+# EMAIL SETTINGS
 
 EMAIL_HOST = os.environ.get('EMAIL_HOST')
 EMAIL_PORT = os.environ.get('EMAIL_PORT')

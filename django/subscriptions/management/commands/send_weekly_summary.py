@@ -5,7 +5,6 @@ from django.utils.html import strip_tags
 from gregory.models import Articles, Trials
 from sitesettings.models import CustomSetting
 from subscriptions.models import Subscribers
-import datetime
 import requests
 from django.contrib.sites.models import Site
 from django.conf import settings
@@ -45,9 +44,10 @@ class Command(BaseCommand):
 			html_content = get_template('emails/weekly_summary.html').render(summary_context)
 			text_content = strip_tags(html_content)
 
-			for email in subscribers_email_list:
-				self.send_simple_message(
-					to=email,
+			# Send an email to each subscriber individually
+			for subscriber_email in subscribers_email_list:
+				result = self.send_simple_message(
+					to=subscriber_email,
 					subject='Weekly Summary',
 					html=html_content,
 					text=text_content,
@@ -62,16 +62,34 @@ class Command(BaseCommand):
 			self.stdout.write(self.style.WARNING('No subscribers found for the Weekly Summary.'))
 
 	def send_simple_message(self, to, subject, html, text, site, customsettings):
-		sender = f'GregoryAI <gregory@mg.{site.domain}>'
+		# Prepare sender email and Postmark API credentials
+		sender = f'GregoryAI <gregory@{site.domain}>'
+		email_postmark_api_url = settings.EMAIL_POSTMARK_API_URL
+		email_postmark_api = settings.EMAIL_POSTMARK_API
+
+		# Set up the payload for the Postmark API
+		payload = {
+			"MessageStream": "broadcast",
+			"From": sender,
+			"To": to,
+			"Subject": subject,
+			"TextBody": text,
+			"HtmlBody": html
+		}
+
+		# Make the POST request to send the email
 		response = requests.post(
-			settings.EMAIL_MAILGUN_API_URL,
-			auth=("api", settings.EMAIL_MAILGUN_API),
-			data={
-				"from": sender,
-				"to": to,
-				"subject": subject,
-				"text": text,
-				"html": html
-			}
+			email_postmark_api_url,
+			headers={
+				"Accept": "application/json",
+				"Content-Type": "application/json",
+				"X-Postmark-Server-Token": email_postmark_api,
+			},
+			json=payload
 		)
+
+		# Output response status for debugging
+		print("Status Code:", response.status_code)
+		print("Response:", response.json())
+		
 		return response

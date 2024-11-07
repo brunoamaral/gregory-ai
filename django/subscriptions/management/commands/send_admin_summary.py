@@ -52,13 +52,30 @@ class Command(BaseCommand):
                         trial.sent_to_teams.add(team)
 
     def send_simple_message(self, to, bcc=None, subject=None, text=None, html=None, 
-                            sender=f'GregoryAI <gregory@mg.{Site.objects.get_current().domain}>',
-                            email_mailgun_api_url=settings.EMAIL_MAILGUN_API_URL, 
-                            email_mailgun_api=settings.EMAIL_MAILGUN_API):
+        sender=f'GregoryAI <gregory@{Site.objects.get_current().domain}>',
+        email_postmark_api_url=settings.EMAIL_POSTMARK_API_URL, 
+        email_postmark_api=settings.EMAIL_POSTMARK_API):
         print(f"data=sender: {sender}, to: {to}, bcc: {bcc}")
+        payload = {
+		"MessageStream": "broadcast",
+		"From": sender,
+		"To": to,
+		"Bcc": bcc,
+		"Subject": subject,
+		"TextBody": text,
+		"HtmlBody": html
+	    }
+    
+        payload = {k: v for k, v in payload.items() if v is not None}
+
         status = requests.post(
-            email_mailgun_api_url,
-            auth=("api", email_mailgun_api),
-            data={"from": sender, "to": to, "bcc": bcc, "subject": subject, "text": text, "html": html}
+        email_postmark_api_url,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "X-Postmark-Server-Token": email_postmark_api,
+            },
+        json=payload
         )
+        print(status)
         return status
