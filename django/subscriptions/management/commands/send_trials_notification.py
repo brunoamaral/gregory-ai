@@ -33,39 +33,55 @@ class Command(BaseCommand):
             html_content = get_template('emails/trial_notification.html').render(summary_context)
             text_content = strip_tags(html_content)
 
-            # Send an email notification
-            result = self.send_simple_message(
-                to='clinical.trials@' + site.domain,
-                bcc=list(subscribers_email_list),
-                subject='There is a new clinical trial',
-                html=html_content,
-                text=text_content,
-                site=site,
-                customsettings=customsettings
-            )
+            # Send an email notification to each subscriber individually
+            for subscriber_email in subscribers_email_list:
+                result = self.send_simple_message(
+                    to=subscriber_email,
+                    subject='There is a new clinical trial',
+                    html=html_content,
+                    text=text_content,
+                    site=site,
+                    customsettings=customsettings
+                )
 
-            if result.status_code == 200:
-                trials.update(sent_real_time_notification=True)
-            else:
-                self.stdout.write(self.style.ERROR('Failed to send email notifications.'))
+                # Check if the email was successfully sent
+                if result.status_code == 200:
+                    self.stdout.write(self.style.SUCCESS(f'Email sent to {subscriber_email}.'))
+                else:
+                    self.stdout.write(self.style.ERROR(f'Failed to send email to {subscriber_email}. Status: {result.status_code}'))
+
+            # Mark trials as notified only after all emails are sent
+            trials.update(sent_real_time_notification=True)
         else:
             self.stdout.write(self.style.WARNING('No new trials or subscribers found for notifications.'))
 
-    def send_simple_message(self, to, bcc, subject, html, text, site, customsettings):
-        sender='GregoryAI <gregory@mg.' + Site.objects.get_current().domain + '>'
-        email_mailgun_api_url = settings.EMAIL_MAILGUN_API_URL
-        email_mailgun_api = settings.EMAIL_MAILGUN_API
+    def send_simple_message(self, to, subject, html, text, site, customsettings):
+        sender = 'GregoryAI <gregory@' + site.domain + '>'
+        email_postmark_api_url = settings.EMAIL_POSTMARK_API_URL
+        email_postmark_api = settings.EMAIL_POSTMARK_API
 
+        payload = {
+            "MessageStream": "broadcast",
+            "From": sender,
+            "To": to,
+            "Subject": subject,
+            "TextBody": text,
+            "HtmlBody": html
+        }
+
+        # Send the request to Postmark
         response = requests.post(
-            email_mailgun_api_url,
-            auth=("api", email_mailgun_api),
-            data={
-                "from": sender,
-                "to": to,
-                "bcc": bcc,
-                "subject": subject,
-                "text": text,
-                "html": html,
-            }
+            email_postmark_api_url,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "X-Postmark-Server-Token": email_postmark_api,
+            },
+            json=payload
         )
+
+        # Output the response for debugging
+        print("Status Code:", response.status_code)
+        print("Response:", response.json())
+        
         return response
