@@ -1,19 +1,22 @@
 from django.db import models
 from django.db.models import UniqueConstraint
 from django.db.models.functions import Lower
+from gregory.models import Subject, Articles, Trials
 
-# Create your models here.
 class Lists(models.Model):
 	list_id = models.AutoField(primary_key=True)
 	list_name = models.CharField(max_length=150, null=False, blank=False)
 	list_description = models.CharField(max_length=150, null=True, blank=True)
+	subjects = models.ManyToManyField('gregory.Subject', blank=True)
+	weekly_digest = models.BooleanField(default=False) # If True, send a weekly digest email
+
 	class Meta:
 		managed = True
 		verbose_name_plural = 'lists'
-		# db_table = 'lists'
+
 	def __str__(self):
 		return str(self.list_name)
-			
+
 class Subscribers(models.Model):
 	PROFILEOPTIONS = [
 		('patient', 'Patient'),
@@ -38,13 +41,37 @@ class Subscribers(models.Model):
 		constraints = [
 			UniqueConstraint(Lower('email'), name='unique_lower_email')
 		]
+
 	def __str__(self):
 		return str(self.email)
 
 	def save(self, *args, **kwargs):
-		# Normalize the email to lowercase before saving
 		self.email = self.email.lower()
 		super(Subscribers, self).save(*args, **kwargs)
 
 
+class SentArticleNotification(models.Model):
+	article = models.ForeignKey(Articles, on_delete=models.CASCADE)
+	list = models.ForeignKey(Lists, on_delete=models.CASCADE)
+	subscriber = models.ForeignKey(Subscribers, on_delete=models.CASCADE)
+	sent_at = models.DateTimeField(auto_now_add=True)
 
+	class Meta:
+		unique_together = ('article', 'list', 'subscriber')
+		verbose_name_plural = 'sent article notifications'
+
+	def __str__(self):
+		return f"Article {self.article_id} sent to {self.list_id}, subscriber {self.subscriber_id}"
+
+class SentTrialNotification(models.Model):
+	trial = models.ForeignKey(Trials, on_delete=models.CASCADE)
+	list = models.ForeignKey(Lists, on_delete=models.CASCADE)
+	subscriber = models.ForeignKey(Subscribers, on_delete=models.CASCADE)
+	sent_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		unique_together = ('trial', 'list', 'subscriber')
+		verbose_name_plural = 'sent trial notifications'
+
+	def __str__(self):
+		return f"Trial {self.trial_id} sent to {self.list_id}, subscriber {self.subscriber_id}"
