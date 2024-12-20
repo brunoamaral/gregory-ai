@@ -8,6 +8,7 @@ class Lists(models.Model):
 	list_name = models.CharField(max_length=150, null=False, blank=False)
 	list_description = models.CharField(max_length=150, null=True, blank=True)
 	subjects = models.ManyToManyField('gregory.Subject', blank=True)
+	weekly_digest = models.BooleanField(default=False) # If True, send a weekly digest email
 
 	class Meta:
 		managed = True
