@@ -16,7 +16,7 @@ class Command(BaseCommand):
         site = Site.objects.get_current()
 
         # Step 1: Find all lists that have subjects.
-        subject_lists = Lists.objects.filter(subjects__isnull=False).distinct()
+        subject_lists = Lists.objects.filter(subjects__isnull=False,weekly_digest=False).distinct()
 
         if not subject_lists.exists():
             self.stdout.write(self.style.WARNING('No lists found with subjects.'))
