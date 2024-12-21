@@ -33,7 +33,7 @@ class Command(BaseCommand):
 				articles = Articles.objects.filter(query, subjects__id=subject_id)
 
 				# Get IDs of the filtered articles
-				article_ids = articles.values_list('id', flat=True)
+				article_ids = articles.values_list('article_id', flat=True)
 
 				# Bulk add articles to the category
 				cat.articles.add(*article_ids)
@@ -61,7 +61,7 @@ class Command(BaseCommand):
 				trials = Trials.objects.filter(query, subjects__id=subject_id)
 
 				# Get IDs of the filtered trials
-				trial_ids = trials.values_list('id', flat=True)
+				trial_ids = trials.values_list('trial_id', flat=True)
 
 				# Bulk add trials to the category
 				cat.trials.add(*trial_ids)
