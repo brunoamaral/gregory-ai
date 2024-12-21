@@ -49,20 +49,8 @@ class ArticleAdmin(admin.ModelAdmin):
     raw_id_fields = ("authors",)
 
 class TrialAdmin(admin.ModelAdmin):
-    list_display = ['trial_id', 'title', 'last_updated']
-    fields = ['discovery_date', 'last_updated', 'title', 'summary', 'link', 'published_date',
-              'sources', 'teams', 'subjects', 'team_categories', 'identifiers', 'export_date',
-              'internal_number', 'last_refreshed_on', 'scientific_title', 'primary_sponsor',
-              'retrospective_flag', 'date_registration', 'source_register', 'recruitment_status',
-              'other_records', 'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender',
-              'date_enrollement', 'target_size', 'study_type', 'study_design', 'phase',
-              'countries', 'contact_firstname', 'contact_lastname', 'contact_address',
-              'contact_email', 'contact_tel', 'contact_affiliation', 'inclusion_criteria',
-              'exclusion_criteria', 'condition', 'intervention', 'primary_outcome',
-              'secondary_outcome', 'secondary_id', 'source_support', 'ethics_review_status',
-              'ethics_review_approval_date', 'ethics_review_contact_name',
-              'ethics_review_contact_address', 'ethics_review_contact_phone',
-              'ethics_review_contact_email', 'results_date_completed', 'results_url_link']
+    list_display = ['trial_id', 'title', 'discovery_date', 'last_updated']
+    exclude = ['ml_predictions']
     readonly_fields = ['last_updated', 'team_categories']
     search_fields = ['trial_id', 'title']
     list_filter = ['teams', 'subjects', 'sources']
