@@ -1,8 +1,10 @@
+from datetime import timedelta
+from django.conf import settings
+from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
-from django.contrib.sites.models import Site
-from django.conf import settings
+from django.utils.timezone import now
 from gregory.models import Articles, Trials, Subject
 from sitesettings.models import CustomSetting
 from subscriptions.models import (
@@ -35,9 +37,16 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.WARNING(f'The list "{digest_list.list_name}" is marked as weekly digest but has no subjects.'))
 				continue
 
-			# Step 3: Gather clinical trials and articles for the subjects of this list
-			articles = Articles.objects.filter(subjects__in=list_subjects).distinct()
-			trials = Trials.objects.filter(subjects__in=list_subjects).distinct()
+			# Step 3: Gather clinical trials and articles for the subjects of this list within the last 30 days
+			articles = Articles.objects.filter(
+				subjects__in=list_subjects,
+				discovery_date__gte=now() - timedelta(days=30)
+			).distinct()
+
+			trials = Trials.objects.filter(
+				subjects__in=list_subjects,
+				discovery_date__gte=now() - timedelta(days=30)
+			).distinct()
 
 			# Step 4: Send the digest to the subscribers of this list
 			subscribers = Subscribers.objects.filter(
