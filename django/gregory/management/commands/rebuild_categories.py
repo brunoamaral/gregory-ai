@@ -20,22 +20,24 @@ class Command(BaseCommand):
 
 		for cat in categories:
 			terms = cat.category_terms
-			subject_id = cat.subject_id
+			# Loop through each subject associated with the category
+			for subject in cat.subjects.all():
+				subject_id = subject.id
 
-			# Build the Q object for filtering articles
-			query = Q()
-			for term in terms:
-				query |= Q(title__icontains=term)
+				# Build the Q object for filtering articles
+				query = Q()
+				for term in terms:
+					query |= Q(title__icontains=term)
 
-			# Filter articles based on the team, subject, and the terms
-			articles = Articles.objects.filter(
-				query,
-				subjects__id=subject_id
-			)
+				# Filter articles based on the subject, and terms
+				articles = Articles.objects.filter(
+					query, 
+					subjects__id=subject_id
+				)
 
-			# Associate articles with the team category
-			for article in articles:
-				article.team_categories.add(cat)
+				# Associate articles with the team category
+				for article in articles:
+					article.team_categories.add(cat)
 
 	def rebuild_cats_trials(self):
 		# Clear existing relationships
@@ -46,19 +48,22 @@ class Command(BaseCommand):
 
 		for cat in categories:
 			terms = cat.category_terms
-			subject_id = cat.subject_id
 
-			# Build the Q object for filtering trials
-			query = Q()
-			for term in terms:
-				query |= Q(title__icontains=term)
+			# Loop through each subject associated with the category
+			for subject in cat.subjects.all():
+				subject_id = subject.id
 
-			# Filter trials based on the team, subject, and the terms
-			trials = Trials.objects.filter(
-				query, 
-				subjects__id=subject_id
-			)
+				# Build the Q object for filtering trials
+				query = Q()
+				for term in terms:
+					query |= Q(title__icontains=term)
 
-			# Associate trials with the team category
-			for trial in trials:
-				trial.team_categories.add(cat)
+				# Filter trials based on the team, subject, and terms
+				trials = Trials.objects.filter(
+					query, 
+					subjects__id=subject_id
+				)
+
+				# Associate trials with the team category
+				for trial in trials:
+					trial.team_categories.add(cat)
