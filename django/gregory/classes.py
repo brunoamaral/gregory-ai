@@ -149,13 +149,14 @@ class SciencePaper:
 
 
 class ClinicalTrial:
-	def __init__(self, title=None, summary=None, link=None, published_date=None, relevant=None, identifiers=None):
+	def __init__(self, title=None, summary=None, link=None, published_date=None, relevant=None, identifiers=None, extra_fields=None):
 		self.title = title
 		self.summary = summary
 		self.link = link
 		self.published_date = published_date
 		self.relevant = relevant
 		self.identifiers = identifiers
+		self.extra_fields = extra_fields or {}
 	def __str__(self):
 		return f"{self.title}, {self.identifiers}"
 	def __repr__(self):
