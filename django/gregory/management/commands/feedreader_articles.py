@@ -40,7 +40,6 @@ class Command(BaseCommand):
 
 		def handle_database_error(self, action, error):
 				"""Generic error handler for database operations."""
-				# Log the error or print it. Replace print with logging in production code.
 				print(f"An error occurred during {action}: {str(error)}")
 
 		def update_articles_from_feeds(self):
@@ -119,8 +118,8 @@ class Command(BaseCommand):
 														author_obj, author_created = Authors.objects.get_or_create(
 																ORCID=orcid,
 																defaults={
-																		'given_name': given_name,
-																		'family_name': family_name
+																		'given_name': given_name or '',  # Empty string if missing
+																		'family_name': family_name or ''  # Empty string if missing
 																		}
 																)
 													else:  # If no ORCID is provided, fallback to using given_name and family_name for lookup/creation
@@ -146,7 +145,7 @@ class Command(BaseCommand):
 												if not science_paper.authors.filter(pk=author_obj.pk).exists():
 													science_paper.authors.add(author_obj)
 							else:
-								print('no DOI, trying to create article')
+								print('No DOI, trying to create article')
 								existing_article = Articles.objects.filter(title=title).first()
 								if existing_article:
 											science_paper = existing_article
