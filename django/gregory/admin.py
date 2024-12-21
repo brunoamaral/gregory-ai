@@ -51,7 +51,6 @@ class ArticleAdmin(admin.ModelAdmin):
 class TrialAdmin(admin.ModelAdmin):
     list_display = ['trial_id', 'title', 'discovery_date', 'last_updated']
     exclude = ['ml_predictions']
-    list_display = ['trial_id', 'title', 'last_updated']
     readonly_fields = ['last_updated', 'team_categories']
     search_fields = ['trial_id', 'title']
     list_filter = ['teams', 'subjects', 'sources']
