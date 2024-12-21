@@ -31,6 +31,7 @@ django/indexers/input/*.json
 django/model_*.joblib
 django/source.csv
 django/static
+django/**/migrations/
 
 # Docker
 docker-data/
