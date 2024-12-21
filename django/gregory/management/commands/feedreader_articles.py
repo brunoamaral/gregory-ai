@@ -23,7 +23,6 @@ class Command(BaseCommand):
 		def handle(self, *args, **options):
 				self.setup()
 				self.update_articles_from_feeds()
-				self.update_trials_from_feeds()
 
 		def setup(self):
 				self.SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
