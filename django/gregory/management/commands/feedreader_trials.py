@@ -114,11 +114,14 @@ class Command(BaseCommand):
 		trial_region = _extract(r'Trial region[^>]*>([^<]+)')
 		results_posted_str = _extract(r'Results posted[^>]*>([^<]+)')
 		results_posted = (results_posted_str.lower() == 'yes') if results_posted_str else False
-
+		medical_conditions = _extract(r'Medical conditions[^>]*>([^<]+)')
+		overall_status = _extract(r'Overall trial status[^>]*>([^<]+)')
+		primary_end_point = _extract(r'Primary end point[^>]*>([^<]+)')
+		secondary_end_point = _extract(r'Secondary end point[^>]*>([^<]+)')
 		overall_decision_date_str = _extract(r'Overall decision date[^>]*>([^<]+)')
 		countries_decision_date_str = _extract(r'Countries decision date[^>]*>([^<]+)')
+		sponsor = _extract(r'Sponsor[^>]*>([^<]+)')
 		sponsor_type = _extract(r'Sponsor type[^>]*>([^<]+)')
-
 		overall_decision_date = None
 		if overall_decision_date_str:
 			try:
@@ -141,6 +144,10 @@ class Command(BaseCommand):
 
 		return {
 			'euct': euct,  # <-- The EudraCT ID parsed from 'Trial number'
+			'condition': medical_conditions, 
+			'primary_sponsor': sponsor,  
+			'primary_outcome': primary_end_point,
+			'secondary_outcome': secondary_end_point,
 			'therapeutic_areas': therapeutic_areas,
 			'country_status': country_status,
 			'trial_region': trial_region,
@@ -148,6 +155,7 @@ class Command(BaseCommand):
 			'overall_decision_date': overall_decision_date,
 			'countries_decision_date': countries_decision_date if countries_decision_date else None,
 			'sponsor_type': sponsor_type,
+			'results_posted': results_posted,
 		}
 
 	def sync_clinical_trial(self, clinical_trial: ClinicalTrial, source):
@@ -210,6 +218,12 @@ class Command(BaseCommand):
 			trial.overall_decision_date = extras.get('overall_decision_date')
 			trial.countries_decision_date = extras.get('countries_decision_date')
 			trial.sponsor_type = extras.get('sponsor_type')
+			trial.condition = extras.get('condition')
+			trial.recruitment_status = extras.get('recruitment_status')
+			trial.primary_outcome = extras.get('primary_outcome')
+			trial.secondary_outcome = extras.get('secondary_outcome')
+			trial.primary_sponsor = extras.get('primary_sponsor')
+			trial.results_posted = extras.get('results_posted')
 
 		trial.save(
 			update_fields=[
@@ -224,6 +238,12 @@ class Command(BaseCommand):
 				'overall_decision_date',
 				'countries_decision_date',
 				'sponsor_type',
+				'condition',
+				'recruitment_status',
+				'primary_outcome',
+				'secondary_outcome',
+				'primary_sponsor',
+				'results_posted',
 			]
 		)
 
@@ -249,6 +269,11 @@ class Command(BaseCommand):
 				overall_decision_date=extras.get('overall_decision_date'),
 				countries_decision_date=extras.get('countries_decision_date'),
 				sponsor_type=extras.get('sponsor_type'),
+				condition=extras.get('condition'),
+				recruitment_status=extras.get('recruitment_status'),
+				primary_outcome=extras.get('primary_outcome'),
+				secondary_outcome=extras.get('secondary_outcome'),
+				primary_sponsor=extras.get('primary_sponsor'),
 			)
 			trial.sources.add(source)
 			trial.teams.add(source.team)
