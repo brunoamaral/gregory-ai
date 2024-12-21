@@ -7,6 +7,8 @@ from gregory.models import Trials, Subject
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers, SentTrialNotification
 import requests
+from django.utils.timezone import now
+from datetime import timedelta
 
 class Command(BaseCommand):
     help = 'Sends real-time notifications for new clinical trials to subscribers, filtered by subjects, without relying on a sent flag on Trials.'
@@ -32,7 +34,11 @@ class Command(BaseCommand):
                 continue
 
             # Step 3: Gather trials for these subjects
-            list_trials = Trials.objects.filter(subjects__in=list_subjects).distinct()
+            # Filter trials within the last 30 days
+            list_trials = Trials.objects.filter(
+                subjects__in=list_subjects,
+                discovery_date__gte=now() - timedelta(days=30)
+            ).distinct()
 
             # Step 4: Find subscribers who are subscribed to this list
             subscribers = Subscribers.objects.filter(
