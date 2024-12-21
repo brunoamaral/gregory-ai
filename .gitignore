@@ -1,68 +1,67 @@
+# Python-specific
 __pycache__/
-./.env
-.DS_Store
+*.py[cod]
+*.env
 .env
-.gitignore
-.hugo_build.lock
 .venv
+venv/
+venv3/
+venv311/
+
+# Virtual environments
+env
+env3.10
+env311/
+
+# VSCode and editor-specific
 .vscode/
-data/articles.json
-data/embeds.json
-data/trials.json
-db-data/
-dev.py
-django/2024-04-02_source.csv
+workspace.code-workspace
+
+# macOS-specific
+.DS_Store
+
+# Django-specific
 django/data/
 django/gregory/data/
 django/gregory/migrations/
 django/gregory/ml_models/
-django/gregory/ml_models/*
 django/helper-scripts/import-articles.py
 django/helper-scripts/who.py
 django/indexers/input/*.json
-django/model_gnb.joblib
-django/model_lr.joblib
-django/model_lsvc.joblib
-django/model_mnb.joblib
+django/model_*.joblib
 django/source.csv
 django/static
+
+# Docker
 docker-data/
 docker-python/
-env
-env3.10
-env311
-env311/
-hugo/content/articles
-hugo/content/articles/*/
-hugo/content/developers/*.xlsx
-hugo/content/developers/*.zip
-hugo/content/developers/**/*.json
-hugo/content/developers/articles.json
-hugo/content/developers/articles.xlsx
-hugo/content/developers/articles.zip
-hugo/content/developers/trials.json
-hugo/content/developers/trials.xlsx
-hugo/content/developers/trials.zip
-hugo/content/trials
-hugo/content/trials/*/
-hugo/data/
-hugo/data/embeds.json
-hugo/hugo_stats.json
+
+# PostgreSQL
+postgres-data/
+postgres-data_old/
+
+# Metabase
 metabase-data/
 metabase/db-data/
-modules/
-node_modules
-nodered-data/
-postgres-data_old
-postgres-data/
-public/
+
+# Node
+node_modules/
+nodered-data
+
+
+# Machine Learning (Python-ML)
 python-ml/data/202*-*.csv
 python-ml/data/202*-*.json
 python-ml/data/source.json
 python-ml/models/
 python-ml/utils/__pycache__/
-resources/
-venv
-venv3
-venv311
-workspace.code-workspace
+
+# Temporary and lock files
+*.lock
+*.json
+data/articles.json
+data/embeds.json
+data/trials.json
+
+# Gitignore itself
+.gitignore
