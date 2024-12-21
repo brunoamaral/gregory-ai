@@ -161,6 +161,7 @@ class Trials(models.Model):
 	teams = models.ManyToManyField('Team', related_name='trials')  # Allows an clinical trial to belong to one or more teams
 	subjects = models.ManyToManyField('Subject', related_name='trials') # Allows a clinical trial to belong to one or more subjects
 	history = HistoricalRecords()
+
 	# WHO Fields
 	export_date = models.DateTimeField(null=True,blank=True)
 	internal_number = models.CharField(max_length=20,null=True,blank=True)
@@ -207,8 +208,18 @@ class Trials(models.Model):
 	results_url_link = models.URLField(null=True,blank=True)
 	sent_to_teams = models.ManyToManyField('Team', related_name='sent_trials')
 	ml_predictions = models.ManyToManyField('MLPredictions', blank=True)
+
+	# Fields for euclinicaltrials.eu data
+	therapeutic_areas = models.TextField(null=True, blank=True)
+	country_status = models.TextField(null=True, blank=True)
+	trial_region = models.CharField(max_length=100, null=True, blank=True)
+	results_posted = models.BooleanField(default=False)
+	overall_decision_date = models.DateField(null=True, blank=True)
+	countries_decision_date = models.JSONField(null=True, blank=True)
+	sponsor_type = models.CharField(max_length=200, null=True, blank=True)
+
 	def __str__(self):
-		return str(self.trial_id) 
+		return str(self.trial_id)
 
 	class Meta:
 		managed = True
