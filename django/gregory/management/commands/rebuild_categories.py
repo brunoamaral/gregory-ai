@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.db.models import Q
-from gregory.models import Articles, Trials, TeamCategory, Articles, Trials
+from gregory.models import Articles, Trials, TeamCategory
+
 
 class Command(BaseCommand):
 	help = 'Rebuilds category associations for articles and trials.'
@@ -19,15 +20,18 @@ class Command(BaseCommand):
 
 		for cat in categories:
 			terms = cat.category_terms
-			team_id = cat.team_id
+			subject_id = cat.subject_id
 
 			# Build the Q object for filtering articles
 			query = Q()
 			for term in terms:
 				query |= Q(title__icontains=term)
 
-			# Filter articles based on the team and the terms
-			articles = Articles.objects.filter(query, teams__id=team_id)
+			# Filter articles based on the team, subject, and the terms
+			articles = Articles.objects.filter(
+				query,
+				subjects__id=subject_id
+			)
 
 			# Associate articles with the team category
 			for article in articles:
@@ -42,15 +46,18 @@ class Command(BaseCommand):
 
 		for cat in categories:
 			terms = cat.category_terms
-			team_id = cat.team_id
+			subject_id = cat.subject_id
 
 			# Build the Q object for filtering trials
 			query = Q()
 			for term in terms:
 				query |= Q(title__icontains=term)
 
-			# Filter trials based on the team and the terms
-			trials = Trials.objects.filter(query, teams__id=team_id)
+			# Filter trials based on the team, subject, and the terms
+			trials = Trials.objects.filter(
+				query, 
+				subjects__id=subject_id
+			)
 
 			# Associate trials with the team category
 			for trial in trials:
