@@ -67,13 +67,10 @@ class TrialAdmin(admin.ModelAdmin):
     search_fields = ['trial_id', 'title']
     list_filter = ['teams', 'subjects', 'sources']
 
-    def formfield_for_manytomany(self, db_field, request, **kwargs):
-        if db_field.name == "sources":
-            kwargs["queryset"] = Sources.objects.filter(source_for='trials')
-        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
 class SourceAdmin(admin.ModelAdmin):
     list_display = ['name', 'source_for', 'subject', 'method']
+    list_filter = ['source_for', 'team', 'subject']
 
 class SubjectAdmin(admin.ModelAdmin):
     list_display = ['subject_name', 'description']
