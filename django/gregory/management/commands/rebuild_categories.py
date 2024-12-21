@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.db.models import Q
-from gregory.models import Articles, Trials, TeamCategory, Articles, Trials
+from gregory.models import Articles, Trials, TeamCategory
+
 
 class Command(BaseCommand):
 	help = 'Rebuilds category associations for articles and trials.'
@@ -15,43 +16,52 @@ class Command(BaseCommand):
 		Articles.team_categories.through.objects.all().delete()
 
 		# Get all team categories
-		categories = TeamCategory.objects.all()
+		categories = TeamCategory.objects.prefetch_related('subjects').all()
 
 		for cat in categories:
 			terms = cat.category_terms
-			team_id = cat.team_id
+			# Loop through each subject associated with the category
+			for subject in cat.subjects.all():
+				subject_id = subject.id
 
-			# Build the Q object for filtering articles
-			query = Q()
-			for term in terms:
-				query |= Q(title__icontains=term)
+				# Build the Q object for filtering articles
+				query = Q()
+				for term in terms:
+					query |= Q(title__icontains=term)
 
-			# Filter articles based on the team and the terms
-			articles = Articles.objects.filter(query, teams__id=team_id)
+				# Filter articles based on the subject and terms
+				articles = Articles.objects.filter(query, subjects__id=subject_id)
 
-			# Associate articles with the team category
-			for article in articles:
-				article.team_categories.add(cat)
+				# Get IDs of the filtered articles
+				article_ids = articles.values_list('id', flat=True)
+
+				# Bulk add articles to the category
+				cat.articles.add(*article_ids)
 
 	def rebuild_cats_trials(self):
 		# Clear existing relationships
 		Trials.team_categories.through.objects.all().delete()
 
 		# Get all team categories
-		categories = TeamCategory.objects.all()
+		categories = TeamCategory.objects.prefetch_related('subjects').all()
 
 		for cat in categories:
 			terms = cat.category_terms
-			team_id = cat.team_id
 
-			# Build the Q object for filtering trials
-			query = Q()
-			for term in terms:
-				query |= Q(title__icontains=term)
+			# Loop through each subject associated with the category
+			for subject in cat.subjects.all():
+				subject_id = subject.id
 
-			# Filter trials based on the team and the terms
-			trials = Trials.objects.filter(query, teams__id=team_id)
+				# Build the Q object for filtering trials
+				query = Q()
+				for term in terms:
+					query |= Q(title__icontains=term)
 
-			# Associate trials with the team category
-			for trial in trials:
-				trial.team_categories.add(cat)
+				# Filter trials based on the subject and terms
+				trials = Trials.objects.filter(query, subjects__id=subject_id)
+
+				# Get IDs of the filtered trials
+				trial_ids = trials.values_list('id', flat=True)
+
+				# Bulk add trials to the category
+				cat.trials.add(*trial_ids)
