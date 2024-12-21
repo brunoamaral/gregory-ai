@@ -48,6 +48,11 @@ class Command(BaseCommand):
 				discovery_date__gte=now() - timedelta(days=30)
 			).distinct()
 
+			# Check if there are any articles or trials before proceeding
+			if not articles.exists() and not trials.exists():
+				self.stdout.write(self.style.WARNING(f'No articles or trials found for the weekly digest list "{digest_list.list_name}". Skipping.'))
+				continue
+
 			# Step 4: Send the digest to the subscribers of this list
 			subscribers = Subscribers.objects.filter(
 				active=True,
