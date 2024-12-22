@@ -43,7 +43,7 @@ class Command(BaseCommand):
 				print(f"An error occurred during {action}: {str(error)}")
 
 		def update_articles_from_feeds(self):
-			sources = Sources.objects.filter(method='rss', source_for='science paper')
+			sources = Sources.objects.filter(method='rss', source_for='science paper', active=True)
 			for source in sources:
 					print(f'# Processing articles from {source}')
 					feed = self.fetch_feed(source.link, source.ignore_ssl)
