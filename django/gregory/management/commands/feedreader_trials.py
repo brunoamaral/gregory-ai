@@ -25,7 +25,7 @@ class Command(BaseCommand):
 
 	def update_trials_from_feeds(self):
 		"""Fetch and process RSS feeds for clinical trials."""
-		sources = Sources.objects.filter(method='rss', source_for='trials')
+		sources = Sources.objects.filter(method='rss', source_for='trials', active=True)
 		for source in sources:
 			feed = self.fetch_feed(source.link, source.ignore_ssl)
 			for entry in feed['entries']:

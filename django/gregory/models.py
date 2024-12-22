@@ -80,6 +80,7 @@ class Subject(models.Model):
 class Sources(models.Model):
 	TABLES = [('science paper', 'Science Paper'),('trials','Trials'),('news article','News Article')]
 	METHODS = [('rss', 'RSS'), ('scrape', 'Scrape'), ('manual', 'Manual submission')]
+	active = models.BooleanField(default=True)
 	source_id = models.AutoField(primary_key=True)
 	source_for = models.CharField(choices=TABLES, max_length=50, default='science paper')
 	name = models.TextField(blank=True, null=True)
