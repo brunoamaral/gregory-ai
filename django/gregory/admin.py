@@ -3,6 +3,8 @@ from .models import Articles, Trials, Sources, Entities, Authors, Subject, MLPre
 from .widgets import MLPredictionsWidget
 from django import forms
 from .fields import MLPredictionsField
+from django.utils.html import format_html
+from django.urls import reverse
 
 class ArticleSubjectRelevanceInline(admin.TabularInline):
     model = ArticleSubjectRelevance
@@ -55,14 +57,52 @@ class TrialAdmin(admin.ModelAdmin):
     search_fields = ['trial_id', 'title']
     list_filter = ['teams', 'subjects', 'sources']
 
+class SourceInline(admin.StackedInline):
+    model = Sources
+    extra = 1
 
 class SourceAdmin(admin.ModelAdmin):
     list_display = ['name', 'source_for', 'subject', 'method']
     list_filter = ['source_for', 'team', 'subject']
 
 class SubjectAdmin(admin.ModelAdmin):
-    list_display = ['subject_name', 'description']
+    list_display = ['subject_name','description', 'view_sources','team']  # Display in the list view
+    readonly_fields = ['linked_sources']  # Display in the edit form
+    list_filter = ['team']  # Add the team filter
 
+    def view_sources(self, obj):
+        """Display sources as clickable links in the list view."""
+        sources = obj.sources_set.all()
+        if sources.exists():
+            links = [
+                format_html(
+                    '<a href="{}">{}</a>',
+                    reverse('admin:gregory_sources_change', args=[source.source_id]),
+                    source.name
+                )
+                for source in sources
+            ]
+            return format_html('<br>'.join(links))
+        return "No sources"
+
+    view_sources.short_description = "Linked Sources"
+
+    def linked_sources(self, obj):
+        """Display sources as clickable links in the form view."""
+        sources = obj.sources_set.all()
+        if sources.exists():
+            links = [
+                format_html(
+                    '<a href="{}">{}</a>',
+                    reverse('admin:gregory_sources_change', args=[source.source_id]),
+                    source.name
+                )
+                for source in sources
+            ]
+            return format_html('<br>'.join(links))
+        return "No sources"
+
+    linked_sources.short_description = "Linked Sources"
 class AuthorsAdmin(admin.ModelAdmin):
     search_fields = ['family_name', 'given_name']
 
@@ -75,5 +115,5 @@ admin.site.register(Articles, ArticleAdmin)
 admin.site.register(Authors, AuthorsAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
-admin.site.register(Subject)
+admin.site.register(Subject, SubjectAdmin)
 admin.site.register(Trials, TrialAdmin)
