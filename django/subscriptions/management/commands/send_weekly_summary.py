@@ -13,7 +13,8 @@ from subscriptions.models import (
 	SentArticleNotification,
 	SentTrialNotification
 )
-import requests
+from utils.send_email import send_email  # Import the shared email utility
+
 
 class Command(BaseCommand):
 	help = 'Sends a weekly digest email for all weekly digest lists.'
@@ -101,13 +102,14 @@ class Command(BaseCommand):
 				html_content = get_template('emails/weekly_summary.html').render(summary_context)
 				text_content = strip_tags(html_content)
 
-				result = self.send_simple_message(
+				# Use the shared email utility here
+				result = send_email(
 					to=subscriber.email,
 					subject=f'Your Weekly Digest: {digest_list.list_name}',
 					html=html_content,
 					text=text_content,
 					site=site,
-					customsettings=customsettings
+					sender_name="GregoryAI"
 				)
 
 				if result.status_code == 200:
@@ -131,32 +133,3 @@ class Command(BaseCommand):
 					self.stdout.write(
 						self.style.ERROR(f'Failed to send weekly digest email to {subscriber.email} for list "{digest_list.list_name}". Status: {result.status_code}')
 					)
-
-	def send_simple_message(self, to, subject, html, text, site, customsettings):
-		sender = f'GregoryAI <gregory@{site.domain}>'
-		email_postmark_api_url = settings.EMAIL_POSTMARK_API_URL
-		email_postmark_api = settings.EMAIL_POSTMARK_API
-
-		payload = {
-			"MessageStream": "broadcast",
-			"From": sender,
-			"To": to,
-			"Subject": subject,
-			"TextBody": text,
-			"HtmlBody": html
-		}
-
-		response = requests.post(
-			email_postmark_api_url,
-			headers={
-				"Accept": "application/json",
-				"Content-Type": "application/json",
-				"X-Postmark-Server-Token": email_postmark_api,
-			},
-			json=payload
-		)
-
-		print("Status Code:", response.status_code)
-		print("Response:", response.json())
-
-		return response

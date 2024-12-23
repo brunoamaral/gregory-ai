@@ -2,13 +2,13 @@ from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
 from django.contrib.sites.models import Site
-from django.conf import settings
+from django.utils.timezone import now
+from datetime import timedelta
 from gregory.models import Trials, Subject
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers, SentTrialNotification
-import requests
-from django.utils.timezone import now
-from datetime import timedelta
+from utils.send_email import send_email
+
 
 class Command(BaseCommand):
     help = 'Sends real-time notifications for new clinical trials to subscribers, filtered by subjects, without relying on a sent flag on Trials.'
@@ -18,7 +18,7 @@ class Command(BaseCommand):
         site = Site.objects.get_current()
 
         # Step 1: Find all lists that have subjects.
-        subject_lists = Lists.objects.filter(subjects__isnull=False,weekly_digest=False).distinct()
+        subject_lists = Lists.objects.filter(subjects__isnull=False, weekly_digest=False).distinct()
 
         if not subject_lists.exists():
             self.stdout.write(self.style.WARNING('No lists found with subjects.'))
@@ -73,13 +73,14 @@ class Command(BaseCommand):
                     html_content = get_template('emails/trial_notification.html').render(summary_context)
                     text_content = strip_tags(html_content)
 
-                    result = self.send_simple_message(
+                    # Use the shared email utility here
+                    result = send_email(
                         to=subscriber.email,
                         subject='There are new clinical trials',
                         html=html_content,
                         text=text_content,
                         site=site,
-                        customsettings=customsettings
+                        sender_name="GregoryAI"
                     )
 
                     if result.status_code == 200:
@@ -91,32 +92,3 @@ class Command(BaseCommand):
                         self.stdout.write(self.style.ERROR(f'Failed to send email to {subscriber.email} for list "{lst.list_name}". Status: {result.status_code}'))
                 else:
                     self.stdout.write(self.style.WARNING(f'No new trials found for {subscriber.email} in list "{lst.list_name}".'))
-
-    def send_simple_message(self, to, subject, html, text, site, customsettings):
-        sender = 'GregoryAI <gregory@' + site.domain + '>'
-        email_postmark_api_url = settings.EMAIL_POSTMARK_API_URL
-        email_postmark_api = settings.EMAIL_POSTMARK_API
-
-        payload = {
-            "MessageStream": "broadcast",
-            "From": sender,
-            "To": to,
-            "Subject": subject,
-            "TextBody": text,
-            "HtmlBody": html
-        }
-
-        response = requests.post(
-            email_postmark_api_url,
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "X-Postmark-Server-Token": email_postmark_api,
-            },
-            json=payload
-        )
-
-        print("Status Code:", response.status_code)
-        print("Response:", response.json())
-
-        return response
