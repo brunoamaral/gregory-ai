@@ -7,8 +7,7 @@ from datetime import timedelta
 from gregory.models import Trials, Subject
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers, SentTrialNotification
-from utils.send_email import send_email
-
+from subscriptions.management.commands.utils.send_email import send_email
 
 class Command(BaseCommand):
     help = 'Sends real-time notifications for new clinical trials to subscribers, filtered by subjects, without relying on a sent flag on Trials.'

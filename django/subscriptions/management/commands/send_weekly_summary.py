@@ -13,7 +13,7 @@ from subscriptions.models import (
 	SentArticleNotification,
 	SentTrialNotification
 )
-from utils.send_email import send_email  # Import the shared email utility
+from subscriptions.management.commands.utils.send_email import send_email
 
 
 class Command(BaseCommand):
