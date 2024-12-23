@@ -4,8 +4,8 @@ from django.utils.html import strip_tags
 from django.contrib.sites.models import Site
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import (
-		get_articles_for_list,
-		get_trials_for_list,
+	get_articles_for_list,
+	get_trials_for_list,
 )
 from gregory.models import Articles, Trials
 from sitesettings.models import CustomSetting
@@ -14,6 +14,7 @@ from subscriptions.models import (
 	Subscribers,
 	SentArticleNotification,
 	SentTrialNotification,
+	FailedNotification,
 )
 
 
@@ -62,7 +63,7 @@ class Command(BaseCommand):
 				sent_trial_ids = SentTrialNotification.objects.filter(
 					trial__in=trials,
 					list=digest_list,
-					subscriber=subscriber
+					subscription=subscriber
 				).values_list('trial_id', flat=True)
 				unsent_trials = trials.exclude(pk__in=sent_trial_ids)
 
@@ -92,19 +93,37 @@ class Command(BaseCommand):
 				)
 
 				if result.status_code == 200:
-					self.stdout.write(self.style.SUCCESS(f'Weekly digest email sent to {subscriber.email} for list "{digest_list.list_name}".'))
-					# Record sent notifications
-					for article in unsent_articles:
-						SentArticleNotification.objects.get_or_create(
-							article=article,
+					response_data = result.json()
+					error_code = response_data.get("ErrorCode", 0)
+					message = response_data.get("Message", "Unknown error")
+
+					if error_code == 0:  # Successful delivery
+						self.stdout.write(self.style.SUCCESS(f'Weekly digest email sent to {subscriber.email} for list "{digest_list.list_name}".'))
+						# Record sent notifications
+						for article in unsent_articles:
+							SentArticleNotification.objects.get_or_create(
+								article=article,
+								list=digest_list,
+								subscriber=subscriber
+							)
+						for trial in unsent_trials:
+							SentTrialNotification.objects.get_or_create(
+								trial=trial,
+								list=digest_list,
+								subscriber=subscriber
+							)
+					else:  # Failed delivery
+						self.stdout.write(self.style.ERROR(f"Failed to send weekly digest email to {subscriber.email} for list '{digest_list.list_name}'. Reason: {message}"))
+						FailedNotification.objects.create(
+							subscriber=subscriber,
 							list=digest_list,
-							subscriber=subscriber
-						)
-					for trial in unsent_trials:
-						SentTrialNotification.objects.get_or_create(
-							trial=trial,
-							list=digest_list,
-							subscriber=subscriber
+							reason=message
 						)
 				else:
-					self.stdout.write(self.style.ERROR(f'Failed to send weekly digest email to {subscriber.email} for list "{digest_list.list_name}". Status: {result.status_code}'))
+					# Log generic failure if response status is not 200
+					self.stdout.write(self.style.ERROR(f"Failed to send weekly digest email to {subscriber.email} for list '{digest_list.list_name}'. Status: {result.status_code}"))
+					FailedNotification.objects.create(
+						subscriber=subscriber,
+						list=digest_list,
+						reason=f"HTTP Status {result.status_code}"
+					)
