@@ -1,81 +1,85 @@
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand
-from django.db.models import Q
 from django.template.loader import get_template
 from django.utils.html import strip_tags
-from gregory.models import Articles, Trials, Team, Subject, MLPredictions
-from sitesettings.models import *
-from subscriptions.models import Subscribers
-import datetime
-import requests
+from gregory.models import Articles, Trials, Team, MLPredictions
+from sitesettings.models import CustomSetting
+from subscriptions.management.commands.utils.send_email import send_email
 from django.db.models import Prefetch
 
+
 class Command(BaseCommand):
-    help = 'Sends an admin summary every 2 days.'
+	help = 'Sends an admin summary every 2 days.'
 
-    def handle(self, *args, **options):
-        customsettings = CustomSetting.objects.get(site=Site.objects.get_current().id)
-        site = Site.objects.get_current()
-        # Get Teams
-        teams = Team.objects.all()
-        for team in teams:
-            members = team.members
-            subjects = team.subjects.all()
-            for subject in subjects:
-                # fetch the articles and trials that were not sent to the team it will be something like the following but we need to find a better way to track if the article was sent to that user
-                articles = Articles.objects.filter(subjects=subject).exclude(sent_to_teams=team).prefetch_related(
-                    Prefetch('ml_predictions', queryset=MLPredictions.objects.select_related('subject'))
-                )
-                trials = Trials.objects.filter(subjects=subject).exclude(sent_to_teams=team)
-                results = []
-                for member in members:
-                    print(f"sending to {member.email}")  # Fixed from admin.email to member.email
-                    summary = {
-                        "articles": articles,
-                        "trials": trials,
-                        "admin": member.email,  # Fixed from admin.email to member.email
-                        "title": customsettings.title,
-                        "email_footer": customsettings.email_footer,
-                        "site": site,
-                    }
-                    to = member.email  # Fixed from admin.email to member.email
-                    html = get_template('emails/admin_summary.html').render(summary)
-                    text = strip_tags(html)
-                    result = self.send_simple_message(to=to, subject=f'{subject} | Admin Summary', html=html, text=text)
-                    results.append(result.status_code)
-                # carefull, this will not keep track of a single failed delivery of the email
-                if 200 in results:
-                    for article in articles:
-                        article.sent_to_teams.add(team)
-                    for trial in trials:
-                        trial.sent_to_teams.add(team)
+	def handle(self, *args, **options):
+		site = Site.objects.get_current()
+		customsettings = CustomSetting.objects.get(site=site)
 
-    def send_simple_message(self, to, bcc=None, subject=None, text=None, html=None, 
-        sender=f'GregoryAI <gregory@{Site.objects.get_current().domain}>',
-        email_postmark_api_url=settings.EMAIL_POSTMARK_API_URL, 
-        email_postmark_api=settings.EMAIL_POSTMARK_API):
-        print(f"data=sender: {sender}, to: {to}, bcc: {bcc}")
-        payload = {
-		"MessageStream": "broadcast",
-		"From": sender,
-		"To": to,
-		"Bcc": bcc,
-		"Subject": subject,
-		"TextBody": text,
-		"HtmlBody": html
-	    }
-    
-        payload = {k: v for k, v in payload.items() if v is not None}
+		# Step 1: Fetch all teams
+		teams = Team.objects.all()
 
-        status = requests.post(
-        email_postmark_api_url,
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "X-Postmark-Server-Token": email_postmark_api,
-            },
-        json=payload
-        )
-        print(status)
-        return status
+		if not teams.exists():
+			self.stdout.write(self.style.WARNING("No teams found. Skipping admin summary."))
+			return
+
+		for team in teams:
+			members = team.members.all()  # Assuming `members` is a related field
+			subjects = team.subjects.all()
+
+			if not members.exists():
+				self.stdout.write(self.style.WARNING(f"No members found in team {team.name}. Skipping."))
+				continue
+
+			if not subjects.exists():
+				self.stdout.write(self.style.WARNING(f"No subjects associated with team {team.name}. Skipping."))
+				continue
+
+			for subject in subjects:
+				# Step 2: Fetch unsent articles and trials for this team and subject
+				articles = Articles.objects.filter(subjects=subject).exclude(sent_to_teams=team).prefetch_related(
+					Prefetch('ml_predictions', queryset=MLPredictions.objects.select_related('subject'))
+				)
+				trials = Trials.objects.filter(subjects=subject).exclude(sent_to_teams=team)
+
+				if not articles.exists() and not trials.exists():
+					self.stdout.write(self.style.WARNING(f'No new articles or trials for team "{team.name}" and subject "{subject}". Skipping.'))
+					continue
+
+				for member in members:
+					self.stdout.write(self.style.SUCCESS(f"Sending admin summary to {member.email}."))
+
+					# Step 3: Prepare the summary context for the email
+					summary_context = {
+						"articles": articles,
+						"trials": trials,
+						"admin": member.email,
+						"title": customsettings.title,
+						"email_footer": customsettings.email_footer,
+						"site": site,
+					}
+
+					# Render email content
+					html_content = get_template('emails/admin_summary.html').render(summary_context)
+					text_content = strip_tags(html_content)
+
+					# Step 4: Send email
+					result = send_email(
+						to=member.email,
+						subject=f'{subject} | Admin Summary',
+						html=html_content,
+						text=text_content,
+						site=site,
+						sender_name="GregoryAI"
+					)
+
+					# Step 5: Log email success/failure
+					if result.status_code == 200:
+						self.stdout.write(self.style.SUCCESS(f"Admin summary email sent to {member.email}."))
+						# Step 6: Mark articles and trials as sent to this team
+						for article in articles:
+							article.sent_to_teams.add(team)
+						for trial in trials:
+							trial.sent_to_teams.add(team)
+					else:
+						self.stdout.write(self.style.ERROR(f"Failed to send email to {member.email}. Status: {result.status_code}"))
