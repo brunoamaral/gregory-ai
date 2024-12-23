@@ -2,12 +2,13 @@ from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
 from django.contrib.sites.models import Site
-from django.utils.timezone import now
-from datetime import timedelta
-from gregory.models import Trials, Subject
+from subscriptions.management.commands.utils.send_email import send_email
+from subscriptions.management.commands.utils.subscription import (
+    get_trials_for_list,
+)
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers, SentTrialNotification
-from subscriptions.management.commands.utils.send_email import send_email
+
 
 class Command(BaseCommand):
     help = 'Sends real-time notifications for new clinical trials to subscribers, filtered by subjects, without relying on a sent flag on Trials.'
@@ -16,7 +17,7 @@ class Command(BaseCommand):
         customsettings = CustomSetting.objects.get(site=Site.objects.get_current().id)
         site = Site.objects.get_current()
 
-        # Step 1: Find all lists that have subjects.
+        # Step 1: Find all lists that have subjects but are not weekly digests
         subject_lists = Lists.objects.filter(subjects__isnull=False, weekly_digest=False).distinct()
 
         if not subject_lists.exists():
@@ -24,22 +25,14 @@ class Command(BaseCommand):
             return
 
         for lst in subject_lists:
-            # Step 2: Get the subjects for this list
-            list_subjects = lst.subjects.all()
+            # Step 2: Use the shared utility function to fetch trials
+            list_trials = get_trials_for_list(lst)
 
-            # If no subjects for some reason (shouldn't happen due to the filter, but just in case)
-            if not list_subjects.exists():
-                self.stdout.write(self.style.WARNING(f'List "{lst.list_name}" has no subjects. Skipping.'))
+            if not list_trials.exists():
+                self.stdout.write(self.style.WARNING(f'No trials found for the list "{lst.list_name}". Skipping.'))
                 continue
 
-            # Step 3: Gather trials for these subjects
-            # Filter trials within the last 30 days
-            list_trials = Trials.objects.filter(
-                subjects__in=list_subjects,
-                discovery_date__gte=now() - timedelta(days=30)
-            ).distinct()
-
-            # Step 4: Find subscribers who are subscribed to this list
+            # Step 3: Find active subscribers for the list
             subscribers = Subscribers.objects.filter(
                 active=True,
                 subscriptions=lst
@@ -49,9 +42,9 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f'No subscribers found for the list "{lst.list_name}".'))
                 continue
 
-            # For each subscriber, send trials not yet sent
+            # Step 4: Notify each subscriber of new trials
             for subscriber in subscribers:
-                # Determine which have already been sent to this list for this subscriber
+                # Determine which trials have already been sent to this subscriber for this list
                 already_sent_ids = SentTrialNotification.objects.filter(
                     trial__in=list_trials,
                     list=lst,
@@ -61,33 +54,34 @@ class Command(BaseCommand):
                 # Filter out already sent trials
                 new_trials = list_trials.exclude(pk__in=already_sent_ids)
 
-                if new_trials.exists():
-                    summary_context = {
-                        "trials": new_trials,
-                        "title": customsettings.title,
-                        "email_footer": customsettings.email_footer,
-                        "site": site,
-                    }
+                if not new_trials.exists():
+                    self.stdout.write(self.style.WARNING(f'No new trials for {subscriber.email} in list "{lst.list_name}".'))
+                    continue
 
-                    html_content = get_template('emails/trial_notification.html').render(summary_context)
-                    text_content = strip_tags(html_content)
+                # Step 5: Prepare and send the email
+                summary_context = {
+                    "trials": new_trials,
+                    "title": customsettings.title,
+                    "email_footer": customsettings.email_footer,
+                    "site": site,
+                }
 
-                    # Use the shared email utility here
-                    result = send_email(
-                        to=subscriber.email,
-                        subject='There are new clinical trials',
-                        html=html_content,
-                        text=text_content,
-                        site=site,
-                        sender_name="GregoryAI"
-                    )
+                html_content = get_template('emails/trial_notification.html').render(summary_context)
+                text_content = strip_tags(html_content)
 
-                    if result.status_code == 200:
-                        self.stdout.write(self.style.SUCCESS(f'Email sent to {subscriber.email} for list "{lst.list_name}".'))
-                        # Record these trials as sent to this subscriber for this list
-                        for trial in new_trials:
-                            SentTrialNotification.objects.get_or_create(trial=trial, list=lst, subscriber=subscriber)
-                    else:
-                        self.stdout.write(self.style.ERROR(f'Failed to send email to {subscriber.email} for list "{lst.list_name}". Status: {result.status_code}'))
+                result = send_email(
+                    to=subscriber.email,
+                    subject='There are new clinical trials',
+                    html=html_content,
+                    text=text_content,
+                    site=site,
+                    sender_name="GregoryAI"
+                )
+
+                if result.status_code == 200:
+                    self.stdout.write(self.style.SUCCESS(f'Email sent to {subscriber.email} for list "{lst.list_name}".'))
+                    # Record sent notifications for the new trials
+                    for trial in new_trials:
+                        SentTrialNotification.objects.get_or_create(trial=trial, list=lst, subscriber=subscriber)
                 else:
-                    self.stdout.write(self.style.WARNING(f'No new trials found for {subscriber.email} in list "{lst.list_name}".'))
+                    self.stdout.write(self.style.ERROR(f'Failed to send email to {subscriber.email} for list "{lst.list_name}". Status: {result.status_code}'))
