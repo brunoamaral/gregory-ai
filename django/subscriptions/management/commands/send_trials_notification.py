@@ -6,7 +6,7 @@ from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers, SentTrialNotification, FailedNotification
-from gregory.models import Team, TeamCredentials
+from gregory.models import TeamCredentials
 
 
 class Command(BaseCommand):
@@ -24,12 +24,11 @@ class Command(BaseCommand):
 			return
 
 		for lst in subject_lists:
-			# Fetch the team associated with the first subject in the list
-			subjects = lst.subjects.all()
-			team = subjects.first().team if subjects.exists() and hasattr(subjects.first(), 'team') else None
+			# Fetch the team directly from the list
+			team = lst.team  # This assumes Lists model has a ForeignKey to Team
 
 			if not team:
-				self.stdout.write(self.style.ERROR(f"Cannot find a team associated with list '{lst.list_name}'. Skipping."))
+				self.stdout.write(self.style.ERROR(f"No team associated with list '{lst.list_name}'. Skipping."))
 				continue
 
 			# Step 2: Fetch Team Credentials
@@ -37,7 +36,7 @@ class Command(BaseCommand):
 				credentials = team.credentials
 				postmark_api_token = credentials.postmark_api_token
 			except TeamCredentials.DoesNotExist:
-				self.stdout.write(self.style.ERROR(f"Credentials not found for team associated with list '{lst.list_name}'. Skipping."))
+				self.stdout.write(self.style.ERROR(f"Credentials not found for team '{team.name}' associated with list '{lst.list_name}'. Skipping."))
 				continue
 
 			# Step 3: Use the shared utility function to fetch trials
