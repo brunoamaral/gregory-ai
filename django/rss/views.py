@@ -4,7 +4,7 @@ from django.contrib.sites.models import Site
 from gregory.models import Articles, Authors, Trials, Sources, TeamCategory
 from django.urls import reverse
 from django.contrib.sites.models import Site
-from .models import CustomSetting
+from sitesettings.models import CustomSetting
 
 def get_website_domain():
 	current_site = Site.objects.get_current()
