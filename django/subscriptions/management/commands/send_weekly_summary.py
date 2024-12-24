@@ -33,9 +33,16 @@ class Command(BaseCommand):
 			return
 
 		for digest_list in weekly_digest_lists:
-			# Step 2: Fetch credentials for the team associated with the list
+			# Fetch the team indirectly through the subjects related to the list
+			subjects = digest_list.subjects.all()
+			team = subjects.first().team if subjects.exists() and hasattr(subjects.first(), 'team') else None
+
+			if not team:
+				self.stdout.write(self.style.ERROR(f"Cannot find a team associated with list '{digest_list.list_name}'. Skipping."))
+				continue
+
+			# Step 2: Fetch Team Credentials
 			try:
-				team = digest_list.team  # Assuming `Lists` has a ForeignKey to `Team`
 				credentials = team.credentials
 				postmark_api_token = credentials.postmark_api_token
 			except TeamCredentials.DoesNotExist:
