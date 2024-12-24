@@ -1,8 +1,7 @@
 from django.db import models
 from django.db.models import UniqueConstraint
 from django.db.models.functions import Lower
-from gregory.models import Subject, Articles, Trials
-from gregory.models import Trials
+from gregory.models import Subject, Articles, Trials, Team
 
 class Lists(models.Model):
 	list_id = models.AutoField(primary_key=True)
@@ -10,13 +9,22 @@ class Lists(models.Model):
 	list_description = models.CharField(max_length=150, null=True, blank=True)
 	subjects = models.ManyToManyField('gregory.Subject', blank=True)
 	weekly_digest = models.BooleanField(default=False) # If True, send a weekly digest email
+	team = models.ForeignKey(
+		Team, 
+		on_delete=models.CASCADE, 
+		related_name="lists",
+		null=False,
+		blank=False,
+		help_text="The team this list belongs to."
+	)
 
 	class Meta:
 		managed = True
 		verbose_name_plural = 'lists'
 
 	def __str__(self):
-		return str(self.list_name)
+		return f"{self.list_name} (Team: {self.team.name})"
+
 
 class Subscribers(models.Model):
 	PROFILEOPTIONS = [

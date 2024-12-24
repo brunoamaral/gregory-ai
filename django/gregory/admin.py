@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, ArticleSubjectRelevance, TeamCategory
+from .models import Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, ArticleSubjectRelevance, TeamCategory, TeamCredentials
 from .widgets import MLPredictionsWidget
 from django import forms
 from .fields import MLPredictionsField
@@ -111,6 +111,15 @@ class TeamCategoryAdmin(admin.ModelAdmin):
     list_display = ('team', 'category_name', 'category_slug')
     search_fields = ('category_name', 'team__name')
 
+
+
+@admin.register(TeamCredentials)
+class TeamCredentialsAdmin(admin.ModelAdmin):
+	list_display = ('team', 'created_at', 'updated_at')
+	# readonly_fields = ('orcid_client_id', 'orcid_client_secret', 'postmark_api_token')
+
+	def get_readonly_fields(self, request, obj=None):
+		return self.readonly_fields
 admin.site.register(Articles, ArticleAdmin)
 admin.site.register(Authors, AuthorsAdmin)
 admin.site.register(Entities)

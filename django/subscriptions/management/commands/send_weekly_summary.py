@@ -7,7 +7,7 @@ from subscriptions.management.commands.utils.subscription import (
 	get_articles_for_list,
 	get_trials_for_list,
 )
-from gregory.models import Articles, Trials
+from gregory.models import Articles, Trials, TeamCredentials
 from sitesettings.models import CustomSetting
 from subscriptions.models import (
 	Lists,
@@ -33,7 +33,22 @@ class Command(BaseCommand):
 			return
 
 		for digest_list in weekly_digest_lists:
-			# Step 2: Use utility functions to get articles and trials
+			# Fetch the team directly from the list
+			team = digest_list.team  # Assumes Lists has a ForeignKey to Team
+
+			if not team:
+				self.stdout.write(self.style.ERROR(f"No team associated with list '{digest_list.list_name}'. Skipping."))
+				continue
+
+			# Step 2: Fetch Team Credentials
+			try:
+				credentials = team.credentials
+				postmark_api_token = credentials.postmark_api_token
+			except TeamCredentials.DoesNotExist:
+				self.stdout.write(self.style.ERROR(f"Credentials not found for team associated with list '{digest_list.list_name}'. Skipping."))
+				continue
+
+			# Step 3: Use utility functions to get articles and trials
 			articles = get_articles_for_list(digest_list)
 			trials = get_trials_for_list(digest_list)
 
@@ -41,7 +56,7 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.WARNING(f'No articles or trials found for the weekly digest list "{digest_list.list_name}". Skipping.'))
 				continue
 
-			# Step 3: Find subscribers of the list
+			# Step 4: Find subscribers of the list
 			subscribers = Subscribers.objects.filter(
 				active=True,
 				subscriptions=digest_list
@@ -52,7 +67,7 @@ class Command(BaseCommand):
 				continue
 
 			for subscriber in subscribers:
-				# Step 4: Filter unsent articles and trials for the subscriber
+				# Step 5: Filter unsent articles and trials for the subscriber
 				sent_article_ids = SentArticleNotification.objects.filter(
 					article__in=articles,
 					list=digest_list,
@@ -63,7 +78,7 @@ class Command(BaseCommand):
 				sent_trial_ids = SentTrialNotification.objects.filter(
 					trial__in=trials,
 					list=digest_list,
-					subscription=subscriber
+					subscriber=subscriber
 				).values_list('trial_id', flat=True)
 				unsent_trials = trials.exclude(pk__in=sent_trial_ids)
 
@@ -71,7 +86,7 @@ class Command(BaseCommand):
 					self.stdout.write(self.style.WARNING(f'No new articles or trials for {subscriber.email} in list "{digest_list.list_name}".'))
 					continue
 
-				# Step 5: Prepare and send the email
+				# Step 6: Prepare and send the email
 				summary_context = {
 					"articles": unsent_articles,
 					"trials": unsent_trials,
@@ -89,7 +104,8 @@ class Command(BaseCommand):
 					html=html_content,
 					text=text_content,
 					site=site,
-					sender_name="GregoryAI"
+					sender_name="GregoryAI",
+					api_token=postmark_api_token  # Use the team's Postmark API token
 				)
 
 				if result.status_code == 200:

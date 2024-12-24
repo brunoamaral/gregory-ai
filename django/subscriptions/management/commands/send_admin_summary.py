@@ -3,7 +3,7 @@ from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
-from gregory.models import Articles, Trials, Team, MLPredictions
+from gregory.models import Articles, Trials, Team, MLPredictions, TeamCredentials
 from sitesettings.models import CustomSetting
 from subscriptions.management.commands.utils.send_email import send_email
 from django.db.models import Prefetch
@@ -17,22 +17,30 @@ class Command(BaseCommand):
 		customsettings = CustomSetting.objects.get(site=site)
 
 		# Step 1: Fetch all teams
-		teams = Team.objects.all()
+		teams = Team.objects.prefetch_related('credentials').all()  # Prefetch credentials for efficiency
 
 		if not teams.exists():
 			self.stdout.write(self.style.WARNING("No teams found. Skipping admin summary."))
 			return
 
 		for team in teams:
-			members = team.members.all()  # Assuming `members` is a related field
+			members = team.members
 			subjects = team.subjects.all()
 
-			if not members.exists():
+			if not members:
 				self.stdout.write(self.style.WARNING(f"No members found in team {team.name}. Skipping."))
 				continue
 
 			if not subjects.exists():
 				self.stdout.write(self.style.WARNING(f"No subjects associated with team {team.name}. Skipping."))
+				continue
+
+			# Fetch team credentials
+			try:
+				credentials = team.credentials
+				postmark_api_token = credentials.postmark_api_token
+			except TeamCredentials.DoesNotExist:
+				self.stdout.write(self.style.ERROR(f"Credentials not found for team {team.name}. Skipping."))
 				continue
 
 			for subject in subjects:
@@ -70,7 +78,8 @@ class Command(BaseCommand):
 						html=html_content,
 						text=text_content,
 						site=site,
-						sender_name="GregoryAI"
+						sender_name="GregoryAI",
+						api_token=postmark_api_token  # Use the team's Postmark API token
 					)
 
 					# Step 5: Log email success/failure

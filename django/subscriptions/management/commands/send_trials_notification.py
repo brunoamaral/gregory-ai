@@ -6,6 +6,7 @@ from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers, SentTrialNotification, FailedNotification
+from gregory.models import TeamCredentials
 
 
 class Command(BaseCommand):
@@ -23,14 +24,29 @@ class Command(BaseCommand):
 			return
 
 		for lst in subject_lists:
-			# Step 2: Use the shared utility function to fetch trials
+			# Fetch the team directly from the list
+			team = lst.team  # This assumes Lists model has a ForeignKey to Team
+
+			if not team:
+				self.stdout.write(self.style.ERROR(f"No team associated with list '{lst.list_name}'. Skipping."))
+				continue
+
+			# Step 2: Fetch Team Credentials
+			try:
+				credentials = team.credentials
+				postmark_api_token = credentials.postmark_api_token
+			except TeamCredentials.DoesNotExist:
+				self.stdout.write(self.style.ERROR(f"Credentials not found for team '{team.name}' associated with list '{lst.list_name}'. Skipping."))
+				continue
+
+			# Step 3: Use the shared utility function to fetch trials
 			list_trials = get_trials_for_list(lst)
 
 			if not list_trials.exists():
 				self.stdout.write(self.style.WARNING(f'No trials found for the list "{lst.list_name}". Skipping.'))
 				continue
 
-			# Step 3: Find active subscribers for the list
+			# Step 4: Find active subscribers for the list
 			subscribers = Subscribers.objects.filter(
 				active=True,
 				subscriptions=lst
@@ -40,7 +56,7 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.WARNING(f'No subscribers found for the list "{lst.list_name}".'))
 				continue
 
-			# Step 4: Notify each subscriber of new trials
+			# Step 5: Notify each subscriber of new trials
 			for subscriber in subscribers:
 				# Determine which trials have already been sent to this subscriber for this list
 				already_sent_ids = SentTrialNotification.objects.filter(
@@ -56,7 +72,7 @@ class Command(BaseCommand):
 					self.stdout.write(self.style.WARNING(f'No new trials for {subscriber.email} in list "{lst.list_name}".'))
 					continue
 
-				# Step 5: Prepare and send the email
+				# Step 6: Prepare and send the email
 				summary_context = {
 					"trials": new_trials,
 					"title": customsettings.title,
@@ -73,10 +89,11 @@ class Command(BaseCommand):
 					html=html_content,
 					text=text_content,
 					site=site,
-					sender_name="GregoryAI"
+					sender_name="GregoryAI",
+					api_token=postmark_api_token  # Use the team's Postmark API token
 				)
 
-				# Step 6: Parse the Postmark response
+				# Step 7: Parse the Postmark response
 				if result.status_code == 200:
 					response_data = result.json()
 					error_code = response_data.get("ErrorCode", 0)
