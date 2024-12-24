@@ -233,7 +233,7 @@ class ArticlesByCategory(viewsets.ModelViewSet):
 	"""
 	def get_queryset(self):
 			category_slug = self.kwargs.get('category_slug', None)
-			category = Categories.objects.filter(category_slug=category_slug).first()
+			category = TeamCategory.objects.filter(category_slug=category_slug).first()
 
 			if category is None:
 				# Returning an empty queryset
