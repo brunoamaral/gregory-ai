@@ -239,8 +239,7 @@ class ArticlesByCategory(viewsets.ModelViewSet):
 				# Returning an empty queryset
 				return Articles.objects.none()
 
-			return Articles.objects.filter(categories=category).order_by('-discovery_date')
-
+			return Articles.objects.filter(team_categories=category).order_by('-discovery_date')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
