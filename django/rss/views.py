@@ -5,8 +5,13 @@ from django.contrib.syndication.views import Feed
 from django.conf import settings
 from gregory.models import Articles, Authors, Trials, Sources, TeamCategory
 from django.urls import reverse
+from django.contrib.sites.models import Site
+from .models import CustomSetting
 
-
+def get_website_domain():
+    current_site = Site.objects.get_current()
+    custom_setting = CustomSetting.objects.filter(site=current_site).first()
+    return custom_setting.admin_email if custom_setting else current_site.domain
 
 class LatestArticlesFeed(Feed):
 	title = "Latest research articles"
@@ -24,7 +29,7 @@ class LatestArticlesFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
+		return f"https://api.{get_website_domain()}/articles/{str(item.pk)}/" 
 
 	def item_pubdate(self, item):
 		"""
@@ -53,7 +58,7 @@ class ArticlesBySubjectFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
+		return f"https://api.{get_website_domain()}/articles/{str(item.pk)}/"
 
 	def item_pubdate(self, item):
 		"""
@@ -86,7 +91,7 @@ class ArticlesByCategoryFeed(Feed):
 
 	def item_link(self, item):
 		# item_link is only needed if NewsItem has no get_absolute_url method.
-		return 'https://' + settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/'
+		return f"https://api.{get_website_domain()}/articles/{str(item.pk)}/"
 
 	def item_pubdate(self, item):
 		"""
@@ -111,7 +116,7 @@ class LatestTrialsFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://api.' + settings.WEBSITE_DOMAIN + '/trials/' + str(item.pk) + '/'
+		return f"https://api.{get_website_domain()}/trials/{str(item.pk)}/"
 
 	def item_pubdate(self, item):
 		"""
@@ -143,7 +148,7 @@ class MachineLearningFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
+		return f"https://api.{get_website_domain()}/articles/{str(item.pk)}/"
 
 class ToPredictFeed(Feed):
 	title = "Relevant articles by machine learning"
@@ -161,7 +166,7 @@ class ToPredictFeed(Feed):
 
 	# # item_link is only needed if NewsItem has no get_absolute_url method.
 	def item_link(self, item):
-		return 'https://'+ settings.WEBSITE_DOMAIN + '/articles/' + str(item.pk) + '/' 
+		return f"https://api.{get_website_domain()}/articles/{str(item.pk)}/"
 
 	def item_pubdate(self, item):
 		"""

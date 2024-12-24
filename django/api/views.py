@@ -632,7 +632,6 @@ class CategoriesByTeam(viewsets.ModelViewSet):
 		team_id = self.kwargs.get('team_id')
 		return TeamCategory.objects.filter(team__id=team_id).order_by('-id')
 
-
 class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
 		"""
 		List all articles for a specific category and team.
