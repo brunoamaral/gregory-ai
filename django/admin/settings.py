@@ -10,7 +10,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
-
+SITE_ID = 1
 # FERNET SECRET KEY
 FERNET_SECRET_KEY = os.environ.get('FERNET_SECRET_KEY')
 
