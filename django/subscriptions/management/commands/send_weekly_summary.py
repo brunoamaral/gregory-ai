@@ -33,12 +33,11 @@ class Command(BaseCommand):
 			return
 
 		for digest_list in weekly_digest_lists:
-			# Fetch the team indirectly through the subjects related to the list
-			subjects = digest_list.subjects.all()
-			team = subjects.first().team if subjects.exists() and hasattr(subjects.first(), 'team') else None
+			# Fetch the team directly from the list
+			team = digest_list.team  # Assumes Lists has a ForeignKey to Team
 
 			if not team:
-				self.stdout.write(self.style.ERROR(f"Cannot find a team associated with list '{digest_list.list_name}'. Skipping."))
+				self.stdout.write(self.style.ERROR(f"No team associated with list '{digest_list.list_name}'. Skipping."))
 				continue
 
 			# Step 2: Fetch Team Credentials
