@@ -1,8 +1,15 @@
-from django.db import models
-from django.contrib.postgres.fields import ArrayField
-from django.utils.text import slugify
-from simple_history.models import HistoricalRecords
+
+from cryptography.fernet import Fernet
 from django_countries.fields import CountryField
+from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
+from django.db import models
+from django.utils.text import slugify
+from organizations.models import Organization, OrganizationUser
+from simple_history.models import HistoricalRecords
+import base64
+from django.conf import settings 
+
 
 class Authors(models.Model):
 	author_id = models.AutoField(primary_key=True)
@@ -227,7 +234,31 @@ class Trials(models.Model):
 		verbose_name_plural = 'trials'
 		db_table = 'trials'
 
-from organizations.models import Organization, OrganizationUser
+def get_fernet():
+	try:
+		secret_key = settings.FERNET_SECRET_KEY
+		return Fernet(secret_key)
+	except Exception as e:
+		raise ValueError("FERNET_SECRET_KEY is not properly configured in settings.") from e
+
+class EncryptedTextField(models.TextField):
+	"""
+	Custom TextField that encrypts data before saving to the database
+	and decrypts it when reading from the database.
+	"""
+	def from_db_value(self, value, expression, connection):
+		if value is None:
+			return value
+		fernet = get_fernet()
+		return fernet.decrypt(base64.b64decode(value)).decode()
+
+	def get_prep_value(self, value):
+		if value is None:
+			return value
+		if not isinstance(value, str):
+			raise ValueError("Only strings can be encrypted.")
+		fernet = get_fernet()
+		return base64.b64encode(fernet.encrypt(value.encode())).decode()
 
 class Team(Organization):
 	class Meta:
@@ -238,6 +269,39 @@ class Team(Organization):
 		# Assuming TeamMember links back to Organization via an 'organization' field
 		# and each TeamMember instance has a related 'user' object
 		return [member.user for member in TeamMember.objects.filter(organization=self)]
+
+class TeamCredentials(models.Model):
+	team = models.OneToOneField(
+		'Team',
+		on_delete=models.CASCADE,
+		related_name="credentials",
+		help_text="The team associated with these credentials."
+	)
+	orcid_client_id = EncryptedTextField(
+		blank=True,
+		null=True,
+		help_text="ORCID Client ID for this team."
+	)
+	orcid_client_secret = EncryptedTextField(
+		blank=True,
+		null=True,
+		help_text="ORCID Client Secret for this team."
+	)
+	postmark_api_token = EncryptedTextField(
+		blank=True,
+		null=True,
+		help_text="Postmark API Token for this team."
+	)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	def __str__(self):
+		return f"Credentials for Team: {self.team.name}"
+
+	class Meta:
+		verbose_name = "Team Credential"
+		verbose_name_plural = "Team Credentials"
+
 class TeamMember(OrganizationUser):
 	class Meta:
 		proxy = True
