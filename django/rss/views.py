@@ -3,14 +3,13 @@ from django.contrib.syndication.views import Feed
 from django.contrib.sites.models import Site
 from gregory.models import Articles, Authors, Trials, Sources, TeamCategory
 from django.urls import reverse
-from sitesettings.models import CustomSetting
+from django.contrib.sites.models import Site
+from .models import CustomSetting
 
-# Helper function to get the website domain dynamically
 def get_website_domain():
 	current_site = Site.objects.get_current()
 	custom_setting = CustomSetting.objects.filter(site=current_site).first()
 	return custom_setting.admin_email if custom_setting else current_site.domain
-
 
 class LatestArticlesFeed(Feed):
 	title = "Latest research articles"
@@ -27,7 +26,7 @@ class LatestArticlesFeed(Feed):
 		return item.summary
 
 	def item_link(self, item):
-		return f"https://{get_website_domain()}/articles/{str(item.pk)}/"
+		return f"https://api.{get_website_domain()}/articles/{str(item.pk)}/" 
 
 	def item_pubdate(self, item):
 		return item.published_date
@@ -52,7 +51,7 @@ class ArticlesBySubjectFeed(Feed):
 		return item.summary
 
 	def item_link(self, item):
-		return f"https://{get_website_domain()}/articles/{str(item.pk)}/"
+		return f"https://api.{get_website_domain()}/articles/{str(item.pk)}/"
 
 	def item_pubdate(self, item):
 		return item.published_date
@@ -79,7 +78,8 @@ class ArticlesByCategoryFeed(Feed):
 		return item.summary
 
 	def item_link(self, item):
-		return f"https://{get_website_domain()}/articles/{str(item.pk)}/"
+		# item_link is only needed if NewsItem has no get_absolute_url method.
+		return f"https://api.{get_website_domain()}/articles/{str(item.pk)}/"
 
 	def item_pubdate(self, item):
 		return item.published_date
@@ -100,7 +100,7 @@ class LatestTrialsFeed(Feed):
 		return item.summary
 
 	def item_link(self, item):
-		return f"https://{get_website_domain()}/trials/{str(item.pk)}/"
+		return f"https://api.{get_website_domain()}/trials/{str(item.pk)}/"
 
 	def item_pubdate(self, item):
 		return item.published_date
@@ -121,7 +121,7 @@ class MachineLearningFeed(Feed):
 		return item.link
 
 	def item_link(self, item):
-		return f"https://{get_website_domain()}/articles/{str(item.pk)}/"
+		return f"https://api.{get_website_domain()}/articles/{str(item.pk)}/"
 
 	def item_pubdate(self, item):
 		return item.published_date
@@ -142,7 +142,7 @@ class ToPredictFeed(Feed):
 		return item.summary
 
 	def item_link(self, item):
-		return f"https://{get_website_domain()}/articles/{str(item.pk)}/"
+		return f"https://api.{get_website_domain()}/articles/{str(item.pk)}/"
 
 	def item_pubdate(self, item):
 		return item.published_date
@@ -163,7 +163,7 @@ class OpenAccessFeed(Feed):
 		return item.summary
 
 	def item_link(self, item):
-		return f"https://{get_website_domain()}/articles/{str(item.pk)}/"
+		return f"https://api.{get_website_domain()}/articles/{str(item.pk)}/"
 
 	def item_pubdate(self, item):
 		return item.published_date
@@ -187,7 +187,7 @@ class ArticlesByAuthorFeed(Feed):
 		return item.summary
 
 	def item_link(self, item):
-		return f"https://{get_website_domain()}/articles/{str(item.pk)}/"
+		return f"https://api.{get_website_domain()}/articles/{str(item.pk)}/"
 
 	def item_pubdate(self, item):
 		return item.published_date
