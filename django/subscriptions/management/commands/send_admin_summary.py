@@ -24,10 +24,10 @@ class Command(BaseCommand):
 			return
 
 		for team in teams:
-			members = team.members.all()  # Assuming `members` is a related field
+			members = team.members
 			subjects = team.subjects.all()
 
-			if not members.exists():
+			if not members:
 				self.stdout.write(self.style.WARNING(f"No members found in team {team.name}. Skipping."))
 				continue
 
