@@ -277,16 +277,17 @@ class TeamCredentials(models.Model):
 		related_name="credentials",
 		help_text="The team associated with these credentials."
 	)
-	orcid_client_id = EncryptedTextField(
-		blank=True,
-		null=True,
-		help_text="ORCID Client ID for this team."
-	)
-	orcid_client_secret = EncryptedTextField(
-		blank=True,
-		null=True,
-		help_text="ORCID Client Secret for this team."
-	)
+	# ORCID for teams is not necessary at the moment.
+	# orcid_client_id = EncryptedTextField(
+	# 	blank=True,
+	# 	null=True,
+	# 	help_text="ORCID Client ID for this team."
+	# )
+	# orcid_client_secret = EncryptedTextField(
+	# 	blank=True,
+	# 	null=True,
+	# 	help_text="ORCID Client Secret for this team."
+	# )
 	postmark_api_token = EncryptedTextField(
 		blank=True,
 		null=True,
