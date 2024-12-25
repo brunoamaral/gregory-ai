@@ -141,6 +141,7 @@ class Articles(models.Model):
 	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
 	sent_to_teams = models.ManyToManyField('Team', related_name='sent_articles', blank=True)   # Allows an article to be sent to one or more teams
+	retracted = models.BooleanField(default=False)
 	def __str__(self):
 		return str(self.article_id)
 
