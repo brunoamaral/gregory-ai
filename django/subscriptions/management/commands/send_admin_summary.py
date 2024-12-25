@@ -6,7 +6,7 @@ from django.utils.html import strip_tags
 from gregory.models import Articles, Trials, MLPredictions, TeamCredentials
 from sitesettings.models import CustomSetting
 from subscriptions.management.commands.utils.send_email import send_email
-from subscriptions.management.commands.utils.subscription import get_trials_for_list,get_articles_for_list
+from subscriptions.management.commands.utils.subscription import get_trials_for_list, get_articles_for_list
 from subscriptions.models import Lists, Subscribers, SentArticleNotification, SentTrialNotification, FailedNotification
 from django.db.models import Prefetch
 from django.utils.timezone import now
@@ -27,6 +27,8 @@ class Command(BaseCommand):
 			self.stdout.write(self.style.WARNING('No lists marked as admin summary found.'))
 			return
 
+		threshold_date = now() - timedelta(days=30)  # Filter for the last 30 days
+
 		for admin_list in admin_summary_lists:
 			# Fetch the team directly from the list
 			team = admin_list.team
@@ -43,9 +45,8 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.ERROR(f"Credentials not found for team associated with list '{admin_list.list_name}'. Skipping."))
 				continue
 
-			# Step 2: Fetch unsent articles and trials for this list
+			# Step 2: Fetch articles and trials for this list
 			list_articles = get_articles_for_list(admin_list)
-
 			list_trials = get_trials_for_list(admin_list)
 
 			# Step 3: Find subscribers of the list
@@ -63,7 +64,8 @@ class Command(BaseCommand):
 				already_sent_article_ids = SentArticleNotification.objects.filter(
 					article__in=list_articles,
 					list=admin_list,
-					subscriber=subscriber
+					subscriber=subscriber,
+					sent_at__gte=threshold_date  # Only notifications sent in the last 30 days
 				).values_list('article_id', flat=True)
 
 				new_articles = list_articles.exclude(pk__in=already_sent_article_ids)
@@ -72,7 +74,8 @@ class Command(BaseCommand):
 				already_sent_trial_ids = SentTrialNotification.objects.filter(
 					trial__in=list_trials,
 					list=admin_list,
-					subscriber=subscriber
+					subscriber=subscriber,
+					sent_at__gte=threshold_date  # Only notifications sent in the last 30 days
 				).values_list('trial_id', flat=True)
 
 				new_trials = list_trials.exclude(pk__in=already_sent_trial_ids)
