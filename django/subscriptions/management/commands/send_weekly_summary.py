@@ -1,3 +1,5 @@
+from datetime import timedelta
+from django.utils.timezone import now
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
@@ -68,17 +70,20 @@ class Command(BaseCommand):
 
 			for subscriber in subscribers:
 				# Step 5: Filter unsent articles and trials for the subscriber
+				threshold_date = now() - timedelta(days=30)
 				sent_article_ids = SentArticleNotification.objects.filter(
 					article__in=articles,
 					list=digest_list,
-					subscriber=subscriber
+					subscriber=subscriber,
+					sent_at__gte=threshold_date
 				).values_list('article_id', flat=True)
 				unsent_articles = articles.exclude(pk__in=sent_article_ids)
 
 				sent_trial_ids = SentTrialNotification.objects.filter(
 					trial__in=trials,
 					list=digest_list,
-					subscriber=subscriber
+					subscriber=subscriber,
+					sent_at__gte=threshold_date
 				).values_list('trial_id', flat=True)
 				unsent_trials = trials.exclude(pk__in=sent_trial_ids)
 
