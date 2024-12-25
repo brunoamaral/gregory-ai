@@ -1,3 +1,5 @@
+from datetime import timedelta
+from django.utils.timezone import now
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
@@ -22,6 +24,8 @@ class Command(BaseCommand):
 		if not subject_lists.exists():
 			self.stdout.write(self.style.WARNING('No lists found with subjects.'))
 			return
+
+		threshold_date = now() - timedelta(days=30)  # Filter for the last 30 days
 
 		for lst in subject_lists:
 			# Fetch the team directly from the list
@@ -62,7 +66,8 @@ class Command(BaseCommand):
 				already_sent_ids = SentTrialNotification.objects.filter(
 					trial__in=list_trials,
 					list=lst,
-					subscriber=subscriber
+					subscriber=subscriber,
+					sent_at__gte=threshold_date  # Only notifications sent in the last 30 days
 				).values_list('trial_id', flat=True)
 
 				# Filter out already sent trials
