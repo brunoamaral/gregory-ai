@@ -17,7 +17,7 @@ class Command(BaseCommand):
 		site = Site.objects.get_current()
 
 		# Step 1: Find all lists that have subjects but are not weekly digests
-		subject_lists = Lists.objects.filter(subjects__isnull=False, weekly_digest=False).distinct()
+		subject_lists = Lists.objects.filter(subjects__isnull=False, clinical_trials_notifications=True).distinct()
 
 		if not subject_lists.exists():
 			self.stdout.write(self.style.WARNING('No lists found with subjects.'))
@@ -85,7 +85,7 @@ class Command(BaseCommand):
 
 				result = send_email(
 					to=subscriber.email,
-					subject='There are new clinical trials',
+					subject=f'There are new clinical trials for {lst}',
 					html=html_content,
 					text=text_content,
 					site=site,
