@@ -8,7 +8,10 @@ class Lists(models.Model):
 	list_name = models.CharField(max_length=150, null=False, blank=False)
 	list_description = models.CharField(max_length=150, null=True, blank=True)
 	subjects = models.ManyToManyField('gregory.Subject', blank=True)
-	weekly_digest = models.BooleanField(default=False) # If True, send a weekly digest email
+	# Set purposes of the list
+	admin_summary = models.BooleanField(default=False) 
+	weekly_digest = models.BooleanField(default=False) 
+	clinical_trials_notifications = models.BooleanField(default=False) 
 	team = models.ForeignKey(
 		Team, 
 		on_delete=models.CASCADE, 
