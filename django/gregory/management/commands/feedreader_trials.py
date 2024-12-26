@@ -188,26 +188,13 @@ class Command(BaseCommand):
 				secondary_outcome=extras.get('secondary_outcome'),
 				primary_sponsor=extras.get('primary_sponsor'),
 			)
-			# trial.save()
 			if trial:
-				trial.history.create(
-					trial_id=trial.trial_id,
-					history_type="+",  
-					history_change_reason=f"Created from {source.name}",
-					history_user=None,  # or specify a user if available
-					history_date=timezone.now()
-				)
+				update_change_reason(trial, f"Created from Source: {source.name} ID: {source.source_id}")
 				trial.sources.add(source)
 				trial.teams.add(source.team)
 				trial.subjects.add(source.subject)
-				trial.history.create(
-					trial_id=trial.trial_id,
-					history_type="~", 
-					history_change_reason=f"Added relationships Team: {source.team}  Subject:{source.subject}",
-					history_user=None,  # or specify a user if available
-					history_date=timezone.now()
-				)
 				trial.save()
+				update_change_reason(trial, f"Added relationships Team: {source.team}  Subject:{source.subject}")
 			return trial
 		except IntegrityError as e:
 			print(f"Integrity error during trial creation: {e}")
