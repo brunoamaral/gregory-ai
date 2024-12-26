@@ -162,21 +162,72 @@ class Command(BaseCommand):
 		"""Sync a ClinicalTrial object with the database."""
 		existing_trial = self.find_existing_trial(clinical_trial)
 		if existing_trial:
+			# Merge identifiers if needed
+			merged_identifiers = self.merge_identifiers(existing_trial.identifiers, clinical_trial.identifiers)
+			if merged_identifiers != existing_trial.identifiers:
+				existing_trial.identifiers = merged_identifiers
+				update_change_reason(existing_trial, "Updated identifiers from RSS feed.")
+				existing_trial.save(update_fields=['identifiers'])
+				print(f"Updated identifiers for trial: {existing_trial.pk}")
+
+			# Ensure the trial has the current source.subject
+			if source.subject not in existing_trial.subjects.all():
+				existing_trial.subjects.add(source.subject)
+				update_change_reason(existing_trial, "Added new subject from RSS feed.")
+				existing_trial.save(update_fields=[])  # Save without specific fields to update relations
+				print(f"Added subject {source.subject} to trial: {existing_trial.pk}")
+
+			# Update other fields if necessary
 			self.update_existing_trial(existing_trial, clinical_trial, source)
 		else:
 			self.create_new_trial(clinical_trial, source)
 
+	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:
+		"""
+		Merge existing and new identifiers, ensuring no duplicate or missing entries.
+		"""
+		merged = existing_identifiers.copy() if existing_identifiers else {}
+		for key, value in new_identifiers.items():
+			if value and key not in merged:
+				merged[key] = value
+		return merged
+
 	def find_existing_trial(self, clinical_trial: ClinicalTrial):
 		"""
-		Only match by EudraCT (euct) if present. 
-		If euct is None or we can't find a match, we consider it new.
+		Find an existing trial by EudraCT (euct), CTIS, NCT, or title (case-insensitive).
+		If no match is found, consider it a new trial.
 		"""
-		euct = clinical_trial.identifiers.get('euct')
-		if euct:
-			# If we have euct, try to find an existing trial with the same euct
-			return Trials.objects.filter(identifiers__euct=euct).first()
+		identifiers = clinical_trial.identifiers
+		euct = identifiers.get('euct')
+		ctis = identifiers.get('ctis')
+		nct = identifiers.get('nct')
+		title = clinical_trial.title.lower() if clinical_trial.title else None
 
-		# No euct => treat as new
+		# Try matching by EudraCT (euct) first
+		if euct:
+			trial = Trials.objects.filter(identifiers__euct=euct).first()
+			if trial:
+				return trial
+
+		# If no match by EudraCT, try matching by CTIS
+		if ctis:
+			trial = Trials.objects.filter(identifiers__ctis=ctis).first()
+			if trial:
+				return trial
+
+		# If no match by CTIS, try matching by NCT
+		if nct:
+			trial = Trials.objects.filter(identifiers__nct=nct).first()
+			if trial:
+				return trial
+
+		# If no identifier matches, compare by title (case-insensitive)
+		if title:
+			trial = Trials.objects.annotate(lower_title=Lower('title')).filter(lower_title=title).first()
+			if trial:
+				return trial
+
+		# No matches found
 		return None
 
 	def update_existing_trial(self, existing_trial, clinical_trial, source):
