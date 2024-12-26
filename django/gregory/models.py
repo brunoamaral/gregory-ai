@@ -9,7 +9,7 @@ from organizations.models import Organization, OrganizationUser
 from simple_history.models import HistoricalRecords
 import base64
 from django.conf import settings 
-
+from django.db.models.functions import Lower
 
 class Authors(models.Model):
 	author_id = models.AutoField(primary_key=True)
@@ -234,7 +234,12 @@ class Trials(models.Model):
 		managed = True
 		verbose_name_plural = 'trials'
 		db_table = 'trials'
-
+		constraints = [
+			models.UniqueConstraint(
+				Lower('title'),
+				name='unique_title_case_insensitive'
+			)
+		]
 def get_fernet():
 	try:
 		secret_key = settings.FERNET_SECRET_KEY
