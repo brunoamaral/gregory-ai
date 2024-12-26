@@ -92,7 +92,7 @@ class Sources(models.Model):
 	source_for = models.CharField(choices=TABLES, max_length=50, default='science paper')
 	name = models.TextField(blank=True, null=True)
 	link = models.TextField(blank=True, null=True)
-	language = models.TextField()
+	language = models.TextField(blank=True, null=True)
 	subject = models.ForeignKey(Subject,on_delete=models.PROTECT,null=True,blank=True,unique=False)
 	method = models.CharField(choices=METHODS, max_length=10, default='rss')
 	ignore_ssl = models.BooleanField(default=False)
@@ -140,7 +140,6 @@ class Articles(models.Model):
 	history = HistoricalRecords()
 	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
-	sent_to_teams = models.ManyToManyField('Team', related_name='sent_articles', blank=True)   # Allows an article to be sent to one or more teams
 	retracted = models.BooleanField(default=False)
 	def __str__(self):
 		return str(self.article_id)
@@ -162,9 +161,6 @@ class Trials(models.Model):
 	published_date = models.DateTimeField(blank=True, null=True)
 	sources = models.ManyToManyField('Sources', blank=True)
 	relevant = models.BooleanField(blank=True, null=True)
-	sent = models.BooleanField(blank=True, null=True)
-	sent_to_subscribers = models.BooleanField(blank=True, null=True) # Used to keep track of the weekly emails
-	sent_real_time_notification = models.BooleanField(default=False, blank=True) # Used to keep track of the emails sent every 12h
 	team_categories = models.ManyToManyField('TeamCategory', related_name='trials')
 	identifiers = models.JSONField(blank=True,null=True)
 	teams = models.ManyToManyField('Team', related_name='trials')  # Allows an clinical trial to belong to one or more teams
@@ -215,7 +211,6 @@ class Trials(models.Model):
 	ethics_review_contact_email = models.EmailField(null=True,blank=True,max_length=500)
 	results_date_completed = models.DateField(null=True,blank=True)
 	results_url_link = models.URLField(null=True,blank=True)
-	sent_to_teams = models.ManyToManyField('Team', related_name='sent_trials')
 	ml_predictions = models.ManyToManyField('MLPredictions', blank=True)
 
 	# Fields for euclinicaltrials.eu data
