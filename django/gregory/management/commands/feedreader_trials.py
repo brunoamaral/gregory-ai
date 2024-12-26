@@ -189,12 +189,13 @@ class Command(BaseCommand):
 				primary_sponsor=extras.get('primary_sponsor'),
 			)
 			if trial:
-				update_change_reason(trial, f"Created from Source: {source.name} ID: {source.source_id}")
+				update_change_reason(trial, f"Created from Source: {source.name} ({source.source_id})")
+				trial.save()
 				trial.sources.add(source)
 				trial.teams.add(source.team)
 				trial.subjects.add(source.subject)
-				trial.save()
 				update_change_reason(trial, f"Added relationships Team: {source.team}  Subject:{source.subject}")
+				trial.save()
 			return trial
 		except IntegrityError as e:
 			print(f"Integrity error during trial creation: {e}")
@@ -258,8 +259,8 @@ class Command(BaseCommand):
 
 		# Save only if changes were detected
 		if has_changes:
+			update_change_reason(existing_trial, f"Updated fields from {source.name} ({source.source_id}): {', '.join(updated_fields)}")
 			existing_trial.save()
-			update_change_reason(existing_trial, f"Updated fields: {', '.join(updated_fields)}")
 
 		# Handle source and subjects additions (relationships)
 		if source.subject not in existing_trial.subjects.all():
