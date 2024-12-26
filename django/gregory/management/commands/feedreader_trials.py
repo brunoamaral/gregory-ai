@@ -162,7 +162,7 @@ class Command(BaseCommand):
 		"""Sync a ClinicalTrial object with the database."""
 		existing_trial = self.find_existing_trial(clinical_trial)
 		if existing_trial:
-			# Check if the identifiers are different
+			# Merge identifiers if needed
 			merged_identifiers = self.merge_identifiers(existing_trial.identifiers, clinical_trial.identifiers)
 			if merged_identifiers != existing_trial.identifiers:
 				existing_trial.identifiers = merged_identifiers
@@ -170,6 +170,14 @@ class Command(BaseCommand):
 				existing_trial.save(update_fields=['identifiers'])
 				print(f"Updated identifiers for trial: {existing_trial.pk}")
 
+			# Ensure the trial has the current source.subject
+			if source.subject not in existing_trial.subjects.all():
+				existing_trial.subjects.add(source.subject)
+				update_change_reason(existing_trial, "Added new subject from RSS feed.")
+				existing_trial.save(update_fields=[])  # Save without specific fields to update relations
+				print(f"Added subject {source.subject} to trial: {existing_trial.pk}")
+
+			# Update other fields if necessary
 			self.update_existing_trial(existing_trial, clinical_trial, source)
 		else:
 			self.create_new_trial(clinical_trial, source)
