@@ -200,56 +200,76 @@ class Command(BaseCommand):
 			print(f"Integrity error during trial creation: {e}")
 
 	def update_existing_trial(self, existing_trial, clinical_trial, source):
-		"""Update an existing trial only if changes are detected."""
-		# Check if identifiers or other fields have changed
+		"""Update an existing trial with new data only when necessary."""
 		has_changes = False
+		updated_fields = []  # Track which fields are updated
 
-		# Merge and compare identifiers
-		merged_identifiers = self.merge_identifiers(existing_trial.identifiers, clinical_trial.identifiers)
-		if merged_identifiers != existing_trial.identifiers:
-			existing_trial.identifiers = merged_identifiers
+		# Update fields directly from ClinicalTrial object
+		if existing_trial.title != clinical_trial.title:
+			existing_trial.title = clinical_trial.title
 			has_changes = True
+			updated_fields.append('title')
 
-		# Compare other fields
 		if existing_trial.summary != clinical_trial.summary:
 			existing_trial.summary = clinical_trial.summary
 			has_changes = True
+			updated_fields.append('summary')
 
 		if existing_trial.link != clinical_trial.link:
 			existing_trial.link = clinical_trial.link
 			has_changes = True
+			updated_fields.append('link')
 
-		# Only save if changes were made
+		if existing_trial.published_date != clinical_trial.published_date:
+			existing_trial.published_date = clinical_trial.published_date
+			has_changes = True
+			updated_fields.append('published_date')
+
+		# Update identifiers
+		merged_identifiers = self.merge_identifiers(existing_trial.identifiers, clinical_trial.identifiers)
+		if merged_identifiers != existing_trial.identifiers:
+			existing_trial.identifiers = merged_identifiers
+			has_changes = True
+			updated_fields.append('identifiers')
+
+		# Update extra fields (if any exist in ClinicalTrial.extra_fields)
+		extras = getattr(clinical_trial, 'extra_fields', {})
+		for field in [
+			'therapeutic_areas', 'country_status', 'trial_region', 'results_posted',
+			'overall_decision_date', 'countries_decision_date', 'sponsor_type',
+			'condition', 'primary_outcome', 'secondary_outcome', 'primary_sponsor',
+			'recruitment_status'
+		]:
+			if field in extras and getattr(existing_trial, field) != extras[field]:
+				setattr(existing_trial, field, extras[field])
+				has_changes = True
+				updated_fields.append(field)
+
+		# Update WHO fields (if applicable and provided in ClinicalTrial.extra_fields)
+		for who_field in [
+			'scientific_title', 'recruitment_status', 'date_registration',
+			'study_type', 'phase', 'countries', 'inclusion_criteria',
+			'exclusion_criteria', 'intervention', 'secondary_id'
+		]:
+			if who_field in extras and getattr(existing_trial, who_field) != extras[who_field]:
+				setattr(existing_trial, who_field, extras[who_field])
+				has_changes = True
+				updated_fields.append(who_field)
+
+		# Save only if changes were detected
 		if has_changes:
 			existing_trial.save()
-			try:
-				update_change_reason(existing_trial, f"Updated from RSS feed. New identifiers: {clinical_trial.identifiers}")
-			except AttributeError as e:
-				print(f"History tracking failed: {e}")
+			update_change_reason(existing_trial, f"Updated fields: {', '.join(updated_fields)}")
 
 		# Handle source and subjects additions (relationships)
 		if source.subject not in existing_trial.subjects.all():
 			existing_trial.subjects.add(source.subject)
-			existing_trial.history.create(
-				trial_id=existing_trial.trial_id,
-				history_type="~",
-				history_change_reason=f"Added subject: {source.subject}",
-				history_user=None,  # or specify a user if available
-				history_date=timezone.now()
-			)
+			update_change_reason(existing_trial, f"Added subject: {source.subject}")
+			existing_trial.save()
 
 		if source not in existing_trial.sources.all():
 			existing_trial.sources.add(source)
-			existing_trial.history.create(
-				trial_id=existing_trial.trial_id,
-				history_type="~",
-				history_change_reason=f"Added source: {source.name}",
-				history_user=None,  # or specify a user if available
-				history_date=timezone.now()
-			)
-
-		# Final save to ensure all changes are persisted if there were updates
-		if has_changes:
+			update_change_reason(existing_trial, f"Added new source: {source.name} ({source.source_id})")
 			existing_trial.save()
 		
 	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:
