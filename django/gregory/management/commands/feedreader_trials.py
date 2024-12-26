@@ -173,7 +173,10 @@ class Command(BaseCommand):
 			# Ensure the trial has the current source.subject
 			if source.subject not in existing_trial.subjects.all():
 				existing_trial.subjects.add(source.subject)
-				update_change_reason(existing_trial, "Added new subject from RSS feed.")
+				try:
+					update_change_reason(existing_trial, "Added new subject from RSS feed.")
+				except AttributeError as e:
+					print(f"Failed to update change reason: {e}")
 				existing_trial.save(update_fields=[])  # Save without specific fields to update relations
 				print(f"Added subject {source.subject} to trial: {existing_trial.pk}")
 
