@@ -168,12 +168,14 @@ class Command(BaseCommand):
 
 	def find_existing_trial(self, clinical_trial: ClinicalTrial):
 		"""
-		Find an existing trial by EudraCT or NCT identifiers.
+		Find an existing trial by EudraCT (euct), CTIS, NCT, or title (case-insensitive).
 		If no match is found, consider it a new trial.
 		"""
 		identifiers = clinical_trial.identifiers
 		euct = identifiers.get('euct')
+		ctis = identifiers.get('ctis')
 		nct = identifiers.get('nct')
+		title = clinical_trial.title.lower() if clinical_trial.title else None
 
 		# Try matching by EudraCT (euct) first
 		if euct:
@@ -181,9 +183,21 @@ class Command(BaseCommand):
 			if trial:
 				return trial
 
-		# If no match by EudraCT, try matching by NCT
+		# If no match by EudraCT, try matching by CTIS
+		if ctis:
+			trial = Trials.objects.filter(identifiers__ctis=ctis).first()
+			if trial:
+				return trial
+
+		# If no match by CTIS, try matching by NCT
 		if nct:
 			trial = Trials.objects.filter(identifiers__nct=nct).first()
+			if trial:
+				return trial
+
+		# If no identifier matches, compare by title (case-insensitive)
+		if title:
+			trial = Trials.objects.annotate(lower_title=Lower('title')).filter(lower_title=title).first()
 			if trial:
 				return trial
 
