@@ -1,15 +1,16 @@
+from dateutil.parser import parse
 from django.core.management.base import BaseCommand
 from django.db import IntegrityError
 from django.db.models import Q
+from django.db.models.functions import Lower
 from django.utils import timezone
-from gregory.models import Trials, Sources
 from gregory.classes import ClinicalTrial
 from gregory.functions import remove_utm
+from gregory.models import Trials, Sources
 from simple_history.utils import update_change_reason
-from dateutil.parser import parse
+import feedparser
 import pytz
 import re
-import feedparser
 import requests
 
 class Command(BaseCommand):
@@ -157,44 +158,7 @@ class Command(BaseCommand):
 			'sponsor_type': sponsor_type,
 			'results_posted': results_posted,
 		}
-
-	def sync_clinical_trial(self, clinical_trial: ClinicalTrial, source):
-		"""Sync a ClinicalTrial object with the database."""
-		existing_trial = self.find_existing_trial(clinical_trial)
-		if existing_trial:
-			# Merge identifiers if needed
-			merged_identifiers = self.merge_identifiers(existing_trial.identifiers, clinical_trial.identifiers)
-			if merged_identifiers != existing_trial.identifiers:
-				existing_trial.identifiers = merged_identifiers
-				update_change_reason(existing_trial, "Updated identifiers from RSS feed.")
-				existing_trial.save(update_fields=['identifiers'])
-				print(f"Updated identifiers for trial: {existing_trial.pk}")
-
-			# Ensure the trial has the current source.subject
-			if source.subject not in existing_trial.subjects.all():
-				existing_trial.subjects.add(source.subject)
-				try:
-					update_change_reason(existing_trial, "Added new subject from RSS feed.")
-				except AttributeError as e:
-					print(f"Failed to update change reason: {e}")
-				existing_trial.save(update_fields=[])  # Save without specific fields to update relations
-				print(f"Added subject {source.subject} to trial: {existing_trial.pk}")
-
-			# Update other fields if necessary
-			self.update_existing_trial(existing_trial, clinical_trial, source)
-		else:
-			self.create_new_trial(clinical_trial, source)
-
-	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:
-		"""
-		Merge existing and new identifiers, ensuring no duplicate or missing entries.
-		"""
-		merged = existing_identifiers.copy() if existing_identifiers else {}
-		for key, value in new_identifiers.items():
-			if value and key not in merged:
-				merged[key] = value
-		return merged
-
+		
 	def find_existing_trial(self, clinical_trial: ClinicalTrial):
 		"""
 		Find an existing trial by EudraCT (euct), CTIS, NCT, or title (case-insensitive).
@@ -232,6 +196,46 @@ class Command(BaseCommand):
 
 		# No matches found
 		return None
+
+	def sync_clinical_trial(self, clinical_trial: ClinicalTrial, source):
+		"""Sync a ClinicalTrial object with the database."""
+		existing_trial = self.find_existing_trial(clinical_trial)
+		if existing_trial:
+			# Merge identifiers if needed
+			merged_identifiers = self.merge_identifiers(existing_trial.identifiers, clinical_trial.identifiers)
+			if merged_identifiers != existing_trial.identifiers:
+				existing_trial.identifiers = merged_identifiers
+				try:
+					update_change_reason(existing_trial, "Updated identifiers from RSS feed.")
+				except AttributeError as e:
+					print(f"Failed to update change reason (history issue): {e}")
+				existing_trial.save(update_fields=['identifiers'])
+				print(f"Updated identifiers for trial: {existing_trial.pk}")
+
+			# Ensure the trial has the current source.subject
+			if source.subject not in existing_trial.subjects.all():
+				existing_trial.subjects.add(source.subject)
+				try:
+					update_change_reason(existing_trial, "Added new subject from RSS feed.")
+				except AttributeError as e:
+					print(f"Failed to update change reason (history issue): {e}")
+				existing_trial.save(update_fields=[])  # Save without specific fields to update relations
+				print(f"Added subject {source.subject} to trial: {existing_trial.pk}")
+
+			# Update other fields if necessary
+			self.update_existing_trial(existing_trial, clinical_trial, source)
+		else:
+			self.create_new_trial(clinical_trial, source)
+
+	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:
+		"""
+		Merge existing and new identifiers, ensuring no duplicate or missing entries.
+		"""
+		merged = existing_identifiers.copy() if existing_identifiers else {}
+		for key, value in new_identifiers.items():
+			if value and key not in merged:
+				merged[key] = value
+		return merged
 
 	def update_existing_trial(self, existing_trial, clinical_trial, source):
 		"""Update an existing trial."""
