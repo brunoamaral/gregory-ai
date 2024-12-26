@@ -1,4 +1,6 @@
 from django.contrib import admin
+from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
+
 from .models import Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, ArticleSubjectRelevance, TeamCategory, TeamCredentials
 from .widgets import MLPredictionsWidget
 from django import forms
@@ -25,7 +27,7 @@ class ArticleAdminForm(forms.ModelForm):
         if self.instance and self.instance.pk:
             self.fields['ml_predictions_display'].initial = self.instance.ml_predictions.all()
 
-class ArticleAdmin(admin.ModelAdmin):
+class ArticleAdmin(SimpleHistoryAdmin):
     form = ArticleAdminForm
     inlines = [ArticleSubjectRelevanceInline]
     fieldsets = (
@@ -33,7 +35,7 @@ class ArticleAdmin(admin.ModelAdmin):
             'fields': (
                 'title', 'link', 'doi', 'summary', 'teams', 'subjects', 'sources',
                 'published_date', 'discovery_date', 'authors', 'team_categories',
-                'entities', 'sent_to_teams', 'sent_to_subscribers', 'kind', 'access',
+                'entities', 'kind', 'access',
                 'publisher', 'container_title', 'crossref_check', 'takeaways',
             ),
             'description': 'This section contains general information about the article'
@@ -50,7 +52,7 @@ class ArticleAdmin(admin.ModelAdmin):
     list_filter = ('subjects',)
     raw_id_fields = ("authors",)
 
-class TrialAdmin(admin.ModelAdmin):
+class TrialAdmin(SimpleHistoryAdmin):
     list_display = ['trial_id', 'title', 'discovery_date', 'last_updated']
     exclude = ['ml_predictions']
     readonly_fields = ['last_updated', 'team_categories']
