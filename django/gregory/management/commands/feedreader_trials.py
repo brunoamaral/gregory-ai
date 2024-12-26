@@ -200,41 +200,57 @@ class Command(BaseCommand):
 			print(f"Integrity error during trial creation: {e}")
 
 	def update_existing_trial(self, existing_trial, clinical_trial, source):
-		"""Update an existing trial."""
+		"""Update an existing trial only if changes are detected."""
+		# Check if identifiers or other fields have changed
+		has_changes = False
+
+		# Merge and compare identifiers
 		merged_identifiers = self.merge_identifiers(existing_trial.identifiers, clinical_trial.identifiers)
-		existing_trial.identifiers = merged_identifiers
-		existing_trial.summary = clinical_trial.summary
-		existing_trial.link = clinical_trial.link
-		existing_trial.save()
-		
+		if merged_identifiers != existing_trial.identifiers:
+			existing_trial.identifiers = merged_identifiers
+			has_changes = True
+
+		# Compare other fields
+		if existing_trial.summary != clinical_trial.summary:
+			existing_trial.summary = clinical_trial.summary
+			has_changes = True
+
+		if existing_trial.link != clinical_trial.link:
+			existing_trial.link = clinical_trial.link
+			has_changes = True
+
+		# Only save if changes were made
+		if has_changes:
+			existing_trial.save()
+			try:
+				update_change_reason(existing_trial, f"Updated from RSS feed. New identifiers: {clinical_trial.identifiers}")
+			except AttributeError as e:
+				print(f"History tracking failed: {e}")
+
+		# Handle source and subjects additions (relationships)
 		if source.subject not in existing_trial.subjects.all():
 			existing_trial.subjects.add(source.subject)
 			existing_trial.history.create(
-					trial_id=existing_trial.trial_id,
-					history_type="~",  
-					history_change_reason=f"Added subject: {source.subject}",
-					history_user=None,  # or specify a user if available
-					history_date=timezone.now()
-				)
+				trial_id=existing_trial.trial_id,
+				history_type="~",
+				history_change_reason=f"Added subject: {source.subject}",
+				history_user=None,  # or specify a user if available
+				history_date=timezone.now()
+			)
 
 		if source not in existing_trial.sources.all():
 			existing_trial.sources.add(source)
 			existing_trial.history.create(
-					trial_id=existing_trial.trial_id,
-					history_type="~", 
-					history_change_reason=f"Added source: {source.name}",
-					history_user=None,  # or specify a user if available
-					history_date=timezone.now()
-				)
-		
-		# Move history tracking to the end and don't return if it fails
-		try:
-			update_change_reason(existing_trial, f"Updated from RSS feed. New identifiers: {clinical_trial.identifiers}")
-		except AttributeError as e:
-			print(f"History tracking failed: {e}")
-		
-		# Final save to ensure all changes are persisted
-		existing_trial.save()
+				trial_id=existing_trial.trial_id,
+				history_type="~",
+				history_change_reason=f"Added source: {source.name}",
+				history_user=None,  # or specify a user if available
+				history_date=timezone.now()
+			)
+
+		# Final save to ensure all changes are persisted if there were updates
+		if has_changes:
+			existing_trial.save()
 		
 	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:
 			"""Merge existing and new identifiers."""
