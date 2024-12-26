@@ -43,7 +43,7 @@ class Command(BaseCommand):
 				if 'euclinicaltrials.eu' in link:
 					extra_fields = self.parse_eu_clinical_trial_data(summary_html)
 				# self.stdout.write(self.style.NOTICE(f"Processing trial: : {link}\n {identifiers}"))
-				clinical_trial = ClinicalTrial(
+				incoming_clinical_trial = ClinicalTrial(
 					title=entry['title'],
 					summary=summary_html,
 					link=link,
@@ -51,17 +51,15 @@ class Command(BaseCommand):
 					identifiers=identifiers,
 					extra_fields=extra_fields
 				)
-
-				existing_trial = self.find_existing_trial(clinical_trial)
+				existing_trial = self.find_existing_trial(incoming_clinical_trial)
 				if existing_trial:
-					self.update_existing_trial(existing_trial, clinical_trial, source)
+					self.update_existing_trial(existing_trial, incoming_clinical_trial, source)
 					# self.stdout.write(self.style.SUCCESS(f"Trial already exists: {existing_trial}"))
-					# self.update_existing_trial(existing_trial, clinical_trial, source)
 					continue
 				if not existing_trial:
-					self.stdout.write(self.style.SUCCESS(f"Creating new trial: {clinical_trial.identifiers}"))
-					new_trial = self.create_new_trial(clinical_trial, source)
-					self.stdout.write((f"Creating new trial: {new_trial.identifiers}"))
+					# self.stdout.write(self.style.SUCCESS(f"Creating new trial: {clinical_trial.identifiers}"))
+					clinical_trial = self.create_new_trial(incoming_clinical_trial, source)
+					self.stdout.write((f"Creating new trial: {incoming_clinical_trial}"))
 
 	def parse_date(self, date_str: str):
 		"""Parse a date string into a timezone-aware datetime."""
@@ -89,8 +87,13 @@ class Command(BaseCommand):
 		"""Extract relevant fields from euclinicaltrials.eu summary."""
 		def _extract(pattern):
 			match = re.search(pattern, summary_html, re.IGNORECASE)
-			return match.group(1).strip() if match else None
-
+			if not match:
+				return None
+			# Get the raw matched text
+			raw_val = match.group(1)
+			# Strip off any leading colon and whitespace
+			raw_val = raw_val.lstrip(': ').strip()
+			return raw_val
 		eudract_pattern = r'Trial number</b>:\s*([0-9]{4}-[0-9]{6}-[0-9]{2})'
 		therapeutic_areas = _extract(r'Therapeutic Areas[^>]*>([^<]+)')
 		country_status = _extract(r'Status in each country[^>]*>([^<]+)')
@@ -185,41 +188,71 @@ class Command(BaseCommand):
 				secondary_outcome=extras.get('secondary_outcome'),
 				primary_sponsor=extras.get('primary_sponsor'),
 			)
+			# trial.save()
 			if trial:
+				trial.history.create(
+					trial_id=trial.trial_id,
+					history_type="+",  
+					history_change_reason=f"Created from {source.name}",
+					history_user=None,  # or specify a user if available
+					history_date=timezone.now()
+				)
 				trial.sources.add(source)
 				trial.teams.add(source.team)
 				trial.subjects.add(source.subject)
+				trial.history.create(
+					trial_id=trial.trial_id,
+					history_type="~", 
+					history_change_reason=f"Added relationships Team: {source.team}  Subject:{source.subject}",
+					history_user=None,  # or specify a user if available
+					history_date=timezone.now()
+				)
 				trial.save()
+			return trial
 		except IntegrityError as e:
 			print(f"Integrity error during trial creation: {e}")
 
 	def update_existing_trial(self, existing_trial, clinical_trial, source):
-			"""Update an existing trial."""
+		"""Update an existing trial."""
+		merged_identifiers = self.merge_identifiers(existing_trial.identifiers, clinical_trial.identifiers)
+		existing_trial.identifiers = merged_identifiers
+		existing_trial.summary = clinical_trial.summary
+		existing_trial.link = clinical_trial.link
+		existing_trial.save()
+		
+		if source.subject not in existing_trial.subjects.all():
+			existing_trial.subjects.add(source.subject)
+			existing_trial.history.create(
+					trial_id=existing_trial.trial_id,
+					history_type="~",  
+					history_change_reason=f"Added subject: {source.subject}",
+					history_user=None,  # or specify a user if available
+					history_date=timezone.now()
+				)
 
-			print(f"Updating trial with ID: {existing_trial.pk}")
-			print(f"Identifiers before update: {existing_trial.identifiers}")
-			merged_identifiers = self.merge_identifiers(existing_trial.identifiers, clinical_trial.identifiers)
-			existing_trial.identifiers = merged_identifiers
-			existing_trial.summary = clinical_trial.summary
-			existing_trial.link = clinical_trial.link
-			if source.subject not in existing_trial.subjects.all():
-				existing_trial.subjects.add(source.subject)
-				print(f"added subject {source.subject} to trial {existing_trial}")
-			if source not in existing_trial.sources.all():
-				existing_trial.sources.add(source)
-				print(f"added source {source} to trial {existing_trial}")
-			# Confirm history tracking
-			try:
-				update_change_reason(existing_trial, "Updated from RSS feed.")
-			except AttributeError as e:
-				print(f"History tracking failed: {e}")
-				return 
-			existing_trial.save()
+		if source not in existing_trial.sources.all():
+			existing_trial.sources.add(source)
+			existing_trial.history.create(
+					trial_id=existing_trial.trial_id,
+					history_type="~", 
+					history_change_reason=f"Added source: {source.name}",
+					history_user=None,  # or specify a user if available
+					history_date=timezone.now()
+				)
+		
+		# Move history tracking to the end and don't return if it fails
+		try:
+			update_change_reason(existing_trial, f"Updated from RSS feed. New identifiers: {clinical_trial.identifiers}")
+		except AttributeError as e:
+			print(f"History tracking failed: {e}")
+		
+		# Final save to ensure all changes are persisted
+		existing_trial.save()
+		
 	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:
-		"""Merge existing and new identifiers."""
-		merged = existing_identifiers.copy() if existing_identifiers else {}
-		for key, value in new_identifiers.items():
-			if value and key not in merged:
-				merged[key] = value
-		return merged
-
+			"""Merge existing and new identifiers."""
+			merged = existing_identifiers.copy() if existing_identifiers else {}
+			for key, value in new_identifiers.items():
+				if value and (key not in merged or merged[key] is None):
+					merged[key] = value
+			return merged
