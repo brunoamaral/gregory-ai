@@ -76,6 +76,7 @@ class Command(BaseCommand):
 										science_paper = existing_article
 										created = False
 									else:
+										update_change_reason(existing_article, "Creating new article from RSS feed")
 										science_paper = Articles.objects.create(
 											doi=doi,
 											title=title,
@@ -90,13 +91,14 @@ class Command(BaseCommand):
 										created = True
 
 									if created:
+										update_change_reason(science_paper, "Assigning teams, subjects, and sources")
 										science_paper.teams.add(source.team)
 										science_paper.subjects.add(source.subject)
 										science_paper.sources.add(source)
 										science_paper.save()
 									else:
-											if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),
-													science_paper.link != link, science_paper.published_date != published_date]):
+											if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),science_paper.link != link, science_paper.published_date != published_date,]):
+													update_change_reason(science_paper, "Updating article with new data from RSS feed")
 													science_paper.title = title
 													science_paper.summary = SciencePaper.clean_abstract(abstract=summary)
 													science_paper.link = link
@@ -107,14 +109,14 @@ class Command(BaseCommand):
 													science_paper.save()
 
 									# Process author information
-									if crossref_paper is not None:  # Assuming `paper` contains the article's metadata including author information
-										if crossref_paper.authors is not None:
+									if crossref_paper and crossref_paper.authors:
 											for author_info in crossref_paper.authors:
 												given_name = author_info.get('given')
 												family_name = author_info.get('family')
 												orcid = author_info.get('ORCID', None)
 												try:
 													if orcid:  # If ORCID is present, use it as the primary key for author lookup/creation
+														update_change_reason(existing_article, "Adding or retrieving author by ORCID")
 														author_obj, author_created = Authors.objects.get_or_create(
 																ORCID=orcid,
 																defaults={
@@ -126,8 +128,8 @@ class Command(BaseCommand):
 														if not given_name or not family_name:
 															self.stdout.write(f"Missing given name or family name, skipping this author. {crossref_paper.doi}")
 															continue
-														else:
-															author_obj, author_created = Authors.objects.get_or_create(
+														update_change_reason(existing_article, "Adding or retrieving author by name")
+														author_obj, author_created = Authors.objects.get_or_create(
 																given_name=given_name,
 																family_name=family_name,
 																defaults={'ORCID': orcid}  # orcid will be an empty string if not provided, which is fine
@@ -143,6 +145,7 @@ class Command(BaseCommand):
 
 													# Link the author to the article if not already linked
 												if not science_paper.authors.filter(pk=author_obj.pk).exists():
+													update_change_reason(science_paper, "Linking author to article")
 													science_paper.authors.add(author_obj)
 							else:
 								print('No DOI, trying to create article')
@@ -151,6 +154,7 @@ class Command(BaseCommand):
 											science_paper = existing_article
 											created = False
 								else:
+											update_change_reason(existing_article, "Creating new article without DOI from RSS feed")
 											science_paper = Articles.objects.create(
 												title=title,
 												summary=summary,
@@ -158,6 +162,7 @@ class Command(BaseCommand):
 												published_date=published_date,
 												crossref_check=None
 											)
+											update_change_reason(science_paper, "Assigning teams, sources, and subjects")
 											science_paper.teams.add(source.team)
 											science_paper.sources.add(source)
 											science_paper.subjects.add(source.subject)
@@ -166,6 +171,7 @@ class Command(BaseCommand):
 								if not created:
 									if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),
 												science_paper.link != link, science_paper.published_date != published_date]):
+										update_change_reason(science_paper, "Updating existing article without DOI")
 										science_paper.title = title
 										science_paper.summary = SciencePaper.clean_abstract(abstract=summary)
 										science_paper.link = link
