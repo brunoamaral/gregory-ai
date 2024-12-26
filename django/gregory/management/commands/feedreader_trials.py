@@ -162,9 +162,27 @@ class Command(BaseCommand):
 		"""Sync a ClinicalTrial object with the database."""
 		existing_trial = self.find_existing_trial(clinical_trial)
 		if existing_trial:
+			# Check if the identifiers are different
+			merged_identifiers = self.merge_identifiers(existing_trial.identifiers, clinical_trial.identifiers)
+			if merged_identifiers != existing_trial.identifiers:
+				existing_trial.identifiers = merged_identifiers
+				update_change_reason(existing_trial, "Updated identifiers from RSS feed.")
+				existing_trial.save(update_fields=['identifiers'])
+				print(f"Updated identifiers for trial: {existing_trial.pk}")
+
 			self.update_existing_trial(existing_trial, clinical_trial, source)
 		else:
 			self.create_new_trial(clinical_trial, source)
+
+	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:
+		"""
+		Merge existing and new identifiers, ensuring no duplicate or missing entries.
+		"""
+		merged = existing_identifiers.copy() if existing_identifiers else {}
+		for key, value in new_identifiers.items():
+			if value and key not in merged:
+				merged[key] = value
+		return merged
 
 	def find_existing_trial(self, clinical_trial: ClinicalTrial):
 		"""
