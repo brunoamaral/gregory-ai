@@ -16,59 +16,52 @@ import requests
 class Command(BaseCommand):
 	def handle(self, *args, **options):
 		self.setup()
-		self.update_trials_from_feeds()
+		self.process_feeds()
 
 	def setup(self):
 		self.tzinfos = {
 			"EDT": pytz.timezone("America/New_York"),
 			"EST": pytz.timezone("America/New_York")
 		}
-
-	def update_trials_from_feeds(self):
+	def process_feeds(self):
 		"""Fetch and process RSS feeds for clinical trials."""
 		sources = Sources.objects.filter(method='rss', source_for='trials', active=True)
 		for source in sources:
-			feed = self.fetch_feed(source.link, source.ignore_ssl)
+			self.stdout.write(self.style.SUCCESS(f"Processing RSS feed: {source.name}"))
+			if not source.ignore_ssl:
+				feed = feedparser.parse(source.link)
+			else:
+				response = requests.get(source.link, verify=False)
+				feed = feedparser.parse(response.content)
 			for entry in feed['entries']:
-				clinical_trial = self.process_feed_entry(entry, source)
-				if clinical_trial:
-					self.sync_clinical_trial(clinical_trial, source)
+				# print(entry.title)
+				summary_html = entry.get('summary_detail', {}).get('value', '') or entry.get('summary', '')
+				published = self.parse_date(entry.get('published'))
+				link = remove_utm(entry['link'])
+				identifiers = self.extract_identifiers(link, entry.get('guid'))
+				extra_fields = {}
+				if 'euclinicaltrials.eu' in link:
+					extra_fields = self.parse_eu_clinical_trial_data(summary_html)
+				# self.stdout.write(self.style.NOTICE(f"Processing trial: : {link}\n {identifiers}"))
+				clinical_trial = ClinicalTrial(
+					title=entry['title'],
+					summary=summary_html,
+					link=link,
+					published_date=published,
+					identifiers=identifiers,
+					extra_fields=extra_fields
+				)
 
-	def fetch_feed(self, link: str, ignore_ssl: bool):
-		if not ignore_ssl:
-			return feedparser.parse(link)
-		else:
-			response = requests.get(link, verify=False)
-			return feedparser.parse(response.content)
-
-	def process_feed_entry(self, entry: dict, source) -> ClinicalTrial:
-		"""
-		Process an RSS feed entry into a ClinicalTrial object.
-		We attempt to get summary_html from 'summary_detail' first,
-		and if it's empty, we fall back to 'summary'.
-		"""
-		summary_html = entry.get('summary_detail', {}).get('value', '') or entry.get('summary', '')
-		published = self.parse_date(entry.get('published'))
-		link = remove_utm(entry['link'])
-
-		identifiers = self.extract_identifiers(link, entry.get('guid'))
-		
-		# If link is from euclinicaltrials.eu, parse EU data from summary_html
-		extra_fields = {}
-		if 'euclinicaltrials.eu' in link:
-			extra_fields = self.parse_eu_clinical_trial_data(summary_html)
-			# If we found a specific EudraCT/EUCT in parse_eu_clinical_trial_data, place it into identifiers
-			if extra_fields.get('euct'):
-				identifiers['euct'] = extra_fields['euct']
-
-		return ClinicalTrial(
-			title=entry['title'],
-			summary=summary_html,
-			link=link,
-			published_date=published,
-			identifiers=identifiers,
-			extra_fields=extra_fields
-		)
+				existing_trial = self.find_existing_trial(clinical_trial)
+				if existing_trial:
+					self.update_existing_trial(existing_trial, clinical_trial, source)
+					# self.stdout.write(self.style.SUCCESS(f"Trial already exists: {existing_trial}"))
+					# self.update_existing_trial(existing_trial, clinical_trial, source)
+					continue
+				if not existing_trial:
+					self.stdout.write(self.style.SUCCESS(f"Creating new trial: {clinical_trial.identifiers}"))
+					new_trial = self.create_new_trial(clinical_trial, source)
+					self.stdout.write((f"Creating new trial: {new_trial.identifiers}"))
 
 	def parse_date(self, date_str: str):
 		"""Parse a date string into a timezone-aware datetime."""
@@ -85,31 +78,20 @@ class Command(BaseCommand):
 		"""
 		eudract = re.search(r'eudract_number%3A(\d{4}-\d{6}-\d{2})', link)
 		nct = guid if 'clinicaltrials.gov' in link else None
+		euct = re.search(r'EUCT=(\d{4}-\d{6}-\d{2})', link)
 		return {
 			"eudract": eudract.group(1) if eudract else None,
 			"nct": nct,
-			"euct": eudract.group(1) if eudract else None,
+			"euct": euct.group(1) if euct else None
 		}
 
 	def parse_eu_clinical_trial_data(self, summary_html: str) -> dict:
-		"""
-		Extract relevant fields from euclinicaltrials.eu summary, including the official EudraCT ID.
-		"""
+		"""Extract relevant fields from euclinicaltrials.eu summary."""
 		def _extract(pattern):
 			match = re.search(pattern, summary_html, re.IGNORECASE)
-			if not match:
-				return None
-			# Get the raw matched text
-			raw_val = match.group(1)
-			# Strip off any leading colon and whitespace
-			raw_val = raw_val.lstrip(': ').strip()
-			return raw_val
+			return match.group(1).strip() if match else None
 
-		# Specifically parse <b>Trial number</b>: 2023-xxxxxx-xx
 		eudract_pattern = r'Trial number</b>:\s*([0-9]{4}-[0-9]{6}-[0-9]{2})'
-		eudract_match = re.search(eudract_pattern, summary_html)
-		euct = eudract_match.group(1) if eudract_match else None
-
 		therapeutic_areas = _extract(r'Therapeutic Areas[^>]*>([^<]+)')
 		country_status = _extract(r'Status in each country[^>]*>([^<]+)')
 		trial_region = _extract(r'Trial region[^>]*>([^<]+)')
@@ -142,9 +124,7 @@ class Command(BaseCommand):
 						countries_decision_date[country_code] = str(parse(date_val).date())
 					except:
 						countries_decision_date[country_code] = date_val
-
 		return {
-			'euct': euct,  # <-- The EudraCT ID parsed from 'Trial number'
 			'condition': medical_conditions, 
 			'primary_sponsor': sponsor,  
 			'primary_outcome': primary_end_point,
@@ -158,156 +138,28 @@ class Command(BaseCommand):
 			'sponsor_type': sponsor_type,
 			'results_posted': results_posted,
 		}
-		
+
 	def find_existing_trial(self, clinical_trial: ClinicalTrial):
-		"""
-		Find an existing trial by EudraCT (euct), CTIS, NCT, or title (case-insensitive).
-		If no match is found, consider it a new trial.
-		"""
 		identifiers = clinical_trial.identifiers
-		euct = identifiers.get('euct')
-		ctis = identifiers.get('ctis')
-		nct = identifiers.get('nct')
 		title = clinical_trial.title.lower() if clinical_trial.title else None
 
-		# Try matching by EudraCT (euct) first
-		if euct:
-			trial = Trials.objects.filter(identifiers__euct=euct).first()
-			if trial:
-				return trial
+		query = Q()
+		if identifiers.get('euct'):
+			query |= Q(identifiers__euct=identifiers['euct'])
+		if identifiers.get('nct'):
+			query |= Q(identifiers__nct=identifiers['nct'])
+		if identifiers.get('ctis'):
+			query |= Q(identifiers__ctis=identifiers['ctis'])
 
-		# If no match by EudraCT, try matching by CTIS
-		if ctis:
-			trial = Trials.objects.filter(identifiers__ctis=ctis).first()
-			if trial:
-				return trial
+		trial = Trials.objects.filter(query).first()
+		if trial:
+			return trial
 
-		# If no match by CTIS, try matching by NCT
-		if nct:
-			trial = Trials.objects.filter(identifiers__nct=nct).first()
-			if trial:
-				return trial
-
-		# If no identifier matches, compare by title (case-insensitive)
 		if title:
-			trial = Trials.objects.annotate(lower_title=Lower('title')).filter(lower_title=title).first()
+			trial = Trials.objects.filter(title__iexact=title).first()
 			if trial:
+				print(f"Found trial by title: {trial.title}")
 				return trial
-
-		# No matches found
-		return None
-
-	def sync_clinical_trial(self, clinical_trial: ClinicalTrial, source):
-		"""Sync a ClinicalTrial object with the database."""
-		existing_trial = self.find_existing_trial(clinical_trial)
-		if existing_trial:
-			# Merge identifiers if needed
-			merged_identifiers = self.merge_identifiers(existing_trial.identifiers, clinical_trial.identifiers)
-			if merged_identifiers != existing_trial.identifiers:
-				existing_trial.identifiers = merged_identifiers
-				try:
-					update_change_reason(existing_trial, "Updated identifiers from RSS feed.")
-				except AttributeError as e:
-					print(f"Failed to update change reason (history issue): {e}")
-				existing_trial.save(update_fields=['identifiers'])
-				print(f"Updated identifiers for trial: {existing_trial.pk}")
-
-			# Ensure the trial has the current source.subject
-			if source.subject not in existing_trial.subjects.all():
-				existing_trial.subjects.add(source.subject)
-				try:
-					update_change_reason(existing_trial, "Added new subject from RSS feed.")
-				except AttributeError as e:
-					print(f"Failed to update change reason (history issue): {e}")
-				existing_trial.save(update_fields=[])  # Save without specific fields to update relations
-				print(f"Added subject {source.subject} to trial: {existing_trial.pk}")
-
-			# Update other fields if necessary
-			self.update_existing_trial(existing_trial, clinical_trial, source)
-		else:
-			self.create_new_trial(clinical_trial, source)
-
-	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:
-		"""
-		Merge existing and new identifiers, ensuring no duplicate or missing entries.
-		"""
-		merged = existing_identifiers.copy() if existing_identifiers else {}
-		for key, value in new_identifiers.items():
-			if value and key not in merged:
-				merged[key] = value
-		return merged
-
-	def update_existing_trial(self, existing_trial, clinical_trial, source):
-		"""Update an existing trial."""
-		fields_to_watch = [
-			'title', 'summary', 'link', 'published_date', 'identifiers',
-			'therapeutic_areas', 'country_status', 'trial_region', 'results_posted',
-			'overall_decision_date', 'countries_decision_date', 'sponsor_type'
-		]
-		initial_state = {field: getattr(existing_trial, field, None) for field in fields_to_watch}
-
-		try:
-			self.apply_trial_updates(existing_trial, clinical_trial, source)
-		except IntegrityError:
-			self.apply_trial_updates(existing_trial, clinical_trial, source, exclude_title=True)
-		
-		if any(initial_state[field] != getattr(existing_trial, field) for field in initial_state):
-			update_change_reason(existing_trial, "Updated from RSS feed.")
-			existing_trial.save()
-			print(f"Trial {existing_trial.pk} updated.")
-		else:
-			print(f"No changes detected for Trial {existing_trial.pk}.")
-
-	def apply_trial_updates(self, trial, clinical_trial, source, exclude_title=False):
-		"""Apply updates to a trial."""
-		if not exclude_title:
-			trial.title = clinical_trial.title
-		trial.summary = clinical_trial.summary
-		trial.link = clinical_trial.link
-		trial.published_date = clinical_trial.published_date
-		trial.identifiers = clinical_trial.identifiers
-
-		extras = getattr(clinical_trial, 'extra_fields', {})
-		if extras:
-			trial.therapeutic_areas = extras.get('therapeutic_areas')
-			trial.country_status = extras.get('country_status')
-			trial.trial_region = extras.get('trial_region')
-			trial.results_posted = extras.get('results_posted', False)
-			trial.overall_decision_date = extras.get('overall_decision_date')
-			trial.countries_decision_date = extras.get('countries_decision_date')
-			trial.sponsor_type = extras.get('sponsor_type')
-			trial.condition = extras.get('condition')
-			trial.recruitment_status = extras.get('recruitment_status')
-			trial.primary_outcome = extras.get('primary_outcome')
-			trial.secondary_outcome = extras.get('secondary_outcome')
-			trial.primary_sponsor = extras.get('primary_sponsor')
-			trial.results_posted = extras.get('results_posted')
-
-		trial.save(
-			update_fields=[
-				'summary',
-				'link',
-				'published_date',
-				'identifiers',
-				'therapeutic_areas',
-				'country_status',
-				'trial_region',
-				'results_posted',
-				'overall_decision_date',
-				'countries_decision_date',
-				'sponsor_type',
-				'condition',
-				'recruitment_status',
-				'primary_outcome',
-				'secondary_outcome',
-				'primary_sponsor',
-				'results_posted',
-			]
-		)
-
-		trial.sources.add(source)
-		trial.teams.add(source.team)
-		trial.subjects.add(source.subject)
 
 	def create_new_trial(self, clinical_trial: ClinicalTrial, source):
 		"""Create a new trial in the database."""
@@ -333,9 +185,41 @@ class Command(BaseCommand):
 				secondary_outcome=extras.get('secondary_outcome'),
 				primary_sponsor=extras.get('primary_sponsor'),
 			)
-			trial.sources.add(source)
-			trial.teams.add(source.team)
-			trial.subjects.add(source.subject)
-			print(f"Created new trial: {trial.trial_id}")
+			if trial:
+				trial.sources.add(source)
+				trial.teams.add(source.team)
+				trial.subjects.add(source.subject)
+				trial.save()
 		except IntegrityError as e:
 			print(f"Integrity error during trial creation: {e}")
+
+	def update_existing_trial(self, existing_trial, clinical_trial, source):
+			"""Update an existing trial."""
+
+			print(f"Updating trial with ID: {existing_trial.pk}")
+			print(f"Identifiers before update: {existing_trial.identifiers}")
+			merged_identifiers = self.merge_identifiers(existing_trial.identifiers, clinical_trial.identifiers)
+			existing_trial.identifiers = merged_identifiers
+			existing_trial.summary = clinical_trial.summary
+			existing_trial.link = clinical_trial.link
+			if source.subject not in existing_trial.subjects.all():
+				existing_trial.subjects.add(source.subject)
+				print(f"added subject {source.subject} to trial {existing_trial}")
+			if source not in existing_trial.sources.all():
+				existing_trial.sources.add(source)
+				print(f"added source {source} to trial {existing_trial}")
+			# Confirm history tracking
+			try:
+				update_change_reason(existing_trial, "Updated from RSS feed.")
+			except AttributeError as e:
+				print(f"History tracking failed: {e}")
+				return 
+			existing_trial.save()
+	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:
+		"""Merge existing and new identifiers."""
+		merged = existing_identifiers.copy() if existing_identifiers else {}
+		for key, value in new_identifiers.items():
+			if value and key not in merged:
+				merged[key] = value
+		return merged
+
