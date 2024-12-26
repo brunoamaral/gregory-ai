@@ -168,15 +168,26 @@ class Command(BaseCommand):
 
 	def find_existing_trial(self, clinical_trial: ClinicalTrial):
 		"""
-		Only match by EudraCT (euct) if present. 
-		If euct is None or we can't find a match, we consider it new.
+		Find an existing trial by EudraCT or NCT identifiers.
+		If no match is found, consider it a new trial.
 		"""
-		euct = clinical_trial.identifiers.get('euct')
-		if euct:
-			# If we have euct, try to find an existing trial with the same euct
-			return Trials.objects.filter(identifiers__euct=euct).first()
+		identifiers = clinical_trial.identifiers
+		euct = identifiers.get('euct')
+		nct = identifiers.get('nct')
 
-		# No euct => treat as new
+		# Try matching by EudraCT (euct) first
+		if euct:
+			trial = Trials.objects.filter(identifiers__euct=euct).first()
+			if trial:
+				return trial
+
+		# If no match by EudraCT, try matching by NCT
+		if nct:
+			trial = Trials.objects.filter(identifiers__nct=nct).first()
+			if trial:
+				return trial
+
+		# No matches found
 		return None
 
 	def update_existing_trial(self, existing_trial, clinical_trial, source):
