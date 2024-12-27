@@ -188,9 +188,9 @@ class Command(BaseCommand):
 				primary_sponsor=extras.get('primary_sponsor'),
 			)
 			if trial:
+				trial.sources.add(source)
 				trial._change_reason= f"Created from Source: {source.name} ({source.source_id})"
 				trial.save()
-				trial.sources.add(source)
 				trial.teams.add(source.team)
 				trial.subjects.add(source.subject)
 				trial._change_reason=f"Added relationships Team: {source.team}  Subject:{source.subject}"
