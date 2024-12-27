@@ -189,12 +189,12 @@ class Command(BaseCommand):
 				primary_sponsor=extras.get('primary_sponsor'),
 			)
 			if trial:
-				update_change_reason(trial, f"Created from Source: {source.name} ({source.source_id})")
+				# update_change_reason(trial, f"Created from Source: {source.name} ({source.source_id})")
 				trial.save()
 				trial.sources.add(source)
 				trial.teams.add(source.team)
 				trial.subjects.add(source.subject)
-				update_change_reason(trial, f"Added relationships Team: {source.team}  Subject:{source.subject}")
+				# update_change_reason(trial, f"Added relationships Team: {source.team}  Subject:{source.subject}")
 				trial.save()
 			return trial
 		except IntegrityError as e:
@@ -259,18 +259,18 @@ class Command(BaseCommand):
 
 		# Save only if changes were detected
 		if has_changes:
-			update_change_reason(existing_trial, f"Updated fields from {source.name} ({source.source_id}): {', '.join(updated_fields)}")
+			# update_change_reason(existing_trial, f"Updated fields from {source.name} ({source.source_id}): {', '.join(updated_fields)}")
 			existing_trial.save()
 
 		# Handle source and subjects additions (relationships)
 		if source.subject not in existing_trial.subjects.all():
 			existing_trial.subjects.add(source.subject)
-			update_change_reason(existing_trial, f"Added subject: {source.subject}")
+			# update_change_reason(existing_trial, f"Added subject: {source.subject}")
 			existing_trial.save()
 
 		if source not in existing_trial.sources.all():
 			existing_trial.sources.add(source)
-			update_change_reason(existing_trial, f"Added new source: {source.name} ({source.source_id})")
+			# update_change_reason(existing_trial, f"Added new source: {source.name} ({source.source_id})")
 			existing_trial.save()
 		
 	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:
