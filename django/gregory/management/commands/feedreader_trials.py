@@ -7,7 +7,6 @@ from django.utils import timezone
 from gregory.classes import ClinicalTrial
 from gregory.functions import remove_utm
 from gregory.models import Trials, Sources
-from simple_history.utils import update_change_reason
 import feedparser
 import pytz
 import re
@@ -189,13 +188,13 @@ class Command(BaseCommand):
 				primary_sponsor=extras.get('primary_sponsor'),
 			)
 			if trial:
+				trial._change_reason= f"Created from Source: {source.name} ({source.source_id})"
 				trial.save()
-				update_change_reason(trial, f"Created from Source: {source.name} ({source.source_id})")
 				trial.sources.add(source)
 				trial.teams.add(source.team)
 				trial.subjects.add(source.subject)
+				trial._change_reason=f"Added relationships Team: {source.team}  Subject:{source.subject}"
 				trial.save()
-				update_change_reason(trial, f"Added relationships Team: {source.team}  Subject:{source.subject}")
 			return trial
 		except IntegrityError as e:
 			print(f"Integrity error during trial creation: {e}")
@@ -259,19 +258,19 @@ class Command(BaseCommand):
 
 		# Save only if changes were detected
 		if has_changes:
+			existing_trial._change_reason=f"Updated fields from {source.name} ({source.source_id}): {', '.join(updated_fields)}"
 			existing_trial.save()
-			update_change_reason(existing_trial, f"Updated fields from {source.name} ({source.source_id}): {', '.join(updated_fields)}")
 
 		# Handle source and subjects additions (relationships)
 		if source.subject not in existing_trial.subjects.all():
 			existing_trial.subjects.add(source.subject)
+			existing_trial._change_reason=f"Added subject: {source.subject}"
 			existing_trial.save()
-			update_change_reason(existing_trial, f"Added subject: {source.subject}")
 
 		if source not in existing_trial.sources.all():
 			existing_trial.sources.add(source)
+			existing_trial._change_reason=f"Added new source: {source.name} ({source.source_id})"
 			existing_trial.save()
-			update_change_reason(existing_trial, f"Added new source: {source.name} ({source.source_id})")
 		
 	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:
 			"""Merge existing and new identifiers."""
