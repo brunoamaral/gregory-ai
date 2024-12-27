@@ -73,9 +73,9 @@ class Command(BaseCommand):
 		nct from guid if 'clinicaltrials.gov' is in the link.
 		However, for euclinicaltrials.eu, we now rely on parse_eu_clinical_trial_data.
 		"""
-		eudract = re.search(r'eudract_number%3A(\d{4}-\d{6}-\d{2})', link)
+		eudract = re.search(r'(?:eudract_number%3A|EUDRACT=)(\d{4}-\d{6}-\d{2}-\d{2})', link, re.IGNORECASE)
+		euct = re.search(r'(?:EUCT=)(\d{4}-\d{6}-\d{2}-\d{2})', link, re.IGNORECASE)
 		nct = guid if 'clinicaltrials.gov' in link else None
-		euct = re.search(r'EUCT=(\d{4}-\d{6}-\d{2})', link)
 		return {
 			"eudract": eudract.group(1) if eudract else None,
 			"nct": nct,
