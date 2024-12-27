@@ -37,7 +37,7 @@ django-extensions==3.2.3
 django-filter==24.2
 django-organizations==2.4.1
 django-reversion==5.0.12
-django-simple-history==3.5.0
+django-simple-history==3.7.0
 django4-cron==0.5.1
 djangorestframework==3.15.1
 djangorestframework-simplejwt==5.3.1
