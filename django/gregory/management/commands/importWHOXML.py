@@ -174,7 +174,8 @@ class Command(BaseCommand):
 			]:
 				trial_data[field.lower()] = self.get_text(trial, field)
 
-			trial_data['title'] = self.get_text(trial, 'Public_title')
+			title = self.get_text(trial, 'Public_title')
+			trial_data['title'] = title.replace('\n', ' ').replace('\r', ' ') if title else None
 			trial_data['link'] = self.get_text(trial, 'web_address')
 			trial_data['trialid'] = self.get_text(trial, 'TrialID')
 
