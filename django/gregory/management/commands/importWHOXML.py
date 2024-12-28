@@ -72,7 +72,7 @@ class Command(BaseCommand):
 			trial.sources.add(source)
 			trial.subjects.add(subject)
 			trial.identifiers = {
-				trial_data['trialid'][:3].lower(): trial_data['trialid']
+				''.join(filter(str.isalpha, trial_data['trialid'])).lower(): trial_data['trialid']
 			}
 			trial._change_reason = f"Created trial from source: {source.name}, team: {source.team}, with subject: {subject}"
 			trial.save()
@@ -114,7 +114,10 @@ class Command(BaseCommand):
 			if existing_trial:
 				self.update_existing_trial(existing_trial, trial_data, source, subject)
 			else:
-				self.create_new_trial(trial_data, source, subject)
+				trial.identifiers = {
+					''.join(filter(str.isalpha, trial_data['trialid'])).lower(): trial_data['trialid']
+				}
+
 		except IntegrityError as e:
 			self.stdout.write(
 				self.style.ERROR(
