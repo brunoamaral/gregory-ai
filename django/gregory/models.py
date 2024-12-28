@@ -189,7 +189,7 @@ class Trials(models.Model):
 	contact_firstname = models.TextField(null=True, blank=True)
 	contact_lastname = models.TextField(null=True, blank=True)
 	contact_address = models.TextField(null=True, blank=True)
-	contact_email = models.EmailField(max_length=1000, null=True, blank=True)
+	contact_email = models.EmailField(max_length=2000, null=True, blank=True)
 	contact_tel = models.TextField(null=True, blank=True)
 	contact_affiliation = models.TextField(null=True, blank=True)
 	inclusion_criteria = models.TextField(null=True, blank=True)  # Changed to TextField
