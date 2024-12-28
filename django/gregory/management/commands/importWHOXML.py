@@ -71,7 +71,9 @@ class Command(BaseCommand):
 			trial = Trials.objects.create(**trial_data)
 			trial.sources.add(source)
 			trial.subjects.add(subject)
-			trials.team.add(source.team)
+			trial.identifiers = {
+				trial_data['trialid'][:3].lower(): trial_data['trialid']
+			}
 			trial._change_reason = f"Created trial from source: {source.name}, team: {source.team}, with subject: {subject}"
 			trial.save()
 			return trial
