@@ -71,7 +71,8 @@ class Command(BaseCommand):
 			trial = Trials.objects.create(**trial_data)
 			trial.sources.add(source)
 			trial.subjects.add(subject)
-			trial._change_reason = f"Created trial from source: {source.name}, with subject: {subject}"
+			trials.team.add(source.team)
+			trial._change_reason = f"Created trial from source: {source.name}, team: {source.team}, with subject: {subject}"
 			trial.save()
 			return trial
 		except IntegrityError as e:
