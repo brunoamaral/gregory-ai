@@ -83,39 +83,43 @@ class Command(BaseCommand):
 		trial_identifier = trial_data.pop('trialid', None)
 		existing_trial = None
 
+		# Step 1: Match by trial identifier in JSON field
 		if trial_identifier:
-			# Try to match the trial identifier with a value in the 'identifiers' JSON field
-			existing_trial = Trials.objects.filter(
-				identifiers__contains={trial_identifier.split("-")[0].lower(): trial_identifier}
-			).first()
+			# Extract the key dynamically from the first letters of the value
+			identifier_key = ''.join(filter(str.isalpha, trial_identifier.split("-")[0])).lower()
 
-			# If the exact key-value match is not found, search through all keys in 'identifiers'
+			# Try to match the trial identifier with the key-value pair in the 'identifiers' JSON field
+			if identifier_key:
+				existing_trial = Trials.objects.filter(
+					identifiers__contains={identifier_key: trial_identifier}
+				).first()
+				# print(f"Existing trial by identifier key-value pair: {existing_trial}")
+
+			# Fallback to a broader search if no specific key match
 			if not existing_trial:
-				existing_trials = Trials.objects.all()
-				for trial in existing_trials:
-					if trial.identifiers:
-						for key, value in trial.identifiers.items():
-							if value == trial_identifier:
-								existing_trial = trial
-								break
-					if existing_trial:
-						break
+				existing_trial = Trials.objects.filter(
+					identifiers__icontains=trial_identifier
+				).first()
+				# print(f"Existing trial by identifier value: {existing_trial}")
 
-		if not existing_trial:
-			# Fallback to matching by title
+
+		# Step 2: Fallback to matching by title (case-insensitive)
+		if not existing_trial and 'title' in trial_data:
 			existing_trial = Trials.objects.filter(title__iexact=trial_data['title']).first()
-
+			# print(f"Existing trial by title: {existing_trial}")
+		# Step 3: Handle trial creation or update
 		try:
 			if existing_trial:
 				self.update_existing_trial(existing_trial, trial_data, source, subject)
 			else:
 				self.create_new_trial(trial_data, source, subject)
-		except Exception as e:
+		except IntegrityError as e:
 			self.stdout.write(
 				self.style.ERROR(
-					f"Error processing trial: {trial_data}. Error: {e}"
+					f"Error processing trial: {trial_data.get('title', 'Unknown')}. Error: {e}"
 				)
 			)
+
 	def update_or_create_from_xml(self, xml_file_path, source_id):
 		try:
 			source = Sources.objects.get(pk=source_id)
