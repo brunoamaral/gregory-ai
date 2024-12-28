@@ -115,10 +115,28 @@ class Command(BaseCommand):
 			if existing_trial:
 				self.update_existing_trial(existing_trial, trial_data, source, subject)
 			else:
+				# Check for duplicate titles one last time before creating a trial
+				duplicate_trial = Trials.objects.filter(title__iexact=trial_data['title']).exists()
+				if duplicate_trial:
+						self.stdout.write(
+								self.style.WARNING(
+									f"Duplicate trial title found (case-insensitive): {trial_data['title']}. Skipping."
+								)
+						)
+						return None
+
+				# Create a new trial
+				trial_data['discovery_date'] = timezone.now()
+				trial = Trials.objects.create(**trial_data)
+				trial.sources.add(source)
+				trial.subjects.add(subject)
+				trial.teams.add(source.team)
 				trial.identifiers = {
 					''.join(filter(str.isalpha, trial_data['trialid'])).lower(): trial_data['trialid']
 				}
 
+				trial._change_reason = f"Created trial from source: {source.name}, team: {source.team}, with subject: {subject}"
+				trial.save()
 		except IntegrityError as e:
 			self.stdout.write(
 				self.style.ERROR(
