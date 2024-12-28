@@ -79,21 +79,21 @@ class Command(BaseCommand):
 					has_changes = True
 					updated_fields.append(key)
 
-	# Ensure source is added only if not already associated
-	if source not in trial.sources.all():
-			trial.sources.add(source)
-			updated_fields.append(f"source: {source.name}")
+		# Ensure source is added only if not already associated
+		if source not in trial.sources.all():
+				trial.sources.add(source)
+				updated_fields.append(f"source: {source.name}")
 
-	# Ensure subject is added only if not already associated
-	if subject not in trial.subjects.all():
-			trial.subjects.add(subject)
-			updated_fields.append(f"subject: {subject}")
+		# Ensure subject is added only if not already associated
+		if subject not in trial.subjects.all():
+				trial.subjects.add(subject)
+				updated_fields.append(f"subject: {subject}")
 
-	# Save the trial only if there are actual changes
-	if has_changes:
-			trial._change_reason = f"Updated fields: {', '.join(updated_fields)}"
-			self.stdout.write(f"Saving changes for trial: {trial.trial_id}. Changes: {updated_fields}")
-			trial.save()
+		# Save the trial only if there are actual changes
+		if has_changes:
+				trial._change_reason = f"Updated fields: {', '.join(updated_fields)}"
+				# self.stdout.write(f"Saving changes for trial: {trial.trial_id}. Changes: {updated_fields}")
+				trial.save()
 
 	def create_new_trial(self, trial_data, source, subject):
 		try:
@@ -109,7 +109,7 @@ class Command(BaseCommand):
 			trial.save()
 			return trial
 		except IntegrityError as e:
-			self.stdout.write(self.style.ERROR(f"Error creating trial: {e}"))
+			self.stdout.write(self.style.ERROR(f"Error creating trial: {trial_data.get('title', 'Unknown')}. Error: {e}"))
 			return None
 
 	def get_or_create_trial(self, trial_data, source, subject):
