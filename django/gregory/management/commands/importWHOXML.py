@@ -48,21 +48,51 @@ class Command(BaseCommand):
 		updated_fields = []
 
 		for key, value in trial_data.items():
-			if getattr(trial, key, None) != value:
-				setattr(trial, key, value)
-				has_changes = True
-				updated_fields.append(key)
+			current_value = getattr(trial, key, None)
 
-		if source not in trial.sources.all():
+			# Handle datetime fields: Normalize and compare only the date part
+			if key in ['export_date', 'date_enrollement', 'ethics_review_approval_date', 'results_date_completed', 'last_refreshed_on']:
+					if isinstance(current_value, datetime.datetime):
+							current_date = current_value.date()
+					elif isinstance(current_value, datetime.date):
+							current_date = current_value
+					else:
+							current_date = None
+
+					if isinstance(value, datetime.datetime):
+							value_date = value.date()
+					elif isinstance(value, datetime.date):
+							value_date = value
+					else:
+							value_date = None
+
+					if current_date != value_date:  # Compare only the date part
+							# self.stdout.write(f"Updating datetime field '{key}': {current_date} -> {value_date}")
+							setattr(trial, key, value)
+							has_changes = True
+							updated_fields.append(key)
+
+			# Handle other fields
+			elif current_value != value:
+					# self.stdout.write(f"Updating field '{key}': {current_value} -> {value}")
+					setattr(trial, key, value)
+					has_changes = True
+					updated_fields.append(key)
+
+	# Ensure source is added only if not already associated
+	if source not in trial.sources.all():
 			trial.sources.add(source)
 			updated_fields.append(f"source: {source.name}")
 
-		if subject not in trial.subjects.all():
+	# Ensure subject is added only if not already associated
+	if subject not in trial.subjects.all():
 			trial.subjects.add(subject)
 			updated_fields.append(f"subject: {subject}")
 
-		if has_changes:
+	# Save the trial only if there are actual changes
+	if has_changes:
 			trial._change_reason = f"Updated fields: {', '.join(updated_fields)}"
+			self.stdout.write(f"Saving changes for trial: {trial.trial_id}. Changes: {updated_fields}")
 			trial.save()
 
 	def create_new_trial(self, trial_data, source, subject):
@@ -103,8 +133,6 @@ class Command(BaseCommand):
 				existing_trial = Trials.objects.filter(
 					identifiers__icontains=trial_identifier
 				).first()
-				# print(f"Existing trial by identifier value: {existing_trial}")
-
 
 		# Step 2: Fallback to matching by title (case-insensitive)
 		if not existing_trial and 'title' in trial_data:
