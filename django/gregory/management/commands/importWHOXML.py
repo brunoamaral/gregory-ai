@@ -71,6 +71,7 @@ class Command(BaseCommand):
 			trial = Trials.objects.create(**trial_data)
 			trial.sources.add(source)
 			trial.subjects.add(subject)
+			trial.teams.add(source.team)
 			trial.identifiers = {
 				''.join(filter(str.isalpha, trial_data['trialid'])).lower(): trial_data['trialid']
 			}
