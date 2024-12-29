@@ -88,16 +88,18 @@ class Command(BaseCommand):
 				has_changes = True
 				updated_fields.append(key)
 
-		# Ensure source is added only if not already associated
+		if has_changes:
+			# trial._change_reason = f"Updated fields: {', '.join(updated_fields)}"
+			self.stdout.write(f"Saving changes for trial: {trial.trial_id}. Changes: {updated_fields}")
+			# trial._change_reason(f"Updated fields: {', '.join(updated_fields)}")
+			trial.save()
 		if source not in trial.sources.all():
-				trial.sources.add(source)
-				updated_fields.append(f"source: {source.name}")
+			trial.sources.add(source)
+			updated_fields.append(f"source: {source.name}")
 
-		# Ensure subject is added only if not already associated
 		if subject not in trial.subjects.all():
-				trial.subjects.add(subject)
-				updated_fields.append(f"subject: {subject}")
-
+			trial.subjects.add(subject)
+			updated_fields.append(f"subject: {subject}")
 		# Save the trial only if there are actual changes
 		if has_changes:
 				trial._change_reason = f"Updated fields: {', '.join(updated_fields)}"
