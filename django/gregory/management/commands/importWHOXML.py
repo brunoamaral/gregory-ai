@@ -7,7 +7,6 @@ import datetime
 import re
 import xml.etree.ElementTree as ET
 import pytz
-
 class Command(BaseCommand):
 	help = 'Update or create trials from an XML file from https://trialsearch.who.int/Default.aspx'
 
@@ -18,18 +17,17 @@ class Command(BaseCommand):
 	def handle(self, *args, **options):
 		xml_file_path = options['xml_file_path']
 		source_id = options['source_id']
-		self.update_or_create_from_xml(xml_file_path, source_id)
+		self.parse_xml(xml_file_path, source_id)
 		self.stdout.write(
 			self.style.SUCCESS('Successfully updated or created trials from XML')
 		)
 
 	def get_text(self, trial, tag_name):
 		element = trial.find(tag_name)
-		return (
-			element.text.strip()
-			if element is not None and element.text is not None
-			else None
-		)
+		if element is not None and element.text is not None:
+			# Strip leading and trailing whitespace and normalize whitespace within
+			return ' '.join(element.text.split()).strip()
+		return None
 
 	def robust_parse_date(self, date_str):
 		if not date_str:
@@ -46,55 +44,61 @@ class Command(BaseCommand):
 	def update_existing_trial(self, trial, trial_data, source, subject):
 		has_changes = False
 		updated_fields = []
-
 		for key, value in trial_data.items():
 			current_value = getattr(trial, key, None)
 
 			# Handle datetime fields: Normalize and compare only the date part
 			if key in ['export_date', 'date_enrollement', 'ethics_review_approval_date', 'results_date_completed', 'last_refreshed_on']:
 					if isinstance(current_value, datetime.datetime):
-							current_date = current_value.date()
+						current_date = current_value.date()
 					elif isinstance(current_value, datetime.date):
-							current_date = current_value
+						current_date = current_value
 					else:
-							current_date = None
+						current_date = None
 
 					if isinstance(value, datetime.datetime):
-							value_date = value.date()
+						value_date = value.date()
 					elif isinstance(value, datetime.date):
-							value_date = value
+						value_date = value
 					else:
-							value_date = None
+						value_date = None
 
 					if current_date != value_date:  # Compare only the date part
-							# self.stdout.write(f"Updating datetime field '{key}': {current_date} -> {value_date}")
-							setattr(trial, key, value)
-							has_changes = True
-							updated_fields.append(key)
+						setattr(trial, key, value)
+						has_changes = True
+						updated_fields.append(key)
 
 			# Handle other fields
-			elif current_value != value:
-					# self.stdout.write(f"Updating field '{key}': {current_value} -> {value}")
-					setattr(trial, key, value)
+			elif key == 'identifiers':
+				# Check for existing identifiers and merge with the one in trial_data
+				if isinstance(current_value, dict) and isinstance(value, dict):
+					merged_identifiers = {**current_value, **value}  # Merge dictionaries
+					if merged_identifiers != current_value:  # Check if the merge changed anything
+						trial.identifiers = merged_identifiers
+						has_changes = True
+						updated_fields.append(key)
+				elif current_value != value:  # In case of non-dict values, simply set
+					trial.identifiers = value
 					has_changes = True
 					updated_fields.append(key)
+			elif current_value != value:
+				setattr(trial, key, value)
+				has_changes = True
+				updated_fields.append(key)
 
-		# Ensure source is added only if not already associated
-		if source not in trial.sources.all():
-				trial.sources.add(source)
-				updated_fields.append(f"source: {source.name}")
-
-		# Ensure subject is added only if not already associated
-		if subject not in trial.subjects.all():
-				trial.subjects.add(subject)
-				updated_fields.append(f"subject: {subject}")
-
-		# Save the trial only if there are actual changes
 		if has_changes:
-				trial._change_reason = f"Updated fields: {', '.join(updated_fields)}"
-				# self.stdout.write(f"Saving changes for trial: {trial.trial_id}. Changes: {updated_fields}")
-				trial.save()
+			# trial._change_reason = f"Updated fields: {', '.join(updated_fields)}"
+			self.stdout.write(f"Saving changes for trial: {trial.trial_id}. Changes: {updated_fields}")
+			# trial._change_reason(f"Updated fields: {', '.join(updated_fields)}")
+			trial.save()
+		if source not in trial.sources.all():
+			trial.sources.add(source)
+			updated_fields.append(f"source: {source.name}")
 
+		if subject not in trial.subjects.all():
+			trial.subjects.add(subject)
+			updated_fields.append(f"subject: {subject}")
+		
 	def create_new_trial(self, trial_data, source, subject):
 		try:
 			trial_data['discovery_date'] = timezone.now()
@@ -102,36 +106,31 @@ class Command(BaseCommand):
 			trial.sources.add(source)
 			trial.subjects.add(subject)
 			trial.teams.add(source.team)
-			trial.identifiers = {
-				''.join(filter(str.isalpha, trial_data['trialid'])).lower(): trial_data['trialid']
-			}
-			trial._change_reason = f"Created trial from source: {source.name}, team: {source.team}, with subject: {subject}"
 			trial.save()
 			return trial
 		except IntegrityError as e:
 			self.stdout.write(self.style.ERROR(f"Error creating trial: {trial_data.get('title', 'Unknown')}. Error: {e}"))
 			return None
 
-	def get_or_create_trial(self, trial_data, source, subject):
-		trial_identifier = trial_data.pop('trialid', None)
+	def check_for_existing_trial(self, trial_data, source, subject):
 		existing_trial = None
 
 		# Step 1: Match by trial identifier in JSON field
-		if trial_identifier:
-			# Extract the key dynamically from the first letters of the value
-			identifier_key = ''.join(filter(str.isalpha, trial_identifier.split("-")[0])).lower()
-
-			# Try to match the trial identifier with the key-value pair in the 'identifiers' JSON field
+		if 'identifiers' in trial_data and trial_data['identifiers']:
+			# Extract the key dynamically from the first letters of the trialid value
+			trial_id_value = list(trial_data['identifiers'].values())[0]  # Extract the trialid value
+			identifier_key = list(trial_data['identifiers'].keys())[0]   # Extract the identifier key
+				
+				# Try to match the trial identifier with the key-value pair in the 'identifiers' JSON field
 			if identifier_key:
 				existing_trial = Trials.objects.filter(
-					identifiers__contains={identifier_key: trial_identifier}
+					identifiers__contains={identifier_key: trial_id_value}
 				).first()
-				# print(f"Existing trial by identifier key-value pair: {existing_trial}")
-
+			
 			# Fallback to a broader search if no specific key match
 			if not existing_trial:
 				existing_trial = Trials.objects.filter(
-					identifiers__icontains=trial_identifier
+					identifiers__contains=trial_id_value
 				).first()
 
 		# Step 2: Fallback to matching by title (case-insensitive)
@@ -146,25 +145,13 @@ class Command(BaseCommand):
 				# Check for duplicate titles one last time before creating a trial
 				duplicate_trial = Trials.objects.filter(title__iexact=trial_data['title']).exists()
 				if duplicate_trial:
-						self.stdout.write(
-								self.style.WARNING(
-									f"Duplicate trial title found (case-insensitive): {trial_data['title']}. Skipping."
-								)
+					self.stdout.write(
+						self.style.WARNING(
+							f"Duplicate trial title found (case-insensitive): {trial_data['title']}. Skipping."
 						)
-						return None
-
-				# Create a new trial
-				trial_data['discovery_date'] = timezone.now()
-				trial = Trials.objects.create(**trial_data)
-				trial.sources.add(source)
-				trial.subjects.add(subject)
-				trial.teams.add(source.team)
-				trial.identifiers = {
-					''.join(filter(str.isalpha, trial_data['trialid'])).lower(): trial_data['trialid']
-				}
-
-				trial._change_reason = f"Created trial from source: {source.name}, team: {source.team}, with subject: {subject}"
-				trial.save()
+					)
+					return None
+				self.create_new_trial(trial_data, source, subject)
 		except IntegrityError as e:
 			self.stdout.write(
 				self.style.ERROR(
@@ -172,7 +159,7 @@ class Command(BaseCommand):
 				)
 			)
 
-	def update_or_create_from_xml(self, xml_file_path, source_id):
+	def parse_xml(self, xml_file_path, source_id):
 		try:
 			source = Sources.objects.get(pk=source_id)
 		except Sources.DoesNotExist:
@@ -189,6 +176,16 @@ class Command(BaseCommand):
 
 		for trial in root.findall('Trial'):
 			trial_data = {}
+			trial_identifier = self.get_text(trial, 'TrialID')
+			# Sanitize and validate TrialID
+			if trial_identifier:
+				trial_identifier = trial_identifier.replace('\n', '').strip()
+				key = ''.join(filter(str.isalpha, trial_identifier.split('-')[0])).lower()
+				trial_data['identifiers'] = { key : trial_identifier}
+			if not trial_identifier:
+				self.stdout.write(self.style.WARNING(f"Missing or invalid TrialID for trial: {self.get_text(trial, 'Public_title')}. Skipping."))
+				continue
+			
 			for field in [
 				'Internal_Number', 'Last_Refreshed_on', 'Scientific_title', 'Primary_sponsor',
 				'Retrospective_flag', 'Source_Register', 'Recruitment_Status', 'other_records',
@@ -205,7 +202,6 @@ class Command(BaseCommand):
 			title = self.get_text(trial, 'Public_title')
 			trial_data['title'] = title.replace('\n', ' ').replace('\r', ' ') if title else None
 			trial_data['link'] = self.get_text(trial, 'web_address')
-			trial_data['trialid'] = self.get_text(trial, 'TrialID')
 
 			for date_field in [
 				'Export_date', 'Date_enrollement', 'Ethics_review_approval_date',
@@ -218,10 +214,10 @@ class Command(BaseCommand):
 			trial_data['published_date'] = self.robust_parse_date(date_registration_raw)
 
 			# Add logging for each trial being processed
-			# self.stdout.write(self.style.NOTICE(f"Processing trial: {trial_data['title']}"))
+			self.stdout.write(self.style.NOTICE(f"Processing trial: {trial_data['title']} with TrialID: {trial_data['identifiers']}"))
 
 			try:
-				self.get_or_create_trial(trial_data, source, subject)
+				self.check_for_existing_trial(trial_data, source, subject)
 			except Exception as e:
 				self.stdout.write(
 					self.style.ERROR(
