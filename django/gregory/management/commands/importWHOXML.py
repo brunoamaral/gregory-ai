@@ -53,31 +53,41 @@ class Command(BaseCommand):
 			# Handle datetime fields: Normalize and compare only the date part
 			if key in ['export_date', 'date_enrollement', 'ethics_review_approval_date', 'results_date_completed', 'last_refreshed_on']:
 					if isinstance(current_value, datetime.datetime):
-							current_date = current_value.date()
+						current_date = current_value.date()
 					elif isinstance(current_value, datetime.date):
-							current_date = current_value
+						current_date = current_value
 					else:
-							current_date = None
+						current_date = None
 
 					if isinstance(value, datetime.datetime):
-							value_date = value.date()
+						value_date = value.date()
 					elif isinstance(value, datetime.date):
-							value_date = value
+						value_date = value
 					else:
-							value_date = None
+						value_date = None
 
 					if current_date != value_date:  # Compare only the date part
-							# self.stdout.write(f"Updating datetime field '{key}': {current_date} -> {value_date}")
-							setattr(trial, key, value)
-							has_changes = True
-							updated_fields.append(key)
+						setattr(trial, key, value)
+						has_changes = True
+						updated_fields.append(key)
 
 			# Handle other fields
-			elif current_value != value:
-					# self.stdout.write(f"Updating field '{key}': {current_value} -> {value}")
-					setattr(trial, key, value)
+			elif key == 'identifiers':
+				# Check for existing identifiers and merge with the one in trial_data
+				if isinstance(current_value, dict) and isinstance(value, dict):
+					merged_identifiers = {**current_value, **value}  # Merge dictionaries
+					if merged_identifiers != current_value:  # Check if the merge changed anything
+						trial.identifiers = merged_identifiers
+						has_changes = True
+						updated_fields.append(key)
+				elif current_value != value:  # In case of non-dict values, simply set
+					trial.identifiers = value
 					has_changes = True
 					updated_fields.append(key)
+			elif current_value != value:
+				setattr(trial, key, value)
+				has_changes = True
+				updated_fields.append(key)
 
 		# Ensure source is added only if not already associated
 		if source not in trial.sources.all():
