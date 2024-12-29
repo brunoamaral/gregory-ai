@@ -25,11 +25,10 @@ class Command(BaseCommand):
 
 	def get_text(self, trial, tag_name):
 		element = trial.find(tag_name)
-		return (
-			element.text.strip()
-			if element is not None and element.text is not None
-			else None
-		)
+		if element is not None and element.text is not None:
+			# Strip leading and trailing whitespace and normalize whitespace within
+			return ' '.join(element.text.split()).strip()
+		return None
 
 	def robust_parse_date(self, date_str):
 		if not date_str:
