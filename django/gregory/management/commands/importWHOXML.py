@@ -177,6 +177,16 @@ class Command(BaseCommand):
 
 		for trial in root.findall('Trial'):
 			trial_data = {}
+			trial_identifier = self.get_text(trial, 'TrialID')
+			# Sanitize and validate TrialID
+			if trial_identifier:
+				trial_identifier = trial_identifier.replace('\n', '').strip()
+				key = ''.join(filter(str.isalpha, trial_identifier.split('-')[0])).lower()
+				trial_data['identifiers'] = { key : trial_identifier}
+			if not trial_identifier:
+				self.stdout.write(self.style.WARNING(f"Missing or invalid TrialID for trial: {self.get_text(trial, 'Public_title')}. Skipping."))
+				continue
+			
 			for field in [
 				'Internal_Number', 'Last_Refreshed_on', 'Scientific_title', 'Primary_sponsor',
 				'Retrospective_flag', 'Source_Register', 'Recruitment_Status', 'other_records',
