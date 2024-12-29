@@ -117,22 +117,22 @@ class Command(BaseCommand):
 		existing_trial = None
 
 		# Step 1: Match by trial identifier in JSON field
-		if trial_identifier:
-			# Extract the key dynamically from the first letters of the value
-			identifier_key = ''.join(filter(str.isalpha, trial_identifier.split("-")[0])).lower()
-
-			# Try to match the trial identifier with the key-value pair in the 'identifiers' JSON field
-			if identifier_key:
-				existing_trial = Trials.objects.filter(
-					identifiers__contains={identifier_key: trial_identifier}
-				).first()
-				# print(f"Existing trial by identifier key-value pair: {existing_trial}")
-
-			# Fallback to a broader search if no specific key match
-			if not existing_trial:
-				existing_trial = Trials.objects.filter(
-					identifiers__icontains=trial_identifier
-				).first()
+		if 'identifiers' in trial_data and trial_data['identifiers']:
+				# Extract the key dynamically from the first letters of the trialid value
+				trial_id_value = list(trial_data['identifiers'].values())[0]  # Extract the trialid value
+				identifier_key = list(trial_data['identifiers'].keys())[0]   # Extract the identifier key
+				
+				# Try to match the trial identifier with the key-value pair in the 'identifiers' JSON field
+				if identifier_key:
+					existing_trial = Trials.objects.filter(
+						identifiers__contains={identifier_key: trial_id_value}
+					).first()
+				
+				# Fallback to a broader search if no specific key match
+				if not existing_trial:
+					existing_trial = Trials.objects.filter(
+						identifiers__contains=trial_id_value
+					).first()
 
 		# Step 2: Fallback to matching by title (case-insensitive)
 		if not existing_trial and 'title' in trial_data:
