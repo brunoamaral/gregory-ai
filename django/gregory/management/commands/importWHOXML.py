@@ -100,12 +100,7 @@ class Command(BaseCommand):
 		if subject not in trial.subjects.all():
 			trial.subjects.add(subject)
 			updated_fields.append(f"subject: {subject}")
-		# Save the trial only if there are actual changes
-		if has_changes:
-				trial._change_reason = f"Updated fields: {', '.join(updated_fields)}"
-				# self.stdout.write(f"Saving changes for trial: {trial.trial_id}. Changes: {updated_fields}")
-				trial.save()
-
+		
 	def create_new_trial(self, trial_data, source, subject):
 		try:
 			trial_data['discovery_date'] = timezone.now()
@@ -113,9 +108,6 @@ class Command(BaseCommand):
 			trial.sources.add(source)
 			trial.subjects.add(subject)
 			trial.teams.add(source.team)
-			trial.identifiers = {
-				''.join(filter(str.isalpha, trial_data['trialid'])).lower(): trial_data['trialid']
-			}
 			trial._change_reason = f"Created trial from source: {source.name}, team: {source.team}, with subject: {subject}"
 			trial.save()
 			return trial
