@@ -112,8 +112,7 @@ class Command(BaseCommand):
 			self.stdout.write(self.style.ERROR(f"Error creating trial: {trial_data.get('title', 'Unknown')}. Error: {e}"))
 			return None
 
-	def get_or_create_trial(self, trial_data, source, subject):
-		trial_identifier = trial_data.pop('trialid', None)
+	def check_for_existing_trial(self, trial_data, source, subject):
 		existing_trial = None
 
 		# Step 1: Match by trial identifier in JSON field
@@ -203,7 +202,6 @@ class Command(BaseCommand):
 			title = self.get_text(trial, 'Public_title')
 			trial_data['title'] = title.replace('\n', ' ').replace('\r', ' ') if title else None
 			trial_data['link'] = self.get_text(trial, 'web_address')
-			trial_data['trialid'] = self.get_text(trial, 'TrialID')
 
 			for date_field in [
 				'Export_date', 'Date_enrollement', 'Ethics_review_approval_date',
@@ -216,10 +214,10 @@ class Command(BaseCommand):
 			trial_data['published_date'] = self.robust_parse_date(date_registration_raw)
 
 			# Add logging for each trial being processed
-			# self.stdout.write(self.style.NOTICE(f"Processing trial: {trial_data['title']}"))
+			self.stdout.write(self.style.NOTICE(f"Processing trial: {trial_data['title']} with TrialID: {trial_data['identifiers']}"))
 
 			try:
-				self.get_or_create_trial(trial_data, source, subject)
+				self.check_for_existing_trial(trial_data, source, subject)
 			except Exception as e:
 				self.stdout.write(
 					self.style.ERROR(
