@@ -53,12 +53,19 @@ class ArticleAdmin(SimpleHistoryAdmin):
 	raw_id_fields = ("authors",)
 
 class TrialAdmin(SimpleHistoryAdmin):
-	list_display = ['trial_id', 'title', 'discovery_date', 'last_updated']
+	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
 	exclude = ['ml_predictions','relevant']
 	readonly_fields = ['last_updated', 'team_categories']
-	search_fields = ['trial_id', 'title']
+	search_fields = ['trial_id', 'title', 'identifiers']
 	list_filter = ['teams', 'subjects', 'sources']
 
+	def display_identifiers(self, obj):
+		# Customize this depending on how you want to display the JSON
+		if obj.identifiers:
+			return ", ".join([f"{k}: {v}" for k, v in obj.identifiers.items()])
+		return "No Identifiers"
+
+	display_identifiers.short_description = "Identifiers"
 class SourceInline(admin.StackedInline):
 	model = Sources
 	extra = 1
