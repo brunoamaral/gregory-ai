@@ -18,7 +18,7 @@ class Command(BaseCommand):
 	def handle(self, *args, **options):
 		xml_file_path = options['xml_file_path']
 		source_id = options['source_id']
-		self.update_or_create_from_xml(xml_file_path, source_id)
+		self.parse_xml(xml_file_path, source_id)
 		self.stdout.write(
 			self.style.SUCCESS('Successfully updated or created trials from XML')
 		)
@@ -172,7 +172,7 @@ class Command(BaseCommand):
 				)
 			)
 
-	def update_or_create_from_xml(self, xml_file_path, source_id):
+	def parse_xml(self, xml_file_path, source_id):
 		try:
 			source = Sources.objects.get(pk=source_id)
 		except Sources.DoesNotExist:
