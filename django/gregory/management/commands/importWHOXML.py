@@ -152,19 +152,7 @@ class Command(BaseCommand):
 								)
 						)
 						return None
-
-				# Create a new trial
-				trial_data['discovery_date'] = timezone.now()
-				trial = Trials.objects.create(**trial_data)
-				trial.sources.add(source)
-				trial.subjects.add(subject)
-				trial.teams.add(source.team)
-				trial.identifiers = {
-					''.join(filter(str.isalpha, trial_data['trialid'])).lower(): trial_data['trialid']
-				}
-
-				trial._change_reason = f"Created trial from source: {source.name}, team: {source.team}, with subject: {subject}"
-				trial.save()
+				self.create_new_trial(trial_data, source, subject)
 		except IntegrityError as e:
 			self.stdout.write(
 				self.style.ERROR(
