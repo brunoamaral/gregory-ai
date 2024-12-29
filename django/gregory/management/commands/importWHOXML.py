@@ -7,7 +7,6 @@ import datetime
 import re
 import xml.etree.ElementTree as ET
 import pytz
-
 class Command(BaseCommand):
 	help = 'Update or create trials from an XML file from https://trialsearch.who.int/Default.aspx'
 
@@ -45,7 +44,6 @@ class Command(BaseCommand):
 	def update_existing_trial(self, trial, trial_data, source, subject):
 		has_changes = False
 		updated_fields = []
-
 		for key, value in trial_data.items():
 			current_value = getattr(trial, key, None)
 
@@ -108,7 +106,6 @@ class Command(BaseCommand):
 			trial.sources.add(source)
 			trial.subjects.add(subject)
 			trial.teams.add(source.team)
-			trial._change_reason = f"Created trial from source: {source.name}, team: {source.team}, with subject: {subject}"
 			trial.save()
 			return trial
 		except IntegrityError as e:
