@@ -120,21 +120,21 @@ class Command(BaseCommand):
 
 		# Step 1: Match by trial identifier in JSON field
 		if 'identifiers' in trial_data and trial_data['identifiers']:
-				# Extract the key dynamically from the first letters of the trialid value
-				trial_id_value = list(trial_data['identifiers'].values())[0]  # Extract the trialid value
-				identifier_key = list(trial_data['identifiers'].keys())[0]   # Extract the identifier key
+			# Extract the key dynamically from the first letters of the trialid value
+			trial_id_value = list(trial_data['identifiers'].values())[0]  # Extract the trialid value
+			identifier_key = list(trial_data['identifiers'].keys())[0]   # Extract the identifier key
 				
 				# Try to match the trial identifier with the key-value pair in the 'identifiers' JSON field
-				if identifier_key:
-					existing_trial = Trials.objects.filter(
-						identifiers__contains={identifier_key: trial_id_value}
-					).first()
-				
-				# Fallback to a broader search if no specific key match
-				if not existing_trial:
-					existing_trial = Trials.objects.filter(
-						identifiers__contains=trial_id_value
-					).first()
+			if identifier_key:
+				existing_trial = Trials.objects.filter(
+					identifiers__contains={identifier_key: trial_id_value}
+				).first()
+			
+			# Fallback to a broader search if no specific key match
+			if not existing_trial:
+				existing_trial = Trials.objects.filter(
+					identifiers__contains=trial_id_value
+				).first()
 
 		# Step 2: Fallback to matching by title (case-insensitive)
 		if not existing_trial and 'title' in trial_data:
@@ -148,12 +148,12 @@ class Command(BaseCommand):
 				# Check for duplicate titles one last time before creating a trial
 				duplicate_trial = Trials.objects.filter(title__iexact=trial_data['title']).exists()
 				if duplicate_trial:
-						self.stdout.write(
-								self.style.WARNING(
-									f"Duplicate trial title found (case-insensitive): {trial_data['title']}. Skipping."
-								)
+					self.stdout.write(
+						self.style.WARNING(
+							f"Duplicate trial title found (case-insensitive): {trial_data['title']}. Skipping."
 						)
-						return None
+					)
+					return None
 				self.create_new_trial(trial_data, source, subject)
 		except IntegrityError as e:
 			self.stdout.write(
