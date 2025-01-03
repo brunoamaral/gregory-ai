@@ -43,6 +43,8 @@ Some variables are optional: EMAIL_*, ORCID_*
 	"EMAIL_HOST" : os.getenv('EMAIL_HOST'), 
 	"EMAIL_MAILGUN_API_URL" : os.getenv('EMAIL_MAILGUN_API_URL'),
 	"EMAIL_MAILGUN_API" : os.getenv('EMAIL_MAILGUN_API'),
+	"EMAIL_POSTMARK_API" : os.getenv('EMAIL_POSTMARK_API'),
+	"EMAIL_POSTMARK_API_URL" : os.getenv('EMAIL_POSTMARK_API'),
 	"EMAIL_PORT" : 587, 
 	"EMAIL_USE_TLS" : 'true', 
 	"GREGORY_DIR" : os.getenv('GREGORY_DIR'),
