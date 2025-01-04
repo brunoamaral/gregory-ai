@@ -2,7 +2,7 @@ from django.db import models
 from django.db.models import UniqueConstraint
 from django.db.models.functions import Lower
 from gregory.models import Subject, Articles, Trials, Team
-
+from simple_history.models import HistoricalRecords
 class Lists(models.Model):
 	list_id = models.AutoField(primary_key=True)
 	list_name = models.CharField(max_length=150, null=False, blank=False)
@@ -45,6 +45,9 @@ class Subscribers(models.Model):
 	active = models.BooleanField(default=True)
 	is_admin = models.BooleanField(default=False)
 	subscriptions = models.ManyToManyField(Lists, blank=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+	history = HistoricalRecords(m2m_fields=['subscriptions'])
 
 	class Meta:
 		managed = True
@@ -55,8 +58,7 @@ class Subscribers(models.Model):
 		]
 
 	def __str__(self):
-		return str(self.email)
-
+		return f"{self.first_name} {self.last_name} ({self.email})"
 	def save(self, *args, **kwargs):
 		self.email = self.email.lower()
 		super(Subscribers, self).save(*args, **kwargs)
