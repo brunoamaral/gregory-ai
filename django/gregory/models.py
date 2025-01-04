@@ -294,6 +294,7 @@ class TeamCredentials(models.Model):
 		null=True,
 		help_text="Postmark API Token for this team."
 	)
+	postmark_api_url= models.URLField(max_length=200, blank=True, null=True, help_text="Postmark API URL for this team.")
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
 
