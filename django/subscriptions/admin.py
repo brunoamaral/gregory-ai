@@ -51,7 +51,7 @@ class ListsAdmin(admin.ModelAdmin):
 	inlines = [SubscriberInline]
 
 class FailedNotificationAdmin(admin.ModelAdmin):
-	list_display = ['subscriber','reason','list']
+	list_display = ['subscriber','reason','list','created_at']
 	list_filter = ['subscriber','list']
 	readonly_fields = ['subscriber','reason','list']
 admin.site.register(FailedNotification,FailedNotificationAdmin)
