@@ -39,6 +39,7 @@ class Command(BaseCommand):
 			try:
 				credentials = team.credentials
 				postmark_api_token = credentials.postmark_api_token
+				api_url = credentials.postmark_api_url
 			except TeamCredentials.DoesNotExist:
 				self.stdout.write(self.style.ERROR(f"Credentials not found for team '{team.name}' associated with list '{lst.list_name}'. Skipping."))
 				continue
@@ -95,7 +96,8 @@ class Command(BaseCommand):
 					text=text_content,
 					site=site,
 					sender_name="GregoryAI",
-					api_token=postmark_api_token  # Use the team's Postmark API token
+					api_token=postmark_api_token,  # Use the team's Postmark API token
+					api_url=api_url
 				)
 
 				# Step 7: Parse the Postmark response
