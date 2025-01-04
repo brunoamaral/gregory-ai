@@ -47,7 +47,7 @@ class SubscriberInline(admin.TabularInline):
 	subscriber_link.short_description = "Edit Subscriber"
 
 class ListsAdmin(admin.ModelAdmin):
-	list_display = ['list_name', 'list_description']
+	list_display = ['list_name', 'list_description', 'admin_summary','weekly_digest','clinical_trials_notifications']
 	inlines = [SubscriberInline]
 
 admin.site.register(Lists, ListsAdmin)
