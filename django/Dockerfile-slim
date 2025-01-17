@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+FROM python:3.11-slim AS base
+
+# Install only necessary system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev \
+	&& apt-get clean \
+	&& rm -rf /var/lib/apt/lists/*
+
+# Environment variables to optimize Python behavior
+ENV PYTHONDONTWRITEBYTECODE=1 \
+	PYTHONUNBUFFERED=1 \
+	PYTHONPATH="/code"
+
+# Set working directory
+WORKDIR /code
+
+# Upgrade pip and install dependencies
+COPY requirements.txt /code/
+RUN pip install --no-cache-dir --upgrade pip \
+	&& pip install --no-cache-dir -r requirements.txt
+
+# Copy application code (optional if used in multi-stage builds)
+COPY . /code
