@@ -17,7 +17,7 @@ services:
   gregory:
     container_name: gregory
     restart: always
-    image: gregory-ai:latest
+    image: amaralbruno/gregory-ai:latest
     # build: 
     #   context: django/
     #   dockerfile: Dockerfile
