@@ -33,32 +33,44 @@ class Command(BaseCommand):
 				response = requests.get(source.link, verify=False)
 				feed = feedparser.parse(response.content)
 			for entry in feed['entries']:
-				# print(entry.title)
-				summary_html = entry.get('summary_detail', {}).get('value', '') or entry.get('summary', '')
-				published = self.parse_date(entry.get('published'))
-				link = remove_utm(entry['link'])
-				identifiers = self.extract_identifiers(link, entry.get('guid'))
-				extra_fields = {}
-				if 'euclinicaltrials.eu' in link:
-					extra_fields = self.parse_eu_clinical_trial_data(summary_html)
-				# self.stdout.write(self.style.NOTICE(f"Processing trial: : {link}\n {identifiers}"))
-				incoming_clinical_trial = ClinicalTrial(
-					title=entry['title'],
-					summary=summary_html,
-					link=link,
-					published_date=published,
-					identifiers=identifiers,
-					extra_fields=extra_fields
-				)
-				existing_trial = self.find_existing_trial(incoming_clinical_trial)
-				if existing_trial:
-					self.update_existing_trial(existing_trial, incoming_clinical_trial, source)
-					# self.stdout.write(self.style.SUCCESS(f"Trial already exists: {existing_trial}"))
-					continue
-				if not existing_trial:
-					# self.stdout.write(self.style.SUCCESS(f"Creating new trial: {clinical_trial.identifiers}"))
-					clinical_trial = self.create_new_trial(incoming_clinical_trial, source)
-					self.stdout.write((f"Creating new trial: {incoming_clinical_trial}"))
+				try:
+					# Extract trial details
+					summary_html = entry.get('summary_detail', {}).get('value', '') or entry.get('summary', '')
+					published = self.parse_date(entry.get('published'))
+					link = remove_utm(entry['link'])
+					identifiers = self.extract_identifiers(link, entry.get('guid'))
+					extra_fields = {}
+					if 'euclinicaltrials.eu' in link:
+						extra_fields = self.parse_eu_clinical_trial_data(summary_html)
+
+					# Create ClinicalTrial object
+					incoming_clinical_trial = ClinicalTrial(
+						title=entry['title'],
+						summary=summary_html,
+						link=link,
+						published_date=published,
+						identifiers=identifiers,
+						extra_fields=extra_fields
+					)
+
+					# Check for existing trial
+					existing_trial = self.find_existing_trial(incoming_clinical_trial)
+					if existing_trial:
+						self.update_existing_trial(existing_trial, incoming_clinical_trial, source)
+						self.stdout.write(self.style.SUCCESS(f"Updated existing trial: {existing_trial.title}"))
+						continue
+
+					# Create new trial if no existing trial is found
+					self.create_new_trial(incoming_clinical_trial, source)
+					self.stdout.write(self.style.SUCCESS(f"Created new trial: {incoming_clinical_trial.title}"))
+				
+				except IntegrityError as e:
+					self.stdout.write(self.style.ERROR(f"IntegrityError for trial '{entry.get('title')}' at link {link}: {e}"))
+				except Exception as e:
+					self.stdout.write(self.style.ERROR(f"Error processing trial '{entry.get('title')}' at link {link}: {e}"))
+
+			self.stdout.write(self.style.SUCCESS(f"Finished processing RSS feed: {source.name}"))
+
 
 	def parse_date(self, date_str: str):
 		"""Parse a date string into a timezone-aware datetime."""
