@@ -18,7 +18,8 @@ from subscriptions.models import (
 	SentTrialNotification,
 	FailedNotification,
 )
-
+from django.db.models import Q
+from django.utils.timezone import now
 
 class Command(BaseCommand):
 	help = 'Sends a weekly digest email for all weekly digest lists.'
@@ -52,7 +53,14 @@ class Command(BaseCommand):
 				continue
 
 			# Step 3: Use utility functions to get articles and trials
-			articles = get_articles_for_list(digest_list)
+			articles = Articles.objects.filter(
+								Q(subjects__in=digest_list.subjects.all()) & 
+								(
+								Q(article_subject_relevances__subject__in=digest_list.subjects.all(), article_subject_relevances__is_relevant=True) |
+								Q(ml_predictions__subject__in=digest_list.subjects.all(), ml_predictions__gnb=True)
+								),
+								discovery_date__gte=now() - timedelta(days=30)
+								).distinct()
 			trials = get_trials_for_list(digest_list)
 
 			if not articles.exists() and not trials.exists():
