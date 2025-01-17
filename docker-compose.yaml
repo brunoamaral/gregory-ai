@@ -18,9 +18,6 @@ services:
     container_name: gregory
     restart: always
     image: amaralbruno/gregory-ai:latest
-    # build: 
-    #   context: django/
-    #   dockerfile: Dockerfile
     # used for local development
     # command: python manage.py runserver 0.0.0.0:8000
     command: gunicorn --workers 4 --threads 2 --log-level debug -b 0.0.0.0:8000 admin.wsgi
