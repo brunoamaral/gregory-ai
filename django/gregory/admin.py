@@ -33,7 +33,7 @@ class ArticleAdmin(SimpleHistoryAdmin):
 	fieldsets = (
 		('Article Information', {
 			'fields': (
-				'title', 'link', 'doi', 'summary', 'teams', 'subjects', 'sources',
+				'title', 'link', 'doi', 'summary','summary_plain_english', 'teams', 'subjects', 'sources',
 				'published_date', 'discovery_date', 'authors', 'team_categories',
 				'entities', 'kind', 'access',
 				'publisher', 'container_title', 'crossref_check', 'takeaways',
