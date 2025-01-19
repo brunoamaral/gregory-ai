@@ -121,6 +121,7 @@ class Articles(models.Model):
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	doi = models.CharField(max_length=280, blank=True, null=True)
 	summary = models.TextField(blank=True, null=True)
+	summary_plain_english = models.TextField(blank=True, null=True) # Used for plain English version
 	sources = models.ManyToManyField(Sources, blank=True)
 	published_date = models.DateTimeField(blank=True, null=True)
 	discovery_date = models.DateTimeField(auto_now_add=True)
@@ -157,6 +158,7 @@ class Trials(models.Model):
 	last_updated = models.DateTimeField(auto_now=True, null=True)
 	title = models.TextField(blank=False,null=False, unique=True)
 	summary = models.TextField(blank=True, null=True)
+	summary_plain_english = models.TextField(blank=True, null=True) # Used for plain English summary
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
 	sources = models.ManyToManyField('Sources', blank=True)
