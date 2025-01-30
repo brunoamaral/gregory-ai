@@ -27,7 +27,7 @@ class Command(BaseCommand):
 				# Build the Q object for filtering articles
 				query = Q()
 				for term in terms:
-					query |= Q(title__icontains=term)
+					query |= Q(title__icontains=term) | Q(summary__icontains=term)  # Include abstract field
 
 				# Filter articles based on the subject and terms
 				articles = Articles.objects.filter(query, subjects__id=subject_id)
