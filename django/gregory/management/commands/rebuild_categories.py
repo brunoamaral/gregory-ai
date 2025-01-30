@@ -55,7 +55,7 @@ class Command(BaseCommand):
 				# Build the Q object for filtering trials
 				query = Q()
 				for term in terms:
-					query |= Q(title__icontains=term)
+					query |= Q(title__icontains=term) | Q(summary__icontains=term)
 
 				# Filter trials based on the subject and terms
 				trials = Trials.objects.filter(query, subjects__id=subject_id)
