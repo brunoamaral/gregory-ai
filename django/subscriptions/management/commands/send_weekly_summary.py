@@ -38,7 +38,7 @@ class Command(BaseCommand):
 		for digest_list in weekly_digest_lists:
 			# Fetch the team directly from the list
 			team = digest_list.team  # Assumes Lists has a ForeignKey to Team
-
+			email_subject = digest_list.list_email_subject or f'Your Weekly Digest: {digest_list.list_name}'
 			if not team:
 				self.stdout.write(self.style.ERROR(f"No team associated with list '{digest_list.list_name}'. Skipping."))
 				continue
@@ -114,7 +114,7 @@ class Command(BaseCommand):
 
 				result = send_email(
 					to=subscriber.email,
-					subject=f'Your Weekly Digest: {digest_list.list_name}',
+					subject=email_subject,
 					html=html_content,
 					text=text_content,
 					site=site,
