@@ -7,6 +7,7 @@ class Lists(models.Model):
 	list_id = models.AutoField(primary_key=True)
 	list_name = models.CharField(max_length=150, null=False, blank=False)
 	list_description = models.CharField(max_length=150, null=True, blank=True)
+	list_email_subject = models.CharField(max_length=150,null=True,blank=True)
 	subjects = models.ManyToManyField('gregory.Subject', blank=True)
 	# Set purposes of the list
 	admin_summary = models.BooleanField(default=False) 

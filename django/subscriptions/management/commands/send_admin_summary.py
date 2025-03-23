@@ -32,6 +32,7 @@ class Command(BaseCommand):
 		for admin_list in admin_summary_lists:
 			# Fetch the team directly from the list
 			team = admin_list.team
+			email_subject = admin_list.list_email_subject or f'{admin_list.list_name} | Admin Summary'
 
 			if not team:
 				self.stdout.write(self.style.ERROR(f"No team associated with list '{admin_list.list_name}'. Skipping."))
@@ -104,7 +105,7 @@ class Command(BaseCommand):
 				# Step 5: Send email
 				result = send_email(
 					to=subscriber.email,
-					subject=f'{admin_list.list_name} | Admin Summary',
+					subject=email_subject,
 					html=html_content,
 					text=text_content,
 					site=site,

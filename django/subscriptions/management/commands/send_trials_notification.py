@@ -30,6 +30,7 @@ class Command(BaseCommand):
 		for lst in subject_lists:
 			# Fetch the team directly from the list
 			team = lst.team  # This assumes Lists model has a ForeignKey to Team
+			email_subject = lst.list_email_subject or f'There are new clinical trials for {lst.list_name}'
 
 			if not team:
 				self.stdout.write(self.style.ERROR(f"No team associated with list '{lst.list_name}'. Skipping."))
@@ -91,7 +92,7 @@ class Command(BaseCommand):
 
 				result = send_email(
 					to=subscriber.email,
-					subject=f'There are new clinical trials for {lst}',
+					subject=email_subject,
 					html=html_content,
 					text=text_content,
 					site=site,
