@@ -9,7 +9,7 @@ from subscriptions.management.commands.utils.subscription import (
 	get_articles_for_list,
 	get_trials_for_list,
 )
-from gregory.models import Articles, Trials, TeamCredentials
+from gregory.models import Articles, Authors, Trials, TeamCredentials
 from sitesettings.models import CustomSetting
 from subscriptions.models import (
 	Lists,
@@ -87,6 +87,9 @@ class Command(BaseCommand):
 					sent_at__gte=threshold_date
 				).values_list('article_id', flat=True)
 				unsent_articles = articles.exclude(pk__in=sent_article_ids)
+				# Add authors to article object
+				for article in unsent_articles:
+					article.authors_list = [a.full_name for a in article.authors.all()]				
 
 				sent_trial_ids = SentTrialNotification.objects.filter(
 					trial__in=trials,
