@@ -13,11 +13,12 @@ DEBUG= True
 SITE_ID = 1
 # FERNET SECRET KEY
 FERNET_SECRET_KEY = os.environ.get('FERNET_SECRET_KEY')
-
+FORMS_URLFIELD_ASSUME_HTTPS = True
 
 ALLOWED_HOSTS = [
 	'0.0.0.0',
 	'localhost',
+	'127.0.0.1',
 	'api.' + os.environ.get('DOMAIN_NAME', ''),
 	'manage.' + os.environ.get('DOMAIN_NAME', ''),
 ]
