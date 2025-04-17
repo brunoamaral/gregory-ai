@@ -129,6 +129,17 @@ table.body .article {
 												<h3>Key takeaways</h3>
 												<p>{{article.takeaways}}</p>
 
+												<p><strong>Authors</strong>:
+												    {% for author in article.authors.all %}
+												        {% if author.ORCID %}
+												            <a href="https://orcid.org/{{ author.ORCID }}">{{ author.full_name }}</a>
+												        {% else %}
+												            {{ author.full_name }}
+												        {% endif %}
+												        {% if not forloop.last %}, {% endif %}
+												    {% endfor %}
+												</p>
+
 												<hr>
 
 												{% endfor %}
