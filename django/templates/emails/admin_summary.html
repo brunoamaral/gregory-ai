@@ -141,6 +141,16 @@ table.body .article {
 												<p><a href="https://api.{{site.domain}}/admin/gregory/articles/{{article.article_id}}/change/">EDIT</a></p>
 
 
+												<p><strong>Authors</strong>:
+													{% for author in article.authors.all %}
+															{% if author.ORCID %}
+																	<a href="https://orcid.org/{{ author.ORCID }}">{{ author.full_name }}</a>
+															{% else %}
+																	{{ author.full_name }}
+															{% endif %}
+															{% if not forloop.last %}, {% endif %}
+													{% endfor %}
+											</p>
 
 
 												<hr>
