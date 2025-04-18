@@ -87,9 +87,6 @@ class Command(BaseCommand):
 					sent_at__gte=threshold_date
 				).values_list('article_id', flat=True)
 				unsent_articles = articles.exclude(pk__in=sent_article_ids)
-				# Add authors to article object
-				for article in unsent_articles:
-					article.authors_list = [a.full_name for a in article.authors.all()]				
 
 				sent_trial_ids = SentTrialNotification.objects.filter(
 					trial__in=trials,
