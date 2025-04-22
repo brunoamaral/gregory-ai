@@ -9,7 +9,7 @@ from subscriptions.management.commands.utils.subscription import (
 	get_articles_for_list,
 	get_trials_for_list,
 )
-from gregory.models import Articles, Trials, TeamCredentials
+from gregory.models import Articles, Authors, Trials, TeamCredentials
 from sitesettings.models import CustomSetting
 from subscriptions.models import (
 	Lists,
