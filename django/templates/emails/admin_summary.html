@@ -52,8 +52,6 @@
 											<p><a href="https://api.{{site.domain}}/admin/gregory/articles/{{article.article_id}}/change/">EDIT</a></p>
 
 
-<<<<<<< Updated upstream
-=======
 											<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;"><strong>Authors</strong>:
 												{% for author in article.authors.all %}
 														{% if author.ORCID %}
@@ -78,11 +76,10 @@
 			<td style="padding:10px;">
 											<h2 style="color: #000000; font-family: sans-serif; font-weight: 400; line-height: 1.4; margin: 0; margin-bottom: 30px;">{{trial.title}}</h2>
 
-											<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;"><strong>Discovery Date</strong>: {{discovery_date}}</p>
+											<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;"><strong>Discovery Date</strong>: {{trial.discovery_date}}</p>
 											<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0; margin-bottom: 15px;">
 											<a style="color: #3498db; text-decoration: underline;" href="{{trial.link}}">{{trial.link}}</a>
 											</p>
->>>>>>> Stashed changes
 
 			</td>
 		</tr>
