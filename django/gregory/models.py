@@ -32,8 +32,8 @@ class Authors(models.Model):
 		return self.given_name+" "+self.family_name
 
 class TeamCategory(models.Model):
-	team = models.ForeignKey('Team', on_delete=models.CASCADE, related_name='team_categories')
-	subjects = models.ManyToManyField('Subject', related_name='team_subjects', blank=True)
+	team = models.ForeignKey('Team', on_delete=models.CASCADE, related_name='team_categories', null=False, blank=False)
+	subjects = models.ManyToManyField('Subject', related_name='team_subjects', blank=False)
 	category_name = models.CharField(max_length=200)
 	category_description = models.TextField(blank=True, null=True)
 	category_slug = models.SlugField(blank=True, null=True, unique=True)
