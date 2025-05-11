@@ -67,6 +67,7 @@ class Entities(models.Model):
 class Subject(models.Model):
 	subject_name = models.CharField(blank=False, null=False, max_length=50)
 	description = models.TextField(blank=True, null=True)
+	subject_slug = models.SlugField(editable=True)
 	team = models.ForeignKey(
 			'Team', 
 			on_delete=models.CASCADE,  # Not sure which would be the best option here
@@ -82,6 +83,7 @@ class Subject(models.Model):
 		managed = True
 		verbose_name_plural = 'subjects'
 		db_table = 'subjects'
+		unique_together = (('team', 'subject_slug'),)
 
 
 class Sources(models.Model):
