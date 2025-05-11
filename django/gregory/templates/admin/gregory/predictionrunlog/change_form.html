@@ -1,0 +1,87 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls %}
+
+{% block content %}
+<div class="module">
+    <h2>{% translate "Prediction Run Log Details" %}</h2>
+    
+    <div class="form-row">
+        <div class="field-box">
+            <label>Team:</label>
+            {{ original.team }}
+        </div>
+    </div>
+    
+    <div class="form-row">
+        <div class="field-box">
+            <label>Subject:</label>
+            {{ original.subject }}
+        </div>
+    </div>
+    
+    <div class="form-row">
+        <div class="field-box">
+            <label>Run Type:</label>
+            {{ original.get_run_type_display }}
+        </div>
+    </div>
+    
+    <div class="form-row">
+        <div class="field-box">
+            <label>Model Version:</label>
+            {{ original.model_version }}
+        </div>
+    </div>
+    
+    <div class="form-row">
+        <div class="field-box">
+            <label>Started:</label>
+            {{ original.run_started }}
+        </div>
+    </div>
+    
+    <div class="form-row">
+        <div class="field-box">
+            <label>Finished:</label>
+            {% if original.run_finished %}
+                {{ original.run_finished }}
+            {% else %}
+                <span style="color: #666;">Running...</span>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="form-row">
+        <div class="field-box">
+            <label>Status:</label>
+            {% if original.success == True %}
+                <span style="color: green; font-weight: bold;">Success</span>
+            {% elif original.success == False %}
+                <span style="color: red; font-weight: bold;">Failed</span>
+            {% else %}
+                <span style="color: orange; font-weight: bold;">Running</span>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="form-row">
+        <div class="field-box">
+            <label>Triggered By:</label>
+            {{ original.triggered_by|default:"Unknown" }}
+        </div>
+    </div>
+    
+    {% if original.error_message %}
+    <div class="form-row">
+        <div class="field-box">
+            <label>Error Message:</label>
+            <div style="padding: 10px; background-color: #fff3f3; border: 1px solid #ffcccc; border-radius: 4px; max-height: 300px; overflow-y: auto;">
+                <pre>{{ original.error_message }}</pre>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{{ block.super }}
+{% endblock %}

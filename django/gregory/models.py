@@ -1,4 +1,3 @@
-
 from cryptography.fernet import Fernet
 from django_countries.fields import CountryField
 from django.conf import settings
@@ -356,5 +355,60 @@ class ArticleSubjectRelevance(models.Model):
 	def __str__(self):
 		relevance_status = "Relevant" if self.is_relevant else "Not Relevant"
 		return f"{self.article.title} - {self.subject.subject_name}: {relevance_status}"
+
+class PredictionRunLog(models.Model):
+	"""
+	Logs both training and prediction runs for machine learning models.
+	"""
+	RUN_TYPE_CHOICES = [
+		('train', 'Training'),
+		('predict', 'Prediction')
+	]
+	
+	team = models.ForeignKey('Team', on_delete=models.CASCADE, related_name='prediction_run_logs')
+	subject = models.ForeignKey('Subject', on_delete=models.CASCADE, related_name='prediction_run_logs')
+	model_version = models.CharField(max_length=100, help_text="Version identifier for the model used")
+	run_type = models.CharField(max_length=10, choices=RUN_TYPE_CHOICES, help_text="Type of run: training or prediction")
+	run_started = models.DateTimeField(auto_now_add=True, help_text="When the run was started")
+	run_finished = models.DateTimeField(null=True, blank=True, help_text="When the run was completed")
+	success = models.BooleanField(null=True, blank=True, help_text="Whether the run was successful")
+	triggered_by = models.CharField(max_length=100, null=True, blank=True, help_text="User or system that triggered the run")
+	error_message = models.TextField(null=True, blank=True, help_text="Error message if the run failed")
+
+	class Meta:
+		verbose_name = "Prediction Run Log"
+		verbose_name_plural = "Prediction Run Logs"
+		indexes = [
+			models.Index(fields=['team', 'subject', 'run_finished']),
+			models.Index(fields=['run_type', 'success']),
+		]
+		
+	def __str__(self):
+		status = "Successful" if self.success else "Failed" if self.success is False else "Running"
+		return f"{self.get_run_type_display()} run for {self.team} - {self.subject} ({status})"
+		
+	@classmethod
+	def get_latest_run(cls, team, subject, run_type=None):
+		"""
+		Get the latest completed run for a team/subject combination.
+		
+		Args:
+			team: Team instance
+			subject: Subject instance
+			run_type: Optional filter by run type ('train' or 'predict')
+			
+		Returns:
+			Latest PredictionRunLog instance or None if no completed runs
+		"""
+		query = cls.objects.filter(
+			team=team,
+			subject=subject,
+			run_finished__isnull=False
+		)
+		
+		if run_type:
+			query = query.filter(run_type=run_type)
+			
+		return query.order_by('-run_finished').first()
 
 
