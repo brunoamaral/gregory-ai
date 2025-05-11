@@ -66,3 +66,4 @@ data/trials.json
 
 # Gitignore itself
 .gitignore
+postgres-data
