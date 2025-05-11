@@ -11,7 +11,33 @@ class TeamMigrationTestCase(TestCase):
         self.org2 = Organization.objects.create(name="Test Team 2")
         self.org3 = Organization.objects.create(name="Test Team")
         self.org4 = Organization.objects.create(name="Test Team")  # Duplicate name to test slug uniqueness
-
+        
+        # Create teams for each organization with proper slug generation
+        self.create_teams_for_organizations()
+    
+    def create_teams_for_organizations(self):
+        """Create Team objects for all Organizations with proper slug handling"""
+        used_slugs = set()
+        
+        for org in Organization.objects.all():
+            # Skip if team already exists
+            if Team.objects.filter(organization=org).exists():
+                continue
+                
+            base_slug = slugify(org.name)
+            slug = base_slug
+            
+            # Handle slug collisions
+            counter = 1
+            while slug in used_slugs:
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            
+            used_slugs.add(slug)
+            
+            # Create team for this organization
+            Team.objects.create(organization=org, slug=slug)
+    
     def test_team_creation_after_migration(self):
         """Test that Team objects exist for all Organizations after migration."""
         # Count teams and verify match with organizations
@@ -49,7 +75,10 @@ class TeamMigrationTestCase(TestCase):
             
         # Test specifically for our duplicate name case
         duplicate_orgs = Organization.objects.filter(name="Test Team")
-        duplicate_teams = [Team.objects.get(organization=org) for org in duplicate_orgs]
+        self.assertEqual(duplicate_orgs.count(), 2, "Expected exactly 2 organizations with name 'Test Team'")
+        
+        duplicate_teams = list(Team.objects.filter(organization__in=duplicate_orgs))
+        self.assertEqual(len(duplicate_teams), 2, "Expected exactly 2 teams for duplicate organizations")
         
         # One should have the base slug, one should have a numbered suffix
         slugs = [team.slug for team in duplicate_teams]
