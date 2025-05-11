@@ -263,15 +263,26 @@ class EncryptedTextField(models.TextField):
 		fernet = get_fernet()
 		return base64.b64encode(fernet.encrypt(value.encode())).decode()
 
-class Team(Organization):
-	class Meta:
-		proxy = True
+class Team(models.Model):
+	organization = models.OneToOneField(
+		Organization, 
+		on_delete=models.CASCADE, 
+		related_name='team'
+	)
+	slug = models.SlugField(unique=True, editable=True)
 
+	def __str__(self):
+		return self.organization.name if self.organization else "Team"
+	
+	@property
+	def name(self):
+		return self.organization.name if self.organization else ""
+	
 	@property
 	def members(self):
 		# Assuming TeamMember links back to Organization via an 'organization' field
 		# and each TeamMember instance has a related 'user' object
-		return [member.user for member in TeamMember.objects.filter(organization=self)]
+		return [member.user for member in TeamMember.objects.filter(organization=self.organization)]
 
 class TeamCredentials(models.Model):
 	team = models.OneToOneField(
