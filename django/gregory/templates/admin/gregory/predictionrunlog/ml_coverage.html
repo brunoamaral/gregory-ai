@@ -1,0 +1,91 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="module" style="margin-bottom: 20px;">
+    <h2>ML Subject Coverage Report</h2>
+    
+    <p>This page shows the ML prediction coverage for all subjects across teams.</p>
+    
+    <div style="margin: 20px 0;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background-color: #f5f5f5;">
+                    <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Team</th>
+                    <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Subject</th>
+                    <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Latest Training</th>
+                    <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Latest Prediction</th>
+                    <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for team in teams %}
+                    {% for subject in team.subjects.all %}
+                        <tr>
+                            {% if forloop.first %}
+                                <td style="padding: 8px; border-bottom: 1px solid #eee; {% if forloop.first %}border-top: 1px solid #ddd;{% endif %}" rowspan="{{ team.subjects.count }}">{{ team.name }}</td>
+                            {% endif %}
+                            <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ subject.subject_name }}</td>
+                            
+                            {% with latest_training=training_data|get_item:subject.id %}
+                                {% if latest_training %}
+                                    <td style="padding: 8px; border-bottom: 1px solid #eee;">
+                                        {{ latest_training.run_finished|date:"M d, Y H:i" }}
+                                        {% if latest_training.success %}
+                                            <span style="color: green; margin-left: 5px;">✓</span>
+                                        {% else %}
+                                            <span style="color: red; margin-left: 5px;">✗</span>
+                                        {% endif %}
+                                    </td>
+                                {% else %}
+                                    <td style="padding: 8px; border-bottom: 1px solid #eee; color: #999;">None</td>
+                                {% endif %}
+                            {% endwith %}
+                            
+                            {% with latest_prediction=prediction_data|get_item:subject.id %}
+                                {% if latest_prediction %}
+                                    <td style="padding: 8px; border-bottom: 1px solid #eee;">
+                                        {{ latest_prediction.run_finished|date:"M d, Y H:i" }}
+                                        {% if latest_prediction.success %}
+                                            <span style="color: green; margin-left: 5px;">✓</span>
+                                        {% else %}
+                                            <span style="color: red; margin-left: 5px;">✗</span>
+                                        {% endif %}
+                                    </td>
+                                {% else %}
+                                    <td style="padding: 8px; border-bottom: 1px solid #eee; color: #999;">None</td>
+                                {% endif %}
+                            {% endwith %}
+                            
+                            {% with latest_training=training_data|get_item:subject.id latest_prediction=prediction_data|get_item:subject.id %}
+                                <td style="padding: 8px; border-bottom: 1px solid #eee;">
+                                    {% if not latest_training and not latest_prediction %}
+                                        <span style="color: red;">No ML activity</span>
+                                    {% elif not latest_training %}
+                                        <span style="color: orange;">Missing training run</span>
+                                    {% elif not latest_prediction %}
+                                        <span style="color: orange;">Missing prediction run</span>
+                                    {% elif latest_training.success and latest_prediction.success %}
+                                        <span style="color: green;">Up to date</span>
+                                    {% else %}
+                                        <span style="color: red;">Issues detected</span>
+                                    {% endif %}
+                                </td>
+                            {% endwith %}
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ team.name }}</td>
+                            <td colspan="4" style="padding: 8px; border-bottom: 1px solid #eee; color: #999;">No subjects</td>
+                        </tr>
+                    {% endfor %}
+                {% empty %}
+                    <tr>
+                        <td colspan="5" style="padding: 15px; text-align: center;">No teams or subjects found</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
