@@ -67,6 +67,7 @@ class Entities(models.Model):
 class Subject(models.Model):
 	subject_name = models.CharField(blank=False, null=False, max_length=50)
 	description = models.TextField(blank=True, null=True)
+	subject_slug = models.SlugField(editable=True)
 	team = models.ForeignKey(
 			'Team', 
 			on_delete=models.CASCADE,  # Not sure which would be the best option here
@@ -82,6 +83,7 @@ class Subject(models.Model):
 		managed = True
 		verbose_name_plural = 'subjects'
 		db_table = 'subjects'
+		unique_together = (('team', 'subject_slug'),)
 
 
 class Sources(models.Model):
@@ -263,15 +265,26 @@ class EncryptedTextField(models.TextField):
 		fernet = get_fernet()
 		return base64.b64encode(fernet.encrypt(value.encode())).decode()
 
-class Team(Organization):
-	class Meta:
-		proxy = True
+class Team(models.Model):
+	organization = models.OneToOneField(
+		Organization, 
+		on_delete=models.CASCADE, 
+		related_name='team'
+	)
+	slug = models.SlugField(unique=True, editable=True)
 
+	def __str__(self):
+		return self.organization.name if self.organization else "Team"
+	
+	@property
+	def name(self):
+		return self.organization.name if self.organization else ""
+	
 	@property
 	def members(self):
 		# Assuming TeamMember links back to Organization via an 'organization' field
 		# and each TeamMember instance has a related 'user' object
-		return [member.user for member in TeamMember.objects.filter(organization=self)]
+		return [member.user for member in TeamMember.objects.filter(organization=self.organization)]
 
 class TeamCredentials(models.Model):
 	team = models.OneToOneField(
