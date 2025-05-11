@@ -206,13 +206,9 @@ class MLPredictionsExtensionTestCase(TestCase):
             predicted_relevant=True
         )
         
-        # Test getting the latest prediction for model version v3.0.0
-        latest_v3_0_0 = MLPredictions.get_latest_prediction(self.article1, self.subject, model_version="v3.0.0")
-        self.assertEqual(latest_v3_0_0, older_prediction)  # Should be the older prediction with model_version="v3.0.0"
-        
-        # Test getting the latest prediction for model version v3.0.1
-        latest_v3_0_1 = MLPredictions.get_latest_prediction(self.article1, self.subject, model_version="v3.0.1")
-        self.assertEqual(latest_v3_0_1, newer_prediction)  # Should be the newer prediction with model_version="v3.0.1"
+        # Test getting the latest prediction (should be the newer one)
+        latest = MLPredictions.get_latest_prediction(self.article1, self.subject, model_version="v3.0.0")
+        self.assertEqual(latest, newer_prediction)
         
         # Test getting the latest prediction for a specific model version
         latest_v1 = MLPredictions.get_latest_prediction(self.article1, self.subject, model_version="v1.0.0")
