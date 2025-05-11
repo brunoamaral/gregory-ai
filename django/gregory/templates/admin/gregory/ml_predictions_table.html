@@ -1,13 +1,40 @@
 {% load static %}
-<table>
+<style>
+    .ml-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .ml-table th, .ml-table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+    .ml-table th {
+        background-color: #f2f2f2;
+    }
+    .ml-status-true {
+        color: green;
+        font-weight: bold;
+    }
+    .ml-status-false {
+        color: red;
+    }
+    .ml-score {
+        font-weight: bold;
+    }
+</style>
+<table class="ml-table">
     <thead>
         <tr>
             <th>ID</th>
             <th>Subject</th>
+            <th>Model Version</th>
+            <th>Relevance</th>
+            <th>Score</th>
             <th>Gaussian Naive Bayes</th>
             <th>Logistic Regression</th>
-            <th>Linear Support Vector Classification</th>
-            <th>Multinomial Naive Bayes</th>
+            <th>Linear SVC</th>
+            <th>Multinomial NB</th>
         </tr>
     </thead>
     <tbody>
@@ -15,10 +42,27 @@
         <tr>
             <td>{{ prediction.id }}</td>
             <td>{{ prediction.subject }}</td>
-            <td>{{ prediction.gnb }}</td>
-            <td>{{ prediction.lr }}</td>
-            <td>{{ prediction.lsvc }}</td>
-            <td>{{ prediction.mnb }}</td>
+            <td>{{ prediction.model_version|default:"N/A" }}</td>
+            <td>
+                {% if prediction.predicted_relevant == True %}
+                <span class="ml-status-true">Relevant</span>
+                {% elif prediction.predicted_relevant == False %}
+                <span class="ml-status-false">Not Relevant</span>
+                {% else %}
+                <span>Unknown</span>
+                {% endif %}
+            </td>
+            <td class="ml-score">
+                {% if prediction.probability_score %}
+                {{ prediction.probability_score|floatformat:2 }}
+                {% else %}
+                N/A
+                {% endif %}
+            </td>
+            <td>{{ prediction.gnb|yesno:"✓,✗,?" }}</td>
+            <td>{{ prediction.lr|yesno:"✓,✗,?" }}</td>
+            <td>{{ prediction.lsvc|yesno:"✓,✗,?" }}</td>
+            <td>{{ prediction.mnb|yesno:"✓,✗,?" }}</td>
         </tr>
         {% endfor %}
     </tbody>
