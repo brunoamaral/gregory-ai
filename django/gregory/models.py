@@ -326,6 +326,12 @@ class TeamMember(OrganizationUser):
 class MLPredictions(models.Model):
 	created_date = models.DateTimeField(auto_now_add=True)
 	subject = models.ForeignKey('Subject', on_delete=models.CASCADE, related_name='ml_subject_predictions')
+	article = models.ForeignKey('Articles', on_delete=models.CASCADE, null=True, related_name='ml_predictions_detail')
+	model_version = models.CharField(max_length=100, null=True, blank=True, help_text='Version identifier of the ML model used')
+	probability_score = models.FloatField(null=True, blank=True, help_text='Probability score from the ML model prediction')
+	predicted_relevant = models.BooleanField(null=True, blank=True, help_text='Whether the ML model predicted this article as relevant')
+	
+	# Legacy boolean columns
 	gnb = models.BooleanField(blank=True, null=True,
 		verbose_name="Gaussian Naive Bayes Prediction",
 		help_text="Indicates the Machine Learning prediction made using Gaussian Naive Bayes."
@@ -342,6 +348,29 @@ class MLPredictions(models.Model):
 		verbose_name = 'Multinomial Naive Bayes',
 		help_text='indicates the Machine Learning prediction using Multinomial Naive Bayes.'
 	)
+	
+	class Meta:
+		unique_together = (('article', 'subject', 'model_version'),)
+	
+	@classmethod
+	def get_latest_prediction(cls, article, subject, model_version=None):
+		"""
+		Get the latest prediction for a given article and subject, optionally filtered by model version.
+		
+		Args:
+			article: Articles instance or ID
+			subject: Subject instance or ID
+			model_version: Optional model version string to filter by
+			
+		Returns:
+			Latest MLPredictions instance or None if no predictions exist
+		"""
+		query = cls.objects.filter(article=article, subject=subject)
+		
+		if model_version:
+			query = query.filter(model_version=model_version)
+			
+		return query.order_by('-created_date').first()
 
 class ArticleSubjectRelevance(models.Model):
 	article = models.ForeignKey(Articles, related_name='article_subject_relevances', on_delete=models.CASCADE)

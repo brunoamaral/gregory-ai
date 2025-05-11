@@ -30,7 +30,7 @@ class ArticleAdminForm(forms.ModelForm):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		if self.instance and self.instance.pk:
-			self.fields['ml_predictions_display'].initial = self.instance.ml_predictions.all()
+			self.fields['ml_predictions_display'].initial = self.instance.ml_predictions_detail.all()
 
 class ArticleAdmin(SimpleHistoryAdmin):
 	form = ArticleAdminForm
