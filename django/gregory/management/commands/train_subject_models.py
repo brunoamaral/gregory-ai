@@ -6,45 +6,163 @@ import argparse
 from datetime import timedelta
 import pandas as pd
 import os
+import json
+import time
 from django.conf import settings
 from gregory.utils.text_utils import text_cleaning_pd_series, text_cleaning_string, load_and_format_dataset, cleanText
 from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from gregory.utils.pseudo_labeling import get_pseudo_labeled_data
+from gregory.utils.bert_model import BERTClassifier
+from gregory.utils.lgbm_tfidf import LGBMTfidfClassifier
+import time
 
 logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
-    help = 'Train ML models for subjects. Supports filtering by team and subject.'
+    help = '''Manage ML models for subjects.
+    
+    Commands:
+      train  - Train ML models for subjects. Supports filtering by team/subject.
+               Pseudo-labeling is enabled by default.
+               
+      predict - Use trained models to make predictions on new text data.
+    
+    Examples:
+      # Train a logistic regression model for a specific team and subject
+      python manage.py train_subject_models train --team=example --subject=healthcare
+      
+      # Train a BERT model with pseudo-labeling and export metadata
+      python manage.py train_subject_models train --team=example --subject=healthcare --model-type=bert --export-metadata
+      
+      # Train all model types without pseudo-labeling
+      python manage.py train_subject_models train --team=example --subject=healthcare --model-type=all --no-pseudo-labeling
+      
+      # Make a prediction using a trained model
+      python manage.py train_subject_models predict --team=example --subject=healthcare --input-text="This is a sample text to classify"
+      
+      # Process a file with texts and save predictions to a JSON file
+      python manage.py train_subject_models predict --team=example --subject=healthcare --input-file=texts.csv --output-file=predictions.json
+    '''
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--team',
-            type=str,
-            help='Team slug to filter subjects'
-        )
-        parser.add_argument(
-            '--subject',
-            type=str,
-            help='Subject slug to train model for'
-        )
-        parser.add_argument(
+        # Create subparsers for different commands
+        subparsers = parser.add_subparsers(dest='command', help='Command to run')
+        
+        # Train command
+        train_parser = subparsers.add_parser('train', help='Train ML models for subjects')
+        
+        # Common arguments
+        for p in [train_parser, parser]:  # Add to both main parser and train subparser for backwards compatibility
+            p.add_argument(
+                '--team',
+                type=str,
+                help='Team slug to filter subjects'
+            )
+            p.add_argument(
+                '--subject',
+                type=str,
+                help='Subject slug to train model for'
+            )
+            p.add_argument(
+                '--verbose',
+                action='store_true',
+                help='Increase output verbosity'
+            )
+            p.add_argument(
+                '--model-type',
+                type=str,
+                default='logreg',
+                choices=['logreg', 'lgbm', 'bert', 'all'],
+                help='Model type to use: logistic regression, LightGBM with TF-IDF, BERT, or all (default: logreg)'
+            )
+        
+        # Training-specific arguments
+        train_parser.add_argument(
             '--timeframe',
             type=int,
             default=90,
             help='Training timeframe in days (default: 90)'
         )
-        parser.add_argument(
+        train_parser.add_argument(
             '--device',
             type=str,
             default='cpu',
             choices=['cpu', 'gpu', 'tpu'],
             help='Device to use for training (default: cpu)'
         )
-        parser.add_argument(
+        train_parser.add_argument(
             '--dry-run',
             action='store_true',
             help='Perform a dry run without actually training models'
         )
-        parser.add_argument(
+        train_parser.add_argument(
+            '--no-pseudo-labeling',
+            action='store_true',
+            help='Disable pseudo-labeling of unlabeled data during training (enabled by default)'
+        )
+        train_parser.add_argument(
+            '--pseudo-confidence',
+            type=float,
+            default=0.9,
+            help='Confidence threshold for pseudo-labeling (default: 0.9)'
+        )
+        train_parser.add_argument(
+            '--bert-max-len',
+            type=int,
+            default=128,
+            help='Maximum sequence length for BERT model (default: 128)'
+        )
+        train_parser.add_argument(
+            '--export-metadata',
+            action='store_true',
+            help='Export model metadata as JSON'
+        )
+        
+        # Predict command
+        predict_parser = subparsers.add_parser('predict', help='Make predictions using trained models')
+        predict_parser.add_argument(
+            '--team',
+            type=str,
+            required=True,
+            help='Team slug to use for prediction'
+        )
+        predict_parser.add_argument(
+            '--subject',
+            type=str,
+            required=True,
+            help='Subject slug to use for prediction'
+        )
+        predict_parser.add_argument(
+            '--model-type',
+            type=str,
+            default='logreg',
+            choices=['logreg', 'lgbm', 'bert'],
+            help='Model type to use for prediction (default: logreg)'
+        )
+        predict_parser.add_argument(
+            '--model-version',
+            type=str,
+            default='v1.0.0',
+            help='Model version to use for prediction (default: v1.0.0)'
+        )
+        predict_parser.add_argument(
+            '--input-text',
+            type=str,
+            help='Text to classify'
+        )
+        predict_parser.add_argument(
+            '--input-file',
+            type=str,
+            help='Path to CSV or JSON file with texts to classify'
+        )
+        predict_parser.add_argument(
+            '--output-file',
+            type=str,
+            help='Path to output file for predictions (default: stdout)'
+        )
+        predict_parser.add_argument(
             '--verbose',
             action='store_true',
             help='Increase output verbosity'
@@ -286,23 +404,406 @@ class Command(BaseCommand):
         self.log(f"Prepared training data: {len(X_train)} samples with {y_train.sum()} positive labels", verbosity=2)
         
         return X_train, y_train
+        
+    def apply_pseudo_labeling(self, train_df, unlabeled_df, confidence_threshold=0.9):
+        """
+        Apply pseudo-labeling to unlabeled data and combine with training data.
+        
+        This process:
+        1. Loads unlabeled data and applies threshold logic (prob ≥ confidence_threshold or ≤ 1-confidence_threshold)
+        2. Caps pseudo-labeled examples per class to match hand-labeled examples
+        3. Selects highest-confidence examples when capping
+        
+        Args:
+            train_df: DataFrame with labeled training data
+            unlabeled_df: DataFrame with unlabeled data
+            confidence_threshold: Confidence threshold for pseudo-labeling (default: 0.9)
+            
+        Returns:
+            DataFrame with combined labeled and pseudo-labeled data
+        """
+        if train_df.empty or unlabeled_df.empty:
+            self.log("Not enough data for pseudo-labeling", level=logging.WARNING)
+            return train_df
+            
+        self.log(f"Applying pseudo-labeling with confidence threshold {confidence_threshold}", verbosity=1)
+        self.log(f"Initial training data: {len(train_df)} samples", verbosity=2)
+        self.log(f"Available unlabeled data: {len(unlabeled_df)} samples", verbosity=2)
+        
+        # Prepare initial training data
+        X_train, y_train = self.prepare_data_for_training(train_df)
+        if X_train is None or len(X_train) == 0:
+            return train_df
+            
+        # Initialize and fit a vectorizer
+        vectorizer = TfidfVectorizer()
+        X_train_vec = vectorizer.fit_transform(X_train)
+        
+        # Train a simple model for pseudo-labeling
+        model = LogisticRegression(max_iter=1000)
+        model.fit(X_train_vec, y_train)
+        
+        # Apply pseudo-labeling
+        pseudo_df = get_pseudo_labeled_data(
+            unlabeled_df, 
+            model, 
+            vectorizer, 
+            train_df, 
+            confidence_threshold
+        )
+        
+        if pseudo_df.empty:
+            self.log("No samples met the pseudo-labeling criteria", verbosity=1)
+            return train_df
+            
+        # Combine original and pseudo-labeled data
+        combined_df = pd.concat([train_df, pseudo_df])
+        
+        self.log(f"Added {len(pseudo_df)} pseudo-labeled samples", verbosity=1)
+        self.log(f"  - Relevant: {pseudo_df['is_relevant'].sum()}", verbosity=2)
+        self.log(f"  - Not relevant: {len(pseudo_df) - pseudo_df['is_relevant'].sum()}", verbosity=2)
+        self.log(f"Combined training data: {len(combined_df)} samples", verbosity=1)
+        
+        return combined_df
+
+    def train_lgbm_model(self, X_train, y_train, X_val=None, y_val=None):
+        """
+        Train a LightGBM model with TF-IDF features.
+        
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            X_val: Validation features (optional)
+            y_val: Validation labels (optional)
+            
+        Returns:
+            Trained LGBMTfidfClassifier instance
+        """
+        self.log("Training LightGBM model with TF-IDF features...", verbosity=1)
+        
+        # Initialize the model
+        lgbm_classifier = LGBMTfidfClassifier()
+        
+        # Train the model
+        start_time = time.time()
+        lgbm_classifier.train(X_train, y_train)
+        
+        # Evaluate on validation set if available
+        if X_val is not None and y_val is not None:
+            metrics = lgbm_classifier.evaluate(X_val, y_val)
+            self.log(f"Validation metrics: {metrics}", verbosity=2)
+        
+        training_time = time.time() - start_time
+        self.log(f"LightGBM model training completed in {training_time:.2f} seconds", verbosity=1)
+        
+        return lgbm_classifier
+    
+    def train_bert_model(self, X_train, y_train, X_val=None, y_val=None, max_len=128):
+        """
+        Train a BERT model for text classification.
+        
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            X_val: Validation features (optional)
+            y_val: Validation labels (optional)
+            max_len: Maximum sequence length for BERT
+            
+        Returns:
+            Trained BERTClassifier instance
+        """
+        self.log("Training BERT model...", verbosity=1)
+        
+        # Initialize the model
+        bert_classifier = BERTClassifier(max_len=max_len)
+        
+        # Train the model with default parameters
+        start_time = time.time()
+        history = bert_classifier.train(
+            X_train, 
+            y_train,
+            X_val=X_val,
+            y_val=y_val,
+            batch_size=16,
+            epochs=4,
+            patience=2
+        )
+        
+        training_time = time.time() - start_time
+        self.log(f"BERT model training completed in {training_time:.2f} seconds", verbosity=1)
+        
+        return bert_classifier
+    
+    def train_logreg_model(self, X_train, y_train):
+        """
+        Train a Logistic Regression model with TF-IDF features.
+        
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            
+        Returns:
+            Tuple of (vectorizer, model)
+        """
+        self.log("Training Logistic Regression model with TF-IDF features...", verbosity=1)
+        
+        # Initialize and fit vectorizer
+        vectorizer = TfidfVectorizer()
+        X_train_vec = vectorizer.fit_transform(X_train)
+        
+        # Train logistic regression model
+        model = LogisticRegression(max_iter=1000)
+        model.fit(X_train_vec, y_train)
+        
+        return vectorizer, model
+
+    def save_model(self, model, model_type, team_slug, subject_slug, model_version, include_metadata=True):
+        """
+        Save a trained model to disk.
+        
+        Args:
+            model: Trained model instance
+            model_type: Type of model ('logreg', 'lgbm', or 'bert')
+            team_slug: Team slug
+            subject_slug: Subject slug
+            model_version: Model version string
+            include_metadata: Whether to include metadata (default: True)
+            
+        Returns:
+            dict: Paths to saved model files
+        """
+        # Create directory for the model
+        model_dir = os.path.join(settings.BASE_DIR, 'data', team_slug, subject_slug, model_version, model_type)
+        os.makedirs(model_dir, exist_ok=True)
+        
+        # Save the model based on its type
+        if model_type == 'logreg':
+            # Unpack the tuple of (vectorizer, model)
+            vectorizer, logreg_model = model
+            
+            # Save the vectorizer and model
+            vectorizer_path = os.path.join(model_dir, 'tfidf_vectorizer.joblib')
+            model_path = os.path.join(model_dir, 'logreg_model.joblib')
+            
+            # Save using joblib
+            import joblib
+            joblib.dump(vectorizer, vectorizer_path)
+            joblib.dump(logreg_model, model_path)
+            
+            # Create metadata
+            if include_metadata:
+                metadata = {
+                    'model_type': 'LogisticRegression_TFIDF',
+                    'created_at': time.strftime("%Y-%m-%d %H:%M:%S"),
+                    'parameters': {
+                        'max_iter': logreg_model.max_iter,
+                    },
+                    'vectorizer_params': {
+                        'features': vectorizer.get_feature_names_out().tolist()[:10] + ['...'],  # First 10 features
+                        'num_features': len(vectorizer.get_feature_names_out())
+                    }
+                }
+                
+                # Save metadata as JSON
+                metadata_path = os.path.join(model_dir, 'metadata.json')
+                with open(metadata_path, 'w') as f:
+                    json.dump(metadata, f, indent=2)
+                
+                return {
+                    'vectorizer_path': vectorizer_path,
+                    'model_path': model_path,
+                    'metadata_path': metadata_path
+                }
+            
+            return {
+                'vectorizer_path': vectorizer_path,
+                'model_path': model_path
+            }
+            
+        elif model_type == 'lgbm':
+            # Save the LightGBM model
+            return model.save_model(model_dir)
+            
+        elif model_type == 'bert':
+            # Save the BERT model
+            model.save_model(model_dir)
+            return {'model_dir': model_dir}
+        
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+
+    def load_model(self, model_type, team_slug, subject_slug, model_version):
+        """
+        Load a trained model from disk.
+        
+        Args:
+            model_type: Type of model ('logreg', 'lgbm', or 'bert')
+            team_slug: Team slug
+            subject_slug: Subject slug
+            model_version: Model version string
+            
+        Returns:
+            Loaded model object with metadata
+        """
+        # Determine path to the model
+        model_dir = os.path.join(settings.BASE_DIR, 'data', team_slug, subject_slug, model_version, model_type)
+        
+        if not os.path.exists(model_dir):
+            raise FileNotFoundError(f"Model directory not found: {model_dir}")
+            
+        self.log(f"Loading {model_type} model from {model_dir}", verbosity=1)
+        
+        # Load metadata if available
+        metadata = None
+        metadata_path = os.path.join(model_dir, 'metadata.json')
+        if os.path.exists(metadata_path):
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            self.log(f"Loaded model metadata from {metadata_path}", verbosity=2)
+            
+        # Load the model based on its type
+        if model_type == 'logreg':
+            # Load the vectorizer and logistic regression model
+            import joblib
+            
+            # Check for required files
+            vectorizer_path = os.path.join(model_dir, 'tfidf_vectorizer.joblib')
+            model_path = os.path.join(model_dir, 'logreg_model.joblib')
+            
+            if not os.path.exists(vectorizer_path) or not os.path.exists(model_path):
+                raise FileNotFoundError(f"Required model files not found in {model_dir}")
+                
+            # Load the models
+            vectorizer = joblib.load(vectorizer_path)
+            logreg_model = joblib.load(model_path)
+            
+            self.log(f"Loaded logistic regression model and vectorizer", verbosity=2)
+            
+            # Return the loaded models and metadata
+            return (vectorizer, logreg_model), metadata
+            
+        elif model_type == 'lgbm':
+            # Create an instance of LGBMTfidfClassifier and load the model
+            from gregory.utils.lgbm_tfidf import LGBMTfidfClassifier
+            
+            # Create a new instance
+            lgbm_classifier = LGBMTfidfClassifier()
+            
+            # Load the saved model
+            lgbm_classifier.load_model(model_dir)
+            
+            self.log(f"Loaded LightGBM model with TF-IDF vectorizer", verbosity=2)
+            
+            return lgbm_classifier, metadata
+            
+        elif model_type == 'bert':
+            # Create an instance of BERTClassifier and load the model
+            from gregory.utils.bert_model import BERTClassifier
+            
+            # Create a new instance
+            # If max_len is in metadata, use it, otherwise default to 128
+            max_len = metadata.get('max_len', 128) if metadata else 128
+            bert_classifier = BERTClassifier(max_len=max_len)
+            
+            # Load the saved model
+            bert_classifier.load_model(model_dir)
+            
+            self.log(f"Loaded BERT model", verbosity=2)
+            
+            return bert_classifier, metadata
+            
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+            
+    def predict(self, model_type, model, texts):
+        """
+        Make predictions with a loaded model.
+        
+        Args:
+            model_type: Type of model ('logreg', 'lgbm', or 'bert')
+            model: Loaded model object
+            texts: List of text strings to predict on
+            
+        Returns:
+            Dictionary with predictions and probabilities
+        """
+        self.log(f"Making predictions with {model_type} model on {len(texts)} texts", verbosity=1)
+        
+        if model_type == 'logreg':
+            # Unpack the tuple of (vectorizer, model)
+            vectorizer, logreg_model = model
+            
+            # Vectorize the texts
+            X = vectorizer.transform(texts)
+            
+            # Make predictions
+            probs = logreg_model.predict_proba(X)
+            preds = logreg_model.predict(X)
+            
+            return {
+                'predictions': preds.tolist(),
+                'probabilities': probs[:, 1].tolist()  # Probability of positive class
+            }
+            
+        elif model_type == 'lgbm':
+            # Use the model's predict method
+            return model.predict(texts)
+            
+        elif model_type == 'bert':
+            # Use the model's predict method
+            return model.predict(texts)
+            
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
 
     def handle(self, *args, **options):
         # Set verbosity level from options
-        self.verbosity = 2 if options['verbose'] else 1
-        dry_run = options['dry_run']
-        team_slug = options['team']
-        subject_slug = options['subject']
-        timeframe = options['timeframe']
-        device = options['device']
+        self.verbosity = 2 if options.get('verbose', False) else 1
+        
+        # Get the command to run (default to 'train' for backwards compatibility)
+        command = options.get('command', 'train')
+        
+        # Get common options
+        team_slug = options.get('team')
+        subject_slug = options.get('subject')
+        model_type = options.get('model_type', 'logreg')
+        
+        if command == 'train':
+            self.handle_train_command(options)
+        elif command == 'predict':
+            self.handle_predict_command(options)
+        else:
+            self.log(f"Unknown command: {command}", level=logging.ERROR)
+            raise CommandError(f"Unknown command: {command}")
+
+    def handle_train_command(self, options):
+        """Handle the 'train' command."""
+        # Get training-specific options
+        dry_run = options.get('dry_run', False)
+        team_slug = options.get('team')
+        subject_slug = options.get('subject')
+        timeframe = options.get('timeframe', 90)
+        device = options.get('device', 'cpu')
+        use_pseudo_labeling = not options.get('no_pseudo_labeling', False)  # Enabled by default
+        pseudo_confidence = options.get('pseudo_confidence', 0.9)
+        model_type = options.get('model_type', 'logreg')
+        bert_max_len = options.get('bert_max_len', 128)
+        export_metadata = options.get('export_metadata', False)
 
         # Log the parsed arguments
-        self.log(f"Running with options:", verbosity=1)
+        self.log(f"Running train command with options:", verbosity=1)
         self.log(f"  Dry run: {dry_run}", verbosity=1)
         self.log(f"  Team: {team_slug or 'All teams'}", verbosity=1)
         self.log(f"  Subject: {subject_slug or 'All subjects'}", verbosity=1)
         self.log(f"  Timeframe: {timeframe} days", verbosity=1)
         self.log(f"  Device: {device}", verbosity=1)
+        self.log(f"  Model type: {model_type}", verbosity=1)
+        self.log(f"  BERT max sequence length: {bert_max_len}", verbosity=1)
+        self.log(f"  Export metadata: {'Enabled' if export_metadata else 'Disabled'}", verbosity=1)
+        if use_pseudo_labeling:
+            self.log(f"  Pseudo-labeling: Enabled (confidence threshold: {pseudo_confidence})", verbosity=1)
+        else:
+            self.log(f"  Pseudo-labeling: Disabled", verbosity=1)
 
         # Filter teams and subjects based on arguments
         teams = []
@@ -398,6 +899,13 @@ class Command(BaseCommand):
                         run_log.save()
                         continue
                     
+                    # Apply pseudo-labeling if enabled
+                    original_train_size = len(train_df)
+                    if use_pseudo_labeling and not unlabeled_df.empty:
+                        self.log(f"Applying pseudo-labeling with {len(unlabeled_df)} unlabeled samples", verbosity=1)
+                        train_df = self.apply_pseudo_labeling(train_df, unlabeled_df, pseudo_confidence)
+                        self.log(f"Training data increased from {original_train_size} to {len(train_df)} samples", verbosity=1)
+                    
                     # Write CSV files
                     output_dir = self.write_csv_files(
                         train_df, val_df, test_df, unlabeled_df,
@@ -412,9 +920,9 @@ class Command(BaseCommand):
                         continue
                     
                     # Calculate class distribution for reporting
-                    if not y_train.empty:
-                        total = len(y_train)
-                        positive = y_train.sum()
+                    if not train_df.empty:
+                        total = len(train_df)
+                        positive = train_df['is_relevant'].sum()
                         negative = total - positive
                         pos_ratio = (positive / total) * 100 if total > 0 else 0
                         
@@ -422,8 +930,21 @@ class Command(BaseCommand):
                         self.log(f"  Relevant: {positive} ({pos_ratio:.1f}%)", verbosity=1)
                         self.log(f"  Not relevant: {negative} ({100 - pos_ratio:.1f}%)", verbosity=1)
                     
-                    # Here would be the actual model training code
-                    self.log(f"Training model for subject: {subject.subject_name} with {len(X_train)} samples", verbosity=1)
+                    # Train models based on the selected type
+                    if model_type in ['logreg', 'all']:
+                        vectorizer, logreg_model = self.train_logreg_model(X_train, y_train)
+                        self.log(f"Logistic Regression model trained for subject: {subject.subject_name}", verbosity=1)
+                        self.save_model((vectorizer, logreg_model), 'logreg', team.slug, subject.subject_slug, model_version, include_metadata=export_metadata)
+                    
+                    if model_type in ['lgbm', 'all']:
+                        lgbm_model = self.train_lgbm_model(X_train, y_train, X_val=val_df['cleaned_text'], y_val=val_df['is_relevant'])
+                        self.log(f"LightGBM model trained for subject: {subject.subject_name}", verbosity=1)
+                        self.save_model(lgbm_model, 'lgbm', team.slug, subject.subject_slug, model_version, include_metadata=export_metadata)
+                    
+                    if model_type in ['bert', 'all']:
+                        bert_model = self.train_bert_model(X_train, y_train, X_val=val_df['cleaned_text'], y_val=val_df['is_relevant'], max_len=bert_max_len)
+                        self.log(f"BERT model trained for subject: {subject.subject_name}", verbosity=1)
+                        self.save_model(bert_model, 'bert', team.slug, subject.subject_slug, model_version, include_metadata=export_metadata)
                     
                     # Update run log to indicate successful completion
                     run_log.run_finished = timezone.now()
@@ -444,3 +965,189 @@ class Command(BaseCommand):
             self.log("Dry run completed. No models were trained.", verbosity=1)
         else:
             self.log("Command completed successfully", verbosity=1)
+
+    def handle_predict_command(self, options):
+        """Handle the 'predict' command to make predictions using trained models."""
+        # Get prediction-specific options
+        team_slug = options.get('team')
+        subject_slug = options.get('subject')
+        model_type = options.get('model_type', 'logreg')
+        model_version = options.get('model_version', 'v1.0.0')
+        input_text = options.get('input_text')
+        input_file = options.get('input_file')
+        output_file = options.get('output_file')
+        
+        # Log the parsed arguments
+        self.log(f"Running predict command with options:", verbosity=1)
+        self.log(f"  Team: {team_slug}", verbosity=1)
+        self.log(f"  Subject: {subject_slug}", verbosity=1)
+        self.log(f"  Model type: {model_type}", verbosity=1)
+        self.log(f"  Model version: {model_version}", verbosity=1)
+        self.log(f"  Input text: {input_text if input_text else 'None'}", verbosity=1)
+        self.log(f"  Input file: {input_file if input_file else 'None'}", verbosity=1)
+        self.log(f"  Output file: {output_file if output_file else 'stdout'}", verbosity=1)
+        
+        # Validate input options
+        if not input_text and not input_file:
+            raise CommandError("Either --input-text or --input-file must be provided")
+        
+        if input_text and input_file:
+            self.log("Both input text and input file provided. Using input text.", level=logging.WARNING)
+        
+        # Load the model
+        try:
+            model, metadata = self.load_model(model_type, team_slug, subject_slug, model_version)
+            
+            if metadata:
+                self.log(f"Loaded model metadata: {json.dumps(metadata, indent=2)}", verbosity=2)
+        except Exception as e:
+            raise CommandError(f"Failed to load model: {str(e)}")
+        
+        # Prepare input texts
+        texts = []
+        texts_source = None
+        
+        if input_text:
+            texts = [input_text]
+            texts_source = 'command_line'
+            self.log(f"Using input text from command line", verbosity=1)
+        elif input_file:
+            # Determine file type from extension
+            file_ext = os.path.splitext(input_file)[1].lower()
+            
+            try:
+                if file_ext == '.csv':
+                    df = pd.read_csv(input_file)
+                    
+                    # Look for text column with standard names
+                    for col in ['text', 'content', 'cleaned_text', 'full_text']:
+                        if col in df.columns:
+                            texts = df[col].tolist()
+                            self.log(f"Using column '{col}' from CSV file", verbosity=1)
+                            break
+                    
+                    if not texts:
+                        # If no standard column found, use the first text-like column
+                        for col in df.columns:
+                            if df[col].dtype == 'object':
+                                texts = df[col].tolist()
+                                self.log(f"Using column '{col}' from CSV file", verbosity=1)
+                                break
+                    
+                    texts_source = 'csv_file'
+                    
+                elif file_ext == '.json':
+                    with open(input_file, 'r') as f:
+                        data = json.load(f)
+                    
+                    # Handle different JSON formats
+                    if isinstance(data, list):
+                        if all(isinstance(item, str) for item in data):
+                            texts = data
+                        elif all(isinstance(item, dict) for item in data):
+                            # Try to find text field in dictionaries
+                            for field in ['text', 'content', 'cleaned_text', 'full_text']:
+                                if field in data[0]:
+                                    texts = [item.get(field) for item in data if item.get(field)]
+                                    self.log(f"Using field '{field}' from JSON objects", verbosity=1)
+                                    break
+                    elif isinstance(data, dict) and 'texts' in data:
+                        texts = data['texts']
+                    
+                    texts_source = 'json_file'
+                    
+                else:
+                    # Assume plain text file, one text per line
+                    with open(input_file, 'r') as f:
+                        texts = [line.strip() for line in f if line.strip()]
+                    
+                    texts_source = 'text_file'
+                
+                self.log(f"Loaded {len(texts)} texts from {input_file}", verbosity=1)
+            
+            except Exception as e:
+                raise CommandError(f"Error reading input file: {str(e)}")
+        
+        # Make predictions
+        if not texts:
+            raise CommandError("No texts found for prediction")
+        
+        try:
+            # Clean the texts before prediction (similar to training)
+            cleaned_texts = []
+            for text in texts:
+                try:
+                    cleaned_text = text_cleaning_string(
+                        text, 
+                        remove_stopwords=True,
+                        remove_punctuation=True,
+                        remove_digits=False,
+                        stemming=False,
+                        lemmatization=True
+                    )
+                except Exception:
+                    # Fallback to simpler cleaning
+                    cleaned_text = cleanText(text)
+                
+                if cleaned_text and len(cleaned_text.split()) >= 10:
+                    cleaned_texts.append(cleaned_text)
+                else:
+                    self.log(f"Warning: Text after cleaning is too short and will be skipped: '{text[:50]}...'", level=logging.WARNING)
+            
+            if not cleaned_texts:
+                raise CommandError("No valid texts after cleaning")
+            
+            # Make predictions
+            predictions = self.predict(model_type, model, cleaned_texts)
+            
+            # Combine the original texts with predictions
+            results = []
+            for i, text in enumerate(texts):
+                if i < len(cleaned_texts):  # Only include texts that were not filtered out
+                    results.append({
+                        'text': text[:100] + ('...' if len(text) > 100 else ''),
+                        'prediction': predictions['predictions'][i],
+                        'probability': predictions['probabilities'][i]
+                    })
+            
+            # Output the results
+            if output_file:
+                # Determine output format based on extension
+                out_ext = os.path.splitext(output_file)[1].lower()
+                
+                if out_ext == '.json':
+                    with open(output_file, 'w') as f:
+                        output_data = {
+                            'metadata': {
+                                'team': team_slug,
+                                'subject': subject_slug,
+                                'model_type': model_type,
+                                'model_version': model_version,
+                                'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
+                                'texts_source': texts_source,
+                                'num_texts': len(results)
+                            },
+                            'predictions': results
+                        }
+                        json.dump(output_data, f, indent=2)
+                else:
+                    # Default to CSV for other extensions
+                    df = pd.DataFrame(results)
+                    df.to_csv(output_file, index=False)
+                
+                self.log(f"Predictions saved to {output_file}", verbosity=1)
+            else:
+                # Print to stdout
+                self.stdout.write("\nPrediction Results:")
+                for result in results:
+                    self.stdout.write("-" * 80)
+                    self.stdout.write(f"Text: {result['text']}")
+                    self.stdout.write(f"Prediction: {'Relevant' if result['prediction'] == 1 else 'Not Relevant'}")
+                    self.stdout.write(f"Probability: {result['probability']:.4f}")
+                self.stdout.write("-" * 80)
+                self.stdout.write(f"Total: {len(results)} predictions\n")
+        
+        except Exception as e:
+            raise CommandError(f"Error during prediction: {str(e)}")
+        
+        self.log("Prediction completed successfully", verbosity=1)
