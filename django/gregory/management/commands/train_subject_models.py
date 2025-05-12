@@ -268,16 +268,13 @@ class Command(BaseCommand):
         self.log(f"  Timeframe: {timeframe} days", verbosity=1)
         self.log(f"  Device: {device}", verbosity=1)
 
-        if dry_run:
-            self.log("Dry run completed. No models were trained.", verbosity=1)
-            return
-
         # Filter teams and subjects based on arguments
         teams = []
         if team_slug:
             try:
                 team = Team.objects.get(slug=team_slug)
                 teams = [team]
+                self.log(f"Processing team: {team.organization}", verbosity=1)
                 self.log(f"Filtered to team: {team}", verbosity=2)
             except Team.DoesNotExist:
                 raise CommandError(f"Team with slug '{team_slug}' does not exist")
@@ -294,9 +291,10 @@ class Command(BaseCommand):
                 try:
                     subject = Subject.objects.get(team=team, subject_slug=subject_slug)
                     subjects = [subject]
-                    self.log(f"Filtered to subject: {subject}", verbosity=2)
+                    self.log(f"Filtered to subject: {subject.subject_name}", verbosity=1)
                 except Subject.DoesNotExist:
-                    self.log(f"Subject with slug '{subject_slug}' does not exist for team {team}", level=logging.WARNING)
+                    warning_message = f"Subject with slug '{subject_slug}' does not exist for team {team}"
+                    self.log(warning_message, level=logging.WARNING, verbosity=1)
                     continue
             else:
                 subjects = Subject.objects.filter(team=team)
@@ -306,6 +304,10 @@ class Command(BaseCommand):
             for subject in subjects:
                 self.log(f"Processing subject: {subject.subject_name} (team: {team.name})", verbosity=1)
                 
+                # Skip actual processing if this is a dry run
+                if dry_run:
+                    continue
+                    
                 # Fetch articles for training
                 labeled_df, unlabeled_df = self.fetch_articles_for_training(subject, timeframe)
                 
@@ -383,5 +385,8 @@ class Command(BaseCommand):
                     run_log.save()
                     
                     self.log(f"Error training model for subject {subject.subject_name}: {str(e)}", level=logging.ERROR)
-                    
-        self.log("Command completed successfully", verbosity=1)
+        
+        if dry_run:
+            self.log("Dry run completed. No models were trained.", verbosity=1)
+        else:
+            self.log("Command completed successfully", verbosity=1)
