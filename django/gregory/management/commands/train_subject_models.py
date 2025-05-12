@@ -7,7 +7,7 @@ from datetime import timedelta
 import pandas as pd
 import os
 from django.conf import settings
-from gregory.utils.text_utils import cleanText
+from gregory.utils.text_utils import text_cleaning_pd_series, text_cleaning_string, load_and_format_dataset, cleanText
 from sklearn.model_selection import train_test_split
 
 logger = logging.getLogger(__name__)
@@ -118,12 +118,18 @@ class Command(BaseCommand):
         
         return labeled_df, unlabeled_df
     
-    def clean_and_prepare_data(self, df):
+    def clean_and_prepare_data(self, df, remove_stopwords=True, remove_punctuation=True, remove_digits=False, stemming=False, lemmatization=False):
         """
-        Clean and prepare data for training.
+        Clean and prepare data for training, following the same approach as in the training notebook
+        which uses text_cleaning_pd_series.
         
         Args:
             df: DataFrame with articles
+            remove_stopwords: Whether to remove stopwords (default: True)
+            remove_punctuation: Whether to remove punctuation (default: True)
+            remove_digits: Whether to remove digits (default: False)
+            stemming: Whether to apply stemming (default: False)
+            lemmatization: Whether to apply lemmatization (default: False)
             
         Returns:
             DataFrame with cleaned text
@@ -131,25 +137,43 @@ class Command(BaseCommand):
         if df.empty:
             return df
         
-        # Combine title and summary as full_text
+        # Combine title and summary as full_text, matching the notebook approach
         df['full_text'] = df['title'].fillna('') + ' ' + df['summary'].fillna('')
         
-        # Clean the text
-        df['cleaned_text'] = df['full_text'].apply(cleanText)
+        try:
+            # Clean the text using text_cleaning_pd_series from the notebook
+            df['cleaned_text'] = text_cleaning_pd_series(
+                df['full_text'], 
+                remove_stopwords=remove_stopwords,
+                remove_punctuation=remove_punctuation, 
+                remove_digits=remove_digits,
+                stemming=stemming,
+                lemmatization=lemmatization
+            )
+        except ImportError as e:
+            # Fallback to our original cleanText function if NLTK is not available
+            self.log(f"Advanced text cleaning not available: {str(e)}. Using basic text cleaning instead.", verbosity=1)
+            df['cleaned_text'] = df['full_text'].apply(cleanText)
+            
+            # Filter out short texts to match the behavior of text_cleaning_pd_series
+            df['cleaned_text'] = df['cleaned_text'].apply(
+                lambda x: None if x is None or len(x.split()) < 10 else x
+            )
+        
+        # Drop rows where cleaning resulted in empty or too short text
+        df = df.dropna(subset=['cleaned_text'])
         
         self.log(f"Cleaned and prepared {len(df)} articles", verbosity=2)
         
         return df
     
-    def split_data(self, df, train_size=0.7, val_size=0.15, test_size=0.15, min_examples_per_class=3):
+    def split_data(self, df, min_examples_per_class=3):
         """
-        Split data into training, validation, and test sets in a stratified manner.
+        Split data into training, validation, and test sets in a stratified manner,
+        following the same approach as in the training notebook.
         
         Args:
             df: DataFrame with labeled articles
-            train_size: Proportion of the data to use for training
-            val_size: Proportion of the data to use for validation
-            test_size: Proportion of the data to use for testing
             min_examples_per_class: Minimum number of examples required per class
             
         Returns:
@@ -165,22 +189,21 @@ class Command(BaseCommand):
                 raise ValueError(f"Not enough examples for class '{'relevant' if cls else 'not relevant'}'. "
                                  f"Got {count}, need at least {min_examples_per_class}.")
         
-        # First split into train and temporary test set (val + test)
-        train_df, temp_df = train_test_split(
-            df, 
-            train_size=train_size,
+        # First split: 85% train_val and 15% test - following notebook approach
+        train_val_df, test_df = train_test_split(
+            df,
+            test_size=0.15,
             stratify=df['is_relevant'],
-            random_state=42
+            random_state=69  # Using same random state as notebook
         )
         
-        # Then split the temporary set into val and test
-        # Adjust the test_fraction to reflect the relative sizes of val and test
-        test_fraction = test_size / (val_size + test_size)
-        val_df, test_df = train_test_split(
-            temp_df, 
-            test_size=test_fraction,
-            stratify=temp_df['is_relevant'],
-            random_state=42
+        # Second split: ~88.235% train and ~11.765% val from train_val_df
+        # 0.1765 * 0.85 ≈ 0.15 of the original dataset
+        train_df, val_df = train_test_split(
+            train_val_df,
+            test_size=0.1765,
+            stratify=train_val_df['is_relevant'],
+            random_state=69  # Using same random state as notebook
         )
         
         self.log(f"Split data into training ({len(train_df)}), validation ({len(val_df)}), and test ({len(test_df)}) sets", verbosity=2)
@@ -213,10 +236,19 @@ class Command(BaseCommand):
         test_path = os.path.join(output_dir, 'test.csv')
         unlabeled_path = os.path.join(output_dir, 'unlabeled.csv')
         
-        train_df.to_csv(train_path, index=False)
-        val_df.to_csv(val_path, index=False)
-        test_df.to_csv(test_path, index=False)
-        unlabeled_df.to_csv(unlabeled_path, index=False)
+        # Set article_id as index if not already set, to match notebook's approach
+        if 'article_id' in train_df.columns:
+            train_df.set_index('article_id', inplace=True)
+            val_df.set_index('article_id', inplace=True)
+            test_df.set_index('article_id', inplace=True)
+            if 'article_id' in unlabeled_df.columns:
+                unlabeled_df.set_index('article_id', inplace=True)
+        
+        # Write to CSV files, including index (which should be article_id)
+        train_df.to_csv(train_path)
+        val_df.to_csv(val_path)
+        test_df.to_csv(test_path)
+        unlabeled_df.to_csv(unlabeled_path)
         
         self.log(f"Wrote CSV files to {output_dir}", verbosity=2)
         self.log(f"  - Training set: {len(train_df)} articles", verbosity=1)
@@ -228,7 +260,7 @@ class Command(BaseCommand):
     
     def prepare_data_for_training(self, labeled_df):
         """
-        Prepares the labeled data for model training.
+        Prepares the labeled data for model training, following the notebook's approach.
         
         Args:
             labeled_df: DataFrame with labeled articles
@@ -239,13 +271,17 @@ class Command(BaseCommand):
         if labeled_df.empty:
             self.log("No labeled data available for training", level=logging.WARNING)
             return None, None
-            
-        # Basic preprocessing: combine title and summary for features
-        labeled_df['text'] = labeled_df['title'].fillna('') + ' ' + labeled_df['summary'].fillna('')
+        
+        # Use the cleaned_text column that we created in clean_and_prepare_data
+        # This aligns with the notebook's approach using text_processed
         
         # Features and target
-        X_train = labeled_df['text']
+        X_train = labeled_df['cleaned_text']
         y_train = labeled_df['is_relevant']
+        
+        # Convert boolean values to 0/1 to match notebook approach
+        if not isinstance(y_train.iloc[0], (int, float)):
+            y_train = y_train.apply(lambda x: 1 if x is True else 0)
         
         self.log(f"Prepared training data: {len(X_train)} samples with {y_train.sum()} positive labels", verbosity=2)
         
@@ -318,9 +354,27 @@ class Command(BaseCommand):
                 # Define model version (should be dynamic in real implementation)
                 model_version = "v1.0.0"
                 
-                # Clean and prepare the data
-                labeled_df = self.clean_and_prepare_data(labeled_df)
-                unlabeled_df = self.clean_and_prepare_data(unlabeled_df)
+                # Clean and prepare the data - following the notebook's approach
+                # Use lemmatization=True to match the recommended notebook approach
+                labeled_df = self.clean_and_prepare_data(
+                    labeled_df,
+                    remove_stopwords=True,
+                    remove_punctuation=True,
+                    remove_digits=False,
+                    stemming=False,
+                    lemmatization=True
+                )
+                unlabeled_df = self.clean_and_prepare_data(
+                    unlabeled_df,
+                    remove_stopwords=True,
+                    remove_punctuation=True,
+                    remove_digits=False,
+                    stemming=False,
+                    lemmatization=True
+                )
+                
+                # Log the counts after cleaning
+                self.log(f"After cleaning: {len(labeled_df)} labeled articles, {len(unlabeled_df)} unlabeled articles", verbosity=1)
                 
                 # Create a log entry for this run
                 run_log = PredictionRunLog.objects.create(
