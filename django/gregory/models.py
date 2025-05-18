@@ -394,9 +394,17 @@ class PredictionRunLog(models.Model):
 		('predict', 'Prediction')
 	]
 	
+	ALGORITHM_CHOICES = [
+		('pubmed_bert', 'PubMed BERT'),
+		('lgbm_tfidf', 'LGBM TF-IDF'),
+		('lstm', 'LSTM'),
+		('unknown', 'Unknown')
+	]
+	
 	team = models.ForeignKey('Team', on_delete=models.CASCADE, related_name='prediction_run_logs')
 	subject = models.ForeignKey('Subject', on_delete=models.CASCADE, related_name='prediction_run_logs')
 	model_version = models.CharField(max_length=100, help_text="Version identifier for the model used")
+	algorithm = models.CharField(max_length=20, choices=ALGORITHM_CHOICES, default='unknown', help_text="ML algorithm used for the run")
 	run_type = models.CharField(max_length=10, choices=RUN_TYPE_CHOICES, help_text="Type of run: training or prediction")
 	run_started = models.DateTimeField(auto_now_add=True, help_text="When the run was started")
 	run_finished = models.DateTimeField(null=True, blank=True, help_text="When the run was completed")

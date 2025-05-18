@@ -5,14 +5,43 @@ from cryptography.fernet import Fernet  # Ensure this import is included
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load environment variables from .env file if python-dotenv is available
+try:
+    from dotenv import load_dotenv
+    
+    # Try multiple locations for .env file
+    potential_paths = [
+        Path(BASE_DIR).parent / '.env',  # Project root
+        Path(BASE_DIR) / '.env',         # Django directory
+    ]
+    
+    for env_path in potential_paths:
+        if env_path.exists():
+            load_dotenv(dotenv_path=env_path)
+            print(f"Loaded environment variables from {env_path}")
+            break
+    else:
+        print("No .env file found in the checked locations.")
+except ImportError:
+    print("python-dotenv not installed. Environment variables must be set manually.")
+
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY')
+# Use environment variable if available, otherwise use a default value for development
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-x)v@)fdg7tkqf#l8$4=br!g00w4*4+19sb(p+s=(^a%-*en)tr')
+
+# Print warning if using default key
+if SECRET_KEY == 'django-insecure-x)v@)fdg7tkqf#l8$4=br!g00w4*4+19sb(p+s=(^a%-*en)tr':
+    print("Using default SECRET_KEY for development. DO NOT use in production!")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG= True
 SITE_ID = 1
 # FERNET SECRET KEY
-FERNET_SECRET_KEY = os.environ.get('FERNET_SECRET_KEY')
+FERNET_SECRET_KEY = os.environ.get('FERNET_SECRET_KEY', 'pSD0ZVXNIHPUzPcHwf1DBMgHjli3M6dBW011JA3991I=')
+
+# Print warning if using default key
+if FERNET_SECRET_KEY == 'pSD0ZVXNIHPUzPcHwf1DBMgHjli3M6dBW011JA3991I=':
+    print("Using default FERNET_SECRET_KEY for development. DO NOT use in production!")
 FORMS_URLFIELD_ASSUME_HTTPS = True
 
 ALLOWED_HOSTS = [

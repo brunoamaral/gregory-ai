@@ -5,7 +5,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gregory', '0037_add_prediction_run_log'),  # Update this to match your latest migration
+        ('gregory', '0037_add_prediction_run_log'),
     ]
 
     operations = [

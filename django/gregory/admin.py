@@ -2,7 +2,6 @@ from django.contrib import admin
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.urls import path
-import csv
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
 from .admin_filters import DateRangeFilter
 
@@ -12,6 +11,24 @@ from django import forms
 from .fields import MLPredictionsField
 from django.utils.html import format_html
 from django.urls import reverse
+# @admin.register(PredictionRunLog)
+class PredictionRunLogAdmin(admin.ModelAdmin):
+    list_display = ['id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 'run_started', 'run_finished', 'status_label', 'triggered_by']
+    list_filter = [DateRangeFilter, 'team', 'subject', 'run_type', 'algorithm', 'success', 'model_version']
+    search_fields = ['team__organization__name', 'subject__subject_name', 'model_version', 'triggered_by', 'algorithm']
+    readonly_fields = ['run_started']  # Auto-populated field
+    date_hierarchy = 'run_started'
+    actions = ['mark_as_failed', 'mark_as_successful', 'export_as_csv']
+    
+    fieldsets = (
+        ('Run Information', {
+            'fields': ('team', 'subject', 'run_type', 'algorithm', 'model_version', 'triggered_by'),
+        }),
+        ('Status', {
+            'fields': ('run_started', 'run_finished', 'success', 'error_message'),
+        }),
+    )
+
 
 class ArticleSubjectRelevanceInline(admin.TabularInline):
 	model = ArticleSubjectRelevance
@@ -211,7 +228,7 @@ class PredictionRunLogAdmin(admin.ModelAdmin):
         """Export selected logs to CSV file"""
         meta = self.model._meta
         field_names = [
-            'id', 'team', 'subject', 'run_type', 'model_version', 
+            'id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 
             'run_started', 'run_finished', 'success', 'triggered_by', 'error_message'
         ]
         
