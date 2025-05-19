@@ -37,10 +37,10 @@ if SECRET_KEY == 'django-insecure-x)v@)fdg7tkqf#l8$4=br!g00w4*4+19sb(p+s=(^a%-*e
 DEBUG= True
 SITE_ID = 1
 # FERNET SECRET KEY
-FERNET_SECRET_KEY = os.environ.get('FERNET_SECRET_KEY', 'pSD0ZVXNIHPUzPcHwf1DBMgHjli3M6dBW011JA3991I=')
+FERNET_SECRET_KEY = os.environ.get('FERNET_SECRET_KEY', 'DEFAULT KEY GOES HERE')
 
 # Print warning if using default key
-if FERNET_SECRET_KEY == 'pSD0ZVXNIHPUzPcHwf1DBMgHjli3M6dBW011JA3991I=':
+if FERNET_SECRET_KEY == 'DEFAULT KEY GOES HERE':
     print("Using default FERNET_SECRET_KEY for development. DO NOT use in production!")
 FORMS_URLFIELD_ASSUME_HTTPS = True
 
