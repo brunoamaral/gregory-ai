@@ -43,6 +43,9 @@ def collect_articles(team_slug: str, subject_slug: str, window_days: Optional[in
         cutoff_date = datetime.now() - timedelta(days=window_days)
         queryset = queryset.filter(discovery_date__gte=cutoff_date)
     
+    # After window filter, require at least one relevance entry
+    queryset = queryset.filter(article_subject_relevances__subject=subject).distinct()
+    
     # Get relevant and not relevant articles via ArticleSubjectRelevance
     return queryset.select_related().prefetch_related(
         'article_subject_relevances'

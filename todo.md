@@ -14,9 +14,9 @@ Use this file to track progress. Check off each item as it’s completed.
 ---
 
 ## M2 — Utility Foundation
-- [ ] m2-t1: Create `gregory/utils/summariser.py` with:
+- [x] m2-t1: Create `gregory/utils/summariser.py` with:
   - `summarise(text: str) -> str` using HF `facebook/bart-large-cnn`, 300 tokens, batch size 4, auto GPU/CPU
-- [ ] m2-t2: Add `summarise_bulk(texts: list[str], batch_size: int = 4) -> list[str]`
+- [x] m2-t2: Add `summarise_bulk(texts: list[str], batch_size: int = 4) -> list[str]`
 - [ ] m2-t3: Create `gregory/utils/versioning.py` with:
   - `make_version_path(base_dir: Path, team: str, subject: str, algo: str) -> Path`
   - Auto-increment `_2`, `_3`, etc. for same-date versions
@@ -36,14 +36,14 @@ Use this file to track progress. Check off each item as it’s completed.
 ---
 
 ## M4 — Algorithm Wrappers
-- [ ] m4-t1: Create `gregory/ml/bert_wrapper.py`:
+- [x] m4-t1: Create `gregory/ml/bert_wrapper.py`:
   - `BertTrainer` with `__init__(...)`, `train(train_df, val_df, test_df, threshold) -> dict`, `save(path)`
   - Uses fixed hyper-params; saves `bert_weights.h5`
-- [ ] m4-t2: Create `gregory/ml/lgbm_wrapper.py`:
+- [x] m4-t2: Create `gregory/ml/lgbm_wrapper.py`:
   - `LGBMTfidfTrainer` matching interface; saves `lgbm_classifier.joblib` + `tfidf_vectorizer.joblib`
-- [ ] m4-t3: Create `gregory/ml/lstm_wrapper.py`:
+- [x] m4-t3: Create `gregory/ml/lstm_wrapper.py`:
   - `LSTMTrainer` matching interface; saves `lstm_weights.h5` + `tokenizer.json`
-- [ ] m4-t4: In `gregory/ml/__init__.py`, implement `get_trainer(algo: str)`
+- [x] m4-t4: In `gregory/ml/__init__.py`, implement `get_trainer(algo: str)`
 
 ---
 
@@ -56,9 +56,9 @@ Use this file to track progress. Check off each item as it’s completed.
 ---
 
 ## M6 — Pseudo-labeler (Opt-in)
-- [ ] m6-t1: Create `gregory/ml/pseudo.py` with BERT self-training loop:
+- [x] m6-t1: Create `gregory/ml/pseudo.py` with BERT self-training loop:
   - `generate_pseudo_labels(train_df, val_df, unlabelled_df, tokenizer, confidence=0.9, max_iter=7) -> pd.DataFrame`
-- [ ] m6-t2: Add `save_pseudo_csv(df, dest_dir: Path) -> Path`:
+- [x] m6-t2: Add `save_pseudo_csv(df, dest_dir: Path) -> Path`:
   - Writes `<YYYYMMDD_HHMMSS>.csv` under `/models/<team>/<subject>/pseudo_labels/`, suffix `_2`, etc.
 - [ ] m6-t3: Write pytest for pseudo-label CSV naming logic (monkeypatched trainer)
 
