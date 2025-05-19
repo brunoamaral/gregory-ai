@@ -27,10 +27,10 @@ except ImportError:
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # Use environment variable if available, otherwise use a default value for development
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-x)v@)fdg7tkqf#l8$4=br!g00w4*4+19sb(p+s=(^a%-*en)tr')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'DEFAULT SECRET_KEY')
 
 # Print warning if using default key
-if SECRET_KEY == 'django-insecure-x)v@)fdg7tkqf#l8$4=br!g00w4*4+19sb(p+s=(^a%-*en)tr':
+if SECRET_KEY == 'DEFAULT SECRET_KEY'):
     print("Using default SECRET_KEY for development. DO NOT use in production!")
 
 # SECURITY WARNING: don't run with debug turned on in production!
