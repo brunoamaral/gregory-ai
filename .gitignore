@@ -23,7 +23,6 @@ workspace.code-workspace
 # Django-specific
 django/data/
 django/gregory/data/
-django/gregory/migrations/
 django/gregory/ml_models/
 django/helper-scripts/import-articles.py
 django/helper-scripts/who.py
@@ -31,7 +30,7 @@ django/indexers/input/*.json
 django/model_*.joblib
 django/source.csv
 django/static
-django/**/migrations/
+
 
 # Docker
 docker-data/
