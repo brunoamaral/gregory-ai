@@ -7,9 +7,9 @@ Use this file to track progress. Check off each item as it’s completed.
 ## M1 — Migration & Model Tweak
 - [x] m1-t1: Add `algorithm` field to `PredictionRunLog` in `gregory/models.py`
   - `CharField(max_length=20, choices=[('pubmed_bert', …), ('lgbm_tfidf', …), ('lstm', …)], null=True, blank=True)`
-- [ ] m1-t2: Generate & apply Django migration
-- [ ] m1-t3: In migration, set existing `PredictionRunLog` rows’ `algorithm` to `"unknown"`
-- [ ] m1-t4: Register `algorithm` in Django admin list display for `PredictionRunLog`
+- [x] m1-t2: Generate & apply Django migration
+- [x] m1-t3: In migration, set existing `PredictionRunLog` rows’ `algorithm` to `"unknown"`
+- [x] m1-t4: Register `algorithm` in Django admin list display for `PredictionRunLog`
 
 ---
 
