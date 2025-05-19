@@ -139,7 +139,7 @@ class Command(BaseCommand):
         )
         
         parser.add_argument(
-            "--version",
+            "--model-version",
             type=str,
             help="Manual version tag (default: auto-generated YYYYMMDD with optional _n suffix)",
         )
@@ -248,7 +248,7 @@ class Command(BaseCommand):
             # Fetch all teams and their subjects
             teams = Team.objects.all()
             for team in teams:
-                subject_slugs = list(team.subject_set.values_list('slug', flat=True))
+                subject_slugs = list(team.subjects.values_list('subject_slug', flat=True))
                 if subject_slugs:  # Only include teams with at least one subject
                     result.append((team.slug, subject_slugs))
         else:
@@ -261,7 +261,7 @@ class Command(BaseCommand):
             if options["subject"]:
                 # Specific subject
                 try:
-                    subject = Subject.objects.get(team=team, slug=options["subject"])
+                    subject = Subject.objects.get(team=team, subject_slug=options["subject"])
                     result.append((team.slug, [subject.slug]))
                 except Subject.DoesNotExist:
                     raise CommandError(
@@ -269,7 +269,7 @@ class Command(BaseCommand):
                     )
             else:
                 # All subjects for the team
-                subject_slugs = list(team.subject_set.values_list('slug', flat=True))
+                subject_slugs = list(team.subjects.values_list('subject_slug', flat=True))
                 if subject_slugs:
                     result.append((team.slug, subject_slugs))
                 else:
@@ -311,9 +311,9 @@ class Command(BaseCommand):
         BASE_MODEL_DIR = os.path.join(settings.BASE_DIR, "models")
         
         # Create version path for this run
-        version = options.get("version")
-        if version:
-            model_dir = Path(BASE_MODEL_DIR) / team_slug / subject_slug / algorithm / version
+        model_version = options.get("model_version")
+        if model_version:
+            model_dir = Path(BASE_MODEL_DIR) / team_slug / subject_slug / algorithm / model_version
             model_dir.mkdir(parents=True, exist_ok=True)
         else:
             model_dir = make_version_path(BASE_MODEL_DIR, team_slug, subject_slug, algorithm)
@@ -630,7 +630,7 @@ class Command(BaseCommand):
                 
                 for subject_slug in subject_slugs:
                     # Get subject object
-                    subject = Subject.objects.get(slug=subject_slug, team=team)
+                    subject = Subject.objects.get(subject_slug=subject_slug, team=team)
                     
                     self.log_message(
                         f"\nProcessing team='{team_slug}' subject='{subject_slug}'",

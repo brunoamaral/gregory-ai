@@ -33,7 +33,7 @@ def collect_articles(team_slug: str, subject_slug: str, window_days: Optional[in
     """
     # Get team and subject
     team = Team.objects.get(slug=team_slug)
-    subject = Subject.objects.get(slug=subject_slug, team=team)
+    subject = Subject.objects.get(subject_slug=subject_slug, team=team)
     
     # Base queryset filtering for team and subject
     queryset = Articles.objects.filter(teams=team, subjects=subject)
@@ -44,6 +44,7 @@ def collect_articles(team_slug: str, subject_slug: str, window_days: Optional[in
         queryset = queryset.filter(discovery_date__gte=cutoff_date)
     
     # After window filter, require at least one relevance entry
+    # TODO: check if this impacts pseudo labelling 
     queryset = queryset.filter(article_subject_relevances__subject=subject).distinct()
     
     # Get relevant and not relevant articles via ArticleSubjectRelevance
