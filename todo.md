@@ -17,7 +17,7 @@ Use this file to track progress. Check off each item as it’s completed.
 - [x] m2-t1: Create `gregory/utils/summariser.py` with:
   - `summarise(text: str) -> str` using HF `facebook/bart-large-cnn`, 300 tokens, batch size 4, auto GPU/CPU
 - [x] m2-t2: Add `summarise_bulk(texts: list[str], batch_size: int = 4) -> list[str]`
-- [ ] m2-t3: Create `gregory/utils/versioning.py` with:
+- [x] m2-t3: Create `gregory/utils/versioning.py` with:
   - `make_version_path(base_dir: Path, team: str, subject: str, algo: str) -> Path`
   - Auto-increment `_2`, `_3`, etc. for same-date versions
 - [ ] m2-t4: Write pytest unit tests for summariser and versioning
@@ -25,11 +25,11 @@ Use this file to track progress. Check off each item as it’s completed.
 ---
 
 ## M3 — Data Preparation
-- [ ] m3-t1: Implement `collect_articles(team_slug: str, subject_slug: str, window_days: int | None) -> QuerySet` in `gregory/utils/dataset.py`
+- [x] m3-t1: Implement `collect_articles(team_slug: str, subject_slug: str, window_days: int | None) -> QuerySet` in `gregory/utils/dataset.py`
   - Filters by `discovery_date`, labeled via `ArticleSubjectRelevance`, and excludes unlabeled
-- [ ] m3-t2: Add `build_dataset(qs: QuerySet) -> pd.DataFrame`
+- [x] m3-t2: Add `build_dataset(qs: QuerySet) -> pd.DataFrame`
   - Merge labels, concatenate `title + summary`, drop rows with no relevance label
-- [ ] m3-t3: Add `train_val_test_split(df: pd.DataFrame) -> (train, val, test)`
+- [x] m3-t3: Add `train_val_test_split(df: pd.DataFrame) -> (train, val, test)`
   - Stratified 70/15/15 split, seed = 69; raise ValueError if stratification fails
 - [ ] m3-t4: Write pytest for dataset logic, split proportions, and stratification errors
 
@@ -48,9 +48,9 @@ Use this file to track progress. Check off each item as it’s completed.
 ---
 
 ## M5 — Metrics Helper
-- [ ] m5-t1: Create `gregory/utils/metrics.py` with:
+- [x] m5-t1: Create `gregory/utils/metrics.py` with:
   - `evaluate_binary(y_true, y_prob, threshold, prefix) -> dict`
-- [ ] m5-t2: Ensure output includes `accuracy`, `precision`, `recall`, `f1`, `roc_auc`, `pr_auc` with `val_` and `test_` prefixes
+- [x] m5-t2: Ensure output includes `accuracy`, `precision`, `recall`, `f1`, `roc_auc`, `pr_auc` with `val_` and `test_` prefixes
 - [ ] m5-t3: Write pytest validating metrics against sklearn on synthetic data
 
 ---
@@ -65,8 +65,8 @@ Use this file to track progress. Check off each item as it’s completed.
 ---
 
 ## M7 — Command Core
-- [ ] m7-t1: Create `gregory/management/commands/train_models.py`
-- [ ] m7-t2: Define argparse flags:
+- [x] m7-t1: Create `gregory/management/commands/train_models.py`
+- [x] m7-t2: Define argparse flags:
   - `--team`, `--subject`, `--all-teams`
   - `--all-articles`, `--lookback-days`
   - `--algo`, `--prob-threshold`, `--version`
