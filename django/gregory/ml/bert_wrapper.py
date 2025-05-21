@@ -14,13 +14,25 @@ from typing import Dict, List, Optional, Tuple, Union, Any
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.layers import Dense, Dropout, Input
-from tensorflow.keras.metrics import AUC, Precision, Recall
-from tensorflow.keras.models import Model
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.regularizers import l2
-from tensorflow.keras.utils import to_categorical
+try:
+    # Try to use tf-keras for backward compatibility with transformers
+    import tf_keras as keras
+    from tf_keras.callbacks import EarlyStopping
+    from tf_keras.layers import Dense, Dropout, Input
+    from tf_keras.metrics import AUC, Precision, Recall
+    from tf_keras.models import Model
+    from tf_keras.optimizers import Adam
+    from tf_keras.regularizers import l2
+    from tf_keras.utils import to_categorical
+except ImportError:
+    # Fall back to TensorFlow's keras if tf-keras is not available
+    from tensorflow.keras.callbacks import EarlyStopping
+    from tensorflow.keras.layers import Dense, Dropout, Input
+    from tensorflow.keras.metrics import AUC, Precision, Recall
+    from tensorflow.keras.models import Model
+    from tensorflow.keras.optimizers import Adam
+    from tensorflow.keras.regularizers import l2
+    from tensorflow.keras.utils import to_categorical
 from transformers import AutoTokenizer, TFAutoModel
 
 from sklearn.metrics import (

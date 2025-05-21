@@ -19,7 +19,7 @@ from tensorflow.keras.utils import to_categorical
 from transformers import PreTrainedTokenizer
 
 from gregory.ml.bert_wrapper import BertTrainer
-from gregory.ml import get_trainer
+from gregory.ml.trainer import get_trainer
 
 
 def generate_pseudo_labels(
@@ -80,6 +80,20 @@ def generate_pseudo_labels(
     train_df = train_df.copy()
     val_df = val_df.copy()
     unlabelled_df = unlabelled_df.copy()
+    
+    # Check if we have enough examples of each class for reliable training
+    class_counts = train_df[label_column].value_counts()
+    min_class_count = class_counts.min() if len(class_counts) > 0 else 0
+    
+    if len(class_counts) < 2 or min_class_count < 2:
+        if verbose:
+            print(f"WARNING: Training data has insufficient examples in the minority class ({min_class_count})")
+            print(f"Class distribution: {class_counts.to_dict()}")
+            print("Skipping pseudo-labeling as it requires at least 2 examples of each class")
+        # Mark the data as not pseudo-labeled
+        train_df['pseudo_labelled'] = False
+        train_df['pseudo_confidence'] = None
+        return train_df  # Return original training data without pseudo-labeling
     
     # Set default parameters based on algorithm
     model_params = model_params or {}
