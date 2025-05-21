@@ -344,6 +344,32 @@ class Command(BaseCommand):
         if len(dataset_df) == 0:
             raise ValueError(f"No labeled articles found for {team_slug}/{subject_slug}")
         
+        # Add class distribution check
+        class_counts = dataset_df['relevant'].value_counts()
+        self.log_message(
+            f"Class distribution: relevant={class_counts.get(1, 0)}, "
+            f"not relevant={class_counts.get(0, 0)}",
+            VerbosityLevel.WARNINGS
+        )
+
+        # Check minimum samples per class
+        min_class_count = class_counts.min() if not class_counts.empty else 0
+        
+        # If we have fewer than 2 samples in any class, we can't train properly
+        if len(class_counts) < 2:
+            raise ValueError(f"Dataset has only one class. Two classes (0 and 1) are required for training.")
+            
+        if min_class_count < 2:
+            raise ValueError(f"The least populated class in y has only {min_class_count} member, which is too few. " +
+                             "The minimum number of groups for any class cannot be less than 2.")
+            
+        if min_class_count < 3:
+            self.log_warning(
+                f"Dataset has only {min_class_count} samples in the smallest class. "
+                f"Training might not be effective. Stratified splitting will be disabled.",
+                VerbosityLevel.WARNINGS
+            )
+        
         self.log_message(
             f"Built dataset with {len(dataset_df)} labeled articles", 
             VerbosityLevel.PROGRESS
@@ -376,13 +402,31 @@ class Command(BaseCommand):
         
         self.log_message("Text summarization complete", VerbosityLevel.PROGRESS)
         
+        # Double-check the class distribution before splitting
+        class_counts = dataset_df['relevant'].value_counts()
+        if len(class_counts) < 2:
+            raise ValueError(f"Cannot split dataset: only one class present ({class_counts.to_dict()})")
+            
+        min_class_count = class_counts.min()
+        if min_class_count < 2:
+            raise ValueError(f"Cannot split dataset: the minority class has only {min_class_count} samples. " +
+                             f"Need at least 2 examples per class. Class distribution: {class_counts.to_dict()}")
+            
         # Step 3: Split the dataset
         try:
             self.log_message("Splitting dataset into train/val/test sets", VerbosityLevel.PROGRESS)
+            self.log_message(f"Class distribution before split: {class_counts.to_dict()}", VerbosityLevel.WARNINGS)
+            
             train_df, val_df, test_df = train_val_test_split(dataset_df)
             
+            # Log class distribution in splits for debugging
+            train_counts = train_df['relevant'].value_counts().to_dict()
+            val_counts = val_df['relevant'].value_counts().to_dict()
+            test_counts = test_df['relevant'].value_counts().to_dict()
+            
             self.log_message(
-                f"Split complete: train={len(train_df)}, val={len(val_df)}, test={len(test_df)}", 
+                f"Split complete: train={len(train_df)} {train_counts}, " +
+                f"val={len(val_df)} {val_counts}, test={len(test_df)} {test_counts}", 
                 VerbosityLevel.PROGRESS
             )
         except ValueError as e:
@@ -677,12 +721,16 @@ class Command(BaseCommand):
                             self.log_error(error_msg, VerbosityLevel.PROGRESS)
                             self.log_error(stack_trace, VerbosityLevel.WARNINGS)
                             
-                            # Update run log with failure
-                            with transaction.atomic():
-                                run_log.success = False
-                                run_log.run_finished = timezone.now()
-                                run_log.error_message = f"{error_msg}\n\n{stack_trace}"
-                                run_log.save()
+                            # Update run log with failure - wrap in try/except to handle DB issues
+                            try:
+                                with transaction.atomic():
+                                    run_log.success = False
+                                    run_log.run_finished = timezone.now()
+                                    # Trim error message to avoid overflow
+                                    run_log.error_message = f"{error_msg}\n\n{stack_trace[:1000]}"  # Limit length
+                                    run_log.save()
+                            except Exception as db_error:
+                                self.log_error(f"Failed to update run log: {str(db_error)}", VerbosityLevel.WARNINGS)
             
             # Print summary if verbosity level is high enough
             if all_results:

@@ -132,10 +132,96 @@ def train_val_test_split(
     if abs(train_size + val_size + test_size - 1.0) > 1e-6:
         raise ValueError("train_size, val_size, and test_size must sum to 1.0")
     
-    # Check that we have enough data to stratify
-    if df[stratify_col].nunique() <= 1:
-        raise ValueError(f"Cannot stratify: '{stratify_col}' has only {df[stratify_col].nunique()} unique value(s)")
+    if len(df) == 0:
+        raise ValueError("Dataset is empty")
     
+    # Check if we have enough samples per class for stratified splitting
+    # Handle missing values and non-numeric data in the stratify column
+    stratify_col_data = df[stratify_col].dropna()
+    
+    # Ensure we have valid data to work with
+    if len(stratify_col_data) == 0:
+        raise ValueError(f"No valid data in stratify column '{stratify_col}'")
+    
+    try:
+        # Get distribution of classes
+        class_counts = stratify_col_data.value_counts()
+        num_classes = len(class_counts)
+        
+        # Get minimum class count with careful error handling
+        if num_classes == 0:
+            raise ValueError(f"No valid classes found in column '{stratify_col}'")
+            
+        min_class_count = class_counts.min()
+        
+        # Log the actual class distribution for debugging
+        class_distribution = ", ".join([f"{k}: {v}" for k, v in class_counts.items()])
+        print(f"Class distribution in dataset: {class_distribution}")
+        
+    except Exception as e:
+        # Fallback in case of any error processing class counts
+        raise ValueError(f"Error analyzing class distribution: {str(e)}")
+    
+    # Check for extreme cases: not enough classes or extremely small class size
+    if num_classes < 2:
+        raise ValueError(f"Dataset has only one class: {class_counts.to_dict()}. " +
+                         "Cannot perform classification with only one class.")
+    
+    # Special handling for datasets with very few examples per class
+    if min_class_count < 2:
+        raise ValueError(f"The least populated class in y has only {min_class_count} member, which is too few. " +
+                         "Consider collecting more data for this class. Class distribution: {class_counts.to_dict()}")
+    
+    # We already ensure min_class_count >= 2 above, but this is extra insurance
+    # If any class has fewer than 3 samples, we can't do proper stratified splitting
+    # (we need at least 1 for train, 1 for val, 1 for test)
+    if min_class_count < 3:
+        print(f"WARNING: Class with only {min_class_count} examples detected. Using non-stratified splitting.")
+        
+        # Force non-stratified splitting for all small datasets
+        rest_df, test_df = train_test_split(
+            df, test_size=test_size, random_state=random_state, 
+            shuffle=True, stratify=None  # Explicitly disable stratification
+        )
+        
+        # Further split rest into train and validation
+        val_size_adjusted = val_size / (1 - test_size)
+        train_df, val_df = train_test_split(
+            rest_df, test_size=val_size_adjusted, 
+            random_state=random_state, shuffle=True, 
+            stratify=None  # Explicitly disable stratification
+        )
+        
+        # Verify the split worked
+        print(f"Split complete - train: {len(train_df)}, val: {len(val_df)}, test: {len(test_df)}")
+        
+        return train_df, val_df, test_df
+        
+        # Handle class imbalance situations with non-stratified sampling
+        print(f"Using non-stratified splitting due to limited examples per class")
+        
+        # Drop stratification explicitly
+        rest_df, test_df = train_test_split(
+            df, test_size=test_size, random_state=random_state, 
+            shuffle=True, stratify=None  # Explicitly disable stratification
+        )
+        
+        # Further split rest into train and validation
+        val_size_adjusted = val_size / (1 - test_size)
+        train_df, val_df = train_test_split(
+            rest_df, test_size=val_size_adjusted, 
+            random_state=random_state, shuffle=True, 
+            stratify=None  # Explicitly disable stratification
+        )
+        
+        # Double-check the generated splits for debugging
+        for split_name, split_df in [("train", train_df), ("val", val_df), ("test", test_df)]:
+            split_counts = split_df[stratify_col].value_counts()
+            print(f"{split_name} split class distribution: {split_counts.to_dict()}")
+        
+        return train_df, val_df, test_df
+    
+    # Regular case: stratified split
     # First split: separate training set
     train_df, temp_df = train_test_split(
         df, 
