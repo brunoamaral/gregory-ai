@@ -196,30 +196,6 @@ def train_val_test_split(
         print(f"Split complete - train: {len(train_df)}, val: {len(val_df)}, test: {len(test_df)}")
         
         return train_df, val_df, test_df
-        
-        # Handle class imbalance situations with non-stratified sampling
-        print(f"Using non-stratified splitting due to limited examples per class")
-        
-        # Drop stratification explicitly
-        rest_df, test_df = train_test_split(
-            df, test_size=test_size, random_state=random_state, 
-            shuffle=True, stratify=None  # Explicitly disable stratification
-        )
-        
-        # Further split rest into train and validation
-        val_size_adjusted = val_size / (1 - test_size)
-        train_df, val_df = train_test_split(
-            rest_df, test_size=val_size_adjusted, 
-            random_state=random_state, shuffle=True, 
-            stratify=None  # Explicitly disable stratification
-        )
-        
-        # Double-check the generated splits for debugging
-        for split_name, split_df in [("train", train_df), ("val", val_df), ("test", test_df)]:
-            split_counts = split_df[stratify_col].value_counts()
-            print(f"{split_name} split class distribution: {split_counts.to_dict()}")
-        
-        return train_df, val_df, test_df
     
     # Regular case: stratified split
     # First split: separate training set
