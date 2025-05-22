@@ -49,6 +49,7 @@ Flask-Bootstrap==3.3.7.1
 flatbuffers==25.2.10
 fonttools==4.25.0
 fqdn==1.5.1
+freezegun==1.5.1
 fsspec==2025.3.2
 gast==0.6.0
 gdown==5.2.0
@@ -189,6 +190,7 @@ sphinxcontrib-serializinghtml==1.1.5
 SQLAlchemy==2.0.30
 sqlparse==0.5.3
 stack-data==0.2.0
+stopwords==1.0.1
 sympy==1.14.0
 tabulate==0.8.2
 tensorboard==2.15.2
