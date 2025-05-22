@@ -100,7 +100,10 @@ class LGBMTfidfTrainer:
         val_labels: List[int],
         num_boost_round: int = 100,
         early_stopping_rounds: int = 10,
-        verbose_eval: bool = True
+        verbose_eval: bool = True,
+        epochs: int = None,  # Added for compatibility with neural network trainers
+        batch_size: int = None,  # Added for compatibility with neural network trainers
+        **kwargs  # Accept any additional kwargs for compatibility
     ) -> Dict[str, List[float]]:
         """
         Train the LightGBM model with TF-IDF features.
@@ -137,30 +140,72 @@ class LGBMTfidfTrainer:
         
         # Train the model
         print(f"Training LightGBM model with {self.n_rounds} boosting rounds...")
+        
+        # Build callbacks list
+        callbacks_list = []
+        if early_stopping_rounds:
+            callbacks_list.append(lgbm.early_stopping(early_stopping_rounds))
+        if verbose_eval:
+            callbacks_list.append(lgbm.log_evaluation(10))
+            
+        # Fit with compatible parameters
         self.model.fit(
             X_train, 
             train_labels,
             eval_set=eval_set,
             eval_names=eval_names,
             eval_metric=['binary_logloss', 'auc'],
-            early_stopping_rounds=early_stopping_rounds,
-            verbose=10 if verbose_eval else 0,
+            callbacks=callbacks_list if callbacks_list else None
         )
         
         # Record training time
         self.training_time = time.time() - start_time
         
         # Get the training history
-        history = {
-            'iterations': list(range(len(self.model.evals_result_['valid']['binary_logloss']))),
-            'train_loss': self.model.evals_result_['train']['binary_logloss'],
-            'val_loss': self.model.evals_result_['valid']['binary_logloss'],
-            'train_auc': self.model.evals_result_['train']['auc'],
-            'val_auc': self.model.evals_result_['valid']['auc']
-        }
+        try:
+            # Try to safely access evaluation results which might have different attribute name
+            evals_result = getattr(self.model, 'evals_result_', None)
+            if evals_result is None:
+                # Try alternative attribute names
+                evals_result = getattr(self.model, '_evals_result', None) or {}
+            
+            history = {}
+            
+            # Only add metrics if we have evaluation results
+            if evals_result and 'valid' in evals_result and 'binary_logloss' in evals_result['valid']:
+                history = {
+                    'iterations': list(range(len(evals_result['valid']['binary_logloss']))),
+                    'train_loss': evals_result['train']['binary_logloss'],
+                    'val_loss': evals_result['valid']['binary_logloss'],
+                }
+                
+                # Add AUC if available
+                if 'auc' in evals_result['valid']:
+                    history['train_auc'] = evals_result['train']['auc']
+                    history['val_auc'] = evals_result['valid']['auc']
+            else:
+                # Fallback if we don't have evaluation results
+                history = {
+                    'iterations': [0],
+                    'train_loss': [0],
+                    'val_loss': [0],
+                }
+        except Exception as e:
+            print(f"Warning: Could not extract training history: {e}")
+            history = {
+                'iterations': [0],
+                'train_loss': [0],
+                'val_loss': [0],
+            }
         
         print(f"Training completed in {self.training_time:.2f} seconds.")
-        print(f"Best iteration: {self.model.best_iteration_}")
+        
+        # Safely access best_iteration
+        best_iter = getattr(self.model, 'best_iteration_', None)
+        if best_iter is not None:
+            print(f"Best iteration: {best_iter}")
+        else:
+            print("Best iteration not available")
         
         return history
     

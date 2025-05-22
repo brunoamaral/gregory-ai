@@ -139,8 +139,9 @@ class LSTMTrainer:
         """
         # Convert to lowercase and remove punctuation
         lowercase = tf.strings.lower(input_text)
-        # Remove punctuation
-        return tf.strings.regex_replace(lowercase, '[%s]' % tf.strings.escape_bytes(b'!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\\t\\n'), '')
+        # Remove punctuation - fixed version that doesn't use escape_bytes which is missing in TF 2.15.0
+        punctuation = '!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\\t\\n'
+        return tf.strings.regex_replace(lowercase, f'[{punctuation}]', '')
     
     def _create_model(self) -> tf.keras.Model:
         """
