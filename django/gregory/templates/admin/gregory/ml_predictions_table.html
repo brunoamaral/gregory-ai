@@ -32,10 +32,6 @@
             <th>Model Version</th>
             <th>Relevance</th>
             <th>Score</th>
-            <th>Gaussian Naive Bayes</th>
-            <th>Logistic Regression</th>
-            <th>Linear SVC</th>
-            <th>Multinomial NB</th>
         </tr>
     </thead>
     <tbody>
@@ -61,10 +57,6 @@
                 N/A
                 {% endif %}
             </td>
-            <td>{{ prediction.gnb|yesno:"✓,✗,?" }}</td>
-            <td>{{ prediction.lr|yesno:"✓,✗,?" }}</td>
-            <td>{{ prediction.lsvc|yesno:"✓,✗,?" }}</td>
-            <td>{{ prediction.mnb|yesno:"✓,✗,?" }}</td>
         </tr>
         {% endfor %}
     </tbody>
