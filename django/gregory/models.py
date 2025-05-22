@@ -67,6 +67,7 @@ class Subject(models.Model):
 	subject_name = models.CharField(blank=False, null=False, max_length=50)
 	description = models.TextField(blank=True, null=True)
 	subject_slug = models.SlugField(editable=True)
+	auto_predict = models.BooleanField(default=False, help_text='Enable automatic ML prediction for new articles')
 	team = models.ForeignKey(
 			'Team', 
 			on_delete=models.CASCADE,  # Not sure which would be the best option here
@@ -324,10 +325,18 @@ class TeamMember(OrganizationUser):
 		proxy = True
 
 class MLPredictions(models.Model):
+	ALGORITHM_CHOICES = [
+		('pubmed_bert', 'PubMed BERT'),
+		('lgbm_tfidf', 'LGBM TF-IDF'),
+		('lstm', 'LSTM'),
+		('unknown', 'Unknown')
+	]
+	
 	created_date = models.DateTimeField(auto_now_add=True)
 	subject = models.ForeignKey('Subject', on_delete=models.CASCADE, related_name='ml_subject_predictions')
 	article = models.ForeignKey('Articles', on_delete=models.CASCADE, null=True, related_name='ml_predictions_detail')
 	model_version = models.CharField(max_length=100, null=True, blank=True, help_text='Version identifier of the ML model used')
+	algorithm = models.CharField(max_length=20, choices=ALGORITHM_CHOICES, default='unknown', help_text='ML algorithm used for prediction')
 	probability_score = models.FloatField(null=True, blank=True, help_text='Probability score from the ML model prediction')
 	predicted_relevant = models.BooleanField(null=True, blank=True, help_text='Whether the ML model predicted this article as relevant')
 	
@@ -350,7 +359,7 @@ class MLPredictions(models.Model):
 	)
 	
 	class Meta:
-		unique_together = (('article', 'subject', 'model_version'),)
+		unique_together = (('article', 'subject', 'model_version', 'algorithm'),)
 	
 	@classmethod
 	def get_latest_prediction(cls, article, subject, model_version=None):
