@@ -28,6 +28,7 @@
         <tr>
             <th>ID</th>
             <th>Subject</th>
+            <th>Algorithm</th>
             <th>Model Version</th>
             <th>Relevance</th>
             <th>Score</th>
@@ -42,6 +43,7 @@
         <tr>
             <td>{{ prediction.id }}</td>
             <td>{{ prediction.subject }}</td>
+            <td>{{ prediction.get_algorithm_display|default:"Unknown" }}</td>
             <td>{{ prediction.model_version|default:"N/A" }}</td>
             <td>
                 {% if prediction.predicted_relevant == True %}
