@@ -1,8 +1,4 @@
-# **Specification:** 
-
-# **predict_articles**
-
-#  **Django Management Command**
+# **Specification: predict_articles Django Management Command**
 
 
 
