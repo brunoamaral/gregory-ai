@@ -175,12 +175,16 @@ def load_model(team, subject, algorithm, model_version):
         elif algorithm == 'lgbm_tfidf':
             # For LGBM, load vectorizer and classifier
             vectorizer_path = os.path.join(model_dir, 'tfidf_vectorizer.joblib')
-            model_path = os.path.join(model_dir, 'classifier.joblib')
-            
+            # Try both possible classifier filenames
+            model_path = os.path.join(model_dir, 'lgbm_classifier.joblib')  # Updated filename
+            if not os.path.exists(model_path):
+                # Fall back to alternate filename if first one doesn't exist
+                model_path = os.path.join(model_dir, 'classifier.joblib')
+                if not os.path.exists(model_path):
+                    raise ModelLoadError(f"LGBM classifier not found at either:\n- {os.path.join(model_dir, 'lgbm_classifier.joblib')}\n- {os.path.join(model_dir, 'classifier.joblib')}")
+                
             if not os.path.exists(vectorizer_path):
                 raise ModelLoadError(f"TF-IDF vectorizer not found at {vectorizer_path}")
-            if not os.path.exists(model_path):
-                raise ModelLoadError(f"LGBM classifier not found at {model_path}")
                 
             # Load the model
             model = LGBMTfidfTrainer()
