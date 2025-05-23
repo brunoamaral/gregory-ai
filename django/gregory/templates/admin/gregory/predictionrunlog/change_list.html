@@ -113,6 +113,7 @@
                         <th scope="col">Team</th>
                         <th scope="col">Subject</th>
                         <th scope="col">Type</th>
+                        <th scope="col">Algorithm</th>
                         <th scope="col">Started</th>
                         <th scope="col">Status</th>
                         <th scope="col">View</th>
@@ -124,6 +125,7 @@
                         <td>{{ run.team }}</td>
                         <td>{{ run.subject }}</td>
                         <td>{{ run.get_run_type_display }}</td>
+                        <td>{{ run.algorithm }}</td>
                         <td>{{ run.run_started|date:"M d, Y H:i" }}</td>
                         <td>
                             {% if run.success == True %}
@@ -140,7 +142,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" style="text-align: center;">No recent runs</td>
+                        <td colspan="7" style="text-align: center;">No recent runs</td>
                     </tr>
                     {% endfor %}
                 </tbody>
