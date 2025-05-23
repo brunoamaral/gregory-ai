@@ -14,7 +14,17 @@ def getDataByDOI(doi: str, client_email: str):
             'Accept': 'application/json'
         }
         response = requests.request("GET", url, headers=headers, data={})
-        return json.loads(response.text)
+        
+        # Add error handling for empty responses
+        if not response.text.strip():
+            print(f"Empty response received for DOI: {doi}")
+            return {}
+            
+        try:
+            return json.loads(response.text)
+        except json.JSONDecodeError:
+            print(f"Error decoding JSON from response for DOI: {doi}. Response: {response.text[:250]}")
+            return {}
     else:
         raise Exception(f"DOI and Client Email cannot be empty! {doi}, {client_email}")
 
