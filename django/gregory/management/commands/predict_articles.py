@@ -36,7 +36,7 @@ class ModelLoadError(Exception):
     pass
 
 
-def get_articles(subject, algorithm, model_version, lookback_days):
+def get_articles(subject, algorithm, model_version, lookback_days=None, all_articles=False):
     """
     Get articles that need prediction for a given subject, algorithm and model version.
     
@@ -44,15 +44,12 @@ def get_articles(subject, algorithm, model_version, lookback_days):
         subject (Subject): The subject to filter articles by
         algorithm (str): The algorithm to use for prediction
         model_version (str): The model version to use
-        lookback_days (int): Only include articles from the last N days
+        lookback_days (int, optional): Only include articles from the last N days
+        all_articles (bool): If True, ignore the lookback_days filter
         
     Returns:
         QuerySet: Filtered articles queryset
     """
-    # Calculate the date threshold
-    today = timezone.now().date()
-    date_threshold = today - timedelta(days=lookback_days)
-    
     # Find articles that already have predictions for this combination
     existing_predictions = MLPredictions.objects.filter(
         subject=subject,
@@ -61,14 +58,18 @@ def get_articles(subject, algorithm, model_version, lookback_days):
         model_version=model_version
     )
     
-    # Get articles for the subject that:
-    # 1. Were discovered after the threshold date
-    # 2. Don't already have a prediction for this (subject, algorithm, model_version)
-    # 3. Have a non-empty summary
-    articles = Articles.objects.filter(
-        subjects=subject,
-        discovery_date__date__gte=date_threshold
-    ).annotate(
+    # Start with base queryset
+    articles = Articles.objects.filter(subjects=subject)
+    
+    # Apply date filter if not all_articles
+    if not all_articles and lookback_days:
+        # Calculate the date threshold
+        today = timezone.now().date()
+        date_threshold = today - timedelta(days=lookback_days)
+        articles = articles.filter(discovery_date__date__gte=date_threshold)
+    
+    # Add remaining filters
+    articles = articles.annotate(
         has_prediction=Exists(existing_predictions)
     ).filter(
         has_prediction=False
@@ -283,6 +284,11 @@ class Command(BaseCommand):
             help=f'Select articles whose discovery_date >= today - N days (default: {DEFAULT_LOOKBACK_DAYS})'
         )
         filter_group.add_argument(
+            '--all-articles',
+            action='store_true',
+            help='Process all articles regardless of discovery date'
+        )
+        filter_group.add_argument(
             '--algo', 
             type=str,
             help='Comma-separated list of algorithms to use (default: all available)'
@@ -314,7 +320,7 @@ class Command(BaseCommand):
             help='Run everything except database writes'
         )
 
-    def run_predictions_for(self, subject, algorithm, model_version, lookback_days, prob_threshold, dry_run=False, verbose=1):
+    def run_predictions_for(self, subject, algorithm, model_version, lookback_days=None, all_articles=False, prob_threshold=0.8, dry_run=False, verbose=1):
         """
         Run predictions for a specific subject and algorithm.
         
@@ -322,7 +328,8 @@ class Command(BaseCommand):
             subject (Subject): The subject to run predictions for
             algorithm (str): The algorithm to use
             model_version (str): The model version to use (or None for latest)
-            lookback_days (int): Only include articles from the last N days
+            lookback_days (int, optional): Only include articles from the last N days
+            all_articles (bool): If True, ignore the lookback_days filter
             prob_threshold (float): Probability threshold for positive class
             dry_run (bool): If True, don't write to the database
             verbose (int): Verbosity level (0-3)
@@ -393,11 +400,14 @@ class Command(BaseCommand):
                 raise
             
             # Get articles that need prediction
-            articles = get_articles(subject, algorithm, resolved_version, lookback_days)
+            articles = get_articles(subject, algorithm, resolved_version, lookback_days, all_articles)
             total_articles = articles.count()
             
             if verbose >= 1:
-                self.stdout.write(f"    Found {total_articles} articles to process")
+                if all_articles:
+                    self.stdout.write(f"    Found {total_articles} articles to process (all articles)")
+                else:
+                    self.stdout.write(f"    Found {total_articles} articles to process (last {lookback_days} days)")
             
             if total_articles == 0:
                 # No articles to process, just update the log and return
@@ -580,6 +590,7 @@ class Command(BaseCommand):
                             algorithm=algorithm,
                             model_version=options.get('model_version'),
                             lookback_days=options.get('lookback_days'),
+                            all_articles=options.get('all_articles', False),
                             prob_threshold=options.get('prob_threshold'),
                             dry_run=options.get('dry_run', False),
                             verbose=verbose
