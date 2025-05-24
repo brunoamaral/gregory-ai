@@ -1,0 +1,34 @@
+{% if predictions %}
+<div class="field-ml_predictions_display">
+  <table>
+    <thead>
+      <tr>
+        <th>Algorithm</th>
+        <th>Model Version</th>
+        <th>Probability Score</th>
+        <th>Prediction</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for prediction in predictions %}
+      <tr>
+        <td>{{ prediction.algorithm }}</td>
+        <td>{{ prediction.model_version }}</td>
+        <td>{{ prediction.probability_score|floatformat:2 }}</td>
+        <td>
+          {% if prediction.predicted_relevant %}
+            <span style="color: green; font-weight: bold;">Relevant</span>
+          {% else %}
+            <span style="color: red; font-weight: bold;">Not Relevant</span>
+          {% endif %}
+        </td>
+        <td>{{ prediction.created_date|date:"Y-m-d H:i" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p>No ML predictions available for this article.</p>
+{% endif %}

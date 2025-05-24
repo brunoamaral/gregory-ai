@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.urls import path
+import csv
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
 from .admin_filters import DateRangeFilter
 
@@ -65,6 +66,7 @@ class ArticleAdmin(SimpleHistoryAdmin):
 		('Machine Learning Relevancy Predictions per Subject', {
 			'fields': ('ml_predictions_display',),
 			'description': 'Grouping machine learning prediction indicators',
+			'classes': ('ml-predictions-section',),
 		}),
 	)
 	list_display = ['article_id', 'title']
@@ -73,6 +75,11 @@ class ArticleAdmin(SimpleHistoryAdmin):
 	search_fields = ['article_id', 'title', 'doi']
 	list_filter = ('subjects',)
 	raw_id_fields = ("authors",)
+	
+	class Media:
+		css = {
+			'all': ['admin/css/ml_predictions.css'],
+		}
 
 class TrialAdmin(SimpleHistoryAdmin):
 	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']

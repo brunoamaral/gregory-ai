@@ -1,0 +1,53 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  /* Dark mode detection and styling */
+  @media (prefers-color-scheme: dark) {
+    /* ML predictions table styling - for both inline and widget versions */
+    .ml-predictions-table table,
+    .field-ml_predictions_display table,
+    .ml-predictions-section table {
+      color: var(--body-fg);
+      background-color: var(--body-bg);
+      border-color: var(--border-color);
+    }
+    
+    .ml-predictions-table th,
+    .ml-predictions-table td,
+    .field-ml_predictions_display th,
+    .field-ml_predictions_display td,
+    .ml-predictions-section th,
+    .ml-predictions-section td {
+      border-color: var(--border-color);
+      color: var(--body-fg);
+    }
+    
+    .ml-predictions-table tr:nth-child(odd),
+    .field-ml_predictions_display tr:nth-child(odd),
+    .ml-predictions-section tr:nth-child(odd) {
+      background-color: var(--darkened-bg);
+    }
+    
+    .ml-predictions-table thead th,
+    .field-ml_predictions_display thead th,
+    .ml-predictions-section thead th {
+      background-color: var(--primary);
+      color: var(--primary-fg);
+    }
+    
+    /* Fix text colors in dark mode for the prediction indicators */
+    .ml-predictions-section span[style*="color: green"],
+    .field-ml_predictions_display span[style*="color: green"] {
+      color: lightgreen !important;
+    }
+    
+    .ml-predictions-section span[style*="color: red"],
+    .field-ml_predictions_display span[style*="color: red"] {
+      color: lightcoral !important;
+    }
+  }
+</style>
+{% endblock %}
