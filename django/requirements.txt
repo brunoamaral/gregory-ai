@@ -33,7 +33,7 @@ cycler==0.11.0
 debugpy==1.6.7
 decorator==5.1.1
 defusedxml==0.7.1
-Django==5.1.5
+Django==5.2.1
 django-countries==7.6.1
 django-extensions==4.1
 django-organizations==2.5.0
