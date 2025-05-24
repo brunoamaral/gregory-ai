@@ -169,7 +169,10 @@ SECRET_KEY='Yeah well, you know, that is just, like, your DJANGO SECRET_KEY, man
 # Every Tuesday at 8:05
 5 8 * * 2 docker exec admin python manage.py send_weekly_summary
 
-# every 12  hours, at minute 25
+# Run ML predictions on new articles daily at 7:00
+0 7 * * * /usr/bin/docker exec admin python manage.py predict_articles --all-teams
+
+# Every 12 hours, at minute 25, run the pipeline
 25 */12 * * * /usr/bin/flock -n /tmp/pipeline /usr/bin/docker exec admin ./manage.py pipeline
 ```
 
@@ -188,9 +191,17 @@ Once finished, login at <https://api.DOMAIN.TLD/admin> or wherever your reverse 
 Gregory needs to run a series of tasks to fetch missing information before applying the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
 
 ```cron
+# Run django cron jobs every 3 minutes
 */3 * * * * /usr/bin/docker exec -t admin ./manage.py runcrons
-#*/10 * * * * /usr/bin/docker exec -t admin ./manage.py get_takeaways
+
+# Get article takeaways every 5 minutes
 */5 * * * * /usr/bin/flock -n /tmp/get_takeaways /usr/bin/docker exec admin ./manage.py get_takeaways
+
+# Run ML predictions on new articles every 6 hours
+0 */6 * * * /usr/bin/docker exec admin python manage.py predict_articles --all-teams --verbose 1
+
+# Train ML models monthly (first day of each month)
+0 3 1 * * /usr/bin/docker exec admin python manage.py train_models --all-teams
 ```
 
 ## How everything fits together
@@ -305,6 +316,58 @@ For development and testing, you may want to see detailed training information:
 python manage.py train_models --team research --subject test --verbose 3
 ```
 
+### Running Article Predictions with the Django Management Command
+
+Once you have trained ML models, you can use the `predict_articles` command to automatically classify new articles with your trained models.
+
+#### Basic Usage
+
+```bash
+# Run predictions for all algorithms on a specific team
+python manage.py predict_articles --team research
+
+# Run predictions only for LSTM model with verbose output
+python manage.py predict_articles --team clinical --algo lstm --verbose 2
+
+# Run predictions for all teams
+python manage.py predict_articles --all-teams
+```
+
+#### Command Options
+
+| Option | Description |
+|--------|-------------|
+| `--team TEAM_SLUG` | Team slug to run predictions for |
+| `--all-teams` | Run predictions for all teams |
+| `--subject SUBJECT_SLUG` | Subject slug within the chosen team (requires --team) |
+| `--lookback-days DAYS` | Select articles discovered within last N days (default: 90) |
+| `--algo ALGORITHMS` | Comma-separated list of algorithms to use (default: all available) |
+| `--model-version VERSION` | Force a specific model version (default: latest available) |
+| `--prob-threshold VALUE` | Probability threshold for classification (default: 0.8) |
+| `--verbose LEVEL` | Verbosity level (0-3, where 3=detailed summary) |
+| `--dry-run` | Run everything except database writes |
+
+#### Production Use
+
+For production environments, add the prediction command to your scheduled tasks:
+
+```bash
+# Example cron job to run predictions daily
+0 2 * * * docker exec gregory-django python manage.py predict_articles --all-teams
+```
+
+#### Development Use
+
+For testing and development:
+
+```bash
+# Test predictions without making database changes
+python manage.py predict_articles --team research --subject test --dry-run --verbose 3
+
+# Run with a specific model version
+python manage.py predict_articles --team research --algo pubmed_bert --model-version 20250430_1
+```
+
 ## Testing
 
 ### Running Tests
@@ -322,68 +385,6 @@ python manage.py test gregory.tests.test_filename
 # Run standalone test files (for tests that avoid Django dependencies)
 cd django
 python gregory/tests/test_train_models_standalone.py
-```
-
-### Training Models with the Django Management Command
-
-Gregory AI includes a powerful Django management command for training ML models, with support for different algorithms, verbosity levels, and more.
-
-#### Basic Usage
-
-```bash
-# Train all algorithms for a specific team and subject
-python manage.py train_models --team research --subject oncology
-
-# Train only BERT for all subjects in the clinical team
-python manage.py train_models --team clinical --algo pubmed_bert
-
-# Train all models for all teams with verbose output
-python manage.py train_models --all-teams --verbose 3
-
-# Run with pseudo-labeling and custom threshold
-python manage.py train_models --team research --subject cardiology --pseudo-label --prob-threshold 0.75
-```
-
-#### Command Options
-
-| Option | Description |
-|--------|-------------|
-| `--team TEAM_SLUG` | Team slug to train models for |
-| `--all-teams` | Train models for all teams |
-| `--subject SUBJECT_SLUG` | Subject slug within the chosen team (if not specified, train for all subjects) |
-| `--all-articles` | Use all labeled articles (ignores 90-day window) |
-| `--lookback-days DAYS` | Override the default 90-day window for article discovery |
-| `--algo ALGORITHMS` | Comma-separated list of algorithms to train (`pubmed_bert`, `lgbm_tfidf`, `lstm`) |
-| `--prob-threshold VALUE` | Probability threshold for classification (default: 0.8) |
-| `--version TAG` | Manual version tag (default: auto-generated YYYYMMDD) |
-| `--pseudo-label` | Run BERT self-training loop before final training |
-| `--verbose LEVEL` | Verbosity level (0-3, where 0=quiet, 3=summary) |
-
-#### Development Use
-
-When developing or testing, consider:
-
-```bash
-# Use minimal data for quick testing
-python manage.py train_models --team test-team --subject test-subject --lookback-days 30 --algo pubmed_bert --verbose 3
-
-# Skip pseudo-labeling in development to speed up training
-python manage.py train_models --team research --subject oncology --algo pubmed_bert --verbose 2
-```
-
-#### Production Use
-
-In production environments:
-
-```bash
-# Train all algorithms with default settings
-python manage.py train_models --team production --subject main
-
-# Use custom version tag for tracking specific runs
-python manage.py train_models --team clinical --subject cardiology --version v1.2.3_special
-
-# Use pseudo-labeling for improved performance with unlabeled data
-python manage.py train_models --team research --all-articles --pseudo-label
 ```
 
 ## Running for local development
