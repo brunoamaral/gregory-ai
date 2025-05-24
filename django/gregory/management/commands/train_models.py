@@ -14,7 +14,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
-from gregory.models import Team, Subject, PredictionRunLog
+from gregory.models import Team, Subject, Articles, PredictionRunLog
 from gregory.utils.dataset import collect_articles, build_dataset, train_val_test_split
 from gregory.utils.summariser import summarise_bulk
 from gregory.utils.metrics import evaluate_binary
@@ -346,6 +346,7 @@ class Command(BaseCommand):
         total_articles = Articles.objects.filter(teams__slug=team_slug, subjects__subject_slug=subject_slug).count()
         labeled_articles = articles_qs.count()
         
+        
         if options["all_articles"]:
             self.log_message(f"Found {labeled_articles} labeled articles out of {total_articles} total articles (using all-articles flag)", VerbosityLevel.PROGRESS)
         else:
@@ -461,10 +462,6 @@ class Command(BaseCommand):
             # Query for articles that don't have relevance entries for this subject
             # This is a simplified version - in production, use a more efficient query
             self.log_message("Collecting unlabeled articles...", VerbosityLevel.PROGRESS)
-            
-            # Use appropriate model name based on your project structure
-            # This assumes you have an 'Articles' model - adjust if needed
-            from gregory.models import Articles
             
             # Get articles from the same team but without relevance labels for this subject
             unlabeled_articles = Articles.objects.filter(
