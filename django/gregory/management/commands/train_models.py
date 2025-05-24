@@ -692,6 +692,14 @@ class Command(BaseCommand):
                     # Get subject object
                     subject = Subject.objects.get(subject_slug=subject_slug, team=team)
                     
+                    # Skip subjects that don't have auto_predict enabled
+                    if not subject.auto_predict:
+                        self.log_message(
+                            f"Skipping {team_slug}/{subject_slug}: auto_predict not enabled",
+                            VerbosityLevel.PROGRESS
+                        )
+                        continue
+                    
                     self.log_message(
                         f"\nProcessing team='{team_slug}' subject='{subject_slug}'",
                         VerbosityLevel.PROGRESS
