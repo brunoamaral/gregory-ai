@@ -46,7 +46,7 @@ class ArticleSubjectRelevanceSerializer(serializers.ModelSerializer):
 class MLPredictionsSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = MLPredictions
-		fields = ['gnb', 'lr', 'lsvc', 'mnb', 'created_date', 'subject']
+		fields = ['id', 'algorithm', 'model_version', 'probability_score', 'predicted_relevant', 'created_date', 'subject']
 
 class CategorySerializer(serializers.ModelSerializer):
 	class Meta:
@@ -70,7 +70,7 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	authors = ArticleAuthorSerializer(many=True, read_only=True)
 	teams = TeamSerializer(many=True, read_only=True)
 	subjects = SubjectsSerializer(many=True, read_only=True)
-	ml_predictions = MLPredictionsSerializer(many=True, read_only=True, source='ml_predictions.all')
+	ml_predictions = MLPredictionsSerializer(many=True, read_only=True, source='ml_predictions_detail')
 	article_subject_relevances = ArticleSubjectRelevanceSerializer(many=True, read_only=True)
 
 	class Meta:

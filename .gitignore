@@ -65,4 +65,7 @@ data/trials.json
 
 # Gitignore itself
 .gitignore
+
+# Gregory
 postgres-data
+django/admin/settings.py

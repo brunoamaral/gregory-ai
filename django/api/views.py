@@ -283,7 +283,7 @@ class AllArticleViewSet(generics.ListAPIView):
 
 class RelevantList(generics.ListAPIView):
 	"""
-	List relevant articles, by manual selection and Machine Learning using the Gausian Naive Bayes Model.
+	List relevant articles, by manual selection and Machine Learning predictions.
 	"""
 	model = Articles
 	serializer_class = ArticleSerializer
@@ -291,10 +291,9 @@ class RelevantList(generics.ListAPIView):
 	def get_queryset(self):
 		return Articles.objects.filter(
 			Q(relevant=True) | 
-			Q(ml_predictions__gnb=True) | 
-			Q(ml_predictions__lr=True) |
-			Q(ml_predictions__lsvc=True) |
-			Q(ml_predictions__mnb=True) |
+			Q(ml_predictions_detail__predicted_relevant=True) |
+			Q(ml_predictions_detail__gnb=True) | 
+			Q(ml_predictions_detail__lr=True) |
 			Q(article_subject_relevances__is_relevant=True)
 		).distinct().order_by('-discovery_date')
 
