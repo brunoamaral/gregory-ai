@@ -30,7 +30,7 @@ except ImportError:
 SECRET_KEY = os.environ.get('SECRET_KEY', 'DEFAULT SECRET_KEY')
 
 # Print warning if using default key
-if SECRET_KEY == 'DEFAULT SECRET_KEY'):
+if SECRET_KEY == 'DEFAULT SECRET_KEY':
     print("Using default SECRET_KEY for development. DO NOT use in production!")
 
 # SECURITY WARNING: don't run with debug turned on in production!
