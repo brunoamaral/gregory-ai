@@ -342,7 +342,18 @@ class Command(BaseCommand):
         # Collect articles query
         articles_qs = collect_articles(team_slug, subject_slug, window_days)
         
-        # Build dataset with labels
+        # Add detailed logging about article counts
+        total_articles = Articles.objects.filter(teams__slug=team_slug, subjects__subject_slug=subject_slug).count()
+        labeled_articles = articles_qs.count()
+        
+        if options["all_articles"]:
+            self.log_message(f"Found {labeled_articles} labeled articles out of {total_articles} total articles (using all-articles flag)", VerbosityLevel.PROGRESS)
+        else:
+            window_msg = f"last {window_days} days" if window_days else "all time"
+            self.log_message(f"Found {labeled_articles} labeled articles out of {total_articles} total articles ({window_msg})", VerbosityLevel.PROGRESS)
+        
+        # Build dataset with collected articles
+        self.log_message(f"Building dataset with {labeled_articles} labeled articles", VerbosityLevel.PROGRESS)
         dataset_df = build_dataset(articles_qs)
         
         if len(dataset_df) == 0:
