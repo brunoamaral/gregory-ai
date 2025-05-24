@@ -355,12 +355,18 @@ class Command(BaseCommand):
                     run_type='predict',
                     success=None,  # Will be updated at the end
                     triggered_by='predict_articles command'
+                    # model_version will be added after resolution
                 )
             
             # Resolve the model version if not explicitly provided
             try:
                 base_path = os.path.join(BASE_MODEL_DIR, subject.team.slug, subject.subject_slug, algorithm)
                 resolved_version = resolve_model_version(base_path, model_version)
+                
+                # Update the model_version in the run_log
+                if run_log and not dry_run:
+                    run_log.model_version = resolved_version
+                    run_log.save()
                 
                 if verbose >= 1:
                     version_msg = "latest" if not model_version else model_version
