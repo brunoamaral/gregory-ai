@@ -6,6 +6,7 @@ stores the results in MLPredictions, and logs each (subject × algorithm) run in
 """
 import os
 import sys
+import json
 import traceback
 from datetime import timedelta
 from pathlib import Path
@@ -142,6 +143,7 @@ def load_model(team, subject, algorithm, model_version):
         elif algorithm == 'lstm':
             from gregory.ml.lstm_wrapper import LSTMTrainer
             import tensorflow as tf
+            from tensorflow.keras.layers import TextVectorization
         else:
             raise ModelLoadError(f"Unsupported algorithm: {algorithm}")
     except ImportError as e:
@@ -204,10 +206,28 @@ def load_model(team, subject, algorithm, model_version):
                 
             # Load the model
             model = LSTMTrainer()
-            model.model = tf.keras.models.load_model(model_path)
-            model.vectorizer = tf.keras.layers.TextVectorization.from_config(
-                tf.keras.models.load_model(tokenizer_path).get_config()
+            
+            # Load the vectorizer config from JSON file first
+            with open(tokenizer_path, 'r') as f:
+                config = json.load(f)
+            
+            # Create new vectorizer with our standard settings
+            model.vectorizer = TextVectorization(
+                max_tokens=model.max_tokens,
+                output_sequence_length=model.sequence_length,
+                standardize=model._custom_standardization
             )
+            
+            # Set the vocabulary
+            model.vectorizer.set_vocabulary(config['vocabulary'])
+            
+            # AFTER setting the vocabulary, create the model
+            # This ensures the embedding layer has the right input_dim
+            model.model = model._create_model()
+            
+            # Then load the weights
+            model.model.load_weights(model_path)
+            
             return model
     except Exception as e:
         raise ModelLoadError(f"Failed to load {algorithm} model: {str(e)}")
