@@ -85,6 +85,7 @@ def build_dataset(queryset: QuerySet) -> pd.DataFrame:
         # Combine title and summary
         text = article.title
         if article.summary:
+            # Using the original article summary (abstract) here, not a generated one
             text += " " + article.summary
             
         data.append({

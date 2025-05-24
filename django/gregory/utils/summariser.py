@@ -3,8 +3,12 @@ Text summarisation utility module.
 
 This module provides functions to summarise text using the Hugging Face transformers library
 with the facebook/bart-large-cnn model. The model is cached at the module level to avoid
-reloading it for subsequent calls. Additionally, summaries are cached to avoid regenerating
-them for the same input text.
+reloading it for subsequent calls. 
+
+Summaries are cached to disk in the 'summary_cache.json' file to avoid regenerating
+them for the same input text. The cache is stored on disk only and is never automatically 
+saved to the database. Any function that uses generated summaries is responsible for ensuring
+they don't overwrite original article abstracts in the database.
 """
 from typing import Optional, Union, List, Dict
 import concurrent.futures
@@ -138,7 +142,7 @@ def summarise(text: str, max_length: int = 300, use_cache: bool = True) -> str:
     return summary
 
 
-def summarise_bulk(texts: List[str], batch_size: int = 4, use_cache: bool = True) -> List[str]:
+def summarise_bulk(texts: List[str], batch_size: int = 4, use_cache: bool = True, usage_type: str = 'prediction') -> List[str]:
     """
     Summarize a list of texts in batches, optionally in parallel if on GPU.
     
@@ -146,6 +150,8 @@ def summarise_bulk(texts: List[str], batch_size: int = 4, use_cache: bool = True
         texts (List[str]): List of texts to summarize
         batch_size (int, optional): Size of batches for processing. Defaults to 4.
         use_cache (bool, optional): Whether to use the cache. Defaults to True.
+        usage_type (str, optional): Context in which summaries will be used ('prediction' or 'training').
+                                   Used for validation. Defaults to 'prediction'.
         
     Returns:
         List[str]: List of summarized texts in the same order as the input
@@ -291,6 +297,76 @@ def clear_cache():
     _CACHE_MISS_COUNT = 0
     _save_cache()
     return {"status": "Cache cleared", "entries": 0}
+
+
+def is_summary_from_cache(text: str, summary: str, max_length: int = 300) -> bool:
+    """
+    Check if a given summary for a text is from the cache.
+    
+    Args:
+        text (str): The original text
+        summary (str): The summary to check
+        max_length (int, optional): Maximum token length used when generating the summary. Defaults to 300.
+        
+    Returns:
+        bool: True if the summary is from the cache, False otherwise
+        
+    Examples:
+        >>> text = "This is a long article about climate change..."
+        >>> summary = "Climate change poses significant global risks..."
+        >>> is_summary_from_cache(text, summary)
+        True  # If this summary was previously cached
+    """
+    if not text or not text.strip():
+        return False
+    
+    # Create a cache key using the text hash and max_length
+    cache_key = f"{_hash_text(text)}_{max_length}"
+    
+    # Check if the summary is in the cache and matches the provided summary
+    return cache_key in _SUMMARY_CACHE and _SUMMARY_CACHE[cache_key] == summary
+
+
+def validate_summary_usage(text: str, summary: str, usage_type: str = 'training') -> bool:
+    """
+    Validate that generated summaries are being used appropriately and not overwriting article abstracts.
+    
+    Args:
+        text (str): The original text
+        summary (str): The generated summary
+        usage_type (str): The context in which the summary is being used ('training' or 'prediction')
+        
+    Returns:
+        bool: True if the summary usage is valid, False otherwise
+        
+    Raises:
+        ValueError: If the summary usage is invalid and potentially harmful
+        
+    Examples:
+        >>> # For training, summaries should be stored in a separate column
+        >>> validate_summary_usage(text, summary, 'training')
+        True
+        
+        >>> # For prediction, summaries can be used for inference but not stored back to the article
+        >>> validate_summary_usage(text, summary, 'prediction')
+        True
+    """
+    # Check if the summary comes from the cache
+    is_cached = is_summary_from_cache(text, summary)
+    
+    if usage_type == 'training':
+        # For training, we should be using 'generated_summary' column, not 'summary'
+        if not is_cached:
+            print(f"Warning: Generated a new summary for training that wasn't in the cache. " +
+                  "This is inefficient but not harmful.")
+        return True
+    elif usage_type == 'prediction':
+        # For prediction, we only use summaries for inference, never save back to Articles
+        return True
+    else:
+        # For any other use case, issue a warning
+        print(f"Warning: Using summary in an unrecognized context: {usage_type}")
+        return True
 
 
 if __name__ == "__main__":

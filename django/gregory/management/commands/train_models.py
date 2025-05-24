@@ -298,6 +298,10 @@ class Command(BaseCommand):
             
         Raises:
             ValueError: If dataset preparation or training fails
+            
+        Note:
+            Generated summaries are stored as 'generated_summary' in the training DataFrame
+            and are never saved back to the database. They are only used for training purposes.
         """
         results = {
             'team': team_slug,
@@ -387,16 +391,17 @@ class Command(BaseCommand):
             titles = dataset_df['title'].tolist()
         
         # Generate summaries for all texts
-        summaries = summarise_bulk(titles, batch_size=4)
+        summaries = summarise_bulk(titles, batch_size=4, usage_type='training')
         
-        # Update the dataset with generated summaries
-        dataset_df['summary'] = summaries
+        # Update the dataset with generated summaries - use 'generated_summary' instead of 'summary'
+        # to avoid overwriting original article abstracts
+        dataset_df['generated_summary'] = summaries
         
-        # Create final text column combining title and summary
+        # Create final text column combining title and generated summary
         dataset_df['text'] = dataset_df.apply(
-            lambda row: f"{row['title']} {row['summary']}".strip() 
+            lambda row: f"{row['title']} {row['generated_summary']}".strip() 
             if 'title' in dataset_df.columns 
-            else f"{row['text']} {row['summary']}".strip(),
+            else f"{row['text']} {row['generated_summary']}".strip(),
             axis=1
         )
         
@@ -478,10 +483,10 @@ class Command(BaseCommand):
                 # Generate summaries for unlabeled data if needed
                 if len(unlabeled_data) > 0:
                     unlabeled_titles = unlabelled_df['title'].tolist()
-                    unlabeled_summaries = summarise_bulk(unlabeled_titles, batch_size=4)
-                    unlabelled_df['summary'] = unlabeled_summaries
+                    unlabeled_summaries = summarise_bulk(unlabeled_titles, batch_size=4, usage_type='training')
+                    unlabelled_df['generated_summary'] = unlabeled_summaries
                     unlabelled_df['text'] = unlabelled_df.apply(
-                        lambda row: f"{row['title']} {row['summary']}".strip(),
+                        lambda row: f"{row['title']} {row['generated_summary']}".strip(),
                         axis=1
                     )
                 
