@@ -439,7 +439,7 @@ class Command(BaseCommand):
                     prediction = MLPredictions(
                         subject=subject,
                         article=article,
-                        model_version=resolved_version,
+                        model_version=resolved_version,  # Always use the resolved model version
                         algorithm=algorithm,
                         probability_score=probability,
                         predicted_relevant=(binary_prediction == 1)
