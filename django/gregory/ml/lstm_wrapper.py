@@ -377,8 +377,29 @@ class LSTMTrainer:
         
         # Save vectorizer config and vocabulary
         vectorizer_path = model_dir / "tokenizer.json"
+        
+        # Get the config but handle the standardize function which is not JSON serializable
+        raw_config = self.vectorizer.get_config()
+        
+        # Create a copy of the config that we can modify
+        serializable_config = raw_config.copy()
+        
+        # Replace the non-serializable standardize function with a string identifier
+        if callable(serializable_config.get('standardize')):
+            serializable_config['standardize'] = "custom_standardization"
+            
+        # Handle any other potentially non-serializable objects
+        for key, value in serializable_config.items():
+            # Check if the value is JSON serializable
+            try:
+                json.dumps({key: value})
+            except (TypeError, OverflowError):
+                # If not serializable, convert to a string representation
+                if key != 'standardize':  # We already handled standardize
+                    serializable_config[key] = str(value)
+        
         vectorizer_config = {
-            "config": self.vectorizer.get_config(),
+            "config": serializable_config,
             "vocabulary": self.vectorizer.get_vocabulary(),
             "index_word": {i: word for i, word in enumerate(self.vectorizer.get_vocabulary())}
         }
@@ -416,6 +437,16 @@ class LSTMTrainer:
             "epochs_trained": self.epochs_trained,
             "vocabulary_size": len(self.vectorizer.get_vocabulary()),
             "timestamp": datetime.now().isoformat(),
+            "model_params": {
+                "max_tokens": self.max_tokens,
+                "sequence_length": self.sequence_length,
+                "embedding_dim": self.embedding_dim,
+                "lstm_units": self.lstm_units,
+                "dropout_rate": self.dropout_rate,
+                "learning_rate": self.learning_rate,
+                "bidirectional": self.bidirectional,
+                "batch_normalization": self.batch_normalization,
+            },
             **history_metrics
         }
         
@@ -447,17 +478,16 @@ class LSTMTrainer:
         with open(vectorizer_path, 'r') as f:
             vectorizer_data = json.load(f)
         
-        # Create vectorizer with the loaded configuration
-        self.vectorizer = TextVectorization.from_config(vectorizer_data["config"])
-        
-        # Set vocabulary
-        vocabulary = vectorizer_data["vocabulary"]
-        lookup = tf.keras.layers.StringLookup(
-            vocabulary=vocabulary,
-            mask_token="",
-            num_oov_indices=1,
-            oov_token="[UNK]"
+        # Create a new TextVectorization layer with our desired settings
+        # rather than trying to deserialize the exact configuration
+        self.vectorizer = TextVectorization(
+            max_tokens=self.max_tokens,
+            output_sequence_length=self.sequence_length,
+            standardize=self._custom_standardization
         )
+        
+        # Set vocabulary from the saved state
+        vocabulary = vectorizer_data["vocabulary"]
         self.vectorizer.set_vocabulary(vocabulary)
         
         # Create model architecture
