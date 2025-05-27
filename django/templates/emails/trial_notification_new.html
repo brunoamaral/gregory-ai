@@ -11,22 +11,34 @@
     <div style="margin-bottom: 30px;">
         <h2 class="content-title">New Clinical Trials Notification</h2>
         <p class="content-text">
-            We've found {{ trials|length }} new clinical trial{{ trials|length|pluralize }} that match your research interests.
+            We've found {{ content_stats.total_trials|default:0 }} new clinical trial{{ content_stats.total_trials|default:0|pluralize }} that match your research interests.
         </p>
     </div>
     
     <!-- Clinical Trials Section -->
-    {% if trials %}
+    {% if trials or additional_trials %}
     <div style="margin-bottom: 40px;">
         <h2 class="content-subtitle" style="color: #1e3a8a; font-size: 22px; margin: 0 0 25px 0; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;">
-            🧪 New Clinical Trials ({{ trials|length }})
+            🧪 New Clinical Trials ({{ content_stats.total_trials|default:0 }})
         </h2>
         
-        {% for trial in trials %}
-            {% with email_type='trial_notification' show_discovery_date=True show_published_date=True show_summary=True show_status=True %}
-                {% include 'emails/components/trial_card.html' %}
-            {% endwith %}
-        {% endfor %}
+        <!-- Featured Trials -->
+        {% if trials %}
+            {% for trial in trials %}
+                {% with email_type='trial_notification' show_discovery_date=True show_published_date=True show_summary=True show_status=True %}
+                    {% include 'emails/components/trial_card.html' %}
+                {% endwith %}
+            {% endfor %}
+        {% endif %}
+        
+        <!-- Additional Trials -->
+        {% if additional_trials %}
+            {% for trial in additional_trials %}
+                {% with email_type='trial_notification' show_discovery_date=True show_published_date=True show_summary=True show_status=True %}
+                    {% include 'emails/components/trial_card.html' %}
+                {% endwith %}
+            {% endfor %}
+        {% endif %}
     </div>
     {% else %}
     <!-- No Trials Message -->

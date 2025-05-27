@@ -273,14 +273,24 @@ class EmailRenderingPipeline:
             self.organizer.email_type = email_type
             
             # Optimize database queries with prefetch_related
-            if articles is not None:
-                articles = articles.prefetch_related(
-                    'authors',
-                    'ml_predictions__subject'
-                )
+            if articles is not None and hasattr(articles, 'prefetch_related'):
+                # Only apply prefetch if it's not already a sliced QuerySet
+                try:
+                    articles = articles.prefetch_related(
+                        'authors',
+                        'ml_predictions__subject'
+                    )
+                except Exception:
+                    # If prefetch fails (e.g., already sliced), continue with original
+                    pass
             
-            if trials is not None:
-                trials = trials.select_related()
+            if trials is not None and hasattr(trials, 'select_related'):
+                # Only apply select_related if it's not already a sliced QuerySet
+                try:
+                    trials = trials.select_related()
+                except Exception:
+                    # If select_related fails (e.g., already sliced), continue with original
+                    pass
             
             # Organize content
             organized_articles = self.organizer.organize_articles(
