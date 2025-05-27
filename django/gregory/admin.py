@@ -12,6 +12,24 @@ from django import forms
 from .fields import MLPredictionsField
 from django.utils.html import format_html
 from django.urls import reverse
+# @admin.register(PredictionRunLog)
+class PredictionRunLogAdmin(admin.ModelAdmin):
+    list_display = ['id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 'run_started', 'run_finished', 'status_label', 'triggered_by']
+    list_filter = [DateRangeFilter, 'team', 'subject', 'run_type', 'algorithm', 'success', 'model_version']
+    search_fields = ['team__organization__name', 'subject__subject_name', 'model_version', 'triggered_by', 'algorithm']
+    readonly_fields = ['run_started']  # Auto-populated field
+    date_hierarchy = 'run_started'
+    actions = ['mark_as_failed', 'mark_as_successful', 'export_as_csv']
+    
+    fieldsets = (
+        ('Run Information', {
+            'fields': ('team', 'subject', 'run_type', 'algorithm', 'model_version', 'triggered_by'),
+        }),
+        ('Status', {
+            'fields': ('run_started', 'run_finished', 'success', 'error_message'),
+        }),
+    )
+
 
 class ArticleSubjectRelevanceInline(admin.TabularInline):
 	model = ArticleSubjectRelevance
@@ -48,6 +66,7 @@ class ArticleAdmin(SimpleHistoryAdmin):
 		('Machine Learning Relevancy Predictions per Subject', {
 			'fields': ('ml_predictions_display',),
 			'description': 'Grouping machine learning prediction indicators',
+			'classes': ('ml-predictions-section',),
 		}),
 	)
 	list_display = ['article_id', 'title']
@@ -56,6 +75,11 @@ class ArticleAdmin(SimpleHistoryAdmin):
 	search_fields = ['article_id', 'title', 'doi']
 	list_filter = ('subjects',)
 	raw_id_fields = ("authors",)
+	
+	class Media:
+		css = {
+			'all': ['admin/css/ml_predictions.css'],
+		}
 
 class TrialAdmin(SimpleHistoryAdmin):
 	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
@@ -136,16 +160,16 @@ class TeamCredentialsAdmin(admin.ModelAdmin):
 		return self.readonly_fields
 @admin.register(PredictionRunLog)
 class PredictionRunLogAdmin(admin.ModelAdmin):
-    list_display = ['id', 'team', 'subject', 'run_type', 'model_version', 'run_started', 'run_finished', 'status_label', 'triggered_by']
-    list_filter = [DateRangeFilter, 'team', 'subject', 'run_type', 'success', 'model_version']
-    search_fields = ['team__organization__name', 'subject__subject_name', 'model_version', 'triggered_by']
+    list_display = ['id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 'run_started', 'run_finished', 'status_label', 'triggered_by']
+    list_filter = [DateRangeFilter, 'team', 'subject', 'run_type', 'algorithm', 'success', 'model_version']
+    search_fields = ['team__organization__name', 'subject__subject_name', 'model_version', 'triggered_by', 'algorithm']
     readonly_fields = ['run_started']  # Auto-populated field
     date_hierarchy = 'run_started'
     actions = ['mark_as_failed', 'mark_as_successful', 'export_as_csv']
     
     fieldsets = (
         ('Run Information', {
-            'fields': ('team', 'subject', 'run_type', 'model_version', 'triggered_by'),
+            'fields': ('team', 'subject', 'run_type', 'algorithm', 'model_version', 'triggered_by'),
         }),
         ('Status', {
             'fields': ('run_started', 'run_finished', 'success', 'error_message'),
@@ -211,7 +235,7 @@ class PredictionRunLogAdmin(admin.ModelAdmin):
         """Export selected logs to CSV file"""
         meta = self.model._meta
         field_names = [
-            'id', 'team', 'subject', 'run_type', 'model_version', 
+            'id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 
             'run_started', 'run_finished', 'success', 'triggered_by', 'error_message'
         ]
         

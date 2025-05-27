@@ -283,18 +283,14 @@ class AllArticleViewSet(generics.ListAPIView):
 
 class RelevantList(generics.ListAPIView):
 	"""
-	List relevant articles, by manual selection and Machine Learning using the Gausian Naive Bayes Model.
+	List relevant articles, by manual selection and Machine Learning predictions.
 	"""
 	model = Articles
 	serializer_class = ArticleSerializer
 
 	def get_queryset(self):
 		return Articles.objects.filter(
-			Q(relevant=True) | 
-			Q(ml_predictions__gnb=True) | 
-			Q(ml_predictions__lr=True) |
-			Q(ml_predictions__lsvc=True) |
-			Q(ml_predictions__mnb=True) |
+			Q(ml_predictions_detail__predicted_relevant=True) |
 			Q(article_subject_relevances__is_relevant=True)
 		).distinct().order_by('-discovery_date')
 
@@ -316,7 +312,12 @@ class newsletterByWeek(viewsets.ModelViewSet):
 		p_week = self.kwargs.get('week')
 		p_year = self.kwargs.get('year')
 		week = getDateRangeFromWeek(p_year=p_year,p_week=p_week)
-		articles = Articles.objects.filter(Q(discovery_date__gte=week[0].astimezone(),discovery_date__lte=week[1].astimezone())).filter(Q(ml_prediction_gnb=True) | Q(relevant=True))
+		articles = Articles.objects.filter(
+			Q(discovery_date__gte=week[0].astimezone(),discovery_date__lte=week[1].astimezone())
+		).filter(
+			Q(ml_predictions_detail__predicted_relevant=True) | 
+			Q(article_subject_relevances__is_relevant=True)
+		).distinct()
 		return articles
 
 	serializer_class = ArticleSerializer
@@ -331,7 +332,12 @@ class lastXdays(viewsets.ModelViewSet):
 	def get_queryset(self):
 		days_to_subtract = self.kwargs.get('days', None)
 		days = datetime.today() - timedelta(days=days_to_subtract)
-		articles = Articles.objects.filter(Q(discovery_date__gte=days.astimezone())).filter(Q(ml_prediction_gnb=True) | Q(relevant=True))
+		articles = Articles.objects.filter(
+			Q(discovery_date__gte=days.astimezone())
+		).filter(
+			Q(ml_predictions_detail__predicted_relevant=True) | 
+			Q(article_subject_relevances__is_relevant=True)
+		).distinct()
 		return articles
 
 	serializer_class = ArticleSerializer
@@ -374,10 +380,14 @@ class ArticlesPredictionNone(generics.ListAPIView):
 	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
-		queryset = Articles.objects.annotate(summary_len=Length('summary')).filter( summary_len__gt = 0).filter(ml_prediction_gnb=None)
+		queryset = Articles.objects.annotate(summary_len=Length('summary')).filter(summary_len__gt=0).exclude(
+			ml_predictions_detail__isnull=False
+		)
 		summary_length = self.request.query_params.get('summary_length')
 		if summary_length is not None:
-			queryset = Articles.objects.annotate(summary_len=Length('summary')).filter( summary_len__gt = summary_length).filter(ml_prediction_gnb=None)
+			queryset = Articles.objects.annotate(summary_len=Length('summary')).filter(summary_len__gt=summary_length).exclude(
+				ml_predictions_detail__isnull=False
+			)
 		return queryset
 
 class ArticlesCount(viewsets.ModelViewSet):

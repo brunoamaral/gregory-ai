@@ -5,6 +5,7 @@ class Command(BaseCommand):
 	help = 'Runs a list of specified management commands.'
 
 	def handle(self, *args, **options):
+		# standard commands to run in the pipeline
 		commands_to_run = [
 			'feedreader_articles',  # 1. Feedreader. Get articles
 			'feedreader_trials',		# 2. Feedreader. Get trials
@@ -14,9 +15,9 @@ class Command(BaseCommand):
 			'update_orcid',     		# 6. Find missing ORCID for authors
 			'rebuild_categories',   # 7. Assign categories
 			'get_takeaways',    		# 8. Get takeaways
-			'3_predict',        		# 9. Predict
 		]
 
+		# First run all the standard commands
 		for cmd in commands_to_run:
 			try:
 				self.stdout.write(self.style.SUCCESS(f'Running command: {cmd}'))
@@ -25,3 +26,11 @@ class Command(BaseCommand):
 			except Exception as e:
 				self.stderr.write(self.style.ERROR(f'Error running command {cmd}: {str(e)}'))
 				self.stdout.write(self.style.WARNING(f'Skipping command: {cmd}'))
+		
+		# Now run predict_articles with the --all-teams flag
+		try:
+			self.stdout.write(self.style.SUCCESS('Running predict_articles with --all-teams flag'))
+			call_command('predict_articles', all_teams=True)
+			self.stdout.write(self.style.SUCCESS('Finished running predict_articles with --all-teams flag'))
+		except Exception as e:
+			self.stderr.write(self.style.ERROR(f'Error running predict_articles: {str(e)}'))

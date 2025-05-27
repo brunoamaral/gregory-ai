@@ -253,13 +253,138 @@ There are options to filter lists of articles by their category or subject in th
 
 ## How to update the Machine Learning Algorithms
 
-This is not working right now and there is a [pull request to setup an automatic process to keep the machine learning models up to date](https://github.com/brunoamaral/gregory/pull/110).
-
 It's useful to re-train the machine learning models once you have a good number of articles flagged as relevant.
 
-1. `cd docker-python; source .venv/bin/activate`
-2. `python3 1_data_processor.py`
-3. `python3 2_train_models.py`
+### Training Models with the Django Management Command
+
+Gregory AI now includes a powerful Django management command for training ML models, with support for different algorithms, verbosity levels, and more.
+
+#### Basic Usage
+
+```bash
+# Train all algorithms for a specific team and subject
+python manage.py train_models --team research --subject oncology
+
+# Train all models for the 'clinical' team with maximum verbosity
+python manage.py train_models --team clinical --verbose 3
+
+# Train only LGBM model for a specific team and subject
+python manage.py train_models --team research --subject cardiology --algo lgbm_tfidf
+```
+
+#### Command Options
+
+| Option | Description |
+|--------|-------------|
+| `--team TEAM_SLUG` | Team slug to train models for |
+| `--all-teams` | Train models for all teams |
+| `--subject SUBJECT_SLUG` | Subject slug within the chosen team (if not specified, train for all subjects) |
+| `--all-articles` | Use all labeled articles (ignores 90-day window) |
+| `--lookback-days DAYS` | Override the default 90-day window for article discovery |
+| `--algo ALGORITHMS` | Comma-separated list of algorithms to train (pubmed_bert,lgbm_tfidf,lstm) |
+| `--prob-threshold THRESHOLD` | Probability threshold for classification (default: 0.8) |
+| `--version VERSION` | Manual version tag (default: auto-generated YYYYMMDD with optional _n suffix) |
+| `--pseudo-label` | Run BERT self-training loop before final training |
+| `--verbose LEVEL` | Verbosity level (0: quiet, 1: progress, 2: +warnings, 3: +summary) |
+
+#### Production Use
+
+In production, it's recommended to run the command on a scheduled basis (e.g., monthly) with the appropriate verbosity level:
+
+```bash
+# Example for production cron job
+docker exec -it gregory-django python manage.py train_models --all-teams --verbose 1
+```
+
+#### Development Use
+
+For development and testing, you may want to see detailed training information:
+
+```bash
+# Example for development
+python manage.py train_models --team research --subject test --verbose 3
+```
+
+## Testing
+
+### Running Tests
+
+Gregory AI includes a comprehensive test suite. To run tests:
+
+```bash
+# Run all tests
+cd django
+python manage.py test
+
+# Run specific test files or modules
+python manage.py test gregory.tests.test_filename
+
+# Run standalone test files (for tests that avoid Django dependencies)
+cd django
+python gregory/tests/test_train_models_standalone.py
+```
+
+### Training Models with the Django Management Command
+
+Gregory AI includes a powerful Django management command for training ML models, with support for different algorithms, verbosity levels, and more.
+
+#### Basic Usage
+
+```bash
+# Train all algorithms for a specific team and subject
+python manage.py train_models --team research --subject oncology
+
+# Train only BERT for all subjects in the clinical team
+python manage.py train_models --team clinical --algo pubmed_bert
+
+# Train all models for all teams with verbose output
+python manage.py train_models --all-teams --verbose 3
+
+# Run with pseudo-labeling and custom threshold
+python manage.py train_models --team research --subject cardiology --pseudo-label --prob-threshold 0.75
+```
+
+#### Command Options
+
+| Option | Description |
+|--------|-------------|
+| `--team TEAM_SLUG` | Team slug to train models for |
+| `--all-teams` | Train models for all teams |
+| `--subject SUBJECT_SLUG` | Subject slug within the chosen team (if not specified, train for all subjects) |
+| `--all-articles` | Use all labeled articles (ignores 90-day window) |
+| `--lookback-days DAYS` | Override the default 90-day window for article discovery |
+| `--algo ALGORITHMS` | Comma-separated list of algorithms to train (`pubmed_bert`, `lgbm_tfidf`, `lstm`) |
+| `--prob-threshold VALUE` | Probability threshold for classification (default: 0.8) |
+| `--version TAG` | Manual version tag (default: auto-generated YYYYMMDD) |
+| `--pseudo-label` | Run BERT self-training loop before final training |
+| `--verbose LEVEL` | Verbosity level (0-3, where 0=quiet, 3=summary) |
+
+#### Development Use
+
+When developing or testing, consider:
+
+```bash
+# Use minimal data for quick testing
+python manage.py train_models --team test-team --subject test-subject --lookback-days 30 --algo pubmed_bert --verbose 3
+
+# Skip pseudo-labeling in development to speed up training
+python manage.py train_models --team research --subject oncology --algo pubmed_bert --verbose 2
+```
+
+#### Production Use
+
+In production environments:
+
+```bash
+# Train all algorithms with default settings
+python manage.py train_models --team production --subject main
+
+# Use custom version tag for tracking specific runs
+python manage.py train_models --team clinical --subject cardiology --version v1.2.3_special
+
+# Use pseudo-labeling for improved performance with unlabeled data
+python manage.py train_models --team research --all-articles --pseudo-label
+```
 
 ## Running for local development
 

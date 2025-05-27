@@ -1,6 +1,57 @@
 {% extends "admin/change_list.html" %}
 {% load i18n admin_urls static admin_list %}
 
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    /* Card styling that respects dark mode */
+    .stats-card {
+        flex: 1;
+        min-width: 300px;
+        margin: 10px;
+        padding: 15px;
+        border-radius: 4px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        background-color: var(--body-bg);
+        border: 1px solid var(--border-color);
+    }
+    
+    /* Stats styling */
+    .stats-container {
+        display: flex;
+        justify-content: space-between;
+    }
+    
+    .stat-item {
+        text-align: center;
+        padding: 10px;
+    }
+    
+    .stat-number {
+        font-size: 24px;
+        font-weight: bold;
+    }
+    
+    .success-color {
+        color: var(--object-tools-bg, #417690);
+    }
+    
+    .failed-color {
+        color: var(--delete-button-bg, #ba2121);
+    }
+    
+    .running-color {
+        color: var(--default-button-bg, #79aec8);
+    }
+    
+    .flex-wrap {
+        display: flex;
+        flex-wrap: wrap;
+        margin: 10px -10px;
+    }
+</style>
+{% endblock %}
+
 {% block object-tools-items %}
     <li>
         <a href="{% url 'admin:predictionrunlog_ml_coverage' %}" class="button">ML Coverage Report</a>
@@ -12,40 +63,40 @@
 <div class="module" style="margin-bottom: 20px;">
     <h2>ML Prediction Runs Dashboard</h2>
     
-    <div style="display: flex; flex-wrap: wrap; margin: 10px -10px;">
+    <div class="flex-wrap">
         <!-- Training Status Summary -->
-        <div style="flex: 1; min-width: 300px; margin: 10px; padding: 15px; background-color: #f9f9f9; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <div class="stats-card">
             <h3>Training Runs</h3>
-            <div style="display: flex; justify-content: space-between;">
-                <div style="text-align: center; padding: 10px;">
-                    <div style="font-size: 24px; color: green; font-weight: bold;">{{ training_success_count }}</div>
+            <div class="stats-container">
+                <div class="stat-item">
+                    <div class="stat-number success-color">{{ training_success_count }}</div>
                     <div>Successful</div>
                 </div>
-                <div style="text-align: center; padding: 10px;">
-                    <div style="font-size: 24px; color: red; font-weight: bold;">{{ training_failed_count }}</div>
+                <div class="stat-item">
+                    <div class="stat-number failed-color">{{ training_failed_count }}</div>
                     <div>Failed</div>
                 </div>
-                <div style="text-align: center; padding: 10px;">
-                    <div style="font-size: 24px; color: orange; font-weight: bold;">{{ training_running_count }}</div>
+                <div class="stat-item">
+                    <div class="stat-number running-color">{{ training_running_count }}</div>
                     <div>Running</div>
                 </div>
             </div>
         </div>
         
         <!-- Prediction Status Summary -->
-        <div style="flex: 1; min-width: 300px; margin: 10px; padding: 15px; background-color: #f9f9f9; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <div class="stats-card">
             <h3>Prediction Runs</h3>
-            <div style="display: flex; justify-content: space-between;">
-                <div style="text-align: center; padding: 10px;">
-                    <div style="font-size: 24px; color: green; font-weight: bold;">{{ prediction_success_count }}</div>
+            <div class="stats-container">
+                <div class="stat-item">
+                    <div class="stat-number success-color">{{ prediction_success_count }}</div>
                     <div>Successful</div>
                 </div>
-                <div style="text-align: center; padding: 10px;">
-                    <div style="font-size: 24px; color: red; font-weight: bold;">{{ prediction_failed_count }}</div>
+                <div class="stat-item">
+                    <div class="stat-number failed-color">{{ prediction_failed_count }}</div>
                     <div>Failed</div>
                 </div>
-                <div style="text-align: center; padding: 10px;">
-                    <div style="font-size: 24px; color: orange; font-weight: bold;">{{ prediction_running_count }}</div>
+                <div class="stat-item">
+                    <div class="stat-number running-color">{{ prediction_running_count }}</div>
                     <div>Running</div>
                 </div>
             </div>
@@ -53,43 +104,45 @@
     </div>
     
     <!-- Recent Activity -->
-    <div style="margin: 10px; padding: 15px; background-color: #f9f9f9; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    <div class="stats-card" style="margin: 10px;">
         <h3>Recent Activity</h3>
         <div style="max-height: 300px; overflow-y: auto;">
-            <table style="width: 100%; border-collapse: collapse;">
+            <table class="results" style="width: 100%;">
                 <thead>
                     <tr>
-                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">Team</th>
-                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">Subject</th>
-                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">Type</th>
-                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">Started</th>
-                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">Status</th>
-                        <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">View</th>
+                        <th scope="col">Team</th>
+                        <th scope="col">Subject</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">Algorithm</th>
+                        <th scope="col">Started</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">View</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for run in recent_runs %}
-                    <tr>
-                        <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ run.team }}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ run.subject }}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ run.get_run_type_display }}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ run.run_started|date:"M d, Y H:i" }}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid #eee;">
+                    <tr class="{% cycle 'row1' 'row2' %}">
+                        <td>{{ run.team }}</td>
+                        <td>{{ run.subject }}</td>
+                        <td>{{ run.get_run_type_display }}</td>
+                        <td>{{ run.algorithm }}</td>
+                        <td>{{ run.run_started|date:"M d, Y H:i" }}</td>
+                        <td>
                             {% if run.success == True %}
-                                <span style="color: green; font-weight: bold;">Success</span>
+                                <span class="success-color" style="font-weight: bold;">Success</span>
                             {% elif run.success == False %}
-                                <span style="color: red; font-weight: bold;">Failed</span>
+                                <span class="failed-color" style="font-weight: bold;">Failed</span>
                             {% else %}
-                                <span style="color: orange; font-weight: bold;">Running</span>
+                                <span class="running-color" style="font-weight: bold;">Running</span>
                             {% endif %}
                         </td>
-                        <td style="padding: 8px; border-bottom: 1px solid #eee;">
+                        <td>
                             <a href="{% url 'admin:gregory_predictionrunlog_change' run.id %}">View</a>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" style="padding: 8px; text-align: center;">No recent runs</td>
+                        <td colspan="7" style="text-align: center;">No recent runs</td>
                     </tr>
                     {% endfor %}
                 </tbody>

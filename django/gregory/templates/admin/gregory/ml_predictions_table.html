@@ -28,13 +28,10 @@
         <tr>
             <th>ID</th>
             <th>Subject</th>
+            <th>Algorithm</th>
             <th>Model Version</th>
             <th>Relevance</th>
             <th>Score</th>
-            <th>Gaussian Naive Bayes</th>
-            <th>Logistic Regression</th>
-            <th>Linear SVC</th>
-            <th>Multinomial NB</th>
         </tr>
     </thead>
     <tbody>
@@ -42,6 +39,7 @@
         <tr>
             <td>{{ prediction.id }}</td>
             <td>{{ prediction.subject }}</td>
+            <td>{{ prediction.get_algorithm_display|default:"Unknown" }}</td>
             <td>{{ prediction.model_version|default:"N/A" }}</td>
             <td>
                 {% if prediction.predicted_relevant == True %}
@@ -59,10 +57,6 @@
                 N/A
                 {% endif %}
             </td>
-            <td>{{ prediction.gnb|yesno:"✓,✗,?" }}</td>
-            <td>{{ prediction.lr|yesno:"✓,✗,?" }}</td>
-            <td>{{ prediction.lsvc|yesno:"✓,✗,?" }}</td>
-            <td>{{ prediction.mnb|yesno:"✓,✗,?" }}</td>
         </tr>
         {% endfor %}
     </tbody>
