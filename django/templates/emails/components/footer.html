@@ -1,0 +1,128 @@
+<!-- Reusable Email Footer Component -->
+<table role="presentation" border="0" cellpadding="0" cellspacing="0" class="email-footer-container" style="width: 100%; background-color: #f9fafb; border-radius: 0 0 8px 8px; border-top: 1px solid #e5e7eb;">
+    <tr>
+        <td style="padding: 30px 40px; text-align: center;">
+            
+            <!-- Main Footer Content -->
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 auto;">
+                <tr>
+                    <td style="text-align: center;">
+                        
+                        <!-- Gregory AI Branding -->
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 20px;">
+                            <tr>
+                                <td style="text-align: center;">
+                                    <h3 style="color: #1e3a8a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 18px; font-weight: 700; margin: 0 0 5px 0;">
+                                        {% block footer_brand %}Gregory AI{% endblock %}
+                                    </h3>
+                                    <p style="color: #6b7280; font-size: 14px; font-weight: 400; margin: 0; line-height: 1.4;">
+                                        {% block footer_description %}Medical Research Intelligence Platform{% endblock %}
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <!-- Website and Support Links -->
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 20px;">
+                            <tr>
+                                <td style="text-align: center;">
+                                    <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0; line-height: 1.5;">
+                                        For more information visit 
+                                        <a href="https://{{ site.domain|default:'gregory-ms.com' }}/" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+                                            https://{{ site.domain|default:'gregory-ms.com' }}/
+                                        </a>
+                                    </p>
+                                    
+                                    <!-- Additional Support Links -->
+                                    <p style="color: #6b7280; font-size: 13px; margin: 0; line-height: 1.4;">
+                                        <a href="https://{{ site.domain|default:'gregory-ms.com' }}/support/" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Support</a> |
+                                        <a href="https://{{ site.domain|default:'gregory-ms.com' }}/about/" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">About</a> |
+                                        <a href="https://{{ site.domain|default:'gregory-ms.com' }}/contact/" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Contact</a>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <!-- Social Media Links -->
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 20px;">
+                            <tr>
+                                <td style="text-align: center;">
+                                    <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Follow us:</p>
+                                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="display: inline-table;">
+                                        <tr>
+                                            <td style="padding: 0 8px;">
+                                                <a href="#" style="color: #3b82f6; text-decoration: none; font-size: 13px;">Twitter</a>
+                                            </td>
+                                            <td style="padding: 0 8px;">
+                                                <a href="#" style="color: #3b82f6; text-decoration: none; font-size: 13px;">LinkedIn</a>
+                                            </td>
+                                            <td style="padding: 0 8px;">
+                                                <a href="#" style="color: #3b82f6; text-decoration: none; font-size: 13px;">GitHub</a>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <!-- Custom Email Footer Content -->
+                        {% if email_footer %}
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 20px;">
+                            <tr>
+                                <td style="text-align: center;">
+                                    <div style="color: #6b7280; font-size: 14px; line-height: 1.5;">
+                                        {{ email_footer|safe }}
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                        {% endif %}
+                        
+                        <!-- Subscription Management -->
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 15px; border-top: 1px solid #e5e7eb; padding-top: 20px;">
+                            <tr>
+                                <td style="text-align: center;">
+                                    <p style="color: #6b7280; font-size: 12px; margin: 0 0 8px 0; line-height: 1.4;">
+                                        This email was sent to {{ subscriber.email|default:"you" }}
+                                    </p>
+                                    <p style="color: #6b7280; font-size: 12px; margin: 0; line-height: 1.4;">
+                                        <a href="#" style="color: #3b82f6; text-decoration: underline;">Update preferences</a> | 
+                                        <a href="#" style="color: #3b82f6; text-decoration: underline;">Unsubscribe</a>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <!-- Legal Links -->
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%;">
+                            <tr>
+                                <td style="text-align: center;">
+                                    <p style="color: #9ca3af; font-size: 11px; margin: 0; line-height: 1.3;">
+                                        <a href="https://{{ site.domain|default:'gregory-ms.com' }}/privacy/" style="color: #9ca3af; text-decoration: underline; margin: 0 5px;">Privacy Policy</a> |
+                                        <a href="https://{{ site.domain|default:'gregory-ms.com' }}/terms/" style="color: #9ca3af; text-decoration: underline; margin: 0 5px;">Terms of Service</a>
+                                    </p>
+                                    <p style="color: #9ca3af; font-size: 11px; margin: 5px 0 0 0; line-height: 1.3;">
+                                        © {% now "Y" %} Gregory AI. All rights reserved.
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                    </td>
+                </tr>
+            </table>
+            
+        </td>
+    </tr>
+</table>
+
+<!-- MSO Outlook Specific Footer Fixes -->
+<!--[if mso]>
+<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 600px;">
+    <tr>
+        <td style="width: 600px; background-color: #f9fafb; padding: 30px 40px; text-align: center; border-top: 1px solid #e5e7eb;">
+            <!-- MSO simplified footer content -->
+        </td>
+    </tr>
+</table>
+<![endif]-->

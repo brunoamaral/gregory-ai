@@ -10,3 +10,13 @@ def get_item(dictionary, key):
     if dictionary is None:
         return None
     return dictionary.get(key)
+
+@register.filter
+def split(value, delimiter):
+    """
+    Split a string by a delimiter
+    Usage: {{ email|split:"@"|first }}
+    """
+    if value is None:
+        return []
+    return str(value).split(delimiter)

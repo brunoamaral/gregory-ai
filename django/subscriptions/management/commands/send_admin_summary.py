@@ -11,6 +11,7 @@ from subscriptions.models import Lists, Subscribers, SentArticleNotification, Se
 from django.db.models import Prefetch
 from django.utils.timezone import now
 from datetime import timedelta
+from templates.emails.components.content_organizer import get_optimized_email_context
 
 
 class Command(BaseCommand):
@@ -88,18 +89,19 @@ class Command(BaseCommand):
 
 				self.stdout.write(self.style.SUCCESS(f"Sending admin summary to {subscriber.email}."))
 
-				# Step 4: Prepare the summary context for the email
-				summary_context = {
-					"articles": new_articles,
-					"trials": new_trials,
-					"admin": subscriber.email,
-					"title": customsettings.title,
-					"email_footer": customsettings.email_footer,
-					"site": site,
-				}
+				# Step 4: Prepare the summary context for the email using optimized Phase 5 rendering pipeline
+				summary_context = get_optimized_email_context(
+					email_type='admin_summary',
+					articles=new_articles,
+					trials=new_trials,
+					subscriber=subscriber,
+					list_obj=admin_list,
+					site=site,
+					custom_settings=customsettings
+				)
 
-				# Render email content
-				html_content = get_template('emails/admin_summary.html').render(summary_context)
+				# Render email content using new template
+				html_content = get_template('emails/admin_summary_new.html').render(summary_context)
 				text_content = strip_tags(html_content)
 
 				# Step 5: Send email

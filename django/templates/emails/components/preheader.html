@@ -1,0 +1,31 @@
+<!-- Reusable Email Preheader Component -->
+<!-- The preheader is the preview text that appears in email clients before opening the email -->
+
+<div style="display: none; font-size: 1px; color: #fefefe; line-height: 1px; font-family: sans-serif; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden;">
+    {% block preheader_text %}
+        {% if email_type == 'weekly_summary' %}
+            {% if articles %}
+                {{ articles|length }} new relevant article{{ articles|length|pluralize }} and {% if trials %}{{ trials|length }} clinical trial{{ trials|length|pluralize }}{% else %}updates{% endif %} this week
+            {% else %}
+                Your weekly medical research summary from Gregory AI
+            {% endif %}
+        {% elif email_type == 'admin_summary' %}
+            {% if articles %}
+                {{ articles|length }} new article{{ articles|length|pluralize }} found in the last 48 hours requiring review
+            {% else %}
+                Latest research findings for admin review
+            {% endif %}
+        {% elif email_type == 'trial_notification' %}
+            {% if trials %}
+                {{ trials|length }} new clinical trial{{ trials|length|pluralize }} matching your interests
+            {% else %}
+                New clinical trial notifications from Gregory AI
+            {% endif %}
+        {% else %}
+            {% block custom_preheader %}Latest updates from Gregory AI medical research intelligence{% endblock %}
+        {% endif %}
+    {% endblock %}
+    
+    <!-- Preheader spacer to push unwanted text out of preview -->
+    &#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;&#8194;
+</div>

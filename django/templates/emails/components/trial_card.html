@@ -1,0 +1,117 @@
+<!-- Clinical Trial Card Component -->
+<!-- 
+Usage: 
+{# % include 'emails/components/trial_card.html' with trial=trial show_admin_links=False % #}
+-->
+
+<div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border-left: 4px solid #059669;">
+    
+    <!-- Trial Title -->
+    <h3 style="color: #1e3a8a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 18px; font-weight: 600; line-height: 1.3; margin: 0 0 15px 0;">
+        {{ trial.title }}
+    </h3>
+    
+    <!-- Trial Identifier -->
+    {% if trial.identifiers.nct %}
+    <div style="margin-bottom: 15px;">
+        <span style="background-color: #ecfdf5; color: #047857; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase;">
+            {{ trial.identifiers.nct }}
+        </span>
+    </div>
+    {% endif %}
+    
+    <!-- Trial Metadata -->
+    <div style="margin-bottom: 15px;">
+        {% if trial.phase %}
+        <p style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
+            <strong>Phase:</strong> {{ trial.phase }}
+        </p>
+        {% endif %}
+        
+        {% if trial.recruitment_status %}
+        <p style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
+            <strong>Status:</strong> 
+            <span style="{% if trial.recruitment_status == 'Recruiting' %}color: #059669; font-weight: 600;{% elif trial.recruitment_status == 'Completed' %}color: #6b7280;{% elif trial.recruitment_status == 'Active, not recruiting' %}color: #d97706; font-weight: 600;{% else %}color: #6b7280;{% endif %}">
+                {{ trial.recruitment_status }}
+            </span>
+        </p>
+        {% endif %}
+        
+        {% if trial.start_date %}
+        <p style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
+            <strong>Start Date:</strong> {{ trial.start_date|date:"M d, Y" }}
+        </p>
+        {% endif %}
+        
+        {% if trial.completion_date %}
+        <p style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
+            <strong>Completion Date:</strong> {{ trial.completion_date|date:"M d, Y" }}
+        </p>
+        {% endif %}
+    </div>
+    
+    <!-- Primary Sponsor -->
+    {% if trial.lead_sponsor %}
+    <div style="margin-bottom: 15px;">
+        <p style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
+            <strong>Lead Sponsor:</strong> {{ trial.lead_sponsor }}
+        </p>
+    </div>
+    {% endif %}
+    
+    <!-- Trial Links -->
+    <div style="margin-bottom: 15px;">
+        {% if show_admin_links %}
+        <!-- Admin-specific links -->
+        {% if trial.link %}
+        <a href="{{ trial.link }}" style="color: #3b82f6; text-decoration: underline; font-weight: 500; margin-right: 15px;">
+            View Original Trial →
+        </a>
+        {% endif %}
+        <a href="https://api.{{ site.domain }}/admin/gregory/clinicaltrial/{{ trial.id }}/change/" style="background-color: #059669; color: #ffffff; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-weight: 500; font-size: 13px;">
+            EDIT TRIAL
+        </a>
+        {% else %}
+        <!-- Regular user links -->
+        {% if trial.link %}
+        <a href="{{ trial.link }}" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+            View Trial Details →
+        </a>
+        {% endif %}
+        {% endif %}
+    </div>
+    
+    <!-- Brief Summary -->
+    {% if trial.brief_summary %}
+    <div style="background-color: #f0fdf4; border-left: 4px solid #059669; padding: 15px; margin-top: 15px; border-radius: 0 4px 4px 0;">
+        <h4 style="color: #047857; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Trial Summary:</h4>
+        <p style="color: #374151; font-size: 14px; line-height: 1.5; margin: 0;">
+            {{ trial.brief_summary|truncatechars:350 }}
+        </p>
+    </div>
+    {% endif %}
+    
+    <!-- Detailed Description -->
+    {% if trial.detailed_description and trial.detailed_description|length > 50 %}
+    <div style="background-color: #fafafa; border-left: 4px solid #6b7280; padding: 15px; margin-top: 15px; border-radius: 0 4px 4px 0;">
+        <h4 style="color: #374151; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Detailed Description:</h4>
+        <p style="color: #374151; font-size: 14px; line-height: 1.5; margin: 0;">
+            {{ trial.detailed_description|truncatechars:300 }}
+        </p>
+    </div>
+    {% endif %}
+    
+    <!-- Conditions -->
+    {% if trial.conditions.exists %}
+    <div style="margin-top: 15px;">
+        <h4 style="color: #6b7280; font-size: 13px; font-weight: 600; margin: 0 0 8px 0;">CONDITIONS:</h4>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            {% for condition in trial.conditions.all %}
+            <span style="background-color: #f3f4f6; color: #374151; padding: 2px 8px; border-radius: 12px; font-size: 12px; border: 1px solid #d1d5db;">
+                {{ condition.condition_name }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>

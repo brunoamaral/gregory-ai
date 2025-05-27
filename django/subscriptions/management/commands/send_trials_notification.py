@@ -9,6 +9,7 @@ from subscriptions.management.commands.utils.subscription import get_trials_for_
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers, SentTrialNotification, FailedNotification
 from gregory.models import TeamCredentials
+from templates.emails.components.content_organizer import get_optimized_email_context
 
 
 class Command(BaseCommand):
@@ -79,15 +80,17 @@ class Command(BaseCommand):
 					self.stdout.write(self.style.WARNING(f'No new trials for {subscriber.email} in list "{lst.list_name}".'))
 					continue
 
-				# Step 6: Prepare and send the email
-				summary_context = {
-					"trials": new_trials,
-					"title": customsettings.title,
-					"email_footer": customsettings.email_footer,
-					"site": site,
-				}
+				# Step 6: Prepare and send the email using optimized Phase 5 rendering pipeline
+				summary_context = get_optimized_email_context(
+					email_type='trial_notification',
+					trials=new_trials,
+					subscriber=subscriber,
+					list_obj=lst,
+					site=site,
+					custom_settings=customsettings
+				)
 
-				html_content = get_template('emails/trial_notification.html').render(summary_context)
+				html_content = get_template('emails/trial_notification_new.html').render(summary_context)
 				text_content = strip_tags(html_content)
 
 				result = send_email(

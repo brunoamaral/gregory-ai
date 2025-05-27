@@ -1,0 +1,69 @@
+<!-- Modern Clinical Trials Notification Email Template -->
+{% extends "emails/base_email.html" %}
+
+<!-- Set email type for components -->
+{% block email_meta_title %}Clinical Trials Update - {{ title|default:"Gregory AI" }}{% endblock %}
+
+{% block content %}
+<div style="padding: 0;">
+    
+    <!-- Welcome Message -->
+    <div style="margin-bottom: 30px;">
+        <h2 class="content-title">New Clinical Trials Notification</h2>
+        <p class="content-text">
+            We've found {{ trials|length }} new clinical trial{{ trials|length|pluralize }} that match your research interests.
+        </p>
+    </div>
+    
+    <!-- Clinical Trials Section -->
+    {% if trials %}
+    <div style="margin-bottom: 40px;">
+        <h2 class="content-subtitle" style="color: #1e3a8a; font-size: 22px; margin: 0 0 25px 0; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;">
+            🧪 New Clinical Trials ({{ trials|length }})
+        </h2>
+        
+        {% for trial in trials %}
+            {% with email_type='trial_notification' show_discovery_date=True show_published_date=True show_summary=True show_status=True %}
+                {% include 'emails/components/trial_card.html' %}
+            {% endwith %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <!-- No Trials Message -->
+    <div style="text-align: center; padding: 40px 20px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e5e7eb;">
+        <h3 style="color: #6b7280; font-size: 18px; margin: 0 0 10px 0;">No New Clinical Trials</h3>
+        <p style="color: #9ca3af; font-size: 14px; margin: 0;">
+            No new clinical trials matching your interests were found at this time. 
+            We'll continue monitoring and notify you when new trials are available.
+        </p>
+    </div>
+    {% endif %}
+    
+    <!-- Notification Frequency Info -->
+    <div style="margin-top: 40px; padding: 20px; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">
+        <h3 style="color: #1e40af; font-size: 16px; margin: 0 0 10px 0;">🔔 Notification Settings</h3>
+        <p style="color: #1e40af; font-size: 14px; margin: 0;">
+            You're receiving this notification because we found new clinical trials matching your research interests. 
+            These notifications are sent when new trials are discovered.
+        </p>
+    </div>
+    
+    <!-- Additional Resources -->
+    <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #e5e7eb;">
+        <p class="content-text" style="text-align: center;">
+            Browse all available clinical trials at 
+            <a href="https://{{ site.domain|default:'gregory-ms.com' }}/trials/" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+                {{ site.domain|default:'gregory-ms.com' }}/trials/
+            </a>
+        </p>
+    </div>
+    
+</div>
+{% endblock %}
+
+<!-- Override header to set correct email type -->
+{% block header %}
+    {% with email_type='trial_notification' show_date=True current_date=now %}
+        {% include 'emails/components/header.html' %}
+    {% endwith %}
+{% endblock %}

@@ -1,0 +1,34 @@
+<!-- Test template to verify header and footer components -->
+{% extends "emails/base_email.html" %}
+
+{% block email_type_title %}Test Email{% endblock %}
+
+{% block content %}
+<div style="padding: 20px;">
+    <h2 class="content-title">Component Test Email</h2>
+    <p class="content-text">
+        This is a test email to verify that the new modular header and footer components are working correctly.
+    </p>
+    
+    <h3 class="content-subtitle">Features Tested:</h3>
+    <ul style="color: #374151; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+        <li>Dynamic email type title in header</li>
+        <li>Professional medical journal styling</li>
+        <li>Responsive header and footer components</li>
+        <li>Proper email client compatibility</li>
+        <li>Modular include system</li>
+    </ul>
+    
+    <p class="content-text">
+        The header should display "Test Email" as the email type, and the footer should include all the standard 
+        Gregory AI branding, links, and subscription management options.
+    </p>
+</div>
+{% endblock %}
+
+<!-- Set email type for testing -->
+{% block header %}
+    {% with email_type='test' show_date=True current_date=now %}
+        {% include 'emails/components/header.html' %}
+    {% endwith %}
+{% endblock %}
