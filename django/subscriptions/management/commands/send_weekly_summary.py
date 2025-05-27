@@ -20,6 +20,7 @@ from subscriptions.models import (
 )
 from django.db.models import Q
 from django.utils.timezone import now
+from templates.emails.components.content_organizer import get_optimized_email_context
 
 class Command(BaseCommand):
 	help = 'Sends a weekly digest email for all weekly digest lists.'
@@ -100,16 +101,18 @@ class Command(BaseCommand):
 					self.stdout.write(self.style.WARNING(f'No new articles or trials for {subscriber.email} in list "{digest_list.list_name}".'))
 					continue
 
-				# Step 6: Prepare and send the email
-				summary_context = {
-					"articles": unsent_articles,
-					"trials": unsent_trials,
-					"title": customsettings.title,
-					"email_footer": customsettings.email_footer,
-					"site": site,
-				}
+				# Step 6: Prepare and send the email using optimized Phase 5 rendering pipeline
+				summary_context = get_optimized_email_context(
+					email_type='weekly_summary',
+					articles=unsent_articles,
+					trials=unsent_trials,
+					subscriber=subscriber,
+					list_obj=digest_list,
+					site=site,
+					custom_settings=customsettings
+				)
 
-				html_content = get_template('emails/weekly_summary.html').render(summary_context)
+				html_content = get_template('emails/weekly_summary_new.html').render(summary_context)
 				text_content = strip_tags(html_content)
 
 				result = send_email(

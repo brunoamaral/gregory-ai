@@ -35,6 +35,14 @@ from rss.views import (
 from subscriptions.views import subscribe_view
 from organizations.backends import invitation_backend
 
+# Email template views (direct import to avoid module issues)
+from templates.emails.views import (
+	email_preview_dashboard,
+	email_template_preview, 
+	email_template_json_context,
+	email_template_variants
+)
+
 # Initialize the router and register some endpoints
 router = routers.DefaultRouter()
 router.register(r'articles', ArticleViewSet)
@@ -76,6 +84,12 @@ urlpatterns = [
 
 	# Subscriptions route
 	path('subscriptions/new/', subscribe_view),
+
+	# Email template preview and testing routes
+	path('emails/', email_preview_dashboard, name='email_preview_dashboard'),
+	path('emails/preview/<str:template_name>/', email_template_preview, name='email_template_preview'),
+	path('emails/context/<str:template_name>/', email_template_json_context, name='email_template_json_context'),
+	path('emails/variants/', email_template_variants, name='email_template_variants'),
 
 	# Team API
 	## List Teams

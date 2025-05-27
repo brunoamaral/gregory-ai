@@ -9,6 +9,7 @@ from subscriptions.management.commands.utils.subscription import get_trials_for_
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers, SentTrialNotification, FailedNotification
 from gregory.models import TeamCredentials
+from templates.emails.components.content_organizer import get_optimized_email_context
 
 
 class Command(BaseCommand):
@@ -17,6 +18,11 @@ class Command(BaseCommand):
 	def handle(self, *args, **options):
 		customsettings = CustomSetting.objects.get(site=Site.objects.get_current().id)
 		site = Site.objects.get_current()
+
+		# Initialize counters for summary
+		emails_sent = 0
+		emails_skipped = 0
+		total_subscribers_processed = 0
 
 		# Step 1: Find all lists that have subjects but are not weekly digests
 		subject_lists = Lists.objects.filter(subjects__isnull=False, clinical_trials_notifications=True).distinct()
@@ -64,6 +70,7 @@ class Command(BaseCommand):
 
 			# Step 5: Notify each subscriber of new trials
 			for subscriber in subscribers:
+				total_subscribers_processed += 1
 				# Determine which trials have already been sent to this subscriber for this list
 				already_sent_ids = SentTrialNotification.objects.filter(
 					trial__in=list_trials,
@@ -76,18 +83,30 @@ class Command(BaseCommand):
 				new_trials = list_trials.exclude(pk__in=already_sent_ids)
 
 				if not new_trials.exists():
-					self.stdout.write(self.style.WARNING(f'No new trials for {subscriber.email} in list "{lst.list_name}".'))
+					self.stdout.write(self.style.WARNING(f'No new trials for {subscriber.email} in list "{lst.list_name}". Skipping email.'))
+					emails_skipped += 1
 					continue
 
-				# Step 6: Prepare and send the email
-				summary_context = {
-					"trials": new_trials,
-					"title": customsettings.title,
-					"email_footer": customsettings.email_footer,
-					"site": site,
-				}
+				# Step 6: Prepare and send the email using optimized Phase 5 rendering pipeline
+				summary_context = get_optimized_email_context(
+					email_type='trial_notification',
+					trials=new_trials,
+					subscriber=subscriber,
+					list_obj=lst,
+					site=site,
+					custom_settings=customsettings
+				)
 
-				html_content = get_template('emails/trial_notification.html').render(summary_context)
+				# Additional safety check: Ensure the context contains trials to display
+				trials_in_context = summary_context.get('trials', [])
+				additional_trials_in_context = summary_context.get('additional_trials', [])
+				
+				if not trials_in_context and not additional_trials_in_context:
+					self.stdout.write(self.style.WARNING(f'No trials to display in email context for {subscriber.email} in list "{lst.list_name}". Skipping email.'))
+					emails_skipped += 1
+					continue
+
+				html_content = get_template('emails/trial_notification_new.html').render(summary_context)
 				text_content = strip_tags(html_content)
 
 				result = send_email(
@@ -109,11 +128,13 @@ class Command(BaseCommand):
 
 					if error_code == 0:  # Successful delivery
 						self.stdout.write(self.style.SUCCESS(f"Email sent to {subscriber.email} for list '{lst.list_name}'."))
+						emails_sent += 1
 						# Record sent notifications for the new trials
 						for trial in new_trials:
 							SentTrialNotification.objects.get_or_create(trial=trial, list=lst, subscriber=subscriber)
 					else:  # Failed delivery
 						self.stdout.write(self.style.ERROR(f"Failed to send email to {subscriber.email} for list '{lst.list_name}'. Reason: {message}"))
+						emails_skipped += 1
 						FailedNotification.objects.create(
 							subscriber=subscriber,
 							list=lst,
@@ -122,8 +143,19 @@ class Command(BaseCommand):
 				else:
 					# Log generic failure if response status is not 200
 					self.stdout.write(self.style.ERROR(f"Failed to send email to {subscriber.email} for list '{lst.list_name}'. Status: {result.status_code}"))
+					emails_skipped += 1
 					FailedNotification.objects.create(
 						subscriber=subscriber,
 						list=lst,
 						reason=f"HTTP Status {result.status_code}"
 					)
+
+		# Print summary
+		self.stdout.write(self.style.SUCCESS(f"\nSummary:"))
+		self.stdout.write(self.style.SUCCESS(f"Total subscribers processed: {total_subscribers_processed}"))
+		self.stdout.write(self.style.SUCCESS(f"Emails sent: {emails_sent}"))
+		self.stdout.write(self.style.WARNING(f"Emails skipped: {emails_skipped}"))
+		if emails_sent > 0:
+			self.stdout.write(self.style.SUCCESS(f"✅ Trial notifications completed successfully!"))
+		else:
+			self.stdout.write(self.style.WARNING(f"ℹ️  No emails were sent (no new trials to notify about)."))

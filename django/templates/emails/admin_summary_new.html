@@ -1,0 +1,113 @@
+<!-- Modern Admin Summary Email Template -->
+{% extends "emails/base_email.html" %}
+{% load gregory_tags %}
+
+<!-- Set email type for components -->
+{% block email_meta_title %}Admin Summary - {{ title|default:"Gregory AI" }}{% endblock %}
+
+{% block content %}
+<div style="padding: 0;">
+    
+    <!-- Admin Welcome Message -->
+    <div style="margin-bottom: 30px;">
+        <h2 class="content-title">Admin Review Required</h2>
+        <p class="content-text">
+            Hello {{ admin|split:"@"|first }},
+        </p>
+        <p class="content-text">
+            Here are the articles and clinical trials discovered in the last 48 hours that require your review.
+        </p>
+    </div>
+    
+    <!-- Articles Section -->
+    {% if articles or additional_articles %}
+    <div style="margin-bottom: 40px;">
+        <h2 class="content-subtitle" style="color: #1e3a8a; font-size: 22px; margin: 0 0 25px 0; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;">
+            📄 New Articles for Review ({{ content_stats.total_articles }})
+        </h2>
+        
+        <!-- High-Confidence Articles (Featured) -->
+        {% if articles %}
+            {% for article in articles %}
+                {% with email_type='admin_summary' show_admin_links=True show_discovery_date=True show_ml_predictions=True %}
+                    {% include 'emails/components/article_card.html' %}
+                {% endwith %}
+            {% endfor %}
+        {% endif %}
+        
+        <!-- Articles Needing Review (Additional) -->
+        {% if additional_articles %}
+            {% for article in additional_articles %}
+                {% with email_type='admin_summary' show_admin_links=True show_discovery_date=True show_ml_predictions=True %}
+                    {% include 'emails/components/article_card.html' %}
+                {% endwith %}
+            {% endfor %}
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    <!-- Clinical Trials Section -->
+    {% if trials or additional_trials %}
+    <div style="margin-bottom: 40px;">
+        <h2 class="content-subtitle" style="color: #1e3a8a; font-size: 22px; margin: 0 0 25px 0; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;">
+            🧪 New Clinical Trials ({{ content_stats.total_trials }})
+        </h2>
+        
+        <!-- Featured Trials -->
+        {% if trials %}
+            {% for trial in trials %}
+                {% with email_type='admin_summary' show_discovery_date=True show_admin_links=True %}
+                    {% include 'emails/components/trial_card.html' %}
+                {% endwith %}
+            {% endfor %}
+        {% endif %}
+        
+        <!-- Additional Trials -->
+        {% if additional_trials %}
+            {% for trial in additional_trials %}
+                {% with email_type='admin_summary' show_discovery_date=True show_admin_links=True %}
+                    {% include 'emails/components/trial_card.html' %}
+                {% endwith %}
+            {% endfor %}
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    <!-- No Content Message -->
+    {% if not articles and not additional_articles and not trials and not additional_trials %}
+    <div style="text-align: center; padding: 40px 20px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e5e7eb;">
+        <h3 style="color: #6b7280; font-size: 18px; margin: 0 0 10px 0;">No New Content for Review</h3>
+        <p style="color: #9ca3af; font-size: 14px; margin: 0;">
+            No new articles or clinical trials were discovered in the last 48 hours.
+        </p>
+    </div>
+    {% endif %}
+    
+    <!-- Admin Actions -->
+    <div style="margin-top: 40px; padding: 20px; background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px;">
+        <h3 style="color: #92400e; font-size: 16px; margin: 0 0 10px 0;">📋 Admin Actions</h3>
+        <p style="color: #92400e; font-size: 14px; margin: 0;">
+            Review the articles above and mark them as relevant using the EDIT ARTICLE buttons. 
+            This helps improve our machine learning accuracy for future recommendations.
+        </p>
+    </div>
+    
+    <!-- Additional Resources -->
+    <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #e5e7eb;">
+        <p class="content-text" style="text-align: center;">
+            For the complete admin dashboard, visit 
+            <a href="https://api.{{ site.domain }}/" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+                Admin Portal
+            </a>
+        </p>
+    </div>
+    
+</div>
+{% endblock %}
+
+<!-- Override header to set correct email type -->
+{% block header %}
+    {% with email_type='admin_summary' show_date=True current_date=now %}
+        {% include 'emails/components/header.html' %}
+    {% endwith %}
+{% endblock %}

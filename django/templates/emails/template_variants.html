@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        
+        h1 {
+            color: #2c5aa0;
+            border-bottom: 3px solid #2c5aa0;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        
+        .variant {
+            margin-bottom: 40px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .variant-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .variant-title {
+            margin: 0;
+            color: #2c5aa0;
+            font-size: 1.3em;
+        }
+        
+        .variant-description {
+            margin: 5px 0 0 0;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .comparison-container {
+            display: flex;
+            min-height: 600px;
+        }
+        
+        .template-column {
+            flex: 1;
+            border-right: 1px solid #e0e0e0;
+        }
+        
+        .template-column:last-child {
+            border-right: none;
+        }
+        
+        .column-header {
+            background: #e9ecef;
+            padding: 10px 15px;
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .template-frame {
+            width: 100%;
+            height: 600px;
+            border: none;
+            background: white;
+        }
+        
+        .navigation {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .nav-button {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 0 10px;
+            background: #2c5aa0;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        .nav-button:hover {
+            background: #1e3f73;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+        
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .comparison-container {
+                flex-direction: column;
+            }
+            
+            .template-column {
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+            
+            .template-column:last-child {
+                border-bottom: none;
+            }
+            
+            .template-frame {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ title }}</h1>
+        
+        <div class="navigation">
+            <a href="{% url 'email_preview_dashboard' %}" class="nav-button">← Back to Dashboard</a>
+            <a href="{% url 'email_template_preview' 'weekly_summary_new' %}" class="nav-button">Preview Templates</a>
+        </div>
+        
+        {% for variant in variants %}
+        <div class="variant">
+            <div class="variant-header">
+                <h3 class="variant-title">{{ variant.name }}</h3>
+                <p class="variant-description">{{ variant.description }}</p>
+            </div>
+            
+            <div class="comparison-container">
+                <div class="template-column">
+                    <div class="column-header">Legacy Template ({{ variant.old_template }})</div>
+                    <iframe 
+                        class="template-frame" 
+                        src="{% url 'email_template_preview' variant.old_template|cut:'.html' %}"
+                        title="{{ variant.name }} - Legacy Template">
+                        <div class="loading">Loading template...</div>
+                    </iframe>
+                </div>
+                
+                <div class="template-column">
+                    <div class="column-header">New Template ({{ variant.new_template }})</div>
+                    <iframe 
+                        class="template-frame" 
+                        src="{% url 'email_template_preview' variant.new_template|cut:'.html' %}"
+                        title="{{ variant.name }} - New Template">
+                        <div class="loading">Loading template...</div>
+                    </iframe>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+            <h3>Template Features Comparison</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 20px;">
+                <div>
+                    <h4 style="color: #2c5aa0;">Legacy Templates</h4>
+                    <ul style="color: #666;">
+                        <li>Monolithic structure</li>
+                        <li>Inline styles</li>
+                        <li>Code duplication</li>
+                        <li>Limited responsiveness</li>
+                        <li>Basic ML integration</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 style="color: #2c5aa0;">New Templates</h4>
+                    <ul style="color: #666;">
+                        <li>Modular components</li>
+                        <li>Responsive design</li>
+                        <li>DRY principles</li>
+                        <li>Gmail optimized</li>
+                        <li>Advanced ML badges</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 style="color: #2c5aa0;">Key Improvements</h4>
+                    <ul style="color: #666;">
+                        <li>50% less code duplication</li>
+                        <li>Better mobile support</li>
+                        <li>Professional design</li>
+                        <li>Easier maintenance</li>
+                        <li>ML confidence scoring</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Handle iframe loading errors
+        document.addEventListener('DOMContentLoaded', function() {
+            const iframes = document.querySelectorAll('.template-frame');
+            
+            iframes.forEach(iframe => {
+                iframe.addEventListener('error', function() {
+                    this.style.display = 'none';
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'error';
+                    errorDiv.innerHTML = 'Error loading template: ' + this.src;
+                    this.parentNode.appendChild(errorDiv);
+                });
+                
+                // Add loading timeout
+                setTimeout(() => {
+                    if (!iframe.contentDocument || iframe.contentDocument.readyState !== 'complete') {
+                        console.log('Template loading timeout for:', iframe.src);
+                    }
+                }, 10000);
+            });
+        });
+    </script>
+</body>
+</html>

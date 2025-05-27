@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Template Preview Dashboard</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .dashboard-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #2c5aa0;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .template-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        .template-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            background: white;
+        }
+        
+        .template-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            border-color: #2c5aa0;
+        }
+        
+        .card-header {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .card-title {
+            margin: 0;
+            color: #2c5aa0;
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+        
+        .card-description {
+            margin: 8px 0 0 0;
+            color: #666;
+            font-size: 0.95em;
+            line-height: 1.5;
+        }
+        
+        .card-actions {
+            padding: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 0.9em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary {
+            background: #2c5aa0;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #1e3f73;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .btn-info:hover {
+            background: #117a8b;
+        }
+        
+        .utilities-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 30px;
+            margin-top: 30px;
+        }
+        
+        .utilities-title {
+            color: #2c5aa0;
+            margin: 0 0 20px 0;
+            font-size: 1.4em;
+        }
+        
+        .utility-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .utility-button {
+            display: block;
+            padding: 15px;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            text-decoration: none;
+            color: #495057;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+        
+        .utility-button:hover {
+            background: #e9ecef;
+            border-color: #2c5aa0;
+            color: #2c5aa0;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-new {
+            background: #28a745;
+        }
+        
+        .status-legacy {
+            background: #ffc107;
+        }
+        
+        .status-test {
+            background: #17a2b8;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        
+        .info-box h4 {
+            color: #1976d2;
+            margin: 0 0 10px 0;
+        }
+        
+        .info-box p {
+            margin: 0;
+            color: #424242;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>Email Template System</h1>
+            <p>Preview and test email templates for Gregory AI</p>
+        </div>
+        
+        <div class="content">
+            <div class="template-grid">
+                {% for template_key, template_name in email_types %}
+                <div class="template-card">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            {% if 'new' in template_key %}
+                                <span class="status-indicator status-new"></span>
+                            {% elif 'test' in template_key %}
+                                <span class="status-indicator status-test"></span>
+                            {% else %}
+                                <span class="status-indicator status-legacy"></span>
+                            {% endif %}
+                            {{ template_name }}
+                        </h3>
+                        <p class="card-description">
+                            {% if template_key == 'weekly_summary_new' %}
+                                User-facing weekly digest with modular components, ML predictions, and responsive design optimized for Gmail.
+                            {% elif template_key == 'admin_summary_new' %}
+                                Admin interface with edit links, ML confidence scores, and comprehensive article management tools.
+                            {% elif template_key == 'trial_notification_new' %}
+                                Real-time clinical trial notifications with trial metadata, status indicators, and smart formatting.
+                            {% elif template_key == 'test_components' %}
+                                Component testing interface for validating individual template elements and styling.
+                            {% endif %}
+                        </p>
+                    </div>
+                    
+                    <div class="card-actions">
+                        <a href="{% url 'email_template_preview' template_key %}" class="btn btn-primary" target="_blank">
+                            Preview Template
+                        </a>
+                        <a href="{% url 'email_template_json_context' template_key %}" class="btn btn-info" target="_blank">
+                            View Context JSON
+                        </a>
+                        {% if template_key != 'test_components' %}
+                        <a href="{% url 'email_template_preview' template_key %}?format=text" class="btn btn-secondary" target="_blank">
+                            Text Version
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div class="utilities-section">
+                <h3 class="utilities-title">Development Utilities</h3>
+                <div class="utility-grid">
+                    <a href="{% url 'email_template_variants' %}" class="utility-button">
+                        Compare Template Versions
+                    </a>
+                    <a href="/admin/subscriptions/lists/" class="utility-button" target="_blank">
+                        Manage Subscription Lists
+                    </a>
+                    <a href="/admin/subscriptions/subscribers/" class="utility-button" target="_blank">
+                        Manage Subscribers
+                    </a>
+                    <a href="/admin/gregory/articles/" class="utility-button" target="_blank">
+                        Article Database
+                    </a>
+                    <a href="/admin/gregory/trials/" class="utility-button" target="_blank">
+                        Clinical Trials
+                    </a>
+                    <a href="/admin/sitesettings/customsetting/" class="utility-button" target="_blank">
+                        Email Settings
+                    </a>
+                </div>
+            </div>
+            
+            <div class="info-box">
+                <h4>Template System Status</h4>
+                <p>
+                    <strong>Phase 5: Advanced Content Organization</strong> - Management commands have been updated to use the new modular template system with enhanced content organization and rendering pipeline optimization.
+                </p>
+                <p style="margin-top: 10px;">
+                    <strong>Current:</strong> All three email types (Weekly Summary, Admin Summary, Clinical Trials) now use component-based templates with ML prediction integration and optimized content organization.
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
