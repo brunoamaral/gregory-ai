@@ -168,8 +168,8 @@ class EmailContentOrganizer:
         sorted_articles = list(articles.order_by('-discovery_date'))
         
         return {
-            'featured_articles': sorted_articles[:self.max_articles_per_email//2],  # Use configured limits
-            'regular_articles': sorted_articles[self.max_articles_per_email//2:self.max_articles_per_email],
+            'featured_articles': sorted_articles,  # Include ALL articles - no limits
+            'regular_articles': [],  # No need to split when including all
             'total_count': len(sorted_articles),
             'high_confidence_count': 0
         }
