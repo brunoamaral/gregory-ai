@@ -17,13 +17,18 @@ class EmailContentOrganizer:
     """
     Advanced content organizer for email templates with smart sorting,
     filtering, and personalization capabilities.
+    
+    IMPORTANT: This organizer does NOT limit content by default - all relevant
+    articles and trials are included to ensure subscribers receive complete
+    information about research findings and clinical trial opportunities.
     """
     
     def __init__(self, email_type='weekly_summary'):
         self.email_type = email_type
         self.confidence_threshold = 0.8
-        self.max_articles_per_email = 99
-        self.max_trials_per_email = 99
+        # Set to very high limits - we want to deliver ALL relevant content to subscribers
+        self.max_articles_per_email = 999
+        self.max_trials_per_email = 999
     
     def organize_articles(self, articles, subscriber=None, list_obj=None):
         """
@@ -82,13 +87,9 @@ class EmailContentOrganizer:
         recruiting_trials = [t for t in organized_trials if t.recruitment_status and 'recruit' in str(t.recruitment_status).lower()]
         other_trials = [t for t in organized_trials if not t.recruitment_status or 'recruit' not in str(t.recruitment_status).lower()]
         
-        # Limit based on email type
-        if self.email_type == 'trial_notification':
-            featured_trials = recruiting_trials[:3]
-            regular_trials = other_trials[:2]
-        else:
-            featured_trials = recruiting_trials[:2]
-            regular_trials = other_trials[:3]
+        # Include ALL trials - don't limit content for subscribers
+        featured_trials = recruiting_trials  # All recruiting trials
+        regular_trials = other_trials  # All other trials
         
         return {
             'featured_trials': featured_trials,
@@ -122,9 +123,9 @@ class EmailContentOrganizer:
                 regular_sorted, subscriber, list_obj
             )
         
-        # Limit articles to prevent overwhelming users
-        featured_articles = high_confidence_sorted[:5]
-        regular_articles = regular_sorted[:5]
+        # Include ALL articles - don't limit content for subscribers
+        featured_articles = high_confidence_sorted  # All high-confidence articles
+        regular_articles = regular_sorted  # All regular articles
         
         return {
             'featured_articles': featured_articles,
@@ -143,8 +144,8 @@ class EmailContentOrganizer:
         needs_review = [a for a in sorted_articles if self._get_max_ml_score(a) <= self.confidence_threshold]
         
         return {
-            'featured_articles': high_confidence[:8],  # More articles for admin review
-            'regular_articles': needs_review[:7],
+            'featured_articles': high_confidence,  # All high-confidence articles for admin review
+            'regular_articles': needs_review,      # All articles needing review
             'total_count': len(sorted_articles),
             'high_confidence_count': len(high_confidence)
         }
@@ -156,7 +157,7 @@ class EmailContentOrganizer:
         sorted_articles = sorted(high_confidence, key=lambda x: x.discovery_date, reverse=True)
         
         return {
-            'featured_articles': sorted_articles[:3],  # Very limited for trial notifications
+            'featured_articles': sorted_articles,  # Include ALL high-confidence trial-related articles
             'regular_articles': [],
             'total_count': len(sorted_articles),
             'high_confidence_count': len(sorted_articles)
@@ -167,8 +168,8 @@ class EmailContentOrganizer:
         sorted_articles = list(articles.order_by('-discovery_date'))
         
         return {
-            'featured_articles': sorted_articles[:5],
-            'regular_articles': sorted_articles[5:10],
+            'featured_articles': sorted_articles[:self.max_articles_per_email//2],  # Use configured limits
+            'regular_articles': sorted_articles[self.max_articles_per_email//2:self.max_articles_per_email],
             'total_count': len(sorted_articles),
             'high_confidence_count': 0
         }
@@ -226,11 +227,15 @@ class EmailContentOrganizer:
         Returns:
             dict: Content statistics for template context
         """
+        # Calculate the actual number of trials that will be displayed
+        displayed_trials_count = len(trials.get('featured_trials', [])) + len(trials.get('regular_trials', []))
+        
         return {
             'total_articles': articles.get('total_count', 0),
             'high_confidence_articles': articles.get('high_confidence_count', 0),
             'featured_articles': len(articles.get('featured_articles', [])),
-            'total_trials': trials.get('total_count', 0),
+            'total_trials': displayed_trials_count,  # Show count of displayed trials, not all processed trials
+            'all_trials_processed': trials.get('total_count', 0),  # Keep total for reference if needed
             'recruiting_trials': trials.get('recruitment_count', 0),
             'featured_trials': len(trials.get('featured_trials', [])),
             'confidence_rate': (
