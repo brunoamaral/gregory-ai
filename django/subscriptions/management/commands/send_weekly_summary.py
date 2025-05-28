@@ -154,10 +154,22 @@ class Command(BaseCommand):
 							reason=message
 						)
 				else:
-					# Log generic failure if response status is not 200
-					self.stdout.write(self.style.ERROR(f"Failed to send weekly digest email to {subscriber.email} for list '{digest_list.list_name}'. Status: {result.status_code}"))
+					# Enhanced error handling for non-200 status codes
+					error_details = f"HTTP Status {result.status_code}"
+					
+					# For 422 errors, extract detailed Postmark error information
+					if result.status_code == 422:
+						try:
+							error_response = result.json()
+							error_code = error_response.get("ErrorCode", "Unknown")
+							error_message = error_response.get("Message", "No details provided")
+							error_details = f"422 Unprocessable Entity - ErrorCode: {error_code}, Message: {error_message}"
+						except (ValueError, KeyError):
+							error_details = f"422 Unprocessable Entity - Unable to parse error details"
+					
+					self.stdout.write(self.style.ERROR(f"Failed to send weekly digest email to {subscriber.email} for list '{digest_list.list_name}'. {error_details}"))
 					FailedNotification.objects.create(
 						subscriber=subscriber,
 						list=digest_list,
-						reason=f"HTTP Status {result.status_code}"
+						reason=error_details
 					)
