@@ -111,15 +111,26 @@
 														<h2 style="color: #000000; font-family: sans-serif; font-weight: 400; line-height: 1.4; margin: 0 0 30px;">{{ article.title }}</h2>
 														<p style="margin: 0 0 15px;"><strong>Discovery Date</strong>: {{ article.discovery_date }}</p>
 														<p style="margin: 0 0 15px;"><a href="{{ article.link }}" style="color: #3498db; text-decoration: underline;">{{ article.link }}</a></p>
-														{% for prediction in article.ml_predictions.all %}
-														<strong>Subject:</strong> {{ prediction.subject.subject_name }}
-														<ul>
-															<li>ML GNB: {{ prediction.gnb }}</li>
-															<li>ML LR: {{ prediction.lr }}</li>
-															<li>ML LSVC: {{ prediction.lsvc }}</li>
-															<li>ML MNB: {{ prediction.mnb }}</li>
-														</ul>
-														{% endfor %}
+														
+														<!-- Modern ML Predictions Display -->
+														{% if article.ml_predictions_detail.exists %}
+														<div style="margin: 15px 0;">
+															<strong>ML Predictions:</strong>
+															{% regroup article.ml_predictions_detail.all by subject as predictions_by_subject %}
+															{% for subject_group in predictions_by_subject %}
+															<div style="margin: 10px 0;">
+																<p style="margin: 5px 0;"><strong>Subject:</strong> {{ subject_group.grouper.subject_name }}</p>
+																{% for prediction in subject_group.list %}
+																<ul style="margin: 5px 0 5px 20px;">
+																	<li>{{ prediction.get_algorithm_display }}: {{ prediction.probability_score|floatformat:3|default:"N/A" }}
+																		{% if prediction.predicted_relevant %} <strong>(RELEVANT)</strong>{% endif %}
+																	</li>
+																</ul>
+																{% endfor %}
+															</div>
+															{% endfor %}
+														</div>
+														{% endif %}
 														<h3 style="font-family: sans-serif; font-size: 14px; font-weight: 700; margin: 0 0 15px;">Key takeaways</h3>
 														<p>{{ article.takeaways }}</p>
 														<p><a href="https://api.{{ site.domain }}/admin/gregory/articles/{{ article.article_id }}/change/">EDIT</a></p>
