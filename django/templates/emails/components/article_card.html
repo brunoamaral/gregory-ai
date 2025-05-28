@@ -83,17 +83,6 @@ Usage:
     </div>
     {% endif %}
     
-    <!-- Relevant Badge (for high-confidence predictions) -->
-    {% if show_ml_predictions %}
-        {% for prediction in article.ml_predictions_detail.all %}
-            {% if prediction.predicted_relevant %}
-                <div style="margin-bottom: 15px;">
-                    {% include 'emails/components/relevant_badge.html' %}
-                </div>
-                {% break %}
-            {% endif %}
-        {% endfor %}
-    {% endif %}
     
     <!-- Article Summary -->
     {% if article.summary %}
