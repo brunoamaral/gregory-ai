@@ -22,8 +22,8 @@ class EmailContentOrganizer:
     def __init__(self, email_type='weekly_summary'):
         self.email_type = email_type
         self.confidence_threshold = 0.8
-        self.max_articles_per_email = 10
-        self.max_trials_per_email = 5
+        self.max_articles_per_email = 99
+        self.max_trials_per_email = 99
     
     def organize_articles(self, articles, subscriber=None, list_obj=None):
         """
