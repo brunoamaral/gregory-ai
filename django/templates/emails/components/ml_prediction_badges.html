@@ -1,33 +1,26 @@
-<!-- ML Prediction Badges Component -->
+<!-- ML Prediction Badges Component - Updated for modern MLPredictions model -->
 <!-- 
 Usage: 
-{# % include 'emails/components/ml_prediction_badges.html' with prediction=prediction % #}
+{% include 'emails/components/ml_prediction_badges.html' with predictions=article.ml_predictions_detail.all %}
 -->
 
-<!-- Individual ML Algorithm Scores -->
-<span style="background-color: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 3px; font-size: 12px; font-weight: 500;">
-    GNB: {{ prediction.gnb|floatformat:3 }}
-</span>
-<span style="background-color: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 3px; font-size: 12px; font-weight: 500;">
-    LR: {{ prediction.lr|floatformat:3 }}
-</span>
-<span style="background-color: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 3px; font-size: 12px; font-weight: 500;">
-    LSVC: {{ prediction.lsvc|floatformat:3 }}
-</span>
-<span style="background-color: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 3px; font-size: 12px; font-weight: 500;">
-    MNB: {{ prediction.mnb|floatformat:3 }}
-</span>
-
-<!-- Overall Probability Score -->
-{% if prediction.probability_score %}
-<span style="background-color: #f3f4f6; color: #374151; padding: 2px 6px; border-radius: 3px; font-size: 12px; font-weight: 600; border: 1px solid #d1d5db;">
-    Overall: {{ prediction.probability_score|floatformat:3 }}
-</span>
-{% endif %}
-
-<!-- Relevant Badge for High Confidence Predictions -->
-{% if prediction.probability_score > 0.8 %}
-<span style="background-color: #10b981; color: #ffffff; padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-    RELEVANT
-</span>
+{% if predictions %}
+    <div style="margin: 8px 0; line-height: 1.6;">
+        {% for prediction in predictions %}
+            <!-- Algorithm and Score Badge -->
+            <span style="background-color: #dbeafe; color: #1e40af; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; margin-right: 6px; display: inline-block; margin-bottom: 3px;">
+                {{ prediction.get_algorithm_display }}: {{ prediction.probability_score|floatformat:3|default:"N/A" }}
+            </span>
+        {% endfor %}
+        
+        <!-- Overall Relevance Badge (if any prediction shows relevant) -->
+        {% for prediction in predictions %}
+            {% if prediction.predicted_relevant %}
+                <span style="background-color: #10b981; color: white; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 4px;">
+                    RELEVANT
+                </span>
+                {% break %}
+            {% endif %}
+        {% endfor %}
+    </div>
 {% endif %}

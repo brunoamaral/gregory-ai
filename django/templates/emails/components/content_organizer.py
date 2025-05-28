@@ -179,7 +179,7 @@ class EmailContentOrganizer:
         high_confidence = []
         
         for article in articles:
-            if hasattr(article, 'ml_predictions') and article.ml_predictions.exists():
+            if hasattr(article, 'ml_predictions_detail') and article.ml_predictions_detail.exists():
                 max_score = self._get_max_ml_score(article)
                 if max_score > self.confidence_threshold:
                     high_confidence.append(article)
@@ -197,11 +197,11 @@ class EmailContentOrganizer:
     
     def _get_max_ml_score(self, article):
         """Get the highest ML prediction score for an article."""
-        if not hasattr(article, 'ml_predictions') or not article.ml_predictions.exists():
+        if not hasattr(article, 'ml_predictions_detail') or not article.ml_predictions_detail.exists():
             return 0.0
         
         max_score = 0.0
-        for prediction in article.ml_predictions.all():
+        for prediction in article.ml_predictions_detail.all():
             if hasattr(prediction, 'probability_score') and prediction.probability_score:
                 max_score = max(max_score, prediction.probability_score)
         

@@ -66,16 +66,17 @@ Usage:
     </div>
     
     <!-- ML Predictions Section (Admin only) -->
-    {% if show_ml_predictions and article.ml_predictions.exists %}
+    {% if show_ml_predictions and article.ml_predictions_detail.exists %}
     <div style="margin-bottom: 15px;">
         <h4 style="color: #1e40af; font-size: 14px; font-weight: 600; margin: 0 0 10px 0;">ML Predictions:</h4>
-        {% for prediction in article.ml_predictions.all %}
+        {% regroup article.ml_predictions_detail.all by subject as predictions_by_subject %}
+        {% for subject_group in predictions_by_subject %}
         <div style="margin-bottom: 10px;">
             <p style="color: #374151; font-size: 13px; margin: 0 0 5px 0;">
-                <strong>Subject:</strong> {{ prediction.subject.subject_name }}
+                <strong>Subject:</strong> {{ subject_group.grouper.subject_name }}
             </p>
             <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                {% include 'emails/components/ml_prediction_badges.html' with prediction=prediction %}
+                {% include 'emails/components/ml_prediction_badges.html' with predictions=subject_group.list %}
             </div>
         </div>
         {% endfor %}
@@ -84,11 +85,12 @@ Usage:
     
     <!-- Relevant Badge (for high-confidence predictions) -->
     {% if show_ml_predictions %}
-        {% for prediction in article.ml_predictions.all %}
-            {% if prediction.probability_score > 0.8 %}
+        {% for prediction in article.ml_predictions_detail.all %}
+            {% if prediction.predicted_relevant %}
                 <div style="margin-bottom: 15px;">
                     {% include 'emails/components/relevant_badge.html' %}
                 </div>
+                {% break %}
             {% endif %}
         {% endfor %}
     {% endif %}
