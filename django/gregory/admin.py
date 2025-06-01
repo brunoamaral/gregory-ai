@@ -31,9 +31,107 @@ class PredictionRunLogAdmin(admin.ModelAdmin):
     )
 
 
+class RelevanceRadioWidget(forms.RadioSelect):
+	"""Custom radio widget with horizontal layout and emojis"""
+	
+	def render(self, name, value, attrs=None, renderer=None):
+		from django.utils.safestring import mark_safe
+		
+		if attrs is None:
+			attrs = {}
+		
+		choices_html = []
+		for choice_value, choice_label in self.choices:
+			# Handle None, True, False comparison properly
+			if choice_value is None and value is None:
+				checked = 'checked'
+			elif choice_value == value:
+				checked = 'checked'
+			elif str(choice_value) == str(value):
+				checked = 'checked'
+			else:
+				checked = ''
+			
+			choice_id = f"{attrs.get('id', name)}_{choice_value or 'none'}"
+			
+			choice_html = f'''
+				<label for="{choice_id}" style="margin-right: 15px; white-space: nowrap; cursor: pointer;">
+					<input type="radio" id="{choice_id}" name="{name}" value="{choice_value or ''}" {checked} style="margin-right: 5px;">
+					{choice_label}
+				</label>
+			'''
+			choices_html.append(choice_html)
+		
+		final_html = f'<div style="display: flex; align-items: center; gap: 10px;">{"".join(choices_html)}</div>'
+		return mark_safe(final_html)
+
+class ArticleSubjectRelevanceForm(forms.ModelForm):
+	RELEVANCE_CHOICES = [
+		(None, '⚪ Not Reviewed'),
+		(True, '✅ Relevant'),
+		(False, '❌ Not Relevant'),
+	]
+	
+	is_relevant = forms.ChoiceField(
+		choices=RELEVANCE_CHOICES,
+		widget=RelevanceRadioWidget,
+		required=False,
+		initial=None,
+		label='Relevance'
+	)
+	
+	class Meta:
+		model = ArticleSubjectRelevance
+		fields = ['subject', 'is_relevant']
+		widgets = {
+			'subject': forms.HiddenInput(),  # Hide the subject field since it's readonly
+		}
+	
+	def clean_is_relevant(self):
+		"""Convert string choice to boolean/None value"""
+		value = self.cleaned_data.get('is_relevant')
+		# Convert string representations to actual values
+		if value == 'True':
+			return True
+		elif value == 'False':
+			return False
+		elif value == 'None' or value == '' or value is None:
+			return None
+		else:
+			return None  # Default to "Not Reviewed"
+
 class ArticleSubjectRelevanceInline(admin.TabularInline):
 	model = ArticleSubjectRelevance
-	extra = 1
+	form = ArticleSubjectRelevanceForm
+	extra = 0  # Don't show extra empty forms
+	can_delete = False  # Prevent deletion since we want all subjects visible
+	fields = ['subject_name', 'is_relevant']  # Show subject name as readonly, then relevance
+	readonly_fields = ['subject_name']
+	
+	def subject_name(self, obj):
+		"""Display the subject name as read-only"""
+		return str(obj.subject) if obj.subject else ''
+	subject_name.short_description = 'Subject'
+	
+	def get_formset(self, request, obj=None, **kwargs):
+		"""Pre-populate with all subjects for the article's teams"""
+		if obj and obj.pk:  # If editing existing article
+			# Get all subjects for the teams this article belongs to
+			team_subjects = Subject.objects.filter(team__in=obj.teams.all()).distinct().order_by('subject_name')
+			
+			# Create ArticleSubjectRelevance instances for any missing subjects
+			for subject in team_subjects:
+				ArticleSubjectRelevance.objects.get_or_create(
+					article=obj,
+					subject=subject,
+					defaults={'is_relevant': None}
+				)
+		
+		return super().get_formset(request, obj, **kwargs)
+	
+	def get_queryset(self, request):
+		"""Order by subject name for consistency"""
+		return super().get_queryset(request).select_related('subject').order_by('subject__subject_name')
 
 class ArticleAdminForm(forms.ModelForm):
 	ml_predictions_display = MLPredictionsField(required=False)
@@ -144,12 +242,30 @@ class SubjectAdmin(admin.ModelAdmin):
 class AuthorsAdmin(admin.ModelAdmin):
 	search_fields = ['family_name', 'given_name']
 
+@admin.register(ArticleSubjectRelevance)
+class ArticleSubjectRelevanceAdmin(admin.ModelAdmin):
+	form = ArticleSubjectRelevanceForm
+	list_display = ['article', 'subject', 'relevance_status']
+	list_filter = ['subject__team', 'subject', 'is_relevant']
+	search_fields = ['article__title', 'subject__subject_name']
+	raw_id_fields = ('article',)
+	
+	def relevance_status(self, obj):
+		if obj.is_relevant is True:
+			return format_html('<span style="color: green; font-weight: bold;">✅ Relevant</span>')
+		elif obj.is_relevant is False:
+			return format_html('<span style="color: red; font-weight: bold;">❌ Not Relevant</span>')
+		else:
+			return format_html('<span style="color: gray;">⚪ Not Reviewed</span>')
+	relevance_status.short_description = 'Relevance Status'
+	
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related('article', 'subject')
+
 @admin.register(TeamCategory)
 class TeamCategoryAdmin(admin.ModelAdmin):
 	list_display = ('team', 'category_name', 'category_slug')
 	search_fields = ('category_name', 'team__name')
-
-
 
 @admin.register(TeamCredentials)
 class TeamCredentialsAdmin(admin.ModelAdmin):
