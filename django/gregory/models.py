@@ -384,14 +384,19 @@ class MLPredictions(models.Model):
 class ArticleSubjectRelevance(models.Model):
 	article = models.ForeignKey(Articles, related_name='article_subject_relevances', on_delete=models.CASCADE)
 	subject = models.ForeignKey('Subject', on_delete=models.CASCADE)
-	is_relevant = models.BooleanField(default=False, help_text="Indicates if the article is relevant for the subject.")
+	is_relevant = models.BooleanField(null=True, blank=True, default=None, help_text="Indicates if the article is relevant for the subject. NULL means not reviewed.")
 
 	class Meta:
 		unique_together = ('article', 'subject')
 		verbose_name_plural = 'article subject relevances'
 
 	def __str__(self):
-		relevance_status = "Relevant" if self.is_relevant else "Not Relevant"
+		if self.is_relevant is True:
+			relevance_status = "Relevant"
+		elif self.is_relevant is False:
+			relevance_status = "Not Relevant"
+		else:
+			relevance_status = "Not Reviewed"
 		return f"{self.article.title} - {self.subject.subject_name}: {relevance_status}"
 
 class PredictionRunLog(models.Model):
