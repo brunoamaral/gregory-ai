@@ -300,12 +300,104 @@ class TeamCategoryAdmin(admin.ModelAdmin):
 	list_display = ('team', 'category_name', 'category_slug')
 	search_fields = ('category_name', 'team__name')
 
+class TeamAdminForm(forms.ModelForm):
+	"""Custom form for Team admin that allows creating organization and team together"""
+	team_name = forms.CharField(
+		max_length=200, 
+		required=False,
+		help_text="Enter team name, or select an existing organization below."
+	)
+	
+	class Meta:
+		model = Team
+		fields = ['organization', 'slug']  # Exclude 'name' since we use 'team_name' instead
+	
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		
+		# If editing an existing team, populate the team_name field with the actual team name
+		if self.instance and self.instance.pk:
+			self.fields['team_name'].initial = self.instance.name
+			# For existing teams, team_name updates the actual team name
+			self.fields['team_name'].help_text = "Team name within the organization."
+		
+		# Make organization field optional for new teams
+		if not self.instance.pk:
+			self.fields['organization'].required = False
+			self.fields['organization'].help_text = "Select an existing organization, or leave blank to create a new one with the team name above."
+	
+	def clean(self):
+		cleaned_data = super().clean()
+		team_name = cleaned_data.get('team_name')
+		organization = cleaned_data.get('organization')
+		
+		# For new teams, require either team_name or organization
+		if not self.instance.pk:
+			if not team_name and not organization:
+				raise forms.ValidationError("Please provide either a team name or select an existing organization.")
+		else:
+			# For existing teams, always require a team name
+			if not team_name:
+				raise forms.ValidationError("Team name is required.")
+		
+		# Check for unique team name within organization
+		if team_name and organization:
+			existing_team = Team.objects.filter(
+				organization=organization, 
+				name=team_name
+			).exclude(pk=self.instance.pk if self.instance.pk else None)
+			
+			if existing_team.exists():
+				raise forms.ValidationError(f"A team named '{team_name}' already exists in organization '{organization.name}'.")
+		
+		return cleaned_data
+	
+	def save(self, commit=True):
+		team_name = self.cleaned_data.get('team_name')
+		organization = self.cleaned_data.get('organization')
+		
+		# For new teams, create organization if team_name is provided and no organization selected
+		if not self.instance.pk:
+			if organization:
+				# If organization is selected, use it
+				self.instance.organization = organization
+				self.instance.name = team_name or organization.name
+				# Auto-generate slug if not provided
+				if not self.instance.slug:
+					from django.utils.text import slugify
+					self.instance.slug = slugify(f"{organization.name}-{team_name or 'team'}")
+			elif team_name:
+				# If only team_name is provided, create new organization
+				from organizations.models import Organization
+				from django.utils.text import slugify
+				
+				# Create the organization
+				organization = Organization.objects.create(name=team_name.strip())
+				self.instance.organization = organization
+				self.instance.name = team_name.strip()
+				
+				# Auto-generate slug if not provided
+				if not self.instance.slug:
+					self.instance.slug = slugify(team_name)
+		else:
+			# For existing teams, update the name
+			if team_name:
+				self.instance.name = team_name.strip()
+		
+		return super().save(commit)
+
 @admin.register(Team)
 class TeamAdmin(admin.ModelAdmin):
+	form = TeamAdminForm
 	list_display = ['id', 'name', 'organization', 'slug', 'subjects_count', 'sources_count']
 	list_filter = ['organization']
-	search_fields = ['organization__name', 'slug']
-	readonly_fields = ['name']  # name is a property
+	search_fields = ['name', 'organization__name', 'slug']
+	
+	fieldsets = (
+		(None, {
+			'fields': ('team_name', 'organization', 'slug')
+		}),
+	)
 	
 	def subjects_count(self, obj):
 		return obj.subjects.count()
