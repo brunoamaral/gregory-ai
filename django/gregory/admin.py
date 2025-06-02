@@ -216,8 +216,7 @@ class SubjectAdminForm(forms.ModelForm):
         # If user is superuser, show all teams
         # Otherwise, keep the default filtering (user's teams only)
         if self.request and hasattr(self.request, 'user') and self.request.user.is_superuser:
-            from organizations.models import Organization
-            self.fields['team'].queryset = Organization.objects.all()
+            self.fields['team'].queryset = Team.objects.all()
 
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
