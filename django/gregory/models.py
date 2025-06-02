@@ -266,19 +266,19 @@ class EncryptedTextField(models.TextField):
 		return base64.b64encode(fernet.encrypt(value.encode())).decode()
 
 class Team(models.Model):
-	organization = models.OneToOneField(
+	organization = models.ForeignKey(
 		Organization, 
 		on_delete=models.CASCADE, 
-		related_name='team'
+		related_name='teams'
 	)
+	name = models.CharField(max_length=200, help_text="Team name within the organization")
 	slug = models.SlugField(unique=True, editable=True)
 
+	class Meta:
+		unique_together = ['organization', 'name']  # Ensure unique team names within each organization
+
 	def __str__(self):
-		return self.organization.name if self.organization else "Team"
-	
-	@property
-	def name(self):
-		return self.organization.name if self.organization else ""
+		return f"{self.name} ({self.organization.name})" if self.organization else self.name
 	
 	@property
 	def members(self):

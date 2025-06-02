@@ -31,9 +31,107 @@ class PredictionRunLogAdmin(admin.ModelAdmin):
     )
 
 
+class RelevanceRadioWidget(forms.RadioSelect):
+	"""Custom radio widget with horizontal layout and emojis"""
+	
+	def render(self, name, value, attrs=None, renderer=None):
+		from django.utils.safestring import mark_safe
+		
+		if attrs is None:
+			attrs = {}
+		
+		choices_html = []
+		for choice_value, choice_label in self.choices:
+			# Handle None, True, False comparison properly
+			if choice_value is None and value is None:
+				checked = 'checked'
+			elif choice_value == value:
+				checked = 'checked'
+			elif str(choice_value) == str(value):
+				checked = 'checked'
+			else:
+				checked = ''
+			
+			choice_id = f"{attrs.get('id', name)}_{choice_value or 'none'}"
+			
+			choice_html = f'''
+				<label for="{choice_id}" style="margin-right: 15px; white-space: nowrap; cursor: pointer;">
+					<input type="radio" id="{choice_id}" name="{name}" value="{choice_value or ''}" {checked} style="margin-right: 5px;">
+					{choice_label}
+				</label>
+			'''
+			choices_html.append(choice_html)
+		
+		final_html = f'<div style="display: flex; align-items: center; gap: 10px;">{"".join(choices_html)}</div>'
+		return mark_safe(final_html)
+
+class ArticleSubjectRelevanceForm(forms.ModelForm):
+	RELEVANCE_CHOICES = [
+		(None, '⚪ Not Reviewed'),
+		(True, '✅ Relevant'),
+		(False, '❌ Not Relevant'),
+	]
+	
+	is_relevant = forms.ChoiceField(
+		choices=RELEVANCE_CHOICES,
+		widget=RelevanceRadioWidget,
+		required=False,
+		initial=None,
+		label='Relevance'
+	)
+	
+	class Meta:
+		model = ArticleSubjectRelevance
+		fields = ['subject', 'is_relevant']
+		widgets = {
+			'subject': forms.HiddenInput(),  # Hide the subject field since it's readonly
+		}
+	
+	def clean_is_relevant(self):
+		"""Convert string choice to boolean/None value"""
+		value = self.cleaned_data.get('is_relevant')
+		# Convert string representations to actual values
+		if value == 'True':
+			return True
+		elif value == 'False':
+			return False
+		elif value == 'None' or value == '' or value is None:
+			return None
+		else:
+			return None  # Default to "Not Reviewed"
+
 class ArticleSubjectRelevanceInline(admin.TabularInline):
 	model = ArticleSubjectRelevance
-	extra = 1
+	form = ArticleSubjectRelevanceForm
+	extra = 0  # Don't show extra empty forms
+	can_delete = False  # Prevent deletion since we want all subjects visible
+	fields = ['subject_name', 'is_relevant']  # Show subject name as readonly, then relevance
+	readonly_fields = ['subject_name']
+	
+	def subject_name(self, obj):
+		"""Display the subject name as read-only"""
+		return str(obj.subject) if obj.subject else ''
+	subject_name.short_description = 'Subject'
+	
+	def get_formset(self, request, obj=None, **kwargs):
+		"""Pre-populate with all subjects for the article's teams"""
+		if obj and obj.pk:  # If editing existing article
+			# Get all subjects for the teams this article belongs to
+			team_subjects = Subject.objects.filter(team__in=obj.teams.all()).distinct().order_by('subject_name')
+			
+			# Create ArticleSubjectRelevance instances for any missing subjects
+			for subject in team_subjects:
+				ArticleSubjectRelevance.objects.get_or_create(
+					article=obj,
+					subject=subject,
+					defaults={'is_relevant': None}
+				)
+		
+		return super().get_formset(request, obj, **kwargs)
+	
+	def get_queryset(self, request):
+		"""Order by subject name for consistency"""
+		return super().get_queryset(request).select_related('subject').order_by('subject__subject_name')
 
 class ArticleAdminForm(forms.ModelForm):
 	ml_predictions_display = MLPredictionsField(required=False)
@@ -103,10 +201,41 @@ class SourceAdmin(admin.ModelAdmin):
 	list_display = ['name', 'source_for', 'subject', 'method']
 	list_filter = ['source_for', 'team', 'subject']
 
+class SubjectAdminForm(forms.ModelForm):
+    """Custom form for Subject admin with superuser-only team access"""
+    
+    class Meta:
+        model = Subject
+        fields = '__all__'
+    
+    def __init__(self, *args, **kwargs):
+        # Get the request from kwargs if passed
+        self.request = kwargs.pop('request', None)
+        super().__init__(*args, **kwargs)
+        
+        # If user is superuser, show all teams
+        # Otherwise, keep the default filtering (user's teams only)
+        if self.request and hasattr(self.request, 'user') and self.request.user.is_superuser:
+            self.fields['team'].queryset = Team.objects.all()
+
+@admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
 	list_display = ['subject_name','description', 'view_sources','team']  # Display in the list view
 	readonly_fields = ['linked_sources']  # Display in the edit form
 	list_filter = ['team']  # Add the team filter
+	form = SubjectAdminForm
+
+	def get_form(self, request, obj=None, **kwargs):
+		"""Pass the request to the form so it can check user permissions"""
+		form_class = super().get_form(request, obj, **kwargs)
+		
+		# Create a wrapper that passes the request to the form
+		class FormWithRequest(form_class):
+				def __init__(self, *args, **form_kwargs):
+						form_kwargs['request'] = request
+						super().__init__(*args, **form_kwargs)
+		
+		return FormWithRequest
 
 	def view_sources(self, obj):
 		"""Display sources as clickable links in the list view."""
@@ -141,15 +270,145 @@ class SubjectAdmin(admin.ModelAdmin):
 		return "No sources"
 
 	linked_sources.short_description = "Linked Sources"
+
+
 class AuthorsAdmin(admin.ModelAdmin):
 	search_fields = ['family_name', 'given_name']
+
+@admin.register(ArticleSubjectRelevance)
+class ArticleSubjectRelevanceAdmin(admin.ModelAdmin):
+	form = ArticleSubjectRelevanceForm
+	list_display = ['article', 'subject', 'relevance_status']
+	list_filter = ['subject__team', 'subject', 'is_relevant']
+	search_fields = ['article__title', 'subject__subject_name']
+	raw_id_fields = ('article',)
+	
+	def relevance_status(self, obj):
+		if obj.is_relevant is True:
+			return format_html('<span style="color: green; font-weight: bold;">✅ Relevant</span>')
+		elif obj.is_relevant is False:
+			return format_html('<span style="color: red; font-weight: bold;">❌ Not Relevant</span>')
+		else:
+			return format_html('<span style="color: gray;">⚪ Not Reviewed</span>')
+	relevance_status.short_description = 'Relevance Status'
+	
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related('article', 'subject')
 
 @admin.register(TeamCategory)
 class TeamCategoryAdmin(admin.ModelAdmin):
 	list_display = ('team', 'category_name', 'category_slug')
 	search_fields = ('category_name', 'team__name')
 
+class TeamAdminForm(forms.ModelForm):
+	"""Custom form for Team admin that allows creating organization and team together"""
+	team_name = forms.CharField(
+		max_length=200, 
+		required=False,
+		help_text="Enter team name, or select an existing organization below."
+	)
+	
+	class Meta:
+		model = Team
+		fields = ['organization', 'slug']  # Exclude 'name' since we use 'team_name' instead
+	
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		
+		# If editing an existing team, populate the team_name field with the actual team name
+		if self.instance and self.instance.pk:
+			self.fields['team_name'].initial = self.instance.name
+			# For existing teams, team_name updates the actual team name
+			self.fields['team_name'].help_text = "Team name within the organization."
+		
+		# Make organization field optional for new teams
+		if not self.instance.pk:
+			self.fields['organization'].required = False
+			self.fields['organization'].help_text = "Select an existing organization, or leave blank to create a new one with the team name above."
+	
+	def clean(self):
+		cleaned_data = super().clean()
+		team_name = cleaned_data.get('team_name')
+		organization = cleaned_data.get('organization')
+		
+		# For new teams, require either team_name or organization
+		if not self.instance.pk:
+			if not team_name and not organization:
+				raise forms.ValidationError("Please provide either a team name or select an existing organization.")
+		else:
+			# For existing teams, always require a team name
+			if not team_name:
+				raise forms.ValidationError("Team name is required.")
+		
+		# Check for unique team name within organization
+		if team_name and organization:
+			existing_team = Team.objects.filter(
+				organization=organization, 
+				name=team_name
+			).exclude(pk=self.instance.pk if self.instance.pk else None)
+			
+			if existing_team.exists():
+				raise forms.ValidationError(f"A team named '{team_name}' already exists in organization '{organization.name}'.")
+		
+		return cleaned_data
+	
+	def save(self, commit=True):
+		team_name = self.cleaned_data.get('team_name')
+		organization = self.cleaned_data.get('organization')
+		
+		# For new teams, create organization if team_name is provided and no organization selected
+		if not self.instance.pk:
+			if organization:
+				# If organization is selected, use it
+				self.instance.organization = organization
+				self.instance.name = team_name or organization.name
+				# Auto-generate slug if not provided
+				if not self.instance.slug:
+					from django.utils.text import slugify
+					self.instance.slug = slugify(f"{organization.name}-{team_name or 'team'}")
+			elif team_name:
+				# If only team_name is provided, create new organization
+				from organizations.models import Organization
+				from django.utils.text import slugify
+				
+				# Create the organization
+				organization = Organization.objects.create(name=team_name.strip())
+				self.instance.organization = organization
+				self.instance.name = team_name.strip()
+				
+				# Auto-generate slug if not provided
+				if not self.instance.slug:
+					self.instance.slug = slugify(team_name)
+		else:
+			# For existing teams, update the name
+			if team_name:
+				self.instance.name = team_name.strip()
+		
+		return super().save(commit)
 
+@admin.register(Team)
+class TeamAdmin(admin.ModelAdmin):
+	form = TeamAdminForm
+	list_display = ['id', 'name', 'organization', 'slug', 'subjects_count', 'sources_count']
+	list_filter = ['organization']
+	search_fields = ['name', 'organization__name', 'slug']
+	
+	fieldsets = (
+		(None, {
+			'fields': ('team_name', 'organization', 'slug')
+		}),
+	)
+	
+	def subjects_count(self, obj):
+		return obj.subjects.count()
+	subjects_count.short_description = 'Subjects'
+	
+	def sources_count(self, obj):
+		return obj.sources.count()
+	sources_count.short_description = 'Sources'
+	
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related('organization').prefetch_related('subjects', 'sources')
 
 @admin.register(TeamCredentials)
 class TeamCredentialsAdmin(admin.ModelAdmin):
@@ -329,5 +588,4 @@ admin.site.register(Articles, ArticleAdmin)
 admin.site.register(Authors, AuthorsAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
-admin.site.register(Subject, SubjectAdmin)
 admin.site.register(Trials, TrialAdmin)
