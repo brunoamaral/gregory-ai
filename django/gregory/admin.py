@@ -201,10 +201,42 @@ class SourceAdmin(admin.ModelAdmin):
 	list_display = ['name', 'source_for', 'subject', 'method']
 	list_filter = ['source_for', 'team', 'subject']
 
+class SubjectAdminForm(forms.ModelForm):
+    """Custom form for Subject admin with superuser-only team access"""
+    
+    class Meta:
+        model = Subject
+        fields = '__all__'
+    
+    def __init__(self, *args, **kwargs):
+        # Get the request from kwargs if passed
+        self.request = kwargs.pop('request', None)
+        super().__init__(*args, **kwargs)
+        
+        # If user is superuser, show all teams
+        # Otherwise, keep the default filtering (user's teams only)
+        if self.request and hasattr(self.request, 'user') and self.request.user.is_superuser:
+            from organizations.models import Organization
+            self.fields['team'].queryset = Organization.objects.all()
+
+@admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
 	list_display = ['subject_name','description', 'view_sources','team']  # Display in the list view
 	readonly_fields = ['linked_sources']  # Display in the edit form
 	list_filter = ['team']  # Add the team filter
+	form = SubjectAdminForm
+
+	def get_form(self, request, obj=None, **kwargs):
+		"""Pass the request to the form so it can check user permissions"""
+		form_class = super().get_form(request, obj, **kwargs)
+		
+		# Create a wrapper that passes the request to the form
+		class FormWithRequest(form_class):
+				def __init__(self, *args, **form_kwargs):
+						form_kwargs['request'] = request
+						super().__init__(*args, **form_kwargs)
+		
+		return FormWithRequest
 
 	def view_sources(self, obj):
 		"""Display sources as clickable links in the list view."""
@@ -239,6 +271,8 @@ class SubjectAdmin(admin.ModelAdmin):
 		return "No sources"
 
 	linked_sources.short_description = "Linked Sources"
+
+
 class AuthorsAdmin(admin.ModelAdmin):
 	search_fields = ['family_name', 'given_name']
 
@@ -445,5 +479,4 @@ admin.site.register(Articles, ArticleAdmin)
 admin.site.register(Authors, AuthorsAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
-admin.site.register(Subject, SubjectAdmin)
 admin.site.register(Trials, TrialAdmin)
