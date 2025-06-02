@@ -301,6 +301,24 @@ class TeamCategoryAdmin(admin.ModelAdmin):
 	list_display = ('team', 'category_name', 'category_slug')
 	search_fields = ('category_name', 'team__name')
 
+@admin.register(Team)
+class TeamAdmin(admin.ModelAdmin):
+	list_display = ['id', 'name', 'organization', 'slug', 'subjects_count', 'sources_count']
+	list_filter = ['organization']
+	search_fields = ['organization__name', 'slug']
+	readonly_fields = ['name']  # name is a property
+	
+	def subjects_count(self, obj):
+		return obj.subjects.count()
+	subjects_count.short_description = 'Subjects'
+	
+	def sources_count(self, obj):
+		return obj.sources.count()
+	sources_count.short_description = 'Sources'
+	
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related('organization').prefetch_related('subjects', 'sources')
+
 @admin.register(TeamCredentials)
 class TeamCredentialsAdmin(admin.ModelAdmin):
 	list_display = ('team', 'created_at', 'updated_at')
