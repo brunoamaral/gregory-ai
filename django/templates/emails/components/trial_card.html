@@ -11,12 +11,16 @@ Usage:
         {{ trial.title }}
     </h3>
     
-    <!-- Trial Identifier -->
-    {% if trial.identifiers.nct %}
+    <!-- Trial Identifiers -->
+    {% if trial.identifiers %}
     <div style="margin-bottom: 15px;">
-        <span style="background-color: #ecfdf5; color: #047857; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase;">
-            {{ trial.identifiers.nct }}
-        </span>
+        {% for identifier_type, identifier_value in trial.identifiers.items %}
+            {% if identifier_value %}
+                <span style="background-color: {% if identifier_type == 'nct' %}#ecfdf5{% elif identifier_type == 'eudract' %}#fef3c7{% elif identifier_type == 'euct' %}#dbeafe{% elif identifier_type == 'ctis' %}#f3e8ff{% else %}#f3f4f6{% endif %}; color: {% if identifier_type == 'nct' %}#047857{% elif identifier_type == 'eudract' %}#92400e{% elif identifier_type == 'euct' %}#1e40af{% elif identifier_type == 'ctis' %}#7c3aed{% else %}#374151{% endif %}; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-right: 8px; margin-bottom: 4px; display: inline-block;">
+                    {{ identifier_type|upper }}: {{ identifier_value }}
+                </span>
+            {% endif %}
+        {% endfor %}
     </div>
     {% endif %}
     
