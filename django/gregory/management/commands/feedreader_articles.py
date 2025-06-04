@@ -47,13 +47,9 @@ class Command(BaseCommand):
 			for source in sources:
 					print(f'# Processing articles from {source}')
 					feed = self.fetch_feed(source.link, source.ignore_ssl)
-					
-					processed_count = 0
-					warning_count = 0
-					
 					for entry in feed['entries']:
 							title = entry['title']
-							processed_count += 1
+							self.stdout.write(f"Processing {title}")
 							
 							# Extract summary with proper priority for PubMed feeds
 							summary = entry.get('summary', '')
@@ -76,18 +72,35 @@ class Command(BaseCommand):
 
 							if doi:
 									crossref_paper = SciencePaper(doi=doi)
-									crossref_paper.refresh()
-									title = crossref_paper.title if crossref_paper.title else entry['title']
+									refresh_result = crossref_paper.refresh()
 									
-									# Use crossref abstract if available, otherwise use the properly extracted feed summary
-									if crossref_paper.abstract and crossref_paper.abstract.strip():
-										summary = SciencePaper.clean_abstract(abstract=crossref_paper.abstract)
-									else:
+									# Check if CrossRef refresh was successful
+									if isinstance(refresh_result, str) and ('error' in refresh_result.lower() or 'not found' in refresh_result.lower()):
+										print(f"  ⚠️  CrossRef lookup failed for DOI {doi}: {refresh_result}")
+										# Use feed data as fallback
+										title = entry['title']
 										summary = feed_summary
+										container_title = None
+										publisher = None
+										access = None
+										crossref_check = None
+									else:
+										# CrossRef data available, use it with fallbacks
+										title = crossref_paper.title if crossref_paper.title else entry['title']
+										
+										# Use crossref abstract if available, otherwise use the properly extracted feed summary
+										if crossref_paper.abstract and crossref_paper.abstract.strip():
+											summary = SciencePaper.clean_abstract(abstract=crossref_paper.abstract)
+										else:
+											summary = feed_summary
+										
+										container_title = crossref_paper.journal
+										publisher = crossref_paper.publisher
+										access = crossref_paper.access
+										crossref_check = timezone.now()
 									
 									# Log potential summary truncation issues
 									if 20 < len(summary) < 500:
-										warning_count += 1
 										print(f"  ⚠️  Potentially truncated summary for DOI {doi}: {len(summary)} characters")
 
 									# Check if an article with the same DOI or title exists
@@ -102,10 +115,10 @@ class Command(BaseCommand):
 											summary=summary,
 											link=link,
 											published_date=published_date,
-											container_title=crossref_paper.journal,
-											publisher=crossref_paper.publisher,
-											access=crossref_paper.access,
-											crossref_check=timezone.now()
+											container_title=container_title,
+											publisher=publisher,
+											access=access,
+											crossref_check=crossref_check
 										)
 										created = True
 
@@ -126,52 +139,50 @@ class Command(BaseCommand):
 													science_paper.subjects.add(source.subject)
 													science_paper.save()
 
-									# Process author information
-									if crossref_paper is not None:  # Assuming `paper` contains the article's metadata including author information
-										if crossref_paper.authors is not None:
-											for author_info in crossref_paper.authors:
-												given_name = author_info.get('given')
-												family_name = author_info.get('family')
-												orcid = author_info.get('ORCID', None)
-												try:
-													if orcid:  # If ORCID is present, use it as the primary key for author lookup/creation
-														author_obj, author_created = Authors.objects.get_or_create(
-																ORCID=orcid,
-																defaults={
-																		'given_name': given_name or '',  # Empty string if missing
-																		'family_name': family_name or ''  # Empty string if missing
-																		}
-																)
-													else:  # If no ORCID is provided, fallback to using given_name and family_name for lookup/creation
-														if not given_name or not family_name:
-															self.stdout.write(f"Missing given name or family name, skipping this author. {crossref_paper.doi}")
-															continue
-														else:
-															author_obj, author_created = Authors.objects.get_or_create(
-																given_name=given_name,
-																family_name=family_name,
-																defaults={'ORCID': orcid}  # orcid will be an empty string if not provided, which is fine
+									# Process author information only if CrossRef data was successfully retrieved
+									if refresh_result != 'DOI not found' and crossref_paper is not None and crossref_paper.authors is not None:
+										for author_info in crossref_paper.authors:
+											given_name = author_info.get('given')
+											family_name = author_info.get('family')
+											orcid = author_info.get('ORCID', None)
+											try:
+												if orcid:  # If ORCID is present, use it as the primary key for author lookup/creation
+													author_obj, author_created = Authors.objects.get_or_create(
+															ORCID=orcid,
+															defaults={
+																	'given_name': given_name or '',  # Empty string if missing
+																	'family_name': family_name or ''  # Empty string if missing
+																	}
 															)
-												except MultipleObjectsReturned:
-													# Handle the case where multiple authors are returned
-													authors = Authors.objects.filter(given_name=given_name, family_name=family_name)
-													print(f"Multiple authors found for {given_name} {family_name}:")
-													for author in authors:
-															print(f"Author ID: {author.author_id}, ORCID: {author.ORCID}")
-													# Use the first author with an ORCID, if available
-													author_obj = next((author for author in authors if author.ORCID), authors.first())
+												else:  # If no ORCID is provided, fallback to using given_name and family_name for lookup/creation
+													if not given_name or not family_name:
+														self.stdout.write(f"Missing given name or family name, skipping this author. {crossref_paper.doi}")
+														continue
+													else:
+														author_obj, author_created = Authors.objects.get_or_create(
+															given_name=given_name,
+															family_name=family_name,
+															defaults={'ORCID': orcid}  # orcid will be an empty string if not provided, which is fine
+														)
+											except MultipleObjectsReturned:
+												# Handle the case where multiple authors are returned
+												authors = Authors.objects.filter(given_name=given_name, family_name=family_name)
+												print(f"Multiple authors found for {given_name} {family_name}:")
+												# Use the first author with an ORCID, if available
+												author_obj = next((author for author in authors if author.ORCID), authors.first())
 
 													# Link the author to the article if not already linked
 												if not science_paper.authors.filter(pk=author_obj.pk).exists():
 													science_paper.authors.add(author_obj)
 							else:
+								print('No DOI, trying to create article')
+								
 								# Use the properly extracted and cleaned feed summary
 								summary = feed_summary
 								
 								# Log potential summary truncation issues
 								if 20 < len(summary) < 500:
-									warning_count += 1
-									print(f"  ⚠️  Potentially truncated summary for title '{title[:50]}...': {len(summary)} characters")
+									self.stdout.write(f"Warning: Potentially truncated summary for title '{title}': {len(summary)} characters")
 								
 								existing_article = Articles.objects.filter(title=title).first()
 								if existing_article:
@@ -201,8 +212,3 @@ class Command(BaseCommand):
 										science_paper.subjects.add(source.subject)
 										science_paper.sources.add(source)
 										science_paper.save()
-					
-					# Summary for this source
-					print(f"  ✅ Processed {processed_count} articles from {source}")
-					if warning_count > 0:
-						print(f"  ⚠️  {warning_count} articles had potentially truncated summaries")
