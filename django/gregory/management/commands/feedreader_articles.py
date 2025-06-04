@@ -50,12 +50,18 @@ class Command(BaseCommand):
 					for entry in feed['entries']:
 							title = entry['title']
 							self.stdout.write(f"Processing {title}")
+							
+							# Extract summary with proper priority for PubMed feeds
 							summary = entry.get('summary', '')
 							if hasattr(entry, 'summary_detail'):
 									summary = entry['summary_detail']['value']
-							published = entry.get('published')
 							if 'pubmed' in source.link and hasattr(entry, 'content'):
 									summary = entry['content'][0]['value']
+							
+							# Clean and store the original feed summary
+							feed_summary = SciencePaper.clean_abstract(abstract=summary) if summary else ''
+							
+							published = entry.get('published')
 							published_date = parse(entry.get('published') or entry.get('prism_coverdate'), tzinfos=self.tzinfos).astimezone(pytz.utc)
 							link = greg.remove_utm(entry['link'])
 							doi = None
@@ -68,7 +74,16 @@ class Command(BaseCommand):
 									crossref_paper = SciencePaper(doi=doi)
 									crossref_paper.refresh()
 									title = crossref_paper.title if crossref_paper.title else entry['title']
-									summary = crossref_paper.abstract if crossref_paper.abstract else entry.get('summary')
+									
+									# Use crossref abstract if available, otherwise use the properly extracted feed summary
+									if crossref_paper.abstract and crossref_paper.abstract.strip():
+										summary = SciencePaper.clean_abstract(abstract=crossref_paper.abstract)
+									else:
+										summary = feed_summary
+									
+									# Log potential summary truncation issues
+									if 20 < len(summary) < 500:
+										self.stdout.write(f"Warning: Potentially truncated summary for DOI {doi}: {len(summary)} characters")
 
 									# Check if an article with the same DOI or title exists
 									existing_article = Articles.objects.filter(Q(doi=doi) | Q(title=title)).first()
@@ -95,10 +110,10 @@ class Command(BaseCommand):
 										science_paper.sources.add(source)
 										science_paper.save()
 									else:
-											if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),
+											if any([science_paper.title != title, science_paper.summary != summary,
 													science_paper.link != link, science_paper.published_date != published_date]):
 													science_paper.title = title
-													science_paper.summary = SciencePaper.clean_abstract(abstract=summary)
+													science_paper.summary = summary
 													science_paper.link = link
 													science_paper.published_date = published_date
 													science_paper.sources.add(source)
@@ -146,6 +161,14 @@ class Command(BaseCommand):
 													science_paper.authors.add(author_obj)
 							else:
 								print('No DOI, trying to create article')
+								
+								# Use the properly extracted and cleaned feed summary
+								summary = feed_summary
+								
+								# Log potential summary truncation issues
+								if 20 < len(summary) < 500:
+									self.stdout.write(f"Warning: Potentially truncated summary for title '{title}': {len(summary)} characters")
+								
 								existing_article = Articles.objects.filter(title=title).first()
 								if existing_article:
 											science_paper = existing_article
@@ -164,10 +187,10 @@ class Command(BaseCommand):
 											created = True
 
 								if not created:
-									if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),
+									if any([science_paper.title != title, science_paper.summary != summary,
 												science_paper.link != link, science_paper.published_date != published_date]):
 										science_paper.title = title
-										science_paper.summary = SciencePaper.clean_abstract(abstract=summary)
+										science_paper.summary = summary
 										science_paper.link = link
 										science_paper.published_date = published_date
 										science_paper.teams.add(source.team)
