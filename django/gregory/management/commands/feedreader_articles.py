@@ -49,7 +49,6 @@ class Command(BaseCommand):
 					feed = self.fetch_feed(source.link, source.ignore_ssl)
 					for entry in feed['entries']:
 							title = entry['title']
-							self.stdout.write(f"Processing {title}")
 							
 							# Extract summary with proper priority for PubMed feeds
 							summary = entry.get('summary', '')
