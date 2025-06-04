@@ -40,6 +40,7 @@ class SciencePaper:
 		import os
 		import pytz
 		from datetime import datetime
+		from requests.exceptions import HTTPError
 		timezone = pytz.timezone('UTC')
 		from sitesettings.models import CustomSetting
 		site = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
@@ -47,10 +48,27 @@ class SciencePaper:
 		my_etiquette = Etiquette(site.title, 'v8', client_website, site.admin_email)
 		works = Works(etiquette=my_etiquette)
 		work = None
+		
 		if self.doi != None:
-			work = works.doi(self.doi)
+			try:
+				work = works.doi(self.doi)
+			except HTTPError as e:
+				if e.response.status_code == 404:
+					print(f"DOI not found in CrossRef: {self.doi}")
+					return 'DOI not found'
+				else:
+					print(f"CrossRef API error for DOI {self.doi}: {e}")
+					return f'CrossRef error: {e}'
+			except Exception as e:
+				print(f"Unexpected error querying CrossRef for DOI {self.doi}: {e}")
+				return f'Unexpected error: {e}'
 		else:
 			return 'No DOI provided'
+			
+		# Only proceed if we successfully got work data
+		if work is None:
+			return 'No data retrieved from CrossRef'
+			
 		if self.link == None:
 			try: 
 				self.link = work['link'][0]['URL']
@@ -65,10 +83,14 @@ class SciencePaper:
 			if site.admin_email == None:
 				print("No site admin email found")
 			else:
-				if unpaywall_utils.checkIfDOIIsOpenAccess(self.doi, site.admin_email):
-					self.access = 'open'
-				else:
-					self.access = 'restricted'
+				try:
+					if unpaywall_utils.checkIfDOIIsOpenAccess(self.doi, site.admin_email):
+						self.access = 'open'
+					else:
+						self.access = 'restricted'
+				except Exception as e:
+					print(f"Error checking Unpaywall for DOI {self.doi}: {e}")
+					self.access = 'unknown'
 			
 		if self.publisher == None:
 			if work != None and 'publisher' in work:
