@@ -167,7 +167,7 @@ class Command(BaseCommand):
 												except MultipleObjectsReturned:
 													# Handle the case where multiple authors are returned
 													authors = Authors.objects.filter(given_name=given_name, family_name=family_name)
-													print(f"Multiple authors found for {given_name} {family_name}:")
+
 													# Use the first author with an ORCID, if available
 													author_obj = next((author for author in authors if author.ORCID), authors.first())
 
