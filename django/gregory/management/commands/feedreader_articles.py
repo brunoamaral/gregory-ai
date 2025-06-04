@@ -47,9 +47,13 @@ class Command(BaseCommand):
 			for source in sources:
 					print(f'# Processing articles from {source}')
 					feed = self.fetch_feed(source.link, source.ignore_ssl)
+					
+					processed_count = 0
+					warning_count = 0
+					
 					for entry in feed['entries']:
 							title = entry['title']
-							self.stdout.write(f"Processing {title}")
+							processed_count += 1
 							
 							# Extract summary with proper priority for PubMed feeds
 							summary = entry.get('summary', '')
@@ -83,7 +87,8 @@ class Command(BaseCommand):
 									
 									# Log potential summary truncation issues
 									if 20 < len(summary) < 500:
-										self.stdout.write(f"Warning: Potentially truncated summary for DOI {doi}: {len(summary)} characters")
+										warning_count += 1
+										print(f"  ⚠️  Potentially truncated summary for DOI {doi}: {len(summary)} characters")
 
 									# Check if an article with the same DOI or title exists
 									existing_article = Articles.objects.filter(Q(doi=doi) | Q(title=title)).first()
@@ -160,14 +165,13 @@ class Command(BaseCommand):
 												if not science_paper.authors.filter(pk=author_obj.pk).exists():
 													science_paper.authors.add(author_obj)
 							else:
-								print('No DOI, trying to create article')
-								
 								# Use the properly extracted and cleaned feed summary
 								summary = feed_summary
 								
 								# Log potential summary truncation issues
 								if 20 < len(summary) < 500:
-									self.stdout.write(f"Warning: Potentially truncated summary for title '{title}': {len(summary)} characters")
+									warning_count += 1
+									print(f"  ⚠️  Potentially truncated summary for title '{title[:50]}...': {len(summary)} characters")
 								
 								existing_article = Articles.objects.filter(title=title).first()
 								if existing_article:
@@ -197,3 +201,8 @@ class Command(BaseCommand):
 										science_paper.subjects.add(source.subject)
 										science_paper.sources.add(source)
 										science_paper.save()
+					
+					# Summary for this source
+					print(f"  ✅ Processed {processed_count} articles from {source}")
+					if warning_count > 0:
+						print(f"  ⚠️  {warning_count} articles had potentially truncated summaries")
