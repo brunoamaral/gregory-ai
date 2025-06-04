@@ -74,7 +74,7 @@ class Command(BaseCommand):
 									refresh_result = crossref_paper.refresh()
 									
 									# Check if CrossRef refresh was successful
-									if isinstance(refresh_result, str) and ('error' in refresh_result.lower() or 'not found' in refresh_result.lower()):
+									if isinstance(refresh_result, str) and any(keyword in refresh_result.lower() for keyword in ['error', 'not found', 'json decode']):
 										print(f"  ⚠️  CrossRef lookup failed for DOI {doi}: {refresh_result}")
 										# Use feed data as fallback
 										title = entry['title']
@@ -139,36 +139,37 @@ class Command(BaseCommand):
 													science_paper.save()
 
 									# Process author information only if CrossRef data was successfully retrieved
-									if refresh_result != 'DOI not found' and crossref_paper is not None and crossref_paper.authors is not None:
-										for author_info in crossref_paper.authors:
-											given_name = author_info.get('given')
-											family_name = author_info.get('family')
-											orcid = author_info.get('ORCID', None)
-											try:
-												if orcid:  # If ORCID is present, use it as the primary key for author lookup/creation
-													author_obj, author_created = Authors.objects.get_or_create(
-															ORCID=orcid,
-															defaults={
-																	'given_name': given_name or '',  # Empty string if missing
-																	'family_name': family_name or ''  # Empty string if missing
-																	}
-															)
-												else:  # If no ORCID is provided, fallback to using given_name and family_name for lookup/creation
-													if not given_name or not family_name:
-														self.stdout.write(f"Missing given name or family name, skipping this author. {crossref_paper.doi}")
-														continue
-													else:
+									if not isinstance(refresh_result, str) or 'not found' not in refresh_result.lower():
+										if crossref_paper is not None and crossref_paper.authors is not None:
+											for author_info in crossref_paper.authors:
+												given_name = author_info.get('given')
+												family_name = author_info.get('family')
+												orcid = author_info.get('ORCID', None)
+												try:
+													if orcid:  # If ORCID is present, use it as the primary key for author lookup/creation
 														author_obj, author_created = Authors.objects.get_or_create(
-															given_name=given_name,
-															family_name=family_name,
-															defaults={'ORCID': orcid}  # orcid will be an empty string if not provided, which is fine
-														)
-											except MultipleObjectsReturned:
-												# Handle the case where multiple authors are returned
-												authors = Authors.objects.filter(given_name=given_name, family_name=family_name)
-												print(f"Multiple authors found for {given_name} {family_name}:")
-												# Use the first author with an ORCID, if available
-												author_obj = next((author for author in authors if author.ORCID), authors.first())
+																ORCID=orcid,
+																defaults={
+																		'given_name': given_name or '',  # Empty string if missing
+																		'family_name': family_name or ''  # Empty string if missing
+																		}
+																)
+													else:  # If no ORCID is provided, fallback to using given_name and family_name for lookup/creation
+														if not given_name or not family_name:
+															self.stdout.write(f"Missing given name or family name, skipping this author. {crossref_paper.doi}")
+															continue
+														else:
+															author_obj, author_created = Authors.objects.get_or_create(
+																given_name=given_name,
+																family_name=family_name,
+																defaults={'ORCID': orcid}  # orcid will be an empty string if not provided, which is fine
+															)
+												except MultipleObjectsReturned:
+													# Handle the case where multiple authors are returned
+													authors = Authors.objects.filter(given_name=given_name, family_name=family_name)
+													print(f"Multiple authors found for {given_name} {family_name}:")
+													# Use the first author with an ORCID, if available
+													author_obj = next((author for author in authors if author.ORCID), authors.first())
 
 													# Link the author to the article if not already linked
 												if not science_paper.authors.filter(pk=author_obj.pk).exists():
