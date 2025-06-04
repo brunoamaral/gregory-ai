@@ -40,7 +40,8 @@ class SciencePaper:
 		import os
 		import pytz
 		from datetime import datetime
-		from requests.exceptions import HTTPError
+		from requests.exceptions import HTTPError, RequestException
+		import json
 		timezone = pytz.timezone('UTC')
 		from sitesettings.models import CustomSetting
 		site = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
@@ -57,8 +58,14 @@ class SciencePaper:
 					print(f"DOI not found in CrossRef: {self.doi}")
 					return 'DOI not found'
 				else:
-					print(f"CrossRef API error for DOI {self.doi}: {e}")
-					return f'CrossRef error: {e}'
+					print(f"CrossRef HTTP error for DOI {self.doi}: {e}")
+					return f'CrossRef HTTP error: {e}'
+			except json.JSONDecodeError as e:
+				print(f"Error decoding JSON from CrossRef response for DOI: {self.doi}")
+				return 'JSON decode error'
+			except RequestException as e:
+				print(f"CrossRef request error for DOI {self.doi}: {e}")
+				return f'CrossRef request error: {e}'
 			except Exception as e:
 				print(f"Unexpected error querying CrossRef for DOI {self.doi}: {e}")
 				return f'Unexpected error: {e}'
