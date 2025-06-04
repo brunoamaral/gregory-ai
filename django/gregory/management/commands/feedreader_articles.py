@@ -156,7 +156,6 @@ class Command(BaseCommand):
 																)
 													else:  # If no ORCID is provided, fallback to using given_name and family_name for lookup/creation
 														if not given_name or not family_name:
-															self.stdout.write(f"Missing given name or family name, skipping this author. {crossref_paper.doi}")
 															continue
 														else:
 															author_obj, author_created = Authors.objects.get_or_create(
