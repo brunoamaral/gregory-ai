@@ -15,6 +15,4 @@ urlpatterns = [
     # Template context as JSON for debugging
     path('emails/context/<str:template_name>/', views.email_template_json_context, name='email_template_json_context'),
     
-    # Template variants comparison
-    path('emails/variants/', views.email_template_variants, name='email_template_variants'),
 ]
