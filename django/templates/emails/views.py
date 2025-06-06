@@ -7,6 +7,7 @@ from django.http import HttpResponse, JsonResponse
 from django.template.loader import get_template
 from django.contrib.sites.models import Site
 from django.views.decorators.http import require_http_methods
+from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render
 from django.utils import timezone
 from datetime import timedelta
@@ -26,9 +27,11 @@ from templates.emails.components.context_helpers import (
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 
+@staff_member_required
 def email_preview_dashboard(request):
     """
     Dashboard for previewing email templates during development.
+    Requires staff-level authentication for security.
     """
     context = {
         'email_types': [
@@ -41,10 +44,12 @@ def email_preview_dashboard(request):
     return render(request, 'emails/email_preview.html', context)
 
 
+@staff_member_required
 @require_http_methods(["GET"])
 def email_template_preview(request, template_name):
     """
     Render email templates with mock data for preview purposes.
+    Requires staff-level authentication for security.
     """
     # Get site and settings
     try:
@@ -132,11 +137,13 @@ def email_template_preview(request, template_name):
         return HttpResponse(f'Error rendering template: {str(e)}', status=500)
 
 
+@staff_member_required
 @require_http_methods(["GET"])
 def email_template_json_context(request, template_name):
     """
     Return the context data that would be used for a template as JSON.
     Useful for debugging template context issues.
+    Requires staff-level authentication for security.
     """
     # This is the same logic as email_template_preview but returns JSON
     try:
