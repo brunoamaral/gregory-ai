@@ -1,7 +1,7 @@
 import requests
 from django.conf import settings
 
-def send_email(to, subject, html, text, site, sender_name="GregoryAI", api_token=None, api_url=None):
+def send_email(to, subject, html, text, site, sender_name="Gregory AI", api_token=None, api_url=None):
     """
     Sends an email using the Postmark API.
 

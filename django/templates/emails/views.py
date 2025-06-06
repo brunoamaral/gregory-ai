@@ -7,6 +7,7 @@ from django.http import HttpResponse, JsonResponse
 from django.template.loader import get_template
 from django.contrib.sites.models import Site
 from django.views.decorators.http import require_http_methods
+from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render
 from django.utils import timezone
 from datetime import timedelta
@@ -26,25 +27,29 @@ from templates.emails.components.context_helpers import (
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 
+@staff_member_required
 def email_preview_dashboard(request):
     """
     Dashboard for previewing email templates during development.
+    Requires staff-level authentication for security.
     """
     context = {
         'email_types': [
-            ('weekly_summary_new', 'Weekly Summary (New)'),
-            ('admin_summary_new', 'Admin Summary (New)'),
-            ('trial_notification_new', 'Clinical Trials (New)'),
+            ('weekly_summary', 'Weekly Summary'),
+            ('admin_summary', 'Admin Summary'),
+            ('trial_notification', 'Clinical Trials'),
             ('test_components', 'Component Test'),
         ]
     }
     return render(request, 'emails/email_preview.html', context)
 
 
+@staff_member_required
 @require_http_methods(["GET"])
 def email_template_preview(request, template_name):
     """
     Render email templates with mock data for preview purposes.
+    Requires staff-level authentication for security.
     """
     # Get site and settings
     try:
@@ -75,7 +80,7 @@ def email_template_preview(request, template_name):
     ).order_by('-discovery_date')[:3]
     
     # Prepare context based on template type
-    if template_name == 'weekly_summary_new':
+    if template_name == 'weekly_summary':
         context = prepare_weekly_summary_context(
             articles=articles,
             trials=trials,
@@ -87,7 +92,7 @@ def email_template_preview(request, template_name):
         context['user'] = mock_subscriber
         context['greeting_time'] = 'morning'
         
-    elif template_name == 'admin_summary_new':
+    elif template_name == 'admin_summary':
         context = prepare_admin_summary_context(
             articles=articles,
             trials=trials,
@@ -98,7 +103,7 @@ def email_template_preview(request, template_name):
         # Add now field for admin template
         context['now'] = timezone.now()
         
-    elif template_name == 'trial_notification_new':
+    elif template_name == 'trial_notification':
         context = prepare_trial_notification_context(
             trials=trials,
             subscriber=mock_subscriber,
@@ -132,11 +137,13 @@ def email_template_preview(request, template_name):
         return HttpResponse(f'Error rendering template: {str(e)}', status=500)
 
 
+@staff_member_required
 @require_http_methods(["GET"])
 def email_template_json_context(request, template_name):
     """
     Return the context data that would be used for a template as JSON.
     Useful for debugging template context issues.
+    Requires staff-level authentication for security.
     """
     # This is the same logic as email_template_preview but returns JSON
     try:
@@ -163,7 +170,7 @@ def email_template_json_context(request, template_name):
         discovery_date__gte=timezone.now() - timedelta(days=30)
     ).order_by('-discovery_date')[:3]
     
-    if template_name == 'weekly_summary_new':
+    if template_name == 'weekly_summary':
         context = prepare_weekly_summary_context(
             articles=articles,
             trials=trials,
@@ -171,7 +178,7 @@ def email_template_json_context(request, template_name):
             site=site,
             customsettings=customsettings
         )
-    elif template_name == 'admin_summary_new':
+    elif template_name == 'admin_summary':
         context = prepare_admin_summary_context(
             articles=articles,
             trials=trials,
@@ -179,7 +186,7 @@ def email_template_json_context(request, template_name):
             site=site,
             customsettings=customsettings
         )
-    elif template_name == 'trial_notification_new':
+    elif template_name == 'trial_notification':
         context = prepare_trial_notification_context(
             trials=trials,
             subscriber=mock_subscriber,
@@ -204,38 +211,6 @@ def email_template_json_context(request, template_name):
     return JsonResponse(serializable_context, json_dumps_params={'indent': 2})
 
 
-def email_template_variants(request):
-    """
-    Display different template variants for comparison.
-    Shows old vs new templates side by side.
-    """
-    variants = [
-        {
-            'name': 'Weekly Summary',
-            'old_template': 'weekly_summary.html',
-            'new_template': 'weekly_summary_new.html',
-            'description': 'User-facing weekly digest of relevant articles and trials'
-        },
-        {
-            'name': 'Admin Summary', 
-            'old_template': 'admin_summary.html',
-            'new_template': 'admin_summary_new.html',
-            'description': 'Admin review interface with edit links and ML predictions'
-        },
-        {
-            'name': 'Trial Notification',
-            'old_template': 'trial_notification.html', 
-            'new_template': 'trial_notification_new.html',
-            'description': 'Notifications for new clinical trials matching user interests'
-        }
-    ]
-    
-    context = {
-        'variants': variants,
-        'title': 'Email Template Variants Comparison'
-    }
-    
-    return render(request, 'emails/template_variants.html', context)
 
 
 def get_email_context_for_management_command(email_type, articles=None, trials=None, subscriber=None, site=None, customsettings=None):

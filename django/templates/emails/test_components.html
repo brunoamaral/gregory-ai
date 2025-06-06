@@ -21,7 +21,7 @@
     
     <p class="content-text">
         The header should display "Test Email" as the email type, and the footer should include all the standard 
-        Gregory AI branding, links, and subscription management options.
+        {{ title|default:"Gregory AI" }} branding, links, and subscription management options.
     </p>
 </div>
 {% endblock %}

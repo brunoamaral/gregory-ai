@@ -7,7 +7,7 @@
             {% if articles %}
                 {{ articles|length }} new relevant article{{ articles|length|pluralize }} and {% if trials %}{{ trials|length }} clinical trial{{ trials|length|pluralize }}{% else %}updates{% endif %} this week
             {% else %}
-                Your weekly medical research summary from Gregory AI
+                Your weekly medical research summary from {{ title|default:"Gregory AI" }}
             {% endif %}
         {% elif email_type == 'admin_summary' %}
             {% if articles %}
@@ -19,10 +19,10 @@
             {% if trials %}
                 {{ trials|length }} new clinical trial{{ trials|length|pluralize }} matching your interests
             {% else %}
-                New clinical trial notifications from Gregory AI
+                New clinical trial notifications from {{ title|default:"Gregory AI" }}
             {% endif %}
         {% else %}
-            {% block custom_preheader %}Latest updates from Gregory AI medical research intelligence{% endblock %}
+            {% block custom_preheader %}Latest updates powered by Gregory AI medical research intelligence{% endblock %}
         {% endif %}
     {% endblock %}
     

@@ -101,7 +101,7 @@ class Command(BaseCommand):
 				)
 
 				# Render email content using new template
-				html_content = get_template('emails/admin_summary_new.html').render(summary_context)
+				html_content = get_template('emails/admin_summary.html').render(summary_context)
 				text_content = strip_tags(html_content)
 
 				# Step 5: Send email
@@ -111,7 +111,7 @@ class Command(BaseCommand):
 					html=html_content,
 					text=text_content,
 					site=site,
-					sender_name="GregoryAI",
+					sender_name=customsettings.title,
 					api_token=postmark_api_token,  # Use the team's Postmark API token
 					api_url=api_url
 				)

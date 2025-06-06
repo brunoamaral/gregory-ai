@@ -40,7 +40,6 @@ from templates.emails.views import (
 	email_preview_dashboard,
 	email_template_preview, 
 	email_template_json_context,
-	email_template_variants
 )
 
 # Initialize the router and register some endpoints
@@ -89,7 +88,7 @@ urlpatterns = [
 	path('emails/', email_preview_dashboard, name='email_preview_dashboard'),
 	path('emails/preview/<str:template_name>/', email_template_preview, name='email_template_preview'),
 	path('emails/context/<str:template_name>/', email_template_json_context, name='email_template_json_context'),
-	path('emails/variants/', email_template_variants, name='email_template_variants'),
+
 
 	# Team API
 	## List Teams
