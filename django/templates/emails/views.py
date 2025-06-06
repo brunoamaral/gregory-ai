@@ -204,35 +204,6 @@ def email_template_json_context(request, template_name):
     return JsonResponse(serializable_context, json_dumps_params={'indent': 2})
 
 
-def email_template_variants(request):
-    """
-    Display different template variants for comparison.
-    Shows old vs new templates side by side.
-    """
-    variants = [
-        {
-            'name': 'Weekly Summary',
-            'new_template': 'weekly_summary.html',
-            'description': 'User-facing weekly digest of relevant articles and trials'
-        },
-        {
-            'name': 'Admin Summary', 
-            'new_template': 'admin_summary.html',
-            'description': 'Admin review interface with edit links and ML predictions'
-        },
-        {
-            'name': 'Trial Notification',
-            'new_template': 'trial_notification.html',
-            'description': 'Notifications for new clinical trials matching user interests'
-        }
-    ]
-    
-    context = {
-        'variants': variants,
-        'title': 'Email Template Variants Comparison'
-    }
-    
-    return render(request, 'emails/template_variants.html', context)
 
 
 def get_email_context_for_management_command(email_type, articles=None, trials=None, subscriber=None, site=None, customsettings=None):
