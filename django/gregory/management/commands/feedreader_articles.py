@@ -16,161 +16,379 @@ import pytz
 import re
 import requests
 from simple_history.utils import update_change_reason
+from abc import ABC, abstractmethod
+
+
+class FeedProcessor(ABC):
+    """Abstract base class for RSS feed processors."""
+    
+    def __init__(self, command_instance):
+        self.command = command_instance
+    
+    @abstractmethod
+    def can_process(self, source_link: str) -> bool:
+        """Check if this processor can handle the given source link."""
+        pass
+    
+    @abstractmethod
+    def extract_summary(self, entry: dict) -> str:
+        """Extract summary from feed entry."""
+        pass
+    
+    @abstractmethod
+    def extract_doi(self, entry: dict) -> str:
+        """Extract DOI from feed entry."""
+        pass
+    
+    def extract_basic_fields(self, entry: dict) -> dict:
+        """Extract common fields that are the same across all feed types."""
+        published_date = parse(
+            entry.get('published') or entry.get('prism_coverdate'), 
+            tzinfos=self.command.tzinfos
+        ).astimezone(pytz.utc)
+        
+        return {
+            'title': entry['title'],
+            'link': greg.remove_utm(entry['link']),
+            'published_date': published_date,
+        }
+
+
+class PubMedFeedProcessor(FeedProcessor):
+    """Processor for PubMed RSS feeds."""
+    
+    def can_process(self, source_link: str) -> bool:
+        return 'pubmed' in source_link.lower()
+    
+    def extract_summary(self, entry: dict) -> str:
+        """Extract summary with PubMed-specific priority."""
+        summary = entry.get('summary', '')
+        if hasattr(entry, 'summary_detail'):
+            summary = entry['summary_detail']['value']
+        if hasattr(entry, 'content'):
+            summary = entry['content'][0]['value']
+        return summary
+    
+    def extract_doi(self, entry: dict) -> str:
+        """Extract DOI from PubMed feed entry."""
+        if entry.get('dc_identifier', '').startswith('doi:'):
+            return entry['dc_identifier'].replace('doi:', '')
+        return None
+
+
+class FasebFeedProcessor(FeedProcessor):
+    """Processor for FASEB RSS feeds."""
+    
+    def can_process(self, source_link: str) -> bool:
+        return 'faseb' in source_link.lower()
+    
+    def extract_summary(self, entry: dict) -> str:
+        """Extract summary for FASEB feeds."""
+        summary = entry.get('summary', '')
+        if hasattr(entry, 'summary_detail'):
+            summary = entry['summary_detail']['value']
+        return summary
+    
+    def extract_doi(self, entry: dict) -> str:
+        """Extract DOI from FASEB feed entry."""
+        return entry.get('prism_doi', '')
+
+
+class DefaultFeedProcessor(FeedProcessor):
+    """Default processor for generic RSS feeds."""
+    
+    def can_process(self, source_link: str) -> bool:
+        return True  # Always can process as fallback
+    
+    def extract_summary(self, entry: dict) -> str:
+        """Extract summary for generic feeds."""
+        summary = entry.get('summary', '')
+        if hasattr(entry, 'summary_detail'):
+            summary = entry['summary_detail']['value']
+        return summary
+    
+    def extract_doi(self, entry: dict) -> str:
+        """Generic DOI extraction - returns None as most feeds don't have DOI."""
+        return None
+
 
 class Command(BaseCommand):
-		help = 'Fetches and updates articles and trials from RSS feeds.'
+    help = 'Fetches and updates articles and trials from RSS feeds.'
 
-		def handle(self, *args, **options):
-				self.setup()
-				self.update_articles_from_feeds()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.feed_processors = [
+            PubMedFeedProcessor(self),
+            FasebFeedProcessor(self),
+            DefaultFeedProcessor(self),  # Always last as fallback
+        ]
 
-		def setup(self):
-				self.SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
-				self.CLIENT_WEBSITE = f'https://{self.SITE.site.domain}/'
-				my_etiquette = Etiquette(self.SITE.title, 'v8', self.CLIENT_WEBSITE, self.SITE.admin_email)
-				self.works = Works(etiquette=my_etiquette)
-				self.tzinfos = {"EDT": gettz("America/New_York"), "EST": gettz("America/New_York")}
+    def handle(self, *args, **options):
+        self.setup()
+        self.update_articles_from_feeds()
 
-		def fetch_feed(self, link, ignore_ssl):
-			if not ignore_ssl:
-					return feedparser.parse(link)
-			else:
-					response = requests.get(link, verify=False)
-					return feedparser.parse(response.content)
+    def setup(self):
+        self.SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
+        self.CLIENT_WEBSITE = f'https://{self.SITE.site.domain}/'
+        my_etiquette = Etiquette(self.SITE.title, 'v8', self.CLIENT_WEBSITE, self.SITE.admin_email)
+        self.works = Works(etiquette=my_etiquette)
+        self.tzinfos = {"EDT": gettz("America/New_York"), "EST": gettz("America/New_York")}
 
-		def handle_database_error(self, action, error):
-				"""Generic error handler for database operations."""
-				print(f"An error occurred during {action}: {str(error)}")
+    def fetch_feed(self, link, ignore_ssl):
+        if not ignore_ssl:
+            return feedparser.parse(link)
+        else:
+            response = requests.get(link, verify=False)
+            return feedparser.parse(response.content)
 
-		def update_articles_from_feeds(self):
-			sources = Sources.objects.filter(method='rss', source_for='science paper', active=True)
-			for source in sources:
-					print(f'# Processing articles from {source}')
-					feed = self.fetch_feed(source.link, source.ignore_ssl)
-					for entry in feed['entries']:
-							title = entry['title']
-							self.stdout.write(f"Processing {title}")
-							summary = entry.get('summary', '')
-							if hasattr(entry, 'summary_detail'):
-									summary = entry['summary_detail']['value']
-							published = entry.get('published')
-							if 'pubmed' in source.link and hasattr(entry, 'content'):
-									summary = entry['content'][0]['value']
-							published_date = parse(entry.get('published') or entry.get('prism_coverdate'), tzinfos=self.tzinfos).astimezone(pytz.utc)
-							link = greg.remove_utm(entry['link'])
-							doi = None
-							if 'pubmed' in source.link and entry.get('dc_identifier', '').startswith('doi:'):
-									doi = entry['dc_identifier'].replace('doi:', '')
-							elif 'faseb' in source.link:
-									doi = entry.get('prism_doi', '')
+    def handle_database_error(self, action, error):
+        """Generic error handler for database operations."""
+        print(f"An error occurred during {action}: {str(error)}")
 
-							if doi:
-									crossref_paper = SciencePaper(doi=doi)
-									crossref_paper.refresh()
-									title = crossref_paper.title if crossref_paper.title else entry['title']
-									summary = crossref_paper.abstract if crossref_paper.abstract else entry.get('summary')
+    def get_feed_processor(self, source_link: str) -> FeedProcessor:
+        """Get the appropriate feed processor for the given source link."""
+        for processor in self.feed_processors:
+            if processor.can_process(source_link):
+                return processor
+        # This should never happen since DefaultFeedProcessor always returns True
+        return self.feed_processors[-1]
 
-									# Check if an article with the same DOI or title exists
-									existing_article = Articles.objects.filter(Q(doi=doi) | Q(title=title)).first()
-									if existing_article:
-										science_paper = existing_article
-										created = False
-									else:
-										science_paper = Articles.objects.create(
-											doi=doi,
-											title=title,
-											summary=summary,
-											link=link,
-											published_date=published_date,
-											container_title=crossref_paper.journal,
-											publisher=crossref_paper.publisher,
-											access=crossref_paper.access,
-											crossref_check=timezone.now()
-										)
-										created = True
+    def update_articles_from_feeds(self):
+        sources = Sources.objects.filter(method='rss', source_for='science paper', active=True)
+        for source in sources:
+            print(f'# Processing articles from {source}')
+            feed = self.fetch_feed(source.link, source.ignore_ssl)
+            processor = self.get_feed_processor(source.link)
+            
+            for entry in feed['entries']:
+                try:
+                    self.process_feed_entry(entry, source, processor)
+                except Exception as e:
+                    print(f"Error processing entry '{entry.get('title', 'Unknown')}': {str(e)}")
+                    continue
 
-									if created:
-										science_paper.teams.add(source.team)
-										science_paper.subjects.add(source.subject)
-										science_paper.sources.add(source)
-										science_paper.save()
-									else:
-											if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),
-													science_paper.link != link, science_paper.published_date != published_date]):
-													science_paper.title = title
-													science_paper.summary = SciencePaper.clean_abstract(abstract=summary)
-													science_paper.link = link
-													science_paper.published_date = published_date
-													science_paper.sources.add(source)
-													science_paper.teams.add(source.team)
-													science_paper.subjects.add(source.subject)
-													science_paper.save()
+    def process_feed_entry(self, entry: dict, source: Sources, processor: FeedProcessor):
+        """Process a single feed entry."""
+        # Extract basic fields common to all feed types
+        basic_fields = processor.extract_basic_fields(entry)
+        title = basic_fields['title']
+        link = basic_fields['link']
+        published_date = basic_fields['published_date']
+        
+        # Extract feed-specific fields
+        raw_summary = processor.extract_summary(entry)
+        doi = processor.extract_doi(entry)
+        
+        # Clean and store the original feed summary
+        feed_summary = SciencePaper.clean_abstract(abstract=raw_summary) if raw_summary else ''
+        
+        if doi:
+            self.process_article_with_doi(
+                doi, title, feed_summary, link, published_date, source
+            )
+        else:
+            self.process_article_without_doi(
+                title, feed_summary, link, published_date, source
+            )
 
-									# Process author information
-									if crossref_paper is not None:  # Assuming `paper` contains the article's metadata including author information
-										if crossref_paper.authors is not None:
-											for author_info in crossref_paper.authors:
-												given_name = author_info.get('given')
-												family_name = author_info.get('family')
-												orcid = author_info.get('ORCID', None)
-												try:
-													if orcid:  # If ORCID is present, use it as the primary key for author lookup/creation
-														author_obj, author_created = Authors.objects.get_or_create(
-																ORCID=orcid,
-																defaults={
-																		'given_name': given_name or '',  # Empty string if missing
-																		'family_name': family_name or ''  # Empty string if missing
-																		}
-																)
-													else:  # If no ORCID is provided, fallback to using given_name and family_name for lookup/creation
-														if not given_name or not family_name:
-															self.stdout.write(f"Missing given name or family name, skipping this author. {crossref_paper.doi}")
-															continue
-														else:
-															author_obj, author_created = Authors.objects.get_or_create(
-																given_name=given_name,
-																family_name=family_name,
-																defaults={'ORCID': orcid}  # orcid will be an empty string if not provided, which is fine
-															)
-												except MultipleObjectsReturned:
-													# Handle the case where multiple authors are returned
-													authors = Authors.objects.filter(given_name=given_name, family_name=family_name)
-													print(f"Multiple authors found for {given_name} {family_name}:")
-													for author in authors:
-															print(f"Author ID: {author.author_id}, ORCID: {author.ORCID}")
-													# Use the first author with an ORCID, if available
-													author_obj = next((author for author in authors if author.ORCID), authors.first())
+    def process_article_with_doi(self, doi: str, title: str, feed_summary: str, 
+                                link: str, published_date, source: Sources):
+        """Process an article that has a DOI."""
+        crossref_paper = SciencePaper(doi=doi)
+        refresh_result = crossref_paper.refresh()
+        
+        # Determine article data based on CrossRef success/failure
+        article_data = self.get_article_data_with_crossref(
+            crossref_paper, refresh_result, title, feed_summary, doi
+        )
+        
+        # Create or update article
+        science_paper = self.create_or_update_article(
+            doi=doi, title=article_data['title'], summary=article_data['summary'],
+            link=link, published_date=published_date, source=source,
+            container_title=article_data['container_title'],
+            publisher=article_data['publisher'],
+            access=article_data['access'],
+            crossref_check=article_data['crossref_check']
+        )
+        
+        # Process authors if CrossRef data is available
+        if self.is_crossref_successful(refresh_result):
+            self.process_authors(crossref_paper, science_paper)
 
-													# Link the author to the article if not already linked
-												if not science_paper.authors.filter(pk=author_obj.pk).exists():
-													science_paper.authors.add(author_obj)
-							else:
-								print('No DOI, trying to create article')
-								existing_article = Articles.objects.filter(title=title).first()
-								if existing_article:
-											science_paper = existing_article
-											created = False
-								else:
-											science_paper = Articles.objects.create(
-												title=title,
-												summary=summary,
-												link=link,
-												published_date=published_date,
-												crossref_check=None
-											)
-											science_paper.teams.add(source.team)
-											science_paper.sources.add(source)
-											science_paper.subjects.add(source.subject)
-											created = True
+    def process_article_without_doi(self, title: str, feed_summary: str, 
+                                   link: str, published_date, source: Sources):
+        """Process an article that doesn't have a DOI."""
+        print('No DOI, trying to create article')
+        
+        # Log potential summary truncation issues
+        if 20 < len(feed_summary) < 500:
+            print(f"Warning: Potentially truncated summary for title '{title}': {len(feed_summary)} characters")
+        
+        # Create or update article
+        self.create_or_update_article(
+            doi=None, title=title, summary=feed_summary, 
+            link=link, published_date=published_date, source=source,
+            crossref_check=None
+        )
 
-								if not created:
-									if any([science_paper.title != title, science_paper.summary != SciencePaper.clean_abstract(abstract=summary),
-												science_paper.link != link, science_paper.published_date != published_date]):
-										science_paper.title = title
-										science_paper.summary = SciencePaper.clean_abstract(abstract=summary)
-										science_paper.link = link
-										science_paper.published_date = published_date
-										science_paper.teams.add(source.team)
-										science_paper.subjects.add(source.subject)
-										science_paper.sources.add(source)
-										science_paper.save()
+    def get_article_data_with_crossref(self, crossref_paper: SciencePaper, refresh_result,
+                                      title: str, feed_summary: str, doi: str) -> dict:
+        """Get article data based on CrossRef lookup results."""
+        if self.is_crossref_failed(refresh_result):
+            print(f"  ⚠️  CrossRef lookup failed for DOI {doi}: {refresh_result}")
+            return {
+                'title': title,
+                'summary': feed_summary,
+                'container_title': None,
+                'publisher': None,
+                'access': None,
+                'crossref_check': None
+            }
+        else:
+            # CrossRef data available, use it with fallbacks
+            crossref_title = crossref_paper.title if crossref_paper.title else title
+            
+            # Use crossref abstract if available, otherwise use feed summary
+            if crossref_paper.abstract and crossref_paper.abstract.strip():
+                summary = SciencePaper.clean_abstract(abstract=crossref_paper.abstract)
+            else:
+                summary = feed_summary
+            
+            # Log potential summary truncation issues
+            if 20 < len(summary) < 500:
+                print(f"  ⚠️  Potentially truncated summary for DOI {doi}: {len(summary)} characters")
+            
+            return {
+                'title': crossref_title,
+                'summary': summary,
+                'container_title': crossref_paper.journal,
+                'publisher': crossref_paper.publisher,
+                'access': crossref_paper.access,
+                'crossref_check': timezone.now()
+            }
+
+    def is_crossref_failed(self, refresh_result) -> bool:
+        """Check if CrossRef refresh failed."""
+        return (isinstance(refresh_result, str) and 
+                any(keyword in refresh_result.lower() 
+                    for keyword in ['error', 'not found', 'json decode']))
+
+    def is_crossref_successful(self, refresh_result) -> bool:
+        """Check if CrossRef refresh was successful."""
+        return not self.is_crossref_failed(refresh_result)
+
+    def create_or_update_article(self, doi: str, title: str, summary: str, link: str,
+                                published_date, source: Sources, container_title=None,
+                                publisher=None, access=None, crossref_check=None) -> Articles:
+        """Create a new article or update existing one."""
+        # Check if an article with the same DOI or title exists
+        if doi:
+            existing_article = Articles.objects.filter(Q(doi=doi) | Q(title=title)).first()
+        else:
+            existing_article = Articles.objects.filter(title=title).first()
+        
+        if existing_article:
+            science_paper = existing_article
+            created = False
+            # Update if content has changed
+            if self.article_needs_update(science_paper, title, summary, link, published_date):
+                self.update_article_fields(science_paper, title, summary, link, published_date)
+        else:
+            # Create new article
+            article_data = {
+                'title': title,
+                'summary': summary,
+                'link': link,
+                'published_date': published_date,
+                'crossref_check': crossref_check
+            }
+            if doi:
+                article_data.update({
+                    'doi': doi,
+                    'container_title': container_title,
+                    'publisher': publisher,
+                    'access': access,
+                })
+            
+            science_paper = Articles.objects.create(**article_data)
+            created = True
+        
+        # Add relationships
+        self.add_article_relationships(science_paper, source)
+        
+        return science_paper
+
+    def article_needs_update(self, article: Articles, title: str, summary: str, 
+                            link: str, published_date) -> bool:
+        """Check if article needs to be updated."""
+        return any([
+            article.title != title,
+            article.summary != summary,
+            article.link != link,
+            article.published_date != published_date
+        ])
+
+    def update_article_fields(self, article: Articles, title: str, summary: str,
+                             link: str, published_date):
+        """Update article fields."""
+        article.title = title
+        article.summary = summary
+        article.link = link
+        article.published_date = published_date
+        article.save()
+
+    def add_article_relationships(self, article: Articles, source: Sources):
+        """Add relationships between article and source (team, subject, sources)."""
+        article.teams.add(source.team)
+        article.subjects.add(source.subject)
+        article.sources.add(source)
+        if hasattr(article, 'save'):
+            article.save()
+
+    def process_authors(self, crossref_paper: SciencePaper, science_paper: Articles):
+        """Process author information from CrossRef data."""
+        if crossref_paper is None or crossref_paper.authors is None:
+            return
+        
+        for author_info in crossref_paper.authors:
+            given_name = author_info.get('given')
+            family_name = author_info.get('family')
+            orcid = author_info.get('ORCID', None)
+            
+            try:
+                author_obj = self.get_or_create_author(given_name, family_name, orcid)
+                if author_obj and not science_paper.authors.filter(pk=author_obj.pk).exists():
+                    science_paper.authors.add(author_obj)
+            except Exception as e:
+                print(f"Error processing author {given_name} {family_name}: {str(e)}")
+                continue
+
+    def get_or_create_author(self, given_name: str, family_name: str, orcid: str) -> Authors:
+        """Get or create an author object."""
+        try:
+            if orcid:  # If ORCID is present, use it as primary key
+                author_obj, author_created = Authors.objects.get_or_create(
+                    ORCID=orcid,
+                    defaults={
+                        'given_name': given_name or '',
+                        'family_name': family_name or ''
+                    }
+                )
+            else:  # If no ORCID, use given_name and family_name
+                if not given_name or not family_name:
+                    return None
+                
+                author_obj, author_created = Authors.objects.get_or_create(
+                    given_name=given_name,
+                    family_name=family_name,
+                    defaults={'ORCID': orcid}
+                )
+            
+            return author_obj
+            
+        except MultipleObjectsReturned:
+            # Handle multiple authors case
+            authors = Authors.objects.filter(given_name=given_name, family_name=family_name)
+            # Use the first author with an ORCID, if available
+            return next((author for author in authors if author.ORCID), authors.first())
