@@ -213,7 +213,7 @@
     <div class="dashboard-container">
         <div class="header">
             <h1>Email Template System</h1>
-            <p>Preview and test email templates for Gregory AI</p>
+            <p>Preview and test email templates for {{ title|default:"Gregory AI" }}</p>
         </div>
         
         <div class="content">
@@ -232,7 +232,7 @@
                             {{ template_name }}
                         </h3>
                         <p class="card-description">
-                            {% if template_key == 'weekly_summary_new' %}
+                            {% if template_key == 'weekly_summary' %}
                                 User-facing weekly digest with modular components, ML predictions, and responsive design optimized for Gmail.
                             {% elif template_key == 'admin_summary_new' %}
                                 Admin interface with edit links, ML confidence scores, and comprehensive article management tools.
