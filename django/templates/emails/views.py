@@ -32,7 +32,7 @@ def email_preview_dashboard(request):
     """
     context = {
         'email_types': [
-            ('weekly_summary_new', 'Weekly Summary (New)'),
+            ('weekly_summary', 'Weekly Summary'),
             ('admin_summary_new', 'Admin Summary (New)'),
             ('trial_notification_new', 'Clinical Trials (New)'),
             ('test_components', 'Component Test'),
@@ -75,7 +75,7 @@ def email_template_preview(request, template_name):
     ).order_by('-discovery_date')[:3]
     
     # Prepare context based on template type
-    if template_name == 'weekly_summary_new':
+    if template_name == 'weekly_summary':
         context = prepare_weekly_summary_context(
             articles=articles,
             trials=trials,
@@ -163,7 +163,7 @@ def email_template_json_context(request, template_name):
         discovery_date__gte=timezone.now() - timedelta(days=30)
     ).order_by('-discovery_date')[:3]
     
-    if template_name == 'weekly_summary_new':
+    if template_name == 'weekly_summary':
         context = prepare_weekly_summary_context(
             articles=articles,
             trials=trials,
@@ -212,8 +212,7 @@ def email_template_variants(request):
     variants = [
         {
             'name': 'Weekly Summary',
-            'old_template': 'weekly_summary.html',
-            'new_template': 'weekly_summary_new.html',
+            'new_template': 'weekly_summary.html',
             'description': 'User-facing weekly digest of relevant articles and trials'
         },
         {

@@ -112,7 +112,7 @@ class Command(BaseCommand):
 					custom_settings=customsettings
 				)
 
-				html_content = get_template('emails/weekly_summary_new.html').render(summary_context)
+				html_content = get_template('emails/weekly_summary.html').render(summary_context)
 				text_content = strip_tags(html_content)
 
 				result = send_email(
@@ -121,7 +121,7 @@ class Command(BaseCommand):
 					html=html_content,
 					text=text_content,
 					site=site,
-					sender_name="GregoryAI",
+					sender_name=customsettings.title,
 					api_token=postmark_api_token,  # Use the team's Postmark API token
 					api_url=api_url
 				)
