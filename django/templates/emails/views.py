@@ -34,7 +34,7 @@ def email_preview_dashboard(request):
         'email_types': [
             ('weekly_summary', 'Weekly Summary'),
             ('admin_summary', 'Admin Summary'),
-            ('trial_notification_new', 'Clinical Trials (New)'),
+            ('trial_notification', 'Clinical Trials'),
             ('test_components', 'Component Test'),
         ]
     }
@@ -98,7 +98,7 @@ def email_template_preview(request, template_name):
         # Add now field for admin template
         context['now'] = timezone.now()
         
-    elif template_name == 'trial_notification_new':
+    elif template_name == 'trial_notification':
         context = prepare_trial_notification_context(
             trials=trials,
             subscriber=mock_subscriber,
@@ -179,7 +179,7 @@ def email_template_json_context(request, template_name):
             site=site,
             customsettings=customsettings
         )
-    elif template_name == 'trial_notification_new':
+    elif template_name == 'trial_notification':
         context = prepare_trial_notification_context(
             trials=trials,
             subscriber=mock_subscriber,
@@ -222,8 +222,7 @@ def email_template_variants(request):
         },
         {
             'name': 'Trial Notification',
-            'old_template': 'trial_notification.html', 
-            'new_template': 'trial_notification_new.html',
+            'new_template': 'trial_notification.html',
             'description': 'Notifications for new clinical trials matching user interests'
         }
     ]
