@@ -1,196 +1,113 @@
-<!doctype html>
-<html>
-<head>
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-	<title>{{ title }} update</title>
-	<style>
-@media only screen and (max-width: 620px) {
-	table.body h1 {
-		font-size: 28px !important;
-		margin-bottom: 10px !important;
-	}
-	table.body p,
-	table.body ul,
-	table.body ol,
-	table.body td,
-	table.body span,
-	table.body a {
-		font-size: 16px !important;
-	}
-	table.body .wrapper,
-	table.body .article {
-		padding: 10px !important;
-	}
-	table.body .content {
-		padding: 0 !important;
-	}
-	table.body .container {
-		padding: 0 !important;
-		width: 100% !important;
-	}
-	table.body .main {
-		border-left-width: 0 !important;
-		border-radius: 0 !important;
-		border-right-width: 0 !important;
-	}
-	table.body .btn table {
-		width: 100% !important;
-	}
-	table.body .btn a {
-		width: 100% !important;
-	}
-	table.body .img-responsive {
-		height: auto !important;
-		max-width: 100% !important;
-		width: auto !important;
-	}
-}
-@media all {
-	.ExternalClass {
-		width: 100%;
-	}
-	.ExternalClass,
-	.ExternalClass p,
-	.ExternalClass span,
-	.ExternalClass font,
-	.ExternalClass td,
-	.ExternalClass div {
-		line-height: 100%;
-	}
-	.apple-link a {
-		color: inherit !important;
-		font-family: inherit !important;
-		font-size: inherit !important;
-		font-weight: inherit !important;
-		line-height: inherit !important;
-		text-decoration: none !important;
-	}
-	#MessageViewBody a {
-		color: inherit;
-		text-decoration: none;
-		font-size: inherit;
-		font-family: inherit;
-		font-weight: inherit;
-		line-height: inherit;
-	}
-	.btn-primary table td:hover {
-		background-color: #34495e !important;
-	}
-	.btn-primary a:hover {
-		background-color: #34495e !important;
-		border-color: #34495e !important;
-	}
-}
-</style>
-</head>
-<body class="" style="background-color: #f6f6f6; font-family: sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; line-height: 1.4; margin: 0; padding: 0; -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%;">
-	<span class="preheader" style="color: transparent; display: none; height: 0; max-height: 0; max-width: 0; opacity: 0; overflow: hidden; mso-hide: all; visibility: hidden; width: 0;">
-		List of articles and new trials this week.
-	</span>
-	<table role="presentation" border="0" cellpadding="0" cellspacing="0" class="body" style="border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; background-color: #f6f6f6; width: 100%;" width="100%" bgcolor="#f6f6f6">
-		<tr>
-			<td style="font-family: sans-serif; font-size: 14px; vertical-align: top;" valign="top">&nbsp;</td>
-			<td class="container" style="font-family: sans-serif; font-size: 14px; vertical-align: top; display: block; max-width: 580px; padding: 10px; width: 580px; margin: 0 auto;" width="580" valign="top">
-				<div class="content" style="box-sizing: border-box; display: block; margin: 0 auto; max-width: 580px; padding: 10px;">
-					<!-- START CENTERED WHITE CONTAINER -->
-					<table role="presentation" class="main" style="border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; background: #ffffff; border-radius: 3px; width: 100%;" width="100%">
-						<!-- START MAIN CONTENT AREA -->
-						<tr>
-							<td class="wrapper" style="font-family: sans-serif; font-size: 14px; vertical-align: top; box-sizing: border-box; padding: 20px;" valign="top">
-								<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: 100%;" width="100%">
-									<tr>
-										<td style="font-family: sans-serif; font-size: 14px; vertical-align: top;" valign="top">
-											<p style="margin: 0 0 15px;">Good Morning, {{ admin.first_name }}.</p>
-											<p style="margin: 0 0 15px;">Here are the articles we have found in the last 2 days</p>
-											<h2 style="color: #0f74c0; font-family: sans-serif; font-weight: 700; line-height: 1.4; margin: 0 0 30px;">New Articles</h2>
-											{% for article in articles %}
-											<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="border:1px solid #dddddd; border-radius:4px; width:100%; margin-bottom:20px;" width="100%">
-												<tr>
-													<td style="padding:10px;">
-														<h2 style="color: #000000; font-family: sans-serif; font-weight: 400; line-height: 1.4; margin: 0 0 30px;">{{ article.title }}</h2>
-														<p style="margin: 0 0 15px;"><strong>Discovery Date</strong>: {{ article.discovery_date }}</p>
-														<p style="margin: 0 0 15px;"><a href="{{ article.link }}" style="color: #3498db; text-decoration: underline;">{{ article.link }}</a></p>
-														
-														<!-- Modern ML Predictions Display -->
-														{% if article.ml_predictions_detail.exists %}
-														<div style="margin: 15px 0;">
-															<strong>ML Predictions:</strong>
-															{% regroup article.ml_predictions_detail.all by subject as predictions_by_subject %}
-															{% for subject_group in predictions_by_subject %}
-															<div style="margin: 10px 0;">
-																<p style="margin: 5px 0;"><strong>Subject:</strong> {{ subject_group.grouper.subject_name }}</p>
-																{% for prediction in subject_group.list %}
-																<ul style="margin: 5px 0 5px 20px;">
-																	<li>{{ prediction.get_algorithm_display }}: {{ prediction.probability_score|floatformat:3|default:"N/A" }}
-																		{% if prediction.predicted_relevant %} <strong>(RELEVANT)</strong>{% endif %}
-																	</li>
-																</ul>
-																{% endfor %}
-															</div>
-															{% endfor %}
-														</div>
-														{% endif %}
-														<h3 style="font-family: sans-serif; font-size: 14px; font-weight: 700; margin: 0 0 15px;">Key takeaways</h3>
-														<p>{{ article.takeaways }}</p>
-														<p><a href="https://api.{{ site.domain }}/admin/gregory/articles/{{ article.article_id }}/change/">EDIT</a></p>
-														<p style="margin: 0 0 15px;"><strong>Authors</strong>:
-															{% for author in article.authors.all %}
-																{% if author.ORCID %}
-																	<a href="https://orcid.org/{{ author.ORCID }}">{{ author.full_name }}</a>
-																{% else %}
-																	{{ author.full_name }}
-																{% endif %}
-																{% if not forloop.last %}, {% endif %}
-															{% endfor %}
-														</p>
-													</td>
-												</tr>
-											</table>
-											{% endfor %}
-											<h2 style="color: #0f74c0; font-family: sans-serif; font-weight: 700; line-height: 1.4; margin: 0 0 30px;">New Trials</h2>
-											{% for trial in trials %}
-											<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="border:1px solid #dddddd; border-radius:4px; width:100%; margin-bottom:20px;" width="100%">
-												<tr>
-													<td style="padding:10px;">
-														<h2 style="color: #000000; font-family: sans-serif; font-weight: 400; line-height: 1.4; margin: 0 0 30px;">{{ trial.title }}</h2>
-														<p style="margin: 0 0 15px;"><strong>Discovery Date</strong>: {{ trial.discovery_date }}</p>
-														<p style="margin: 0 0 15px;"><a style="color: #3498db; text-decoration: underline;" href="{{ trial.link }}">{{ trial.link }}</a></p>
-													</td>
-												</tr>
-											</table>
-											{% endfor %}
-											<p style="font-family: sans-serif; font-size: 14px; font-weight: normal; margin: 0 0 15px;">For the full list, please visit <a style="color: #3498db; text-decoration: underline;" href="https://{{ site.domain }}/">https://{{ site.domain }}/</a></p>
-											{{ email_footer | safe }}
-										</td>
-									</tr>
-								</table>
-							</td>
-						</tr>
-					<!-- END MAIN CONTENT AREA -->
-					</table>
-					<!-- END CENTERED WHITE CONTAINER -->
-					<!-- START FOOTER -->
-					<div class="footer" style="clear: both; margin-top: 10px; text-align: center; width: 100%;">
-						<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="border-collapse: separate; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: 100%;" width="100%">
-							<tr>
-								<td style="font-family: sans-serif; vertical-align: top; padding-bottom: 10px; padding-top: 10px; color: #999999; font-size: 12px; text-align: center;" valign="top" align="center">
-									<span style="color: #999999; font-size: 12px; text-align: center;">GregoryAI</span><br>
-									For more information visit <a style="color: #3498db; text-decoration: underline;" href="https://{{ site.domain }}/">https://{{ site.domain }}/</a>.
-								</td>
-							</tr>
-							<tr>
-								<td style="font-family: sans-serif; vertical-align: top; padding-bottom: 10px; padding-top: 10px; color: #999999; font-size: 12px; text-align: center;" valign="top" align="center">
-									Powered by <a style="color: #3498db; text-decoration: underline;" href="http://htmlemail.io">HTMLemail</a>.
-								</td>
-							</tr>
-						</table>
-					</div>
-					<!-- END FOOTER -->
-				</div>
-			</td>
-			<td style="font-family: sans-serif; font-size: 14px; vertical-align: top;" valign="top">&nbsp;</td>
-		</tr>
-	</table>
-</body>
-</html>
+<!-- Modern Admin Summary Email Template -->
+{% extends "emails/base_email.html" %}
+{% load gregory_tags %}
+
+<!-- Set email type for components -->
+{% block email_meta_title %}Admin Summary - {{ title|default:"Gregory AI" }}{% endblock %}
+
+{% block content %}
+<div style="padding: 0;">
+    
+    <!-- Admin Welcome Message -->
+    <div style="margin-bottom: 30px;">
+        <h2 class="content-title">Admin Review Required</h2>
+        <p class="content-text">
+            Hello {{ admin|split:"@"|first }},
+        </p>
+        <p class="content-text">
+            Here are the articles and clinical trials discovered in the last 48 hours that require your review.
+        </p>
+    </div>
+    
+    <!-- Articles Section -->
+    {% if articles or additional_articles %}
+    <div style="margin-bottom: 40px;">
+        <h2 class="content-subtitle" style="color: #1e3a8a; font-size: 22px; margin: 0 0 25px 0; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;">
+            📄 New Articles for Review ({{ content_stats.total_articles }})
+        </h2>
+        
+        <!-- High-Confidence Articles (Featured) -->
+        {% if articles %}
+            {% for article in articles %}
+                {% with email_type='admin_summary' show_admin_links=True show_discovery_date=True show_ml_predictions=True %}
+                    {% include 'emails/components/article_card.html' %}
+                {% endwith %}
+            {% endfor %}
+        {% endif %}
+        
+        <!-- Articles Needing Review (Additional) -->
+        {% if additional_articles %}
+            {% for article in additional_articles %}
+                {% with email_type='admin_summary' show_admin_links=True show_discovery_date=True show_ml_predictions=True %}
+                    {% include 'emails/components/article_card.html' %}
+                {% endwith %}
+            {% endfor %}
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    <!-- Clinical Trials Section -->
+    {% if trials or additional_trials %}
+    <div style="margin-bottom: 40px;">
+        <h2 class="content-subtitle" style="color: #1e3a8a; font-size: 22px; margin: 0 0 25px 0; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;">
+            🧪 New Clinical Trials ({{ content_stats.total_trials }})
+        </h2>
+        
+        <!-- Featured Trials -->
+        {% if trials %}
+            {% for trial in trials %}
+                {% with email_type='admin_summary' show_discovery_date=True show_admin_links=True %}
+                    {% include 'emails/components/trial_card.html' %}
+                {% endwith %}
+            {% endfor %}
+        {% endif %}
+        
+        <!-- Additional Trials -->
+        {% if additional_trials %}
+            {% for trial in additional_trials %}
+                {% with email_type='admin_summary' show_discovery_date=True show_admin_links=True %}
+                    {% include 'emails/components/trial_card.html' %}
+                {% endwith %}
+            {% endfor %}
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    <!-- No Content Message -->
+    {% if not articles and not additional_articles and not trials and not additional_trials %}
+    <div style="text-align: center; padding: 40px 20px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e5e7eb;">
+        <h3 style="color: #6b7280; font-size: 18px; margin: 0 0 10px 0;">No New Content for Review</h3>
+        <p style="color: #9ca3af; font-size: 14px; margin: 0;">
+            No new articles or clinical trials were discovered in the last 48 hours.
+        </p>
+    </div>
+    {% endif %}
+    
+    <!-- Admin Actions -->
+    <div style="margin-top: 40px; padding: 20px; background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px;">
+        <h3 style="color: #92400e; font-size: 16px; margin: 0 0 10px 0;">📋 Admin Actions</h3>
+        <p style="color: #92400e; font-size: 14px; margin: 0;">
+            Review the articles above and mark them as relevant using the EDIT ARTICLE buttons. 
+            This helps improve our machine learning accuracy for future recommendations.
+        </p>
+    </div>
+    
+    <!-- Additional Resources -->
+    <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #e5e7eb;">
+        <p class="content-text" style="text-align: center;">
+            For the complete admin dashboard, visit 
+            <a href="https://api.{{ site.domain }}/" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+                Admin Portal
+            </a>
+        </p>
+    </div>
+    
+</div>
+{% endblock %}
+
+<!-- Override header to set correct email type -->
+{% block header %}
+    {% with email_type='admin_summary' show_date=True current_date=now %}
+        {% include 'emails/components/header.html' %}
+    {% endwith %}
+{% endblock %}

@@ -33,7 +33,7 @@ def email_preview_dashboard(request):
     context = {
         'email_types': [
             ('weekly_summary', 'Weekly Summary'),
-            ('admin_summary_new', 'Admin Summary (New)'),
+            ('admin_summary', 'Admin Summary'),
             ('trial_notification_new', 'Clinical Trials (New)'),
             ('test_components', 'Component Test'),
         ]
@@ -87,7 +87,7 @@ def email_template_preview(request, template_name):
         context['user'] = mock_subscriber
         context['greeting_time'] = 'morning'
         
-    elif template_name == 'admin_summary_new':
+    elif template_name == 'admin_summary':
         context = prepare_admin_summary_context(
             articles=articles,
             trials=trials,
@@ -171,7 +171,7 @@ def email_template_json_context(request, template_name):
             site=site,
             customsettings=customsettings
         )
-    elif template_name == 'admin_summary_new':
+    elif template_name == 'admin_summary':
         context = prepare_admin_summary_context(
             articles=articles,
             trials=trials,
@@ -217,8 +217,7 @@ def email_template_variants(request):
         },
         {
             'name': 'Admin Summary', 
-            'old_template': 'admin_summary.html',
-            'new_template': 'admin_summary_new.html',
+            'new_template': 'admin_summary.html',
             'description': 'Admin review interface with edit links and ML predictions'
         },
         {
