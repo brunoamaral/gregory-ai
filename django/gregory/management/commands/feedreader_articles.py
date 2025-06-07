@@ -42,10 +42,19 @@ class FeedProcessor(ABC):
     
     def extract_basic_fields(self, entry: dict) -> dict:
         """Extract common fields that are the same across all feed types."""
-        published_date = parse(
-            entry.get('published') or entry.get('prism_coverdate'), 
-            tzinfos=self.command.tzinfos
-        ).astimezone(pytz.utc)
+        # Try multiple date fields in order of preference
+        date_string = (
+            entry.get('published') or 
+            entry.get('prism_coverdate') or 
+            entry.get('updated') or 
+            entry.get('date') or 
+            entry.get('prism_publicationdate')
+        )
+        
+        if not date_string:
+            raise ValueError(f"No valid date field found in feed entry: {entry.get('title', 'Unknown')}")
+        
+        published_date = parse(date_string, tzinfos=self.command.tzinfos).astimezone(pytz.utc)
         
         return {
             'title': entry['title'],
