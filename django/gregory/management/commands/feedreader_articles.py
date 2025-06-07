@@ -94,6 +94,77 @@ class FasebFeedProcessor(FeedProcessor):
         return entry.get('prism_doi', '')
 
 
+class BioRxivFeedProcessor(FeedProcessor):
+    """Processor for bioRxiv RSS feeds with keyword filtering support."""
+    
+    def can_process(self, source_link: str) -> bool:
+        return 'biorxiv' in source_link.lower()
+    
+    def extract_summary(self, entry: dict) -> str:
+        """Extract summary for bioRxiv feeds."""
+        # Prefer description field for bioRxiv
+        summary = entry.get('description', '')
+        if not summary and hasattr(entry, 'summary_detail'):
+            summary = entry['summary_detail']['value']
+        elif not summary:
+            summary = entry.get('summary', '')
+        return summary
+    
+    def extract_doi(self, entry: dict) -> str:
+        """Extract DOI from bioRxiv feed entry."""
+        # bioRxiv uses dc:identifier with doi: prefix
+        dc_identifier = entry.get('dc_identifier', '')
+        if dc_identifier.startswith('doi:'):
+            return dc_identifier.replace('doi:', '')
+        return None
+    
+    def should_include_article(self, entry: dict, source: 'Sources') -> bool:
+        """Check if article should be included based on keyword filtering."""
+        if not source.keyword_filter:
+            return True  # No filter, include all articles
+        
+        # Get text content to search
+        title = entry.get('title', '').lower()
+        summary = self.extract_summary(entry).lower()
+        search_text = f"{title} {summary}"
+        
+        # Parse keywords from the filter string
+        keywords = self._parse_keyword_filter(source.keyword_filter)
+        
+        # Check if any keyword matches
+        for keyword in keywords:
+            if keyword.lower() in search_text:
+                return True
+        
+        return False
+    
+    def _parse_keyword_filter(self, keyword_filter: str) -> list:
+        """Parse keyword filter string into individual keywords and phrases."""
+        import re
+        
+        if not keyword_filter:
+            return []
+        
+        keywords = []
+        
+        # Split by commas first to preserve order
+        parts = [part.strip() for part in keyword_filter.split(',')]
+        
+        for part in parts:
+            if not part:
+                continue
+            
+            # Check if part is a quoted phrase
+            if part.startswith('"') and part.endswith('"') and len(part) > 1:
+                # Remove quotes and add the phrase
+                keywords.append(part[1:-1])
+            else:
+                # Regular keyword
+                keywords.append(part)
+        
+        return keywords
+
+
 class DefaultFeedProcessor(FeedProcessor):
     """Default processor for generic RSS feeds."""
     
@@ -120,6 +191,7 @@ class Command(BaseCommand):
         self.feed_processors = [
             PubMedFeedProcessor(self),
             FasebFeedProcessor(self),
+            BioRxivFeedProcessor(self),
             DefaultFeedProcessor(self),  # Always last as fallback
         ]
 
@@ -162,6 +234,11 @@ class Command(BaseCommand):
             
             for entry in feed['entries']:
                 try:
+                    # Check if the article should be included based on keyword filtering
+                    if isinstance(processor, BioRxivFeedProcessor) and not processor.should_include_article(entry, source):
+                        print(f"  ➡️  Excluded by keyword filter: {entry.get('title', 'Unknown')}")
+                        continue
+                    
                     self.process_feed_entry(entry, source, processor)
                 except Exception as e:
                     print(f"Error processing entry '{entry.get('title', 'Unknown')}': {str(e)}")

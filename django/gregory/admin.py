@@ -198,8 +198,30 @@ class SourceInline(admin.StackedInline):
 	extra = 1
 
 class SourceAdmin(admin.ModelAdmin):
-	list_display = ['name', 'source_for', 'subject', 'method']
-	list_filter = ['source_for', 'team', 'subject']
+	list_display = ['name', 'source_for', 'subject', 'method', 'has_keyword_filter']
+	list_filter = ['source_for', 'team', 'subject', 'method']
+	search_fields = ['name', 'link', 'description', 'keyword_filter']
+	fieldsets = (
+		('Basic Information', {
+			'fields': ('name', 'source_for', 'method', 'active', 'link')
+		}),
+		('Organization', {
+			'fields': ('team', 'subject')
+		}),
+		('Settings', {
+			'fields': ('ignore_ssl', 'language', 'description')
+		}),
+		('Filtering (bioRxiv only)', {
+			'fields': ('keyword_filter',),
+			'description': 'For bioRxiv sources, specify keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson).'
+		}),
+	)
+	
+	def has_keyword_filter(self, obj):
+		"""Display whether source has keyword filtering enabled."""
+		return bool(obj.keyword_filter)
+	has_keyword_filter.boolean = True
+	has_keyword_filter.short_description = 'Has Filter'
 
 class SubjectAdminForm(forms.ModelForm):
     """Custom form for Subject admin with superuser-only team access"""
