@@ -171,7 +171,7 @@ class ArticleAdmin(SimpleHistoryAdmin):
 	ordering = ['-discovery_date']
 	readonly_fields = ['entities', 'discovery_date']
 	search_fields = ['article_id', 'title', 'doi']
-	list_filter = ('subjects',)
+	list_filter = ('teams', 'subjects','sources', )
 	raw_id_fields = ("authors",)
 	
 	class Media:
