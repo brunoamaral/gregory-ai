@@ -22,6 +22,11 @@ class Command(BaseCommand):
 			"EDT": pytz.timezone("America/New_York"),
 			"EST": pytz.timezone("America/New_York")
 		}
+
+	def _safe_change_reason(self, reason: str) -> str:
+		"""Truncate change reason to fit within 100 character database limit."""
+		return reason[:100] if len(reason) > 100 else reason
+
 	def process_feeds(self):
 		"""Fetch and process RSS feeds for clinical trials."""
 		sources = Sources.objects.filter(method='rss', source_for='trials', active=True)
@@ -201,11 +206,11 @@ class Command(BaseCommand):
 			)
 			if trial:
 				trial.sources.add(source)
-				trial._change_reason= f"Created from Source: {source.name} ({source.source_id})"
+				trial._change_reason = self._safe_change_reason(f"Created from Source: {source.name} ({source.source_id})")
 				trial.save()
 				trial.teams.add(source.team)
 				trial.subjects.add(source.subject)
-				trial._change_reason=f"Added relationships Team: {source.team}  Subject:{source.subject}"
+				trial._change_reason = self._safe_change_reason(f"Added relationships Team: {source.team}  Subject:{source.subject}")
 				trial.save()
 			return trial
 		except IntegrityError as e:
@@ -270,18 +275,18 @@ class Command(BaseCommand):
 
 		# Save only if changes were detected
 		if has_changes:
-			existing_trial._change_reason=f"Updated fields from {source.name} ({source.source_id}): {', '.join(updated_fields)}"
+			existing_trial._change_reason = self._safe_change_reason(f"Updated fields from {source.name} ({source.source_id}): {', '.join(updated_fields)}")
 			existing_trial.save()
 
 		# Handle source and subjects additions (relationships)
 		if source.subject not in existing_trial.subjects.all():
 			existing_trial.subjects.add(source.subject)
-			existing_trial._change_reason=f"Added subject: {source.subject}"
+			existing_trial._change_reason = self._safe_change_reason(f"Added subject: {source.subject}")
 			existing_trial.save()
 
 		if source not in existing_trial.sources.all():
 			existing_trial.sources.add(source)
-			existing_trial._change_reason=f"Added new source: {source.name} ({source.source_id})"
+			existing_trial._change_reason = self._safe_change_reason(f"Added new source: {source.name} ({source.source_id})")
 			existing_trial.save()
 		
 	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:
