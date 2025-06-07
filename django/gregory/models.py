@@ -94,11 +94,16 @@ class Sources(models.Model):
 	source_for = models.CharField(choices=TABLES, max_length=50, default='science paper')
 	name = models.TextField(blank=True, null=True)
 	link = models.TextField(blank=True, null=True)
-	language = models.TextField(blank=True, null=True)
+	language = models.CharField(blank=True, null=True)
 	subject = models.ForeignKey(Subject,on_delete=models.PROTECT,null=True,blank=True,unique=False)
 	method = models.CharField(choices=METHODS, max_length=10, default='rss')
 	ignore_ssl = models.BooleanField(default=False)
 	description = models.TextField(blank=True, null=True)
+	keyword_filter = models.TextField(
+		blank=True, 
+		null=True,
+		help_text='Keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson). Only applies to certain feed sources like bioRxiv.'
+	)
 	team = models.ForeignKey(
 		'Team', 
 		on_delete=models.CASCADE,  # Not sure which would be the best option here
