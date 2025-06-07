@@ -183,7 +183,15 @@ class TrialAdmin(SimpleHistoryAdmin):
 	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
 	exclude = ['ml_predictions','relevant']
 	readonly_fields = ['last_updated', 'team_categories']
-	search_fields = ['trial_id', 'title', 'identifiers']
+	search_fields = [
+		'trial_id', 'title', 'summary', 'summary_plain_english', 'scientific_title',
+		'primary_sponsor', 'source_register', 'recruitment_status', 'condition',
+		'intervention', 'primary_outcome', 'secondary_outcome', 'inclusion_criteria',
+		'exclusion_criteria', 'study_type', 'study_design', 'phase', 'countries',
+		'contact_firstname', 'contact_lastname', 'contact_affiliation',
+		'therapeutic_areas', 'sponsor_type', 'internal_number', 'secondary_id',
+		'identifiers'
+	]
 	list_filter = ['teams', 'subjects', 'sources']
 
 	def display_identifiers(self, obj):
