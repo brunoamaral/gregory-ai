@@ -106,10 +106,10 @@ class BioRxivFeedProcessor(FeedProcessor):
         # Prefer description field for bioRxiv/medRxiv
         summary = entry.get('description', '')
         if not summary and hasattr(entry, 'summary_detail'):
-            summary = entry['summary_detail']['value']
+            summary = entry['summary_detail'].get('value', '') or ''
         elif not summary:
             summary = entry.get('summary', '')
-        return summary
+        return summary or ''
     
     def extract_doi(self, entry: dict) -> str:
         """Extract DOI from bioRxiv or medRxiv feed entry."""
