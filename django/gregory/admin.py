@@ -297,25 +297,6 @@ class SubjectAdmin(admin.ModelAdmin):
 class AuthorsAdmin(admin.ModelAdmin):
 	search_fields = ['family_name', 'given_name']
 
-@admin.register(ArticleSubjectRelevance)
-class ArticleSubjectRelevanceAdmin(admin.ModelAdmin):
-	form = ArticleSubjectRelevanceForm
-	list_display = ['article', 'subject', 'relevance_status']
-	list_filter = ['subject__team', 'subject', 'is_relevant']
-	search_fields = ['article__title', 'subject__subject_name']
-	raw_id_fields = ('article',)
-	
-	def relevance_status(self, obj):
-		if obj.is_relevant is True:
-			return format_html('<span style="color: green; font-weight: bold;">✅ Relevant</span>')
-		elif obj.is_relevant is False:
-			return format_html('<span style="color: red; font-weight: bold;">❌ Not Relevant</span>')
-		else:
-			return format_html('<span style="color: gray;">⚪ Not Reviewed</span>')
-	relevance_status.short_description = 'Relevance Status'
-	
-	def get_queryset(self, request):
-		return super().get_queryset(request).select_related('article', 'subject')
 
 @admin.register(TeamCategory)
 class TeamCategoryAdmin(admin.ModelAdmin):
