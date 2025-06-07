@@ -95,14 +95,15 @@ class FasebFeedProcessor(FeedProcessor):
 
 
 class BioRxivFeedProcessor(FeedProcessor):
-    """Processor for bioRxiv RSS feeds with keyword filtering support."""
+    """Processor for bioRxiv and medRxiv RSS feeds with keyword filtering support."""
     
     def can_process(self, source_link: str) -> bool:
-        return 'biorxiv' in source_link.lower()
+        link = source_link.lower()
+        return 'biorxiv' in link or 'medrxiv' in link
     
     def extract_summary(self, entry: dict) -> str:
-        """Extract summary for bioRxiv feeds."""
-        # Prefer description field for bioRxiv
+        """Extract summary for bioRxiv and medRxiv feeds."""
+        # Prefer description field for bioRxiv/medRxiv
         summary = entry.get('description', '')
         if not summary and hasattr(entry, 'summary_detail'):
             summary = entry['summary_detail']['value']
@@ -111,8 +112,8 @@ class BioRxivFeedProcessor(FeedProcessor):
         return summary
     
     def extract_doi(self, entry: dict) -> str:
-        """Extract DOI from bioRxiv feed entry."""
-        # bioRxiv uses dc:identifier with doi: prefix
+        """Extract DOI from bioRxiv or medRxiv feed entry."""
+        # bioRxiv and medRxiv use dc:identifier with doi: prefix
         dc_identifier = entry.get('dc_identifier', '')
         if dc_identifier.startswith('doi:'):
             return dc_identifier.replace('doi:', '')

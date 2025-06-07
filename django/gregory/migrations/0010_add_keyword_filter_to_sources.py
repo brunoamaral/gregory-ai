@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='sources',
             name='keyword_filter',
-            field=models.TextField(blank=True, help_text='Keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson). Only applies to certain feed sources like bioRxiv.', null=True),
+            field=models.TextField(blank=True, help_text='Keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson). Only applies to certain feed sources like bioRxiv and medRxiv.', null=True),
         ),
     ]

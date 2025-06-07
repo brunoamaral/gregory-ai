@@ -211,9 +211,9 @@ class SourceAdmin(admin.ModelAdmin):
 		('Settings', {
 			'fields': ('ignore_ssl', 'language', 'description')
 		}),
-		('Filtering (bioRxiv only)', {
+		('Filtering (bioRxiv and medRxiv)', {
 			'fields': ('keyword_filter',),
-			'description': 'For bioRxiv sources, specify keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson).'
+			'description': 'For bioRxiv and medRxiv sources, specify keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson).'
 		}),
 	)
 	
