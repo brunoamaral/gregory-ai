@@ -87,6 +87,13 @@ Gregory's API is open and doesn't require authentication unless you need to use 
 | Teams                   | GET /teams/{id}/subjects                 | List all subjects for specific team by ID           | ✅                                       |
 | Teams                   | GET /teams/{id}/sources                  | List all sources for specific team by ID            | ✅                                       |
 | Teams                   | GET /teams/{id}/categories               | List all categories for specific team by ID         | ✅                                       |
+| Teams                   | GET /teams/{id}/articles/subject/{subject_id}/     | List all articles for a team filtered by subject    | ✅              |
+| Teams                   | GET /teams/{id}/articles/category/{category_slug}/ | List all articles for a team filtered by category   | ✅              |
+| Teams                   | GET /teams/{id}/articles/source/{source_id}/       | List all articles for a team filtered by source     | ✅              |
+| Teams                   | GET /teams/{id}/trials/category/{category_slug}/   | List clinical trials for a team filtered by category | ✅              |
+| Teams                   | GET /teams/{id}/trials/subject/{subject_id}/       | List clinical trials for a team filtered by subject | ✅              |
+| Teams                   | GET /teams/{id}/trials/source/{source_id}/         | List clinical trials for a team filtered by source  | ✅              |
+| Teams                   | GET /teams/{id}/categories/{category_slug}/monthly-counts/ | Monthly article and trial counts for a team category | ✅              |
 | MLPredictions           | GET /ml-predictions/                     | List all ML predictions                             | 🛑                                              |
 | MLPredictions           | POST /ml-predictions/                    | Create a new ML prediction                          | 🛑                                              |
 | MLPredictions           | GET /ml-predictions/{id}/                | Retrieve a specific ML prediction by ID             | 🛑                                              |
@@ -97,5 +104,3 @@ Gregory's API is open and doesn't require authentication unless you need to use 
 | ArticleSubjectRelevance | GET /article-subject-relevances/{id}/    | Retrieve a specific article subject relevance by ID | 🛑                                              |
 | ArticleSubjectRelevance | PUT /article-subject-relevances/{id}/    | Update a specific article subject relevance by ID   | 🛑                                              |
 | ArticleSubjectRelevance | DELETE /article-subject-relevances/{id}/ | Delete a specific article subject relevance by ID   | 🛑                                              |
-
-This table now includes the additional endpoints defined in your `urls.py` file, ensuring that all your API endpoints are accurately tracked.

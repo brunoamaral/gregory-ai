@@ -52,6 +52,13 @@
 | Teams                   | GET /teams/{id}/subjects                 | List all subjects for specific team by ID           | :white_check_mark:                                       |
 | Teams                   | GET /teams/{id}/sources                  | List all sources for specific team by ID            | :white_check_mark:                                       |
 | Teams                   | GET /teams/{id}/categories               | List all categories for specific team by ID         | :white_check_mark:                                       |
+| Teams                   | GET /teams/{id}/articles/subject/{subject_id}/     | List all articles for a team filtered by subject    | :white_check_mark:              |
+| Teams                   | GET /teams/{id}/articles/category/{category_slug}/ | List all articles for a team filtered by category   | :white_check_mark:              |
+| Teams                   | GET /teams/{id}/articles/source/{source_id}/       | List all articles for a team filtered by source     | :white_check_mark:              |
+| Teams                   | GET /teams/{id}/trials/category/{category_slug}/   | List clinical trials for a team filtered by category| :white_check_mark:              |
+| Teams                   | GET /teams/{id}/trials/subject/{subject_id}/       | List clinical trials for a team filtered by subject | :white_check_mark:              |
+| Teams                   | GET /teams/{id}/trials/source/{source_id}/         | List clinical trials for a team filtered by source  | :white_check_mark:              |
+| Teams                   | GET /teams/{id}/categories/{category_slug}/monthly-counts/ | Monthly article and trial counts for a team category | :white_check_mark:              |
 | MLPredictions           | GET /ml-predictions/                     | List all ML predictions                             | :stop_sign:                                              |
 | MLPredictions           | POST /ml-predictions/                    | Create a new ML prediction                          | :stop_sign:                                              |
 | MLPredictions           | GET /ml-predictions/{id}/                | Retrieve a specific ML prediction by ID             | :stop_sign:                                              |
