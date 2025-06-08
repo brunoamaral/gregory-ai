@@ -18,5 +18,4 @@ In the email, click the **Edit** link, and you'll be taken to the API page of th
 It's useful to re-train the machine learning models once you have a good number of articles flagged as relevant.
 
 1. `cd django; source venv/bin/activate`
-2. `sudo docker exec -it admin ./manage.py 1_data_processor` the source.csv file will show up here `django/gregory/data/source.csv`
-3. `python3 2_train_models.py`
+2. `sudo docker exec -it admin ./manage.py train_models`
