@@ -36,6 +36,12 @@ For other integrations, the Django app provides RSS feeds with a live update of 
 
 #### Rest API: <https://api.gregory-ms.com>
 
+## Codex Automation
+
+Issues labeled `codex` are automatically assigned to the **openai-codex** user.
+The workflow then invokes the Codex GitHub App, which proposes a pull request
+with changes that address the issue.
+
 ## Running in Production
 
 ### Server Requirements
