@@ -56,7 +56,7 @@ class RelevanceRadioWidget(forms.RadioSelect):
 			
 			choice_html = f'''
 				<label for="{choice_id}" style="margin-right: 15px; white-space: nowrap; cursor: pointer;">
-					<input type="radio" id="{choice_id}" name="{name}" value="{choice_value or ''}" {checked} style="margin-right: 5px;">
+					<input type="radio" id="{choice_id}" name="{name}" value="{choice_value if choice_value is not None else ''}" {checked} style="margin-right: 5px;">
 					{choice_label}
 				</label>
 			'''
@@ -91,9 +91,9 @@ class ArticleSubjectRelevanceForm(forms.ModelForm):
 		"""Convert string choice to boolean/None value"""
 		value = self.cleaned_data.get('is_relevant')
 		# Convert string representations to actual values
-		if value == 'True':
+		if value == 'True' or value is True:
 			return True
-		elif value == 'False':
+		elif value == 'False' or value is False:
 			return False
 		elif value == 'None' or value == '' or value is None:
 			return None
