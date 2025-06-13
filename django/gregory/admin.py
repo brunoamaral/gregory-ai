@@ -55,7 +55,7 @@ class RelevanceRadioWidget(forms.RadioSelect):
 			choice_id = f"{attrs.get('id', name)}_{choice_value or 'none'}"
 			
 			choice_html = f'''
-				<label for="{choice_id}" style="margin-right: 15px; white-space: nowrap; cursor: pointer;">
+				<label style="margin-right: 15px; white-space: nowrap; cursor: pointer;">
 					<input type="radio" id="{choice_id}" name="{name}" value="{choice_value if choice_value is not None else ''}" {checked} style="margin-right: 5px;">
 					{choice_label}
 				</label>
