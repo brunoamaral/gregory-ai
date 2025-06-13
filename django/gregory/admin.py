@@ -113,25 +113,31 @@ class ArticleSubjectRelevanceInline(admin.TabularInline):
 		return str(obj.subject) if obj.subject else ''
 	subject_name.short_description = 'Subject'
 	
-	def get_formset(self, request, obj=None, **kwargs):
-		"""Pre-populate with all subjects for the article's teams"""
-		if obj and obj.pk:  # If editing existing article
-			# Get all subjects for the teams this article belongs to
-			team_subjects = Subject.objects.filter(team__in=obj.teams.all()).distinct().order_by('subject_name')
-			
-			# Create ArticleSubjectRelevance instances for any missing subjects
-			for subject in team_subjects:
-				ArticleSubjectRelevance.objects.get_or_create(
-					article=obj,
-					subject=subject,
-					defaults={'is_relevant': None}
-				)
+        def get_formset(self, request, obj=None, **kwargs):
+                """Pre-populate with all subjects for the article's teams"""
+                if obj and obj.pk:  # If editing existing article
+                        # Get subjects for the teams this article belongs to that
+                        # have auto_predict enabled
+                        team_subjects = Subject.objects.filter(
+                                team__in=obj.teams.all(),
+                                auto_predict=True
+                        ).distinct().order_by('subject_name')
+
+                        # Create ArticleSubjectRelevance instances for any missing subjects
+                        for subject in team_subjects:
+                                ArticleSubjectRelevance.objects.get_or_create(
+                                        article=obj,
+                                        subject=subject,
+                                        defaults={'is_relevant': None}
+                                )
 		
 		return super().get_formset(request, obj, **kwargs)
 	
-	def get_queryset(self, request):
-		"""Order by subject name for consistency"""
-		return super().get_queryset(request).select_related('subject').order_by('subject__subject_name')
+        def get_queryset(self, request):
+                """Order by subject name for consistency and filter auto_predict subjects"""
+                return super().get_queryset(request).select_related('subject').filter(
+                        subject__auto_predict=True
+                ).order_by('subject__subject_name')
 
 class ArticleAdminForm(forms.ModelForm):
 	ml_predictions_display = MLPredictionsField(required=False)
