@@ -2,6 +2,7 @@ from subscriptions.forms import SubscribersForm
 from subscriptions.models import Subscribers, Lists
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponseRedirect
+from django.contrib.sites.models import Site
 import logging
 # Create your views here.
 
@@ -47,14 +48,20 @@ def subscribe_view(request):
 						subscriber.subscriptions.add(*subscription_lists)
 						subscriber.save()
 
-						return HttpResponseRedirect('https://gregory-ms.com/thank-you/')
+                                                domain = Site.objects.get_current().domain
+                                                scheme = 'https' if request.is_secure() else 'http'
+                                                return HttpResponseRedirect(f'{scheme}://{domain}/thank-you/')
 
 				except Exception as e:
 						logger.error(f"Subscription error: {e}")
-						return HttpResponseRedirect('https://gregory-ms.com/error/')
+                                                domain = Site.objects.get_current().domain
+                                                scheme = 'https' if request.is_secure() else 'http'
+                                                return HttpResponseRedirect(f'{scheme}://{domain}/error/')
 
 		else:
 				# Log errors for debugging
 				logger.error("Form is invalid.")
 				logger.error(subscriber_form.errors)
-				return HttpResponseRedirect('https://gregory-ms.com/error/')
+                                domain = Site.objects.get_current().domain
+                                scheme = 'https' if request.is_secure() else 'http'
+                                return HttpResponseRedirect(f'{scheme}://{domain}/error/')

@@ -3,6 +3,7 @@
 Usage: 
 {# % include 'emails/components/article_card.html' with article=article show_admin_links=False show_ml_predictions=False % #}
 -->
+{% load gregory_tags %}
 
 <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
     
@@ -89,7 +90,7 @@ Usage:
     <div style="background-color: #f1f5f9; border-left: 4px solid #64748b; padding: 15px; margin-bottom: 15px; border-radius: 0 4px 4px 0;">
         <h4 style="color: #475569; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Summary:</h4>
         <p style="color: #374151; font-size: 14px; line-height: 1.5; margin: 0;">
-            {{ article.summary|truncatechars:300 }}
+            {{ article.summary|clean_html_tags|truncatechars:300 }}
         </p>
     </div>
     {% endif %}

@@ -4,6 +4,7 @@ Usage:
 {# % include 'emails/components/trial_card_simple.html' with trial=trial % #}
 This is a simplified version for contexts where we just need basic trial display
 -->
+{% load gregory_tags %}
 
 <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border-left: 4px solid #059669;">
     
@@ -57,7 +58,7 @@ This is a simplified version for contexts where we just need basic trial display
     <div style="background-color: #f0fdf4; border-left: 4px solid #059669; padding: 15px; margin-top: 15px; border-radius: 0 4px 4px 0;">
         <h4 style="color: #047857; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Trial Summary:</h4>
         <p style="color: #374151; font-size: 14px; line-height: 1.5; margin: 0;">
-            {{ trial.brief_summary|truncatechars:250 }}
+            {{ trial.brief_summary|clean_html_tags|truncatechars:250 }}
         </p>
     </div>
     {% endif %}
