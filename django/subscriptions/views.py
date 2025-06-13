@@ -9,10 +9,10 @@ import logging
 def subscribe_view(request):
 		logging.basicConfig(level=logging.INFO)
 		logger = logging.getLogger('__name__')
-		
+
 		# Process the form data
 		subscriber_form = SubscribersForm(request.POST)
-		
+
 		if subscriber_form.is_valid():
 				first_name = subscriber_form.cleaned_data['first_name']
 				last_name = subscriber_form.cleaned_data['last_name']
