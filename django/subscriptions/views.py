@@ -47,21 +47,20 @@ def subscribe_view(request):
 						# Add the lists to the subscriber's subscriptions
 						subscriber.subscriptions.add(*subscription_lists)
 						subscriber.save()
-
-                                                domain = Site.objects.get_current().domain
-                                                scheme = 'https' if request.is_secure() else 'http'
-                                                return HttpResponseRedirect(f'{scheme}://{domain}/thank-you/')
+						domain = Site.objects.get_current().domain
+						scheme = 'https' if request.is_secure() else 'http'
+						return HttpResponseRedirect(f'{scheme}://{domain}/thank-you/')
 
 				except Exception as e:
 						logger.error(f"Subscription error: {e}")
-                                                domain = Site.objects.get_current().domain
-                                                scheme = 'https' if request.is_secure() else 'http'
-                                                return HttpResponseRedirect(f'{scheme}://{domain}/error/')
+						domain = Site.objects.get_current().domain
+						scheme = 'https' if request.is_secure() else 'http'
+						return HttpResponseRedirect(f'{scheme}://{domain}/error/')
 
 		else:
 				# Log errors for debugging
 				logger.error("Form is invalid.")
 				logger.error(subscriber_form.errors)
-                                domain = Site.objects.get_current().domain
-                                scheme = 'https' if request.is_secure() else 'http'
-                                return HttpResponseRedirect(f'{scheme}://{domain}/error/')
+				domain = Site.objects.get_current().domain
+				scheme = 'https' if request.is_secure() else 'http'
+				return HttpResponseRedirect(f'{scheme}://{domain}/error/')
