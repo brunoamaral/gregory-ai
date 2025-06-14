@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from gregory.models import Articles, Trials, Sources, Authors, Subject, Team, MLPredictions, ArticleSubjectRelevance, TeamCategory
+from gregory.models import Articles, Trials, Sources, Authors, Subject, Team, MLPredictions, ArticleSubjectRelevance, TeamCategory, ArticleTrialReference
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
 from django.contrib.sites.models import Site
@@ -72,6 +72,7 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	subjects = SubjectsSerializer(many=True, read_only=True)
 	ml_predictions = MLPredictionsSerializer(many=True, read_only=True, source='ml_predictions_detail')
 	article_subject_relevances = ArticleSubjectRelevanceSerializer(many=True, read_only=True)
+	clinical_trials = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Articles
@@ -80,13 +81,20 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 			'article_id', 'title', 'summary', 'link', 'published_date', 'sources', 'teams',
 			'subjects', 'publisher', 'container_title', 'authors',
 			'discovery_date', 'article_subject_relevances',
-			'doi', 'access', 'takeaways', 'team_categories', 'ml_predictions',
+			'doi', 'access', 'takeaways', 'team_categories', 'ml_predictions', 'clinical_trials',
 		]
-		read_only_fields = ('discovery_date', 'ml_predictions', 'takeaways')
+		read_only_fields = ('discovery_date', 'ml_predictions', 'takeaways', 'clinical_trials')
+	
+	def get_clinical_trials(self, obj):
+		"""Get trials referenced in the article"""
+		references = ArticleTrialReference.objects.filter(article=obj)
+		trials = [ref.trial for ref in references]
+		return TrialReferenceSerializer(trials, many=True).data
 
 class TrialSerializer(serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
+	articles = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Trials
@@ -102,9 +110,15 @@ class TrialSerializer(serializers.HyperlinkedModelSerializer):
 			'intervention', 'primary_outcome', 'secondary_outcome', 'secondary_id',
 			'source_support', 'ethics_review_status', 'ethics_review_approval_date',
 			'ethics_review_contact_name', 'ethics_review_contact_address', 'ethics_review_contact_phone',
-			'ethics_review_contact_email', 'results_date_completed', 'results_url_link'
+			'ethics_review_contact_email', 'results_date_completed', 'results_url_link', 'articles'
 		]
-		read_only_fields = ('discovery_date',)
+		read_only_fields = ('discovery_date', 'articles')
+		
+	def get_articles(self, obj):
+		"""Get articles that reference this trial"""
+		references = ArticleTrialReference.objects.filter(trial=obj)
+		articles = [ref.article for ref in references]
+		return ArticleReferenceSerializer(articles, many=True).data
 
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:
@@ -131,6 +145,18 @@ class AuthorSerializer(serializers.ModelSerializer):
 		site = get_site()
 		base_url = f"https://api.{site.domain}/articles/author/" if site else ""
 		return base_url + str(obj.author_id) if site else ""
+
+# Simple Trial serializer for use in Article references
+class TrialReferenceSerializer(serializers.ModelSerializer):
+	class Meta:
+		model = Trials
+		fields = ['trial_id', 'title', 'summary', 'link']
+
+# Simple Article serializer for use in Trial references
+class ArticleReferenceSerializer(serializers.ModelSerializer):
+	class Meta:
+		model = Articles
+		fields = ['article_id', 'title', 'summary', 'link']
 
 class CountArticlesSerializer(serializers.ModelSerializer):
 	class Meta:
