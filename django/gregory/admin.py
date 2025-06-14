@@ -1,17 +1,21 @@
 from django.contrib import admin
 from django.http import HttpResponse
 from django.shortcuts import render
-from django.urls import path
+from django.urls import path, reverse
 import csv
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
 from .admin_filters import DateRangeFilter
 
-from .models import Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, ArticleSubjectRelevance, TeamCategory, TeamCredentials, PredictionRunLog, Team
+from .models import (
+    Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, 
+    ArticleSubjectRelevance, TeamCategory, TeamCredentials, PredictionRunLog, Team,
+    ArticleTrialReference
+)
 from .widgets import MLPredictionsWidget
 from django import forms
 from .fields import MLPredictionsField
 from django.utils.html import format_html
-from django.urls import reverse
+
 # @admin.register(PredictionRunLog)
 class PredictionRunLogAdmin(admin.ModelAdmin):
 		list_display = ['id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 'run_started', 'run_finished', 'status_label', 'triggered_by']
@@ -30,6 +34,30 @@ class PredictionRunLogAdmin(admin.ModelAdmin):
 				}),
 		)
 
+
+class ArticleTrialReferenceInline(admin.TabularInline):
+    model = ArticleTrialReference
+    extra = 0
+    readonly_fields = ['trial', 'identifier_type', 'identifier_value', 'discovered_date']
+    can_delete = False
+    verbose_name_plural = "Referenced Trials"
+    verbose_name = "Trial Reference"
+    classes = ['collapse']
+
+    def has_add_permission(self, request, obj=None):
+        return False  # Prevent manual adding, should be done by the detect_trial_references command
+
+class TrialArticleReferenceInline(admin.TabularInline):
+    model = ArticleTrialReference
+    extra = 0
+    readonly_fields = ['article', 'identifier_type', 'identifier_value', 'discovered_date']
+    can_delete = False
+    verbose_name_plural = "Referencing Articles"
+    verbose_name = "Article Reference"
+    classes = ['collapse']
+    
+    def has_add_permission(self, request, obj=None):
+        return False  # Prevent manual adding, should be done by the detect_trial_references command
 
 class RelevanceRadioWidget(forms.RadioSelect):
 	"""Custom radio widget with horizontal layout and emojis"""
@@ -155,7 +183,7 @@ class ArticleAdminForm(forms.ModelForm):
 
 class ArticleAdmin(SimpleHistoryAdmin):
 	form = ArticleAdminForm
-	inlines = [ArticleSubjectRelevanceInline]
+	inlines = [ArticleSubjectRelevanceInline, ArticleTrialReferenceInline]
 	fieldsets = (
 		('Article Information', {
 			'fields': (
@@ -188,6 +216,7 @@ class TrialAdmin(SimpleHistoryAdmin):
 	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
 	exclude = ['ml_predictions','relevant']
 	readonly_fields = ['last_updated', 'team_categories']
+	inlines = [TrialArticleReferenceInline]
 	search_fields = [
 		'trial_id', 'title', 'summary', 'summary_plain_english', 'scientific_title',
 		'primary_sponsor', 'source_register', 'recruitment_status', 'condition',
@@ -605,3 +634,12 @@ admin.site.register(Authors, AuthorsAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)
+
+# Register ArticleTrialReference model with default admin
+# @admin.register(ArticleTrialReference)
+# class ArticleTrialReferenceAdmin(admin.ModelAdmin):
+#     list_display = ['article', 'trial', 'identifier_type', 'identifier_value', 'discovered_date']
+#     list_filter = ['identifier_type', 'discovered_date']
+#     search_fields = ['article__title', 'trial__title', 'identifier_value']
+#     date_hierarchy = 'discovered_date'
+#     readonly_fields = ['discovered_date']
