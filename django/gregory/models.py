@@ -404,6 +404,29 @@ class ArticleSubjectRelevance(models.Model):
 			relevance_status = "Not Reviewed"
 		return f"{self.article.title} - {self.subject.subject_name}: {relevance_status}"
 
+class ArticleTrialReference(models.Model):
+	"""
+	Represents a relationship between an Article and a Trial, where the Article's summary
+	contains an identifier from the Trial's identifiers field.
+	"""
+	article = models.ForeignKey('Articles', on_delete=models.CASCADE, related_name='trial_references')
+	trial = models.ForeignKey('Trials', on_delete=models.CASCADE, related_name='article_references')
+	identifier_type = models.CharField(max_length=50, help_text="Which identifier was found (e.g., 'nct_id', 'isrctn')")
+	identifier_value = models.CharField(max_length=100, help_text="The actual identifier value")
+	discovered_date = models.DateTimeField(auto_now_add=True)
+	
+	class Meta:
+			unique_together = ('article', 'trial', 'identifier_type')
+			verbose_name_plural = 'article trial references'
+			db_table = 'article_trial_references'
+			indexes = [
+				models.Index(fields=['identifier_type', 'identifier_value']),
+			]
+	
+	def __str__(self):
+			return f"Article {self.article.article_id} references Trial {self.trial.trial_id} via {self.identifier_type}"
+
+
 class PredictionRunLog(models.Model):
 	"""
 	Logs both training and prediction runs for machine learning models.
