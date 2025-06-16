@@ -385,7 +385,6 @@ class MLPredictions(models.Model):
 				fields=['article', 'subject', 'model_version', 'algorithm'],
 				name='unique_article_subject_prediction')
 		]
-		# unique_together = (('article', 'subject', 'model_version', 'algorithm'),)
 	
 	@classmethod
 	def get_latest_prediction(cls, article, subject, model_version=None):

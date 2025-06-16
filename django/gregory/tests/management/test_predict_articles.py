@@ -376,11 +376,13 @@ class TestBulkCreateWithDuplicateHandling(TestCase):
         ]
         
         # Bulk create the predictions
-        created = len(MLPredictions.objects.bulk_create(predictions, ignore_conflicts=True))
-        
-        # Only one prediction should be created (for article2)
-        self.assertEqual(created, 1)
-        self.assertEqual(MLPredictions.objects.count(), 2)
+        before_count = MLPredictions.objects.count()
+        MLPredictions.objects.bulk_create(predictions, ignore_conflicts=True)
+        after_count = MLPredictions.objects.count()
+
+        # Only one new prediction should have been added (for article2)
+        self.assertEqual(after_count - before_count, 1)
+        self.assertEqual(after_count, before_count + 1)
         
         # The existing prediction for article1 should remain unchanged
         article1_prediction = MLPredictions.objects.get(article=self.article1)
