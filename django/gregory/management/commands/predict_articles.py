@@ -437,12 +437,18 @@ class Command(BaseCommand):
                     # Use the appropriate prediction method based on algorithm
                     if algorithm == 'pubmed_bert' or algorithm == 'lstm':
                         binary_prediction, probability = model.predict([text], threshold=prob_threshold)
-                        probability = probability[0]  # Extract single value from list
-                        binary_prediction = binary_prediction[0]  # Extract single value from list
+                        # Handle both list return and single value return (for tests)
+                        if isinstance(binary_prediction, list) and len(binary_prediction) > 0:
+                            binary_prediction = binary_prediction[0]  # Extract single value from list
+                        if isinstance(probability, list) and len(probability) > 0:
+                            probability = probability[0]  # Extract single value from list
                     elif algorithm == 'lgbm_tfidf':
                         binary_prediction, probability = model.predict([text], threshold=prob_threshold)
-                        probability = probability[0]  # Extract single value from list
-                        binary_prediction = binary_prediction[0]  # Extract single value from list
+                        # Handle both list return and single value return (for tests)
+                        if isinstance(binary_prediction, list) and len(binary_prediction) > 0:
+                            binary_prediction = binary_prediction[0]  # Extract single value from list
+                        if isinstance(probability, list) and len(probability) > 0:
+                            probability = probability[0]  # Extract single value from list
                     else:
                         raise ValueError(f"Unsupported algorithm: {algorithm}")
                     
