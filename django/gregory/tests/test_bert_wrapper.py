@@ -12,7 +12,13 @@ from unittest.mock import patch, MagicMock
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Layer
+
+try:
+    # Try to use tf-keras for backward compatibility with transformers
+    from tf_keras.layers import Layer
+except ImportError:
+    # Fall back to TensorFlow's keras if tf-keras is not available
+    from tensorflow.keras.layers import Layer
 
 from gregory.ml.bert_wrapper import BertTrainer
 
@@ -42,10 +48,19 @@ class TestBertTrainer(unittest.TestCase):
         
         # Configure the BERT mock to return sensible values
         self.mock_bert_instance = self.mock_bert.from_pretrained.return_value
-        self.mock_bert_instance.return_value = [
-            tf.ones((2, 10, 768), dtype=tf.float32),  # sequence output
-            tf.ones((2, 768), dtype=tf.float32)       # pooled output
-        ]
+        
+        # Create a mock layer output that can be used in a Functional model
+        # We need to create an actual Layer output, not just a tensor
+        class MockBertLayer(Layer):
+            def call(self, inputs, **kwargs):
+                # Return sequence output and pooled output that mimic BERT
+                sequence_output = tf.ones((tf.shape(inputs[0])[0], 10, 768), dtype=tf.float32)
+                pooled_output = tf.ones((tf.shape(inputs[0])[0], 768), dtype=tf.float32)
+                return [sequence_output, pooled_output]
+        
+        # Create a mock layer and set it as the return value for the BERT model
+        self.mock_bert_layer = MockBertLayer()
+        self.mock_bert_instance.__call__ = self.mock_bert_layer
         
         # Create a BertTrainer instance with small dimensions for testing
         self.trainer = BertTrainer(
