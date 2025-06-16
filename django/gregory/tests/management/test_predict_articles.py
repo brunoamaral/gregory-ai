@@ -44,33 +44,39 @@ class TestPredictArticlesCommand(TestCase):
             team=self.team, auto_predict=False
         )
 
-    @patch('gregory.management.commands.predict_articles.Command.handle')
+    @patch('gregory.management.commands.predict_articles.Command.handle', return_value=None)
     def test_valid_args_team_only(self, mock_handle):
         call_command('predict_articles', '--team=test-team')
         mock_handle.assert_called_once()
 
-    @patch('gregory.management.commands.predict_articles.Command.handle')
+    @patch('gregory.management.commands.predict_articles.Command.handle', return_value=None)
     def test_valid_args_team_and_subject(self, mock_handle):
         call_command('predict_articles', '--team=test-team', '--subject=test-subject')
         mock_handle.assert_called_once()
 
-    @patch('gregory.management.commands.predict_articles.Command.handle')
+    @patch('gregory.management.commands.predict_articles.Command.handle', return_value=None)
     def test_valid_args_all_teams(self, mock_handle):
         call_command('predict_articles', '--all-teams')
         mock_handle.assert_called_once()
 
     def test_invalid_args_no_team_or_all_teams(self):
-        with self.assertRaises(CommandError):
+        with self.assertRaises(SystemExit):
             call_command('predict_articles')
 
     def test_invalid_args_subject_without_team(self):
-        with self.assertRaises(CommandError):
+        with self.assertRaises(SystemExit):
             call_command('predict_articles', '--subject=test-subject')
 
     def test_invalid_args_team_and_all_teams(self):
-        with patch('gregory.management.commands.predict_articles.Command.handle') as mock_handle:
+        """
+        Test that when both --team and --all-teams are provided, 
+        --all-teams takes precedence and the command runs successfully.
+        """
+        with patch('gregory.management.commands.predict_articles.Command.handle',
+                   return_value=None) as mock_handle:
             call_command('predict_articles', '--team=test-team', '--all-teams')
             mock_handle.assert_called_once()
+            # Ensure all_teams was set to True in the options
             self.assertTrue(mock_handle.call_args[1]['all_teams'])
 
 
