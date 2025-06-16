@@ -112,7 +112,7 @@ def resolve_model_version(base_path, explicit_version=None):
         if explicit_version in versions:
             return explicit_version
         else:
-            raise ValueError(f"Requested model version '{explicit_version}' not found in '{base_path}'")
+            raise FileNotFoundError(f"Requested model version '{explicit_version}' not found in '{base_path}'")
     
     # Otherwise, return the lexicographically largest (most recent) version
     return sorted(versions)[-1]
