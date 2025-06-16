@@ -401,7 +401,8 @@ class Command(BaseCommand):
             
             # Get articles that need prediction
             articles = get_articles(subject, algorithm, resolved_version, lookback_days, all_articles)
-            total_articles = articles.count()
+            # Handle both QuerySets and lists
+            total_articles = len(articles) if isinstance(articles, list) else articles.count()
             
             if verbose >= 1:
                 if all_articles:
