@@ -1,7 +1,7 @@
 absl-py==2.2.2
 alabaster==0.7.12
 altair==4.1.0
-anyio>=4.0.0,<5.0.0
+anyio==4.2.0
 appnope==0.1.4
 argon2-cffi==21.3.0
 argon2-cffi-bindings==21.2.0
@@ -25,7 +25,7 @@ charset-normalizer==2.0.4
 click==8.1.7
 colorama==0.4.6
 comm==0.1.2
-contourpy>=1.0.0,<1.2.0
+contourpy==1.1.1
 crossref==0.1.2
 crossrefapi==1.6.0
 cryptography==41.0.7
@@ -33,7 +33,7 @@ cycler==0.11.0
 debugpy==1.6.7
 decorator==5.1.1
 defusedxml==0.7.1
-Django==5.2.1
+Django==5.2.3
 django-countries==7.6.1
 django-extensions==4.1
 django-organizations==2.5.0
@@ -93,13 +93,12 @@ jupyterlab_server==2.25.1
 keras==2.15.0
 kiwisolver==1.4.4
 libclang==18.1.1
-lightgbm>=4.0.0,<4.7.0
+lightgbm==4.6.0
 Markdown==3.8
 markdown-it-py==3.0.0
 markdown2==2.3.5
 MarkupSafe==2.1.3
-# Add platform-specific dependencies for matplotlib and numpy 
-matplotlib>=3.7.0,<3.9.0
+matplotlib==3.8.0
 matplotlib-inline==0.1.6
 mccabe==0.7.0
 mdurl==0.1.2
@@ -116,9 +115,10 @@ nbconvert==7.10.0
 nbformat==5.9.2
 nest-asyncio==1.5.6
 networkx==3.4.2
+nltk==3.9.1
 notebook_shim==0.2.3
 numexpr==2.8.7
-numpy>=1.24.0,<1.27.0
+numpy==1.26.3
 oauthlib==3.2.2
 ohio==0.5.0
 opt_einsum==3.4.0
@@ -179,6 +179,7 @@ scikit-learn==1.6.1
 scipy==1.13.1
 seaborn==0.13.2
 Send2Trash==1.8.2
+sentencepiece==0.2.0
 sgmllib3k==1.0.0
 sip==6.7.12
 six==1.16.0
