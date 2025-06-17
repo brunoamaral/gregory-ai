@@ -4,8 +4,11 @@ from django.shortcuts import render
 from django.urls import path, reverse
 import csv
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
-from .admin_filters import DateRangeFilter
+from .admin_filters import DateRangeFilter, SourceHealthFilter
 from django.db import models  # Add this import for models.Count
+from django.utils import timezone
+from django import forms
+from django.utils.html import format_html, mark_safe
 
 from .models import (
     Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, 
@@ -241,8 +244,8 @@ class SourceInline(admin.StackedInline):
 	extra = 1
 
 class SourceAdmin(admin.ModelAdmin):
-	list_display = ['name', 'source_for', 'subject', 'method', 'has_keyword_filter']
-	list_filter = ['source_for', 'team', 'subject', 'method']
+	list_display = ['name', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator', 'has_keyword_filter']
+	list_filter = ['source_for', 'team', 'subject', 'method', SourceHealthFilter]
 	search_fields = ['name', 'link', 'description', 'keyword_filter']
 	fieldsets = (
 		('Basic Information', {
@@ -265,6 +268,59 @@ class SourceAdmin(admin.ModelAdmin):
 		return bool(obj.keyword_filter)
 	has_keyword_filter.boolean = True
 	has_keyword_filter.short_description = 'Has Filter'
+	
+	def last_article_date(self, obj):
+		"""Display the date of the latest article or trial from this source."""
+		if obj.source_for == 'trials':
+			latest_date = obj.get_latest_trial_date()
+			if latest_date:
+				days_since = (timezone.now() - latest_date).days
+				return f"{latest_date.strftime('%Y-%m-%d')} ({days_since} days ago)"
+			return "No trials"
+		else:
+			latest_date = obj.get_latest_article_date()
+			if latest_date:
+				days_since = (timezone.now() - latest_date).days
+				return f"{latest_date.strftime('%Y-%m-%d')} ({days_since} days ago)"
+			return "No articles"
+	last_article_date.short_description = 'Last Content'
+	last_article_date.short_description = 'Last Article'
+	
+	def article_count(self, obj):
+		"""Display the count of articles or trials from this source."""
+		if obj.source_for == 'trials':
+			return obj.get_trial_count()
+		else:
+			return obj.get_article_count()
+	article_count.short_description = 'Content Count'
+	
+	def health_status_indicator(self, obj):
+		"""Display a visual indicator of the source's health status."""
+		status = obj.get_health_status()
+		
+		if status == "healthy":
+			return format_html('<span style="color: green; font-size: 14px;">●</span>')
+		elif status == "warning":
+			return format_html('<span style="color: orange; font-size: 14px;">●</span>')
+		elif status == "error":
+			return format_html('<span style="color: red; font-size: 14px;">●</span>')
+		elif status == "inactive":
+			return format_html('<span style="color: gray; font-size: 14px;">●</span>')
+		else:  # no_content
+			return format_html('<span style="color: blue; font-size: 14px;">●</span>')
+	health_status_indicator.short_description = 'Status'
+	
+	def get_queryset(self, request):
+		"""Filter sources based on user permissions."""
+		qs = super().get_queryset(request)
+		
+		# Superusers see all sources
+		if request.user.is_superuser:
+			return qs
+			
+		# Regular users only see sources from their teams
+		user_teams = request.user.teammember_set.values_list('organization__teams__id', flat=True)
+		return qs.filter(team__id__in=user_teams)
 
 class SubjectAdminForm(forms.ModelForm):
 		"""Custom form for Subject admin with superuser-only team access"""
