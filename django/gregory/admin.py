@@ -5,6 +5,7 @@ from django.urls import path, reverse
 import csv
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
 from .admin_filters import DateRangeFilter
+from django.db import models  # Add this import for models.Count
 
 from .models import (
     Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, 
@@ -336,10 +337,121 @@ class SubjectAdmin(admin.ModelAdmin):
 	linked_sources.short_description = "Linked Sources"
 
 
+class AuthorArticlesInline(admin.TabularInline):
+	model = Articles.authors.through
+	verbose_name = "Article"
+	verbose_name_plural = "Author's Articles"
+	extra = 0
+	can_delete = False
+	fields = ['article_info', 'article_summary', 'article_doi_link', 'admin_link']
+	readonly_fields = ['article_info', 'article_summary', 'article_doi_link', 'admin_link']
+	ordering = ['-articles__published_date']  # Order by most recent articles first
+	
+	def article_info(self, obj):
+		try:
+			article = obj.articles
+			title = article.title
+			published_date = article.published_date
+			if published_date:
+				return format_html('{}<br/><span style="color: #666; font-size: 0.8em;">Published: {}</span>', 
+						title, published_date.strftime('%Y-%m-%d'))
+			return title
+		except Exception as e:
+			return f"Error accessing article: {str(e)}"
+	article_info.short_description = 'Title'
+	
+	def article_summary(self, obj):
+		try:
+			article = obj.articles
+			summary = article.summary
+			if summary:
+				return summary[:200] + '...' if len(summary) > 200 else summary
+			return '-'
+		except Exception as e:
+			return f"Error accessing article summary: {str(e)}"
+	article_summary.short_description = 'Summary'
+	
+	def article_doi_link(self, obj):
+		try:
+			article = obj.articles
+			if article.doi:
+				doi_link = f"https://doi.org/{article.doi}"
+				return format_html('<a href="{}" target="_blank">{}</a>', doi_link, article.doi)
+			elif article.link:
+				return format_html('<a href="{}" target="_blank">Link to article</a>', article.link)
+			return '-'
+		except Exception as e:
+			return f"Error accessing article link: {str(e)}"
+	article_doi_link.short_description = 'External Link'
+	
+	def admin_link(self, obj):
+		try:
+			article = obj.articles
+			url = reverse('admin:gregory_articles_change', args=[article.pk])
+			return format_html('<a href="{}" target="_blank">View Article</a>', url)
+		except Exception as e:
+			return f"Error generating admin link: {str(e)}"
+	admin_link.short_description = 'Admin Link'
+	
+	def has_add_permission(self, request, obj=None):
+		return False
+
+class ArticleCountFilter(admin.SimpleListFilter):
+	title = 'Number of Articles'
+	parameter_name = 'article_count'
+
+	def lookups(self, request, model_admin):
+		return (
+			('0', 'No articles'),
+			('1-5', '1 to 5 articles'),
+			('6-10', '6 to 10 articles'),
+			('11+', 'More than 10 articles'),
+		)
+
+	def queryset(self, request, queryset):
+		if self.value() == '0':
+			# Authors with no articles
+			return queryset.annotate(count=models.Count('articles_set')).filter(count=0)
+		elif self.value() == '1-5':
+			# Authors with 1-5 articles
+			return queryset.annotate(count=models.Count('articles_set')).filter(count__gte=1, count__lte=5)
+		elif self.value() == '6-10':
+			# Authors with 6-10 articles
+			return queryset.annotate(count=models.Count('articles_set')).filter(count__gte=6, count__lte=10)
+		elif self.value() == '11+':
+			# Authors with more than 10 articles
+			return queryset.annotate(count=models.Count('articles_set')).filter(count__gt=10)
+		return queryset
+
 class AuthorsAdmin(admin.ModelAdmin):
-	search_fields = ['family_name', 'given_name']
-
-
+	search_fields = ['family_name', 'given_name', 'ORCID']
+	list_display = ['given_name', 'family_name', 'display_orcid', 'country', 'article_count']
+	list_filter = ['country', ArticleCountFilter]
+	inlines = [AuthorArticlesInline]
+	
+	def display_orcid(self, obj):
+		if obj.ORCID:
+			orcid_url = f"https://orcid.org/{obj.ORCID}"
+			return format_html('<a href="{}" target="_blank">{}</a>', orcid_url, obj.ORCID)
+		return "-"
+	display_orcid.short_description = 'ORCID'
+	display_orcid.admin_order_field = 'ORCID'
+	
+	def article_count(self, obj):
+		return obj.articles_count
+	article_count.short_description = 'Number of Articles'
+	article_count.admin_order_field = 'articles_count'
+	
+	def get_queryset(self, request):
+		queryset = super().get_queryset(request)
+		queryset = queryset.annotate(articles_count=models.Count('articles'))
+		return queryset
+	
+	def get_inline_instances(self, request, obj=None):
+		if not obj:  # If we're adding a new object, don't display inlines
+			return []
+		return super().get_inline_instances(request, obj)
+	
 @admin.register(TeamCategory)
 class TeamCategoryAdmin(admin.ModelAdmin):
 	list_display = ('team', 'category_name', 'category_slug')
