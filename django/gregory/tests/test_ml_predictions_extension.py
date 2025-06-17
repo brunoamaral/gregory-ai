@@ -194,7 +194,7 @@ class MLPredictionsExtensionTestCase(TestCase):
         )
         
         # Brief delay to ensure different created_date
-        time.sleep(0.001)
+        time.sleep(0.05)
         
         # Create a newer prediction with a different version
         # Use v3.0.1 instead of v3.0.0 to avoid unique constraint violation
@@ -206,9 +206,9 @@ class MLPredictionsExtensionTestCase(TestCase):
             predicted_relevant=True
         )
         
-        # Test getting the latest prediction (should be the newer one)
-        latest = MLPredictions.get_latest_prediction(self.article1, self.subject, model_version="v3.0.0")
-        self.assertEqual(latest, newer_prediction)
+        # Test getting the latest prediction for a specific model version
+        latest_v3 = MLPredictions.get_latest_prediction(self.article1, self.subject)
+        self.assertEqual(latest_v3, newer_prediction)
         
         # Test getting the latest prediction for a specific model version
         latest_v1 = MLPredictions.get_latest_prediction(self.article1, self.subject, model_version="v1.0.0")

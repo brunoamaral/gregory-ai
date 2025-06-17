@@ -5,7 +5,7 @@ This module tests the get_trainer factory function to ensure it correctly return
 the appropriate trainer class based on the algorithm name.
 """
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from gregory.ml import get_trainer
 from gregory.ml.bert_wrapper import BertTrainer
@@ -16,10 +16,17 @@ from gregory.ml.lstm_wrapper import LSTMTrainer
 class TestMLFactory(unittest.TestCase):
     """Test cases for the ML factory function."""
     
-    @patch('gregory.ml.bert_wrapper.TFAutoModel')
+    @patch('gregory.ml.bert_wrapper.BertTrainer._create_model')
     @patch('gregory.ml.bert_wrapper.AutoTokenizer')
-    def test_get_bert_trainer(self, mock_tokenizer, mock_model):
+    @patch('gregory.ml.bert_wrapper.TFAutoModel')
+    def test_get_bert_trainer(self, mock_tf_auto_model, mock_tokenizer, mock_create_model):
         """Test that get_trainer returns BertTrainer for 'pubmed_bert'."""
+        # Configure the mocks
+        mock_create_model.return_value = MagicMock()
+        mock_tokenizer.from_pretrained.return_value = MagicMock()
+        mock_tf_auto_model.from_pretrained.return_value = MagicMock()
+        
+        # Test default parameters
         trainer = get_trainer('pubmed_bert')
         self.assertIsInstance(trainer, BertTrainer)
         
@@ -39,9 +46,15 @@ class TestMLFactory(unittest.TestCase):
         self.assertIsInstance(custom_trainer, LGBMTfidfTrainer)
         self.assertEqual(custom_trainer.random_state, 42)
     
+    @patch('gregory.ml.lstm_wrapper.LSTMTrainer._create_model')
     @patch('gregory.ml.lstm_wrapper.TextVectorization')
-    def test_get_lstm_trainer(self, mock_vectorization):
+    def test_get_lstm_trainer(self, mock_vectorization, mock_create_model):
         """Test that get_trainer returns LSTMTrainer for 'lstm'."""
+        # Configure the mock
+        mock_create_model.return_value = MagicMock()
+        mock_vectorization.return_value = MagicMock()
+        
+        # Test default parameters
         trainer = get_trainer('lstm')
         self.assertIsInstance(trainer, LSTMTrainer)
         

@@ -30,6 +30,21 @@ class MockedBartModel:
         return torch.tensor([[101, 102, 103, 104]] * batch_size)
 
 
+class MockInputs:
+    """Mock inputs object that has a to() method like a PyTorch tensor."""
+    
+    def __init__(self, input_ids, attention_mask):
+        self.data = {"input_ids": input_ids, "attention_mask": attention_mask}
+    
+    def to(self, device):
+        """Mock to() method to move tensors to a device."""
+        return self
+    
+    def __getitem__(self, key):
+        """Allow dictionary-like access to the data."""
+        return self.data[key]
+
+
 class MockedBartTokenizer:
     """Mock BART tokenizer for testing summarization without loading the real model."""
     
@@ -41,12 +56,12 @@ class MockedBartTokenizer:
         if isinstance(text, str):
             # Single text case
             dummy_ids = torch.tensor([[1, 2, 3]])
-            return {"input_ids": dummy_ids}
+            return MockInputs(dummy_ids, torch.ones_like(dummy_ids))
         else:
             # Batch case
             batch_size = len(text)
             dummy_ids = torch.tensor([[1, 2, 3]] * batch_size)
-            return {"input_ids": dummy_ids}
+            return MockInputs(dummy_ids, torch.ones_like(dummy_ids))
     
     def decode(self, ids, **kwargs):
         """Mock decode method to return a fixed string."""

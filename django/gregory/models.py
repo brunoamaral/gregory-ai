@@ -9,7 +9,7 @@ from simple_history.models import HistoricalRecords
 import base64
 from django.conf import settings 
 from django.db.models.functions import Lower
-
+from django.db import models
 class Authors(models.Model):
 	author_id = models.AutoField(primary_key=True)
 	family_name = models.CharField(blank=False,null=False, max_length=150)
@@ -50,7 +50,11 @@ class TeamCategory(models.Model):
 		return self.articles.count()
 
 	class Meta:
-		unique_together = (('team', 'category_slug'),)
+		constraints = [
+			models.UniqueConstraint(
+				fields=['team', 'category_slug'],
+				name='unique_team_category_slug')
+		]
 		verbose_name_plural = 'team categories'
 		db_table = 'team_categories'
 
@@ -83,7 +87,11 @@ class Subject(models.Model):
 		managed = True
 		verbose_name_plural = 'subjects'
 		db_table = 'subjects'
-		unique_together = (('team', 'subject_slug'),)
+		constraints = [
+			models.UniqueConstraint(
+				fields=['team', 'subject_slug'],
+				name='unique_team_subject_slug')
+		]
 
 
 class Sources(models.Model):
@@ -154,7 +162,11 @@ class Articles(models.Model):
 
 	class Meta:
 		managed = True
-		unique_together = (('title', 'link'),)
+		constraints = [
+			models.UniqueConstraint(
+				fields=['title', 'link'],
+				name='unique_article_title_link')
+		]
 		verbose_name_plural = 'articles'
 		db_table = 'articles'
 		ordering = ['-discovery_date']
@@ -280,7 +292,11 @@ class Team(models.Model):
 	slug = models.SlugField(unique=True, editable=True)
 
 	class Meta:
-		unique_together = ['organization', 'name']  # Ensure unique team names within each organization
+		constraints = [
+			models.UniqueConstraint(
+				fields=['organization', 'name'],
+				name='unique_organization_team_name')
+		]  # Ensure unique team names within each organization
 
 	def __str__(self):
 		return f"{self.name} ({self.organization.name})" if self.organization else self.name
@@ -364,7 +380,11 @@ class MLPredictions(models.Model):
 	)
 	
 	class Meta:
-		unique_together = (('article', 'subject', 'model_version', 'algorithm'),)
+		constraints = [
+			models.UniqueConstraint(
+				fields=['article', 'subject', 'model_version', 'algorithm'],
+				name='unique_article_subject_prediction')
+		]
 	
 	@classmethod
 	def get_latest_prediction(cls, article, subject, model_version=None):
@@ -392,7 +412,11 @@ class ArticleSubjectRelevance(models.Model):
 	is_relevant = models.BooleanField(null=True, blank=True, default=None, help_text="Indicates if the article is relevant for the subject. NULL means not reviewed.")
 
 	class Meta:
-		unique_together = ('article', 'subject')
+		constraints = [
+			models.UniqueConstraint(
+				fields=['article', 'subject'],
+				name='unique_article_subject_relevance')
+		]
 		verbose_name_plural = 'article subject relevances'
 
 	def __str__(self):
@@ -416,7 +440,11 @@ class ArticleTrialReference(models.Model):
 	discovered_date = models.DateTimeField(auto_now_add=True)
 	
 	class Meta:
-			unique_together = ('article', 'trial', 'identifier_type')
+			constraints = [
+				models.UniqueConstraint(
+					fields=['article', 'trial', 'identifier_type'],
+					name='unique_article_trial_identifier')
+			]
 			verbose_name_plural = 'article trial references'
 			db_table = 'article_trial_references'
 			indexes = [
