@@ -53,3 +53,88 @@ class DateRangeFilter(admin.SimpleListFilter):
             return queryset.filter(run_started__gte=start_date)
         
         return queryset
+
+class SourceHealthFilter(admin.SimpleListFilter):
+    """
+    Filter sources based on their health status
+    """
+    title = 'Health Status'
+    parameter_name = 'health_status'
+    
+    def lookups(self, request, model_admin):
+        """
+        Returns a list of tuples representing the filter options
+        """
+        return (
+            ('healthy', 'Healthy (updated in last 30 days)'),
+            ('warning', 'Warning (30-60 days since update)'),
+            ('error', 'Error (60+ days since update)'),
+            ('inactive', 'Inactive'),
+            ('no_content', 'No Content')
+        )
+    
+    def queryset(self, request, queryset):
+        """
+        Filters the queryset based on the selected health status.
+        Uses the same logic for both article and trial sources.
+        """
+        if self.value() == 'healthy':
+            thirty_days_ago = timezone.now() - datetime.timedelta(days=30)
+            source_ids = []
+            for source in queryset:
+                if source.active:
+                    if source.source_for == 'trials':
+                        latest_date = source.get_latest_trial_date()
+                    else:
+                        latest_date = source.get_latest_article_date()
+                        
+                    if latest_date and latest_date >= thirty_days_ago:
+                        source_ids.append(source.source_id)
+            return queryset.filter(source_id__in=source_ids)
+            
+        elif self.value() == 'warning':
+            thirty_days_ago = timezone.now() - datetime.timedelta(days=30)
+            sixty_days_ago = timezone.now() - datetime.timedelta(days=60)
+            source_ids = []
+            for source in queryset:
+                if source.active:
+                    if source.source_for == 'trials':
+                        latest_date = source.get_latest_trial_date()
+                    else:
+                        latest_date = source.get_latest_article_date()
+                        
+                    if latest_date and sixty_days_ago <= latest_date < thirty_days_ago:
+                        source_ids.append(source.source_id)
+            return queryset.filter(source_id__in=source_ids)
+            
+        elif self.value() == 'error':
+            sixty_days_ago = timezone.now() - datetime.timedelta(days=60)
+            source_ids = []
+            for source in queryset:
+                if source.active:
+                    if source.source_for == 'trials':
+                        latest_date = source.get_latest_trial_date()
+                    else:
+                        latest_date = source.get_latest_article_date()
+                        
+                    if latest_date and latest_date < sixty_days_ago:
+                        source_ids.append(source.source_id)
+            return queryset.filter(source_id__in=source_ids)
+            
+        elif self.value() == 'inactive':
+            return queryset.filter(active=False)
+            
+        elif self.value() == 'no_content':
+            source_ids = []
+            for source in queryset:
+                if source.active:
+                    if source.source_for == 'trials':
+                        has_content = source.trials_set.exists()
+                    else:
+                        has_content = source.articles_set.exists()
+                        
+                    if not has_content:
+                        source_ids.append(source.source_id)
+            return queryset.filter(source_id__in=source_ids)
+            
+        return queryset
