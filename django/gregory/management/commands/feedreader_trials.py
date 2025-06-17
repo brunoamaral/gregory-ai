@@ -13,7 +13,16 @@ import re
 import requests
 
 class Command(BaseCommand):
+	def add_arguments(self, parser):
+		parser.add_argument(
+			'-v', '--verbosity',
+			type=int,
+			default=1,
+			help='Verbosity level: 0=minimal output, 1=normal output (default), 2=verbose output, 3=very verbose output',
+		)
+
 	def handle(self, *args, **options):
+		self.verbosity = options.get('verbosity', 1)
 		self.setup()
 		self.process_feeds()
 
@@ -31,7 +40,7 @@ class Command(BaseCommand):
 		"""Fetch and process RSS feeds for clinical trials."""
 		sources = Sources.objects.filter(method='rss', source_for='trials', active=True)
 		for source in sources:
-			self.stdout.write(self.style.SUCCESS(f"Processing RSS feed: {source.name}"))
+			self.log(f"Processing RSS feed: {source.name}", level=1)
 			if not source.ignore_ssl:
 				feed = feedparser.parse(source.link)
 			else:
@@ -62,19 +71,19 @@ class Command(BaseCommand):
 					existing_trial = self.find_existing_trial(incoming_clinical_trial)
 					if existing_trial:
 						self.update_existing_trial(existing_trial, incoming_clinical_trial, source)
-						self.stdout.write(self.style.SUCCESS(f"Updated existing trial: {existing_trial.title}"))
+						self.log(f"Updated existing trial: {existing_trial.title}", level=2, style_func=self.style.SUCCESS)
 						continue
 
 					# Create new trial if no existing trial is found
 					self.create_new_trial(incoming_clinical_trial, source)
-					self.stdout.write(self.style.SUCCESS(f"Created new trial: {incoming_clinical_trial.title}"))
+					self.log(f"Created new trial: {incoming_clinical_trial.title}", level=2, style_func=self.style.SUCCESS)
 				
 				except IntegrityError as e:
-					self.stdout.write(self.style.ERROR(f"IntegrityError for trial '{entry.get('title')}' at link {link}: {e}"))
+					self.log(f"IntegrityError for trial '{entry.get('title')}' at link {link}: {e}", level=3, style_func=self.style.ERROR)
 				except Exception as e:
-					self.stdout.write(self.style.ERROR(f"Error processing trial '{entry.get('title')}' at link {link}: {e}"))
+					self.log(f"Error processing trial '{entry.get('title')}' at link {link}: {e}", level=3, style_func=self.style.ERROR)
 
-			self.stdout.write(self.style.SUCCESS(f"Finished processing RSS feed: {source.name}"))
+			self.log(f"Finished processing RSS feed: {source.name}", level=1, style_func=self.style.SUCCESS)
 
 
 	def parse_date(self, date_str: str):
@@ -177,7 +186,7 @@ class Command(BaseCommand):
 		if title:
 			trial = Trials.objects.filter(title__iexact=title).first()
 			if trial:
-				print(f"Found trial by title: {trial.title}")
+				self.log(f"Found trial by title: {trial.title}", level=3)
 				return trial
 
 	def create_new_trial(self, clinical_trial: ClinicalTrial, source):
@@ -214,7 +223,7 @@ class Command(BaseCommand):
 				trial.save()
 			return trial
 		except IntegrityError as e:
-			print(f"Integrity error during trial creation: {e}")
+			self.log(f"Integrity error during trial creation: {e}", level=3, style_func=self.style.ERROR)
 
 	def update_existing_trial(self, existing_trial, clinical_trial, source):
 		"""Update an existing trial with new data only when necessary."""

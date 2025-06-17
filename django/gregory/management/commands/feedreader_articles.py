@@ -196,6 +196,14 @@ class DefaultFeedProcessor(FeedProcessor):
 class Command(BaseCommand):
     help = 'Fetches and updates articles and trials from RSS feeds.'
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '-v', '--verbosity',
+            type=int,
+            default=1,
+            help='Verbosity level: 0=minimal output, 1=normal output (default), 2=verbose output, 3=very verbose output',
+        )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.feed_processors = [
@@ -204,10 +212,25 @@ class Command(BaseCommand):
             BioRxivFeedProcessor(self),
             DefaultFeedProcessor(self),  # Always last as fallback
         ]
+        self.verbosity = 1  # Default verbosity level
 
     def handle(self, *args, **options):
+        self.verbosity = options.get('verbosity', 1)
         self.setup()
         self.update_articles_from_feeds()
+        
+    def log(self, message, level=2):
+        """
+        Log a message if the verbosity level is high enough.
+        
+        Levels:
+        0 = Silent
+        1 = Only main processing steps (feeds, sources)
+        2 = Detailed information (default for most messages)
+        3 = Debug information
+        """
+        if self.verbosity >= level:
+            print(message)
 
     def setup(self):
         self.SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
@@ -225,7 +248,7 @@ class Command(BaseCommand):
 
     def handle_database_error(self, action, error):
         """Generic error handler for database operations."""
-        print(f"An error occurred during {action}: {str(error)}")
+        self.log(f"An error occurred during {action}: {str(error)}", level=2)
 
     def get_feed_processor(self, source_link: str) -> FeedProcessor:
         """Get the appropriate feed processor for the given source link."""
@@ -238,7 +261,7 @@ class Command(BaseCommand):
     def update_articles_from_feeds(self):
         sources = Sources.objects.filter(method='rss', source_for='science paper', active=True)
         for source in sources:
-            print(f'# Processing articles from {source}')
+            self.log(f'# Processing articles from {source}', level=1)
             feed = self.fetch_feed(source.link, source.ignore_ssl)
             processor = self.get_feed_processor(source.link)
             
@@ -246,12 +269,12 @@ class Command(BaseCommand):
                 try:
                     # Check if the article should be included based on keyword filtering
                     if isinstance(processor, BioRxivFeedProcessor) and not processor.should_include_article(entry, source):
-                        print(f"  ➡️  Excluded by keyword filter: {entry.get('title', 'Unknown')}")
+                        self.log(f"  ➡️  Excluded by keyword filter: {entry.get('title', 'Unknown')}", level=2)
                         continue
                     
                     self.process_feed_entry(entry, source, processor)
                 except Exception as e:
-                    print(f"Error processing entry '{entry.get('title', 'Unknown')}': {str(e)}")
+                    self.log(f"Error processing entry '{entry.get('title', 'Unknown')}': {str(e)}", level=2)
                     continue
 
     def process_feed_entry(self, entry: dict, source: Sources, processor: FeedProcessor):
@@ -306,11 +329,11 @@ class Command(BaseCommand):
     def process_article_without_doi(self, title: str, feed_summary: str, 
                                    link: str, published_date, source: Sources):
         """Process an article that doesn't have a DOI."""
-        print('No DOI, trying to create article')
+        self.log('No DOI, trying to create article', level=2)
         
         # Log potential summary truncation issues
         if 20 < len(feed_summary) < 500:
-            print(f"Warning: Potentially truncated summary for title '{title}': {len(feed_summary)} characters")
+            self.log(f"Warning: Potentially truncated summary for title '{title}': {len(feed_summary)} characters", level=2)
         
         # Create or update article
         self.create_or_update_article(
@@ -323,7 +346,7 @@ class Command(BaseCommand):
                                       title: str, feed_summary: str, doi: str) -> dict:
         """Get article data based on CrossRef lookup results."""
         if self.is_crossref_failed(refresh_result):
-            print(f"  ⚠️  CrossRef lookup failed for DOI {doi}: {refresh_result}")
+            self.log(f"  ⚠️  CrossRef lookup failed for DOI {doi}: {refresh_result}", level=2)
             return {
                 'title': title,
                 'summary': feed_summary,
@@ -344,7 +367,7 @@ class Command(BaseCommand):
             
             # Log potential summary truncation issues
             if 20 < len(summary) < 500:
-                print(f"  ⚠️  Potentially truncated summary for DOI {doi}: {len(summary)} characters")
+                self.log(f"  ⚠️  Potentially truncated summary for DOI {doi}: {len(summary)} characters", level=2)
             
             return {
                 'title': crossref_title,
@@ -448,7 +471,7 @@ class Command(BaseCommand):
                 if author_obj and not science_paper.authors.filter(pk=author_obj.pk).exists():
                     science_paper.authors.add(author_obj)
             except Exception as e:
-                print(f"Error processing author {given_name} {family_name}: {str(e)}")
+                self.log(f"Error processing author {given_name} {family_name}: {str(e)}", level=2)
                 continue
 
     def get_or_create_author(self, given_name: str, family_name: str, orcid: str) -> Authors:
