@@ -4,10 +4,10 @@ from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.utils.text import slugify
+from django.utils import timezone
 from organizations.models import Organization, OrganizationUser
 from simple_history.models import HistoricalRecords
 import base64
-from django.conf import settings 
 from django.db.models.functions import Lower
 from django.db import models
 class Authors(models.Model):
@@ -119,6 +119,66 @@ class Sources(models.Model):
 		blank=False,  
 		related_name='sources'  # Helps in querying from the Team model, e.g., team.sources.all()
 	)
+	
+	def get_latest_article_date(self):
+		"""
+		Returns the date of the most recent article from this source.
+		"""
+		latest_article = self.articles_set.order_by('-published_date').first()
+		if latest_article:
+			return latest_article.published_date
+		return None
+	
+	def get_article_count(self):
+		"""
+		Returns the count of articles from this source.
+		"""
+		return self.articles_set.count()
+	
+	def get_latest_trial_date(self):
+		"""
+		Returns the date of the most recent trial from this source.
+		"""
+		latest_trial = self.trials_set.order_by('-last_updated').first()
+		if latest_trial:
+			return latest_trial.last_updated
+		return None
+
+	def get_trial_count(self):
+		"""
+		Returns the count of trials from this source.
+		"""
+		return self.trials_set.count()
+		
+	def get_health_status(self):
+		"""
+		Returns the health status of the source based on the latest article/trial date.
+		Uses the same status logic for both article and trial sources.
+		"""
+		if not self.active:
+			return "inactive"
+			
+		# Get the latest article or trial date depending on source type
+		if self.source_for == 'trials':
+			# For trial sources, check the Trials model
+			latest_date = self.get_latest_trial_date()
+		else:
+			# For article sources, check the Articles model
+			latest_date = self.get_latest_article_date()
+			
+		if not latest_date:
+			return "no_content"
+		
+		# Same status logic for both types of sources
+		now = timezone.now()
+		days_since_last_update = (now - latest_date).days
+		
+		if days_since_last_update > 60:
+			return "error"
+		elif days_since_last_update > 30:
+			return "warning"
+		else:
+			return "healthy"
 
 	def __str__(self):
 		return self.name or ""
