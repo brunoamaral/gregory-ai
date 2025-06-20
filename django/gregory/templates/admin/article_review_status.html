@@ -1,0 +1,146 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_list %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" type="text/css" href="{% static "admin/css/changelists.css" %}">
+  <style>
+    .subject-selector {
+      margin: 20px 0;
+      padding: 20px;
+      background-color: #f8f8f8;
+      border-radius: 5px;
+      border: 1px solid #ddd;
+    }
+    
+    .review-filter {
+      margin: 10px 0;
+    }
+    
+    .search-box {
+      margin: 10px 0;
+    }
+    
+    .status-column {
+      width: 120px;
+      text-align: center;
+    }
+    
+    .title-column {
+      width: 60%;
+    }
+    
+    .date-column {
+      width: 180px;
+    }
+    
+    .action-column {
+      width: 100px;
+      text-align: center;
+    }
+    
+    .pagination {
+      margin: 20px 0;
+      text-align: center;
+    }
+
+    .back-to-articles {
+      margin-bottom: 15px;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="back-to-articles">
+    <a href="{% url 'admin:gregory_articles_changelist' %}" class="button" style="background-color: #417690; color: white;">
+      ← Back to Articles List
+    </a>
+  </div>
+
+  <h1>{{ title }}</h1>
+  
+  <div class="subject-selector">
+    <form method="get">
+      <div>
+        <label for="subject_id">Select Subject:</label>
+        <select name="subject_id" id="subject_id" onchange="this.form.submit()">
+          {% for subject in subjects %}
+          <option value="{{ subject.id }}" {% if subject.id == selected_subject_id %}selected{% endif %}>
+            {{ subject.subject_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      
+      <div class="review-filter">
+        <label>Review Status:</label>
+        <input type="radio" name="review_status" id="review_status_all" value="all" 
+          {% if review_status == 'all' %}checked{% endif %} onchange="this.form.submit()">
+        <label for="review_status_all">All</label>
+        
+        <input type="radio" name="review_status" id="review_status_reviewed" value="reviewed" 
+          {% if review_status == 'reviewed' %}checked{% endif %} onchange="this.form.submit()">
+        <label for="review_status_reviewed">Reviewed</label>
+        
+        <input type="radio" name="review_status" id="review_status_not_reviewed" value="not_reviewed" 
+          {% if review_status == 'not_reviewed' %}checked{% endif %} onchange="this.form.submit()">
+        <label for="review_status_not_reviewed">Not Reviewed</label>
+      </div>
+      
+      <div class="search-box">
+        <label for="search_input">Search:</label>
+        <input type="text" name="q" id="search_input" value="{{ search_query }}">
+        <button type="submit">Search</button>
+      </div>
+    </form>
+  </div>
+  
+  {% if page_obj.object_list %}
+    <div class="results">
+      <table id="result_list">
+        <thead>
+          <tr>
+            <th class="title-column">Title</th>
+            <th class="date-column">Discovery Date</th>
+            <th class="status-column">Review Status</th>
+            <th class="action-column">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in articles_with_review_status %}
+            <tr class="{% cycle 'row1' 'row2' %}">
+              <td class="title-column">{{ item.article.title }}</td>
+              <td class="date-column">{{ item.article.discovery_date|date:"M d, Y" }}</td>
+              <td class="status-column">{{ item.status_html }}</td>
+              <td class="action-column">
+                <a href="{{ item.edit_url }}" class="button" target="_blank">Edit</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="pagination">
+      <span class="step-links">
+        {% if page_obj.has_previous %}
+          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}&page=1">&laquo; first</a>
+          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}&page={{ page_obj.previous_page_number }}">previous</a>
+        {% endif %}
+
+        <span class="current">
+          Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.
+        </span>
+
+        {% if page_obj.has_next %}
+          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}&page={{ page_obj.next_page_number }}">next</a>
+          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}&page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
+        {% endif %}
+      </span>
+    </div>
+  {% else %}
+    <p>No articles found for the selected subject and filters.</p>
+  {% endif %}
+</div>
+{% endblock %}

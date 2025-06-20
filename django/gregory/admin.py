@@ -208,8 +208,24 @@ class ArticleAdmin(SimpleHistoryAdmin):
 	ordering = ['-discovery_date']
 	readonly_fields = ['entities', 'discovery_date']
 	search_fields = ['article_id', 'title', 'doi']
-	list_filter = ('teams', 'subjects','sources', )
+	list_filter = ('teams', 'subjects','sources')
 	raw_id_fields = ("authors",)
+	
+	def get_urls(self):
+		from django.urls import path
+		from .admin_views import article_review_status_view
+		
+		urls = super().get_urls()
+		custom_urls = [
+			path('review-status/', self.admin_site.admin_view(article_review_status_view), name='article_review_status'),
+		]
+		return custom_urls + urls
+	
+	def changelist_view(self, request, extra_context=None):
+		"""Override changelist view to add a button to access review status page"""
+		extra_context = extra_context or {}
+		extra_context['review_status_url'] = reverse('admin:article_review_status')
+		return super().changelist_view(request, extra_context=extra_context)
 	
 	class Media:
 		css = {
