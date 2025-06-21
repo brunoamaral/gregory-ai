@@ -1,9 +1,10 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse, JsonResponse
 from django.core.paginator import Paginator
 from django.utils.html import format_html
 from django.db.models import Q, Case, When, Value, BooleanField, Count
+from django.contrib import messages
 from .models import Articles, Subject, ArticleSubjectRelevance
 import json
 
@@ -19,6 +20,39 @@ def article_review_status_view(request):
     selected_subject_id = request.GET.get('subject_id')
     if not selected_subject_id and subjects.exists():
         selected_subject_id = subjects.first().id
+    
+    # Handle batch actions
+    if request.method == 'POST' and selected_subject_id:
+        action = request.POST.get('action')
+        selected_articles = request.POST.getlist('selected_articles')
+        
+        if selected_articles and action:
+            subject = Subject.objects.get(id=selected_subject_id)
+            
+            if action == 'mark_relevant':
+                # Set the articles as relevant for the selected subject
+                mark_articles_as_relevant(selected_articles, subject, True)
+                messages.success(request, f"{len(selected_articles)} articles marked as relevant for {subject.subject_name}")
+                
+            elif action == 'mark_not_relevant':
+                # Set the articles as not relevant for the selected subject
+                mark_articles_as_relevant(selected_articles, subject, False)
+                messages.success(request, f"{len(selected_articles)} articles marked as not relevant for {subject.subject_name}")
+            
+            elif action == 'mark_for_review':
+                # Unset the relevance status for the selected subject
+                mark_articles_for_review(selected_articles, subject)
+                messages.success(request, f"{len(selected_articles)} articles marked for review for {subject.subject_name}")
+            
+            # Redirect to the same page to avoid form resubmission
+            redirect_url = f"{request.path}?subject_id={selected_subject_id}"
+            if 'review_status' in request.GET:
+                redirect_url += f"&review_status={request.GET.get('review_status')}"
+            if 'q' in request.GET:
+                redirect_url += f"&q={request.GET.get('q')}"
+            if 'page' in request.GET:
+                redirect_url += f"&page={request.GET.get('page')}"
+            return redirect(redirect_url)
     
     # Review status filter
     review_status = request.GET.get('review_status', 'all')
@@ -82,6 +116,7 @@ def article_review_status_view(request):
         articles_with_review_status.append({
             'article': article,
             'status_html': status_html,
+            'is_relevant': is_relevant,
             'edit_url': edit_url
         })
     
@@ -96,3 +131,44 @@ def article_review_status_view(request):
     }
     
     return render(request, 'admin/article_review_status.html', context)
+
+
+def mark_articles_as_relevant(article_ids, subject, is_relevant):
+    """
+    Mark multiple articles as relevant or not relevant for a specific subject
+    """
+    for article_id in article_ids:
+        article = Articles.objects.get(article_id=article_id)
+        
+        # Get or create the relevance object
+        relevance, created = ArticleSubjectRelevance.objects.get_or_create(
+            article=article,
+            subject=subject,
+            defaults={'is_relevant': is_relevant}
+        )
+        
+        # If the relevance object already exists, update its status
+        if not created:
+            relevance.is_relevant = is_relevant
+            relevance.save()
+
+def mark_articles_for_review(article_ids, subject):
+    """
+    Mark articles for review by setting is_relevant to NULL for a specific subject
+    """
+    for article_id in article_ids:
+        article = Articles.objects.get(article_id=article_id)
+        
+        # Check if the relevance object exists
+        try:
+            relevance = ArticleSubjectRelevance.objects.get(
+                article=article,
+                subject=subject
+            )
+            # Set is_relevant to NULL
+            relevance.is_relevant = None
+            relevance.save()
+        except ArticleSubjectRelevance.DoesNotExist:
+            # No need to do anything if the relevance object doesn't exist
+            # since no relevance means it's already marked for review
+            pass

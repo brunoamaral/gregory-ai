@@ -27,11 +27,11 @@
     }
     
     .title-column {
-      width: 60%;
+      width: 50%;
     }
     
     .date-column {
-      width: 180px;
+      width: 150px;
     }
     
     .action-column {
@@ -47,6 +47,47 @@
     .back-to-articles {
       margin-bottom: 15px;
     }
+    
+    .select-column {
+      width: 50px;
+      text-align: center;
+    }
+    
+    .batch-actions {
+      margin: 15px 0;
+      padding: 15px;
+      background-color: #f0f8ff;
+      border-radius: 5px;
+      border: 1px solid #cce5ff;
+      display: flex;
+      align-items: center;
+    }
+    
+    .batch-actions select {
+      margin-right: 10px;
+      padding: 5px;
+    }
+    
+    .batch-actions button {
+      padding: 5px 10px;
+      background-color: #417690;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .batch-actions button:hover {
+      background-color: #2b5070;
+    }
+    
+    .messages {
+      margin-bottom: 15px;
+    }
+    
+    .select-all-checkbox {
+      margin-right: 5px;
+    }
   </style>
 {% endblock %}
 
@@ -57,6 +98,17 @@
       ← Back to Articles List
     </a>
   </div>
+
+  {% if messages %}
+  <div class="messages">
+    {% for message in messages %}
+    <div class="message {% if message.tags %}{{ message.tags }}{% endif %}" 
+         style="padding: 10px; margin-bottom: 10px; border-radius: 4px; background-color: {% if 'success' in message.tags %}#dff0d8{% elif 'error' in message.tags %}#f2dede{% else %}#d9edf7{% endif %};">
+      {{ message }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   <h1>{{ title }}</h1>
   
@@ -97,30 +149,53 @@
   </div>
   
   {% if page_obj.object_list %}
-    <div class="results">
-      <table id="result_list">
-        <thead>
-          <tr>
-            <th class="title-column">Title</th>
-            <th class="date-column">Discovery Date</th>
-            <th class="status-column">Review Status</th>
-            <th class="action-column">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for item in articles_with_review_status %}
-            <tr class="{% cycle 'row1' 'row2' %}">
-              <td class="title-column">{{ item.article.title }}</td>
-              <td class="date-column">{{ item.article.discovery_date|date:"M d, Y" }}</td>
-              <td class="status-column">{{ item.status_html }}</td>
-              <td class="action-column">
-                <a href="{{ item.edit_url }}" class="button" target="_blank">Edit</a>
-              </td>
+    <form method="post" id="article-action-form">
+      {% csrf_token %}
+      <div class="batch-actions">
+        <span style="margin-right: 10px;">With selected:</span>
+        <select name="action" id="action-select">
+          <option value="">Choose an action</option>
+          <option value="mark_relevant">Mark as Relevant</option>
+          <option value="mark_not_relevant">Mark as Not Relevant</option>
+          <option value="mark_for_review">Mark for Review</option>
+        </select>
+        <button type="submit">Apply</button>
+        <span style="margin-left: 15px;">
+          <input type="checkbox" id="select-all-checkbox" class="select-all-checkbox">
+          <label for="select-all-checkbox">Select All</label>
+        </span>
+      </div>
+      
+      <div class="results">
+        <table id="result_list">
+          <thead>
+            <tr>
+              <th class="select-column">Select</th>
+              <th class="title-column">Title</th>
+              <th class="date-column">Discovery Date</th>
+              <th class="status-column">Review Status</th>
+              <th class="action-column">Actions</th>
             </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {% for item in articles_with_review_status %}
+              <tr class="{% cycle 'row1' 'row2' %}">
+                <td class="select-column">
+                  <input type="checkbox" name="selected_articles" value="{{ item.article.article_id }}" 
+                         class="article-checkbox" {% if item.is_relevant is not None %}data-reviewed="true"{% endif %}>
+                </td>
+                <td class="title-column">{{ item.article.title }}</td>
+                <td class="date-column">{{ item.article.discovery_date|date:"M d, Y" }}</td>
+                <td class="status-column">{{ item.status_html }}</td>
+                <td class="action-column">
+                  <a href="{{ item.edit_url }}" class="button" target="_blank">Edit</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </form>
     
     <div class="pagination">
       <span class="step-links">
@@ -143,4 +218,46 @@
     <p>No articles found for the selected subject and filters.</p>
   {% endif %}
 </div>
+
+<script type="text/javascript">
+  document.addEventListener('DOMContentLoaded', function() {
+    // Handle select all checkbox
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    const articleCheckboxes = document.querySelectorAll('.article-checkbox');
+    
+    if (selectAllCheckbox) {
+      selectAllCheckbox.addEventListener('change', function() {
+        const isChecked = this.checked;
+        
+        articleCheckboxes.forEach(function(checkbox) {
+          checkbox.checked = isChecked;
+        });
+      });
+    }
+    
+    // Form submission validation
+    const form = document.getElementById('article-action-form');
+    
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        const actionSelect = document.getElementById('action-select');
+        const selectedArticles = document.querySelectorAll('.article-checkbox:checked');
+        
+        if (actionSelect.value === '') {
+          e.preventDefault();
+          alert('Please select an action to perform.');
+          return false;
+        }
+        
+        if (selectedArticles.length === 0) {
+          e.preventDefault();
+          alert('Please select at least one article.');
+          return false;
+        }
+        
+        return true;
+      });
+    }
+  });
+</script>
 {% endblock %}
