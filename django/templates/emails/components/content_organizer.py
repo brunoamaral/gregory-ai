@@ -243,6 +243,48 @@ class EmailContentOrganizer:
                 if articles.get('total_count', 0) > 0 else 0
             )
         }
+    
+    def organize_latest_research_by_category(self, category_articles_dict):
+        """
+        Organize latest research articles by team category.
+        
+        Args:
+            category_articles_dict: Dictionary with team categories as keys and lists of articles as values
+            
+        Returns:
+            dict: Organized latest research articles with metadata
+        """
+        if not category_articles_dict:
+            return {
+                'has_latest_research': False,
+                'categories': [],
+                'total_categories': 0,
+                'total_articles': 0
+            }
+        
+        organized_categories = []
+        total_articles = 0
+        
+        # Sort categories alphabetically by name
+        for category, articles in sorted(category_articles_dict.items(), key=lambda x: x[0].category_name):
+            # Sort articles by discovery date (newest first)
+            sorted_articles = sorted(articles, key=lambda x: x.discovery_date, reverse=True)
+            total_articles += len(sorted_articles)
+            
+            # Add to organized categories
+            organized_categories.append({
+                'category': category,
+                'category_name': category.category_name,
+                'articles': sorted_articles,
+                'article_count': len(sorted_articles)
+            })
+        
+        return {
+            'has_latest_research': True,
+            'categories': organized_categories,
+            'total_categories': len(organized_categories),
+            'total_articles': total_articles
+        }
 
 
 class EmailRenderingPipeline:
@@ -343,12 +385,20 @@ class EmailRenderingPipeline:
             
             # Add email-type specific context
             if email_type == 'weekly_summary':
+                # Add latest research by category if the list has any latest research categories
+                latest_research = {}
+                if list_obj and hasattr(list_obj, 'latest_research_categories'):
+                    from subscriptions.management.commands.utils.subscription import get_latest_research_by_category
+                    category_articles = get_latest_research_by_category(list_obj)
+                    latest_research = self.organizer.organize_latest_research_by_category(category_articles)
+                
                 context.update({
                     'greeting_time': self._get_greeting_time(),
                     'user': subscriber,
                     'list': list_obj,
                     'title': getattr(custom_settings, 'title', 'Gregory AI'),
-                    'email_footer': getattr(custom_settings, 'email_footer', '')
+                    'email_footer': getattr(custom_settings, 'email_footer', ''),
+                    'latest_research': latest_research
                 })
             
             elif email_type == 'admin_summary':
