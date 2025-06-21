@@ -55,14 +55,18 @@ class CategorySerializer(serializers.ModelSerializer):
 
 class ArticleAuthorSerializer(serializers.ModelSerializer):
 	country = serializers.SerializerMethodField()
+	full_name = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Authors
-		fields = ['author_id', 'given_name', 'family_name', 'ORCID', 'country']
+		fields = ['author_id', 'given_name', 'family_name', 'full_name', 'ORCID', 'country']
 
 	def get_country(self, obj):
 		# Return the country code or name
 		return obj.country.code if obj.country else None
+		
+	def get_full_name(self, obj):
+		return obj.full_name
 
 class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field='name')
@@ -129,10 +133,11 @@ class AuthorSerializer(serializers.ModelSerializer):
 	articles_count = serializers.SerializerMethodField()
 	country = serializers.SerializerMethodField()
 	articles_list = serializers.SerializerMethodField()
+	full_name = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Authors
-		fields = ['author_id', 'given_name', 'family_name', 'ORCID', 'country', 'articles_count', 'articles_list']
+		fields = ['author_id', 'given_name', 'family_name', 'full_name', 'ORCID', 'country', 'articles_count', 'articles_list']
 
 	def get_articles_count(self, obj):
 		return obj.articles_set.count()
@@ -145,6 +150,9 @@ class AuthorSerializer(serializers.ModelSerializer):
 		site = get_site()
 		base_url = f"https://api.{site.domain}/articles/author/" if site else ""
 		return base_url + str(obj.author_id) if site else ""
+		
+	def get_full_name(self, obj):
+		return obj.full_name
 
 # Simple Trial serializer for use in Article references
 class TrialReferenceSerializer(serializers.ModelSerializer):
