@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from .models import Subscribers, Lists, FailedNotification
+from .forms import ListsAdminForm
 
 class SubscriberAdmin(admin.ModelAdmin):
 	list_display = ['subscriber_id', 'first_name', 'last_name', 'email', 'active', 'number_of_subscriptions']
@@ -47,8 +48,28 @@ class SubscriberInline(admin.TabularInline):
 	subscriber_link.short_description = "Edit Subscriber"
 
 class ListsAdmin(admin.ModelAdmin):
-	list_display = ['list_name', 'list_description', 'admin_summary','weekly_digest','clinical_trials_notifications']
+	form = ListsAdminForm
+	list_display = ['list_name', 'list_description', 'admin_summary','weekly_digest','clinical_trials_notifications', 'has_latest_research']
 	inlines = [SubscriberInline]
+	filter_horizontal = ['subjects', 'latest_research_categories']
+	fieldsets = [
+		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team']}),
+		('Email Types', {'fields': ['admin_summary', 'weekly_digest', 'clinical_trials_notifications']}),
+		('Main Content', {
+			'fields': ['subjects'],
+			'description': 'Select subjects for which relevant articles and trials will be included in the main content of emails.'
+		}),
+		('Latest Research Section', {
+			'fields': ['latest_research_categories'],
+			'description': 'Select team categories to include in the "Latest Research" section of weekly digest emails. '
+						'This section will display the latest articles for each selected category.'
+		}),
+	]
+	
+	def has_latest_research(self, obj):
+		return obj.latest_research_categories.exists()
+	has_latest_research.boolean = True
+	has_latest_research.short_description = 'Latest Research'
 
 class FailedNotificationAdmin(admin.ModelAdmin):
 	list_display = ['subscriber','reason','list','created_at']
