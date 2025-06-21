@@ -13,18 +13,26 @@ import re
 import requests
 
 class Command(BaseCommand):
-	def add_arguments(self, parser):
-		parser.add_argument(
-			'-v', '--verbosity',
-			type=int,
-			default=1,
-			help='Verbosity level: 0=minimal output, 1=normal output (default), 2=verbose output, 3=very verbose output',
-		)
-
 	def handle(self, *args, **options):
 		self.verbosity = options.get('verbosity', 1)
 		self.setup()
 		self.process_feeds()
+
+	def log(self, message, level=2, style_func=None):
+		"""
+		Log a message if the verbosity level is high enough.
+		
+		Levels:
+		0 = Silent
+		1 = Only main processing steps (feeds, sources)
+		2 = Detailed information (default for most messages)
+		3 = Debug information
+		"""
+		if self.verbosity >= level:
+			if style_func:
+				self.stdout.write(style_func(message))
+			else:
+				self.stdout.write(message)
 
 	def setup(self):
 		self.tzinfos = {
