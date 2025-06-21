@@ -1,7 +1,7 @@
 from django.db import models
 from django.db.models import UniqueConstraint
 from django.db.models.functions import Lower
-from gregory.models import Subject, Articles, Trials, Team
+from gregory.models import Subject, Articles, Trials, Team, TeamCategory
 from simple_history.models import HistoricalRecords
 class Lists(models.Model):
 	list_id = models.AutoField(primary_key=True)
@@ -13,6 +13,14 @@ class Lists(models.Model):
 	admin_summary = models.BooleanField(default=False) 
 	weekly_digest = models.BooleanField(default=False) 
 	clinical_trials_notifications = models.BooleanField(default=False) 
+	# Latest research categories
+	latest_research_categories = models.ManyToManyField(
+		'gregory.TeamCategory', 
+		blank=True, 
+		related_name="latest_research_lists", 
+		verbose_name="Latest Research Categories",
+		help_text="Select team categories to include in the 'Latest Research' section of weekly digest emails."
+	)
 	team = models.ForeignKey(
 		Team, 
 		on_delete=models.CASCADE, 

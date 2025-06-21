@@ -196,14 +196,6 @@ class DefaultFeedProcessor(FeedProcessor):
 class Command(BaseCommand):
     help = 'Fetches and updates articles and trials from RSS feeds.'
 
-    def add_arguments(self, parser):
-        parser.add_argument(
-            '-v', '--verbosity',
-            type=int,
-            default=1,
-            help='Verbosity level: 0=minimal output, 1=normal output (default), 2=verbose output, 3=very verbose output',
-        )
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.feed_processors = [
@@ -219,7 +211,7 @@ class Command(BaseCommand):
         self.setup()
         self.update_articles_from_feeds()
         
-    def log(self, message, level=2):
+    def log(self, message, level=2, style_func=None):
         """
         Log a message if the verbosity level is high enough.
         
@@ -230,7 +222,10 @@ class Command(BaseCommand):
         3 = Debug information
         """
         if self.verbosity >= level:
-            print(message)
+            if style_func:
+                self.stdout.write(style_func(message))
+            else:
+                self.stdout.write(message)
 
     def setup(self):
         self.SITE = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))

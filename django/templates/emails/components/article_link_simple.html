@@ -1,0 +1,11 @@
+<!-- Simple Article Link Component for Latest Research Section -->
+<div style="margin-bottom: 15px; padding: 5px 0; border-bottom: 1px solid #e5e7eb;">
+    <a href="{{ article.url|default:'#' }}" style="text-decoration: none; color: #2563eb; font-weight: 500; display: block; font-size: 15px;">
+        {{ article.title|default:"Article title" }}
+    </a>
+    {% if article.doi %}
+    <p style="margin: 5px 0 0 0; font-size: 13px; color: #6b7280;">
+        DOI: <a href="https://doi.org/{{ article.doi }}" style="color: #6b7280;">{{ article.doi }}</a>
+    </p>
+    {% endif %}
+</div>
