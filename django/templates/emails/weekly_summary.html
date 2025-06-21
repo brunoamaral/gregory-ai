@@ -66,6 +66,27 @@
     </div>
     {% endif %}
     
+    <!-- Latest Research by Category Section -->
+    {% if latest_research.has_latest_research %}
+    <div style="margin-bottom: 40px;">
+        <h2 class="content-subtitle" style="color: #1e3a8a; font-size: 22px; margin: 0 0 25px 0; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;">
+            📚 Latest Research by Category
+        </h2>
+        
+        {% for category in latest_research.categories %}
+            <div style="margin-bottom: 30px;">
+                <h3 style="color: #4b5563; font-size: 18px; margin: 0 0 15px 0; padding-bottom: 5px; border-bottom: 1px solid #e5e7eb;">
+                    {{ category.category_name }}
+                </h3>
+                
+                {% for article in category.articles %}
+                    {% include 'emails/components/article_link_simple.html' with article=article %}
+                {% endfor %}
+            </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
     <!-- No Content Message -->
     {% if not articles and not additional_articles and not trials and not additional_trials %}
     <div style="text-align: center; padding: 40px 20px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e5e7eb;">
