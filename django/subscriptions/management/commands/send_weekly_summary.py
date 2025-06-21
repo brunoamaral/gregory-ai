@@ -8,6 +8,7 @@ from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import (
 	get_articles_for_list,
 	get_trials_for_list,
+	get_latest_research_by_category,
 )
 from gregory.models import Articles, Authors, Trials, TeamCredentials
 from sitesettings.models import CustomSetting
