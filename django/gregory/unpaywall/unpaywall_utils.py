@@ -13,17 +13,26 @@ def getDataByDOI(doi: str, client_email: str):
         headers = {
             'Accept': 'application/json'
         }
-        response = requests.request("GET", url, headers=headers, data={})
-        
-        # Add error handling for empty responses
-        if not response.text.strip():
-            print(f"Empty response received for DOI: {doi}")
-            return {}
-            
         try:
-            return json.loads(response.text)
-        except json.JSONDecodeError:
-            print(f"Error decoding JSON from response for DOI: {doi}. Response: {response.text[:250]}")
+            response = requests.request("GET", url, headers=headers, data={})
+            
+            # Handle 404 responses gracefully
+            if response.status_code == 404:
+                # DOI not found in Unpaywall - this is a normal condition for many DOIs
+                return {}
+                
+            # Add error handling for empty responses
+            if not response.text.strip():
+                print(f"Empty response received for DOI: {doi}")
+                return {}
+                
+            try:
+                return json.loads(response.text)
+            except json.JSONDecodeError:
+                print(f"Error decoding JSON from response for DOI: {doi}. Response: {response.text[:250]}")
+                return {}
+        except requests.exceptions.RequestException as e:
+            print(f"Request error when accessing Unpaywall for DOI: {doi}. Error: {e}")
             return {}
     else:
         raise Exception(f"DOI and Client Email cannot be empty! {doi}, {client_email}")
