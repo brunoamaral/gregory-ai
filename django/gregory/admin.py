@@ -357,10 +357,16 @@ class SubjectAdminForm(forms.ModelForm):
 
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
-	list_display = ['subject_name','description', 'view_sources','team']  # Display in the list view
+	list_display = ['formatted_subject_name', 'description', 'view_sources', 'team']  # Updated list display
 	readonly_fields = ['linked_sources']  # Display in the edit form
 	list_filter = ['team']  # Add the team filter
 	form = SubjectAdminForm
+	
+	def formatted_subject_name(self, obj):
+		"""Display subject name with emphasis"""
+		return format_html('<strong>{}</strong>', obj.subject_name)
+	formatted_subject_name.short_description = 'Subject'
+	formatted_subject_name.admin_order_field = 'subject_name'
 
 	def get_form(self, request, obj=None, **kwargs):
 		"""Pass the request to the form so it can check user permissions"""
@@ -618,7 +624,7 @@ class TeamAdminForm(forms.ModelForm):
 @admin.register(Team)
 class TeamAdmin(admin.ModelAdmin):
 	form = TeamAdminForm
-	list_display = ['id', 'name', 'organization', 'slug', 'subjects_count', 'sources_count']
+	list_display = ['id', 'formatted_team_name', 'organization', 'slug', 'subjects_count', 'sources_count']
 	list_filter = ['organization']
 	search_fields = ['name', 'organization__name', 'slug']
 	
@@ -627,6 +633,12 @@ class TeamAdmin(admin.ModelAdmin):
 			'fields': ('team_name', 'organization', 'slug')
 		}),
 	)
+	
+	def formatted_team_name(self, obj):
+		"""Display team name with formatting"""
+		return format_html('<strong>{}</strong>', obj.name)
+	formatted_team_name.short_description = 'Team Name'
+	formatted_team_name.admin_order_field = 'name'
 	
 	def subjects_count(self, obj):
 		return obj.subjects.count()

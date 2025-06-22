@@ -81,7 +81,12 @@ class Subject(models.Model):
 	)
 
 	def __str__(self):
-		return str(self.team) + " - " + self.subject_name
+		# More readable subject representation
+		if self.team:
+			# Keep it short - just show the subject name and team name (no organization)
+			return f"{self.subject_name} [{self.team.name}]"
+		else:
+			return self.subject_name
 
 	class Meta:
 		managed = True
@@ -93,6 +98,14 @@ class Subject(models.Model):
 				name='unique_team_subject_slug')
 		]
 
+	def get_full_name(self):
+		"""Return a full representation of the subject including team and organization"""
+		if self.team and self.team.organization:
+			return f"{self.subject_name} - {self.team.name} ({self.team.organization.name})"
+		elif self.team:
+			return f"{self.subject_name} - {self.team.name}"
+		else:
+			return self.subject_name
 
 class Sources(models.Model):
 	TABLES = [('science paper', 'Science Paper'),('trials','Trials'),('news article','News Article')]
@@ -359,7 +372,11 @@ class Team(models.Model):
 		]  # Ensure unique team names within each organization
 
 	def __str__(self):
-		return f"{self.name} ({self.organization.name})" if self.organization else self.name
+		if self.organization:
+			# Only show organization name if it's different from team name
+			if self.name.lower() != self.organization.name.lower():
+				return f"{self.name} ({self.organization.name})"
+		return self.name
 	
 	@property
 	def members(self):

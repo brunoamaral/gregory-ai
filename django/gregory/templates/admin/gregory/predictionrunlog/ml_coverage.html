@@ -59,9 +59,9 @@
                     {% for subject in team.subjects.all %}
                         <tr class="{% cycle 'row1' 'row2' %}">
                             {% if forloop.first %}
-                                <td rowspan="{{ team.subjects.count }}">{{ team.name }}</td>
+                                <td rowspan="{{ team.subjects.count }}">{{ team|format_team:'short' }}</td>
                             {% endif %}
-                            <td>{{ subject.subject_name }}</td>
+                            <td>{{ subject|format_subject:'short' }}</td>
                             
                             {% with latest_training=training_data|get_item:subject.id %}
                                 {% if latest_training %}
