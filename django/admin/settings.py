@@ -48,6 +48,7 @@ ALLOWED_HOSTS = [
 	'0.0.0.0',
 	'localhost',
 	'127.0.0.1',
+	'gregory:8000',
 	'api.' + os.environ.get('DOMAIN_NAME', ''),
 	'manage.' + os.environ.get('DOMAIN_NAME', ''),
 ]
