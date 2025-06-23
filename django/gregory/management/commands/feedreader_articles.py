@@ -61,6 +61,50 @@ class FeedProcessor(ABC):
             'link': greg.remove_utm(entry['link']),
             'published_date': published_date,
         }
+        
+    def should_include_article(self, entry: dict, source: 'Sources') -> bool:
+        """Check if article should be included based on keyword filtering."""
+        if not source.keyword_filter:
+            return True  # No filter, include all articles
+        
+        # Get text content to search
+        title = entry.get('title', '').lower()
+        summary = self.extract_summary(entry).lower()
+        search_text = f"{title} {summary}"
+        
+        # Parse keywords from the filter string
+        keywords = self._parse_keyword_filter(source.keyword_filter)
+        
+        # Check if any keyword matches
+        for keyword in keywords:
+            if keyword.lower() in search_text:
+                return True
+        
+        return False
+    
+    def _parse_keyword_filter(self, keyword_filter: str) -> list:
+        """Parse keyword filter string into individual keywords and phrases."""
+        if not keyword_filter:
+            return []
+        
+        keywords = []
+        
+        # Split by commas first to preserve order
+        parts = [part.strip() for part in keyword_filter.split(',')]
+        
+        for part in parts:
+            if not part:
+                continue
+            
+            # Check if part is a quoted phrase
+            if part.startswith('"') and part.endswith('"') and len(part) > 1:
+                # Remove quotes and add the phrase
+                keywords.append(part[1:-1])
+            else:
+                # Regular keyword
+                keywords.append(part)
+        
+        return keywords
 
 
 class PubMedFeedProcessor(FeedProcessor):
@@ -127,52 +171,6 @@ class BioRxivFeedProcessor(FeedProcessor):
         if dc_identifier.startswith('doi:'):
             return dc_identifier.replace('doi:', '')
         return None
-    
-    def should_include_article(self, entry: dict, source: 'Sources') -> bool:
-        """Check if article should be included based on keyword filtering."""
-        if not source.keyword_filter:
-            return True  # No filter, include all articles
-        
-        # Get text content to search
-        title = entry.get('title', '').lower()
-        summary = self.extract_summary(entry).lower()
-        search_text = f"{title} {summary}"
-        
-        # Parse keywords from the filter string
-        keywords = self._parse_keyword_filter(source.keyword_filter)
-        
-        # Check if any keyword matches
-        for keyword in keywords:
-            if keyword.lower() in search_text:
-                return True
-        
-        return False
-    
-    def _parse_keyword_filter(self, keyword_filter: str) -> list:
-        """Parse keyword filter string into individual keywords and phrases."""
-        import re
-        
-        if not keyword_filter:
-            return []
-        
-        keywords = []
-        
-        # Split by commas first to preserve order
-        parts = [part.strip() for part in keyword_filter.split(',')]
-        
-        for part in parts:
-            if not part:
-                continue
-            
-            # Check if part is a quoted phrase
-            if part.startswith('"') and part.endswith('"') and len(part) > 1:
-                # Remove quotes and add the phrase
-                keywords.append(part[1:-1])
-            else:
-                # Regular keyword
-                keywords.append(part)
-        
-        return keywords
 
 
 class DefaultFeedProcessor(FeedProcessor):
@@ -193,6 +191,41 @@ class DefaultFeedProcessor(FeedProcessor):
         return None
 
 
+class PNASFeedProcessor(FeedProcessor):
+    """Processor for PNAS RSS 1.0/RDF format feeds."""
+    
+    def can_process(self, source_link: str) -> bool:
+        return 'pnas.org' in source_link.lower()
+    
+    def extract_summary(self, entry: dict) -> str:
+        """Extract summary from PNAS feed entry."""
+        summary = entry.get('description', '')
+        
+        # PNAS descriptions typically have the format:
+        # "Proceedings of the National Academy of Sciences, Volume X, Issue Y, Month Year. <br/>SignificanceText..."
+        if summary and '<br/>' in summary:
+            # Extract only the content after the <br/> tag which contains the actual abstract
+            parts = summary.split('<br/>')
+            if len(parts) > 1 and parts[1].strip():
+                return parts[1].strip()
+        
+        return summary
+    
+    def extract_doi(self, entry: dict) -> str:
+        """Extract DOI from PNAS feed entry."""
+        # PNAS provides DOI in dc:identifier field with 'doi:' prefix
+        dc_identifier = entry.get('dc_identifier', '')
+        if dc_identifier.startswith('doi:'):
+            return dc_identifier.replace('doi:', '')
+        
+        # Alternatively, check prism:doi if available
+        prism_doi = entry.get('prism_doi', '')
+        if prism_doi:
+            return prism_doi
+            
+        return None
+
+
 class Command(BaseCommand):
     help = 'Fetches and updates articles and trials from RSS feeds.'
 
@@ -202,6 +235,7 @@ class Command(BaseCommand):
             PubMedFeedProcessor(self),
             FasebFeedProcessor(self),
             BioRxivFeedProcessor(self),
+            PNASFeedProcessor(self),
             DefaultFeedProcessor(self),  # Always last as fallback
         ]
         self.verbosity = 1  # Default verbosity level
@@ -263,7 +297,7 @@ class Command(BaseCommand):
             for entry in feed['entries']:
                 try:
                     # Check if the article should be included based on keyword filtering
-                    if isinstance(processor, BioRxivFeedProcessor) and not processor.should_include_article(entry, source):
+                    if hasattr(processor, 'should_include_article') and not processor.should_include_article(entry, source):
                         self.log(f"  ➡️  Excluded by keyword filter: {entry.get('title', 'Unknown')}", level=2)
                         continue
                     

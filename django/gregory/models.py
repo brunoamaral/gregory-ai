@@ -123,7 +123,7 @@ class Sources(models.Model):
 	keyword_filter = models.TextField(
 		blank=True, 
 		null=True,
-		help_text='Keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson). Only applies to certain feed sources like bioRxiv.'
+		help_text='Keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson). Applies to supported feed sources like bioRxiv and PNAS.'
 	)
 	team = models.ForeignKey(
 		'Team', 
