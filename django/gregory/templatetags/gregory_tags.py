@@ -98,3 +98,11 @@ def format_team(team, format_type='default'):
         return team.name
     else:  # default
         return str(team)
+
+@register.filter
+def has_attribute(obj, attribute):
+    """
+    Check if an object has a specific attribute
+    Usage: {% if article|has_attribute:'filtered_ml_predictions' %}...{% endif %}
+    """
+    return hasattr(obj, attribute)
