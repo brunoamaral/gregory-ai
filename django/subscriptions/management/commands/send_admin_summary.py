@@ -49,7 +49,18 @@ class Command(BaseCommand):
 				continue
 
 			# Step 2: Fetch articles and trials for this list
-			list_articles = get_articles_for_list(admin_list)
+			# First, get the subjects associated with this list
+			list_subjects = admin_list.subjects.all()
+			
+			# Fetch articles with ML predictions for the list's subjects only
+			list_articles = get_articles_for_list(admin_list).prefetch_related(
+				Prefetch(
+					'ml_predictions_detail',
+					queryset=MLPredictions.objects.filter(subject__in=list_subjects),
+					to_attr='filtered_ml_predictions'
+				)
+			)
+			
 			list_trials = get_trials_for_list(admin_list)
 
 			# Step 3: Find subscribers of the list
