@@ -5,8 +5,11 @@ from django.core.paginator import Paginator
 from django.utils.html import format_html
 from django.db.models import Q, Case, When, Value, BooleanField, Count
 from django.contrib import messages
+from django.utils.dateparse import parse_date
+from django.utils import timezone
 from .models import Articles, Subject, ArticleSubjectRelevance
 import json
+from datetime import datetime, timedelta
 
 @staff_member_required
 def article_review_status_view(request):
@@ -52,6 +55,13 @@ def article_review_status_view(request):
                 redirect_url += f"&q={request.GET.get('q')}"
             if 'page' in request.GET:
                 redirect_url += f"&page={request.GET.get('page')}"
+            if 'date_option' in request.GET:
+                redirect_url += f"&date_option={request.GET.get('date_option')}"
+                if request.GET.get('date_option') == 'custom':
+                    if 'date_from' in request.GET:
+                        redirect_url += f"&date_from={request.GET.get('date_from')}"
+                    if 'date_to' in request.GET:
+                        redirect_url += f"&date_to={request.GET.get('date_to')}"
             return redirect(redirect_url)
     
     # Review status filter
@@ -88,6 +98,37 @@ def article_review_status_view(request):
             Q(doi__icontains=search_query) |
             Q(summary__icontains=search_query)
         )
+    
+    # Date filtering
+    date_option = request.GET.get('date_option', '')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    
+    # Apply date filter based on simple options or custom date range
+    if date_option:
+        today = timezone.now().date()
+        
+        if date_option == 'today':
+            # Filter for articles discovered today
+            queryset = queryset.filter(discovery_date=today)
+        elif date_option == 'last_7_days':
+            # Filter for articles discovered in the last 7 days
+            seven_days_ago = today - timedelta(days=7)
+            queryset = queryset.filter(discovery_date__gte=seven_days_ago)
+        elif date_option == 'this_month':
+            # Filter for articles discovered this month
+            first_day_of_month = today.replace(day=1)
+            queryset = queryset.filter(discovery_date__gte=first_day_of_month)
+        elif date_option == 'this_year':
+            # Filter for articles discovered this year
+            first_day_of_year = today.replace(month=1, day=1)
+            queryset = queryset.filter(discovery_date__gte=first_day_of_year)
+        elif date_option == 'custom' and date_from and date_to:
+            # Filter by custom discovery date range
+            queryset = queryset.filter(
+                discovery_date__gte=parse_date(date_from),
+                discovery_date__lte=parse_date(date_to)
+            )
     
     # Pagination
     paginator = Paginator(queryset, 25)  # Show 25 articles per page
@@ -128,6 +169,9 @@ def article_review_status_view(request):
         'search_query': search_query,
         'page_obj': page_obj,
         'articles_with_review_status': articles_with_review_status,
+        'date_option': date_option,
+        'date_from': date_from,
+        'date_to': date_to,
     }
     
     return render(request, 'admin/article_review_status.html', context)
