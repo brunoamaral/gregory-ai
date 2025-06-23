@@ -88,6 +88,52 @@
     .select-all-checkbox {
       margin-right: 5px;
     }
+    
+    .date-filter {
+      margin-top: 15px; 
+      padding-top: 15px; 
+      border-top: 1px solid #eee;
+    }
+    
+    .date-filter-label {
+      display: block; 
+      margin-bottom: 10px; 
+      font-weight: bold;
+    }
+    
+    .date-filter-options {
+      margin-bottom: 10px;
+    }
+    
+    .date-inputs {
+      display: flex; 
+      gap: 10px;
+    }
+    
+    .date-inputs.hidden {
+      display: none;
+    }
+    
+    .success-message {
+      padding: 10px; 
+      margin-bottom: 10px; 
+      border-radius: 4px; 
+      background-color: #dff0d8;
+    }
+    
+    .error-message {
+      padding: 10px; 
+      margin-bottom: 10px; 
+      border-radius: 4px; 
+      background-color: #f2dede;
+    }
+    
+    .info-message {
+      padding: 10px; 
+      margin-bottom: 10px; 
+      border-radius: 4px; 
+      background-color: #d9edf7;
+    }
   </style>
 {% endblock %}
 
@@ -102,8 +148,7 @@
   {% if messages %}
   <div class="messages">
     {% for message in messages %}
-    <div class="message {% if message.tags %}{{ message.tags }}{% endif %}" 
-         style="padding: 10px; margin-bottom: 10px; border-radius: 4px; background-color: {% if 'success' in message.tags %}#dff0d8{% elif 'error' in message.tags %}#f2dede{% else %}#d9edf7{% endif %};">
+    <div class="message {% if message.tags %}{{ message.tags }}{% endif %} {% if 'success' in message.tags %}success-message{% elif 'error' in message.tags %}error-message{% else %}info-message{% endif %}">
       {{ message }}
     </div>
     {% endfor %}
@@ -144,6 +189,50 @@
         <label for="search_input">Search:</label>
         <input type="text" name="q" id="search_input" value="{{ search_query }}">
         <button type="submit">Search</button>
+      </div>
+      
+      <div class="date-filter">
+        <label class="date-filter-label">Discovery Date Filter:</label>
+        
+        <div class="date-filter-options">
+          <input type="radio" name="date_option" id="date_option_none" value="" 
+                 {% if not date_option %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
+          <label for="date_option_none">None</label>
+          
+          <input type="radio" name="date_option" id="date_option_today" value="today" 
+                 {% if date_option == 'today' %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
+          <label for="date_option_today">Today</label>
+          
+          <input type="radio" name="date_option" id="date_option_last_7_days" value="last_7_days" 
+                 {% if date_option == 'last_7_days' %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
+          <label for="date_option_last_7_days">Last 7 Days</label>
+          
+          <input type="radio" name="date_option" id="date_option_this_month" value="this_month" 
+                 {% if date_option == 'this_month' %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
+          <label for="date_option_this_month">This Month</label>
+          
+          <input type="radio" name="date_option" id="date_option_this_year" value="this_year" 
+                 {% if date_option == 'this_year' %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
+          <label for="date_option_this_year">This Year</label>
+          
+          <input type="radio" name="date_option" id="date_option_custom" value="custom" 
+                 {% if date_option == 'custom' %}checked{% endif %} onchange="toggleDateInputs(this.value)">
+          <label for="date_option_custom">Custom Range</label>
+        </div>
+        
+        <div id="date-inputs" class="date-inputs {% if date_option != 'custom' %}hidden{% endif %}">
+          <div>
+            <label for="date_from">From:</label>
+            <input type="date" name="date_from" id="date_from" value="{{ date_from }}">
+          </div>
+          <div>
+            <label for="date_to">To:</label>
+            <input type="date" name="date_to" id="date_to" value="{{ date_to }}">
+          </div>
+          <div>
+            <button type="submit">Apply Date Filter</button>
+          </div>
+        </div>
       </div>
     </form>
   </div>
@@ -197,11 +286,10 @@
       </div>
     </form>
     
-    <div class="pagination">
-      <span class="step-links">
+    <div class="pagination">        <span class="step-links">
         {% if page_obj.has_previous %}
-          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}&page=1">&laquo; first</a>
-          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}&page={{ page_obj.previous_page_number }}">previous</a>
+          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}&page=1">&laquo; first</a>
+          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}&page={{ page_obj.previous_page_number }}">previous</a>
         {% endif %}
 
         <span class="current">
@@ -209,8 +297,8 @@
         </span>
 
         {% if page_obj.has_next %}
-          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}&page={{ page_obj.next_page_number }}">next</a>
-          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}&page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
+          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}&page={{ page_obj.next_page_number }}">next</a>
+          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}&page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
         {% endif %}
       </span>
     </div>
@@ -220,6 +308,7 @@
 </div>
 
 <script type="text/javascript">
+  // Initialize date filter visibility
   document.addEventListener('DOMContentLoaded', function() {
     // Handle select all checkbox
     const selectAllCheckbox = document.getElementById('select-all-checkbox');
@@ -258,6 +347,21 @@
         return true;
       });
     }
+    
+    // Initialize date filter visibility
+    toggleDateInputs(document.querySelector('input[name="date_option"]:checked')?.value || '');
   });
+  
+  // Function to toggle date input fields visibility
+  function toggleDateInputs(value) {
+    const dateInputs = document.getElementById('date-inputs');
+    if (dateInputs) {
+      if (value === 'custom') {
+        dateInputs.classList.remove('hidden');
+      } else {
+        dateInputs.classList.add('hidden');
+      }
+    }
+  }
 </script>
 {% endblock %}
