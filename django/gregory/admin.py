@@ -532,8 +532,30 @@ class AuthorsAdmin(admin.ModelAdmin):
 	
 @admin.register(TeamCategory)
 class TeamCategoryAdmin(admin.ModelAdmin):
-	list_display = ('team', 'category_name', 'category_slug')
-	search_fields = ('category_name', 'team__name')
+	list_display = ('category_name', 'team', 'article_count', 'display_subjects')
+	search_fields = ('category_name', 'team__name', 'subjects__subject_name')
+	list_filter = ('team', 'subjects')
+	filter_horizontal = ('subjects',)  # For better subject selection in the edit form
+	
+	def get_queryset(self, request):
+		"""Add prefetch_related to avoid multiple DB queries"""
+		return super().get_queryset(request).prefetch_related('subjects', 'articles')
+	
+	def article_count(self, obj):
+		"""Display number of articles in this category"""
+		return obj.articles.count()
+	article_count.short_description = "Articles"
+	
+	def display_subjects(self, obj):
+		"""Display subjects as a comma-separated list"""
+		subjects = list(obj.subjects.all())
+		if len(subjects) == 0:
+			return "-"
+		elif len(subjects) <= 3:
+			return ", ".join(str(subject) for subject in subjects)
+		else:
+			return f"{', '.join(str(subject) for subject in subjects[:3])} (+{len(subjects) - 3})"
+	display_subjects.short_description = "Subjects"
 
 class TeamAdminForm(forms.ModelForm):
 	"""Custom form for Team admin that allows creating organization and team together"""
