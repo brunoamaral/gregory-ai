@@ -175,19 +175,24 @@ class EmailContentOrganizer:
         }
     
     def _filter_high_confidence(self, articles):
-        """Filter articles with high ML confidence scores."""
+        """Filter articles with high ML confidence scores or manual review."""
         high_confidence = []
         
         for article in articles:
+            # First check if the article was manually reviewed and marked as relevant
+            if hasattr(article, 'article_subject_relevances') and article.article_subject_relevances.filter(is_relevant=True).exists():
+                high_confidence.append(article)
+                continue
+                
             # Check for filtered predictions first (used by admin_summary)
             if hasattr(article, 'filtered_ml_predictions') and article.filtered_ml_predictions:
                 max_score = self._get_max_ml_score(article)
-                if max_score > self.confidence_threshold:
+                if max_score >= self.confidence_threshold:
                     high_confidence.append(article)
             # Fall back to standard predictions
             elif hasattr(article, 'ml_predictions_detail') and article.ml_predictions_detail.exists():
                 max_score = self._get_max_ml_score(article)
-                if max_score > self.confidence_threshold:
+                if max_score >= self.confidence_threshold:
                     high_confidence.append(article)
         
         return high_confidence
@@ -318,7 +323,7 @@ class EmailRenderingPipeline:
         
     def prepare_optimized_context(self, email_type, articles=None, trials=None, 
                                 subscriber=None, list_obj=None, site=None, 
-                                custom_settings=None):
+                                custom_settings=None, confidence_threshold=None):
         """
         Prepare optimized context with content organization and performance enhancements.
         
@@ -330,6 +335,7 @@ class EmailRenderingPipeline:
             list_obj: Lists object
             site: Site object
             custom_settings: CustomSetting object
+            confidence_threshold: Custom ML prediction confidence threshold to use
             
         Returns:
             dict: Optimized context for template rendering
@@ -337,6 +343,10 @@ class EmailRenderingPipeline:
         try:
             # Initialize organizer for this email type
             self.organizer.email_type = email_type
+            
+            # Set custom confidence threshold if provided
+            if confidence_threshold is not None:
+                self.organizer.confidence_threshold = confidence_threshold
             
             # Optimize database queries with prefetch_related
             if articles is not None and hasattr(articles, 'prefetch_related'):
