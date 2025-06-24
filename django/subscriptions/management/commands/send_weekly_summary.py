@@ -46,6 +46,14 @@ class Command(BaseCommand):
 		)
 
 	def handle(self, *args, **options):
+		threshold = options['threshold']
+		days_to_look_back = options['days']
+		debug = options['debug']
+
+		
+		if debug:
+			self.stdout.write(self.style.NOTICE(f"Running with ML threshold: {threshold}, days: {days_to_look_back}"))
+		
 		site = Site.objects.get_current()
 		customsettings = CustomSetting.objects.get(site=site)
 
@@ -118,6 +126,13 @@ class Command(BaseCommand):
 					sent_at__gte=threshold_date
 				).values_list('trial_id', flat=True)
 				unsent_trials = trials.exclude(pk__in=sent_trial_ids)
+				
+				# Add debugging for the filtered unsent articles
+				if debug:
+					self.stdout.write(self.style.NOTICE(f"For subscriber {subscriber.email}:"))
+					self.stdout.write(self.style.NOTICE(f"  - Found {len(sent_article_ids)} already sent articles"))
+					self.stdout.write(self.style.NOTICE(f"  - Will include {unsent_articles.count()} new articles in the email"))
+					self.stdout.write(self.style.NOTICE(f"  - Will include {unsent_trials.count()} new trials in the email"))
 
 				if not unsent_articles.exists() and not unsent_trials.exists():
 					self.stdout.write(self.style.WARNING(f'No new articles or trials for {subscriber.email} in list "{digest_list.list_name}".'))
@@ -131,8 +146,24 @@ class Command(BaseCommand):
 					subscriber=subscriber,
 					list_obj=digest_list,
 					site=site,
-					custom_settings=customsettings
-				)
+				# Debug the final content that will appear in the email
+				if debug:
+					self.stdout.write(self.style.NOTICE(f"Final email content for subscriber {subscriber.email}:"))
+					self.stdout.write(self.style.NOTICE(f"  - Featured Articles: {len(summary_context.get('articles', []))}"))
+					self.stdout.write(self.style.NOTICE(f"  - Additional Articles: {len(summary_context.get('additional_articles', []))}"))
+					self.stdout.write(self.style.NOTICE(f"  - Featured Trials: {len(summary_context.get('trials', []))}"))
+					self.stdout.write(self.style.NOTICE(f"  - Additional Trials: {len(summary_context.get('additional_trials', []))}"))
+					
+					# Print actual article titles
+					if summary_context.get('articles'):
+						self.stdout.write(self.style.NOTICE("Featured article titles:"))
+						for i, article in enumerate(summary_context.get('articles')):
+							self.stdout.write(self.style.NOTICE(f"    {i+1}. {article.title[:50]}..."))
+					
+					if summary_context.get('additional_articles'):
+						self.stdout.write(self.style.NOTICE("Additional article titles:"))
+						for i, article in enumerate(summary_context.get('additional_articles')):
+							self.stdout.write(self.style.NOTICE(f"    {i+1}. {article.title[:50]}..."))
 
 				html_content = get_template('emails/weekly_summary.html').render(summary_context)
 				text_content = strip_tags(html_content)
@@ -156,18 +187,25 @@ class Command(BaseCommand):
 					if error_code == 0:  # Successful delivery
 						self.stdout.write(self.style.SUCCESS(f'Weekly digest email sent to {subscriber.email} for list "{digest_list.list_name}".'))
 						# Record sent notifications
+						new_sent_count = 0
 						for article in unsent_articles:
 							SentArticleNotification.objects.get_or_create(
 								article=article,
 								list=digest_list,
 								subscriber=subscriber
 							)
+							new_sent_count += 1
+						self.stdout.write(self.style.NOTICE(f'  - Recorded {new_sent_count} new sent article notifications'))
+						
+						new_trial_sent_count = 0
 						for trial in unsent_trials:
 							SentTrialNotification.objects.get_or_create(
 								trial=trial,
 								list=digest_list,
 								subscriber=subscriber
 							)
+							new_trial_sent_count += 1
+						self.stdout.write(self.style.NOTICE(f'  - Recorded {new_trial_sent_count} new sent trial notifications'))
 					else:  # Failed delivery
 						self.stdout.write(self.style.ERROR(f"Failed to send weekly digest email to {subscriber.email} for list '{digest_list.list_name}'. Reason: {message}"))
 						FailedNotification.objects.create(
