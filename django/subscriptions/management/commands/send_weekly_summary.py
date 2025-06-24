@@ -61,9 +61,7 @@ class Command(BaseCommand):
 								# Articles that were manually reviewed and marked as relevant
 								Q(article_subject_relevances__subject__in=digest_list.subjects.all(), article_subject_relevances__is_relevant=True) |
 								# Articles with ML prediction probability score above 0.8
-								Q(ml_predictions__subject__in=digest_list.subjects.all(), ml_predictions__probability_score__gte=0.8) |
-								# For backward compatibility, also include articles with GNB=True
-								Q(ml_predictions__subject__in=digest_list.subjects.all(), ml_predictions__gnb=True)
+								Q(ml_predictions__subject__in=digest_list.subjects.all(), ml_predictions__probability_score__gte=0.8)
 								),
 								discovery_date__gte=now() - timedelta(days=30)
 								).distinct()

@@ -115,7 +115,6 @@ class Sources(models.Model):
 	source_for = models.CharField(choices=TABLES, max_length=50, default='science paper')
 	name = models.TextField(blank=True, null=True)
 	link = models.TextField(blank=True, null=True)
-	language = models.CharField(blank=True, null=True)
 	subject = models.ForeignKey(Subject,on_delete=models.PROTECT,null=True,blank=True,unique=False)
 	method = models.CharField(choices=METHODS, max_length=10, default='rss')
 	ignore_ssl = models.BooleanField(default=False)
@@ -437,24 +436,6 @@ class MLPredictions(models.Model):
 	algorithm = models.CharField(max_length=20, choices=ALGORITHM_CHOICES, default='unknown', help_text='ML algorithm used for prediction')
 	probability_score = models.FloatField(null=True, blank=True, help_text='Probability score from the ML model prediction')
 	predicted_relevant = models.BooleanField(null=True, blank=True, help_text='Whether the ML model predicted this article as relevant')
-	
-	# Legacy boolean columns
-	gnb = models.BooleanField(blank=True, null=True,
-		verbose_name="Gaussian Naive Bayes Prediction",
-		help_text="Indicates the Machine Learning prediction made using Gaussian Naive Bayes."
-	)
-	lr = models.BooleanField(blank=True, null=True,
-		verbose_name="Logistic Regression Prediction",
-		help_text="Indicates the Machine Learning prediction made using Logistic Regression."
-	)
-	lsvc = models.BooleanField(blank=True,null=True,
-		verbose_name="Linear Support Vector Classification Prediction",
-		help_text="Indicates the Machine Learning prediction made using Linear Support Vector Classification."
-	)
-	mnb = models.BooleanField(blank=True, null=True,
-		verbose_name = 'Multinomial Naive Bayes',
-		help_text='indicates the Machine Learning prediction using Multinomial Naive Bayes.'
-	)
 	
 	class Meta:
 		constraints = [
