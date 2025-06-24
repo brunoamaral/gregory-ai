@@ -44,12 +44,20 @@ class Command(BaseCommand):
 			action='store_true',
 			help='Enable detailed debugging output'
 		)
+		parser.add_argument(
+			'--dry-run',
+			action='store_true',
+			help='Simulate sending emails without actually sending them or recording sent notifications'
+		)
 
 	def handle(self, *args, **options):
 		threshold = options['threshold']
 		days_to_look_back = options['days']
 		debug = options['debug']
+		dry_run = options['dry_run']
 
+		if dry_run:
+			self.stdout.write(self.style.WARNING("DRY RUN MODE: No emails will be sent and no records will be updated"))
 		
 		if debug:
 			self.stdout.write(self.style.NOTICE(f"Running with ML threshold: {threshold}, days: {days_to_look_back}"))
@@ -224,6 +232,22 @@ class Command(BaseCommand):
 				html_content = get_template('emails/weekly_summary.html').render(summary_context)
 				text_content = strip_tags(html_content)
 
+				if dry_run:
+					# In dry-run mode, just log what would be sent without actually sending
+					self.stdout.write(self.style.SUCCESS(f'[DRY RUN] Would send weekly digest email to {subscriber.email} for list "{digest_list.list_name}"'))
+					self.stdout.write(self.style.NOTICE(f'  - Subject: {email_subject}'))
+					self.stdout.write(self.style.NOTICE(f'  - Would include {unsent_articles.count()} articles and {unsent_trials.count()} trials'))
+					
+					# Print more details if in debug mode
+					if debug:
+						self.stdout.write(self.style.NOTICE(f'  - Content summary:'))
+						self.stdout.write(self.style.NOTICE(f'    * Featured Articles: {len(summary_context.get("articles", []))}'))
+						self.stdout.write(self.style.NOTICE(f'    * Additional Articles: {len(summary_context.get("additional_articles", []))}'))
+						self.stdout.write(self.style.NOTICE(f'    * Featured Trials: {len(summary_context.get("trials", []))}'))
+						self.stdout.write(self.style.NOTICE(f'    * Additional Trials: {len(summary_context.get("additional_trials", []))}'))
+					continue  # Skip to next subscriber without sending
+
+				# If not in dry-run mode, proceed with actual sending
 				result = send_email(
 					to=subscriber.email,
 					subject=email_subject,
