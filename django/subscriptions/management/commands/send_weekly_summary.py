@@ -25,6 +25,25 @@ from templates.emails.components.content_organizer import get_optimized_email_co
 
 class Command(BaseCommand):
 	help = 'Sends a weekly digest email for all weekly digest lists.'
+	
+	def add_arguments(self, parser):
+		parser.add_argument(
+			'--threshold',
+			type=float,
+			default=0.8,
+			help='ML prediction score threshold (default: 0.8)'
+		)
+		parser.add_argument(
+			'--days',
+			type=int,
+			default=30,
+			help='Number of days to look back for articles (default: 30)'
+		)
+		parser.add_argument(
+			'--debug',
+			action='store_true',
+			help='Enable detailed debugging output'
+		)
 
 	def handle(self, *args, **options):
 		site = Site.objects.get_current()
