@@ -10,7 +10,7 @@ from subscriptions.management.commands.utils.subscription import (
 	get_trials_for_list,
 	get_latest_research_by_category,
 )
-from gregory.models import Articles, Authors, Trials, TeamCredentials
+from gregory.models import Articles, Authors, Trials, TeamCredentials, MLPredictions
 from sitesettings.models import CustomSetting
 from subscriptions.models import (
 	Lists,
@@ -19,14 +19,41 @@ from subscriptions.models import (
 	SentTrialNotification,
 	FailedNotification,
 )
-from django.db.models import Q
+from django.db.models import Q, Exists, OuterRef
 from django.utils.timezone import now
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 class Command(BaseCommand):
 	help = 'Sends a weekly digest email for all weekly digest lists.'
+	
+	def add_arguments(self, parser):
+		parser.add_argument(
+			'--threshold',
+			type=float,
+			default=0.8,
+			help='ML prediction score threshold (default: 0.8)'
+		)
+		parser.add_argument(
+			'--days',
+			type=int,
+			default=30,
+			help='Number of days to look back for articles (default: 30)'
+		)
+		parser.add_argument(
+			'--debug',
+			action='store_true',
+			help='Enable detailed debugging output'
+		)
 
 	def handle(self, *args, **options):
+		threshold = options['threshold']
+		days_to_look_back = options['days']
+		debug = options['debug']
+
+		
+		if debug:
+			self.stdout.write(self.style.NOTICE(f"Running with ML threshold: {threshold}, days: {days_to_look_back}"))
+		
 		site = Site.objects.get_current()
 		customsettings = CustomSetting.objects.get(site=site)
 
@@ -55,17 +82,69 @@ class Command(BaseCommand):
 				continue
 
 			# Step 3: Use utility functions to get articles and trials
-			articles = Articles.objects.filter(
-								Q(subjects__in=digest_list.subjects.all()) & 
-								(
-								# Articles that were manually reviewed and marked as relevant
-								Q(article_subject_relevances__subject__in=digest_list.subjects.all(), article_subject_relevances__is_relevant=True) |
-								# Articles with ML prediction probability score above 0.8
-								Q(ml_predictions__subject__in=digest_list.subjects.all(), ml_predictions__probability_score__gte=0.8)
-								),
-								discovery_date__gte=now() - timedelta(days=30)
-								).distinct()
-			trials = get_trials_for_list(digest_list)
+			# Add verbose debugging to see how many articles are found
+			self.stdout.write(self.style.NOTICE(f"Looking for articles for list '{digest_list.list_name}'..."))
+			
+			# First, get articles by subject
+			subject_articles = Articles.objects.filter(
+				subjects__in=digest_list.subjects.all(),
+				discovery_date__gte=now() - timedelta(days=days_to_look_back)
+			).distinct()
+			self.stdout.write(self.style.NOTICE(f"Found {subject_articles.count()} articles by subject"))
+			
+			# Then, get manually reviewed articles
+			manual_reviewed = Articles.objects.filter(
+				subjects__in=digest_list.subjects.all(),
+				article_subject_relevances__subject__in=digest_list.subjects.all(),
+				article_subject_relevances__is_relevant=True,
+				discovery_date__gte=now() - timedelta(days=days_to_look_back)
+			).distinct()
+			self.stdout.write(self.style.NOTICE(f"Found {manual_reviewed.count()} manually reviewed articles"))
+			
+			# Get articles with ML prediction scores above threshold
+			# Create a subquery to check for ML predictions above threshold
+			ml_pred_subquery = MLPredictions.objects.filter(
+				article=OuterRef('pk'),
+				subject__in=digest_list.subjects.all(),
+				probability_score__gte=threshold
+			)
+			
+			# Get articles with valid ML predictions
+			ml_predicted = Articles.objects.filter(
+				subjects__in=digest_list.subjects.all(),
+				discovery_date__gte=now() - timedelta(days=days_to_look_back)
+			).filter(
+				Exists(ml_pred_subquery)
+			).distinct()
+			self.stdout.write(self.style.NOTICE(f"Found {ml_predicted.count()} articles with ML prediction score ≥ {threshold}"))
+			
+			# Debugging: Check ML prediction scores for some articles
+			if debug:
+				sample_articles = subject_articles.order_by('-discovery_date')[:5]  # Get 5 most recent articles
+				self.stdout.write(self.style.NOTICE(f"ML prediction scores for recent articles:"))
+				for article in sample_articles:
+					self.stdout.write(self.style.NOTICE(f"  Article {article.article_id}: {article.title[:50]}..."))
+					ml_preds = article.ml_predictions_detail.all()
+					if ml_preds.exists():
+						for pred in ml_preds:
+							self.stdout.write(self.style.NOTICE(f"    - Subject: {pred.subject.subject_name}, Score: {pred.probability_score}"))
+					else:
+						self.stdout.write(self.style.NOTICE(f"    - No ML predictions found"))
+			
+			# Standard filtering: manually reviewed OR high ML prediction score
+			# Instead of union(), use a combined filter query
+			article_ids = list(manual_reviewed.values_list('pk', flat=True)) + list(ml_predicted.values_list('pk', flat=True))
+			articles = Articles.objects.filter(pk__in=article_ids).distinct()
+			self.stdout.write(self.style.NOTICE(f"Filtered by manual review or ML threshold: {articles.count()} articles"))
+			
+			self.stdout.write(self.style.NOTICE(f"Final combined query found {articles.count()} articles"))
+			
+			# Use the helper function to get trials, but pass the days_to_look_back parameter
+			trials = Trials.objects.filter(
+				subjects__in=digest_list.subjects.all(),
+				discovery_date__gte=now() - timedelta(days=days_to_look_back)
+			).distinct()
+			self.stdout.write(self.style.NOTICE(f"Found {trials.count()} trials"))
 
 			if not articles.exists() and not trials.exists():
 				self.stdout.write(self.style.WARNING(f'No articles or trials found for the weekly digest list "{digest_list.list_name}". Skipping.'))
@@ -99,6 +178,13 @@ class Command(BaseCommand):
 					sent_at__gte=threshold_date
 				).values_list('trial_id', flat=True)
 				unsent_trials = trials.exclude(pk__in=sent_trial_ids)
+				
+				# Add debugging for the filtered unsent articles
+				if debug:
+					self.stdout.write(self.style.NOTICE(f"For subscriber {subscriber.email}:"))
+					self.stdout.write(self.style.NOTICE(f"  - Found {len(sent_article_ids)} already sent articles"))
+					self.stdout.write(self.style.NOTICE(f"  - Will include {unsent_articles.count()} new articles in the email"))
+					self.stdout.write(self.style.NOTICE(f"  - Will include {unsent_trials.count()} new trials in the email"))
 
 				if not unsent_articles.exists() and not unsent_trials.exists():
 					self.stdout.write(self.style.WARNING(f'No new articles or trials for {subscriber.email} in list "{digest_list.list_name}".'))
@@ -112,8 +198,28 @@ class Command(BaseCommand):
 					subscriber=subscriber,
 					list_obj=digest_list,
 					site=site,
-					custom_settings=customsettings
+					custom_settings=customsettings,
+					confidence_threshold=threshold  # Pass the threshold parameter to the content organizer
 				)
+				
+				# Debug the final content that will appear in the email
+				if debug:
+					self.stdout.write(self.style.NOTICE(f"Final email content for subscriber {subscriber.email}:"))
+					self.stdout.write(self.style.NOTICE(f"  - Featured Articles: {len(summary_context.get('articles', []))}"))
+					self.stdout.write(self.style.NOTICE(f"  - Additional Articles: {len(summary_context.get('additional_articles', []))}"))
+					self.stdout.write(self.style.NOTICE(f"  - Featured Trials: {len(summary_context.get('trials', []))}"))
+					self.stdout.write(self.style.NOTICE(f"  - Additional Trials: {len(summary_context.get('additional_trials', []))}"))
+					
+					# Print actual article titles
+					if summary_context.get('articles'):
+						self.stdout.write(self.style.NOTICE("Featured article titles:"))
+						for i, article in enumerate(summary_context.get('articles')):
+							self.stdout.write(self.style.NOTICE(f"    {i+1}. {article.title[:50]}..."))
+					
+					if summary_context.get('additional_articles'):
+						self.stdout.write(self.style.NOTICE("Additional article titles:"))
+						for i, article in enumerate(summary_context.get('additional_articles')):
+							self.stdout.write(self.style.NOTICE(f"    {i+1}. {article.title[:50]}..."))
 
 				html_content = get_template('emails/weekly_summary.html').render(summary_context)
 				text_content = strip_tags(html_content)
@@ -137,18 +243,25 @@ class Command(BaseCommand):
 					if error_code == 0:  # Successful delivery
 						self.stdout.write(self.style.SUCCESS(f'Weekly digest email sent to {subscriber.email} for list "{digest_list.list_name}".'))
 						# Record sent notifications
+						new_sent_count = 0
 						for article in unsent_articles:
 							SentArticleNotification.objects.get_or_create(
 								article=article,
 								list=digest_list,
 								subscriber=subscriber
 							)
+							new_sent_count += 1
+						self.stdout.write(self.style.NOTICE(f'  - Recorded {new_sent_count} new sent article notifications'))
+						
+						new_trial_sent_count = 0
 						for trial in unsent_trials:
 							SentTrialNotification.objects.get_or_create(
 								trial=trial,
 								list=digest_list,
 								subscriber=subscriber
 							)
+							new_trial_sent_count += 1
+						self.stdout.write(self.style.NOTICE(f'  - Recorded {new_trial_sent_count} new sent trial notifications'))
 					else:  # Failed delivery
 						self.stdout.write(self.style.ERROR(f"Failed to send weekly digest email to {subscriber.email} for list '{digest_list.list_name}'. Reason: {message}"))
 						FailedNotification.objects.create(
