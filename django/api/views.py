@@ -11,7 +11,7 @@ from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, Te
 from rest_framework import permissions, viewsets, generics, filters
 from rest_framework.decorators import api_view
 from django_filters import rest_framework as django_filters
-from api.filters import ArticleFilter
+from api.filters import ArticleFilter, TrialFilter
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -675,4 +675,23 @@ class ArticleSearchView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
     filterset_class = ArticleFilter
+    search_fields = ['title', 'summary']
+
+class TrialSearchView(generics.ListAPIView):
+    """
+    Advanced search for clinical trials by title, summary, and recruitment status.
+    
+    This endpoint allows searching with the following parameters:
+    - ?title=keyword - Search only in title field
+    - ?summary=keyword - Search only in summary/abstract field
+    - ?search=keyword - Search in both title and summary fields
+    - ?status=keyword - Filter by recruitment status (e.g., 'Recruiting', 'Completed')
+    
+    Results are ordered by discovery date (newest first).
+    """
+    queryset = Trials.objects.all().order_by('-discovery_date')
+    serializer_class = TrialSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
+    filterset_class = TrialFilter
     search_fields = ['title', 'summary']

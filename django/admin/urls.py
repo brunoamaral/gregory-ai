@@ -26,7 +26,7 @@ from api.views import (
 	RelevantList, UnsentList, TrialsBySource, SourceViewSet, TrialViewSet, 
 	post_article, newsletterByWeek, lastXdays, CategoryViewSet, TrialsByCategory, MonthlyCountsView, LoginView, ProtectedEndpointView,
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, TrialsByTeam, SubjectsByTeam, SourcesByTeam, CategoriesByTeam,
-    ArticlesByCategoryAndTeam, ArticlesBySource, TrialsBySubject, ArticleSearchView
+    ArticlesByCategoryAndTeam, ArticlesBySource, TrialsBySubject, ArticleSearchView, TrialSearchView
 )
 from rss.views import (
 	ArticlesByAuthorFeed, ArticlesByCategoryFeed, ArticlesBySubjectFeed, OpenAccessFeed,
@@ -129,6 +129,7 @@ urlpatterns = [
 	path('articles/relevant/last/<int:days>/', lastXdays.as_view({'get': 'list'})),
 	path('articles/relevant/week/<int:year>/<int:week>/', newsletterByWeek.as_view({'get': 'list'})),
 	path('articles/search/', ArticleSearchView.as_view(), name='article-search'),
+	path('trials/search/', TrialSearchView.as_view(), name='trial-search'),
 	re_path('^articles/category/(?P<category_slug>[-\w]+)/$', ArticlesByCategory.as_view({'get':'list'})),
 	re_path('^articles/journal/(?P<journal_slug>.+)/$', ArticlesByJournal.as_view({'get':'list'})),
 	re_path('^articles/open-access/$', OpenAccessArticles.as_view()),
