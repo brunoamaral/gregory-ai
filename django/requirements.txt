@@ -38,6 +38,7 @@ django-extensions==4.1
 django-organizations==2.5.0
 django-simple-history==3.8.0
 Django==5.2.3
+django-filter==23.5
 djangorestframework_simplejwt==5.5.0
 djangorestframework==3.16.0
 docutils==0.18.1
