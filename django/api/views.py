@@ -10,6 +10,8 @@ from gregory.classes import SciencePaper
 from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, TeamCategory
 from rest_framework import permissions, viewsets, generics, filters
 from rest_framework.decorators import api_view
+from django_filters import rest_framework as django_filters
+from api.filters import ArticleFilter
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -656,3 +658,21 @@ class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
 				return Articles.objects.filter(team_categories=team_category).prefetch_related(
 						'team_categories', 'sources', 'authors', 'teams', 'subjects', 'ml_predictions'
 				)
+
+class ArticleSearchView(generics.ListAPIView):
+    """
+    Advanced search for articles by title and abstract (summary).
+    
+    This endpoint allows searching with the following parameters:
+    - ?title=keyword - Search only in title field
+    - ?summary=keyword - Search only in summary/abstract field
+    - ?search=keyword - Search in both title and summary fields
+    
+    Results are ordered by discovery date (newest first).
+    """
+    queryset = Articles.objects.all().order_by('-discovery_date')
+    serializer_class = ArticleSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
+    filterset_class = ArticleFilter
+    search_fields = ['title', 'summary']
