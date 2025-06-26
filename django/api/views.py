@@ -663,35 +663,164 @@ class ArticleSearchView(generics.ListAPIView):
     """
     Advanced search for articles by title and abstract (summary).
     
-    This endpoint allows searching with the following parameters:
-    - ?title=keyword - Search only in title field
-    - ?summary=keyword - Search only in summary/abstract field
-    - ?search=keyword - Search in both title and summary fields
+    This endpoint requires a POST request with team_id and subject_id in the request body, 
+    along with optional search parameters.
+    
+    Search parameters in POST body:
+    - title: Search only in title field
+    - summary: Search only in summary/abstract field
+    - search: Search in both title and summary fields
+    - team_id: Required - Team ID to filter articles by (must be provided)
+    - subject_id: Required - Subject ID to filter articles by (must be provided)
     
     Results are ordered by discovery date (newest first).
     """
-    queryset = Articles.objects.all().order_by('-discovery_date')
     serializer_class = ArticleSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.AllowAny]  # Allow access to anyone since we require team_id and subject_id
     filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
     filterset_class = ArticleFilter
     search_fields = ['title', 'summary']
+    http_method_names = ['post']
+    
+    def get_queryset(self):
+        # This method is still called even for POST requests
+        return Articles.objects.none()  # Return empty queryset by default
+    
+    def post(self, request, *args, **kwargs):
+        # Extract required parameters
+        team_id = request.data.get('team_id')
+        subject_id = request.data.get('subject_id')
+        
+        # Validate required parameters
+        if not team_id or not subject_id:
+            return Response(
+                {"error": "Missing required parameters: team_id, subject_id"}, 
+                status=400
+            )
+        
+        try:
+            # Check if team and subject exist
+            team = Team.objects.get(id=team_id)
+            subject = Subject.objects.get(id=subject_id, team=team)
+        except Team.DoesNotExist:
+            return Response(
+                {"error": f"Team with ID {team_id} not found"}, 
+                status=404
+            )
+        except Subject.DoesNotExist:
+            return Response(
+                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
+                status=404
+            )
+        
+        # Start with articles filtered by team and subject
+        queryset = Articles.objects.filter(teams=team, subjects=subject).order_by('-discovery_date')
+        
+        # Apply additional filters
+        title = request.data.get('title')
+        summary = request.data.get('summary')
+        search = request.data.get('search')
+        
+        if title:
+            queryset = queryset.filter(title__icontains=title)
+        if summary:
+            queryset = queryset.filter(summary__icontains=summary)
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search) | Q(summary__icontains=search)
+            )
+        
+        # Use pagination from ListAPIView
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+            
+        # If no pagination
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
 class TrialSearchView(generics.ListAPIView):
     """
     Advanced search for clinical trials by title, summary, and recruitment status.
     
-    This endpoint allows searching with the following parameters:
-    - ?title=keyword - Search only in title field
-    - ?summary=keyword - Search only in summary/abstract field
-    - ?search=keyword - Search in both title and summary fields
-    - ?status=keyword - Filter by recruitment status (e.g., 'Recruiting', 'Completed')
+    This endpoint requires a POST request with team_id and subject_id in the request body, 
+    along with optional search parameters.
+    
+    Search parameters in POST body:
+    - title: Search only in title field
+    - summary: Search only in summary/abstract field
+    - search: Search in both title and summary fields
+    - status: Filter by recruitment status (e.g., 'Recruiting', 'Completed')
+    - team_id: Required - Team ID to filter trials by (must be provided)
+    - subject_id: Required - Subject ID to filter trials by (must be provided)
     
     Results are ordered by discovery date (newest first).
     """
-    queryset = Trials.objects.all().order_by('-discovery_date')
     serializer_class = TrialSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.AllowAny]  # Allow access to anyone since we require team_id and subject_id
     filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
     filterset_class = TrialFilter
     search_fields = ['title', 'summary']
+    http_method_names = ['post']
+    
+    def get_queryset(self):
+        # This method is still called even for POST requests
+        return Trials.objects.none()  # Return empty queryset by default
+    
+    def post(self, request, *args, **kwargs):
+        # Extract required parameters
+        team_id = request.data.get('team_id')
+        subject_id = request.data.get('subject_id')
+        
+        # Validate required parameters
+        if not team_id or not subject_id:
+            return Response(
+                {"error": "Missing required parameters: team_id, subject_id"}, 
+                status=400
+            )
+        
+        try:
+            # Check if team and subject exist
+            team = Team.objects.get(id=team_id)
+            subject = Subject.objects.get(id=subject_id, team=team)
+        except Team.DoesNotExist:
+            return Response(
+                {"error": f"Team with ID {team_id} not found"}, 
+                status=404
+            )
+        except Subject.DoesNotExist:
+            return Response(
+                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
+                status=404
+            )
+        
+        # Start with trials filtered by team and subject
+        queryset = Trials.objects.filter(teams=team, subjects=subject).order_by('-discovery_date')
+        
+        # Apply additional filters
+        title = request.data.get('title')
+        summary = request.data.get('summary')
+        search = request.data.get('search')
+        status = request.data.get('status')
+        
+        if title:
+            queryset = queryset.filter(title__icontains=title)
+        if summary:
+            queryset = queryset.filter(summary__icontains=summary)
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search) | Q(summary__icontains=search)
+            )
+        if status:
+            queryset = queryset.filter(recruitment_status=status)
+        
+        # Use pagination from ListAPIView
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+            
+        # If no pagination
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)

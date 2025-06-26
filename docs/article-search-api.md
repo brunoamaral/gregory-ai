@@ -1,15 +1,38 @@
 # Article Search API
 
 ## Overview
-The API now includes a dedicated endpoint for searching articles by title and abstract (summary). This allows for both specific field searches and general searches across both fields.
+The API now includes a dedicated endpoint for searching articles by title and abstract (summary). This allows for both specific field searches and general searches across both fields. Access to article search requires providing team and subject IDs, which are used to filter the results.
 
 ## Endpoint
 
 ```
-GET /api/articles/search/
+POST /api/articles/search/
 ```
 
-## Query Parameters
+## Request Body
+
+The request must be a POST request with a JSON body containing at least the following required fields:
+
+```json
+{
+  "team_id": 1,
+  "subject_id": 2,
+  
+  // Optional search parameters:
+  "title": "keyword",
+  "summary": "keyword",
+  "search": "keyword"
+}
+```
+
+### Required Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `team_id` | ID of the team to filter articles by (required) |
+| `subject_id` | ID of the subject to filter articles by (required) |
+
+### Optional Search Parameters
 
 | Parameter | Description |
 |-----------|-------------|
@@ -18,6 +41,8 @@ GET /api/articles/search/
 | `search`  | Search for articles where either the title OR the abstract contains this keyword |
 
 ## Response Format
+
+### Success Response (200 OK)
 The response follows the standard DRF paginated format:
 
 ```json
@@ -44,21 +69,64 @@ The response follows the standard DRF paginated format:
 }
 ```
 
+### Error Responses
+
+#### 400 Bad Request
+Returned when required parameters are missing or invalid.
+
+```json
+{
+  "error": "Missing required parameters: team_id, subject_id"
+}
+```
+
+or
+
+```json
+{
+  "error": "Invalid team_id or subject_id"
+}
+```
+
 ## Examples
 
-1. Search for articles with "COVID" in the title:
+### Search for articles related to "COVID" for a specific team and subject
+
 ```
-GET /api/articles/search/?title=COVID
+POST /api/articles/search/
+Content-Type: application/json
+
+{
+  "team_id": 1,
+  "subject_id": 2,
+  "search": "COVID"
+}
 ```
 
-2. Search for articles with "treatment" in the abstract:
+### Search for articles containing "treatment" in the abstract
+
 ```
-GET /api/articles/search/?summary=treatment
+POST /api/articles/search/
+Content-Type: application/json
+
+{
+  "team_id": 1,
+  "subject_id": 2,
+  "summary": "treatment"
+}
 ```
 
-3. Search for articles that mention "vaccine" in either title or abstract:
+### Search for articles with "vaccine" in the title
+
 ```
-GET /api/articles/search/?search=vaccine
+POST /api/articles/search/
+Content-Type: application/json
+
+{
+  "team_id": 1,
+  "subject_id": 2,
+  "title": "vaccine"
+}
 ```
 
 ## Notes
@@ -66,3 +134,4 @@ GET /api/articles/search/?search=vaccine
 - Results are ordered by discovery date (newest first)
 - The search uses partial matching, so searching for "treat" will match "treatment", "treatments", etc.
 - The endpoint is paginated (default 10 items per page)
+- Both team_id and subject_id are required parameters
