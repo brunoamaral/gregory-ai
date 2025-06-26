@@ -271,7 +271,7 @@ class SourceAdmin(admin.ModelAdmin):
 			'fields': ('team', 'subject')
 		}),
 		('Settings', {
-			'fields': ('ignore_ssl', 'language', 'description')
+			'fields': ('ignore_ssl', 'description')
 		}),
 		('Filtering (bioRxiv and medRxiv)', {
 			'fields': ('keyword_filter',),
