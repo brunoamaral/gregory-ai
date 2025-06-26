@@ -117,8 +117,8 @@ class Command(BaseCommand):
                     if not id_value:
                         continue
                     
-                    # Case-insensitive search in summary
-                    if id_value.lower() in article.summary.lower():
+                    id_pattern = re.escape(id_value)
+                    if re.search(id_pattern, article.summary, re.IGNORECASE):
                         total_references += 1
                         article_refs_count += 1
                         total_articles_with_refs.add(article.article_id)
