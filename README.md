@@ -1,416 +1,77 @@
-[TOC]
+# Gregory
 
-# GregoryAI
+Gregory is an AI system that uses Machine Learning and Natural Language Processing to track clinical research and identify papers that improve patient wellbeing.
 
-Gregory is an AI system that uses Machine Learning and Natural Language Processing to track
-clinical research and identify papers which improves the wellbeing of patients.
+## Overview
 
-Sources for research can be added by RSS feed or manually.
+Gregory helps research teams stay up-to-date with the latest scientific publications and clinical trials. It intelligently filters and categorizes research from multiple sources, delivering relevant information through APIs, RSS feeds, and email notifications.
 
-The output can be seen in a static site, using `build.py` or via the api provided by the Django Rest Framework.
+## Key Features
 
-The docker compose file also includes a Metabase container which is used to build dashboards and manage notifications.
+1. **Machine Learning & NLP** - Automatically identifies relevant research
+2. **RSS Integration** - Gathers and filters search results from PubMed and other sources
+3. **Keyword Filtering** - Excludes irrelevant articles from bioRxiv, PNAS, etc.
+4. **Flexible Configuration** - Organize research by subjects, categories, and teams
+5. **Email Notifications** - Scheduled digests and alerts for new research
+6. **API & RSS Feeds** - Integration with websites and other software solutions
+7. **Clinical Trials Tracking** - Monitor and receive alerts for new trials
+8. **Author Identification** - Tracks authors and their ORCID identifiers
 
-Sources can also be added to monitor Clinical Trials, in which case Gregory can notify a list of email subscribers.
+## Documentation
 
-For other integrations, the Django app provides RSS feeds with a live update of relevant research and newly posted clinical trials.
+For detailed information, please refer to our documentation:
 
-## Features
+- [Installation Guide](docs/installation.md)
+- [API Reference](docs/api/index.md)
+  - [Team API](docs/team-api.md)
+  - [Subject API](docs/subject-api.md)
+  - [Source API](docs/source-api.md)
+  - [Category API](docs/category-api.md)
+  - [Article Search API](docs/article-search-api.md)
+  - [Trial Search API](docs/trial-search-api.md)
+- [Machine Learning Documentation](docs/ml/index.md)
+- [Developer Guide](docs/dev/index.md)
+- [Deployment Guide](docs/deployment/index.md)
 
-1. Machine Learning to identify relevant research
-2. Configure RSS feeds to gather search results from PubMed and other websites
-3. Configure searches on any public website
-4. Integration with mailgun.com to send emails
-5. Automatic emails to the admin team with results in the last 48hours
-6. Subscriber management
-7. Configure email lists for different stakeholders
-8. Public and Private API to integrate with other software solutions and websites
-9. Configure categories to organize search results based on keywords in title
-10. Configure different “subjects” to have keep different research areas segmented
-11. Identify authors and their ORCID
-12. Generate different RSS feeds
+## Current Usage
 
-### Current Use Case for Multiple Sclerosis
+Gregory is currently used to track research in Multiple Sclerosis at [gregory-ms.com](https://gregory-ms.com).
 
-<https://gregory-ms.com>
-
-#### Rest API: <https://api.gregory-ms.com>
-
-## Codex Automation
-
-Issues labeled `codex` are automatically assigned to the **openai-codex** user.
-The workflow then invokes the Codex GitHub App, which proposes a pull request
-with changes that address the issue.
-
-## Running in Production
-
-### Server Requirements
-
-- [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/) with 2GB of swap memory to be able to build the MachineLearning Models. ([Adding swap for Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-add-swap-space-on-ubuntu-20-04))
-- [ ] [Mailgun](https://www.mailgun.com/) (optional)
-
-### Installing Gregory
-
-#### 1. Clone and Install
-1. Clone the repository:
-	```bash
-	git clone <repository_url>
-	cd <repository_directory>
-	docker compose up -d 
-	docker exec admin python manage.py makemigrations
-	docker exec admin python manage.py migrate
-	```
-#### 2. Setup DNS for `api.domain.etc`
-
-1. Log in to your DNS provider.
-2. Add a new A record for `api.domain.etc` pointing to your server's IP address.
-
-#### 3. Setup DNS for Mailgun `mg.domain.etc`
-1. Log in to your DNS provider.
-2. Add the following DNS records provided by Mailgun for `mg.domain.etc`:
-	- TXT record
-	- MX record
-	- CNAME record
-
-#### 4. Get Mailgun API Keys and Add to `.env`
-1. Log in to your Mailgun account.
-2. Navigate to `API Keys`.
-3. Copy the private API key.
-4. Add the key to your `.env` file.
-
-#### 5. Get ORCID API Keys and Add to `.env`
-1. Log in to your ORCID account.
-2. Navigate to `Developer Tools` and create an API client.
-3. Copy the client ID and client secret.
-4. Add the following to your `.env` file:
-	```env
-	ORCID_CLIENT_ID=your_orcid_client_id
-	ORCID_CLIENT_SECRET=your_orcid_client_secret
-	```
-
-##### 5.1 make sure your .env file is complete
-```bash
-DOMAIN_NAME=DOMAIN.COM
-# Set this to the subdomain you configured with Mailgun. Example: mg.domain.com
-EMAIL_DOMAIN=
-# The SMTP server and credentials you are using. For example: smtp.eu.mailgun.org
-# These variables are only needed if you plan to send notification emails
-EMAIL_HOST=
-EMAIL_HOST_PASSWORD=
-EMAIL_HOST_PASSWORD=
-EMAIL_HOST_USER=
-# We use Mailgun by default on the newsletters, input your API key here
-EMAIL_MAILGUN_API_URL=
-EMAIL_PORT=587
-EMAIL_USE_TLS='True'
-# Where you cloned the repository
-GREGORY_DIR=
-# Set your postgres DB and credentials
-POSTGRES_DB=
-POSTGRES_PASSWORD=
-POSTGRES_USER=
-SECRET_KEY='Yeah well, you know, that is just, like, your DJANGO SECRET_KEY, man' # you should set this manually https://docs.djangoproject.com/en/4.0/ref/settings/#secret-key
-```
-
-#### 6. Configure Server
-
-##### 6.1. Nginx
-1. Install Nginx:
-	```bash
-	sudo apt-get update
-	sudo apt-get install nginx
-	```
-2. Configure Nginx for your application:
-	```bash
-	sudo nano /etc/nginx/sites-available/default
-	```
-	- Add your server block configuration.
-3. Test and restart Nginx:
-	```bash
-	sudo nginx -t
-	sudo systemctl restart nginx
-	```
-
-##### 6.2. Certbot
-1. Install Certbot:
-	```bash
-	sudo apt-get install certbot python3-certbot-nginx
-	```
-2. Obtain and install SSL certificate:
-	```bash
-	sudo certbot --nginx -d domain.etc -d www.domain.etc
-	```
-
-##### 6.3. Firewall
-1. Allow necessary ports:
-	```bash
-	sudo ufw allow 'Nginx Full'
-	sudo ufw enable
-	```
-
-#### 7. Configure Gregory
-
-##### 7.1. Create a Site
-1. Log in to the Gregory dashboard.
-2. Navigate to `Sites` and click `Create Site`.
-
-##### 7.2. Create a Team
-1. Navigate to `Teams` and click `Create Team`.
-
-##### 7.3. Add a User to the Team
-1. Navigate to `Teams`, select the team, and click `Add User`.
-2. Enter the user's email and assign a role.
-
-##### 7.4. Add a Source, such as PubMed
-
-1. Navigate to `Sources` and click `Add Source`.
-2. Select `RSS` method and provide the necessary configuration.
-
-#### 8. Add cronjobs to run the pipeline and send emails
-
-```cron
-# Every 2 days at 8:00
-0 8 */2 * * /usr/bin/docker exec admin python manage.py send_admin_summary
-
-# Every Tuesday at 8:05
-5 8 * * 2 docker exec admin python manage.py send_weekly_summary
-
-# every 12  hours, at minute 25
-25 */12 * * * /usr/bin/flock -n /tmp/pipeline /usr/bin/docker exec admin ./manage.py pipeline
-```
-
-
-
-1. **Execute** `python3 setup.py`.
-
-The script checks if you have all the requirements and run to help you setup the containers.
-
-Once finished, login at <https://api.DOMAIN.TLD/admin> or wherever your reverse proxy is listening on.
-
-4. Go to the admin dashboard and change the example.com site to match your domain
-5. Go to custom settings and set the Site and Title fields.
-6. **Configure** your RSS Sources in the Django admin page.
-7. **Setup** database maintenance tasks.
-Gregory needs to run a series of tasks to fetch missing information before applying the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
-
-```cron
-*/3 * * * * /usr/bin/docker exec -t admin ./manage.py runcrons
-#*/10 * * * * /usr/bin/docker exec -t admin ./manage.py get_takeaways
-*/5 * * * * /usr/bin/flock -n /tmp/get_takeaways /usr/bin/docker exec admin ./manage.py get_takeaways
-```
-
-## How everything fits together
-
-### Django
-
-Most of the logic is inside Django, the **admin** container provides the [Django Rest Framework](https://www.django-rest-framework.org/), manages subscriptions, and sends emails.
-
-The following subscriptions are available:
-
-**Admin digest**
-
-This is sent every 48 hours with the latest articles and their machine learning prediction. Allows the admin access to an Edit link where the article can be edited and tagged as relevant.
-
-**Weekly digest**
-
-This is sent every Tuesday, it lists the relevant articles discovered in the last week.
-
-**Clinical Trials**
-
-This is sent every 12 hours if a new clinical trial was posted.
-
-The title of the email footer for these emails needs to be set in the Custom Settings section of the admin backoffice.
-
-Django also allows you to add new sources from where to fetch articles. Take a look at `/admin/gregory/sources/ `
-
-![image-20220619195841565](images/image-20220619195841565.png)
-
-### Mailgun
-
-Emails are sent from the `admin` container using Mailgun.
-
-To enable them, you will need a mailgun account, or you can replace them with another way to send emails.
-
-You need to configure the relevant variables for this to work:
+## Quick Start
 
 ```bash
-EMAIL_USE_TLS=true
-EMAIL_MAILGUN_API='YOUR API KEY'
-EMAIL_DOMAIN='YOURDOMAIN'
-EMAIL_MAILGUN_API_URL="https://api.eu.mailgun.net/v3/YOURDOMAIN/messages"
+# Clone the repository
+git clone <repository_url>
+cd <repository_directory>
+
+# Set up environment
+cp example.env .env
+# Edit .env with your configuration
+
+# Start containers
+docker compose up -d
+
+# Initialize database
+docker exec admin python manage.py makemigrations
+docker exec admin python manage.py migrate
 ```
 
-As an alternative, you can configure Django to use any other email server.
+Visit `http://localhost:8000/admin` to access the admin interface.
 
-### RSS feeds and API
+## License
 
-Gregory has the concept of 'subject'. In this case, Multiple Sclerosis is the only subject configured. A Subject is a group of Sources and their respective articles. There are also categories that can be created. A category is a group of articles whose title matches at least one keyword in list for that category. Categories can include articles across subjects.
+This project is licensed under [LICENSE](LICENSE).
 
-There are options to filter lists of articles by their category or subject in the format `articles/category/<category>` and `articles/subject/<subject>` where <category> and <subject> is the lowercase name with spaces replaced by dashes.
+## Acknowledgements
 
-#### Available RSS feeds
+Special thanks to all contributors who have helped with the development of Gregory:
 
-1. Latest articles, `/feed/latest/articles/`
-2. Latest articles by subject, `/feed/articles/subject/<subject>/`
-3. Latest articles by category, `/feed/articles/category/<category>/`
-4. Latest clinical trials, `/feed/latest/trials/`
-5. Latest relevant articles by Machine Learning, `/feed/machine-learning/`
-6. Twitter feed, `/feed/twitter/`. This includes all relevant articles by manual selection and machine learning prediction. It's read by [Zapier](https://zapier.com/) so that we can post on twitter automatically.
-
-## How to update the Machine Learning Algorithms
-
-It's useful to re-train the machine learning models once you have a good number of articles flagged as relevant.
-
-### Training Models with the Django Management Command
-
-Gregory AI now includes a powerful Django management command for training ML models, with support for different algorithms, verbosity levels, and more.
-
-#### Basic Usage
-
-```bash
-# Train all algorithms for a specific team and subject
-python manage.py train_models --team research --subject oncology
-
-# Train all models for the 'clinical' team with maximum verbosity
-python manage.py train_models --team clinical --verbose 3
-
-# Train only LGBM model for a specific team and subject
-python manage.py train_models --team research --subject cardiology --algo lgbm_tfidf
-```
-
-#### Command Options
-
-| Option | Description |
-|--------|-------------|
-| `--team TEAM_SLUG` | Team slug to train models for |
-| `--all-teams` | Train models for all teams |
-| `--subject SUBJECT_SLUG` | Subject slug within the chosen team (if not specified, train for all subjects) |
-| `--all-articles` | Use all labeled articles (ignores 90-day window) |
-| `--lookback-days DAYS` | Override the default 90-day window for article discovery |
-| `--algo ALGORITHMS` | Comma-separated list of algorithms to train (pubmed_bert,lgbm_tfidf,lstm) |
-| `--prob-threshold THRESHOLD` | Probability threshold for classification (default: 0.8) |
-| `--version VERSION` | Manual version tag (default: auto-generated YYYYMMDD with optional _n suffix) |
-| `--pseudo-label` | Run BERT self-training loop before final training |
-| `--verbose LEVEL` | Verbosity level (0: quiet, 1: progress, 2: +warnings, 3: +summary) |
-
-#### Production Use
-
-In production, it's recommended to run the command on a scheduled basis (e.g., monthly) with the appropriate verbosity level:
-
-```bash
-# Example for production cron job
-docker exec -it gregory-django python manage.py train_models --all-teams --verbose 1
-```
-
-#### Development Use
-
-For development and testing, you may want to see detailed training information:
-
-```bash
-# Example for development
-python manage.py train_models --team research --subject test --verbose 3
-```
-
-## Testing
-
-### Running Tests
-
-Gregory AI includes a comprehensive test suite. To run tests:
-
-```bash
-# Run all tests
-cd django
-python manage.py test
-
-# Run specific test files or modules
-python manage.py test gregory.tests.test_filename
-
-# Run standalone test files (for tests that avoid Django dependencies)
-cd django
-python gregory/tests/test_train_models_standalone.py
-```
-
-### Training Models with the Django Management Command
-
-Gregory AI includes a powerful Django management command for training ML models, with support for different algorithms, verbosity levels, and more.
-
-#### Basic Usage
-
-```bash
-# Train all algorithms for a specific team and subject
-python manage.py train_models --team research --subject oncology
-
-# Train only BERT for all subjects in the clinical team
-python manage.py train_models --team clinical --algo pubmed_bert
-
-# Train all models for all teams with verbose output
-python manage.py train_models --all-teams --verbose 3
-
-# Run with pseudo-labeling and custom threshold
-python manage.py train_models --team research --subject cardiology --pseudo-label --prob-threshold 0.75
-```
-
-#### Command Options
-
-| Option | Description |
-|--------|-------------|
-| `--team TEAM_SLUG` | Team slug to train models for |
-| `--all-teams` | Train models for all teams |
-| `--subject SUBJECT_SLUG` | Subject slug within the chosen team (if not specified, train for all subjects) |
-| `--all-articles` | Use all labeled articles (ignores 90-day window) |
-| `--lookback-days DAYS` | Override the default 90-day window for article discovery |
-| `--algo ALGORITHMS` | Comma-separated list of algorithms to train (`pubmed_bert`, `lgbm_tfidf`, `lstm`) |
-| `--prob-threshold VALUE` | Probability threshold for classification (default: 0.8) |
-| `--version TAG` | Manual version tag (default: auto-generated YYYYMMDD) |
-| `--pseudo-label` | Run BERT self-training loop before final training |
-| `--verbose LEVEL` | Verbosity level (0-3, where 0=quiet, 3=summary) |
-
-#### Development Use
-
-When developing or testing, consider:
-
-```bash
-# Use minimal data for quick testing
-python manage.py train_models --team test-team --subject test-subject --lookback-days 30 --algo pubmed_bert --verbose 3
-
-# Skip pseudo-labeling in development to speed up training
-python manage.py train_models --team research --subject oncology --algo pubmed_bert --verbose 2
-```
-
-#### Production Use
-
-In production environments:
-
-```bash
-# Train all algorithms with default settings
-python manage.py train_models --team production --subject main
-
-# Use custom version tag for tracking specific runs
-python manage.py train_models --team clinical --subject cardiology --version v1.2.3_special
-
-# Use pseudo-labeling for improved performance with unlabeled data
-python manage.py train_models --team research --all-articles --pseudo-label
-```
-
-## Running for local development
-
-Edit the env.example file to fit your configuration and rename to .env
-
-```bash
-sudo docker-compose up -d
-python3 -m venv env
-source env/bin/activate
-pip install -r requirements.txt
-```
-
-## Thank you to
-
-- @[Antoniolopes](https://github.com/antoniolopes) for helping with the Machine Learning script.
-- @[Chbm](https://github.com/chbm) for help in keeping the code secure.
-- @[Jneves](https://github.com/jneves) for help with the build script
-- @[Malduarte](https://github.com/malduarte) for help with the migration from sqlite to postgres.
-- @[Melo](https://github.com/melo) for showing me [Hugo](https://github.com/gohugoio/hugo)
-- @[Nurv](https://github.com/nurv) for the suggestion in using Spacy.io
-- @[Rcarmo](https://github.com/rcarmo) for showing me [Node-RED](https://github.com/node-red/node-red)
+- @[Antoniolopes](https://github.com/antoniolopes) - Machine Learning script
+- @[Chbm](https://github.com/chbm) - Security improvements
+- @[Jneves](https://github.com/jneves) - Build script
+- @[Malduarte](https://github.com/malduarte) - Database migration
+- @[Melo](https://github.com/melo) - [Hugo](https://github.com/gohugoio/hugo) integration
+- @[Nurv](https://github.com/nurv) - [Spacy.io](https://spacy.io/) integration
+- @[Rcarmo](https://github.com/rcarmo) - [Node-RED](https://github.com/node-red/node-red) integration
 
 And the **Lobsters** at [One Over Zero](https://github.com/oneoverzero)
