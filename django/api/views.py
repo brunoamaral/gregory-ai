@@ -301,7 +301,7 @@ class UnsentList(generics.ListAPIView):
 	serializer_class = ArticleSerializer
 
 	def get_queryset(self):
-		return Articles.objects.all().exclude(sent_to_subscribers = True)
+		return Articles.objects.all().exclude(sent_to_subscribers = True).order_by('-discovery_date')
 
 class newsletterByWeek(viewsets.ModelViewSet):
 	"""
@@ -317,7 +317,7 @@ class newsletterByWeek(viewsets.ModelViewSet):
 		).filter(
 			Q(ml_predictions_detail__predicted_relevant=True) | 
 			Q(article_subject_relevances__is_relevant=True)
-		).distinct()
+		).distinct().order_by('-discovery_date')
 		return articles
 
 	serializer_class = ArticleSerializer
@@ -337,7 +337,7 @@ class lastXdays(viewsets.ModelViewSet):
 		).filter(
 			Q(ml_predictions_detail__predicted_relevant=True) | 
 			Q(article_subject_relevances__is_relevant=True)
-		).distinct()
+		).distinct().order_by('-discovery_date')
 		return articles
 
 	serializer_class = ArticleSerializer
@@ -370,6 +370,9 @@ class ArticlesByKeyword(generics.ListAPIView):
 	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [filters.SearchFilter]
 	search_fields = ['title','summary']
+	
+	def get_queryset(self):
+		return Articles.objects.all().order_by('-discovery_date')
 
 class ArticlesPredictionNone(generics.ListAPIView):
 	"""
@@ -382,12 +385,12 @@ class ArticlesPredictionNone(generics.ListAPIView):
 	def get_queryset(self):
 		queryset = Articles.objects.annotate(summary_len=Length('summary')).filter(summary_len__gt=0).exclude(
 			ml_predictions_detail__isnull=False
-		)
+		).order_by('-discovery_date')
 		summary_length = self.request.query_params.get('summary_length')
 		if summary_length is not None:
 			queryset = Articles.objects.annotate(summary_len=Length('summary')).filter(summary_len__gt=summary_length).exclude(
 				ml_predictions_detail__isnull=False
-			)
+			).order_by('-discovery_date')
 		return queryset
 
 class ArticlesCount(viewsets.ModelViewSet):
@@ -400,15 +403,6 @@ class ArticlesCount(viewsets.ModelViewSet):
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	pagination_classes = None
 
-	# def get_queryset(self):
-	# 	return HttpResponse(Articles.objects.count())
-	# def list(self, request, *args, **kwargs):
-	# 	queryset = self.filter_queryset(self.get_queryset())
-	# 	# If you want response all the results, without pagination, 
-	# 	# stop calling the self.paginate_queryset method, use queryset directly
-	# 	page = self.paginate_queryset(queryset) or queryset
-	# 	serializer = self.get_serializer(page, many=True)
-	# 	return HttpResponse(json.dumps(serializer.data))
 
 class OpenAccessArticles(generics.ListAPIView):
 	"""
@@ -418,8 +412,8 @@ class OpenAccessArticles(generics.ListAPIView):
 	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
-		queryset = Articles.objects.filter(access='open')
-		return queryset 
+		queryset = Articles.objects.filter(access='open').order_by('-discovery_date')
+		return queryset
 	
 ###
 # CATEGORIES
@@ -491,7 +485,7 @@ class TrialsBySource(generics.ListAPIView):
 		"""
 		team_id = self.kwargs['team_id']
 		source_id = self.kwargs['source_id']
-		return Trials.objects.filter(teams__id=team_id, source__source_id=source_id)
+		return Trials.objects.filter(teams__id=team_id, source__source_id=source_id).order_by('-discovery_date')
 
 class TrialsByCategory(viewsets.ModelViewSet):
 	"""
@@ -505,7 +499,7 @@ class TrialsByCategory(viewsets.ModelViewSet):
 			category_slug = self.kwargs.get('category_slug', None)
 			category = get_object_or_404(TeamCategory, category_slug=category_slug, team_id=team_id)
 
-			return Trials.objects.filter(teams=team_id, team_categories=category).order_by('-trial_id')
+			return Trials.objects.filter(teams=team_id, team_categories=category).order_by('-discovery_date')
 
 class TrialsBySubject(viewsets.ModelViewSet):
 	"""
@@ -519,7 +513,7 @@ class TrialsBySubject(viewsets.ModelViewSet):
 		subject_id = self.kwargs['subject_id']
 		get_object_or_404(Subject, id=subject_id, team_id=team_id)
 
-		return Trials.objects.filter(teams=team_id, subjects=subject_id).order_by('-trial_id')
+		return Trials.objects.filter(teams=team_id, subjects=subject_id).order_by('-discovery_date')
 
 
 ###
@@ -655,4 +649,4 @@ class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
 				team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
 				return Articles.objects.filter(team_categories=team_category).prefetch_related(
 						'team_categories', 'sources', 'authors', 'teams', 'subjects', 'ml_predictions'
-				)
+				).order_by('-discovery_date')
