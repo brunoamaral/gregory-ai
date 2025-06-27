@@ -252,13 +252,18 @@ class ArticlesByTeam(viewsets.ModelViewSet):
 		return Articles.objects.filter(teams__id=team_id).order_by('-discovery_date')
 
 class ArticlesBySubject(viewsets.ModelViewSet):
+	"""
+	Search Articles by the subject field and team ID. Usage /teams/<team_id>/articles/subject/<subject_id>/
+	"""
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
 		subject_id = self.kwargs.get('subject_id')
-		return Articles.objects.filter(subjects__id=subject_id, teams=team_id).order_by('-discovery_date')
+		get_object_or_404(Subject, id=subject_id, team_id=team_id)
+
+		return Articles.objects.filter(teams=team_id, subjects=subject_id).order_by('-discovery_date')
 class ArticlesByJournal(viewsets.ModelViewSet):
 	"""
 	Search articles by the journal field. Usage /articles/journal/{{journal}}/.
@@ -343,12 +348,18 @@ class lastXdays(viewsets.ModelViewSet):
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 class ArticlesBySource(viewsets.ModelViewSet):
+	"""
+	Lists the articles that come from the specified source_id.
+	Usage /teams/<team_id>/articles/source/<source_id>/
+	"""
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
 		source_id = self.kwargs.get('source_id')
+		get_object_or_404(Sources, source_id=source_id, team_id=team_id)
+		
 		return Articles.objects.filter(teams__id=team_id, sources__source_id=source_id).order_by('-discovery_date')
 
 class ArticlesByAuthorList(generics.ListAPIView):
@@ -483,15 +494,19 @@ class AllTrialViewSet(generics.ListAPIView):
 
 
 class TrialsBySource(generics.ListAPIView):
+	"""
+	Lists the clinical trials that come from the specified source_id. 
+	Usage /teams/<team_id>/trials/source/<source_id>/
+	"""
 	serializer_class = TrialSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
-		"""
-		Lists the clinical trials that come from the specified source_id
-		"""
 		team_id = self.kwargs['team_id']
 		source_id = self.kwargs['source_id']
-		return Trials.objects.filter(teams__id=team_id, source__source_id=source_id)
+		get_object_or_404(Sources, source_id=source_id, team_id=team_id)
+		
+		return Trials.objects.filter(teams__id=team_id, source__source_id=source_id).order_by('-discovery_date')
 
 class TrialsByCategory(viewsets.ModelViewSet):
 	"""
@@ -505,7 +520,7 @@ class TrialsByCategory(viewsets.ModelViewSet):
 			category_slug = self.kwargs.get('category_slug', None)
 			category = get_object_or_404(TeamCategory, category_slug=category_slug, team_id=team_id)
 
-			return Trials.objects.filter(teams=team_id, team_categories=category).order_by('-trial_id')
+			return Trials.objects.filter(teams=team_id, team_categories=category).order_by('-discovery_date')
 
 class TrialsBySubject(viewsets.ModelViewSet):
 	"""
@@ -519,7 +534,7 @@ class TrialsBySubject(viewsets.ModelViewSet):
 		subject_id = self.kwargs['subject_id']
 		get_object_or_404(Subject, id=subject_id, team_id=team_id)
 
-		return Trials.objects.filter(teams=team_id, subjects=subject_id).order_by('-trial_id')
+		return Trials.objects.filter(teams=team_id, subjects=subject_id).order_by('-discovery_date')
 
 
 ###
