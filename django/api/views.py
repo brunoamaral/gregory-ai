@@ -2,6 +2,7 @@ from api.serializers import (
 		ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, 
 		CategorySerializer, TeamSerializer, SubjectsSerializer, ArticlesByCategoryAndTeamSerializer
 )
+from api.pagination import FlexiblePagination
 from datetime import datetime, timedelta
 from django.db.models import Count, Q
 from django.db.models.functions import Length, TruncMonth
@@ -657,15 +658,17 @@ class ArticleSearchView(generics.ListAPIView):
     """
     Advanced search for articles by title and abstract (summary).
     
-    This endpoint requires a POST request with team_id and subject_id in the request body, 
+    This endpoint accepts both GET and POST requests with team_id and subject_id parameters, 
     along with optional search parameters.
     
-    Search parameters in POST body:
+    Parameters (can be sent as query params for GET or in request body for POST):
     - title: Search only in title field
     - summary: Search only in summary/abstract field
     - search: Search in both title and summary fields
     - team_id: Required - Team ID to filter articles by (must be provided)
     - subject_id: Required - Subject ID to filter articles by (must be provided)
+    - page: Page number for pagination (default: 1)
+    - page_size: Number of results per page (default: 10, max: 100)
     
     Results are ordered by discovery date (newest first).
     """
@@ -674,28 +677,68 @@ class ArticleSearchView(generics.ListAPIView):
     filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
     filterset_class = ArticleFilter
     search_fields = ['title', 'summary']
-    http_method_names = ['post']
+    pagination_class = FlexiblePagination
+    http_method_names = ['get', 'post']  # Support both GET and POST
     
     def get_queryset(self):
-        # This method is still called even for POST requests
-        return Articles.objects.none()  # Return empty queryset by default
-    
-    def post(self, request, *args, **kwargs):
+        # This method handles both GET and POST requests
+        if self.request.method == 'GET':
+            params = self.request.query_params
+        else:
+            params = self.request.data
+            
         # Extract required parameters
-        team_id = request.data.get('team_id')
-        subject_id = request.data.get('subject_id')
+        team_id = params.get('team_id')
+        subject_id = params.get('subject_id')
         
         # Validate required parameters
+        if not team_id or not subject_id:
+            return Articles.objects.none()
+        
+        try:
+            # Start with articles filtered by team and subject
+            queryset = Articles.objects.filter(
+                teams__id=team_id, 
+                subjects__id=subject_id
+            ).order_by('-discovery_date')
+            
+            # Apply additional filters
+            title = params.get('title')
+            summary = params.get('summary')
+            search = params.get('search')
+            
+            if title:
+                queryset = queryset.filter(title__icontains=title)
+            if summary:
+                queryset = queryset.filter(summary__icontains=summary)
+            if search:
+                queryset = queryset.filter(
+                    Q(title__icontains=search) | Q(summary__icontains=search)
+                )
+                
+            return queryset
+        except:
+            return Articles.objects.none()
+    
+    def post(self, request, *args, **kwargs):
+        # For POST requests, delegate to the list method which uses get_queryset
+        return self.list(request, *args, **kwargs)
+        
+    def get(self, request, *args, **kwargs):
+        # Validate required parameters for GET requests
+        team_id = request.query_params.get('team_id')
+        subject_id = request.query_params.get('subject_id')
+        
         if not team_id or not subject_id:
             return Response(
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-        
+            
         try:
             # Check if team and subject exist
-            team = Team.objects.get(id=team_id)
-            subject = Subject.objects.get(id=subject_id, team=team)
+            Team.objects.get(id=team_id)
+            Subject.objects.get(id=subject_id, team_id=team_id)
         except Team.DoesNotExist:
             return Response(
                 {"error": f"Team with ID {team_id} not found"}, 
@@ -706,48 +749,26 @@ class ArticleSearchView(generics.ListAPIView):
                 {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
                 status=404
             )
-        
-        # Start with articles filtered by team and subject
-        queryset = Articles.objects.filter(teams=team, subjects=subject).order_by('-discovery_date')
-        
-        # Apply additional filters
-        title = request.data.get('title')
-        summary = request.data.get('summary')
-        search = request.data.get('search')
-        
-        if title:
-            queryset = queryset.filter(title__icontains=title)
-        if summary:
-            queryset = queryset.filter(summary__icontains=summary)
-        if search:
-            queryset = queryset.filter(
-                Q(title__icontains=search) | Q(summary__icontains=search)
-            )
-        
-        # Use pagination from ListAPIView
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
             
-        # If no pagination
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        # Delegate to the list method
+        return self.list(request, *args, **kwargs)
 
 class TrialSearchView(generics.ListAPIView):
     """
     Advanced search for clinical trials by title, summary, and recruitment status.
     
-    This endpoint requires a POST request with team_id and subject_id in the request body, 
+    This endpoint accepts both GET and POST requests with team_id and subject_id parameters, 
     along with optional search parameters.
     
-    Search parameters in POST body:
+    Parameters (can be sent as query params for GET or in request body for POST):
     - title: Search only in title field
     - summary: Search only in summary/abstract field
     - search: Search in both title and summary fields
     - status: Filter by recruitment status (e.g., 'Recruiting', 'Completed')
     - team_id: Required - Team ID to filter trials by (must be provided)
     - subject_id: Required - Subject ID to filter trials by (must be provided)
+    - page: Page number for pagination (default: 1)
+    - page_size: Number of results per page (default: 10, max: 100)
     
     Results are ordered by discovery date (newest first).
     """
@@ -756,47 +777,39 @@ class TrialSearchView(generics.ListAPIView):
     filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
     filterset_class = TrialFilter
     search_fields = ['title', 'summary']
-    http_method_names = ['post']
+    pagination_class = FlexiblePagination
+    http_method_names = ['get', 'post']  # Support both GET and POST
     
     def get_queryset(self):
-        # This method is still called even for POST requests
-        return Trials.objects.none()  # Return empty queryset by default
-    
-    def post(self, request, *args, **kwargs):
+        # This method handles both GET and POST requests
+        if self.request.method == 'GET':
+            params = self.request.query_params
+        else:
+            params = self.request.data
+            
         # Extract required parameters
-        team_id = request.data.get('team_id')
-        subject_id = request.data.get('subject_id')
+        team_id = params.get('team_id')
+        subject_id = params.get('subject_id')
         
         # Validate required parameters
         if not team_id or not subject_id:
-            return Response(
-                {"error": "Missing required parameters: team_id, subject_id"}, 
-                status=400
-            )
-        
+            return Trials.objects.none()
+            
         try:
             # Check if team and subject exist
             team = Team.objects.get(id=team_id)
             subject = Subject.objects.get(id=subject_id, team=team)
-        except Team.DoesNotExist:
-            return Response(
-                {"error": f"Team with ID {team_id} not found"}, 
-                status=404
-            )
-        except Subject.DoesNotExist:
-            return Response(
-                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
-                status=404
-            )
+        except (Team.DoesNotExist, Subject.DoesNotExist):
+            return Trials.objects.none()
         
         # Start with trials filtered by team and subject
         queryset = Trials.objects.filter(teams=team, subjects=subject).order_by('-discovery_date')
         
         # Apply additional filters
-        title = request.data.get('title')
-        summary = request.data.get('summary')
-        search = request.data.get('search')
-        status = request.data.get('status')
+        title = params.get('title')
+        summary = params.get('summary')
+        search = params.get('search')
+        status = params.get('status')
         
         if title:
             queryset = queryset.filter(title__icontains=title)
@@ -808,13 +821,9 @@ class TrialSearchView(generics.ListAPIView):
             )
         if status:
             queryset = queryset.filter(recruitment_status=status)
-        
-        # Use pagination from ListAPIView
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
             
-        # If no pagination
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        return queryset
+    
+    def post(self, request, *args, **kwargs):
+        # For POST requests, delegate to the list method which uses get_queryset
+        return self.list(request, *args, **kwargs)
