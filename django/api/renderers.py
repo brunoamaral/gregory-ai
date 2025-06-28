@@ -681,14 +681,21 @@ class StreamingCSVRenderer(FlattenedCSVRenderer):
             
             # Set a flag on the response to indicate it should be streamed
             renderer_context['response'].streaming = True
+            
+            # Store the renderer in the context so middleware can access it
+            renderer_context['renderer'] = self
         
         # Check if this is paginated data
         if isinstance(data, dict) and 'results' in data and isinstance(data['results'], list):
             # Replace the entire data with just the results
             data = data['results']
         
-        # Return the generator function
-        return self.generate_csv_rows(data, renderer_context)
+        # Create the generator function and store it for the middleware to access
+        self.generator_function = self.generate_csv_rows(data, renderer_context)
+        
+        # Return an empty string - the middleware will handle the streaming
+        # This prevents the framework from trying to consume the generator
+        return ""
     
     def generate_csv_rows(self, data, renderer_context):
         """
