@@ -10,12 +10,14 @@ from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper
 from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, TeamCategory
 from rest_framework import permissions, viewsets, generics, filters
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, action
 from django_filters import rest_framework as django_filters
 from api.filters import ArticleFilter, TrialFilter
 from rest_framework.response import Response
+from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
+from api.renderers import StreamingCSVRenderer, FlattenedCSVRenderer
 import json
 import traceback
 
@@ -211,13 +213,15 @@ def post_article(request):
 ### 
 class ArticleViewSet(viewsets.ModelViewSet):
 	"""
-	List all articles in the database by earliest discovery_date
+	List all articles in the database by earliest discovery_date.
+	CSV responses are automatically streamed for better performance with large datasets.
 	"""
 	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [filters.SearchFilter]
+	filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
 	search_fields  = ['$title','$summary']
+	filterset_class = ArticleFilter
 
 class RelatedArticles(viewsets.ModelViewSet):
 	"""
@@ -462,12 +466,14 @@ class MonthlyCountsView(APIView):
 class TrialViewSet(viewsets.ModelViewSet):
 	"""
 	List all clinical trials by discovery date. Accepts regular expressions in search.
+	CSV responses are automatically streamed for better performance with large datasets.
 	"""
 	queryset = Trials.objects.all().order_by('-discovery_date')
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [filters.SearchFilter]
+	filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
 	search_fields  = ['$title','$summary']
+	filterset_class = TrialFilter
 
 class AllTrialViewSet(generics.ListAPIView):
 	"""

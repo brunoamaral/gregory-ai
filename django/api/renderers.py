@@ -6,6 +6,7 @@ from html import unescape
 import json
 from datetime import datetime
 from django.utils.text import slugify
+from django.http import StreamingHttpResponse
 
 class FlattenedCSVRenderer(CSVRenderer):
     """
@@ -652,3 +653,124 @@ class FlattenedCSVRenderer(CSVRenderer):
                     item.pop(key, None)
         
         return data_list
+
+class StreamingCSVRenderer(FlattenedCSVRenderer):
+    """
+    A streaming CSV renderer that extends FlattenedCSVRenderer but uses Django's
+    StreamingHttpResponse to stream results one row at a time, reducing memory usage
+    and making it less likely to time out for large datasets.
+    
+    This renderer is designed to be a drop-in replacement for FlattenedCSVRenderer.
+    """
+    
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        """
+        Prepare the data for streaming but return a generator function instead of
+        the complete CSV content. The actual StreamingHttpResponse will be created
+        in a middleware that wraps the response.
+        """
+        # Set the custom filename in the response headers if we have a response object
+        if renderer_context and 'response' in renderer_context:
+            # Determine the object type (articles, trials, etc.)
+            object_type = self._determine_object_type(renderer_context)
+            current_date = datetime.now().strftime('%Y-%m-%d')
+            filename = f"gregory-ai-{object_type}-{current_date}.csv"
+            
+            # Set Content-Disposition header with the custom filename
+            renderer_context['response']['Content-Disposition'] = f'attachment; filename="{filename}"'
+            
+            # Set a flag on the response to indicate it should be streamed
+            renderer_context['response'].streaming = True
+        
+        # Check if this is paginated data
+        if isinstance(data, dict) and 'results' in data and isinstance(data['results'], list):
+            # Replace the entire data with just the results
+            data = data['results']
+        
+        # Return the generator function
+        return self.generate_csv_rows(data, renderer_context)
+    
+    def generate_csv_rows(self, data, renderer_context):
+        """
+        Generator function that yields CSV rows one at a time.
+        """
+        # Consolidate various fields into single columns
+        if isinstance(data, list):
+            data = self._consolidate_authors(data)
+            data = self._consolidate_subjects(data)
+            data = self._consolidate_ml_predictions(data)
+            data = self._consolidate_clinical_trials(data)
+            data = self._consolidate_team_categories(data)
+            data = self._consolidate_sources(data)
+            data = self._consolidate_article_subject_relevances(data)
+            data = self._remove_excluded_columns(data)
+            
+        # Clean text fields to ensure proper CSV formatting
+        if isinstance(data, list):
+            data = self.clean_data_for_csv(data)
+        
+        # Flatten the data structure
+        flattened_data = self.flatten_data(data)
+        
+        # Reorder columns
+        header, rows = self._reorder_columns(flattened_data['header'], flattened_data['rows'])
+        
+        # Final check to ensure all header items are strings
+        header = [str(h) for h in header]
+        
+        # Create a StringIO buffer for a single row at a time
+        csv_buffer = io.StringIO()
+        csv_writer = csv.writer(
+            csv_buffer,
+            quoting=csv.QUOTE_ALL,  # Quote all fields for maximum compatibility
+            quotechar='"',
+            doublequote=True,  # Double quotes within fields are doubled
+            lineterminator='\n'
+        )
+        
+        # Yield the header row first
+        csv_writer.writerow(header)
+        yield csv_buffer.getvalue()
+        
+        # Clear the buffer for the next row
+        csv_buffer.seek(0)
+        csv_buffer.truncate(0)
+        
+        # Yield each data row one at a time
+        for row in rows:
+            # Final check to ensure all row items are strings
+            string_row = []
+            for item in row:
+                if item is None:
+                    string_row.append('')
+                elif not isinstance(item, str):
+                    try:
+                        string_row.append(str(item))
+                    except Exception:
+                        string_row.append('')
+                else:
+                    string_row.append(item)
+            
+            try:
+                csv_writer.writerow(string_row)
+                row_data = csv_buffer.getvalue()
+                yield row_data
+                
+                # Clear the buffer for the next row
+                csv_buffer.seek(0)
+                csv_buffer.truncate(0)
+            except Exception:
+                # If writing fails, try with a safer approach
+                safe_row = ['' if item is None else str(item) for item in string_row]
+                try:
+                    csv_writer.writerow(safe_row)
+                    row_data = csv_buffer.getvalue()
+                    yield row_data
+                    
+                    # Clear the buffer for the next row
+                    csv_buffer.seek(0)
+                    csv_buffer.truncate(0)
+                except Exception:
+                    # Skip this row if it still fails
+                    csv_buffer.seek(0)
+                    csv_buffer.truncate(0)
