@@ -201,7 +201,21 @@ LOGGING = {
 }
 
 # CORS Settings
-CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins - since you mentioned you don't mind if others use your API
+# Allow requests from all origins
+CORS_ALLOW_ALL_ORIGINS = True
+
+# Alternative to CORS_ALLOW_ALL_ORIGINS: explicitly specify allowed origins
+# CORS_ALLOWED_ORIGINS = [
+#     "https://gregory-ms.com",
+#     "https://www.gregory-ms.com",
+#     "http://localhost:3000",
+# ]
+
+# Allow credentials (cookies, authorization headers, etc.) to be exposed to the browser
+CORS_ALLOW_CREDENTIALS = True
+
+# Cache preflight requests for 1 hour
+CORS_PREFLIGHT_MAX_AGE = 3600
 
 # Additional CORS settings to ensure proper handling of CSV responses
 CORS_ALLOW_METHODS = [

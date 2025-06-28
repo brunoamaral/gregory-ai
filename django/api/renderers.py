@@ -40,6 +40,14 @@ class FlattenedCSVRenderer(CSVRenderer):
         For paginated responses, we only want the actual results in CSV format,
         not the pagination metadata (count, next, previous, etc.).
         """
+        # Add debug logging to understand request and response details
+        if renderer_context and 'request' in renderer_context:
+            request = renderer_context['request']
+            print(f"DEBUG: CSV Renderer request path: {request.path}")
+            print(f"DEBUG: CSV Renderer request headers: {request.headers}")
+            print(f"DEBUG: CSV Renderer request META origin: {request.META.get('HTTP_ORIGIN', 'None')}")
+            print(f"DEBUG: CSV Renderer request META referer: {request.META.get('HTTP_REFERER', 'None')}")
+        
         # Set the custom filename in the response headers
         if renderer_context and 'response' in renderer_context:
             # Determine the object type (articles, trials, etc.)
@@ -59,14 +67,20 @@ class FlattenedCSVRenderer(CSVRenderer):
                 # Use the actual origin of the request if available
                 origin = renderer_context['request'].META.get('HTTP_ORIGIN')
                 response['Access-Control-Allow-Origin'] = origin
+                # When specifying an origin (not using *), the Vary header must include Origin
+                # to ensure proper caching behavior
+                vary_header = response.get('Vary', '')
+                if 'Origin' not in vary_header:
+                    response['Vary'] = f"{vary_header}, Origin" if vary_header else "Origin"
             else:
                 # Fallback to allowing all origins if we can't determine the specific origin
                 response['Access-Control-Allow-Origin'] = '*'
             
-            # Expose Content-Disposition header for CSV downloads
+            # Ensure the Content-Disposition header is exposed for CSV downloads
             response['Access-Control-Expose-Headers'] = 'Content-Disposition'
             response['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-            response['Access-Control-Allow-Headers'] = 'Content-Type, Accept'
+            response['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Authorization'
+            response['Access-Control-Allow-Credentials'] = 'true'
         
         
         # Check if this is paginated data
