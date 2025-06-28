@@ -48,8 +48,25 @@ class FlattenedCSVRenderer(CSVRenderer):
             filename = f"gregory-ai-{object_type}-{current_date}.csv"
             
             # Set Content-Disposition header with the custom filename
-            renderer_context['response']['Content-Disposition'] = f'attachment; filename="{filename}"'
-            renderer_context['response']['Content-Type'] = 'text/csv; charset=utf-8'
+            response = renderer_context['response']
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            response['Content-Type'] = 'text/csv; charset=utf-8'
+            
+            # Add CORS headers directly to the response to ensure they're always present
+            # These will override any headers set by middleware if they exist
+            # or be used directly if no middleware is handling CORS
+            if 'request' in renderer_context and 'HTTP_ORIGIN' in renderer_context['request'].META:
+                # Use the actual origin of the request if available
+                origin = renderer_context['request'].META.get('HTTP_ORIGIN')
+                response['Access-Control-Allow-Origin'] = origin
+            else:
+                # Fallback to allowing all origins if we can't determine the specific origin
+                response['Access-Control-Allow-Origin'] = '*'
+            
+            # Expose Content-Disposition header for CSV downloads
+            response['Access-Control-Expose-Headers'] = 'Content-Disposition'
+            response['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+            response['Access-Control-Allow-Headers'] = 'Content-Type, Accept'
         
         
         # Check if this is paginated data
