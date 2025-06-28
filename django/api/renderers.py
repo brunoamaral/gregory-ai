@@ -49,6 +49,8 @@ class FlattenedCSVRenderer(CSVRenderer):
             
             # Set Content-Disposition header with the custom filename
             renderer_context['response']['Content-Disposition'] = f'attachment; filename="{filename}"'
+            renderer_context['response']['Content-Type'] = 'text/csv; charset=utf-8'
+        
         
         # Check if this is paginated data
         if isinstance(data, dict) and 'results' in data and isinstance(data['results'], list):

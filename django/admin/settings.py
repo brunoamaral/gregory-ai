@@ -68,6 +68,7 @@ INSTALLED_APPS = [
 	'rest_framework_simplejwt',
 	'rest_framework_csv',  # Add CSV renderer support
 	'django_filters',
+	'corsheaders',  # CORS headers support
 	'django.contrib.admin',
 	'django.contrib.auth',
 	'django.contrib.contenttypes',
@@ -84,6 +85,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
 	'django.middleware.security.SecurityMiddleware',
+	'corsheaders.middleware.CorsMiddleware',  # CORS middleware (position is important!)
 	'django.contrib.sessions.middleware.SessionMiddleware',
 	'django.middleware.common.CommonMiddleware',
 	'django.middleware.csrf.CsrfViewMiddleware',
@@ -197,6 +199,39 @@ LOGGING = {
 		'level': 'INFO',
 	},
 }
+
+# CORS Settings
+CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins - since you mentioned you don't mind if others use your API
+
+# Additional CORS settings to ensure proper handling of CSV responses
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "cache-control",
+    "pragma",
+]
+
+# Important: Allow Content-Disposition header to be exposed
+# This is critical for CSV downloads to work properly
+CORS_EXPOSE_HEADERS = [
+    "content-disposition",
+]
 
 if not FERNET_SECRET_KEY:
 		if DEBUG:  # Only generate a key in development
