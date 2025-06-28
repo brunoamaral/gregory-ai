@@ -111,7 +111,7 @@ class FlattenedCSVRenderer(CSVRenderer):
                 for author in item['authors']:
                     if isinstance(author, dict):
                         if 'full_name' in author:
-                            author_names.append(author['full_name'])
+                            author_names.append(str(author['full_name']))
                         # Fallback if full_name isn't available
                         elif 'given_name' in author and 'family_name' in author:
                             author_names.append(f"{author['given_name']} {author['family_name']}")
@@ -142,7 +142,7 @@ class FlattenedCSVRenderer(CSVRenderer):
                 for subject in item['subjects']:
                     if isinstance(subject, dict):
                         if 'subject_name' in subject:
-                            subject_names.append(subject['subject_name'])
+                            subject_names.append(str(subject['subject_name']))
                 
                 # Replace the subjects list with a comma-separated string of names
                 item['subjects'] = ', '.join(subject_names)
@@ -159,7 +159,7 @@ class FlattenedCSVRenderer(CSVRenderer):
                 for rel in item['article_subject_relevances']:
                     if isinstance(rel, dict) and 'subject' in rel and isinstance(rel['subject'], dict):
                         if 'subject_name' in rel['subject']:
-                            relevant_subjects.append(rel['subject']['subject_name'])
+                            relevant_subjects.append(str(rel['subject']['subject_name']))
                 
                 # Create or update a relevant_subjects field
                 if relevant_subjects:
@@ -187,7 +187,7 @@ class FlattenedCSVRenderer(CSVRenderer):
                 # Extract key prediction information
                 for pred in item['ml_predictions']:
                     if isinstance(pred, dict):
-                        algorithm = pred.get('algorithm', 'unknown')
+                        algorithm = str(pred.get('algorithm', 'unknown'))
                         score = pred.get('probability_score', 0)
                         relevant = pred.get('predicted_relevant', False)
                         
@@ -221,18 +221,22 @@ class FlattenedCSVRenderer(CSVRenderer):
                 for trial in item['clinical_trials']:
                     if isinstance(trial, dict):
                         if 'trial_id' in trial:
-                            trials_info.append(trial['trial_id'])
+                            # Ensure trial_id is a string
+                            trials_info.append(str(trial['trial_id']))
                         elif 'nct_id' in trial:
-                            trials_info.append(trial['nct_id'])
+                            # Ensure nct_id is a string
+                            trials_info.append(str(trial['nct_id']))
                         elif 'title' in trial:
                             # Truncate long titles
-                            title = trial['title']
+                            title = str(trial['title'])
                             if len(title) > 50:
                                 title = title[:47] + '...'
                             trials_info.append(title)
                 
                 # Replace the clinical_trials list with a comma-separated string
-                item['clinical_trials'] = ', '.join(trials_info) if trials_info else 'None'
+                # Ensure all items in trials_info are strings before joining
+                string_trials_info = [str(info) for info in trials_info]
+                item['clinical_trials'] = ', '.join(string_trials_info) if string_trials_info else 'None'
                 
                 # Remove individual clinical_trials fields
                 for key in list(item.keys()):
@@ -256,7 +260,7 @@ class FlattenedCSVRenderer(CSVRenderer):
                 # Extract category names
                 for category in item['team_categories']:
                     if isinstance(category, dict) and 'category_name' in category:
-                        categories.append(category['category_name'])
+                        categories.append(str(category['category_name']))
                 
                 # Replace the team_categories list with a comma-separated string
                 item['team_categories'] = ', '.join(categories) if categories else 'None'
@@ -287,10 +291,11 @@ class FlattenedCSVRenderer(CSVRenderer):
                     for source in item['sources']:
                         if isinstance(source, dict):
                             if 'name' in source:
-                                source_names.append(source['name'])
+                                source_names.append(str(source['name']))
                             elif 'source_id' in source:
                                 source_names.append(f"Source #{source['source_id']}")
                     
+                    # Ensure all values are strings before joining
                     item['sources'] = ', '.join(source_names) if source_names else ', '.join(str(s) for s in item['sources'])
         
         return data_list
@@ -315,7 +320,7 @@ class FlattenedCSVRenderer(CSVRenderer):
                         # Get subject name
                         if 'subject' in rel and isinstance(rel['subject'], dict):
                             if 'subject_name' in rel['subject']:
-                                subject_info += rel['subject']['subject_name']
+                                subject_info += str(rel['subject']['subject_name'])
                         
                         # Add relevance status if available
                         if 'is_relevant' in rel:
@@ -413,62 +418,112 @@ class FlattenedCSVRenderer(CSVRenderer):
         # Reorder columns
         header, rows = self._reorder_columns(flattened_data['header'], flattened_data['rows'])
         
+        # Final check to ensure all header items are strings
+        header = [str(h) for h in header]
+        
+        
         # Write header row
         csv_writer.writerow(header)
         
-        # Write data rows
-        for row in rows:
-            csv_writer.writerow(row)
+        # Write data rows with extra type checking
+        for i, row in enumerate(rows):
+            # Final check to ensure all row items are strings
+            string_row = []
+            for item in row:
+                if item is None:
+                    string_row.append('')
+                elif not isinstance(item, str):
+                    try:
+                        string_row.append(str(item))
+                    except Exception as e:
+                        # If conversion fails, add error info and empty string
+                        string_row.append('')
+                else:
+                    string_row.append(item)
+            try:
+                csv_writer.writerow(string_row)
+            except Exception as e:
+                safe_row = ['' if item is None else str(item) for item in string_row]
+                try:
+                    csv_writer.writerow(safe_row)
+                except Exception as new_e:
+                    with open('/tmp/csv_debug.txt', 'a') as f:
+                        f.write(f"Still failed with safe row: {str(new_e)}\n")
             
         return csv_buffer.getvalue()
     
     def _reorder_columns(self, header, rows):
         """
         Reorder columns to match the preferred order and exclude unwanted columns.
+        Ensures all values are properly converted to strings.
         """
-        # Create a mapping of column name to index
-        column_indices = {column: idx for idx, column in enumerate(header)}
-        
-        # Determine the new order of columns
-        new_order = []
-        
-        # First, add the preferred columns in the specified order (if they exist)
-        for col in self.PREFERRED_COLUMN_ORDER:
-            if col in column_indices:
-                new_order.append(col)
-        
-        # Then add any remaining columns, excluding those in EXCLUDED_COLUMNS
-        for col in header:
-            if col not in new_order and col not in self.EXCLUDED_COLUMNS:
-                # Skip columns that start with excluded prefixes
-                if not any(col.startswith(excluded + '.') for excluded in self.EXCLUDED_COLUMNS):
+        try:
+            # Create a mapping of column name to index
+            column_indices = {column: idx for idx, column in enumerate(header)}
+            
+            # Determine the new order of columns
+            new_order = []
+            
+            # First, add the preferred columns in the specified order (if they exist)
+            for col in self.PREFERRED_COLUMN_ORDER:
+                if col in column_indices:
                     new_order.append(col)
-        
-        # Create a mapping from old indices to new indices
-        index_mapping = [column_indices[col] for col in new_order]
-        
-        # Reorder each row according to the new column order
-        reordered_rows = []
-        for row in rows:
-            reordered_row = [row[idx] if idx < len(row) else '' for idx in index_mapping]
-            reordered_rows.append(reordered_row)
-        
-        return new_order, reordered_rows
+            
+            # Then add any remaining columns, excluding those in EXCLUDED_COLUMNS
+            for col in header:
+                if col not in new_order and col not in self.EXCLUDED_COLUMNS:
+                    # Skip columns that start with excluded prefixes
+                    if not any(col.startswith(excluded + '.') for excluded in self.EXCLUDED_COLUMNS):
+                        new_order.append(col)
+            
+            # Create a mapping from old indices to new indices
+            index_mapping = [column_indices[col] for col in new_order]
+            
+            # Helper function to safely convert values to strings
+            def safe_str(value):
+                if value is None:
+                    return ''
+                try:
+                    return str(value)
+                except:
+                    return ''
+            
+            # Reorder each row according to the new column order
+            reordered_rows = []
+            for row in rows:
+                # Get the value at each index, ensure it's a string, or use empty string if index is out of bounds
+                reordered_row = []
+                for idx in index_mapping:
+                    if idx < len(row):
+                        reordered_row.append(safe_str(row[idx]))
+                    else:
+                        reordered_row.append('')
+                reordered_rows.append(reordered_row)
+            
+            return new_order, reordered_rows
+        except Exception as e:
+            # Return empty lists as a fallback
+            return [], []
     
     def flatten_data(self, data):
         """
         Use the parent CSVRenderer's flattening logic but with our customizations.
+        Ensures the output is consistently formatted for our custom tablize method.
         """
         # First use the parent class's flatten method
         if hasattr(self, '_flatten_data'):
-            # DRF's internal flattening function if available
-            flattened = self._flatten_data(data)
+            try:
+                # DRF's internal flattening function if available
+                flattened = self._flatten_data(data)
+                # Convert to our expected format
+                return self.custom_flatten_data(flattened)
+            except Exception as e:
+                # If the parent method fails, fall back to our custom implementation
+                return self.custom_flatten_data(data)
         else:
             # Fallback to our own implementation
-            flattened = self.custom_flatten_data(data)
+            return self.custom_flatten_data(data)
             
-        return flattened
-    
     def custom_flatten_data(self, data):
         """
         Custom implementation of data flattening for CSV.
@@ -493,7 +548,23 @@ class FlattenedCSVRenderer(CSVRenderer):
     def tablize(self, data):
         """
         Convert the data to a table-like format for CSV.
+        Ensures all values are strings to prevent "expected str instance" errors.
         """
+        # Helper function to ensure a value is a string
+        def ensure_string(value):
+            if value is None:
+                return ''
+            elif isinstance(value, (dict, list)):
+                try:
+                    return json.dumps(value)
+                except:
+                    return str(value)
+            else:
+                try:
+                    return str(value)
+                except:
+                    return ''
+            
         # If data is a list, process each item
         if isinstance(data, list):
             # Get all possible field names from all items
@@ -505,18 +576,15 @@ class FlattenedCSVRenderer(CSVRenderer):
             field_names = sorted(field_names)
             
             # Create the table with headers
-            table = [field_names]
+            # Convert all field names to strings to be safe
+            table = [[ensure_string(field) for field in field_names]]
             
             # Add each item as a row
             for item in data:
                 row = []
                 for field in field_names:
                     if isinstance(item, dict) and field in item:
-                        value = item[field]
-                        # Convert complex objects to JSON strings
-                        if isinstance(value, (dict, list)):
-                            value = json.dumps(value)
-                        row.append(value)
+                        row.append(ensure_string(item[field]))
                     else:
                         row.append('')
                 table.append(row)
@@ -526,16 +594,13 @@ class FlattenedCSVRenderer(CSVRenderer):
         # If data is a single item
         elif isinstance(data, dict):
             field_names = self.get_field_names(data)
-            table = [field_names]
+            # Convert all field names to strings to be safe
+            table = [[ensure_string(field) for field in field_names]]
             
             row = []
             for field in field_names:
                 if field in data:
-                    value = data[field]
-                    # Convert complex objects to JSON strings
-                    if isinstance(value, (dict, list)):
-                        value = json.dumps(value)
-                    row.append(value)
+                    row.append(ensure_string(data[field]))
                 else:
                     row.append('')
             table.append(row)
@@ -544,7 +609,7 @@ class FlattenedCSVRenderer(CSVRenderer):
             
         # If data is a non-dict value, treat as a single cell
         else:
-            return [[str(data)]]
+            return [[ensure_string(data)]]
     
     def get_field_names(self, obj, prefix=''):
         """

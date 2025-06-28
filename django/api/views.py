@@ -669,8 +669,12 @@ class ArticleSearchView(generics.ListAPIView):
     - subject_id: Required - Subject ID to filter articles by (must be provided)
     - page: Page number for pagination (default: 1)
     - page_size: Number of results per page (default: 10, max: 100)
+    - all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
     
     Results are ordered by discovery date (newest first).
+    
+    To download all search results as CSV, add format=csv and all_results=true to the query parameters.
+    Example: /articles/search/?team_id=1&subject_id=1&search=covid&format=csv&all_results=true
     """
     serializer_class = ArticleSerializer
     permission_classes = [permissions.AllowAny]  # Allow access to anyone since we require team_id and subject_id
@@ -769,8 +773,12 @@ class TrialSearchView(generics.ListAPIView):
     - subject_id: Required - Subject ID to filter trials by (must be provided)
     - page: Page number for pagination (default: 1)
     - page_size: Number of results per page (default: 10, max: 100)
+    - all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
     
     Results are ordered by discovery date (newest first).
+	
+    To download all search results as CSV, add format=csv and all_results=true to the query parameters.
+    Example: /trials/search/?team_id=1&subject_id=1&search=covid&format=csv&all_results=true
     """
     serializer_class = TrialSerializer
     permission_classes = [permissions.AllowAny]  # Allow access to anyone since we require team_id and subject_id
