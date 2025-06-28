@@ -66,6 +66,7 @@ INSTALLED_APPS = [
 	'rest_framework',
 	'rest_framework.authtoken',
 	'rest_framework_simplejwt',
+	'rest_framework_csv',  # Add CSV renderer support
 	'django_filters',
 	'django.contrib.admin',
 	'django.contrib.auth',
@@ -155,6 +156,11 @@ REST_FRAMEWORK = {
 		'rest_framework.authentication.BasicAuthentication',
 		'rest_framework.authentication.SessionAuthentication',
 		'rest_framework_simplejwt.authentication.JWTAuthentication',
+	),
+	'DEFAULT_RENDERER_CLASSES': (
+		'rest_framework.renderers.JSONRenderer',
+		'rest_framework.renderers.BrowsableAPIRenderer',
+		'api.renderers.FlattenedCSVRenderer',
 	),
 	'DEFAULT_FILTER_BACKENDS': [
 		'django_filters.rest_framework.DjangoFilterBackend',
