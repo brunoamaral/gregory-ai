@@ -1,5 +1,50 @@
 # Gregory API EndPoints
 
+## Data Formats
+
+All API endpoints support three formats:
+
+1. **JSON** (default): Standard JSON format for API responses
+2. **HTML** (browsable API): A user-friendly HTML interface for browsing the API
+3. **CSV**: Data in comma-separated values format for spreadsheet applications
+
+To get the response in CSV format, you can either:
+
+1. Add the format parameter: `?format=csv` to the URL
+2. Set the Accept header to `text/csv`
+
+Example:
+```bash
+# Using format parameter
+curl https://api.example.com/articles/?format=csv
+
+# Using Accept header
+curl -H "Accept: text/csv" https://api.example.com/articles/
+```
+
+### CSV Export Features
+
+When exporting data as CSV, the following features are available:
+
+1. **Pagination Bypass**: Add `all_results=true` to retrieve all data without pagination (useful for downloading complete datasets)
+2. **Clean Data Format**: The CSV export automatically:
+   - Consolidates nested fields (authors, subjects, clinical_trials, etc.) into single, readable columns
+   - Properly formats and escapes text fields to handle special characters
+   - Sets meaningful column names
+   - Uses a standardized filename format (e.g., gregory-ai-articles-2023-07-15.csv)
+3. **Type Safety**: All values are properly converted to strings to ensure compatibility with CSV format
+
+Example for exporting all search results as CSV:
+```bash
+# Export all articles matching a search query as CSV
+curl https://api.example.com/articles/search/?team_id=1&subject_id=1&search=covid&format=csv&all_results=true
+
+# Export all clinical trials matching a search query as CSV
+curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recruiting&format=csv&all_results=true
+```
+
+## Endpoints
+
 | Model                   | API Endpoint                             | Description                                         | Status                                                   |
 | ----------------------- | ---------------------------------------- | --------------------------------------------------- | -------------------------------------------------------- |
 | Authors                 | GET /authors/                            | List all authors                                    | :white_check_mark:                                       |
@@ -37,11 +82,15 @@
 | Articles                | GET /articles/{id}/                      | Retrieve a specific article by ID                   | :white_check_mark:                                       |
 | Articles                | PUT /articles/{id}/                      | Update a specific article by ID                     | :stop_sign:                                              |
 | Articles                | DELETE /articles/{id}/                   | Delete a specific article by ID                     | :stop_sign:                                              |
+| Articles                | GET /articles/search/                    | Search articles with filters & optional CSV export  | :white_check_mark:                                       |
+| Articles                | POST /articles/search/                   | Search articles (POST method)                       | :white_check_mark:                                       |
 | Trials                  | GET /trials/                             | List all trials                                     | :white_check_mark:                                       |
 | Trials                  | POST /trials/                            | Create a new trial                                  | :stop_sign:                                              |
 | Trials                  | GET /trials/{id}/                        | Retrieve a specific trial by ID                     | :white_check_mark:                                       |
 | Trials                  | PUT /trials/{id}/                        | Update a specific trial by ID                       | :stop_sign:                                              |
 | Trials                  | DELETE /trials/{id}/                     | Delete a specific trial by ID                       | :stop_sign:                                              |
+| Trials                  | GET /trials/search/                      | Search trials with filters & optional CSV export    | :white_check_mark:                                       |
+| Trials                  | POST /trials/search/                     | Search trials (POST method)                         | :white_check_mark:                                       |
 | Teams                   | GET /teams/                              | List all teams                                      | :white_check_mark:                                       |
 | Teams                   | POST /teams/                             | Create a new team                                   |                                                          |
 | Teams                   | GET /teams/{id}/                         | Retrieve a specific team by ID                      | :white_check_mark:                                       |
