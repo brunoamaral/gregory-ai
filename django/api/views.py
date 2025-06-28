@@ -674,6 +674,7 @@ class ArticleSearchView(generics.ListAPIView):
     Results are ordered by discovery date (newest first).
     
     To download all search results as CSV, add format=csv and all_results=true to the query parameters.
+    CSV export automatically uses streaming for large datasets to prevent timeouts.
     Example: /articles/search/?team_id=1&subject_id=1&search=covid&format=csv&all_results=true
     """
     serializer_class = ArticleSerializer
@@ -778,6 +779,7 @@ class TrialSearchView(generics.ListAPIView):
     Results are ordered by discovery date (newest first).
 	
     To download all search results as CSV, add format=csv and all_results=true to the query parameters.
+    CSV export automatically uses streaming for large datasets to prevent timeouts.
     Example: /trials/search/?team_id=1&subject_id=1&search=covid&format=csv&all_results=true
     """
     serializer_class = TrialSerializer
