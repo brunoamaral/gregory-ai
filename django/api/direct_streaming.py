@@ -83,46 +83,26 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                         if renderer_context.get('view'):
                             view = renderer_context['view']
                             
-                            # Check if this is an MS articles search
-                            search_term = request.query_params.get('search', '').lower()
-                            is_ms_search = 'ms' in search_term or 'multiple sclerosis' in search_term
-                            
-                            if is_ms_search:
-                                # Log that we're using the MS-specific approach
-                                logger.info(f"CSV Export: Using MS-specific export for search term: {search_term}")
+                            # Try a direct approach using a custom serializer for better performance
+                            try:
+                                # Get the original queryset
+                                queryset = view.filter_queryset(view.get_queryset())
                                 
-                                # Import models directly to avoid circular imports
-                                from django.db.models import Q
-                                from gregory.models import Articles
+                                # Log query details
+                                query_str = str(queryset.query)
+                                logger.info(f"CSV Export: SQL Query: {query_str[:300]}...")  # Truncate long queries
                                 
-                                # Count different MS query approaches for debugging
-                                ms_count_title_multiple_sclerosis = Articles.objects.filter(title__icontains='multiple sclerosis').count()
-                                ms_count_summary_multiple_sclerosis = Articles.objects.filter(summary__icontains='multiple sclerosis').count()
-                                ms_count_title_ms_word = Articles.objects.filter(title__iregex=r'\bms\b').count()
-                                ms_count_summary_ms_word = Articles.objects.filter(summary__iregex=r'\bms\b').count()
+                                # Log the number of results for debugging
+                                queryset_count = queryset.count()
+                                logger.info(f"CSV Export: Unpaginated queryset count: {queryset_count}")
                                 
-                                logger.info(f"CSV Export: MS counts by query type: " +
-                                           f"title 'multiple sclerosis': {ms_count_title_multiple_sclerosis}, " +
-                                           f"summary 'multiple sclerosis': {ms_count_summary_multiple_sclerosis}, " +
-                                           f"title '\\bms\\b': {ms_count_title_ms_word}, " +
-                                           f"summary '\\bms\\b': {ms_count_summary_ms_word}")
+                                # Get query parameters for debugging
+                                query_params = dict(request.query_params)
+                                logger.info(f"CSV Export: Query parameters: {query_params}")
                                 
-                                # Improved MS-specific query with better word boundary handling
-                                ms_queryset = Articles.objects.filter(
-                                    Q(title__icontains='multiple sclerosis') | 
-                                    Q(title__iregex=r'\bms\b') |
-                                    Q(title__iregex=r'\bm\.s\.\b') |  # Handle M.S. variation
-                                    Q(summary__icontains='multiple sclerosis') | 
-                                    Q(summary__iregex=r'\bms\b') |
-                                    Q(summary__iregex=r'\bm\.s\.\b')   # Handle M.S. variation
-                                ).order_by('-discovery_date')
-                                
-                                # Log the count for debugging
-                                ms_count = ms_queryset.count()
-                                logger.info(f"CSV Export: MS-specific query count: {ms_count}")
-                                
-                                # Get values directly with more complete field selection
-                                values_list = list(ms_queryset.values(
+                                # Use values() to get a more efficient data representation
+                                # This bypasses potential serializer limitations
+                                values_list = list(queryset.values(
                                     'article_id', 'title', 'summary', 'link', 'published_date', 
                                     'discovery_date', 'doi', 'access', 'publisher', 'container_title',
                                     'takeaways', 'summary_plain_english'
@@ -130,84 +110,45 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                                 
                                 # Log the number of values items
                                 values_count = len(values_list)
-                                logger.info(f"CSV Export: MS values list count: {values_count}")
+                                logger.info(f"CSV Export: Values list count: {values_count}")
                                 
                                 # Collect unique article IDs for tracking duplicates
                                 article_ids = [item['article_id'] for item in values_list]
                                 unique_article_ids = set(article_ids)
-                                logger.info(f"CSV Export: MS unique article IDs: {len(unique_article_ids)} out of {len(article_ids)}")
+                                logger.info(f"CSV Export: Unique article IDs: {len(unique_article_ids)} out of {len(article_ids)}")
                                 
-                                data = values_list
-                                self.using_simplified_data = True
-                                self.article_ids = article_ids
-                                
-                            else:
-                                # Try a direct approach using a custom serializer for better performance
-                                try:
-                                    # Get the original queryset
-                                    queryset = view.filter_queryset(view.get_queryset())
-                                    
-                                    # Log query details
-                                    query_str = str(queryset.query)
-                                    logger.info(f"CSV Export: SQL Query: {query_str[:300]}...")  # Truncate long queries
-                                    
-                                    # Log the number of results for debugging
-                                    queryset_count = queryset.count()
-                                    logger.info(f"CSV Export: Unpaginated queryset count: {queryset_count}")
-                                    
-                                    # Get query parameters for debugging
-                                    query_params = dict(request.query_params)
-                                    logger.info(f"CSV Export: Query parameters: {query_params}")
-                                    
-                                    # Use values() to get a more efficient data representation
-                                    # This bypasses potential serializer limitations
-                                    values_list = list(queryset.values(
-                                        'article_id', 'title', 'summary', 'link', 'published_date', 
-                                        'discovery_date', 'doi', 'access', 'publisher', 'container_title',
-                                        'takeaways', 'summary_plain_english'
-                                    ))
-                                    
-                                    # Log the number of values items
-                                    values_count = len(values_list)
-                                    logger.info(f"CSV Export: Values list count: {values_count}")
-                                    
-                                    # Collect unique article IDs for tracking duplicates
+                                # Add a flag to indicate we need to fetch related objects separately
+                                if values_count > 0:
+                                    # Get a list of all article IDs
                                     article_ids = [item['article_id'] for item in values_list]
-                                    unique_article_ids = set(article_ids)
-                                    logger.info(f"CSV Export: Unique article IDs: {len(unique_article_ids)} out of {len(article_ids)}")
                                     
-                                    # Add a flag to indicate we need to fetch related objects separately
-                                    if values_count > 0:
-                                        # Get a list of all article IDs
-                                        article_ids = [item['article_id'] for item in values_list]
-                                        
-                                        # Use the custom data instead of going through the serializer
-                                        data = values_list
-                                        
-                                        # Mark that we're using a simplified representation
-                                        self.using_simplified_data = True
-                                        self.article_ids = article_ids
-                                    else:
-                                        # Fallback to regular serializer if values list is empty
-                                        serializer = view.get_serializer(queryset, many=True)
-                                        data = serializer.data
-                                        self.using_simplified_data = False
+                                    # Use the custom data instead of going through the serializer
+                                    data = values_list
                                     
-                                except Exception as e:
-                                    # Log the error
-                                    logger.error(f"CSV Export Error: {str(e)}")
-                                    
-                                    # Fallback to the standard approach
+                                    # Mark that we're using a simplified representation
+                                    self.using_simplified_data = True
+                                    self.article_ids = article_ids
+                                else:
+                                    # Fallback to regular serializer if values list is empty
                                     serializer = view.get_serializer(queryset, many=True)
-                                    serialized_data = serializer.data
-                                    
-                                    # Log the number of serialized items
-                                    serialized_count = len(serialized_data)
-                                    logger.info(f"CSV Export: Serialized data count: {serialized_count}")
-                                    
-                                    # Use the complete data instead of paginated data
-                                    data = serialized_data
+                                    data = serializer.data
                                     self.using_simplified_data = False
+                                
+                            except Exception as e:
+                                # Log the error
+                                logger.error(f"CSV Export Error: {str(e)}")
+                                
+                                # Fallback to the standard approach
+                                serializer = view.get_serializer(queryset, many=True)
+                                serialized_data = serializer.data
+                                
+                                # Log the number of serialized items
+                                serialized_count = len(serialized_data)
+                                logger.info(f"CSV Export: Serialized data count: {serialized_count}")
+                                
+                                # Use the complete data instead of paginated data
+                                data = serialized_data
+                                self.using_simplified_data = False
                         else:
                             # Fallback to just using the paginated results
                             data = paginated_data
