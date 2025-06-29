@@ -141,7 +141,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
     
     def generate_csv_rows(self, data):
         """
-        Generator function that yields CSV rows one at a time.
+        Generator function that yields CSV rows one at a time, with detailed logging for skipped rows.
         """
         # Process data to flatten and consolidate it
         processed_data = self.process_data(data)
@@ -173,8 +173,10 @@ class DirectStreamingCSVRenderer(CSVRenderer):
         csv_buffer.seek(0)
         csv_buffer.truncate(0)
         
+        skipped = 0
+        written = 0
         # Write and yield each data row
-        for row in rows:
+        for idx, row in enumerate(rows):
             # Ensure all values are strings
             string_row = ['' if item is None else str(item) for item in row]
             
@@ -183,12 +185,14 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                 yield csv_buffer.getvalue()
                 csv_buffer.seek(0)
                 csv_buffer.truncate(0)
+                written += 1
             except Exception as e:
-                logger.warning(f"CSV Export: Skipping problematic row: {string_row} — Error: {str(e)}")
+                logger.error(f"CSV Export: Skipped row {idx} due to error: {e}. Row content: {string_row}")
                 csv_buffer.seek(0)
                 csv_buffer.truncate(0)
+                skipped += 1
         
-        logger.info(f"CSV Export: Successfully generated {len(rows)} data rows")
+        logger.info(f"CSV Export: Attempted {len(rows)} rows, written {written}, skipped {skipped}")
     
     def process_data(self, data):
         """
