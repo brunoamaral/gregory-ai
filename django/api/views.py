@@ -706,10 +706,14 @@ class ArticleSearchView(generics.ListAPIView):
         
         try:
             # Start with articles filtered by team and subject
+            # Use distinct('article_id') to eliminate duplicates from many-to-many relationships
             queryset = Articles.objects.filter(
                 teams__id=team_id, 
                 subjects__id=subject_id
-            ).order_by('-discovery_date')
+            ).distinct('article_id').order_by('article_id', '-discovery_date')
+            
+            # Note: We need to include article_id in the order_by when using distinct('article_id')
+            # This ensures we get the newest article by discovery_date for each unique article_id
             
             # Apply additional filters
             title = params.get('title')
@@ -717,13 +721,13 @@ class ArticleSearchView(generics.ListAPIView):
             search = params.get('search')
             
             if title:
-                queryset = queryset.filter(title__icontains=title).distinct()
+                queryset = queryset.filter(title__icontains=title)
             if summary:
-                queryset = queryset.filter(summary__icontains=summary).distinct()
+                queryset = queryset.filter(summary__icontains=summary)
             if search:
                 queryset = queryset.filter(
                     Q(title__icontains=search) | Q(summary__icontains=search)
-                ).distinct()
+                )
                 
             return queryset
         except:
@@ -816,7 +820,8 @@ class TrialSearchView(generics.ListAPIView):
             return Trials.objects.none()
         
         # Start with trials filtered by team and subject
-        queryset = Trials.objects.filter(teams=team, subjects=subject).order_by('-discovery_date')
+        # Use distinct('trial_id') to eliminate duplicates from many-to-many relationships
+        queryset = Trials.objects.filter(teams=team, subjects=subject).distinct('trial_id').order_by('trial_id', '-discovery_date')
         
         # Apply additional filters
         title = params.get('title')
@@ -825,15 +830,15 @@ class TrialSearchView(generics.ListAPIView):
         status = params.get('status')
         
         if title:
-            queryset = queryset.filter(title__icontains=title).distinct()
+            queryset = queryset.filter(title__icontains=title)
         if summary:
-            queryset = queryset.filter(summary__icontains=summary).distinct()
+            queryset = queryset.filter(summary__icontains=summary)
         if search:
             queryset = queryset.filter(
                 Q(title__icontains=search) | Q(summary__icontains=search)
-            ).distinct()
+            )
         if status:
-            queryset = queryset.filter(recruitment_status=status).distinct()
+            queryset = queryset.filter(recruitment_status=status)
             
         return queryset
     
