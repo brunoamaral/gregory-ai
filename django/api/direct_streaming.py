@@ -183,8 +183,8 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                 yield csv_buffer.getvalue()
                 csv_buffer.seek(0)
                 csv_buffer.truncate(0)
-            except Exception:
-                # Skip problematic rows
+            except Exception as e:
+                logger.warning(f"CSV Export: Skipping problematic row: {string_row} — Error: {str(e)}")
                 csv_buffer.seek(0)
                 csv_buffer.truncate(0)
         
