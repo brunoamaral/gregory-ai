@@ -51,9 +51,31 @@ class DirectStreamingCSVRenderer(CSVRenderer):
             current_date = datetime.now().strftime('%Y-%m-%d')
             filename = f"gregory-ai-{object_type}-{current_date}.csv"
         
-        # Check if this is paginated data
+        # Check if this is paginated data but ONLY for CSV requests,
+        # disable pagination to get all results
+        if renderer_context and 'request' in renderer_context:
+            request = renderer_context['request']
+            # For CSV requests, disable pagination
+            if request.query_params.get('format', '').lower() == 'csv':
+                if isinstance(data, dict) and 'results' in data:
+                    # Extract the paginated results
+                    paginated_data = data['results']
+                    
+                    # If we have a view object, try to get all results without pagination
+                    if renderer_context.get('view'):
+                        view = renderer_context['view']
+                        # Get the original queryset
+                        queryset = view.filter_queryset(view.get_queryset())
+                        # Use the same serializer but with all results
+                        serializer = view.get_serializer(queryset, many=True)
+                        # Use the complete data instead of paginated data
+                        data = serializer.data
+                    else:
+                        # Fallback to just using the paginated results
+                        data = paginated_data
+                        
+        # If still paginated (fallback case), just use the results
         if isinstance(data, dict) and 'results' in data and isinstance(data['results'], list):
-            # Replace the entire data with just the results
             data = data['results']
             
         # Create a StreamingHttpResponse with the generator function
