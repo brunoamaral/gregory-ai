@@ -36,6 +36,12 @@ class DirectStreamingCSVRenderer(CSVRenderer):
         'teams'
     ]
     
+    # List of text fields to clean line breaks from (for articles and trials)
+    TEXT_FIELDS_TO_CLEAN = [
+        'summary', 'title', 'takeaways', 'summary_plain_english',
+        'description', 'criteria', 'brief_summary', 'detailed_description'
+    ]
+    
     def render(self, data, accepted_media_type=None, renderer_context=None):
         """
         Render the data and return a StreamingHttpResponse directly.
@@ -225,7 +231,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                     continue
                     
                 # Clean text fields (remove line breaks)
-                if key in ['summary', 'title', 'takeaways', 'summary_plain_english'] and isinstance(value, str):
+                if key in self.TEXT_FIELDS_TO_CLEAN and isinstance(value, str):
                     # Replace line breaks with spaces
                     value = value.replace('\n', ' ').replace('\r', ' ')
                     # Normalize multiple spaces to single spaces
