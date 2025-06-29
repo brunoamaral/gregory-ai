@@ -78,7 +78,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                     # For paginated requests without all_results=true, just use the paginated data
                     if not all_results:
                         # Log what we're doing
-                        logger.info(f"CSV Export: Using paginated data with {len(data['results'])} items")
+                        logger.debug(f"CSV Export: Using paginated data with {len(data['results'])} items")
                         # Use the paginated results directly
                         data = data['results']
                     else:
@@ -96,19 +96,16 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                                 
                                 # Log query details
                                 query_str = str(queryset.query)
-                                logger.info(f"CSV Export: SQL Query: {query_str[:300]}...")  # Truncate long queries
-                                
-                                # Log the number of results for debugging
-                                queryset_count = queryset.count()
-                                logger.info(f"CSV Export: Unpaginated queryset count: {queryset_count}")
-                                
-                                # Get query parameters for debugging
-                                query_params = dict(request.query_params)
-                                logger.info(f"CSV Export: Query parameters: {query_params}")
+                                logger.debug(f"CSV Export: SQL Query: {query_str[:300]}...")  # Truncate long queries
                                 
                                 # Always use the serializer for all_results CSV export
                                 serializer = view.get_serializer(queryset, many=True)
                                 data = serializer.data
+                                
+                                logger.debug(f"CSV Export: Serialized data count: {len(data)}")
+                                # Log unique article_ids if present
+                                article_ids = [item.get('article_id') for item in data if isinstance(item, dict) and 'article_id' in item]
+                                logger.debug(f"CSV Export: Unique article_ids in export: {set(article_ids)} (count: {len(set(article_ids))})")
                                 self.using_simplified_data = False
                                 
                             except Exception as e:
@@ -121,8 +118,10 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                                 
                                 # Log the number of serialized items
                                 serialized_count = len(serialized_data)
-                                logger.info(f"CSV Export: Serialized data count: {serialized_count}")
-                                
+                                logger.debug(f"CSV Export: Serialized data count: {serialized_count}")
+                                # Log unique article_ids in fallback data
+                                article_ids = [item.get('article_id') for item in serialized_data if isinstance(item, dict) and 'article_id' in item]
+                                logger.debug(f"CSV Export: Unique article_ids in export: {set(article_ids)} (count: {len(set(article_ids))})")
                                 # Use the complete data instead of paginated data
                                 data = serialized_data
                                 self.using_simplified_data = False
@@ -134,6 +133,11 @@ class DirectStreamingCSVRenderer(CSVRenderer):
         if isinstance(data, dict) and 'results' in data and isinstance(data['results'], list):
             data = data['results']
             
+        # Log unique article_ids just before CSV generation
+        if isinstance(data, list):
+            article_ids = [item.get('article_id') for item in data if isinstance(item, dict) and 'article_id' in item]
+            logger.debug(f"CSV Export: Final unique article_ids before CSV: {set(article_ids)} (count: {len(set(article_ids))})")
+        
         # Create a StreamingHttpResponse with the generator function
         response = StreamingHttpResponse(
             streaming_content=self.generate_csv_rows(data),
@@ -151,6 +155,10 @@ class DirectStreamingCSVRenderer(CSVRenderer):
         """
         # Process data to flatten and consolidate it
         processed_data = self.process_data(data)
+        
+        # Log unique article_ids in processed_data
+        article_ids = [item.get('article_id') for item in processed_data if isinstance(item, dict) and 'article_id' in item]
+        logger.debug(f"CSV Export: Processed data unique article_ids: {set(article_ids)} (count: {len(set(article_ids))})")
         
         # Flatten to a table structure
         table = self.tablize(processed_data)
@@ -198,7 +206,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                 csv_buffer.truncate(0)
                 skipped += 1
         
-        logger.info(f"CSV Export: Attempted {len(rows)} rows, written {written}, skipped {skipped}")
+        logger.debug(f"CSV Export: Attempted {len(rows)} rows, written {written}, skipped {skipped}")
     
     def process_data(self, data):
         """
@@ -212,7 +220,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                 return []
         
         # Log the number of items we're processing
-        logger.info(f"CSV Export: Processing {len(data)} items")
+        logger.debug(f"CSV Export: Processing {len(data)} items")
                 
         # Process each item
         processed_data = []
@@ -249,7 +257,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                     
             processed_data.append(processed_item)
         
-        logger.info(f"CSV Export: Processed data has {len(processed_data)} items")
+        logger.debug(f"CSV Export: Processed data has {len(processed_data)} items")
         return processed_data
     
     def tablize(self, data):
@@ -287,5 +295,5 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                 row.append(item.get(key, ''))
             table.append(row)
         
-        logger.info(f"CSV Export: Tablized data has {len(table)-1} rows (plus header)")
+        logger.debug(f"CSV Export: Tablized data has {len(table)-1} rows (plus header)")
         return table
