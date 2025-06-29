@@ -38,8 +38,45 @@ class DirectStreamingCSVRenderer(CSVRenderer):
     
     # List of text fields to clean line breaks from (for articles and trials)
     TEXT_FIELDS_TO_CLEAN = [
-        'summary', 'title', 'takeaways', 'summary_plain_english',
-        'description', 'criteria', 'brief_summary', 'detailed_description'
+# Trials
+'title',
+'summary',
+'summary_plain_english',
+'scientific_title',
+'primary_sponsor',
+'target_size',
+'study_type',
+'study_design',
+'phase',
+'countries',
+'contact_firstname',
+'contact_lastname',
+'contact_address',
+'contact_tel',
+'contact_affiliation',
+'inclusion_criteria',
+'exclusion_criteria',
+'condition',
+'intervention',
+'primary_outcome',
+'secondary_outcome',
+'secondary_id',
+'source_support',
+'ethics_review_status',
+'ethics_review_contact_address',
+'ethics_review_contact_phone',
+'therapeutic_areas',
+'country_status',
+
+# Articles
+'title',
+'summary',
+'subjects',
+'relevant_subjects',
+'takeaways',
+'ml_predictions',
+'clinical_trials',
+'team_categories',
     ]
     
     def render(self, data, accepted_media_type=None, renderer_context=None):
