@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+<form method="post" action="?{{ query_string }}">
+  {% csrf_token %}
+  <p>Select columns to include:</p>
+  {% for field in fields %}
+  <div>
+    <label>
+      <input type="checkbox" name="fields" value="{{ field }}" checked> {{ field }}
+    </label>
+  </div>
+  {% endfor %}
+  <button type="submit" class="button default">Download CSV</button>
+</form>
+{% endblock %}

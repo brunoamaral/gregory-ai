@@ -213,19 +213,21 @@ class ArticleAdmin(SimpleHistoryAdmin):
 	
 	def get_urls(self):
 		from django.urls import path
-		from .admin_views import article_review_status_view
+		from .admin_views import article_review_status_view, export_articles_csv
 		
-		urls = super().get_urls()
-		custom_urls = [
-			path('review-status/', self.admin_site.admin_view(article_review_status_view), name='article_review_status'),
+				urls = super().get_urls()
+					custom_urls = [
+								path('review-status/', self.admin_site.admin_view(article_review_status_view), name='article_review_status'),
+								path('export-csv/', self.admin_site.admin_view(export_articles_csv), name='articles_export_csv'),
 		]
 		return custom_urls + urls
 	
 	def changelist_view(self, request, extra_context=None):
 		"""Override changelist view to add a button to access review status page"""
 		extra_context = extra_context or {}
-		extra_context['review_status_url'] = reverse('admin:article_review_status')
-		return super().changelist_view(request, extra_context=extra_context)
+extra_context['review_status_url'] = reverse('admin:article_review_status')
+extra_context['csv_export_url'] = reverse('admin:articles_export_csv')
+return super().changelist_view(request, extra_context=extra_context)
 	
 	class Media:
 		css = {
@@ -246,7 +248,22 @@ class TrialAdmin(SimpleHistoryAdmin):
 		'therapeutic_areas', 'sponsor_type', 'internal_number', 'secondary_id',
 		'identifiers'
 	]
-	list_filter = ['teams', 'subjects', 'sources']
+list_filter = ['teams', 'subjects', 'sources']
+
+	def get_urls(self):
+	from django.urls import path
+	from .admin_views import export_trials_csv
+	
+	urls = super().get_urls()
+	custom_urls = [
+	path('export-csv/', self.admin_site.admin_view(export_trials_csv), name='trials_export_csv'),
+	]
+	return custom_urls + urls
+	
+	def changelist_view(self, request, extra_context=None):
+	extra_context = extra_context or {}
+	extra_context['csv_export_url'] = reverse('admin:trials_export_csv')
+	return super().changelist_view(request, extra_context=extra_context)
 
 	def display_identifiers(self, obj):
 		# Customize this depending on how you want to display the JSON
