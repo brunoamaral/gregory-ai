@@ -93,7 +93,6 @@ MIDDLEWARE = [
 	'django.middleware.gzip.GZipMiddleware',
 	'django.contrib.sites.middleware.CurrentSiteMiddleware',
 	'simple_history.middleware.HistoryRequestMiddleware',
-	'api.middleware.StreamingCSVMiddleware',
 ]
 
 ROOT_URLCONF = 'admin.urls'
