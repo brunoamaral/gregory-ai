@@ -717,13 +717,13 @@ class ArticleSearchView(generics.ListAPIView):
             search = params.get('search')
             
             if title:
-                queryset = queryset.filter(title__icontains=title)
+                queryset = queryset.filter(title__icontains=title).distinct()
             if summary:
-                queryset = queryset.filter(summary__icontains=summary)
+                queryset = queryset.filter(summary__icontains=summary).distinct()
             if search:
                 queryset = queryset.filter(
                     Q(title__icontains=search) | Q(summary__icontains=search)
-                )
+                ).distinct()
                 
             return queryset
         except:
@@ -825,15 +825,15 @@ class TrialSearchView(generics.ListAPIView):
         status = params.get('status')
         
         if title:
-            queryset = queryset.filter(title__icontains=title)
+            queryset = queryset.filter(title__icontains=title).distinct()
         if summary:
-            queryset = queryset.filter(summary__icontains=summary)
+            queryset = queryset.filter(summary__icontains=summary).distinct()
         if search:
             queryset = queryset.filter(
                 Q(title__icontains=search) | Q(summary__icontains=search)
-            )
+            ).distinct()
         if status:
-            queryset = queryset.filter(recruitment_status=status)
+            queryset = queryset.filter(recruitment_status=status).distinct()
             
         return queryset
     
