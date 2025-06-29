@@ -100,39 +100,10 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                                 query_params = dict(request.query_params)
                                 logger.info(f"CSV Export: Query parameters: {query_params}")
                                 
-                                # Use values() to get a more efficient data representation
-                                # This bypasses potential serializer limitations
-                                values_list = list(queryset.values(
-                                    'article_id', 'title', 'summary', 'link', 'published_date', 
-                                    'discovery_date', 'doi', 'access', 'publisher', 'container_title',
-                                    'takeaways', 'summary_plain_english'
-                                ))
-                                
-                                # Log the number of values items
-                                values_count = len(values_list)
-                                logger.info(f"CSV Export: Values list count: {values_count}")
-                                
-                                # Collect unique article IDs for tracking duplicates
-                                article_ids = [item['article_id'] for item in values_list]
-                                unique_article_ids = set(article_ids)
-                                logger.info(f"CSV Export: Unique article IDs: {len(unique_article_ids)} out of {len(article_ids)}")
-                                
-                                # Add a flag to indicate we need to fetch related objects separately
-                                if values_count > 0:
-                                    # Get a list of all article IDs
-                                    article_ids = [item['article_id'] for item in values_list]
-                                    
-                                    # Use the custom data instead of going through the serializer
-                                    data = values_list
-                                    
-                                    # Mark that we're using a simplified representation
-                                    self.using_simplified_data = True
-                                    self.article_ids = article_ids
-                                else:
-                                    # Fallback to regular serializer if values list is empty
-                                    serializer = view.get_serializer(queryset, many=True)
-                                    data = serializer.data
-                                    self.using_simplified_data = False
+                                # Always use the serializer for all_results CSV export
+                                serializer = view.get_serializer(queryset, many=True)
+                                data = serializer.data
+                                self.using_simplified_data = False
                                 
                             except Exception as e:
                                 # Log the error
