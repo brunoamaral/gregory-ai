@@ -59,17 +59,14 @@ No special setup is required - all CSV responses are automatically streamed. The
 - **Better for Large Datasets**: Can handle much larger datasets without timing out
 - **Same Filtering Capabilities**: Supports all the same filters as regular endpoints
 - **Seamless Integration**: Works automatically with all existing endpoints
+- **Clean Text Fields**: Line breaks in text fields (like summaries) are automatically removed for better CSV compatibility
 
 ## Implementation Details
 
 ### CSV Generation
 
-Both renderers use a row-by-row approach to generate CSV content:
-
-1. Process and flatten the data structure
-2. Generate the header row first
-3. Generate data rows one at a time
-4. Use proper CSV escaping and quoting to handle special characters
+2. **Cleans Text Fields**: Line breaks in text fields like summaries are removed and replaced with spaces
+3. **Row-by-Row Processing**: Data is processed one row at a time to minimize memory usage
 
 ### Response Headers
 

@@ -141,6 +141,14 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                 if key in self.EXCLUDED_COLUMNS or any(key.startswith(excluded + '.') for excluded in self.EXCLUDED_COLUMNS):
                     continue
                     
+                # Clean text fields (remove line breaks)
+                if key in ['summary', 'title', 'takeaways', 'summary_plain_english'] and isinstance(value, str):
+                    # Replace line breaks with spaces
+                    value = value.replace('\n', ' ').replace('\r', ' ')
+                    # Normalize multiple spaces to single spaces
+                    while '  ' in value:
+                        value = value.replace('  ', ' ')
+                    
                 # Handle lists and nested objects
                 if isinstance(value, (list, dict)):
                     try:
