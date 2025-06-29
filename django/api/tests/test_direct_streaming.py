@@ -9,9 +9,9 @@ class DirectStreamingCSVRendererTest(unittest.TestCase):
         """Test that the DirectStreamingCSVRenderer returns a StreamingHttpResponse"""
         # Create test data
         data = [
-            {'id': 1, 'title': 'Test Article 1', 'summary': 'Summary 1'},
-            {'id': 2, 'title': 'Test Article 2', 'summary': 'Summary 2'},
-            {'id': 3, 'title': 'Test Article 3', 'summary': 'Summary 3'},
+            {'id': 1, 'title': 'Test Article 1', 'summary': 'Summary 1\nwith a line break'},
+            {'id': 2, 'title': 'Test Article 2', 'summary': 'Summary 2\r\nwith different line breaks'},
+            {'id': 3, 'title': 'Test Article 3', 'summary': 'Summary 3\rwith just CR'},
         ]
         
         # Create the renderer
@@ -20,7 +20,8 @@ class DirectStreamingCSVRendererTest(unittest.TestCase):
         # Create a mock renderer context
         renderer_context = {
             'request': type('obj', (object,), {
-                'path': '/articles/'
+                'path': '/articles/',
+                'query_params': {'format': 'csv'}
             })
         }
         
@@ -47,9 +48,20 @@ class DirectStreamingCSVRendererTest(unittest.TestCase):
         
         # Verify data rows contain the expected values
         title_index = rows[0].index('title')
+        summary_index = rows[0].index('summary')
+        
+        # Verify line breaks have been removed from summaries
         self.assertEqual(rows[1][title_index], 'Test Article 1')
+        self.assertFalse('\n' in rows[1][summary_index])
+        self.assertTrue('Summary 1 with a line break' in rows[1][summary_index])
+        
         self.assertEqual(rows[2][title_index], 'Test Article 2')
+        self.assertFalse('\r\n' in rows[2][summary_index])
+        self.assertTrue('Summary 2 with different line breaks' in rows[2][summary_index])
+        
         self.assertEqual(rows[3][title_index], 'Test Article 3')
+        self.assertFalse('\r' in rows[3][summary_index])
+        self.assertTrue('Summary 3 with just CR' in rows[3][summary_index])
 
 if __name__ == '__main__':
     unittest.main()

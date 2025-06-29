@@ -1,10 +1,14 @@
-from rest_framework_csv.renderers import CSVRenderer
 import csv
 import io
+import json
+import logging
 from django.http import StreamingHttpResponse
 from django.utils.text import slugify
 from datetime import datetime
-import json
+from rest_framework_csv.renderers import CSVRenderer
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 class DirectStreamingCSVRenderer(CSVRenderer):
     """
@@ -14,6 +18,10 @@ class DirectStreamingCSVRenderer(CSVRenderer):
     media_type = 'text/csv'
     format = 'csv'
     charset = 'utf-8'
+    
+    # Initialize flags for simplified data
+    using_simplified_data = False
+    article_ids = []
     
     # Define the order of columns we want to appear first
     PREFERRED_COLUMN_ORDER = [
@@ -64,12 +72,68 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                     # If we have a view object, try to get all results without pagination
                     if renderer_context.get('view'):
                         view = renderer_context['view']
-                        # Get the original queryset
-                        queryset = view.filter_queryset(view.get_queryset())
-                        # Use the same serializer but with all results
-                        serializer = view.get_serializer(queryset, many=True)
-                        # Use the complete data instead of paginated data
-                        data = serializer.data
+                        
+                        # Check if this is an MS articles search
+                        search_term = request.query_params.get('search', '').lower()
+
+                        # Try a direct approach using a custom serializer for better performance
+                        # and to ensure we get all results
+                        try:
+                            # Get the original queryset
+                            queryset = view.filter_queryset(view.get_queryset())
+                            
+                            # Log the number of results for debugging
+                            queryset_count = queryset.count()
+                            logger.info(f"CSV Export: Unpaginated queryset count: {queryset_count}")
+                            
+                            # Get query parameters for debugging
+                            query_params = dict(request.query_params)
+                            logger.info(f"CSV Export: Query parameters: {query_params}")
+                            
+                            # Use values() to get a more efficient data representation
+                            # This bypasses potential serializer limitations
+                            values_list = list(queryset.values(
+                                'article_id', 'title', 'summary', 'link', 'published_date', 
+                                'discovery_date', 'doi', 'access', 'publisher', 'container_title',
+                                'takeaways'
+                            ))
+                            
+                            # Log the number of values items
+                            values_count = len(values_list)
+                            logger.info(f"CSV Export: Values list count: {values_count}")
+                            
+                            # Add a flag to indicate we need to fetch related objects separately
+                            if values_count > 0:
+                                # Get a list of all article IDs
+                                article_ids = [item['article_id'] for item in values_list]
+                                
+                                # Use the custom data instead of going through the serializer
+                                data = values_list
+                                
+                                # Mark that we're using a simplified representation
+                                self.using_simplified_data = True
+                                self.article_ids = article_ids
+                            else:
+                                # Fallback to regular serializer if values list is empty
+                                serializer = view.get_serializer(queryset, many=True)
+                                data = serializer.data
+                                self.using_simplified_data = False
+                            
+                        except Exception as e:
+                            # Log the error
+                            logger.error(f"CSV Export Error: {str(e)}")
+                            
+                            # Fallback to the standard approach
+                            serializer = view.get_serializer(queryset, many=True)
+                            serialized_data = serializer.data
+                            
+                            # Log the number of serialized items
+                            serialized_count = len(serialized_data)
+                            logger.info(f"CSV Export: Serialized data count: {serialized_count}")
+                            
+                            # Use the complete data instead of paginated data
+                            data = serialized_data
+                            self.using_simplified_data = False
                     else:
                         # Fallback to just using the paginated results
                         data = paginated_data
@@ -92,20 +156,27 @@ class DirectStreamingCSVRenderer(CSVRenderer):
     def generate_csv_rows(self, data):
         """
         Generator function that yields CSV rows one at a time.
+        Memory-efficient implementation that processes and yields each row separately.
         """
         # Process data to flatten and consolidate it
         processed_data = self.process_data(data)
         
-        # Flatten to a table structure
-        table = self.tablize(processed_data)
-        
-        if not table or len(table) == 0:
-            yield ""
-            return
+        # Get all unique keys for the header
+        all_keys = set()
+        for item in processed_data:
+            all_keys.update(item.keys())
             
-        # Extract header and rows
-        header = table[0]
-        rows = table[1:] if len(table) > 1 else []
+        # Sort keys with preferred columns first
+        ordered_keys = []
+        
+        # First add preferred columns in the specified order
+        for key in self.PREFERRED_COLUMN_ORDER:
+            if key in all_keys:
+                ordered_keys.append(key)
+                all_keys.remove(key)
+                
+        # Then add remaining keys alphabetically
+        ordered_keys.extend(sorted(all_keys))
         
         # Create a CSV writer for each row
         csv_buffer = io.StringIO()
@@ -118,25 +189,32 @@ class DirectStreamingCSVRenderer(CSVRenderer):
         )
         
         # Write and yield the header row
-        csv_writer.writerow(header)
+        csv_writer.writerow(ordered_keys)
         yield csv_buffer.getvalue()
         csv_buffer.seek(0)
         csv_buffer.truncate(0)
         
-        # Write and yield each data row
-        for row in rows:
-            # Ensure all values are strings
-            string_row = ['' if item is None else str(item) for item in row]
+        # Write and yield each data row without storing the entire table in memory
+        row_count = 0
+        for item in processed_data:
+            row = []
+            for key in ordered_keys:
+                value = item.get(key, '')
+                row.append('' if value is None else str(value))
             
             try:
-                csv_writer.writerow(string_row)
+                csv_writer.writerow(row)
                 yield csv_buffer.getvalue()
                 csv_buffer.seek(0)
                 csv_buffer.truncate(0)
-            except Exception:
-                # Skip problematic rows
+                row_count += 1
+            except Exception as e:
+                # Log and skip problematic rows
+                logger.error(f"CSV Export: Error writing row {row_count}: {str(e)}")
                 csv_buffer.seek(0)
                 csv_buffer.truncate(0)
+        
+        logger.info(f"CSV Export: Successfully generated {row_count} data rows")
     
     def process_data(self, data):
         """
@@ -146,12 +224,17 @@ class DirectStreamingCSVRenderer(CSVRenderer):
             if isinstance(data, dict):
                 data = [data]
             else:
+                logger.warning(f"CSV Export: Invalid data type: {type(data)}, expected list or dict")
                 return []
+        
+        # Log the number of items we're processing
+        logger.info(f"CSV Export: Processing {len(data)} items")
                 
         # Process each item
         processed_data = []
         for item in data:
             if not isinstance(item, dict):
+                logger.warning(f"CSV Export: Invalid item type: {type(item)}, expected dict")
                 continue
                 
             # Create a new item with processed values
@@ -181,7 +264,8 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                     processed_item[key] = value
                     
             processed_data.append(processed_item)
-            
+        
+        logger.info(f"CSV Export: Processed data has {len(processed_data)} items")
         return processed_data
     
     def tablize(self, data):
@@ -189,6 +273,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
         Convert data to a table format suitable for CSV.
         """
         if not data:
+            logger.warning("CSV Export: No data to tablize")
             return []
             
         # Get all unique keys
@@ -217,5 +302,6 @@ class DirectStreamingCSVRenderer(CSVRenderer):
             for key in ordered_keys:
                 row.append(item.get(key, ''))
             table.append(row)
-            
+        
+        logger.info(f"CSV Export: Tablized data has {len(table)-1} rows (plus header)")
         return table
