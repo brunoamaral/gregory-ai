@@ -710,7 +710,7 @@ class ArticleSearchView(generics.ListAPIView):
             queryset = Articles.objects.filter(
                 teams__id=team_id, 
                 subjects__id=subject_id
-            ).distinct('article_id').order_by('article_id', '-discovery_date')
+            ).distinct('article_id').order_by('-discovery_date')
             
             # Note: We need to include article_id in the order_by when using distinct('article_id')
             # This ensures we get the newest article by discovery_date for each unique article_id
