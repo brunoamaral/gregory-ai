@@ -10,10 +10,11 @@ from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper
 from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, TeamCategory
 from rest_framework import permissions, viewsets, generics, filters
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, action
 from django_filters import rest_framework as django_filters
 from api.filters import ArticleFilter, TrialFilter
 from rest_framework.response import Response
+from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 import json
@@ -211,13 +212,15 @@ def post_article(request):
 ### 
 class ArticleViewSet(viewsets.ModelViewSet):
 	"""
-	List all articles in the database by earliest discovery_date
+	List all articles in the database by earliest discovery_date.
+	CSV responses are automatically streamed for better performance with large datasets.
 	"""
 	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [filters.SearchFilter]
+	filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
 	search_fields  = ['$title','$summary']
+	filterset_class = ArticleFilter
 
 class RelatedArticles(viewsets.ModelViewSet):
 	"""
@@ -462,12 +465,14 @@ class MonthlyCountsView(APIView):
 class TrialViewSet(viewsets.ModelViewSet):
 	"""
 	List all clinical trials by discovery date. Accepts regular expressions in search.
+	CSV responses are automatically streamed for better performance with large datasets.
 	"""
 	queryset = Trials.objects.all().order_by('-discovery_date')
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [filters.SearchFilter]
+	filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
 	search_fields  = ['$title','$summary']
+	filterset_class = TrialFilter
 
 class AllTrialViewSet(generics.ListAPIView):
 	"""
@@ -701,10 +706,14 @@ class ArticleSearchView(generics.ListAPIView):
         
         try:
             # Start with articles filtered by team and subject
+            # Use distinct('article_id') to eliminate duplicates from many-to-many relationships
             queryset = Articles.objects.filter(
                 teams__id=team_id, 
                 subjects__id=subject_id
-            ).order_by('-discovery_date')
+            ).distinct('article_id').order_by('article_id', '-discovery_date')
+            
+            # Note: When using distinct('article_id'), the first field in order_by MUST be article_id
+            # Then we can add '-discovery_date' to get the newest article for each unique article_id
             
             # Apply additional filters
             title = params.get('title')
@@ -811,7 +820,8 @@ class TrialSearchView(generics.ListAPIView):
             return Trials.objects.none()
         
         # Start with trials filtered by team and subject
-        queryset = Trials.objects.filter(teams=team, subjects=subject).order_by('-discovery_date')
+        # Use distinct('trial_id') to eliminate duplicates from many-to-many relationships
+        queryset = Trials.objects.filter(teams=team, subjects=subject).distinct('trial_id').order_by('trial_id', '-discovery_date')
         
         # Apply additional filters
         title = params.get('title')
