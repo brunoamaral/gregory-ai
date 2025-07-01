@@ -198,7 +198,19 @@ class Command(BaseCommand):
 					self.stdout.write(self.style.WARNING(f'No new articles or trials for {subscriber.email} in list "{digest_list.list_name}".'))
 					continue
 
-				# Step 6: Prepare and send the email using optimized Phase 5 rendering pipeline
+				# Step 6: Apply article limit if specified in the subscription list
+				article_limit = getattr(digest_list, 'article_limit', 15) or 15  # Default to 15 if not set or None
+				if unsent_articles.count() > article_limit:
+					# Order by highest ML prediction score first, then by discovery date (newest first)
+					# We need to annotate with the max ML prediction score for ordering
+					from django.db.models import Max
+					unsent_articles = unsent_articles.annotate(
+						max_ml_score=Max('ml_predictions_detail__probability_score')
+					).order_by('-max_ml_score', '-discovery_date')[:article_limit]
+					if debug:
+						self.stdout.write(self.style.NOTICE(f"Applied article limit: showing {article_limit} highest-scoring articles (by ML prediction, then newest) out of {unsent_articles.count()} available"))
+
+				# Step 7: Prepare and send the email using optimized Phase 5 rendering pipeline
 				summary_context = get_optimized_email_context(
 					email_type='weekly_summary',
 					articles=unsent_articles,
@@ -236,7 +248,9 @@ class Command(BaseCommand):
 					# In dry-run mode, just log what would be sent without actually sending
 					self.stdout.write(self.style.SUCCESS(f'[DRY RUN] Would send weekly digest email to {subscriber.email} for list "{digest_list.list_name}"'))
 					self.stdout.write(self.style.NOTICE(f'  - Subject: {email_subject}'))
-					self.stdout.write(self.style.NOTICE(f'  - Would include {unsent_articles.count()} articles and {unsent_trials.count()} trials'))
+					# Note: unsent_articles may have been limited, so show the actual count being sent
+					articles_to_send = len(unsent_articles) if hasattr(unsent_articles, '__len__') else unsent_articles.count()
+					self.stdout.write(self.style.NOTICE(f'  - Would include {articles_to_send} articles and {unsent_trials.count()} trials'))
 					
 					# Print more details if in debug mode
 					if debug:
@@ -275,7 +289,7 @@ class Command(BaseCommand):
 								subscriber=subscriber
 							)
 							new_sent_count += 1
-						self.stdout.write(self.style.NOTICE(f'  - Recorded {new_sent_count} new sent article notifications'))
+						self.stdout.write(self.style.NOTICE(f'  - Recorded {new_sent_count} new sent article notifications (limited by article_limit: {article_limit})'))
 						
 						new_trial_sent_count = 0
 						for trial in unsent_trials:

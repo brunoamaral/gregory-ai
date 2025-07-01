@@ -13,6 +13,13 @@ class Lists(models.Model):
 	admin_summary = models.BooleanField(default=False) 
 	weekly_digest = models.BooleanField(default=False) 
 	clinical_trials_notifications = models.BooleanField(default=False) 
+	# Article limit for weekly digest emails
+	article_limit = models.PositiveIntegerField(
+		default=15,
+		null=True,
+		blank=True,
+		help_text="Maximum number of articles to include in weekly digest emails (default: 15)"
+	)
 	# Latest research categories
 	latest_research_categories = models.ManyToManyField(
 		'gregory.TeamCategory', 
