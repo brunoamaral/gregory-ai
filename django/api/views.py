@@ -564,6 +564,7 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	* Team and subject filter: `?team_id=1&subject_id=5&sort_by=article_count`
 	* Count per category: `?team_id=1&category_slug=natalizumab&sort_by=article_count&order=desc`
 	* Category with timeframe: `?team_id=1&category_slug=natalizumab&timeframe=year&sort_by=article_count`
+	* Date range: `?date_from=2024-06-01&date_to=2024-12-31&team_id=1&subject_id=1&sort_by=article_count`
 	"""
 	serializer_class = AuthorSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
