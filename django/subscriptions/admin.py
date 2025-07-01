@@ -55,6 +55,10 @@ class ListsAdmin(admin.ModelAdmin):
 	fieldsets = [
 		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team']}),
 		('Email Types', {'fields': ['admin_summary', 'weekly_digest', 'clinical_trials_notifications']}),
+		('Content Settings', {
+			'fields': ['article_limit'],
+			'description': 'Configure content limits for weekly digest emails.'
+		}),
 		('Main Content', {
 			'fields': ['subjects'],
 			'description': 'Select subjects for which relevant articles and trials will be included in the main content of emails.'
