@@ -18,7 +18,8 @@ class Lists(models.Model):
 		default=15,
 		null=True,
 		blank=True,
-		help_text="Maximum number of articles to include in weekly digest emails (default: 15)"
+		help_text="Maximum number of articles to include in weekly digest emails (default: 15)",
+		verbose_name="Article Limit for Weekly Digest Emails"
 	)
 	# Latest research categories
 	latest_research_categories = models.ManyToManyField(
