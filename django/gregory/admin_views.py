@@ -223,31 +223,31 @@ def mark_articles_for_review(article_ids, subject):
 
 @staff_member_required
 def export_model_csv(request, model, serializer_class):
-"""Generic CSV export for admin list views."""
-	admin_class = admin.site._registry[model]
-	cl = admin_class.get_changelist_instance(request)
-	queryset = cl.get_queryset(request)
-	all_fields = list(serializer_class.Meta.fields)
-	if request.method == "POST":
-	selected = request.POST.getlist("fields") or all_fields
-	serializer = serializer_class(queryset, many=True)
-	data = [
-	{k: v for k, v in item.items() if k in selected}
-	for item in serializer.data
-	]
-	renderer = DirectStreamingCSVRenderer()
-	return renderer.render(data, "text/csv", {"request": request})
-	context = {
-	"title": f"Export {model._meta.verbose_name_plural.title()} as CSV",
-	"fields": all_fields,
-	"query_string": request.GET.urlencode(),
-	}
-	return render(request, "admin/export_csv_form.html", context)
+    """Generic CSV export for admin list views."""
+    admin_class = admin.site._registry[model]
+    cl = admin_class.get_changelist_instance(request)
+    queryset = cl.get_queryset(request)
+    all_fields = list(serializer_class.Meta.fields)
+    if request.method == "POST":
+        selected = request.POST.getlist("fields") or all_fields
+        serializer = serializer_class(queryset, many=True)
+        data = [
+            {k: v for k, v in item.items() if k in selected}
+            for item in serializer.data
+        ]
+        renderer = DirectStreamingCSVRenderer()
+        return renderer.render(data, "text/csv", {"request": request})
+    context = {
+        "title": f"Export {model._meta.verbose_name_plural.title()} as CSV",
+        "fields": all_fields,
+        "query_string": request.GET.urlencode(),
+    }
+    return render(request, "admin/export_csv_form.html", context)
 
 
 def export_articles_csv(request):
-	return export_model_csv(request, Articles, ArticleSerializer)
+    return export_model_csv(request, Articles, ArticleSerializer)
 
 
 def export_trials_csv(request):
-	return export_model_csv(request, Trials, TrialSerializer)
+    return export_model_csv(request, Trials, TrialSerializer)
