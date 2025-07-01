@@ -2,7 +2,6 @@
 {% load i18n %}
 
 {% block content %}
-<h1>{{ title }}</h1>
 <form method="post" action="?{{ query_string }}">
   {% csrf_token %}
   <p>Select columns to include:</p>
