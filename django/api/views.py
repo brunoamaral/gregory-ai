@@ -4,12 +4,12 @@ from api.serializers import (
 )
 from api.pagination import FlexiblePagination
 from datetime import datetime, timedelta
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Prefetch
 from django.db.models.functions import Length, TruncMonth
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper
 from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, TeamCategory
-from rest_framework import permissions, viewsets, generics, filters
+from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
 from django_filters import rest_framework as django_filters
 from api.filters import ArticleFilter, TrialFilter
@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 import json
 import traceback
+from django.utils.dateparse import parse_date
 
 from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress
 from api.models import APIAccessSchemeLog
@@ -543,11 +544,194 @@ class SourceViewSet(viewsets.ModelViewSet):
 
 class AuthorsViewSet(viewsets.ModelViewSet):
 	"""
-	List all authors
+	Enhanced Authors API with sorting and filtering capabilities.
+	
+	**Query Parameters:**
+	
+	* **sort_by**: 'article_count' (default: 'author_id')
+	* **order**: 'asc' or 'desc' (default: 'desc' for article_count, 'asc' for others)
+	* **team_id**: filter by team ID
+	* **subject_id**: filter by subject ID
+	* **category_slug**: filter by team category slug
+	* **date_from**: filter articles from this date (YYYY-MM-DD)
+	* **date_to**: filter articles to this date (YYYY-MM-DD)
+	* **timeframe**: 'year', 'month', 'week' (relative to current date)
+	
+	**Examples:**
+	
+	* Sort by article count: `?sort_by=article_count&order=desc`
+	* Filter by timeframe: `?sort_by=article_count&timeframe=year`
+	* Team and subject filter: `?team_id=1&subject_id=5&sort_by=article_count`
+	* Count per category: `?team_id=1&category_slug=natalizumab&sort_by=article_count&order=desc`
+	* Category with timeframe: `?team_id=1&category_slug=natalizumab&timeframe=year&sort_by=article_count`
+	* Date range: `?date_from=2024-06-01&date_to=2024-12-31&team_id=1&subject_id=1&sort_by=article_count`
 	"""
-	queryset = Authors.objects.all().order_by('author_id')
 	serializer_class = AuthorSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	
+	def get_queryset(self):
+		queryset = Authors.objects.all()
+		
+		# Get query parameters
+		sort_by = self.request.query_params.get('sort_by', 'author_id')
+		order = self.request.query_params.get('order', 'desc' if sort_by == 'article_count' else 'asc')
+		team_id = self.request.query_params.get('team_id')
+		subject_id = self.request.query_params.get('subject_id')
+		category_slug = self.request.query_params.get('category_slug')
+		date_from = self.request.query_params.get('date_from')
+		date_to = self.request.query_params.get('date_to')
+		timeframe = self.request.query_params.get('timeframe')
+		
+		# Build date filter for articles
+		date_filters = {}
+		
+		if timeframe:
+			now = datetime.now()
+			if timeframe == 'year':
+				date_from = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+			elif timeframe == 'month':
+				date_from = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+			elif timeframe == 'week':
+				# Get Monday of current week
+				days_since_monday = now.weekday()
+				date_from = now - timedelta(days=days_since_monday)
+				date_from = date_from.replace(hour=0, minute=0, second=0, microsecond=0)
+		
+		if date_from:
+			try:
+				if isinstance(date_from, str):
+					date_from = parse_date(date_from) or datetime.strptime(date_from, '%Y-%m-%d').date()
+				date_filters['published_date__gte'] = date_from
+			except (ValueError, TypeError):
+				pass
+		
+		if date_to:
+			try:
+				if isinstance(date_to, str):
+					date_to = parse_date(date_to) or datetime.strptime(date_to, '%Y-%m-%d').date()
+				date_filters['published_date__lte'] = date_to
+			except (ValueError, TypeError):
+				pass
+		
+		# Apply team/subject/category filters
+		author_filters = {}  # Used for filtering Articles to get author IDs
+		count_filters = {}   # Used for Count annotation on Authors queryset
+		
+		# Validate that team_id is provided when using subject_id or category_slug
+		if (subject_id or category_slug) and not team_id:
+			# Return empty queryset if team_id is missing for subject/category filtering
+			return Authors.objects.none()
+		
+		if team_id:
+			try:
+				team_id = int(team_id)
+				author_filters['teams__id'] = team_id
+				count_filters['articles__teams__id'] = team_id
+			except ValueError:
+				pass
+		
+		if subject_id:
+			try:
+				subject_id = int(subject_id)
+				author_filters['subjects__id'] = subject_id
+				count_filters['articles__subjects__id'] = subject_id
+			except ValueError:
+				pass
+		
+		if category_slug:
+			author_filters['team_categories__category_slug'] = category_slug
+			count_filters['articles__team_categories__category_slug'] = category_slug
+		
+		# Add date filters to both author and count filters
+		author_filters.update(date_filters)
+		# For count filters, we need to add the articles__ prefix to date filters
+		count_date_filters = {f'articles__{k}': v for k, v in date_filters.items()}
+		count_filters.update(count_date_filters)
+		
+		# Filter authors if any filters are applied
+		if author_filters:
+			author_ids = Articles.objects.filter(**author_filters).values_list('authors', flat=True).distinct()
+			queryset = queryset.filter(author_id__in=author_ids)
+		
+		# Add article count annotation for sorting
+		if sort_by == 'article_count':
+			if count_filters:
+				queryset = queryset.annotate(
+					article_count=Count('articles', filter=Q(**count_filters), distinct=True)
+				)
+			else:
+				queryset = queryset.annotate(
+					article_count=Count('articles', distinct=True)
+				)
+		
+		# Apply sorting
+		if sort_by == 'article_count':
+			order_prefix = '-' if order == 'desc' else ''
+			queryset = queryset.order_by(f'{order_prefix}article_count', 'author_id')
+		else:
+			# Default sorting by author_id or other fields
+			order_prefix = '-' if order == 'desc' else ''
+			queryset = queryset.order_by(f'{order_prefix}{sort_by}')
+		
+		return queryset.distinct()
+	
+	@action(detail=False, methods=['get'])
+	def by_team_subject(self, request):
+		"""
+		Get authors filtered by team and subject with article counts
+		
+		Parameters:
+		- team_id (required): Team ID
+		- subject_id (required): Subject ID
+		- Additional filters from main queryset apply
+		"""
+		team_id = request.query_params.get('team_id')
+		subject_id = request.query_params.get('subject_id')
+		
+		if not team_id or not subject_id:
+			return Response(
+				{"error": "Both team_id and subject_id are required"}, 
+				status=status.HTTP_400_BAD_REQUEST
+			)
+		
+		queryset = self.filter_queryset(self.get_queryset())
+		page = self.paginate_queryset(queryset)
+		
+		if page is not None:
+			serializer = self.get_serializer(page, many=True)
+			return self.get_paginated_response(serializer.data)
+		
+		serializer = self.get_serializer(queryset, many=True)
+		return Response(serializer.data)
+	
+	@action(detail=False, methods=['get'])
+	def by_team_category(self, request):
+		"""
+		Get authors filtered by team category with article counts
+		
+		Parameters:
+		- team_id (required): Team ID
+		- category_slug (required): Team category slug
+		- Additional filters from main queryset apply
+		"""
+		team_id = request.query_params.get('team_id')
+		category_slug = request.query_params.get('category_slug')
+		
+		if not team_id or not category_slug:
+			return Response(
+				{"error": "Both team_id and category_slug are required"}, 
+				status=status.HTTP_400_BAD_REQUEST
+			)
+		
+		queryset = self.filter_queryset(self.get_queryset())
+		page = self.paginate_queryset(queryset)
+		
+		if page is not None:
+			serializer = self.get_serializer(page, many=True)
+			return self.get_paginated_response(serializer.data)
+		
+		serializer = self.get_serializer(queryset, many=True)
+		return Response(serializer.data)
 
 
 ###
