@@ -16,6 +16,18 @@ WORKDIR /code
 
 # Upgrade pip and install dependencies
 COPY requirements.txt /code/
+# Install system dependencies required to build Python packages
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        gcc \
+        python3-dev \
+        libatlas-base-dev \
+        libffi-dev \
+        libxml2-dev \
+        libxslt1-dev \
+        zlib1g-dev && \
+    rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir --upgrade pip \
 	&& pip install --no-cache-dir -r requirements.txt
 
