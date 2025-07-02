@@ -45,7 +45,7 @@ from templates.emails.views import (
 # Initialize the router and register some endpoints
 router = routers.DefaultRouter()
 router.register(r'articles', ArticleViewSet)
-router.register(r'authors', AuthorsViewSet)
+router.register(r'authors', AuthorsViewSet, basename='authors')
 router.register(r'categories', CategoryViewSet)
 router.register(r'sources', SourceViewSet)
 router.register(r'trials', TrialViewSet)
@@ -119,6 +119,12 @@ urlpatterns = [
 	path('teams/<int:team_id>/subjects/', SubjectsByTeam.as_view({'get': 'list'}), name='subjects-by-team'),
 	## List sources
 	path('teams/<int:team_id>/sources/', SourcesByTeam.as_view({'get': 'list'}), name='sources-by-team'),
+	
+	# Author API endpoints
+	## List authors by team and subject
+	path('teams/<int:team_id>/subjects/<int:subject_id>/authors/', AuthorsViewSet.as_view({'get': 'by_team_subject'}), name='authors-by-team-subject'),
+	## List authors by team and category  
+	path('teams/<int:team_id>/categories/<str:category_slug>/authors/', AuthorsViewSet.as_view({'get': 'by_team_category'}), name='authors-by-team-category'),
 	
 	
 	# Old API routes

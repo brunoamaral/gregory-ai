@@ -140,6 +140,10 @@ class AuthorSerializer(serializers.ModelSerializer):
 		fields = ['author_id', 'given_name', 'family_name', 'full_name', 'ORCID', 'country', 'articles_count', 'articles_list']
 
 	def get_articles_count(self, obj):
+		# If the queryset has annotated article_count, use it for efficiency
+		if hasattr(obj, 'article_count'):
+			return obj.article_count
+		# Fallback to counting all articles
 		return obj.articles_set.count()
 
 	def get_country(self, obj):
