@@ -531,12 +531,23 @@ class TrialsBySubject(viewsets.ModelViewSet):
 
 class SourceViewSet(viewsets.ModelViewSet):
 	"""
-	List all sources of data
+	List all sources of data with optional filters for team and subject.
 	"""
 	queryset = Sources.objects.all().order_by('name')
 	serializer_class = SourceSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+	def get_queryset(self):
+		queryset = super().get_queryset()
+		team_id = self.request.query_params.get('team_id')
+		subject_id = self.request.query_params.get('subject_id')
+
+		if team_id:
+			queryset = queryset.filter(team__id=team_id)
+		if subject_id:
+			queryset = queryset.filter(subject__id=subject_id)
+
+		return queryset
 
 ###
 # AUTHORS
