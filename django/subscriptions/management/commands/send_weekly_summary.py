@@ -204,11 +204,14 @@ class Command(BaseCommand):
 					# Order by highest ML prediction score first, then by discovery date (newest first)
 					# We need to annotate with the max ML prediction score for ordering
 					from django.db.models import Max
-					unsent_articles = unsent_articles.annotate(
+					limited_articles = unsent_articles.annotate(
 						max_ml_score=Max('ml_predictions_detail__probability_score')
 					).order_by('-max_ml_score', '-discovery_date')[:article_limit]
+					
+					# Convert sliced QuerySet to list to avoid "Cannot filter a query once a slice has been taken" error
+					unsent_articles = list(limited_articles)
 					if debug:
-						self.stdout.write(self.style.NOTICE(f"Applied article limit: showing {article_limit} highest-scoring articles (by ML prediction, then newest) out of {unsent_articles.count()} available"))
+						self.stdout.write(self.style.NOTICE(f"Applied article limit: showing {article_limit} highest-scoring articles (by ML prediction, then newest) out of {len(unsent_articles)} available"))
 
 				# Step 7: Prepare and send the email using optimized Phase 5 rendering pipeline
 				# CRITICAL FIX: Get the organized content BEFORE recording as sent
