@@ -193,10 +193,15 @@ class Command(BaseCommand):
 					self.stdout.write(self.style.NOTICE(f"  - Found {len(sent_article_ids)} already sent articles"))
 					# Handle both QuerySet and list cases
 					articles_count = len(unsent_articles) if isinstance(unsent_articles, list) else unsent_articles.count()
+					trials_count = len(unsent_trials) if isinstance(unsent_trials, list) else unsent_trials.count()
 					self.stdout.write(self.style.NOTICE(f"  - Will include {articles_count} new articles in the email"))
-					self.stdout.write(self.style.NOTICE(f"  - Will include {unsent_trials.count()} new trials in the email"))
+					self.stdout.write(self.style.NOTICE(f"  - Will include {trials_count} new trials in the email"))
 
-				if not unsent_articles and not unsent_trials.exists():
+				# Handle both QuerySet and list cases for existence check
+				has_unsent_articles = bool(unsent_articles) if isinstance(unsent_articles, list) else unsent_articles.exists()
+				has_unsent_trials = bool(unsent_trials) if isinstance(unsent_trials, list) else unsent_trials.exists()
+				
+				if not has_unsent_articles and not has_unsent_trials:
 					self.stdout.write(self.style.WARNING(f'No new articles or trials for {subscriber.email} in list "{digest_list.list_name}".'))
 					continue
 

@@ -42,7 +42,13 @@ class EmailContentOrganizer:
         Returns:
             dict: Organized articles with metadata
         """
-        if not articles.exists():
+        # Handle both QuerySet and list cases
+        if hasattr(articles, 'exists'):
+            has_articles = articles.exists()
+        else:
+            has_articles = bool(articles)
+        
+        if not has_articles:
             return {
                 'featured_articles': [],
                 'regular_articles': [],
@@ -72,7 +78,13 @@ class EmailContentOrganizer:
         Returns:
             dict: Organized trials with metadata
         """
-        if not trials.exists():
+        # Handle both QuerySet and list cases
+        if hasattr(trials, 'exists'):
+            has_trials = trials.exists()
+        else:
+            has_trials = bool(trials)
+        
+        if not has_trials:
             return {
                 'featured_trials': [],
                 'regular_trials': [],
@@ -102,9 +114,17 @@ class EmailContentOrganizer:
         """Organize articles for weekly summary emails."""
         # Get high-confidence articles first
         high_confidence_articles = self._filter_high_confidence(articles)
-        regular_articles = articles.exclude(
-            pk__in=[a.pk for a in high_confidence_articles]
-        )
+        
+        # Handle both QuerySet and list cases for exclusion
+        if hasattr(articles, 'exclude'):
+            # QuerySet case - use exclude
+            regular_articles = articles.exclude(
+                pk__in=[a.pk for a in high_confidence_articles]
+            )
+        else:
+            # List case - filter manually
+            high_confidence_pks = [a.pk for a in high_confidence_articles]
+            regular_articles = [a for a in articles if a.pk not in high_confidence_pks]
         
         # Sort by discovery date for user-friendly experience
         high_confidence_sorted = sorted(
@@ -112,7 +132,14 @@ class EmailContentOrganizer:
             key=lambda x: x.discovery_date, 
             reverse=True
         )
-        regular_sorted = list(regular_articles.order_by('-discovery_date'))
+        
+        # Handle both QuerySet and list cases for ordering
+        if hasattr(regular_articles, 'order_by'):
+            # QuerySet case
+            regular_sorted = list(regular_articles.order_by('-discovery_date'))
+        else:
+            # List case - sort manually
+            regular_sorted = sorted(regular_articles, key=lambda x: x.discovery_date, reverse=True)
         
         # Apply subscriber preferences if available
         if subscriber and list_obj:
