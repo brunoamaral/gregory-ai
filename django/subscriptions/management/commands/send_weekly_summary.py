@@ -191,16 +191,20 @@ class Command(BaseCommand):
 				if debug:
 					self.stdout.write(self.style.NOTICE(f"For subscriber {subscriber.email}:"))
 					self.stdout.write(self.style.NOTICE(f"  - Found {len(sent_article_ids)} already sent articles"))
-					self.stdout.write(self.style.NOTICE(f"  - Will include {unsent_articles.count()} new articles in the email"))
+					# Handle both QuerySet and list cases
+					articles_count = len(unsent_articles) if isinstance(unsent_articles, list) else unsent_articles.count()
+					self.stdout.write(self.style.NOTICE(f"  - Will include {articles_count} new articles in the email"))
 					self.stdout.write(self.style.NOTICE(f"  - Will include {unsent_trials.count()} new trials in the email"))
 
-				if not unsent_articles.exists() and not unsent_trials.exists():
+				if not unsent_articles and not unsent_trials.exists():
 					self.stdout.write(self.style.WARNING(f'No new articles or trials for {subscriber.email} in list "{digest_list.list_name}".'))
 					continue
 
 				# Step 6: Apply article limit if specified in the subscription list
 				article_limit = getattr(digest_list, 'article_limit', 15) or 15  # Default to 15 if not set or None
-				if unsent_articles.count() > article_limit:
+				# Handle both QuerySet and list cases
+				articles_count = len(unsent_articles) if isinstance(unsent_articles, list) else unsent_articles.count()
+				if articles_count > article_limit:
 					# Order by highest ML prediction score first, then by discovery date (newest first)
 					# We need to annotate with the max ML prediction score for ordering
 					from django.db.models import Max
