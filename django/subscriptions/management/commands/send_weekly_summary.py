@@ -211,6 +211,8 @@ class Command(BaseCommand):
 						self.stdout.write(self.style.NOTICE(f"Applied article limit: showing {article_limit} highest-scoring articles (by ML prediction, then newest) out of {unsent_articles.count()} available"))
 
 				# Step 7: Prepare and send the email using optimized Phase 5 rendering pipeline
+				# CRITICAL FIX: Get the organized content BEFORE recording as sent
+				# This ensures what we record matches what gets sent
 				summary_context = get_optimized_email_context(
 					email_type='weekly_summary',
 					articles=unsent_articles,
@@ -222,6 +224,10 @@ class Command(BaseCommand):
 					confidence_threshold=threshold  # Pass the threshold parameter to the content organizer
 				)
 				
+				# Extract the actual articles that will be rendered in the email
+				articles_to_be_sent = list(summary_context.get('articles', [])) + list(summary_context.get('additional_articles', []))
+				trials_to_be_sent = list(summary_context.get('trials', [])) + list(summary_context.get('additional_trials', []))
+				
 				# Debug the final content that will appear in the email
 				if debug:
 					self.stdout.write(self.style.NOTICE(f"Final email content for subscriber {subscriber.email}:"))
@@ -229,6 +235,8 @@ class Command(BaseCommand):
 					self.stdout.write(self.style.NOTICE(f"  - Additional Articles: {len(summary_context.get('additional_articles', []))}"))
 					self.stdout.write(self.style.NOTICE(f"  - Featured Trials: {len(summary_context.get('trials', []))}"))
 					self.stdout.write(self.style.NOTICE(f"  - Additional Trials: {len(summary_context.get('additional_trials', []))}"))
+					self.stdout.write(self.style.NOTICE(f"  - Total articles to be sent: {len(articles_to_be_sent)}"))
+					self.stdout.write(self.style.NOTICE(f"  - Total trials to be sent: {len(trials_to_be_sent)}"))
 					
 					# Print actual article titles
 					if summary_context.get('articles'):
@@ -243,14 +251,73 @@ class Command(BaseCommand):
 
 				html_content = get_template('emails/weekly_summary.html').render(summary_context)
 				text_content = strip_tags(html_content)
+				
+				# VERIFICATION: Check that the rendered HTML actually contains the articles
+				if debug:
+					# Count article titles in the rendered HTML
+					article_count_in_html = 0
+					missing_articles = []
+					
+					for article in articles_to_be_sent:
+						# Try multiple ways to find the article in HTML
+						title_found = False
+						
+						# Method 1: Exact title match (first 50 chars)
+						if article.title[:50] in html_content:
+							title_found = True
+						
+						# Method 2: Check for title without HTML tags (escape <scp> tags)
+						import html
+						clean_title = html.escape(article.title[:50])
+						if clean_title in html_content:
+							title_found = True
+						
+						# Method 3: Check for title with HTML entities decoded
+						from django.utils.html import strip_tags as strip_html_tags
+						stripped_title = strip_html_tags(article.title[:50])
+						if stripped_title in html_content:
+							title_found = True
+						
+						# Method 4: Check for partial matches (removing problematic characters)
+						safe_title = article.title[:50].replace('<scp>', '').replace('</scp>', '').replace('‐', '-')
+						if safe_title in html_content:
+							title_found = True
+						
+						if title_found:
+							article_count_in_html += 1
+						else:
+							missing_articles.append(article)
+					
+					self.stdout.write(self.style.NOTICE(f"VERIFICATION: {article_count_in_html} out of {len(articles_to_be_sent)} articles found in rendered HTML"))
+					
+					# If there's a mismatch, show which articles are missing
+					if missing_articles:
+						self.stdout.write(self.style.WARNING("MISMATCH DETECTED! Articles missing from HTML:"))
+						for article in missing_articles:
+							self.stdout.write(self.style.WARNING(f"  - MISSING: {article.title[:50]}..."))
+							# Also show how the title appears in different formats
+							import html
+							self.stdout.write(self.style.WARNING(f"    * Original: {article.title[:50]}"))
+							self.stdout.write(self.style.WARNING(f"    * HTML escaped: {html.escape(article.title[:50])}"))
+							self.stdout.write(self.style.WARNING(f"    * Stripped: {strip_html_tags(article.title[:50])}"))
+					
+					# Also check for the "No New Content This Week" message
+					if "No New Content This Week" in html_content:
+						self.stdout.write(self.style.ERROR("WARNING: Email contains 'No New Content' message despite having articles!"))
+					
+					# Save the HTML content to a file for inspection
+					import os
+					debug_file = f"/tmp/weekly_summary_debug_{subscriber.subscriber_id}.html"
+					with open(debug_file, 'w', encoding='utf-8') as f:
+						f.write(html_content)
+					self.stdout.write(self.style.NOTICE(f"HTML content saved to: {debug_file}"))
 
 				if dry_run:
 					# In dry-run mode, just log what would be sent without actually sending
 					self.stdout.write(self.style.SUCCESS(f'[DRY RUN] Would send weekly digest email to {subscriber.email} for list "{digest_list.list_name}"'))
 					self.stdout.write(self.style.NOTICE(f'  - Subject: {email_subject}'))
-					# Note: unsent_articles may have been limited, so show the actual count being sent
-					articles_to_send = len(unsent_articles) if hasattr(unsent_articles, '__len__') else unsent_articles.count()
-					self.stdout.write(self.style.NOTICE(f'  - Would include {articles_to_send} articles and {unsent_trials.count()} trials'))
+					# Show the actual articles that would be sent based on content organizer
+					self.stdout.write(self.style.NOTICE(f'  - Would include {len(articles_to_be_sent)} articles and {len(trials_to_be_sent)} trials'))
 					
 					# Print more details if in debug mode
 					if debug:
@@ -280,19 +347,19 @@ class Command(BaseCommand):
 
 					if error_code == 0:  # Successful delivery
 						self.stdout.write(self.style.SUCCESS(f'Weekly digest email sent to {subscriber.email} for list "{digest_list.list_name}".'))
-						# Record sent notifications
+						# Record sent notifications for articles that were actually sent in the email
 						new_sent_count = 0
-						for article in unsent_articles:
+						for article in articles_to_be_sent:
 							SentArticleNotification.objects.get_or_create(
 								article=article,
 								list=digest_list,
 								subscriber=subscriber
 							)
 							new_sent_count += 1
-						self.stdout.write(self.style.NOTICE(f'  - Recorded {new_sent_count} new sent article notifications (limited by article_limit: {article_limit})'))
+						self.stdout.write(self.style.NOTICE(f'  - Recorded {new_sent_count} new sent article notifications (actually rendered in email)'))
 						
 						new_trial_sent_count = 0
-						for trial in unsent_trials:
+						for trial in trials_to_be_sent:
 							SentTrialNotification.objects.get_or_create(
 								trial=trial,
 								list=digest_list,
