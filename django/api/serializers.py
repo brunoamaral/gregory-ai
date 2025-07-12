@@ -133,7 +133,6 @@ class AuthorSerializer(serializers.ModelSerializer):
 	articles_count = serializers.SerializerMethodField()
 	country = serializers.SerializerMethodField()
 	articles_list = serializers.SerializerMethodField()
-	full_name = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Authors
@@ -154,9 +153,6 @@ class AuthorSerializer(serializers.ModelSerializer):
 		site = get_site()
 		base_url = f"https://api.{site.domain}/articles/author/" if site else ""
 		return base_url + str(obj.author_id) if site else ""
-		
-	def get_full_name(self, obj):
-		return obj.full_name
 
 # Simple Trial serializer for use in Article references
 class TrialReferenceSerializer(serializers.ModelSerializer):
