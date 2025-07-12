@@ -1077,11 +1077,18 @@ class AuthorSearchView(generics.ListAPIView):
 
             full_name = params.get('full_name')
             if full_name:
+                # URL decode the full_name parameter to handle %20 spaces and other encoded characters
+                from urllib.parse import unquote
+                full_name = unquote(full_name)
                 # Use the new full_name database field for more efficient searching
                 queryset = queryset.filter(full_name__icontains=full_name)
 
             return queryset
-        except Exception:
+        except Exception as e:
+            # Log the exception for debugging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in AuthorSearchView.get_queryset: {str(e)}")
             return Authors.objects.none()
 
     def post(self, request, *args, **kwargs):
