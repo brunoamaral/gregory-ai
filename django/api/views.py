@@ -1054,7 +1054,7 @@ class AuthorSearchView(generics.ListAPIView):
     permission_classes = [permissions.AllowAny]
     filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
     filterset_class = AuthorFilter
-    search_fields = ['given_name', 'family_name']
+    search_fields = ['full_name']
     pagination_class = FlexiblePagination
     http_method_names = ['get', 'post']
 
@@ -1077,10 +1077,8 @@ class AuthorSearchView(generics.ListAPIView):
 
             full_name = params.get('full_name')
             if full_name:
-                queryset = queryset.filter(
-                    Q(given_name__icontains=full_name) |
-                    Q(family_name__icontains=full_name)
-                )
+                # Use the new full_name database field for more efficient searching
+                queryset = queryset.filter(full_name__icontains=full_name)
 
             return queryset
         except Exception:

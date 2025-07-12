@@ -14,21 +14,23 @@ class Authors(models.Model):
 	author_id = models.AutoField(primary_key=True)
 	family_name = models.CharField(blank=False,null=False, max_length=150)
 	given_name = models.CharField(blank=False,null=False, max_length=150)
+	full_name = models.CharField(max_length=301, blank=True, null=True, db_index=True, help_text="Auto-generated from given_name and family_name")
 	ORCID = models.CharField(blank=True, null=True, max_length=150, unique=True)
 	country = CountryField(blank=True, null=True)  # New field
 	orcid_check = models.DateTimeField(blank=True, null=True)
 	history = HistoricalRecords()
 
+	def save(self, *args, **kwargs):
+		# Auto-populate full_name from given_name and family_name
+		self.full_name = f"{self.given_name} {self.family_name}".strip()
+		super().save(*args, **kwargs)
+
 	def __str__(self):
-		full_name = (self.given_name,self.family_name)
-		object_name = ' '.join(full_name)
-		return str(object_name)
+		return self.full_name or f"{self.given_name} {self.family_name}"
+	
 	class Meta:
 		verbose_name_plural = 'authors'
 		db_table = 'authors'
-	@property
-	def full_name(self):
-		return self.given_name+" "+self.family_name
 
 class TeamCategory(models.Model):
 	team = models.ForeignKey('Team', on_delete=models.CASCADE, related_name='team_categories', null=False, blank=False)
