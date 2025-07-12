@@ -57,8 +57,5 @@ class AuthorFilter(filters.FilterSet):
         fields = ['full_name']
 
     def filter_full_name(self, queryset, name, value):
-        """Search in given_name and family_name fields"""
-        return queryset.filter(
-            models.Q(given_name__icontains=value) |
-            models.Q(family_name__icontains=value)
-        )
+        """Search in the full_name database field"""
+        return queryset.filter(full_name__icontains=value)
