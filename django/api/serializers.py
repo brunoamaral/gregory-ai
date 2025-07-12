@@ -49,9 +49,26 @@ class MLPredictionsSerializer(serializers.ModelSerializer):
 		fields = ['id', 'algorithm', 'model_version', 'probability_score', 'predicted_relevant', 'created_date', 'subject']
 
 class CategorySerializer(serializers.ModelSerializer):
+	article_count_total = serializers.SerializerMethodField()
+	trials_count_total = serializers.SerializerMethodField()
+	
 	class Meta:
 		model = TeamCategory
-		fields = ['id', 'category_description', 'category_name', 'category_slug', 'category_terms', 'article_count']
+		fields = ['id', 'category_description', 'category_name', 'category_slug', 'category_terms', 'article_count_total', 'trials_count_total']
+	
+	def get_article_count_total(self, obj):
+		# If the queryset has annotated article_count, use it for efficiency
+		if hasattr(obj, 'article_count_annotated'):
+			return obj.article_count_annotated
+		# Fallback to the model method
+		return obj.article_count()
+	
+	def get_trials_count_total(self, obj):
+		# If the queryset has annotated trials_count, use it for efficiency
+		if hasattr(obj, 'trials_count_annotated'):
+			return obj.trials_count_annotated
+		# Fallback to the model method
+		return obj.trials_count()
 
 class ArticleAuthorSerializer(serializers.ModelSerializer):
 	country = serializers.SerializerMethodField()
