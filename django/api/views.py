@@ -433,6 +433,12 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	queryset = TeamCategory.objects.all()
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	
+	def get_queryset(self):
+		return TeamCategory.objects.annotate(
+			article_count_annotated=Count('articles', distinct=True),
+			trials_count_annotated=Count('trials', distinct=True)
+		).all()
 
 class MonthlyCountsView(APIView):
 	def get(self, request, team_id, category_slug):
@@ -837,7 +843,10 @@ class CategoriesByTeam(viewsets.ModelViewSet):
 
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
-		return TeamCategory.objects.filter(team__id=team_id).order_by('-id')
+		return TeamCategory.objects.filter(team__id=team_id).annotate(
+			article_count_annotated=Count('articles', distinct=True),
+			trials_count_annotated=Count('trials', distinct=True)
+		).order_by('-id')
 
 class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
 		"""

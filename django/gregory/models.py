@@ -50,6 +50,9 @@ class TeamCategory(models.Model):
 
 	def article_count(self):
 		return self.articles.count()
+	
+	def trials_count(self):
+		return self.trials.count()
 
 	class Meta:
 		constraints = [
