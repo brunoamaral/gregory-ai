@@ -1,6 +1,6 @@
 from django_filters import rest_framework as filters
 from django.db import models
-from gregory.models import Articles, Trials
+from gregory.models import Articles, Trials, Authors
 
 class ArticleFilter(filters.FilterSet):
     """
@@ -43,6 +43,19 @@ class TrialFilter(filters.FilterSet):
         Search in both title and summary fields
         """
         return queryset.filter(
-            models.Q(title__icontains=value) | 
+            models.Q(title__icontains=value) |
             models.Q(summary__icontains=value)
         )
+
+class AuthorFilter(filters.FilterSet):
+    """Filter class for Authors, allowing searching by full name."""
+
+    full_name = filters.CharFilter(method='filter_full_name')
+
+    class Meta:
+        model = Authors
+        fields = ['full_name']
+
+    def filter_full_name(self, queryset, name, value):
+        """Search in the full_name database field"""
+        return queryset.filter(full_name__icontains=value)

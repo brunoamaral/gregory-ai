@@ -12,7 +12,7 @@ from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, Te
 from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
 from django_filters import rest_framework as django_filters
-from api.filters import ArticleFilter, TrialFilter
+from api.filters import ArticleFilter, TrialFilter, AuthorFilter
 from rest_framework.response import Response
 from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
@@ -1039,4 +1039,57 @@ class TrialSearchView(generics.ListAPIView):
     
     def post(self, request, *args, **kwargs):
         # For POST requests, delegate to the list method which uses get_queryset
+        return self.list(request, *args, **kwargs)
+
+class AuthorSearchView(generics.ListAPIView):
+    """
+    Advanced search for authors by full name.
+
+    Supports both GET and POST requests with required team_id and subject_id
+    parameters. Filtering by full_name is case-insensitive and allows partial
+    matches. Pagination and CSV export options mirror the article search
+    endpoint.
+    """
+    serializer_class = AuthorSerializer
+    permission_classes = [permissions.AllowAny]
+    filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
+    filterset_class = AuthorFilter
+    search_fields = ['full_name']
+    pagination_class = FlexiblePagination
+    http_method_names = ['get', 'post']
+
+    def get_queryset(self):
+        params = self.request.query_params if self.request.method == 'GET' else self.request.data
+
+        team_id = params.get('team_id')
+        subject_id = params.get('subject_id')
+
+        if not team_id or not subject_id:
+            return Authors.objects.none()
+
+        try:
+            author_ids = Articles.objects.filter(
+                teams__id=team_id,
+                subjects__id=subject_id
+            ).values_list('authors', flat=True).distinct()
+
+            queryset = Authors.objects.filter(author_id__in=author_ids).order_by('author_id')
+
+            full_name = params.get('full_name')
+            if full_name:
+                # URL decode the full_name parameter to handle %20 spaces and other encoded characters
+                from urllib.parse import unquote
+                full_name = unquote(full_name)
+                # Use the new full_name database field for more efficient searching
+                queryset = queryset.filter(full_name__icontains=full_name)
+
+            return queryset
+        except Exception as e:
+            # Log the exception for debugging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in AuthorSearchView.get_queryset: {str(e)}")
+            return Authors.objects.none()
+
+    def post(self, request, *args, **kwargs):
         return self.list(request, *args, **kwargs)

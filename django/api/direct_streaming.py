@@ -94,7 +94,9 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                 object_type = 'articles'
             elif 'trial' in path:
                 object_type = 'trials'
-            elif 'categor' in path:
+            elif 'author' in path:
+                object_type = 'authors'
+            elif 'category' in path:
                 object_type = 'categories'
             elif 'subject' in path:
                 object_type = 'subjects'
