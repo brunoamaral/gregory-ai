@@ -115,7 +115,8 @@ class Command(BaseCommand):
                 # Initial database filtering (broad match)
                 query = Q()
                 for term in terms:
-                    query |= Q(title__icontains=term) | Q(summary__icontains=term)
+                    upper_term = term.upper()
+                    query |= Q(utitle__contains=upper_term) | Q(usummary__contains=upper_term)
                 
                 candidates = base_query.filter(query)
                 total_candidates = candidates.count()
@@ -255,7 +256,8 @@ class Command(BaseCommand):
                 # Initial database filtering (broad match)
                 query = Q()
                 for term in terms:
-                    query |= Q(title__icontains=term) | Q(summary__icontains=term)
+                    upper_term = term.upper()
+                    query |= Q(utitle__contains=upper_term) | Q(usummary__contains=upper_term)
                 
                 candidates = base_query.filter(query)
                 total_candidates = candidates.count()
