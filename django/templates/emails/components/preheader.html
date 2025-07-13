@@ -10,8 +10,8 @@
                 Your weekly medical research summary from {{ title|default:"Gregory AI" }}
             {% endif %}
         {% elif email_type == 'admin_summary' %}
-            {% if articles %}
-                {{ articles|length }} new article{{ articles|length|pluralize }} found in the last 48 hours requiring review
+            {% if content_stats.total_articles %}
+                {{ content_stats.total_articles}} new article{{ content_stats.total_articles|pluralize }} found in the last 48 hours requiring review
             {% else %}
                 Latest research findings for admin review
             {% endif %}
