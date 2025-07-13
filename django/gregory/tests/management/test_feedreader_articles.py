@@ -605,11 +605,12 @@ class TestErrorHandling(TestCase):
     def test_database_error_handler(self):
         """Test generic database error handler."""
         command = Command()
+        command.verbosity = 2  # Set verbosity so the log will output
         
         # Test the error handler method
-        with patch('builtins.print') as mock_print:
+        with patch.object(command, 'stdout') as mock_stdout:
             command.handle_database_error('test operation', Exception('Test error'))
-            mock_print.assert_called_once_with('An error occurred during test operation: Test error')
+            mock_stdout.write.assert_called_once_with('An error occurred during test operation: Test error')
 
 
 @override_settings(MIGRATION_MODULES={app: None for app in ['gregory', 'organizations', 'sitesettings', 'sites']})
