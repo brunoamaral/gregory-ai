@@ -42,10 +42,6 @@ class MLPredictionsExtensionTestCase(TestCase):
             model_version="v1.0.0",
             probability_score=0.85,
             predicted_relevant=True,
-            gnb=True,
-            lr=True,
-            lsvc=False,
-            mnb=True
         )
     
     def test_new_fields_exist(self):
@@ -69,11 +65,6 @@ class MLPredictionsExtensionTestCase(TestCase):
         self.assertIsNotNone(prediction.predicted_relevant)
         self.assertTrue(prediction.predicted_relevant)
         
-        # Check that legacy fields are still accessible
-        self.assertTrue(prediction.gnb)
-        self.assertTrue(prediction.lr)
-        self.assertFalse(prediction.lsvc)
-        self.assertTrue(prediction.mnb)
     
     def test_unique_constraint(self):
         """Test that the unique constraint is enforced"""

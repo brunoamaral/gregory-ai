@@ -13,6 +13,10 @@ import re
 import requests
 
 class Command(BaseCommand):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.verbosity = 1  # Default verbosity level
+		
 	def handle(self, *args, **options):
 		self.verbosity = options.get('verbosity', 1)
 		self.setup()

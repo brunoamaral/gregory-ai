@@ -2,14 +2,17 @@ from cryptography.fernet import Fernet
 from django_countries.fields import CountryField
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
+from django.db.models import GeneratedField
+from django.db.models.functions import Upper
 from django.utils.text import slugify
 from django.utils import timezone
 from organizations.models import Organization, OrganizationUser
 from simple_history.models import HistoricalRecords
 import base64
 from django.db.models.functions import Lower
-from django.db import models
+
 class Authors(models.Model):
 	author_id = models.AutoField(primary_key=True)
 	family_name = models.CharField(blank=False,null=False, max_length=150)
@@ -214,6 +217,19 @@ class Articles(models.Model):
 	doi = models.CharField(max_length=280, blank=True, null=True)
 	summary = models.TextField(blank=True, null=True)
 	summary_plain_english = models.TextField(blank=True, null=True) # Used for plain English version
+	
+	# Persisted uppercase columns for performant case-insensitive search
+	utitle = GeneratedField(
+		expression=Upper('title'),
+		output_field=models.TextField(),
+		db_persist=True
+	)
+	usummary = GeneratedField(
+		expression=Upper('summary'),
+		output_field=models.TextField(),
+		db_persist=True
+	)
+	
 	sources = models.ManyToManyField(Sources, blank=True)
 	published_date = models.DateTimeField(blank=True, null=True)
 	discovery_date = models.DateTimeField(auto_now_add=True)
@@ -244,6 +260,19 @@ class Articles(models.Model):
 				fields=['title', 'link'],
 				name='unique_article_title_link')
 		]
+		indexes = [
+			# GIN indexes for fast text search on uppercase columns
+			GinIndex(
+				fields=['utitle'],
+				name='articles_utitle_gin_idx',
+				opclasses=['gin_trgm_ops']
+			),
+			GinIndex(
+				fields=['usummary'],
+				name='articles_usummary_gin_idx',
+				opclasses=['gin_trgm_ops']
+			),
+		]
 		verbose_name_plural = 'articles'
 		db_table = 'articles'
 		ordering = ['-discovery_date']
@@ -255,6 +284,19 @@ class Trials(models.Model):
 	title = models.TextField(blank=False,null=False, unique=True)
 	summary = models.TextField(blank=True, null=True)
 	summary_plain_english = models.TextField(blank=True, null=True) # Used for plain English summary
+	
+	# Persisted uppercase columns for performant case-insensitive search
+	utitle = GeneratedField(
+		expression=Upper('title'),
+		output_field=models.TextField(),
+		db_persist=True
+	)
+	usummary = GeneratedField(
+		expression=Upper('summary'),
+		output_field=models.TextField(),
+		db_persist=True
+	)
+	
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True)
 	sources = models.ManyToManyField('Sources', blank=True)
@@ -332,6 +374,19 @@ class Trials(models.Model):
 				Lower('title'),
 				name='unique_title_case_insensitive'
 			)
+		]
+		indexes = [
+			# GIN indexes for fast text search on uppercase columns
+			GinIndex(
+				fields=['utitle'],
+				name='trials_utitle_gin_idx',
+				opclasses=['gin_trgm_ops']
+			),
+			GinIndex(
+				fields=['usummary'],
+				name='trials_usummary_gin_idx',
+				opclasses=['gin_trgm_ops']
+			),
 		]
 def get_fernet():
 	try:
