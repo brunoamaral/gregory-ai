@@ -2,6 +2,7 @@ from cryptography.fernet import Fernet
 from django_countries.fields import CountryField
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django.db.models import GeneratedField
 from django.db.models.functions import Upper
@@ -259,6 +260,19 @@ class Articles(models.Model):
 				fields=['title', 'link'],
 				name='unique_article_title_link')
 		]
+		indexes = [
+			# GIN indexes for fast text search on uppercase columns
+			GinIndex(
+				fields=['utitle'],
+				name='articles_utitle_gin_idx',
+				opclasses=['gin_trgm_ops']
+			),
+			GinIndex(
+				fields=['usummary'],
+				name='articles_usummary_gin_idx',
+				opclasses=['gin_trgm_ops']
+			),
+		]
 		verbose_name_plural = 'articles'
 		db_table = 'articles'
 		ordering = ['-discovery_date']
@@ -360,6 +374,19 @@ class Trials(models.Model):
 				Lower('title'),
 				name='unique_title_case_insensitive'
 			)
+		]
+		indexes = [
+			# GIN indexes for fast text search on uppercase columns
+			GinIndex(
+				fields=['utitle'],
+				name='trials_utitle_gin_idx',
+				opclasses=['gin_trgm_ops']
+			),
+			GinIndex(
+				fields=['usummary'],
+				name='trials_usummary_gin_idx',
+				opclasses=['gin_trgm_ops']
+			),
 		]
 def get_fernet():
 	try:
