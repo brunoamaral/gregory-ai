@@ -93,10 +93,11 @@ def article_review_status_view(request):
     # Search functionality
     search_query = request.GET.get('q', '')
     if search_query:
+        upper_search = search_query.upper()
         queryset = queryset.filter(
-            Q(title__icontains=search_query) | 
+            Q(utitle__contains=upper_search) | 
             Q(doi__icontains=search_query) |
-            Q(summary__icontains=search_query)
+            Q(usummary__contains=upper_search)
         )
     
     # Date filtering
