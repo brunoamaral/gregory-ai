@@ -83,5 +83,7 @@ class AuthorFilter(filters.FilterSet):
         fields = ['full_name']
 
     def filter_full_name(self, queryset, name, value):
-        """Search in the full_name database field"""
-        return queryset.filter(full_name__icontains=value)
+        """Search in the full_name database field using optimized uppercase column"""
+        # Use uppercase search for better performance with GIN index
+        upper_value = value.upper()
+        return queryset.filter(ufull_name__contains=upper_value)
