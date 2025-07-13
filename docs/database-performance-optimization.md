@@ -2,7 +2,7 @@
 
 ## Overview
 
-This implementation adds persisted uppercase columns (`utitle`, `usummary`) to the `articles` and `trials` tables to dramatically improve case-insensitive search performance.
+This implementation adds persisted uppercase columns (`utitle`, `usummary`, `ufull_name`) to the `articles`, `trials`, and `authors` tables to dramatically improve case-insensitive search performance.
 
 ## Problem
 
@@ -11,6 +11,7 @@ The original search implementation used Django's `icontains` lookup, which trans
 ```sql
 WHERE UPPER(title) LIKE UPPER('%search_term%')
    OR UPPER(summary) LIKE UPPER('%search_term%')
+   OR UPPER(full_name) LIKE UPPER('%search_term%')
 ```
 
 Since PostgreSQL cannot use indexes when functions are applied to columns at query time, every search resulted in a full table scan, causing performance issues on large datasets.
@@ -43,6 +44,19 @@ class Articles(models.Model):
         indexes = [
             GinIndex(fields=['utitle'], opclasses=['gin_trgm_ops'], name='articles_utitle_gin_idx'),
             GinIndex(fields=['usummary'], opclasses=['gin_trgm_ops'], name='articles_usummary_gin_idx'),
+        ]
+
+class Authors(models.Model):
+    # ...existing fields...
+    ufull_name = GeneratedField(
+        expression=Upper('full_name'),
+        output_field=models.TextField(),
+        db_persist=True
+    )
+    
+    class Meta:
+        indexes = [
+            GinIndex(fields=['ufull_name'], opclasses=['gin_trgm_ops'], name='authors_ufull_name_gin_idx'),
         ]
 ```
 
@@ -87,6 +101,9 @@ queryset.filter(Q(title__icontains=search) | Q(summary__icontains=search))
 ```python
 upper_search = search.upper()
 queryset.filter(Q(utitle__contains=upper_search) | Q(usummary__contains=upper_search))
+
+# For Authors
+queryset.filter(ufull_name__contains=search.upper())
 ```
 
 ## Performance Results
@@ -101,21 +118,23 @@ Performance testing shows dramatic improvements:
 ## Files Modified
 
 ### Database Migrations
-- `django/gregory/migrations/0018_add_uppercase_helper_columns_to_trials_articles.py` - Creates GeneratedField columns
+- `django/gregory/migrations/0018_add_uppercase_helper_columns_to_trials_articles.py` - Creates GeneratedField columns for Articles and Trials
 - `django/gregory/migrations/0019_enable_pg_trgm_extension.py` - Enables pg_trgm extension
-- `django/gregory/migrations/0020_add_gin_indexes_for_text_search.py` - Creates GIN indexes
+- `django/gregory/migrations/0020_add_gin_indexes_for_text_search.py` - Creates GIN indexes for Articles and Trials
+- `django/gregory/migrations/0021_authors_ufull_name_historicalauthors_ufull_name_and_more.py` - Creates GeneratedField column and GIN index for Authors
 
 ### Models
-- `django/gregory/models.py` - Added GeneratedField definitions and GinIndex configurations
+- `django/gregory/models.py` - Added GeneratedField definitions and GinIndex configurations for Articles, Trials, and Authors
 
 ### API Filters
-- `django/api/filters.py` - Updated `ArticleFilter` and `TrialFilter` to use Django ORM with uppercase columns
+- `django/api/filters.py` - Updated `ArticleFilter`, `TrialFilter`, and `AuthorFilter` to use Django ORM with uppercase columns
 
 ### Management Commands
 - `django/gregory/management/commands/rebuild_categories.py` - Updated to use Django-native ORM throughout
 
 ### Tests
-- `django/gregory/tests/test_uppercase_search_columns.py` - Comprehensive test suite including GIN index verification
+- `django/gregory/tests/test_uppercase_search_columns.py` - Comprehensive test suite for Articles and Trials including GIN index verification
+- `django/gregory/tests/test_authors_uppercase_search_columns.py` - Comprehensive test suite for Authors optimization including GIN index verification
 
 ## Benefits
 
@@ -177,17 +196,23 @@ GET /api/articles/?title=vaccine
 
 # Search in summary only  
 GET /api/articles/?summary=treatment
+
+# Search for authors by name
+GET /api/authors/search/?full_name=john+smith
 ```
 
 ### Programmatic Usage
 ```python
-from gregory.models import Articles
+from gregory.models import Articles, Authors
 from django.db.models import Q
 
 # Search using the Django ORM with optimized columns
 results = Articles.objects.filter(
     Q(utitle__contains='COVID') | Q(usummary__contains='COVID')
 )
+
+# Search authors by name
+authors = Authors.objects.filter(ufull_name__contains='JOHN SMITH')
 
 # Can also combine with other filters
 recent_covid_articles = Articles.objects.filter(
@@ -203,9 +228,13 @@ To verify the indexes are being used:
 EXPLAIN ANALYZE 
 SELECT COUNT(*) FROM articles 
 WHERE utitle LIKE '%COVID%' OR usummary LIKE '%COVID%';
+
+EXPLAIN ANALYZE 
+SELECT COUNT(*) FROM authors 
+WHERE ufull_name LIKE '%JOHN%';
 ```
 
-Look for "Bitmap Index Scan" using the GIN indexes (`articles_utitle_gin_idx`, `articles_usummary_gin_idx`) rather than "Seq Scan".
+Look for "Bitmap Index Scan" using the GIN indexes (`articles_utitle_gin_idx`, `articles_usummary_gin_idx`, `authors_ufull_name_gin_idx`) rather than "Seq Scan".
 
 ## Future Considerations
 
