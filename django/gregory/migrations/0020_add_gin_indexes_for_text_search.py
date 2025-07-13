@@ -7,7 +7,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gregory', '0020_enable_pg_trgm_extension'),
+        ('gregory', '0019_enable_pg_trgm_extension'),
     ]
 
     operations = [
