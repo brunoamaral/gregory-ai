@@ -154,6 +154,31 @@ class UppercaseSearchColumnsTestCase(TestCase):
             self.assertEqual(result_ids, expected_ids, f"Failed for search term: {term}")
     
     
+    def test_gin_indexes_exist(self):
+        """Test that GIN indexes exist on the uppercase columns"""
+        with connection.cursor() as cursor:
+            # Check for GIN indexes on articles table
+            cursor.execute("""
+                SELECT indexname 
+                FROM pg_indexes 
+                WHERE tablename = 'articles' 
+                AND indexname IN ('articles_utitle_gin_idx', 'articles_usummary_gin_idx')
+            """)
+            article_indexes = [row[0] for row in cursor.fetchall()]
+            self.assertIn('articles_utitle_gin_idx', article_indexes)
+            self.assertIn('articles_usummary_gin_idx', article_indexes)
+            
+            # Check for GIN indexes on trials table
+            cursor.execute("""
+                SELECT indexname 
+                FROM pg_indexes 
+                WHERE tablename = 'trials' 
+                AND indexname IN ('trials_utitle_gin_idx', 'trials_usummary_gin_idx')
+            """)
+            trial_indexes = [row[0] for row in cursor.fetchall()]
+            self.assertIn('trials_utitle_gin_idx', trial_indexes)
+            self.assertIn('trials_usummary_gin_idx', trial_indexes)
+
     def test_empty_search_handling(self):
         """Test that empty search terms are handled correctly"""
         # Empty string search should return no results
