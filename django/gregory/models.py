@@ -21,6 +21,12 @@ class Authors(models.Model):
 	ORCID = models.CharField(blank=True, null=True, max_length=150, unique=True)
 	country = CountryField(blank=True, null=True)  # New field
 	orcid_check = models.DateTimeField(blank=True, null=True)
+	# Optimized uppercase column for fast text search
+	ufull_name = GeneratedField(
+		expression=Upper('full_name'),
+		output_field=models.TextField(),
+		db_persist=True
+	)
 	history = HistoricalRecords()
 
 	def save(self, *args, **kwargs):
@@ -34,6 +40,9 @@ class Authors(models.Model):
 	class Meta:
 		verbose_name_plural = 'authors'
 		db_table = 'authors'
+		indexes = [
+			GinIndex(fields=['ufull_name'], opclasses=['gin_trgm_ops'], name='authors_ufull_name_gin_idx'),
+		]
 
 class TeamCategory(models.Model):
 	team = models.ForeignKey('Team', on_delete=models.CASCADE, related_name='team_categories', null=False, blank=False)
