@@ -957,7 +957,32 @@ class ArticleSearchView(generics.ListAPIView):
             return Articles.objects.none()
     
     def post(self, request, *args, **kwargs):
-        # For POST requests, delegate to the list method which uses get_queryset
+        # For POST requests, validate required parameters
+        team_id = request.data.get('team_id')
+        subject_id = request.data.get('subject_id')
+        
+        if not team_id or not subject_id:
+            return Response(
+                {"error": "Missing required parameters: team_id, subject_id"}, 
+                status=400
+            )
+            
+        try:
+            # Check if team and subject exist
+            Team.objects.get(id=team_id)
+            Subject.objects.get(id=subject_id, team_id=team_id)
+        except Team.DoesNotExist:
+            return Response(
+                {"error": f"Team with ID {team_id} not found"}, 
+                status=404
+            )
+        except Subject.DoesNotExist:
+            return Response(
+                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
+                status=404
+            )
+            
+        # Delegate to the list method which uses get_queryset
         return self.list(request, *args, **kwargs)
         
     def get(self, request, *args, **kwargs):
@@ -1067,7 +1092,61 @@ class TrialSearchView(generics.ListAPIView):
         return queryset
     
     def post(self, request, *args, **kwargs):
-        # For POST requests, delegate to the list method which uses get_queryset
+        # For POST requests, validate required parameters
+        team_id = request.data.get('team_id')
+        subject_id = request.data.get('subject_id')
+        
+        if not team_id or not subject_id:
+            return Response(
+                {"error": "Missing required parameters: team_id, subject_id"}, 
+                status=400
+            )
+            
+        try:
+            # Check if team and subject exist
+            Team.objects.get(id=team_id)
+            Subject.objects.get(id=subject_id, team_id=team_id)
+        except Team.DoesNotExist:
+            return Response(
+                {"error": f"Team with ID {team_id} not found"}, 
+                status=404
+            )
+        except Subject.DoesNotExist:
+            return Response(
+                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
+                status=404
+            )
+            
+        # Delegate to the list method which uses get_queryset
+        return self.list(request, *args, **kwargs)
+        
+    def get(self, request, *args, **kwargs):
+        # Validate required parameters for GET requests
+        team_id = request.query_params.get('team_id')
+        subject_id = request.query_params.get('subject_id')
+        
+        if not team_id or not subject_id:
+            return Response(
+                {"error": "Missing required parameters: team_id, subject_id"}, 
+                status=400
+            )
+            
+        try:
+            # Check if team and subject exist
+            Team.objects.get(id=team_id)
+            Subject.objects.get(id=subject_id, team_id=team_id)
+        except Team.DoesNotExist:
+            return Response(
+                {"error": f"Team with ID {team_id} not found"}, 
+                status=404
+            )
+        except Subject.DoesNotExist:
+            return Response(
+                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
+                status=404
+            )
+            
+        # Delegate to the list method
         return self.list(request, *args, **kwargs)
 
 class AuthorSearchView(generics.ListAPIView):
@@ -1121,4 +1200,58 @@ class AuthorSearchView(generics.ListAPIView):
             return Authors.objects.none()
 
     def post(self, request, *args, **kwargs):
+        # For POST requests, validate required parameters
+        team_id = request.data.get('team_id')
+        subject_id = request.data.get('subject_id')
+        
+        if not team_id or not subject_id:
+            return Response(
+                {"error": "Missing required parameters: team_id, subject_id"}, 
+                status=400
+            )
+            
+        try:
+            # Check if team and subject exist
+            Team.objects.get(id=team_id)
+            Subject.objects.get(id=subject_id, team_id=team_id)
+        except Team.DoesNotExist:
+            return Response(
+                {"error": f"Team with ID {team_id} not found"}, 
+                status=404
+            )
+        except Subject.DoesNotExist:
+            return Response(
+                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
+                status=404
+            )
+            
+        return self.list(request, *args, **kwargs)
+        
+    def get(self, request, *args, **kwargs):
+        # Validate required parameters for GET requests
+        team_id = request.query_params.get('team_id')
+        subject_id = request.query_params.get('subject_id')
+        
+        if not team_id or not subject_id:
+            return Response(
+                {"error": "Missing required parameters: team_id, subject_id"}, 
+                status=400
+            )
+            
+        try:
+            # Check if team and subject exist
+            Team.objects.get(id=team_id)
+            Subject.objects.get(id=subject_id, team_id=team_id)
+        except Team.DoesNotExist:
+            return Response(
+                {"error": f"Team with ID {team_id} not found"}, 
+                status=404
+            )
+        except Subject.DoesNotExist:
+            return Response(
+                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
+                status=404
+            )
+            
+        # Delegate to the list method
         return self.list(request, *args, **kwargs)
