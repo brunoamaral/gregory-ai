@@ -7,21 +7,34 @@ class ArticleFilter(filters.FilterSet):
     Filter class for Articles, allowing searching by title, abstract, 
     and combined search across both fields.
     """
-    title = filters.CharFilter(lookup_expr='icontains')
-    summary = filters.CharFilter(field_name='summary', lookup_expr='icontains')
+    title = filters.CharFilter(method='filter_title')
+    summary = filters.CharFilter(method='filter_summary')
     search = filters.CharFilter(method='filter_search')
     
     class Meta:
         model = Articles
         fields = ['title', 'summary', 'search']
     
+    def filter_title(self, queryset, name, value):
+        """
+        Search in title field using uppercase column for performance
+        """
+        return queryset.filter(utitle__contains=value.upper())
+    
+    def filter_summary(self, queryset, name, value):
+        """
+        Search in summary field using uppercase column for performance
+        """
+        return queryset.filter(usummary__contains=value.upper())
+    
     def filter_search(self, queryset, name, value):
         """
-        Search in both title and summary fields
+        Search in both title and summary fields using uppercase columns for performance
         """
+        upper_value = value.upper()
         return queryset.filter(
-            models.Q(title__icontains=value) | 
-            models.Q(summary__icontains=value)
+            models.Q(utitle__contains=upper_value) | 
+            models.Q(usummary__contains=upper_value)
         )
 
 class TrialFilter(filters.FilterSet):
@@ -29,8 +42,8 @@ class TrialFilter(filters.FilterSet):
     Filter class for Trials, allowing searching by title, summary,
     and combined search across both fields, plus filtering by recruitment status.
     """
-    title = filters.CharFilter(lookup_expr='icontains')
-    summary = filters.CharFilter(field_name='summary', lookup_expr='icontains')
+    title = filters.CharFilter(method='filter_title')
+    summary = filters.CharFilter(method='filter_summary')
     search = filters.CharFilter(method='filter_search')
     status = filters.CharFilter(field_name='recruitment_status', lookup_expr='exact')
     
@@ -38,13 +51,26 @@ class TrialFilter(filters.FilterSet):
         model = Trials
         fields = ['title', 'summary', 'search', 'status']
     
+    def filter_title(self, queryset, name, value):
+        """
+        Search in title field using uppercase column for performance
+        """
+        return queryset.filter(utitle__contains=value.upper())
+    
+    def filter_summary(self, queryset, name, value):
+        """
+        Search in summary field using uppercase column for performance
+        """
+        return queryset.filter(usummary__contains=value.upper())
+    
     def filter_search(self, queryset, name, value):
         """
-        Search in both title and summary fields
+        Search in both title and summary fields using uppercase columns for performance
         """
+        upper_value = value.upper()
         return queryset.filter(
-            models.Q(title__icontains=value) |
-            models.Q(summary__icontains=value)
+            models.Q(utitle__contains=upper_value) |
+            models.Q(usummary__contains=upper_value)
         )
 
 class AuthorFilter(filters.FilterSet):
