@@ -21,7 +21,7 @@ try:
             print(f"Loaded environment variables from {env_path}")
             break
     else:
-        print("No .env file found in the checked locations.")
+        print(f"No .env file found in ${env_path}")
 except ImportError:
     print("python-dotenv not installed. Environment variables must be set manually.")
 
@@ -51,6 +51,7 @@ ALLOWED_HOSTS = [
 	'gregory',
 	'api.' + os.environ.get('DOMAIN_NAME', ''),
 	'manage.' + os.environ.get('DOMAIN_NAME', ''),
+	'example.com',  
 ]
 
 CSRF_TRUSTED_ORIGINS = [
