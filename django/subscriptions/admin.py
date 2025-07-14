@@ -4,8 +4,8 @@ from .models import Subscribers, Lists, FailedNotification
 from .forms import ListsAdminForm
 
 class SubscriberAdmin(admin.ModelAdmin):
-	list_display = ['subscriber_id', 'first_name', 'last_name', 'email', 'active', 'number_of_subscriptions']
-	list_filter = ['active', 'profile']
+	list_display = ['subscriber_id', 'first_name', 'last_name', 'email', 'active', 'number_of_subscriptions', 'created_at', 'updated_at']
+	list_filter = ['active', 'profile', 'created_at', 'updated_at']
 	search_fields = ['first_name', 'last_name', 'email']
 	actions = ['make_active', 'make_inactive']
 
