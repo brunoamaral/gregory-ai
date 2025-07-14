@@ -1,0 +1,29 @@
+{% extends "admin/change_list.html" %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    <li>
+        <a href="{{ analytics_url }}" class="addlink analytics-button">
+            View Analytics
+        </a>
+    </li>
+{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <style>
+        .analytics-button {
+            background-color: #007cba !important;  /* Blue color */
+            border-color: #005a87 !important;
+        }
+        .analytics-button:hover {
+            background-color: #005a87 !important;  /* Darker blue on hover */
+            border-color: #004066 !important;
+        }
+        .analytics-button:focus {
+            background-color: #005a87 !important;
+            border-color: #004066 !important;
+            box-shadow: 0 0 0 2px rgba(0, 124, 186, 0.25) !important;
+        }
+    </style>
+{% endblock %}
