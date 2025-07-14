@@ -1,0 +1,94 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label='subscriptions' %}">Subscriptions</a>
+&rsaquo; <a href="{% url 'admin:subscriptions_subscribers_changelist' %}">Subscribers</a>
+&rsaquo; Analytics
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="form-row">
+    
+    <div style="margin: 20px 0;">
+        <a href="{% url 'admin:subscriptions_subscribers_changelist' %}" class="button">← Back to Subscribers</a>
+    </div>
+    
+    <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 5px;">
+        <h2>New Subscribers - Last 30 Days</h2>
+        <div style="margin: 10px 0;">
+            <strong>Total new subscribers in the last 30 days: <span id="total-count">Loading...</span></strong>
+        </div>
+        <div style="width: 100%; height: 400px; margin: 20px 0;">
+            <canvas id="subscribersChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('subscribersChart').getContext('2d');
+    
+    // Fetch data from our custom endpoint
+    fetch('{% url "admin:subscriptions_subscribers_analytics_data" %}')
+        .then(response => response.json())
+        .then(data => {
+            // Update total count
+            document.getElementById('total-count').textContent = data.total_new_subscribers;
+            
+            // Create the chart
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'New Subscribers',
+                        data: data.data,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxTicksLimit: 10
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Daily New Subscribers (Last 30 Days)'
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching analytics data:', error);
+            document.getElementById('total-count').textContent = 'Error loading data';
+        });
+});
+</script>
+{% endblock %}
