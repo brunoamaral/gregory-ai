@@ -550,6 +550,7 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	* **team_id**: filter by team ID
 	* **subject_id**: filter by subject ID
 	* **category_slug**: filter by team category slug
+	* **category_id**: filter by team category ID
 	* **date_from**: filter articles from this date (YYYY-MM-DD)
 	* **date_to**: filter articles to this date (YYYY-MM-DD)
 	* **timeframe**: 'year', 'month', 'week' (relative to current date)
@@ -560,6 +561,7 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	* Filter by timeframe: `?sort_by=article_count&timeframe=year`
 	* Team and subject filter: `?team_id=1&subject_id=5&sort_by=article_count`
 	* Count per category: `?team_id=1&category_slug=natalizumab&sort_by=article_count&order=desc`
+	* Category with ID: `?team_id=1&category_id=5&sort_by=article_count&order=desc`
 	* Category with timeframe: `?team_id=1&category_slug=natalizumab&timeframe=year&sort_by=article_count`
 	* Date range: `?date_from=2024-06-01&date_to=2024-12-31&team_id=1&subject_id=1&sort_by=article_count`
 	"""
@@ -575,6 +577,7 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 		team_id = self.request.query_params.get('team_id')
 		subject_id = self.request.query_params.get('subject_id')
 		category_slug = self.request.query_params.get('category_slug')
+		category_id = self.request.query_params.get('category_id')
 		date_from = self.request.query_params.get('date_from')
 		date_to = self.request.query_params.get('date_to')
 		timeframe = self.request.query_params.get('timeframe')
@@ -614,8 +617,8 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 		author_filters = {}  # Used for filtering Articles to get author IDs
 		count_filters = {}   # Used for Count annotation on Authors queryset
 		
-		# Validate that team_id is provided when using subject_id or category_slug
-		if (subject_id or category_slug) and not team_id:
+		# Validate that team_id is provided when using subject_id or category filters
+		if (subject_id or category_slug or category_id) and not team_id:
 			# Return empty queryset if team_id is missing for subject/category filtering
 			return Authors.objects.none()
 		
@@ -638,6 +641,14 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 		if category_slug:
 			author_filters['team_categories__category_slug'] = category_slug
 			count_filters['articles__team_categories__category_slug'] = category_slug
+		
+		if category_id:
+			try:
+				category_id = int(category_id)
+				author_filters['team_categories__id'] = category_id
+				count_filters['articles__team_categories__id'] = category_id
+			except ValueError:
+				pass
 		
 		# Add date filters to both author and count filters
 		author_filters.update(date_filters)
@@ -708,15 +719,16 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 		
 		Parameters:
 		- team_id (required): Team ID
-		- category_slug (required): Team category slug
+		- category_slug OR category_id (required): Team category slug or ID
 		- Additional filters from main queryset apply
 		"""
 		team_id = request.query_params.get('team_id')
 		category_slug = request.query_params.get('category_slug')
+		category_id = request.query_params.get('category_id')
 		
-		if not team_id or not category_slug:
+		if not team_id or (not category_slug and not category_id):
 			return Response(
-				{"error": "Both team_id and category_slug are required"}, 
+				{"error": "team_id and either category_slug or category_id are required"}, 
 				status=status.HTTP_400_BAD_REQUEST
 			)
 		

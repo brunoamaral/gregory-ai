@@ -373,6 +373,7 @@ The `/authors/` endpoint supports comprehensive filtering and searching:
 - `?team_id=X` - Filter authors by team ID
 - `?subject_id=Y` - Filter authors by subject ID (use with team_id)
 - `?category_slug=slug` - Filter authors by category slug (use with team_id)
+- `?category_id=Y` - Filter authors by category ID (use with team_id)
 
 **Date Filtering:**
 - `?date_from=YYYY-MM-DD` - Filter articles from this date
@@ -385,7 +386,8 @@ The `/authors/` endpoint supports comprehensive filtering and searching:
 
 **Special Endpoints:**
 - `/authors/by_team_subject/?team_id=X&subject_id=Y` - Authors for specific team+subject combination
-- `/authors/by_team_category/?team_id=X&category_slug=slug` - Authors for specific team+category combination
+- `/authors/by_team_category/?team_id=X&category_slug=slug` - Authors for specific team+category combination (by slug)
+- `/authors/by_team_category/?team_id=X&category_id=Y` - Authors for specific team+category combination (by ID)
 
 **Example Usage:**
 ```bash
@@ -395,8 +397,11 @@ GET /authors/?team_id=1
 # Authors by team and subject with article count sorting
 GET /authors/?team_id=1&subject_id=2&sort_by=article_count&order=desc
 
-# Authors by team and category
+# Authors by team and category (by slug)
 GET /authors/?team_id=1&category_slug=natalizumab&sort_by=article_count
+
+# Authors by team and category (by ID)
+GET /authors/?team_id=1&category_id=5&sort_by=article_count
 
 # Authors with date filtering
 GET /authors/?team_id=1&subject_id=2&timeframe=year&sort_by=article_count
@@ -404,8 +409,11 @@ GET /authors/?team_id=1&subject_id=2&timeframe=year&sort_by=article_count
 # Specific team+subject endpoint
 GET /authors/by_team_subject/?team_id=1&subject_id=2
 
-# Specific team+category endpoint  
+# Specific team+category endpoint (by slug)  
 GET /authors/by_team_category/?team_id=1&category_slug=natalizumab
+
+# Specific team+category endpoint (by ID)
+GET /authors/by_team_category/?team_id=1&category_id=5
 ```
 
 ### Subjects Endpoint Filtering

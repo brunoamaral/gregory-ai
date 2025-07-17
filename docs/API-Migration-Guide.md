@@ -112,11 +112,17 @@ curl "https://api.gregory-ms.com/subjects/?team_id=1&search=multiple&ordering=su
 # New ✅ Preferred - Authors by team and subject
 curl "https://api.gregory-ms.com/authors/by_team_subject/?team_id=1&subject_id=1"
 
-# New ✅ Preferred - Authors by team and category
+# New ✅ Preferred - Authors by team and category (by slug)
 curl "https://api.gregory-ms.com/authors/by_team_category/?team_id=1&category_slug=natalizumab"
 
-# New ✅ Enhanced - Authors with filtering and sorting
+# New ✅ Preferred - Authors by team and category (by ID)
+curl "https://api.gregory-ms.com/authors/by_team_category/?team_id=1&category_id=5"
+
+# New ✅ Enhanced - Authors with filtering and sorting (by slug)
 curl "https://api.gregory-ms.com/authors/?team_id=1&subject_id=1&sort_by=article_count&order=desc"
+
+# New ✅ Enhanced - Authors with filtering and sorting (by category ID)
+curl "https://api.gregory-ms.com/authors/?team_id=1&category_id=5&sort_by=article_count&order=desc"
 ```
 
 ## Response Headers
@@ -216,11 +222,17 @@ const advancedSubjectsUrl = `https://api.gregory-ms.com/subjects/?team_id=${team
 // New approach ✅ - Authors by team and subject
 const newAuthorsUrl = `https://api.gregory-ms.com/authors/by_team_subject/?team_id=${teamId}&subject_id=${subjectId}`;
 
-// New approach ✅ - Authors by team and category
+// New approach ✅ - Authors by team and category (by slug)
 const newCategoryAuthorsUrl = `https://api.gregory-ms.com/authors/by_team_category/?team_id=${teamId}&category_slug=${categorySlug}`;
 
-// Enhanced authors filtering
+// New approach ✅ - Authors by team and category (by ID)
+const newCategoryAuthorsByIdUrl = `https://api.gregory-ms.com/authors/by_team_category/?team_id=${teamId}&category_id=${categoryId}`;
+
+// Enhanced authors filtering (by slug)
 const advancedAuthorsUrl = `https://api.gregory-ms.com/authors/?team_id=${teamId}&subject_id=${subjectId}&sort_by=article_count&order=desc`;
+
+// Enhanced authors filtering (by category ID)
+const advancedAuthorsByCategoryIdUrl = `https://api.gregory-ms.com/authors/?team_id=${teamId}&category_id=${categoryId}&sort_by=article_count&order=desc`;
 ```
 
 ### Python
@@ -252,11 +264,17 @@ advanced_subjects_url = f"https://api.gregory-ms.com/subjects/?team_id={team_id}
 # New approach ✅ - Authors by team and subject
 new_authors_url = f"https://api.gregory-ms.com/authors/by_team_subject/?team_id={team_id}&subject_id={subject_id}"
 
-# New approach ✅ - Authors by team and category  
+# New approach ✅ - Authors by team and category (by slug)
 new_category_authors_url = f"https://api.gregory-ms.com/authors/by_team_category/?team_id={team_id}&category_slug={category_slug}"
 
-# Enhanced authors filtering
+# New approach ✅ - Authors by team and category (by ID)
+new_category_authors_by_id_url = f"https://api.gregory-ms.com/authors/by_team_category/?team_id={team_id}&category_id={category_id}"
+
+# Enhanced authors filtering (by slug)
 advanced_authors_url = f"https://api.gregory-ms.com/authors/?team_id={team_id}&subject_id={subject_id}&sort_by=article_count&order=desc"
+
+# Enhanced authors filtering (by category ID)
+advanced_authors_by_category_id_url = f"https://api.gregory-ms.com/authors/?team_id={team_id}&category_id={category_id}&sort_by=article_count&order=desc"
 ```
 
 ### cURL
@@ -282,11 +300,17 @@ curl "https://api.gregory-ms.com/subjects/?team_id=1&search=multiple&ordering=su
 # New approach ✅ - Authors by team and subject
 curl "https://api.gregory-ms.com/authors/by_team_subject/?team_id=1&subject_id=1"
 
-# New approach ✅ - Authors by team and category
+# New approach ✅ - Authors by team and category (by slug)
 curl "https://api.gregory-ms.com/authors/by_team_category/?team_id=1&category_slug=natalizumab"
 
-# Enhanced authors filtering
+# New approach ✅ - Authors by team and category (by ID)
+curl "https://api.gregory-ms.com/authors/by_team_category/?team_id=1&category_id=5"
+
+# Enhanced authors filtering (by subject)
 curl "https://api.gregory-ms.com/authors/?team_id=1&subject_id=1&sort_by=article_count&order=desc"
+
+# Enhanced authors filtering (by category ID)
+curl "https://api.gregory-ms.com/authors/?team_id=1&category_id=5&sort_by=article_count&order=desc"
 ```
 
 This migration will make the API more consistent, flexible, and easier to use!
