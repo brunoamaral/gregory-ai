@@ -12,7 +12,7 @@ from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, Te
 from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
 from django_filters import rest_framework as django_filters
-from api.filters import ArticleFilter, TrialFilter, AuthorFilter, SourceFilter
+from api.filters import ArticleFilter, TrialFilter, AuthorFilter, SourceFilter, CategoryFilter
 from rest_framework.response import Response
 from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
@@ -428,11 +428,19 @@ class OpenAccessArticles(generics.ListAPIView):
 
 class CategoryViewSet(viewsets.ModelViewSet):
 	"""
-	List all categories in the database.
+	List all categories in the database with optional filters for team and subject.
+	
+	**Query Parameters:**
+	* **team_id**: filter by team ID
+	* **subject_id**: filter by subject ID
 	"""
-	queryset = TeamCategory.objects.all()
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filterset_class = CategoryFilter
+	search_fields = ['category_name', 'category_description']
+	ordering_fields = ['category_name', 'id']
+	ordering = ['category_name']
 	
 	def get_queryset(self):
 		return TeamCategory.objects.annotate(
@@ -819,20 +827,6 @@ class SubjectsByTeam(viewsets.ModelViewSet):
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
 		return Subject.objects.filter(team__id=team_id).order_by('-id')
-
-class CategoriesByTeam(viewsets.ModelViewSet):
-	"""
-	List all categories for a specific team by ID
-	"""
-	serializer_class = CategorySerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-	def get_queryset(self):
-		team_id = self.kwargs.get('team_id')
-		return TeamCategory.objects.filter(team__id=team_id).annotate(
-			article_count_annotated=Count('articles', distinct=True),
-			trials_count_annotated=Count('trials', distinct=True)
-		).order_by('-id')
 
 class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 	"""

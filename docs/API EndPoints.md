@@ -53,7 +53,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Authors                 | PUT /authors/{id}/                       | Update a specific author by ID                      | N/A                                                     | ❌ **Not Available**                                  |
 | Authors                 | DELETE /authors/{id}/                    | Delete a specific author by ID                      | N/A                                                     | ❌ **Not Available**                                  |
 | Authors                 | GET /authors/search/                     | Search authors by full name with filters & optional CSV export | `team_id` *(req)*, `subject_id` *(req)*, `full_name`, `format`, `all_results` | ✅ **Available**                                       |
-| Categories              | GET /categories/                         | List all categories                                 | Standard pagination params                               | ✅ **Available**                                       |
+| Categories              | GET /categories/                         | List all categories with optional filters           | `team_id`, `subject_id`, `search`, `ordering`, pagination | ✅ **Available**                                       |
 | Categories              | POST /categories/                        | Create a new category                               | N/A                                                     | ❌ **Not Available**                                  |
 | Categories              | GET /categories/{id}/                    | Retrieve a specific category by ID                  | `id` (path)                                             | ✅ **Available**                                       |
 | Categories              | PUT /categories/{id}/                    | Update a specific category by ID                    | N/A                                                     | ❌ **Not Available**                                  |
@@ -108,7 +108,6 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Teams                   | GET /teams/{id}/articles/                | List all articles for a specific team by ID         | `id` (path), pagination params                         | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/trials/                  | List all clinical trials for a specific team by ID  | `id` (path), pagination params                         | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/subjects/                | List all subjects for specific team by ID           | `id` (path), pagination params                         | ✅ **Available**                                       |
-| Teams                   | GET /teams/{id}/categories/              | List all categories for specific team by ID         | `id` (path), pagination params                         | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/subjects/{subject_id}/categories/ | List all categories for a team filtered by subject | `id` (path), `subject_id` (path), pagination params | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/articles/subject/{subject_id}/     | List all articles for a team filtered by subject    | `id` (path), `subject_id` (path)              | ✅ **Available**              |
 | Teams                   | GET /teams/{id}/articles/category/{category_slug}/ | List all articles for a team filtered by category   | `id` (path), `category_slug` (path)           | ✅ **Available**              |
@@ -156,6 +155,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 - **Format params**: `format` (json, csv, html), `all_results` (true/false for CSV export)
 - **Author filter params**: `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe`
 - **Sources filter params**: `team_id`, `subject_id`, `search` (name/description), `ordering` (name, source_id)
+- **Categories filter params**: `team_id`, `subject_id`, `search` (name/description), `ordering` (category_name, id)
 
 ### Sources Endpoint Filtering
 
@@ -184,6 +184,35 @@ GET /sources/?team_id=1&subject_id=2
 
 # Search and filter combined
 GET /sources/?team_id=1&search=pubmed&ordering=name
+```
+
+### Categories Endpoint Filtering
+
+The `/categories/` endpoint supports comprehensive filtering and searching:
+
+**Filtering:**
+- `?team_id=X` - Filter categories by team ID
+- `?subject_id=Y` - Filter categories by subject ID
+- `?team_id=X&subject_id=Y` - Filter by both team and subject
+
+**Searching:**
+- `?search=keyword` - Search in category name and description fields
+
+**Ordering:**
+- `?ordering=category_name` - Order by category name (default)
+- `?ordering=id` - Order by category ID
+- `?ordering=-category_name` - Reverse order (add `-` prefix)
+
+**Example Usage:**
+```bash
+# Filter categories by team
+GET /categories/?team_id=1
+
+# Filter categories by team and subject
+GET /categories/?team_id=1&subject_id=2
+
+# Search and filter combined
+GET /categories/?team_id=1&search=natalizumab&ordering=category_name
 ```
 
 ### Search Endpoint Requirements
