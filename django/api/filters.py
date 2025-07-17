@@ -40,16 +40,21 @@ class ArticleFilter(filters.FilterSet):
 class TrialFilter(filters.FilterSet):
     """
     Filter class for Trials, allowing searching by title, summary,
-    and combined search across both fields, plus filtering by recruitment status.
+    and combined search across both fields, plus filtering by recruitment status,
+    team, and subject.
     """
     title = filters.CharFilter(method='filter_title')
     summary = filters.CharFilter(method='filter_summary')
     search = filters.CharFilter(method='filter_search')
     status = filters.CharFilter(field_name='recruitment_status', lookup_expr='exact')
+    team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact')
+    subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact')
+    category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact')
+    source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact')
     
     class Meta:
         model = Trials
-        fields = ['title', 'summary', 'search', 'status']
+        fields = ['title', 'summary', 'search', 'status', 'team_id', 'subject_id', 'category_id', 'source_id']
     
     def filter_title(self, queryset, name, value):
         """

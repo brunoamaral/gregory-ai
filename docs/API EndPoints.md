@@ -93,7 +93,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Articles                | GET /articles/author/{author_id}/        | List articles by specific author                    | `author_id` (path)                                      | ✅ **Available**                                       |
 | Articles                | GET /articles/category/{category_slug}/  | List articles by category                           | `category_slug` (path)                                  | ✅ **Available**                                       |
 | Articles                | GET /articles/journal/{journal_slug}/    | List articles by journal                            | `journal_slug` (path)                                   | ✅ **Available**                                       |
-| Trials                  | GET /trials/                             | List all trials                                     | `search`, `title`, `summary`, filtering & pagination    | ✅ **Available**                                       |
+| Trials                  | GET /trials/                             | List all trials with optional filters               | `team_id`, `subject_id`, `category_id`, `source_id`, `status`, `search`, `ordering`, pagination | ✅ **Available**                                       |
 | Trials                  | POST /trials/                            | Create a new trial                                  | N/A                                                     | ❌ **Not Available**                                  |
 | Trials                  | GET /trials/{id}/                        | Retrieve a specific trial by ID                     | `id` (path)                                             | ✅ **Available**                                       |
 | Trials                  | PUT /trials/{id}/                        | Update a specific trial by ID                       | N/A                                                     | ❌ **Not Available**                                  |
@@ -106,15 +106,11 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Teams                   | PUT /teams/{id}/                         | Update a specific team by ID                        | N/A                                                     | ❌ **Not Available**                                  |
 | Teams                   | DELETE /teams/{id}/                      | Delete a specific team by ID                        | N/A                                                     | ❌ **Not Available**                                  |
 | Teams                   | GET /teams/{id}/articles/                | List all articles for a specific team by ID         | `id` (path), pagination params                         | ✅ **Available**                                       |
-| Teams                   | GET /teams/{id}/trials/                  | List all clinical trials for a specific team by ID  | `id` (path), pagination params                         | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/subjects/                | List all subjects for specific team by ID           | `id` (path), pagination params                         | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/subjects/{subject_id}/categories/ | List all categories for a team filtered by subject | `id` (path), `subject_id` (path), pagination params | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/articles/subject/{subject_id}/     | List all articles for a team filtered by subject    | `id` (path), `subject_id` (path)              | ✅ **Available**              |
 | Teams                   | GET /teams/{id}/articles/category/{category_slug}/ | List all articles for a team filtered by category   | `id` (path), `category_slug` (path)           | ✅ **Available**              |
 | Teams                   | GET /teams/{id}/articles/source/{source_id}/       | List all articles for a team filtered by source     | `id` (path), `source_id` (path)               | ✅ **Available**              |
-| Teams                   | GET /teams/{id}/trials/category/{category_slug}/   | List clinical trials for a team filtered by category| `id` (path), `category_slug` (path)           | ✅ **Available**              |
-| Teams                   | GET /teams/{id}/trials/subject/{subject_id}/       | List clinical trials for a team filtered by subject | `id` (path), `subject_id` (path)              | ✅ **Available**              |
-| Teams                   | GET /teams/{id}/trials/source/{source_id}/         | List clinical trials for a team filtered by source  | `id` (path), `source_id` (path)               | ✅ **Available**              |
 | Teams                   | GET /teams/{id}/categories/{category_slug}/monthly-counts/ | Monthly article and trial counts for a team category | `id` (path), `category_slug` (path)    | ✅ **Available**              |
 | Teams                   | GET /teams/{id}/subjects/{subject_id}/authors/     | List authors by team and subject                     | `id` (path), `subject_id` (path), author filters | ✅ **Available**              |
 | Teams                   | GET /teams/{id}/categories/{category_slug}/authors/ | List authors by team and category                   | `id` (path), `category_slug` (path), author filters | ✅ **Available**              |
@@ -156,6 +152,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 - **Author filter params**: `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe`
 - **Sources filter params**: `team_id`, `subject_id`, `search` (name/description), `ordering` (name, source_id)
 - **Categories filter params**: `team_id`, `subject_id`, `search` (name/description), `ordering` (category_name, id)
+- **Trials filter params**: `team_id`, `subject_id`, `category_id`, `source_id`, `status` (recruitment), `search` (title/summary), `ordering` (discovery_date, published_date, title, trial_id)
 
 ### Sources Endpoint Filtering
 
@@ -213,6 +210,43 @@ GET /categories/?team_id=1&subject_id=2
 
 # Search and filter combined
 GET /categories/?team_id=1&search=natalizumab&ordering=category_name
+```
+
+### Trials Endpoint Filtering
+
+The `/trials/` endpoint supports comprehensive filtering and searching:
+
+**Filtering:**
+- `?team_id=X` - Filter trials by team ID
+- `?subject_id=Y` - Filter trials by subject ID
+- `?category_id=Z` - Filter trials by category ID
+- `?source_id=W` - Filter trials by source ID
+- `?status=recruiting` - Filter by recruitment status
+- Multiple filters can be combined
+
+**Searching:**
+- `?search=keyword` - Search in trial title and summary fields
+
+**Ordering:**
+- `?ordering=-discovery_date` - Order by discovery date (default, newest first)
+- `?ordering=published_date` - Order by published date
+- `?ordering=title` - Order by title
+- `?ordering=trial_id` - Order by trial ID
+- `?ordering=-published_date` - Reverse order (add `-` prefix)
+
+**Example Usage:**
+```bash
+# Filter trials by team
+GET /trials/?team_id=1
+
+# Filter trials by team, subject, and recruitment status
+GET /trials/?team_id=1&subject_id=2&status=recruiting
+
+# Search and filter combined
+GET /trials/?team_id=1&search=alzheimer&status=recruiting&ordering=-published_date
+
+# Filter by source and category
+GET /trials/?team_id=1&source_id=3&category_id=5
 ```
 
 ### Search Endpoint Requirements

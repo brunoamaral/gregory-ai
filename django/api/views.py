@@ -479,15 +479,25 @@ class MonthlyCountsView(APIView):
 
 class TrialViewSet(viewsets.ModelViewSet):
 	"""
-	List all clinical trials by discovery date. Accepts regular expressions in search.
+	List all clinical trials by discovery date with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
+	
+	**Query Parameters:**
+	* **team_id**: filter by team ID
+	* **subject_id**: filter by subject ID
+	* **category_id**: filter by category ID
+	* **source_id**: filter by source ID
+	* **status**: filter by recruitment status
+	* **search**: search in title and summary
 	"""
 	queryset = Trials.objects.all().order_by('-discovery_date')
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
-	search_fields  = ['$title','$summary']
+	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
 	filterset_class = TrialFilter
+	search_fields = ['title', 'summary']
+	ordering_fields = ['discovery_date', 'published_date', 'title', 'trial_id']
+	ordering = ['-discovery_date']
 
 class AllTrialViewSet(generics.ListAPIView):
 	"""
@@ -497,46 +507,6 @@ class AllTrialViewSet(generics.ListAPIView):
 	queryset = Trials.objects.all().order_by('-discovery_date')
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-
-class TrialsBySource(generics.ListAPIView):
-	serializer_class = TrialSerializer
-
-	def get_queryset(self):
-		"""
-		Lists the clinical trials that come from the specified source_id
-		"""
-		team_id = self.kwargs['team_id']
-		source_id = self.kwargs['source_id']
-		return Trials.objects.filter(teams__id=team_id, source__source_id=source_id).order_by('-discovery_date')
-
-class TrialsByCategory(viewsets.ModelViewSet):
-	"""
-	Search Trials by the category field. Usage /trials/category/{{category_slug}}/
-	"""
-	serializer_class = TrialSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-	def get_queryset(self):
-			team_id = self.kwargs['team_id']
-			category_slug = self.kwargs.get('category_slug', None)
-			category = get_object_or_404(TeamCategory, category_slug=category_slug, team_id=team_id)
-
-			return Trials.objects.filter(teams=team_id, team_categories=category).order_by('-discovery_date')
-
-class TrialsBySubject(viewsets.ModelViewSet):
-	"""
-	Search Trials by the subject field and team ID. Usage /teams/<team_id>/trials/subject/<subject_id>/
-	"""
-	serializer_class = TrialSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-	def get_queryset(self):
-		team_id = self.kwargs['team_id']
-		subject_id = self.kwargs['subject_id']
-		get_object_or_404(Subject, id=subject_id, team_id=team_id)
-
-		return Trials.objects.filter(teams=team_id, subjects=subject_id).order_by('-discovery_date')
 
 
 ###
@@ -806,17 +776,6 @@ class ArticlesByTeam(viewsets.ModelViewSet):
 		def get_queryset(self):
 				team_id = self.kwargs.get('team_id')
 				return Articles.objects.filter(teams__id=team_id).order_by('-discovery_date')
-class TrialsByTeam(viewsets.ModelViewSet):
-	"""
-	List all clinical trials for a specific team by ID
-	"""
-	serializer_class = TrialSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-	def get_queryset(self):
-		team_id = self.kwargs.get('team_id')
-		return Trials.objects.filter(teams__id=team_id).order_by('-discovery_date')
-
 class SubjectsByTeam(viewsets.ModelViewSet):
 	"""
 	List all research subjects for a specific team by ID
