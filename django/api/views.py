@@ -12,7 +12,7 @@ from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, Te
 from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
 from django_filters import rest_framework as django_filters
-from api.filters import ArticleFilter, TrialFilter, AuthorFilter
+from api.filters import ArticleFilter, TrialFilter, AuthorFilter, SourceFilter
 from rest_framework.response import Response
 from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
@@ -538,22 +538,19 @@ class TrialsBySubject(viewsets.ModelViewSet):
 class SourceViewSet(viewsets.ModelViewSet):
 	"""
 	List all sources of data with optional filters for team and subject.
+	
+	**Query Parameters:**
+	* **team_id**: filter by team ID
+	* **subject_id**: filter by subject ID
 	"""
 	queryset = Sources.objects.all().order_by('name')
 	serializer_class = SourceSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-	def get_queryset(self):
-		queryset = super().get_queryset()
-		team_id = self.request.query_params.get('team_id')
-		subject_id = self.request.query_params.get('subject_id')
-
-		if team_id:
-			queryset = queryset.filter(team__id=team_id)
-		if subject_id:
-			queryset = queryset.filter(subject__id=subject_id)
-
-		return queryset
+	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filterset_class = SourceFilter
+	search_fields = ['name', 'description']
+	ordering_fields = ['name', 'source_id']
+	ordering = ['name']
 
 ###
 # AUTHORS
@@ -822,17 +819,6 @@ class SubjectsByTeam(viewsets.ModelViewSet):
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
 		return Subject.objects.filter(team__id=team_id).order_by('-id')
-
-class SourcesByTeam(viewsets.ModelViewSet):
-	"""
-	List all sources for a specific team by ID
-	"""
-	serializer_class = SourceSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-	def get_queryset(self):
-		team_id = self.kwargs.get('team_id')
-		return Sources.objects.filter(team__id=team_id).order_by('-source_id')
 
 class CategoriesByTeam(viewsets.ModelViewSet):
 	"""

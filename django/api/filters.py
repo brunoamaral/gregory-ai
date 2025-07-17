@@ -1,6 +1,6 @@
 from django_filters import rest_framework as filters
 from django.db import models
-from gregory.models import Articles, Trials, Authors
+from gregory.models import Articles, Trials, Authors, Sources
 
 class ArticleFilter(filters.FilterSet):
     """
@@ -87,3 +87,14 @@ class AuthorFilter(filters.FilterSet):
         # Use uppercase search for better performance with GIN index
         upper_value = value.upper()
         return queryset.filter(ufull_name__contains=upper_value)
+
+class SourceFilter(filters.FilterSet):
+    """
+    Filter class for Sources, allowing filtering by team and subject.
+    """
+    team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact')
+    subject_id = filters.NumberFilter(field_name='subject__id', lookup_expr='exact')
+    
+    class Meta:
+        model = Sources
+        fields = ['team_id', 'subject_id']
