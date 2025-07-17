@@ -28,6 +28,13 @@ The Gregory API is transitioning from team-based URL endpoints to a unified appr
 |-------------|--------------|---------|
 | `GET /teams/{id}/subjects/` | `GET /subjects/?team_id={id}` | ⚠️ Deprecated |
 
+### Authors Endpoints
+
+| Old Endpoint | New Endpoint | Status |
+|-------------|--------------|---------|
+| `GET /teams/{id}/subjects/{subject_id}/authors/` | `GET /authors/by_team_subject/?team_id={id}&subject_id={subject_id}` | ✅ Migrated |
+| `GET /teams/{id}/categories/{category_slug}/authors/` | `GET /authors/by_team_category/?team_id={id}&category_slug={category_slug}` | ✅ Migrated |
+
 ### Benefits of New Approach
 
 1. **Unified Filtering**: All filtering options available on main endpoint
@@ -97,6 +104,21 @@ curl "https://api.gregory-ms.com/subjects/?team_id=1&format=json"
 curl "https://api.gregory-ms.com/subjects/?team_id=1&search=multiple&ordering=subject_name&format=json"
 ```
 
+### Authors Filtering (Migrated)
+```bash
+# Old authors by team and subject (no longer available)
+# curl "https://api.gregory-ms.com/teams/1/subjects/1/authors/"
+
+# New ✅ Preferred - Authors by team and subject
+curl "https://api.gregory-ms.com/authors/by_team_subject/?team_id=1&subject_id=1"
+
+# New ✅ Preferred - Authors by team and category
+curl "https://api.gregory-ms.com/authors/by_team_category/?team_id=1&category_slug=natalizumab"
+
+# New ✅ Enhanced - Authors with filtering and sorting
+curl "https://api.gregory-ms.com/authors/?team_id=1&subject_id=1&sort_by=article_count&order=desc"
+```
+
 ## Response Headers
 
 During the deprecation period, legacy endpoints will include these headers:
@@ -123,6 +145,13 @@ X-Deprecated-Endpoint: /teams/1/articles/
 - [ ] Test enhanced search and ordering capabilities
 - [ ] Update any documentation or client libraries
 - [ ] Monitor deprecation headers in responses
+
+### For Authors ✅ Migrated
+- [x] Replace `/teams/{id}/subjects/{subject_id}/authors/` with `/authors/by_team_subject/?team_id={id}&subject_id={subject_id}`
+- [x] Replace `/teams/{id}/categories/{category_slug}/authors/` with `/authors/by_team_category/?team_id={id}&category_slug={category_slug}`
+- [x] Update to use enhanced filtering capabilities with `/authors/?team_id={id}&subject_id={subject_id}&sort_by=article_count`
+- [x] Old endpoints removed and return 404
+- [x] Test new endpoints for equivalent functionality
 
 ## Enhanced Filtering Capabilities
 
@@ -180,6 +209,18 @@ const newSubjectsUrl = `https://api.gregory-ms.com/subjects/?team_id=${teamId}`;
 
 // Enhanced subjects filtering
 const advancedSubjectsUrl = `https://api.gregory-ms.com/subjects/?team_id=${teamId}&search=${encodeURIComponent(searchTerm)}&ordering=subject_name`;
+
+// Old approach - Authors (no longer available)
+// const oldAuthorsUrl = `https://api.gregory-ms.com/teams/${teamId}/subjects/${subjectId}/authors/`;
+
+// New approach ✅ - Authors by team and subject
+const newAuthorsUrl = `https://api.gregory-ms.com/authors/by_team_subject/?team_id=${teamId}&subject_id=${subjectId}`;
+
+// New approach ✅ - Authors by team and category
+const newCategoryAuthorsUrl = `https://api.gregory-ms.com/authors/by_team_category/?team_id=${teamId}&category_slug=${categorySlug}`;
+
+// Enhanced authors filtering
+const advancedAuthorsUrl = `https://api.gregory-ms.com/authors/?team_id=${teamId}&subject_id=${subjectId}&sort_by=article_count&order=desc`;
 ```
 
 ### Python
@@ -204,6 +245,18 @@ new_subjects_url = f"https://api.gregory-ms.com/subjects/?team_id={team_id}"
 # Enhanced subjects filtering
 search_term = urllib.parse.quote_plus("multiple")
 advanced_subjects_url = f"https://api.gregory-ms.com/subjects/?team_id={team_id}&search={search_term}&ordering=subject_name"
+
+# Old approach - Authors (no longer available)
+# old_authors_url = f"https://api.gregory-ms.com/teams/{team_id}/subjects/{subject_id}/authors/"
+
+# New approach ✅ - Authors by team and subject
+new_authors_url = f"https://api.gregory-ms.com/authors/by_team_subject/?team_id={team_id}&subject_id={subject_id}"
+
+# New approach ✅ - Authors by team and category  
+new_category_authors_url = f"https://api.gregory-ms.com/authors/by_team_category/?team_id={team_id}&category_slug={category_slug}"
+
+# Enhanced authors filtering
+advanced_authors_url = f"https://api.gregory-ms.com/authors/?team_id={team_id}&subject_id={subject_id}&sort_by=article_count&order=desc"
 ```
 
 ### cURL
@@ -222,6 +275,18 @@ curl "https://api.gregory-ms.com/subjects/?team_id=1&format=json"
 
 # Enhanced subjects filtering
 curl "https://api.gregory-ms.com/subjects/?team_id=1&search=multiple&ordering=subject_name&format=json"
+
+# Old approach - Authors (no longer available)  
+# curl "https://api.gregory-ms.com/teams/1/subjects/1/authors/"
+
+# New approach ✅ - Authors by team and subject
+curl "https://api.gregory-ms.com/authors/by_team_subject/?team_id=1&subject_id=1"
+
+# New approach ✅ - Authors by team and category
+curl "https://api.gregory-ms.com/authors/by_team_category/?team_id=1&category_slug=natalizumab"
+
+# Enhanced authors filtering
+curl "https://api.gregory-ms.com/authors/?team_id=1&subject_id=1&sort_by=article_count&order=desc"
 ```
 
 This migration will make the API more consistent, flexible, and easier to use!

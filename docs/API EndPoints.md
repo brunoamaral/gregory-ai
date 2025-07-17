@@ -4,9 +4,14 @@
 
 > **📋 MIGRATION NOTICE:** The API is transitioning from team-based URL patterns to query parameter filtering for better consistency and flexibility.
 
-### Preferred Approach (✅ Recommended)
+### Preferred Approach (✅ Recommended# Standard: Get categories for a team and subject
+GET /teams/{team_id}/subjects/{subject_id}/categories/
 
-| Use Case | Preferred Endpoint | Benefits |
+# Standard: Get monthly counts for a team category
+GET /teams/{team_id}/categories/{category_slug}/monthly-counts/
+```
+
+**Status**: All legacy endpoints are fully functional and tested. They continue to work alongside the new filtering system to ensure backward compatibility for existing clients.| Preferred Endpoint | Benefits |
 |----------|-------------------|----------|
 | Team articles | `GET /articles/?team_id=1` | Unified filtering, parameter combinations |
 | Team subjects | `GET /subjects/?team_id=1` | Consistent filtering approach |
@@ -78,12 +83,14 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 
 | Model                   | API Endpoint                             | Description                                         | Parameters                                              | Status                                                   |
 | ----------------------- | ---------------------------------------- | --------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------- |
-| Authors                 | GET /authors/                            | List all authors                                    | `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe` | ✅ **Available**                                       |
+| Authors                 | GET /authors/                            | List all authors with comprehensive filtering       | `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe` | ✅ **Available**                                       |
 | Authors                 | POST /authors/                           | Create a new author                                 | N/A                                                     | ❌ **Not Available**                                  |
 | Authors                 | GET /authors/{id}/                       | Retrieve a specific author by ID                    | `id` (path)                                             | ✅ **Available**                                       |
 | Authors                 | PUT /authors/{id}/                       | Update a specific author by ID                      | N/A                                                     | ❌ **Not Available**                                  |
 | Authors                 | DELETE /authors/{id}/                    | Delete a specific author by ID                      | N/A                                                     | ❌ **Not Available**                                  |
 | Authors                 | GET /authors/search/                     | Search authors by full name with filters & optional CSV export | `team_id` *(req)*, `subject_id` *(req)*, `full_name`, `format`, `all_results` | ✅ **Available**                                       |
+| Authors                 | GET /authors/by_team_subject/            | Get authors filtered by team and subject            | `team_id` *(req)*, `subject_id` *(req)*, additional filters | ✅ **Available**                                       |
+| Authors                 | GET /authors/by_team_category/           | Get authors filtered by team and category           | `team_id` *(req)*, `category_slug` *(req)*, additional filters | ✅ **Available**                                       |
 | Categories              | GET /categories/                         | List all categories with optional filters           | `team_id`, `subject_id`, `search`, `ordering`, pagination | ✅ **Available**                                       |
 | Categories              | POST /categories/                        | Create a new category                               | N/A                                                     | ❌ **Not Available**                                  |
 | Categories              | GET /categories/{id}/                    | Retrieve a specific category by ID                  | `id` (path)                                             | ✅ **Available**                                       |
@@ -140,8 +147,6 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Teams                   | GET /teams/{id}/articles/category/{category_slug}/ | ⚠️ **DEPRECATED** - List all articles for a team filtered by category | `id` (path), `category_slug` (path)           | ⚠️ **Use /articles/?team_id={id}&category_slug={category_slug} instead** |
 | Teams                   | GET /teams/{id}/articles/source/{source_id}/       | ⚠️ **DEPRECATED** - List all articles for a team filtered by source | `id` (path), `source_id` (path)               | ⚠️ **Use /articles/?team_id={id}&source_id={source_id} instead** |
 | Teams                   | GET /teams/{id}/categories/{category_slug}/monthly-counts/ | Monthly article and trial counts for a team category | `id` (path), `category_slug` (path)    | ✅ **Available**              |
-| Teams                   | GET /teams/{id}/subjects/{subject_id}/authors/     | List authors by team and subject                     | `id` (path), `subject_id` (path), author filters | ✅ **Available**              |
-| Teams                   | GET /teams/{id}/categories/{category_slug}/authors/ | List authors by team and category                   | `id` (path), `category_slug` (path), author filters | ✅ **Available**              |
 | MLPredictions           | GET /ml-predictions/                     | List all ML predictions                             | N/A                                                     | ❌ **Not Available**                                  |
 | MLPredictions           | POST /ml-predictions/                    | Create a new ML prediction                          | N/A                                                     | ❌ **Not Available**                                  |
 | MLPredictions           | GET /ml-predictions/{id}/                | Retrieve a specific ML prediction by ID             | N/A                                                     | ❌ **Not Available**                                  |
@@ -358,6 +363,49 @@ GET /sources/?team_id=1&subject_id=2
 
 # Search and filter combined
 GET /sources/?team_id=1&search=pubmed&ordering=name
+```
+
+### Authors Endpoint Filtering
+
+The `/authors/` endpoint supports comprehensive filtering and searching:
+
+**Filtering:**
+- `?team_id=X` - Filter authors by team ID
+- `?subject_id=Y` - Filter authors by subject ID (use with team_id)
+- `?category_slug=slug` - Filter authors by category slug (use with team_id)
+
+**Date Filtering:**
+- `?date_from=YYYY-MM-DD` - Filter articles from this date
+- `?date_to=YYYY-MM-DD` - Filter articles to this date  
+- `?timeframe=year|month|week` - Relative timeframe filtering
+
+**Sorting:**
+- `?sort_by=author_id|article_count` - Sort by field (default: author_id)
+- `?order=asc|desc` - Sort order (default: desc for article_count, asc for others)
+
+**Special Endpoints:**
+- `/authors/by_team_subject/?team_id=X&subject_id=Y` - Authors for specific team+subject combination
+- `/authors/by_team_category/?team_id=X&category_slug=slug` - Authors for specific team+category combination
+
+**Example Usage:**
+```bash
+# Filter authors by team
+GET /authors/?team_id=1
+
+# Authors by team and subject with article count sorting
+GET /authors/?team_id=1&subject_id=2&sort_by=article_count&order=desc
+
+# Authors by team and category
+GET /authors/?team_id=1&category_slug=natalizumab&sort_by=article_count
+
+# Authors with date filtering
+GET /authors/?team_id=1&subject_id=2&timeframe=year&sort_by=article_count
+
+# Specific team+subject endpoint
+GET /authors/by_team_subject/?team_id=1&subject_id=2
+
+# Specific team+category endpoint  
+GET /authors/by_team_category/?team_id=1&category_slug=natalizumab
 ```
 
 ### Subjects Endpoint Filtering

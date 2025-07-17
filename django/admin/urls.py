@@ -109,12 +109,6 @@ urlpatterns = [
 	## List subjects
 	path('teams/<int:team_id>/subjects/', SubjectsByTeam.as_view({'get': 'list'}), name='subjects-by-team'),
 	
-	# Author API endpoints
-	## List authors by team and subject
-	path('teams/<int:team_id>/subjects/<int:subject_id>/authors/', AuthorsViewSet.as_view({'get': 'by_team_subject'}), name='authors-by-team-subject'),
-	## List authors by team and category  
-	path('teams/<int:team_id>/categories/<str:category_slug>/authors/', AuthorsViewSet.as_view({'get': 'by_team_category'}), name='authors-by-team-category'),
-	
 	
 	# Old API routes
 	
