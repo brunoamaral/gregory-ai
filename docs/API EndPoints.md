@@ -73,7 +73,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Subjects                | GET /subjects/{id}/                      | Retrieve a specific subject by ID                   | `id` (path)                                             | ✅ **Available**                                       |
 | Subjects                | PUT /subjects/{id}/                      | Update a specific subject by ID                     | N/A                                                     | ❌ **Not Available**                                  |
 | Subjects                | DELETE /subjects/{id}/                   | Delete a specific subject by ID                     | N/A                                                     | ❌ **Not Available**                                  |
-| Sources                 | GET /sources/                            | List all sources                                    | Standard pagination params                               | ✅ **Available**                                       |
+| Sources                 | GET /sources/                            | List all sources with optional filters              | `team_id`, `subject_id`, `search`, `ordering`, pagination | ✅ **Available**                                       |
 | Sources                 | POST /sources/                           | Create a new source                                 | N/A                                                     | ❌ **Not Available**                                  |
 | Sources                 | GET /sources/{id}/                       | Retrieve a specific source by ID                    | `id` (path)                                             | ✅ **Available**                                       |
 | Sources                 | PUT /sources/{id}/                       | Update a specific source by ID                      | N/A                                                     | ❌ **Not Available**                                  |
@@ -108,7 +108,6 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Teams                   | GET /teams/{id}/articles/                | List all articles for a specific team by ID         | `id` (path), pagination params                         | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/trials/                  | List all clinical trials for a specific team by ID  | `id` (path), pagination params                         | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/subjects/                | List all subjects for specific team by ID           | `id` (path), pagination params                         | ✅ **Available**                                       |
-| Teams                   | GET /teams/{id}/sources/                 | List all sources for specific team by ID            | `id` (path), pagination params                         | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/categories/              | List all categories for specific team by ID         | `id` (path), pagination params                         | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/subjects/{subject_id}/categories/ | List all categories for a team filtered by subject | `id` (path), `subject_id` (path), pagination params | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/articles/subject/{subject_id}/     | List all articles for a team filtered by subject    | `id` (path), `subject_id` (path)              | ✅ **Available**              |
@@ -156,6 +155,36 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 - **Standard pagination params**: `page`, `page_size`
 - **Format params**: `format` (json, csv, html), `all_results` (true/false for CSV export)
 - **Author filter params**: `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe`
+- **Sources filter params**: `team_id`, `subject_id`, `search` (name/description), `ordering` (name, source_id)
+
+### Sources Endpoint Filtering
+
+The `/sources/` endpoint supports comprehensive filtering and searching:
+
+**Filtering:**
+- `?team_id=X` - Filter sources by team ID
+- `?subject_id=Y` - Filter sources by subject ID
+- `?team_id=X&subject_id=Y` - Filter by both team and subject
+
+**Searching:**
+- `?search=keyword` - Search in source name and description fields
+
+**Ordering:**
+- `?ordering=name` - Order by name (default)
+- `?ordering=source_id` - Order by source ID
+- `?ordering=-name` - Reverse order (add `-` prefix)
+
+**Example Usage:**
+```bash
+# Filter sources by team
+GET /sources/?team_id=1
+
+# Filter sources by team and subject
+GET /sources/?team_id=1&subject_id=2
+
+# Search and filter combined
+GET /sources/?team_id=1&search=pubmed&ordering=name
+```
 
 ### Search Endpoint Requirements
 - **Required params** *(marked with req)*: Must be provided for the endpoint to function
