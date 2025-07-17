@@ -1,6 +1,6 @@
 from django_filters import rest_framework as filters
 from django.db import models
-from gregory.models import Articles, Trials, Authors, Sources, TeamCategory
+from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject
 
 class ArticleFilter(filters.FilterSet):
     """
@@ -120,6 +120,16 @@ class SourceFilter(filters.FilterSet):
     class Meta:
         model = Sources
         fields = ['team_id', 'subject_id']
+
+class SubjectFilter(filters.FilterSet):
+    """
+    Filter class for Subject, allowing filtering by team.
+    """
+    team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact')
+    
+    class Meta:
+        model = Subject
+        fields = ['team_id']
 
 class CategoryFilter(filters.FilterSet):
     """

@@ -22,11 +22,17 @@ The Gregory API is transitioning from team-based URL endpoints to a unified appr
 | `GET /teams/{id}/articles/category/{category_slug}/` | `GET /articles/?team_id={id}&category_slug={category_slug}` | ⚠️ Deprecated |
 | `GET /teams/{id}/articles/source/{source_id}/` | `GET /articles/?team_id={id}&source_id={source_id}` | ⚠️ Deprecated |
 
+### Subjects Endpoints
+
+| Old Endpoint | New Endpoint | Status |
+|-------------|--------------|---------|
+| `GET /teams/{id}/subjects/` | `GET /subjects/?team_id={id}` | ⚠️ Deprecated |
+
 ### Benefits of New Approach
 
 1. **Unified Filtering**: All filtering options available on main endpoint
 2. **Parameter Combinations**: Mix and match any filters (team + subject + author + search, etc.)
-3. **Consistency**: Same endpoint for all article queries
+3. **Consistency**: Same endpoint for all article and subject queries
 4. **Simplicity**: Fewer endpoints to maintain and document
 
 ## Migration Examples
@@ -76,6 +82,21 @@ curl "https://api.gregory-ms.com/teams/1/articles/source/123/?format=json"
 curl "https://api.gregory-ms.com/articles/?team_id=1&source_id=123&format=json"
 ```
 
+### Basic Team Subjects
+```bash
+# Old
+curl "https://api.gregory-ms.com/teams/1/subjects/?format=json"
+
+# New ✅ Preferred
+curl "https://api.gregory-ms.com/subjects/?team_id=1&format=json"
+```
+
+### Enhanced Subjects Filtering
+```bash
+# Search subjects (new capability with enhanced filtering)
+curl "https://api.gregory-ms.com/subjects/?team_id=1&search=multiple&ordering=subject_name&format=json"
+```
+
 ## Response Headers
 
 During the deprecation period, legacy endpoints will include these headers:
@@ -88,6 +109,7 @@ X-Deprecated-Endpoint: /teams/1/articles/
 
 ## Client Migration Checklist
 
+### For Articles
 - [ ] Identify all API calls using `/teams/{id}/articles/*` patterns
 - [ ] Update URLs to use `/articles/?team_id={id}` format
 - [ ] Test new endpoints to ensure equivalent functionality
@@ -95,9 +117,17 @@ X-Deprecated-Endpoint: /teams/1/articles/
 - [ ] Monitor deprecation headers in responses
 - [ ] Consider taking advantage of new filtering combinations
 
+### For Subjects
+- [ ] Identify all API calls using `/teams/{id}/subjects/` patterns
+- [ ] Update URLs to use `/subjects/?team_id={id}` format
+- [ ] Test enhanced search and ordering capabilities
+- [ ] Update any documentation or client libraries
+- [ ] Monitor deprecation headers in responses
+
 ## Enhanced Filtering Capabilities
 
-The new unified endpoint supports all these parameters:
+### Articles Endpoint
+The new unified `/articles/` endpoint supports all these parameters:
 
 - `team_id` - Filter by team (required for team-specific data)
 - `subject_id` - Filter by subject (use with team_id)
@@ -111,6 +141,15 @@ The new unified endpoint supports all these parameters:
 - `page` - Page number for pagination
 - `page_size` - Items per page (max 100)
 
+### Subjects Endpoint
+The new unified `/subjects/` endpoint supports these parameters:
+
+- `team_id` - Filter by team
+- `search` - Search in subject name and description
+- `ordering` - Order results (e.g., `subject_name`, `-id`, `team`)
+- `page` - Page number for pagination
+- `page_size` - Items per page (max 100)
+
 ## Support
 
 If you have questions about migration or need help updating your client code:
@@ -118,42 +157,71 @@ If you have questions about migration or need help updating your client code:
 1. Check the API documentation at `/docs/API EndPoints.md`
 2. Test both old and new endpoints during transition
 3. Use the deprecation headers to identify which new endpoint to use
+4. Run the validation script: `python utils/validate_migration.py`
 
 ## Code Examples
 
 ### JavaScript/Node.js
 ```javascript
-// Old approach
+// Old approach - Articles
 const oldUrl = `https://api.gregory-ms.com/teams/${teamId}/articles/subject/${subjectId}/`;
 
-// New approach ✅
+// New approach ✅ - Articles
 const newUrl = `https://api.gregory-ms.com/articles/?team_id=${teamId}&subject_id=${subjectId}`;
 
 // With additional filters
 const advancedUrl = `https://api.gregory-ms.com/articles/?team_id=${teamId}&subject_id=${subjectId}&search=${encodeURIComponent(searchTerm)}&ordering=-published_date`;
+
+// Old approach - Subjects  
+const oldSubjectsUrl = `https://api.gregory-ms.com/teams/${teamId}/subjects/`;
+
+// New approach ✅ - Subjects
+const newSubjectsUrl = `https://api.gregory-ms.com/subjects/?team_id=${teamId}`;
+
+// Enhanced subjects filtering
+const advancedSubjectsUrl = `https://api.gregory-ms.com/subjects/?team_id=${teamId}&search=${encodeURIComponent(searchTerm)}&ordering=subject_name`;
 ```
 
 ### Python
 ```python
-# Old approach
+# Old approach - Articles
 old_url = f"https://api.gregory-ms.com/teams/{team_id}/articles/subject/{subject_id}/"
 
-# New approach ✅
+# New approach ✅ - Articles
 new_url = f"https://api.gregory-ms.com/articles/?team_id={team_id}&subject_id={subject_id}"
 
 # With additional filters
 import urllib.parse
 search_term = urllib.parse.quote_plus("stem cells")
 advanced_url = f"https://api.gregory-ms.com/articles/?team_id={team_id}&subject_id={subject_id}&search={search_term}&ordering=-published_date"
+
+# Old approach - Subjects
+old_subjects_url = f"https://api.gregory-ms.com/teams/{team_id}/subjects/"
+
+# New approach ✅ - Subjects  
+new_subjects_url = f"https://api.gregory-ms.com/subjects/?team_id={team_id}"
+
+# Enhanced subjects filtering
+search_term = urllib.parse.quote_plus("multiple")
+advanced_subjects_url = f"https://api.gregory-ms.com/subjects/?team_id={team_id}&search={search_term}&ordering=subject_name"
 ```
 
 ### cURL
 ```bash
-# Old approach
+# Old approach - Articles
 curl "https://api.gregory-ms.com/teams/1/articles/subject/4/?search=regeneration&format=json"
 
-# New approach ✅
+# New approach ✅ - Articles
 curl "https://api.gregory-ms.com/articles/?team_id=1&subject_id=4&search=regeneration&format=json"
+
+# Old approach - Subjects
+curl "https://api.gregory-ms.com/teams/1/subjects/?format=json"
+
+# New approach ✅ - Subjects
+curl "https://api.gregory-ms.com/subjects/?team_id=1&format=json"
+
+# Enhanced subjects filtering
+curl "https://api.gregory-ms.com/subjects/?team_id=1&search=multiple&ordering=subject_name&format=json"
 ```
 
 This migration will make the API more consistent, flexible, and easier to use!

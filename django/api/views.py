@@ -12,7 +12,7 @@ from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, Te
 from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
 from django_filters import rest_framework as django_filters
-from api.filters import ArticleFilter, TrialFilter, AuthorFilter, SourceFilter, CategoryFilter
+from api.filters import ArticleFilter, TrialFilter, AuthorFilter, SourceFilter, CategoryFilter, SubjectFilter
 from rest_framework.response import Response
 from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
@@ -765,11 +765,29 @@ class TeamsViewSet(viewsets.ModelViewSet):
 
 class SubjectsViewSet(viewsets.ModelViewSet):
 	"""
-	List all subjects
+	✅ PREFERRED ENDPOINT: This is the main subjects endpoint that supports filtering options.
+	
+	List all subjects in the database with optional team filtering.
+	
+	**Query Parameters:**
+	* **team_id**: filter by team ID (replaces /teams/{id}/subjects/)
+	* **search**: search in subject name and description
+	* **ordering**: order by 'id', 'subject_name', 'team' (add '-' for reverse)
+	
+	**Examples:**
+	* Filter by team: `/subjects/?team_id=1`
+	* Search subjects: `/subjects/?search=multiple`
+	* Team filter with search: `/subjects/?team_id=1&search=sclerosis`
+	* Order by name: `/subjects/?ordering=subject_name`
 	"""
 	queryset = Subject.objects.all().order_by('id')
 	serializer_class = SubjectsSerializer
-	permission_classes  = [permissions.IsAuthenticatedOrReadOnly]
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filterset_class = SubjectFilter
+	search_fields = ['subject_name', 'description']
+	ordering_fields = ['id', 'subject_name', 'team']
+	ordering = ['id']
 
 class ArticlesByTeam(viewsets.ModelViewSet):
 	"""
@@ -857,14 +875,39 @@ class ArticlesBySubject(viewsets.ModelViewSet):
 
 class SubjectsByTeam(viewsets.ModelViewSet):
 	"""
-	List all research subjects for a specific team by ID
+	⚠️ DEPRECATED: This endpoint will be removed in a future version.
+	Please use /subjects/?team_id={team_id} instead.
+	
+	List all research subjects for a specific team by ID.
+	
+	Migration Path:
+	- Old: GET /teams/1/subjects/?search=keyword
+	- New: GET /subjects/?team_id=1&search=keyword
+	
+	Now supports enhanced filtering while maintaining backward compatibility.
+	You can use all the same filters as the main /subjects/ endpoint:
+	- ?search=keyword - Search in subject name and description
+	- ?ordering=field - Order results
 	"""
 	serializer_class = SubjectsSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filterset_class = SubjectFilter
+	search_fields = ['subject_name', 'description']
+	ordering_fields = ['id', 'subject_name']
+	ordering = ['id']
 
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
 		return Subject.objects.filter(team__id=team_id).order_by('-id')
+	
+	def list(self, request, *args, **kwargs):
+		"""Override list to add deprecation warning header"""
+		response = super().list(request, *args, **kwargs)
+		team_id = self.kwargs.get('team_id')
+		deprecated_endpoint = f'/teams/{team_id}/subjects/'
+		replacement_endpoint = f'/subjects/?team_id={team_id}'
+		return add_deprecation_headers(response, deprecated_endpoint, replacement_endpoint)
 
 class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 	"""

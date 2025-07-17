@@ -9,6 +9,7 @@
 | Use Case | Preferred Endpoint | Benefits |
 |----------|-------------------|----------|
 | Team articles | `GET /articles/?team_id=1` | Unified filtering, parameter combinations |
+| Team subjects | `GET /subjects/?team_id=1` | Consistent filtering approach |
 | Team + subject | `GET /articles/?team_id=1&subject_id=4` | Mix with other filters |
 | Team + category (slug) | `GET /articles/?team_id=1&category_slug=natalizumab` | All filtering options available |
 | Team + category (ID) | `GET /articles/?team_id=1&category_id=5` | Flexible ID-based filtering |
@@ -20,6 +21,7 @@
 | Legacy Pattern | Status | Migration Target |
 |---------------|--------|------------------|
 | `GET /teams/{id}/articles/` | ⚠️ **Deprecated** | `/articles/?team_id={id}` |
+| `GET /teams/{id}/subjects/` | ⚠️ **Deprecated** | `/subjects/?team_id={id}` |
 | `GET /teams/{id}/articles/subject/{subject_id}/` | ⚠️ **Deprecated** | `/articles/?team_id={id}&subject_id={subject_id}` |
 | `GET /teams/{id}/articles/category/{category_slug}/` | ⚠️ **Deprecated** | `/articles/?team_id={id}&category_slug={category_slug}` |
 | `GET /teams/{id}/articles/source/{source_id}/` | ⚠️ **Deprecated** | `/articles/?team_id={id}&source_id={source_id}` |
@@ -97,7 +99,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Entities                | GET /entities/{id}/                      | Retrieve a specific entity by ID                    | N/A                                                     | ❌ **Not Available**                                  |
 | Entities                | PUT /entities/{id}/                      | Update a specific entity by ID                      | N/A                                                     | ❌ **Not Available**                                  |
 | Entities                | DELETE /entities/{id}/                   | Delete a specific entity by ID                      | N/A                                                     | ❌ **Not Available**                                  |
-| Subjects                | GET /subjects/                           | List all subjects                                   | Standard pagination params                               | ✅ **Available**                                       |
+| Subjects                | GET /subjects/                           | List all subjects with optional team filtering      | `team_id`, `search`, `ordering`, pagination        | ✅ **Available**                                       |
 | Subjects                | POST /subjects/                          | Create a new subject                                | N/A                                                     | ❌ **Not Available**                                  |
 | Subjects                | GET /subjects/{id}/                      | Retrieve a specific subject by ID                   | `id` (path)                                             | ✅ **Available**                                       |
 | Subjects                | PUT /subjects/{id}/                      | Update a specific subject by ID                     | N/A                                                     | ❌ **Not Available**                                  |
@@ -132,7 +134,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Teams                   | PUT /teams/{id}/                         | Update a specific team by ID                        | N/A                                                     | ❌ **Not Available**                                  |
 | Teams                   | DELETE /teams/{id}/                      | Delete a specific team by ID                        | N/A                                                     | ❌ **Not Available**                                  |
 | Teams                   | GET /teams/{id}/articles/                | ⚠️ **DEPRECATED** - List all articles for a specific team by ID | `id` (path), enhanced filtering params, pagination     | ⚠️ **Use /articles/?team_id={id} instead**           |
-| Teams                   | GET /teams/{id}/subjects/                | List all subjects for specific team by ID           | `id` (path), pagination params                         | ✅ **Available**                                       |
+| Teams                   | GET /teams/{id}/subjects/                | ⚠️ **DEPRECATED** - List all subjects for specific team by ID | `id` (path), enhanced filtering params, pagination | ⚠️ **Use /subjects/?team_id={id} instead**           |
 | Teams                   | GET /teams/{id}/subjects/{subject_id}/categories/ | List all categories for a team filtered by subject | `id` (path), `subject_id` (path), pagination params | ✅ **Available**                                       |
 | Teams                   | GET /teams/{id}/articles/subject/{subject_id}/     | ⚠️ **DEPRECATED** - List all articles for a team filtered by subject | `id` (path), `subject_id` (path), enhanced filtering params | ⚠️ **Use /articles/?team_id={id}&subject_id={subject_id} instead** |
 | Teams                   | GET /teams/{id}/articles/category/{category_slug}/ | ⚠️ **DEPRECATED** - List all articles for a team filtered by category | `id` (path), `category_slug` (path)           | ⚠️ **Use /articles/?team_id={id}&category_slug={category_slug} instead** |
@@ -186,15 +188,19 @@ GET /teams/{team_id}/articles/?format=json&page=1
 # Enhanced: Get articles for a team filtered by subject (now supports full filtering) 
 GET /teams/{team_id}/articles/subject/{subject_id}/?format=json
 # New capabilities: &search=keyword&author_id=X&category_slug=Y&journal_slug=Z&ordering=field
+
+# Enhanced: Get subjects for a team (now supports full filtering)
+GET /teams/{team_id}/subjects/?format=json
+# New capabilities: &search=keyword&ordering=field
 ```
 
 **New filtering capabilities added to legacy endpoints:**
-- `?author_id=X` - Filter by author ID
-- `?category_slug=slug` - Filter by category
-- `?journal_slug=slug` - Filter by journal (URL-encoded)
-- `?source_id=Y` - Filter by source ID
-- `?search=keyword` - Full-text search in title and summary
-- `?ordering=field` - Order by discovery_date, published_date, title, article_id (add `-` for reverse)
+- `?author_id=X` - Filter by author ID (articles only)
+- `?category_slug=slug` - Filter by category (articles only)
+- `?journal_slug=slug` - Filter by journal (articles only, URL-encoded)
+- `?source_id=Y` - Filter by source ID (articles only)
+- `?search=keyword` - Full-text search in title/summary (articles) or name/description (subjects)
+- `?ordering=field` - Order by discovery_date, published_date, title, article_id (articles) or id, subject_name (subjects) (add `-` for reverse)
 
 ### Standard Legacy Team-Based Endpoints
 
@@ -273,6 +279,15 @@ GET /teams/1/articles/subject/4/?format=json&search=regeneration&category_slug=s
 
 # NEW: Equivalent using main endpoint
 GET /articles/?team_id=1&subject_id=4&search=regeneration&category_slug=stem-cells&journal_slug=Nature
+
+# BEFORE: Basic subjects for team
+GET /teams/1/subjects/?format=json
+
+# AFTER: Enhanced subjects with filtering
+GET /teams/1/subjects/?format=json&search=multiple&ordering=subject_name
+
+# NEW: Equivalent using main endpoint  
+GET /subjects/?team_id=1&search=multiple&ordering=subject_name
 ```
 
 **Benefits of the enhanced legacy endpoints:**
@@ -296,15 +311,22 @@ GET /teams/1/articles/subject/4/?search=regeneration&journal_slug=Nature&format=
 
 # Complex filtering on team articles
 GET /teams/1/articles/?search=stem+cells&category_slug=clinical-trials&author_id=123&ordering=title&format=json
+
+# Search team subjects
+GET /teams/1/subjects/?search=multiple&format=json
+
+# Order team subjects by name
+GET /teams/1/subjects/?ordering=subject_name&format=json
 ```
 
 ## Parameter Details
 
 ### Common Parameters
-- **Standard pagination params**: `page`, `page_size`
+- **Common Parameters**: `page`, `page_size`
 - **Format params**: `format` (json, csv, html), `all_results` (true/false for CSV export)
 - **Author filter params**: `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe`
 - **Articles filter params**: `team_id`, `subject_id`, `author_id`, `category_slug`, `journal_slug` (URL-encoded journal name), `source_id`, `search` (title/summary), `ordering` (discovery_date, published_date, title, article_id)
+- **Subjects filter params**: `team_id`, `search` (subject_name/description), `ordering` (id, subject_name, team)
 - **Sources filter params**: `team_id`, `subject_id`, `search` (name/description), `ordering` (name, source_id)
 - **Categories filter params**: `team_id`, `subject_id`, `search` (name/description), `ordering` (category_name, id)
 - **Trials filter params**: `team_id`, `subject_id`, `category_id`, `source_id`, `status` (recruitment), `search` (title/summary), `ordering` (discovery_date, published_date, title, trial_id)
@@ -336,6 +358,34 @@ GET /sources/?team_id=1&subject_id=2
 
 # Search and filter combined
 GET /sources/?team_id=1&search=pubmed&ordering=name
+```
+
+### Subjects Endpoint Filtering
+
+The `/subjects/` endpoint supports filtering and searching:
+
+**Filtering:**
+- `?team_id=X` - Filter subjects by team ID
+
+**Searching:**
+- `?search=keyword` - Search in subject name and description fields
+
+**Ordering:**
+- `?ordering=id` - Order by ID (default)
+- `?ordering=subject_name` - Order by subject name
+- `?ordering=team` - Order by team
+- `?ordering=-subject_name` - Reverse order (add `-` prefix)
+
+**Example Usage:**
+```bash
+# Filter subjects by team
+GET /subjects/?team_id=1
+
+# Search subjects by name or description
+GET /subjects/?search=multiple
+
+# Team filter with search combined
+GET /subjects/?team_id=1&search=sclerosis&ordering=subject_name
 ```
 
 ### Articles Endpoint Filtering
