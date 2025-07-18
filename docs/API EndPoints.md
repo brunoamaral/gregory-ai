@@ -1,17 +1,19 @@
-# Gregory API EndPoints
+# [GregoryAi](https://gregory-ai.com/) API EndPoints
+
+[TOC]
 
 ## Preferred Endpoints vs Legacy
 
 > **📋 MIGRATION NOTICE:** The API is transitioning from team-based URL patterns to query parameter filtering for better consistency and flexibility.
 
-### Preferred Approach (✅ Recommended# Standard: Get categories for a team and subject
-GET /teams/{team_id}/subjects/{subject_id}/categories/
+Currently we can use `/teams/{team_id}/subjects/{subject_id}/categories/` to get categories for a team and subject, but this is being deprecated in favor of a more flexible filtering system.
 
-# Standard: Get monthly counts for a team category
-GET /teams/{team_id}/categories/{category_slug}/monthly-counts/
-```
+The endpoint above will be converted to `/categories/?team_id={team_id}&subject_id={subject_id}`.
 
-**Status**: All legacy endpoints are fully functional and tested. They continue to work alongside the new filtering system to ensure backward compatibility for existing clients.| Preferred Endpoint | Benefits |
+**Status**: All legacy endpoints are fully functional and tested. They continue to work alongside the new filtering system to ensure backward compatibility for existing clients.
+The legacy endpoints will be removed by the end of August.
+
+| Filter | Preferred Endpoint | Benefits | 
 |----------|-------------------|----------|
 | Team articles | `GET /articles/?team_id=1` | Unified filtering, parameter combinations |
 | Team subjects | `GET /subjects/?team_id=1` | Consistent filtering approach |
@@ -83,7 +85,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 
 | Model                   | API Endpoint                             | Description                                         | Parameters                                              | Status                                                   |
 | ----------------------- | ---------------------------------------- | --------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------- |
-| Authors                 | GET /authors/                            | List all authors with comprehensive filtering       | `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe` | ✅ **Available**                                       |
+| Authors                 | GET /authors/                            | List all authors with comprehensive filtering       | `author_id`, `full_name`, `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe` | ✅ **Available**                                       |
 | Authors                 | POST /authors/                           | Create a new author                                 | N/A                                                     | ❌ **Not Available**                                  |
 | Authors                 | GET /authors/{id}/                       | Retrieve a specific author by ID                    | `id` (path)                                             | ✅ **Available**                                       |
 | Authors                 | PUT /authors/{id}/                       | Update a specific author by ID                      | N/A                                                     | ❌ **Not Available**                                  |
@@ -111,7 +113,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Subjects                | GET /subjects/{id}/                      | Retrieve a specific subject by ID                   | `id` (path)                                             | ✅ **Available**                                       |
 | Subjects                | PUT /subjects/{id}/                      | Update a specific subject by ID                     | N/A                                                     | ❌ **Not Available**                                  |
 | Subjects                | DELETE /subjects/{id}/                   | Delete a specific subject by ID                     | N/A                                                     | ❌ **Not Available**                                  |
-| Sources                 | GET /sources/                            | List all sources with optional filters              | `team_id`, `subject_id`, `search`, `ordering`, pagination | ✅ **Available**                                       |
+| Sources                 | GET /sources/                            | List all sources with optional filters              | `team_id`, `subject_id`, `source_for`, `search`, `ordering`, pagination | ✅ **Available**                                       |
 | Sources                 | POST /sources/                           | Create a new source                                 | N/A                                                     | ❌ **Not Available**                                  |
 | Sources                 | GET /sources/{id}/                       | Retrieve a specific source by ID                    | `id` (path)                                             | ✅ **Available**                                       |
 | Sources                 | PUT /sources/{id}/                       | Update a specific source by ID                      | N/A                                                     | ❌ **Not Available**                                  |
@@ -209,7 +211,7 @@ GET /teams/{team_id}/subjects/?format=json
 
 ### Standard Legacy Team-Based Endpoints
 
-The following legacy patterns maintain their original functionality:
+For now, the following legacy patterns maintain their original functionality:
 
 ```bash
 # Standard: Get articles for a team filtered by category
@@ -331,10 +333,10 @@ GET /teams/1/subjects/?ordering=subject_name&format=json
 ### Common Parameters
 - **Common Parameters**: `page`, `page_size`
 - **Format params**: `format` (json, csv, html), `all_results` (true/false for CSV export)
-- **Author filter params**: `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe`
+- **Author filter params**: `author_id`, `full_name`, `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe`
 - **Articles filter params**: `team_id`, `subject_id`, `author_id`, `category_slug`, `journal_slug` (URL-encoded journal name), `source_id`, `search` (title/summary), `ordering` (discovery_date, published_date, title, article_id)
 - **Subjects filter params**: `team_id`, `search` (subject_name/description), `ordering` (id, subject_name, team)
-- **Sources filter params**: `team_id`, `subject_id`, `search` (name/description), `ordering` (name, source_id)
+- **Sources filter params**: `team_id`, `subject_id`, `source_for` (articles, trials, both), `search` (name/description), `ordering` (name, source_id)
 - **Categories filter params**: `team_id`, `subject_id`, `search` (name/description), `ordering` (category_name, id)
 - **Trials filter params**: `team_id`, `subject_id`, `category_id`, `source_id`, `status` (recruitment), `search` (title/summary), `ordering` (discovery_date, published_date, title, trial_id)
 
@@ -345,6 +347,7 @@ The `/sources/` endpoint supports comprehensive filtering and searching:
 **Filtering:**
 - `?team_id=X` - Filter sources by team ID
 - `?subject_id=Y` - Filter sources by subject ID
+- `?source_for=type` - Filter sources by content type (articles, trials, both)
 - `?team_id=X&subject_id=Y` - Filter by both team and subject
 
 **Searching:**
@@ -363,8 +366,17 @@ GET /sources/?team_id=1
 # Filter sources by team and subject
 GET /sources/?team_id=1&subject_id=2
 
+# Filter sources by content type
+GET /sources/?source_for=articles
+
+# Filter sources for trials only
+GET /sources/?source_for=trials
+
+# Filter sources that provide both articles and trials
+GET /sources/?source_for=both
+
 # Search and filter combined
-GET /sources/?team_id=1&search=pubmed&ordering=name
+GET /sources/?team_id=1&search=pubmed&ordering=name&source_for=articles
 ```
 
 ### Authors Endpoint Filtering
@@ -372,6 +384,8 @@ GET /sources/?team_id=1&search=pubmed&ordering=name
 The `/authors/` endpoint supports comprehensive filtering and searching:
 
 **Filtering:**
+- `?author_id=X` - Filter by specific author ID
+- `?full_name=name` - Search authors by full name (case-insensitive)
 - `?team_id=X` - Filter authors by team ID
 - `?subject_id=Y` - Filter authors by subject ID (use with team_id)
 - `?category_slug=slug` - Filter authors by category slug (use with team_id)
@@ -393,6 +407,12 @@ The `/authors/` endpoint supports comprehensive filtering and searching:
 
 **Example Usage:**
 ```bash
+# Get specific author by ID
+GET /authors/?author_id=380002
+
+# Search authors by name
+GET /authors/?full_name=John%20Smith
+
 # Filter authors by team
 GET /authors/?team_id=1
 

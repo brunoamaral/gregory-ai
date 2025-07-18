@@ -631,6 +631,8 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	
 	**Query Parameters:**
 	
+	* **author_id**: filter by specific author ID
+	* **full_name**: search by author's full name (case-insensitive)
 	* **sort_by**: 'article_count' (default: 'author_id')
 	* **order**: 'asc' or 'desc' (default: 'desc' for article_count, 'asc' for others)
 	* **team_id**: filter by team ID
@@ -643,6 +645,8 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	
 	**Examples:**
 	
+	* Get specific author: `?author_id=380002`
+	* Search by name: `?full_name=John%20Smith`
 	* Sort by article count: `?sort_by=article_count&order=desc`
 	* Filter by timeframe: `?sort_by=article_count&timeframe=year`
 	* Team and subject filter: `?team_id=1&subject_id=5&sort_by=article_count`
@@ -658,6 +662,8 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 		queryset = Authors.objects.all()
 		
 		# Get query parameters
+		author_id = self.request.query_params.get('author_id')
+		full_name = self.request.query_params.get('full_name')
 		sort_by = self.request.query_params.get('sort_by', 'author_id')
 		order = self.request.query_params.get('order', 'desc' if sort_by == 'article_count' else 'asc')
 		team_id = self.request.query_params.get('team_id')
@@ -667,6 +673,19 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 		date_from = self.request.query_params.get('date_from')
 		date_to = self.request.query_params.get('date_to')
 		timeframe = self.request.query_params.get('timeframe')
+		
+		# Apply simple filters first
+		if author_id:
+			try:
+				author_id = int(author_id)
+				queryset = queryset.filter(author_id=author_id)
+			except ValueError:
+				pass
+		
+		if full_name:
+			# Use uppercase search for better performance with GIN index
+			upper_value = full_name.upper()
+			queryset = queryset.filter(ufull_name__contains=upper_value)
 		
 		# Build date filter for articles
 		date_filters = {}

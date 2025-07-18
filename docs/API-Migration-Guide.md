@@ -313,4 +313,6 @@ curl "https://api.gregory-ms.com/authors/?team_id=1&subject_id=1&sort_by=article
 curl "https://api.gregory-ms.com/authors/?team_id=1&category_id=5&sort_by=article_count&order=desc"
 ```
 
-This migration will make the API more consistent, flexible, and easier to use!
+# Contacts
+
+For any questions, please get in touch with bruno@gregory-ai.com.

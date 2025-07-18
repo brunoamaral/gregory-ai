@@ -96,13 +96,14 @@ class TrialFilter(filters.FilterSet):
         )
 
 class AuthorFilter(filters.FilterSet):
-    """Filter class for Authors, allowing searching by full name."""
+    """Filter class for Authors, allowing searching by full name and filtering by author ID."""
 
     full_name = filters.CharFilter(method='filter_full_name')
+    author_id = filters.NumberFilter(field_name='author_id', lookup_expr='exact')
 
     class Meta:
         model = Authors
-        fields = ['full_name']
+        fields = ['full_name', 'author_id']
 
     def filter_full_name(self, queryset, name, value):
         """Search in the full_name database field using optimized uppercase column"""
