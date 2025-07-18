@@ -168,7 +168,7 @@ class AuthorSerializer(serializers.ModelSerializer):
 
 	def get_articles_list(self, obj):
 		site = get_site()
-		base_url = f"https://api.{site.domain}/articles/author/" if site else ""
+		base_url = f"https://api.{site.domain}/articles/?author_id=" if site else ""
 		return base_url + str(obj.author_id) if site else ""
 
 # Simple Trial serializer for use in Article references

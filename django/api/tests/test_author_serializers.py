@@ -126,7 +126,7 @@ class AuthorSerializerTest(TestCase):
         serializer = AuthorSerializer(self.author)
         data = serializer.data
         
-        expected_url = f"https://api.example.com/articles/author/{self.author.author_id}"
+        expected_url = f"https://api.example.com/articles/?author_id={self.author.author_id}"
         self.assertEqual(data['articles_list'], expected_url)
         
     def test_article_author_serializer_basic_fields(self):
