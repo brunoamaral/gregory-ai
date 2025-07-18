@@ -146,7 +146,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Teams                   | GET /teams/{id}/articles/subject/{subject_id}/     | ⚠️ **DEPRECATED** - List all articles for a team filtered by subject | `id` (path), `subject_id` (path), enhanced filtering params | ⚠️ **Use /articles/?team_id={id}&subject_id={subject_id} instead** |
 | Teams                   | GET /teams/{id}/articles/category/{category_slug}/ | ⚠️ **DEPRECATED** - List all articles for a team filtered by category | `id` (path), `category_slug` (path)           | ⚠️ **Use /articles/?team_id={id}&category_slug={category_slug} instead** |
 | Teams                   | GET /teams/{id}/articles/source/{source_id}/       | ⚠️ **DEPRECATED** - List all articles for a team filtered by source | `id` (path), `source_id` (path)               | ⚠️ **Use /articles/?team_id={id}&source_id={source_id} instead** |
-| Teams                   | GET /teams/{id}/categories/{category_slug}/monthly-counts/ | Monthly article and trial counts for a team category | `id` (path), `category_slug` (path)    | ✅ **Available**              |
+| Teams                   | GET /teams/{id}/categories/{category_slug}/monthly-counts/ | Monthly article and trial counts for a team category, with optional ML filtering | `id` (path), `category_slug` (path), `ml_threshold` (query, optional: 0.0-1.0, default: 0.5)    | ✅ **Available**              |
 | MLPredictions           | GET /ml-predictions/                     | List all ML predictions                             | N/A                                                     | ❌ **Not Available**                                  |
 | MLPredictions           | POST /ml-predictions/                    | Create a new ML prediction                          | N/A                                                     | ❌ **Not Available**                                  |
 | MLPredictions           | GET /ml-predictions/{id}/                | Retrieve a specific ML prediction by ID             | N/A                                                     | ❌ **Not Available**                                  |
@@ -232,6 +232,7 @@ GET /teams/{team_id}/categories/{category_slug}/authors/
 
 # Standard: Get monthly counts for a team category
 GET /teams/{team_id}/categories/{category_slug}/monthly-counts/
+# Optional ML filtering: ?ml_threshold=0.8
 ```
 
 ```bash
@@ -261,6 +262,7 @@ GET /teams/{team_id}/categories/{category_slug}/authors/
 
 # Legacy: Get monthly counts for a team category
 GET /teams/{team_id}/categories/{category_slug}/monthly-counts/
+# Optional ML filtering: ?ml_threshold=0.8
 ```
 
 **Status**: All legacy endpoints are fully functional and tested. They continue to work alongside the new filtering system to ensure backward compatibility for existing clients.
@@ -547,6 +549,65 @@ GET /trials/?team_id=1&search=alzheimer&status=recruiting&ordering=-published_da
 
 # Filter by source and category
 GET /trials/?team_id=1&source_id=3&category_id=5
+```
+
+### Monthly Counts Endpoint with ML Filtering
+
+The `/teams/{team_id}/categories/{category_slug}/monthly-counts/` endpoint provides monthly aggregated data with optional ML prediction filtering:
+
+**Parameters:**
+- `team_id` (path, required) - Team ID
+- `category_slug` (path, required) - Category slug
+- `ml_threshold` (query, optional) - ML prediction probability threshold (0.0-1.0, default: 0.5)
+
+**Response Fields:**
+- `monthly_article_counts` - Total articles by month
+- `monthly_ml_article_counts_by_model` - Articles with latest ML predictions >= threshold by month, separated by model
+- `monthly_trial_counts` - Total trials by month
+- `ml_threshold` - The threshold value used for ML filtering
+- `available_models` - List of ML algorithms found in the data (e.g., ["pubmed_bert", "lgbm_tfidf", "lstm"])
+- `category_name` - Category name
+- `category_slug` - Category slug
+
+**Important Notes:**
+- Only the most recent ML prediction for each article-model combination is considered
+- Each model (pubmed_bert, lgbm_tfidf, lstm, etc.) provides separate monthly counts
+- Articles can have predictions from multiple models
+
+**Example Usage:**
+```bash
+# Default ML threshold (0.5)
+GET /teams/1/categories/natalizumab/monthly-counts/
+
+# High confidence ML predictions (0.8)
+GET /teams/1/categories/natalizumab/monthly-counts/?ml_threshold=0.8
+
+# Low threshold to include more predictions (0.3)
+GET /teams/1/categories/natalizumab/monthly-counts/?ml_threshold=0.3
+
+# Very high confidence predictions only (0.95)
+GET /teams/1/categories/natalizumab/monthly-counts/?ml_threshold=0.95
+```
+
+**Example Response:**
+```json
+{
+  "category_name": "Natalizumab",
+  "category_slug": "natalizumab",
+  "ml_threshold": 0.8,
+  "monthly_article_counts": [
+    {"month": "2023-01-01T00:00:00Z", "count": 25},
+    {"month": "2023-02-01T00:00:00Z", "count": 18}
+  ],
+  "monthly_ml_article_counts": [
+    {"month": "2023-01-01T00:00:00Z", "count": 8},
+    {"month": "2023-02-01T00:00:00Z", "count": 5}
+  ],
+  "monthly_trial_counts": [
+    {"month": "2023-01-01T00:00:00Z", "count": 3},
+    {"month": "2023-02-01T00:00:00Z", "count": 1}
+  ]
+}
 ```
 
 ### Search Endpoint Requirements

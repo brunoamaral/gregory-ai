@@ -454,14 +454,97 @@ class CategoryViewSet(viewsets.ModelViewSet):
 		).all()
 
 class MonthlyCountsView(APIView):
+	"""
+	Get monthly counts of articles and trials for a specific team category.
+	
+	**Query Parameters:**
+	* **ml_threshold**: ML prediction probability threshold (0.0-1.0, default: 0.5)
+	  - Returns count of articles with ML predictions above this threshold for each model
+	
+	**Returns:**
+	* `monthly_article_counts`: Total articles by month
+	* `monthly_ml_article_counts_by_model`: Articles with ML predictions >= threshold by month for each model
+	* `monthly_trial_counts`: Total trials by month
+	* `ml_threshold`: The threshold value used for ML filtering
+	* `available_models`: List of ML models found in the data
+	
+	**Examples:**
+	* Default threshold: `/teams/1/categories/natalizumab/monthly_counts/`
+	* Custom threshold: `/teams/1/categories/natalizumab/monthly_counts/?ml_threshold=0.8`
+	"""
 	def get(self, request, team_id, category_slug):
 			team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
+			
+			# Get ML prediction threshold parameter (default to 0.5 if not provided)
+			ml_threshold = request.query_params.get('ml_threshold', 0.5)
+			try:
+				ml_threshold = float(ml_threshold)
+			except (ValueError, TypeError):
+				ml_threshold = 0.5
 			
 			# Monthly article counts
 			articles = Articles.objects.filter(team_categories=team_category)
 			articles = articles.annotate(month=TruncMonth('published_date'))
 			article_counts = articles.values('month').annotate(count=Count('article_id')).order_by('month')
 			article_counts = list(article_counts.values('month', 'count'))
+
+			# Get available ML models for this category by getting distinct algorithms from latest predictions
+			from gregory.models import MLPredictions
+			from django.db.models import Max
+			
+			# Get the latest prediction date for each article-algorithm combination
+			latest_predictions_subquery = MLPredictions.objects.filter(
+				article__team_categories=team_category,
+				algorithm__isnull=False
+			).values('article_id', 'algorithm').annotate(
+				latest_date=Max('created_date')
+			)
+			
+			# Get the actual latest predictions
+			latest_prediction_ids = []
+			for pred_info in latest_predictions_subquery:
+				latest_pred = MLPredictions.objects.filter(
+					article_id=pred_info['article_id'],
+					algorithm=pred_info['algorithm'],
+					created_date=pred_info['latest_date']
+				).first()
+				if latest_pred:
+					latest_prediction_ids.append(latest_pred.id)
+			
+			# Get available models from these latest predictions
+			available_models = MLPredictions.objects.filter(
+				id__in=latest_prediction_ids
+			).values_list('algorithm', flat=True).distinct()
+			available_models = list(available_models)			# Monthly articles with ML predictions above threshold for each model (latest predictions only)
+			ml_counts_by_model = {}
+			for model in available_models:
+				# Get latest prediction IDs for this specific model
+				latest_model_predictions_subquery = MLPredictions.objects.filter(
+					article__team_categories=team_category,
+					algorithm=model
+				).values('article_id').annotate(
+					latest_date=Max('created_date')
+				)
+				
+				latest_model_prediction_ids = []
+				for pred_info in latest_model_predictions_subquery:
+					latest_pred = MLPredictions.objects.filter(
+						article_id=pred_info['article_id'],
+						algorithm=model,
+						created_date=pred_info['latest_date'],
+						probability_score__gte=ml_threshold
+					).first()
+					if latest_pred:
+						latest_model_prediction_ids.append(pred_info['article_id'])
+				
+				# Get articles with latest predictions above threshold for this model
+				articles_with_ml = Articles.objects.filter(
+					team_categories=team_category,
+					article_id__in=latest_model_prediction_ids
+				)
+				articles_with_ml = articles_with_ml.annotate(month=TruncMonth('published_date'))
+				ml_article_counts = articles_with_ml.values('month').annotate(count=Count('article_id', distinct=True)).order_by('month')
+				ml_counts_by_model[model] = list(ml_article_counts.values('month', 'count'))
 
 			# Monthly trial counts
 			trials = Trials.objects.filter(team_categories=team_category)
@@ -472,7 +555,10 @@ class MonthlyCountsView(APIView):
 			data = {
 					'category_name': team_category.category_name,
 					'category_slug': team_category.category_slug,
+					'ml_threshold': ml_threshold,
+					'available_models': available_models,
 					'monthly_article_counts': article_counts,
+					'monthly_ml_article_counts_by_model': ml_counts_by_model,
 					'monthly_trial_counts': trial_counts,
 			}
 
