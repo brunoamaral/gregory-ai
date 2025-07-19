@@ -741,6 +741,7 @@ class TrialViewSet(viewsets.ModelViewSet):
 	**Query Parameters:**
 	* **team_id**: filter by team ID
 	* **subject_id**: filter by subject ID
+	* **category_slug**: filter by category slug
 	* **category_id**: filter by category ID
 	* **source_id**: filter by source ID
 	* **status**: filter by recruitment status

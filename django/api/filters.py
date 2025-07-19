@@ -66,12 +66,13 @@ class TrialFilter(filters.FilterSet):
     status = filters.CharFilter(field_name='recruitment_status', lookup_expr='exact')
     team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact')
     subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact')
+    category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact')
     category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact')
     source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact')
     
     class Meta:
         model = Trials
-        fields = ['title', 'summary', 'search', 'status', 'team_id', 'subject_id', 'category_id', 'source_id']
+        fields = ['title', 'summary', 'search', 'status', 'team_id', 'subject_id', 'category_slug', 'category_id', 'source_id']
     
     def filter_title(self, queryset, name, value):
         """
