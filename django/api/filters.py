@@ -137,9 +137,10 @@ class CategoryFilter(filters.FilterSet):
     """
     Filter class for TeamCategory, allowing filtering by team and subject.
     """
+    category_id = filters.NumberFilter(field_name='id', lookup_expr='exact')
     team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact')
     subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact')
     
     class Meta:
         model = TeamCategory
-        fields = ['team_id', 'subject_id']
+        fields = ['category_id', 'team_id', 'subject_id']
