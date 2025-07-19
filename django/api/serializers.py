@@ -5,6 +5,7 @@ from sitesettings.models import CustomSetting
 from django.contrib.sites.models import Site
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Count, Q
 
 def get_custom_settings():
 		try:
@@ -98,10 +99,34 @@ class CategorySerializer(serializers.ModelSerializer):
 	
 	def get_top_authors(self, obj):
 		"""Get top authors by article count in this category"""
-		# Check if detailed author data was prefetched by the view
-		if hasattr(obj, 'top_authors_data'):
-			return CategoryTopAuthorSerializer(obj.top_authors_data, many=True).data
-		return []
+		# Check if author data should be included
+		if not getattr(obj, '_author_params', {}).get('include_authors', False):
+			return []
+		
+		# Get parameters
+		author_params = getattr(obj, '_author_params', {})
+		max_authors = author_params.get('max_authors', 10)
+		date_filters = author_params.get('date_filters', {})
+		
+		# Build filter for articles in this category
+		article_filter = Q(team_categories=obj)
+		if date_filters:
+			# Adjust the date filter keys for the Articles model
+			articles_date_filters = {}
+			for key, value in date_filters.items():
+				if key.startswith('articles__'):
+					articles_date_filters[key.replace('articles__', '')] = value
+			if articles_date_filters:
+				article_filter &= Q(**articles_date_filters)
+		
+		# Get authors with article counts in this category
+		top_authors = Authors.objects.filter(
+			articles__in=Articles.objects.filter(article_filter)
+		).annotate(
+			category_articles_count=Count('articles', filter=article_filter, distinct=True)
+		).order_by('-category_articles_count')[:max_authors]
+		
+		return CategoryTopAuthorSerializer(top_authors, many=True).data
 
 class ArticleAuthorSerializer(serializers.ModelSerializer):
 	country = serializers.SerializerMethodField()

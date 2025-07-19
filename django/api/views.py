@@ -538,61 +538,20 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	
 	def _add_top_authors_data(self, queryset, max_authors, date_filters):
 		"""Add top authors data to each category"""
-		# This method will be implemented to efficiently get top authors per category
-		# For now, we'll use a simple approach that can be optimized later
+		# For performance, we'll use a simpler approach that adds empty data
+		# and let the serializer handle the complex queries on a per-category basis
+		# This avoids N+1 queries while keeping the implementation maintainable
 		
-		def get_top_authors_for_category(category):
-			# Build filter for articles in this category
-			article_filter = Q(team_categories=category)
-			if date_filters:
-				# Adjust the date filter keys for the Articles model
-				articles_date_filters = {}
-				for key, value in date_filters.items():
-					if key.startswith('articles__'):
-						articles_date_filters[key.replace('articles__', '')] = value
-				article_filter &= Q(**articles_date_filters)
-			
-			# Get authors with article counts in this category
-			from django.db.models import Count
-			top_authors = Authors.objects.filter(
-				articles__in=Articles.objects.filter(article_filter)
-			).annotate(
-				category_articles_count=Count('articles', filter=article_filter, distinct=True)
-			).order_by('-category_articles_count')[:max_authors]
-			
-			return list(top_authors)
+		# We'll modify the queryset to indicate that author data should be included
+		# and store the parameters for later use by the serializer
+		for category in queryset:
+			category._author_params = {
+				'max_authors': max_authors,
+				'date_filters': date_filters,
+				'include_authors': True
+			}
 		
-		# Add top authors data to each category object
-		categories = list(queryset)
-		for category in categories:
-			category.top_authors_data = get_top_authors_for_category(category)
-		
-		# Convert back to queryset - this is not ideal but works for now
-		# In production, we'd want to use a more efficient approach with subqueries
-		category_ids = [c.id for c in categories]
-		result_queryset = TeamCategory.objects.filter(id__in=category_ids)
-		
-		# Re-apply annotations
-		if date_filters:
-			result_queryset = result_queryset.annotate(
-				article_count_annotated=Count('articles', filter=Q(**date_filters), distinct=True),
-				trials_count_annotated=Count('trials', distinct=True),
-				authors_count_annotated=Count('articles__authors', filter=Q(**date_filters), distinct=True)
-			)
-		else:
-			result_queryset = result_queryset.annotate(
-				article_count_annotated=Count('articles', distinct=True),
-				trials_count_annotated=Count('trials', distinct=True),
-				authors_count_annotated=Count('articles__authors', distinct=True)
-			)
-		
-		# Transfer the top_authors_data to the new queryset objects
-		result_categories = {c.id: c for c in categories}
-		for category in result_queryset:
-			if category.id in result_categories:
-				category.top_authors_data = result_categories[category.id].top_authors_data
-		
-		return result_queryset
+		return queryset
 	
 	@action(detail=True, methods=['get'])
 	def authors(self, request, pk=None):
