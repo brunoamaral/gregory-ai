@@ -48,13 +48,33 @@ class MLPredictionsSerializer(serializers.ModelSerializer):
 		model = MLPredictions
 		fields = ['id', 'algorithm', 'model_version', 'probability_score', 'predicted_relevant', 'created_date', 'subject']
 
+class CategoryTopAuthorSerializer(serializers.ModelSerializer):
+	"""Serializer for top authors within a category"""
+	articles_count = serializers.SerializerMethodField()
+	country = serializers.SerializerMethodField()
+
+	class Meta:
+		model = Authors
+		fields = ['author_id', 'given_name', 'family_name', 'full_name', 'ORCID', 'country', 'articles_count']
+
+	def get_articles_count(self, obj):
+		return getattr(obj, 'category_articles_count', 0)
+	
+	def get_country(self, obj):
+		return obj.country.code if obj.country else None
+
 class CategorySerializer(serializers.ModelSerializer):
 	article_count_total = serializers.SerializerMethodField()
 	trials_count_total = serializers.SerializerMethodField()
+	authors_count = serializers.SerializerMethodField()
+	top_authors = serializers.SerializerMethodField()
 	
 	class Meta:
 		model = TeamCategory
-		fields = ['id', 'category_description', 'category_name', 'category_slug', 'category_terms', 'article_count_total', 'trials_count_total']
+		fields = [
+			'id', 'category_description', 'category_name', 'category_slug', 'category_terms', 
+			'article_count_total', 'trials_count_total', 'authors_count', 'top_authors'
+		]
 	
 	def get_article_count_total(self, obj):
 		# If the queryset has annotated article_count, use it for efficiency
@@ -69,6 +89,19 @@ class CategorySerializer(serializers.ModelSerializer):
 			return obj.trials_count_annotated
 		# Fallback to the model method
 		return obj.trials_count()
+	
+	def get_authors_count(self, obj):
+		"""Total number of unique authors in this category"""
+		if hasattr(obj, 'authors_count_annotated'):
+			return obj.authors_count_annotated
+		return obj.articles.values('authors').distinct().count()
+	
+	def get_top_authors(self, obj):
+		"""Get top authors by article count in this category"""
+		# Check if detailed author data was prefetched by the view
+		if hasattr(obj, 'top_authors_data'):
+			return CategoryTopAuthorSerializer(obj.top_authors_data, many=True).data
+		return []
 
 class ArticleAuthorSerializer(serializers.ModelSerializer):
 	country = serializers.SerializerMethodField()
