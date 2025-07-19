@@ -5,6 +5,7 @@ from sitesettings.models import CustomSetting
 from django.contrib.sites.models import Site
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Count, Q
 
 def get_custom_settings():
 		try:
@@ -48,13 +49,33 @@ class MLPredictionsSerializer(serializers.ModelSerializer):
 		model = MLPredictions
 		fields = ['id', 'algorithm', 'model_version', 'probability_score', 'predicted_relevant', 'created_date', 'subject']
 
+class CategoryTopAuthorSerializer(serializers.ModelSerializer):
+	"""Serializer for top authors within a category"""
+	articles_count = serializers.SerializerMethodField()
+	country = serializers.SerializerMethodField()
+
+	class Meta:
+		model = Authors
+		fields = ['author_id', 'given_name', 'family_name', 'full_name', 'ORCID', 'country', 'articles_count']
+
+	def get_articles_count(self, obj):
+		return getattr(obj, 'category_articles_count', 0)
+	
+	def get_country(self, obj):
+		return obj.country.code if obj.country else None
+
 class CategorySerializer(serializers.ModelSerializer):
 	article_count_total = serializers.SerializerMethodField()
 	trials_count_total = serializers.SerializerMethodField()
+	authors_count = serializers.SerializerMethodField()
+	top_authors = serializers.SerializerMethodField()
 	
 	class Meta:
 		model = TeamCategory
-		fields = ['id', 'category_description', 'category_name', 'category_slug', 'category_terms', 'article_count_total', 'trials_count_total']
+		fields = [
+			'id', 'category_description', 'category_name', 'category_slug', 'category_terms', 
+			'article_count_total', 'trials_count_total', 'authors_count', 'top_authors'
+		]
 	
 	def get_article_count_total(self, obj):
 		# If the queryset has annotated article_count, use it for efficiency
@@ -69,6 +90,48 @@ class CategorySerializer(serializers.ModelSerializer):
 			return obj.trials_count_annotated
 		# Fallback to the model method
 		return obj.trials_count()
+	
+	def get_authors_count(self, obj):
+		"""Total number of unique authors in this category"""
+		if hasattr(obj, 'authors_count_annotated'):
+			return obj.authors_count_annotated
+		return obj.articles.values('authors').distinct().count()
+	
+	def get_top_authors(self, obj):
+		"""Get top authors by article count in this category"""
+		# Get author parameters from serializer context
+		context = self.context
+		author_params = context.get('author_params', {})
+		
+		# Check if author data should be included
+		if not author_params.get('include_authors', False):
+			return []
+		
+		# Get parameters
+		max_authors = author_params.get('max_authors', 10)
+		date_filters = author_params.get('date_filters', {})
+		
+		# Build filter for articles in this category
+		author_filter = Q(articles__team_categories=obj)
+		if date_filters:
+			# Adjust the date filter keys for the Articles model
+			articles_date_filters = {}
+			for key, value in date_filters.items():
+				if key.startswith('articles__'):
+					articles_date_filters[key.replace('articles__', '')] = value
+				else:
+					articles_date_filters[f'articles__{key}'] = value
+			if articles_date_filters:
+				author_filter &= Q(**articles_date_filters)
+		
+		# Get authors with article counts in this category
+		top_authors = Authors.objects.filter(
+			articles__team_categories=obj
+		).annotate(
+			category_articles_count=Count('articles', filter=Q(articles__team_categories=obj), distinct=True)
+		).order_by('-category_articles_count')[:max_authors]
+		
+		return CategoryTopAuthorSerializer(top_authors, many=True).data
 
 class ArticleAuthorSerializer(serializers.ModelSerializer):
 	country = serializers.SerializerMethodField()

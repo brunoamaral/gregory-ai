@@ -1,6 +1,6 @@
 from api.serializers import (
 		ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, 
-		CategorySerializer, TeamSerializer, SubjectsSerializer, ArticlesByCategoryAndTeamSerializer
+		CategorySerializer, CategoryTopAuthorSerializer, TeamSerializer, SubjectsSerializer, ArticlesByCategoryAndTeamSerializer
 )
 from api.pagination import FlexiblePagination
 from datetime import datetime, timedelta
@@ -434,24 +434,189 @@ class OpenAccessArticles(generics.ListAPIView):
 class CategoryViewSet(viewsets.ModelViewSet):
 	"""
 	List all categories in the database with optional filters for team and subject.
+	Now includes author statistics for each category.
 	
 	**Query Parameters:**
 	* **team_id**: filter by team ID
-	* **subject_id**: filter by subject ID
+	* **subject_id**: filter by subject ID  
+	* **include_authors**: Include top authors data (default: true)
+	* **max_authors**: Maximum number of top authors to return per category (default: 10, max: 50)
+	* **date_from**: Filter articles from this date (YYYY-MM-DD)
+	* **date_to**: Filter articles to this date (YYYY-MM-DD)
+	* **timeframe**: 'year', 'month', 'week' (relative to current date)
+	
+	**Response includes:**
+	* Category basic information
+	* Total article and trial counts  
+	* Authors count (unique authors in category)
+	* Top authors with their article counts in this category
+	
+	**Examples:**
+	* Basic: `GET /categories/?team_id=1`
+	* With subject: `GET /categories/?team_id=1&subject_id=2`
+	* Date filtered: `GET /categories/?team_id=1&timeframe=year`
+	* More authors: `GET /categories/?team_id=1&max_authors=20`
+	* Without authors: `GET /categories/?team_id=1&include_authors=false`
 	"""
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
 	filterset_class = CategoryFilter
 	search_fields = ['category_name', 'category_description']
-	ordering_fields = ['category_name', 'id']
+	ordering_fields = ['category_name', 'id', 'article_count_annotated', 'authors_count_annotated']
 	ordering = ['category_name']
 	
 	def get_queryset(self):
-		return TeamCategory.objects.annotate(
-			article_count_annotated=Count('articles', distinct=True),
-			trials_count_annotated=Count('trials', distinct=True)
-		).all()
+		queryset = TeamCategory.objects.all()
+		
+		# Annotate with basic counts
+		date_filters = self._build_date_filters(
+			self.request.query_params.get('date_from'),
+			self.request.query_params.get('date_to'),
+			self.request.query_params.get('timeframe')
+		)
+		
+		if date_filters:
+			queryset = queryset.annotate(
+				article_count_annotated=Count('articles', filter=Q(**date_filters), distinct=True),
+				trials_count_annotated=Count('trials', distinct=True),
+				authors_count_annotated=Count('articles__authors', filter=Q(**date_filters), distinct=True)
+			)
+		else:
+			queryset = queryset.annotate(
+				article_count_annotated=Count('articles', distinct=True),
+				trials_count_annotated=Count('trials', distinct=True),
+				authors_count_annotated=Count('articles__authors', distinct=True)
+			)
+		
+		return queryset
+	
+	def get_serializer_context(self):
+		"""Add author parameters to serializer context"""
+		context = super().get_serializer_context()
+		
+		# Get query parameters for author data
+		include_authors = self.request.query_params.get('include_authors', 'true').lower() == 'true'
+		try:
+			max_authors = min(int(self.request.query_params.get('max_authors', 10)), 50)
+		except (ValueError, TypeError):
+			max_authors = 10
+		
+		date_filters = self._build_date_filters(
+			self.request.query_params.get('date_from'),
+			self.request.query_params.get('date_to'),
+			self.request.query_params.get('timeframe')
+		)
+		
+		context['author_params'] = {
+			'include_authors': include_authors,
+			'max_authors': max_authors,
+			'date_filters': date_filters
+		}
+		
+		return context
+	
+	def _build_date_filters(self, date_from, date_to, timeframe):
+		"""Build date filters for articles"""
+		date_filters = {}
+		
+		if timeframe:
+			now = datetime.now()
+			if timeframe == 'year':
+				date_from = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+			elif timeframe == 'month':
+				date_from = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+			elif timeframe == 'week':
+				# Get Monday of current week
+				days_since_monday = now.weekday()
+				date_from = now - timedelta(days=days_since_monday)
+				date_from = date_from.replace(hour=0, minute=0, second=0, microsecond=0)
+		
+		if date_from:
+			try:
+				if isinstance(date_from, str):
+					date_from = parse_date(date_from) or datetime.strptime(date_from, '%Y-%m-%d').date()
+				date_filters['articles__published_date__gte'] = date_from
+			except (ValueError, TypeError):
+				pass
+		
+		if date_to:
+			try:
+				if isinstance(date_to, str):
+					date_to = parse_date(date_to) or datetime.strptime(date_to, '%Y-%m-%d').date()
+				date_filters['articles__published_date__lte'] = date_to
+			except (ValueError, TypeError):
+				pass
+		
+		return date_filters
+	
+	
+	@action(detail=True, methods=['get'])
+	def authors(self, request, pk=None):
+		"""
+		Get detailed author statistics for a specific category.
+		
+		**Query Parameters:**
+		* **min_articles**: Minimum articles per author (default: 1)
+		* **sort_by**: 'articles_count', 'author_name' (default: 'articles_count')
+		* **order**: 'asc', 'desc' (default: 'desc')
+		* Date filtering parameters (same as main endpoint)
+		
+		**URL:** `/categories/{id}/authors/`
+		"""
+		category = self.get_object()
+		
+		# Get query parameters
+		try:
+			min_articles = int(request.query_params.get('min_articles', 1))
+		except (ValueError, TypeError):
+			min_articles = 1
+		sort_by = request.query_params.get('sort_by', 'articles_count')
+		order = request.query_params.get('order', 'desc')
+		date_from = request.query_params.get('date_from')
+		date_to = request.query_params.get('date_to')
+		timeframe = request.query_params.get('timeframe')
+		
+		# Build date filters
+		date_filters = self._build_date_filters(date_from, date_to, timeframe)
+		
+		# Build filter for articles in this category
+		article_filter = Q(team_categories=category)
+		if date_filters:
+			# Adjust the date filter keys for the Articles model
+			articles_date_filters = {}
+			for key, value in date_filters.items():
+				if key.startswith('articles__'):
+					articles_date_filters[key.replace('articles__', '')] = value
+			article_filter &= Q(**articles_date_filters)
+		
+		# Get authors with article counts in this category
+		authors_queryset = Authors.objects.filter(
+			articles__in=Articles.objects.filter(article_filter)
+		).annotate(
+			category_articles_count=Count('articles', filter=article_filter, distinct=True)
+		).filter(
+			category_articles_count__gte=min_articles
+		)
+		
+		# Apply sorting
+		if sort_by == 'articles_count':
+			order_prefix = '-' if order == 'desc' else ''
+			authors_queryset = authors_queryset.order_by(f'{order_prefix}category_articles_count', 'author_id')
+		elif sort_by == 'author_name':
+			order_prefix = '-' if order == 'desc' else ''
+			authors_queryset = authors_queryset.order_by(f'{order_prefix}full_name', 'author_id')
+		else:
+			authors_queryset = authors_queryset.order_by('-category_articles_count', 'author_id')
+		
+		# Paginate results
+		page = self.paginate_queryset(authors_queryset)
+		if page is not None:
+			serializer = CategoryTopAuthorSerializer(page, many=True)
+			return self.get_paginated_response(serializer.data)
+		
+		serializer = CategoryTopAuthorSerializer(authors_queryset, many=True)
+		return Response(serializer.data)
 
 class MonthlyCountsView(APIView):
 	"""
