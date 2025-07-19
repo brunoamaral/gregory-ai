@@ -476,29 +476,50 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	ordering = ['category_name']
 	
 	def get_queryset(self):
+		"""
+		Optimized queryset that avoids complex COUNT annotations which cause hanging queries.
+		
+		Instead of using expensive Count() annotations with multiple JOINs, we:
+		1. Use simple filtering and prefetch_related for efficiency
+		2. Calculate counts in the serializer using prefetched data when possible
+		3. Use select_related for foreign keys
+		"""
 		queryset = TeamCategory.objects.all()
 		
-		# Annotate with basic counts
-		date_filters = self._build_date_filters(
-			self.request.query_params.get('date_from'),
-			self.request.query_params.get('date_to'),
-			self.request.query_params.get('timeframe')
+		# Apply filters without expensive annotations
+		team_id = self.request.query_params.get('team_id')
+		subject_id = self.request.query_params.get('subject_id')
+		category_id = self.request.query_params.get('category_id')
+		
+		if team_id:
+			queryset = queryset.filter(team_id=team_id)
+		
+		if subject_id:
+			queryset = queryset.filter(subjects__id=subject_id)
+			
+		if category_id:
+			queryset = queryset.filter(id=category_id)
+		
+		# Use efficient prefetching instead of annotations
+		# This avoids the complex GROUP BY queries that are hanging the database
+		queryset = queryset.select_related('team').prefetch_related(
+			'subjects',
+			# Only prefetch essential fields to reduce memory usage
+			Prefetch(
+				'articles',
+				queryset=Articles.objects.select_related().only(
+					'article_id', 'title', 'published_date', 'discovery_date'
+				)
+			),
+			Prefetch(
+				'trials', 
+				queryset=Trials.objects.select_related().only(
+					'trial_id', 'title', 'published_date', 'discovery_date'
+				)
+			)
 		)
 		
-		if date_filters:
-			queryset = queryset.annotate(
-				article_count_annotated=Count('articles', filter=Q(**date_filters), distinct=True),
-				trials_count_annotated=Count('trials', distinct=True),
-				authors_count_annotated=Count('articles__authors', filter=Q(**date_filters), distinct=True)
-			)
-		else:
-			queryset = queryset.annotate(
-				article_count_annotated=Count('articles', distinct=True),
-				trials_count_annotated=Count('trials', distinct=True),
-				authors_count_annotated=Count('articles__authors', distinct=True)
-			)
-		
-		return queryset
+		return queryset.distinct()
 	
 	def get_serializer_context(self):
 		"""Add author parameters to serializer context"""
@@ -614,9 +635,14 @@ class CategoryViewSet(viewsets.ModelViewSet):
 		
 		# Get authors with article counts in this category
 		authors_queryset = Authors.objects.filter(
-			articles__in=Articles.objects.filter(article_filter)
+			articles__team_categories=category
 		).annotate(
-			category_articles_count=Count('articles', filter=article_filter, distinct=True)
+			category_articles_count=Count(
+				'articles', 
+				filter=Q(articles__team_categories=category) & 
+				       Q(**{f'articles__{k}': v for k, v in date_filters.items() if k.startswith('articles__')}),
+				distinct=True
+			)
 		).filter(
 			category_articles_count__gte=min_articles
 		)
@@ -660,96 +686,69 @@ class MonthlyCountsView(APIView):
 	* Custom threshold: `/teams/1/categories/natalizumab/monthly_counts/?ml_threshold=0.8`
 	"""
 	def get(self, request, team_id, category_slug):
-			team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
-			
-			# Get ML prediction threshold parameter (default to 0.5 if not provided)
-			ml_threshold = request.query_params.get('ml_threshold', 0.5)
-			try:
-				ml_threshold = float(ml_threshold)
-			except (ValueError, TypeError):
-				ml_threshold = 0.5
-			
-			# Monthly article counts
-			articles = Articles.objects.filter(team_categories=team_category)
-			articles = articles.annotate(month=TruncMonth('published_date'))
-			article_counts = articles.values('month').annotate(count=Count('article_id')).order_by('month')
-			article_counts = list(article_counts.values('month', 'count'))
+		"""Optimized monthly counts to avoid complex ML prediction queries"""
+		team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
+		
+		# Get ML prediction threshold parameter (default to 0.5 if not provided)
+		ml_threshold = request.query_params.get('ml_threshold', 0.5)
+		try:
+			ml_threshold = float(ml_threshold)
+		except (ValueError, TypeError):
+			ml_threshold = 0.5
+		
+		# Monthly article counts (simple and fast)
+		articles = Articles.objects.filter(team_categories=team_category)
+		articles = articles.annotate(month=TruncMonth('published_date'))
+		article_counts = articles.values('month').annotate(count=Count('article_id')).order_by('month')
+		article_counts = list(article_counts.values('month', 'count'))
 
-			# Get available ML models for this category by getting distinct algorithms from latest predictions
-			from gregory.models import MLPredictions
-			from django.db.models import Max
-			
-			# Get the latest prediction date for each article-algorithm combination
-			latest_predictions_subquery = MLPredictions.objects.filter(
+		# Get available ML models using a simpler approach
+		from gregory.models import MLPredictions
+		from django.db.models import Max
+		
+		# Get distinct algorithms with a simple query
+		available_models = MLPredictions.objects.filter(
+			article__team_categories=team_category
+		).values_list('algorithm', flat=True).distinct()
+		available_models = list(available_models)
+		
+		# Optimized ML counts - avoid complex nested subqueries
+		ml_counts_by_model = {}
+		for model in available_models:
+			# Simplified approach: get articles with ML predictions above threshold for this model
+			# Use a direct query instead of complex subqueries
+			article_ids_with_ml = MLPredictions.objects.filter(
 				article__team_categories=team_category,
-				algorithm__isnull=False
-			).values('article_id', 'algorithm').annotate(
-				latest_date=Max('created_date')
-			)
+				algorithm=model,
+				probability_score__gte=ml_threshold
+			).values_list('article_id', flat=True).distinct()
 			
-			# Get the actual latest predictions
-			latest_prediction_ids = []
-			for pred_info in latest_predictions_subquery:
-				latest_pred = MLPredictions.objects.filter(
-					article_id=pred_info['article_id'],
-					algorithm=pred_info['algorithm'],
-					created_date=pred_info['latest_date']
-				).first()
-				if latest_pred:
-					latest_prediction_ids.append(latest_pred.id)
+			# Get monthly counts for these articles using a simple query
+			articles_with_ml = Articles.objects.filter(
+				article_id__in=list(article_ids_with_ml),  # Convert to list to avoid subquery
+				team_categories=team_category
+			).annotate(month=TruncMonth('published_date'))
 			
-			# Get available models from these latest predictions
-			available_models = MLPredictions.objects.filter(
-				id__in=latest_prediction_ids
-			).values_list('algorithm', flat=True).distinct()
-			available_models = list(available_models)			# Monthly articles with ML predictions above threshold for each model (latest predictions only)
-			ml_counts_by_model = {}
-			for model in available_models:
-				# Get latest prediction IDs for this specific model
-				latest_model_predictions_subquery = MLPredictions.objects.filter(
-					article__team_categories=team_category,
-					algorithm=model
-				).values('article_id').annotate(
-					latest_date=Max('created_date')
-				)
-				
-				latest_model_prediction_ids = []
-				for pred_info in latest_model_predictions_subquery:
-					latest_pred = MLPredictions.objects.filter(
-						article_id=pred_info['article_id'],
-						algorithm=model,
-						created_date=pred_info['latest_date'],
-						probability_score__gte=ml_threshold
-					).first()
-					if latest_pred:
-						latest_model_prediction_ids.append(pred_info['article_id'])
-				
-				# Get articles with latest predictions above threshold for this model
-				articles_with_ml = Articles.objects.filter(
-					team_categories=team_category,
-					article_id__in=latest_model_prediction_ids
-				)
-				articles_with_ml = articles_with_ml.annotate(month=TruncMonth('published_date'))
-				ml_article_counts = articles_with_ml.values('month').annotate(count=Count('article_id', distinct=True)).order_by('month')
-				ml_counts_by_model[model] = list(ml_article_counts.values('month', 'count'))
+			ml_article_counts = articles_with_ml.values('month').annotate(count=Count('article_id', distinct=True)).order_by('month')
+			ml_counts_by_model[model] = list(ml_article_counts.values('month', 'count'))
 
-			# Monthly trial counts
-			trials = Trials.objects.filter(team_categories=team_category)
-			trials = trials.annotate(month=TruncMonth('published_date'))
-			trial_counts = trials.values('month').annotate(count=Count('trial_id')).order_by('month')
-			trial_counts = list(trial_counts.values('month', 'count'))
+		# Monthly trial counts (simple and fast)
+		trials = Trials.objects.filter(team_categories=team_category)
+		trials = trials.annotate(month=TruncMonth('published_date'))
+		trial_counts = trials.values('month').annotate(count=Count('trial_id')).order_by('month')
+		trial_counts = list(trial_counts.values('month', 'count'))
 
-			data = {
-					'category_name': team_category.category_name,
-					'category_slug': team_category.category_slug,
-					'ml_threshold': ml_threshold,
-					'available_models': available_models,
-					'monthly_article_counts': article_counts,
-					'monthly_ml_article_counts_by_model': ml_counts_by_model,
-					'monthly_trial_counts': trial_counts,
-			}
+		data = {
+				'category_name': team_category.category_name,
+				'category_slug': team_category.category_slug,
+				'ml_threshold': ml_threshold,
+				'available_models': available_models,
+				'monthly_article_counts': article_counts,
+				'monthly_ml_article_counts_by_model': ml_counts_by_model,
+				'monthly_trial_counts': trial_counts,
+		}
 
-			return Response(data)
+		return Response(data)
 
 ###
 # TRIALS

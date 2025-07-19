@@ -107,6 +107,9 @@ urlpatterns = [
 	## List subjects
 	path('teams/<int:team_id>/subjects/', SubjectsByTeam.as_view({'get': 'list'}), name='subjects-by-team'),
 	
+	# Monthly counts for categories
+	path('teams/<int:team_id>/categories/<str:category_slug>/monthly_counts/', MonthlyCountsView.as_view(), name='monthly-counts'),
+	
 	
 	# Old API routes
 	

@@ -79,27 +79,50 @@ class CategorySerializer(serializers.ModelSerializer):
 		]
 	
 	def get_article_count_total(self, obj):
+		"""Optimized article count using prefetched data when available"""
+		# Use prefetched data if available to avoid additional queries
+		if hasattr(obj, '_prefetched_objects_cache') and 'articles' in obj._prefetched_objects_cache:
+			return len(obj._prefetched_objects_cache['articles'])
+		
 		# If the queryset has annotated article_count, use it for efficiency
 		if hasattr(obj, 'article_count_annotated'):
 			return obj.article_count_annotated
-		# Fallback to the model method
-		return obj.article_count()
+		
+		# Fallback to simple count query (avoid obj.article_count() which may be complex)
+		return obj.articles.count()
 	
 	def get_trials_count_total(self, obj):
+		"""Optimized trials count using prefetched data when available"""
+		# Use prefetched data if available to avoid additional queries  
+		if hasattr(obj, '_prefetched_objects_cache') and 'trials' in obj._prefetched_objects_cache:
+			return len(obj._prefetched_objects_cache['trials'])
+		
 		# If the queryset has annotated trials_count, use it for efficiency
 		if hasattr(obj, 'trials_count_annotated'):
 			return obj.trials_count_annotated
-		# Fallback to the model method
-		return obj.trials_count()
+		
+		# Fallback to simple count query
+		return obj.trials.count()
 	
 	def get_authors_count(self, obj):
-		"""Total number of unique authors in this category"""
+		"""Optimized authors count avoiding complex JOINs"""
+		# Use annotated count if available
 		if hasattr(obj, 'authors_count_annotated'):
 			return obj.authors_count_annotated
-		return obj.articles.values('authors').distinct().count()
+		
+		# Use a more efficient subquery approach instead of complex JOINs
+		# This avoids the hanging queries by using EXISTS instead of JOIN + COUNT + GROUP BY
+		from django.db.models import Exists, OuterRef
+		from gregory.models import Authors
+		
+		return Authors.objects.filter(
+			Exists(
+				obj.articles.filter(authors=OuterRef('pk'))
+			)
+		).count()
 	
 	def get_top_authors(self, obj):
-		"""Get top authors by article count in this category"""
+		"""Optimized top authors calculation avoiding complex JOINs"""
 		# Get author parameters from serializer context
 		context = self.context
 		author_params = context.get('author_params', {})
@@ -112,24 +135,33 @@ class CategorySerializer(serializers.ModelSerializer):
 		max_authors = author_params.get('max_authors', 10)
 		date_filters = author_params.get('date_filters', {})
 		
-		# Build filter for articles in this category
-		author_filter = Q(articles__team_categories=obj)
+		# Use a more efficient approach with subqueries instead of complex JOINs
+		# Get article IDs for this category first
+		article_ids = obj.articles.values_list('article_id', flat=True)
+		
+		# Apply date filters if needed
 		if date_filters:
+			articles_qs = obj.articles.all()
 			# Adjust the date filter keys for the Articles model
 			articles_date_filters = {}
 			for key, value in date_filters.items():
 				if key.startswith('articles__'):
 					articles_date_filters[key.replace('articles__', '')] = value
 				else:
-					articles_date_filters[f'articles__{key}'] = value
+					articles_date_filters[f'{key}'] = value
 			if articles_date_filters:
-				author_filter &= Q(**articles_date_filters)
+				articles_qs = articles_qs.filter(**articles_date_filters)
+			article_ids = articles_qs.values_list('article_id', flat=True)
 		
-		# Get authors with article counts in this category
+		# Get authors with article counts using a simpler subquery approach
+		# This avoids the complex GROUP BY queries that hang the database
+		from django.db.models import Subquery
+		from gregory.models import Authors
+		
 		top_authors = Authors.objects.filter(
-			articles__team_categories=obj
+			articles__article_id__in=Subquery(article_ids)
 		).annotate(
-			category_articles_count=Count('articles', filter=Q(articles__team_categories=obj), distinct=True)
+			category_articles_count=Count('articles', filter=Q(articles__article_id__in=Subquery(article_ids)), distinct=True)
 		).order_by('-category_articles_count')[:max_authors]
 		
 		return CategoryTopAuthorSerializer(top_authors, many=True).data
