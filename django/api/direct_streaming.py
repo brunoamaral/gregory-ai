@@ -107,10 +107,18 @@ class DirectStreamingCSVRenderer(CSVRenderer):
         # Check if this is paginated data but ONLY for CSV requests
         if renderer_context and 'request' in renderer_context:
             request = renderer_context['request']
+            
+            # Helper function to get query params from both Django and DRF requests
+            def get_query_params(request):
+                # DRF request has query_params, Django request has GET
+                return getattr(request, 'query_params', request.GET)
+            
+            query_params = get_query_params(request)
+            
             # For CSV requests, check if we need to use paginated data or get all results
-            if request.query_params.get('format', '').lower() == 'csv':
+            if query_params.get('format', '').lower() == 'csv':
                 # Check if this is explicitly paginated or if we should fetch all results
-                all_results = request.query_params.get('all_results', '').lower() in ('true', '1', 'yes')
+                all_results = query_params.get('all_results', '').lower() in ('true', '1', 'yes')
                 
                 # Check if we have paginated data
                 if isinstance(data, dict) and 'results' in data:
