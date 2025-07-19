@@ -439,17 +439,24 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	**Query Parameters:**
 	* **team_id**: filter by team ID
 	* **subject_id**: filter by subject ID  
+	* **category_id**: filter by specific category ID
 	* **include_authors**: Include top authors data (default: true)
 	* **max_authors**: Maximum number of top authors to return per category (default: 10, max: 50)
 	* **date_from**: Filter articles from this date (YYYY-MM-DD)
 	* **date_to**: Filter articles to this date (YYYY-MM-DD)
 	* **timeframe**: 'year', 'month', 'week' (relative to current date)
+	* **monthly_counts**: Include monthly article/trial counts with ML predictions (default: false)
+	* **ml_threshold**: ML prediction probability threshold when monthly_counts=true (0.0-1.0, default: 0.5)
 	
 	**Response includes:**
 	* Category basic information
 	* Total article and trial counts  
 	* Authors count (unique authors in category)
 	* Top authors with their article counts in this category
+	* Monthly counts (when monthly_counts=true)
+	
+	**Additional Actions:**
+	* `/categories/{id}/authors/` - Get detailed author statistics for a specific category
 	
 	**Examples:**
 	* Basic: `GET /categories/?team_id=1`
@@ -457,6 +464,8 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	* Date filtered: `GET /categories/?team_id=1&timeframe=year`
 	* More authors: `GET /categories/?team_id=1&max_authors=20`
 	* Without authors: `GET /categories/?team_id=1&include_authors=false`
+	* Monthly counts: `GET /categories/?category_id=6&monthly_counts=true&ml_threshold=0.8`
+	* Single category with monthly counts: `GET /categories/?category_id=6&monthly_counts=true`
 	"""
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -502,6 +511,14 @@ class CategoryViewSet(viewsets.ModelViewSet):
 		except (ValueError, TypeError):
 			max_authors = 10
 		
+		# Get monthly counts parameter
+		monthly_counts = self.request.query_params.get('monthly_counts', 'false').lower() == 'true'
+		ml_threshold = self.request.query_params.get('ml_threshold', 0.5)
+		try:
+			ml_threshold = float(ml_threshold)
+		except (ValueError, TypeError):
+			ml_threshold = 0.5
+		
 		date_filters = self._build_date_filters(
 			self.request.query_params.get('date_from'),
 			self.request.query_params.get('date_to'),
@@ -512,6 +529,11 @@ class CategoryViewSet(viewsets.ModelViewSet):
 			'include_authors': include_authors,
 			'max_authors': max_authors,
 			'date_filters': date_filters
+		}
+		
+		context['monthly_counts_params'] = {
+			'include_monthly_counts': monthly_counts,
+			'ml_threshold': ml_threshold
 		}
 		
 		return context

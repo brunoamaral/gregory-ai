@@ -69,12 +69,13 @@ class CategorySerializer(serializers.ModelSerializer):
 	trials_count_total = serializers.SerializerMethodField()
 	authors_count = serializers.SerializerMethodField()
 	top_authors = serializers.SerializerMethodField()
+	monthly_counts = serializers.SerializerMethodField()
 	
 	class Meta:
 		model = TeamCategory
 		fields = [
 			'id', 'category_description', 'category_name', 'category_slug', 'category_terms', 
-			'article_count_total', 'trials_count_total', 'authors_count', 'top_authors'
+			'article_count_total', 'trials_count_total', 'authors_count', 'top_authors', 'monthly_counts'
 		]
 	
 	def get_article_count_total(self, obj):
@@ -132,6 +133,98 @@ class CategorySerializer(serializers.ModelSerializer):
 		).order_by('-category_articles_count')[:max_authors]
 		
 		return CategoryTopAuthorSerializer(top_authors, many=True).data
+	
+	def get_monthly_counts(self, obj):
+		"""Get monthly counts of articles and trials when requested"""
+		# Get monthly counts parameters from serializer context
+		context = self.context
+		monthly_params = context.get('monthly_counts_params', {})
+		
+		# Check if monthly counts should be included
+		if not monthly_params.get('include_monthly_counts', False):
+			return None
+		
+		# Get ML threshold
+		ml_threshold = monthly_params.get('ml_threshold', 0.5)
+		
+		# Import here to avoid circular imports
+		from gregory.models import MLPredictions
+		from django.db.models import Max
+		from django.db.models.functions import TruncMonth
+		
+		# Monthly article counts
+		articles = obj.articles.all()
+		articles = articles.annotate(month=TruncMonth('published_date'))
+		article_counts = articles.values('month').annotate(count=Count('article_id')).order_by('month')
+		article_counts = list(article_counts.values('month', 'count'))
+
+		# Get available ML models for this category by getting distinct algorithms from latest predictions
+		# Get the latest prediction date for each article-algorithm combination
+		latest_predictions_subquery = MLPredictions.objects.filter(
+			article__team_categories=obj,
+			algorithm__isnull=False
+		).values('article_id', 'algorithm').annotate(
+			latest_date=Max('created_date')
+		)
+		
+		# Get the actual latest predictions
+		latest_prediction_ids = []
+		for pred_info in latest_predictions_subquery:
+			latest_pred = MLPredictions.objects.filter(
+				article_id=pred_info['article_id'],
+				algorithm=pred_info['algorithm'],
+				created_date=pred_info['latest_date']
+			).first()
+			if latest_pred:
+				latest_prediction_ids.append(latest_pred.id)
+		
+		# Get available models from these latest predictions
+		available_models = MLPredictions.objects.filter(
+			id__in=latest_prediction_ids
+		).values_list('algorithm', flat=True).distinct()
+		available_models = list(available_models)
+		
+		# Monthly articles with ML predictions above threshold for each model (latest predictions only)
+		ml_counts_by_model = {}
+		for model in available_models:
+			# Get latest prediction IDs for this specific model
+			latest_model_predictions_subquery = MLPredictions.objects.filter(
+				article__team_categories=obj,
+				algorithm=model
+			).values('article_id').annotate(
+				latest_date=Max('created_date')
+			)
+			
+			latest_model_prediction_ids = []
+			for pred_info in latest_model_predictions_subquery:
+				latest_pred = MLPredictions.objects.filter(
+					article_id=pred_info['article_id'],
+					algorithm=model,
+					created_date=pred_info['latest_date'],
+					probability_score__gte=ml_threshold
+				).first()
+				if latest_pred:
+					latest_model_prediction_ids.append(pred_info['article_id'])
+			
+			# Get articles with latest predictions above threshold for this model
+			articles_with_ml = obj.articles.filter(article_id__in=latest_model_prediction_ids)
+			articles_with_ml = articles_with_ml.annotate(month=TruncMonth('published_date'))
+			ml_article_counts = articles_with_ml.values('month').annotate(count=Count('article_id', distinct=True)).order_by('month')
+			ml_counts_by_model[model] = list(ml_article_counts.values('month', 'count'))
+
+		# Monthly trial counts
+		trials = obj.trials.all()
+		trials = trials.annotate(month=TruncMonth('published_date'))
+		trial_counts = trials.values('month').annotate(count=Count('trial_id')).order_by('month')
+		trial_counts = list(trial_counts.values('month', 'count'))
+
+		return {
+			'ml_threshold': ml_threshold,
+			'available_models': available_models,
+			'monthly_article_counts': article_counts,
+			'monthly_ml_article_counts_by_model': ml_counts_by_model,
+			'monthly_trial_counts': trial_counts,
+		}
 
 class ArticleAuthorSerializer(serializers.ModelSerializer):
 	country = serializers.SerializerMethodField()

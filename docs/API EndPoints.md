@@ -10,7 +10,23 @@ Currently we can use `/teams/{team_id}/subjects/{subject_id}/categories/` to get
 
 The endpoint above will be converted to `/categories/?team_id={team_id}&subject_id={subject_id}`.
 
-**Status**: All legacy endpoints are fully functional and tested. They continue to work alongside the new filtering system to ensure backward compatibility for existing clients.
+**Status**: All legacy endpoints are fully functional and tes**Usage Examples:**
+```bash
+# Basic usage with monthly counts (default threshold: 0.5)
+GET /categories/?category_id=6&monthly_counts=true
+
+# High confidence ML predictions (0.8)
+GET /categories/?category_id=6&monthly_counts=true&ml_threshold=0.8
+
+# Low threshold to include more predictions (0.3)
+GET /categories/?category_id=6&monthly_counts=true&ml_threshold=0.3
+
+# Very high confidence predictions only (0.95)
+GET /categories/?category_id=6&monthly_counts=true&ml_threshold=0.95
+
+# Get category data without monthly counts
+GET /categories/?category_id=6
+```ontinue to work alongside the new filtering system to ensure backward compatibility for existing clients.
 The legacy endpoints will be removed by the end of August.
 
 | Filter | Preferred Endpoint | Benefits | 
@@ -93,9 +109,11 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Authors                 | GET /authors/search/                     | Search authors by full name with filters & optional CSV export | `team_id` *(req)*, `subject_id` *(req)*, `full_name`, `format`, `all_results` | ✅ **Available**                                       |
 | Authors                 | GET /authors/by_team_subject/            | Get authors filtered by team and subject            | `team_id` *(req)*, `subject_id` *(req)*, additional filters | ✅ **Available**                                       |
 | Authors                 | GET /authors/by_team_category/           | Get authors filtered by team and category           | `team_id` *(req)*, `category_slug` *(req)*, additional filters | ✅ **Available**                                       |
-| Categories              | GET /categories/                         | List all categories with optional filters           | `team_id`, `subject_id`, `search`, `ordering`, pagination | ✅ **Available**                                       |
+| Categories              | GET /categories/                         | List all categories with optional filters           | `team_id`, `subject_id`, `category_id`, `search`, `ordering`, `include_authors`, `max_authors`, pagination | ✅ **Available**                                       |
 | Categories              | POST /categories/                        | Create a new category                               | N/A                                                     | ❌ **Not Available**                                  |
 | Categories              | GET /categories/{id}/                    | Retrieve a specific category by ID                  | `id` (path)                                             | ✅ **Available**                                       |
+| Categories              | GET /categories/{id}/authors/            | Get detailed author statistics for a category       | `id` (path), `min_articles`, `sort_by`, `order`, date filters | ✅ **Available**                                       |
+| Categories              | GET /categories/{id}/monthly_counts/     | Get monthly article/trial counts with ML predictions| `id` (path), `ml_threshold` (0.0-1.0, default: 0.5)   | ✅ **Available**                                       |
 | Categories              | PUT /categories/{id}/                    | Update a specific category by ID                    | N/A                                                     | ❌ **Not Available**                                  |
 | Categories              | DELETE /categories/{id}/                 | Delete a specific category by ID                    | N/A                                                     | ❌ **Not Available**                                  |
 | Team Categories         | GET /team-categories/                    | List all team categories                            | Standard pagination params                               | ✅ **Available** (via /categories/)                   |
@@ -148,7 +166,6 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Teams                   | GET /teams/{id}/articles/subject/{subject_id}/     | ⚠️ **DEPRECATED** - List all articles for a team filtered by subject | `id` (path), `subject_id` (path), enhanced filtering params | ⚠️ **Use /articles/?team_id={id}&subject_id={subject_id} instead** |
 | Teams                   | GET /teams/{id}/articles/category/{category_slug}/ | ⚠️ **DEPRECATED** - List all articles for a team filtered by category | `id` (path), `category_slug` (path)           | ⚠️ **Use /articles/?team_id={id}&category_slug={category_slug} instead** |
 | Teams                   | GET /teams/{id}/articles/source/{source_id}/       | ⚠️ **DEPRECATED** - List all articles for a team filtered by source | `id` (path), `source_id` (path)               | ⚠️ **Use /articles/?team_id={id}&source_id={source_id} instead** |
-| Teams                   | GET /teams/{id}/categories/{category_slug}/monthly-counts/ | Monthly article and trial counts for a team category, with optional ML filtering | `id` (path), `category_slug` (path), `ml_threshold` (query, optional: 0.0-1.0, default: 0.5)    | ✅ **Available**              |
 | MLPredictions           | GET /ml-predictions/                     | List all ML predictions                             | N/A                                                     | ❌ **Not Available**                                  |
 | MLPredictions           | POST /ml-predictions/                    | Create a new ML prediction                          | N/A                                                     | ❌ **Not Available**                                  |
 | MLPredictions           | GET /ml-predictions/{id}/                | Retrieve a specific ML prediction by ID             | N/A                                                     | ❌ **Not Available**                                  |
@@ -232,8 +249,8 @@ GET /teams/{team_id}/subjects/{subject_id}/authors/
 # Standard: Get authors for a team and category
 GET /teams/{team_id}/categories/{category_slug}/authors/
 
-# Standard: Get monthly counts for a team category
-GET /teams/{team_id}/categories/{category_slug}/monthly-counts/
+# Standard: Get monthly counts for a category
+GET /categories/{category_id}/monthly_counts/
 # Optional ML filtering: ?ml_threshold=0.8
 ```
 
@@ -261,9 +278,6 @@ GET /teams/{team_id}/subjects/{subject_id}/authors/
 
 # Legacy: Get authors for a team and category
 GET /teams/{team_id}/categories/{category_slug}/authors/
-
-# Legacy: Get monthly counts for a team category
-GET /teams/{team_id}/categories/{category_slug}/monthly-counts/
 # Optional ML filtering: ?ml_threshold=0.8
 ```
 
@@ -507,12 +521,26 @@ GET /articles/?team_id=1&subject_id=2&author_id=123&category_slug=natalizumab&se
 
 ### Categories Endpoint Filtering
 
-The `/categories/` endpoint supports comprehensive filtering and searching:
+The `/categories/` endpoint supports comprehensive filtering, searching, and analytics:
 
 **Filtering:**
 - `?team_id=X` - Filter categories by team ID
 - `?subject_id=Y` - Filter categories by subject ID
+- `?category_id=Z` - Filter to specific category ID
 - `?team_id=X&subject_id=Y` - Filter by both team and subject
+
+**Author Analytics:**
+- `?include_authors=false` - Exclude top authors data (default: true)
+- `?max_authors=20` - Maximum number of top authors to return (default: 10, max: 50)
+
+**Monthly Analytics:**
+- `?monthly_counts=true` - Include monthly article/trial counts with ML predictions (default: false)
+- `?ml_threshold=0.8` - ML prediction probability threshold when monthly_counts=true (0.0-1.0, default: 0.5)
+
+**Date Filtering:**
+- `?date_from=2024-01-01` - Filter articles from this date (YYYY-MM-DD)
+- `?date_to=2024-12-31` - Filter articles to this date (YYYY-MM-DD) 
+- `?timeframe=year` - Filter by relative timeframe ('year', 'month', 'week')
 
 **Searching:**
 - `?search=keyword` - Search in category name and description fields
@@ -529,6 +557,12 @@ GET /categories/?team_id=1
 
 # Filter categories by team and subject
 GET /categories/?team_id=1&subject_id=2
+
+# Single category with monthly analytics
+GET /categories/?category_id=6&monthly_counts=true&ml_threshold=0.8
+
+# Category analytics for current year
+GET /categories/?team_id=1&timeframe=year&monthly_counts=true
 
 # Search and filter combined
 GET /categories/?team_id=1&search=natalizumab&ordering=category_name
@@ -573,11 +607,10 @@ GET /trials/?team_id=1&source_id=3&category_id=5
 
 ### Monthly Counts Endpoint with ML Filtering
 
-The `/teams/{team_id}/categories/{category_slug}/monthly-counts/` endpoint provides monthly aggregated data with optional ML prediction filtering:
+The `/categories/{category_id}/monthly_counts/` endpoint provides monthly aggregated data with optional ML prediction filtering:
 
 **Parameters:**
-- `team_id` (path, required) - Team ID
-- `category_slug` (path, required) - Category slug
+- `category_id` (path, required) - Category ID
 - `ml_threshold` (query, optional) - ML prediction probability threshold (0.0-1.0, default: 0.5)
 
 **Response Fields:**
