@@ -469,20 +469,13 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	def get_queryset(self):
 		queryset = TeamCategory.objects.all()
 		
-		# Get query parameters for filtering
-		include_authors = self.request.query_params.get('include_authors', 'true').lower() == 'true'
-		try:
-			max_authors = min(int(self.request.query_params.get('max_authors', 10)), 50)
-		except (ValueError, TypeError):
-			max_authors = 10
-		date_from = self.request.query_params.get('date_from')
-		date_to = self.request.query_params.get('date_to')
-		timeframe = self.request.query_params.get('timeframe')
-		
-		# Build date filters
-		date_filters = self._build_date_filters(date_from, date_to, timeframe)
-		
 		# Annotate with basic counts
+		date_filters = self._build_date_filters(
+			self.request.query_params.get('date_from'),
+			self.request.query_params.get('date_to'),
+			self.request.query_params.get('timeframe')
+		)
+		
 		if date_filters:
 			queryset = queryset.annotate(
 				article_count_annotated=Count('articles', filter=Q(**date_filters), distinct=True),
@@ -496,11 +489,32 @@ class CategoryViewSet(viewsets.ModelViewSet):
 				authors_count_annotated=Count('articles__authors', distinct=True)
 			)
 		
-		# Prefetch top authors data if requested
-		if include_authors:
-			queryset = self._add_top_authors_data(queryset, max_authors, date_filters)
-		
 		return queryset
+	
+	def get_serializer_context(self):
+		"""Add author parameters to serializer context"""
+		context = super().get_serializer_context()
+		
+		# Get query parameters for author data
+		include_authors = self.request.query_params.get('include_authors', 'true').lower() == 'true'
+		try:
+			max_authors = min(int(self.request.query_params.get('max_authors', 10)), 50)
+		except (ValueError, TypeError):
+			max_authors = 10
+		
+		date_filters = self._build_date_filters(
+			self.request.query_params.get('date_from'),
+			self.request.query_params.get('date_to'),
+			self.request.query_params.get('timeframe')
+		)
+		
+		context['author_params'] = {
+			'include_authors': include_authors,
+			'max_authors': max_authors,
+			'date_filters': date_filters
+		}
+		
+		return context
 	
 	def _build_date_filters(self, date_from, date_to, timeframe):
 		"""Build date filters for articles"""
@@ -536,22 +550,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
 		
 		return date_filters
 	
-	def _add_top_authors_data(self, queryset, max_authors, date_filters):
-		"""Add top authors data to each category"""
-		# For performance, we'll use a simpler approach that adds empty data
-		# and let the serializer handle the complex queries on a per-category basis
-		# This avoids N+1 queries while keeping the implementation maintainable
-		
-		# We'll modify the queryset to indicate that author data should be included
-		# and store the parameters for later use by the serializer
-		for category in queryset:
-			category._author_params = {
-				'max_authors': max_authors,
-				'date_filters': date_filters,
-				'include_authors': True
-			}
-		
-		return queryset
 	
 	@action(detail=True, methods=['get'])
 	def authors(self, request, pk=None):

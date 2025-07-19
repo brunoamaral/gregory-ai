@@ -99,31 +99,36 @@ class CategorySerializer(serializers.ModelSerializer):
 	
 	def get_top_authors(self, obj):
 		"""Get top authors by article count in this category"""
+		# Get author parameters from serializer context
+		context = self.context
+		author_params = context.get('author_params', {})
+		
 		# Check if author data should be included
-		if not getattr(obj, '_author_params', {}).get('include_authors', False):
+		if not author_params.get('include_authors', False):
 			return []
 		
 		# Get parameters
-		author_params = getattr(obj, '_author_params', {})
 		max_authors = author_params.get('max_authors', 10)
 		date_filters = author_params.get('date_filters', {})
 		
 		# Build filter for articles in this category
-		article_filter = Q(team_categories=obj)
+		author_filter = Q(articles__team_categories=obj)
 		if date_filters:
 			# Adjust the date filter keys for the Articles model
 			articles_date_filters = {}
 			for key, value in date_filters.items():
 				if key.startswith('articles__'):
 					articles_date_filters[key.replace('articles__', '')] = value
+				else:
+					articles_date_filters[f'articles__{key}'] = value
 			if articles_date_filters:
-				article_filter &= Q(**articles_date_filters)
+				author_filter &= Q(**articles_date_filters)
 		
 		# Get authors with article counts in this category
 		top_authors = Authors.objects.filter(
-			articles__in=Articles.objects.filter(article_filter)
+			articles__team_categories=obj
 		).annotate(
-			category_articles_count=Count('articles', filter=article_filter, distinct=True)
+			category_articles_count=Count('articles', filter=Q(articles__team_categories=obj), distinct=True)
 		).order_by('-category_articles_count')[:max_authors]
 		
 		return CategoryTopAuthorSerializer(top_authors, many=True).data
