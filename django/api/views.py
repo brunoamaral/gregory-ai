@@ -231,9 +231,14 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	List all articles in the database with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
 	
-	This endpoint replaces the legacy team-based URLs:
+	This endpoint replaces the legacy team-based URLs and specific article type endpoints:
 	- Instead of `/teams/1/articles/` → use `/articles/?team_id=1`
 	- Instead of `/teams/1/articles/subject/4/` → use `/articles/?team_id=1&subject_id=4`
+	- Instead of `/articles/relevant/` → use `/articles/?relevant=true`
+	- Instead of `/articles/relevant/last/15/` → use `/articles/?relevant=true&last_days=15`
+	- Instead of `/articles/relevant/week/2024/52/` → use `/articles/?relevant=true&week=52&year=2024`
+	- Instead of `/articles/open-access/` → use `/articles/?open_access=true`
+	- Instead of `/articles/unsent/` → use `/articles/?unsent=true`
 	
 	# Query Parameters:
 	- **team_id** - filter by team ID (replaces /teams/{id}/articles/)
@@ -248,13 +253,26 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	- **page** - page number for pagination
 	- **page_size** - items per page (max 100)
 	
+	# Special Article Types:
+	- **relevant** - filter for relevant articles (true/false)
+	- **open_access** - filter for open access articles (true/false)
+	- **unsent** - filter for articles not sent to subscribers (true/false)
+	- **last_days** - filter for articles from last N days (number)
+	- **week** - filter for specific week number (requires year parameter)
+	- **year** - year for week filtering (used with week parameter)
+	
 	# Examples:
 	- Team articles: `/articles/?team_id=1`
 	- Team + subject: `/articles/?team_id=1&subject_id=4`
 	- With search: `/articles/?team_id=1&search=stem+cells`
 	- Category by slug: `/articles/?team_id=1&category_slug=natalizumab`
 	- Category by ID: `/articles/?team_id=1&category_id=5`
-	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&ordering=-published_date`
+	- Relevant articles: `/articles/?relevant=true`
+	- Relevant from last 15 days: `/articles/?relevant=true&last_days=15`
+	- Relevant from specific week: `/articles/?relevant=true&week=52&year=2024`
+	- Open access articles: `/articles/?open_access=true`
+	- Unsent articles: `/articles/?unsent=true`
+	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&relevant=true&ordering=-published_date`
 	"""
 	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer
@@ -285,67 +303,6 @@ class AllArticleViewSet(generics.ListAPIView):
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-class RelevantList(generics.ListAPIView):
-	"""
-	List relevant articles, by manual selection and Machine Learning predictions.
-	"""
-	model = Articles
-	serializer_class = ArticleSerializer
-
-	def get_queryset(self):
-		return Articles.objects.filter(
-			Q(ml_predictions_detail__predicted_relevant=True) |
-			Q(article_subject_relevances__is_relevant=True)
-		).distinct().order_by('-discovery_date')
-
-class UnsentList(generics.ListAPIView):
-	"""
-	Lists the articles that have not been sent to subscribers
-	"""
-	serializer_class = ArticleSerializer
-
-	def get_queryset(self):
-		return Articles.objects.all().exclude(sent_to_subscribers = True).order_by('-discovery_date')
-
-class newsletterByWeek(viewsets.ModelViewSet):
-	"""
-	Search relevant articles. /articles/relevant/week/{year}/{week}/.
-	For a given week number, returns articles flagged as relevant by the admin team or the Machine Learning models.
-	"""
-	def get_queryset(self):
-		p_week = self.kwargs.get('week')
-		p_year = self.kwargs.get('year')
-		week = getDateRangeFromWeek(p_year=p_year,p_week=p_week)
-		articles = Articles.objects.filter(
-			Q(discovery_date__gte=week[0].astimezone(),discovery_date__lte=week[1].astimezone())
-		).filter(
-			Q(ml_predictions_detail__predicted_relevant=True) | 
-			Q(article_subject_relevances__is_relevant=True)
-		).distinct().order_by('-discovery_date')
-		return articles
-
-	serializer_class = ArticleSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-
-class lastXdays(viewsets.ModelViewSet):
-	"""
-	Search relevant articles. /articles/relevant/last/{days}/.
-	For a given number of days, returns articles flagged as relevant by the admin team or the Machine Learning models.
-	"""
-	def get_queryset(self):
-		days_to_subtract = self.kwargs.get('days', None)
-		days = datetime.today() - timedelta(days=days_to_subtract)
-		articles = Articles.objects.filter(
-			Q(discovery_date__gte=days.astimezone())
-		).filter(
-			Q(ml_predictions_detail__predicted_relevant=True) | 
-			Q(article_subject_relevances__is_relevant=True)
-		).distinct().order_by('-discovery_date')
-		return articles
-
-	serializer_class = ArticleSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 class ArticlesBySource(viewsets.ModelViewSet):
 	"""
 	⚠️ DEPRECATED: This endpoint will be removed in a future version.
@@ -416,17 +373,6 @@ class ArticlesCount(viewsets.ModelViewSet):
 	pagination_classes = None
 
 
-class OpenAccessArticles(generics.ListAPIView):
-	"""
-	List all articles in the database that are registered as open access on unpaywall.org
-	"""
-	serializer_class = ArticleSerializer
-	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-	def get_queryset(self):
-		queryset = Articles.objects.filter(access='open').order_by('-discovery_date')
-		return queryset
-	
 ###
 # CATEGORIES
 ###

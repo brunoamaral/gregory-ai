@@ -21,9 +21,8 @@ from rest_framework import routers
 from rest_framework.authtoken import views
 
 from api.views import (
-	ArticleViewSet, AuthorsViewSet, OpenAccessArticles, 
-	RelevantList, UnsentList, SourceViewSet, TrialViewSet, 
-	post_article, newsletterByWeek, lastXdays, CategoryViewSet, MonthlyCountsView, LoginView, ProtectedEndpointView,
+	ArticleViewSet, AuthorsViewSet, SourceViewSet, TrialViewSet, 
+	post_article, CategoryViewSet, MonthlyCountsView, LoginView, ProtectedEndpointView,
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, SubjectsByTeam,
     ArticlesByCategoryAndTeam, ArticlesBySource, ArticleSearchView, TrialSearchView, AuthorSearchView, CategoriesByTeamAndSubject
 )
@@ -110,18 +109,10 @@ urlpatterns = [
 	# Monthly counts for categories
 	path('teams/<int:team_id>/categories/<str:category_slug>/monthly_counts/', MonthlyCountsView.as_view(), name='monthly-counts'),
 	
-	
-	# Old API routes
-	
-	## Articles routes
-	path('articles/relevant/', RelevantList.as_view()),
-	path('articles/relevant/last/<int:days>/', lastXdays.as_view({'get': 'list'})),
-	path('articles/relevant/week/<int:year>/<int:week>/', newsletterByWeek.as_view({'get': 'list'})),
-        path('articles/search/', ArticleSearchView.as_view(), name='article-search'),
-        path('trials/search/', TrialSearchView.as_view(), name='trial-search'),
-        path('authors/search/', AuthorSearchView.as_view(), name='author-search'),
-	re_path('^articles/open-access/$', OpenAccessArticles.as_view()),
-	re_path('^articles/unsent/$', UnsentList.as_view()),
+	# Search endpoints
+	path('articles/search/', ArticleSearchView.as_view(), name='article-search'),
+	path('trials/search/', TrialSearchView.as_view(), name='trial-search'),
+	path('authors/search/', AuthorSearchView.as_view(), name='author-search'),
 
 	# Include router routes
 	path('', include(router.urls)),

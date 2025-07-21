@@ -1,12 +1,14 @@
 from django_filters import rest_framework as filters
 from django.db import models
+from django.utils import timezone
+from datetime import datetime, timedelta
 from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject
 
 class ArticleFilter(filters.FilterSet):
     """
     Filter class for Articles, allowing searching by title, summary,
     and combined search across both fields, plus filtering by author,
-    category, journal, team, and subject.
+    category, journal, team, subject, and special article types.
     """
     title = filters.CharFilter(method='filter_title')
     summary = filters.CharFilter(method='filter_summary')
@@ -19,9 +21,21 @@ class ArticleFilter(filters.FilterSet):
     subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact')
     source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact')
     
+    # New parameters for special article types
+    relevant = filters.BooleanFilter(method='filter_relevant')
+    open_access = filters.BooleanFilter(method='filter_open_access')
+    unsent = filters.BooleanFilter(method='filter_unsent')
+    last_days = filters.NumberFilter(method='filter_last_days')
+    week = filters.NumberFilter(method='filter_week')
+    year = filters.NumberFilter(method='filter_year')
+    
     class Meta:
         model = Articles
-        fields = ['title', 'summary', 'search', 'author_id', 'category_slug', 'category_id', 'journal_slug', 'team_id', 'subject_id', 'source_id']
+        fields = [
+            'title', 'summary', 'search', 'author_id', 'category_slug', 'category_id', 
+            'journal_slug', 'team_id', 'subject_id', 'source_id', 'relevant', 
+            'open_access', 'unsent', 'last_days', 'week', 'year'
+        ]
     
     def filter_title(self, queryset, name, value):
         """
@@ -53,6 +67,77 @@ class ArticleFilter(filters.FilterSet):
         from urllib.parse import unquote
         journal_name = unquote(value)
         return queryset.filter(container_title__iregex=f'^{journal_name}$')
+    
+    def filter_relevant(self, queryset, name, value):
+        """
+        Filter for relevant articles (ML predictions or manual selection)
+        """
+        if value:
+            return queryset.filter(
+                models.Q(ml_predictions_detail__predicted_relevant=True) |
+                models.Q(article_subject_relevances__is_relevant=True)
+            ).distinct()
+        else:
+            return queryset.exclude(
+                models.Q(ml_predictions_detail__predicted_relevant=True) |
+                models.Q(article_subject_relevances__is_relevant=True)
+            ).distinct()
+    
+    def filter_open_access(self, queryset, name, value):
+        """
+        Filter for open access articles
+        """
+        if value:
+            return queryset.filter(access='open')
+        else:
+            return queryset.exclude(access='open')
+    
+    def filter_unsent(self, queryset, name, value):
+        """
+        Filter for articles not sent to subscribers
+        """
+        if value:
+            return queryset.exclude(sent_to_subscribers=True)
+        else:
+            return queryset.filter(sent_to_subscribers=True)
+    
+    def filter_last_days(self, queryset, name, value):
+        """
+        Filter for articles from the last X days
+        """
+        if value and value > 0:
+            days_ago = timezone.now() - timedelta(days=value)
+            return queryset.filter(discovery_date__gte=days_ago)
+        return queryset
+    
+    def filter_week(self, queryset, name, value):
+        """
+        Filter for articles from a specific week (requires year parameter)
+        """
+        year = self.request.GET.get('year')
+        if value and year:
+            try:
+                week_num = int(value)
+                year_num = int(year)
+                
+                # Calculate first and last day of the week
+                first_day_of_week = datetime.strptime(f'{year_num}-W{week_num - 1}-1', "%Y-W%W-%w")
+                last_day_of_week = first_day_of_week + timedelta(days=6.9)
+                
+                return queryset.filter(
+                    discovery_date__gte=first_day_of_week.replace(tzinfo=timezone.get_current_timezone()),
+                    discovery_date__lte=last_day_of_week.replace(tzinfo=timezone.get_current_timezone())
+                )
+            except (ValueError, TypeError):
+                pass
+        return queryset
+    
+    def filter_year(self, queryset, name, value):
+        """
+        Filter for articles from a specific year (used with week parameter)
+        This filter doesn't modify the queryset directly - it's used by filter_week
+        """
+        return queryset
 
 class TrialFilter(filters.FilterSet):
     """
