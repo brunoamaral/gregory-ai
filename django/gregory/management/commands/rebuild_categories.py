@@ -10,7 +10,7 @@ from datetime import timedelta
 logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
-    help = 'Rebuilds category associations for articles and trials with improved efficiency and accuracy.'
+    help = 'Rebuilds category associations for articles and trials with improved efficiency and accuracy. For trials, searches across multiple fields including title, summary, intervention, outcomes, scientific title, and therapeutic areas.'
 
     def add_arguments(self, parser):
         parser.add_argument('--days', type=int, help='Only process content from the last N days')
@@ -252,11 +252,19 @@ class Command(BaseCommand):
                         Q(last_updated__gte=cutoff_date)
                     )
                 
-                # Initial database filtering (broad match)
+                # Initial database filtering (broad match) - trials have more searchable fields
                 query = Q()
                 for term in terms:
                     upper_term = term.upper()
-                    query |= Q(utitle__contains=upper_term) | Q(usummary__contains=upper_term)
+                    query |= (
+                        Q(utitle__icontains=upper_term) | 
+                        Q(usummary__icontains=upper_term) |
+                        Q(intervention__icontains=term) |
+                        Q(primary_outcome__icontains=term) |
+                        Q(scientific_title__icontains=term) |
+                        Q(secondary_outcome__icontains=term) |
+                        Q(therapeutic_areas__icontains=term)
+                    )
                 
                 candidates = base_query.filter(query)
                 total_candidates = candidates.count()
@@ -279,8 +287,22 @@ class Command(BaseCommand):
                         matched_terms = set()
                         title = trial.title.lower()
                         summary = (trial.summary or "").lower()
+                        intervention = (trial.intervention or "").lower()
+                        primary_outcome = (trial.primary_outcome or "").lower()
+                        scientific_title = (trial.scientific_title or "").lower()
+                        secondary_outcome = (trial.secondary_outcome or "").lower()
+                        therapeutic_areas = (trial.therapeutic_areas or "").lower()
                         
-                        # Check for whole-word matches in title (higher weight)
+                        # Scoring system for trial categorization:
+                        # Title matches: 3 points (highest priority - most descriptive)
+                        # Summary matches: 2 points (good context)
+                        # Scientific title matches: 2 points (formal description)
+                        # Intervention matches: 2 points (what's being tested)
+                        # Primary/Secondary outcome matches: 1 point each (results focus)
+                        # Therapeutic areas matches: 1 point (general categorization)
+                        # Multiple term bonus: +2 points per unique matched term
+                        
+                        # Check for whole-word matches in title (highest weight)
                         for i, pattern in enumerate(term_patterns):
                             if pattern.search(title):
                                 score += 3
@@ -289,6 +311,36 @@ class Command(BaseCommand):
                         # Check for whole-word matches in summary
                         for i, pattern in enumerate(term_patterns):
                             if pattern.search(summary):
+                                score += 2
+                                matched_terms.add(terms[i])
+                        
+                        # Check for whole-word matches in scientific title
+                        for i, pattern in enumerate(term_patterns):
+                            if pattern.search(scientific_title):
+                                score += 2
+                                matched_terms.add(terms[i])
+                        
+                        # Check for whole-word matches in intervention
+                        for i, pattern in enumerate(term_patterns):
+                            if pattern.search(intervention):
+                                score += 2
+                                matched_terms.add(terms[i])
+                        
+                        # Check for whole-word matches in primary outcome
+                        for i, pattern in enumerate(term_patterns):
+                            if pattern.search(primary_outcome):
+                                score += 1
+                                matched_terms.add(terms[i])
+                        
+                        # Check for whole-word matches in secondary outcome
+                        for i, pattern in enumerate(term_patterns):
+                            if pattern.search(secondary_outcome):
+                                score += 1
+                                matched_terms.add(terms[i])
+                        
+                        # Check for whole-word matches in therapeutic areas
+                        for i, pattern in enumerate(term_patterns):
+                            if pattern.search(therapeutic_areas):
                                 score += 1
                                 matched_terms.add(terms[i])
                         
@@ -311,6 +363,26 @@ class Command(BaseCommand):
                         for trial_id, title, score, matched in trials_with_scores:
                             self.log_message(f"      Trial {trial_id}: Score {score}, Terms: {', '.join(matched)}")
                             self.log_message(f"        Title: {title[:100]}...")
+                            # Show which fields contributed to the match
+                            trial = next((t for t in batch if t.trial_id == trial_id), None)
+                            if trial:
+                                search_fields = {
+                                    'title': trial.title,
+                                    'summary': trial.summary or '',
+                                    'intervention': trial.intervention or '',
+                                    'primary_outcome': trial.primary_outcome or '',
+                                    'scientific_title': trial.scientific_title or '',
+                                    'secondary_outcome': trial.secondary_outcome or '',
+                                    'therapeutic_areas': trial.therapeutic_areas or ''
+                                }
+                                matching_fields = []
+                                for field_name, field_value in search_fields.items():
+                                    for term in matched:
+                                        if term.lower() in field_value.lower():
+                                            matching_fields.append(field_name)
+                                            break
+                                if matching_fields:
+                                    self.log_message(f"        Matched in fields: {', '.join(set(matching_fields))}")
                     
                     offset += batch_size
                     self.log_message(f"    Processed {min(total_trials, total_candidates)} of {total_candidates} trials")
