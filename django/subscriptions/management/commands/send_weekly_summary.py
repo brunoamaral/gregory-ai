@@ -24,7 +24,15 @@ from django.utils.timezone import now
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 class Command(BaseCommand):
-	help = 'Sends a weekly digest email for all weekly digest lists.'
+	help = '''Sends a weekly digest email for all weekly digest lists.
+	
+	Options:
+	--threshold: ML prediction score threshold (default: 0.8)
+	--days: Number of days to look back for articles (default: 30)
+	--debug: Enable detailed debugging output
+	--dry-run: Simulate sending emails without actually sending them
+	--all-articles: Include all unsent articles regardless of ML predictions or manual review status, ordered by most recent
+	'''
 	
 	def add_arguments(self, parser):
 		parser.add_argument(
@@ -49,18 +57,27 @@ class Command(BaseCommand):
 			action='store_true',
 			help='Simulate sending emails without actually sending them or recording sent notifications'
 		)
+		parser.add_argument(
+			'--all-articles',
+			action='store_true',
+			help='Include all unsent articles regardless of ML predictions or manual review status, ordered by most recent'
+		)
 
 	def handle(self, *args, **options):
 		threshold = options['threshold']
 		days_to_look_back = options['days']
 		debug = options['debug']
 		dry_run = options['dry_run']
+		all_articles = options['all_articles']
 
 		if dry_run:
 			self.stdout.write(self.style.WARNING("DRY RUN MODE: No emails will be sent and no records will be updated"))
 		
+		if all_articles:
+			self.stdout.write(self.style.WARNING("ALL ARTICLES MODE: Including all unsent articles regardless of ML predictions or manual review"))
+		
 		if debug:
-			self.stdout.write(self.style.NOTICE(f"Running with ML threshold: {threshold}, days: {days_to_look_back}"))
+			self.stdout.write(self.style.NOTICE(f"Running with ML threshold: {threshold}, days: {days_to_look_back}, all_articles: {all_articles}"))
 		
 		site = Site.objects.get_current()
 		customsettings = CustomSetting.objects.get(site=site)
@@ -93,59 +110,70 @@ class Command(BaseCommand):
 			# Add verbose debugging to see how many articles are found
 			self.stdout.write(self.style.NOTICE(f"Looking for articles for list '{digest_list.list_name}'..."))
 			
-			# First, get articles by subject
-			subject_articles = Articles.objects.filter(
-				subjects__in=digest_list.subjects.all(),
-				discovery_date__gte=now() - timedelta(days=days_to_look_back)
-			).distinct()
-			self.stdout.write(self.style.NOTICE(f"Found {subject_articles.count()} articles by subject"))
-			
-			# Then, get manually reviewed articles
-			manual_reviewed = Articles.objects.filter(
-				subjects__in=digest_list.subjects.all(),
-				article_subject_relevances__subject__in=digest_list.subjects.all(),
-				article_subject_relevances__is_relevant=True,
-				discovery_date__gte=now() - timedelta(days=days_to_look_back)
-			).distinct()
-			self.stdout.write(self.style.NOTICE(f"Found {manual_reviewed.count()} manually reviewed articles"))
-			
-			# Get articles with ML prediction scores above threshold
-			# Create a subquery to check for ML predictions above threshold
-			ml_pred_subquery = MLPredictions.objects.filter(
-				article=OuterRef('pk'),
-				subject__in=digest_list.subjects.all(),
-				probability_score__gte=threshold
-			)
-			
-			# Get articles with valid ML predictions
-			ml_predicted = Articles.objects.filter(
-				subjects__in=digest_list.subjects.all(),
-				discovery_date__gte=now() - timedelta(days=days_to_look_back)
-			).filter(
-				Exists(ml_pred_subquery)
-			).distinct()
-			self.stdout.write(self.style.NOTICE(f"Found {ml_predicted.count()} articles with ML prediction score ≥ {threshold}"))
-			
-			# Debugging: Check ML prediction scores for some articles
-			if debug:
-				sample_articles = subject_articles.order_by('-discovery_date')[:5]  # Get 5 most recent articles
-				self.stdout.write(self.style.NOTICE(f"ML prediction scores for recent articles:"))
-				for article in sample_articles:
-					self.stdout.write(self.style.NOTICE(f"  Article {article.article_id}: {article.title[:50]}..."))
-					ml_preds = article.ml_predictions_detail.all()
-					if ml_preds.exists():
-						for pred in ml_preds:
-							self.stdout.write(self.style.NOTICE(f"    - Subject: {pred.subject.subject_name}, Score: {pred.probability_score}"))
-					else:
-						self.stdout.write(self.style.NOTICE(f"    - No ML predictions found"))
-			
-			# Standard filtering: manually reviewed OR high ML prediction score
-			# Instead of union(), use a combined filter query
-			article_ids = list(manual_reviewed.values_list('pk', flat=True)) + list(ml_predicted.values_list('pk', flat=True))
-			articles = Articles.objects.filter(pk__in=article_ids).distinct()
-			self.stdout.write(self.style.NOTICE(f"Filtered by manual review or ML threshold: {articles.count()} articles"))
-			
-			self.stdout.write(self.style.NOTICE(f"Final combined query found {articles.count()} articles"))
+			if all_articles:
+				# When --all-articles flag is used, get all articles for the subjects regardless of ML predictions or manual review
+				articles = Articles.objects.filter(
+					subjects__in=digest_list.subjects.all(),
+					discovery_date__gte=now() - timedelta(days=days_to_look_back)
+				).distinct().order_by('-discovery_date')
+				
+				self.stdout.write(self.style.NOTICE(f"ALL ARTICLES MODE: Found {articles.count()} total articles (ordered by most recent)"))
+				
+			else:
+				# Standard filtering: manually reviewed OR high ML prediction score
+				# First, get articles by subject
+				subject_articles = Articles.objects.filter(
+					subjects__in=digest_list.subjects.all(),
+					discovery_date__gte=now() - timedelta(days=days_to_look_back)
+				).distinct()
+				self.stdout.write(self.style.NOTICE(f"Found {subject_articles.count()} articles by subject"))
+				
+				# Then, get manually reviewed articles
+				manual_reviewed = Articles.objects.filter(
+					subjects__in=digest_list.subjects.all(),
+					article_subject_relevances__subject__in=digest_list.subjects.all(),
+					article_subject_relevances__is_relevant=True,
+					discovery_date__gte=now() - timedelta(days=days_to_look_back)
+				).distinct()
+				self.stdout.write(self.style.NOTICE(f"Found {manual_reviewed.count()} manually reviewed articles"))
+				
+				# Get articles with ML prediction scores above threshold
+				# Create a subquery to check for ML predictions above threshold
+				ml_pred_subquery = MLPredictions.objects.filter(
+					article=OuterRef('pk'),
+					subject__in=digest_list.subjects.all(),
+					probability_score__gte=threshold
+				)
+				
+				# Get articles with valid ML predictions
+				ml_predicted = Articles.objects.filter(
+					subjects__in=digest_list.subjects.all(),
+					discovery_date__gte=now() - timedelta(days=days_to_look_back)
+				).filter(
+					Exists(ml_pred_subquery)
+				).distinct()
+				self.stdout.write(self.style.NOTICE(f"Found {ml_predicted.count()} articles with ML prediction score ≥ {threshold}"))
+				
+				# Debugging: Check ML prediction scores for some articles
+				if debug:
+					sample_articles = subject_articles.order_by('-discovery_date')[:5]  # Get 5 most recent articles
+					self.stdout.write(self.style.NOTICE(f"ML prediction scores for recent articles:"))
+					for article in sample_articles:
+						self.stdout.write(self.style.NOTICE(f"  Article {article.article_id}: {article.title[:50]}..."))
+						ml_preds = article.ml_predictions_detail.all()
+						if ml_preds.exists():
+							for pred in ml_preds:
+								self.stdout.write(self.style.NOTICE(f"    - Subject: {pred.subject.subject_name}, Score: {pred.probability_score}"))
+						else:
+							self.stdout.write(self.style.NOTICE(f"    - No ML predictions found"))
+				
+				# Combine manually reviewed OR high ML prediction score
+				# Instead of union(), use a combined filter query
+				article_ids = list(manual_reviewed.values_list('pk', flat=True)) + list(ml_predicted.values_list('pk', flat=True))
+				articles = Articles.objects.filter(pk__in=article_ids).distinct()
+				self.stdout.write(self.style.NOTICE(f"Filtered by manual review or ML threshold: {articles.count()} articles"))
+				
+				self.stdout.write(self.style.NOTICE(f"Final combined query found {articles.count()} articles"))
 			
 			# Use the helper function to get trials, but pass the days_to_look_back parameter
 			trials = Trials.objects.filter(
@@ -210,17 +238,23 @@ class Command(BaseCommand):
 				# Handle both QuerySet and list cases
 				articles_count = len(unsent_articles) if isinstance(unsent_articles, list) else unsent_articles.count()
 				if articles_count > article_limit:
-					# Order by highest ML prediction score first, then by discovery date (newest first)
-					# We need to annotate with the max ML prediction score for ordering
-					from django.db.models import Max
-					limited_articles = unsent_articles.annotate(
-						max_ml_score=Max('ml_predictions_detail__probability_score')
-					).order_by('-max_ml_score', '-discovery_date')[:article_limit]
+					if all_articles:
+						# When using --all-articles, order by discovery date (newest first) only
+						limited_articles = unsent_articles.order_by('-discovery_date')[:article_limit]
+						if debug:
+							self.stdout.write(self.style.NOTICE(f"Applied article limit in ALL ARTICLES mode: showing {article_limit} most recent articles out of {articles_count} available"))
+					else:
+						# Standard mode: Order by highest ML prediction score first, then by discovery date (newest first)
+						# We need to annotate with the max ML prediction score for ordering
+						from django.db.models import Max
+						limited_articles = unsent_articles.annotate(
+							max_ml_score=Max('ml_predictions_detail__probability_score')
+						).order_by('-max_ml_score', '-discovery_date')[:article_limit]
+						if debug:
+							self.stdout.write(self.style.NOTICE(f"Applied article limit: showing {article_limit} highest-scoring articles (by ML prediction, then newest) out of {articles_count} available"))
 					
 					# Convert sliced QuerySet to list to avoid "Cannot filter a query once a slice has been taken" error
 					unsent_articles = list(limited_articles)
-					if debug:
-						self.stdout.write(self.style.NOTICE(f"Applied article limit: showing {article_limit} highest-scoring articles (by ML prediction, then newest) out of {len(unsent_articles)} available"))
 
 				# Step 7: Prepare and send the email using optimized Phase 5 rendering pipeline
 				# CRITICAL FIX: Get the organized content BEFORE recording as sent
@@ -326,7 +360,8 @@ class Command(BaseCommand):
 
 				if dry_run:
 					# In dry-run mode, just log what would be sent without actually sending
-					self.stdout.write(self.style.SUCCESS(f'[DRY RUN] Would send weekly digest email to {subscriber.email} for list "{digest_list.list_name}"'))
+					mode_info = "ALL ARTICLES mode" if all_articles else f"ML threshold {threshold} mode"
+					self.stdout.write(self.style.SUCCESS(f'[DRY RUN] Would send weekly digest email to {subscriber.email} for list "{digest_list.list_name}" ({mode_info})'))
 					self.stdout.write(self.style.NOTICE(f'  - Subject: {email_subject}'))
 					# Show the actual articles that would be sent based on content organizer
 					self.stdout.write(self.style.NOTICE(f'  - Would include {len(articles_to_be_sent)} articles and {len(trials_to_be_sent)} trials'))
