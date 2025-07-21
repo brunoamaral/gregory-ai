@@ -1,10 +1,10 @@
+import logging
+import re
 from django.core.management.base import BaseCommand
 from django.db.models import Q, F
 from django.utils import timezone
 from gregory.models import Articles, Trials, TeamCategory
-import re
 from datetime import timedelta
-import logging
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -57,10 +57,10 @@ class Command(BaseCommand):
         # Clear existing relationships (all or just recent)
         if not self.dry_run:
             if days:
-                # Only delete categorizations for recently updated articles
+                # Only delete categorizations for recently discovered articles
+                # Use discovery_date since last_updated doesn't exist for Articles
                 recent_article_ids = Articles.objects.filter(
-                    Q(discovery_date__gte=cutoff_date) | 
-                    Q(last_updated__gte=cutoff_date)
+                    discovery_date__gte=cutoff_date
                 ).values_list('article_id', flat=True)
                 
                 count = Articles.team_categories.through.objects.filter(
@@ -108,8 +108,7 @@ class Command(BaseCommand):
                 # Apply date filter if incremental
                 if cutoff_date:
                     base_query = base_query.filter(
-                        Q(discovery_date__gte=cutoff_date) | 
-                        Q(last_updated__gte=cutoff_date)
+                        Q(discovery_date__gte=cutoff_date)
                     )
                 
                 # Initial database filtering (broad match)
