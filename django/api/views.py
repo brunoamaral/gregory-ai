@@ -226,35 +226,35 @@ def post_article(request):
 ### 
 class ArticleViewSet(viewsets.ModelViewSet):
 	"""
-	✅ PREFERRED ENDPOINT: This is the main articles endpoint that supports all filtering options.
+	✅ **PREFERRED ENDPOINT**: This is the main articles endpoint that supports all filtering options.
 	
 	List all articles in the database with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
 	
 	This endpoint replaces the legacy team-based URLs:
-	- Instead of /teams/1/articles/ → use /articles/?team_id=1
-	- Instead of /teams/1/articles/subject/4/ → use /articles/?team_id=1&subject_id=4
+	- Instead of `/teams/1/articles/` → use `/articles/?team_id=1`
+	- Instead of `/teams/1/articles/subject/4/` → use `/articles/?team_id=1&subject_id=4`
 	
-	**Query Parameters:**
-	* **team_id**: filter by team ID (replaces /teams/{id}/articles/)
-	* **subject_id**: filter by subject ID (used with team_id)
-	* **author_id**: filter by author ID
-	* **category_slug**: filter by category slug
-	* **category_id**: filter by category ID
-	* **journal_slug**: filter by journal (convert spaces to dashes)
-	* **source_id**: filter by source ID
-	* **search**: search in title and summary
-	* **ordering**: order results by field (e.g., -published_date, title)
-	* **page**: page number for pagination
-	* **page_size**: items per page (max 100)
+	# Query Parameters:
+	- **team_id** - filter by team ID (replaces /teams/{id}/articles/)
+	- **subject_id** - filter by subject ID (used with team_id)
+	- **author_id** - filter by author ID
+	- **category_slug** - filter by category slug
+	- **category_id** - filter by category ID
+	- **journal_slug** - filter by journal (convert spaces to dashes)
+	- **source_id** - filter by source ID
+	- **search** - search in title and summary
+	- **ordering** - order results by field (e.g., -published_date, title)
+	- **page** - page number for pagination
+	- **page_size** - items per page (max 100)
 	
-	**Examples:**
-	* Team articles: /articles/?team_id=1
-	* Team + subject: /articles/?team_id=1&subject_id=4
-	* With search: /articles/?team_id=1&search=stem+cells
-	* Category by slug: /articles/?team_id=1&category_slug=natalizumab
-	* Category by ID: /articles/?team_id=1&category_id=5
-	* Complex filter: /articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&ordering=-published_date
+	# Examples:
+	- Team articles: `/articles/?team_id=1`
+	- Team + subject: `/articles/?team_id=1&subject_id=4`
+	- With search: `/articles/?team_id=1&search=stem+cells`
+	- Category by slug: `/articles/?team_id=1&category_slug=natalizumab`
+	- Category by ID: `/articles/?team_id=1&category_id=5`
+	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&ordering=-published_date`
 	"""
 	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer
@@ -436,36 +436,36 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	List all categories in the database with optional filters for team and subject.
 	Now includes author statistics for each category.
 	
-	**Query Parameters:**
-	* **team_id**: filter by team ID
-	* **subject_id**: filter by subject ID  
-	* **category_id**: filter by specific category ID
-	* **include_authors**: Include top authors data (default: true)
-	* **max_authors**: Maximum number of top authors to return per category (default: 10, max: 50)
-	* **date_from**: Filter articles from this date (YYYY-MM-DD)
-	* **date_to**: Filter articles to this date (YYYY-MM-DD)
-	* **timeframe**: 'year', 'month', 'week' (relative to current date)
-	* **monthly_counts**: Include monthly article/trial counts with ML predictions (default: false)
-	* **ml_threshold**: ML prediction probability threshold when monthly_counts=true (0.0-1.0, default: 0.5)
+	# Query Parameters:
+	- **team_id** - filter by team ID
+	- **subject_id** - filter by subject ID  
+	- **category_id** - filter by specific category ID
+	- **include_authors** - Include top authors data (default: true)
+	- **max_authors** - Maximum number of top authors to return per category (default: 10, max: 50)
+	- **date_from** - Filter articles from this date (YYYY-MM-DD)
+	- **date_to** - Filter articles to this date (YYYY-MM-DD)
+	- **timeframe** - 'year', 'month', 'week' (relative to current date)
+	- **monthly_counts** - Include monthly article/trial counts with ML predictions (default: false)
+	- **ml_threshold** - ML prediction probability threshold when monthly_counts=true (0.0-1.0, default: 0.5)
 	
-	**Response includes:**
-	* Category basic information
-	* Total article and trial counts  
-	* Authors count (unique authors in category)
-	* Top authors with their article counts in this category
-	* Monthly counts (when monthly_counts=true)
+	# Response includes:
+	- Category basic information
+	- Total article and trial counts  
+	- Authors count (unique authors in category)
+	- Top authors with their article counts in this category
+	- Monthly counts (when monthly_counts=true)
 	
-	**Additional Actions:**
-	* `/categories/{id}/authors/` - Get detailed author statistics for a specific category
+	# Additional Actions:
+	- `/categories/{id}/authors/` - Get detailed author statistics for a specific category
 	
-	**Examples:**
-	* Basic: `GET /categories/?team_id=1`
-	* With subject: `GET /categories/?team_id=1&subject_id=2`
-	* Date filtered: `GET /categories/?team_id=1&timeframe=year`
-	* More authors: `GET /categories/?team_id=1&max_authors=20`
-	* Without authors: `GET /categories/?team_id=1&include_authors=false`
-	* Monthly counts: `GET /categories/?category_id=6&monthly_counts=true&ml_threshold=0.8`
-	* Single category with monthly counts: `GET /categories/?category_id=6&monthly_counts=true`
+	# Examples:
+	- Basic: `GET /categories/?team_id=1`
+	- With subject: `GET /categories/?team_id=1&subject_id=2`
+	- Date filtered: `GET /categories/?team_id=1&timeframe=year`
+	- More authors: `GET /categories/?team_id=1&max_authors=20`
+	- Without authors: `GET /categories/?team_id=1&include_authors=false`
+	- Monthly counts: `GET /categories/?category_id=6&monthly_counts=true&ml_threshold=0.8`
+	- Single category with monthly counts: `GET /categories/?category_id=6&monthly_counts=true`
 	"""
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -599,11 +599,11 @@ class CategoryViewSet(viewsets.ModelViewSet):
 		"""
 		Get detailed author statistics for a specific category.
 		
-		**Query Parameters:**
-		* **min_articles**: Minimum articles per author (default: 1)
-		* **sort_by**: 'articles_count', 'author_name' (default: 'articles_count')
-		* **order**: 'asc', 'desc' (default: 'desc')
-		* Date filtering parameters (same as main endpoint)
+		# Query Parameters:
+		- **min_articles** - Minimum articles per author (default: 1)
+		- **sort_by** - 'articles_count', 'author_name' (default: 'articles_count')
+		- **order** - 'asc', 'desc' (default: 'desc')
+		- Date filtering parameters (same as main endpoint)
 		
 		**URL:** `/categories/{id}/authors/`
 		"""
@@ -670,20 +670,20 @@ class MonthlyCountsView(APIView):
 	"""
 	Get monthly counts of articles and trials for a specific team category.
 	
-	**Query Parameters:**
-	* **ml_threshold**: ML prediction probability threshold (0.0-1.0, default: 0.5)
+	# Query Parameters:
+	- **ml_threshold** - ML prediction probability threshold (0.0-1.0, default: 0.5)
 	  - Returns count of articles with ML predictions above this threshold for each model
 	
-	**Returns:**
-	* `monthly_article_counts`: Total articles by month
-	* `monthly_ml_article_counts_by_model`: Articles with ML predictions >= threshold by month for each model
-	* `monthly_trial_counts`: Total trials by month
-	* `ml_threshold`: The threshold value used for ML filtering
-	* `available_models`: List of ML models found in the data
+	# Returns:
+	- `monthly_article_counts` - Total articles by month
+	- `monthly_ml_article_counts_by_model` - Articles with ML predictions >= threshold by month for each model
+	- `monthly_trial_counts` - Total trials by month
+	- `ml_threshold` - The threshold value used for ML filtering
+	- `available_models` - List of ML models found in the data
 	
-	**Examples:**
-	* Default threshold: `/teams/1/categories/natalizumab/monthly_counts/`
-	* Custom threshold: `/teams/1/categories/natalizumab/monthly_counts/?ml_threshold=0.8`
+	# Examples:
+	- Default threshold: `/teams/1/categories/natalizumab/monthly_counts/`
+	- Custom threshold: `/teams/1/categories/natalizumab/monthly_counts/?ml_threshold=0.8`
 	"""
 	def get(self, request, team_id, category_slug):
 		"""Optimized monthly counts to avoid complex ML prediction queries"""
@@ -759,30 +759,30 @@ class TrialViewSet(viewsets.ModelViewSet):
 	List all clinical trials by discovery date with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
 	
-	**Core Query Parameters:**
-	* **trial_id**: filter by specific trial ID
-	* **team_id**: filter by team ID
-	* **subject_id**: filter by subject ID
-	* **category_slug**: filter by category slug
-	* **category_id**: filter by category ID
-	* **source_id**: filter by source ID
-	* **status/recruitment_status**: filter by recruitment status
-	* **search**: search in title and summary
+	# Core Query Parameters:
+	- **trial_id** - filter by specific trial ID
+	- **team_id** - filter by team ID
+	- **subject_id** - filter by subject ID
+	- **category_slug** - filter by category slug
+	- **category_id** - filter by category ID
+	- **source_id** - filter by source ID
+	- **status/recruitment_status** - filter by recruitment status
+	- **search** - search in title and summary
 	
-	**Trial-Specific Parameters:**
-	* **internal_number**: filter by WHO internal number
-	* **phase**: filter by trial phase (Phase I, II, III, etc.)
-	* **study_type**: filter by study type (Interventional, Observational)
-	* **primary_sponsor**: filter by sponsor organization
-	* **source_register**: filter by source registry
-	* **countries**: filter by trial countries
+	# Trial-Specific Parameters:
+	- **internal_number** - filter by WHO internal number
+	- **phase** - filter by trial phase (Phase I, II, III, etc.)
+	- **study_type** - filter by study type (Interventional, Observational)
+	- **primary_sponsor** - filter by sponsor organization
+	- **source_register** - filter by source registry
+	- **countries** - filter by trial countries
 	
-	**Medical/Research Parameters:**
-	* **condition**: filter by medical condition
-	* **intervention**: filter by intervention type
-	* **therapeutic_areas**: filter by therapeutic areas
-	* **inclusion_agemin/agemax**: filter by age inclusion criteria
-	* **inclusion_gender**: filter by gender inclusion criteria
+	# Medical/Research Parameters:
+	- **condition** - filter by medical condition
+	- **intervention** - filter by intervention type
+	- **therapeutic_areas** - filter by therapeutic areas
+	- **inclusion_agemin/agemax** - filter by age inclusion criteria
+	- **inclusion_gender** - filter by gender inclusion criteria
 	"""
 	queryset = Trials.objects.all().order_by('-discovery_date')
 	serializer_class = TrialSerializer
@@ -811,9 +811,9 @@ class SourceViewSet(viewsets.ModelViewSet):
 	"""
 	List all sources of data with optional filters for team and subject.
 	
-	**Query Parameters:**
-	* **team_id**: filter by team ID
-	* **subject_id**: filter by subject ID
+	# Query Parameters:
+	- **team_id** - filter by team ID
+	- **subject_id** - filter by subject ID
 	"""
 	queryset = Sources.objects.all().order_by('name')
 	serializer_class = SourceSerializer
@@ -832,31 +832,31 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	"""
 	Enhanced Authors API with sorting and filtering capabilities.
 	
-	**Query Parameters:**
+	# Query Parameters:
 	
-	* **author_id**: filter by specific author ID
-	* **full_name**: search by author's full name (case-insensitive)
-	* **sort_by**: 'article_count' (default: 'author_id')
-	* **order**: 'asc' or 'desc' (default: 'desc' for article_count, 'asc' for others)
-	* **team_id**: filter by team ID
-	* **subject_id**: filter by subject ID
-	* **category_slug**: filter by team category slug
-	* **category_id**: filter by team category ID
-	* **date_from**: filter articles from this date (YYYY-MM-DD)
-	* **date_to**: filter articles to this date (YYYY-MM-DD)
-	* **timeframe**: 'year', 'month', 'week' (relative to current date)
+	- **author_id** - filter by specific author ID
+	- **full_name** - search by author's full name (case-insensitive)
+	- **sort_by** - 'article_count' (default: 'author_id')
+	- **order** - 'asc' or 'desc' (default: 'desc' for article_count, 'asc' for others)
+	- **team_id** - filter by team ID
+	- **subject_id** - filter by subject ID
+	- **category_slug** - filter by team category slug
+	- **category_id** - filter by team category ID
+	- **date_from** - filter articles from this date (YYYY-MM-DD)
+	- **date_to** - filter articles to this date (YYYY-MM-DD)
+	- **timeframe** - 'year', 'month', 'week' (relative to current date)
 	
-	**Examples:**
+	# Examples:
 	
-	* Get specific author: `?author_id=380002`
-	* Search by name: `?full_name=John%20Smith`
-	* Sort by article count: `?sort_by=article_count&order=desc`
-	* Filter by timeframe: `?sort_by=article_count&timeframe=year`
-	* Team and subject filter: `?team_id=1&subject_id=5&sort_by=article_count`
-	* Count per category: `?team_id=1&category_slug=natalizumab&sort_by=article_count&order=desc`
-	* Category with ID: `?team_id=1&category_id=5&sort_by=article_count&order=desc`
-	* Category with timeframe: `?team_id=1&category_slug=natalizumab&timeframe=year&sort_by=article_count`
-	* Date range: `?date_from=2024-06-01&date_to=2024-12-31&team_id=1&subject_id=1&sort_by=article_count`
+	- Get specific author: `?author_id=380002`
+	- Search by name: `?full_name=John%20Smith`
+	- Sort by article count: `?sort_by=article_count&order=desc`
+	- Filter by timeframe: `?sort_by=article_count&timeframe=year`
+	- Team and subject filter: `?team_id=1&subject_id=5&sort_by=article_count`
+	- Count per category: `?team_id=1&category_slug=natalizumab&sort_by=article_count&order=desc`
+	- Category with ID: `?team_id=1&category_id=5&sort_by=article_count&order=desc`
+	- Category with timeframe: `?team_id=1&category_slug=natalizumab&timeframe=year&sort_by=article_count`
+	- Date range: `?date_from=2024-06-01&date_to=2024-12-31&team_id=1&subject_id=1&sort_by=article_count`
 	"""
 	serializer_class = AuthorSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -1085,20 +1085,20 @@ class TeamsViewSet(viewsets.ModelViewSet):
 
 class SubjectsViewSet(viewsets.ModelViewSet):
 	"""
-	✅ PREFERRED ENDPOINT: This is the main subjects endpoint that supports filtering options.
+	✅ **PREFERRED ENDPOINT**: This is the main subjects endpoint that supports filtering options.
 	
 	List all subjects in the database with optional team filtering.
 	
-	**Query Parameters:**
-	* **team_id**: filter by team ID (replaces /teams/{id}/subjects/)
-	* **search**: search in subject name and description
-	* **ordering**: order by 'id', 'subject_name', 'team' (add '-' for reverse)
+	# Query Parameters:
+	- **team_id** - filter by team ID (replaces /teams/{id}/subjects/)
+	- **search** - search in subject name and description
+	- **ordering** - order by 'id', 'subject_name', 'team' (add '-' for reverse)
 	
-	**Examples:**
-	* Filter by team: `/subjects/?team_id=1`
-	* Search subjects: `/subjects/?search=multiple`
-	* Team filter with search: `/subjects/?team_id=1&search=sclerosis`
-	* Order by name: `/subjects/?ordering=subject_name`
+	# Examples:
+	- Filter by team: `/subjects/?team_id=1`
+	- Search subjects: `/subjects/?search=multiple`
+	- Team filter with search: `/subjects/?team_id=1&search=sclerosis`
+	- Order by name: `/subjects/?ordering=subject_name`
 	"""
 	queryset = Subject.objects.all().order_by('id')
 	serializer_class = SubjectsSerializer
