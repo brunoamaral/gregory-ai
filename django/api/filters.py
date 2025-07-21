@@ -60,19 +60,46 @@ class TrialFilter(filters.FilterSet):
     and combined search across both fields, plus filtering by recruitment status,
     team, and subject.
     """
+    # Core search filters
     title = filters.CharFilter(method='filter_title')
     summary = filters.CharFilter(method='filter_summary')
     search = filters.CharFilter(method='filter_search')
-    status = filters.CharFilter(field_name='recruitment_status', lookup_expr='exact')
+    
+    # ID and relationship filters
+    trial_id = filters.NumberFilter(field_name='trial_id', lookup_expr='exact')
     team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact')
     subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact')
     category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact')
     category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact')
     source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact')
     
+    # Trial-specific filters
+    status = filters.CharFilter(field_name='recruitment_status', lookup_expr='exact')
+    recruitment_status = filters.CharFilter(field_name='recruitment_status', lookup_expr='exact')
+    internal_number = filters.CharFilter(field_name='internal_number', lookup_expr='icontains')
+    phase = filters.CharFilter(field_name='phase', lookup_expr='icontains')
+    study_type = filters.CharFilter(field_name='study_type', lookup_expr='icontains')
+    primary_sponsor = filters.CharFilter(field_name='primary_sponsor', lookup_expr='icontains')
+    source_register = filters.CharFilter(field_name='source_register', lookup_expr='icontains')
+    countries = filters.CharFilter(field_name='countries', lookup_expr='icontains')
+    
+    # Medical/research filters
+    condition = filters.CharFilter(field_name='condition', lookup_expr='icontains')
+    intervention = filters.CharFilter(field_name='intervention', lookup_expr='icontains')
+    therapeutic_areas = filters.CharFilter(field_name='therapeutic_areas', lookup_expr='icontains')
+    inclusion_agemin = filters.CharFilter(field_name='inclusion_agemin', lookup_expr='exact')
+    inclusion_agemax = filters.CharFilter(field_name='inclusion_agemax', lookup_expr='exact')
+    inclusion_gender = filters.CharFilter(field_name='inclusion_gender', lookup_expr='icontains')
+    
     class Meta:
         model = Trials
-        fields = ['title', 'summary', 'search', 'status', 'team_id', 'subject_id', 'category_slug', 'category_id', 'source_id']
+        fields = [
+            'trial_id', 'title', 'summary', 'search', 'status', 'recruitment_status',
+            'team_id', 'subject_id', 'category_slug', 'category_id', 'source_id',
+            'internal_number', 'phase', 'study_type', 'primary_sponsor', 'source_register',
+            'countries', 'condition', 'intervention', 'therapeutic_areas',
+            'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender'
+        ]
     
     def filter_title(self, queryset, name, value):
         """
@@ -101,10 +128,12 @@ class AuthorFilter(filters.FilterSet):
 
     full_name = filters.CharFilter(method='filter_full_name')
     author_id = filters.NumberFilter(field_name='author_id', lookup_expr='exact')
+    orcid = filters.CharFilter(field_name='ORCID', lookup_expr='icontains')
+    country = filters.CharFilter(field_name='country', lookup_expr='exact')
 
     class Meta:
         model = Authors
-        fields = ['full_name', 'author_id']
+        fields = ['full_name', 'author_id', 'orcid', 'country']
 
     def filter_full_name(self, queryset, name, value):
         """Search in the full_name database field using optimized uppercase column"""
@@ -116,12 +145,16 @@ class SourceFilter(filters.FilterSet):
     """
     Filter class for Sources, allowing filtering by team and subject.
     """
+    source_id = filters.NumberFilter(field_name='source_id', lookup_expr='exact')
     team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact')
     subject_id = filters.NumberFilter(field_name='subject__id', lookup_expr='exact')
+    active = filters.BooleanFilter(field_name='active')
+    source_for = filters.CharFilter(field_name='source_for', lookup_expr='exact')
+    link = filters.CharFilter(field_name='link', lookup_expr='icontains')
     
     class Meta:
         model = Sources
-        fields = ['team_id', 'subject_id']
+        fields = ['source_id', 'team_id', 'subject_id', 'active', 'source_for', 'link']
 
 class SubjectFilter(filters.FilterSet):
     """
@@ -140,7 +173,12 @@ class CategoryFilter(filters.FilterSet):
     category_id = filters.NumberFilter(field_name='id', lookup_expr='exact')
     team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact')
     subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact')
+    category_terms = filters.CharFilter(method='filter_category_terms')
     
     class Meta:
         model = TeamCategory
-        fields = ['category_id', 'team_id', 'subject_id']
+        fields = ['category_id', 'team_id', 'subject_id', 'category_terms']
+    
+    def filter_category_terms(self, queryset, name, value):
+        """Filter by category terms using array overlap"""
+        return queryset.filter(category_terms__icontains=value)

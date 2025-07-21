@@ -347,12 +347,12 @@ GET /teams/1/subjects/?ordering=subject_name&format=json
 ### Common Parameters
 - **Common Parameters**: `page`, `page_size`
 - **Format params**: `format` (json, csv, html), `all_results` (true/false for CSV export)
-- **Author filter params**: `author_id`, `full_name`, `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe`
+- **Author filter params**: `author_id`, `full_name`, `orcid`, `country`, `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe`
 - **Articles filter params**: `team_id`, `subject_id`, `author_id`, `category_slug`, `journal_slug` (URL-encoded journal name), `source_id`, `search` (title/summary), `ordering` (discovery_date, published_date, title, article_id)
 - **Subjects filter params**: `team_id`, `search` (subject_name/description), `ordering` (id, subject_name, team)
-- **Sources filter params**: `team_id`, `subject_id`, `source_for` (articles, trials, both), `search` (name/description), `ordering` (name, source_id)
-- **Categories filter params**: `team_id`, `subject_id`, `search` (name/description), `ordering` (category_name, id)
-- **Trials filter params**: `team_id`, `subject_id`, `category_id`, `source_id`, `status` (recruitment), `search` (title/summary), `ordering` (discovery_date, published_date, title, trial_id)
+- **Sources filter params**: `source_id`, `team_id`, `subject_id`, `active`, `source_for` (articles, trials, both), `link`, `search` (name/description), `ordering` (name, source_id)
+- **Categories filter params**: `category_id`, `team_id`, `subject_id`, `category_terms`, `search` (name/description), `ordering` (category_name, id)
+- **Trials filter params**: `trial_id`, `team_id`, `subject_id`, `category_id`, `source_id`, `status`/`recruitment_status`, `internal_number`, `phase`, `study_type`, `primary_sponsor`, `source_register`, `countries`, `condition`, `intervention`, `therapeutic_areas`, `inclusion_agemin`, `inclusion_agemax`, `inclusion_gender`, `search` (title/summary), `ordering` (discovery_date, published_date, title, trial_id)
 
 ### Sources Endpoint Filtering
 
@@ -572,13 +572,29 @@ GET /categories/?team_id=1&search=natalizumab&ordering=category_name
 
 The `/trials/` endpoint supports comprehensive filtering and searching:
 
-**Filtering:**
+**Core Filtering:**
+- `?trial_id=X` - Filter by specific trial ID
 - `?team_id=X` - Filter trials by team ID
 - `?subject_id=Y` - Filter trials by subject ID
 - `?category_id=Z` - Filter trials by category ID
 - `?source_id=W` - Filter trials by source ID
-- `?status=recruiting` - Filter by recruitment status
-- Multiple filters can be combined
+- `?status=recruiting` or `?recruitment_status=recruiting` - Filter by recruitment status
+
+**Trial-Specific Filtering:**
+- `?internal_number=INT-2024-001` - Filter by WHO internal number
+- `?phase=Phase III` - Filter by trial phase
+- `?study_type=Interventional` - Filter by study type
+- `?primary_sponsor=University` - Filter by sponsor organization
+- `?source_register=ClinicalTrials.gov` - Filter by source registry
+- `?countries=United States` - Filter by trial countries
+
+**Medical/Research Filtering:**
+- `?condition=COVID-19` - Filter by medical condition
+- `?intervention=vaccine` - Filter by intervention type
+- `?therapeutic_areas=Infectious` - Filter by therapeutic areas
+- `?inclusion_agemin=18` - Filter by minimum age
+- `?inclusion_agemax=65` - Filter by maximum age  
+- `?inclusion_gender=All` - Filter by gender inclusion
 
 **Searching:**
 - `?search=keyword` - Search in trial title and summary fields
@@ -592,17 +608,23 @@ The `/trials/` endpoint supports comprehensive filtering and searching:
 
 **Example Usage:**
 ```bash
-# Filter trials by team
-GET /trials/?team_id=1
+# Filter trials by specific trial ID
+GET /trials/?trial_id=12345
 
-# Filter trials by team, subject, and recruitment status
-GET /trials/?team_id=1&subject_id=2&status=recruiting
+# Filter trials by phase and condition
+GET /trials/?phase=Phase III&condition=COVID-19
 
-# Search and filter combined
-GET /trials/?team_id=1&search=alzheimer&status=recruiting&ordering=-published_date
+# Filter by sponsor and country
+GET /trials/?primary_sponsor=University&countries=United States
 
-# Filter by source and category
-GET /trials/?team_id=1&source_id=3&category_id=5
+# Medical research filtering
+GET /trials/?therapeutic_areas=Neurology&inclusion_agemin=18&inclusion_agemax=65
+
+# Combined filtering with search
+GET /trials/?team_id=1&phase=Phase II&search=alzheimer&ordering=-published_date
+
+# Filter by internal number and recruitment status
+GET /trials/?internal_number=INT-2024&recruitment_status=Recruiting
 ```
 
 ### Monthly Counts Endpoint with ML Filtering

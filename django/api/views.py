@@ -759,14 +759,30 @@ class TrialViewSet(viewsets.ModelViewSet):
 	List all clinical trials by discovery date with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
 	
-	**Query Parameters:**
+	**Core Query Parameters:**
+	* **trial_id**: filter by specific trial ID
 	* **team_id**: filter by team ID
 	* **subject_id**: filter by subject ID
 	* **category_slug**: filter by category slug
 	* **category_id**: filter by category ID
 	* **source_id**: filter by source ID
-	* **status**: filter by recruitment status
+	* **status/recruitment_status**: filter by recruitment status
 	* **search**: search in title and summary
+	
+	**Trial-Specific Parameters:**
+	* **internal_number**: filter by WHO internal number
+	* **phase**: filter by trial phase (Phase I, II, III, etc.)
+	* **study_type**: filter by study type (Interventional, Observational)
+	* **primary_sponsor**: filter by sponsor organization
+	* **source_register**: filter by source registry
+	* **countries**: filter by trial countries
+	
+	**Medical/Research Parameters:**
+	* **condition**: filter by medical condition
+	* **intervention**: filter by intervention type
+	* **therapeutic_areas**: filter by therapeutic areas
+	* **inclusion_agemin/agemax**: filter by age inclusion criteria
+	* **inclusion_gender**: filter by gender inclusion criteria
 	"""
 	queryset = Trials.objects.all().order_by('-discovery_date')
 	serializer_class = TrialSerializer
