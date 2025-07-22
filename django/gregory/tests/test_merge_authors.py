@@ -24,6 +24,7 @@ class MergeAuthorsCommandTest(TestCase):
         help_text = parser.format_help()
         self.assertIn('--dry-run', help_text)
         self.assertIn('--keep-author', help_text)
+        self.assertIn('--force', help_text)
 
     def test_merge_authors_nonexistent_orcid(self):
         """Test handling of non-existent ORCID"""
@@ -91,6 +92,17 @@ class MergeAuthorsCommandTest(TestCase):
         # Both error messages are acceptable as they indicate missing/invalid input
         with self.assertRaises(CommandError):
             call_command('merge_authors')
+
+    def test_force_flag_handling(self):
+        """Test that the force flag is properly handled"""
+        from gregory.management.commands.merge_authors import Command
+        cmd = Command()
+        
+        # Test that force flag is properly configured
+        parser = cmd.create_parser('merge_authors', 'merge_authors')
+        help_text = parser.format_help()
+        self.assertIn('--force', help_text)
+        self.assertIn('Skip confirmation prompt', help_text)
 
     def test_invalid_orcid_format_handling(self):
         """Test handling of invalid ORCID format"""

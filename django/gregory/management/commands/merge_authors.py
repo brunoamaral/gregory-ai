@@ -24,6 +24,11 @@ class Command(BaseCommand):
             type=int,
             help='Specify the author_id to keep when merging (default: prefers https version, then most articles, then earliest created)'
         )
+        parser.add_argument(
+            '--force',
+            action='store_true',
+            help='Skip confirmation prompt and proceed with merge automatically'
+        )
 
     def normalize_orcid(self, orcid):
         """
@@ -60,6 +65,7 @@ class Command(BaseCommand):
         orcid = options['orcid']
         dry_run = options['dry_run']
         keep_author_id = options.get('keep_author')
+        force = options['force']
         
         if not orcid:
             raise CommandError('You must provide an ORCID argument.')
@@ -171,16 +177,21 @@ class Command(BaseCommand):
             
             return
 
-        # Confirm the merge
-        self.stdout.write('\n' + '!' * 80)
-        confirmation = input(
-            'Are you sure you want to proceed with this merge? '
-            'This action cannot be undone! Type "yes" to continue: '
-        )
-        
-        if confirmation.lower() != 'yes':
-            self.stdout.write(self.style.WARNING('Merge cancelled.'))
-            return
+        # Confirm the merge (unless force is specified)
+        if not force:
+            self.stdout.write('\n' + '!' * 80)
+            confirmation = input(
+                'Are you sure you want to proceed with this merge? '
+                'This action cannot be undone! Type "yes" to continue: '
+            )
+            
+            if confirmation.lower() != 'yes':
+                self.stdout.write(self.style.WARNING('Merge cancelled.'))
+                return
+        else:
+            self.stdout.write('\n' + '⚡' * 80)
+            self.stdout.write(self.style.WARNING('FORCE MODE: Proceeding with merge without confirmation!'))
+            self.stdout.write('⚡' * 80)
 
         # Perform the merge within a transaction
         try:
