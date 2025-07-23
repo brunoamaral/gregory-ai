@@ -148,28 +148,11 @@ def add_utm_params(url, utm_params):
     return new_url
 
 @register.filter
-def article_url(article):
+def build_article_url(article_id, domain):
     """
-    Build a proper article URL using the current site domain.
-    Usage: {{ article|article_url }}
-    
-    Args:
-        article: Article object with article_id
-    
-    Returns:
-        Full article URL using site domain
+    Build article URL by combining domain and article ID.
+    Usage: {{ article.article_id|build_article_url:site_domain }}
     """
-    if not article or not hasattr(article, 'article_id') or not article.article_id:
+    if not article_id or not domain:
         return ""
-    
-    from django.contrib.sites.models import Site
-    
-    try:
-        site = Site.objects.get_current()
-        # Fallback to gregory-ms.com if site domain is empty (same logic as send_weekly_summary.py)
-        domain = site.domain if site.domain and site.domain.strip() else ''
-    except:
-        # Fallback if site framework fails
-        domain = 'gregory-ms.com'
-    
-    return f"https://{domain}/articles/{article.article_id}/"
+    return f"https://{domain}/articles/{article_id}/"

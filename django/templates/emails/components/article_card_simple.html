@@ -10,7 +10,7 @@ This is a simplified version for contexts where we just need basic article displ
     
     <!-- Article Title -->
     <h3 style="color: #1e3a8a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 18px; font-weight: 600; line-height: 1.3; margin: 0 0 15px 0;">
-        <a href="{% if utm_params %}{{ article|article_url|add_utm_params:utm_params }}{% else %}{{ article|article_url }}{% endif %}">{{ article.title|safe }}</a>
+        <a href="{% if utm_params %}{{ article.article_id|build_article_url:site_domain|add_utm_params:utm_params }}{% else %}{{ article.article_id|build_article_url:site_domain }}{% endif %}">{{ article.title|safe }}</a>
     </h3>
     
     <!-- Article Metadata -->
@@ -29,7 +29,7 @@ This is a simplified version for contexts where we just need basic article displ
     
     <!-- Article Link -->
     <div style="margin-bottom: 15px;">
-        <a href="{% if utm_params %}{{ article|article_url|add_utm_params:utm_params }}{% else %}{{ article|article_url }}{% endif %}" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+        <a href="{% if utm_params %}{{ article.article_id|build_article_url:site_domain|add_utm_params:utm_params }}{% else %}{{ article.article_id|build_article_url:site_domain }}{% endif %}" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
             View Full Article →
         </a>
     </div>

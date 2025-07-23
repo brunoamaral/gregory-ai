@@ -1,7 +1,7 @@
 <!-- Simple Article Link Component for Latest Research Section -->
 {% load gregory_tags %}
 <div style="margin-bottom: 15px; padding: 5px 0; border-bottom: 1px solid #e5e7eb;">
-    <a href="{% if utm_params %}{{ article|article_url|add_utm_params:utm_params }}{% else %}{{ article|article_url }}{% endif %}" style="text-decoration: none; color: #2563eb; font-weight: 500; display: block; font-size: 15px;">
+    <a href="{% if utm_params %}{{ article.article_id|build_article_url:site_domain|add_utm_params:utm_params }}{% else %}{{ article.article_id|build_article_url:site_domain }}{% endif %}" style="text-decoration: none; color: #2563eb; font-weight: 500; display: block; font-size: 15px;">
         {{ article.title|default:"Article title" }}
     </a>
     {% if article.doi %}

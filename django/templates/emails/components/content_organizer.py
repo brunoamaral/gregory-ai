@@ -424,6 +424,9 @@ class EmailRenderingPipeline:
                 'custom_settings': custom_settings,
                 'customsettings': custom_settings,  # Template compatibility
                 
+                # Site domain for URL construction (fallback logic same as send_weekly_summary.py)
+                'site_domain': site.domain if site and site.domain and site.domain.strip() else 'gregory-ms.com',
+                
                 # UTM parameters for link tracking
                 'utm_params': utm_params or {},
                 
