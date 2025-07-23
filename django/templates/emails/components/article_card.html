@@ -55,14 +55,16 @@ Usage:
         <a href="{{ article.link }}" style="color: #3b82f6; text-decoration: underline; font-weight: 500; margin-right: 15px;">
             View Original Article →
         </a>
-        <a href="https://api.{{ site.domain }}/admin/gregory/articles/{{ article.article_id }}/change/#article_subject_relevances-heading" style="background-color: #3b82f6; color: #ffffff; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-weight: 500; font-size: 13px;">
+        <a href="https://api.{% with domain=site.domain|default:"gregory-ms.com" %}{{ domain }}{% endwith %}/admin/gregory/articles/{{ article.article_id }}/change/#article_subject_relevances-heading" style="background-color: #3b82f6; color: #ffffff; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-weight: 500; font-size: 13px;">
             EDIT ARTICLE
         </a>
         {% else %}
         <!-- Regular user links -->
-        <a href="https://{{ site.domain }}/articles/{{ article.article_id }}/" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+        {% with domain=site.domain|default:"gregory-ms.com" %}
+        <a href="https://{{ domain }}/articles/{{ article.article_id }}/" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
             View Full Article →
         </a>
+        {% endwith %}
         {% endif %}
     </div>
     

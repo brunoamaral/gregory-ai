@@ -350,7 +350,7 @@ class EmailRenderingPipeline:
         
     def prepare_optimized_context(self, email_type, articles=None, trials=None, 
                                 subscriber=None, list_obj=None, site=None, 
-                                custom_settings=None, confidence_threshold=None):
+                                custom_settings=None, confidence_threshold=None, utm_params=None):
         """
         Prepare optimized context with content organization and performance enhancements.
         
@@ -363,6 +363,7 @@ class EmailRenderingPipeline:
             site: Site object
             custom_settings: CustomSetting object
             confidence_threshold: Custom ML prediction confidence threshold to use
+            utm_params: Dictionary of UTM parameters for link tracking
             
         Returns:
             dict: Optimized context for template rendering
@@ -422,6 +423,9 @@ class EmailRenderingPipeline:
                 'site': site,
                 'custom_settings': custom_settings,
                 'customsettings': custom_settings,  # Template compatibility
+                
+                # UTM parameters for link tracking
+                'utm_params': utm_params or {},
                 
                 # Organized content
                 'articles': organized_articles.get('featured_articles', []),

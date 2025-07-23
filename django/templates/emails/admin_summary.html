@@ -96,7 +96,7 @@
     <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #e5e7eb;">
         <p class="content-text" style="text-align: center;">
             For the complete admin dashboard, visit 
-            <a href="https://api.{{ site.domain }}/" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+            <a href="https://api.{% with domain=site.domain|default:"gregory-ms.com" %}{{ domain }}{% endwith %}/" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
                 Admin Portal
             </a>
         </p>

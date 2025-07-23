@@ -106,3 +106,43 @@ def has_attribute(obj, attribute):
     Usage: {% if article|has_attribute:'filtered_ml_predictions' %}...{% endif %}
     """
     return hasattr(obj, attribute)
+
+@register.filter
+def add_utm_params(url, utm_params):
+    """
+    Add UTM parameters to a URL for tracking.
+    Usage: {{ article.link|add_utm_params:utm_params }}
+    
+    Args:
+        url: The URL to modify
+        utm_params: Dictionary of UTM parameters
+    
+    Returns:
+        URL with UTM parameters appended
+    """
+    if not url or not utm_params:
+        return url
+    
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    
+    # Parse the URL
+    parsed_url = urlparse(url)
+    query_params = parse_qs(parsed_url.query)
+    
+    # Add UTM parameters (don't override existing ones)
+    for key, value in utm_params.items():
+        if key not in query_params:
+            query_params[key] = [value]
+    
+    # Rebuild the URL
+    new_query = urlencode(query_params, doseq=True)
+    new_url = urlunparse((
+        parsed_url.scheme,
+        parsed_url.netloc,
+        parsed_url.path,
+        parsed_url.params,
+        new_query,
+        parsed_url.fragment
+    ))
+    
+    return new_url

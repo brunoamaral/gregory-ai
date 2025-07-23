@@ -259,6 +259,15 @@ class Command(BaseCommand):
 				# Step 7: Prepare and send the email using optimized Phase 5 rendering pipeline
 				# CRITICAL FIX: Get the organized content BEFORE recording as sent
 				# This ensures what we record matches what gets sent
+				
+				# Prepare UTM parameters for tracking
+				utm_params = {
+					'utm_source': 'weekly_digest',
+					'utm_medium': 'email',
+					'utm_campaign': f'weekly_digest_{digest_list.list_name.lower().replace(" ", "_")}',
+					'utm_content': f'subscriber_{subscriber.subscriber_id}'
+				}
+				
 				summary_context = get_optimized_email_context(
 					email_type='weekly_summary',
 					articles=unsent_articles,
@@ -267,7 +276,8 @@ class Command(BaseCommand):
 					list_obj=digest_list,
 					site=site,
 					custom_settings=customsettings,
-					confidence_threshold=threshold  # Pass the threshold parameter to the content organizer
+					confidence_threshold=threshold,  # Pass the threshold parameter to the content organizer
+					utm_params=utm_params  # Add UTM parameters to context
 				)
 				
 				# Extract the actual articles that will be rendered in the email

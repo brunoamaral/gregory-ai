@@ -47,7 +47,7 @@ This is a simplified version for contexts where we just need basic trial display
     <!-- Trial Link -->
     {% if trial.link %}
     <div style="margin-bottom: 15px;">
-        <a href="{{ trial.link }}" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+        <a href="{% if utm_params %}{{ trial.link|add_utm_params:utm_params }}{% else %}{{ trial.link }}{% endif %}" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
             View Trial Details →
         </a>
     </div>
