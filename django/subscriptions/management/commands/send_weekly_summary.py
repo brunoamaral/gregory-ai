@@ -81,6 +81,17 @@ class Command(BaseCommand):
 		
 		site = Site.objects.get_current()
 		customsettings = CustomSetting.objects.get(site=site)
+		
+		# Ensure site domain is not empty - fallback to a default if needed
+		if not site.domain or site.domain.strip() == '':
+			# Log the issue and use fallback domain
+			self.stdout.write(self.style.WARNING(f"Site domain is empty! Using fallback domain 'gregory-ms.com'"))
+			from types import SimpleNamespace
+			site_with_domain = SimpleNamespace()
+			site_with_domain.id = site.id
+			site_with_domain.domain = 'gregory-ms.com'
+			site_with_domain.name = site.name
+			site = site_with_domain
 
 		# Step 1: Find all lists that are weekly digests
 		weekly_digest_lists = Lists.objects.filter(weekly_digest=True, subjects__isnull=False).distinct()

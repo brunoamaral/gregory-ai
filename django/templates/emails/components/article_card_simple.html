@@ -10,11 +10,7 @@ This is a simplified version for contexts where we just need basic article displ
     
     <!-- Article Title -->
     <h3 style="color: #1e3a8a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 18px; font-weight: 600; line-height: 1.3; margin: 0 0 15px 0;">
-        {% with domain=site.domain|default:"gregory-ms.com" %}
-        {% with article_url="https://"|add:domain|add:"/articles/"|add:article.article_id|add:"/" %}
-        <a href="{% if utm_params %}{{ article_url|add_utm_params:utm_params }}{% else %}{{ article_url }}{% endif %}">{{ article.title|safe }}</a>
-        {% endwith %}
-        {% endwith %}
+        <a href="{% if utm_params %}{{ article|article_url|add_utm_params:utm_params }}{% else %}{{ article|article_url }}{% endif %}">{{ article.title|safe }}</a>
     </h3>
     
     <!-- Article Metadata -->
@@ -26,27 +22,16 @@ This is a simplified version for contexts where we just need basic article displ
         {% if article.authors.exists %}
         <p style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
             <strong>Authors:</strong>
-            {% for author in article.authors.all %}
-                {% if author.ORCID %}
-                    <a href="https://orcid.org/{{ author.ORCID }}" style="color: #3b82f6; text-decoration: underline;">{{ author.full_name }}</a>
-                {% else %}
-                    {{ author.full_name }}
-                {% endif %}
-                {% if not forloop.last %}, {% endif %}
-            {% endfor %}
+            {% for author in article.authors.all %}{% if author.ORCID %}<a href="{{ author.ORCID }}" style="color: #3b82f6; text-decoration: underline;">{{ author.full_name }}</a>{% else %}{{ author.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
         </p>
         {% endif %}
     </div>
     
     <!-- Article Link -->
     <div style="margin-bottom: 15px;">
-        {% with domain=site.domain|default:"gregory-ms.com" %}
-        {% with article_url="https://"|add:domain|add:"/articles/"|add:article.article_id|add:"/" %}
-        <a href="{% if utm_params %}{{ article_url|add_utm_params:utm_params }}{% else %}{{ article_url }}{% endif %}" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+        <a href="{% if utm_params %}{{ article|article_url|add_utm_params:utm_params }}{% else %}{{ article|article_url }}{% endif %}" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
             View Full Article →
         </a>
-        {% endwith %}
-        {% endwith %}
     </div>
     
     <!-- Key Takeaways -->
