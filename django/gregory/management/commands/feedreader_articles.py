@@ -378,7 +378,7 @@ class Command(BaseCommand):
         )
         
         # Create or update article
-        science_paper = self.create_or_update_article(
+        science_paper, created, crossref_was_updated = self.create_or_update_article(
             doi=doi, title=article_data['title'], summary=article_data['summary'],
             link=link, published_date=published_date, source=source,
             container_title=article_data['container_title'],
@@ -387,8 +387,11 @@ class Command(BaseCommand):
             crossref_check=article_data['crossref_check']
         )
         
-        # Process authors if CrossRef data is available
-        if self.is_crossref_successful(refresh_result):
+        # Process authors if:
+        # 1. CrossRef data is available AND
+        # 2. (Article was created OR CrossRef data was updated for existing article)
+        if self.is_crossref_successful(refresh_result) and (created or crossref_was_updated):
+            self.log(f" Processing authors for {'new' if created else 'updated'} article: {science_paper.title}", level=2)
             self.process_authors(crossref_paper, science_paper)
 
     def process_article_without_doi(self, title: str, feed_summary: str, 
@@ -400,8 +403,8 @@ class Command(BaseCommand):
         if 20 < len(feed_summary) < 500:
             self.log(f"Warning: Potentially truncated summary for title '{title}': {len(feed_summary)} characters", level=2)
         
-        # Create or update article
-        self.create_or_update_article(
+        # Create or update article (no CrossRef data, so crossref_was_updated will be False)
+        science_paper, created, crossref_was_updated = self.create_or_update_article(
             doi=None, title=title, summary=feed_summary, 
             link=link, published_date=published_date, source=source,
             crossref_check=None
@@ -455,20 +458,31 @@ class Command(BaseCommand):
 
     def create_or_update_article(self, doi: str, title: str, summary: str, link: str,
                                 published_date, source: Sources, container_title=None,
-                                publisher=None, access=None, crossref_check=None) -> Articles:
-        """Create a new article or update existing one."""
+                                publisher=None, access=None, crossref_check=None) -> tuple[Articles, bool, bool]:
+        """Create a new article or update existing one. Returns (article, created, crossref_updated)."""
         # Check if an article with the same DOI or title exists
         if doi:
             existing_article = Articles.objects.filter(Q(doi=doi) | Q(title=title)).first()
         else:
             existing_article = Articles.objects.filter(title=title).first()
         
+        crossref_was_updated = False
+        
         if existing_article:
             science_paper = existing_article
             created = False
-            # Update if content has changed
-            if self.article_needs_update(science_paper, title, summary, link, published_date):
-                self.update_article_fields(science_paper, title, summary, link, published_date)
+            
+            # Check what needs to be updated
+            basic_fields_changed = self.article_needs_update(science_paper, title, summary, link, published_date)
+            crossref_fields_changed = self.crossref_needs_update(science_paper, container_title, publisher, access, crossref_check)
+            
+            # Update fields if anything has changed
+            if basic_fields_changed or crossref_fields_changed:
+                self.update_all_article_fields(
+                    science_paper, title, summary, link, published_date,
+                    container_title, publisher, access, crossref_check
+                )
+                crossref_was_updated = crossref_fields_changed
         else:
             # Create new article
             article_data = {
@@ -488,11 +502,13 @@ class Command(BaseCommand):
             
             science_paper = Articles.objects.create(**article_data)
             created = True
+            # For new articles with CrossRef data, authors should be processed
+            crossref_was_updated = crossref_check is not None
         
         # Add relationships
         self.add_article_relationships(science_paper, source)
         
-        return science_paper
+        return science_paper, created, crossref_was_updated
 
     def article_needs_update(self, article: Articles, title: str, summary: str, 
                             link: str, published_date) -> bool:
@@ -512,6 +528,48 @@ class Command(BaseCommand):
         article.link = link
         article.published_date = published_date
         article.save()
+
+    def update_all_article_fields(self, article: Articles, title: str, summary: str,
+                                 link: str, published_date, container_title: str,
+                                 publisher: str, access: str, crossref_check):
+        """Update all article fields (basic + CrossRef) in a single operation."""
+        article.title = title
+        article.summary = summary
+        article.link = link
+        article.published_date = published_date
+        article.container_title = container_title
+        article.publisher = publisher
+        article.access = access
+        article.crossref_check = crossref_check
+        article.save()
+        self.log(f" Updated article data: {article.title}", level=2)
+
+    def crossref_needs_update(self, article: Articles, container_title: str, 
+                             publisher: str, access: str, crossref_check) -> bool:
+        """Check if CrossRef data needs to be updated."""
+        # If we have new CrossRef data and the article doesn't have it
+        if crossref_check and not article.crossref_check:
+            return True
+        
+        # If CrossRef data has changed
+        if crossref_check and any([
+            article.container_title != container_title,
+            article.publisher != publisher,
+            article.access != access
+        ]):
+            return True
+        
+        return False
+
+    def update_crossref_fields(self, article: Articles, container_title: str,
+                              publisher: str, access: str, crossref_check):
+        """Update CrossRef-related fields."""
+        article.container_title = container_title
+        article.publisher = publisher
+        article.access = access
+        article.crossref_check = crossref_check
+        article.save()
+        self.log(f" Updated CrossRef data for article: {article.title}", level=2)
 
     def add_article_relationships(self, article: Articles, source: Sources):
         """Add relationships between article and source (team, subject, sources)."""
