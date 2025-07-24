@@ -821,6 +821,149 @@ class TestFeedreaderArticlesIntegration(TransactionTestCase):
         self.assertNotIn(news_source, sources)
 
 
+class TestNatureFeedProcessor(TestCase):
+    """Test Nature.com feed processor functionality."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.organization = Organization.objects.create(name='Test Organization')
+        self.team = Team.objects.create(
+            slug='test-team',
+            organization=self.organization
+        )
+        self.subject = Subject.objects.create(
+            subject_name='Test Subject',
+            subject_slug='test-subject',
+            team=self.team
+        )
+        self.site = Site.objects.create(
+            domain='test.example.com',
+            name='Test Site'
+        )
+        self.custom_setting = CustomSetting.objects.create(
+            site=self.site,
+            title='Test Gregory Site',
+            admin_email='admin@test.com'
+        )
+        
+        from gregory.management.commands.feedreader_articles import NatureFeedProcessor, Command
+        self.command = Command()
+        self.processor = NatureFeedProcessor(self.command)
+    
+    def test_can_process_nature_urls(self):
+        """Test that processor correctly identifies Nature.com URLs."""
+        nature_urls = [
+            'https://www.nature.com/subjects/multiple-sclerosis.rss',
+            'https://www.nature.com/subjects/alzheimer.rss',
+            'https://NATURE.COM/feed.xml',  # case insensitive
+        ]
+        
+        non_nature_urls = [
+            'https://pubmed.ncbi.nlm.nih.gov/rss/search/',
+            'https://faseb.onlinelibrary.wiley.com/feed/',
+            'https://connect.biorxiv.org/relate/feed/',
+        ]
+        
+        for url in nature_urls:
+            with self.subTest(url=url):
+                self.assertTrue(self.processor.can_process(url))
+        
+        for url in non_nature_urls:
+            with self.subTest(url=url):
+                self.assertFalse(self.processor.can_process(url))
+    
+    def test_extract_doi_from_nature_link(self):
+        """Test DOI extraction from Nature.com article links."""
+        test_cases = [
+            {
+                'entry': {
+                    'link': 'https://www.nature.com/articles/s41467-025-61751-9',
+                    'title': 'Test Article'
+                },
+                'expected_doi': '10.1038/s41467-025-61751-9'
+            },
+            {
+                'entry': {
+                    'link': 'https://www.nature.com/articles/s41582-025-01115-5',
+                    'title': 'Another Article'
+                },
+                'expected_doi': '10.1038/s41582-025-01115-5'
+            },
+            {
+                'entry': {
+                    'link': 'https://www.nature.com/articles/s41746-025-01788-8?utm_source=test',
+                    'title': 'Article with query params'
+                },
+                'expected_doi': '10.1038/s41746-025-01788-8'
+            },
+            {
+                'entry': {
+                    'link': 'https://www.nature.com/articles/s41467-025-61751-9#section1',
+                    'title': 'Article with fragment'
+                },
+                'expected_doi': '10.1038/s41467-025-61751-9'
+            },
+        ]
+        
+        for case in test_cases:
+            with self.subTest(link=case['entry']['link']):
+                doi = self.processor.extract_doi(case['entry'])
+                self.assertEqual(doi, case['expected_doi'])
+    
+    def test_extract_doi_invalid_links(self):
+        """Test DOI extraction with invalid or missing links."""
+        invalid_cases = [
+            {'entry': {'title': 'No link'}},  # Missing link
+            {'entry': {'link': '', 'title': 'Empty link'}},  # Empty link
+            {'entry': {'link': 'https://www.nature.com/no-articles-path', 'title': 'No articles path'}},
+            {'entry': {'link': 'https://www.nature.com/articles/', 'title': 'Empty articles path'}},
+        ]
+        
+        for case in invalid_cases:
+            with self.subTest(case=case):
+                doi = self.processor.extract_doi(case['entry'])
+                self.assertIsNone(doi)
+    
+    def test_extract_summary(self):
+        """Test summary extraction from Nature feed entries."""
+        # Nature feeds typically have empty summaries, but test the extraction logic
+        test_cases = [
+            {
+                'entry': {'summary': 'Test summary'},
+                'expected': 'Test summary'
+            },
+            {
+                'entry': {'summary': ''},
+                'expected': ''
+            },
+            {
+                'entry': {},  # No summary field
+                'expected': ''
+            },
+        ]
+        
+        for case in test_cases:
+            with self.subTest(case=case):
+                summary = self.processor.extract_summary(case['entry'])
+                self.assertEqual(summary, case['expected'])
+    
+    @patch.dict(os.environ, {'DOMAIN_NAME': 'test.example.com'})
+    def test_nature_feed_processor_integration(self):
+        """Test that Nature processor is included in command processors."""
+        from gregory.management.commands.feedreader_articles import Command, NatureFeedProcessor
+        
+        command = Command()
+        
+        # Check that NatureFeedProcessor is in the processors list
+        nature_processors = [p for p in command.feed_processors if isinstance(p, NatureFeedProcessor)]
+        self.assertEqual(len(nature_processors), 1)
+        
+        # Test that it can be selected for Nature URLs
+        nature_url = 'https://www.nature.com/subjects/multiple-sclerosis.rss'
+        processor = command.get_feed_processor(nature_url)
+        self.assertIsInstance(processor, NatureFeedProcessor)
+
+
 class TestCommandExecution(TestCase):
     """Test command execution and management command interface."""
     

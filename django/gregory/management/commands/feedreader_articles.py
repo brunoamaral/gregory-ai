@@ -7,7 +7,7 @@ from django.core.exceptions import MultipleObjectsReturned
 from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
-from gregory.classes import SciencePaper, ClinicalTrial
+from gregory.classes import SciencePaper
 from sitesettings.models import CustomSetting
 import feedparser
 import gregory.functions as greg
@@ -173,6 +173,41 @@ class BioRxivFeedProcessor(FeedProcessor):
         return None
 
 
+class NatureFeedProcessor(FeedProcessor):
+    """Processor for Nature.com RSS feeds."""
+    
+    def can_process(self, source_link: str) -> bool:
+        return 'nature.com' in source_link.lower()
+    
+    def extract_summary(self, entry: dict) -> str:
+        """Extract summary for Nature feeds - usually empty in Nature RSS."""
+        summary = entry.get('summary', '')
+        if hasattr(entry, 'summary_detail'):
+            summary = entry['summary_detail']['value']
+        return summary
+    
+    def extract_doi(self, entry: dict) -> str:
+        """Extract DOI from Nature feed entry link."""
+        link = entry.get('link', '')
+        if not link:
+            return None
+        
+        # Nature links are in format: https://www.nature.com/articles/s41467-025-61751-9
+        # Extract the partial DOI from the link and construct full DOI
+        if '/articles/' in link:
+            try:
+                partial_doi = link.split('/articles/')[-1]
+                # Remove any query parameters or fragments
+                partial_doi = partial_doi.split('?')[0].split('#')[0]
+                # Construct full DOI with Nature prefix
+                if partial_doi:
+                    return f"10.1038/{partial_doi}"
+            except Exception:
+                pass
+        
+        return None
+
+
 class DefaultFeedProcessor(FeedProcessor):
     """Default processor for generic RSS feeds."""
     
@@ -236,6 +271,7 @@ class Command(BaseCommand):
             FasebFeedProcessor(self),
             BioRxivFeedProcessor(self),
             PNASFeedProcessor(self),
+            NatureFeedProcessor(self),
             DefaultFeedProcessor(self),  # Always last as fallback
         ]
         self.verbosity = 1  # Default verbosity level
