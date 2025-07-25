@@ -1240,17 +1240,20 @@ class ArticleSearchView(generics.ListAPIView):
     - page: Page number for pagination (default: 1)
     - page_size: Number of results per page (default: 10, max: 100)
     - all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
+    - ordering: Order results by field (e.g., -discovery_date, -published_date, title, article_id)
     
-    Results are ordered by discovery date (newest first).
+    Results are ordered by discovery date (newest first) by default.
     
     To download all search results as CSV, add format=csv and all_results=true to the query parameters.
     Example: /articles/search/?team_id=1&subject_id=1&search=covid&format=csv&all_results=true
     """
     serializer_class = ArticleSerializer
     permission_classes = [permissions.AllowAny]  # Allow access to anyone since we require team_id and subject_id
-    filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
+    filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = ArticleFilter
     search_fields = ['title', 'summary']
+    ordering_fields = ['discovery_date', 'published_date', 'title', 'article_id']
+    ordering = ['-discovery_date']  # Default ordering by newest first
     pagination_class = FlexiblePagination
     http_method_names = ['get', 'post']  # Support both GET and POST
     
@@ -1271,14 +1274,11 @@ class ArticleSearchView(generics.ListAPIView):
         
         try:
             # Start with articles filtered by team and subject
-            # Use distinct('article_id') to eliminate duplicates from many-to-many relationships
+            # Remove distinct constraint to allow proper ordering
             queryset = Articles.objects.filter(
                 teams__id=team_id, 
                 subjects__id=subject_id
-            ).distinct('article_id').order_by('article_id', '-discovery_date')
-            
-            # Note: When using distinct('article_id'), the first field in order_by MUST be article_id
-            # Then we can add '-discovery_date' to get the newest article for each unique article_id
+            ).distinct()
             
             # Apply additional filters
             title = params.get('title')
@@ -1374,17 +1374,20 @@ class TrialSearchView(generics.ListAPIView):
     - page: Page number for pagination (default: 1)
     - page_size: Number of results per page (default: 10, max: 100)
     - all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
+    - ordering: Order results by field (e.g., -discovery_date, -published_date, title, trial_id)
     
-    Results are ordered by discovery date (newest first).
+    Results are ordered by discovery date (newest first) by default.
 	
     To download all search results as CSV, add format=csv and all_results=true to the query parameters.
     Example: /trials/search/?team_id=1&subject_id=1&search=covid&format=csv&all_results=true
     """
     serializer_class = TrialSerializer
     permission_classes = [permissions.AllowAny]  # Allow access to anyone since we require team_id and subject_id
-    filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
+    filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = TrialFilter
     search_fields = ['title', 'summary']
+    ordering_fields = ['discovery_date', 'published_date', 'title', 'trial_id']
+    ordering = ['-discovery_date']  # Default ordering by newest first
     pagination_class = FlexiblePagination
     http_method_names = ['get', 'post']  # Support both GET and POST
     
@@ -1411,8 +1414,8 @@ class TrialSearchView(generics.ListAPIView):
             return Trials.objects.none()
         
         # Start with trials filtered by team and subject
-        # Use distinct('trial_id') to eliminate duplicates from many-to-many relationships
-        queryset = Trials.objects.filter(teams=team, subjects=subject).distinct('trial_id').order_by('trial_id', '-discovery_date')
+        # Remove distinct constraint to allow proper ordering
+        queryset = Trials.objects.filter(teams=team, subjects=subject).distinct()
         
         # Apply additional filters
         title = params.get('title')
