@@ -305,6 +305,352 @@ class TestCrossRefIntegration(TestCase):
             self.assertIsNone(crossref_check)
 
 
+class TestCrossRefDataUpdates(TransactionTestCase):
+    """Test CrossRef data updates for existing articles."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.organization = Organization.objects.create(name='Test Organization')
+        self.team = Team.objects.create(
+            slug='test-team',
+            organization=self.organization
+        )
+        self.subject = Subject.objects.create(
+            subject_name='Test Subject',
+            subject_slug='test-subject',
+            team=self.team
+        )
+        self.source = Sources.objects.create(
+            name='Test Source',
+            link='https://example.com/feed.xml',
+            method='rss',
+            source_for='science paper',
+            active=True,
+            team=self.team,
+            subject=self.subject
+        )
+        self.site = Site.objects.create(domain='test.example.com', name='Test Site')
+        self.custom_setting = CustomSetting.objects.create(
+            site=self.site,
+            title='Test Gregory',
+            admin_email='admin@test.example.com'
+        )
+    
+    @patch.dict(os.environ, {'DOMAIN_NAME': 'test.example.com'})
+    def test_crossref_needs_update_no_previous_data(self):
+        """Test crossref_needs_update when article has no previous CrossRef data."""
+        # Create article without CrossRef data
+        article = Articles.objects.create(
+            title='Test Article',
+            summary='Test summary',
+            doi='10.1234/test.doi',
+            link='https://example.com/article/1',
+            published_date=timezone.now(),
+            crossref_check=None,  # No previous CrossRef data
+            container_title=None,
+            publisher=None,
+            access=None
+        )
+        
+        command = Command()
+        command.setup()
+        
+        # New CrossRef data is available
+        container_title = 'Test Journal'
+        publisher = 'Test Publisher'
+        access = 'open'
+        crossref_check = timezone.now()
+        
+        # Should need update since we now have CrossRef data
+        needs_update = command.crossref_needs_update(
+            article, container_title, publisher, access, crossref_check
+        )
+        
+        self.assertTrue(needs_update)
+    
+    @patch.dict(os.environ, {'DOMAIN_NAME': 'test.example.com'})
+    def test_crossref_needs_update_changed_data(self):
+        """Test crossref_needs_update when CrossRef data has changed."""
+        # Create article with existing CrossRef data
+        old_crossref_check = timezone.now() - timedelta(days=1)
+        article = Articles.objects.create(
+            title='Test Article',
+            summary='Test summary',
+            doi='10.1234/test.doi',
+            link='https://example.com/article/1',
+            published_date=timezone.now(),
+            crossref_check=old_crossref_check,
+            container_title='Old Journal',
+            publisher='Old Publisher',
+            access='closed'
+        )
+        
+        command = Command()
+        command.setup()
+        
+        # Updated CrossRef data
+        container_title = 'New Journal'  # Changed
+        publisher = 'Old Publisher'  # Same
+        access = 'open'  # Changed
+        crossref_check = timezone.now()
+        
+        # Should need update since data has changed
+        needs_update = command.crossref_needs_update(
+            article, container_title, publisher, access, crossref_check
+        )
+        
+        self.assertTrue(needs_update)
+    
+    @patch.dict(os.environ, {'DOMAIN_NAME': 'test.example.com'})
+    def test_crossref_needs_update_no_changes(self):
+        """Test crossref_needs_update when no changes are needed."""
+        # Create article with existing CrossRef data
+        old_crossref_check = timezone.now() - timedelta(days=1)
+        article = Articles.objects.create(
+            title='Test Article',
+            summary='Test summary',
+            doi='10.1234/test.doi',
+            link='https://example.com/article/1',
+            published_date=timezone.now(),
+            crossref_check=old_crossref_check,
+            container_title='Same Journal',
+            publisher='Same Publisher',
+            access='open'
+        )
+        
+        command = Command()
+        command.setup()
+        
+        # Same CrossRef data
+        container_title = 'Same Journal'
+        publisher = 'Same Publisher'
+        access = 'open'
+        crossref_check = timezone.now()
+        
+        # Should not need update since data is the same
+        needs_update = command.crossref_needs_update(
+            article, container_title, publisher, access, crossref_check
+        )
+        
+        self.assertFalse(needs_update)
+    
+    @patch.dict(os.environ, {'DOMAIN_NAME': 'test.example.com'})
+    def test_update_crossref_fields(self):
+        """Test that CrossRef fields are properly updated."""
+        # Create article with old CrossRef data
+        old_crossref_check = timezone.now() - timedelta(days=1)
+        article = Articles.objects.create(
+            title='Test Article',
+            summary='Test summary',
+            doi='10.1234/test.doi',
+            link='https://example.com/article/1',
+            published_date=timezone.now(),
+            crossref_check=old_crossref_check,
+            container_title='Old Journal',
+            publisher='Old Publisher',
+            access='closed'
+        )
+        
+        command = Command()
+        command.setup()
+        
+        # New CrossRef data
+        new_container_title = 'New Journal'
+        new_publisher = 'New Publisher'
+        new_access = 'open'
+        new_crossref_check = timezone.now()
+        
+        # Update the fields
+        command.update_crossref_fields(
+            article, new_container_title, new_publisher, new_access, new_crossref_check
+        )
+        
+        # Verify the update
+        article.refresh_from_db()
+        self.assertEqual(article.container_title, new_container_title)
+        self.assertEqual(article.publisher, new_publisher)
+        self.assertEqual(article.access, new_access)
+        self.assertEqual(article.crossref_check, new_crossref_check)
+    
+    @patch.dict(os.environ, {'DOMAIN_NAME': 'test.example.com'})
+    @patch('gregory.management.commands.feedreader_articles.SciencePaper')
+    def test_existing_article_crossref_update_integration(self, mock_science_paper_class):
+        """Test complete workflow: existing article gets updated with new CrossRef data."""
+        # Create existing article without CrossRef data
+        existing_article = Articles.objects.create(
+            title='Original Title',
+            summary='Original summary',
+            doi='10.1234/test.doi',
+            link='https://example.com/article/1',
+            published_date=timezone.now() - timedelta(days=1),
+            crossref_check=None,
+            container_title=None,
+            publisher=None,
+            access=None
+        )
+        
+        # Mock successful CrossRef lookup
+        mock_science_paper = Mock()
+        mock_science_paper.title = 'Enhanced Title from CrossRef'
+        mock_science_paper.abstract = 'Enhanced abstract from CrossRef'
+        mock_science_paper.journal = 'Nature'
+        mock_science_paper.publisher = 'Springer Nature'
+        mock_science_paper.access = 'open'
+        mock_science_paper.authors = [
+            {'given': 'John', 'family': 'Doe', 'ORCID': 'https://orcid.org/0000-0000-0000-0001'}
+        ]
+        mock_science_paper.refresh.return_value = True
+        
+        # Make sure the class constructor returns our mock instance
+        mock_science_paper_class.return_value = mock_science_paper
+        
+        # Mock abstract cleaning - patch the class method directly
+        with patch('gregory.management.commands.feedreader_articles.SciencePaper.clean_abstract', return_value='Cleaned enhanced abstract'):
+            command = Command()
+            command.setup()
+            
+            # Process the article with DOI (simulating a feed entry processing)
+            # Use a different title to ensure we're testing the CrossRef title usage
+            command.process_article_with_doi(
+                doi='10.1234/test.doi',
+                title='Different Feed Title',  # Different from both original and CrossRef title
+                feed_summary='Feed summary',
+                link='https://example.com/article/1',
+                published_date=timezone.now(),
+                source=self.source
+            )
+        
+        # Verify that the existing article was updated with CrossRef data
+        existing_article.refresh_from_db()
+        self.assertEqual(existing_article.title, 'Enhanced Title from CrossRef')
+        self.assertEqual(existing_article.summary, 'Cleaned enhanced abstract')
+        self.assertEqual(existing_article.container_title, 'Nature')
+        self.assertEqual(existing_article.publisher, 'Springer Nature')
+        self.assertEqual(existing_article.access, 'open')
+        self.assertIsNotNone(existing_article.crossref_check)
+        
+        # Verify article count didn't increase (updated existing, didn't create new)
+        self.assertEqual(Articles.objects.filter(doi='10.1234/test.doi').count(), 1)
+    
+    @patch.dict(os.environ, {'DOMAIN_NAME': 'test.example.com'})
+    @patch('gregory.management.commands.feedreader_articles.SciencePaper')
+    def test_authors_processed_when_crossref_updated(self, mock_science_paper_class):
+        """Test that authors are processed when existing article gets CrossRef data."""
+        # Create existing article without CrossRef data and no authors
+        existing_article = Articles.objects.create(
+            title='Original Title',
+            summary='Original summary',
+            doi='10.1234/test.doi',
+            link='https://example.com/article/1',
+            published_date=timezone.now() - timedelta(days=1),
+            crossref_check=None,
+            container_title=None,
+            publisher=None,
+            access=None
+        )
+        
+        # Verify no authors initially
+        self.assertEqual(existing_article.authors.count(), 0)
+        
+        # Mock successful CrossRef lookup with author data
+        mock_science_paper = Mock()
+        mock_science_paper.title = 'Enhanced Title from CrossRef'
+        mock_science_paper.abstract = 'Enhanced abstract from CrossRef'
+        mock_science_paper.journal = 'Nature'
+        mock_science_paper.publisher = 'Springer Nature'
+        mock_science_paper.access = 'open'
+        mock_science_paper.authors = [
+            {'given': 'John', 'family': 'Doe', 'ORCID': 'https://orcid.org/0000-0000-0000-0001'},
+            {'given': 'Jane', 'family': 'Smith', 'ORCID': 'https://orcid.org/0000-0000-0000-0002'}
+        ]
+        mock_science_paper.refresh.return_value = True
+        mock_science_paper_class.return_value = mock_science_paper
+        
+        # Mock abstract cleaning
+        with patch('gregory.management.commands.feedreader_articles.SciencePaper.clean_abstract', return_value='Cleaned enhanced abstract'):
+            command = Command()
+            command.setup()
+            
+            # Process the article with DOI - this should update CrossRef data and process authors
+            command.process_article_with_doi(
+                doi='10.1234/test.doi',
+                title='Feed Title',
+                feed_summary='Feed summary',
+                link='https://example.com/article/1',
+                published_date=timezone.now(),
+                source=self.source
+            )
+        
+        # Verify that the existing article was updated with CrossRef data
+        existing_article.refresh_from_db()
+        self.assertEqual(existing_article.title, 'Enhanced Title from CrossRef')
+        self.assertEqual(existing_article.container_title, 'Nature')
+        self.assertIsNotNone(existing_article.crossref_check)
+        
+        # Verify that authors were processed and added
+        self.assertEqual(existing_article.authors.count(), 2)
+        
+        # Verify specific authors were created
+        john_doe = Authors.objects.get(ORCID='https://orcid.org/0000-0000-0000-0001')
+        jane_smith = Authors.objects.get(ORCID='https://orcid.org/0000-0000-0000-0002')
+        
+        self.assertEqual(john_doe.given_name, 'John')
+        self.assertEqual(john_doe.family_name, 'Doe')
+        self.assertEqual(jane_smith.given_name, 'Jane')
+        self.assertEqual(jane_smith.family_name, 'Smith')
+        
+        # Verify authors are linked to the article
+        self.assertIn(john_doe, existing_article.authors.all())
+        self.assertIn(jane_smith, existing_article.authors.all())
+    
+    @patch.dict(os.environ, {'DOMAIN_NAME': 'test.example.com'})
+    def test_create_or_update_article_with_crossref_title_change(self):
+        """Test that create_or_update_article correctly updates title from CrossRef."""
+        # Create existing article without CrossRef data
+        existing_article = Articles.objects.create(
+            title='Original Title',
+            summary='Original summary',
+            doi='10.1234/test.doi',
+            link='https://example.com/article/1',
+            published_date=timezone.now() - timedelta(days=1),
+            crossref_check=None,
+            container_title=None,
+            publisher=None,
+            access=None
+        )
+        
+        command = Command()
+        command.setup()
+        
+        # Call create_or_update_article with CrossRef data
+        updated_article, created, crossref_was_updated = command.create_or_update_article(
+            doi='10.1234/test.doi',
+            title='Enhanced Title from CrossRef',  # New title from CrossRef
+            summary='Enhanced summary from CrossRef',
+            link='https://example.com/article/1',
+            published_date=timezone.now(),
+            source=self.source,
+            container_title='Nature',
+            publisher='Springer Nature',
+            access='open',
+            crossref_check=timezone.now()
+        )
+        
+        # Verify the article was updated, not created new
+        self.assertEqual(updated_article.pk, existing_article.pk)
+        self.assertFalse(created)  # Should be False since it was an update
+        self.assertTrue(crossref_was_updated)  # Should be True since CrossRef data was added
+        
+        # Verify the title was updated to CrossRef title
+        updated_article.refresh_from_db()
+        self.assertEqual(updated_article.title, 'Enhanced Title from CrossRef')
+        self.assertEqual(updated_article.summary, 'Enhanced summary from CrossRef')
+        self.assertEqual(updated_article.container_title, 'Nature')
+        self.assertEqual(updated_article.publisher, 'Springer Nature')
+        self.assertEqual(updated_article.access, 'open')
+        self.assertIsNotNone(updated_article.crossref_check)
+
+
 class TestArticleCreationAndUpdate(TransactionTestCase):
     """Test article creation and update logic."""
     
