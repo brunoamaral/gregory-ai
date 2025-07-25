@@ -35,6 +35,7 @@ python manage.py merge_authors <ORCID> [OPTIONS]
 
 - `--dry-run`: Show what would be merged without making changes
 - `--keep-author <ID>`: Specify the author_id to keep when merging (overrides automatic HTTPS prioritization)
+- `--force`: Skip confirmation prompt and proceed with merge automatically
 
 ## Examples
 
@@ -75,6 +76,19 @@ python manage.py merge_authors 0000-0000-0000-1234 --keep-author 42
 
 This forces the command to keep author with ID 42 instead of auto-selecting based on article count.
 
+### Force Mode (No Confirmation)
+```bash
+python manage.py merge_authors 0000-0000-0000-1234 --force
+```
+
+This will proceed with the merge without asking for confirmation. **Use with extreme caution** in production! Always run with `--dry-run` first to verify the merge plan.
+
+You can combine flags:
+```bash
+# Force merge while keeping a specific author
+python manage.py merge_authors 0000-0000-0000-1234 --keep-author 42 --force
+```
+
 ## How It Works
 
 1. **Find duplicates**: Searches for all authors with the given ORCID (both http and https variants)
@@ -91,7 +105,7 @@ This forces the command to keep author with ID 42 instead of auto-selecting base
 
 - **Transaction safety**: All operations are wrapped in a database transaction
 - **Dry run mode**: Preview changes without making them
-- **Confirmation prompt**: Requires explicit "yes" confirmation
+- **Confirmation prompt**: Requires explicit "yes" confirmation (can be bypassed with `--force`)
 - **HTTPS prioritization**: Automatically prefers the more secure HTTPS ORCID format
 - **Data preservation**: Keeps the best available information from all authors
 - **Article deduplication**: Avoids creating duplicate article-author associations
@@ -132,6 +146,7 @@ Before running in production:
 1. **Always run with --dry-run first** to preview changes
 2. **Make a database backup** before running the actual merge
 3. **Verify the results** after merging to ensure data integrity
+4. **Use --force with extreme caution** - only after thoroughly testing with --dry-run
 
 Example production workflow:
 ```bash
@@ -141,5 +156,22 @@ python manage.py merge_authors 0000-0000-0000-1234 --dry-run
 # 2. If satisfied with the preview, run the actual merge
 python manage.py merge_authors 0000-0000-0000-1234
 
-# 3. Verify the results in the admin interface or database
+# 3. For automated scripts (use with caution!)
+python manage.py merge_authors 0000-0000-0000-1234 --force
+
+# 4. Verify the results in the admin interface or database
 ```
+
+### ⚠️ Force Mode Warning
+
+The `--force` flag bypasses the confirmation prompt and immediately proceeds with the merge. This is useful for:
+- **Automated scripts** processing multiple ORCIDs
+- **Batch operations** where manual confirmation is impractical
+- **CI/CD pipelines** running data cleanup tasks
+
+**However, use with extreme caution because:**
+- There's no way to undo the merge
+- No final chance to review the merge plan
+- Database changes are permanent
+
+**Always** run with `--dry-run` first to verify the merge plan before using `--force`.
