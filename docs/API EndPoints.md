@@ -120,7 +120,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 
 | Model                   | API Endpoint                             | Description                                         | Parameters                                              | Status                                                   |
 | ----------------------- | ---------------------------------------- | --------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------- |
-| Authors                 | GET /authors/                            | List all authors with comprehensive filtering       | `author_id`, `full_name`, `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe` | ✅ **Available**                                       |
+| Authors                 | GET /authors/                            | List all authors with comprehensive filtering       | `author_id`, `full_name`, `orcid`, `country`, `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe` | ✅ **Available**                                       |
 | Authors                 | POST /authors/                           | Create a new author                                 | N/A                                                     | ❌ **Not Available**                                  |
 | Authors                 | GET /authors/{id}/                       | Retrieve a specific author by ID                    | `id` (path)                                             | ✅ **Available**                                       |
 | Authors                 | PUT /authors/{id}/                       | Update a specific author by ID                      | N/A                                                     | ❌ **Not Available**                                  |
@@ -373,6 +373,8 @@ The `/authors/` endpoint supports comprehensive filtering and searching:
 **Filtering:**
 - `?author_id=X` - Filter by specific author ID
 - `?full_name=name` - Search authors by full name (case-insensitive)
+- `?orcid=identifier` - Filter by ORCID identifier (case-insensitive contains search)
+- `?country=code` - Filter authors by country code (exact match)
 - `?team_id=X` - Filter authors by team ID
 - `?subject_id=Y` - Filter authors by subject ID (use with team_id)
 - `?category_slug=slug` - Filter authors by category slug (use with team_id)
@@ -400,7 +402,13 @@ GET /authors/?author_id=380002
 # Search authors by name
 GET /authors/?full_name=John%20Smith
 
-# Filter authors by team
+# Filter authors by ORCID
+GET /authors/?orcid=0000-0000-0000-0001
+
+# Filter authors by country
+GET /authors/?country=US
+
+# Authors by team
 GET /authors/?team_id=1
 
 # Authors by team and subject with article count sorting

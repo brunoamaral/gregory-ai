@@ -782,6 +782,8 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	
 	- **author_id** - filter by specific author ID
 	- **full_name** - search by author's full name (case-insensitive)
+	- **orcid** - filter by ORCID identifier (case-insensitive contains search)
+	- **country** - filter by country code (exact match)
 	- **sort_by** - 'article_count' (default: 'author_id')
 	- **order** - 'asc' or 'desc' (default: 'desc' for article_count, 'asc' for others)
 	- **team_id** - filter by team ID
@@ -796,6 +798,8 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	
 	- Get specific author: `?author_id=380002`
 	- Search by name: `?full_name=John%20Smith`
+	- Filter by ORCID: `?orcid=0000-0000-0000-0001`
+	- Filter by country: `?country=US`
 	- Sort by article count: `?sort_by=article_count&order=desc`
 	- Filter by timeframe: `?sort_by=article_count&timeframe=year`
 	- Team and subject filter: `?team_id=1&subject_id=5&sort_by=article_count`
@@ -813,6 +817,8 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 		# Get query parameters
 		author_id = self.request.query_params.get('author_id')
 		full_name = self.request.query_params.get('full_name')
+		orcid = self.request.query_params.get('orcid')
+		country = self.request.query_params.get('country')
 		sort_by = self.request.query_params.get('sort_by', 'author_id')
 		order = self.request.query_params.get('order', 'desc' if sort_by == 'article_count' else 'asc')
 		team_id = self.request.query_params.get('team_id')
@@ -835,6 +841,14 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 			# Use uppercase search for better performance with GIN index
 			upper_value = full_name.upper()
 			queryset = queryset.filter(ufull_name__contains=upper_value)
+		
+		if orcid:
+			# Filter by ORCID (case-insensitive contains search)
+			queryset = queryset.filter(ORCID__contains=orcid)
+		
+		if country:
+			# Filter by country (exact match)
+			queryset = queryset.filter(country=country)
 		
 		# Build date filter for articles
 		date_filters = {}
