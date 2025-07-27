@@ -1310,6 +1310,223 @@ class TestNatureFeedProcessor(TestCase):
         self.assertIsInstance(processor, NatureFeedProcessor)
 
 
+class TestSagePublicationsFeedProcessor(TestCase):
+    """Test SAGE Publications feed processor functionality."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.organization = Organization.objects.create(name='Test Organization')
+        self.team = Team.objects.create(
+            slug='test-team',
+            organization=self.organization
+        )
+        self.subject = Subject.objects.create(
+            subject_name='Test Subject',
+            subject_slug='test-subject',
+            team=self.team
+        )
+        self.site = Site.objects.create(
+            domain='test.example.com',
+            name='Test Site'
+        )
+        self.custom_setting = CustomSetting.objects.create(
+            site=self.site,
+            title='Test Gregory Site',
+            admin_email='admin@test.com'
+        )
+        
+        from gregory.management.commands.feedreader_articles import SagePublicationsFeedProcessor, Command
+        self.command = Command()
+        self.processor = SagePublicationsFeedProcessor(self.command)
+    
+    def test_can_process_sage_urls(self):
+        """Test that processor correctly identifies SAGE Publications URLs."""
+        sage_urls = [
+            'https://journals.sagepub.com/loi/sgoa?ai=2b4&mi=ehikzz&af=R',
+            'https://journals.sagepub.com/rss/feed.xml',
+            'https://SAGEPUB.COM/feed.xml',  # case insensitive
+            'https://example.sagepub.com/journals/feed.rss',
+        ]
+        
+        non_sage_urls = [
+            'https://pubmed.ncbi.nlm.nih.gov/rss/search/',
+            'https://www.nature.com/subjects/multiple-sclerosis.rss',
+            'https://connect.biorxiv.org/relate/feed/',
+            'https://faseb.onlinelibrary.wiley.com/feed/',
+        ]
+        
+        for url in sage_urls:
+            with self.subTest(url=url):
+                self.assertTrue(self.processor.can_process(url))
+        
+        for url in non_sage_urls:
+            with self.subTest(url=url):
+                self.assertFalse(self.processor.can_process(url))
+    
+    def test_extract_doi_from_dc_identifier(self):
+        """Test DOI extraction from SAGE Publications dc:identifier field."""
+        test_cases = [
+            {
+                'entry': {
+                    'dc_identifier': 'doi:10.1177/21582440251334940',
+                    'title': 'Test Article'
+                },
+                'expected_doi': '10.1177/21582440251334940'
+            },
+            {
+                'entry': {
+                    'dc_identifier': 'doi:10.1177/21582440251327547',
+                    'title': 'Another Article'
+                },
+                'expected_doi': '10.1177/21582440251327547'
+            }
+        ]
+        
+        for case in test_cases:
+            with self.subTest(dc_identifier=case['entry']['dc_identifier']):
+                doi = self.processor.extract_doi(case['entry'])
+                self.assertEqual(doi, case['expected_doi'])
+    
+    def test_extract_doi_from_prism_doi(self):
+        """Test DOI extraction from SAGE Publications prism:doi field."""
+        entry = {
+            'prism_doi': '10.1177/21582440251334940',
+            'title': 'Test Article'
+        }
+        
+        doi = self.processor.extract_doi(entry)
+        self.assertEqual(doi, '10.1177/21582440251334940')
+    
+    def test_extract_doi_from_link(self):
+        """Test DOI extraction from SAGE Publications article links."""
+        test_cases = [
+            {
+                'entry': {
+                    'link': 'https://journals.sagepub.com/doi/abs/10.1177/21582440251334940?ai=2b4&mi=ehikzz&af=R',
+                    'title': 'Test Article'
+                },
+                'expected_doi': '10.1177/21582440251334940'
+            },
+            {
+                'entry': {
+                    'link': 'https://journals.sagepub.com/doi/abs/10.1177/21582440251327547',
+                    'title': 'Another Article'
+                },
+                'expected_doi': '10.1177/21582440251327547'
+            }
+        ]
+        
+        for case in test_cases:
+            with self.subTest(link=case['entry']['link']):
+                doi = self.processor.extract_doi(case['entry'])
+                self.assertEqual(doi, case['expected_doi'])
+    
+    def test_extract_doi_invalid_entries(self):
+        """Test DOI extraction with invalid or missing data."""
+        invalid_cases = [
+            {'entry': {'title': 'No DOI fields'}},  # Missing DOI fields
+            {'entry': {'dc_identifier': '', 'title': 'Empty dc_identifier'}},  # Empty dc_identifier
+            {'entry': {'link': 'https://journals.sagepub.com/no-doi', 'title': 'No DOI in link'}},
+            {'entry': {'link': '', 'title': 'Empty link'}},  # Empty link
+        ]
+        
+        for case in invalid_cases:
+            with self.subTest(case=case):
+                doi = self.processor.extract_doi(case['entry'])
+                self.assertIsNone(doi)
+    
+    def test_extract_summary_from_content_encoded(self):
+        """Test summary extraction from SAGE Publications content:encoded field."""
+        entry = {
+            'content_encoded': 'SAGE Open, <a href="https://journals.sagepub.com/toc/sgoa/15/2">Volume 15, Issue 2</a>, April-June 2025. <br/>Gender inequalities in the workplace present a profound challenge, undermining not only the psychological well-being and performance of employees but also the fabric of organizational justice and efficiency.',
+            'title': 'Test Article'
+        }
+        
+        summary = self.processor.extract_summary(entry)
+        expected = 'SAGE Open, Volume 15, Issue 2, April-June 2025. Gender inequalities in the workplace present a profound challenge, undermining not only the psychological well-being and performance of employees but also the fabric of organizational justice and efficiency.'
+        self.assertEqual(summary, expected)
+    
+    def test_extract_summary_volume_issue_filtering(self):
+        """Test summary extraction with volume/issue metadata filtering."""
+        entry = {
+            'description': 'SAGE Open, Volume 15, Issue 2, April-June 2025. This is the actual content of the article that should be preserved as the summary.',
+            'title': 'Test Article'
+        }
+        
+        summary = self.processor.extract_summary(entry)
+        expected = 'This is the actual content of the article that should be preserved as the summary.'
+        self.assertEqual(summary, expected)
+    
+    def test_extract_summary_fallback_fields(self):
+        """Test summary extraction with fallback to different fields."""
+        test_cases = [
+            {
+                'entry': {'description': 'Description content'},
+                'expected': 'Description content'
+            },
+            {
+                'entry': {'summary': 'Summary content'},
+                'expected': 'Summary content'
+            },
+            {
+                'entry': {},  # No summary fields
+                'expected': ''
+            }
+        ]
+        
+        for case in test_cases:
+            with self.subTest(case=case):
+                summary = self.processor.extract_summary(case['entry'])
+                self.assertEqual(summary, case['expected'])
+    
+    @patch.dict(os.environ, {'DOMAIN_NAME': 'test.example.com'})
+    def test_sage_feed_processor_integration(self):
+        """Test that SAGE Publications processor is included in command processors."""
+        from gregory.management.commands.feedreader_articles import Command, SagePublicationsFeedProcessor
+        
+        command = Command()
+        
+        # Check that SagePublicationsFeedProcessor is in the processors list
+        sage_processors = [p for p in command.feed_processors if isinstance(p, SagePublicationsFeedProcessor)]
+        self.assertEqual(len(sage_processors), 1)
+        
+        # Test that it can be selected for SAGE URLs
+        sage_url = 'https://journals.sagepub.com/loi/sgoa?ai=2b4&mi=ehikzz&af=R'
+        processor = command.get_feed_processor(sage_url)
+        self.assertIsInstance(processor, SagePublicationsFeedProcessor)
+    
+    def test_keyword_filtering_inheritance(self):
+        """Test that SAGE processor inherits keyword filtering functionality."""
+        # Create a mock source with keyword filter
+        source = Sources.objects.create(
+            source_name='Test SAGE Source',
+            link='https://journals.sagepub.com/test',
+            method='rss',
+            source_for='science paper',
+            active=True,
+            team=self.team,
+            subject=self.subject,
+            keyword_filter='multiple sclerosis, neurodegeneration, "immune system"'
+        )
+        
+        # Test entries
+        matching_entry = {
+            'title': 'Study on Multiple Sclerosis Treatment',
+            'description': 'This study examines new treatments for MS patients.',
+        }
+        
+        non_matching_entry = {
+            'title': 'Cancer Research Study',
+            'description': 'This study looks at cancer treatment protocols.',
+        }
+        
+        # Test that matching entry is included
+        self.assertTrue(self.processor.should_include_article(matching_entry, source))
+        
+        # Test that non-matching entry is excluded
+        self.assertFalse(self.processor.should_include_article(non_matching_entry, source))
+
+
 class TestCommandExecution(TestCase):
     """Test command execution and management command interface."""
     

@@ -261,6 +261,72 @@ class PNASFeedProcessor(FeedProcessor):
         return None
 
 
+class SagePublicationsFeedProcessor(FeedProcessor):
+    """Processor for SAGE Publications RSS feeds (RDF format) with keyword filtering support."""
+    
+    def can_process(self, source_link: str) -> bool:
+        return 'sagepub.com' in source_link.lower() or 'journals.sagepub.com' in source_link.lower()
+    
+    def extract_summary(self, entry: dict) -> str:
+        """Extract summary from SAGE Publications feed entry."""
+        # Try multiple content fields in order of preference
+        # SAGE uses content:encoded for the full description
+        summary = entry.get('content_encoded', '')
+        
+        if not summary:
+            summary = entry.get('description', '')
+        
+        if not summary and hasattr(entry, 'summary_detail'):
+            summary = entry['summary_detail'].get('value', '')
+        
+        if not summary:
+            summary = entry.get('summary', '')
+        
+        # Clean up HTML tags and formatting for better readability
+        if summary:
+            # Remove HTML tags
+            import re
+            summary = re.sub(r'<[^>]+>', '', summary)
+            # Clean up extra whitespace
+            summary = ' '.join(summary.split())
+            # SAGE descriptions often have volume/issue info at the beginning
+            # Extract content after common patterns like "Volume X, Issue Y, Month Year. <br/>"
+            if 'Volume ' in summary and 'Issue ' in summary:
+                # Try to find the start of actual content after metadata
+                parts = summary.split('. ')
+                if len(parts) > 1:
+                    # Skip the first part which is usually metadata
+                    summary = '. '.join(parts[1:])
+        
+        return summary or ''
+    
+    def extract_doi(self, entry: dict) -> str:
+        """Extract DOI from SAGE Publications feed entry."""
+        # SAGE uses dc:identifier with 'doi:' prefix
+        dc_identifier = entry.get('dc_identifier', '')
+        if dc_identifier and dc_identifier.startswith('doi:'):
+            return dc_identifier.replace('doi:', '')
+        
+        # Also check prism:doi if available
+        prism_doi = entry.get('prism_doi', '')
+        if prism_doi:
+            return prism_doi
+        
+        # Fallback: try to extract DOI from the link
+        link = entry.get('link', '')
+        if link and 'doi/abs/10.1177/' in link:
+            try:
+                # Extract DOI from URL pattern like: 
+                # https://journals.sagepub.com/doi/abs/10.1177/21582440251334940
+                doi_match = re.search(r'doi/abs/(10\.1177/[^?&]+)', link)
+                if doi_match:
+                    return doi_match.group(1)
+            except Exception:
+                pass
+        
+        return None
+
+
 class Command(BaseCommand):
     help = 'Fetches and updates articles and trials from RSS feeds.'
 
@@ -271,6 +337,7 @@ class Command(BaseCommand):
             FasebFeedProcessor(self),
             BioRxivFeedProcessor(self),
             PNASFeedProcessor(self),
+            SagePublicationsFeedProcessor(self),
             NatureFeedProcessor(self),
             DefaultFeedProcessor(self),  # Always last as fallback
         ]
