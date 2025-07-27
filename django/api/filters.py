@@ -105,10 +105,20 @@ class ArticleFilter(filters.FilterSet):
         """
         Filter for articles from the last X days
         """
-        if value and value > 0:
-            days_ago = timezone.now() - timedelta(days=value)
+        if not value:
+            return queryset
+            
+        try:
+            # Convert to integer and validate
+            days = int(value)
+            if days <= 0:
+                return queryset
+            
+            days_ago = timezone.now() - timedelta(days=days)
             return queryset.filter(discovery_date__gte=days_ago)
-        return queryset
+        except (ValueError, TypeError, OverflowError):
+            # Return unfiltered queryset if value is invalid
+            return queryset
     
     def filter_week(self, queryset, name, value):
         """
