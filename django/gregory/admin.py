@@ -234,7 +234,7 @@ class ArticleAdmin(SimpleHistoryAdmin):
 
 class TrialAdmin(SimpleHistoryAdmin):
 	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
-	exclude = ['ml_predictions','relevant']
+	exclude = ['ml_predictions']
 	readonly_fields = ['last_updated', 'team_categories']
 	inlines = [TrialArticleReferenceInline]
 	search_fields = [
