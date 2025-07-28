@@ -24,7 +24,6 @@ class ArticleFilter(filters.FilterSet):
     # New parameters for special article types
     relevant = filters.BooleanFilter(method='filter_relevant', label='Relevant')
     open_access = filters.BooleanFilter(method='filter_open_access', label='Open Access')
-    unsent = filters.BooleanFilter(method='filter_unsent', label='Unsent')
     last_days = filters.NumberFilter(method='filter_last_days', label='Last Days')
     week = filters.NumberFilter(method='filter_week', label='Week')
     year = filters.NumberFilter(method='filter_year', label='Year')
@@ -34,7 +33,7 @@ class ArticleFilter(filters.FilterSet):
         fields = [
             'title', 'summary', 'search', 'author_id', 'category_slug', 'category_id', 
             'journal_slug', 'team_id', 'subject_id', 'source_id', 'relevant', 
-            'open_access', 'unsent', 'last_days', 'week', 'year'
+            'open_access', 'last_days', 'week', 'year'
         ]
     
     def filter_title(self, queryset, name, value):
@@ -91,15 +90,6 @@ class ArticleFilter(filters.FilterSet):
             return queryset.filter(access='open')
         else:
             return queryset.exclude(access='open')
-    
-    def filter_unsent(self, queryset, name, value):
-        """
-        Filter for articles not sent to subscribers
-        """
-        if value:
-            return queryset.exclude(sent_to_subscribers=True)
-        else:
-            return queryset.filter(sent_to_subscribers=True)
     
     def filter_last_days(self, queryset, name, value):
         """

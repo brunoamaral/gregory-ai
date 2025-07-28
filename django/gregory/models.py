@@ -248,7 +248,6 @@ class Articles(models.Model):
 	relevant = models.BooleanField(blank=True, null=True)
 	ml_predictions = models.ManyToManyField('MLPredictions', blank=True)
 	noun_phrases = models.JSONField(blank=True, null=True)
-	sent_to_subscribers = models.BooleanField(blank=True, null=True)
 	kind = models.CharField(choices=KINDS, max_length=50,default='science paper')
 	access = models.CharField(choices=ACCESS_OPTIONS, max_length=50, default=None, null=True)
 	publisher = models.CharField(max_length=150, blank=True, null=True, default=None)

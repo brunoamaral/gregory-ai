@@ -226,19 +226,18 @@ def post_article(request):
 ### 
 class ArticleViewSet(viewsets.ModelViewSet):
 	"""
-	✅ **PREFERRED ENDPOINT**: This is the main articles endpoint that supports all filtering options.
-	
 	List all articles in the database with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
 	
 	This endpoint replaces the legacy team-based URLs and specific article type endpoints:
+
 	- Instead of `/teams/1/articles/` → use `/articles/?team_id=1`
 	- Instead of `/teams/1/articles/subject/4/` → use `/articles/?team_id=1&subject_id=4`
 	- Instead of `/articles/relevant/` → use `/articles/?relevant=true`
 	- Instead of `/articles/relevant/last/15/` → use `/articles/?relevant=true&last_days=15`
 	- Instead of `/articles/relevant/week/2024/52/` → use `/articles/?relevant=true&week=52&year=2024`
 	- Instead of `/articles/open-access/` → use `/articles/?open_access=true`
-	- Instead of `/articles/unsent/` → use `/articles/?unsent=true`
+
 	
 	# Query Parameters:
 	- **team_id** - filter by team ID (replaces /teams/{id}/articles/)
@@ -256,7 +255,6 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	# Special Article Types:
 	- **relevant** - filter for relevant articles (true/false)
 	- **open_access** - filter for open access articles (true/false)
-	- **unsent** - filter for articles not sent to subscribers (true/false)
 	- **last_days** - filter for articles from last N days (number)
 	- **week** - filter for specific week number (requires year parameter)
 	- **year** - year for week filtering (used with week parameter)
@@ -271,7 +269,6 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	- Relevant from last 15 days: `/articles/?relevant=true&last_days=15`
 	- Relevant from specific week: `/articles/?relevant=true&week=52&year=2024`
 	- Open access articles: `/articles/?open_access=true`
-	- Unsent articles: `/articles/?unsent=true`
 	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&relevant=true&ordering=-published_date`
 	"""
 	queryset = Articles.objects.all().order_by('-discovery_date')
