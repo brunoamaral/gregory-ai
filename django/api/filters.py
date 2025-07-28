@@ -10,24 +10,24 @@ class ArticleFilter(filters.FilterSet):
     and combined search across both fields, plus filtering by author,
     category, journal, team, subject, and special article types.
     """
-    title = filters.CharFilter(method='filter_title')
-    summary = filters.CharFilter(method='filter_summary')
-    search = filters.CharFilter(method='filter_search')
-    author_id = filters.NumberFilter(field_name='authors__author_id', lookup_expr='exact')
-    category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact')
-    category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact')
-    journal_slug = filters.CharFilter(method='filter_journal')
-    team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact')
-    subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact')
-    source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact')
+    title = filters.CharFilter(method='filter_title', label='Title')
+    summary = filters.CharFilter(method='filter_summary', label='Summary')
+    search = filters.CharFilter(method='filter_search', label='Search')
+    author_id = filters.NumberFilter(field_name='authors__author_id', lookup_expr='exact', label='Author ID')
+    category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact', label='Category Slug')
+    category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact', label='Category ID')
+    journal_slug = filters.CharFilter(method='filter_journal', label='Journal')
+    team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact', label='Team ID')
+    subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact', label='Subject ID')
+    source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact', label='Source ID')
     
     # New parameters for special article types
-    relevant = filters.BooleanFilter(method='filter_relevant')
-    open_access = filters.BooleanFilter(method='filter_open_access')
-    unsent = filters.BooleanFilter(method='filter_unsent')
-    last_days = filters.NumberFilter(method='filter_last_days')
-    week = filters.NumberFilter(method='filter_week')
-    year = filters.NumberFilter(method='filter_year')
+    relevant = filters.BooleanFilter(method='filter_relevant', label='Relevant')
+    open_access = filters.BooleanFilter(method='filter_open_access', label='Open Access')
+    unsent = filters.BooleanFilter(method='filter_unsent', label='Unsent')
+    last_days = filters.NumberFilter(method='filter_last_days', label='Last Days')
+    week = filters.NumberFilter(method='filter_week', label='Week')
+    year = filters.NumberFilter(method='filter_year', label='Year')
     
     class Meta:
         model = Articles
@@ -156,20 +156,19 @@ class TrialFilter(filters.FilterSet):
     team, and subject.
     """
     # Core search filters
-    title = filters.CharFilter(method='filter_title')
-    summary = filters.CharFilter(method='filter_summary')
-    search = filters.CharFilter(method='filter_search')
+    title = filters.CharFilter(method='filter_title', label='Title')
+    summary = filters.CharFilter(method='filter_summary', label='Summary')
+    search = filters.CharFilter(method='filter_search', label='Search')
     
     # ID and relationship filters
-    trial_id = filters.NumberFilter(field_name='trial_id', lookup_expr='exact')
-    team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact')
-    subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact')
-    category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact')
-    category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact')
-    source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact')
+    trial_id = filters.NumberFilter(field_name='trial_id', lookup_expr='exact', label='Trial ID')
+    team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact', label='Team ID')
+    subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact', label='Subject ID')
+    category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact', label='Category Slug')
+    category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact', label='Category ID')
+    source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact', label='Source ID')
     
     # Trial-specific filters
-    status = filters.CharFilter(field_name='recruitment_status', lookup_expr='exact')
     recruitment_status = filters.CharFilter(field_name='recruitment_status', lookup_expr='exact')
     internal_number = filters.CharFilter(field_name='internal_number', lookup_expr='icontains')
     phase = filters.CharFilter(field_name='phase', lookup_expr='icontains')
@@ -189,7 +188,7 @@ class TrialFilter(filters.FilterSet):
     class Meta:
         model = Trials
         fields = [
-            'trial_id', 'title', 'summary', 'search', 'status', 'recruitment_status',
+            'trial_id', 'title', 'summary', 'search', 'recruitment_status',
             'team_id', 'subject_id', 'category_slug', 'category_id', 'source_id',
             'internal_number', 'phase', 'study_type', 'primary_sponsor', 'source_register',
             'countries', 'condition', 'intervention', 'therapeutic_areas',
@@ -221,10 +220,10 @@ class TrialFilter(filters.FilterSet):
 class AuthorFilter(filters.FilterSet):
     """Filter class for Authors, allowing searching by full name and filtering by author ID."""
 
-    full_name = filters.CharFilter(method='filter_full_name')
-    author_id = filters.NumberFilter(field_name='author_id', lookup_expr='exact')
-    orcid = filters.CharFilter(field_name='ORCID', lookup_expr='icontains')
-    country = filters.CharFilter(field_name='country', lookup_expr='exact')
+    full_name = filters.CharFilter(method='filter_full_name', label='Full Name')
+    author_id = filters.NumberFilter(field_name='author_id', lookup_expr='exact', label='Author ID')
+    orcid = filters.CharFilter(field_name='ORCID', lookup_expr='icontains', label='ORCID')
+    country = filters.CharFilter(field_name='country', lookup_expr='exact', label='Country')
 
     class Meta:
         model = Authors
@@ -240,12 +239,12 @@ class SourceFilter(filters.FilterSet):
     """
     Filter class for Sources, allowing filtering by team and subject.
     """
-    source_id = filters.NumberFilter(field_name='source_id', lookup_expr='exact')
-    team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact')
-    subject_id = filters.NumberFilter(field_name='subject__id', lookup_expr='exact')
-    active = filters.BooleanFilter(field_name='active')
-    source_for = filters.CharFilter(field_name='source_for', lookup_expr='exact')
-    link = filters.CharFilter(field_name='link', lookup_expr='icontains')
+    source_id = filters.NumberFilter(field_name='source_id', lookup_expr='exact', label='Source ID')
+    team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact', label='Team ID')
+    subject_id = filters.NumberFilter(field_name='subject__id', lookup_expr='exact', label='Subject ID')
+    active = filters.BooleanFilter(field_name='active', label='Active')
+    source_for = filters.CharFilter(field_name='source_for', lookup_expr='exact', label='Source For')
+    link = filters.CharFilter(field_name='link', lookup_expr='icontains', label='Link')
     
     class Meta:
         model = Sources
@@ -255,7 +254,7 @@ class SubjectFilter(filters.FilterSet):
     """
     Filter class for Subject, allowing filtering by team.
     """
-    team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact')
+    team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact', label='Team ID')
     
     class Meta:
         model = Subject
@@ -265,10 +264,10 @@ class CategoryFilter(filters.FilterSet):
     """
     Filter class for TeamCategory, allowing filtering by team and subject.
     """
-    category_id = filters.NumberFilter(field_name='id', lookup_expr='exact')
-    team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact')
-    subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact')
-    category_terms = filters.CharFilter(method='filter_category_terms')
+    category_id = filters.NumberFilter(field_name='id', lookup_expr='exact', label='Category ID')
+    team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact', label='Team ID')
+    subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact', label='Subject ID')
+    category_terms = filters.CharFilter(method='filter_category_terms', label='Category Terms')
     
     class Meta:
         model = TeamCategory

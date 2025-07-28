@@ -810,6 +810,11 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	"""
 	serializer_class = AuthorSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filterset_class = AuthorFilter
+	search_fields = ['full_name', 'ORCID']
+	ordering_fields = ['author_id', 'full_name', 'country']
+	ordering = ['author_id']
 	
 	def get_queryset(self):
 		queryset = Authors.objects.all()
