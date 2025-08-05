@@ -296,24 +296,28 @@ class ArticleViewSet(viewsets.ModelViewSet):
 
 		- team_id: Filter by specific team
 		- subject_id: Filter by specific subject
+		- ml_threshold: ML prediction threshold (default: 0.8)
 		- last_days: Filter articles from last N days
 		- week & year: Filter articles from specific week
 		
 		Example:    
-		GET /articles/relevance_counts/?team_id=1&subject_id=4
+		GET /articles/relevance_counts/?team_id=1&subject_id=4&ml_threshold=0.9
 		"""
 		# Apply the same filters as the main queryset
 		filtered_queryset = self.filter_queryset(self.get_queryset())
+		
+		# Get ML threshold from request parameters, default to 0.8
+		threshold = float(self.request.GET.get('ml_threshold', 0.8))
 		
 		# Count manually relevant articles
 		manually_relevant = filtered_queryset.filter(
 			article_subject_relevances__is_relevant=True
 		).distinct().count()
 		
-		# Count ML-relevant articles (using the new consensus logic)
+		# Count ML-relevant articles (using the new consensus logic with threshold)
 		ml_relevant_articles = []
 		for article in filtered_queryset.distinct():
-			if article.is_ml_relevant_any_subject():
+			if article.is_ml_relevant_any_subject(threshold=threshold):
 				ml_relevant_articles.append(article.article_id)
 		
 		ml_relevant_count = len(ml_relevant_articles)
@@ -335,6 +339,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
 			'ml_relevant': ml_relevant_count,
 			'both_relevant': both_relevant,
 			'total_unique_relevant': total_unique,
+			'ml_threshold_used': threshold,
 			'breakdown': {
 				'manual_only': manually_relevant - both_relevant,
 				'ml_only': ml_relevant_count - both_relevant,

@@ -23,6 +23,7 @@ class ArticleFilter(filters.FilterSet):
     
     # New parameters for special article types
     relevant = filters.BooleanFilter(method='filter_relevant', label='Relevant')
+    ml_threshold = filters.NumberFilter(method='filter_ml_threshold', label='ML Threshold (0.0-1.0)')
     open_access = filters.BooleanFilter(method='filter_open_access', label='Open Access')
     last_days = filters.NumberFilter(method='filter_last_days', label='Last Days')
     week = filters.NumberFilter(method='filter_week', label='Week')
@@ -32,7 +33,7 @@ class ArticleFilter(filters.FilterSet):
         model = Articles
         fields = [
             'title', 'summary', 'search', 'author_id', 'category_slug', 'category_id', 
-            'journal_slug', 'team_id', 'subject_id', 'source_id', 'relevant', 
+            'journal_slug', 'team_id', 'subject_id', 'source_id', 'relevant', 'ml_threshold',
             'open_access', 'last_days', 'week', 'year'
         ]
     
@@ -70,16 +71,20 @@ class ArticleFilter(filters.FilterSet):
     def filter_relevant(self, queryset, name, value):
         """
         Filter for relevant articles (ML predictions with consensus or manual selection)
+        Uses ml_threshold parameter if provided, otherwise defaults to 0.8
         """
         if value:
+            # Get ML threshold from request parameters, default to 0.8
+            threshold = float(self.request.GET.get('ml_threshold', 0.8))
+            
             # Get articles that are either:
             # 1. Manually marked as relevant
             manually_relevant = models.Q(article_subject_relevances__is_relevant=True)
             
-            # 2. ML-relevant based on subject-specific consensus settings
+            # 2. ML-relevant based on subject-specific consensus settings and threshold
             ml_relevant_articles = []
             for article in queryset.distinct():
-                if article.is_ml_relevant_any_subject():
+                if article.is_ml_relevant_any_subject(threshold=threshold):
                     ml_relevant_articles.append(article.article_id)
             
             ml_relevant_q = models.Q(article_id__in=ml_relevant_articles)
@@ -87,16 +92,35 @@ class ArticleFilter(filters.FilterSet):
             return queryset.filter(manually_relevant | ml_relevant_q).distinct()
         else:
             # Exclude articles that are either manually relevant or ML-relevant
+            threshold = float(self.request.GET.get('ml_threshold', 0.8))
             manually_relevant = models.Q(article_subject_relevances__is_relevant=True)
             
             ml_relevant_articles = []
             for article in queryset.distinct():
-                if article.is_ml_relevant_any_subject():
+                if article.is_ml_relevant_any_subject(threshold=threshold):
                     ml_relevant_articles.append(article.article_id)
             
             ml_relevant_q = models.Q(article_id__in=ml_relevant_articles)
             
             return queryset.exclude(manually_relevant | ml_relevant_q).distinct()
+    
+    def filter_ml_threshold(self, queryset, name, value):
+        """
+        Filter for articles with ML predictions above the specified threshold.
+        This filter is used in combination with the relevant filter.
+        """
+        # This filter doesn't modify the queryset directly - it's used by filter_relevant
+        # But we can validate the threshold value here
+        try:
+            threshold = float(value)
+            if not 0.0 <= threshold <= 1.0:
+                # Invalid threshold, return empty queryset
+                return queryset.none()
+        except (ValueError, TypeError):
+            # Invalid threshold format, return empty queryset
+            return queryset.none()
+        
+        return queryset
     
     def filter_open_access(self, queryset, name, value):
         """
