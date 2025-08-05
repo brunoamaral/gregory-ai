@@ -254,6 +254,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	
 	# Special Article Types:
 	- **relevant** - filter for relevant articles (true/false)
+	- **ml_threshold** - minimum ML prediction confidence (float 0.0-1.0, e.g., 0.75)
 	- **open_access** - filter for open access articles (true/false)
 	- **last_days** - filter for articles from last N days (number)
 	- **week** - filter for specific week number (requires year parameter)
@@ -266,10 +267,11 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	- Category by slug: `/articles/?team_id=1&category_slug=natalizumab`
 	- Category by ID: `/articles/?team_id=1&category_id=5`
 	- Relevant articles: `/articles/?relevant=true`
+	- Relevant with ML threshold: `/articles/?relevant=true&ml_threshold=0.75`
 	- Relevant from last 15 days: `/articles/?relevant=true&last_days=15`
 	- Relevant from specific week: `/articles/?relevant=true&week=52&year=2024`
 	- Open access articles: `/articles/?open_access=true`
-	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&relevant=true&ordering=-published_date`
+	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&relevant=true&ml_threshold=0.8&ordering=-published_date`
 	"""
 	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer

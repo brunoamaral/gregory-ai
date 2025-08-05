@@ -1,6 +1,7 @@
 from django_filters import rest_framework as filters
 from django.db import models
 from django.utils import timezone
+from django import forms
 from datetime import datetime, timedelta
 from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject
 
@@ -23,7 +24,8 @@ class ArticleFilter(filters.FilterSet):
     
     # New parameters for special article types
     relevant = filters.BooleanFilter(method='filter_relevant', label='Relevant')
-    ml_threshold = filters.NumberFilter(method='filter_ml_threshold', label='ML Threshold (0.0-1.0)')
+    ml_threshold = filters.NumberFilter(method='filter_ml_threshold', label='ML Threshold (0.0-1.0)', 
+                                       widget=forms.NumberInput(attrs={'step': '0.01', 'min': '0.0', 'max': '1.0'}))
     open_access = filters.BooleanFilter(method='filter_open_access', label='Open Access')
     last_days = filters.NumberFilter(method='filter_last_days', label='Last Days')
     week = filters.NumberFilter(method='filter_week', label='Week')
@@ -107,20 +109,25 @@ class ArticleFilter(filters.FilterSet):
     def filter_ml_threshold(self, queryset, name, value):
         """
         Filter for articles with ML predictions above the specified threshold.
-        This filter is used in combination with the relevant filter.
+        Works independently or in combination with the relevant filter.
         """
-        # This filter doesn't modify the queryset directly - it's used by filter_relevant
-        # But we can validate the threshold value here
         try:
             threshold = float(value)
             if not 0.0 <= threshold <= 1.0:
                 # Invalid threshold, return empty queryset
                 return queryset.none()
+                
+            # Filter articles that meet the ML threshold for any subject
+            ml_relevant_articles = []
+            for article in queryset.distinct():
+                if article.is_ml_relevant_any_subject(threshold=threshold):
+                    ml_relevant_articles.append(article.article_id)
+            
+            return queryset.filter(article_id__in=ml_relevant_articles)
+            
         except (ValueError, TypeError):
             # Invalid threshold format, return empty queryset
             return queryset.none()
-        
-        return queryset
     
     def filter_open_access(self, queryset, name, value):
         """
