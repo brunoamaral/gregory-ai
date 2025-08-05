@@ -38,8 +38,8 @@ class Command(BaseCommand):
 		parser.add_argument(
 			'--threshold',
 			type=float,
-			default=0.8,
-			help='ML prediction score threshold (default: 0.8)'
+			default=0.9,
+			help='ML prediction score threshold (default: 0.90)'
 		)
 		parser.add_argument(
 			'--days',
