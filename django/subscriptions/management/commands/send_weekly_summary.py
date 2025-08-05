@@ -27,11 +27,15 @@ class Command(BaseCommand):
 	help = '''Sends a weekly digest email for all weekly digest lists.
 	
 	Options:
-	--threshold: ML prediction score threshold (default: 0.8)
+	--threshold: ML prediction score threshold (default: 0.8) - Combined with consensus logic
 	--days: Number of days to look back for articles (default: 30)
 	--debug: Enable detailed debugging output
 	--dry-run: Simulate sending emails without actually sending them
 	--all-articles: Include all unsent articles regardless of ML predictions or manual review status, ordered by most recent
+	
+	Note: The system now uses ML consensus settings configured per subject combined with probability threshold.
+	Each subject can be configured to require 'any', 'majority', or 'all' ML models to agree,
+	and each model must have a prediction score >= threshold.
 	'''
 	
 	def add_arguments(self, parser):
@@ -70,14 +74,16 @@ class Command(BaseCommand):
 		dry_run = options['dry_run']
 		all_articles = options['all_articles']
 
+		if debug:
+			self.stdout.write(self.style.NOTICE(f"Running with threshold: {threshold}, days: {days_to_look_back}, all_articles: {all_articles}"))
+			if not all_articles:
+				self.stdout.write(self.style.NOTICE(f"Using ML consensus logic with probability threshold >= {threshold}"))
+		
 		if dry_run:
 			self.stdout.write(self.style.WARNING("DRY RUN MODE: No emails will be sent and no records will be updated"))
 		
 		if all_articles:
 			self.stdout.write(self.style.WARNING("ALL ARTICLES MODE: Including all unsent articles regardless of ML predictions or manual review"))
-		
-		if debug:
-			self.stdout.write(self.style.NOTICE(f"Running with ML threshold: {threshold}, days: {days_to_look_back}, all_articles: {all_articles}"))
 		
 		site = Site.objects.get_current()
 		customsettings = CustomSetting.objects.get(site=site)
@@ -131,7 +137,7 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.NOTICE(f"ALL ARTICLES MODE: Found {articles.count()} total articles (ordered by most recent)"))
 				
 			else:
-				# Standard filtering: manually reviewed OR high ML prediction score
+				# Standard filtering: manually reviewed OR ML-relevant based on consensus settings
 				# First, get articles by subject
 				subject_articles = Articles.objects.filter(
 					subjects__in=digest_list.subjects.all(),
@@ -148,41 +154,56 @@ class Command(BaseCommand):
 				).distinct()
 				self.stdout.write(self.style.NOTICE(f"Found {manual_reviewed.count()} manually reviewed articles"))
 				
-				# Get articles with ML prediction scores above threshold
-				# Create a subquery to check for ML predictions above threshold
-				ml_pred_subquery = MLPredictions.objects.filter(
-					article=OuterRef('pk'),
-					subject__in=digest_list.subjects.all(),
-					probability_score__gte=threshold
-				)
+				# Get articles that are ML-relevant based on new consensus logic
+				ml_relevant_articles = []
+				for article in subject_articles:
+					if article.is_ml_relevant_any_subject(threshold=threshold):
+						ml_relevant_articles.append(article.article_id)
 				
-				# Get articles with valid ML predictions
-				ml_predicted = Articles.objects.filter(
-					subjects__in=digest_list.subjects.all(),
-					discovery_date__gte=now() - timedelta(days=days_to_look_back)
-				).filter(
-					Exists(ml_pred_subquery)
-				).distinct()
-				self.stdout.write(self.style.NOTICE(f"Found {ml_predicted.count()} articles with ML prediction score ≥ {threshold}"))
+				ml_predicted = Articles.objects.filter(pk__in=ml_relevant_articles)
+				self.stdout.write(self.style.NOTICE(f"Found {ml_predicted.count()} articles meeting ML consensus criteria (threshold >= {threshold})"))
 				
-				# Debugging: Check ML prediction scores for some articles
+				# Debugging: Check ML consensus for some articles
 				if debug:
 					sample_articles = subject_articles.order_by('-discovery_date')[:5]  # Get 5 most recent articles
-					self.stdout.write(self.style.NOTICE(f"ML prediction scores for recent articles:"))
+					self.stdout.write(self.style.NOTICE(f"ML consensus evaluation for recent articles (threshold >= {threshold}):"))
 					for article in sample_articles:
 						self.stdout.write(self.style.NOTICE(f"  Article {article.article_id}: {article.title[:50]}..."))
-						ml_preds = article.ml_predictions_detail.all()
-						if ml_preds.exists():
-							for pred in ml_preds:
-								self.stdout.write(self.style.NOTICE(f"    - Subject: {pred.subject.subject_name}, Score: {pred.probability_score}"))
+						
+						# Check relevance for each subject this article belongs to
+						article_subjects = article.subjects.filter(auto_predict=True)
+						if article_subjects.exists():
+							for subject in article_subjects:
+								is_relevant = article.is_ml_relevant_for_subject(subject, threshold=threshold)
+								consensus_type = subject.ml_consensus_type
+								
+								# Get prediction details for this subject
+								high_confidence_predictions = article.ml_predictions_detail.filter(
+									subject=subject,
+									predicted_relevant=True,
+									probability_score__gte=threshold
+								).values_list('algorithm', flat=True)
+								high_confidence_count = len(set(high_confidence_predictions)) if high_confidence_predictions else 0
+								
+								# Also show all predictions (regardless of threshold) for context
+								all_predictions = article.ml_predictions_detail.filter(
+									subject=subject,
+									predicted_relevant=True
+								)
+								all_scores = [(pred.algorithm, pred.probability_score) for pred in all_predictions]
+								
+								self.stdout.write(self.style.NOTICE(f"    - Subject: {subject.subject_name} (consensus: {consensus_type})"))
+								self.stdout.write(self.style.NOTICE(f"      * {high_confidence_count}/3 models >= {threshold} threshold → {'INCLUDED' if is_relevant else 'EXCLUDED'}"))
+								if all_scores:
+									scores_text = ", ".join([f"{alg}: {score:.2f}" for alg, score in all_scores])
+									self.stdout.write(self.style.NOTICE(f"      * All scores: {scores_text}"))
 						else:
-							self.stdout.write(self.style.NOTICE(f"    - No ML predictions found"))
+							self.stdout.write(self.style.NOTICE(f"    - No subjects with auto_predict=True"))
 				
-				# Combine manually reviewed OR high ML prediction score
-				# Instead of union(), use a combined filter query
-				article_ids = list(manual_reviewed.values_list('pk', flat=True)) + list(ml_predicted.values_list('pk', flat=True))
+				# Combine manually reviewed OR ML-relevant based on consensus and threshold
+				article_ids = list(manual_reviewed.values_list('pk', flat=True)) + ml_relevant_articles
 				articles = Articles.objects.filter(pk__in=article_ids).distinct()
-				self.stdout.write(self.style.NOTICE(f"Filtered by manual review or ML threshold: {articles.count()} articles"))
+				self.stdout.write(self.style.NOTICE(f"Filtered by manual review or ML consensus (>= {threshold}): {articles.count()} articles"))
 				
 				self.stdout.write(self.style.NOTICE(f"Final combined query found {articles.count()} articles"))
 			
@@ -255,16 +276,47 @@ class Command(BaseCommand):
 						if debug:
 							self.stdout.write(self.style.NOTICE(f"Applied article limit in ALL ARTICLES mode: showing {article_limit} most recent articles out of {articles_count} available"))
 					else:
-						# Standard mode: Order by highest ML prediction score first, then by discovery date (newest first)
-						# We need to annotate with the max ML prediction score for ordering
-						from django.db.models import Max
-						limited_articles = unsent_articles.annotate(
-							max_ml_score=Max('ml_predictions_detail__probability_score')
-						).order_by('-max_ml_score', '-discovery_date')[:article_limit]
+						# Standard mode: Order by manual relevance first, then ML consensus count, then discovery date
+						# Prioritize manually relevant articles, then those with more ML model agreement
+						manual_relevant_ids = set(Articles.objects.filter(
+							pk__in=[a.pk for a in unsent_articles],
+							article_subject_relevances__is_relevant=True
+						).values_list('pk', flat=True))
+						
+						# Create a list with priority scoring for sorting
+						article_priorities = []
+						for article in unsent_articles:
+							# Calculate priority score
+							priority_score = 0
+							
+							# Manual relevance gets highest priority (1000 points)
+							if article.pk in manual_relevant_ids:
+								priority_score += 1000
+							
+							# ML consensus gets points based on number of models agreeing above threshold
+							for subject in article.subjects.filter(auto_predict=True):
+								predictions = article.ml_predictions_detail.filter(
+									subject=subject,
+									predicted_relevant=True,
+									probability_score__gte=threshold
+								).values_list('algorithm', flat=True)
+								relevant_count = len(set(predictions)) if predictions else 0
+								priority_score += relevant_count * 100  # 100 points per agreeing model above threshold
+							
+							article_priorities.append((article, priority_score))
+						
+						# Sort by priority score (descending), then by discovery date (newest first)
+						article_priorities.sort(key=lambda x: (-x[1], -x[0].discovery_date.timestamp()))
+						limited_articles = [item[0] for item in article_priorities[:article_limit]]
+						
 						if debug:
-							self.stdout.write(self.style.NOTICE(f"Applied article limit: showing {article_limit} highest-scoring articles (by ML prediction, then newest) out of {articles_count} available"))
+							self.stdout.write(self.style.NOTICE(f"Applied article limit: showing {article_limit} highest-priority articles (manual + ML consensus >= {threshold}) out of {articles_count} available"))
+							# Show priority breakdown for top articles
+							for i, (article, score) in enumerate(article_priorities[:min(5, article_limit)]):
+								manual_flag = "✓" if article.pk in manual_relevant_ids else "✗"
+								self.stdout.write(self.style.NOTICE(f"  {i+1}. Score {score}: Manual {manual_flag} | {article.title[:40]}..."))
 					
-					# Convert sliced QuerySet to list to avoid "Cannot filter a query once a slice has been taken" error
+					# Convert to list to avoid "Cannot filter a query once a slice has been taken" error
 					unsent_articles = list(limited_articles)
 
 				# Step 7: Prepare and send the email using optimized Phase 5 rendering pipeline
@@ -287,7 +339,6 @@ class Command(BaseCommand):
 					list_obj=digest_list,
 					site=site,
 					custom_settings=customsettings,
-					confidence_threshold=threshold,  # Pass the threshold parameter to the content organizer
 					utm_params=utm_params  # Add UTM parameters to context
 				)
 				
@@ -381,7 +432,7 @@ class Command(BaseCommand):
 
 				if dry_run:
 					# In dry-run mode, just log what would be sent without actually sending
-					mode_info = "ALL ARTICLES mode" if all_articles else f"ML threshold {threshold} mode"
+					mode_info = "ALL ARTICLES mode" if all_articles else f"ML consensus mode (threshold >= {threshold})"
 					self.stdout.write(self.style.SUCCESS(f'[DRY RUN] Would send weekly digest email to {subscriber.email} for list "{digest_list.list_name}" ({mode_info})'))
 					self.stdout.write(self.style.NOTICE(f'  - Subject: {email_subject}'))
 					# Show the actual articles that would be sent based on content organizer

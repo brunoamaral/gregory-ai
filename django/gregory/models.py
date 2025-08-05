@@ -270,26 +270,29 @@ class Articles(models.Model):
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
 	retracted = models.BooleanField(default=False)
 	
-	def is_ml_relevant_for_subject(self, subject):
+	def is_ml_relevant_for_subject(self, subject, threshold=0.8):
 		"""
-		Check if this article is ML-relevant for a specific subject based on the subject's consensus type.
+		Check if this article is ML-relevant for a specific subject based on the subject's consensus type
+		and probability threshold.
 		
 		Args:
 			subject: Subject instance to check relevance for
+			threshold: Minimum probability score required (default: 0.8)
 			
 		Returns:
 			bool: True if article meets the ML consensus criteria for the subject
 		"""
-		# Get all ML predictions for this article and subject
+		# Get all ML predictions for this article and subject that meet the threshold
 		predictions = self.ml_predictions_detail.filter(
 			subject=subject,
-			predicted_relevant=True
+			predicted_relevant=True,
+			probability_score__gte=threshold
 		).values_list('algorithm', flat=True)
 		
 		if not predictions.exists():
 			return False
 			
-		# Count unique algorithms that predicted relevant
+		# Count unique algorithms that predicted relevant with sufficient confidence
 		relevant_algorithms = set(predictions)
 		total_predictions = len(relevant_algorithms)
 		
@@ -304,15 +307,18 @@ class Articles(models.Model):
 			# Default to 'any' if unknown consensus type
 			return total_predictions >= 1
 	
-	def is_ml_relevant_any_subject(self):
+	def is_ml_relevant_any_subject(self, threshold=0.8):
 		"""
 		Check if this article is ML-relevant for any of its associated subjects.
+		
+		Args:
+			threshold: Minimum probability score required (default: 0.8)
 		
 		Returns:
 			bool: True if article meets ML consensus criteria for at least one subject
 		"""
 		for subject in self.subjects.filter(auto_predict=True):
-			if self.is_ml_relevant_for_subject(subject):
+			if self.is_ml_relevant_for_subject(subject, threshold):
 				return True
 		return False
 	

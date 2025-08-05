@@ -2,44 +2,52 @@
 
 ## Overview
 
-This enhancement adds granular control over how ML models determine article relevance. Instead of requiring just one ML model to predict relevance, administrators can now configure subjects to require different levels of consensus among the 3 ML models (BERT, LGBM, LSTM).
+This enhancement adds granular control over how ML models determine article relevance. Instead of using just a simple threshold, the system now combines **consensus requirements** with **probability thresholds** to provide precise control over article selection.
 
-## New Features
+## Dual Filter Approach
 
 ### 1. ML Consensus Types
 
 Each subject now has a `ml_consensus_type` field with three options:
 
-- **Any Model (default)**: Article is relevant if at least 1 ML model predicts relevance
-- **Majority Vote**: Article is relevant if at least 2 out of 3 ML models agree
-- **Unanimous**: Article is relevant if all 3 ML models predict relevance
+- **Any Model**: Article is relevant if at least 1 ML model predicts relevance above threshold
+- **Majority Vote**: Article is relevant if at least 2 out of 3 ML models agree above threshold  
+- **Unanimous**: Article is relevant if all 3 ML models predict relevance above threshold
 
-### 2. Enhanced API Endpoints
+### 2. Probability Threshold
+
+Each ML prediction must also meet a minimum probability score (default: 0.8) to be considered in consensus calculation.
+
+**Example**: Article with predictions:
+- BERT: 0.9 (relevant) ✓
+- LGBM: 0.7 (relevant) ✗ (below threshold)
+- LSTM: 0.85 (relevant) ✓
+
+With `majority` consensus + 0.8 threshold = **2 models above threshold** → **INCLUDED**
+
+## Enhanced API Endpoints
 
 #### Existing `/articles/?relevant=true` Endpoint
-Now respects the subject-specific ML consensus settings when filtering articles.
+Now supports both consensus settings and threshold filtering.
 
 **Example API Calls:**
 ```bash
-# Get all relevant articles (manual + ML with consensus)
+# Get relevant articles with default threshold (0.8)
 GET /api/articles/?relevant=true
 
-# Get relevant articles for specific team and subject
-GET /api/articles/?relevant=true&team_id=1&subject_id=4
+# Get relevant articles with custom threshold
+GET /api/articles/?relevant=true&ml_threshold=0.9
 
-# Get relevant articles from last 30 days
-GET /api/articles/?relevant=true&last_days=30
-
-# Get counts only (no article data)
-GET /api/articles/?relevant=true&page_size=0
+# Combined with team/subject filtering
+GET /api/articles/?relevant=true&team_id=1&subject_id=4&ml_threshold=0.85
 ```
 
-#### New `/articles/relevance_counts/` Endpoint
-Provides detailed breakdown of article relevance by identification method.
+#### Enhanced `/articles/relevance_counts/` Endpoint
+Now shows which threshold was used in the analysis.
 
 **Example API Call:**
 ```bash
-GET /api/articles/relevance_counts/?team_id=1&subject_id=4
+GET /api/articles/relevance_counts/?team_id=1&ml_threshold=0.9
 ```
 
 **Example Response:**
@@ -49,6 +57,7 @@ GET /api/articles/relevance_counts/?team_id=1&subject_id=4
     "ml_relevant": 67,
     "both_relevant": 12,
     "total_unique_relevant": 100,
+    "ml_threshold_used": 0.9,
     "breakdown": {
         "manual_only": 33,
         "ml_only": 55,
