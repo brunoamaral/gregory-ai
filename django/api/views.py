@@ -280,6 +280,68 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	ordering_fields = ['discovery_date', 'published_date', 'title', 'article_id']
 	ordering = ['-discovery_date']
 
+	@action(detail=False, methods=['get'])
+	def relevance_counts(self, request):
+		"""
+		Get counts of relevant articles broken down by identification method.
+		
+		Returns counts for:
+
+		- Manual identification: Articles marked as relevant by human reviewers
+		- ML predictions: Articles predicted as relevant by ML models (respecting consensus settings)
+		- Both: Articles that are both manually marked and ML-predicted as relevant
+		- Total unique: Total unique relevant articles (avoids double counting)
+		
+		Query Parameters:
+
+		- team_id: Filter by specific team
+		- subject_id: Filter by specific subject
+		- last_days: Filter articles from last N days
+		- week & year: Filter articles from specific week
+		
+		Example:    
+		GET /articles/relevance_counts/?team_id=1&subject_id=4
+		"""
+		# Apply the same filters as the main queryset
+		filtered_queryset = self.filter_queryset(self.get_queryset())
+		
+		# Count manually relevant articles
+		manually_relevant = filtered_queryset.filter(
+			article_subject_relevances__is_relevant=True
+		).distinct().count()
+		
+		# Count ML-relevant articles (using the new consensus logic)
+		ml_relevant_articles = []
+		for article in filtered_queryset.distinct():
+			if article.is_ml_relevant_any_subject():
+				ml_relevant_articles.append(article.article_id)
+		
+		ml_relevant_count = len(ml_relevant_articles)
+		
+		# Count articles that are both manually and ML relevant
+		both_relevant = filtered_queryset.filter(
+			article_subject_relevances__is_relevant=True,
+			article_id__in=ml_relevant_articles
+		).distinct().count()
+		
+		# Count total unique relevant articles (union of manual and ML)
+		total_unique = filtered_queryset.filter(
+			Q(article_subject_relevances__is_relevant=True) |
+			Q(article_id__in=ml_relevant_articles)
+		).distinct().count()
+		
+		return Response({
+			'manual_relevant': manually_relevant,
+			'ml_relevant': ml_relevant_count,
+			'both_relevant': both_relevant,
+			'total_unique_relevant': total_unique,
+			'breakdown': {
+				'manual_only': manually_relevant - both_relevant,
+				'ml_only': ml_relevant_count - both_relevant,
+				'both': both_relevant
+			}
+		})
+
 class RelatedArticles(viewsets.ModelViewSet):
 	"""
 	Search related articles by the noun_phrases field. This search accepts regular expressions such as /articles/related/?search=<noun_phrase>|<noun_phrase>

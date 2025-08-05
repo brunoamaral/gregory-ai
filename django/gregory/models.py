@@ -85,10 +85,22 @@ class Entities(models.Model):
 		db_table = 'entities'
 
 class Subject(models.Model):
+	ML_CONSENSUS_CHOICES = [
+		('any', 'Any Model (at least one predicts relevant)'),
+		('majority', 'Majority Vote (at least 2 out of 3 agree)'),
+		('all', 'Unanimous (all models must agree)'),
+	]
+	
 	subject_name = models.CharField(blank=False, null=False, max_length=50)
 	description = models.TextField(blank=True, null=True)
 	subject_slug = models.SlugField(editable=True)
 	auto_predict = models.BooleanField(default=False, help_text='Enable automatic ML prediction for new articles')
+	ml_consensus_type = models.CharField(
+		max_length=10, 
+		choices=ML_CONSENSUS_CHOICES, 
+		default='any',
+		help_text='How ML models should agree for an article to be considered relevant'
+	)
 	team = models.ForeignKey(
 			'Team', 
 			on_delete=models.CASCADE,  # Not sure which would be the best option here
@@ -257,6 +269,53 @@ class Articles(models.Model):
 	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
 	retracted = models.BooleanField(default=False)
+	
+	def is_ml_relevant_for_subject(self, subject):
+		"""
+		Check if this article is ML-relevant for a specific subject based on the subject's consensus type.
+		
+		Args:
+			subject: Subject instance to check relevance for
+			
+		Returns:
+			bool: True if article meets the ML consensus criteria for the subject
+		"""
+		# Get all ML predictions for this article and subject
+		predictions = self.ml_predictions_detail.filter(
+			subject=subject,
+			predicted_relevant=True
+		).values_list('algorithm', flat=True)
+		
+		if not predictions.exists():
+			return False
+			
+		# Count unique algorithms that predicted relevant
+		relevant_algorithms = set(predictions)
+		total_predictions = len(relevant_algorithms)
+		
+		# Apply consensus logic based on subject's ml_consensus_type
+		if subject.ml_consensus_type == 'any':
+			return total_predictions >= 1
+		elif subject.ml_consensus_type == 'majority':
+			return total_predictions >= 2
+		elif subject.ml_consensus_type == 'all':
+			return total_predictions >= 3
+		else:
+			# Default to 'any' if unknown consensus type
+			return total_predictions >= 1
+	
+	def is_ml_relevant_any_subject(self):
+		"""
+		Check if this article is ML-relevant for any of its associated subjects.
+		
+		Returns:
+			bool: True if article meets ML consensus criteria for at least one subject
+		"""
+		for subject in self.subjects.filter(auto_predict=True):
+			if self.is_ml_relevant_for_subject(subject):
+				return True
+		return False
+	
 	def __str__(self):
 		return str(self.article_id)
 

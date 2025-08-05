@@ -69,18 +69,34 @@ class ArticleFilter(filters.FilterSet):
     
     def filter_relevant(self, queryset, name, value):
         """
-        Filter for relevant articles (ML predictions or manual selection)
+        Filter for relevant articles (ML predictions with consensus or manual selection)
         """
         if value:
-            return queryset.filter(
-                models.Q(ml_predictions_detail__predicted_relevant=True) |
-                models.Q(article_subject_relevances__is_relevant=True)
-            ).distinct()
+            # Get articles that are either:
+            # 1. Manually marked as relevant
+            manually_relevant = models.Q(article_subject_relevances__is_relevant=True)
+            
+            # 2. ML-relevant based on subject-specific consensus settings
+            ml_relevant_articles = []
+            for article in queryset.distinct():
+                if article.is_ml_relevant_any_subject():
+                    ml_relevant_articles.append(article.article_id)
+            
+            ml_relevant_q = models.Q(article_id__in=ml_relevant_articles)
+            
+            return queryset.filter(manually_relevant | ml_relevant_q).distinct()
         else:
-            return queryset.exclude(
-                models.Q(ml_predictions_detail__predicted_relevant=True) |
-                models.Q(article_subject_relevances__is_relevant=True)
-            ).distinct()
+            # Exclude articles that are either manually relevant or ML-relevant
+            manually_relevant = models.Q(article_subject_relevances__is_relevant=True)
+            
+            ml_relevant_articles = []
+            for article in queryset.distinct():
+                if article.is_ml_relevant_any_subject():
+                    ml_relevant_articles.append(article.article_id)
+            
+            ml_relevant_q = models.Q(article_id__in=ml_relevant_articles)
+            
+            return queryset.exclude(manually_relevant | ml_relevant_q).distinct()
     
     def filter_open_access(self, queryset, name, value):
         """
