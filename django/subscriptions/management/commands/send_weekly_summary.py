@@ -26,25 +26,23 @@ from templates.emails.components.content_organizer import get_optimized_email_co
 class Command(BaseCommand):
 	help = '''Sends a weekly digest email for all weekly digest lists.
 	
+	The ML prediction threshold is now configured per list in the admin interface,
+	not via command line arguments. Each list can have its own threshold setting
+	in the "Content Settings" section.
+	
 	Options:
-	--threshold: ML prediction score threshold (default: 0.8) - Combined with consensus logic
 	--days: Number of days to look back for articles (default: 30)
 	--debug: Enable detailed debugging output
 	--dry-run: Simulate sending emails without actually sending them
 	--all-articles: Include all unsent articles regardless of ML predictions or manual review status, ordered by most recent
 	
-	Note: The system now uses ML consensus settings configured per subject combined with probability threshold.
-	Each subject can be configured to require 'any', 'majority', or 'all' ML models to agree,
-	and each model must have a prediction score >= threshold.
+	Note: The system uses ML consensus settings configured per subject combined with
+	the ML threshold configured for each list. Each subject can be configured to require
+	'any', 'majority', or 'all' ML models to agree, and each model must have a 
+	prediction score >= the list's ML threshold.
 	'''
 	
 	def add_arguments(self, parser):
-		parser.add_argument(
-			'--threshold',
-			type=float,
-			default=0.9,
-			help='ML prediction score threshold (default: 0.90)'
-		)
 		parser.add_argument(
 			'--days',
 			type=int,
@@ -68,16 +66,15 @@ class Command(BaseCommand):
 		)
 
 	def handle(self, *args, **options):
-		threshold = options['threshold']
 		days_to_look_back = options['days']
 		debug = options['debug']
 		dry_run = options['dry_run']
 		all_articles = options['all_articles']
 
 		if debug:
-			self.stdout.write(self.style.NOTICE(f"Running with threshold: {threshold}, days: {days_to_look_back}, all_articles: {all_articles}"))
+			self.stdout.write(self.style.NOTICE(f"Running with days: {days_to_look_back}, all_articles: {all_articles}"))
 			if not all_articles:
-				self.stdout.write(self.style.NOTICE(f"Using ML consensus logic with probability threshold >= {threshold}"))
+				self.stdout.write(self.style.NOTICE(f"Using ML consensus logic with per-list threshold configuration"))
 		
 		if dry_run:
 			self.stdout.write(self.style.WARNING("DRY RUN MODE: No emails will be sent and no records will be updated"))
@@ -107,9 +104,20 @@ class Command(BaseCommand):
 			return
 
 		for digest_list in weekly_digest_lists:
+			# Get ML threshold from the list configuration
+			threshold = digest_list.ml_threshold
+			
 			# Fetch the team directly from the list
 			team = digest_list.team  # Assumes Lists has a ForeignKey to Team
 			email_subject = digest_list.list_email_subject or f'Your Weekly Digest: {digest_list.list_name}'
+			
+			if debug:
+				self.stdout.write(
+					self.style.NOTICE(
+						f"Processing list '{digest_list.list_name}' - Using ML threshold: {threshold} (configured for this list)"
+					)
+				)
+			
 			if not team:
 				self.stdout.write(self.style.ERROR(f"No team associated with list '{digest_list.list_name}'. Skipping."))
 				continue

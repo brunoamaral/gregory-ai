@@ -119,8 +119,9 @@ class ListsAdmin(admin.ModelAdmin):
 		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team']}),
 		('Email Types', {'fields': ['admin_summary', 'weekly_digest', 'clinical_trials_notifications']}),
 		('Content Settings', {
-			'fields': ['article_limit'],
-			'description': 'Configure content limits for weekly digest emails.'
+			'fields': ['article_limit', 'ml_threshold'],
+			'description': 'Configure content limits and ML prediction thresholds for weekly digest emails. '
+						'The ML threshold determines the minimum confidence level required for ML predictions to be considered relevant.'
 		}),
 		('Main Content', {
 			'fields': ['subjects'],
