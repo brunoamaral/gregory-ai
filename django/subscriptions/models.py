@@ -1,6 +1,7 @@
 from django.db import models
 from django.db.models import UniqueConstraint
 from django.db.models.functions import Lower
+from django.core.validators import MinValueValidator, MaxValueValidator
 from gregory.models import Subject, Articles, Trials, Team, TeamCategory
 from simple_history.models import HistoricalRecords
 class Lists(models.Model):
@@ -20,6 +21,14 @@ class Lists(models.Model):
 		blank=True,
 		help_text="Maximum number of articles to include in weekly digest emails (default: 15)",
 		verbose_name="Article Limit for Weekly Digest Emails"
+	)
+	
+	# ML threshold for relevance filtering
+	ml_threshold = models.FloatField(
+		default=0.8,
+		validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+		help_text="ML prediction confidence threshold (0.0-1.0). Only articles with ML predictions above this threshold will be considered relevant.",
+		verbose_name="ML Threshold for Relevance"
 	)
 	# Latest research categories
 	latest_research_categories = models.ManyToManyField(
