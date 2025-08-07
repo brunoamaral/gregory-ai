@@ -87,6 +87,46 @@ class ArticleFilter(filters.FilterSet):
         except (ValueError, TypeError):
             return default  # Use default if conversion fails
 
+    def _get_ml_relevant_articles_query(self, threshold=0.8):
+        """
+        Build a database-level query to find ML-relevant articles based on consensus logic.
+        This avoids the N+1 query problem by using efficient Django ORM queries.
+        """
+        from django.db.models import Count, Q, Case, When, IntegerField
+        
+        # Get all article IDs that meet ML consensus for at least one subject
+        ml_relevant_ids = set()
+        
+        # Get all subjects with auto_predict enabled
+        auto_predict_subjects = Subject.objects.filter(auto_predict=True).values('id', 'ml_consensus_type')
+        
+        for subject_data in auto_predict_subjects:
+            subject_id = subject_data['id']
+            consensus_type = subject_data['ml_consensus_type']
+            
+            # Determine minimum algorithm count based on consensus type
+            min_algorithms = {
+                'any': 1,
+                'majority': 2,
+                'all': 3
+            }.get(consensus_type, 1)  # Default to 'any' if unknown
+            
+            # Find articles that meet consensus for this subject
+            articles_for_subject = Articles.objects.filter(
+                subjects__id=subject_id,
+                ml_predictions_detail__subject_id=subject_id,
+                ml_predictions_detail__predicted_relevant=True,
+                ml_predictions_detail__probability_score__gte=threshold
+            ).annotate(
+                algorithm_count=Count('ml_predictions_detail__algorithm', distinct=True)
+            ).filter(
+                algorithm_count__gte=min_algorithms
+            ).values_list('article_id', flat=True)
+            
+            ml_relevant_ids.update(articles_for_subject)
+        
+        return Q(article_id__in=list(ml_relevant_ids))
+
     def filter_relevant(self, queryset, name, value):
         """
         Filter for relevant articles (ML predictions with consensus or manual selection)
@@ -101,25 +141,14 @@ class ArticleFilter(filters.FilterSet):
             manually_relevant = models.Q(article_subject_relevances__is_relevant=True)
             
             # 2. ML-relevant based on subject-specific consensus settings and threshold
-            ml_relevant_articles = []
-            for article in queryset.distinct():
-                if article.is_ml_relevant_any_subject(threshold=threshold):
-                    ml_relevant_articles.append(article.article_id)
-            
-            ml_relevant_q = models.Q(article_id__in=ml_relevant_articles)
+            ml_relevant_q = self._get_ml_relevant_articles_query(threshold)
             
             return queryset.filter(manually_relevant | ml_relevant_q).distinct()
         else:
             # Exclude articles that are either manually relevant or ML-relevant
             threshold = self._parse_ml_threshold(0.8)
             manually_relevant = models.Q(article_subject_relevances__is_relevant=True)
-            
-            ml_relevant_articles = []
-            for article in queryset.distinct():
-                if article.is_ml_relevant_any_subject(threshold=threshold):
-                    ml_relevant_articles.append(article.article_id)
-            
-            ml_relevant_q = models.Q(article_id__in=ml_relevant_articles)
+            ml_relevant_q = self._get_ml_relevant_articles_query(threshold)
             
             return queryset.exclude(manually_relevant | ml_relevant_q).distinct()
     
@@ -134,13 +163,9 @@ class ArticleFilter(filters.FilterSet):
                 # Invalid threshold, return empty queryset
                 return queryset.none()
                 
-            # Filter articles that meet the ML threshold for any subject
-            ml_relevant_articles = []
-            for article in queryset.distinct():
-                if article.is_ml_relevant_any_subject(threshold=threshold):
-                    ml_relevant_articles.append(article.article_id)
-            
-            return queryset.filter(article_id__in=ml_relevant_articles)
+            # Use efficient database-level query instead of Python loop
+            ml_relevant_q = self._get_ml_relevant_articles_query(threshold)
+            return queryset.filter(ml_relevant_q)
             
         except (ValueError, TypeError):
             # Invalid threshold format, return empty queryset
