@@ -70,6 +70,23 @@ class ArticleFilter(filters.FilterSet):
         journal_name = unquote(value)
         return queryset.filter(container_title__iregex=f'^{journal_name}$')
     
+    def _parse_ml_threshold(self, default=0.8):
+        """
+        Helper method to safely parse ml_threshold parameter from request.
+        Returns default value if parameter is missing, empty, or invalid.
+        """
+        try:
+            threshold_param = self.request.GET.get('ml_threshold', str(default))
+            if threshold_param == '' or threshold_param is None:
+                return default
+            else:
+                threshold = float(threshold_param)
+                if not 0.0 <= threshold <= 1.0:
+                    return default  # Use default if invalid range
+                return threshold
+        except (ValueError, TypeError):
+            return default  # Use default if conversion fails
+
     def filter_relevant(self, queryset, name, value):
         """
         Filter for relevant articles (ML predictions with consensus or manual selection)
@@ -77,7 +94,7 @@ class ArticleFilter(filters.FilterSet):
         """
         if value:
             # Get ML threshold from request parameters, default to 0.8
-            threshold = float(self.request.GET.get('ml_threshold', 0.8))
+            threshold = self._parse_ml_threshold(0.8)
             
             # Get articles that are either:
             # 1. Manually marked as relevant
@@ -94,7 +111,7 @@ class ArticleFilter(filters.FilterSet):
             return queryset.filter(manually_relevant | ml_relevant_q).distinct()
         else:
             # Exclude articles that are either manually relevant or ML-relevant
-            threshold = float(self.request.GET.get('ml_threshold', 0.8))
+            threshold = self._parse_ml_threshold(0.8)
             manually_relevant = models.Q(article_subject_relevances__is_relevant=True)
             
             ml_relevant_articles = []
