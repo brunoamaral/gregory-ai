@@ -336,7 +336,7 @@ class Command(BaseCommand):
 					'utm_source': 'weekly_summary',
 					'utm_medium': 'email',
 					'utm_campaign': f'weekly_summary_{digest_list.list_name.lower().replace(" ", "_")}',
-					'utm_content': subscriber.subscriber_id
+					'utm_content': f'subscriber_{subscriber.subscriber_id}'
 				}
 				
 				summary_context = get_optimized_email_context(
