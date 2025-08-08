@@ -333,10 +333,10 @@ class Command(BaseCommand):
 				
 				# Prepare UTM parameters for tracking
 				utm_params = {
-					'utm_source': 'weekly_digest',
+					'utm_source': 'weekly_summary',
 					'utm_medium': 'email',
-					'utm_campaign': f'weekly_digest_{digest_list.list_name.lower().replace(" ", "_")}',
-					'utm_content': f'subscriber_{subscriber.subscriber_id}'
+					'utm_campaign': f'weekly_summary_{digest_list.list_name.lower().replace(" ", "_")}',
+					'utm_content': subscriber.subscriber_id
 				}
 				
 				summary_context = get_optimized_email_context(
