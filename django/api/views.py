@@ -454,6 +454,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	- **team_id** - filter by team ID
 	- **subject_id** - filter by subject ID  
 	- **category_id** - filter by specific category ID
+	- **get_categories** - comma-separated list of category IDs (e.g., 1,2,3)
 	- **include_authors** - Include top authors data (default: true)
 	- **max_authors** - Maximum number of top authors to return per category (default: 10, max: 50)
 	- **date_from** - Filter articles from this date (YYYY-MM-DD)
@@ -480,6 +481,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	- Without authors: `GET /categories/?team_id=1&include_authors=false`
 	- Monthly counts: `GET /categories/?category_id=6&monthly_counts=true&ml_threshold=0.8`
 	- Single category with monthly counts: `GET /categories/?category_id=6&monthly_counts=true`
+	- Multiple categories by ID: `GET /categories/?get_categories=1,2,3`
 	"""
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -504,6 +506,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 		team_id = self.request.query_params.get('team_id')
 		subject_id = self.request.query_params.get('subject_id')
 		category_id = self.request.query_params.get('category_id')
+		get_categories = self.request.query_params.get('get_categories')
 		
 		if team_id:
 			queryset = queryset.filter(team_id=team_id)
@@ -513,6 +516,17 @@ class CategoryViewSet(viewsets.ModelViewSet):
 			
 		if category_id:
 			queryset = queryset.filter(id=category_id)
+
+		# Support fetching multiple categories by ID: get_categories=1,2,3
+		if get_categories:
+			ids = []
+			for part in get_categories.split(','):
+				try:
+					ids.append(int(part.strip()))
+				except (ValueError, TypeError):
+					continue
+			if len(ids) > 0:
+				queryset = queryset.filter(id__in=ids)
 		
 		# Use efficient prefetching instead of annotations
 		# This avoids the complex GROUP BY queries that are hanging the database
