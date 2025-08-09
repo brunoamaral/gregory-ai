@@ -241,6 +241,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	
 	# Query Parameters:
 	- **team_id** - filter by team ID (replaces /teams/{id}/articles/)
+	- **doi** - filter by exact DOI (case-insensitive)
 	- **subject_id** - filter by subject ID (used with team_id)
 	- **author_id** - filter by author ID
 	- **category_slug** - filter by category slug
@@ -261,6 +262,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	- **year** - year for week filtering (used with week parameter)
 	
 	# Examples:
+	- By DOI: `/articles/?doi=10.1016/j.procs.2023.01.401`
 	- Team articles: `/articles/?team_id=1`
 	- Team + subject: `/articles/?team_id=1&subject_id=4`
 	- With search: `/articles/?team_id=1&search=stem+cells`

@@ -15,6 +15,7 @@ class ArticleFilter(filters.FilterSet):
     summary = filters.CharFilter(method='filter_summary', label='Summary')
     search = filters.CharFilter(method='filter_search', label='Search')
     author_id = filters.NumberFilter(field_name='authors__author_id', lookup_expr='exact', label='Author ID')
+    doi = filters.CharFilter(field_name='doi', lookup_expr='iexact', label='DOI')
     category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact', label='Category Slug')
     category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact', label='Category ID')
     journal_slug = filters.CharFilter(method='filter_journal', label='Journal')
@@ -34,7 +35,7 @@ class ArticleFilter(filters.FilterSet):
     class Meta:
         model = Articles
         fields = [
-            'title', 'summary', 'search', 'author_id', 'category_slug', 'category_id', 
+            'title', 'summary', 'search', 'author_id', 'doi', 'category_slug', 'category_id', 
             'journal_slug', 'team_id', 'subject_id', 'source_id', 'relevant', 'ml_threshold',
             'open_access', 'last_days', 'week', 'year'
         ]
