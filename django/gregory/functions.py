@@ -24,6 +24,27 @@ def remove_utm(url):
 	return urlunparse(u)
 
 
+def normalize_orcid(value):
+	"""Normalize ORCID values by removing URL prefixes and trailing slashes.
+
+	Examples:
+	- https://orcid.org/0000-0002-1825-0097 -> 0000-0002-1825-0097
+	- http://www.orcid.org/0000-0002-1825-0097/ -> 0000-0002-1825-0097
+	- 0000-0002-1825-0097 -> 0000-0002-1825-0097
+
+	Returns None when input is falsy after cleanup.
+	"""
+	if not value:
+		return None
+	# Ensure string and strip whitespace
+	s = str(value).strip()
+	# Remove protocol and domain variants (case-insensitive)
+	s = re.sub(r'^(https?://)?(www\.)?orcid\.org/', '', s, flags=re.IGNORECASE)
+	# Remove any remaining leading/trailing slashes and whitespace
+	s = s.strip().strip('/')
+	return s or None
+
+
 def get_doi(title):
 	doi = None
 	if title != '':

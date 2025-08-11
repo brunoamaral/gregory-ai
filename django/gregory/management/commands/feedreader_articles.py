@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
 from gregory.models import Articles, Trials, Sources, Authors
+from gregory.functions import normalize_orcid
 from crossref.restful import Works, Etiquette
 from dateutil.parser import parse
 from dateutil.tz import gettz
@@ -654,7 +655,7 @@ class Command(BaseCommand):
         for author_info in crossref_paper.authors:
             given_name = author_info.get('given')
             family_name = author_info.get('family')
-            orcid = author_info.get('ORCID', None)
+            orcid = normalize_orcid(author_info.get('ORCID')) if author_info.get('ORCID') else None
             
             try:
                 author_obj = self.get_or_create_author(given_name, family_name, orcid)

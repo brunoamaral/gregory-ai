@@ -2,6 +2,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count, Q
 from django.utils import timezone
 from gregory.models import Authors
+from gregory.functions import normalize_orcid
 import orcid
 import os
 from dotenv import load_dotenv
@@ -38,16 +39,7 @@ class Command(BaseCommand):
 				initial_country = author.country
 				
 				# Clean up ORCID ID to ensure proper format
-				author_orcid_number = author.ORCID
-				
-				# Remove various possible URL prefixes
-				for prefix in ['https://orcid.org/', 'http://orcid.org/', 'https://www.orcid.org/', 'http://www.orcid.org/']:
-					if author_orcid_number.startswith(prefix):
-						author_orcid_number = author_orcid_number.replace(prefix, '')
-						break
-				
-				# Remove any remaining slashes
-				author_orcid_number = author_orcid_number.strip('/')
+				author_orcid_number = normalize_orcid(author.ORCID)
 				print(f"Cleaned ORCID ID: {author_orcid_number}")  # Debug
 				record = orcid_api.read_record_public(author_orcid_number, 'record', token)
 				addresses = record.get('person', {}).get('addresses', {}).get('address', [])

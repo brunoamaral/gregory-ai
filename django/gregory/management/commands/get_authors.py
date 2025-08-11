@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import os
 from django.utils import timezone
 from gregory.models import Articles, Authors
+from gregory.functions import normalize_orcid
 from sitesettings.models import CustomSetting
 from django.db.models import Q
 
@@ -25,7 +26,8 @@ class Command(BaseCommand):
                     # Ensure we have the necessary information
                     given_name = author_data.get('given')
                     family_name = author_data.get('family')
-                    orcid = author_data.get('ORCID')
+                    raw_orcid = author_data.get('ORCID')
+                    orcid = normalize_orcid(raw_orcid)
 
                     if not given_name or not family_name:
                         self.stdout.write(f"Missing given name or family name, skipping this author. Article DOI: {article.doi}.")
