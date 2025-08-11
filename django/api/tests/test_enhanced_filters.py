@@ -213,6 +213,13 @@ class AuthorFilterTests(TestCase):
         self.assertEqual(len(response.data['results']), 1)
         self.assertEqual(response.data['results'][0]['author_id'], self.author1.author_id)
     
+    def test_orcid_partial_filter(self):
+        """Test filtering authors by partial ORCID"""
+        response = self.client.get('/authors/?orcid=0001')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(response.data['results'][0]['author_id'], self.author1.author_id)
+    
     def test_country_filter(self):
         """Test filtering authors by country"""
         response = self.client.get('/authors/?country=US')
