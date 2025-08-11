@@ -26,10 +26,7 @@ from api.views import (
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, SubjectsByTeam,
     ArticlesByCategoryAndTeam, ArticlesBySource, ArticleSearchView, TrialSearchView, AuthorSearchView, CategoriesByTeamAndSubject
 )
-from rss.views import (
-	ArticlesByAuthorFeed, ArticlesByCategoryFeed, ArticlesBySubjectFeed, OpenAccessFeed,
-	LatestArticlesFeed, LatestTrialsFeed, MachineLearningFeed
-)
+from rss.views import	ArticlesByAuthorFeed
 from subscriptions.views import subscribe_view
 from organizations.backends import invitation_backend
 
@@ -63,14 +60,8 @@ urlpatterns = [
 	# API routes
 	path('articles/post/', post_article),
 
-	# Feed routes
-	path('feed/articles/author/<int:author_id>/', ArticlesByAuthorFeed(), name='articles_by_author_feed'),
-	path('feed/articles/subject/<str:subject>/', ArticlesBySubjectFeed()),
-	path('feed/articles/open-access/', OpenAccessFeed()),  # Renamed for clarity
-	path('feed/latest/articles/', LatestArticlesFeed()),
-	path('feed/latest/trials/', LatestTrialsFeed()),
-	path('feed/machine-learning/', MachineLearningFeed()),
-	path('feed/teams/<int:team_id>/categories/<str:category_slug>/', ArticlesByCategoryFeed(), name='articles-by-category-feed'),
+	# Feed routes (supports ORCID or numeric author_id)
+	path('feed/author/<str:orcid>/', ArticlesByAuthorFeed(), name='articles_by_author_feed'),
 
 	# Organization routes
 	re_path(r'^accounts/', include('organizations.urls')),
