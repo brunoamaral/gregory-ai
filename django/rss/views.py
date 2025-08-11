@@ -18,17 +18,10 @@ class ArticlesByAuthorFeed(Feed):
 	description = "RSS feed for articles by a specific author."
 
 	def get_object(self, request, orcid):
-		# Support ORCID provided as full URL or plain ID; also fallback to numeric author_id
+		# Look up by the plain (normalized) ORCID value; fallback to numeric author_id
 		normalized = normalize_orcid(orcid)
 		if normalized:
-			try:
-				return Authors.objects.get(ORCID=normalized)
-			except Authors.DoesNotExist:
-				pass
-		# Backward compatibility: allow /feed/author/<author_id>/
-		if orcid.isdigit():
-			return Authors.objects.get(pk=int(orcid))
-		# Not found
+			return Authors.objects.get(ORCID=normalized)
 		raise Authors.DoesNotExist
 
 	def items(self, obj):

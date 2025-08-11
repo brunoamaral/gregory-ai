@@ -42,6 +42,8 @@ def normalize_orcid(value):
 	s = re.sub(r'^(https?://)?(www\.)?orcid\.org/', '', s, flags=re.IGNORECASE)
 	# Remove any remaining leading/trailing slashes and whitespace
 	s = s.strip().strip('/')
+	# ORCID check digit can be 'X' (uppercase); standardize to uppercase for consistent storage
+	s = s.upper()
 	return s or None
 
 
