@@ -13,16 +13,23 @@ def get_website_domain():
 	return current_site.domain
 
 class ArticlesByAuthorFeed(Feed):
-	title = "Articles by Author"
-	link = "/feed/author/"
-	description = "RSS feed for articles by a specific author."
 
 	def get_object(self, request, orcid):
-		# Look up by the plain (normalized) ORCID value; fallback to numeric author_id
+		# Resolve strictly by normalized ORCID only
 		normalized = normalize_orcid(orcid)
-		if normalized:
-			return Authors.objects.get(ORCID=normalized)
-		raise Authors.DoesNotExist
+		if not normalized:
+			raise Authors.DoesNotExist
+		return Authors.objects.get(ORCID=normalized)
+
+	# Feed metadata (dynamic per author)
+	def title(self, obj):
+		return f"Articles by {obj.full_name or 'Author'}"
+
+	def link(self, obj):
+		# Link to the author page using ORCID
+		return f"https://{get_website_domain()}/authors/{obj.ORCID}/"
+
+	description = "RSS feed for articles by a specific author."
 
 	def items(self, obj):
 		return Articles.objects.filter(authors=obj)
