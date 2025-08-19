@@ -892,10 +892,10 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	"""
 	serializer_class = AuthorSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter]
 	filterset_class = AuthorFilter
 	search_fields = ['full_name', 'ORCID']
-	ordering_fields = ['author_id', 'full_name', 'country']
+	ordering_fields = ['author_id', 'full_name', 'country', 'article_count']
 	ordering = ['author_id']
 	
 	def get_queryset(self):
@@ -956,7 +956,7 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 			try:
 				if isinstance(date_from, str):
 					date_from = parse_date(date_from) or datetime.strptime(date_from, '%Y-%m-%d').date()
-				date_filters['published_date__gte'] = date_from
+				date_filters['articles__published_date__gte'] = date_from
 			except (ValueError, TypeError):
 				pass
 		
@@ -964,12 +964,11 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 			try:
 				if isinstance(date_to, str):
 					date_to = parse_date(date_to) or datetime.strptime(date_to, '%Y-%m-%d').date()
-				date_filters['published_date__lte'] = date_to
+				date_filters['articles__published_date__lte'] = date_to
 			except (ValueError, TypeError):
 				pass
 		
-		# Apply team/subject/category filters
-		author_filters = {}  # Used for filtering Articles to get author IDs
+		# Apply team/subject/category filters using single-phase approach
 		count_filters = {}   # Used for Count annotation on Authors queryset
 		
 		# Validate that team_id is provided when using subject_id or category filters
@@ -980,7 +979,6 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 		if team_id:
 			try:
 				team_id = int(team_id)
-				author_filters['teams__id'] = team_id
 				count_filters['articles__teams__id'] = team_id
 			except ValueError:
 				pass
@@ -988,44 +986,40 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 		if subject_id:
 			try:
 				subject_id = int(subject_id)
-				author_filters['subjects__id'] = subject_id
 				count_filters['articles__subjects__id'] = subject_id
 			except ValueError:
 				pass
 		
 		if category_slug:
-			author_filters['team_categories__category_slug'] = category_slug
 			count_filters['articles__team_categories__category_slug'] = category_slug
 		
 		if category_id:
 			try:
 				category_id = int(category_id)
-				author_filters['team_categories__id'] = category_id
 				count_filters['articles__team_categories__id'] = category_id
 			except ValueError:
 				pass
 		
-		# Add date filters to both author and count filters
-		author_filters.update(date_filters)
-		# For count filters, we need to add the articles__ prefix to date filters
-		count_date_filters = {f'articles__{k}': v for k, v in date_filters.items()}
-		count_filters.update(count_date_filters)
-		
-		# Filter authors if any filters are applied
-		if author_filters:
-			author_ids = Articles.objects.filter(**author_filters).values_list('authors', flat=True).distinct()
-			queryset = queryset.filter(author_id__in=author_ids)
+		# Add date filters to count filters
+		count_filters.update(date_filters)
 		
 		# Add article count annotation for sorting
 		if sort_by == 'article_count':
 			if count_filters:
+				# Annotate with count and filter to only include authors with articles matching criteria
 				queryset = queryset.annotate(
 					article_count=Count('articles', filter=Q(**count_filters), distinct=True)
-				)
+				).filter(article_count__gt=0)
 			else:
 				queryset = queryset.annotate(
 					article_count=Count('articles', distinct=True)
 				)
+		elif count_filters:
+			# Even if not sorting by article_count, we still need to filter authors 
+			# to only those who have articles matching the criteria
+			queryset = queryset.annotate(
+				article_count=Count('articles', filter=Q(**count_filters), distinct=True)
+			).filter(article_count__gt=0)
 		
 		# Apply sorting
 		if sort_by == 'article_count':
