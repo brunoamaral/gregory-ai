@@ -30,11 +30,14 @@ class Command(BaseCommand):
 	not via command line arguments. Each list can have its own threshold setting
 	in the "Content Settings" section.
 	
+	Articles are excluded only if they are manually tagged as not relevant for ALL 
+	subjects they are associated with in the specific digest list.
+	
 	Options:
 	--days: Number of days to look back for articles (default: 30)
 	--debug: Enable detailed debugging output
 	--dry-run: Simulate sending emails without actually sending them
-	--all-articles: Include all unsent articles regardless of ML predictions or manual review status, ordered by most recent
+	--all-articles: Include all unsent articles regardless of ML predictions or manual review status, ordered by most recent (but still excludes articles not relevant for all their subjects)
 	
 	Note: The system uses ML consensus settings configured per subject combined with
 	the ML threshold configured for each list. Each subject can be configured to require
@@ -62,7 +65,7 @@ class Command(BaseCommand):
 		parser.add_argument(
 			'--all-articles',
 			action='store_true',
-			help='Include all unsent articles regardless of ML predictions or manual review status, ordered by most recent'
+			help='Include all unsent articles regardless of ML predictions or manual review status, ordered by most recent (but still excludes articles not relevant for all their subjects in the list)'
 		)
 
 	def handle(self, *args, **options):
@@ -80,7 +83,7 @@ class Command(BaseCommand):
 			self.stdout.write(self.style.WARNING("DRY RUN MODE: No emails will be sent and no records will be updated"))
 		
 		if all_articles:
-			self.stdout.write(self.style.WARNING("ALL ARTICLES MODE: Including all unsent articles regardless of ML predictions or manual review"))
+			self.stdout.write(self.style.WARNING("ALL ARTICLES MODE: Including all unsent articles regardless of ML predictions or manual review (but excluding articles not relevant for all their subjects in the list)"))
 		
 		site = Site.objects.get_current()
 		customsettings = CustomSetting.objects.get(site=site)
@@ -137,17 +140,44 @@ class Command(BaseCommand):
 			
 			if all_articles:
 				# When --all-articles flag is used, get all articles for the subjects regardless of ML predictions or manual review
-				articles = Articles.objects.filter(
+				# BUT exclude articles manually tagged as not relevant for ALL subjects they're associated with in this list
+				base_articles = Articles.objects.filter(
 					subjects__in=digest_list.subjects.all(),
 					discovery_date__gte=now() - timedelta(days=days_to_look_back)
-				).distinct().order_by('-discovery_date')
+				).distinct()
 				
-				self.stdout.write(self.style.NOTICE(f"ALL ARTICLES MODE: Found {articles.count()} total articles (ordered by most recent)"))
+				# Filter out articles that are manually tagged as not relevant for ALL subjects they're associated with in this list
+				filtered_articles = []
+				for article in base_articles:
+					# Get the subjects this article belongs to that are also in this digest list
+					article_list_subjects = article.subjects.filter(id__in=digest_list.subjects.all())
+					
+					# Check manual relevance for each subject this article is associated with in this list
+					should_include = True
+					explicit_irrelevant_count = 0
+					total_relevance_records = 0
+					
+					for subject in article_list_subjects:
+						relevance = article.article_subject_relevances.filter(subject=subject).first()
+						if relevance is not None:
+							total_relevance_records += 1
+							if relevance.is_relevant is False:
+								explicit_irrelevant_count += 1
+					
+					# Exclude article only if ALL of its subjects in this list have been manually tagged as not relevant
+					if total_relevance_records > 0 and explicit_irrelevant_count == total_relevance_records:
+						should_include = False
+					
+					if should_include:
+						filtered_articles.append(article.pk)
+				
+				articles = Articles.objects.filter(pk__in=filtered_articles).order_by('-discovery_date')
+				self.stdout.write(self.style.NOTICE(f"ALL ARTICLES MODE: Found {articles.count()} total articles (excluding articles manually tagged as not relevant for ALL their subjects in this list)"))
 				
 			else:
 				# Standard filtering: manually reviewed OR ML-relevant based on consensus settings
-				# First, get articles by subject
-				subject_articles = Articles.objects.filter(
+				# First, get articles by subject, excluding articles manually tagged as not relevant for ALL their subjects in this list
+				base_subject_articles = Articles.objects.filter(
 					subjects__in=digest_list.subjects.all(),
 					discovery_date__gte=now() - timedelta(days=days_to_look_back)
 				).distinct()
