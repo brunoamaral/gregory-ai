@@ -260,9 +260,10 @@ class SourceInline(admin.StackedInline):
 	extra = 1
 
 class SourceAdmin(admin.ModelAdmin):
-	list_display = ['name', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator', 'has_keyword_filter']
-	list_filter = ['source_for', 'team', 'subject', 'method', SourceHealthFilter]
+	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator', 'has_keyword_filter']
+	list_filter = ['active', 'source_for', 'team', 'subject', 'method', SourceHealthFilter]
 	search_fields = ['name', 'link', 'description', 'keyword_filter']
+	actions = ['activate_sources', 'deactivate_sources']
 	fieldsets = (
 		('Basic Information', {
 			'fields': ('name', 'source_for', 'method', 'active', 'link')
@@ -337,6 +338,24 @@ class SourceAdmin(admin.ModelAdmin):
 		# Regular users only see sources from their teams
 		user_teams = request.user.teammember_set.values_list('organization__teams__id', flat=True)
 		return qs.filter(team__id__in=user_teams)
+	
+	def activate_sources(self, request, queryset):
+		"""Admin action to activate selected sources."""
+		updated_count = queryset.update(active=True)
+		self.message_user(
+			request,
+			f'Successfully activated {updated_count} source(s).'
+		)
+	activate_sources.short_description = "Activate selected sources"
+	
+	def deactivate_sources(self, request, queryset):
+		"""Admin action to deactivate selected sources."""
+		updated_count = queryset.update(active=False)
+		self.message_user(
+			request,
+			f'Successfully deactivated {updated_count} source(s).'
+		)
+	deactivate_sources.short_description = "Deactivate selected sources"
 
 class SubjectAdminForm(forms.ModelForm):
 		"""Custom form for Subject admin with superuser-only team access"""
