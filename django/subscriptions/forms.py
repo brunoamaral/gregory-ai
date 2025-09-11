@@ -27,7 +27,7 @@ class ListsAdminForm(ModelForm):
 
 class SubscribersForm(ModelForm):
 	first_name = forms.CharField(max_length=100)
-	last_name = forms.CharField(max_length=100)
+	last_name = forms.CharField(max_length=100, required=False)
 	email = forms.EmailField(max_length=120)
 	# ``list`` was previously an ``IntegerField`` which only captured a
 	# single checkbox value.  It has been removed so the view can obtain all
