@@ -105,6 +105,9 @@ urlpatterns = [
 	path('trials/search/', TrialSearchView.as_view(), name='trial-search'),
 	path('authors/search/', AuthorSearchView.as_view(), name='author-search'),
 
+	# Gregory app routes
+	path('', include('gregory.urls')),
+
 	# Include router routes
 	path('', include(router.urls)),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{{ page_title }} - GregoryAI</title>
+	<style>
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+			line-height: 1.6;
+			color: #333;
+			max-width: 800px;
+			margin: 0 auto;
+			padding: 2rem 1rem;
+			background-color: #f8f9fa;
+		}
+		.container {
+			background: white;
+			border-radius: 10px;
+			padding: 2rem;
+			box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+		}
+		h1 {
+			color: #2c3e50;
+			border-bottom: 3px solid #3498db;
+			padding-bottom: 0.5rem;
+			margin-bottom: 2rem;
+		}
+		.contributor {
+			margin-bottom: 3rem;
+			padding: 2rem;
+			border: 2px solid #e9ecef;
+			border-radius: 8px;
+			background-color: #f8f9fa;
+		}
+		.contributor-name {
+			color: #2c3e50;
+			font-size: 1.4rem;
+			font-weight: 600;
+			margin-bottom: 1rem;
+		}
+		.project-details {
+			color: #34495e;
+			font-style: italic;
+			margin-bottom: 1rem;
+		}
+		.description {
+			margin-bottom: 1.5rem;
+		}
+		.team-members {
+			margin: 1rem 0;
+		}
+		.team-members h4 {
+			color: #2c3e50;
+			margin-bottom: 0.5rem;
+		}
+		.team-members ul {
+			list-style: none;
+			padding: 0;
+		}
+		.team-members li {
+			background: #3498db;
+			color: white;
+			padding: 0.3rem 0.8rem;
+			margin: 0.3rem;
+			border-radius: 20px;
+			display: inline-block;
+			font-size: 0.9rem;
+		}
+		.repository-info {
+			background: #e8f4fd;
+			padding: 1rem;
+			border-radius: 5px;
+			border-left: 4px solid #3498db;
+			margin-top: 1rem;
+		}
+		.license {
+			color: #7f8c8d;
+			font-size: 0.9rem;
+			margin-top: 0.5rem;
+		}
+		.footer {
+			text-align: center;
+			margin-top: 3rem;
+			padding-top: 2rem;
+			border-top: 1px solid #e9ecef;
+			color: #7f8c8d;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>{{ page_title }}</h1>
+
+		<p>GregoryAI is the result of collaborative efforts from researchers, developers, and institutions dedicated to advancing clinical research accessibility. We extend our heartfelt gratitude to all contributors who have helped shape this platform.</p>
+
+		{% for contributor in contributors %}
+		<div class="contributor">
+			<div class="contributor-name">{{ contributor.name }}</div>
+			<div class="project-details">{{ contributor.project_details }}</div>
+			<div class="description">{{ contributor.description }}</div>
+
+			{% if contributor.team_members %}
+			<div class="team-members">
+				<h4>Team Members:</h4>
+				<ul>
+					{% for member in contributor.team_members %}
+					<li>{{ member }}</li>
+					{% endfor %}
+				</ul>
+			</div>
+			{% endif %}
+
+			<div class="repository-info">
+				<strong>Local Directory:</strong> {{ contributor.repository }}<br>
+				{% if contributor.github_url %}
+				<strong>GitHub Repository:</strong>
+				<a href="{{ contributor.github_url }}" target="_blank" style="color: #007cba; text-decoration: none;">
+					{{ contributor.github_url }}
+				</a>
+				{% endif %}
+				<div class="license">Licensed under: {{ contributor.license }}</div>
+			</div>
+		</div>
+		{% endfor %}
+
+		<div class="footer">
+			<p>Thank you to all contributors who continue to support the advancement of clinical research through technology.</p>
+		</div>
+	</div>
+</body>
+</html>
