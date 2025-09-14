@@ -181,16 +181,43 @@ class Command(BaseCommand):
 					subjects__in=digest_list.subjects.all(),
 					discovery_date__gte=now() - timedelta(days=days_to_look_back)
 				).distinct()
-				self.stdout.write(self.style.NOTICE(f"Found {subject_articles.count()} articles by subject"))
 				
-				# Then, get manually reviewed articles
+				# Apply smart filtering logic for manual relevance
+				filtered_article_ids = []
+				for article in base_subject_articles:
+					# Get the subjects this article belongs to that are also in this digest list
+					article_list_subjects = article.subjects.filter(id__in=digest_list.subjects.all())
+					
+					# Check manual relevance for each subject this article is associated with in this list
+					should_include = True
+					explicit_irrelevant_count = 0
+					total_relevance_records = 0
+					
+					for subject in article_list_subjects:
+						relevance = article.article_subject_relevances.filter(subject=subject).first()
+						if relevance is not None:
+							total_relevance_records += 1
+							if relevance.is_relevant is False:
+								explicit_irrelevant_count += 1
+					
+					# Exclude article only if ALL of its subjects in this list have been manually tagged as not relevant
+					if total_relevance_records > 0 and explicit_irrelevant_count == total_relevance_records:
+						should_include = False
+					
+					if should_include:
+						filtered_article_ids.append(article.pk)
+				
+				subject_articles = Articles.objects.filter(pk__in=filtered_article_ids)
+				self.stdout.write(self.style.NOTICE(f"Found {subject_articles.count()} articles by subject (excluding articles manually tagged as not relevant for ALL their subjects in this list)"))
+				
+				# Then, get manually reviewed articles (only those tagged as relevant for at least one subject)
 				manual_reviewed = Articles.objects.filter(
 					subjects__in=digest_list.subjects.all(),
 					article_subject_relevances__subject__in=digest_list.subjects.all(),
 					article_subject_relevances__is_relevant=True,
 					discovery_date__gte=now() - timedelta(days=days_to_look_back)
 				).distinct()
-				self.stdout.write(self.style.NOTICE(f"Found {manual_reviewed.count()} manually reviewed articles"))
+				self.stdout.write(self.style.NOTICE(f"Found {manual_reviewed.count()} manually reviewed articles (tagged as relevant for at least one subject)"))
 				
 				# Get articles that are ML-relevant based on new consensus logic
 				ml_relevant_articles = []
