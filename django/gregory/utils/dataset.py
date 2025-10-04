@@ -43,9 +43,12 @@ def collect_articles(team_slug: str, subject_slug: str, window_days: Optional[in
         cutoff_date = datetime.now() - timedelta(days=window_days)
         queryset = queryset.filter(discovery_date__gte=cutoff_date)
     
-    # After window filter, require at least one relevance entry
-    # TODO: check if this impacts pseudo labelling 
-    queryset = queryset.filter(article_subject_relevances__subject=subject).distinct()
+    # After window filter, require at least one relevance entry with a non-null is_relevant value
+    # This ensures we only get manually reviewed articles (is_relevant is True or False, not None)
+    queryset = queryset.filter(
+        article_subject_relevances__subject=subject,
+        article_subject_relevances__is_relevant__isnull=False
+    ).distinct()
     
     # Get relevant and not relevant articles via ArticleSubjectRelevance
     return queryset.select_related().prefetch_related(
@@ -81,6 +84,10 @@ def build_dataset(queryset: QuerySet) -> pd.DataFrame:
             
         # Use the first relevance entry (there should be one per subject)
         relevance = relevance_entries.first()
+        
+        # Skip articles where relevance has not been manually reviewed (is_relevant is None)
+        if relevance.is_relevant is None:
+            continue
         
         # Combine title and summary
         text = article.title

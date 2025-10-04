@@ -202,3 +202,54 @@ class DatasetTestCase(TestCase):
         # Should raise ValueError because stratification isn't possible
         with self.assertRaises(ValueError):
             train_val_test_split(df)
+
+    def test_collect_articles_skips_null_relevance(self):
+        """Test that articles with is_relevant=None are excluded from the dataset."""
+        # Create an article with is_relevant=None (not yet reviewed)
+        unreviewed_article = Articles.objects.create(
+            title='Unreviewed Article',
+            link='https://example.com/unreviewed',
+            discovery_date=datetime.now()
+        )
+        unreviewed_article.teams.add(self.team)
+        unreviewed_article.subjects.add(self.subject)
+        
+        # Create relevance relationship with is_relevant=None
+        ArticleSubjectRelevance.objects.create(
+            article=unreviewed_article,
+            subject=self.subject,
+            is_relevant=None  # Not yet reviewed
+        )
+        
+        # Collect articles - should exclude the unreviewed one
+        articles = collect_articles('test-team', 'test-subject')
+        self.assertEqual(articles.count(), 5)  # Only the original 5, not the unreviewed one
+        
+    def test_build_dataset_handles_null_relevance(self):
+        """Test that build_dataset doesn't crash when is_relevant is None."""
+        # Create an article with is_relevant=None
+        unreviewed_article = Articles.objects.create(
+            title='Unreviewed Article',
+            link='https://example.com/unreviewed',
+            discovery_date=datetime.now()
+        )
+        unreviewed_article.teams.add(self.team)
+        unreviewed_article.subjects.add(self.subject)
+        
+        ArticleSubjectRelevance.objects.create(
+            article=unreviewed_article,
+            subject=self.subject,
+            is_relevant=None
+        )
+        
+        # Get all articles (including unreviewed)
+        all_articles = Articles.objects.filter(teams=self.team, subjects=self.subject)
+        
+        # Build dataset - should handle None gracefully
+        df = build_dataset(all_articles)
+        
+        # The unreviewed article should be excluded from the dataset
+        self.assertEqual(len(df), 5)  # Only the 5 reviewed articles
+        
+        # Verify all rows have valid relevance values (0 or 1, not None)
+        self.assertTrue(df['relevant'].isin([0, 1]).all())
