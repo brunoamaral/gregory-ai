@@ -328,6 +328,57 @@ class SagePublicationsFeedProcessor(FeedProcessor):
         return None
 
 
+class BaseSearchFeedProcessor(FeedProcessor):
+    """Processor for BASE (Bielefeld Academic Search Engine) RSS feeds."""
+    
+    def can_process(self, source_link: str) -> bool:
+        return 'base-search.net' in source_link.lower()
+    
+    def extract_summary(self, entry: dict) -> str:
+        """Extract summary from BASE feed entry."""
+        # BASE uses 'summary' field
+        summary = entry.get('summary', '')
+        
+        if not summary and hasattr(entry, 'summary_detail'):
+            summary = entry['summary_detail'].get('value', '')
+        
+        # BASE summaries are often truncated but we accept them as-is
+        # Clean up extra whitespace
+        if summary:
+            summary = ' '.join(summary.split())
+        
+        return summary or ''
+    
+    def extract_doi(self, entry: dict) -> str:
+        """Extract DOI from BASE feed entry."""
+        # BASE uses dc:relation field with format: "doi:10.1177/... ; PMID"
+        dc_relation = entry.get('dc_relation', '')
+        
+        if not dc_relation:
+            return None
+        
+        # Split by semicolon to handle multiple values
+        parts = re.split(r'\s*;\s*', dc_relation)
+        
+        for part in parts:
+            part = part.strip()
+            
+            # Method 1: Check for 'doi:' prefix (most common in BASE)
+            if part.lower().startswith('doi:'):
+                doi = part[4:].strip()
+                # Validate it looks like a DOI (starts with 10.)
+                if doi.startswith('10.'):
+                    return doi
+            
+            # Method 2: Check for doi.org URL
+            if 'doi.org' in part.lower():
+                doi_match = re.search(r'doi\.org/(10\.\d+/[^\s;]+)', part)
+                if doi_match:
+                    return doi_match.group(1)
+        
+        return None
+
+
 class Command(BaseCommand):
     help = 'Fetches and updates articles and trials from RSS feeds.'
 
@@ -340,6 +391,7 @@ class Command(BaseCommand):
             PNASFeedProcessor(self),
             SagePublicationsFeedProcessor(self),
             NatureFeedProcessor(self),
+            BaseSearchFeedProcessor(self),
             DefaultFeedProcessor(self),  # Always last as fallback
         ]
         self.verbosity = 1  # Default verbosity level
