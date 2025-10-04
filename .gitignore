@@ -71,3 +71,4 @@ postgres-data
 django/admin/settings.py
 django/models/
 *.code-workspace
+ai_tests/

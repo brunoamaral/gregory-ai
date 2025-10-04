@@ -126,8 +126,8 @@ access_scheme = checkValidAccess(api_key, ip_addr)  # Checks APIAccessScheme tab
 Backend auto-fetches missing metadata via `SciencePaper` class (queries CrossRef API).
 
 ## Testing Conventions
-
-- Tests in `django/APP/tests/test_*.py`
+- if you need to run tests not meant for production code, place them in the directory `ai_tests` at the root of the project.
+- Place Tests in `django/APP/tests/test_*.py`
 - Use `TransactionTestCase` for tests involving signals or multi-model transactions
 - Standalone test files (e.g., `test_train_models_standalone.py`) can run outside Django test runner
 - Run via: `docker exec gregory python manage.py test gregory.tests.test_module`
