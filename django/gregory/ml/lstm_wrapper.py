@@ -377,8 +377,16 @@ class LSTMTrainer:
         
         # Save vectorizer config and vocabulary
         vectorizer_path = model_dir / "tokenizer.json"
+        
+        # Get config and sanitize it for JSON serialization
+        config = self.vectorizer.get_config()
+        
+        # Replace the standardize function reference with its name
+        if 'standardize' in config and callable(config['standardize']):
+            config['standardize'] = 'custom_standardization'
+        
         vectorizer_config = {
-            "config": self.vectorizer.get_config(),
+            "config": config,
             "vocabulary": self.vectorizer.get_vocabulary(),
             "index_word": {i: word for i, word in enumerate(self.vectorizer.get_vocabulary())}
         }

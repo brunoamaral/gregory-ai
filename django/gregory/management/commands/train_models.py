@@ -575,15 +575,36 @@ class Command(BaseCommand):
             # Format metrics with prefixes for consistency
             formatted_metrics = {}
             
+            # Helper function to sanitize values for JSON serialization
+            def sanitize_value(value):
+                """Convert value to JSON-serializable type."""
+                if isinstance(value, (int, float, str, bool, type(None))):
+                    return value
+                elif isinstance(value, (list, tuple)):
+                    return [sanitize_value(v) for v in value]
+                elif isinstance(value, dict):
+                    return {k: sanitize_value(v) for k, v in value.items()}
+                elif isinstance(value, np.ndarray):
+                    return value.tolist()
+                elif hasattr(value, '__float__'):
+                    return float(value)
+                elif hasattr(value, '__int__'):
+                    return int(value)
+                else:
+                    # Skip non-serializable objects (like methods)
+                    return None
+            
             # Add validation metrics with 'val_' prefix
             for key, value in val_metrics.items():
-                if isinstance(value, (int, float)):  # Only include numeric metrics
-                    formatted_metrics[f"val_{key}"] = value
+                sanitized = sanitize_value(value)
+                if sanitized is not None:  # Only include serializable values
+                    formatted_metrics[f"val_{key}"] = sanitized
             
             # Add test metrics with 'test_' prefix
             for key, value in test_metrics.items():
-                if isinstance(value, (int, float)):  # Only include numeric metrics
-                    formatted_metrics[f"test_{key}"] = value
+                sanitized = sanitize_value(value)
+                if sanitized is not None:  # Only include serializable values
+                    formatted_metrics[f"test_{key}"] = sanitized
             
             # Log key metrics at appropriate verbosity level
             self.log_message(
@@ -623,8 +644,31 @@ class Command(BaseCommand):
         
         # Save metrics to JSON file
         metrics_path = model_dir / "metrics.json"
-        with open(metrics_path, 'w') as f:
-            json.dump(formatted_metrics, f, indent=2)
+        
+        # Debug: Print types of all values in formatted_metrics
+        self.log_message("Checking metrics for JSON serializability...", VerbosityLevel.WARNINGS)
+        for key, value in formatted_metrics.items():
+            self.log_message(f"  {key}: {type(value).__name__} = {str(value)[:50]}", VerbosityLevel.WARNINGS)
+        
+        try:
+            with open(metrics_path, 'w') as f:
+                json.dump(formatted_metrics, f, indent=2)
+        except TypeError as e:
+            # If JSON serialization fails, try to identify the problematic key
+            self.log_error(f"JSON serialization error: {str(e)}", VerbosityLevel.WARNINGS)
+            
+            # Save only the successfully serializable metrics
+            safe_metrics = {}
+            for key, value in formatted_metrics.items():
+                try:
+                    json.dumps({key: value})  # Test if this specific key-value is serializable
+                    safe_metrics[key] = value
+                except TypeError as te:
+                    self.log_warning(f"Skipping non-serializable metric: {key} (type: {type(value).__name__}, error: {te})", VerbosityLevel.WARNINGS)
+            
+            # Save the safe metrics
+            with open(metrics_path, 'w') as f:
+                json.dump(safe_metrics, f, indent=2)
         
         self.log_success(
             f"Model training complete for {team_slug}/{subject_slug}/{algorithm}",
