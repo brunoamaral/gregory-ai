@@ -262,7 +262,7 @@ class Command(BaseCommand):
                 # Specific subject
                 try:
                     subject = Subject.objects.get(team=team, subject_slug=options["subject"])
-                    result.append((team.slug, [subject.slug]))
+                    result.append((team.slug, [subject.subject_slug]))
                 except Subject.DoesNotExist:
                     raise CommandError(
                         f"Subject with slug '{options['subject']}' does not exist in team '{team.slug}'"
