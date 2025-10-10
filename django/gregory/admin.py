@@ -213,11 +213,12 @@ class ArticleAdmin(SimpleHistoryAdmin):
 	
 	def get_urls(self):
 		from django.urls import path
-		from .admin_views import article_review_status_view
+		from .admin_views import article_review_status_view, update_article_relevance_ajax
 		
 		urls = super().get_urls()
 		custom_urls = [
 			path('review-status/', self.admin_site.admin_view(article_review_status_view), name='article_review_status'),
+			path('update-article-relevance/', self.admin_site.admin_view(update_article_relevance_ajax), name='update_article_relevance'),
 		]
 		return custom_urls + urls
 	

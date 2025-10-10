@@ -35,7 +35,7 @@
     }
     
     .action-column {
-      width: 100px;
+      width: 180px;
       text-align: center;
     }
     
@@ -133,6 +133,157 @@
       margin-bottom: 10px; 
       border-radius: 4px; 
       background-color: #d9edf7;
+    }
+    
+    .predictions-column {
+      width: 200px;
+      font-size: 0.9em;
+    }
+    
+    .prediction-score {
+      display: inline-block;
+      margin: 2px 0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background-color: #f5f5f5;
+    }
+    
+    .prediction-label {
+      font-weight: bold;
+      margin-right: 5px;
+    }
+    
+    .score-high {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    
+    .score-medium {
+      background-color: #fff3cd;
+      color: #856404;
+    }
+    
+    .score-low {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    
+    .action-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    
+    .action-btn {
+      padding: 5px 10px;
+      font-size: 0.85em;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      text-align: center;
+      transition: all 0.2s;
+      font-weight: 500;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+    
+    .action-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .action-btn:active:not(:disabled) {
+      transform: translateY(0);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+    
+    .btn-relevant {
+      background: linear-gradient(to bottom, #28a745, #218838);
+      color: white;
+      border-color: #1e7e34;
+    }
+    
+    .btn-relevant:hover:not(:disabled) {
+      background: linear-gradient(to bottom, #218838, #1e7e34);
+    }
+    
+    .btn-not-relevant {
+      background: linear-gradient(to bottom, #dc3545, #c82333);
+      color: white;
+      border-color: #bd2130;
+    }
+    
+    .btn-not-relevant:hover:not(:disabled) {
+      background: linear-gradient(to bottom, #c82333, #bd2130);
+    }
+    
+    .btn-review {
+      background: linear-gradient(to bottom, #ffc107, #e0a800);
+      color: #333;
+      border-color: #d39e00;
+    }
+    
+    .btn-review:hover:not(:disabled) {
+      background: linear-gradient(to bottom, #e0a800, #d39e00);
+    }
+    
+    a.btn-edit {
+      background: linear-gradient(to bottom, #417690, #356a80);
+      color: white;
+      border-color: #2b566a;
+      text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.25);
+    }
+    
+    .btn-edit:hover {
+      background: linear-gradient(to bottom, #356a80, #2b566a);
+      color: white;
+      text-decoration: none;
+    }
+    
+    .btn-disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    
+    .btn-disabled:hover {
+      transform: none;
+      box-shadow: none;
+    }
+    
+    .sortable {
+      cursor: pointer;
+      user-select: none;
+      position: relative;
+    }
+    
+    .sortable:hover {
+      background-color: #f0f0f0;
+    }
+    
+    .sortable::after {
+      content: ' ⇅';
+      color: #999;
+      font-size: 0.8em;
+    }
+    
+    .sortable.sorted-asc::after {
+      content: ' ▲';
+      color: #417690;
+    }
+    
+    .sortable.sorted-desc::after {
+      content: ' ▼';
+      color: #417690;
+    }
+    
+    .avg-score {
+      display: block;
+      font-size: 0.85em;
+      color: #666;
+      margin-top: 4px;
+      font-weight: bold;
     }
   </style>
 {% endblock %}
@@ -263,21 +414,63 @@
               <th class="title-column">Title</th>
               <th class="date-column">Discovery Date</th>
               <th class="status-column">Review Status</th>
+              <th class="predictions-column sortable {% if sort_by == '-ml_score' %}sorted-desc{% elif sort_by == 'ml_score' %}sorted-asc{% endif %}" 
+                  onclick="sortBy('{% if sort_by == '-ml_score' %}ml_score{% else %}-ml_score{% endif %}')">
+                Predictions (Avg)
+              </th>
               <th class="action-column">Actions</th>
             </tr>
           </thead>
           <tbody>
             {% for item in articles_with_review_status %}
-              <tr class="{% cycle 'row1' 'row2' %}">
+              <tr class="{% cycle 'row1' 'row2' %}" data-article-id="{{ item.article.article_id }}">
                 <td class="select-column">
                   <input type="checkbox" name="selected_articles" value="{{ item.article.article_id }}" 
                          class="article-checkbox" {% if item.is_relevant is not None %}data-reviewed="true"{% endif %}>
                 </td>
                 <td class="title-column">{{ item.article.title }}</td>
                 <td class="date-column">{{ item.article.discovery_date|date:"M d, Y" }}</td>
-                <td class="status-column">{{ item.status_html }}</td>
+                <td class="status-column status-cell">{{ item.status_html }}</td>
+                <td class="predictions-column">
+                  {% if item.ml_predictions %}
+                    {% for algo, pred_data in item.ml_predictions.items %}
+                      {% if pred_data.score is not None %}
+                        <div class="prediction-score {% if pred_data.score >= 0.7 %}score-high{% elif pred_data.score >= 0.4 %}score-medium{% else %}score-low{% endif %}">
+                          <span class="prediction-label">
+                            {% if algo == 'pubmed_bert' %}BERT{% elif algo == 'lgbm_tfidf' %}LGBM{% elif algo == 'lstm' %}LSTM{% else %}{{ algo }}{% endif %}:
+                          </span>
+                          {{ pred_data.score|floatformat:3 }}
+                        </div>
+                      {% endif %}
+                    {% endfor %}
+                    {% if item.avg_ml_score is not None %}
+                      <div class="avg-score {% if item.avg_ml_score >= 0.7 %}score-high{% elif item.avg_ml_score >= 0.4 %}score-medium{% else %}score-low{% endif %}" style="padding: 3px 6px; border-radius: 3px; margin-top: 4px;">
+                        Avg: {{ item.avg_ml_score|floatformat:3 }}
+                      </div>
+                    {% endif %}
+                  {% else %}
+                    <span style="color: #999;">No predictions</span>
+                  {% endif %}
+                </td>
                 <td class="action-column">
-                  <a href="{{ item.edit_url }}" class="button" target="_blank">Edit</a>
+                  <div class="action-buttons">
+                    <button class="action-btn btn-relevant" 
+                            onclick="updateRelevance({{ item.article.article_id }}, 'mark_relevant')"
+                            {% if item.is_relevant == True %}disabled{% endif %}>
+                      ✓ Relevant
+                    </button>
+                    <button class="action-btn btn-not-relevant" 
+                            onclick="updateRelevance({{ item.article.article_id }}, 'mark_not_relevant')"
+                            {% if item.is_relevant == False %}disabled{% endif %}>
+                      ✗ Not Relevant
+                    </button>
+                    <button class="action-btn btn-review" 
+                            onclick="updateRelevance({{ item.article.article_id }}, 'mark_for_review')"
+                            {% if item.is_relevant == None %}disabled{% endif %}>
+                      ↺ For Review
+                    </button>
+                    <a href="{{ item.edit_url }}" class="action-btn btn-edit" target="_blank">Edit</a>
+                  </div>
                 </td>
               </tr>
             {% endfor %}
@@ -288,8 +481,8 @@
     
     <div class="pagination">        <span class="step-links">
         {% if page_obj.has_previous %}
-          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}&page=1">&laquo; first</a>
-          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}&page={{ page_obj.previous_page_number }}">previous</a>
+          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}&page=1">&laquo; first</a>
+          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}&page={{ page_obj.previous_page_number }}">previous</a>
         {% endif %}
 
         <span class="current">
@@ -297,8 +490,8 @@
         </span>
 
         {% if page_obj.has_next %}
-          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}&page={{ page_obj.next_page_number }}">next</a>
-          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}&page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
+          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}&page={{ page_obj.next_page_number }}">next</a>
+          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}&page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
         {% endif %}
       </span>
     </div>
@@ -363,5 +556,107 @@
       }
     }
   }
+  
+  // Function to sort by a specific field
+  function sortBy(sortField) {
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('sort_by', sortField);
+    currentUrl.searchParams.set('page', '1'); // Reset to first page when sorting
+    window.location.href = currentUrl.toString();
+  }
+  
+  // Function to get CSRF token from cookie
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+  
+  // Function to update article relevance via AJAX
+  function updateRelevance(articleId, action) {
+    const subjectId = {{ selected_subject_id }};
+    const csrftoken = getCookie('csrftoken');
+    const row = document.querySelector(`tr[data-article-id="${articleId}"]`);
+    const statusCell = row.querySelector('.status-cell');
+    const buttons = row.querySelectorAll('.action-btn');
+    
+    // Disable all buttons during request
+    buttons.forEach(btn => {
+      if (btn.tagName === 'BUTTON') {
+        btn.disabled = true;
+        btn.classList.add('btn-disabled');
+      }
+    });
+    
+    fetch('/admin/gregory/articles/update-article-relevance/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken
+      },
+      body: JSON.stringify({
+        article_id: articleId,
+        subject_id: subjectId,
+        action: action
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // Update the status cell
+        statusCell.innerHTML = data.status_html;
+        
+        // Re-enable all buttons
+        buttons.forEach(btn => {
+          if (btn.tagName === 'BUTTON') {
+            btn.disabled = false;
+            btn.classList.remove('btn-disabled');
+          }
+        });
+        
+        // Disable the button for the current action
+        if (action === 'mark_relevant') {
+          row.querySelector('.btn-relevant').disabled = true;
+        } else if (action === 'mark_not_relevant') {
+          row.querySelector('.btn-not-relevant').disabled = true;
+        } else if (action === 'mark_for_review') {
+          row.querySelector('.btn-review').disabled = true;
+        }
+        
+        // Show success message (optional - you can add a toast notification here)
+        console.log(data.message);
+      } else {
+        alert('Error: ' + data.error);
+        // Re-enable all buttons on error
+        buttons.forEach(btn => {
+          if (btn.tagName === 'BUTTON') {
+            btn.disabled = false;
+            btn.classList.remove('btn-disabled');
+          }
+        });
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert('An error occurred while updating the article status.');
+      // Re-enable all buttons on error
+      buttons.forEach(btn => {
+        if (btn.tagName === 'BUTTON') {
+          btn.disabled = false;
+          btn.classList.remove('btn-disabled');
+        }
+      });
+    });
+  }
+
 </script>
 {% endblock %}

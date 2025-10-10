@@ -7,7 +7,7 @@ from django.db.models import Q, Case, When, Value, BooleanField, Count
 from django.contrib import messages
 from django.utils.dateparse import parse_date
 from django.utils import timezone
-from .models import Articles, Subject, ArticleSubjectRelevance
+from .models import Articles, Subject, ArticleSubjectRelevance, MLPredictions
 import json
 from datetime import datetime, timedelta
 
@@ -131,6 +131,13 @@ def article_review_status_view(request):
                 discovery_date__lte=parse_date(date_to)
             )
     
+    # Get sort parameter
+    sort_by = request.GET.get('sort_by', '-discovery_date')
+    
+    # If not sorting by ML score, apply sorting to queryset before pagination
+    if sort_by not in ['ml_score', '-ml_score']:
+        queryset = queryset.order_by(sort_by).distinct()
+    
     # Pagination
     paginator = Paginator(queryset, 25)  # Show 25 articles per page
     page_number = request.GET.get('page', 1)
@@ -155,12 +162,43 @@ def article_review_status_view(request):
         
         edit_url = f'/admin/gregory/articles/{article.article_id}/change/'
         
+        # Get latest ML predictions for this article and subject
+        ml_predictions = MLPredictions.objects.filter(
+            article=article,
+            subject_id=selected_subject_id
+        ).order_by('algorithm', '-created_date').distinct('algorithm')
+        
+        # Build a dictionary of predictions by algorithm and calculate average
+        predictions_dict = {}
+        scores = []
+        for pred in ml_predictions:
+            if pred.probability_score is not None:
+                predictions_dict[pred.algorithm] = {
+                    'score': pred.probability_score,
+                    'predicted_relevant': pred.predicted_relevant
+                }
+                scores.append(pred.probability_score)
+        
+        # Calculate average score (None if no predictions)
+        avg_score = sum(scores) / len(scores) if scores else None
+        
         articles_with_review_status.append({
             'article': article,
             'status_html': status_html,
             'is_relevant': is_relevant,
-            'edit_url': edit_url
+            'edit_url': edit_url,
+            'ml_predictions': predictions_dict,
+            'avg_ml_score': avg_score
         })
+    
+    # If sorting by ML score, sort the articles_with_review_status list
+    if sort_by in ['ml_score', '-ml_score']:
+        # Sort by average ML score
+        # Articles with no predictions (None) go to the end
+        articles_with_review_status.sort(
+            key=lambda x: (x['avg_ml_score'] is None, x['avg_ml_score'] if x['avg_ml_score'] is not None else 0),
+            reverse=(sort_by == '-ml_score')
+        )
     
     context = {
         'title': 'Article Review Status',
@@ -173,6 +211,7 @@ def article_review_status_view(request):
         'date_option': date_option,
         'date_from': date_from,
         'date_to': date_to,
+        'sort_by': sort_by,
     }
     
     return render(request, 'admin/article_review_status.html', context)
@@ -217,3 +256,70 @@ def mark_articles_for_review(article_ids, subject):
             # No need to do anything if the relevance object doesn't exist
             # since no relevance means it's already marked for review
             pass
+
+@staff_member_required
+def update_article_relevance_ajax(request):
+    """
+    AJAX endpoint to update a single article's relevance status
+    """
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            article_id = data.get('article_id')
+            subject_id = data.get('subject_id')
+            action = data.get('action')  # 'mark_relevant', 'mark_not_relevant', or 'mark_for_review'
+            
+            article = Articles.objects.get(article_id=article_id)
+            subject = Subject.objects.get(id=subject_id)
+            
+            if action == 'mark_relevant':
+                relevance, created = ArticleSubjectRelevance.objects.get_or_create(
+                    article=article,
+                    subject=subject,
+                    defaults={'is_relevant': True}
+                )
+                if not created:
+                    relevance.is_relevant = True
+                    relevance.save()
+                status = 'relevant'
+                status_html = '<span style="color: #009900; font-weight: bold;">Relevant</span>'
+                
+            elif action == 'mark_not_relevant':
+                relevance, created = ArticleSubjectRelevance.objects.get_or_create(
+                    article=article,
+                    subject=subject,
+                    defaults={'is_relevant': False}
+                )
+                if not created:
+                    relevance.is_relevant = False
+                    relevance.save()
+                status = 'not_relevant'
+                status_html = '<span style="color: #cc0000; font-weight: bold;">Not Relevant</span>'
+                
+            elif action == 'mark_for_review':
+                try:
+                    relevance = ArticleSubjectRelevance.objects.get(
+                        article=article,
+                        subject=subject
+                    )
+                    relevance.is_relevant = None
+                    relevance.save()
+                except ArticleSubjectRelevance.DoesNotExist:
+                    pass
+                status = 'not_reviewed'
+                status_html = '<span style="color: #f90; font-weight: bold;">Not Reviewed</span>'
+            
+            return JsonResponse({
+                'success': True,
+                'status': status,
+                'status_html': status_html,
+                'message': f'Article marked as {status.replace("_", " ")}'
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=400)
+    
+    return JsonResponse({'success': False, 'error': 'Invalid request method'}, status=405)
