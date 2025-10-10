@@ -38,9 +38,28 @@ def forwards(apps, schema_editor):
 		for a in group:
 			if a.pk == keeper.pk:
 				continue
-			# Reassign all article links from duplicate to keeper
-			through.objects.filter(authors_id=a.pk).update(authors_id=keeper.pk)
-			# Delete duplicate
+			
+			# Get all article relationships for this duplicate author
+			duplicate_relationships = through.objects.filter(authors_id=a.pk)
+			
+			for rel in duplicate_relationships:
+				article_id = rel.articles_id
+				
+				# Check if relationship already exists with keeper
+				existing_rel = through.objects.filter(
+					articles_id=article_id, 
+					authors_id=keeper.pk
+				).first()
+				
+				if existing_rel:
+					# Relationship already exists, just delete the duplicate
+					rel.delete()
+				else:
+					# Update to point to keeper
+					rel.authors_id = keeper.pk
+					rel.save()
+			
+			# Delete duplicate author
 			a.delete()
 		# Ensure keeper has normalized ORCID
 		if keeper.ORCID != norm:
