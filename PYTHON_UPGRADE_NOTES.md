@@ -16,7 +16,7 @@ This document describes the upgrade from Python 3.11 to Python 3.12 in the Grego
 - **tensorflow**: `2.15.0` → `2.17.1`
 - **tensorboard**: `2.15.2` → `2.17.1`
 - **keras**: `2.15.0` → `3.6.0` (Major version change - Keras 3)
-- **tf-keras**: `2.15.0` → `2.17.1`
+- **tf-keras**: `2.15.0` → `2.17.0` (provides Keras 2 compatibility if needed)
 - **tensorflow-estimator**: Removed (deprecated in TensorFlow 2.16+)
 
 ## Why Python 3.12?

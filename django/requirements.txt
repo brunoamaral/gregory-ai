@@ -202,7 +202,7 @@ tensorflow==2.17.1
 tensorflow-io-gcs-filesystem==0.37.1
 termcolor==3.1.0
 terminado==0.17.1
-tf-keras==2.17.1
+tf-keras==2.17.0
 threadpoolctl==3.6.0
 tinycss2==1.2.1
 tokenizers==0.15.2
