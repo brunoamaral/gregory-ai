@@ -21,6 +21,53 @@ from .fields import MLPredictionsField
 from django.utils.html import format_html
 
 
+def get_user_organizations(user):
+	"""Get the list of organization IDs for a user."""
+	if user.is_superuser:
+		return None  # None means all organizations
+	return user.organizations_organizationuser.values_list('organization__id', flat=True)
+
+
+class OrganizationRestrictedFieldListFilter(admin.RelatedFieldListFilter):
+	"""Custom filter that restricts related field choices to user's organization."""
+	
+	def field_choices(self, field, request, model_admin):
+		"""Override to filter choices based on user's organization."""
+		choices = super().field_choices(field, request, model_admin)
+		
+		if request.user.is_superuser:
+			return choices
+		
+		user_orgs = get_user_organizations(request.user)
+		
+		# Filter the choices based on organization
+		filtered_choices = []
+		for choice_value, choice_label in choices:
+			if choice_value is None:
+				# Include the empty choice
+				filtered_choices.append((choice_value, choice_label))
+				continue
+			
+			try:
+				# Get the object for this choice
+				obj = field.related_model.objects.get(pk=choice_value)
+				
+				# Check if it belongs to user's organization
+				if hasattr(obj, 'organization'):
+					if obj.organization_id in user_orgs:
+						filtered_choices.append((choice_value, choice_label))
+				elif hasattr(obj, 'team'):
+					if obj.team.organization_id in user_orgs:
+						filtered_choices.append((choice_value, choice_label))
+				else:
+					# If no organization field, include it
+					filtered_choices.append((choice_value, choice_label))
+			except:
+				pass
+		
+		return filtered_choices
+
+
 class OrganizationFilterMixin:
 	"""
 	Mixin to restrict admin queryset visibility based on user's organization.
@@ -36,7 +83,7 @@ class OrganizationFilterMixin:
 			return qs
 		
 		# Staff users only see objects from their organization
-		user_orgs = request.user.organizations_organizationuser.values_list('organization__id', flat=True)
+		user_orgs = get_user_organizations(request.user)
 		
 		# Try to filter by organization directly
 		if hasattr(qs.model, 'organization'):
@@ -218,9 +265,21 @@ class ArticleAdminForm(forms.ModelForm):
 		}
 
 	def __init__(self, *args, **kwargs):
+		self.request = kwargs.pop('request', None)
 		super().__init__(*args, **kwargs)
+		
 		if self.instance and self.instance.pk:
 			self.fields['ml_predictions_display'].initial = self.instance.ml_predictions_detail.all()
+		
+		# Filter team and subject choices based on user's organization
+		if self.request:
+			if self.request.user.is_superuser:
+				self.fields['teams'].queryset = Team.objects.all()
+				self.fields['subjects'].queryset = Subject.objects.all()
+			else:
+				user_orgs = get_user_organizations(self.request.user)
+				self.fields['teams'].queryset = Team.objects.filter(organization__id__in=user_orgs)
+				self.fields['subjects'].queryset = Subject.objects.filter(team__organization__id__in=user_orgs)
 
 class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	form = ArticleAdminForm
@@ -245,8 +304,23 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	ordering = ['-discovery_date']
 	readonly_fields = ['entities', 'discovery_date']
 	search_fields = ['article_id', 'title', 'doi']
-	list_filter = ('teams', 'subjects','sources')
+	list_filter = [
+		('teams', OrganizationRestrictedFieldListFilter),
+		('subjects', OrganizationRestrictedFieldListFilter),
+		('sources', OrganizationRestrictedFieldListFilter),
+	]
 	raw_id_fields = ("authors",)
+	
+	def get_form(self, request, obj=None, **kwargs):
+		"""Pass the request to the form so it can filter field choices."""
+		form_class = super().get_form(request, obj, **kwargs)
+		
+		class FormWithRequest(form_class):
+			def __init__(self, *args, **form_kwargs):
+				form_kwargs['request'] = request
+				super().__init__(*args, **form_kwargs)
+		
+		return FormWithRequest
 	
 	def get_urls(self):
 		from django.urls import path
@@ -284,7 +358,11 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		'therapeutic_areas', 'sponsor_type', 'internal_number', 'secondary_id',
 		'identifiers'
 	]
-	list_filter = ['teams', 'subjects', 'sources']
+	list_filter = [
+		('teams', OrganizationRestrictedFieldListFilter),
+		('subjects', OrganizationRestrictedFieldListFilter),
+		('sources', OrganizationRestrictedFieldListFilter),
+	]
 
 	def display_identifiers(self, obj):
 		# Customize this depending on how you want to display the JSON
@@ -297,9 +375,37 @@ class SourceInline(admin.StackedInline):
 	model = Sources
 	extra = 1
 
+
+class SourceAdminForm(forms.ModelForm):
+	"""Custom form for Source admin with organization-based field access"""
+	
+	class Meta:
+		model = Sources
+		fields = '__all__'
+	
+	def __init__(self, *args, **kwargs):
+		self.request = kwargs.pop('request', None)
+		super().__init__(*args, **kwargs)
+		
+		# Filter team and subject choices based on user's organization
+		if self.request:
+			if self.request.user.is_superuser:
+				self.fields['team'].queryset = Team.objects.all()
+				self.fields['subject'].queryset = Subject.objects.all()
+			else:
+				user_orgs = get_user_organizations(self.request.user)
+				self.fields['team'].queryset = Team.objects.filter(organization__id__in=user_orgs)
+				self.fields['subject'].queryset = Subject.objects.filter(team__organization__id__in=user_orgs)
+
+
 class SourceAdmin(OrganizationFilterMixin, admin.ModelAdmin):
+	form = SourceAdminForm
 	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator', 'has_keyword_filter']
-	list_filter = ['active', 'source_for', 'team', 'subject', 'method', SourceHealthFilter]
+	list_filter = [
+		'active', 'source_for', 'method', SourceHealthFilter,
+		('team', OrganizationRestrictedFieldListFilter),
+		('subject', OrganizationRestrictedFieldListFilter),
+	]
 	search_fields = ['name', 'link', 'description', 'keyword_filter']
 	actions = ['activate_sources', 'deactivate_sources']
 	fieldsets = (
@@ -317,6 +423,17 @@ class SourceAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 			'description': 'For bioRxiv and medRxiv sources, specify keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson).'
 		}),
 	)
+	
+	def get_form(self, request, obj=None, **kwargs):
+		"""Pass the request to the form so it can filter field choices."""
+		form_class = super().get_form(request, obj, **kwargs)
+		
+		class FormWithRequest(form_class):
+			def __init__(self, *args, **form_kwargs):
+				form_kwargs['request'] = request
+				super().__init__(*args, **form_kwargs)
+		
+		return FormWithRequest
 	
 	def has_keyword_filter(self, obj):
 		"""Display whether source has keyword filtering enabled."""
@@ -384,27 +501,30 @@ class SourceAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	deactivate_sources.short_description = "Deactivate selected sources"
 
 class SubjectAdminForm(forms.ModelForm):
-		"""Custom form for Subject admin with superuser-only team access"""
+	"""Custom form for Subject admin with organization-based team access"""
+	
+	class Meta:
+		model = Subject
+		fields = '__all__'
+	
+	def __init__(self, *args, **kwargs):
+		# Get the request from kwargs if passed
+		self.request = kwargs.pop('request', None)
+		super().__init__(*args, **kwargs)
 		
-		class Meta:
-				model = Subject
-				fields = '__all__'
-		
-		def __init__(self, *args, **kwargs):
-				# Get the request from kwargs if passed
-				self.request = kwargs.pop('request', None)
-				super().__init__(*args, **kwargs)
-				
-				# If user is superuser, show all teams
-				# Otherwise, keep the default filtering (user's teams only)
-				if self.request and hasattr(self.request, 'user') and self.request.user.is_superuser:
-						self.fields['team'].queryset = Team.objects.all()
+		# Filter teams based on user's organization
+		if self.request:
+			if self.request.user.is_superuser:
+				self.fields['team'].queryset = Team.objects.all()
+			else:
+				user_orgs = get_user_organizations(self.request.user)
+				self.fields['team'].queryset = Team.objects.filter(organization__id__in=user_orgs)
 
 @admin.register(Subject)
 class SubjectAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	list_display = ['formatted_subject_name', 'description', 'view_sources', 'team']  # Updated list display
 	readonly_fields = ['linked_sources']  # Display in the edit form
-	list_filter = ['team']  # Add the team filter
+	list_filter = [('team', OrganizationRestrictedFieldListFilter)]  # Add the team filter
 	form = SubjectAdminForm
 	
 	def formatted_subject_name(self, obj):
@@ -579,7 +699,10 @@ class AuthorsAdmin(admin.ModelAdmin):
 class TeamCategoryAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	list_display = ('category_name', 'team', 'article_count', 'display_subjects')
 	search_fields = ('category_name', 'team__name', 'subjects__subject_name')
-	list_filter = ('team', 'subjects')
+	list_filter = [
+		('team', OrganizationRestrictedFieldListFilter),
+		('subjects', OrganizationRestrictedFieldListFilter),
+	]
 	filter_horizontal = ('subjects',)  # For better subject selection in the edit form
 	
 	def get_queryset(self, request):
