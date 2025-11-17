@@ -20,6 +20,43 @@ from django import forms
 from .fields import MLPredictionsField
 from django.utils.html import format_html
 
+
+class OrganizationFilterMixin:
+	"""
+	Mixin to restrict admin queryset visibility based on user's organization.
+	Superusers see everything; staff users only see objects from their organization.
+	"""
+	
+	def get_queryset(self, request):
+		"""Filter queryset by organization for non-superusers."""
+		qs = super().get_queryset(request)
+		
+		# Superusers see everything
+		if request.user.is_superuser:
+			return qs
+		
+		# Staff users only see objects from their organization
+		user_orgs = request.user.organizations_organizationuser.values_list('organization__id', flat=True)
+		
+		# Try to filter by organization directly
+		if hasattr(qs.model, 'organization'):
+			return qs.filter(organization__id__in=user_orgs)
+		
+		# If the model has a team relationship, filter by team's organization
+		if hasattr(qs.model, 'team'):
+			return qs.filter(team__organization__id__in=user_orgs)
+		
+		# If the model has multiple teams (M2M), filter by any team's organization
+		try:
+			# Check if 'teams' is a M2M field
+			qs.model._meta.get_field('teams')
+			return qs.filter(teams__organization__id__in=user_orgs).distinct()
+		except:
+			pass
+		
+		return qs
+
+
 # @admin.register(PredictionRunLog)
 class PredictionRunLogAdmin(admin.ModelAdmin):
 		list_display = ['id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 'run_started', 'run_finished', 'status_label', 'triggered_by']
@@ -185,7 +222,7 @@ class ArticleAdminForm(forms.ModelForm):
 		if self.instance and self.instance.pk:
 			self.fields['ml_predictions_display'].initial = self.instance.ml_predictions_detail.all()
 
-class ArticleAdmin(SimpleHistoryAdmin):
+class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	form = ArticleAdminForm
 	inlines = [ArticleSubjectRelevanceInline, ArticleTrialReferenceInline]
 	fieldsets = (
@@ -233,7 +270,7 @@ class ArticleAdmin(SimpleHistoryAdmin):
 			'all': ['admin/css/ml_predictions.css'],
 		}
 
-class TrialAdmin(SimpleHistoryAdmin):
+class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
 	exclude = ['ml_predictions']
 	readonly_fields = ['last_updated', 'team_categories']
@@ -260,7 +297,7 @@ class SourceInline(admin.StackedInline):
 	model = Sources
 	extra = 1
 
-class SourceAdmin(admin.ModelAdmin):
+class SourceAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator', 'has_keyword_filter']
 	list_filter = ['active', 'source_for', 'team', 'subject', 'method', SourceHealthFilter]
 	search_fields = ['name', 'link', 'description', 'keyword_filter']
@@ -328,18 +365,6 @@ class SourceAdmin(admin.ModelAdmin):
 			return format_html('<span style="color: blue; font-size: 14px;">●</span>')
 	health_status_indicator.short_description = 'Status'
 	
-	def get_queryset(self, request):
-		"""Filter sources based on user permissions."""
-		qs = super().get_queryset(request)
-		
-		# Superusers see all sources
-		if request.user.is_superuser:
-			return qs
-			
-		# Regular users only see sources from their teams
-		user_teams = request.user.organizations_organizationuser.values_list('organization__teams__id', flat=True)
-		return qs.filter(team__id__in=user_teams)
-	
 	def activate_sources(self, request, queryset):
 		"""Admin action to activate selected sources."""
 		updated_count = queryset.update(active=True)
@@ -376,7 +401,7 @@ class SubjectAdminForm(forms.ModelForm):
 						self.fields['team'].queryset = Team.objects.all()
 
 @admin.register(Subject)
-class SubjectAdmin(admin.ModelAdmin):
+class SubjectAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	list_display = ['formatted_subject_name', 'description', 'view_sources', 'team']  # Updated list display
 	readonly_fields = ['linked_sources']  # Display in the edit form
 	list_filter = ['team']  # Add the team filter
@@ -551,7 +576,7 @@ class AuthorsAdmin(admin.ModelAdmin):
 		return super().get_inline_instances(request, obj)
 	
 @admin.register(TeamCategory)
-class TeamCategoryAdmin(admin.ModelAdmin):
+class TeamCategoryAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	list_display = ('category_name', 'team', 'article_count', 'display_subjects')
 	search_fields = ('category_name', 'team__name', 'subjects__subject_name')
 	list_filter = ('team', 'subjects')
@@ -664,7 +689,7 @@ class TeamAdminForm(forms.ModelForm):
 		return super().save(commit)
 
 @admin.register(Team)
-class TeamAdmin(admin.ModelAdmin):
+class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	form = TeamAdminForm
 	list_display = ['id', 'formatted_team_name', 'organization', 'slug', 'subjects_count', 'sources_count']
 	list_filter = ['organization']
@@ -694,178 +719,179 @@ class TeamAdmin(admin.ModelAdmin):
 		return super().get_queryset(request).select_related('organization').prefetch_related('subjects', 'sources')
 
 @admin.register(TeamCredentials)
-class TeamCredentialsAdmin(admin.ModelAdmin):
+class TeamCredentialsAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	list_display = ('team', 'created_at', 'updated_at')
 	# readonly_fields = ('orcid_client_id', 'orcid_client_secret', 'postmark_api_token')
 
 	def get_readonly_fields(self, request, obj=None):
 		return self.readonly_fields
+
 @admin.register(PredictionRunLog)
-class PredictionRunLogAdmin(admin.ModelAdmin):
-		list_display = ['id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 'run_started', 'run_finished', 'status_label', 'triggered_by']
-		list_filter = [DateRangeFilter, 'team', 'subject', 'run_type', 'algorithm', 'success', 'model_version']
-		search_fields = ['team__organization__name', 'subject__subject_name', 'model_version', 'triggered_by', 'algorithm']
-		readonly_fields = ['run_started']  # Auto-populated field
-		date_hierarchy = 'run_started'
-		actions = ['mark_as_failed', 'mark_as_successful', 'export_as_csv']
+class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
+	list_display = ['id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 'run_started', 'run_finished', 'status_label', 'triggered_by']
+	list_filter = [DateRangeFilter, 'team', 'subject', 'run_type', 'algorithm', 'success', 'model_version']
+	search_fields = ['team__organization__name', 'subject__subject_name', 'model_version', 'triggered_by', 'algorithm']
+	readonly_fields = ['run_started']  # Auto-populated field
+	date_hierarchy = 'run_started'
+	actions = ['mark_as_failed', 'mark_as_successful', 'export_as_csv']
+	
+	fieldsets = (
+		('Run Information', {
+			'fields': ('team', 'subject', 'run_type', 'algorithm', 'model_version', 'triggered_by'),
+		}),
+		('Status', {
+			'fields': ('run_started', 'run_finished', 'success', 'error_message'),
+		}),
+	)
+	
+	def status_label(self, obj):
+		if obj.success is True:
+			return format_html('<span style="color: green; font-weight: bold;">Success</span>')
+		elif obj.success is False:
+			return format_html('<span style="color: red; font-weight: bold;">Failed</span>')
+		else:
+			return format_html('<span style="color: orange; font-weight: bold;">Running</span>')
+	status_label.short_description = "Status"
+	
+	def get_queryset(self, request):
+		# Order by most recent runs first
+		return super().get_queryset(request).order_by('-run_started')
+	
+	def has_change_permission(self, request, obj=None):
+		# Logs should generally not be modified after creation
+		# But admins might need to update status or error messages
+		return True
+	
+	def has_delete_permission(self, request, obj=None):
+		# Allow deletion for admins
+		return True
+	
+	def mark_as_failed(self, request, queryset):
+		"""Mark selected unfinished runs as failed"""
+		from django.utils import timezone
 		
-		fieldsets = (
-				('Run Information', {
-						'fields': ('team', 'subject', 'run_type', 'algorithm', 'model_version', 'triggered_by'),
-				}),
-				('Status', {
-						'fields': ('run_started', 'run_finished', 'success', 'error_message'),
-				}),
+		# Only update runs that are still in progress (success is None)
+		updated = queryset.filter(success__isnull=True).update(
+			success=False,
+			run_finished=timezone.now(),
+			error_message="Manually marked as failed by admin."
 		)
 		
-		def status_label(self, obj):
-				if obj.success is True:
-						return format_html('<span style="color: green; font-weight: bold;">Success</span>')
-				elif obj.success is False:
-						return format_html('<span style="color: red; font-weight: bold;">Failed</span>')
+		if updated == 0:
+			self.message_user(request, "No unfinished runs were selected.")
+		else:
+			self.message_user(request, f"Successfully marked {updated} run(s) as failed.")
+	mark_as_failed.short_description = "Mark selected unfinished runs as failed"
+	
+	def mark_as_successful(self, request, queryset):
+		"""Mark selected unfinished runs as successful"""
+		from django.utils import timezone
+		
+		# Only update runs that are still in progress (success is None)
+		updated = queryset.filter(success__isnull=True).update(
+			success=True,
+			run_finished=timezone.now()
+		)
+		
+		if updated == 0:
+			self.message_user(request, "No unfinished runs were selected.")
+		else:
+			self.message_user(request, f"Successfully marked {updated} run(s) as successful.")
+	mark_as_successful.short_description = "Mark selected unfinished runs as successful"
+	
+	def export_as_csv(self, request, queryset):
+		"""Export selected logs to CSV file"""
+		meta = self.model._meta
+		field_names = [
+			'id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 
+			'run_started', 'run_finished', 'success', 'triggered_by', 'error_message'
+		]
+		
+		response = HttpResponse(content_type='text/csv')
+		response['Content-Disposition'] = f'attachment; filename={meta.verbose_name_plural}.csv'
+		
+		writer = csv.writer(response)
+		writer.writerow([field for field in field_names])
+		
+		for obj in queryset:
+			row = []
+			for field in field_names:
+				if field == 'team':
+					value = str(getattr(obj, field))
+				elif field == 'subject':
+					value = str(getattr(obj, field))
+				elif field == 'run_type':
+					value = obj.get_run_type_display()
 				else:
-						return format_html('<span style="color: orange; font-weight: bold;">Running</span>')
-		status_label.short_description = "Status"
+					value = getattr(obj, field)
+				row.append(value)
+			writer.writerow(row)
 		
-		def get_queryset(self, request):
-				# Order by most recent runs first
-				return super().get_queryset(request).order_by('-run_started')
+		return response
+	export_as_csv.short_description = "Export selected logs to CSV"
+	
+	def changelist_view(self, request, extra_context=None):
+		# Add dashboard statistics to the context
+		extra_context = extra_context or {}
 		
-		def has_change_permission(self, request, obj=None):
-				# Logs should generally not be modified after creation
-				# But admins might need to update status or error messages
-				return True
+		# Training runs statistics
+		extra_context['training_success_count'] = PredictionRunLog.objects.filter(run_type='train', success=True).count()
+		extra_context['training_failed_count'] = PredictionRunLog.objects.filter(run_type='train', success=False).count()
+		extra_context['training_running_count'] = PredictionRunLog.objects.filter(run_type='train', success__isnull=True).count()
 		
-		def has_delete_permission(self, request, obj=None):
-				# Allow deletion for admins
-				return True
+		# Prediction runs statistics
+		extra_context['prediction_success_count'] = PredictionRunLog.objects.filter(run_type='predict', success=True).count()
+		extra_context['prediction_failed_count'] = PredictionRunLog.objects.filter(run_type='predict', success=False).count()
+		extra_context['prediction_running_count'] = PredictionRunLog.objects.filter(run_type='predict', success__isnull=True).count()
 		
-		def mark_as_failed(self, request, queryset):
-				"""Mark selected unfinished runs as failed"""
-				from django.utils import timezone
-				
-				# Only update runs that are still in progress (success is None)
-				updated = queryset.filter(success__isnull=True).update(
-						success=False,
-						run_finished=timezone.now(),
-						error_message="Manually marked as failed by admin."
-				)
-				
-				if updated == 0:
-						self.message_user(request, "No unfinished runs were selected.")
-				else:
-						self.message_user(request, f"Successfully marked {updated} run(s) as failed.")
-		mark_as_failed.short_description = "Mark selected unfinished runs as failed"
+		# Recent runs (last 10)
+		extra_context['recent_runs'] = PredictionRunLog.objects.all().order_by('-run_started')[:10]
 		
-		def mark_as_successful(self, request, queryset):
-				"""Mark selected unfinished runs as successful"""
-				from django.utils import timezone
-				
-				# Only update runs that are still in progress (success is None)
-				updated = queryset.filter(success__isnull=True).update(
-						success=True,
-						run_finished=timezone.now()
-				)
-				
-				if updated == 0:
-						self.message_user(request, "No unfinished runs were selected.")
-				else:
-						self.message_user(request, f"Successfully marked {updated} run(s) as successful.")
-		mark_as_successful.short_description = "Mark selected unfinished runs as successful"
+		return super().changelist_view(request, extra_context=extra_context)
+	
+	def get_urls(self):
+		urls = super().get_urls()
+		custom_urls = [
+			path(
+				'ml-coverage/',
+				self.admin_site.admin_view(self.ml_coverage_view),
+				name='predictionrunlog_ml_coverage',
+			),
+		]
+		return custom_urls + urls
+	
+	def ml_coverage_view(self, request):
+		"""View to show ML coverage across teams and subjects"""
+		# Get all teams
+		teams = Team.objects.prefetch_related('subjects').all()
 		
-		def export_as_csv(self, request, queryset):
-				"""Export selected logs to CSV file"""
-				meta = self.model._meta
-				field_names = [
-						'id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 
-						'run_started', 'run_finished', 'success', 'triggered_by', 'error_message'
-				]
-				
-				response = HttpResponse(content_type='text/csv')
-				response['Content-Disposition'] = f'attachment; filename={meta.verbose_name_plural}.csv'
-				
-				writer = csv.writer(response)
-				writer.writerow([field for field in field_names])
-				
-				for obj in queryset:
-						row = []
-						for field in field_names:
-								if field == 'team':
-										value = str(getattr(obj, field))
-								elif field == 'subject':
-										value = str(getattr(obj, field))
-								elif field == 'run_type':
-										value = obj.get_run_type_display()
-								else:
-										value = getattr(obj, field)
-								row.append(value)
-						writer.writerow(row)
-						
-				return response
-		export_as_csv.short_description = "Export selected logs to CSV"
-				
-		def changelist_view(self, request, extra_context=None):
-				# Add dashboard statistics to the context
-				extra_context = extra_context or {}
-				
-				# Training runs statistics
-				extra_context['training_success_count'] = PredictionRunLog.objects.filter(run_type='train', success=True).count()
-				extra_context['training_failed_count'] = PredictionRunLog.objects.filter(run_type='train', success=False).count()
-				extra_context['training_running_count'] = PredictionRunLog.objects.filter(run_type='train', success__isnull=True).count()
-				
-				# Prediction runs statistics
-				extra_context['prediction_success_count'] = PredictionRunLog.objects.filter(run_type='predict', success=True).count()
-				extra_context['prediction_failed_count'] = PredictionRunLog.objects.filter(run_type='predict', success=False).count()
-				extra_context['prediction_running_count'] = PredictionRunLog.objects.filter(run_type='predict', success__isnull=True).count()
-				
-				# Recent runs (last 10)
-				extra_context['recent_runs'] = PredictionRunLog.objects.all().order_by('-run_started')[:10]
-				
-				return super().changelist_view(request, extra_context=extra_context)
+		# Create dictionaries to store the latest runs per subject
+		training_data = {}
+		prediction_data = {}
 		
-		def get_urls(self):
-				urls = super().get_urls()
-				custom_urls = [
-						path(
-								'ml-coverage/',
-								self.admin_site.admin_view(self.ml_coverage_view),
-								name='predictionrunlog_ml_coverage',
-						),
-				]
-				return custom_urls + urls
+		# Get all subjects
+		all_subjects = Subject.objects.all()
 		
-		def ml_coverage_view(self, request):
-				"""View to show ML coverage across teams and subjects"""
-				# Get all teams
-				teams = Team.objects.prefetch_related('subjects').all()
-				
-				# Create dictionaries to store the latest runs per subject
-				training_data = {}
-				prediction_data = {}
-				
-				# Get all subjects
-				all_subjects = Subject.objects.all()
-				
-				# For each subject, get its latest training and prediction runs
-				for subject in all_subjects:
-						latest_training = PredictionRunLog.get_latest_run(subject.team, subject, run_type='train')
-						latest_prediction = PredictionRunLog.get_latest_run(subject.team, subject, run_type='predict')
-						
-						if latest_training:
-								training_data[subject.id] = latest_training
-								
-						if latest_prediction:
-								prediction_data[subject.id] = latest_prediction
-				
-				context = {
-						'title': 'ML Coverage Report',
-						'teams': teams,
-						'training_data': training_data,
-						'prediction_data': prediction_data,
-				}
-				
-				# Render the template
-				return render(request, 'admin/gregory/predictionrunlog/ml_coverage.html', context)
+		# For each subject, get its latest training and prediction runs
+		for subject in all_subjects:
+			latest_training = PredictionRunLog.get_latest_run(subject.team, subject, run_type='train')
+			latest_prediction = PredictionRunLog.get_latest_run(subject.team, subject, run_type='predict')
+			
+			if latest_training:
+				training_data[subject.id] = latest_training
+			
+			if latest_prediction:
+				prediction_data[subject.id] = latest_prediction
+		
+		context = {
+			'title': 'ML Coverage Report',
+			'teams': teams,
+			'training_data': training_data,
+			'prediction_data': prediction_data,
+		}
+		
+		# Render the template
+		return render(request, 'admin/gregory/predictionrunlog/ml_coverage.html', context)
 
 admin.site.register(Articles, ArticleAdmin)
 admin.site.register(Authors, AuthorsAdmin)
