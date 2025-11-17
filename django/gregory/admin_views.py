@@ -16,8 +16,14 @@ def article_review_status_view(request):
     """
     Custom admin view for reviewing articles by subject
     """
-    # Get all subjects for the dropdown
-    subjects = Subject.objects.all().order_by('subject_name')
+    # Get subjects based on user's organization
+    if request.user.is_superuser:
+        subjects = Subject.objects.all().order_by('subject_name')
+    else:
+        # Get user's organizations
+        user_orgs = request.user.organizations_organizationuser.values_list('organization__id', flat=True)
+        # Filter subjects by user's organization's teams
+        subjects = Subject.objects.filter(team__organization__id__in=user_orgs).order_by('subject_name').distinct()
     
     # Default to first subject if none selected
     selected_subject_id = request.GET.get('subject_id')
