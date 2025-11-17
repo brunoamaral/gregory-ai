@@ -337,7 +337,7 @@ class SourceAdmin(admin.ModelAdmin):
 			return qs
 			
 		# Regular users only see sources from their teams
-		user_teams = request.user.teammember_set.values_list('organization__teams__id', flat=True)
+		user_teams = request.user.organizations_organizationuser.values_list('organization__teams__id', flat=True)
 		return qs.filter(team__id__in=user_teams)
 	
 	def activate_sources(self, request, queryset):
