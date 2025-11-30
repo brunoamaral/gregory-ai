@@ -13,7 +13,6 @@ The docker compose file also includes a Metabase container which is used to buil
 
 Sources can also be added to monitor Clinical Trials, in which case Gregory can notify a list of email subscribers.
 
-For other integrations, the Django app provides RSS feeds with a live update of relevant research and newly posted clinical trials.
 
 ## Features
 
@@ -28,7 +27,7 @@ For other integrations, the Django app provides RSS feeds with a live update of 
 9. Configure categories to organize search results based on keywords in title
 10. Configure different “subjects” to have keep different research areas segmented
 11. Identify authors and their ORCID
-12. Generate different RSS feeds
+12. Generate RSS feeds for articles by author
 
 ### Current Use Case for Multiple Sclerosis
 

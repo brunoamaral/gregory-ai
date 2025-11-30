@@ -203,13 +203,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | **Email Templates**     | GET /emails/                             | Email template preview dashboard                    | None                                                    | ✅ **Available**                                       |
 | **Email Templates**     | GET /emails/preview/{template_name}/     | Preview specific email template                     | `template_name` (path)                                  | ✅ **Available**                                       |
 | **Email Templates**     | GET /emails/context/{template_name}/     | Get template context as JSON                        | `template_name` (path)                                  | ✅ **Available**                                       |
-| **RSS Feeds**           | GET /feed/latest/articles/               | RSS feed for latest articles                        | None                                                    | ✅ **Available**                                       |
-| **RSS Feeds**           | GET /feed/latest/trials/                 | RSS feed for latest trials                          | None                                                    | ✅ **Available**                                       |
-| **RSS Feeds**           | GET /feed/articles/author/{author_id}/   | RSS feed for articles by author                     | `author_id` (path)                                      | ✅ **Available**                                       |
-| **RSS Feeds**           | GET /feed/articles/subject/{subject}/    | RSS feed for articles by subject                    | `subject` (path)                                        | ✅ **Available**                                       |
-| **RSS Feeds**           | GET /feed/articles/open-access/          | RSS feed for open access articles                   | None                                                    | ✅ **Available**                                       |
-| **RSS Feeds**           | GET /feed/machine-learning/              | RSS feed for ML predictions                         | None                                                    | ✅ **Available**                                       |
-| **RSS Feeds**           | GET /feed/teams/{team_id}/categories/{category_slug}/ | RSS feed for team category articles        | `team_id` (path), `category_slug` (path)               | ✅ **Available**                                       |
+| **RSS Feeds**           | GET /feed/author/<str:orcid>/            | RSS feed for articles by author (ORCID)            | `orcid` (path)                                          | ✅ **Available**                                       |
 
 ## Remaining Team-Based Endpoints
 
