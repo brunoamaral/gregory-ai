@@ -10,13 +10,7 @@ Gregory's API is open and doesn't require authentication unless you need to use 
    - `articles/relevant/`: Access relevant articles.
    - `articles/post/`: Endpoint for posting an article.
 4. **Feed Routes:**
-   - `feed/articles/author/<int:author_id>/`: Feed for articles by a specific author.
-   - `feed/articles/category/<str:category>/`: Feed for articles in a specific category.
-   - `feed/articles/subject/<str:subject>/`: Feed for articles on a specific subject.
-   - `feed/articles/open-access/`: Feed for open-access articles.
-   - `feed/latest/articles/`: Feed for the latest articles.
-   - `feed/latest/trials/`: Feed for the latest trials.
-   - `feed/machine-learning/`: Feed for machine learning related articles.
+   - `feed/author/<str:orcid>/`: Feed for articles by a specific author using their ORCID identifier.
 5. **Subscriptions Route:**
    - `subscriptions/new/`: Endpoint for new subscriptions.
 

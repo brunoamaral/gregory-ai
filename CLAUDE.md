@@ -102,7 +102,7 @@ Set up cron jobs for:
 
 ### Available Endpoints
 - Articles API with filtering by subject/category
-- RSS feeds: `/feed/latest/articles/`, `/feed/machine-learning/`
+- RSS feeds: `/feed/author/<str:orcid>/` for articles by a specific author
 - JWT authentication support
 - CSV export capabilities
 
