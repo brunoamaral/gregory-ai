@@ -4,8 +4,8 @@ import stopwords
 from bs4 import BeautifulSoup
 
 # Define some cleaning procedures:
-REPLACE_BY_SPACE_RE = re.compile('[/(){}\[\]\|@,;]')
-BAD_SYMBOLS_RE = re.compile('[^0-9a-z #+_]')
+REPLACE_BY_SPACE_RE = re.compile(r'[/(){}\[\]\|@,;]')
+BAD_SYMBOLS_RE = re.compile(r'[^0-9a-z #+_]')
 STOPWORDS = set(stopwords.get_stopwords("en"))
 
 # Util function to clean text
