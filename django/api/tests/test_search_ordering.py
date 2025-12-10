@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from datetime import datetime, timedelta
 from gregory.models import Articles, Trials, Team, Subject, Sources
+from organizations.models import Organization
 from rest_framework.test import APIClient
 from rest_framework import status
 import json
@@ -20,9 +21,18 @@ class SearchOrderingTestCase(TestCase):
         """Set up test data"""
         self.client = APIClient()
         
-        # Create test team and subject
-        self.team = Team.objects.create(name="Test Team", description="Test team for ordering tests")
-        self.subject = Subject.objects.create(name="Test Subject", team=self.team)
+        # Create test organization and team
+        self.organization = Organization.objects.create(name="Test Organization")
+        self.team = Team.objects.create(
+            name="Test Team",
+            organization=self.organization,
+            slug="test-team"
+        )
+        self.subject = Subject.objects.create(
+            subject_name="Test Subject",
+            subject_slug="test-subject",
+            team=self.team
+        )
         
         # Create test source
         self.source = Sources.objects.create(name="Test Source", link="http://test.com")
