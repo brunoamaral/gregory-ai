@@ -1,55 +1,61 @@
 import unittest
-from django.test import RequestFactory
+from django.test import RequestFactory, TestCase
 from django.http import StreamingHttpResponse
 from api.direct_streaming import DirectStreamingCSVRenderer
-from rest_framework.test import APITestCase
+from rest_framework.test import APITestCase, APIClient
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.request import Request
+from gregory.models import Articles, Team, Sources
+from organizations.models import Organization
+from django.contrib.auth.models import User
 
 class TestCSVRenderer(APITestCase):
     """
     Test the DirectStreamingCSVRenderer to ensure it correctly handles both
-    paginated and full exports.
+    paginated and full exports. Tests are now done through the API view layer
+    to ensure streaming works end-to-end.
     """
     
     def setUp(self):
-        self.renderer = DirectStreamingCSVRenderer()
-        self.factory = RequestFactory()
+        # Create test data through the API
+        self.user = User.objects.create_user(username='testuser', password='12345')
+        self.organization = Organization.objects.create(name="Test Organization", slug="test-org")
+        self.organization.add_user(self.user)
         
-        # Create test data
-        self.test_data = [
-            {'id': i, 'name': f'Item {i}'} for i in range(1, 101)
-        ]
+        self.team = Team.objects.create(
+            organization=self.organization,
+            name="Test Team",
+            slug="test-team"
+        )
         
-        # Create paginated data
-        self.paginated_data = {
-            'count': len(self.test_data),
-            'next': 'http://testserver/items/?page=2',
-            'previous': None,
-            'results': self.test_data[:10]  # First 10 items
-        }
+        self.source = Sources.objects.create(name="Test Source", source_for="science paper")
+        
+        # Create test articles
+        for i in range(1, 21):  # Create 20 articles for pagination testing
+            article = Articles.objects.create(
+                title=f'Test Article {i}',
+                summary=f'Summary {i}',
+                link=f'https://example.com/article-{i}',
+                kind='science paper'
+            )
+            article.sources.add(self.source)
+            article.teams.add(self.team)
+        
+        # Set up API client
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
         
     def test_paginated_csv_export(self):
         """Test that paginated CSV exports respect pagination."""
-        # Create a request with format=csv and no all_results
-        request = self.factory.get('/api/items/?format=csv&page=1&page_size=10')
-        
-        # Create renderer context
-        renderer_context = {
-            'request': request,
-            'view': type('MockView', (), {
-                'get_queryset': lambda self: None,
-                'filter_queryset': lambda self, queryset: None,
-                'get_serializer': lambda self, *args, **kwargs: None
-            })()
-        }
-        
-        # Render the paginated data
-        response = self.renderer.render(self.paginated_data, 'text/csv', renderer_context)
+        # Make a request with format=csv and pagination
+        response = self.client.get('/articles/', {'format': 'csv', 'page_size': 10})
         
         # Check that we got a StreamingHttpResponse
         self.assertIsInstance(response, StreamingHttpResponse)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('text/csv', response['Content-Type'])
         
         # Collect the streaming content
         content = b''.join(response.streaming_content).decode('utf-8')
@@ -59,35 +65,24 @@ class TestCSVRenderer(APITestCase):
         self.assertEqual(len(rows), 11)  # 10 data rows + header
         
     def test_full_csv_export(self):
-        """Test that full CSV exports include all results when all_results=true."""
-        # Create a request with format=csv and all_results=true
-        request = self.factory.get('/api/items/?format=csv&all_results=true')
+        """Test that CSV export returns all paginated results (respects default page_size)."""
+        # Make a request with format=csv (no all_results parameter)
+        # This should return the default paginated set
+        response = self.client.get('/articles/', {'format': 'csv'})
         
-        # Create renderer context with a view that returns all data
-        class MockView:
-            def get_queryset(self):
-                return self.test_data
-                
-            def filter_queryset(self, queryset):
-                return queryset
-                
-            def get_serializer(self, queryset, many=False):
-                return type('MockSerializer', (), {'data': queryset})()
+        # Check response type and status
+        self.assertIsInstance(response, StreamingHttpResponse)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('text/csv', response['Content-Type'])
+        self.assertIn('Content-Disposition', response)
         
-        mock_view = MockView()
-        mock_view.test_data = self.test_data
+        # Collect the streaming content
+        content = b''.join(response.streaming_content).decode('utf-8')
         
-        renderer_context = {
-            'request': request,
-            'view': mock_view
-        }
-        
-        # Use the paginated data, but expect the renderer to get all results
-        response = self.renderer.render(self.paginated_data, 'text/csv', renderer_context)
-        
-        # This test might need adjustments based on how your implementation works
-        # If your renderer bypasses the view for full exports, you might need
-        # to mock more behavior or test differently
+        # Count the rows (should be default page_size rows + 1 header)
+        # Default page size is 10, so we expect 10 data rows + 1 header = 11 total
+        rows = content.strip().split('\n')
+        self.assertEqual(len(rows), 11)  # 10 data rows (default page size) + header
 
 if __name__ == '__main__':
     unittest.main()

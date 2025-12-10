@@ -5,8 +5,8 @@ from django.http import StreamingHttpResponse
 from api.direct_streaming import DirectStreamingCSVRenderer
 
 class DirectStreamingCSVRendererTest(unittest.TestCase):
-    def test_renderer_returns_streaming_response(self):
-        """Test that the DirectStreamingCSVRenderer returns a StreamingHttpResponse"""
+    def test_renderer_returns_csv_bytes(self):
+        """Test that the DirectStreamingCSVRenderer returns CSV bytes (per DRF renderer contract)"""
         # Create test data
         data = [
             {'id': 1, 'title': 'Test Article 1', 'summary': 'Summary 1\nwith a line break'},
@@ -25,16 +25,15 @@ class DirectStreamingCSVRendererTest(unittest.TestCase):
             })
         }
         
-        # Render the data
+        # Render the data - should return bytes, not StreamingHttpResponse
+        # (the view layer handles converting to StreamingHttpResponse)
         response = renderer.render(data, accepted_media_type='text/csv', renderer_context=renderer_context)
         
-        # Verify the response is a StreamingHttpResponse
-        self.assertIsInstance(response, StreamingHttpResponse)
-        self.assertEqual(response['Content-Type'], 'text/csv')
-        self.assertTrue('attachment; filename=' in response['Content-Disposition'])
+        # Verify the response is bytes (per DRF renderer contract)
+        self.assertIsInstance(response, bytes)
         
-        # Verify the CSV content
-        content = b''.join(response.streaming_content).decode('utf-8')
+        # Decode and verify the CSV content
+        content = response.decode('utf-8')
         csv_reader = csv.reader(io.StringIO(content))
         rows = list(csv_reader)
         
