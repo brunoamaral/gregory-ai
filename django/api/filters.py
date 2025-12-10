@@ -189,8 +189,8 @@ class ArticleFilter(filters.FilterSet):
             return queryset
             
         try:
-            # Convert to integer and validate
-            days = int(value)
+            # Convert to float first, then int (handles '10.5' -> 10)
+            days = int(float(value))
             if days <= 0:
                 return queryset
             
@@ -250,6 +250,7 @@ class TrialFilter(filters.FilterSet):
     
     # Trial-specific filters
     recruitment_status = filters.CharFilter(field_name='recruitment_status', lookup_expr='exact')
+    status = filters.CharFilter(field_name='recruitment_status', lookup_expr='exact')  # Legacy alias for backward compatibility
     internal_number = filters.CharFilter(field_name='internal_number', lookup_expr='icontains')
     phase = filters.CharFilter(field_name='phase', lookup_expr='icontains')
     study_type = filters.CharFilter(field_name='study_type', lookup_expr='icontains')
@@ -268,7 +269,7 @@ class TrialFilter(filters.FilterSet):
     class Meta:
         model = Trials
         fields = [
-            'trial_id', 'title', 'summary', 'search', 'recruitment_status',
+            'trial_id', 'title', 'summary', 'search', 'recruitment_status', 'status',
             'team_id', 'subject_id', 'category_slug', 'category_id', 'source_id',
             'internal_number', 'phase', 'study_type', 'primary_sponsor', 'source_register',
             'countries', 'condition', 'intervention', 'therapeutic_areas',
