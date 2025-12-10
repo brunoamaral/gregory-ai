@@ -25,7 +25,7 @@ class ArticleAPIFilterTest(TestCase):
 			with self.subTest(last_days=invalid_value):
 				try:
 					# This should NOT return a 500 error anymore
-					response = self.client.get('/api/articles/', {'last_days': invalid_value})
+					response = self.client.get('/articles/', {'last_days': invalid_value})
 					
 					# Should return either 200 (success) or 400 (bad request), but not 500 (server error)
 					self.assertIn(response.status_code, [200, 400], 
@@ -43,7 +43,7 @@ class ArticleAPIFilterTest(TestCase):
 		for valid_value in valid_values:
 			with self.subTest(last_days=valid_value):
 				try:
-					response = self.client.get('/api/articles/', {'last_days': valid_value})
+					response = self.client.get('/articles/', {'last_days': valid_value})
 					self.assertEqual(response.status_code, 200, 
 						f"API failed for valid last_days='{valid_value}'")
 					
