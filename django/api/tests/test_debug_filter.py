@@ -19,18 +19,21 @@ class SimpleFilterTest(TestCase):
 		base_date = timezone.make_aware(base_date)
 		
 		# Article from 5 days before base date (Jan 10)
+		# Note: discovery_date has auto_now_add=True, so create then update
 		article1 = Articles.objects.create(
 			title="Recent Article",
-			link="https://example.com/1", 
-			discovery_date=base_date - timedelta(days=5)
+			link="https://example.com/1"
 		)
+		article1.discovery_date = base_date - timedelta(days=5)
+		article1.save(update_fields=['discovery_date'])
 		
 		# Article from 15 days before base date (Dec 31, 2024)
 		article2 = Articles.objects.create(
 			title="Old Article",
-			link="https://example.com/2",
-			discovery_date=base_date - timedelta(days=15)
+			link="https://example.com/2"
 		)
+		article2.discovery_date = base_date - timedelta(days=15)
+		article2.save(update_fields=['discovery_date'])
 		
 		# Test the filter logic directly with base_date as "now"
 		queryset = Articles.objects.all()
@@ -48,7 +51,7 @@ class SimpleFilterTest(TestCase):
 		print(f"Article2 date: {article2.discovery_date}")  # Should be Dec 31 (< Jan 5)
 		
 		self.assertEqual(filtered.count(), 1)
-		self.assertEqual(filtered.first().id, article1.id)
+		self.assertEqual(filtered.first().article_id, article1.article_id)
 		
 		# Now test our custom filter method with proper mocking
 		filter_instance = ArticleFilter()
