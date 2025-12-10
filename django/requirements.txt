@@ -37,7 +37,7 @@ defusedxml==0.7.1
 Django==5.2.3
 django-countries==7.6.1
 django-extensions==4.1
-django-filter==23.1.0
+django-filter==23.1
 django-organizations==2.5.0
 django-simple-history==3.8.0
 djangorestframework==3.16.0
@@ -85,7 +85,7 @@ json5==0.9.6
 jsonpointer==3.0.0
 jsonschema==4.19.2
 jsonschema-specifications==2023.7.1
-keras>=3.10.0
+keras==3.12.0
 kiwisolver==1.4.4
 libclang==18.1.1
 lightgbm==4.6.0
@@ -100,7 +100,7 @@ mccabe==0.7.0
 mdurl==0.1.2
 millify==0.1.1
 mistune==2.0.4
-ml-dtypes==0.5.4
+ml_dtypes==0.5.4
 mpmath==1.3.0
 munkres==1.1.4
 mypy==1.5.1
@@ -133,7 +133,7 @@ pluggy==1.0.0
 ply==3.11
 prometheus-client==0.14.1
 prompt-toolkit==3.0.43
-protobuf>=5.28.0
+protobuf==6.33.2
 psutil==5.9.0
 psycopg-binary==3.2.9
 psycopg2-binary==2.9.10
@@ -174,6 +174,7 @@ scipy==1.13.1
 seaborn==0.13.2
 Send2Trash==1.8.2
 sentencepiece==0.2.0
+setuptools==80.9.0
 sgmllib3k==1.0.0
 simplejson==3.20.1
 sip==6.7.12
@@ -195,8 +196,7 @@ stack-data==0.2.0
 stopwords==1.0.1
 sympy==1.14.0
 tabulate==0.8.2
-# tensorboard==2.15.2
-tensorboard~=2.20.0
+tensorboard==2.20.0
 tensorboard-data-server==0.7.2
 tensorflow==2.20.0
 #tensorflow-cpu-aws==2.15.0
@@ -225,6 +225,7 @@ webcolors==24.11.1
 webencodings==0.5.1
 websocket-client==0.58.0
 Werkzeug==3.0.3
+wheel==0.45.1
 win-inet-pton==1.1.0
 wrapt==1.14.1
 xhtml2pdf==0.2.2
