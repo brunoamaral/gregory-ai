@@ -273,15 +273,19 @@ class SagePublicationsFeedProcessor(FeedProcessor):
         # Try multiple content fields in order of preference
         # SAGE uses content:encoded for the full description
         summary = entry.get('content_encoded', '')
+        used_field = 'content_encoded' if summary else None
         
         if not summary:
             summary = entry.get('description', '')
+            used_field = 'description' if summary else None
         
         if not summary and hasattr(entry, 'summary_detail'):
             summary = entry['summary_detail'].get('value', '')
+            used_field = 'summary_detail' if summary else None
         
         if not summary:
             summary = entry.get('summary', '')
+            used_field = 'summary' if summary else None
         
         # Clean up HTML tags and formatting for better readability
         if summary:
