@@ -1433,6 +1433,23 @@ class ArticleSearchView(generics.ListAPIView):
         except:
             return Articles.objects.none()
     
+    def filter_queryset(self, queryset):
+        """
+        Filter the queryset and handle ordering from both GET and POST requests.
+        """
+        # First apply standard filters
+        queryset = super().filter_queryset(queryset)
+        
+        # Handle ordering for POST requests manually (OrderingFilter only checks query_params by default)
+        if self.request.method == 'POST':
+            ordering = self.request.data.get('ordering')
+            if ordering:
+                # Validate that ordering field is in allowed fields
+                if ordering.lstrip('-') in [f.replace('-', '') for f in self.ordering_fields]:
+                    queryset = queryset.order_by(ordering)
+        
+        return queryset
+    
     def post(self, request, *args, **kwargs):
         # For POST requests, validate required parameters
         team_id = request.data.get('team_id')
@@ -1569,6 +1586,23 @@ class TrialSearchView(generics.ListAPIView):
         if status:
             queryset = queryset.filter(recruitment_status=status)
             
+        return queryset
+    
+    def filter_queryset(self, queryset):
+        """
+        Filter the queryset and handle ordering from both GET and POST requests.
+        """
+        # First apply standard filters
+        queryset = super().filter_queryset(queryset)
+        
+        # Handle ordering for POST requests manually (OrderingFilter only checks query_params by default)
+        if self.request.method == 'POST':
+            ordering = self.request.data.get('ordering')
+            if ordering:
+                # Validate that ordering field is in allowed fields
+                if ordering.lstrip('-') in [f.replace('-', '') for f in self.ordering_fields]:
+                    queryset = queryset.order_by(ordering)
+        
         return queryset
     
     def post(self, request, *args, **kwargs):
