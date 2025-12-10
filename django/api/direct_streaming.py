@@ -79,11 +79,10 @@ class DirectStreamingCSVRenderer(CSVRenderer):
 'team_categories',
     ]
     
-    def render(self, data, accepted_media_type=None, renderer_context=None):
+    def get_filename(self, renderer_context):
         """
-        Render the data and return a StreamingHttpResponse directly.
+        Determine the filename for CSV export based on the request path.
         """
-        # Set the custom filename in the response headers
         filename = "gregory-data.csv"
         if renderer_context and 'request' in renderer_context:
             # Determine the object type (articles, trials, etc.)
@@ -104,71 +103,14 @@ class DirectStreamingCSVRenderer(CSVRenderer):
             current_date = datetime.now().strftime('%Y-%m-%d')
             filename = f"gregory-ai-{object_type}-{current_date}.csv"
         
-        # Check if this is paginated data but ONLY for CSV requests
-        if renderer_context and 'request' in renderer_context:
-            request = renderer_context['request']
-            # For CSV requests, check if we need to use paginated data or get all results
-            if request.query_params.get('format', '').lower() == 'csv':
-                # Check if this is explicitly paginated or if we should fetch all results
-                all_results = request.query_params.get('all_results', '').lower() in ('true', '1', 'yes')
-                
-                # Check if we have paginated data
-                if isinstance(data, dict) and 'results' in data:
-                    # For paginated requests without all_results=true, just use the paginated data
-                    if not all_results:
-                        # Log what we're doing
-                        logger.debug(f"CSV Export: Using paginated data with {len(data['results'])} items")
-                        # Use the paginated results directly
-                        data = data['results']
-                    else:
-                        # Extract the paginated results as fallback
-                        paginated_data = data['results']
-                        
-                        # If we have a view object and all_results=true, try to get all results without pagination
-                        if renderer_context.get('view'):
-                            view = renderer_context['view']
-                            
-                            # Try a direct approach using a custom serializer for better performance
-                            try:
-                                # Get the original queryset
-                                queryset = view.filter_queryset(view.get_queryset())
-                                
-                                # Log query details
-                                query_str = str(queryset.query)
-                                logger.debug(f"CSV Export: SQL Query: {query_str[:300]}...")  # Truncate long queries
-                                
-                                # Always use the serializer for all_results CSV export
-                                serializer = view.get_serializer(queryset, many=True)
-                                data = serializer.data
-                                
-                                logger.debug(f"CSV Export: Serialized data count: {len(data)}")
-                                # Log unique article_ids if present
-                                article_ids = [item.get('article_id') for item in data if isinstance(item, dict) and 'article_id' in item]
-                                logger.debug(f"CSV Export: Unique article_ids in export: {set(article_ids)} (count: {len(set(article_ids))})")
-                                self.using_simplified_data = False
-                                
-                            except Exception as e:
-                                # Log the error
-                                logger.error(f"CSV Export Error: {str(e)}")
-                                
-                                # Fallback to the standard approach
-                                serializer = view.get_serializer(queryset, many=True)
-                                serialized_data = serializer.data
-                                
-                                # Log the number of serialized items
-                                serialized_count = len(serialized_data)
-                                logger.debug(f"CSV Export: Serialized data count: {serialized_count}")
-                                # Log unique article_ids in fallback data
-                                article_ids = [item.get('article_id') for item in serialized_data if isinstance(item, dict) and 'article_id' in item]
-                                logger.debug(f"CSV Export: Unique article_ids in export: {set(article_ids)} (count: {len(set(article_ids))})")
-                                # Use the complete data instead of paginated data
-                                data = serialized_data
-                                self.using_simplified_data = False
-                        else:
-                            # Fallback to just using the paginated results
-                            data = paginated_data
-                            
-        # If still paginated (fallback case), just use the results
+        return filename
+    
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        """
+        Render the data to CSV bytes. The view layer will handle streaming via finalize_response.
+        This keeps the renderer compliant with DRF's contract (returns bytes, not Response).
+        """
+        # Handle paginated data
         if isinstance(data, dict) and 'results' in data and isinstance(data['results'], list):
             data = data['results']
             
@@ -177,20 +119,15 @@ class DirectStreamingCSVRenderer(CSVRenderer):
             article_ids = [item.get('article_id') for item in data if isinstance(item, dict) and 'article_id' in item]
             logger.debug(f"CSV Export: Final unique article_ids before CSV: {set(article_ids)} (count: {len(set(article_ids))})")
         
-        # Create a StreamingHttpResponse with the generator function
-        response = StreamingHttpResponse(
-            streaming_content=self.generate_csv_rows(data),
-            content_type='text/csv'
-        )
+        # Generate CSV content as a string (not streaming)
+        csv_content = self.generate_csv_content(data)
         
-        # Set the filename for download
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
-        return response
+        # Return as UTF-8 encoded bytes (DRF renderer contract)
+        return csv_content.encode('utf-8')
     
-    def generate_csv_rows(self, data):
+    def generate_csv_content(self, data):
         """
-        Generator function that yields CSV rows one at a time, with detailed logging for skipped rows.
+        Generate complete CSV content as a string.
         """
         # Process data to flatten and consolidate it
         processed_data = self.process_data(data)
@@ -203,14 +140,13 @@ class DirectStreamingCSVRenderer(CSVRenderer):
         table = self.tablize(processed_data)
         
         if not table or len(table) == 0:
-            yield ""
-            return
+            return ""
             
         # Extract header and rows
         header = table[0]
         rows = table[1:] if len(table) > 1 else []
         
-        # Create a CSV writer for each row
+        # Create CSV output
         csv_buffer = io.StringIO()
         csv_writer = csv.writer(
             csv_buffer,
@@ -220,32 +156,27 @@ class DirectStreamingCSVRenderer(CSVRenderer):
             lineterminator='\n'
         )
         
-        # Write and yield the header row
+        # Write header row
         csv_writer.writerow(header)
-        yield csv_buffer.getvalue()
-        csv_buffer.seek(0)
-        csv_buffer.truncate(0)
         
         skipped = 0
         written = 0
-        # Write and yield each data row
+        # Write each data row
         for idx, row in enumerate(rows):
             # Ensure all values are strings
             string_row = ['' if item is None else str(item) for item in row]
             
             try:
                 csv_writer.writerow(string_row)
-                yield csv_buffer.getvalue()
-                csv_buffer.seek(0)
-                csv_buffer.truncate(0)
                 written += 1
             except Exception as e:
                 logger.error(f"CSV Export: Skipped row {idx} due to error: {e}. Row content: {string_row}")
-                csv_buffer.seek(0)
-                csv_buffer.truncate(0)
                 skipped += 1
         
         logger.debug(f"CSV Export: Attempted {len(rows)} rows, written {written}, skipped {skipped}")
+        
+        # Return the complete CSV as a string
+        return csv_buffer.getvalue()
     
     def process_data(self, data):
         """
