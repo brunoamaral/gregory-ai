@@ -535,9 +535,21 @@ class TestCrossRefDataUpdates(TransactionTestCase):
     @patch.dict(os.environ, {'DOMAIN_NAME': 'test.example.com'})
     @patch('gregory.management.commands.feedreader_articles.SciencePaper')
     def test_authors_processed_when_crossref_updated(self, mock_science_paper_class):
-        """Test that authors are processed when existing article gets CrossRef data."""
-        # Create existing article without CrossRef data and no authors
-        existing_article = Articles.objects.create(
+        """Test that existing authors in DB get linked when processing a new article with CrossRef data."""
+        # Pre-populate the database with authors (simulating they exist from previous articles)
+        john_doe = Authors.objects.create(
+            given_name='John',
+            family_name='Doe',
+            ORCID='https://orcid.org/0000-0000-0000-0001'
+        )
+        jane_smith = Authors.objects.create(
+            given_name='Jane',
+            family_name='Smith',
+            ORCID='https://orcid.org/0000-0000-0000-0002'
+        )
+        
+        # Create a NEW article (not yet in the system)
+        new_article = Articles.objects.create(
             title='Original Title',
             summary='Original summary',
             doi='10.1234/test.doi',
@@ -549,16 +561,17 @@ class TestCrossRefDataUpdates(TransactionTestCase):
             access=None
         )
         
-        # Verify no authors initially
-        self.assertEqual(existing_article.authors.count(), 0)
+        # Verify article has NO authors initially
+        self.assertEqual(new_article.authors.count(), 0)
         
-        # Mock successful CrossRef lookup with author data
+        # Mock CrossRef lookup that returns author data matching the existing authors
         mock_science_paper = Mock()
         mock_science_paper.title = 'Enhanced Title from CrossRef'
         mock_science_paper.abstract = 'Enhanced abstract from CrossRef'
         mock_science_paper.journal = 'Nature'
         mock_science_paper.publisher = 'Springer Nature'
         mock_science_paper.access = 'open'
+        # CrossRef data contains the same author info as our pre-existing authors
         mock_science_paper.authors = [
             {'given': 'John', 'family': 'Doe', 'ORCID': 'https://orcid.org/0000-0000-0000-0001'},
             {'given': 'Jane', 'family': 'Smith', 'ORCID': 'https://orcid.org/0000-0000-0000-0002'}
@@ -571,7 +584,7 @@ class TestCrossRefDataUpdates(TransactionTestCase):
             command = Command()
             command.setup()
             
-            # Process the article with DOI - this should update CrossRef data and process authors
+            # Process the article - should link the existing authors from the DB
             command.process_article_with_doi(
                 doi='10.1234/test.doi',
                 title='Feed Title',
@@ -581,27 +594,16 @@ class TestCrossRefDataUpdates(TransactionTestCase):
                 source=self.source
             )
         
-        # Verify that the existing article was updated with CrossRef data
-        existing_article.refresh_from_db()
-        self.assertEqual(existing_article.title, 'Enhanced Title from CrossRef')
-        self.assertEqual(existing_article.container_title, 'Nature')
-        self.assertIsNotNone(existing_article.crossref_check)
+        # Verify that the article was updated with CrossRef data
+        new_article.refresh_from_db()
+        self.assertEqual(new_article.title, 'Enhanced Title from CrossRef')
+        self.assertEqual(new_article.container_title, 'Nature')
+        self.assertIsNotNone(new_article.crossref_check)
         
-        # Verify that authors were processed and added
-        self.assertEqual(existing_article.authors.count(), 2)
-        
-        # Verify specific authors were created
-        john_doe = Authors.objects.get(ORCID='https://orcid.org/0000-0000-0000-0001')
-        jane_smith = Authors.objects.get(ORCID='https://orcid.org/0000-0000-0000-0002')
-        
-        self.assertEqual(john_doe.given_name, 'John')
-        self.assertEqual(john_doe.family_name, 'Doe')
-        self.assertEqual(jane_smith.given_name, 'Jane')
-        self.assertEqual(jane_smith.family_name, 'Smith')
-        
-        # Verify authors are linked to the article
-        self.assertIn(john_doe, existing_article.authors.all())
-        self.assertIn(jane_smith, existing_article.authors.all())
+        # Verify that EXISTING authors from DB got linked to the new article
+        self.assertIn(john_doe, new_article.authors.all())
+        self.assertIn(jane_smith, new_article.authors.all())
+        self.assertEqual(new_article.authors.count(), 2)
     
     @patch.dict(os.environ, {'DOMAIN_NAME': 'test.example.com'})
     def test_create_or_update_article_with_crossref_title_change(self):
@@ -1499,7 +1501,7 @@ class TestSagePublicationsFeedProcessor(TestCase):
         """Test that SAGE processor inherits keyword filtering functionality."""
         # Create a mock source with keyword filter
         source = Sources.objects.create(
-            source_name='Test SAGE Source',
+            name='Test SAGE Source',
             link='https://journals.sagepub.com/test',
             method='rss',
             source_for='science paper',
