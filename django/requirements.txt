@@ -6,7 +6,7 @@ appnope==0.1.4
 argon2-cffi==21.3.0
 argon2-cffi-bindings==21.2.0
 arrow==1.3.0
-asgiref==3.8.1
+asgiref==3.11.0
 asttokens==2.0.5
 astunparse==1.6.3
 async-lru==2.0.4
@@ -34,7 +34,7 @@ cycler==0.11.0
 debugpy==1.6.7
 decorator==5.1.1
 defusedxml==0.7.1
-Django==5.2.3
+Django==6.0
 django-countries==7.6.1
 django-extensions==4.1
 django-filter==23.1
@@ -204,7 +204,7 @@ tensorflow-estimator==2.15.0
 tensorflow-io-gcs-filesystem==0.37.1
 termcolor==3.1.0
 terminado==0.17.1
-tf-keras==2.15.0
+tf-keras==2.20.1
 threadpoolctl==3.6.0
 tinycss2==1.2.1
 tokenizers==0.15.2
