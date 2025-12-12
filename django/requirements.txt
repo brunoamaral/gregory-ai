@@ -37,7 +37,7 @@ defusedxml==0.7.1
 Django==6.0
 django-countries==7.6.1
 django-extensions==4.1
-django-filter==23.1
+django-filter>=25.1
 django-organizations==2.5.0
 django-simple-history==3.8.0
 djangorestframework==3.16.0
@@ -199,7 +199,6 @@ tabulate==0.8.2
 tensorboard==2.20.0
 tensorboard-data-server==0.7.2
 tensorflow==2.20.0
-#tensorflow-cpu-aws==2.15.0
 tensorflow-estimator==2.15.0
 tensorflow-io-gcs-filesystem==0.37.1
 termcolor==3.1.0
