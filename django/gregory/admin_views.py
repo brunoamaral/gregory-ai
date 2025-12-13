@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse, JsonResponse
 from django.core.paginator import Paginator
-from django.utils.html import format_html
+from django.utils.html import format_html, mark_safe
 from django.db.models import Q, Case, When, Value, BooleanField, Count
 from django.contrib import messages
 from django.utils.dateparse import parse_date
@@ -160,11 +160,11 @@ def article_review_status_view(request):
         is_relevant = review_data['is_relevant'] if review_data else None
         
         if is_relevant is True:
-            status_html = format_html('<span style="color: #009900; font-weight: bold;">Relevant</span>')
+            status_html = mark_safe('<span style="color: #009900; font-weight: bold;">Relevant</span>')
         elif is_relevant is False:
-            status_html = format_html('<span style="color: #cc0000; font-weight: bold;">Not Relevant</span>')
+            status_html = mark_safe('<span style="color: #cc0000; font-weight: bold;">Not Relevant</span>')
         else:
-            status_html = format_html('<span style="color: #f90; font-weight: bold;">Not Reviewed</span>')
+            status_html = mark_safe('<span style="color: #f90; font-weight: bold;">Not Reviewed</span>')
         
         edit_url = f'/admin/gregory/articles/{article.article_id}/change/'
         
@@ -288,7 +288,7 @@ def update_article_relevance_ajax(request):
                     relevance.is_relevant = True
                     relevance.save()
                 status = 'relevant'
-                status_html = '<span style="color: #009900; font-weight: bold;">Relevant</span>'
+                status_html = mark_safe('<span style="color: #009900; font-weight: bold;">Relevant</span>')
                 
             elif action == 'mark_not_relevant':
                 relevance, created = ArticleSubjectRelevance.objects.get_or_create(
@@ -300,7 +300,7 @@ def update_article_relevance_ajax(request):
                     relevance.is_relevant = False
                     relevance.save()
                 status = 'not_relevant'
-                status_html = '<span style="color: #cc0000; font-weight: bold;">Not Relevant</span>'
+                status_html = mark_safe('<span style="color: #cc0000; font-weight: bold;">Not Relevant</span>')
                 
             elif action == 'mark_for_review':
                 try:
@@ -313,7 +313,7 @@ def update_article_relevance_ajax(request):
                 except ArticleSubjectRelevance.DoesNotExist:
                     pass
                 status = 'not_reviewed'
-                status_html = '<span style="color: #f90; font-weight: bold;">Not Reviewed</span>'
+                status_html = mark_safe('<span style="color: #f90; font-weight: bold;">Not Reviewed</span>')
             
             return JsonResponse({
                 'success': True,
