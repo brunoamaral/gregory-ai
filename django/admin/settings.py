@@ -69,6 +69,7 @@ INSTALLED_APPS = [
 	'rest_framework_simplejwt',
 	'rest_framework_csv',  # Add CSV renderer support
 	'django_filters',
+	'django.contrib.postgres',
 	'django.contrib.admin',
 	'django.contrib.auth',
 	'django.contrib.contenttypes',

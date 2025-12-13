@@ -46,9 +46,10 @@ class CategoryAuthorsTestCase(TestCase):
         from api.serializers import CategorySerializer
         
         # Check that the new fields are in the Meta.fields
+        # Note: monthly_counts is an optional field that can be included based on context parameters
         expected_fields = [
             'id', 'category_description', 'category_name', 'category_slug', 'category_terms', 
-            'article_count_total', 'trials_count_total', 'authors_count', 'top_authors'
+            'article_count_total', 'trials_count_total', 'authors_count', 'top_authors', 'monthly_counts'
         ]
         
         self.assertEqual(CategorySerializer.Meta.fields, expected_fields)

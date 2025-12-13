@@ -356,8 +356,18 @@ class AuthorSerializer(serializers.ModelSerializer):
 
 	def get_articles_list(self, obj):
 		site = get_site()
-		base_url = f"https://api.{site.domain}/articles/?author_id=" if site else ""
-		return base_url + str(obj.author_id) if site else ""
+		if not site:
+			return ""
+		
+		# If the domain already has 'api.' subdomain, use it as-is
+		# Otherwise, add 'api.' prefix
+		domain = site.domain
+		if domain.startswith('api.'):
+			base_url = f"https://{domain}/articles/?author_id="
+		else:
+			base_url = f"https://api.{domain}/articles/?author_id="
+		
+		return base_url + str(obj.author_id)
 
 # Simple Trial serializer for use in Article references
 class TrialReferenceSerializer(serializers.ModelSerializer):

@@ -284,6 +284,45 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	ordering_fields = ['discovery_date', 'published_date', 'title', 'article_id']
 	ordering = ['-discovery_date']
 
+	def finalize_response(self, request, response, *args, **kwargs):
+		"""
+		Override to handle CSV streaming. If CSV format is requested, convert the response
+		to a StreamingHttpResponse with proper headers.
+		"""
+		# Call parent finalize_response first
+		response = super().finalize_response(request, response, *args, **kwargs)
+		
+		# Check if this is a CSV response
+		if request.query_params.get('format', '').lower() == 'csv':
+			# Render the response to get the content
+			response.render()
+			
+			# Get the CSV bytes from the response content
+			csv_bytes = response.content if isinstance(response.content, bytes) else response.content.encode('utf-8')
+			
+			# Create a simple generator that yields the bytes
+			def csv_stream():
+				yield csv_bytes
+			
+			# Determine the filename from the renderer
+			from api.direct_streaming import DirectStreamingCSVRenderer
+			renderer = DirectStreamingCSVRenderer()
+			filename = renderer.get_filename({'request': request})
+			
+			# Create StreamingHttpResponse
+			streaming_response = StreamingHttpResponse(
+				streaming_content=csv_stream(),
+				content_type='text/csv; charset=utf-8'
+			)
+			
+			# Set all the proper headers
+			streaming_response['Content-Disposition'] = f'attachment; filename="{filename}"'
+			streaming_response['Content-Type'] = 'text/csv; charset=utf-8'
+			
+			return streaming_response
+		
+		return response
+
 	@action(detail=False, methods=['get'])
 	def relevance_counts(self, request):
 		"""
@@ -1394,6 +1433,23 @@ class ArticleSearchView(generics.ListAPIView):
         except:
             return Articles.objects.none()
     
+    def filter_queryset(self, queryset):
+        """
+        Filter the queryset and handle ordering from both GET and POST requests.
+        """
+        # First apply standard filters
+        queryset = super().filter_queryset(queryset)
+        
+        # Handle ordering for POST requests manually (OrderingFilter only checks query_params by default)
+        if self.request.method == 'POST':
+            ordering = self.request.data.get('ordering')
+            if ordering:
+                # Validate that ordering field is in allowed fields
+                if ordering.lstrip('-') in [f.replace('-', '') for f in self.ordering_fields]:
+                    queryset = queryset.order_by(ordering)
+        
+        return queryset
+    
     def post(self, request, *args, **kwargs):
         # For POST requests, validate required parameters
         team_id = request.data.get('team_id')
@@ -1530,6 +1586,23 @@ class TrialSearchView(generics.ListAPIView):
         if status:
             queryset = queryset.filter(recruitment_status=status)
             
+        return queryset
+    
+    def filter_queryset(self, queryset):
+        """
+        Filter the queryset and handle ordering from both GET and POST requests.
+        """
+        # First apply standard filters
+        queryset = super().filter_queryset(queryset)
+        
+        # Handle ordering for POST requests manually (OrderingFilter only checks query_params by default)
+        if self.request.method == 'POST':
+            ordering = self.request.data.get('ordering')
+            if ordering:
+                # Validate that ordering field is in allowed fields
+                if ordering.lstrip('-') in [f.replace('-', '') for f in self.ordering_fields]:
+                    queryset = queryset.order_by(ordering)
+        
         return queryset
     
     def post(self, request, *args, **kwargs):

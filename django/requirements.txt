@@ -6,7 +6,7 @@ appnope==0.1.4
 argon2-cffi==21.3.0
 argon2-cffi-bindings==21.2.0
 arrow==1.3.0
-asgiref==3.8.1
+asgiref==3.11.0
 asttokens==2.0.5
 astunparse==1.6.3
 async-lru==2.0.4
@@ -34,10 +34,10 @@ cycler==0.11.0
 debugpy==1.6.7
 decorator==5.1.1
 defusedxml==0.7.1
-Django==5.2.3
+Django==6.0
 django-countries==7.6.1
 django-extensions==4.1
-django-filter==23.1.0
+django-filter>=25.1
 django-organizations==2.5.0
 django-simple-history==3.8.0
 djangorestframework==3.16.0
@@ -85,7 +85,7 @@ json5==0.9.6
 jsonpointer==3.0.0
 jsonschema==4.19.2
 jsonschema-specifications==2023.7.1
-keras==2.15.0
+keras==3.12.0
 kiwisolver==1.4.4
 libclang==18.1.1
 lightgbm==4.6.0
@@ -100,7 +100,7 @@ mccabe==0.7.0
 mdurl==0.1.2
 millify==0.1.1
 mistune==2.0.4
-ml-dtypes==0.2.0
+ml_dtypes==0.5.4
 mpmath==1.3.0
 munkres==1.1.4
 mypy==1.5.1
@@ -133,7 +133,7 @@ pluggy==1.0.0
 ply==3.11
 prometheus-client==0.14.1
 prompt-toolkit==3.0.43
-protobuf==4.25.7
+protobuf==6.33.2
 psutil==5.9.0
 psycopg-binary==3.2.9
 psycopg2-binary==2.9.10
@@ -174,6 +174,7 @@ scipy==1.13.1
 seaborn==0.13.2
 Send2Trash==1.8.2
 sentencepiece==0.2.0
+setuptools==80.9.0
 sgmllib3k==1.0.0
 simplejson==3.20.1
 sip==6.7.12
@@ -195,15 +196,14 @@ stack-data==0.2.0
 stopwords==1.0.1
 sympy==1.14.0
 tabulate==0.8.2
-tensorboard==2.15.2
+tensorboard==2.20.0
 tensorboard-data-server==0.7.2
-tensorflow==2.15.0
-#tensorflow-cpu-aws==2.15.0
+tensorflow==2.20.0
 tensorflow-estimator==2.15.0
 tensorflow-io-gcs-filesystem==0.37.1
 termcolor==3.1.0
 terminado==0.17.1
-tf-keras==2.15.0
+tf-keras==2.20.1
 threadpoolctl==3.6.0
 tinycss2==1.2.1
 tokenizers==0.15.2
@@ -224,6 +224,7 @@ webcolors==24.11.1
 webencodings==0.5.1
 websocket-client==0.58.0
 Werkzeug==3.0.3
+wheel==0.45.1
 win-inet-pton==1.1.0
 wrapt==1.14.1
 xhtml2pdf==0.2.2

@@ -58,8 +58,10 @@ class StreamingCSVRendererTest(TestCase):
         self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
         self.assertTrue('attachment; filename=' in response['Content-Disposition'])
         
-        # Verify the CSV content
-        content = response.content.decode('utf-8')
+        # Verify the CSV content - consume streaming_content
+        # streaming_content is a generator, so we need to iterate through it
+        content_bytes = b''.join(response.streaming_content)
+        content = content_bytes.decode('utf-8')
         csv_reader = csv.reader(io.StringIO(content))
         rows = list(csv_reader)
         
@@ -81,8 +83,10 @@ class StreamingCSVRendererTest(TestCase):
         # Test response properties
         self.assertEqual(response.status_code, 200)
         
-        # Verify the CSV content
-        content = response.content.decode('utf-8')
+        # Verify the CSV content - consume streaming_content
+        # streaming_content is a generator, so we need to iterate through it
+        content_bytes = b''.join(response.streaming_content)
+        content = content_bytes.decode('utf-8')
         csv_reader = csv.reader(io.StringIO(content))
         rows = list(csv_reader)
         

@@ -273,15 +273,19 @@ class SagePublicationsFeedProcessor(FeedProcessor):
         # Try multiple content fields in order of preference
         # SAGE uses content:encoded for the full description
         summary = entry.get('content_encoded', '')
+        used_field = 'content_encoded' if summary else None
         
         if not summary:
             summary = entry.get('description', '')
+            used_field = 'description' if summary else None
         
         if not summary and hasattr(entry, 'summary_detail'):
             summary = entry['summary_detail'].get('value', '')
+            used_field = 'summary_detail' if summary else None
         
         if not summary:
             summary = entry.get('summary', '')
+            used_field = 'summary' if summary else None
         
         # Clean up HTML tags and formatting for better readability
         if summary:
@@ -290,14 +294,18 @@ class SagePublicationsFeedProcessor(FeedProcessor):
             summary = re.sub(r'<[^>]+>', '', summary)
             # Clean up extra whitespace
             summary = ' '.join(summary.split())
-            # SAGE descriptions often have volume/issue info at the beginning
-            # Extract content after common patterns like "Volume X, Issue Y, Month Year. <br/>"
-            if 'Volume ' in summary and 'Issue ' in summary:
-                # Try to find the start of actual content after metadata
-                parts = summary.split('. ')
-                if len(parts) > 1:
-                    # Skip the first part which is usually metadata
-                    summary = '. '.join(parts[1:])
+            
+            # For description field: Remove SAGE metadata at the beginning
+            # For content_encoded field: Keep the metadata as it's part of professional publication header
+            if used_field == 'description':
+                # SAGE descriptions often have volume/issue info at the beginning
+                # Extract content after common patterns like "Volume X, Issue Y, Month Year. "
+                if 'Volume ' in summary and 'Issue ' in summary:
+                    # Try to find the start of actual content after metadata
+                    parts = summary.split('. ')
+                    if len(parts) > 1:
+                        # Skip the first part which is usually metadata
+                        summary = '. '.join(parts[1:])
         
         return summary or ''
     
