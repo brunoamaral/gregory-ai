@@ -252,6 +252,7 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	- **ordering** - order results by field (e.g., -published_date, title)
 	- **page** - page number for pagination
 	- **page_size** - items per page (max 100)
+	- **all_results** - set to 'true' to bypass pagination and get all results (useful for CSV export)
 	
 	# Special Article Types:
 	- **relevant** - filter for relevant articles (true/false)
@@ -273,11 +274,13 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	- Relevant from last 15 days: `/articles/?relevant=true&last_days=15`
 	- Relevant from specific week: `/articles/?relevant=true&week=52&year=2024`
 	- Open access articles: `/articles/?open_access=true`
+	- CSV export all results: `/articles/?format=csv&all_results=true`
 	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&relevant=true&ml_threshold=0.8&ordering=-published_date`
 	"""
 	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	pagination_class = FlexiblePagination
 	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
 	filterset_class = ArticleFilter
 	search_fields = ['title', 'summary']
@@ -835,6 +838,9 @@ class TrialViewSet(viewsets.ModelViewSet):
 	- **source_id** - filter by source ID
 	- **status/recruitment_status** - filter by recruitment status
 	- **search** - search in title and summary
+	- **page** - page number for pagination
+	- **page_size** - items per page (max 100)
+	- **all_results** - set to 'true' to bypass pagination and get all results (useful for CSV export)
 	
 	# Trial-Specific Parameters:
 	- **internal_number** - filter by WHO internal number
@@ -850,10 +856,15 @@ class TrialViewSet(viewsets.ModelViewSet):
 	- **therapeutic_areas** - filter by therapeutic areas
 	- **inclusion_agemin/agemax** - filter by age inclusion criteria
 	- **inclusion_gender** - filter by gender inclusion criteria
+	
+	# Examples:
+	- All trials as CSV: `/trials/?format=csv&all_results=true`
+	- Filtered trials: `/trials/?team_id=1&status=Recruiting&format=csv&all_results=true`
 	"""
 	queryset = Trials.objects.all().order_by('-discovery_date')
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	pagination_class = FlexiblePagination
 	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
 	filterset_class = TrialFilter
 	search_fields = ['title', 'summary']
