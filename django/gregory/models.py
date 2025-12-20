@@ -27,7 +27,6 @@ class Authors(models.Model):
 		output_field=models.TextField(),
 		db_persist=True
 	)
-	history = HistoricalRecords()
 
 	def save(self, *args, **kwargs):
 		# Auto-populate full_name from given_name and family_name
@@ -265,7 +264,7 @@ class Articles(models.Model):
 	container_title = models.CharField(max_length=150, blank=True, null=True, default=None)
 	crossref_check = models.DateTimeField(blank=True, null=True)
 	takeaways = models.TextField(blank=True, null=True)
-	history = HistoricalRecords()
+	history = HistoricalRecords(excluded_fields=['crossref_check', 'utitle', 'usummary'])
 	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
 	retracted = models.BooleanField(default=False)
