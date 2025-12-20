@@ -51,3 +51,11 @@ class Command(BaseCommand):
 			self.stdout.write(self.style.SUCCESS('Finished running detect_trial_references'))
 		except Exception as e:
 			self.stderr.write(self.style.ERROR(f'Error running detect_trial_references: {str(e)}'))
+
+		# Prune old sent notification records (keeps last 30 days by default)
+		try:
+			self.stdout.write(self.style.SUCCESS('Running prune_sent_notifications to clean up old records'))
+			call_command('prune_sent_notifications', days=30)
+			self.stdout.write(self.style.SUCCESS('Finished running prune_sent_notifications'))
+		except Exception as e:
+			self.stderr.write(self.style.ERROR(f'Error running prune_sent_notifications: {str(e)}'))
