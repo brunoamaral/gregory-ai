@@ -471,15 +471,15 @@ class SourceAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		status = obj.get_health_status()
 		
 		if status == "healthy":
-			return format_html('<span style="color: green; font-size: 14px;">●</span>')
+			return format_html('<span style="color: green; font-size: 14px;">{}</span>', '●')
 		elif status == "warning":
-			return format_html('<span style="color: orange; font-size: 14px;">●</span>')
+			return format_html('<span style="color: orange; font-size: 14px;">{}</span>', '●')
 		elif status == "error":
-			return format_html('<span style="color: red; font-size: 14px;">●</span>')
+			return format_html('<span style="color: red; font-size: 14px;">{}</span>', '●')
 		elif status == "inactive":
-			return format_html('<span style="color: gray; font-size: 14px;">●</span>')
+			return format_html('<span style="color: gray; font-size: 14px;">{}</span>', '●')
 		else:  # no_content
-			return format_html('<span style="color: blue; font-size: 14px;">●</span>')
+			return format_html('<span style="color: blue; font-size: 14px;">{}</span>', '●')
 	health_status_indicator.short_description = 'Status'
 	
 	def activate_sources(self, request, queryset):
