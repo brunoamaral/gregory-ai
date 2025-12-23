@@ -32,7 +32,7 @@ class ArticlesByAuthorFeed(Feed):
 	description = "RSS feed for articles by a specific author."
 
 	def items(self, obj):
-		return Articles.objects.filter(authors=obj)
+		return Articles.objects.filter(authors=obj).order_by('-published_date')[:50]
 
 	def item_title(self, item):
 		return item.title
@@ -45,6 +45,9 @@ class ArticlesByAuthorFeed(Feed):
 
 	def item_pubdate(self, item):
 		return item.published_date
+
+	def item_updateddate(self, item):
+		return item.last_updated
 
 
 class TrialsBySubjectFeed(Feed):
@@ -137,3 +140,6 @@ class TrialsBySubjectFeed(Feed):
 
 	def item_pubdate(self, item):
 		return item.published_date
+
+	def item_updateddate(self, item):
+		return item.last_updated
