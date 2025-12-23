@@ -557,7 +557,7 @@ class SubjectAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 				)
 				for source in sources
 			]
-			return format_html('<br>'.join(links))
+			return mark_safe('<br>'.join(links))
 		return "No sources"
 
 	view_sources.short_description = "Linked Sources"
@@ -574,7 +574,7 @@ class SubjectAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 				)
 				for source in sources
 			]
-			return format_html('<br>'.join(links))
+			return mark_safe('<br>'.join(links))
 		return "No sources"
 
 	linked_sources.short_description = "Linked Sources"
