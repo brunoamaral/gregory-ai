@@ -26,7 +26,7 @@ from api.views import (
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, SubjectsByTeam,
     ArticlesByCategoryAndTeam, ArticlesBySource, ArticleSearchView, TrialSearchView, AuthorSearchView, CategoriesByTeamAndSubject
 )
-from rss.views import	ArticlesByAuthorFeed
+from rss.views import	ArticlesByAuthorFeed, TrialsBySubjectFeed
 from subscriptions.views import subscribe_view
 from organizations.backends import invitation_backend
 
@@ -62,6 +62,7 @@ urlpatterns = [
 
 	# Feed routes (supports ORCID or numeric author_id)
 	path('feed/author/<str:orcid>/', ArticlesByAuthorFeed(), name='articles_by_author_feed'),
+	path('feed/trials/subject/<str:subject_slug>/', TrialsBySubjectFeed(), name='trials_by_subject_feed'),
 
 	# Organization routes
 	re_path(r'^accounts/', include('organizations.urls')),
