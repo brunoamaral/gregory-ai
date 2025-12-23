@@ -500,6 +500,29 @@ class SourceAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		)
 	deactivate_sources.short_description = "Deactivate selected sources"
 
+class SourcesInline(admin.StackedInline):
+	"""Inline admin for managing sources within a subject"""
+	model = Sources
+	extra = 1  # Show 1 empty form by default for adding new sources
+	fields = ['name', 'link', 'source_for', 'method', 'active', 'keyword_filter', 'description']
+	verbose_name = "New Source"
+	verbose_name_plural = "Add New Source"
+	
+	def get_queryset(self, request):
+		"""Return empty queryset to hide existing sources from inline forms"""
+		return super().get_queryset(request).none()
+	
+	def save_formset(self, request, form, formset, change):
+		"""Automatically set subject and team when saving sources"""
+		instances = formset.save(commit=False)
+		for instance in instances:
+			# Auto-populate subject and team from the parent Subject object
+			instance.subject = form.instance
+			instance.team = form.instance.team
+			instance.save()
+		formset.save_m2m()
+
+
 class SubjectAdminForm(forms.ModelForm):
 	"""Custom form for Subject admin with organization-based team access"""
 	
@@ -526,6 +549,7 @@ class SubjectAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	readonly_fields = ['linked_sources']  # Display in the edit form
 	list_filter = [('team', OrganizationRestrictedFieldListFilter)]  # Add the team filter
 	form = SubjectAdminForm
+	inlines = [SourcesInline]  # Add the inline for managing sources
 	
 	def formatted_subject_name(self, obj):
 		"""Display subject name with emphasis"""
