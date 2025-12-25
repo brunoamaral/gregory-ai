@@ -7,7 +7,7 @@ clinical trials using the ClinicalTrials.gov REST API v2.
 Source Configuration:
 - method: 'ctgov_api'
 - source_for: 'trials'
-- ctgov_search_query: The condition/disease search query (e.g., "multiple sclerosis")
+- ctgov_search_condition: The condition/disease search query (e.g., "multiple sclerosis")
 - description: Optional additional search parameters:
     - "INTERVENTION:rituximab, ocrelizumab" - search by intervention/treatment
     - "TERM:some general search" - general search terms
@@ -46,11 +46,17 @@ class Command(BaseCommand):
 			type=int,
 			help='Process only a specific source by ID'
 		)
+		parser.add_argument(
+			'--debug',
+			action='store_true',
+			help='Show detailed data for each clinical trial found'
+		)
 
 	def handle(self, *args, **options):
 		self.verbosity = options.get('verbosity', 1)
 		max_results = options.get('max_results', 100)
 		source_id = options.get('source_id')
+		self.debug = options.get('debug', False)
 
 		self.api = ClinicalTrialsGovAPI()
 
@@ -84,6 +90,32 @@ class Command(BaseCommand):
 		"""Truncate change reason to fit within 100 character database limit."""
 		return reason[:100] if len(reason) > 100 else reason
 
+	def _print_trial_debug(self, clinical_trial):
+		"""Print detailed debug information for a clinical trial."""
+		self.stdout.write(self.style.WARNING("\n" + "=" * 80))
+		self.stdout.write(self.style.WARNING(f"TRIAL: {clinical_trial.identifiers.get('nct', 'N/A')}"))
+		self.stdout.write(self.style.WARNING("=" * 80))
+		
+		self.stdout.write(f"Title: {clinical_trial.title}")
+		self.stdout.write(f"Link: {clinical_trial.link}")
+		self.stdout.write(f"Published Date: {clinical_trial.published_date}")
+		self.stdout.write(f"Identifiers: {clinical_trial.identifiers}")
+		
+		if clinical_trial.summary:
+			summary_preview = clinical_trial.summary[:500] + "..." if len(clinical_trial.summary) > 500 else clinical_trial.summary
+			self.stdout.write(f"Summary: {summary_preview}")
+		
+		extras = clinical_trial.extra_fields or {}
+		self.stdout.write("\nExtra Fields:")
+		for key, value in extras.items():
+			if value:
+				# Truncate long values for display
+				if isinstance(value, str) and len(value) > 200:
+					value = value[:200] + "..."
+				self.stdout.write(f"  {key}: {value}")
+		
+		self.stdout.write("")  # Empty line for separation
+
 	def process_sources(self, max_results=100, source_id=None):
 		"""Fetch and process trials from ClinicalTrials.gov API sources."""
 		sources = Sources.objects.filter(method='ctgov_api', source_for='trials', active=True)
@@ -114,6 +146,10 @@ class Command(BaseCommand):
 						if not clinical_trial.title:
 							self.log(f"Skipping study with no title", level=3)
 							continue
+
+						# Debug output
+						if self.debug:
+							self._print_trial_debug(clinical_trial)
 
 						# Check for existing trial
 						existing_trial = self.find_existing_trial(clinical_trial)
@@ -148,7 +184,7 @@ class Command(BaseCommand):
 		"""Build API search parameters from source configuration.
 		
 		Source configuration:
-		- ctgov_search_query: The condition/disease search query (e.g., "multiple sclerosis")
+		- ctgov_search_condition: The condition/disease search query (e.g., "multiple sclerosis")
 		- description: Optional additional search parameters:
 		    - "INTERVENTION:rituximab, ocrelizumab" - search by intervention/treatment
 		    - "TERM:some general search" - general search terms
@@ -158,9 +194,9 @@ class Command(BaseCommand):
 			'sort': ['LastUpdatePostDate:desc'],  # Get newest updates first
 		}
 
-		# Use ctgov_search_query for the condition search query
-		if source.ctgov_search_query:
-			params['query_cond'] = source.ctgov_search_query
+		# Use ctgov_search_condition for the condition search query
+		if source.ctgov_search_condition:
+			params['query_cond'] = source.ctgov_search_condition
 
 		# Use description field for additional search parameters (optional)
 		# Format: "INTERVENTION:term1, term2" or just general terms
@@ -172,42 +208,10 @@ class Command(BaseCommand):
 				general_terms = source.description[5:].strip()  # Remove "TERM:" prefix
 				params['query_term'] = general_terms
 
-		# Define fields to retrieve (optimize API response size)
-		params['fields'] = [
-			'NCTId',
-			'OrgStudyId',
-			'SecondaryIdInfos',
-			'BriefTitle',
-			'OfficialTitle',
-			'BriefSummary',
-			'DetailedDescription',
-			'OverallStatus',
-			'StartDateStruct',
-			'StudyFirstSubmitDate',
-			'StudyType',
-			'Phase',
-			'EnrollmentInfo',
-			'Condition',
-			'EligibilityCriteria',
-			'MinimumAge',
-			'MaximumAge',
-			'Sex',
-			'LeadSponsorName',
-			'CollaboratorName',
-			'LocationCountry',
-			'CentralContactName',
-			'CentralContactPhone',
-			'CentralContactEMail',
-			'InterventionType',
-			'InterventionName',
-			'InterventionDescription',
-			'PrimaryOutcomeMeasure',
-			'PrimaryOutcomeDescription',
-			'PrimaryOutcomeTimeFrame',
-			'SecondaryOutcomeMeasure',
-			'SecondaryOutcomeDescription',
-			'SecondaryOutcomeTimeFrame',
-		]
+		# Note: We don't specify fields to get the full study data
+		# The API returns all fields by default
+
+		return params
 
 		return params
 
