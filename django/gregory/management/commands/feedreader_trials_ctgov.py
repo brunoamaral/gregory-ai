@@ -164,11 +164,11 @@ class Command(BaseCommand):
 							created_count += 1
 
 					except IntegrityError as e:
-						self.log(f"IntegrityError for trial '{clinical_trial.title[:50]}...': {e}", level=3, style_func=self.style.ERROR)
+						self.stdout.write(self.style.ERROR(f"IntegrityError for trial '{clinical_trial.title[:50]}...' (NCT: {clinical_trial.identifiers.get('nct', 'N/A')}): {e}"))
 						error_count += 1
 					except Exception as e:
 						nct_id = clinical_trial.identifiers.get('nct', 'unknown') if clinical_trial else 'unknown'
-						self.log(f"Error processing trial {nct_id}: {e}", level=2, style_func=self.style.ERROR)
+						self.stdout.write(self.style.ERROR(f"Error processing trial {nct_id}: {e}"))
 						error_count += 1
 
 			except Exception as e:
@@ -216,13 +216,19 @@ class Command(BaseCommand):
 		return params
 
 	def find_existing_trial(self, clinical_trial: ClinicalTrial):
-		"""Find an existing trial by NCT ID or title."""
+		"""Find an existing trial by NCT ID, title, or link."""
 		identifiers = clinical_trial.identifiers
 		title = clinical_trial.title.lower() if clinical_trial.title else None
 
 		# First try to find by NCT ID (most reliable)
 		if identifiers.get('nct'):
-			trial = Trials.objects.filter(identifiers__nct=identifiers['nct']).first()
+			nct_id = identifiers['nct']
+			# Try exact match in identifiers JSON
+			trial = Trials.objects.filter(identifiers__nct=nct_id).first()
+			if trial:
+				return trial
+			# Also search for NCT ID in link field (e.g., https://clinicaltrials.gov/study/NCT12345)
+			trial = Trials.objects.filter(link__icontains=nct_id).first()
 			if trial:
 				return trial
 
@@ -236,7 +242,13 @@ class Command(BaseCommand):
 			if trial:
 				return trial
 
-		# Fallback to title match
+		# Try by link (ClinicalTrials.gov URL)
+		if clinical_trial.link:
+			trial = Trials.objects.filter(link=clinical_trial.link).first()
+			if trial:
+				return trial
+
+		# Fallback to title match (case-insensitive)
 		if title:
 			trial = Trials.objects.filter(title__iexact=clinical_trial.title).first()
 			if trial:
@@ -304,11 +316,16 @@ class Command(BaseCommand):
 		has_changes = False
 		updated_fields = []
 
-		# Update basic fields
+		# Update title only if it won't cause a duplicate conflict
 		if existing_trial.title != clinical_trial.title and clinical_trial.title:
-			existing_trial.title = clinical_trial.title
-			has_changes = True
-			updated_fields.append('title')
+			# Check if the new title already exists (case-insensitive) for a different trial
+			conflicting_trial = Trials.objects.filter(title__iexact=clinical_trial.title).exclude(pk=existing_trial.pk).first()
+			if conflicting_trial:
+				self.log(f"Skipping title update - would conflict with trial {conflicting_trial.trial_id}", level=2, style_func=self.style.WARNING)
+			else:
+				existing_trial.title = clinical_trial.title
+				has_changes = True
+				updated_fields.append('title')
 
 		if existing_trial.summary != clinical_trial.summary and clinical_trial.summary:
 			existing_trial.summary = clinical_trial.summary
