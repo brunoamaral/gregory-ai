@@ -10,15 +10,13 @@ import json
 import traceback
 from datetime import timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, Union, Any
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 from django.db.models import Q, Exists, OuterRef
 from django.utils import timezone
 
-from gregory.models import Team, Subject, Articles, MLPredictions, PredictionRunLog
+from gregory.models import Team, Articles, MLPredictions, PredictionRunLog
 from gregory.utils.text_utils import cleanHTML, cleanText
 
 # Base path for models
