@@ -281,6 +281,7 @@ class Command(BaseCommand):
 				contact_email=extras.get('contact_email'),
 				contact_tel=extras.get('contact_tel'),
 				source_register=extras.get('source_register'),
+				ctg_detailed_description=extras.get('ctg_detailed_description'),
 			)
 			
 			if trial:
@@ -339,7 +340,7 @@ class Command(BaseCommand):
 			'intervention', 'secondary_id', 'condition', 'primary_outcome', 'secondary_outcome',
 			'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender', 'target_size',
 			'contact_firstname', 'contact_lastname', 'contact_email', 'contact_tel',
-			'source_register'
+			'source_register', 'ctg_detailed_description'
 		]
 
 		for field in extra_field_mapping:

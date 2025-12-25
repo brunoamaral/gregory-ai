@@ -579,7 +579,7 @@ class ClinicalTrialsGovAPI:
 			'contact_email': contact_info.get('email'),
 			'contact_tel': contact_info.get('phone'),
 			'source_register': 'ClinicalTrials.gov',
-			'detailed_description': detailed_description,
+			'ctg_detailed_description': detailed_description,
 		}
 		
 		return ClinicalTrial(
