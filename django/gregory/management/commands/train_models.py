@@ -40,31 +40,55 @@ except Exception as e:
     def save_pseudo_csv(*args, **kwargs):
         raise ImportError("ML modules could not be imported")
 
-# Initialize imports
-# Debug imports individually to find the problematic one
-try:
-    from gregory.ml.bert_wrapper import BertTrainer
-    print("✓ Successfully imported BertTrainer")
-except Exception as e:
-    print(f"✗ Failed to import BertTrainer: {e}")
+# ML import status tracking (for debug mode)
+_ml_import_status = {}
 
-try:
-    from gregory.ml.lgbm_wrapper import LGBMTfidfTrainer
-    print("✓ Successfully imported LGBMTfidfTrainer")
-except Exception as e:
-    print(f"✗ Failed to import LGBMTfidfTrainer: {e}")
+def _check_ml_imports(stdout=None):
+    """
+    Check ML imports and optionally print status.
+    Called when --debug flag is used.
+    """
+    global _ml_import_status
+    
+    def _print(msg):
+        if stdout:
+            stdout.write(msg + "\n")
+        else:
+            print(msg)
+    
+    try:
+        from gregory.ml.bert_wrapper import BertTrainer
+        _ml_import_status['BertTrainer'] = True
+        _print("✓ Successfully imported BertTrainer")
+    except Exception as e:
+        _ml_import_status['BertTrainer'] = str(e)
+        _print(f"✗ Failed to import BertTrainer: {e}")
 
-try:
-    from gregory.ml.lstm_wrapper import LSTMTrainer
-    print("✓ Successfully imported LSTMTrainer")
-except Exception as e:
-    print(f"✗ Failed to import LSTMTrainer: {e}")
+    try:
+        from gregory.ml.lgbm_wrapper import LGBMTfidfTrainer
+        _ml_import_status['LGBMTfidfTrainer'] = True
+        _print("✓ Successfully imported LGBMTfidfTrainer")
+    except Exception as e:
+        _ml_import_status['LGBMTfidfTrainer'] = str(e)
+        _print(f"✗ Failed to import LGBMTfidfTrainer: {e}")
 
-try:
-    from gregory.ml import get_trainer
-    print("✓ Successfully imported get_trainer")
-except Exception as e:
-    print(f"✗ Failed to import get_trainer: {e}")
+    try:
+        from gregory.ml.lstm_wrapper import LSTMTrainer
+        _ml_import_status['LSTMTrainer'] = True
+        _print("✓ Successfully imported LSTMTrainer")
+    except Exception as e:
+        _ml_import_status['LSTMTrainer'] = str(e)
+        _print(f"✗ Failed to import LSTMTrainer: {e}")
+
+    try:
+        from gregory.ml import get_trainer
+        _ml_import_status['get_trainer'] = True
+        _print("✓ Successfully imported get_trainer")
+    except Exception as e:
+        _ml_import_status['get_trainer'] = str(e)
+        _print(f"✗ Failed to import get_trainer: {e}")
+    
+    return _ml_import_status
 
 class Command(BaseCommand):
     """
@@ -156,6 +180,11 @@ class Command(BaseCommand):
             choices=[0, 1, 2, 3],
             default=1,
             help="Verbosity level (0: quiet, 1: progress, 2: +warnings, 3: +summary)",
+        )
+        parser.add_argument(
+            "--debug",
+            action="store_true",
+            help="Enable debug mode (prints ML import status and additional diagnostics)",
         )
 
     def validate_arguments(self, options):
@@ -688,6 +717,25 @@ class Command(BaseCommand):
         """
         # Set up verboser with the requested verbosity level
         self.setup_verboser(options["verbose"])
+        
+        # Run debug checks if --debug flag is set
+        if options.get("debug"):
+            self.stdout.write("=== Debug Mode Enabled ===\n")
+            self.stdout.write("Checking ML imports...\n")
+            _check_ml_imports(stdout=self.stdout)
+            self.stdout.write("\n")
+            
+            # Show GPU info
+            try:
+                from gregory.ml.gpu_config import get_device_info
+                device_info = get_device_info()
+                self.stdout.write("Device info:\n")
+                self.stdout.write(f"  Platform: {device_info.get('platform')}\n")
+                self.stdout.write(f"  GPUs: {device_info.get('gpus', [])}\n")
+                self.stdout.write(f"  Using GPU: {device_info.get('using_gpu', False)}\n")
+                self.stdout.write("\n")
+            except Exception as e:
+                self.stdout.write(f"Could not get device info: {e}\n\n")
         
         try:
             # Validate command arguments
