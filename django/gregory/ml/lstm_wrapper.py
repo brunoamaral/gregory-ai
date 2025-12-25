@@ -12,6 +12,11 @@ from typing import Dict, List, Optional, Tuple, Union, Any, Callable
 
 import numpy as np
 import pandas as pd
+
+# Configure GPU memory growth BEFORE other TensorFlow imports
+from gregory.ml.gpu_config import configure_gpu_memory_growth
+configure_gpu_memory_growth()
+
 import tensorflow as tf
 from tensorflow.keras.layers import (
     TextVectorization,

@@ -181,10 +181,17 @@ class Command(BaseCommand):
             default=1,
             help="Verbosity level (0: quiet, 1: progress, 2: +warnings, 3: +summary)",
         )
+        
         parser.add_argument(
             "--debug",
             action="store_true",
             help="Enable debug mode (prints ML import status and additional diagnostics)",
+        )
+        
+        parser.add_argument(
+            "--cpu",
+            action="store_true",
+            help="Force CPU-only training (disable GPU). Use if GPU causes bus errors on Apple Silicon.",
         )
 
     def validate_arguments(self, options):
@@ -715,6 +722,12 @@ class Command(BaseCommand):
             *args: Additional positional arguments
             **options: The parsed command arguments
         """
+        # Handle --cpu flag: disable GPU before any TensorFlow imports
+        if options.get("cpu"):
+            from gregory.ml.gpu_config import disable_gpu
+            disable_gpu()
+            self.stdout.write("GPU disabled - using CPU only\n")
+        
         # Set up verboser with the requested verbosity level
         self.setup_verboser(options["verbose"])
         
