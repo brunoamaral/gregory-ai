@@ -356,13 +356,57 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		'exclusion_criteria', 'study_type', 'study_design', 'phase', 'countries',
 		'contact_firstname', 'contact_lastname', 'contact_affiliation',
 		'therapeutic_areas', 'sponsor_type', 'internal_number', 'secondary_id',
-		'identifiers'
+		'identifiers', 'ctg_detailed_description'
 	]
 	list_filter = [
 		('teams', OrganizationRestrictedFieldListFilter),
 		('subjects', OrganizationRestrictedFieldListFilter),
 		('sources', OrganizationRestrictedFieldListFilter),
 	]
+	fieldsets = (
+		(None, {
+			'fields': ('title', 'scientific_title', 'link', 'identifiers', 'discovery_date', 'published_date', 'last_updated')
+		}),
+		('Description', {
+			'fields': ('summary', 'summary_plain_english', 'ctg_detailed_description'),
+			'classes': ('collapse',),
+		}),
+		('Study Details', {
+			'fields': ('study_type', 'study_design', 'phase', 'recruitment_status', 'target_size', 'date_registration'),
+			'classes': ('collapse',),
+		}),
+		('Conditions & Interventions', {
+			'fields': ('condition', 'intervention', 'primary_outcome', 'secondary_outcome'),
+			'classes': ('collapse',),
+		}),
+		('Eligibility', {
+			'fields': ('inclusion_criteria', 'exclusion_criteria', 'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender'),
+			'classes': ('collapse',),
+		}),
+		('Sponsors & Contacts', {
+			'fields': ('primary_sponsor', 'sponsor_type', 'contact_firstname', 'contact_lastname', 'contact_email', 'contact_tel', 'contact_affiliation'),
+			'classes': ('collapse',),
+		}),
+		('Location & Registry', {
+			'fields': ('countries', 'source_register', 'secondary_id', 'internal_number', 'other_records'),
+			'classes': ('collapse',),
+		}),
+		('Relationships', {
+			'fields': ('sources', 'teams', 'subjects', 'team_categories'),
+		}),
+		('EU Clinical Trials', {
+			'fields': ('therapeutic_areas', 'country_status', 'trial_region', 'results_posted', 'overall_decision_date', 'countries_decision_date'),
+			'classes': ('collapse',),
+		}),
+		('Ethics Review', {
+			'fields': ('ethics_review_status', 'ethics_review_approval_date', 'ethics_review_contact_name', 'ethics_review_contact_address', 'ethics_review_contact_phone', 'ethics_review_contact_email'),
+			'classes': ('collapse',),
+		}),
+		('Results', {
+			'fields': ('results_date_completed', 'results_url_link'),
+			'classes': ('collapse',),
+		}),
+	)
 
 	def display_identifiers(self, obj):
 		# Customize this depending on how you want to display the JSON
@@ -422,7 +466,15 @@ class SourceAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 			'fields': ('keyword_filter',),
 			'description': 'For bioRxiv and medRxiv sources, specify keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson).'
 		}),
+		('ClinicalTrials.gov API Settings', {
+			'fields': ('ctgov_search_condition',),
+			'classes': ('ctgov-settings',),
+			'description': 'Settings for ClinicalTrials.gov API sources. Enter the condition/disease to search for clinical trials.'
+		}),
 	)
+	
+	class Media:
+		js = ('admin/js/source_method_toggle.js',)
 	
 	def get_form(self, request, obj=None, **kwargs):
 		"""Pass the request to the form so it can filter field choices."""
