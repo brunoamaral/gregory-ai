@@ -438,6 +438,9 @@ class Trials(models.Model):
 	# New field added
 	other_records = models.CharField(max_length=200, null=True, blank=True)
 
+	# ClinicalTrials.gov API specific fields
+	ctg_detailed_description = models.TextField(null=True, blank=True, help_text="Detailed description from ClinicalTrials.gov API")
+
 	def __str__(self):
 		return str(self.trial_id)
 
