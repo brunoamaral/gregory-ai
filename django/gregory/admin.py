@@ -422,7 +422,15 @@ class SourceAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 			'fields': ('keyword_filter',),
 			'description': 'For bioRxiv and medRxiv sources, specify keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson).'
 		}),
+		('ClinicalTrials.gov API Settings', {
+			'fields': ('ctgov_search_condition',),
+			'classes': ('ctgov-settings',),
+			'description': 'Settings for ClinicalTrials.gov API sources. Enter the condition/disease to search for clinical trials.'
+		}),
 	)
+	
+	class Media:
+		js = ('admin/js/source_method_toggle.js',)
 	
 	def get_form(self, request, obj=None, **kwargs):
 		"""Pass the request to the form so it can filter field choices."""

@@ -137,7 +137,7 @@ class Subject(models.Model):
 
 class Sources(models.Model):
 	TABLES = [('science paper', 'Science Paper'),('trials','Trials'),('news article','News Article')]
-	METHODS = [('rss', 'RSS'), ('scrape', 'Scrape'), ('manual', 'Manual submission')]
+	METHODS = [('rss', 'RSS'), ('scrape', 'Scrape'), ('manual', 'Manual submission'), ('ctgov_api', 'ClinicalTrials.gov API')]
 	active = models.BooleanField(default=True)
 	source_id = models.AutoField(primary_key=True)
 	source_for = models.CharField(choices=TABLES, max_length=50, default='science paper')
@@ -151,6 +151,12 @@ class Sources(models.Model):
 		blank=True, 
 		null=True,
 		help_text='Keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson). Applies to supported feed sources like bioRxiv and PNAS.'
+	)
+	ctgov_search_condition = models.TextField(
+		blank=True,
+		null=True,
+		verbose_name='ClinicalTrials.gov Search condition/Disease',
+		help_text='Search condition/Disease for ClinicalTrials.gov API. Enter conditions/diseases to search (e.g., "multiple sclerosis"). Only used when method is "ClinicalTrials.gov API".'
 	)
 	team = models.ForeignKey(
 		'Team', 
