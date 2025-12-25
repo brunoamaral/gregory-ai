@@ -40,6 +40,9 @@ docker-python/
 postgres-data/
 postgres-data_old/
 
+# Database backups
+backups/
+
 # Metabase
 metabase-data/
 metabase/db-data/
@@ -72,3 +75,6 @@ django/admin/settings.py
 django/models/
 *.code-workspace
 ai_tests/
+.venv-tf/
+.env.sync
+scripts/sync-production-db.sh
