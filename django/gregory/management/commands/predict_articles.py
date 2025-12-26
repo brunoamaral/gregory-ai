@@ -224,6 +224,10 @@ def load_model(team, subject, algorithm, model_version):
             # This ensures the embedding layer has the right input_dim
             model.model = model._create_model()
             
+            # Build the model with the correct input shape before loading weights
+            # Keras 3.x requires the model to be built before load_weights()
+            model.model.build(input_shape=(None, model.sequence_length))
+            
             # Then load the weights
             model.model.load_weights(model_path)
             

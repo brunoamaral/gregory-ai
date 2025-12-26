@@ -477,6 +477,10 @@ class LSTMTrainer:
         # Create model architecture
         self.model = self._create_model()
         
+        # Build the model with the correct input shape before loading weights
+        # Keras 3.x requires the model to be built before load_weights()
+        self.model.build(input_shape=(None, self.sequence_length))
+        
         # Load weights
         self.model.load_weights(str(weights_path))
         
