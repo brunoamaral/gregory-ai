@@ -376,8 +376,8 @@ class LSTMTrainer:
         model_dir = Path(model_dir)
         model_dir.mkdir(parents=True, exist_ok=True)
         
-        # Save model weights
-        weights_path = model_dir / "lstm_weights.h5"
+        # Save model weights (Keras 3.x requires .weights.h5 suffix)
+        weights_path = model_dir / "lstm.weights.h5"
         self.model.save_weights(str(weights_path))
         
         # Save vectorizer config and vocabulary
@@ -450,7 +450,8 @@ class LSTMTrainer:
         """
         model_dir = Path(model_dir)
         
-        weights_path = model_dir / "lstm_weights.h5"
+        # Keras 3.x requires .weights.h5 suffix
+        weights_path = model_dir / "lstm.weights.h5"
         vectorizer_path = model_dir / "tokenizer.json"
         
         if not weights_path.exists() or not vectorizer_path.exists():

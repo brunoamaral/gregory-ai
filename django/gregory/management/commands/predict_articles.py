@@ -194,8 +194,8 @@ def load_model(team, subject, algorithm, model_version):
             return model
             
         elif algorithm == 'lstm':
-            # For LSTM, load model and tokenizer
-            model_path = os.path.join(model_dir, 'lstm_weights.h5')
+            # For LSTM, load model and tokenizer (Keras 3.x requires .weights.h5 suffix)
+            model_path = os.path.join(model_dir, 'lstm.weights.h5')
             tokenizer_path = os.path.join(model_dir, 'tokenizer.json')
             
             if not os.path.exists(model_path):
