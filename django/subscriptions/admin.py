@@ -112,7 +112,7 @@ class SubscriberInline(admin.TabularInline):
 
 class ListsAdmin(admin.ModelAdmin):
 	form = ListsAdminForm
-	list_display = ['list_name', 'list_description', 'admin_summary','weekly_digest','clinical_trials_notifications', 'has_latest_research']
+	list_display = ['list_name', 'team', 'list_description', 'admin_summary','weekly_digest','clinical_trials_notifications', 'has_latest_research']
 	inlines = [SubscriberInline]
 	filter_horizontal = ['subjects', 'latest_research_categories']
 	fieldsets = [
