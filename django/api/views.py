@@ -393,16 +393,6 @@ class ArticleViewSet(viewsets.ModelViewSet):
 			}
 		})
 
-class RelatedArticles(viewsets.ModelViewSet):
-	"""
-	Search related articles by the noun_phrases field. This search accepts regular expressions such as /articles/related/?search=<noun_phrase>|<noun_phrase>
-	"""
-	queryset = Articles.objects.all().order_by('-discovery_date')
-	serializer_class = ArticleSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [filters.SearchFilter]
-	search_fields  = ['$noun_phrases']
-
 
 class ArticlesBySource(viewsets.ModelViewSet):
 	"""
@@ -444,24 +434,6 @@ class ArticlesByKeyword(generics.ListAPIView):
 	def get_queryset(self):
 		return Articles.objects.all().order_by('-discovery_date')
 
-class ArticlesPredictionNone(generics.ListAPIView):
-	"""
-	List articles where the Machine Learning prediction is Null and summary length greater than 0 characters.    
-	To override the default summary length pass the summary_length argument to the url as `/articles/prediction/none/?summary_length=42` 
-	"""
-	serializer_class = ArticleSerializer
-	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-	def get_queryset(self):
-		queryset = Articles.objects.annotate(summary_len=Length('summary')).filter(summary_len__gt=0).exclude(
-			ml_predictions_detail__isnull=False
-		).order_by('-discovery_date')
-		summary_length = self.request.query_params.get('summary_length')
-		if summary_length is not None:
-			queryset = Articles.objects.annotate(summary_len=Length('summary')).filter(summary_len__gt=summary_length).exclude(
-				ml_predictions_detail__isnull=False
-			).order_by('-discovery_date')
-		return queryset
 
 class ArticlesCount(viewsets.ModelViewSet):
 	"""
