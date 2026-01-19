@@ -381,13 +381,6 @@ class ArticleReferenceSerializer(serializers.ModelSerializer):
 		model = Articles
 		fields = ['article_id', 'title', 'summary', 'link']
 
-class CountArticlesSerializer(serializers.ModelSerializer):
-	class Meta:
-		model = Articles
-		fields = ('articles_count',)
-
-	def get_articles_count(self, obj):
-		return Articles.objects.count()
 
 class ArticlesByCategoryAndTeamSerializer(serializers.ModelSerializer):
 	articles = ArticleSerializer(many=True, read_only=True)

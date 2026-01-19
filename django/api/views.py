@@ -1,5 +1,5 @@
 from api.serializers import (
-		ArticleSerializer, TrialSerializer, SourceSerializer, CountArticlesSerializer, AuthorSerializer, 
+		ArticleSerializer, TrialSerializer, SourceSerializer, AuthorSerializer, 
 		CategorySerializer, CategoryTopAuthorSerializer, TeamSerializer, SubjectsSerializer, ArticlesByCategoryAndTeamSerializer
 )
 from api.pagination import FlexiblePagination
@@ -433,17 +433,6 @@ class ArticlesByKeyword(generics.ListAPIView):
 	
 	def get_queryset(self):
 		return Articles.objects.all().order_by('-discovery_date')
-
-
-class ArticlesCount(viewsets.ModelViewSet):
-	"""
-	List all articles in the database by published date
-	"""
-
-	queryset = Articles.objects.raw('select count(*),article_id from articles group by article_id limit 1;')
-	serializer_class = CountArticlesSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	pagination_classes = None
 
 
 ###
