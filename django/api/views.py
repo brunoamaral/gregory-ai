@@ -394,34 +394,6 @@ class ArticleViewSet(viewsets.ModelViewSet):
 		})
 
 
-class ArticlesBySource(viewsets.ModelViewSet):
-	"""
-	⚠️ DEPRECATED: This endpoint will be removed in a future version.
-	Please use /articles/?team_id={team_id}&source_id={source_id} instead.
-	
-	List all articles for a specific team and source combination.
-	
-	Migration Path:
-	- Old: GET /teams/1/articles/source/123/
-	- New: GET /articles/?team_id=1&source_id=123
-	"""
-	serializer_class = ArticleSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-	def get_queryset(self):
-		team_id = self.kwargs.get('team_id')
-		source_id = self.kwargs.get('source_id')
-		return Articles.objects.filter(teams__id=team_id, sources__source_id=source_id).order_by('-discovery_date')
-	
-	def list(self, request, *args, **kwargs):
-		"""Override list to add deprecation warning header"""
-		response = super().list(request, *args, **kwargs)
-		team_id = self.kwargs.get('team_id')
-		source_id = self.kwargs.get('source_id')
-		deprecated_endpoint = f'/teams/{team_id}/articles/source/{source_id}/'
-		replacement_endpoint = f'/articles/?team_id={team_id}&source_id={source_id}'
-		return add_deprecation_headers(response, deprecated_endpoint, replacement_endpoint)
-
 class ArticlesByKeyword(generics.ListAPIView):
 	"""
 	List articles by keyword

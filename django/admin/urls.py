@@ -24,7 +24,7 @@ from api.views import (
 	ArticleViewSet, AuthorsViewSet, SourceViewSet, TrialViewSet, 
 	post_article, CategoryViewSet, MonthlyCountsView, LoginView, ProtectedEndpointView,
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, SubjectsByTeam,
-    ArticlesByCategoryAndTeam, ArticlesBySource, ArticleSearchView, TrialSearchView, AuthorSearchView, CategoriesByTeamAndSubject
+    ArticlesByCategoryAndTeam, ArticleSearchView, TrialSearchView, AuthorSearchView, CategoriesByTeamAndSubject
 )
 from rss.views import	ArticlesByAuthorFeed, TrialsBySubjectFeed
 from subscriptions.views import subscribe_view
@@ -90,8 +90,6 @@ urlpatterns = [
 	path('teams/<int:team_id>/articles/subject/<int:subject_id>/', ArticlesBySubject.as_view({'get': 'list'}), name='articles-by-subject'),
 	## List articles per category: OK
 	path('teams/<int:team_id>/articles/category/<str:category_slug>/', ArticlesByCategoryAndTeam.as_view({'get': 'list'}), name='articles-by-category-and-team'),
-	## List articles per source
-	path('teams/<int:team_id>/articles/source/<int:source_id>/', ArticlesBySource.as_view({'get': 'list'}), name='articles-by-category-and-team'),
 	## List articles per journal
 	## List categories by team and subject
 	path('teams/<int:team_id>/subjects/<int:subject_id>/categories/', CategoriesByTeamAndSubject.as_view({'get': 'list'}), name='categories-by-team-and-subject'),
