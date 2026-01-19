@@ -156,22 +156,6 @@ class CategoryOptimizationTestCase(TestCase):
         self.assertEqual(len(data['results']), 1)
         self.assertEqual(data['results'][0]['id'], self.category.id)
 
-    def test_monthly_counts_performance(self):
-        """Test that monthly counts queries don't hang"""
-        start_time = time.time()
-        
-        response = self.client.get(f'/teams/{self.team.id}/categories/{self.category.category_slug}/monthly_counts/')
-        
-        end_time = time.time()
-        query_time = end_time - start_time
-        
-        self.assertEqual(response.status_code, 200)
-        self.assertLess(query_time, 2.0)  # Should complete in under 2 seconds
-        
-        data = response.json()
-        self.assertIn('monthly_article_counts', data)
-        self.assertIn('monthly_trial_counts', data)
-
     @override_settings(DEBUG=True)  # To capture SQL queries
     def test_no_complex_group_by_queries(self):
         """Ensure we're not generating the problematic GROUP BY queries"""

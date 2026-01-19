@@ -22,7 +22,7 @@ from rest_framework.authtoken import views
 
 from api.views import (
 	ArticleViewSet, AuthorsViewSet, SourceViewSet, TrialViewSet, 
-	post_article, CategoryViewSet, MonthlyCountsView, LoginView, ProtectedEndpointView,
+	post_article, CategoryViewSet, LoginView, ProtectedEndpointView,
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, SubjectsByTeam,
     ArticlesByCategoryAndTeam, ArticleSearchView, TrialSearchView, AuthorSearchView, CategoriesByTeamAndSubject
 )
@@ -95,9 +95,6 @@ urlpatterns = [
 	path('teams/<int:team_id>/subjects/<int:subject_id>/categories/', CategoriesByTeamAndSubject.as_view({'get': 'list'}), name='categories-by-team-and-subject'),
 	## List subjects
 	path('teams/<int:team_id>/subjects/', SubjectsByTeam.as_view({'get': 'list'}), name='subjects-by-team'),
-	
-	# Monthly counts for categories
-	path('teams/<int:team_id>/categories/<str:category_slug>/monthly_counts/', MonthlyCountsView.as_view(), name='monthly-counts'),
 	
 	# Search endpoints
 	path('articles/search/', ArticleSearchView.as_view(), name='article-search'),

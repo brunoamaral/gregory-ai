@@ -17,20 +17,20 @@
 
 **Usage Examples:**
 ```bash
-# Basic usage with monthly counts (default threshold: 0.5)
+# Get categories for a team
+GET /categories/?team_id=1
+
+# Get a specific category by ID
+GET /categories/?category_id=6
+
+# Get categories with top authors
+GET /categories/?team_id=1&include_authors=true&max_authors=20
+
+# Get category with monthly counts (default threshold: 0.5)
 GET /categories/?category_id=6&monthly_counts=true
 
-# High confidence ML predictions (0.8)
+# Get category with monthly counts and custom ML threshold
 GET /categories/?category_id=6&monthly_counts=true&ml_threshold=0.8
-
-# Low threshold to include more predictions (0.3)
-GET /categories/?category_id=6&monthly_counts=true&ml_threshold=0.3
-
-# Very high confidence predictions only (0.95)
-GET /categories/?category_id=6&monthly_counts=true&ml_threshold=0.95
-
-# Get category data without monthly counts
-GET /categories/?category_id=6
 ```
 
 The endpoints use a flexible query parameter system that allows combining multiple filters.
@@ -132,7 +132,6 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Categories              | POST /categories/                        | Create a new category                               | N/A                                                     | ❌ **Not Available**                                  |
 | Categories              | GET /categories/{id}/                    | Retrieve a specific category by ID                  | `id` (path)                                             | ✅ **Available**                                       |
 | Categories              | GET /categories/{id}/authors/            | Get detailed author statistics for a category       | `id` (path), `min_articles`, `sort_by`, `order`, date filters | ✅ **Available**                                       |
-| Categories              | GET /categories/{id}/monthly_counts/     | Get monthly article/trial counts with ML predictions| `id` (path), `ml_threshold` (0.0-1.0, default: 0.5)   | ✅ **Available**                                       |
 | Categories              | PUT /categories/{id}/                    | Update a specific category by ID                    | N/A                                                     | ❌ **Not Available**                                  |
 | Categories              | DELETE /categories/{id}/                 | Delete a specific category by ID                    | N/A                                                     | ❌ **Not Available**                                  |
 | Team Categories         | GET /team-categories/                    | List all team categories                            | Standard pagination params                               | ✅ **Available** (via /categories/)                   |
@@ -180,7 +179,6 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Teams                   | GET /teams/{id}/articles/subject/{subject_id}/     | ⚠️ **DEPRECATED** - List all articles for a team filtered by subject | `id` (path), `subject_id` (path), enhanced filtering params | ⚠️ **Use /articles/?team_id={id}&subject_id={subject_id} instead** |
 | Teams                   | GET /teams/{id}/articles/category/{category_slug}/ | ⚠️ **DEPRECATED** - List all articles for a team filtered by category | `id` (path), `category_slug` (path)           | ⚠️ **Use /articles/?team_id={id}&category_slug={category_slug} instead** |
 | Teams                   | GET /teams/{id}/articles/source/{source_id}/       | ⚠️ **DEPRECATED** - List all articles for a team filtered by source | `id` (path), `source_id` (path)               | ⚠️ **Use /articles/?team_id={id}&source_id={source_id} instead** |
-| Teams                   | GET /teams/{id}/categories/{category_slug}/monthly_counts/ | Get monthly counts for a category | `id` (path), `category_slug` (path), `ml_threshold` | ✅ **Available**                                       |
 | MLPredictions           | GET /ml-predictions/                     | List all ML predictions                             | N/A                                                     | ❌ **Not Available**                                  |
 | MLPredictions           | POST /ml-predictions/                    | Create a new ML prediction                          | N/A                                                     | ❌ **Not Available**                                  |
 | MLPredictions           | GET /ml-predictions/{id}/                | Retrieve a specific ML prediction by ID             | N/A                                                     | ❌ **Not Available**                                  |
@@ -240,10 +238,6 @@ These team-based endpoints remain active and are **not deprecated**:
 ```bash
 # Active: Get categories for a team and subject
 GET /teams/{team_id}/subjects/{subject_id}/categories/
-
-# Active: Get monthly counts for a category
-GET /teams/{team_id}/categories/{category_slug}/monthly_counts/
-# Optional ML filtering: ?ml_threshold=0.8
 ```
 
 **Enhanced filtering capabilities available on deprecated endpoints:**
@@ -257,11 +251,6 @@ GET /teams/{team_id}/categories/{category_slug}/monthly_counts/
 ### Migration Recommendation
 
 While the deprecated endpoints continue to work, we **strongly recommend** migrating to the new parameter-based endpoints for better performance and flexibility:
-
-# Standard: Get monthly counts for a category
-GET /categories/{category_id}/monthly_counts/
-# Optional ML filtering: ?ml_threshold=0.8
-```
 
 ```bash
 # Legacy: Get all articles for a team
@@ -534,10 +523,13 @@ GET /categories/?team_id=1
 # Filter categories by team and subject
 GET /categories/?team_id=1&subject_id=2
 
+# Category with top authors
+GET /categories/?team_id=1&include_authors=true&max_authors=20
+
 # Single category with monthly analytics
 GET /categories/?category_id=6&monthly_counts=true&ml_threshold=0.8
 
-# Category analytics for current year
+# Categories for current year with monthly counts
 GET /categories/?team_id=1&timeframe=year&monthly_counts=true
 
 # Search and filter combined
@@ -601,64 +593,6 @@ GET /trials/?team_id=1&phase=Phase II&search=alzheimer&ordering=-published_date
 
 # Filter by internal number and recruitment status
 GET /trials/?internal_number=INT-2024&recruitment_status=Recruiting
-```
-
-### Monthly Counts Endpoint with ML Filtering
-
-The `/categories/{category_id}/monthly_counts/` endpoint provides monthly aggregated data with optional ML prediction filtering:
-
-**Parameters:**
-- `category_id` (path, required) - Category ID
-- `ml_threshold` (query, optional) - ML prediction probability threshold (0.0-1.0, default: 0.5)
-
-**Response Fields:**
-- `monthly_article_counts` - Total articles by month
-- `monthly_ml_article_counts_by_model` - Articles with latest ML predictions >= threshold by month, separated by model
-- `monthly_trial_counts` - Total trials by month
-- `ml_threshold` - The threshold value used for ML filtering
-- `available_models` - List of ML algorithms found in the data (e.g., ["pubmed_bert", "lgbm_tfidf", "lstm"])
-- `category_name` - Category name
-- `category_slug` - Category slug
-
-**Important Notes:**
-- Only the most recent ML prediction for each article-model combination is considered
-- Each model (pubmed_bert, lgbm_tfidf, lstm, etc.) provides separate monthly counts
-- Articles can have predictions from multiple models
-
-**Example Usage:**
-```bash
-# Default ML threshold (0.5)
-GET /teams/1/categories/natalizumab/monthly-counts/
-
-# High confidence ML predictions (0.8)
-GET /teams/1/categories/natalizumab/monthly-counts/?ml_threshold=0.8
-
-# Low threshold to include more predictions (0.3)
-GET /teams/1/categories/natalizumab/monthly-counts/?ml_threshold=0.3
-
-# Very high confidence predictions only (0.95)
-GET /teams/1/categories/natalizumab/monthly-counts/?ml_threshold=0.95
-```
-
-**Example Response:**
-```json
-{
-  "category_name": "Natalizumab",
-  "category_slug": "natalizumab",
-  "ml_threshold": 0.8,
-  "monthly_article_counts": [
-    {"month": "2023-01-01T00:00:00Z", "count": 25},
-    {"month": "2023-02-01T00:00:00Z", "count": 18}
-  ],
-  "monthly_ml_article_counts": [
-    {"month": "2023-01-01T00:00:00Z", "count": 8},
-    {"month": "2023-02-01T00:00:00Z", "count": 5}
-  ],
-  "monthly_trial_counts": [
-    {"month": "2023-01-01T00:00:00Z", "count": 3},
-    {"month": "2023-02-01T00:00:00Z", "count": 1}
-  ]
-}
 ```
 
 ### Search Endpoint Requirements
