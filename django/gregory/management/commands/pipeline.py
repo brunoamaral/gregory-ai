@@ -17,12 +17,13 @@ class Command(BaseCommand):
 		commands_to_run = [
 			'feedreader_articles',  # 1. Feedreader. Get articles
 			'feedreader_trials',		# 2. Feedreader. Get trials
-			'find_doi',         		# 3. Find missing DOI
-			'update_articles_info', # 4. Find missing data
-			'get_authors',      		# 5. Find missing authors
-			'update_orcid',     		# 6. Find missing ORCID for authors
-			'rebuild_categories',   # 7. Assign categories
-			'get_takeaways',    		# 8. Get takeaways
+			'feedreader_trials_ctgov', # 3. ClinicalTrials.gov trials
+			'find_doi',         		# 4. Find missing DOI
+			'update_articles_info', # 5. Find missing data
+			'get_authors',      		# 6. Find missing authors
+			'update_orcid',     		# 7. Find missing ORCID for authors
+			'rebuild_categories',   # 8. Assign categories
+			'get_takeaways',    		# 9. Get takeaways
 		]
 
 		# First run all the standard commands
