@@ -404,15 +404,6 @@ class RelatedArticles(viewsets.ModelViewSet):
 	search_fields  = ['$noun_phrases']
 
 
-class AllArticleViewSet(generics.ListAPIView):
-	"""
-	List all articles 
-	"""
-	pagination_class = None
-	queryset = Articles.objects.all().order_by('-discovery_date')
-	serializer_class = ArticleSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
 class ArticlesBySource(viewsets.ModelViewSet):
 	"""
 	⚠️ DEPRECATED: This endpoint will be removed in a future version.
