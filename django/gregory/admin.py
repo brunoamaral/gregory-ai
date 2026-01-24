@@ -300,8 +300,19 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 			'classes': ('ml-predictions-section',),
 		}),
 	)
-	list_display = ['article_id', 'title']
+	list_display = ['article_id', 'title', 'discovery_date', 'display_sources']
 	ordering = ['-discovery_date']
+	
+	@admin.display(description='Sources')
+	def display_sources(self, obj):
+		"""Display sources as comma-separated list."""
+		return ', '.join([source.name for source in obj.sources.all()])
+	
+	def get_queryset(self, request):
+		"""Optimize queryset with prefetch for sources."""
+		qs = super().get_queryset(request)
+		return qs.prefetch_related('sources')
+	
 	readonly_fields = ['entities', 'discovery_date']
 	search_fields = ['article_id', 'title', 'doi']
 	list_filter = [
