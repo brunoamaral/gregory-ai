@@ -50,28 +50,6 @@ The endpoints use a flexible query parameter system that allows combining multip
 | Unsent articles | `GET /articles/?unsent=true` | Filter by notification status |
 | Complex filtering | `GET /articles/?team_id=1&subject_id=4&author_id=123&search=stem&relevant=true` | Only possible with new approach |
 
-### Legacy Endpoints Migration Complete
-
-All legacy endpoints have been successfully migrated to the new parameter-based filtering system. The following endpoints have been **removed** and replaced:
-
-| Former Legacy Pattern | Status | Current Endpoint |
-|----------------------|--------|------------------|
-| `GET /teams/{id}/articles/` | ✅ **Migrated** | `/articles/?team_id={id}` |
-| `GET /teams/{id}/subjects/` | ✅ **Migrated** | `/subjects/?team_id={id}` |
-| `GET /teams/{id}/articles/subject/{subject_id}/` | ✅ **Migrated** | `/articles/?team_id={id}&subject_id={subject_id}` |
-| `GET /teams/{id}/articles/category/{category_slug}/` | ✅ **Migrated** | `/articles/?team_id={id}&category_slug={category_slug}` |
-| `GET /teams/{id}/articles/source/{source_id}/` | ✅ **Migrated** | `/articles/?team_id={id}&source_id={source_id}` |
-| `GET /articles/relevant/` | ✅ **Migrated** | `/articles/?relevant=true` |
-| `GET /articles/relevant/last/{days}/` | ✅ **Migrated** | `/articles/?relevant=true&last_days={days}` |
-| `GET /articles/relevant/week/{year}/{week}/` | ✅ **Migrated** | `/articles/?relevant=true&week={week}&year={year}` |
-| `GET /articles/open-access/` | ✅ **Migrated** | `/articles/?open_access=true` |
-| `GET /articles/unsent/` | ✅ **Migrated** | `/articles/?unsent=true` |
-
-**Migration Benefits:**
-- **Unified Filtering**: All filters can be combined in a single endpoint
-- **Better Performance**: Optimized query structure for faster responses
-- **Enhanced Flexibility**: Mix and match any combination of filters
-- **Consistent API**: All endpoints follow the same parameter pattern
 
 ## Data Formats
 
