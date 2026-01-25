@@ -336,6 +336,49 @@ class SagePublicationsFeedProcessor(FeedProcessor):
         return None
 
 
+class SpringerLinkFeedProcessor(FeedProcessor):
+    """Processor for Springer Link RSS feeds (link.springer.com)."""
+    
+    def can_process(self, source_link: str) -> bool:
+        return 'link.springer.com' in source_link.lower()
+    
+    def extract_summary(self, entry: dict) -> str:
+        """Extract summary from Springer Link feed entry.
+        
+        Springer uses <description> with HTML tags (typically <p> tags).
+        We strip HTML tags but preserve HTML entities, then trim whitespace.
+        """
+        summary = entry.get('description', '') or entry.get('summary', '')
+        
+        if not summary:
+            return ''
+        
+        # Strip HTML tags but preserve HTML entities
+        summary = re.sub(r'<[^>]+>', '', summary)
+        
+        # Trim whitespace (including newlines and multiple spaces)
+        summary = ' '.join(summary.split())
+        
+        return summary
+    
+    def extract_doi(self, entry: dict) -> str:
+        """Extract DOI from Springer Link feed entry.
+        
+        Springer uses <guid> containing the DOI directly (e.g., 10.1007/s00332-025-10234-8).
+        We validate that it starts with '10.' before accepting it.
+        """
+        guid = entry.get('id', '') or entry.get('guid', '')
+        
+        if not guid:
+            return None
+        
+        # Validate DOI format (should start with 10.)
+        if guid.startswith('10.'):
+            return guid
+        
+        return None
+
+
 class BaseSearchFeedProcessor(FeedProcessor):
     """Processor for BASE (Bielefeld Academic Search Engine) RSS feeds."""
     
@@ -399,6 +442,7 @@ class Command(BaseCommand):
             PNASFeedProcessor(self),
             SagePublicationsFeedProcessor(self),
             NatureFeedProcessor(self),
+            SpringerLinkFeedProcessor(self),
             BaseSearchFeedProcessor(self),
             DefaultFeedProcessor(self),  # Always last as fallback
         ]
