@@ -12,8 +12,8 @@ load_dotenv()
 
 class Command(BaseCommand):
 	help = 'Updates authors\' country information and ORCID check timestamp from the ORCID public API based on specific criteria.'
-	orcid_key = os.environ.get('ORCID_ClientID')
-	orcid_secret = os.environ.get('ORCID_ClientSecret')
+	orcid_key = os.environ.get('ORCID_CLIENT_ID')
+	orcid_secret = os.environ.get('ORCID_CLIENT_SECRET')
 
 	def handle(self, *args, **kwargs):
 		orcid_api = orcid.PublicAPI(self.orcid_key, self.orcid_secret, sandbox=False)

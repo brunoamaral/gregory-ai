@@ -83,8 +83,8 @@ also set global fallback values via environment variables — see step 5.1.
 3. Copy the client ID and client secret.
 4. Add the following to your `.env` file:
 	```env
-	ORCID_ClientID=your_orcid_client_id
-	ORCID_ClientSecret=your_orcid_client_secret
+	ORCID_CLIENT_ID=your_orcid_client_id
+	ORCID_CLIENT_SECRET=your_orcid_client_secret
 	```
 
 ##### 4.1 Make sure your .env file is complete
@@ -118,8 +118,8 @@ EMAIL_POSTMARK_API_KEY=
 EMAIL_POSTMARK_API_URL=
 
 # --- ORCID API ---
-ORCID_ClientID=
-ORCID_ClientSecret=
+ORCID_CLIENT_ID=
+ORCID_CLIENT_SECRET=
 ```
 
 #### 5. Configure Server
