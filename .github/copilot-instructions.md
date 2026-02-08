@@ -66,7 +66,7 @@ docker exec gregory python manage.py migrate
 ```
  
 
-**Environment**: Managed via `docker-compose.yaml` + `.env` file. Critical vars: `FERNET_SECRET_KEY` (for encrypted fields), `ORCID_ClientID/Secret`, `EMAIL_*` (Mailgun/Postmark), `POSTGRES_*`.
+**Environment**: Managed via `docker-compose.yaml` + `.env` file. Critical vars: `FERNET_SECRET_KEY` (for encrypted fields), `ORCID_CLIENT_ID/SECRET`, `EMAIL_*` (Postmark), `POSTGRES_*`.
  
 ## UI guidelines
 - Application should have a modern and clean design.

@@ -19,7 +19,7 @@ Sources can also be added to monitor Clinical Trials, in which case Gregory can 
 1. Machine Learning to identify relevant research
 2. Configure RSS feeds to gather search results from PubMed and other websites
 3. Configure searches on any public website
-4. Integration with mailgun.com to send emails
+4. Integration with Postmark for transactional emails
 5. Automatic emails to the admin team with results in the last 48hours
 6. Subscriber management
 7. Configure email lists for different stakeholders
@@ -45,8 +45,8 @@ with changes that address the issue.
 
 ### Server Requirements
 
-- [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/) with 2GB of swap memory to be able to build the MachineLearning Models. ([Adding swap for Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-add-swap-space-on-ubuntu-20-04))
-- [ ] [Mailgun](https://www.mailgun.com/) (optional)
+- [ ] [Docker](https://www.docker.com/) and the [Docker Compose plugin](https://docs.docker.com/compose/) with 2GB of swap memory to be able to build the Machine Learning models. ([Adding swap for Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-add-swap-space-on-ubuntu-20-04))
+- [ ] [Postmark](https://postmarkapp.com/) account (optional, for transactional emails)
 
 ### Installing Gregory
 
@@ -55,29 +55,29 @@ with changes that address the issue.
 	```bash
 	git clone <repository_url>
 	cd <repository_directory>
-	docker compose up -d 
-	docker exec admin python manage.py makemigrations
-	docker exec admin python manage.py migrate
+	docker compose up -d
+	docker exec gregory python manage.py makemigrations
+	docker exec gregory python manage.py migrate
 	```
 #### 2. Setup DNS for `api.domain.etc`
 
 1. Log in to your DNS provider.
 2. Add a new A record for `api.domain.etc` pointing to your server's IP address.
 
-#### 3. Setup DNS for Mailgun `mg.domain.etc`
-1. Log in to your DNS provider.
-2. Add the following DNS records provided by Mailgun for `mg.domain.etc`:
-	- TXT record
-	- MX record
-	- CNAME record
+#### 3. Configure Postmark (optional)
 
-#### 4. Get Mailgun API Keys and Add to `.env`
-1. Log in to your Mailgun account.
-2. Navigate to `API Keys`.
-3. Copy the private API key.
-4. Add the key to your `.env` file.
+GregoryAI uses [Postmark](https://postmarkapp.com/) for transactional emails
+(newsletters, admin digests, clinical trial notifications).
 
-#### 5. Get ORCID API Keys and Add to `.env`
+The preferred approach is to configure Postmark credentials **per-team** in
+the Django admin (Team → `postmark_api_token` / `postmark_api_url`). You can
+also set global fallback values via environment variables — see step 5.1.
+
+1. Create a Postmark account and server at <https://postmarkapp.com/>.
+2. Copy your Server API Token.
+3. Set the token either per-team in Django admin or in your `.env` file.
+
+#### 4. Get ORCID API Keys and Add to `.env`
 1. Log in to your ORCID account.
 2. Navigate to `Developer Tools` and create an API client.
 3. Copy the client ID and client secret.
@@ -87,33 +87,44 @@ with changes that address the issue.
 	ORCID_CLIENT_SECRET=your_orcid_client_secret
 	```
 
-##### 5.1 make sure your .env file is complete
+##### 4.1 Make sure your .env file is complete
 ```bash
 DOMAIN_NAME=DOMAIN.COM
-# Set this to the subdomain you configured with Mailgun. Example: mg.domain.com
-EMAIL_DOMAIN=
-# The SMTP server and credentials you are using. For example: smtp.eu.mailgun.org
-# These variables are only needed if you plan to send notification emails
-EMAIL_HOST=
-EMAIL_HOST_PASSWORD=
-EMAIL_HOST_PASSWORD=
-EMAIL_HOST_USER=
-# We use Mailgun by default on the newsletters, input your API key here
-EMAIL_MAILGUN_API_URL=
-EMAIL_PORT=587
-EMAIL_USE_TLS='True'
-# Where you cloned the repository
-GREGORY_DIR=
-# Set your postgres DB and credentials
+
+# --- PostgreSQL ---
 POSTGRES_DB=
 POSTGRES_PASSWORD=
 POSTGRES_USER=
-SECRET_KEY='Yeah well, you know, that is just, like, your DJANGO SECRET_KEY, man' # you should set this manually https://docs.djangoproject.com/en/4.0/ref/settings/#secret-key
+
+# --- Django ---
+SECRET_KEY='' # Generate a unique key — https://docs.djangoproject.com/en/4.0/ref/settings/#secret-key
+GREGORY_DIR=
+
+# Encryption key for sensitive DB fields.
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+FERNET_SECRET_KEY=
+
+# --- Email / SMTP ---
+# These variables are only needed if you plan to send notification emails.
+EMAIL_DOMAIN=
+EMAIL_HOST=
+EMAIL_HOST_PASSWORD=
+EMAIL_HOST_USER=
+EMAIL_PORT=587
+EMAIL_USE_TLS='True'
+
+# Postmark (fallback; per-team config in Django admin is preferred)
+EMAIL_POSTMARK_API_KEY=
+EMAIL_POSTMARK_API_URL=
+
+# --- ORCID API ---
+ORCID_CLIENT_ID=
+ORCID_CLIENT_SECRET=
 ```
 
-#### 6. Configure Server
+#### 5. Configure Server
 
-##### 6.1. Nginx
+##### 5.1. Nginx
 1. Install Nginx:
 	```bash
 	sudo apt-get update
@@ -130,7 +141,7 @@ SECRET_KEY='Yeah well, you know, that is just, like, your DJANGO SECRET_KEY, man
 	sudo systemctl restart nginx
 	```
 
-##### 6.2. Certbot
+##### 5.2. Certbot
 1. Install Certbot:
 	```bash
 	sudo apt-get install certbot python3-certbot-nginx
@@ -140,42 +151,42 @@ SECRET_KEY='Yeah well, you know, that is just, like, your DJANGO SECRET_KEY, man
 	sudo certbot --nginx -d domain.etc -d www.domain.etc
 	```
 
-##### 6.3. Firewall
+##### 5.3. Firewall
 1. Allow necessary ports:
 	```bash
 	sudo ufw allow 'Nginx Full'
 	sudo ufw enable
 	```
 
-#### 7. Configure Gregory
+#### 6. Configure Gregory
 
-##### 7.1. Create a Site
+##### 6.1. Create a Site
 1. Log in to the Gregory dashboard.
 2. Navigate to `Sites` and click `Create Site`.
 
-##### 7.2. Create a Team
+##### 6.2. Create a Team
 1. Navigate to `Teams` and click `Create Team`.
 
-##### 7.3. Add a User to the Team
+##### 6.3. Add a User to the Team
 1. Navigate to `Teams`, select the team, and click `Add User`.
 2. Enter the user's email and assign a role.
 
-##### 7.4. Add a Source, such as PubMed
+##### 6.4. Add a Source, such as PubMed
 
 1. Navigate to `Sources` and click `Add Source`.
 2. Select `RSS` method and provide the necessary configuration.
 
-#### 8. Add cronjobs to run the pipeline and send emails
+#### 7. Add cron jobs to run the pipeline and send emails
 
 ```cron
 # Every 2 days at 8:00
-0 8 */2 * * /usr/bin/docker exec admin python manage.py send_admin_summary
+0 8 */2 * * /usr/bin/docker exec gregory python manage.py send_admin_summary
 
 # Every Tuesday at 8:05
-5 8 * * 2 docker exec admin python manage.py send_weekly_summary
+5 8 * * 2 docker exec gregory python manage.py send_weekly_summary
 
-# every 12  hours, at minute 25
-25 */12 * * * /usr/bin/flock -n /tmp/pipeline /usr/bin/docker exec admin ./manage.py pipeline
+# Every 12 hours, at minute 25
+25 */12 * * * /usr/bin/flock -n /tmp/pipeline /usr/bin/docker exec gregory python manage.py pipeline
 ```
 
 
@@ -193,16 +204,15 @@ Once finished, login at <https://api.DOMAIN.TLD/admin> or wherever your reverse 
 Gregory needs to run a series of tasks to fetch missing information before applying the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
 
 ```cron
-*/3 * * * * /usr/bin/docker exec -t admin ./manage.py runcrons
-#*/10 * * * * /usr/bin/docker exec -t admin ./manage.py get_takeaways
-*/5 * * * * /usr/bin/flock -n /tmp/get_takeaways /usr/bin/docker exec admin ./manage.py get_takeaways
+*/3 * * * * /usr/bin/docker exec -t gregory python manage.py runcrons
+*/5 * * * * /usr/bin/flock -n /tmp/get_takeaways /usr/bin/docker exec gregory python manage.py get_takeaways
 ```
 
 ## How everything fits together
 
 ### Django
 
-Most of the logic is inside Django, the **admin** container provides the [Django Rest Framework](https://www.django-rest-framework.org/), manages subscriptions, and sends emails.
+Most of the logic is inside Django, the **gregory** container provides the [Django Rest Framework](https://www.django-rest-framework.org/), manages subscriptions, and sends emails.
 
 The following subscriptions are available:
 
@@ -224,22 +234,25 @@ Django also allows you to add new sources from where to fetch articles. Take a l
 
 ![image-20220619195841565](images/image-20220619195841565.png)
 
-### Mailgun
+### Postmark
 
-Emails are sent from the `admin` container using Mailgun.
+Emails are sent from the `gregory` container using [Postmark](https://postmarkapp.com/).
 
-To enable them, you will need a mailgun account, or you can replace them with another way to send emails.
+The preferred approach is to configure Postmark credentials **per-team** in the
+Django admin (Team → `postmark_api_token` / `postmark_api_url`). This allows
+different teams to use separate Postmark servers.
 
-You need to configure the relevant variables for this to work:
+Global fallback environment variables can be set in `.env`:
 
 ```bash
 EMAIL_USE_TLS=true
-EMAIL_MAILGUN_API='YOUR API KEY'
+EMAIL_POSTMARK_API_KEY='YOUR SERVER API TOKEN'
+EMAIL_POSTMARK_API_URL='https://api.postmarkapp.com/email'
 EMAIL_DOMAIN='YOURDOMAIN'
-EMAIL_MAILGUN_API_URL="https://api.eu.mailgun.net/v3/YOURDOMAIN/messages"
 ```
 
-As an alternative, you can configure Django to use any other email server.
+As an alternative, you can configure Django to use any other SMTP email server
+via the `EMAIL_HOST*` variables.
 
 ### RSS feeds and API
 
@@ -396,7 +409,7 @@ python manage.py train_models --team research --all-articles --pseudo-label
 Edit the env.example file to fit your configuration and rename to .env
 
 ```bash
-sudo docker-compose up -d
+docker compose up -d
 python3 -m venv env
 source env/bin/activate
 pip install -r requirements.txt

@@ -26,7 +26,7 @@ GregoryAI is a Django-based research aggregation system that uses Machine Learni
 ### Docker Operations
 ```bash
 # Start the application
-docker-compose up -d
+docker compose up -d
 
 # Access Django container
 docker exec -it gregory python manage.py <command>
@@ -58,7 +58,7 @@ python manage.py send_admin_summary     # Send admin digest
 ### Local Development
 ```bash
 # Edit env.example and rename to .env
-docker-compose up -d
+docker compose up -d
 python3 -m venv env
 source env/bin/activate
 pip install -r requirements.txt  # Note: Use pyproject.toml for uv
@@ -69,7 +69,7 @@ Key variables needed in `.env`:
 - `SECRET_KEY`: Django secret key
 - `FERNET_SECRET_KEY`: Encryption key
 - `POSTGRES_*`: Database credentials
-- `EMAIL_*`: Email service configuration (Mailgun/Postmark)
+- `EMAIL_*`: Email service configuration (Postmark)
 - `ORCID_*`: ORCID API credentials
 
 ## Machine Learning Components
@@ -89,13 +89,13 @@ python manage.py train_models --team <team> --subject <subject> --algo <algorith
 Set up cron jobs for:
 ```cron
 # Admin summary every 2 days
-0 8 */2 * * docker exec admin python manage.py send_admin_summary
+0 8 */2 * * docker exec gregory python manage.py send_admin_summary
 
 # Weekly summary every Tuesday
-5 8 * * 2 docker exec admin python manage.py send_weekly_summary
+5 8 * * 2 docker exec gregory python manage.py send_weekly_summary
 
 # Pipeline every 12 hours
-25 */12 * * * flock -n /tmp/pipeline docker exec admin ./manage.py pipeline
+25 */12 * * * flock -n /tmp/pipeline docker exec gregory python manage.py pipeline
 ```
 
 ## API Features
