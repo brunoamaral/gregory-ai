@@ -114,7 +114,7 @@ EMAIL_PORT=587
 EMAIL_USE_TLS='True'
 
 # Postmark (fallback; per-team config in Django admin is preferred)
-EMAIL_POSTMARK_API=
+EMAIL_POSTMARK_API_KEY=
 EMAIL_POSTMARK_API_URL=
 
 # --- ORCID API ---
@@ -246,7 +246,7 @@ Global fallback environment variables can be set in `.env`:
 
 ```bash
 EMAIL_USE_TLS=true
-EMAIL_POSTMARK_API='YOUR SERVER API TOKEN'
+EMAIL_POSTMARK_API_KEY='YOUR SERVER API TOKEN'
 EMAIL_POSTMARK_API_URL='https://api.postmarkapp.com/email'
 EMAIL_DOMAIN='YOURDOMAIN'
 ```

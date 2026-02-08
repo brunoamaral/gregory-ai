@@ -90,8 +90,8 @@ Optional variables: EMAIL_*, ORCID_*
 		"EMAIL_HOST": os.getenv("EMAIL_HOST"),
 		"EMAIL_HOST_PASSWORD": os.getenv("EMAIL_HOST_PASSWORD"),
 		"EMAIL_HOST_USER": os.getenv("EMAIL_HOST_USER"),
-		"EMAIL_POSTMARK_API": os.getenv("EMAIL_POSTMARK_API"),
-		"EMAIL_POSTMARK_API_URL": os.getenv("EMAIL_POSTMARK_API_URL"),
+		"EMAIL_POSTMARK_API_KEY": os.getenv("EMAIL_POSTMARK_API_KEY"),
+		"EMAIL_POSTMARK_API_URL": os.getenv("EMAIL_POSTMARK_API_URL", "https://api.postmarkapp.com/email"),
 		"EMAIL_PORT": 587,
 		"EMAIL_USE_TLS": "true",
 		"FERNET_SECRET_KEY": os.getenv("FERNET_SECRET_KEY") or fernet_key,
@@ -260,7 +260,7 @@ digests, clinical trial notifications).
 
 The preferred approach is to configure Postmark credentials per-team in the
 Django admin (Team → postmark_api_token / postmark_api_url). The global
-EMAIL_POSTMARK_API and EMAIL_POSTMARK_API_URL environment variables in .env are
+EMAIL_POSTMARK_API_KEY and EMAIL_POSTMARK_API_URL environment variables in .env are
 used as a fallback when team-level credentials are not set.
 
 For more information see https://postmarkapp.com/developer

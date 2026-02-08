@@ -18,7 +18,7 @@ def send_email(to, subject, html, text, site, sender_name="Gregory AI", api_toke
     email_postmark_api_url = api_url or settings.EMAIL_POSTMARK_API_URL
 
     # Use the provided API token or fall back to the default from settings
-    postmark_api_token = api_token or settings.EMAIL_POSTMARK_API
+    postmark_api_token = api_token or settings.EMAIL_POSTMARK_API_KEY
 
     payload = {
         "MessageStream": "broadcast",
