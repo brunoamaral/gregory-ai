@@ -43,6 +43,13 @@ class ArticlesByAuthorFeed(Feed):
 	def item_link(self, item):
 		return f"https://{get_website_domain()}/articles/{str(item.pk)}/"
 
+	def item_guid(self, item):
+		if item.doi:
+			return f"doi:{item.doi}"
+		return f"urn:gregory:article:{item.pk}"
+
+	item_guid_is_permalink = False
+
 	def item_pubdate(self, item):
 		return item.published_date
 
@@ -137,6 +144,11 @@ class TrialsBySubjectFeed(Feed):
 
 	def item_link(self, item):
 		return item.link
+
+	def item_guid(self, item):
+		return f"urn:gregory:trial:{item.pk}"
+
+	item_guid_is_permalink = False
 
 	def item_pubdate(self, item):
 		return item.published_date
