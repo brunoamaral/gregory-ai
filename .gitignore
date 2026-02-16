@@ -78,3 +78,4 @@ ai_tests/
 .venv-tf/
 .env.sync
 scripts/sync-production-db.sh
+specs/
