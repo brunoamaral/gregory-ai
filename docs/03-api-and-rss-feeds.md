@@ -10,8 +10,8 @@ Gregory's API is open and doesn't require authentication unless you need to use 
    - `articles/relevant/`: Access relevant articles.
    - `articles/post/`: Endpoint for posting an article.
 4. **Feed Routes:**
-   - `feed/author/<str:orcid>/`: Feed for articles by a specific author using their ORCID identifier.
-   - `feed/trials/subject/<str:subject_slug>/`: Feed for clinical trials filtered by subject slug.
+   - `feed/author/<str:orcid>/`: Feed for articles by a specific author using their ORCID identifier. Ordered by `-published_date` (newest first), limited to 50 items.
+   - `feed/trials/subject/<str:subject_slug>/`: Feed for clinical trials filtered by subject slug. Ordered by `-discovery_date` (newest first), limited to 50 items.
 5. **Subscriptions Route:**
    - `subscriptions/new/`: Endpoint for new subscriptions.
 
