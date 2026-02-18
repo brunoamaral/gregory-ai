@@ -229,8 +229,12 @@ class Command(BaseCommand):
 				trial.sources.add(source)
 				trial._change_reason = self._safe_change_reason(f"Created from Source: {source.name} ({source.source_id})")
 				trial.save()
-				trial.teams.add(source.team)
-				trial.subjects.add(source.subject)
+				if source.team:
+					trial.teams.add(source.team)
+				else:
+					self.log(f"Warning: Source '{source.name}' has no team assigned. Skipping team association.", level=1, style_func=self.style.WARNING)
+				if source.subject:
+					trial.subjects.add(source.subject)
 				trial._change_reason = self._safe_change_reason(f"Added relationships Team: {source.team}  Subject:{source.subject}")
 				trial.save()
 			return trial
@@ -299,8 +303,8 @@ class Command(BaseCommand):
 			existing_trial._change_reason = self._safe_change_reason(f"Updated fields from {source.name} ({source.source_id}): {', '.join(updated_fields)}")
 			existing_trial.save()
 
-		# Handle source and subjects additions (relationships)
-		if source.subject not in existing_trial.subjects.all():
+		# Handle source, team, and subjects additions (relationships)
+		if source.subject and source.subject not in existing_trial.subjects.all():
 			existing_trial.subjects.add(source.subject)
 			existing_trial._change_reason = self._safe_change_reason(f"Added subject: {source.subject}")
 			existing_trial.save()
@@ -308,6 +312,11 @@ class Command(BaseCommand):
 		if source not in existing_trial.sources.all():
 			existing_trial.sources.add(source)
 			existing_trial._change_reason = self._safe_change_reason(f"Added new source: {source.name} ({source.source_id})")
+			existing_trial.save()
+
+		if source.team and source.team not in existing_trial.teams.all():
+			existing_trial.teams.add(source.team)
+			existing_trial._change_reason = self._safe_change_reason(f"Added team: {source.team}")
 			existing_trial.save()
 		
 	def merge_identifiers(self, existing_identifiers: dict, new_identifiers: dict) -> dict:

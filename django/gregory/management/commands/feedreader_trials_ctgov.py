@@ -300,8 +300,12 @@ class Command(BaseCommand):
 				trial.sources.add(source)
 				trial._change_reason = self._safe_change_reason(f"Created from ClinicalTrials.gov API Source: {source.name}")
 				trial.save()
-				trial.teams.add(source.team)
-				trial.subjects.add(source.subject)
+				if source.team:
+					trial.teams.add(source.team)
+				else:
+					self.log(f"Warning: Source '{source.name}' has no team assigned. Skipping team association.", level=1, style_func=self.style.WARNING)
+				if source.subject:
+					trial.subjects.add(source.subject)
 				trial._change_reason = self._safe_change_reason(f"Added relationships Team: {source.team} Subject: {source.subject}")
 				trial.save()
 			

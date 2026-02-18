@@ -503,6 +503,17 @@ class SourceAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		return bool(obj.keyword_filter)
 	has_keyword_filter.boolean = True
 	has_keyword_filter.short_description = 'Has Filter'
+
+	def save_model(self, request, obj, form, change):
+		"""Warn admin if source has no team assigned."""
+		super().save_model(request, obj, form, change)
+		if not obj.team:
+			from django.contrib import messages
+			messages.warning(
+				request,
+				f"Source '{obj.name}' has no team assigned. "
+				f"Feedreaders will skip team association for content from this source."
+			)
 	
 	def last_article_date(self, obj):
 		"""Display the date of the latest article or trial from this source."""

@@ -745,8 +745,12 @@ class Command(BaseCommand):
 
     def add_article_relationships(self, article: Articles, source: Sources):
         """Add relationships between article and source (team, subject, sources)."""
-        article.teams.add(source.team)
-        article.subjects.add(source.subject)
+        if source.team:
+            article.teams.add(source.team)
+        else:
+            self.log(f"Warning: Source '{source.name}' has no team assigned. Skipping team association.", level=1, style_func=self.style.WARNING)
+        if source.subject:
+            article.subjects.add(source.subject)
         article.sources.add(source)
         if hasattr(article, 'save'):
             article.save()
