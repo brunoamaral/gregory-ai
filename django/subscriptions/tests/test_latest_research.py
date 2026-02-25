@@ -51,13 +51,14 @@ class TestLatestResearchCategories(TestCase):
             team=self.team
         )
         
-        # Create articles
+        # Create articles and assign to categories via team_categories M2M
         self.article1 = Articles.objects.create(
             title="Article 1",
             discovery_date=timezone.now() - timedelta(days=5),
             doi="10.1234/article1"
         )
         self.article1.subjects.add(self.subject1)
+        self.article1.team_categories.add(self.category1)
         
         self.article2 = Articles.objects.create(
             title="Article 2",
@@ -65,6 +66,7 @@ class TestLatestResearchCategories(TestCase):
             doi="10.1234/article2"
         )
         self.article2.subjects.add(self.subject1)
+        self.article2.team_categories.add(self.category1)
         
         self.article3 = Articles.objects.create(
             title="Article 3",
@@ -72,6 +74,7 @@ class TestLatestResearchCategories(TestCase):
             doi="10.1234/article3"
         )
         self.article3.subjects.add(self.subject2)
+        self.article3.team_categories.add(self.category2)
         
         self.article4 = Articles.objects.create(
             title="Article 4",
@@ -79,6 +82,7 @@ class TestLatestResearchCategories(TestCase):
             doi="10.1234/article4"
         )
         self.article4.subjects.add(self.subject3)
+        self.article4.team_categories.add(self.category2)
 
     def test_get_latest_research_by_category(self):
         # Test the get_latest_research_by_category function
@@ -90,8 +94,8 @@ class TestLatestResearchCategories(TestCase):
         self.assertIn(self.category2, result)
         
         # Verify article counts
-        self.assertEqual(len(result[self.category1]), 2)  # Should have 2 articles from subject1
-        self.assertEqual(len(result[self.category2]), 2)  # Should have 2 articles from subject2 and subject3
+        self.assertEqual(len(result[self.category1]), 2)  # Should have 2 articles assigned to category1
+        self.assertEqual(len(result[self.category2]), 2)  # Should have 2 articles assigned to category2
         
         # Test the organizer
         organizer = EmailContentOrganizer('weekly_summary')
@@ -109,9 +113,26 @@ class TestLatestResearchCategories(TestCase):
         empty_organized = organizer.organize_latest_research_by_category(empty_result)
         self.assertFalse(empty_organized['has_latest_research'])
         
+    def test_articles_not_in_category_excluded(self):
+        """Test that articles not assigned to a category via team_categories M2M are excluded."""
+        # Create an article in subject1 but NOT assigned to category1
+        unassigned = Articles.objects.create(
+            title="Unassigned Article",
+            discovery_date=timezone.now() - timedelta(days=1),
+            doi="10.1234/unassigned"
+        )
+        unassigned.subjects.add(self.subject1)
+        # Deliberately NOT adding to team_categories
+
+        result = get_latest_research_by_category(self.test_list)
+
+        # category1 should still only have the 2 originally assigned articles
+        self.assertEqual(len(result[self.category1]), 2)
+        self.assertNotIn(unassigned, result[self.category1])
+
     def test_maximum_articles_per_category(self):
         """Test that each category is limited to 20 articles maximum"""
-        # Create 25 more articles for subject1 (category1)
+        # Create 25 more articles assigned to category1
         for i in range(5, 30):
             article = Articles.objects.create(
                 title=f"Article {i}",
@@ -119,6 +140,7 @@ class TestLatestResearchCategories(TestCase):
                 doi=f"10.1234/article{i}"
             )
             article.subjects.add(self.subject1)
+            article.team_categories.add(self.category1)
         
         # Now category1 should have 27 articles total (2 existing + 25 new)
         result = get_latest_research_by_category(self.test_list)

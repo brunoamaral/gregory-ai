@@ -21,7 +21,9 @@ def get_articles_for_list(lst):
 def get_latest_research_by_category(lst, days=30):
     """
     Returns latest articles for each team category in the latest_research_categories,
-    grouped by team category.
+    grouped by team category. Uses the team_categories M2M relationship populated
+    by rebuild_categories, so only articles whose titles/summaries matched the
+    category's terms are included.
     
     Args:
         lst: Lists object
@@ -37,16 +39,11 @@ def get_latest_research_by_category(lst, days=30):
     if not lst.latest_research_categories.exists():
         return result
     
-    # Get articles for each team category
+    # Get articles for each team category via the team_categories M2M
     for category in lst.latest_research_categories.all():
-        # Get subjects that belong to this category
-        category_subjects = category.subjects.all()
-        
-        # Get articles that belong to any of these subjects (limited to 20)
-        latest_articles = Articles.objects.filter(
-            subjects__in=category_subjects,
+        latest_articles = category.articles.filter(
             discovery_date__gte=now() - timedelta(days=days)
-        ).order_by('-discovery_date').distinct()[:20]  # Limit to 20 articles per category
+        ).order_by('-discovery_date').distinct()[:20]
         
         if latest_articles.exists():
             result[category] = latest_articles
