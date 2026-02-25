@@ -164,8 +164,7 @@ class LSTMTrainer:
         # Add embedding layer
         model.add(Embedding(
             input_dim=vocab_size,
-            output_dim=self.embedding_dim,
-            input_length=self.sequence_length
+            output_dim=self.embedding_dim
         ))
         
         # Add LSTM layer with dropout
