@@ -510,10 +510,12 @@ class Command(BaseCommand):
         except Exception as e:
             # Handle any unexpected errors
             if run_log and not dry_run:
-                run_log.success = False
-                run_log.error_message = f"Unexpected error: {str(e)}"
-                run_log.run_finished = timezone.now()
-                run_log.save()
+                # Only update if the error wasn't already recorded by an inner handler
+                if not run_log.error_message:
+                    run_log.success = False
+                    run_log.error_message = f"Unexpected error: {str(e)}"
+                    run_log.run_finished = timezone.now()
+                    run_log.save()
             
             if verbose >= 1:
                 self.stderr.write(self.style.ERROR(f"    Run failed: {str(e)}"))
