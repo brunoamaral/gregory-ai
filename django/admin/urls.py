@@ -24,7 +24,8 @@ from api.views import (
 	ArticleViewSet, AuthorsViewSet, SourceViewSet, TrialViewSet, 
 	post_article, CategoryViewSet, LoginView, ProtectedEndpointView,
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, SubjectsByTeam,
-    ArticlesByCategoryAndTeam, ArticleSearchView, TrialSearchView, AuthorSearchView, CategoriesByTeamAndSubject
+    ArticlesByCategoryAndTeam, ArticleSearchView, TrialSearchView, AuthorSearchView, CategoriesByTeamAndSubject,
+    StatsView
 )
 from rss.views import	ArticlesByAuthorFeed, TrialsBySubjectFeed
 from subscriptions.views import subscribe_view
@@ -100,6 +101,9 @@ urlpatterns = [
 	path('articles/search/', ArticleSearchView.as_view(), name='article-search'),
 	path('trials/search/', TrialSearchView.as_view(), name='trial-search'),
 	path('authors/search/', AuthorSearchView.as_view(), name='author-search'),
+
+	# Stats endpoint
+	path('stats/', StatsView.as_view(), name='stats'),
 
 	# Gregory app routes
 	path('', include('gregory.urls')),
