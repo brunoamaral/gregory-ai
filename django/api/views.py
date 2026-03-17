@@ -644,6 +644,36 @@ class TrialViewSet(viewsets.ModelViewSet):
 	ordering_fields = ['discovery_date', 'published_date', 'title', 'trial_id']
 	ordering = ['-discovery_date']
 
+	def list(self, request, *args, **kwargs):
+		response = super().list(request, *args, **kwargs)
+		# Only inject stats into JSON responses (not CSV)
+		if isinstance(response.data, dict):
+			filtered_qs = self.filter_queryset(self.get_queryset())
+			# Single aggregation query — clear ordering to prevent GROUP BY pollution
+			status_counts = {
+				item['recruitment_status']: item['count']
+				for item in filtered_qs.order_by().values('recruitment_status').annotate(count=Count('trial_id'))
+			}
+			def _sum(*keys):
+				return sum(status_counts.get(k, 0) for k in keys)
+			response.data['stats'] = {
+				'total': sum(status_counts.values()),
+				'no_status': status_counts.get(None, 0),
+				'recruiting': _sum('Recruiting', 'RECRUITING'),
+				'active_not_recruiting': _sum('ACTIVE_NOT_RECRUITING', 'Not recruiting', 'Not Recruiting'),
+				'not_yet_recruiting': _sum('NOT_YET_RECRUITING'),
+				'completed': _sum('COMPLETED'),
+				'enrolling_by_invitation': _sum('ENROLLING_BY_INVITATION'),
+				'terminated': _sum('TERMINATED'),
+				'suspended': _sum('SUSPENDED'),
+				'withdrawn': _sum('WITHDRAWN'),
+				'available': _sum('AVAILABLE'),
+				'not_available': _sum('Not Available'),
+				'withheld': _sum('WITHHELD'),
+				'authorised': _sum('Authorised'),
+			}
+		return response
+
 class AllTrialViewSet(generics.ListAPIView):
 	"""
 	List all clinical trials by discovery date
