@@ -823,6 +823,34 @@ class TeamCategoryAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 			return f"{', '.join(str(subject) for subject in subjects[:3])} (+{len(subjects) - 3})"
 	display_subjects.short_description = "Subjects"
 
+class TeamSubjectInline(admin.TabularInline):
+	model = Subject
+	extra = 0
+	fields = ('subject_name', 'subject_slug', 'auto_predict', 'ml_consensus_type')
+	readonly_fields = ('subject_name', 'subject_slug', 'auto_predict', 'ml_consensus_type')
+	show_change_link = True
+	verbose_name = 'Subject'
+	verbose_name_plural = 'Subjects'
+	can_delete = False
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+
+class TeamSourceInline(admin.TabularInline):
+	model = Sources
+	extra = 0
+	fields = ('name', 'source_for', 'method', 'subject', 'active')
+	readonly_fields = ('name', 'source_for', 'method', 'subject', 'active')
+	show_change_link = True
+	verbose_name = 'Source'
+	verbose_name_plural = 'Sources'
+	can_delete = False
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+
 class TeamAdminForm(forms.ModelForm):
 	"""Custom form for Team admin that allows creating organization and team together"""
 	team_name = forms.CharField(
@@ -912,6 +940,7 @@ class TeamAdminForm(forms.ModelForm):
 @admin.register(Team)
 class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	form = TeamAdminForm
+	inlines = [TeamSubjectInline, TeamSourceInline]
 	list_display = ['id', 'formatted_team_name', 'organization', 'slug', 'subjects_count', 'sources_count']
 	list_filter = ['organization']
 	search_fields = ['name', 'organization__name', 'slug']
