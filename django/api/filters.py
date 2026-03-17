@@ -249,8 +249,8 @@ class TrialFilter(filters.FilterSet):
     source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact', label='Source ID')
     
     # Trial-specific filters
-    recruitment_status = filters.CharFilter(field_name='recruitment_status', lookup_expr='exact')
-    status = filters.CharFilter(field_name='recruitment_status', lookup_expr='exact')  # Legacy alias for backward compatibility
+    recruitment_status = filters.CharFilter(field_name='recruitment_status', lookup_expr='iexact')
+    status = filters.CharFilter(field_name='recruitment_status', lookup_expr='iexact')  # Legacy alias for backward compatibility
     internal_number = filters.CharFilter(field_name='internal_number', lookup_expr='icontains')
     phase = filters.CharFilter(field_name='phase', lookup_expr='icontains')
     study_type = filters.CharFilter(field_name='study_type', lookup_expr='icontains')
