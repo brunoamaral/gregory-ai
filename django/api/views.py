@@ -1553,3 +1553,115 @@ class AuthorSearchView(generics.ListAPIView):
             
         # Delegate to the list method
         return self.list(request, *args, **kwargs)
+
+
+###
+# STATS
+###
+
+class StatsView(APIView):
+	"""
+	Returns aggregate statistics about the data in the system.
+	All counts can be optionally scoped to one or more teams via ?team=1 or ?team=1,2,3.
+	"""
+	permission_classes = [permissions.AllowAny]
+
+	def get(self, request):
+		from urllib.parse import urlparse
+		from subscriptions.models import Subscribers
+
+		# Parse team IDs from query params
+		team_param = request.query_params.get('team', None)
+		team_ids = None
+		if team_param:
+			try:
+				team_ids = [int(t.strip()) for t in team_param.split(',') if t.strip()]
+			except ValueError:
+				return Response(
+					{'error': 'Invalid team parameter. Expected integer or comma-separated integers.'},
+					status=status.HTTP_400_BAD_REQUEST
+				)
+
+		# Articles count
+		if team_ids:
+			articles_count = Articles.objects.filter(teams__in=team_ids).distinct().count()
+		else:
+			articles_count = Articles.objects.count()
+
+		# Trials count
+		if team_ids:
+			trials_count = Trials.objects.filter(teams__in=team_ids).distinct().count()
+		else:
+			trials_count = Trials.objects.count()
+
+		# Subscribers count (active only)
+		if team_ids:
+			subscribers_count = Subscribers.objects.filter(
+				active=True,
+				subscriptions__team__in=team_ids
+			).distinct().count()
+		else:
+			subscribers_count = Subscribers.objects.filter(active=True).count()
+
+		# Authors count (distinct authors linked to articles in scope)
+		if team_ids:
+			authors_count = Authors.objects.filter(
+				articles__teams__in=team_ids
+			).distinct().count()
+		else:
+			authors_count = Authors.objects.count()
+
+		# Sources queryset scoped to team(s)
+		if team_ids:
+			sources_qs = Sources.objects.filter(team__in=team_ids)
+		else:
+			sources_qs = Sources.objects.all()
+
+		def extract_domain(url):
+			if not url:
+				return None
+			try:
+				return urlparse(url).netloc or None
+			except Exception:
+				return None
+
+		source_data = list(sources_qs.values('link', 'source_for'))
+
+		# sources.total = number of unique domains
+		all_domains = set()
+		for s in source_data:
+			d = extract_domain(s['link'])
+			if d:
+				all_domains.add(d)
+
+		# sources.by_type = unique domain count per source type
+		type_domains = {}
+		for s in source_data:
+			d = extract_domain(s['link'])
+			if d:
+				type_domains.setdefault(s['source_for'], set()).add(d)
+		sources_by_type = {k: len(v) for k, v in type_domains.items()}
+
+		# sources.by_domain = each unique domain with count of individual feeds
+		domain_feed_count = {}
+		for s in source_data:
+			d = extract_domain(s['link'])
+			if d:
+				domain_feed_count[d] = domain_feed_count.get(d, 0) + 1
+		sources_by_domain = sorted(
+			[{'domain': d, 'count': c} for d, c in domain_feed_count.items()],
+			key=lambda x: x['count'],
+			reverse=True
+		)
+
+		return Response({
+			'articles': articles_count,
+			'trials': trials_count,
+			'subscribers': subscribers_count,
+			'authors': authors_count,
+			'sources': {
+				'total': len(all_domains),
+				'by_type': sources_by_type,
+				'by_domain': sources_by_domain,
+			}
+		})
