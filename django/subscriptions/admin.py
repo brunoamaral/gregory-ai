@@ -116,7 +116,9 @@ class ListsAdmin(admin.ModelAdmin):
 	inlines = [SubscriberInline]
 	filter_horizontal = ['subjects', 'latest_research_categories']
 	fieldsets = [
-		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team']}),
+		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team', 'allowed_domains']}),
+					# allowed_domains: comma-separated domains (e.g. example.com) whose subscription
+					# forms are permitted to add subscribers to this list and receive redirects.
 		('Email Types', {'fields': ['admin_summary', 'weekly_digest', 'clinical_trials_notifications']}),
 		('Content Settings', {
 			'fields': ['article_limit', 'ml_threshold'],
