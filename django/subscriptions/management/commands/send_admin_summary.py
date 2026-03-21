@@ -8,6 +8,7 @@ from sitesettings.models import CustomSetting
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list, get_articles_for_list
 from subscriptions.models import Lists, Subscribers, SentArticleNotification, SentTrialNotification, FailedNotification
+from subscriptions.management.commands.utils.handle_postmark_errors import handle_postmark_error
 from django.db.models import Prefetch
 from django.utils.timezone import now
 from datetime import timedelta
@@ -127,43 +128,14 @@ class Command(BaseCommand):
 					api_url=api_url
 				)
 
-				if result and result.status_code == 200:
-					response_data = result.json()
-					error_code = response_data.get("ErrorCode", 0)
-					message = response_data.get("Message", "Unknown error")
+				error_result = handle_postmark_error(result, subscriber, admin_list, stdout=self)
 
-					if error_code == 0:  # Successful delivery
-						self.stdout.write(self.style.SUCCESS(f"Email sent to {subscriber.email} for list '{admin_list.list_name}'."))
-						# Record sent notifications for the new articles
-						for article in new_articles:
-							SentArticleNotification.objects.get_or_create(article=article, list=admin_list, subscriber=subscriber)
-						# Record sent notifications for the new trials
-						for trial in new_trials:
-							SentTrialNotification.objects.get_or_create(trial=trial, list=admin_list, subscriber=subscriber)
-					else:
-						self.stdout.write(self.style.ERROR(f"Failed to send email to {subscriber.email} for list '{admin_list.list_name}'. Reason: {message}"))
-						FailedNotification.objects.create(
-							subscriber=subscriber,
-							list=admin_list,
-							reason=message
-						)
-				else:
-					# Enhanced error handling for non-200 status codes
-					error_details = f"HTTP Status {result.status_code if result else 'No Response'}"
-					
-					# For 422 errors, extract detailed Postmark error information
-					if result and result.status_code == 422:
-						try:
-							error_response = result.json()
-							error_code = error_response.get("ErrorCode", "Unknown")
-							error_message = error_response.get("Message", "No details provided")
-							error_details = f"422 Unprocessable Entity - ErrorCode: {error_code}, Message: {error_message}"
-						except (ValueError, KeyError):
-							error_details = f"422 Unprocessable Entity - Unable to parse error details"
-					
-					self.stdout.write(self.style.ERROR(f"Failed to send email to {subscriber.email} for list '{admin_list.list_name}'. {error_details}"))
-					FailedNotification.objects.create(
-						subscriber=subscriber,
-						list=admin_list,
-						reason=error_details
-					)
+				if error_result is None:
+					# Success
+					self.stdout.write(self.style.SUCCESS(f"Email sent to {subscriber.email} for list '{admin_list.list_name}'."))
+					# Record sent notifications for the new articles
+					for article in new_articles:
+						SentArticleNotification.objects.get_or_create(article=article, list=admin_list, subscriber=subscriber)
+					# Record sent notifications for the new trials
+					for trial in new_trials:
+						SentTrialNotification.objects.get_or_create(trial=trial, list=admin_list, subscriber=subscriber)

@@ -9,6 +9,7 @@ from subscriptions.management.commands.utils.subscription import get_trials_for_
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers, SentTrialNotification, FailedNotification
 from gregory.models import TeamCredentials
+from subscriptions.management.commands.utils.handle_postmark_errors import handle_postmark_error
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 
@@ -121,46 +122,17 @@ class Command(BaseCommand):
 				)
 
 				# Step 7: Parse the Postmark response
-				if result.status_code == 200:
-					response_data = result.json()
-					error_code = response_data.get("ErrorCode", 0)
-					message = response_data.get("Message", "Unknown error")
+				error_result = handle_postmark_error(result, subscriber, lst, stdout=self)
 
-					if error_code == 0:  # Successful delivery
-						self.stdout.write(self.style.SUCCESS(f"Email sent to {subscriber.email} for list '{lst.list_name}'."))
-						emails_sent += 1
-						# Record sent notifications for the new trials
-						for trial in new_trials:
-							SentTrialNotification.objects.get_or_create(trial=trial, list=lst, subscriber=subscriber)
-					else:  # Failed delivery
-						self.stdout.write(self.style.ERROR(f"Failed to send email to {subscriber.email} for list '{lst.list_name}'. Reason: {message}"))
-						emails_skipped += 1
-						FailedNotification.objects.create(
-							subscriber=subscriber,
-							list=lst,
-							reason=message
-						)
+				if error_result is None:
+					# Success
+					self.stdout.write(self.style.SUCCESS(f"Email sent to {subscriber.email} for list '{lst.list_name}'."))
+					emails_sent += 1
+					# Record sent notifications for the new trials
+					for trial in new_trials:
+						SentTrialNotification.objects.get_or_create(trial=trial, list=lst, subscriber=subscriber)
 				else:
-					# Enhanced error handling for non-200 status codes
-					error_details = f"HTTP Status {result.status_code}"
-					
-					# For 422 errors, extract detailed Postmark error information
-					if result.status_code == 422:
-						try:
-							error_response = result.json()
-							error_code = error_response.get("ErrorCode", "Unknown")
-							error_message = error_response.get("Message", "No details provided")
-							error_details = f"422 Unprocessable Entity - ErrorCode: {error_code}, Message: {error_message}"
-						except (ValueError, KeyError):
-							error_details = f"422 Unprocessable Entity - Unable to parse error details"
-					
-					self.stdout.write(self.style.ERROR(f"Failed to send email to {subscriber.email} for list '{lst.list_name}'. {error_details}"))
 					emails_skipped += 1
-					FailedNotification.objects.create(
-						subscriber=subscriber,
-						list=lst,
-						reason=error_details
-					)
 
 		# Print summary
 		self.stdout.write(self.style.SUCCESS(f"\nSummary:"))
