@@ -58,6 +58,7 @@ class Lists(models.Model):
 class Subscribers(models.Model):
 	PROFILEOPTIONS = [
 		('patient', 'Patient'),
+		('caregiver', 'Caregiver'),
 		('doctor', 'Doctor'),
 		('clinical centre', 'Clinical Centre'),
 		('researcher', 'Researcher')
