@@ -30,6 +30,13 @@ class Lists(models.Model):
 		help_text="ML prediction confidence threshold (0.0-1.0). Only articles with ML predictions above this threshold will be considered relevant.",
 		verbose_name="ML Threshold for Relevance"
 	)
+	# Allowed domains for the subscription form
+	allowed_domains = models.TextField(
+		blank=True,
+		default='',
+		help_text="Comma-separated list of domains allowed to submit subscribers to this list (e.g. example.com, other-site.org). The origin domain is used for post-subscription redirects.",
+		verbose_name="Allowed Domains"
+	)
 	# Latest research categories
 	latest_research_categories = models.ManyToManyField(
 		'gregory.TeamCategory', 

@@ -15,6 +15,32 @@ Gregory's API is open and doesn't require authentication unless you need to use 
 5. **Subscriptions Route:**
    - `subscriptions/new/`: Endpoint for new subscriptions.
 
+## Subscription form endpoint
+
+`POST /subscriptions/new/` accepts HTML form submissions (no CSRF token required). Fields:
+
+| Field | Required | Description |
+|---|---|---|
+| `first_name` | yes | Subscriber first name |
+| `last_name` | no | Subscriber last name |
+| `email` | yes | Subscriber email address |
+| `profile` | yes | One of: `patient`, `caregiver`, `doctor`, `clinical centre`, `researcher` |
+| `list` | no | List ID(s) to subscribe to; may be repeated for multiple selections |
+
+On success the subscriber is created or updated, subscribed to the selected lists, and the browser is redirected to `/thank-you/`. On failure it is redirected to `/error/`.
+
+### Redirect domain and allowed domains
+
+The redirect base URL is **not** hardcoded. Instead, the view reads the `Origin` header (falling back to `Referer`) from the request and checks whether that domain appears in the **Allowed Domains** field of at least one of the selected lists. If it matches, the subscriber is redirected back to that origin domain. If no match is found, the redirect falls back to the current Django `Site` domain.
+
+Configure allowed origins per list in the Django admin under **Subscriptions → Lists → Allowed Domains** as a comma-separated list of hostnames:
+
+```
+example.com, staging.example.com
+```
+
+This prevents open-redirect attacks: only explicitly whitelisted domains are used for redirects.
+
 # API EndPoints
 
 | Model                   | API Endpoint                             | Description                                         | Status                                                   |
