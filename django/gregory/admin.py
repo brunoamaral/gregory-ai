@@ -219,25 +219,35 @@ class ArticleSubjectRelevanceForm(forms.ModelForm):
 class ArticleSubjectRelevanceInline(admin.TabularInline):
 	model = ArticleSubjectRelevance
 	form = ArticleSubjectRelevanceForm
-	extra = 0  # Don't show extra empty forms
 	can_delete = False  # Prevent deletion since we want all subjects visible
-	fields = ['subject_name', 'is_relevant']  # Show subject name as readonly, then relevance
+	fields = ['subject_name', 'subject', 'is_relevant']  # subject is hidden via HiddenInput widget
 	readonly_fields = ['subject_name']
-	
+
+	def get_extra(self, request, obj=None, **kwargs):
+		"""Superusers get one extra empty form to add new subject relevances"""
+		if request.user.is_superuser:
+			return 1
+		return 0
+
 	def subject_name(self, obj):
 		"""Display the subject name as read-only"""
 		return str(obj.subject) if obj.subject else ''
 	subject_name.short_description = 'Subject'
-	
+
 	def get_formset(self, request, obj=None, **kwargs):
-		"""Pre-populate with all subjects for the article's teams"""
+		"""Pre-populate with subjects for the article's teams.
+		Superusers get all subjects; other users only get auto_predict subjects.
+		"""
 		if obj and obj.pk:  # If editing existing article
-			# Get subjects for the teams this article belongs to that
-			# have auto_predict enabled
-			team_subjects = Subject.objects.filter(
-				team__in=obj.teams.all(),
-				auto_predict=True
-			).distinct().order_by('subject_name')
+			if request.user.is_superuser:
+				team_subjects = Subject.objects.filter(
+					team__in=obj.teams.all()
+				).distinct().order_by('subject_name')
+			else:
+				team_subjects = Subject.objects.filter(
+					team__in=obj.teams.all(),
+					auto_predict=True
+				).distinct().order_by('subject_name')
 
 			# Create ArticleSubjectRelevance instances for any missing subjects
 			for subject in team_subjects:
@@ -246,13 +256,19 @@ class ArticleSubjectRelevanceInline(admin.TabularInline):
 					subject=subject,
 					defaults={'is_relevant': None}
 				)
-		return super().get_formset(request, obj, **kwargs)
+
+		formset = super().get_formset(request, obj, **kwargs)
+		# For superusers, show all subjects in the subject dropdown for new rows
+		if request.user.is_superuser:
+			formset.form.base_fields['subject'].widget = forms.Select()
+		return formset
 
 	def get_queryset(self, request):
-		"""Order by subject name for consistency and filter auto_predict subjects"""
-		return super().get_queryset(request).select_related('subject').filter(
-			subject__auto_predict=True
-		).order_by('subject__subject_name')
+		"""Superusers see all subjects; other users see only auto_predict subjects"""
+		qs = super().get_queryset(request).select_related('subject')
+		if not request.user.is_superuser:
+			qs = qs.filter(subject__auto_predict=True)
+		return qs.order_by('subject__subject_name')
 
 class ArticleAdminForm(forms.ModelForm):
 	ml_predictions_display = MLPredictionsField(required=False)
