@@ -229,16 +229,6 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	List all articles in the database with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
 	
-	This endpoint replaces the legacy team-based URLs and specific article type endpoints:
-
-	- Instead of `/teams/1/articles/` → use `/articles/?team_id=1`
-	- Instead of `/teams/1/articles/subject/4/` → use `/articles/?team_id=1&subject_id=4`
-	- Instead of `/articles/relevant/` → use `/articles/?relevant=true`
-	- Instead of `/articles/relevant/last/15/` → use `/articles/?relevant=true&last_days=15`
-	- Instead of `/articles/relevant/week/2024/52/` → use `/articles/?relevant=true&week=52&year=2024`
-	- Instead of `/articles/open-access/` → use `/articles/?open_access=true`
-
-	
 	# Query Parameters:
 	- **team_id** - filter by team ID (replaces /teams/{id}/articles/)
 	- **doi** - filter by exact DOI (case-insensitive)
@@ -253,10 +243,10 @@ class ArticleViewSet(viewsets.ModelViewSet):
 	- **page** - page number for pagination
 	- **page_size** - items per page (max 100)
 	- **all_results** - set to 'true' to bypass pagination and get all results (useful for CSV export)
-	
+
 	# Special Article Types:
-	- **relevant** - filter for relevant articles (true/false)
-	- **ml_threshold** - minimum ML prediction confidence (float 0.0-1.0, e.g., 0.75)
+	- **relevant** - filter for relevant articles (true/false). When combined with **subject_id**, relevance is scoped to that specific subject — only articles that are relevant *for that subject* (via ML predictions or manual marking) are returned. Without subject_id, relevance is checked across all subjects.
+	- **ml_threshold** - minimum ML prediction confidence (float 0.0-1.0, e.g., 0.75). Also scoped to subject_id when provided.
 	- **open_access** - filter for open access articles (true/false)
 	- **last_days** - filter for articles from last N days (number)
 	- **week** - filter for specific week number (requires year parameter)

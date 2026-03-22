@@ -41,7 +41,44 @@ example.com, staging.example.com
 
 This prevents open-redirect attacks: only explicitly whitelisted domains are used for redirects.
 
-# API EndPoints
+## Articles Query Parameters
+
+The `/articles/` endpoint supports the following query parameters for filtering:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `team_id` | integer | Filter by team ID |
+| `subject_id` | integer | Filter by subject ID |
+| `author_id` | integer | Filter by author ID |
+| `doi` | string | Filter by exact DOI (case-insensitive) |
+| `category_slug` | string | Filter by category slug |
+| `category_id` | integer | Filter by category ID |
+| `journal_slug` | string | Filter by journal (convert spaces to dashes) |
+| `source_id` | integer | Filter by source ID |
+| `search` | string | Search in title and summary |
+| `relevant` | boolean | Filter for relevant articles. When combined with `subject_id`, relevance is scoped to that specific subject — only articles relevant *for that subject* (via ML predictions or manual marking) are returned. Without `subject_id`, relevance is checked across all subjects. |
+| `ml_threshold` | float (0.0–1.0) | Minimum ML prediction confidence score. Also scoped to `subject_id` when provided. |
+| `open_access` | boolean | Filter for open access articles |
+| `last_days` | integer | Filter for articles from the last N days |
+| `week` | integer (1–52) | Filter by week number (requires `year`) |
+| `year` | integer | Year for week filtering (used with `week`) |
+| `ordering` | string | Order results (e.g., `-published_date`, `title`) |
+| `page` | integer | Page number for pagination |
+| `page_size` | integer | Items per page (max 100) |
+| `all_results` | boolean | Bypass pagination and return all results (useful for CSV export) |
+| `format` | string | Response format: `json` (default) or `csv` |
+
+## Examples
+
+```
+GET /articles/?team_id=1&subject_id=4&relevant=true
+GET /articles/?relevant=true&ml_threshold=0.75
+GET /articles/?relevant=true&last_days=15
+GET /articles/?team_id=1&search=stem+cells
+GET /articles/?format=csv&all_results=true
+```
+
+## API EndPoints
 
 | Model                   | API Endpoint                             | Description                                         | Status                                                   |
 | ----------------------- | ---------------------------------------- | --------------------------------------------------- | -------------------------------------------------------- |
