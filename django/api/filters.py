@@ -334,16 +334,18 @@ class TrialFilter(filters.FilterSet):
         )
 
 class AuthorFilter(filters.FilterSet):
-    """Filter class for Authors, allowing searching by full name and filtering by author ID."""
+    """Filter class for Authors, allowing searching by full name, given name, family name and filtering by author ID."""
 
     full_name = filters.CharFilter(method='filter_full_name', label='Full Name')
+    given_name = filters.CharFilter(field_name='given_name', lookup_expr='icontains', label='Given Name')
+    family_name = filters.CharFilter(field_name='family_name', lookup_expr='icontains', label='Family Name')
     author_id = filters.NumberFilter(field_name='author_id', lookup_expr='exact', label='Author ID')
     orcid = filters.CharFilter(field_name='ORCID', lookup_expr='icontains', label='ORCID')
     country = filters.CharFilter(field_name='country', lookup_expr='exact', label='Country')
 
     class Meta:
         model = Authors
-        fields = ['full_name', 'author_id', 'orcid', 'country']
+        fields = ['full_name', 'given_name', 'family_name', 'author_id', 'orcid', 'country']
 
     def filter_full_name(self, queryset, name, value):
         """Search in the full_name database field using optimized uppercase column"""

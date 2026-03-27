@@ -707,6 +707,8 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	
 	- **author_id** - filter by specific author ID
 	- **full_name** - search by author's full name (case-insensitive)
+	- **given_name** - search by author's given name (case-insensitive)
+	- **family_name** - search by author's family name (case-insensitive)
 	- **orcid** - filter by ORCID identifier (case-insensitive contains search)
 	- **country** - filter by country code (exact match)
 	- **sort_by** - 'article_count' (default: 'author_id')
@@ -723,6 +725,8 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	
 	- Get specific author: `?author_id=380002`
 	- Search by name: `?full_name=John%20Smith`
+	- Search by given name: `?given_name=John`
+	- Search by family name: `?family_name=Smith`
 	- Filter by ORCID: `?orcid=0000-0000-0000-0001`
 	- Filter by country: `?country=US`
 	- Sort by article count: `?sort_by=article_count&order=desc`
