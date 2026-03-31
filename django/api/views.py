@@ -594,6 +594,7 @@ class TrialViewSet(viewsets.ModelViewSet):
 	
 	# Core Query Parameters:
 	- **trial_id** - filter by specific trial ID
+	- **identifier** - filter by any trial identifier (NCT, EudraCT, EUCT, CTIS, or org_study_id)
 	- **team_id** - filter by team ID
 	- **subject_id** - filter by subject ID
 	- **category_slug** - filter by category slug

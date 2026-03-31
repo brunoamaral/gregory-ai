@@ -282,6 +282,7 @@ class TrialFilter(filters.FilterSet):
     category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact', label='Category Slug')
     category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact', label='Category ID')
     source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact', label='Source ID')
+    identifier = filters.CharFilter(method='filter_identifier', label='Identifier')
     
     # Trial-specific filters
     recruitment_status = filters.CharFilter(field_name='recruitment_status', lookup_expr='iexact')
@@ -305,7 +306,7 @@ class TrialFilter(filters.FilterSet):
         model = Trials
         fields = [
             'trial_id', 'title', 'summary', 'search', 'recruitment_status', 'status',
-            'team_id', 'subject_id', 'category_slug', 'category_id', 'source_id',
+            'team_id', 'subject_id', 'category_slug', 'category_id', 'source_id', 'identifier',
             'internal_number', 'phase', 'study_type', 'primary_sponsor', 'source_register',
             'countries', 'condition', 'intervention', 'therapeutic_areas',
             'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender'
@@ -331,6 +332,19 @@ class TrialFilter(filters.FilterSet):
         return queryset.filter(
             models.Q(utitle__contains=upper_value) |
             models.Q(usummary__contains=upper_value)
+        )
+    
+    def filter_identifier(self, queryset, name, value):
+        """
+        Search trial by identifier across all identifier types in the JSON field.
+        Searches: nct, eudract, euct, ctis, org_study_id
+        """
+        return queryset.filter(
+            models.Q(identifiers__nct=value) |
+            models.Q(identifiers__eudract=value) |
+            models.Q(identifiers__euct=value) |
+            models.Q(identifiers__ctis=value) |
+            models.Q(identifiers__org_study_id=value)
         )
 
 class AuthorFilter(filters.FilterSet):
