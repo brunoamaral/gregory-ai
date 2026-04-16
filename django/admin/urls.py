@@ -45,8 +45,11 @@ router.register(r'authors', AuthorsViewSet, basename='authors')
 router.register(r'categories', CategoryViewSet, basename='categories')
 router.register(r'sources', SourceViewSet)
 router.register(r'trials', TrialViewSet)
-router.register(r'teams', TeamsViewSet)
 router.register(r'subjects', SubjectsViewSet)
+
+# Teams router (excluded from API root listing)
+teams_router = routers.SimpleRouter()
+teams_router.register(r'teams', TeamsViewSet)
 
 # Define URL patterns
 urlpatterns = [
@@ -84,9 +87,8 @@ urlpatterns = [
 	path('emails/context/<str:template_name>/', email_template_json_context, name='email_template_json_context'),
 
 
-	# Team API
-	## List Teams
-	path('teams/', TeamsViewSet.as_view({'get':'list'})),
+	# Team API (excluded from API root, requires authentication)
+	path('', include(teams_router.urls)),
 	## List articles
 	path('teams/<int:team_id>/articles/', ArticlesByTeam.as_view({'get': 'list'}), name='articles-by-team'),
 	## List article per ID
@@ -113,4 +115,5 @@ urlpatterns = [
 
 	# Include router routes
 	path('', include(router.urls)),
+
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
