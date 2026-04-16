@@ -181,6 +181,22 @@ class RelevanceRadioWidget(forms.RadioSelect):
 		final_html = f'<div style="display: flex; align-items: center; gap: 10px;">{"".join(choices_html)}</div>'
 		return mark_safe(final_html)
 
+class SubjectDisplayWidget(forms.Widget):
+	"""Shows subject name as bold text (with hidden pk) for existing rows."""
+
+	def render(self, name, value, attrs=None, renderer=None):
+		if value:
+			try:
+				subject = Subject.objects.get(pk=value)
+				return mark_safe(
+					f'<strong>{subject}</strong>'
+					f'<input type="hidden" name="{name}" value="{value}">'
+				)
+			except Subject.DoesNotExist:
+				pass
+		return mark_safe(f'<input type="hidden" name="{name}" value="">')
+
+
 class ArticleSubjectRelevanceForm(forms.ModelForm):
 	RELEVANCE_CHOICES = [
 		(None, '⚪ Not Reviewed'),
@@ -200,7 +216,7 @@ class ArticleSubjectRelevanceForm(forms.ModelForm):
 		model = ArticleSubjectRelevance
 		fields = ['subject', 'is_relevant']
 		widgets = {
-			'subject': forms.HiddenInput(),  # Hide the subject field since it's readonly
+			'subject': SubjectDisplayWidget(),
 		}
 	
 	def clean_is_relevant(self):
@@ -216,23 +232,32 @@ class ArticleSubjectRelevanceForm(forms.ModelForm):
 		else:
 			return None  # Default to "Not Reviewed"
 
+class ArticleSubjectRelevanceFormSet(forms.BaseInlineFormSet):
+	"""Custom formset that shows the subject dropdown only on new (unsaved) rows."""
+
+	def add_fields(self, form, index):
+		super().add_fields(form, index)
+		if not form.instance.pk:
+			# New row: show a subject select dropdown
+			form.fields['subject'].widget = forms.Select()
+			form.fields['subject'].queryset = Subject.objects.all().order_by('subject_name')
+		else:
+			# Existing row: show subject name as text with embedded hidden pk
+			form.fields['subject'].widget = SubjectDisplayWidget()
+
+
 class ArticleSubjectRelevanceInline(admin.TabularInline):
 	model = ArticleSubjectRelevance
 	form = ArticleSubjectRelevanceForm
-	can_delete = False  # Prevent deletion since we want all subjects visible
-	fields = ['subject_name', 'subject', 'is_relevant']  # subject is hidden via HiddenInput widget
-	readonly_fields = ['subject_name']
+	formset = ArticleSubjectRelevanceFormSet
+	can_delete = True
+	fields = ['subject', 'is_relevant']
 
 	def get_extra(self, request, obj=None, **kwargs):
 		"""Superusers get one extra empty form to add new subject relevances"""
 		if request.user.is_superuser:
 			return 1
 		return 0
-
-	def subject_name(self, obj):
-		"""Display the subject name as read-only"""
-		return str(obj.subject) if obj.subject else ''
-	subject_name.short_description = 'Subject'
 
 	def get_formset(self, request, obj=None, **kwargs):
 		"""Pre-populate with subjects for the article's teams.
@@ -257,11 +282,7 @@ class ArticleSubjectRelevanceInline(admin.TabularInline):
 					defaults={'is_relevant': None}
 				)
 
-		formset = super().get_formset(request, obj, **kwargs)
-		# For superusers, show all subjects in the subject dropdown for new rows
-		if request.user.is_superuser:
-			formset.form.base_fields['subject'].widget = forms.Select()
-		return formset
+		return super().get_formset(request, obj, **kwargs)
 
 	def get_queryset(self, request):
 		"""Superusers see all subjects; other users see only auto_predict subjects"""
