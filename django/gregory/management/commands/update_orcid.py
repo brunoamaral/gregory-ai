@@ -1,10 +1,10 @@
 from django.core.management.base import BaseCommand
 from django.db.models import Count, Q
 from django.utils import timezone
-from gregory.models import Authors
+from gregory.models import Authors, Team
 from gregory.functions import normalize_orcid
+from subscriptions.management.commands.utils.get_credentials import get_orcid_credentials
 import orcid
-import os
 from dotenv import load_dotenv
 from simple_history.utils import update_change_reason
 import requests
@@ -12,11 +12,34 @@ load_dotenv()
 
 class Command(BaseCommand):
 	help = 'Updates authors\' country information and ORCID check timestamp from the ORCID public API based on specific criteria.'
-	orcid_key = os.environ.get('ORCID_CLIENT_ID')
-	orcid_secret = os.environ.get('ORCID_CLIENT_SECRET')
+
+	def add_arguments(self, parser):
+		parser.add_argument(
+			'--team',
+			type=str,
+			default=None,
+			help='Team slug to use for ORCID credentials. Falls back to organisation credentials then environment variables if not set.',
+		)
 
 	def handle(self, *args, **kwargs):
-		orcid_api = orcid.PublicAPI(self.orcid_key, self.orcid_secret, sandbox=False)
+		team_slug = kwargs.get('team')
+		team = None
+		if team_slug:
+			try:
+				team = Team.objects.get(slug=team_slug)
+			except Team.DoesNotExist:
+				self.stderr.write(self.style.ERROR(f"Team with slug '{team_slug}' not found."))
+				return
+
+		orcid_key, orcid_secret = get_orcid_credentials(team)
+		if not orcid_key or not orcid_secret:
+			self.stderr.write(self.style.ERROR(
+				"ORCID credentials not found. Set ORCID_CLIENT_ID and ORCID_CLIENT_SECRET "
+				"in the environment, or configure them on the team or organisation."
+			))
+			return
+
+		orcid_api = orcid.PublicAPI(orcid_key, orcid_secret, sandbox=False)
 		try:
 			token = orcid_api.get_search_token_from_orcid()
 		except requests.exceptions.HTTPError as e:
