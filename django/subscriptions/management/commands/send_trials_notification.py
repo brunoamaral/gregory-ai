@@ -9,6 +9,7 @@ from subscriptions.management.commands.utils.subscription import get_trials_for_
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers, SentTrialNotification, FailedNotification
 from gregory.models import TeamCredentials
+from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 
@@ -42,13 +43,10 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.ERROR(f"No team associated with list '{lst.list_name}'. Skipping."))
 				continue
 
-			# Step 2: Fetch Team Credentials
-			try:
-				credentials = team.credentials
-				postmark_api_token = credentials.postmark_api_token
-				api_url = credentials.postmark_api_url
-			except TeamCredentials.DoesNotExist:
-				self.stdout.write(self.style.ERROR(f"Credentials not found for team '{team.name}' associated with list '{lst.list_name}'. Skipping."))
+			# Step 2: Resolve Postmark credentials (Team → Organization → Django settings)
+			postmark_api_token, api_url = get_postmark_credentials(team)
+			if not postmark_api_token or not api_url:
+				self.stdout.write(self.style.ERROR(f"No Postmark credentials found for team '{team.name}', its organization, or Django settings. Skipping list '{lst.list_name}'."))
 				continue
 
 			# Step 3: Use the shared utility function to fetch trials

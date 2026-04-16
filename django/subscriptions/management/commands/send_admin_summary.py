@@ -4,6 +4,7 @@ from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
 from gregory.models import Articles, Trials, MLPredictions, TeamCredentials
+from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials
 from sitesettings.models import CustomSetting
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list, get_articles_for_list
@@ -39,13 +40,10 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.ERROR(f"No team associated with list '{admin_list.list_name}'. Skipping."))
 				continue
 
-			# Fetch Team Credentials
-			try:
-				credentials = team.credentials
-				postmark_api_token = credentials.postmark_api_token
-				api_url = credentials.postmark_api_url
-			except TeamCredentials.DoesNotExist:
-				self.stdout.write(self.style.ERROR(f"Credentials not found for team associated with list '{admin_list.list_name}'. Skipping."))
+			# Resolve Postmark credentials (Team → Organization → Django settings)
+			postmark_api_token, api_url = get_postmark_credentials(team)
+			if not postmark_api_token or not api_url:
+				self.stdout.write(self.style.ERROR(f"No Postmark credentials found for team '{team.name}', its organization, or Django settings. Skipping list '{admin_list.list_name}'."))
 				continue
 
 			# Step 2: Fetch articles and trials for this list

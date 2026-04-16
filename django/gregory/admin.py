@@ -15,7 +15,7 @@ from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 from .models import (
     Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, 
     ArticleSubjectRelevance, TeamCategory, TeamCredentials, PredictionRunLog, Team,
-    ArticleTrialReference
+    ArticleTrialReference, OrganizationCredentials
 )
 from .widgets import MLPredictionsWidget
 from django import forms
@@ -1054,6 +1054,13 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 class TeamCredentialsAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	list_display = ('team', 'created_at', 'updated_at')
 	# readonly_fields = ('orcid_client_id', 'orcid_client_secret', 'postmark_api_token')
+
+	def get_readonly_fields(self, request, obj=None):
+		return self.readonly_fields
+
+@admin.register(OrganizationCredentials)
+class OrganizationCredentialsAdmin(admin.ModelAdmin):
+	list_display = ('organization', 'created_at', 'updated_at')
 
 	def get_readonly_fields(self, request, obj=None):
 		return self.readonly_fields
