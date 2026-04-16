@@ -1,9 +1,13 @@
+import uuid
 from django.db import models
 from django.db.models import UniqueConstraint
 from django.db.models.functions import Lower
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.contrib.sites.models import Site
 from gregory.models import Subject, Articles, Trials, Team, TeamCategory
 from simple_history.models import HistoricalRecords
+
+
 class Lists(models.Model):
 	list_id = models.AutoField(primary_key=True)
 	list_name = models.CharField(max_length=150, null=False, blank=False)
@@ -78,10 +82,16 @@ class Subscribers(models.Model):
 	profile = models.CharField(choices=PROFILEOPTIONS, max_length=50, default='')
 	active = models.BooleanField(default=True)
 	is_admin = models.BooleanField(default=False)
-	subscriptions = models.ManyToManyField(Lists, blank=True)
+	unsubscribe_token = models.UUIDField(
+		default=uuid.uuid4,
+		unique=True,
+		editable=False,
+		help_text="Unique token used in unsubscribe links. Never expose this outside of email context.",
+	)
+	subscriptions = models.ManyToManyField(Lists, through='ListSubscription', blank=True)
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
-	history = HistoricalRecords(m2m_fields=['subscriptions'])
+	history = HistoricalRecords()
 
 	class Meta:
 		managed = True
@@ -135,3 +145,91 @@ class FailedNotification(models.Model):
 
     def __str__(self):
         return f"Failed notification to {self.subscriber.email} for list {self.list.list_name}"
+
+
+class ListSubscription(models.Model):
+	"""Through-model for the Subscribers ↔ Lists M2M, storing consent and per-list opt-out."""
+
+	CONSENT_METHOD_CHOICES = [
+		('web_form', 'Web Form'),
+		('admin', 'Admin'),
+		('api', 'API'),
+		('import', 'Import'),
+	]
+
+	subscriber = models.ForeignKey(Subscribers, on_delete=models.CASCADE, related_name='list_subscriptions')
+	list = models.ForeignKey(Lists, on_delete=models.CASCADE, related_name='list_subscriptions')
+	subscribed_at = models.DateTimeField(auto_now_add=True)
+	# GDPR consent fields
+	consent_ip = models.GenericIPAddressField(
+		null=True,
+		blank=True,
+		help_text="IP address at the time of subscription (for GDPR audit trail).",
+	)
+	consent_source_site = models.ForeignKey(
+		Site,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='list_subscriptions',
+		help_text="The site the subscription form was submitted from.",
+	)
+	consent_method = models.CharField(
+		max_length=20,
+		choices=CONSENT_METHOD_CHOICES,
+		default='web_form',
+		help_text="How this subscription was obtained.",
+	)
+	# Per-list unsubscribe
+	is_active = models.BooleanField(
+		default=True,
+		help_text="Uncheck to unsubscribe this subscriber from this specific list.",
+	)
+	unsubscribed_at = models.DateTimeField(
+		null=True,
+		blank=True,
+		help_text="Timestamp when the subscriber opted out of this list.",
+	)
+	history = HistoricalRecords()
+
+	class Meta:
+		unique_together = ('subscriber', 'list')
+		verbose_name = 'List Subscription'
+		verbose_name_plural = 'List Subscriptions'
+
+	def __str__(self):
+		status = 'active' if self.is_active else 'unsubscribed'
+		return f"{self.subscriber.email} → {self.list.list_name} ({status})"
+
+
+class SubscriberSiteProfile(models.Model):
+	"""Per-site profile for a subscriber. Overrides the global Subscribers.profile."""
+
+	PROFILEOPTIONS = Subscribers.PROFILEOPTIONS
+
+	subscriber = models.ForeignKey(
+		Subscribers,
+		on_delete=models.CASCADE,
+		related_name='site_profiles',
+	)
+	site = models.ForeignKey(
+		Site,
+		on_delete=models.CASCADE,
+		related_name='subscriber_profiles',
+	)
+	profile = models.CharField(
+		choices=PROFILEOPTIONS,
+		max_length=50,
+		default='',
+		help_text="The subscriber's role on this specific site.",
+	)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		unique_together = ('subscriber', 'site')
+		verbose_name = 'Subscriber Site Profile'
+		verbose_name_plural = 'Subscriber Site Profiles'
+
+	def __str__(self):
+		return f"{self.subscriber.email} @ {self.site.domain} ({self.profile})"

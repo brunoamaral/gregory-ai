@@ -85,6 +85,16 @@
                                     <p style="color: #6b7280; font-size: 12px; margin: 0 0 8px 0; line-height: 1.4;">
                                         This email was sent to {{ subscriber.email|default:"you" }}
                                     </p>
+                                    {% if subscriber.unsubscribe_token and list_id %}
+                                    <p style="color: #9ca3af; font-size: 11px; margin: 0; line-height: 1.8;">
+                                        <a href="{{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/list/{{ list_id }}/" style="color: #9ca3af; text-decoration: underline; margin: 0 4px;">Unsubscribe from this list</a>
+                                        {% if site %}&nbsp;|&nbsp;
+                                        <a href="{{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/site/{{ site.id }}/" style="color: #9ca3af; text-decoration: underline; margin: 0 4px;">Unsubscribe from all lists on {{ site.domain }}</a>
+                                        {% endif %}
+                                        &nbsp;|&nbsp;
+                                        <a href="{{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/all/" style="color: #9ca3af; text-decoration: underline; margin: 0 4px;">Unsubscribe from everything</a>
+                                    </p>
+                                    {% endif %}
                                 </td>
                             </tr>
                         </table>

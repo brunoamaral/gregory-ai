@@ -28,7 +28,7 @@ from api.views import (
     StatsView
 )
 from rss.views import	ArticlesByAuthorFeed, TrialsBySubjectFeed
-from subscriptions.views import subscribe_view
+from subscriptions.views import subscribe_view, unsubscribe_list, unsubscribe_site, unsubscribe_all
 from organizations.backends import invitation_backend
 
 # Email template views (direct import to avoid module issues)
@@ -74,6 +74,9 @@ urlpatterns = [
 
 	# Subscriptions route
 	path('subscriptions/new/', subscribe_view),
+	path('subscriptions/unsubscribe/<uuid:token>/list/<int:list_id>/', unsubscribe_list, name='unsubscribe_list'),
+	path('subscriptions/unsubscribe/<uuid:token>/site/<int:site_id>/', unsubscribe_site, name='unsubscribe_site'),
+	path('subscriptions/unsubscribe/<uuid:token>/all/', unsubscribe_all, name='unsubscribe_all'),
 
 	# Email template preview and testing routes
 	path('emails/', email_preview_dashboard, name='email_preview_dashboard'),

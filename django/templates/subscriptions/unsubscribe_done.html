@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unsubscribed</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f9fafb;
+            margin: 0;
+            padding: 40px 16px;
+            color: #111827;
+        }
+        .card {
+            max-width: 480px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.12);
+            padding: 40px 36px;
+            text-align: center;
+        }
+        h1 { font-size: 1.4rem; margin-top: 0; }
+        p  { line-height: 1.6; color: #4b5563; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>You have been unsubscribed</h1>
+
+    {% if scope == 'list' %}
+        <p>{{ subscriber.email }} has been removed from the mailing list.</p>
+    {% elif scope == 'site' %}
+        <p>{{ subscriber.email }} has been removed from all mailing lists on this site.</p>
+    {% else %}
+        <p>{{ subscriber.email }} has been globally unsubscribed and will no longer
+        receive any emails from us.</p>
+    {% endif %}
+
+    <p style="font-size: 0.85rem; color: #9ca3af; margin-top: 24px;">
+        If this was a mistake, please contact us to reactivate your subscription.
+    </p>
+</div>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unsubscribe – Confirm</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f9fafb;
+            margin: 0;
+            padding: 40px 16px;
+            color: #111827;
+        }
+        .card {
+            max-width: 480px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.12);
+            padding: 40px 36px;
+        }
+        h1 { font-size: 1.4rem; margin-top: 0; }
+        p  { line-height: 1.6; color: #4b5563; }
+        .scope-label { font-weight: 600; color: #1e3a8a; }
+        form { margin-top: 28px; }
+        button {
+            background: #dc2626;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 24px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        button:hover { background: #b91c1c; }
+        .cancel { margin-left: 16px; font-size: 0.9rem; color: #6b7280; text-decoration: none; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>Unsubscribe Confirmation</h1>
+
+    {% if scope == 'list' %}
+        <p>You are about to unsubscribe <span class="scope-label">{{ subscriber.email }}</span>
+        from the list <span class="scope-label">{{ list_obj.list_name }}</span>.</p>
+    {% elif scope == 'site' %}
+        <p>You are about to unsubscribe <span class="scope-label">{{ subscriber.email }}</span>
+        from all lists on <span class="scope-label">{{ site_obj.domain }}</span>.</p>
+    {% else %}
+        <p>You are about to unsubscribe <span class="scope-label">{{ subscriber.email }}</span>
+        from <span class="scope-label">all mailing lists</span>. You will no longer receive any
+        emails from us.</p>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit">Yes, unsubscribe me</button>
+        <a class="cancel" href="javascript:history.back()">Cancel</a>
+    </form>
+</div>
+</body>
+</html>
