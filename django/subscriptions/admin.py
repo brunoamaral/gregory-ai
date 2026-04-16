@@ -112,7 +112,7 @@ class SubscriberInline(admin.TabularInline):
 
 class ListsAdmin(admin.ModelAdmin):
 	form = ListsAdminForm
-	list_display = ['list_name', 'team', 'list_description', 'admin_summary','weekly_digest','clinical_trials_notifications', 'has_latest_research']
+	list_display = ['list_name', 'organisation_name', 'team', 'list_description', 'admin_summary','weekly_digest','clinical_trials_notifications', 'has_latest_research']
 	inlines = [SubscriberInline]
 	filter_horizontal = ['subjects', 'latest_research_categories']
 	fieldsets = [
@@ -140,6 +140,13 @@ class ListsAdmin(admin.ModelAdmin):
 		return obj.latest_research_categories.exists()
 	has_latest_research.boolean = True
 	has_latest_research.short_description = 'Latest Research'
+
+	def organisation_name(self, obj):
+		if obj.team and obj.team.organization:
+			return obj.team.organization.name
+		return ''
+	organisation_name.short_description = 'Organisation'
+	organisation_name.admin_order_field = 'team__organization__name'
 
 class FailedNotificationAdmin(admin.ModelAdmin):
 	list_display = ['subscriber','reason','list','created_at']
