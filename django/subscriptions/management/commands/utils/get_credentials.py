@@ -3,6 +3,43 @@ from django.contrib.sites.models import Site
 
 from gregory.models import TeamCredentials, OrganizationCredentials, OrganizationSite
 from sitesettings.models import CustomSetting
+import os
+
+
+def get_orcid_credentials(team=None):
+	"""
+	Resolve ORCID API credentials using the fallback chain:
+	Team → Organization → environment variables.
+
+	All-or-nothing: if the team has both client_id and client_secret set,
+	use them. Otherwise fall back to the organization, then environment variables.
+
+	Pass team=None to skip team/org lookups and go straight to env vars.
+
+	Returns a tuple (client_id, client_secret).
+	"""
+	if team is not None:
+		# Try team-level credentials
+		try:
+			creds = team.credentials
+			if creds.orcid_client_id and creds.orcid_client_secret:
+				return (creds.orcid_client_id, creds.orcid_client_secret)
+		except TeamCredentials.DoesNotExist:
+			pass
+
+		# Try organization-level credentials
+		try:
+			org_creds = team.organization.credentials
+			if org_creds.orcid_client_id and org_creds.orcid_client_secret:
+				return (org_creds.orcid_client_id, org_creds.orcid_client_secret)
+		except OrganizationCredentials.DoesNotExist:
+			pass
+
+	# Fall back to environment variables
+	return (
+		os.environ.get('ORCID_CLIENT_ID'),
+		os.environ.get('ORCID_CLIENT_SECRET'),
+	)
 
 
 def get_postmark_credentials(team):

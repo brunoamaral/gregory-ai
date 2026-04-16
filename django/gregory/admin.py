@@ -886,11 +886,11 @@ class OrganizationSiteInline(admin.TabularInline):
 
 
 class OrganizationCredentialsInline(admin.StackedInline):
-	"""Inline to manage Postmark credentials for an organization."""
+	"""Inline to manage Postmark/ORCID credentials for an organization."""
 	model = OrganizationCredentials
 	extra = 0
 	max_num = 1
-	fields = ('postmark_api_token', 'postmark_api_url')
+	fields = ('postmark_api_token', 'postmark_api_url', 'orcid_client_id', 'orcid_client_secret')
 	verbose_name = 'Credentials'
 	verbose_name_plural = 'Credentials'
 
