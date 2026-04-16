@@ -63,10 +63,11 @@ class Command(BaseCommand):
 			
 			list_trials = get_trials_for_list(admin_list)
 
-			# Step 3: Find subscribers of the list
+			# Step 3: Find subscribers of the list (respect per-list opt-out)
 			subscribers = Subscribers.objects.filter(
 				active=True,
-				subscriptions=admin_list
+				list_subscriptions__list=admin_list,
+				list_subscriptions__is_active=True,
 			).distinct()
 
 			if not subscribers.exists():

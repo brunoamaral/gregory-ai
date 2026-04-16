@@ -6,15 +6,36 @@ from django.http import JsonResponse
 from django.db.models import Count
 from django.utils import timezone
 from datetime import timedelta
-from .models import Subscribers, Lists, FailedNotification
+from .models import Subscribers, Lists, FailedNotification, ListSubscription, SubscriberSiteProfile
 from .forms import ListsAdminForm
+
+
+class SubscriberSiteProfileInline(admin.TabularInline):
+	model = SubscriberSiteProfile
+	extra = 0
+	fields = ['site', 'profile', 'created_at', 'updated_at']
+	readonly_fields = ['created_at', 'updated_at']
+	verbose_name = 'Site Profile'
+	verbose_name_plural = 'Site Profiles'
+
+
+class ListSubscriptionInline(admin.TabularInline):
+	"""Shows which lists this subscriber belongs to, with consent metadata."""
+	model = ListSubscription
+	extra = 0
+	fields = ['list', 'is_active', 'consent_method', 'consent_source_site', 'consent_ip', 'subscribed_at', 'unsubscribed_at']
+	readonly_fields = ['consent_ip', 'consent_source_site', 'consent_method', 'subscribed_at', 'unsubscribed_at']
+	verbose_name = 'List Subscription'
+	verbose_name_plural = 'List Subscriptions'
+
 
 class SubscriberAdmin(admin.ModelAdmin):
 	list_display = ['subscriber_id', 'first_name', 'last_name', 'email', 'active', 'number_of_subscriptions', 'created_at', 'updated_at']
 	list_filter = ['active', 'profile', 'created_at', 'updated_at']
 	search_fields = ['first_name', 'last_name', 'email']
 	actions = ['make_active', 'make_inactive']
-	readonly_fields = ['created_at', 'updated_at']
+	readonly_fields = ['created_at', 'updated_at', 'unsubscribe_token']
+	inlines = [SubscriberSiteProfileInline, ListSubscriptionInline]
 
 	def get_urls(self):
 		urls = super().get_urls()
@@ -88,32 +109,35 @@ class SubscriberAdmin(admin.ModelAdmin):
 
 admin.site.register(Subscribers, SubscriberAdmin)
 
-class SubscriberInline(admin.TabularInline):
-	model = Subscribers.subscriptions.through  # Through model for M2M
-	extra = 1
+
+class ListSubscriberInline(admin.TabularInline):
+	"""Shows subscribers for a given list, with consent metadata."""
+	model = ListSubscription
+	extra = 0
 	can_delete = True
-	verbose_name = "Subscriber"
-	verbose_name_plural = "Subscribers"
-	fields = ['subscriber_link', 'subscriber_email']
-	readonly_fields = ['subscriber_link', 'subscriber_email']
+	verbose_name = 'Subscriber'
+	verbose_name_plural = 'Subscribers'
+	fields = ['subscriber_link', 'subscriber_email', 'is_active', 'consent_method', 'subscribed_at']
+	readonly_fields = ['subscriber_link', 'subscriber_email', 'consent_method', 'subscribed_at']
 
 	def subscriber_email(self, obj):
-		if obj.subscribers_id:
-			return obj.subscribers.email
-		return ""
-	subscriber_email.short_description = "Subscriber Email"
+		if obj.subscriber_id:
+			return obj.subscriber.email
+		return ''
+	subscriber_email.short_description = 'Email'
 
 	def subscriber_link(self, obj):
-		if obj.subscribers_id:
-			url = f"/admin/subscriptions/subscribers/{obj.subscribers_id}/change/"
-			return format_html('<a href="{}" target="_blank">{}</a>', url, obj.subscribers.email)
-		return ""
-	subscriber_link.short_description = "Edit Subscriber"
+		if obj.subscriber_id:
+			url = f"/admin/subscriptions/subscribers/{obj.subscriber_id}/change/"
+			return format_html('<a href="{}" target="_blank">{} {}</a>', url, obj.subscriber.first_name, obj.subscriber.last_name)
+		return ''
+	subscriber_link.short_description = 'Subscriber'
+
 
 class ListsAdmin(admin.ModelAdmin):
 	form = ListsAdminForm
 	list_display = ['list_name', 'organisation_name', 'team', 'list_description', 'admin_summary','weekly_digest','clinical_trials_notifications', 'has_latest_research']
-	inlines = [SubscriberInline]
+	inlines = [ListSubscriberInline]
 	filter_horizontal = ['subjects', 'latest_research_categories']
 	fieldsets = [
 		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team', 'allowed_domains']}),
@@ -154,3 +178,19 @@ class FailedNotificationAdmin(admin.ModelAdmin):
 	readonly_fields = ['subscriber','reason','list']
 admin.site.register(FailedNotification,FailedNotificationAdmin)
 admin.site.register(Lists, ListsAdmin)
+
+
+@admin.register(SubscriberSiteProfile)
+class SubscriberSiteProfileAdmin(admin.ModelAdmin):
+	list_display = ['subscriber', 'site', 'profile', 'created_at']
+	list_filter = ['site', 'profile']
+	search_fields = ['subscriber__email', 'subscriber__first_name', 'subscriber__last_name']
+	readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(ListSubscription)
+class ListSubscriptionAdmin(admin.ModelAdmin):
+	list_display = ['subscriber', 'list', 'is_active', 'consent_method', 'subscribed_at', 'unsubscribed_at']
+	list_filter = ['is_active', 'consent_method', 'subscribed_at']
+	search_fields = ['subscriber__email', 'list__list_name']
+	readonly_fields = ['subscribed_at', 'consent_ip', 'consent_source_site', 'consent_method', 'unsubscribed_at']
