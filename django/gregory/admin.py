@@ -9,6 +9,8 @@ from django.db import models  # Add this import for models.Count
 from django.utils import timezone
 from django import forms
 from django.utils.html import format_html, mark_safe
+from organizations.models import Organization
+from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 
 from .models import (
     Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, 
@@ -874,6 +876,40 @@ class TeamSubjectInline(admin.TabularInline):
 		return False
 
 
+class OrganizationTeamInline(admin.TabularInline):
+	"""Inline to display teams belonging to an organization."""
+	model = Team
+	extra = 0
+	fields = ('name', 'slug')
+	readonly_fields = ('name', 'slug')
+	show_change_link = True
+	verbose_name = 'Team'
+	verbose_name_plural = 'Teams'
+	can_delete = False
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+
+admin.site.unregister(Organization)
+
+
+@admin.register(Organization)
+class OrganizationAdmin(BaseOrganizationAdmin):
+	"""Custom Organization admin that shows associated teams."""
+	list_display = ['name', 'slug', 'teams_count']
+
+	def get_inline_instances(self, request, obj=None):
+		inlines = super().get_inline_instances(request, obj)
+		if obj is not None:
+			inlines.append(OrganizationTeamInline(self.model, self.admin_site))
+		return inlines
+
+	def teams_count(self, obj):
+		return obj.teams.count()
+	teams_count.short_description = 'Teams'
+
+
 class TeamSourceInline(admin.TabularInline):
 	model = Sources
 	extra = 0
@@ -978,7 +1014,7 @@ class TeamAdminForm(forms.ModelForm):
 class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	form = TeamAdminForm
 	inlines = [TeamSubjectInline, TeamSourceInline]
-	list_display = ['id', 'formatted_team_name', 'organization', 'slug', 'subjects_count', 'sources_count']
+	list_display = ['id', 'formatted_team_name', 'organization_link', 'slug', 'subjects_count', 'sources_count']
 	list_filter = ['organization']
 	search_fields = ['name', 'organization__name', 'slug']
 	
@@ -987,6 +1023,15 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 			'fields': ('team_name', 'organization', 'slug')
 		}),
 	)
+	readonly_fields = ('organization_link',)
+
+	def organization_link(self, obj):
+		if obj.organization_id:
+			url = reverse('admin:organizations_organization_change', args=[obj.organization_id])
+			return format_html('<a href="{}">{}</a>', url, obj.organization.name)
+		return '-'
+	organization_link.short_description = 'Organisation'
+	organization_link.admin_order_field = 'organization__name'
 	
 	def formatted_team_name(self, obj):
 		"""Display team name with formatting"""
