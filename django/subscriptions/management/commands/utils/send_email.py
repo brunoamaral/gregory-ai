@@ -1,7 +1,7 @@
 import requests
 from django.conf import settings
 
-def send_email(to, subject, html, text, site, sender_name="Gregory AI", api_token=None, api_url=None):
+def send_email(to, subject, html, text, site, sender_name="Gregory AI", api_token=None, api_url=None, sender_prefix=None):
     """
     Sends an email using the Postmark API.
 
@@ -12,9 +12,12 @@ def send_email(to, subject, html, text, site, sender_name="Gregory AI", api_toke
     :param site: Site object for generating the sender email.
     :param sender_name: Name of the sender (default is "GregoryAI").
     :param api_token: Custom Postmark API token (if provided).
+    :param api_url: Custom Postmark API URL (if provided).
+    :param sender_prefix: Local part of the sender address (default: 'gregory').
     :return: Response object from the Postmark API.
     """
-    sender = f"{sender_name} <gregory@{site.domain}>"
+    prefix = sender_prefix or 'gregory'
+    sender = f"{sender_name} <{prefix}@{site.domain}>"
     email_postmark_api_url = api_url or settings.EMAIL_POSTMARK_API_URL
 
     # Use the provided API token or fall back to the default from settings

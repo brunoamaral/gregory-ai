@@ -1,11 +1,9 @@
 from django.conf import settings
-from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
 from gregory.models import Articles, Trials, MLPredictions, TeamCredentials
-from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials
-from sitesettings.models import CustomSetting
+from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list, get_articles_for_list
 from subscriptions.models import Lists, Subscribers, SentArticleNotification, SentTrialNotification, FailedNotification
@@ -19,9 +17,6 @@ class Command(BaseCommand):
 	help = 'Sends an admin summary every 2 days.'
 
 	def handle(self, *args, **options):
-		site = Site.objects.get_current()
-		customsettings = CustomSetting.objects.get(site=site)
-
 		# Step 1: Find all lists that are admin summaries
 		admin_summary_lists = Lists.objects.filter(admin_summary=True).distinct()
 
@@ -44,6 +39,13 @@ class Command(BaseCommand):
 			postmark_api_token, api_url = get_postmark_credentials(team)
 			if not postmark_api_token or not api_url:
 				self.stdout.write(self.style.ERROR(f"No Postmark credentials found for team '{team.name}', its organization, or Django settings. Skipping list '{admin_list.list_name}'."))
+				continue
+
+			# Resolve site and custom settings for this team
+			try:
+				site, customsettings = get_site_and_settings(team)
+			except Exception as e:
+				self.stdout.write(self.style.ERROR(f"Could not resolve site/settings for team '{team.name}': {e}. Skipping list '{admin_list.list_name}'."))
 				continue
 
 			# Step 2: Fetch articles and trials for this list
@@ -121,8 +123,9 @@ class Command(BaseCommand):
 					text=text_content,
 					site=site,
 					sender_name=customsettings.title,
-					api_token=postmark_api_token,  # Use the team's Postmark API token
-					api_url=api_url
+					api_token=postmark_api_token,
+					api_url=api_url,
+					sender_prefix=customsettings.sender_email_prefix,
 				)
 
 				if result and result.status_code == 200:
