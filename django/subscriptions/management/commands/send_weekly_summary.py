@@ -3,7 +3,6 @@ from django.utils.timezone import now
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
-from django.contrib.sites.models import Site
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import (
 	get_articles_for_list,
@@ -11,7 +10,7 @@ from subscriptions.management.commands.utils.subscription import (
 	get_latest_research_by_category,
 )
 from gregory.models import Articles, Authors, Trials, TeamCredentials, MLPredictions
-from sitesettings.models import CustomSetting
+from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
 from subscriptions.models import (
 	Lists,
 	Subscribers,
@@ -84,20 +83,6 @@ class Command(BaseCommand):
 		
 		if all_articles:
 			self.stdout.write(self.style.WARNING("ALL ARTICLES MODE: Including all unsent articles regardless of ML predictions or manual review (but excluding articles not relevant for all their subjects in the list)"))
-		
-		site = Site.objects.get_current()
-		customsettings = CustomSetting.objects.get(site=site)
-		
-		# Ensure site domain is not empty - fallback to a default if needed
-		if not site.domain or site.domain.strip() == '':
-			# Log the issue and use fallback domain
-			self.stdout.write(self.style.WARNING(f"Site domain is empty! Using fallback domain 'gregory-ms.com'"))
-			from types import SimpleNamespace
-			site_with_domain = SimpleNamespace()
-			site_with_domain.id = site.id
-			site_with_domain.domain = 'gregory-ms.com'
-			site_with_domain.name = site.name
-			site = site_with_domain
 
 		# Step 1: Find all lists that are weekly digests
 		weekly_digest_lists = Lists.objects.filter(weekly_digest=True, subjects__isnull=False).distinct()
@@ -125,13 +110,17 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.ERROR(f"No team associated with list '{digest_list.list_name}'. Skipping."))
 				continue
 
-			# Step 2: Fetch Team Credentials
+			# Step 2: Resolve Postmark credentials (Team → Organization → Django settings)
+			postmark_api_token, api_url = get_postmark_credentials(team)
+			if not postmark_api_token or not api_url:
+				self.stdout.write(self.style.ERROR(f"No Postmark credentials found for team '{team.name}', its organization, or Django settings. Skipping list '{digest_list.list_name}'."))
+				continue
+
+			# Resolve site and custom settings for this team
 			try:
-				credentials = team.credentials
-				postmark_api_token = credentials.postmark_api_token
-				api_url = credentials.postmark_api_url
-			except TeamCredentials.DoesNotExist:
-				self.stdout.write(self.style.ERROR(f"Credentials not found for team associated with list '{digest_list.list_name}'. Skipping."))
+				site, customsettings = get_site_and_settings(team)
+			except Exception as e:
+				self.stdout.write(self.style.ERROR(f"Could not resolve site/settings for team '{team.name}': {e}. Skipping list '{digest_list.list_name}'."))
 				continue
 
 			# Step 3: Use utility functions to get articles and trials
@@ -520,15 +509,9 @@ class Command(BaseCommand):
 					text=text_content,
 					site=site,
 					sender_name=customsettings.title,
-					api_token=postmark_api_token,  # Use the team's Postmark API token
-					api_url=api_url
-				)
-
-				if result.status_code == 200:
-					response_data = result.json()
-					error_code = response_data.get("ErrorCode", 0)
-					message = response_data.get("Message", "Unknown error")
-
+						api_token=postmark_api_token,
+						api_url=api_url,
+						sender_prefix=customsettings.sender_email_prefix,
 					if error_code == 0:  # Successful delivery
 						self.stdout.write(self.style.SUCCESS(f'Weekly digest email sent to {subscriber.email} for list "{digest_list.list_name}".'))
 						# Record sent notifications for articles that were actually sent in the email

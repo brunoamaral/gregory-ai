@@ -3,12 +3,11 @@ from django.utils.timezone import now
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
-from django.contrib.sites.models import Site
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list
-from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers, SentTrialNotification, FailedNotification
 from gregory.models import TeamCredentials
+from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 
@@ -16,9 +15,6 @@ class Command(BaseCommand):
 	help = 'Sends real-time notifications for new clinical trials to subscribers, filtered by subjects, without relying on a sent flag on Trials.'
 
 	def handle(self, *args, **options):
-		customsettings = CustomSetting.objects.get(site=Site.objects.get_current().id)
-		site = Site.objects.get_current()
-
 		# Initialize counters for summary
 		emails_sent = 0
 		emails_skipped = 0
@@ -42,13 +38,17 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.ERROR(f"No team associated with list '{lst.list_name}'. Skipping."))
 				continue
 
-			# Step 2: Fetch Team Credentials
+			# Step 2: Resolve Postmark credentials (Team → Organization → Django settings)
+			postmark_api_token, api_url = get_postmark_credentials(team)
+			if not postmark_api_token or not api_url:
+				self.stdout.write(self.style.ERROR(f"No Postmark credentials found for team '{team.name}', its organization, or Django settings. Skipping list '{lst.list_name}'."))
+				continue
+
+			# Resolve site and custom settings for this team
 			try:
-				credentials = team.credentials
-				postmark_api_token = credentials.postmark_api_token
-				api_url = credentials.postmark_api_url
-			except TeamCredentials.DoesNotExist:
-				self.stdout.write(self.style.ERROR(f"Credentials not found for team '{team.name}' associated with list '{lst.list_name}'. Skipping."))
+				site, customsettings = get_site_and_settings(team)
+			except Exception as e:
+				self.stdout.write(self.style.ERROR(f"Could not resolve site/settings for team '{team.name}': {e}. Skipping list '{lst.list_name}'."))
 				continue
 
 			# Step 3: Use the shared utility function to fetch trials
@@ -116,8 +116,9 @@ class Command(BaseCommand):
 					text=text_content,
 					site=site,
 					sender_name=customsettings.title,
-					api_token=postmark_api_token,  # Use the team's Postmark API token
-					api_url=api_url
+					api_token=postmark_api_token,
+					api_url=api_url,
+					sender_prefix=customsettings.sender_email_prefix,
 				)
 
 				# Step 7: Parse the Postmark response

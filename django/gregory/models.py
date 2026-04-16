@@ -501,6 +501,13 @@ class Team(models.Model):
 	)
 	name = models.CharField(max_length=200, help_text="Team name within the organization")
 	slug = models.SlugField(unique=True, editable=True)
+	site = models.ForeignKey(
+		'sites.Site',
+		on_delete=models.PROTECT,
+		null=True,
+		blank=True,
+		help_text="The website (Site) this team sends emails from. Overrides the global SITE_ID setting."
+	)
 
 	class Meta:
 		constraints = [
@@ -521,6 +528,63 @@ class Team(models.Model):
 		# Assuming TeamMember links back to Organization via an 'organization' field
 		# and each TeamMember instance has a related 'user' object
 		return [member.user for member in TeamMember.objects.filter(organization=self.organization)]
+
+class OrganizationCredentials(models.Model):
+	organization = models.OneToOneField(
+		Organization,
+		on_delete=models.CASCADE,
+		related_name="credentials",
+		help_text="The organization associated with these credentials."
+	)
+	postmark_api_token = EncryptedTextField(
+		blank=True,
+		null=True,
+		help_text="Postmark API Token for this organization."
+	)
+	postmark_api_url = models.URLField(max_length=200, blank=True, null=True, default='https://api.postmarkapp.com/email', help_text="Postmark API URL for this organization.")
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	def __str__(self):
+		return f"Credentials for Organization: {self.organization.name}"
+
+	class Meta:
+		verbose_name = "Organization Credential"
+		verbose_name_plural = "Organization Credentials"
+
+class OrganizationSite(models.Model):
+	organization = models.ForeignKey(
+		Organization,
+		on_delete=models.CASCADE,
+		related_name="organization_sites",
+		help_text="The organization this site belongs to."
+	)
+	site = models.ForeignKey(
+		'sites.Site',
+		on_delete=models.CASCADE,
+		related_name="organization_sites",
+		help_text="The Django site associated with this organization."
+	)
+	is_default = models.BooleanField(
+		default=False,
+		help_text="Mark this as the default site for the organization. Used when a team has no site configured."
+	)
+
+	class Meta:
+		verbose_name = "Organization Site"
+		verbose_name_plural = "Organization Sites"
+		unique_together = [('organization', 'site')]
+		constraints = [
+			models.UniqueConstraint(
+				fields=['organization'],
+				condition=models.Q(is_default=True),
+				name='unique_default_site_per_organization'
+			)
+		]
+
+	def __str__(self):
+		default_label = " (default)" if self.is_default else ""
+		return f"{self.site.domain}{default_label} — {self.organization.name}"
 
 class TeamCredentials(models.Model):
 	team = models.OneToOneField(
@@ -545,7 +609,7 @@ class TeamCredentials(models.Model):
 		null=True,
 		help_text="Postmark API Token for this team."
 	)
-	postmark_api_url= models.URLField(max_length=200, blank=True, null=True, help_text="Postmark API URL for this team.")
+	postmark_api_url = models.URLField(max_length=200, blank=True, null=True, default='https://api.postmarkapp.com/email', help_text="Postmark API URL for this team.")
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
 

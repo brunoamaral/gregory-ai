@@ -15,7 +15,7 @@ from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 from .models import (
     Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, 
     ArticleSubjectRelevance, TeamCategory, TeamCredentials, PredictionRunLog, Team,
-    ArticleTrialReference
+    ArticleTrialReference, OrganizationCredentials, OrganizationSite
 )
 from .widgets import MLPredictionsWidget
 from django import forms
@@ -876,6 +876,25 @@ class TeamSubjectInline(admin.TabularInline):
 		return False
 
 
+class OrganizationSiteInline(admin.TabularInline):
+	"""Inline to manage sites associated with an organization."""
+	model = OrganizationSite
+	extra = 1
+	fields = ('site', 'is_default')
+	verbose_name = 'Site'
+	verbose_name_plural = 'Sites'
+
+
+class OrganizationCredentialsInline(admin.StackedInline):
+	"""Inline to manage Postmark credentials for an organization."""
+	model = OrganizationCredentials
+	extra = 0
+	max_num = 1
+	fields = ('postmark_api_token', 'postmark_api_url')
+	verbose_name = 'Credentials'
+	verbose_name_plural = 'Credentials'
+
+
 class OrganizationTeamInline(admin.TabularInline):
 	"""Inline to display teams belonging to an organization."""
 	model = Team
@@ -903,6 +922,8 @@ class OrganizationAdmin(BaseOrganizationAdmin):
 		inlines = super().get_inline_instances(request, obj)
 		if obj is not None:
 			inlines.append(OrganizationTeamInline(self.model, self.admin_site))
+			inlines.append(OrganizationSiteInline(self.model, self.admin_site))
+			inlines.append(OrganizationCredentialsInline(self.model, self.admin_site))
 		return inlines
 
 	def teams_count(self, obj):
@@ -922,6 +943,16 @@ class TeamSourceInline(admin.TabularInline):
 
 	def has_add_permission(self, request, obj=None):
 		return False
+
+
+class TeamCredentialsInline(admin.StackedInline):
+	"""Inline to manage Postmark/ORCID credentials for a team."""
+	model = TeamCredentials
+	extra = 0
+	max_num = 1
+	fields = ('postmark_api_token', 'postmark_api_url', 'orcid_client_id', 'orcid_client_secret')
+	verbose_name = 'Credentials'
+	verbose_name_plural = 'Credentials'
 
 
 class TeamAdminForm(forms.ModelForm):
@@ -1013,14 +1044,14 @@ class TeamAdminForm(forms.ModelForm):
 @admin.register(Team)
 class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	form = TeamAdminForm
-	inlines = [TeamSubjectInline, TeamSourceInline]
-	list_display = ['id', 'formatted_team_name', 'organization_link', 'slug', 'subjects_count', 'sources_count']
+	inlines = [TeamSubjectInline, TeamSourceInline, TeamCredentialsInline]
+	list_display = ['id', 'formatted_team_name', 'organization_link', 'slug', 'site', 'subjects_count', 'sources_count']
 	list_filter = ['organization']
 	search_fields = ['name', 'organization__name', 'slug']
 	
 	fieldsets = (
 		(None, {
-			'fields': ('team_name', 'organization', 'slug')
+			'fields': ('team_name', 'organization', 'slug', 'site')
 		}),
 	)
 	readonly_fields = ('organization_link',)
@@ -1049,14 +1080,6 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	
 	def get_queryset(self, request):
 		return super().get_queryset(request).select_related('organization').prefetch_related('subjects', 'sources')
-
-@admin.register(TeamCredentials)
-class TeamCredentialsAdmin(OrganizationFilterMixin, admin.ModelAdmin):
-	list_display = ('team', 'created_at', 'updated_at')
-	# readonly_fields = ('orcid_client_id', 'orcid_client_secret', 'postmark_api_token')
-
-	def get_readonly_fields(self, request, obj=None):
-		return self.readonly_fields
 
 @admin.register(PredictionRunLog)
 class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
