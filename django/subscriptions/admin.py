@@ -165,6 +165,20 @@ class ListsAdmin(admin.ModelAdmin):
 	has_latest_research.boolean = True
 	has_latest_research.short_description = 'Latest Research'
 
+	def subscriber_count(self, obj):
+		return obj.list_subscriptions.filter(is_active=True).count()
+	subscriber_count.short_description = 'Subscribers'
+	subscriber_count.admin_order_field = 'active_subscriber_count'
+
+	def get_queryset(self, request):
+		from django.db.models import Count, Q
+		qs = super().get_queryset(request)
+		return qs.annotate(active_subscriber_count=Count(
+			'list_subscriptions',
+			filter=Q(list_subscriptions__is_active=True),
+			distinct=True,
+		))
+
 	def organisation_name(self, obj):
 		if obj.team and obj.team.organization:
 			return obj.team.organization.name
