@@ -516,18 +516,19 @@ class Team(models.Model):
 				name='unique_organization_team_name')
 		]  # Ensure unique team names within each organization
 
+	members = models.ManyToManyField(
+		'auth.User',
+		blank=True,
+		related_name='teams_membership',
+		help_text="Users who are members of this team."
+	)
+
 	def __str__(self):
 		if self.organization:
 			# Only show organization name if it's different from team name
 			if self.name.lower() != self.organization.name.lower():
 				return f"{self.name} ({self.organization.name})"
 		return self.name
-	
-	@property
-	def members(self):
-		# Assuming TeamMember links back to Organization via an 'organization' field
-		# and each TeamMember instance has a related 'user' object
-		return [member.user for member in TeamMember.objects.filter(organization=self.organization)]
 
 class OrganizationCredentials(models.Model):
 	organization = models.OneToOneField(

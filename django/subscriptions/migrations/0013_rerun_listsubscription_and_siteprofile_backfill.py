@@ -6,11 +6,13 @@ table was named 'subscribers_subscriptions' instead of
 
 Also fixes a silent failure in 0009's create_site_profiles: that function used
 historical models, but gregory_team.site was not yet in the model state at
-migration 0009 (it was added in gregory/0034_team_site). As a result
-team.site always resolved to None and no profiles were created.
+migration 0009. As a result team.site always resolved to None and no profiles
+were created.
 
-This migration declares a dependency on gregory/0034_team_site and uses raw
-SQL so it is not subject to historical model limitations.
+This migration declares a dependency on gregory/0035_organizationsite and uses
+raw SQL so it is not subject to historical model limitations. When a team has
+no site_id set, it falls back to the organisation's default site via
+OrganizationSite (is_default=True).
 
 Both operations are idempotent (ON CONFLICT DO NOTHING), so running on a
 database that was already correctly migrated is safe.
@@ -51,14 +53,16 @@ def recreate_site_profiles(apps, schema_editor):
 	db = schema_editor.connection
 
 	# Use raw SQL so we get the live schema (team.site_id) rather than the
-	# historical model state at migration 0009 which predates gregory/0034_team_site.
+	# historical model state at migration 0009 which predates gregory/0035_organizationsite.
+	# When a team has no site_id, fall back to the organisation's default site
+	# (OrganizationSite where is_default=true).
 	with db.cursor() as cursor:
 		cursor.execute("""
 			INSERT INTO subscriptions_subscribersiteprofile
 				(subscriber_id, site_id, profile, created_at, updated_at)
-			SELECT DISTINCT ON (ls.subscriber_id, t.site_id)
+			SELECT DISTINCT ON (ls.subscriber_id, COALESCE(t.site_id, os.site_id))
 				ls.subscriber_id,
-				t.site_id,
+				COALESCE(t.site_id, os.site_id),
 				COALESCE(NULLIF(sub.profile, ''), 'patient'),
 				NOW(),
 				NOW()
@@ -66,7 +70,9 @@ def recreate_site_profiles(apps, schema_editor):
 			JOIN subscriptions_lists l ON l.list_id = ls.list_id
 			JOIN gregory_team t ON t.id = l.team_id
 			JOIN subscribers sub ON sub.subscriber_id = ls.subscriber_id
-			WHERE t.site_id IS NOT NULL
+			LEFT JOIN gregory_organizationsite os
+				ON os.organization_id = t.organization_id AND os.is_default = true
+			WHERE COALESCE(t.site_id, os.site_id) IS NOT NULL
 			ON CONFLICT (subscriber_id, site_id) DO NOTHING
 		""")
 
@@ -75,7 +81,7 @@ class Migration(migrations.Migration):
 
 	dependencies = [
 		('subscriptions', '0012_fix_lists_team_fk'),
-		('gregory', '0034_team_site'),
+		('gregory', '0035_organizationsite'),
 	]
 
 	operations = [
