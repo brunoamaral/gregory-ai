@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.urls import path, reverse
@@ -9,7 +11,7 @@ from django.db import models  # Add this import for models.Count
 from django.utils import timezone
 from django import forms
 from django.utils.html import format_html, mark_safe
-from organizations.models import Organization
+from organizations.models import Organization, OrganizationUser
 from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 
 from .models import (
@@ -1061,10 +1063,24 @@ class TeamAdminForm(forms.ModelForm):
 		
 		return super().save(commit)
 
+class TeamMembersInline(admin.TabularInline):
+	model = Team.members.through
+	extra = 1
+	verbose_name = 'Member'
+	verbose_name_plural = 'Members'
+	autocomplete_fields = ['user']
+
+
+def _ensure_user_in_organization(user, organization):
+	"""Add user to organization if not already a member."""
+	if not OrganizationUser.objects.filter(user=user, organization=organization).exists():
+		OrganizationUser.objects.create(user=user, organization=organization)
+
+
 @admin.register(Team)
 class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	form = TeamAdminForm
-	inlines = [TeamSubjectInline, TeamSourceInline, TeamCredentialsInline]
+	inlines = [TeamMembersInline, TeamSubjectInline, TeamSourceInline, TeamCredentialsInline]
 	list_display = ['id', 'formatted_team_name', 'organization_link', 'slug', 'site', 'subjects_count', 'sources_count']
 	list_filter = ['organization']
 	search_fields = ['name', 'organization__name', 'slug']
@@ -1099,7 +1115,15 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	sources_count.short_description = 'Sources'
 	
 	def get_queryset(self, request):
-		return super().get_queryset(request).select_related('organization').prefetch_related('subjects', 'sources')
+		return super().get_queryset(request).select_related('organization').prefetch_related('subjects', 'sources', 'members')
+
+	def save_related(self, request, form, formsets, change):
+		super().save_related(request, form, formsets, change)
+		# Auto-add new members to the team's organization
+		team = form.instance
+		if team.organization_id:
+			for user in team.members.all():
+				_ensure_user_in_organization(user, team.organization)
 
 @admin.register(PredictionRunLog)
 class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
@@ -1273,6 +1297,32 @@ admin.site.register(Authors, AuthorsAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)
+
+
+# --- Custom UserAdmin with Team membership inline ---
+
+class UserTeamInline(admin.TabularInline):
+	model = Team.members.through
+	extra = 1
+	verbose_name = 'Team membership'
+	verbose_name_plural = 'Team memberships'
+	autocomplete_fields = ['team']
+
+
+class CustomUserAdmin(BaseUserAdmin):
+	inlines = list(BaseUserAdmin.inlines) + [UserTeamInline]
+
+	def save_related(self, request, form, formsets, change):
+		super().save_related(request, form, formsets, change)
+		# Auto-add user to each team's organization
+		user = form.instance
+		for team in Team.objects.filter(members=user):
+			if team.organization_id:
+				_ensure_user_in_organization(user, team.organization)
+
+
+admin.site.unregister(User)
+admin.site.register(User, CustomUserAdmin)
 
 # Register ArticleTrialReference model with default admin
 # @admin.register(ArticleTrialReference)
