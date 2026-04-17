@@ -72,19 +72,41 @@ def create_site_profiles(apps, schema_editor):
 	SubscriberSiteProfile = apps.get_model('subscriptions', 'SubscriberSiteProfile')
 	ListSubscription = apps.get_model('subscriptions', 'ListSubscription')
 
+	# Try to build a map of organization_id → default site_id from OrganizationSite.
+	# This table may not exist yet when 0009 runs on a fresh database, so handle
+	# the missing-table case gracefully.
+	org_default_site = {}
+	db = schema_editor.connection
+	with db.cursor() as cursor:
+		cursor.execute(
+			"SELECT COUNT(*) FROM information_schema.tables "
+			"WHERE table_schema = 'public' "
+			"AND table_name = 'gregory_organizationsite'"
+		)
+		if cursor.fetchone()[0]:
+			cursor.execute(
+				"SELECT organization_id, site_id FROM gregory_organizationsite "
+				"WHERE is_default = true"
+			)
+			for org_id, site_id in cursor.fetchall():
+				org_default_site[org_id] = site_id
+
 	for sub in Subscribers.objects.all():
 		# Collect all unique sites this subscriber is associated with via their lists
 		site_profile_map = {}  # site_id → profile
-		for ls in ListSubscription.objects.filter(subscriber=sub).select_related('list__team__site'):
+		for ls in ListSubscription.objects.filter(subscriber=sub).select_related('list__team'):
 			team = ls.list.team
 			if team is None:
 				continue
-			site = getattr(team, 'site', None)
-			if site is None:
+			# Use team.site_id if set, otherwise fall back to organisation's default site
+			site_id = getattr(team, 'site_id', None)
+			if not site_id:
+				site_id = org_default_site.get(getattr(team, 'organization_id', None))
+			if not site_id:
 				continue
 			# Use the subscriber's global profile as a starting value
-			if site.id not in site_profile_map:
-				site_profile_map[site.id] = sub.profile
+			if site_id not in site_profile_map:
+				site_profile_map[site_id] = sub.profile
 
 		for site_id, profile in site_profile_map.items():
 			SubscriberSiteProfile.objects.get_or_create(
