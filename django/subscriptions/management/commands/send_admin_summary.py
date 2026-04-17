@@ -63,10 +63,11 @@ class Command(BaseCommand):
 			
 			list_trials = get_trials_for_list(admin_list)
 
-			# Step 3: Find subscribers of the list
+			# Step 3: Find subscribers of the list (respect per-list opt-out)
 			subscribers = Subscribers.objects.filter(
 				active=True,
-				subscriptions=admin_list
+				list_subscriptions__list=admin_list,
+				list_subscriptions__is_active=True,
 			).distinct()
 
 			if not subscribers.exists():
@@ -110,6 +111,10 @@ class Command(BaseCommand):
 					site=site,
 					custom_settings=customsettings
 				)
+				# Inject unsubscribe context for the footer template
+				_scheme = 'https' if site.domain not in ('localhost', '127.0.0.1') else 'http'
+				summary_context['list_id'] = admin_list.list_id
+				summary_context['unsubscribe_base_url'] = f"{_scheme}://{site.domain}"
 
 				# Render email content using new template
 				html_content = get_template('emails/admin_summary.html').render(summary_context)

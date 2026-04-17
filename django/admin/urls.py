@@ -28,7 +28,7 @@ from api.views import (
     StatsView
 )
 from rss.views import	ArticlesByAuthorFeed, TrialsBySubjectFeed
-from subscriptions.views import subscribe_view
+from subscriptions.views import subscribe_view, unsubscribe_list, unsubscribe_site, unsubscribe_all
 from organizations.backends import invitation_backend
 
 # Email template views (direct import to avoid module issues)
@@ -45,8 +45,11 @@ router.register(r'authors', AuthorsViewSet, basename='authors')
 router.register(r'categories', CategoryViewSet, basename='categories')
 router.register(r'sources', SourceViewSet)
 router.register(r'trials', TrialViewSet)
-router.register(r'teams', TeamsViewSet)
 router.register(r'subjects', SubjectsViewSet)
+
+# Teams router (excluded from API root listing)
+teams_router = routers.SimpleRouter()
+teams_router.register(r'teams', TeamsViewSet)
 
 # Define URL patterns
 urlpatterns = [
@@ -74,6 +77,9 @@ urlpatterns = [
 
 	# Subscriptions route
 	path('subscriptions/new/', subscribe_view),
+	path('subscriptions/unsubscribe/<uuid:token>/list/<int:list_id>/', unsubscribe_list, name='unsubscribe_list'),
+	path('subscriptions/unsubscribe/<uuid:token>/site/<int:site_id>/', unsubscribe_site, name='unsubscribe_site'),
+	path('subscriptions/unsubscribe/<uuid:token>/all/', unsubscribe_all, name='unsubscribe_all'),
 
 	# Email template preview and testing routes
 	path('emails/', email_preview_dashboard, name='email_preview_dashboard'),
@@ -81,9 +87,8 @@ urlpatterns = [
 	path('emails/context/<str:template_name>/', email_template_json_context, name='email_template_json_context'),
 
 
-	# Team API
-	## List Teams
-	path('teams/', TeamsViewSet.as_view({'get':'list'})),
+	# Team API (excluded from API root, requires authentication)
+	path('', include(teams_router.urls)),
 	## List articles
 	path('teams/<int:team_id>/articles/', ArticlesByTeam.as_view({'get': 'list'}), name='articles-by-team'),
 	## List article per ID
@@ -110,4 +115,5 @@ urlpatterns = [
 
 	# Include router routes
 	path('', include(router.urls)),
+
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

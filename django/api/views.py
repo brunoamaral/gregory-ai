@@ -965,7 +965,7 @@ class TeamsViewSet(viewsets.ModelViewSet):
 	"""
 	queryset = Team.objects.all().order_by('id')
 	serializer_class = TeamSerializer
-	permission_classes  = [permissions.IsAuthenticatedOrReadOnly]
+	permission_classes  = [permissions.IsAuthenticated]
 
 ###
 # SUBJECTS

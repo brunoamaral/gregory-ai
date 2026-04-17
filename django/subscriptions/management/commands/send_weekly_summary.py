@@ -272,10 +272,11 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.WARNING(f'No articles or trials found for the weekly digest list "{digest_list.list_name}". Skipping.'))
 				continue
 
-			# Step 4: Find subscribers of the list
+			# Step 4: Find subscribers of the list (respect per-list opt-out)
 			subscribers = Subscribers.objects.filter(
 				active=True,
-				subscriptions=digest_list
+				list_subscriptions__list=digest_list,
+				list_subscriptions__is_active=True,
 			).distinct()
 
 			if not subscribers.exists():
@@ -393,8 +394,13 @@ class Command(BaseCommand):
 					list_obj=digest_list,
 					site=site,
 					custom_settings=customsettings,
-					utm_params=utm_params  # Add UTM parameters to context
+					utm_params=utm_params,  # Add UTM parameters to context
 				)
+
+				# Inject unsubscribe context for the footer template
+				_scheme = 'https' if site.domain not in ('localhost', '127.0.0.1') else 'http'
+				summary_context['list_id'] = digest_list.list_id
+				summary_context['unsubscribe_base_url'] = f"{_scheme}://{site.domain}"
 				
 				# Extract the actual articles that will be rendered in the email
 				articles_to_be_sent = list(summary_context.get('articles', [])) + list(summary_context.get('additional_articles', []))
@@ -509,9 +515,16 @@ class Command(BaseCommand):
 					text=text_content,
 					site=site,
 					sender_name=customsettings.title,
-						api_token=postmark_api_token,
-						api_url=api_url,
-						sender_prefix=customsettings.sender_email_prefix,
+					api_token=postmark_api_token,
+					api_url=api_url,
+					sender_prefix=customsettings.sender_email_prefix,
+				)
+
+				if result and result.status_code == 200:
+					response_data = result.json()
+					error_code = response_data.get("ErrorCode", 0)
+					message = response_data.get("Message", "Unknown error")
+
 					if error_code == 0:  # Successful delivery
 						self.stdout.write(self.style.SUCCESS(f'Weekly digest email sent to {subscriber.email} for list "{digest_list.list_name}".'))
 						# Record sent notifications for articles that were actually sent in the email

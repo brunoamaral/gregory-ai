@@ -70,6 +70,25 @@ class OrganizationRestrictedFieldListFilter(admin.RelatedFieldListFilter):
 		return filtered_choices
 
 
+class ArticleOrganizationFilter(admin.SimpleListFilter):
+	"""Filter articles by organisation (via teams__organization)."""
+	title = 'organisation'
+	parameter_name = 'organisation'
+
+	def lookups(self, request, model_admin):
+		if request.user.is_superuser:
+			orgs = Organization.objects.all().order_by('name')
+		else:
+			user_org_ids = get_user_organizations(request.user)
+			orgs = Organization.objects.filter(id__in=user_org_ids).order_by('name')
+		return [(org.pk, org.name) for org in orgs]
+
+	def queryset(self, request, queryset):
+		if self.value():
+			return queryset.filter(teams__organization__id=self.value()).distinct()
+		return queryset
+
+
 class OrganizationFilterMixin:
 	"""
 	Mixin to restrict admin queryset visibility based on user's organization.
@@ -355,6 +374,7 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	readonly_fields = ['entities', 'discovery_date']
 	search_fields = ['article_id', 'title', 'doi']
 	list_filter = [
+		ArticleOrganizationFilter,
 		('teams', OrganizationRestrictedFieldListFilter),
 		('subjects', OrganizationRestrictedFieldListFilter),
 		('sources', OrganizationRestrictedFieldListFilter),
