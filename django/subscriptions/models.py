@@ -2,7 +2,6 @@ import uuid
 from django.db import models
 from django.db.models import UniqueConstraint
 from django.db.models.functions import Lower
-from django.conf import settings as django_settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.sites.models import Site
 from django_ckeditor_5.fields import CKEditor5Field
@@ -253,7 +252,7 @@ class Announcement(models.Model):
 		max_length=200,
 		blank=True,
 		default='',
-		help_text="Optional title shown in the email header box. Leave blank to hide the title box.",
+		help_text="Replaces the Gregory AI title in the email header. Leave blank to use the default site title.",
 		verbose_name="Header Title",
 	)
 	header_tagline = models.CharField(

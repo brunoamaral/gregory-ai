@@ -322,7 +322,6 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			user_orgs = get_user_organizations(request.user)
 			if user_orgs is not None:
 				if not announcement.lists.filter(team__organization__id__in=user_orgs).exists():
-					from django.http import HttpResponseForbidden
 					return None
 		return announcement
 
