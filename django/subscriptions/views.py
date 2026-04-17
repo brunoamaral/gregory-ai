@@ -70,6 +70,25 @@ def subscribe_view(request):
 	# to the correct domain even when the form is invalid.
 	redirect_base = _get_redirect_base(request, subscription_lists)
 
+	# Validate that every requested list ID resolved to a real List.
+	if list_ids:
+		found_ids = {str(lst.pk) for lst in subscription_lists}
+		missing_ids = [lid for lid in list_ids if lid not in found_ids]
+		if missing_ids:
+			logger.error(
+				"subscribe_view: requested list IDs %s do not exist in the database. "
+				"Check that the form is posting correct list IDs.",
+				missing_ids,
+			)
+			return HttpResponseRedirect(f'{redirect_base}/error/')
+	else:
+		# No list selected at all — nothing to subscribe to.
+		logger.error(
+			"subscribe_view: no list IDs submitted. "
+			"The form must include at least one 'list' field value.",
+		)
+		return HttpResponseRedirect(f'{redirect_base}/error/')
+
 	subscriber_form = SubscribersForm(request.POST)
 
 	if subscriber_form.is_valid():
