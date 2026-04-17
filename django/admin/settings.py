@@ -82,6 +82,7 @@ INSTALLED_APPS = [
 	'sitesettings',
 	'indexers',
 	'api',
+	'django_ckeditor_5',
 ]
 
 MIDDLEWARE = [
@@ -146,6 +147,26 @@ USE_TZ = True
 # Static files
 STATIC_URL = 'static/'
 STATIC_ROOT = '/code/static'
+
+# Media files (for CKEditor uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = '/code/media'
+
+# CKEditor 5 configuration
+CKEDITOR_5_CONFIGS = {
+	'default': {
+		'toolbar': [
+			'heading', '|',
+			'bold', 'italic', 'underline', 'strikethrough', '|',
+			'bulletedList', 'numberedList', '|',
+			'link', 'blockQuote', '|',
+			'horizontalLine', '|',
+			'undo', 'redo',
+		],
+		'language': 'en',
+	},
+}
+CKEDITOR_5_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

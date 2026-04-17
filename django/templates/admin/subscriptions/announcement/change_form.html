@@ -1,0 +1,129 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<link rel="stylesheet" type="text/css" href="{% static 'admin/css/custom_admin.css' %}" />
+<style>
+.announcement-layout {
+	display: flex;
+	gap: 24px;
+	align-items: flex-start;
+}
+.announcement-form-col {
+	flex: 1;
+	min-width: 0;
+}
+.announcement-preview-col {
+	width: 520px;
+	flex-shrink: 0;
+	position: sticky;
+	top: 20px;
+}
+.preview-panel {
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	overflow: hidden;
+}
+.preview-panel-header {
+	padding: 12px 16px;
+	background: #f8fafc;
+	border-bottom: 1px solid #ddd;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+.preview-panel-header strong {
+	font-size: 14px;
+	color: #374151;
+}
+.preview-refresh-btn {
+	padding: 5px 12px;
+	background: #6b7280;
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 13px;
+}
+.preview-refresh-btn:hover {
+	background: #4b5563;
+}
+.preview-placeholder {
+	padding: 60px 20px;
+	text-align: center;
+	color: #9ca3af;
+	font-size: 14px;
+}
+#preview-frame {
+	width: 100%;
+	height: 700px;
+	border: none;
+	display: block;
+}
+@media (max-width: 1200px) {
+	.announcement-layout {
+		flex-direction: column;
+	}
+	.announcement-preview-col {
+		width: 100%;
+		position: static;
+	}
+	#preview-frame {
+		height: 500px;
+	}
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="announcement-layout">
+	<div class="announcement-form-col">
+		{{ block.super }}
+	</div>
+	<div class="announcement-preview-col">
+		<div class="preview-panel">
+			<div class="preview-panel-header">
+				<strong>Email Preview</strong>
+				{% if original.pk %}
+				<button type="button" class="preview-refresh-btn" onclick="refreshPreview()">Refresh</button>
+				{% endif %}
+			</div>
+			{% if original.pk %}
+			<iframe id="preview-frame" src="{% url 'admin:subscriptions_announcement_preview' original.pk %}"></iframe>
+			{% else %}
+			<div class="preview-placeholder">Save the announcement to see a preview here.</div>
+			{% endif %}
+		</div>
+	</div>
+</div>
+<script>
+function refreshPreview() {
+	var frame = document.getElementById('preview-frame');
+	if (frame) { frame.src = frame.src; }
+}
+</script>
+{% endblock %}
+
+{% block after_related_objects %}
+{{ block.super }}
+{% if show_send_buttons %}
+<div style="margin: 20px 0; padding: 20px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px;">
+	<h3 style="margin: 0 0 10px 0; color: #0c4a6e;">Announcement Actions</h3>
+	<p style="margin: 0 0 15px 0; color: #475569;">Save the announcement first, then use the buttons below to preview or send.</p>
+	<a href="{% url 'admin:subscriptions_announcement_preview' original.pk %}" target="_blank"
+	   style="display: inline-block; padding: 8px 20px; background: #6b7280; color: white; text-decoration: none; border-radius: 5px; margin-right: 10px;">
+		Preview Email
+	</a>
+	<a href="{% url 'admin:subscriptions_announcement_send_test' original.pk %}"
+	   style="display: inline-block; padding: 8px 20px; background: #3b82f6; color: white; text-decoration: none; border-radius: 5px; margin-right: 10px;">
+		Send Test to Myself
+	</a>
+	<a href="{% url 'admin:subscriptions_announcement_send' original.pk %}"
+	   style="display: inline-block; padding: 8px 20px; background: #10b981; color: white; text-decoration: none; border-radius: 5px;">
+		Send to Subscribers
+	</a>
+</div>
+{% endif %}
+{% endblock %}

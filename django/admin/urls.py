@@ -116,4 +116,7 @@ urlpatterns = [
 	# Include router routes
 	path('', include(router.urls)),
 
-] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+	# CKEditor 5 routes
+	path('ckeditor5/', include('django_ckeditor_5.urls')),
+
+] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

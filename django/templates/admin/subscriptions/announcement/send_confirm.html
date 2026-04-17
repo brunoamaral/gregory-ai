@@ -1,0 +1,65 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Confirm Send: {{ announcement.subject }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 700px; margin: 20px auto; padding: 20px;">
+	<h2>Confirm Announcement Send</h2>
+
+	<div style="margin: 20px 0; padding: 15px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px;">
+		<strong>⚠️ This action cannot be undone.</strong> The announcement will be sent to all active subscribers on the selected lists.
+	</div>
+
+	<div style="margin: 20px 0; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
+		<strong>Subject:</strong> {{ announcement.subject }}
+	</div>
+
+	<h3>Target Lists</h3>
+	<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+		<thead>
+			<tr style="background: #f1f5f9;">
+				<th style="padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0;">List</th>
+				<th style="padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0;">Team</th>
+				<th style="padding: 10px; text-align: right; border-bottom: 2px solid #e2e8f0;">Active Subscribers</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for info in list_info %}
+			<tr>
+				<td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">{{ info.list.list_name }}</td>
+				<td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">{{ info.list.team.name }}</td>
+				<td style="padding: 10px; text-align: right; border-bottom: 1px solid #e2e8f0;">{{ info.subscriber_count }}</td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+
+	<div style="margin: 20px 0; padding: 15px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px;">
+		<strong>Total unique subscribers: {{ total_subscribers }}</strong>
+		<br><small style="color: #6b7280;">Subscribers on multiple lists will only receive the email once.</small>
+	</div>
+
+	{% if total_subscribers == 0 %}
+	<div style="margin: 20px 0; padding: 15px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px;">
+		<strong>No active subscribers found.</strong> There are no active subscribers on the selected lists.
+	</div>
+	{% endif %}
+
+	<form method="post">
+		{% csrf_token %}
+		<div style="margin-top: 20px;">
+			<a href="{% url 'admin:subscriptions_announcement_change' announcement.pk %}"
+			   style="display: inline-block; padding: 8px 20px; background: #6b7280; color: white; text-decoration: none; border-radius: 5px; margin-right: 10px;">
+				Cancel
+			</a>
+			{% if total_subscribers > 0 %}
+			<button type="submit"
+					style="padding: 8px 20px; background: #10b981; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
+				Send to {{ total_subscribers }} Subscriber{{ total_subscribers|pluralize }}
+			</button>
+			{% endif %}
+		</div>
+	</form>
+</div>
+{% endblock %}

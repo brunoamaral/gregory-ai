@@ -2,8 +2,10 @@ import uuid
 from django.db import models
 from django.db.models import UniqueConstraint
 from django.db.models.functions import Lower
+from django.conf import settings as django_settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.sites.models import Site
+from django_ckeditor_5.fields import CKEditor5Field
 from gregory.models import Subject, Articles, Trials, Team, TeamCategory
 from simple_history.models import HistoricalRecords
 
@@ -233,3 +235,94 @@ class SubscriberSiteProfile(models.Model):
 
 	def __str__(self):
 		return f"{self.subscriber.email} @ {self.site.domain} ({self.profile})"
+
+
+class Announcement(models.Model):
+	STATUS_CHOICES = [
+		('draft', 'Draft'),
+		('sending', 'Sending'),
+		('sent', 'Sent'),
+		('failed', 'Failed'),
+	]
+
+	subject = models.CharField(
+		max_length=200,
+		help_text="Email subject line for this announcement.",
+	)
+	header_title = models.CharField(
+		max_length=200,
+		blank=True,
+		default='',
+		help_text="Optional title shown in the email header box. Leave blank to hide the title box.",
+		verbose_name="Header Title",
+	)
+	header_tagline = models.CharField(
+		max_length=200,
+		blank=True,
+		default='',
+		help_text="Optional subtitle/tagline shown below the site name in the email header. Leave blank for default.",
+		verbose_name="Header Tagline",
+	)
+	body = CKEditor5Field(
+		config_name='default',
+		help_text="The content of the announcement email.",
+	)
+	lists = models.ManyToManyField(
+		Lists,
+		related_name='announcements',
+		help_text="Select one or more lists to send this announcement to.",
+	)
+	created_by = models.ForeignKey(
+		'auth.User',
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name='announcements',
+	)
+	created_at = models.DateTimeField(auto_now_add=True)
+	status = models.CharField(
+		max_length=10,
+		choices=STATUS_CHOICES,
+		default='draft',
+	)
+	sent_at = models.DateTimeField(null=True, blank=True)
+	recipients_count = models.PositiveIntegerField(default=0)
+	failures_count = models.PositiveIntegerField(default=0)
+
+	class Meta:
+		ordering = ['-created_at']
+		verbose_name = 'Announcement'
+		verbose_name_plural = 'Announcements'
+
+	def __str__(self):
+		return f"{self.subject} ({self.get_status_display()})"
+
+
+class AnnouncementRecipient(models.Model):
+	announcement = models.ForeignKey(
+		Announcement,
+		on_delete=models.CASCADE,
+		related_name='recipients',
+	)
+	subscriber = models.ForeignKey(
+		Subscribers,
+		on_delete=models.CASCADE,
+		related_name='announcement_recipients',
+	)
+	list = models.ForeignKey(
+		Lists,
+		on_delete=models.CASCADE,
+		related_name='announcement_recipients',
+	)
+	sent_at = models.DateTimeField(auto_now_add=True)
+	success = models.BooleanField(default=True)
+	error_message = models.TextField(blank=True, default='')
+
+	class Meta:
+		unique_together = ('announcement', 'subscriber')
+		verbose_name = 'Announcement Recipient'
+		verbose_name_plural = 'Announcement Recipients'
+
+	def __str__(self):
+		status = 'OK' if self.success else 'FAILED'
+		return f"{self.subscriber.email} [{status}]"

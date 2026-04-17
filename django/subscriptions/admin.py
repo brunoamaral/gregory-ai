@@ -1,13 +1,16 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import path, reverse
-from django.shortcuts import render
-from django.http import JsonResponse
-from django.db.models import Count
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse, HttpResponse
+from django.db.models import Count, Q
 from django.utils import timezone
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
+from django.contrib import messages
 from datetime import timedelta
-from .models import Subscribers, Lists, FailedNotification, ListSubscription, SubscriberSiteProfile
-from .forms import ListsAdminForm
+from .models import Subscribers, Lists, FailedNotification, ListSubscription, SubscriberSiteProfile, Announcement, AnnouncementRecipient
+from .forms import ListsAdminForm, AnnouncementAdminForm
 
 
 class SubscriberSiteProfileInline(admin.TabularInline):
@@ -208,3 +211,325 @@ class ListSubscriptionAdmin(admin.ModelAdmin):
 	list_filter = ['is_active', 'consent_method', 'subscribed_at']
 	search_fields = ['subscriber__email', 'list__list_name']
 	readonly_fields = ['subscribed_at', 'consent_ip', 'consent_source_site', 'consent_method', 'unsubscribed_at']
+
+
+class AnnouncementRecipientInline(admin.TabularInline):
+	model = AnnouncementRecipient
+	extra = 0
+	readonly_fields = ['subscriber', 'list', 'sent_at', 'success', 'error_message']
+	can_delete = False
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+
+@admin.register(Announcement)
+class AnnouncementAdmin(admin.ModelAdmin):
+	form = AnnouncementAdminForm
+	list_display = ['subject', 'status_badge', 'created_by', 'created_at', 'sent_at', 'recipients_count', 'failures_count']
+	list_filter = ['status', 'created_at']
+	search_fields = ['subject']
+	readonly_fields = ['status', 'sent_at', 'recipients_count', 'failures_count', 'created_by', 'created_at']
+	inlines = [AnnouncementRecipientInline]
+
+	fieldsets = [
+		(None, {'fields': ['subject']}),
+		('Email Header', {
+			'fields': ['header_title', 'header_tagline'],
+			'description': 'Optionally override the title (defaults to "Gregory AI") and the tagline shown in the email header.',
+		}),
+		('Body', {'fields': ['body']}),
+		('Destination', {'fields': ['lists']}),
+
+		('Send Status', {
+			'fields': ['status', 'created_by', 'created_at', 'sent_at', 'recipients_count', 'failures_count'],
+			'classes': ['collapse'],
+		}),
+	]
+
+	def status_badge(self, obj):
+		colors = {
+			'draft': '#6b7280',
+			'sending': '#f59e0b',
+			'sent': '#10b981',
+			'failed': '#ef4444',
+		}
+		color = colors.get(obj.status, '#6b7280')
+		return format_html(
+			'<span style="background-color: {}; color: white; padding: 3px 10px; border-radius: 10px; font-size: 11px;">{}</span>',
+			color, obj.get_status_display()
+		)
+	status_badge.short_description = 'Status'
+	status_badge.admin_order_field = 'status'
+
+	def get_form(self, request, obj=None, **kwargs):
+		form_class = super().get_form(request, obj, **kwargs)
+
+		class FormWithRequest(form_class):
+			def __init__(self, *args, **form_kwargs):
+				form_kwargs['request'] = request
+				super().__init__(*args, **form_kwargs)
+
+		return FormWithRequest
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request)
+		if request.user.is_superuser:
+			return qs
+		from gregory.admin import get_user_organizations
+		user_orgs = get_user_organizations(request.user)
+		if user_orgs is not None:
+			return qs.filter(lists__team__organization__id__in=user_orgs).distinct()
+		return qs
+
+	def get_readonly_fields(self, request, obj=None):
+		readonly = list(super().get_readonly_fields(request, obj))
+		if obj and obj.status == 'sent':
+			readonly.extend(['subject', 'header_title', 'header_tagline', 'body', 'lists'])
+		return readonly
+
+	def save_model(self, request, obj, form, change):
+		if not change:
+			obj.created_by = request.user
+		super().save_model(request, obj, form, change)
+
+	def get_urls(self):
+		urls = super().get_urls()
+		custom_urls = [
+			path(
+				'<int:announcement_id>/preview/',
+				self.admin_site.admin_view(self.preview_view),
+				name='subscriptions_announcement_preview',
+			),
+			path(
+				'<int:announcement_id>/send-test/',
+				self.admin_site.admin_view(self.send_test_view),
+				name='subscriptions_announcement_send_test',
+			),
+			path(
+				'<int:announcement_id>/send/',
+				self.admin_site.admin_view(self.send_view),
+				name='subscriptions_announcement_send',
+			),
+		]
+		return custom_urls + urls
+
+	def _get_announcement_or_404(self, request, announcement_id):
+		"""Get announcement and verify user has access."""
+		announcement = get_object_or_404(Announcement, pk=announcement_id)
+		if not request.user.is_superuser:
+			from gregory.admin import get_user_organizations
+			user_orgs = get_user_organizations(request.user)
+			if user_orgs is not None:
+				if not announcement.lists.filter(team__organization__id__in=user_orgs).exists():
+					from django.http import HttpResponseForbidden
+					return None
+		return announcement
+
+	def _render_announcement_email(self, announcement, subscriber=None, site=None):
+		"""Render announcement as HTML email using the base template."""
+		context = {
+			'announcement_subject': announcement.subject,
+			'announcement_body': announcement.body,
+			'email_type': 'announcement',
+			'show_date': True,
+			'header_title': announcement.header_title,
+			'header_tagline': announcement.header_tagline,
+		}
+		if subscriber:
+			context['subscriber'] = subscriber
+			context['unsubscribe_base_url'] = f"https://{site.domain}/subscriptions/unsubscribe/{subscriber.unsubscribe_token}" if site else ''
+		if site:
+			context['site'] = site
+		html = render_to_string('emails/announcement.html', context)
+		return html
+
+	def _render_announcement_text(self, announcement, subscriber=None):
+		"""Render plain-text version of the announcement."""
+		lines = []
+		if subscriber and subscriber.first_name:
+			lines.append(f"Hello {subscriber.first_name},\n")
+		lines.append(strip_tags(announcement.body))
+		return '\n'.join(lines)
+
+	def preview_view(self, request, announcement_id):
+		announcement = self._get_announcement_or_404(request, announcement_id)
+		if announcement is None:
+			from django.http import HttpResponseForbidden
+			return HttpResponseForbidden("Access denied.")
+		html = self._render_announcement_email(announcement)
+		response = HttpResponse(html)
+		response['X-Frame-Options'] = 'SAMEORIGIN'
+		return response
+
+	def send_test_view(self, request, announcement_id):
+		announcement = self._get_announcement_or_404(request, announcement_id)
+		if announcement is None:
+			from django.http import HttpResponseForbidden
+			return HttpResponseForbidden("Access denied.")
+
+		if request.method == 'POST':
+			from subscriptions.management.commands.utils.send_email import send_email
+			from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
+
+			# Use the first list's team for credentials
+			first_list = announcement.lists.select_related('team').first()
+			if not first_list:
+				messages.error(request, "No lists selected. Please select at least one list before sending a test.")
+				return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
+
+			try:
+				api_token, api_url = get_postmark_credentials(first_list.team)
+				site, _ = get_site_and_settings(first_list.team)
+			except Exception:
+				api_token, api_url, site = None, None, None
+
+			html = self._render_announcement_email(announcement, site=site)
+			text = self._render_announcement_text(announcement)
+
+			try:
+				response = send_email(
+					to=request.user.email,
+					subject=f"[TEST] {announcement.subject}",
+					html=html,
+					text=text,
+					site=site,
+					api_token=api_token,
+					api_url=api_url,
+				)
+				if response.status_code == 200:
+					messages.success(request, f"Test email sent to {request.user.email}.")
+				else:
+					messages.error(request, f"Failed to send test email: {response.text}")
+			except Exception as e:
+				messages.error(request, f"Error sending test email: {e}")
+
+			return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
+
+		# GET — show confirmation form
+		context = {
+			**self.admin_site.each_context(request),
+			'announcement': announcement,
+			'user_email': request.user.email,
+			'title': f'Send Test: {announcement.subject}',
+			'opts': self.model._meta,
+		}
+		return render(request, 'admin/subscriptions/announcement/send_test.html', context)
+
+	def send_view(self, request, announcement_id):
+		announcement = self._get_announcement_or_404(request, announcement_id)
+		if announcement is None:
+			from django.http import HttpResponseForbidden
+			return HttpResponseForbidden("Access denied.")
+
+		if announcement.status == 'sent':
+			messages.warning(request, "This announcement has already been sent.")
+			return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
+
+		target_lists = announcement.lists.select_related('team__organization').prefetch_related(
+			'list_subscriptions__subscriber'
+		).all()
+
+		# Build subscriber info per list for display and sending
+		list_info = []
+		all_subscribers = {}  # email -> (subscriber, list) — deduplicate by email
+		for lst in target_lists:
+			active_subs = Subscribers.objects.filter(
+				list_subscriptions__list=lst,
+				list_subscriptions__is_active=True,
+				active=True,
+			).distinct()
+			list_info.append({
+				'list': lst,
+				'subscriber_count': active_subs.count(),
+			})
+			for sub in active_subs:
+				if sub.email not in all_subscribers:
+					all_subscribers[sub.email] = (sub, lst)
+
+		if request.method == 'POST':
+			from subscriptions.management.commands.utils.send_email import send_email
+			from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
+
+			announcement.status = 'sending'
+			announcement.save(update_fields=['status'])
+
+			success_count = 0
+			failure_count = 0
+
+			# Group subscribers by the list (for credentials resolution)
+			# Use the list from which we first encountered them
+			for email, (subscriber, lst) in all_subscribers.items():
+				try:
+					api_token, api_url = get_postmark_credentials(lst.team)
+					site, _ = get_site_and_settings(lst.team)
+				except Exception:
+					api_token, api_url, site = None, None, None
+
+				html = self._render_announcement_email(announcement, subscriber=subscriber, site=site)
+				text = self._render_announcement_text(announcement, subscriber=subscriber)
+
+				error_msg = ''
+				success = False
+				try:
+					response = send_email(
+						to=subscriber.email,
+						subject=announcement.subject,
+						html=html,
+						text=text,
+						site=site,
+						api_token=api_token,
+						api_url=api_url,
+					)
+					if response.status_code == 200:
+						success = True
+						success_count += 1
+					else:
+						error_msg = response.text[:500]
+						failure_count += 1
+				except Exception as e:
+					error_msg = str(e)[:500]
+					failure_count += 1
+
+				AnnouncementRecipient.objects.create(
+					announcement=announcement,
+					subscriber=subscriber,
+					list=lst,
+					success=success,
+					error_message=error_msg,
+				)
+
+			announcement.status = 'sent' if failure_count == 0 else 'failed'
+			announcement.sent_at = timezone.now()
+			announcement.recipients_count = success_count
+			announcement.failures_count = failure_count
+			announcement.save(update_fields=['status', 'sent_at', 'recipients_count', 'failures_count'])
+
+			if failure_count == 0:
+				messages.success(request, f"Announcement sent to {success_count} subscriber(s).")
+			else:
+				messages.warning(
+					request,
+					f"Announcement sent to {success_count} subscriber(s) with {failure_count} failure(s)."
+				)
+			return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
+
+		# GET — show confirmation page
+		context = {
+			**self.admin_site.each_context(request),
+			'announcement': announcement,
+			'list_info': list_info,
+			'total_subscribers': len(all_subscribers),
+			'title': f'Confirm Send: {announcement.subject}',
+			'opts': self.model._meta,
+		}
+		return render(request, 'admin/subscriptions/announcement/send_confirm.html', context)
+
+	def change_view(self, request, object_id, form_url='', extra_context=None):
+		extra_context = extra_context or {}
+		try:
+			announcement = Announcement.objects.get(pk=object_id)
+			extra_context['show_send_buttons'] = announcement.status == 'draft'
+		except Announcement.DoesNotExist:
+			pass
+		return super().change_view(request, object_id, form_url, extra_context=extra_context)
