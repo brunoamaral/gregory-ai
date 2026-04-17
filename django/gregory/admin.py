@@ -1321,7 +1321,10 @@ class CustomUserAdmin(BaseUserAdmin):
 				_ensure_user_in_organization(user, team.organization)
 
 
-admin.site.unregister(User)
+try:
+	admin.site.unregister(User)
+except admin.sites.NotRegistered:
+	pass
 admin.site.register(User, CustomUserAdmin)
 
 # Register ArticleTrialReference model with default admin
