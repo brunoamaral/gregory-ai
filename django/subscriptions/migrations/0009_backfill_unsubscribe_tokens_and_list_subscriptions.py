@@ -12,7 +12,6 @@ Data migration that:
 
 import uuid
 from django.db import migrations
-from django.utils.timezone import now as tz_now
 
 
 def backfill_tokens(apps, schema_editor):
@@ -35,24 +34,28 @@ def migrate_m2m_to_through(apps, schema_editor):
 
 	# First check if the old auto M2M table still exists (it won't on a fresh install).
 	# We use information_schema to avoid aborting the current PostgreSQL transaction.
+	# The table may be named 'subscriptions_subscribers_subscriptions' (app-prefixed)
+	# or 'subscribers_subscriptions' (legacy name from an older schema).
+	old_table = None
 	with db.cursor() as cursor:
 		cursor.execute(
-			"SELECT COUNT(*) FROM information_schema.tables "
+			"SELECT table_name FROM information_schema.tables "
 			"WHERE table_schema = 'public' "
-			"AND table_name = 'subscriptions_subscribers_subscriptions'"
+			"AND table_name IN ('subscriptions_subscribers_subscriptions', 'subscribers_subscriptions')"
 		)
-		exists = cursor.fetchone()[0]
+		row = cursor.fetchone()
+		if row:
+			old_table = row[0]
 
-	if not exists:
+	if not old_table:
 		return
 
 	with db.cursor() as cursor:
 		cursor.execute(
-			"SELECT subscribers_id, lists_id FROM subscriptions_subscribers_subscriptions"
+			f"SELECT subscribers_id, lists_id FROM {old_table}"
 		)
 		rows = cursor.fetchall()
 
-	ts = tz_now()
 	for subscriber_id, list_id in rows:
 		ListSubscription.objects.get_or_create(
 			subscriber_id=subscriber_id,
