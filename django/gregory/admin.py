@@ -16,7 +16,7 @@ from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 
 from .models import (
     Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, 
-    ArticleSubjectRelevance, TeamCategory, TeamCredentials, PredictionRunLog, Team,
+    ArticleSubjectRelevance, TeamCategory, PredictionRunLog, Team,
     ArticleTrialReference, OrganizationCredentials, OrganizationSite
 )
 from .widgets import MLPredictionsWidget
@@ -1044,16 +1044,6 @@ class TeamSourceInline(admin.TabularInline):
 		return False
 
 
-class TeamCredentialsInline(admin.StackedInline):
-	"""Inline to manage Postmark/ORCID credentials for a team."""
-	model = TeamCredentials
-	extra = 0
-	max_num = 1
-	fields = ('postmark_api_token', 'postmark_api_url', 'orcid_client_id', 'orcid_client_secret')
-	verbose_name = 'Credentials'
-	verbose_name_plural = 'Credentials'
-
-
 class TeamAdminForm(forms.ModelForm):
 	"""Custom form for Team admin that allows creating organization and team together"""
 	team_name = forms.CharField(
@@ -1183,7 +1173,7 @@ class ReassignTeamForm(forms.Form):
 @admin.register(Team)
 class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	form = TeamAdminForm
-	inlines = [TeamMembersInline, TeamSubjectInline, TeamSourceInline, TeamCredentialsInline]
+	inlines = [TeamMembersInline, TeamSubjectInline, TeamSourceInline]
 	list_display = ['id', 'formatted_team_name', 'organization_link', 'slug', 'subjects_count', 'sources_count', 'active_badge']
 	list_display_links = ['id', 'formatted_team_name']
 	list_filter = ['organization', 'is_active']

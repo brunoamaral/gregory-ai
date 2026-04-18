@@ -623,39 +623,6 @@ class OrganizationSite(models.Model):
 		default_label = " (default)" if self.is_default else ""
 		return f"{self.site.domain}{default_label} — {self.organization.name}"
 
-class TeamCredentials(models.Model):
-	team = models.OneToOneField(
-		'Team',
-		on_delete=models.CASCADE,
-		related_name="credentials",
-		help_text="The team associated with these credentials."
-	)
-	orcid_client_id = EncryptedTextField(
-		blank=True,
-		null=True,
-		help_text="ORCID Client ID for this team."
-	)
-	orcid_client_secret = EncryptedTextField(
-		blank=True,
-		null=True,
-		help_text="ORCID Client Secret for this team."
-	)
-	postmark_api_token = EncryptedTextField(
-		blank=True,
-		null=True,
-		help_text="Postmark API Token for this team."
-	)
-	postmark_api_url = models.URLField(max_length=200, blank=True, null=True, default='https://api.postmarkapp.com/email', help_text="Postmark API URL for this team.")
-	created_at = models.DateTimeField(auto_now_add=True)
-	updated_at = models.DateTimeField(auto_now=True)
-
-	def __str__(self):
-		return f"Credentials for Team: {self.team.name}"
-
-	class Meta:
-		verbose_name = "Team Credential"
-		verbose_name_plural = "Team Credentials"
-
 class TeamMember(OrganizationUser):
 	class Meta:
 		proxy = True

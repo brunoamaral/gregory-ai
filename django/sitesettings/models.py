@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.sites.models import Site
+from gregory.models import EncryptedTextField
 
 class CustomSetting(models.Model):
 	setting_id = models.AutoField(primary_key=True)
@@ -54,6 +55,17 @@ class CustomSetting(models.Model):
 		default='',
 		help_text="Mastodon profile URL for the email footer."
 	)
+	postmark_api_token = EncryptedTextField(
+		blank=True,
+		null=True,
+		help_text="Postmark API token for this site. Overrides the organisation-level token."
+	)
+	postmark_api_url = models.URLField(
+		max_length=200,
+		blank=True,
+		null=True,
+		default='https://api.postmarkapp.com/email',
+		help_text="Postmark API URL for this site. Overrides the organisation-level URL."
 	privacy_policy_url = models.URLField(
 		blank=True,
 		default='',

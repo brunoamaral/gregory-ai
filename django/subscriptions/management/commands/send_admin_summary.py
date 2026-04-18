@@ -2,7 +2,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
-from gregory.models import Articles, Trials, MLPredictions, TeamCredentials
+from gregory.models import Articles, Trials, MLPredictions
 from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list, get_articles_for_list
@@ -35,17 +35,17 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.ERROR(f"No team associated with list '{admin_list.list_name}'. Skipping."))
 				continue
 
-			# Resolve Postmark credentials (Team → Organization → Django settings)
-			postmark_api_token, api_url = get_postmark_credentials(team)
-			if not postmark_api_token or not api_url:
-				self.stdout.write(self.style.ERROR(f"No Postmark credentials found for team '{team.name}', its organization, or Django settings. Skipping list '{admin_list.list_name}'."))
-				continue
-
-			# Resolve site and custom settings for this list (List.site → Team.site → Org default → global)
+			# Resolve site and custom settings for this list (List.site → Org default → global)
 			try:
 				site, customsettings = get_site_and_settings(team, list_obj=admin_list)
 			except Exception as e:
 				self.stdout.write(self.style.ERROR(f"Could not resolve site/settings for team '{team.name}': {e}. Skipping list '{admin_list.list_name}'."))
+				continue
+
+			# Resolve Postmark credentials (Site-level CustomSetting → Organization → Django settings)
+			postmark_api_token, api_url = get_postmark_credentials(custom_settings=customsettings, organization=team.organization)
+			if not postmark_api_token or not api_url:
+				self.stdout.write(self.style.ERROR(f"No Postmark credentials found for site, organisation, or Django settings. Skipping list '{admin_list.list_name}'."))
 				continue
 
 			# Step 2: Fetch articles and trials for this list

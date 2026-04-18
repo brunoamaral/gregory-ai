@@ -1,35 +1,26 @@
 from django.conf import settings
 from django.contrib.sites.models import Site
 
-from gregory.models import TeamCredentials, OrganizationCredentials, OrganizationSite
+from gregory.models import OrganizationCredentials, OrganizationSite
 from sitesettings.models import CustomSetting
 import os
 
 
-def get_orcid_credentials(team=None):
+def get_orcid_credentials(organization=None):
 	"""
 	Resolve ORCID API credentials using the fallback chain:
-	Team → Organization → environment variables.
+	Organization → environment variables.
 
-	All-or-nothing: if the team has both client_id and client_secret set,
-	use them. Otherwise fall back to the organization, then environment variables.
+	All-or-nothing: if the organization has both client_id and client_secret set,
+	use them. Otherwise fall back to environment variables.
 
-	Pass team=None to skip team/org lookups and go straight to env vars.
+	Pass organization=None to skip org lookups and go straight to env vars.
 
 	Returns a tuple (client_id, client_secret).
 	"""
-	if team is not None:
-		# Try team-level credentials
+	if organization is not None:
 		try:
-			creds = team.credentials
-			if creds.orcid_client_id and creds.orcid_client_secret:
-				return (creds.orcid_client_id, creds.orcid_client_secret)
-		except TeamCredentials.DoesNotExist:
-			pass
-
-		# Try organization-level credentials
-		try:
-			org_creds = team.organization.credentials
+			org_creds = organization.credentials
 			if org_creds.orcid_client_id and org_creds.orcid_client_secret:
 				return (org_creds.orcid_client_id, org_creds.orcid_client_secret)
 		except OrganizationCredentials.DoesNotExist:
@@ -42,31 +33,28 @@ def get_orcid_credentials(team=None):
 	)
 
 
-def get_postmark_credentials(team):
+def get_postmark_credentials(custom_settings=None, organization=None):
 	"""
 	Resolve Postmark credentials using the fallback chain:
-	Team → Organization → Django settings.
+	CustomSetting (site-level) → OrganizationCredentials → Django settings.
 
-	All-or-nothing: if the team has credentials with both token and URL set,
-	use them. Otherwise fall back to the organization, then Django settings.
+	All-or-nothing per level: both token and URL must be set to use that level.
 
 	Returns a tuple (api_token, api_url).
 	"""
-	# Try team-level credentials
-	try:
-		creds = team.credentials
-		if creds.postmark_api_token and creds.postmark_api_url:
-			return (creds.postmark_api_token, creds.postmark_api_url)
-	except TeamCredentials.DoesNotExist:
-		pass
+	# Try site-level credentials
+	if custom_settings is not None:
+		if getattr(custom_settings, 'postmark_api_token', None) and getattr(custom_settings, 'postmark_api_url', None):
+			return (custom_settings.postmark_api_token, custom_settings.postmark_api_url)
 
 	# Try organization-level credentials
-	try:
-		org_creds = team.organization.credentials
-		if org_creds.postmark_api_token and org_creds.postmark_api_url:
-			return (org_creds.postmark_api_token, org_creds.postmark_api_url)
-	except OrganizationCredentials.DoesNotExist:
-		pass
+	if organization is not None:
+		try:
+			org_creds = organization.credentials
+			if org_creds.postmark_api_token and org_creds.postmark_api_url:
+				return (org_creds.postmark_api_token, org_creds.postmark_api_url)
+		except OrganizationCredentials.DoesNotExist:
+			pass
 
 	# Fall back to Django settings
 	return (
