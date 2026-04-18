@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.apps import apps
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.http import HttpResponse
@@ -1016,6 +1017,13 @@ admin.site.unregister(Organization)
 class OrganizationAdmin(BaseOrganizationAdmin):
 	"""Custom Organization admin that shows associated teams."""
 	list_display = ['name', 'slug', 'teams_count']
+	readonly_fields = ('lists_display',)
+
+	def get_fieldsets(self, request, obj=None):
+		fieldsets = list(super().get_fieldsets(request, obj))
+		if obj is not None:
+			fieldsets.append(('Lists', {'fields': ('lists_display',)}))
+		return fieldsets
 
 	def get_inline_instances(self, request, obj=None):
 		inlines = super().get_inline_instances(request, obj)
@@ -1028,6 +1036,27 @@ class OrganizationAdmin(BaseOrganizationAdmin):
 	def teams_count(self, obj):
 		return obj.teams.count()
 	teams_count.short_description = 'Teams'
+
+	def lists_display(self, obj):
+		from subscriptions.models import Lists
+		lists = list(
+			Lists.objects.filter(team__organization=obj)
+			.select_related('team')
+			.order_by('team__name', 'list_name')
+		)
+		if not lists:
+			return '-'
+		from django.utils.html import format_html_join
+		items = format_html_join(
+			'',
+			'<li><a href="{}">{}</a> <span style="color:#666;font-size:0.9em">({})</span></li>',
+			(
+				(reverse('admin:subscriptions_lists_change', args=[lst.pk]), lst.list_name, lst.team.name)
+				for lst in lists
+			),
+		)
+		return format_html('<ul style="margin:0;padding-left:1.2em">{}</ul>', items)
+	lists_display.short_description = 'Lists'
 
 
 class TeamSourceInline(admin.TabularInline):
@@ -1146,6 +1175,21 @@ class TeamMembersInline(admin.TabularInline):
 	autocomplete_fields = ['user']
 
 
+class TeamListsInline(admin.TabularInline):
+	"""Inline to display lists belonging to a team."""
+	model = apps.get_model('subscriptions', 'Lists')
+	extra = 0
+	fields = ('list_name', 'list_description', 'weekly_digest', 'admin_summary')
+	readonly_fields = ('list_name', 'list_description', 'weekly_digest', 'admin_summary')
+	show_change_link = True
+	verbose_name = 'List'
+	verbose_name_plural = 'Lists'
+	can_delete = False
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+
 def _ensure_user_in_organization(user, organization):
 	"""Add user to organization if not already a member."""
 	if not OrganizationUser.objects.filter(user=user, organization=organization).exists():
@@ -1173,7 +1217,7 @@ class ReassignTeamForm(forms.Form):
 @admin.register(Team)
 class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	form = TeamAdminForm
-	inlines = [TeamMembersInline, TeamSubjectInline, TeamSourceInline]
+	inlines = [TeamMembersInline, TeamSubjectInline, TeamSourceInline, TeamListsInline]
 	list_display = ['id', 'formatted_team_name', 'organization_link', 'slug', 'subjects_count', 'sources_count', 'active_badge']
 	list_display_links = ['id', 'formatted_team_name']
 	list_filter = ['organization', 'is_active']
