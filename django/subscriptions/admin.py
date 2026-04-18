@@ -66,8 +66,8 @@ class SubscriptionListFilter(admin.SimpleListFilter):
 
 
 class SubscriberAdmin(admin.ModelAdmin):
-	list_display = ['subscriber_id', 'first_name', 'last_name', 'email', 'active', 'number_of_subscriptions', 'created_at', 'updated_at']
-	list_filter = ['active', SubscriptionListFilter, 'created_at', 'updated_at']
+	list_display = ['first_name', 'last_name', 'email', 'active', 'list_names', 'number_of_subscriptions', 'created_at']
+	list_filter = ['active', SubscriptionListFilter, 'created_at']
 	search_fields = ['first_name', 'last_name', 'email']
 	actions = ['make_active', 'make_inactive']
 	readonly_fields = ['created_at', 'updated_at', 'unsubscribe_token']
@@ -82,7 +82,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 				filter=Q(list_subscriptions__is_active=True),
 				distinct=True,
 			)
-		)
+		).prefetch_related('list_subscriptions__list')
 		user_orgs = get_user_organizations(request.user)
 		if user_orgs is not None:
 			qs = qs.filter(list_subscriptions__list__team__organization__id__in=user_orgs).distinct()
@@ -144,6 +144,15 @@ class SubscriberAdmin(admin.ModelAdmin):
 		extra_context['analytics_url'] = reverse('admin:subscriptions_subscribers_analytics')
 		return super().changelist_view(request, extra_context)
 
+	def list_names(self, obj):
+		names = [
+			ls.list.list_name
+			for ls in obj.list_subscriptions.all()
+			if ls.is_active and ls.list_id
+		]
+		return ', '.join(names) if names else '—'
+	list_names.short_description = 'Lists'
+
 	def number_of_subscriptions(self, obj):
 		return obj.active_subscription_count
 	number_of_subscriptions.short_description = 'Subscriptions'
@@ -180,7 +189,7 @@ class ListSubscriberInline(admin.TabularInline):
 
 	def subscriber_link(self, obj):
 		if obj.subscriber_id:
-			url = f"/admin/subscriptions/subscribers/{obj.subscriber_id}/change/"
+			url = reverse('admin:subscriptions_subscribers_change', args=[obj.subscriber_id])
 			return format_html('<a href="{}" target="_blank">{} {}</a>', url, obj.subscriber.first_name, obj.subscriber.last_name)
 		return ''
 	subscriber_link.short_description = 'Subscriber'
