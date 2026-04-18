@@ -140,31 +140,50 @@ def _merge_subjects(source_subject, target_subject, dry_run: bool, report: Reass
 	Sources.objects.filter(subject=source_subject).update(subject=target_subject)
 
 	# MLPredictions — skip duplicates (unique_article_subject_prediction constraint)
-	for pred in MLPredictions.objects.filter(subject=source_subject):
-		exists = MLPredictions.objects.filter(
-			article=pred.article,
-			subject=target_subject,
-			model_version=pred.model_version,
-			algorithm=pred.algorithm,
-		).exists()
-		if not exists:
-			pred.subject = target_subject
-			pred.save(update_fields=['subject'])
+	target_prediction_keys = set(
+		MLPredictions.objects.filter(subject=target_subject).values_list(
+			'article_id',
+			'model_version',
+			'algorithm',
+		)
+	)
+	prediction_ids_to_update = []
+	prediction_ids_to_delete = []
+	for pred_id, article_id, model_version, algorithm in MLPredictions.objects.filter(
+		subject=source_subject
+	).values_list('pk', 'article_id', 'model_version', 'algorithm'):
+		key = (article_id, model_version, algorithm)
+		if key in target_prediction_keys:
+			prediction_ids_to_delete.append(pred_id)
 		else:
-			pred.delete()
+			prediction_ids_to_update.append(pred_id)
+			target_prediction_keys.add(key)
+
+	if prediction_ids_to_update:
+		MLPredictions.objects.filter(pk__in=prediction_ids_to_update).update(subject=target_subject)
+	if prediction_ids_to_delete:
+		MLPredictions.objects.filter(pk__in=prediction_ids_to_delete).delete()
 
 	# ArticleSubjectRelevance — skip duplicates
-	for asr in ArticleSubjectRelevance.objects.filter(subject=source_subject):
-		exists = ArticleSubjectRelevance.objects.filter(
-			article=asr.article,
-			subject=target_subject,
-		).exists()
-		if not exists:
-			asr.subject = target_subject
-			asr.save(update_fields=['subject'])
+	target_asr_article_ids = set(
+		ArticleSubjectRelevance.objects.filter(subject=target_subject).values_list('article_id', flat=True)
+	)
+	asr_ids_to_update = []
+	asr_ids_to_delete = []
+	for asr_id, article_id in ArticleSubjectRelevance.objects.filter(subject=source_subject).values_list(
+		'pk',
+		'article_id',
+	):
+		if article_id in target_asr_article_ids:
+			asr_ids_to_delete.append(asr_id)
 		else:
-			asr.delete()
+			asr_ids_to_update.append(asr_id)
+			target_asr_article_ids.add(article_id)
 
+	if asr_ids_to_update:
+		ArticleSubjectRelevance.objects.filter(pk__in=asr_ids_to_update).update(subject=target_subject)
+	if asr_ids_to_delete:
+		ArticleSubjectRelevance.objects.filter(pk__in=asr_ids_to_delete).delete()
 	# PredictionRunLog
 	PredictionRunLog.objects.filter(subject=source_subject).update(subject=target_subject)
 
@@ -231,106 +250,109 @@ def reassign_team(
 	if not to_team.is_active:
 		raise ValueError(f"Target team '{to_team}' is inactive. Choose an active team.")
 
-	# ------------------------------------------------------------------ #
-	# 1. Subjects                                                          #
-	# ------------------------------------------------------------------ #
-	existing_slugs = set(
-		Subject.objects.filter(team=to_team).values_list('subject_slug', flat=True)
-	)
+	with transaction.atomic():
+		# ------------------------------------------------------------------ #
+		# 1. Subjects                                                          #
+		# ------------------------------------------------------------------ #
+		existing_slugs = set(
+			Subject.objects.filter(team=to_team).values_list('subject_slug', flat=True)
+		)
 
-	for subject in Subject.objects.filter(team=from_team):
-		if subject.subject_slug not in existing_slugs:
-			if not dry_run:
-				subject.team = to_team
-				subject.save(update_fields=['team'])
-			report.subjects_moved.append(subject.subject_slug)
-			existing_slugs.add(subject.subject_slug)
-		else:
-			# Conflict!
-			if conflict == 'skip':
-				report.subjects_skipped.append(subject.subject_slug)
-				logger.info("Skipping subject '%s' — slug already exists in target team.", subject.subject_slug)
-
-			elif conflict == 'rename':
-				new_slug = f"{subject.subject_slug}-from-{from_team.slug}"
-				# Ensure the new slug is also unique
-				counter = 2
-				candidate = new_slug
-				while candidate in existing_slugs:
-					candidate = f"{new_slug}-{counter}"
-					counter += 1
-				new_slug = candidate
+		for subject in Subject.objects.filter(team=from_team):
+			if subject.subject_slug not in existing_slugs:
 				if not dry_run:
-					subject.subject_slug = new_slug
 					subject.team = to_team
-					subject.save(update_fields=['subject_slug', 'team'])
-				report.subjects_renamed.append(f"{subject.subject_slug} → {new_slug}")
-				existing_slugs.add(new_slug)
+					subject.save(update_fields=['team'])
+				report.subjects_moved.append(subject.subject_slug)
+				existing_slugs.add(subject.subject_slug)
+			else:
+				# Conflict!
+				if conflict == 'skip':
+					report.subjects_skipped.append(subject.subject_slug)
+					logger.info("Skipping subject '%s' — slug already exists in target team.", subject.subject_slug)
 
-			elif conflict == 'merge':
-				target_subject = Subject.objects.get(team=to_team, subject_slug=subject.subject_slug)
-				_merge_subjects(subject, target_subject, dry_run=dry_run, report=report)
-				report.subjects_merged.append(subject.subject_slug)
+				elif conflict == 'rename':
+					original_slug = subject.subject_slug
+					new_slug = f"{original_slug}-from-{from_team.slug}"
+					# Ensure the new slug is also unique
+					counter = 2
+					candidate = new_slug
+					while candidate in existing_slugs:
+						candidate = f"{new_slug}-{counter}"
+						counter += 1
+					new_slug = candidate
+					if not dry_run:
+						subject.subject_slug = new_slug
+						subject.team = to_team
+						subject.save(update_fields=['subject_slug', 'team'])
+					report.subjects_renamed.append(f"{original_slug} → {new_slug}")
+					existing_slugs.add(new_slug)
+
+				elif conflict == 'merge':
+					target_subject = Subject.objects.get(team=to_team, subject_slug=subject.subject_slug)
+					_merge_subjects(subject, target_subject, dry_run=dry_run, report=report)
+					report.subjects_merged.append(subject.subject_slug)
+
+		# ------------------------------------------------------------------ #
+		# 2. Sources (those not already moved via Subject merge)               #
+		# ------------------------------------------------------------------ #
+		sources_qs = Sources.objects.filter(team=from_team)
+		report.sources_moved = sources_qs.count()
+		if not dry_run:
+			sources_qs.update(team=to_team)
+
+		# ------------------------------------------------------------------ #
+		# 3. TeamCategories                                                    #
+		# ------------------------------------------------------------------ #
+		categories_qs = TeamCategory.objects.filter(team=from_team)
+		report.categories_moved = categories_qs.count()
+		if not dry_run:
+			categories_qs.update(team=to_team)
+
+		# ------------------------------------------------------------------ #
+		# 4. Lists (newsletter lists)                                          #
+		# ------------------------------------------------------------------ #
+		from subscriptions.models import Lists
+		lists_qs = Lists.objects.filter(team=from_team)
+		report.lists_moved = lists_qs.count()
+		if not dry_run:
+			lists_qs.update(team=to_team)
+
+		# ------------------------------------------------------------------ #
+		# 5. PredictionRunLog                                                  #
+		# ------------------------------------------------------------------ #
+		logs_qs = PredictionRunLog.objects.filter(team=from_team)
+		report.prediction_logs_moved = logs_qs.count()
+		if not dry_run:
+			logs_qs.update(team=to_team)
+
+		# ------------------------------------------------------------------ #
+		# 6. Articles M2M                                                      #
+		# ------------------------------------------------------------------ #
+		from gregory.models import Articles
+		articles = Articles.objects.filter(teams=from_team)
+		report.articles_relinked = articles.count()
+		if not dry_run:
+			for article in articles:
+				if not article.teams.filter(pk=to_team.pk).exists():
+					article.teams.add(to_team)
+				article.teams.remove(from_team)
+
+		# ------------------------------------------------------------------ #
+		# 7. Trials M2M                                                        #
+		# ------------------------------------------------------------------ #
+		from gregory.models import Trials
+		trials = Trials.objects.filter(teams=from_team)
+		report.trials_relinked = trials.count()
+		if not dry_run:
+			for trial in trials:
+				if not trial.teams.filter(pk=to_team.pk).exists():
+					trial.teams.add(to_team)
+				trial.teams.remove(from_team)
 
 	# ------------------------------------------------------------------ #
-	# 2. Sources (those not already moved via Subject merge)               #
-	# ------------------------------------------------------------------ #
-	sources_qs = Sources.objects.filter(team=from_team)
-	report.sources_moved = sources_qs.count()
-	if not dry_run:
-		sources_qs.update(team=to_team)
-
-	# ------------------------------------------------------------------ #
-	# 3. TeamCategories                                                    #
-	# ------------------------------------------------------------------ #
-	categories_qs = TeamCategory.objects.filter(team=from_team)
-	report.categories_moved = categories_qs.count()
-	if not dry_run:
-		categories_qs.update(team=to_team)
-
-	# ------------------------------------------------------------------ #
-	# 4. Lists (newsletter lists)                                          #
-	# ------------------------------------------------------------------ #
-	from subscriptions.models import Lists
-	lists_qs = Lists.objects.filter(team=from_team)
-	report.lists_moved = lists_qs.count()
-	if not dry_run:
-		lists_qs.update(team=to_team)
-
-	# ------------------------------------------------------------------ #
-	# 5. PredictionRunLog                                                  #
-	# ------------------------------------------------------------------ #
-	logs_qs = PredictionRunLog.objects.filter(team=from_team)
-	report.prediction_logs_moved = logs_qs.count()
-	if not dry_run:
-		logs_qs.update(team=to_team)
-
-	# ------------------------------------------------------------------ #
-	# 6. Articles M2M                                                      #
-	# ------------------------------------------------------------------ #
-	from gregory.models import Articles
-	articles = Articles.objects.filter(teams=from_team)
-	report.articles_relinked = articles.count()
-	if not dry_run:
-		for article in articles:
-			if not article.teams.filter(pk=to_team.pk).exists():
-				article.teams.add(to_team)
-			article.teams.remove(from_team)
-
-	# ------------------------------------------------------------------ #
-	# 7. Trials M2M                                                        #
-	# ------------------------------------------------------------------ #
-	from gregory.models import Trials
-	trials = Trials.objects.filter(teams=from_team)
-	report.trials_relinked = trials.count()
-	if not dry_run:
-		for trial in trials:
-			if not trial.teams.filter(pk=to_team.pk).exists():
-				trial.teams.add(to_team)
-			trial.teams.remove(from_team)
-
-	# ------------------------------------------------------------------ #
-	# 8. Move model files on disk                                          #
+	# 8. Move model files on disk (outside atomic block — runs only after  #
+	#    the DB transaction commits successfully)                           #
 	# ------------------------------------------------------------------ #
 	_move_model_dir(from_team.slug, to_team.slug, report, dry_run=dry_run)
 

@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.http import HttpResponse
@@ -535,11 +535,25 @@ class ReassignToTeamMixin:
 
 	@admin.action(description="Reassign selected to another team…")
 	def reassign_to_team_action(self, request, queryset):
+		# Safety: all selected objects must belong to the same organisation.
+		team_ids = queryset.values_list('team_id', flat=True).distinct()
+		org_ids = list(
+			Team.all_objects.filter(pk__in=team_ids)
+			.values_list('organization_id', flat=True)
+			.distinct()
+		)
+		if len(org_ids) != 1:
+			self.message_user(
+				request,
+				"Selected objects span multiple organisations. "
+				"Please select only objects from a single organisation.",
+				level=messages.ERROR,
+			)
+			return
+
+		target_qs = Team.objects.filter(organization_id=org_ids[0])
+
 		if 'apply' not in request.POST:
-			# Collect the org ids from the selected objects' current teams.
-			team_ids = queryset.values_list('team_id', flat=True).distinct()
-			org_ids = Team.all_objects.filter(pk__in=team_ids).values_list('organization_id', flat=True).distinct()
-			target_qs = Team.objects.filter(organization_id__in=org_ids)
 			form = ReassignToTeamForm()
 			form.fields['target_team'].queryset = target_qs
 			return render(
@@ -554,17 +568,23 @@ class ReassignToTeamMixin:
 				},
 			)
 
-		team_ids = queryset.values_list('team_id', flat=True).distinct()
-		org_ids = Team.all_objects.filter(pk__in=team_ids).values_list('organization_id', flat=True).distinct()
-		target_qs = Team.objects.filter(organization_id__in=org_ids)
 		form = ReassignToTeamForm(request.POST)
 		form.fields['target_team'].queryset = target_qs
 
 		if not form.is_valid():
-			self.message_user(request, "Invalid form — please try again.", level='error')
+			self.message_user(request, "Invalid form — please try again.", level=messages.ERROR)
 			return
 
 		to_team = form.cleaned_data['target_team']
+		# Final guard: target team must belong to the same organisation.
+		if to_team.organization_id != org_ids[0]:
+			self.message_user(
+				request,
+				"Target team does not belong to the same organisation as the selected objects.",
+				level=messages.ERROR,
+			)
+			return
+
 		count = queryset.count()
 		queryset.update(team=to_team)
 		self.message_user(request, f"{count} object(s) reassigned to '{to_team}'.")
@@ -625,7 +645,6 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 		"""Warn admin if source has no team assigned."""
 		super().save_model(request, obj, form, change)
 		if not obj.team:
-			from django.contrib import messages
 			messages.warning(
 				request,
 				f"Source '{obj.name}' has no team assigned. "
@@ -1286,7 +1305,7 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		form.fields['target_team'].queryset = target_qs
 
 		if not form.is_valid():
-			self.message_user(request, "Invalid form — please try again.", level='error')
+			self.message_user(request, "Invalid form — please try again.", level=messages.ERROR)
 			return
 
 		to_team = form.cleaned_data['target_team']
@@ -1306,7 +1325,7 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 				errors.append(str(exc))
 
 		if errors:
-			self.message_user(request, "Errors: " + "; ".join(errors), level='error')
+			self.message_user(request, "Errors: " + "; ".join(errors), level=messages.ERROR)
 
 	@admin.action(description="Hard-delete selected inactive teams (only if empty)")
 	def hard_delete_empty_inactive_teams(self, request, queryset):
@@ -1332,7 +1351,7 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		if deleted:
 			self.message_user(request, f"{deleted} team(s) permanently deleted.")
 		if skipped:
-			self.message_user(request, "Skipped: " + "; ".join(skipped), level='warning')
+			self.message_user(request, "Skipped: " + "; ".join(skipped), level=messages.WARNING)
 
 	# ------------------------------------------------------------------ #
 	# URLs for custom views                                                #
@@ -1368,7 +1387,7 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 					report = reassign_team(from_team=from_team, to_team=to_team, conflict=conflict)
 					self.message_user(request, f"Reassignment complete.\n{report.summary()}")
 				except ValueError as exc:
-					self.message_user(request, str(exc), level='error')
+					self.message_user(request, str(exc), level=messages.ERROR)
 				return self._response_post_save(request, from_team)
 		else:
 			form = ReassignTeamForm()

@@ -211,11 +211,33 @@ class ListsAdmin(admin.ModelAdmin):
 				help_text="Selected lists will be moved to this team.",
 			)
 
+		# Safety: lists without a team have no organisation and cannot be reassigned.
+		if queryset.filter(team__isnull=True).exists():
+			self.message_user(
+				request,
+				"Some selected lists have no team assigned and cannot be reassigned.",
+				level=messages.ERROR,
+			)
+			return
+
+		# Safety: all selected lists must belong to the same organisation.
+		org_ids = list(
+			queryset.values_list('team__organization_id', flat=True).distinct()
+		)
+		if len(org_ids) != 1:
+			self.message_user(
+				request,
+				"Selected lists span multiple organisations. "
+				"Please select only lists from a single organisation.",
+				level=messages.ERROR,
+			)
+			return
+
+		target_qs = Team.objects.filter(organization_id=org_ids[0])
+
 		if 'apply' not in request.POST:
-			team_ids = queryset.values_list('team_id', flat=True).distinct()
-			org_ids = Team.all_objects.filter(pk__in=team_ids).values_list('organization_id', flat=True).distinct()
 			form = ReassignListsForm()
-			form.fields['target_team'].queryset = Team.objects.filter(organization_id__in=org_ids)
+			form.fields['target_team'].queryset = target_qs
 			return render(
 				request,
 				'admin/gregory/reassign_to_team_intermediate.html',
@@ -228,14 +250,20 @@ class ListsAdmin(admin.ModelAdmin):
 				},
 			)
 
-		team_ids = queryset.values_list('team_id', flat=True).distinct()
-		org_ids = Team.all_objects.filter(pk__in=team_ids).values_list('organization_id', flat=True).distinct()
 		form = ReassignListsForm(request.POST)
-		form.fields['target_team'].queryset = Team.objects.filter(organization_id__in=org_ids)
+		form.fields['target_team'].queryset = target_qs
 		if not form.is_valid():
-			self.message_user(request, "Invalid form — please try again.", level='error')
+			self.message_user(request, "Invalid form — please try again.", level=messages.ERROR)
 			return
 		to_team = form.cleaned_data['target_team']
+		# Final guard: target team must belong to the same organisation.
+		if to_team.organization_id != org_ids[0]:
+			self.message_user(
+				request,
+				"Target team does not belong to the same organisation as the selected lists.",
+				level=messages.ERROR,
+			)
+			return
 		count = queryset.count()
 		queryset.update(team=to_team)
 		self.message_user(request, f"{count} list(s) reassigned to '{to_team}'.")
