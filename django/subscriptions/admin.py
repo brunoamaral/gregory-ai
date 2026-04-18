@@ -9,8 +9,18 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.contrib import messages
 from datetime import timedelta
+import bleach
 from .models import Subscribers, Lists, FailedNotification, ListSubscription, SubscriberSiteProfile, Announcement, AnnouncementRecipient
 from .forms import ListsAdminForm, AnnouncementAdminForm
+
+# Allowlist for announcement body HTML (used by bleach sanitization)
+_ANNOUNCEMENT_ALLOWED_TAGS = [
+	'p', 'strong', 'em', 'u', 's', 'ul', 'ol', 'li',
+	'a', 'h2', 'h3', 'h4', 'blockquote', 'br', 'hr',
+]
+_ANNOUNCEMENT_ALLOWED_ATTRS = {
+	'a': ['href', 'target', 'rel'],
+}
 
 
 class SubscriberSiteProfileInline(admin.TabularInline):
@@ -325,21 +335,31 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					return None
 		return announcement
 
-	def _render_announcement_email(self, announcement, subscriber=None, site=None):
+	def _render_announcement_email(self, announcement, subscriber=None, site=None, list_id=None):
 		"""Render announcement as HTML email using the base template."""
+		safe_body = bleach.clean(
+			announcement.body,
+			tags=_ANNOUNCEMENT_ALLOWED_TAGS,
+			attributes=_ANNOUNCEMENT_ALLOWED_ATTRS,
+			strip=True,
+		)
 		context = {
 			'announcement_subject': announcement.subject,
-			'announcement_body': announcement.body,
+			'announcement_body': safe_body,
 			'email_type': 'announcement',
 			'show_date': True,
+			'current_date': timezone.now(),
 			'header_title': announcement.header_title,
 			'header_tagline': announcement.header_tagline,
 		}
 		if subscriber:
 			context['subscriber'] = subscriber
-			context['unsubscribe_base_url'] = f"https://{site.domain}/subscriptions/unsubscribe/{subscriber.unsubscribe_token}" if site else ''
 		if site:
+			_scheme = 'https' if site.domain not in ('localhost', '127.0.0.1') else 'http'
+			context['unsubscribe_base_url'] = f"{_scheme}://{site.domain}"
 			context['site'] = site
+		if list_id:
+			context['list_id'] = list_id
 		html = render_to_string('emails/announcement.html', context)
 		return html
 
@@ -465,7 +485,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 				except Exception:
 					api_token, api_url, site = None, None, None
 
-				html = self._render_announcement_email(announcement, subscriber=subscriber, site=site)
+				html = self._render_announcement_email(announcement, subscriber=subscriber, site=site, list_id=lst.list_id)
 				text = self._render_announcement_text(announcement, subscriber=subscriber)
 
 				error_msg = ''
