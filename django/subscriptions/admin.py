@@ -4,7 +4,7 @@ from django.urls import path, reverse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
 from django.db.models import Count, Q
-from django.db.models.functions import TruncDate
+from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
@@ -105,38 +105,92 @@ class SubscriberAdmin(admin.ModelAdmin):
 		return render(request, 'admin/subscriptions/subscribers/analytics.html', context)
 
 	def analytics_data(self, request):
-		# Get data for the last 30 days
+		# Determine range and granularity from query param
+		range_param = request.GET.get('range', '30d')
+		RANGES = {
+			'7d':   (7,   TruncDate,  '%Y-%m-%d'),
+			'30d':  (30,  TruncDate,  '%Y-%m-%d'),
+			'90d':  (90,  TruncWeek,  '%Y-%m-%d'),
+			'365d': (365, TruncMonth, '%Y-%m'),
+		}
+		if range_param not in RANGES:
+			range_param = '30d'
+		days, trunc_fn, date_fmt = RANGES[range_param]
+
 		end_date = timezone.now().date()
-		start_date = end_date - timedelta(days=29)  # 30 days including today
-		
-		# Create a list of all dates in the range
-		date_range = []
-		current_date = start_date
-		while current_date <= end_date:
-			date_range.append(current_date)
-			current_date += timedelta(days=1)
-		
-		# Get subscriber counts by date
-		subscriber_counts = (
-			Subscribers.objects
-			.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
-			.annotate(date=TruncDate('created_at'))
-			.values('date')
-			.annotate(count=Count('subscriber_id'))
-			.order_by('date')
+		start_date = end_date - timedelta(days=days - 1)
+
+		# Build full period sequence for zero-filling
+		if trunc_fn is TruncDate:
+			period_range = []
+			d = start_date
+			while d <= end_date:
+				period_range.append(d)
+				d += timedelta(days=1)
+		elif trunc_fn is TruncWeek:
+			# ISO week starts on Monday
+			from datetime import date
+			period_range = []
+			d = start_date - timedelta(days=start_date.weekday())
+			while d <= end_date:
+				period_range.append(d)
+				d += timedelta(weeks=1)
+		else:  # TruncMonth
+			from datetime import date
+			period_range = []
+			d = start_date.replace(day=1)
+			while d <= end_date:
+				period_range.append(d)
+				# advance to first day of next month
+				if d.month == 12:
+					d = date(d.year + 1, 1, 1)
+				else:
+					d = date(d.year, d.month + 1, 1)
+
+		def _build_series(qs, date_field):
+			counts = (
+				qs
+				.annotate(period=trunc_fn(date_field))
+				.values('period')
+				.annotate(count=Count('id'))
+				.order_by('period')
+			)
+			lookup = {item['period']: item['count'] for item in counts if item['period']}
+			return [lookup.get(p, 0) for p in period_range]
+
+		# New subscribers
+		new_subscribers_qs = Subscribers.objects.filter(
+			created_at__date__gte=start_date,
+			created_at__date__lte=end_date,
 		)
-		
-		# Create a dictionary for easy lookup
-		counts_dict = {item['date']: item['count'] for item in subscriber_counts}
-		
-		# Prepare data for the chart
-		labels = [date.strftime('%Y-%m-%d') for date in date_range]
-		data = [counts_dict.get(date, 0) for date in date_range]
-		
+		new_subscribers_data = _build_series(new_subscribers_qs, 'created_at')
+
+		# New subscriptions (list joins)
+		new_subs_qs = ListSubscription.objects.filter(
+			subscribed_at__date__gte=start_date,
+			subscribed_at__date__lte=end_date,
+		)
+		new_subscriptions_data = _build_series(new_subs_qs, 'subscribed_at')
+
+		# Unsubscriptions
+		unsubs_qs = ListSubscription.objects.filter(
+			unsubscribed_at__date__gte=start_date,
+			unsubscribed_at__date__lte=end_date,
+		)
+		unsubscriptions_data = _build_series(unsubs_qs, 'unsubscribed_at')
+
+		labels = [p.strftime(date_fmt) for p in period_range]
+
 		return JsonResponse({
 			'labels': labels,
-			'data': data,
-			'total_new_subscribers': sum(data),
+			'new_subscribers': new_subscribers_data,
+			'new_subscriptions': new_subscriptions_data,
+			'unsubscriptions': unsubscriptions_data,
+			'totals': {
+				'new_subscribers': sum(new_subscribers_data),
+				'new_subscriptions': sum(new_subscriptions_data),
+				'unsubscriptions': sum(unsubscriptions_data),
+			},
 		})
 
 	def changelist_view(self, request, extra_context=None):
