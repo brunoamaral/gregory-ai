@@ -3,6 +3,7 @@ from django.utils.html import format_html
 from django.urls import path, reverse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
+import csv
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
@@ -69,7 +70,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 	list_display = ['first_name', 'last_name', 'email', 'active', 'list_names', 'number_of_subscriptions', 'created_at']
 	list_filter = ['active', SubscriptionListFilter, 'created_at']
 	search_fields = ['first_name', 'last_name', 'email']
-	actions = ['make_active', 'make_inactive']
+	actions = ['make_active', 'make_inactive', 'export_csv', 'add_to_list']
 	readonly_fields = ['created_at', 'updated_at', 'unsubscribe_token']
 	inlines = [SubscriberSiteProfileInline, ListSubscriptionInline]
 
@@ -221,6 +222,89 @@ class SubscriberAdmin(admin.ModelAdmin):
 		updated_count = queryset.update(active=False)
 		self.message_user(request, f"{updated_count} subscriber(s) marked as inactive.")
 	make_inactive.short_description = "Mark selected subscribers as inactive"
+
+	@admin.action(description="Export selected subscribers as CSV")
+	def export_csv(self, request, queryset):
+		response = HttpResponse(content_type='text/csv')
+		response['Content-Disposition'] = 'attachment; filename="subscribers.csv"'
+		writer = csv.writer(response)
+		writer.writerow(['email', 'first_name', 'last_name', 'active', 'lists', 'created_at'])
+		qs = queryset.prefetch_related('list_subscriptions__list')
+		for sub in qs:
+			active_lists = ', '.join(
+				ls.list.list_name
+				for ls in sub.list_subscriptions.all()
+				if ls.is_active and ls.list_id
+			)
+			writer.writerow([
+				sub.email,
+				sub.first_name,
+				sub.last_name or '',
+				sub.active,
+				active_lists,
+				sub.created_at.strftime('%Y-%m-%d %H:%M'),
+			])
+		return response
+
+	@admin.action(description="Add selected subscribers to a list…")
+	def add_to_list(self, request, queryset):
+		from gregory.admin import get_user_organizations
+
+		class AddToListForm(forms.Form):
+			target_list = forms.ModelChoiceField(
+				queryset=Lists.objects.none(),
+				label='Target list',
+				help_text='Selected subscribers will be added to this list.',
+			)
+
+		user_orgs = get_user_organizations(request.user)
+		if user_orgs is not None:
+			available_lists = Lists.objects.filter(team__organization__id__in=user_orgs)
+		else:
+			available_lists = Lists.objects.all()
+
+		if 'apply' not in request.POST:
+			form = AddToListForm()
+			form.fields['target_list'].queryset = available_lists
+			return render(
+				request,
+				'admin/subscriptions/subscribers/add_to_list_intermediate.html',
+				{
+					'title': 'Add subscribers to list',
+					'objects': queryset,
+					'form': form,
+					'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
+				},
+			)
+
+		form = AddToListForm(request.POST)
+		form.fields['target_list'].queryset = available_lists
+		if not form.is_valid():
+			self.message_user(request, 'Invalid form — please try again.', level=messages.ERROR)
+			return
+
+		target_list = form.cleaned_data['target_list']
+		added = 0
+		for sub in queryset:
+			_, created = ListSubscription.objects.get_or_create(
+				subscriber=sub,
+				list=target_list,
+				defaults={
+					'consent_method': 'admin',
+					'is_active': True,
+				},
+			)
+			if created:
+				added += 1
+			else:
+				# Re-activate if they previously unsubscribed
+				ListSubscription.objects.filter(
+					subscriber=sub, list=target_list, is_active=False
+				).update(is_active=True, unsubscribed_at=None)
+		self.message_user(
+			request,
+			f"{added} subscriber(s) added to '{target_list}' ({queryset.count() - added} already subscribed).",
+		)
 
 admin.site.register(Subscribers, SubscriberAdmin)
 
