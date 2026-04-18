@@ -66,4 +66,13 @@ class CustomSetting(models.Model):
 		null=True,
 		default='https://api.postmarkapp.com/email',
 		help_text="Postmark API URL for this site. Overrides the organisation-level URL."
+	privacy_policy_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="Privacy policy page URL for the email footer."
+	)
+	terms_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="Terms of service page URL for the email footer."
 	)
