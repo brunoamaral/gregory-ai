@@ -41,22 +41,29 @@ def _encrypt(plaintext):
 
 
 def copy_credentials_forward(apps, schema_editor):
-	TeamCredentials = apps.get_model('gregory', 'TeamCredentials')
 	OrganizationCredentials = apps.get_model('gregory', 'OrganizationCredentials')
 	CustomSetting = apps.get_model('sitesettings', 'CustomSetting')
 	Lists = apps.get_model('subscriptions', 'Lists')
 	Team = apps.get_model('gregory', 'Team')
 
+	# Table name for TeamCredentials (removed from live models, use literal name).
+	tc_table = 'gregory_teamcredentials'
 	cs_table = CustomSetting._meta.db_table
 	oc_table = OrganizationCredentials._meta.db_table
 
-	# Use .values() throughout so that EncryptedTextField.from_db_value is never
-	# called; raw (encrypted) column data is handled explicitly below.
-	for tc_row in TeamCredentials.objects.values(
-		'id', 'team_id',
-		'postmark_api_token', 'postmark_api_url',
-		'orcid_client_id', 'orcid_client_secret',
-	):
+	# Read TeamCredentials via raw SQL so that EncryptedTextField.from_db_value is
+	# never invoked.  Django calls from_db_value even in .values() queries, which
+	# would decrypt the data before _decrypt() sees it, causing a double-decrypt
+	# failure (InvalidToken / incorrect padding).
+	with schema_editor.connection.cursor() as cursor:
+		cursor.execute(
+			f"SELECT id, team_id, postmark_api_token, postmark_api_url,"
+			f" orcid_client_id, orcid_client_secret FROM {tc_table}"
+		)
+		cols = [c[0] for c in cursor.description]
+		tc_rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+	for tc_row in tc_rows:
 		postmark_token = _decrypt(tc_row['postmark_api_token'])
 		postmark_url = tc_row.get('postmark_api_url') or ''
 
@@ -69,19 +76,25 @@ def copy_credentials_forward(apps, schema_editor):
 				.values_list('site_id', flat=True)
 				.distinct()
 			)
-			for cs_row in CustomSetting.objects.filter(site_id__in=site_ids).values(
-				'id', 'postmark_api_token', 'postmark_api_url',
-			):
-				if not cs_row['postmark_api_token']:
-					# Use schema_editor.execute so EncryptedTextField.get_prep_value
-					# is never called and double-encryption cannot occur.
-					schema_editor.execute(
-						f"UPDATE {cs_table}"
-						" SET postmark_api_token = %s"
-						", postmark_api_url = COALESCE(NULLIF(postmark_api_url, ''), %s)"
-						" WHERE id = %s",
-						[_encrypt(postmark_token), postmark_url, cs_row['id']],
+			if site_ids:
+				placeholders = ', '.join(['%s'] * len(site_ids))
+				with schema_editor.connection.cursor() as cursor:
+					cursor.execute(
+						f"SELECT id, postmark_api_token, postmark_api_url"
+						f" FROM {cs_table} WHERE site_id IN ({placeholders})",
+						site_ids,
 					)
+					cs_cols = [c[0] for c in cursor.description]
+					cs_rows = [dict(zip(cs_cols, row)) for row in cursor.fetchall()]
+				for cs_row in cs_rows:
+					if not cs_row['postmark_api_token']:
+						schema_editor.execute(
+							f"UPDATE {cs_table}"
+							" SET postmark_api_token = %s"
+							", postmark_api_url = COALESCE(NULLIF(postmark_api_url, ''), %s)"
+							" WHERE id = %s",
+							[_encrypt(postmark_token), postmark_url, cs_row['id']],
+						)
 
 		# --- ORCID: copy to OrganizationCredentials for the team's organisation ---
 		orcid_id = _decrypt(tc_row['orcid_client_id'])
@@ -97,18 +110,24 @@ def copy_credentials_forward(apps, schema_editor):
 		except Team.DoesNotExist:
 			continue
 
-		try:
-			creds_row = OrganizationCredentials.objects.values(
-				'id', 'orcid_client_id',
-			).get(organization_id=org_id)
-			if not _decrypt(creds_row['orcid_client_id']):
+		# Read OrganizationCredentials via raw SQL for the same reason.
+		with schema_editor.connection.cursor() as cursor:
+			cursor.execute(
+				f"SELECT id, orcid_client_id FROM {oc_table} WHERE organization_id = %s",
+				[org_id],
+			)
+			oc_row = cursor.fetchone()
+
+		if oc_row:
+			existing_id, existing_orcid_id = oc_row
+			if not _decrypt(existing_orcid_id):
 				schema_editor.execute(
 					f"UPDATE {oc_table}"
 					" SET orcid_client_id = %s, orcid_client_secret = %s"
 					" WHERE id = %s",
-					[_encrypt(orcid_id), _encrypt(orcid_secret), creds_row['id']],
+					[_encrypt(orcid_id), _encrypt(orcid_secret), existing_id],
 				)
-		except OrganizationCredentials.DoesNotExist:
+		else:
 			now = timezone.now()
 			schema_editor.execute(
 				f"INSERT INTO {oc_table}"
