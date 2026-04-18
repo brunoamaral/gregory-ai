@@ -62,7 +62,10 @@ class SubscriptionListFilter(admin.SimpleListFilter):
 
 	def queryset(self, request, queryset):
 		if self.value():
-			return queryset.filter(list_subscriptions__list_id=self.value())
+			return queryset.filter(
+				list_subscriptions__list_id=self.value(),
+				list_subscriptions__is_active=True,
+			)
 		return queryset
 
 
@@ -153,17 +156,32 @@ class SubscriberAdmin(admin.ModelAdmin):
 				qs
 				.annotate(period=trunc_fn(date_field))
 				.values('period')
-				.annotate(count=Count('id'))
+				.annotate(count=Count('pk'))
 				.order_by('period')
 			)
-			lookup = {item['period']: item['count'] for item in counts if item['period']}
+			lookup = {}
+			for item in counts:
+				period = item['period']
+				if not period:
+					continue
+				if hasattr(period, 'date'):
+					period = period.date()
+				lookup[period] = item['count']
 			return [lookup.get(p, 0) for p in period_range]
+
+		# Apply org scoping
+		from gregory.admin import get_user_organizations
+		user_orgs = get_user_organizations(request.user)
 
 		# New subscribers
 		new_subscribers_qs = Subscribers.objects.filter(
 			created_at__date__gte=start_date,
 			created_at__date__lte=end_date,
 		)
+		if user_orgs is not None:
+			new_subscribers_qs = new_subscribers_qs.filter(
+				list_subscriptions__list__team__organization__id__in=user_orgs
+			).distinct()
 		new_subscribers_data = _build_series(new_subscribers_qs, 'created_at')
 
 		# New subscriptions (list joins)
@@ -171,6 +189,10 @@ class SubscriberAdmin(admin.ModelAdmin):
 			subscribed_at__date__gte=start_date,
 			subscribed_at__date__lte=end_date,
 		)
+		if user_orgs is not None:
+			new_subs_qs = new_subs_qs.filter(
+				list__team__organization__id__in=user_orgs
+			)
 		new_subscriptions_data = _build_series(new_subs_qs, 'subscribed_at')
 
 		# Unsubscriptions
@@ -178,6 +200,10 @@ class SubscriberAdmin(admin.ModelAdmin):
 			unsubscribed_at__date__gte=start_date,
 			unsubscribed_at__date__lte=end_date,
 		)
+		if user_orgs is not None:
+			unsubs_qs = unsubs_qs.filter(
+				list__team__organization__id__in=user_orgs
+			)
 		unsubscriptions_data = _build_series(unsubs_qs, 'unsubscribed_at')
 
 		labels = [p.strftime(date_fmt) for p in period_range]
@@ -228,6 +254,13 @@ class SubscriberAdmin(admin.ModelAdmin):
 		response = HttpResponse(content_type='text/csv')
 		response['Content-Disposition'] = 'attachment; filename="subscribers.csv"'
 		writer = csv.writer(response)
+		def _csv_safe(value):
+			"""Prevent CSV injection by prefixing dangerous leading characters."""
+			s = str(value)
+			if s and s[0] in ('=', '+', '-', '@', '\t', '\r'):
+				s = "'" + s
+			return s
+
 		writer.writerow(['email', 'first_name', 'last_name', 'active', 'lists', 'created_at'])
 		qs = queryset.prefetch_related('list_subscriptions__list')
 		for sub in qs:
@@ -237,11 +270,11 @@ class SubscriberAdmin(admin.ModelAdmin):
 				if ls.is_active and ls.list_id
 			)
 			writer.writerow([
-				sub.email,
-				sub.first_name,
-				sub.last_name or '',
+				_csv_safe(sub.email),
+				_csv_safe(sub.first_name),
+				_csv_safe(sub.last_name or ''),
 				sub.active,
-				active_lists,
+				_csv_safe(active_lists),
 				sub.created_at.strftime('%Y-%m-%d %H:%M'),
 			])
 		return response

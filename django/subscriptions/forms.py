@@ -2,7 +2,7 @@ from django import forms
 from django.forms import ModelForm
 from django_ckeditor_5.widgets import CKEditor5Widget
 
-from .models import Subscribers, Lists, Announcement
+from .models import Subscribers, Lists, Announcement, SubscriberSiteProfile
 
 class ListsAdminForm(ModelForm):
     class Meta:
@@ -53,13 +53,7 @@ class SubscribersForm(ModelForm):
 	last_name = forms.CharField(max_length=100, required=False)
 	email = forms.EmailField(max_length=120)
 	profile = forms.ChoiceField(
-		choices=[('', '---------')] + [
-			('patient', 'Patient'),
-			('caregiver', 'Caregiver'),
-			('doctor', 'Doctor'),
-			('clinical centre', 'Clinical Centre'),
-			('researcher', 'Researcher'),
-		],
+		choices=[('', '---------')] + SubscriberSiteProfile.PROFILEOPTIONS,
 		required=False,
 	)
 	# ``list`` was previously an ``IntegerField`` which only captured a
