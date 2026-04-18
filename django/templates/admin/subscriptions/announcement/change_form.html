@@ -91,7 +91,7 @@
 				{% endif %}
 			</div>
 			{% if original.pk %}
-			<iframe id="preview-frame" src="{% url 'admin:subscriptions_announcement_preview' original.pk %}"></iframe>
+			<iframe id="preview-frame" sandbox="allow-same-origin" src="{% url 'admin:subscriptions_announcement_preview' original.pk %}"></iframe>
 			{% else %}
 			<div class="preview-placeholder">Save the announcement to see a preview here.</div>
 			{% endif %}
