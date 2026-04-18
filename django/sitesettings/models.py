@@ -13,3 +13,54 @@ class CustomSetting(models.Model):
 		blank=True,
 		help_text="Local part of the sender email address (e.g. 'gregory' → gregory@site.domain)."
 	)
+	api_domain = models.CharField(
+		max_length=253,
+		blank=True,
+		default='',
+		help_text="Domain where the Django backend is reachable (e.g. api.example.com). Used for unsubscribe links."
+	)
+	website_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="Main website URL shown in the email footer (e.g. https://example.com)."
+	)
+	support_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="Support page URL for the email footer."
+	)
+	about_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="About page URL for the email footer."
+	)
+	contact_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="Contact page URL for the email footer."
+	)
+	bluesky_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="Blue Sky profile URL for the email footer."
+	)
+	github_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="GitHub profile/repo URL for the email footer."
+	)
+	mastodon_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="Mastodon profile URL for the email footer."
+	)
+	privacy_policy_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="Privacy policy page URL for the email footer."
+	)
+	terms_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="Terms of service page URL for the email footer."
+	)

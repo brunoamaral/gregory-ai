@@ -58,6 +58,30 @@ class Lists(models.Model):
 		blank=False,
 		help_text="The team this list belongs to."
 	)
+	site = models.ForeignKey(
+		Site,
+		on_delete=models.PROTECT,
+		related_name="lists",
+		null=False,
+		blank=True,
+		help_text="The site this list sends emails from. Determines footer branding, links, and unsubscribe URLs. Auto-populated from the organisation default site if not set."
+	)
+
+	def save(self, *args, **kwargs):
+		if not self.site_id:
+			from gregory.models import OrganizationSite
+			org_site = (
+				OrganizationSite.objects
+				.filter(organization=self.team.organization)
+				.order_by('-is_default', 'id')
+				.select_related('site')
+				.first()
+			)
+			if org_site:
+				self.site = org_site.site
+			else:
+				self.site = Site.objects.get_current()
+		super().save(*args, **kwargs)
 
 	class Meta:
 		managed = True

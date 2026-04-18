@@ -9,7 +9,13 @@ class CustomSettingInline(admin.StackedInline):
 	model = CustomSetting
 	extra = 1
 	max_num = 1
-	fields = ['title', 'sender_email_prefix', 'email_footer', 'admin_email']
+	fields = [
+		'title', 'sender_email_prefix', 'admin_email', 'api_domain',
+		'email_footer',
+		'website_url', 'support_url', 'about_url', 'contact_url',
+		'bluesky_url', 'github_url', 'mastodon_url',
+		'privacy_policy_url', 'terms_url',
+	]
 
 
 class SiteWithSettingsAdmin(SiteAdmin):

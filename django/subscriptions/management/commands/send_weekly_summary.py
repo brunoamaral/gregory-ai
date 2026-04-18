@@ -116,9 +116,9 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.ERROR(f"No Postmark credentials found for team '{team.name}', its organization, or Django settings. Skipping list '{digest_list.list_name}'."))
 				continue
 
-			# Resolve site and custom settings for this team
+			# Resolve site and custom settings for this list (List.site → Team.site → Org default → global)
 			try:
-				site, customsettings = get_site_and_settings(team)
+				site, customsettings = get_site_and_settings(team, list_obj=digest_list)
 			except Exception as e:
 				self.stdout.write(self.style.ERROR(f"Could not resolve site/settings for team '{team.name}': {e}. Skipping list '{digest_list.list_name}'."))
 				continue
@@ -398,9 +398,10 @@ class Command(BaseCommand):
 				)
 
 				# Inject unsubscribe context for the footer template
-				_scheme = 'https' if site.domain not in ('localhost', '127.0.0.1') else 'http'
+				_api_domain = getattr(customsettings, 'api_domain', '') or site.domain
+				_scheme = 'https' if _api_domain not in ('localhost', '127.0.0.1') else 'http'
 				summary_context['list_id'] = digest_list.list_id
-				summary_context['unsubscribe_base_url'] = f"{_scheme}://{site.domain}"
+				summary_context['unsubscribe_base_url'] = f"{_scheme}://{_api_domain}"
 				
 				# Extract the actual articles that will be rendered in the email
 				articles_to_be_sent = list(summary_context.get('articles', [])) + list(summary_context.get('additional_articles', []))

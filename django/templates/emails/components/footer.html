@@ -13,57 +13,70 @@
                             <tr>
                                 <td style="text-align: center;">
                                     <h3 style="color: #1e3a8a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 18px; font-weight: 700; margin: 0 0 5px 0;">
-                                        {% block footer_brand %}Powered by Gregory AI{% endblock %}
+                                        {% block footer_brand %}{{ title|default:"Gregory AI" }}{% endblock %}
                                     </h3>
-                                    <p style="color: #6b7280; font-size: 14px; font-weight: 400; margin: 0; line-height: 1.4;">
-                                        {% block footer_description %}Scientific Research Intelligence Platform{% endblock %}
-                                    </p>
                                 </td>
                             </tr>
                         </table>
                         
-                        <!-- Website and Support Links -->
+                        <!-- Website Link -->
+                        {% if website_url %}
                         <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 20px;">
                             <tr>
                                 <td style="text-align: center;">
                                     <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0; line-height: 1.5;">
                                         For more information visit 
-                                        <a href="https://gregory-ai.com/" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
-                                            https://gregory-ai.com/
+                                        <a href="{{ website_url }}" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+                                            {{ website_url }}
                                         </a>
-                                    </p>
-                                    
-                                    <!-- Additional Support Links -->
-                                    <p style="color: #6b7280; font-size: 13px; margin: 0; line-height: 1.4;">
-                                        <a href="https://{{ site.domain|default:'gregory-ai.com' }}/support/" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Support</a> |
-                                        <a href="https://{{ site.domain|default:'gregory-ai.com' }}/about/" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">About</a> |
-                                        <a href="https://{{ site.domain|default:'gregory-ai.com' }}/contact/" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Contact</a>
                                     </p>
                                 </td>
                             </tr>
                         </table>
+                        {% endif %}
+                        
+                        <!-- Navigation Links -->
+                        {% if support_url or about_url or contact_url %}
+                        <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 20px;">
+                            <tr>
+                                <td style="text-align: center;">
+                                    <p style="color: #6b7280; font-size: 13px; margin: 0; line-height: 1.4;">
+                                        {% if support_url %}<a href="{{ support_url }}" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Support</a>{% endif %}{% if support_url and about_url %} | {% endif %}{% if about_url %}<a href="{{ about_url }}" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">About</a>{% endif %}{% if contact_url and about_url or contact_url and support_url %} | {% endif %}{% if contact_url %}<a href="{{ contact_url }}" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Contact</a>{% endif %}
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                        {% endif %}
                         
                         <!-- Social Media Links -->
+                        {% if bluesky_url or github_url or mastodon_url %}
                         <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 20px;">
                             <tr>
                                 <td style="text-align: center;">
                                     <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Follow us:</p>
                                     <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="display: inline-table;">
                                         <tr>
+                                            {% if bluesky_url %}
                                             <td style="padding: 0 8px;">
-                                                <a href="https://bsky.app/profile/Gregory-MS.com" style="color: #3b82f6; text-decoration: none; font-size: 13px;">Blue Sky</a>
+                                                <a href="{{ bluesky_url }}" style="color: #3b82f6; text-decoration: none; font-size: 13px;">Blue Sky</a>
                                             </td>
+                                            {% endif %}
+                                            {% if github_url %}
                                             <td style="padding: 0 8px;">
-                                                <a href="https://github.com/brunoamaral/gregory" style="color: #3b82f6; text-decoration: none; font-size: 13px;">GitHub</a>
+                                                <a href="{{ github_url }}" style="color: #3b82f6; text-decoration: none; font-size: 13px;">GitHub</a>
                                             </td>
+                                            {% endif %}
+                                            {% if mastodon_url %}
                                             <td style="padding: 0 8px;">
-                                                <a href="https://med-mastodon.com/@gregoryMS" style="color: #3b82f6; text-decoration: none; font-size: 13px;">Mastodon</a>
+                                                <a href="{{ mastodon_url }}" style="color: #3b82f6; text-decoration: none; font-size: 13px;">Mastodon</a>
                                             </td>
+                                            {% endif %}
                                         </tr>
                                     </table>
                                 </td>
                             </tr>
                         </table>
+                        {% endif %}
                         
                         <!-- Custom Email Footer Content -->
                         {% if email_footer %}
@@ -99,16 +112,20 @@
                             </tr>
                         </table>
                         
-                        <!-- Legal Links -->
+                        <!-- Legal Links and Powered By -->
                         <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%;">
                             <tr>
                                 <td style="text-align: center;">
-                                    <p style="color: #9ca3af; font-size: 11px; margin: 0; line-height: 1.3;">
-                                        <a href="https://{{ site.domain|default:'gregory-ai.com' }}/privacy-policy/" style="color: #9ca3af; text-decoration: underline; margin: 0 5px;">Privacy Policy</a> |
-                                        <a href="https://{{ site.domain|default:'gregory-ai.com' }}/terms/" style="color: #9ca3af; text-decoration: underline; margin: 0 5px;">Terms of Service</a>
+                                    {% if privacy_policy_url or terms_url %}
+                                    <p style="color: #9ca3af; font-size: 11px; margin: 0 0 5px 0; line-height: 1.3;">
+                                        {% if privacy_policy_url %}<a href="{{ privacy_policy_url }}" style="color: #9ca3af; text-decoration: underline; margin: 0 5px;">Privacy Policy</a>{% endif %}{% if privacy_policy_url and terms_url %} | {% endif %}{% if terms_url %}<a href="{{ terms_url }}" style="color: #9ca3af; text-decoration: underline; margin: 0 5px;">Terms of Service</a>{% endif %}
                                     </p>
+                                    {% endif %}
                                     <p style="color: #9ca3af; font-size: 11px; margin: 5px 0 0 0; line-height: 1.3;">
                                         © {% now "Y" %} {{ title|default:"Gregory AI" }}. All rights reserved.
+                                    </p>
+                                    <p style="color: #d1d5db; font-size: 10px; margin: 8px 0 0 0; line-height: 1.3;">
+                                        Powered by <a href="https://gregory-ai.com/" style="color: #d1d5db; text-decoration: underline;">Gregory AI</a>
                                     </p>
                                 </td>
                             </tr>

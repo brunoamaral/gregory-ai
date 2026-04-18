@@ -156,7 +156,7 @@ class ListsAdmin(admin.ModelAdmin):
 	filter_horizontal = ['subjects', 'latest_research_categories']
 	actions = ['reassign_to_team_action']
 	fieldsets = [
-		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team', 'allowed_domains']}),
+		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team', 'site', 'allowed_domains']}),
 					# allowed_domains: comma-separated domains (e.g. example.com) whose subscription
 					# forms are permitted to add subscribers to this list and receive redirects.
 		('Email Types', {'fields': ['admin_summary', 'weekly_digest', 'clinical_trials_notifications']}),
@@ -404,7 +404,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					return None
 		return announcement
 
-	def _render_announcement_email(self, announcement, subscriber=None, site=None, list_id=None):
+	def _render_announcement_email(self, announcement, subscriber=None, site=None, list_id=None, custom_settings=None):
 		"""Render announcement as HTML email using the base template."""
 		safe_body = bleach.clean(
 			announcement.body,
@@ -420,12 +420,25 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			'current_date': timezone.now(),
 			'header_title': announcement.header_title,
 			'header_tagline': announcement.header_tagline,
+			'title': getattr(custom_settings, 'title', 'Gregory AI') if custom_settings else 'Gregory AI',
+			'email_footer': getattr(custom_settings, 'email_footer', '') if custom_settings else '',
+			'website_url': getattr(custom_settings, 'website_url', '') if custom_settings else '',
+			'support_url': getattr(custom_settings, 'support_url', '') if custom_settings else '',
+			'about_url': getattr(custom_settings, 'about_url', '') if custom_settings else '',
+			'contact_url': getattr(custom_settings, 'contact_url', '') if custom_settings else '',
+			'bluesky_url': getattr(custom_settings, 'bluesky_url', '') if custom_settings else '',
+			'github_url': getattr(custom_settings, 'github_url', '') if custom_settings else '',
+			'mastodon_url': getattr(custom_settings, 'mastodon_url', '') if custom_settings else '',
+			'privacy_policy_url': '',
+			'terms_url': '',
 		}
 		if subscriber:
 			context['subscriber'] = subscriber
 		if site:
-			_scheme = 'https' if site.domain not in ('localhost', '127.0.0.1') else 'http'
-			context['unsubscribe_base_url'] = f"{_scheme}://{site.domain}"
+			_api_domain = getattr(custom_settings, 'api_domain', '') if custom_settings else ''
+			_api_domain = _api_domain or site.domain
+			_scheme = 'https' if _api_domain not in ('localhost', '127.0.0.1') else 'http'
+			context['unsubscribe_base_url'] = f"{_scheme}://{_api_domain}"
 			context['site'] = site
 		if list_id:
 			context['list_id'] = list_id
@@ -468,11 +481,11 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 			try:
 				api_token, api_url = get_postmark_credentials(first_list.team)
-				site, _ = get_site_and_settings(first_list.team)
+				site, custom_settings = get_site_and_settings(first_list.team, list_obj=first_list)
 			except Exception:
-				api_token, api_url, site = None, None, None
+				api_token, api_url, site, custom_settings = None, None, None, None
 
-			html = self._render_announcement_email(announcement, site=site)
+			html = self._render_announcement_email(announcement, site=site, custom_settings=custom_settings)
 			text = self._render_announcement_text(announcement)
 
 			try:
@@ -543,24 +556,24 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			success_count = 0
 			failure_count = 0
 
-			# Pre-compute credentials per team to avoid re-fetching for every subscriber
-			team_credentials = {}
+			# Pre-compute credentials per list to avoid re-fetching for every subscriber
+			list_credentials = {}
 			for _email, (_sub, _lst) in all_subscribers.items():
-				pk = _lst.team_id
-				if pk not in team_credentials:
+				pk = _lst.list_id
+				if pk not in list_credentials:
 					try:
 						_api_token, _api_url = get_postmark_credentials(_lst.team)
-						_site, _ = get_site_and_settings(_lst.team)
+						_site, _cs = get_site_and_settings(_lst.team, list_obj=_lst)
 					except Exception:
-						_api_token, _api_url, _site = None, None, None
-					team_credentials[pk] = (_api_token, _api_url, _site)
+						_api_token, _api_url, _site, _cs = None, None, None, None
+					list_credentials[pk] = (_api_token, _api_url, _site, _cs)
 
 			# Group subscribers by the list (for credentials resolution)
 			# Use the list from which we first encountered them
 			for email, (subscriber, lst) in all_subscribers.items():
-				api_token, api_url, site = team_credentials.get(lst.team_id, (None, None, None))
+				api_token, api_url, site, custom_settings = list_credentials.get(lst.list_id, (None, None, None, None))
 
-				html = self._render_announcement_email(announcement, subscriber=subscriber, site=site, list_id=lst.list_id)
+				html = self._render_announcement_email(announcement, subscriber=subscriber, site=site, list_id=lst.list_id, custom_settings=custom_settings)
 				text = self._render_announcement_text(announcement, subscriber=subscriber)
 
 				error_msg = ''

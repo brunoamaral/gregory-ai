@@ -75,10 +75,11 @@ def get_postmark_credentials(team):
 	)
 
 
-def get_site_and_settings(team):
+def get_site_and_settings(team, list_obj=None):
 	"""
-	Resolve the Site and CustomSetting for a team using the fallback chain:
-	  1. team.site (explicitly configured on the Team)
+	Resolve the Site and CustomSetting for an email list (or team) using the
+	fallback chain:
+	  1. list_obj.site (explicitly configured on the List; auto-populated on save)
 	  2. Organization's default OrganizationSite (is_default=True)
 	  3. Organization's first OrganizationSite (any)
 	  4. Site.objects.get_current() (global SITE_ID fallback)
@@ -88,8 +89,8 @@ def get_site_and_settings(team):
 	"""
 	site = None
 
-	if team.site_id:
-		site = team.site
+	if list_obj is not None and list_obj.site_id:
+		site = list_obj.site
 	else:
 		org_site = (
 			OrganizationSite.objects
