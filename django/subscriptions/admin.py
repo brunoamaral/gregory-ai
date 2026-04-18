@@ -638,7 +638,6 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			'header_title': announcement.header_title,
 			'header_tagline': announcement.header_tagline,
 			'title': getattr(custom_settings, 'title', 'Gregory AI') if custom_settings else 'Gregory AI',
-			'email_footer': getattr(custom_settings, 'email_footer', '') if custom_settings else '',
 			'website_url': getattr(custom_settings, 'website_url', '') if custom_settings else '',
 			'support_url': getattr(custom_settings, 'support_url', '') if custom_settings else '',
 			'about_url': getattr(custom_settings, 'about_url', '') if custom_settings else '',

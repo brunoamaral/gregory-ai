@@ -59,8 +59,7 @@ def email_template_preview(request, template_name):
         # Fallback for development
         site = {'domain': 'gregory-ms.com', 'name': 'Gregory AI'}
         customsettings = {
-            'title': 'Gregory AI - MS Research Updates',
-            'email_footer': 'Thank you for using Gregory AI to stay updated on MS research.'
+            'title': 'Gregory AI - MS Research Updates'
         }
     
     # Create mock subscriber
@@ -124,7 +123,6 @@ def email_template_preview(request, template_name):
             'trials': trials,
             'now': timezone.now(),
             'title': customsettings.title if hasattr(customsettings, 'title') else 'Gregory AI',
-            'email_footer': customsettings.email_footer if hasattr(customsettings, 'email_footer') else 'Gregory AI Footer'
         }
     else:
         return HttpResponse('Template not found', status=404)
@@ -152,8 +150,7 @@ def email_template_json_context(request, template_name):
     except:
         site = {'domain': 'gregory-ms.com', 'name': 'Gregory AI'}
         customsettings = {
-            'title': 'Gregory AI - MS Research Updates',
-            'email_footer': 'Thank you for using Gregory AI to stay updated on MS research.'
+            'title': 'Gregory AI - MS Research Updates'
         }
     
     mock_subscriber = {

@@ -117,7 +117,6 @@ def prepare_weekly_summary_context(articles, trials, subscriber, site, customset
     base_context.update({
         'subscriber': subscriber,
         'title': customsettings.title,
-        'email_footer': customsettings.email_footer,
         'greeting_time': get_greeting_time(),
     })
     
@@ -151,8 +150,7 @@ def prepare_admin_summary_context(articles, trials, subscriber, site, customsett
         'subscriber': subscriber,
         'admin': admin_email,
         'title': getattr(customsettings, 'title', 'Gregory AI') if hasattr(customsettings, 'title') else customsettings.get('title', 'Gregory AI'),
-        'email_footer': getattr(customsettings, 'email_footer', '') if hasattr(customsettings, 'email_footer') else customsettings.get('email_footer', ''),
-        'show_ml_predictions': True,
+		'show_ml_predictions': True,
         'show_admin_links': True,
     })
     
@@ -178,7 +176,6 @@ def prepare_trial_notification_context(trials, subscriber, site, customsettings)
     base_context.update({
         'subscriber': subscriber,
         'title': customsettings.title,
-        'email_footer': customsettings.email_footer,
         'show_trial_details': True,
     })
     

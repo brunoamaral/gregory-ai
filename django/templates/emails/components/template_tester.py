@@ -78,7 +78,6 @@ class EmailTemplateTestUtils:
         
         mock_customsettings = {
             'title': 'Gregory AI - MS Research Updates',
-            'email_footer': 'Thank you for using Gregory AI to stay updated on MS research.',
             'contact_email': 'hello@gregory-ms.com',
             'social_links': {
                 'twitter': 'https://twitter.com/gregory_ai',
@@ -107,7 +106,6 @@ class EmailTemplateTestUtils:
         if email_type == 'admin_summary':
             context['admin'] = 'admin@gregory-ms.com'
             context['title'] = mock_customsettings['title']
-            context['email_footer'] = mock_customsettings['email_footer']
         
         return context
     
