@@ -1184,7 +1184,7 @@ class ReassignTeamForm(forms.Form):
 class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	form = TeamAdminForm
 	inlines = [TeamMembersInline, TeamSubjectInline, TeamSourceInline, TeamCredentialsInline]
-	list_display = ['id', 'formatted_team_name', 'organization_link', 'slug', 'site', 'subjects_count', 'sources_count', 'active_badge']
+	list_display = ['id', 'formatted_team_name', 'organization_link', 'slug', 'subjects_count', 'sources_count', 'active_badge']
 	list_display_links = ['id', 'formatted_team_name']
 	list_filter = ['organization', 'is_active']
 	search_fields = ['name', 'organization__name', 'slug']
@@ -1192,7 +1192,7 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 
 	fieldsets = (
 		(None, {
-			'fields': ('team_name', 'organization', 'slug', 'site', 'is_active')
+			'fields': ('team_name', 'organization', 'slug', 'is_active')
 		}),
 	)
 	readonly_fields = ('organization_link',)
