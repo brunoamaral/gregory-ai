@@ -9,9 +9,11 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.contrib import messages
 from datetime import timedelta
+from django import forms
 import bleach
 from .models import Subscribers, Lists, FailedNotification, ListSubscription, SubscriberSiteProfile, Announcement, AnnouncementRecipient
 from .forms import ListsAdminForm, AnnouncementAdminForm
+from gregory.models import Team
 
 # Allowlist for announcement body HTML (used by bleach sanitization)
 _ANNOUNCEMENT_ALLOWED_TAGS = [
@@ -152,6 +154,7 @@ class ListsAdmin(admin.ModelAdmin):
 	list_display = ['list_name', 'organisation_name', 'team', 'list_description', 'admin_summary','weekly_digest','clinical_trials_notifications', 'has_latest_research', 'subscriber_count']
 	inlines = [ListSubscriberInline]
 	filter_horizontal = ['subjects', 'latest_research_categories']
+	actions = ['reassign_to_team_action']
 	fieldsets = [
 		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team', 'allowed_domains']}),
 					# allowed_domains: comma-separated domains (e.g. example.com) whose subscription
@@ -198,6 +201,72 @@ class ListsAdmin(admin.ModelAdmin):
 		return ''
 	organisation_name.short_description = 'Organisation'
 	organisation_name.admin_order_field = 'team__organization__name'
+
+	@admin.action(description="Reassign selected lists to another team…")
+	def reassign_to_team_action(self, request, queryset):
+		class ReassignListsForm(forms.Form):
+			target_team = forms.ModelChoiceField(
+				queryset=Team.objects.none(),
+				label="Target team",
+				help_text="Selected lists will be moved to this team.",
+			)
+
+		# Safety: lists without a team have no organisation and cannot be reassigned.
+		if queryset.filter(team__isnull=True).exists():
+			self.message_user(
+				request,
+				"Some selected lists have no team assigned and cannot be reassigned.",
+				level=messages.ERROR,
+			)
+			return
+
+		# Safety: all selected lists must belong to the same organisation.
+		org_ids = list(
+			queryset.values_list('team__organization_id', flat=True).distinct()
+		)
+		if len(org_ids) != 1:
+			self.message_user(
+				request,
+				"Selected lists span multiple organisations. "
+				"Please select only lists from a single organisation.",
+				level=messages.ERROR,
+			)
+			return
+
+		target_qs = Team.objects.filter(organization_id=org_ids[0])
+
+		if 'apply' not in request.POST:
+			form = ReassignListsForm()
+			form.fields['target_team'].queryset = target_qs
+			return render(
+				request,
+				'admin/gregory/reassign_to_team_intermediate.html',
+				{
+					'title': 'Reassign lists to team',
+					'objects': queryset,
+					'form': form,
+					'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
+					'model_name': 'lists',
+				},
+			)
+
+		form = ReassignListsForm(request.POST)
+		form.fields['target_team'].queryset = target_qs
+		if not form.is_valid():
+			self.message_user(request, "Invalid form — please try again.", level=messages.ERROR)
+			return
+		to_team = form.cleaned_data['target_team']
+		# Final guard: target team must belong to the same organisation.
+		if to_team.organization_id != org_ids[0]:
+			self.message_user(
+				request,
+				"Target team does not belong to the same organisation as the selected lists.",
+				level=messages.ERROR,
+			)
+			return
+		count = queryset.count()
+		queryset.update(team=to_team)
+		self.message_user(request, f"{count} list(s) reassigned to '{to_team}'.")
 
 class FailedNotificationAdmin(admin.ModelAdmin):
 	list_display = ['subscriber','reason','list','created_at']

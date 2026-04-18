@@ -1,0 +1,40 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<p>
+    Reassign <strong>{{ objects.count }} {{ model_name }}</strong> to another team.
+</p>
+
+<form method="post">
+    {% csrf_token %}
+
+    {% for obj in objects %}
+        <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="reassign_to_team_action">
+    <input type="hidden" name="apply" value="1">
+
+    <fieldset class="module aligned">
+        {% for field in form %}
+        <div class="form-row">
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}
+                <p class="help">{{ field.help_text }}</p>
+            {% endif %}
+            {% for error in field.errors %}
+                <p class="errornote">{{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </fieldset>
+
+    <div class="submit-row">
+        <input type="submit" value="Confirm reassignment" class="default">
+        <a href="../" class="button cancel-link">Cancel</a>
+    </div>
+</form>
+{% endblock %}

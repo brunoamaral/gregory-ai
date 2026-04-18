@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.http import HttpResponse
@@ -514,7 +514,83 @@ class SourceAdminForm(forms.ModelForm):
 				self.fields['subject'].queryset = Subject.objects.filter(team__organization__id__in=user_orgs)
 
 
-class SourceAdmin(OrganizationFilterMixin, admin.ModelAdmin):
+class ReassignToTeamForm(forms.Form):
+	"""Simple form for granular per-object 'reassign to team' actions."""
+	target_team = forms.ModelChoiceField(
+		queryset=Team.objects.none(),
+		label="Target team",
+		help_text="All selected objects will be moved to this team.",
+	)
+
+
+class ReassignToTeamMixin:
+	"""
+	Admin mixin that adds a 'Reassign to team' bulk action.
+
+	Subclasses must ensure their model has a ``team`` ForeignKey field.
+	"""
+
+	def _get_reassign_template(self):
+		return 'admin/gregory/reassign_to_team_intermediate.html'
+
+	@admin.action(description="Reassign selected to another team…")
+	def reassign_to_team_action(self, request, queryset):
+		# Safety: all selected objects must belong to the same organisation.
+		team_ids = queryset.values_list('team_id', flat=True).distinct()
+		org_ids = list(
+			Team.all_objects.filter(pk__in=team_ids)
+			.values_list('organization_id', flat=True)
+			.distinct()
+		)
+		if len(org_ids) != 1:
+			self.message_user(
+				request,
+				"Selected objects span multiple organisations. "
+				"Please select only objects from a single organisation.",
+				level=messages.ERROR,
+			)
+			return
+
+		target_qs = Team.objects.filter(organization_id=org_ids[0])
+
+		if 'apply' not in request.POST:
+			form = ReassignToTeamForm()
+			form.fields['target_team'].queryset = target_qs
+			return render(
+				request,
+				self._get_reassign_template(),
+				{
+					'title': 'Reassign to team',
+					'objects': queryset,
+					'form': form,
+					'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
+					'model_name': queryset.model._meta.verbose_name_plural,
+				},
+			)
+
+		form = ReassignToTeamForm(request.POST)
+		form.fields['target_team'].queryset = target_qs
+
+		if not form.is_valid():
+			self.message_user(request, "Invalid form — please try again.", level=messages.ERROR)
+			return
+
+		to_team = form.cleaned_data['target_team']
+		# Final guard: target team must belong to the same organisation.
+		if to_team.organization_id != org_ids[0]:
+			self.message_user(
+				request,
+				"Target team does not belong to the same organisation as the selected objects.",
+				level=messages.ERROR,
+			)
+			return
+
+		count = queryset.count()
+		queryset.update(team=to_team)
+		self.message_user(request, f"{count} object(s) reassigned to '{to_team}'.")
+
+
+class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
 	form = SourceAdminForm
 	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator', 'has_keyword_filter']
 	list_filter = [
@@ -523,7 +599,7 @@ class SourceAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		('subject', OrganizationRestrictedFieldListFilter),
 	]
 	search_fields = ['name', 'link', 'description', 'keyword_filter']
-	actions = ['activate_sources', 'deactivate_sources']
+	actions = ['activate_sources', 'deactivate_sources', 'reassign_to_team_action']
 	fieldsets = (
 		('Basic Information', {
 			'fields': ('name', 'source_for', 'method', 'active', 'link')
@@ -569,7 +645,6 @@ class SourceAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		"""Warn admin if source has no team assigned."""
 		super().save_model(request, obj, form, change)
 		if not obj.team:
-			from django.contrib import messages
 			messages.warning(
 				request,
 				f"Source '{obj.name}' has no team assigned. "
@@ -679,12 +754,13 @@ class SubjectAdminForm(forms.ModelForm):
 				self.fields['team'].queryset = Team.objects.filter(organization__id__in=user_orgs)
 
 @admin.register(Subject)
-class SubjectAdmin(OrganizationFilterMixin, admin.ModelAdmin):
+class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
 	list_display = ['formatted_subject_name', 'description', 'view_sources', 'team']  # Updated list display
 	readonly_fields = ['linked_sources']  # Display in the edit form
 	list_filter = [('team', OrganizationRestrictedFieldListFilter)]  # Add the team filter
 	form = SubjectAdminForm
 	inlines = [SourcesInline]  # Add the inline for managing sources
+	actions = ['reassign_to_team_action']
 	
 	def formatted_subject_name(self, obj):
 		"""Display subject name with emphasis"""
@@ -855,14 +931,15 @@ class AuthorsAdmin(admin.ModelAdmin):
 		return super().get_inline_instances(request, obj)
 	
 @admin.register(TeamCategory)
-class TeamCategoryAdmin(OrganizationFilterMixin, admin.ModelAdmin):
+class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
 	list_display = ('category_name', 'team', 'article_count', 'display_subjects')
 	search_fields = ('category_name', 'team__name', 'subjects__subject_name')
 	list_filter = [
 		('team', OrganizationRestrictedFieldListFilter),
 		('subjects', OrganizationRestrictedFieldListFilter),
 	]
-	filter_horizontal = ('subjects',)  # For better subject selection in the edit form
+	filter_horizontal = ('subjects',)
+	actions = ['reassign_to_team_action']
 	
 	def get_queryset(self, request):
 		"""Add prefetch_related to avoid multiple DB queries"""
@@ -1030,6 +1107,10 @@ class TeamAdminForm(forms.ModelForm):
 		return cleaned_data
 	
 	def save(self, commit=True):
+		from django.utils.text import slugify
+		from organizations.models import Organization
+		from gregory.models import OrganizationSite
+
 		team_name = self.cleaned_data.get('team_name')
 		organization = self.cleaned_data.get('organization')
 		
@@ -1041,14 +1122,9 @@ class TeamAdminForm(forms.ModelForm):
 				self.instance.name = team_name or organization.name
 				# Auto-generate slug if not provided
 				if not self.instance.slug:
-					from django.utils.text import slugify
 					self.instance.slug = slugify(f"{organization.name}-{team_name or 'team'}")
 			elif team_name:
 				# If only team_name is provided, create new organization
-				from organizations.models import Organization
-				from django.utils.text import slugify
-				
-				# Create the organization
 				organization = Organization.objects.create(name=team_name.strip())
 				self.instance.organization = organization
 				self.instance.name = team_name.strip()
@@ -1060,7 +1136,16 @@ class TeamAdminForm(forms.ModelForm):
 			# For existing teams, update the name
 			if team_name:
 				self.instance.name = team_name.strip()
-		
+
+		# Default site to the organisation's default site when not explicitly set
+		if not self.instance.site_id and self.instance.organization_id:
+			default_org_site = OrganizationSite.objects.filter(
+				organization_id=self.instance.organization_id,
+				is_default=True,
+			).select_related('site').first()
+			if default_org_site:
+				self.instance.site = default_org_site.site
+
 		return super().save(commit)
 
 class TeamMembersInline(admin.TabularInline):
@@ -1077,20 +1162,54 @@ def _ensure_user_in_organization(user, organization):
 		OrganizationUser.objects.create(user=user, organization=organization)
 
 
+class ReassignTeamForm(forms.Form):
+	"""Intermediate form for the 'Reassign to team' admin action."""
+	target_team = forms.ModelChoiceField(
+		queryset=Team.objects.none(),  # filled dynamically
+		label="Target team",
+		help_text="All objects will be moved to this team. Must be in the same organisation.",
+	)
+	conflict = forms.ChoiceField(
+		choices=[
+			('skip',   'Skip — leave conflicting subjects on the old team'),
+			('rename', 'Rename — append a suffix to conflicting subject slugs'),
+			('merge',  'Merge — fold conflicting subjects into the existing one'),
+		],
+		initial='skip',
+		label="Subject slug conflict handling",
+	)
+
+
 @admin.register(Team)
 class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	form = TeamAdminForm
 	inlines = [TeamMembersInline, TeamSubjectInline, TeamSourceInline, TeamCredentialsInline]
-	list_display = ['id', 'formatted_team_name', 'organization_link', 'slug', 'site', 'subjects_count', 'sources_count']
-	list_filter = ['organization']
+	list_display = ['id', 'formatted_team_name', 'organization_link', 'slug', 'site', 'subjects_count', 'sources_count', 'active_badge']
+	list_display_links = ['id', 'formatted_team_name']
+	list_filter = ['organization', 'is_active']
 	search_fields = ['name', 'organization__name', 'slug']
-	
+	actions = ['soft_delete_teams', 'reassign_to_team', 'hard_delete_empty_inactive_teams']
+
 	fieldsets = (
 		(None, {
-			'fields': ('team_name', 'organization', 'slug', 'site')
+			'fields': ('team_name', 'organization', 'slug', 'site', 'is_active')
 		}),
 	)
 	readonly_fields = ('organization_link',)
+
+	def get_queryset(self, request):
+		# Show all teams (active and inactive) in the admin.
+		qs = Team.all_objects.select_related('organization').prefetch_related('subjects', 'sources', 'members')
+		# Apply organisation-based filtering from OrganizationFilterMixin if needed.
+		if not request.user.is_superuser:
+			user_orgs = get_user_organizations(request.user)
+			if user_orgs is not None:
+				qs = qs.filter(organization__in=user_orgs)
+		return qs
+
+	# ------------------------------------------------------------------ #
+	# Display helpers                                                      #
+	# ------------------------------------------------------------------ #
 
 	def organization_link(self, obj):
 		if obj.organization_id:
@@ -1099,23 +1218,193 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		return '-'
 	organization_link.short_description = 'Organisation'
 	organization_link.admin_order_field = 'organization__name'
-	
+
 	def formatted_team_name(self, obj):
-		"""Display team name with formatting"""
-		return format_html('<strong>{}</strong>', obj.name)
+		if obj.is_active:
+			return format_html('<strong>{}</strong>', obj.name)
+		return format_html(
+			'<strong style="color:#999;text-decoration:line-through;">{}</strong> '
+			'<span style="color:#c0392b;font-size:0.85em;">[inactive]</span>',
+			obj.name,
+		)
 	formatted_team_name.short_description = 'Team Name'
 	formatted_team_name.admin_order_field = 'name'
-	
+
+	def active_badge(self, obj):
+		if obj.is_active:
+			return format_html('<span style="color:green;font-weight:bold;">{}</span>', '✓ Active')
+		return format_html('<span style="color:#c0392b;font-weight:bold;">{}</span>', '✗ Inactive')
+	active_badge.short_description = 'Status'
+	active_badge.admin_order_field = 'is_active'
+
 	def subjects_count(self, obj):
 		return obj.subjects.count()
 	subjects_count.short_description = 'Subjects'
-	
+
 	def sources_count(self, obj):
 		return obj.sources.count()
 	sources_count.short_description = 'Sources'
-	
-	def get_queryset(self, request):
-		return super().get_queryset(request).select_related('organization').prefetch_related('subjects', 'sources', 'members')
+
+	# ------------------------------------------------------------------ #
+	# Soft-delete: override delete_model and delete_queryset               #
+	# ------------------------------------------------------------------ #
+
+	def delete_model(self, request, obj):
+		"""Soft-delete a single team from the change view."""
+		obj.delete()  # calls Team.delete() which sets is_active=False
+
+	def delete_queryset(self, request, queryset):
+		"""Soft-delete all selected teams from the list view."""
+		for team in queryset:
+			team.delete()
+
+	# ------------------------------------------------------------------ #
+	# Admin actions                                                        #
+	# ------------------------------------------------------------------ #
+
+	@admin.action(description="Deactivate selected teams (soft delete)")
+	def soft_delete_teams(self, request, queryset):
+		count = 0
+		for team in queryset:
+			if team.is_active:
+				team.delete()
+				count += 1
+		self.message_user(request, f"{count} team(s) deactivated.")
+
+	@admin.action(description="Reassign all objects to another team…")
+	def reassign_to_team(self, request, queryset):
+		from gregory.services.team_reassignment import reassign_team
+
+		# Step 1 — show the intermediate form.
+		if 'apply' not in request.POST:
+			# Build queryset of valid target teams: active, not in the selection,
+			# but sharing the same organisation as the selected teams.
+			org_ids = queryset.values_list('organization_id', flat=True).distinct()
+			target_qs = Team.objects.filter(organization_id__in=org_ids).exclude(
+				pk__in=queryset.values_list('pk', flat=True)
+			)
+			form = ReassignTeamForm()
+			form.fields['target_team'].queryset = target_qs
+			return render(
+				request,
+				'admin/gregory/team/reassign_intermediate.html',
+				{
+					'title': 'Reassign team objects',
+					'teams': queryset,
+					'form': form,
+					'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
+				},
+			)
+
+		# Step 2 — process the form.
+		org_ids = queryset.values_list('organization_id', flat=True).distinct()
+		target_qs = Team.objects.filter(organization_id__in=org_ids).exclude(
+			pk__in=queryset.values_list('pk', flat=True)
+		)
+		form = ReassignTeamForm(request.POST)
+		form.fields['target_team'].queryset = target_qs
+
+		if not form.is_valid():
+			self.message_user(request, "Invalid form — please try again.", level=messages.ERROR)
+			return
+
+		to_team = form.cleaned_data['target_team']
+		conflict = form.cleaned_data['conflict']
+
+		errors = []
+		for from_team in queryset:
+			try:
+				report = reassign_team(from_team=from_team, to_team=to_team, conflict=conflict)
+				self.message_user(
+					request,
+					f"Reassigned '{from_team.name}' → '{to_team.name}': "
+					f"{len(report.subjects_moved)} subjects, {report.sources_moved} sources, "
+					f"{report.lists_moved} lists moved.",
+				)
+			except ValueError as exc:
+				errors.append(str(exc))
+
+		if errors:
+			self.message_user(request, "Errors: " + "; ".join(errors), level=messages.ERROR)
+
+	@admin.action(description="Hard-delete selected inactive teams (only if empty)")
+	def hard_delete_empty_inactive_teams(self, request, queryset):
+		deleted = 0
+		skipped = []
+		for team in queryset:
+			if team.is_active:
+				skipped.append(f"'{team.name}' is still active")
+				continue
+			has_objects = (
+				team.subjects.exists()
+				or team.sources.exists()
+				or team.team_categories.exists()
+				or team.lists.exists()
+				or team.prediction_run_logs.exists()
+			)
+			if has_objects:
+				skipped.append(f"'{team.name}' still has related objects — reassign first")
+				continue
+			team.hard_delete()
+			deleted += 1
+
+		if deleted:
+			self.message_user(request, f"{deleted} team(s) permanently deleted.")
+		if skipped:
+			self.message_user(request, "Skipped: " + "; ".join(skipped), level=messages.WARNING)
+
+	# ------------------------------------------------------------------ #
+	# URLs for custom views                                                #
+	# ------------------------------------------------------------------ #
+
+	def get_urls(self):
+		from django.urls import path as url_path
+		urls = super().get_urls()
+		custom = [
+			url_path(
+				'<int:team_id>/reassign/',
+				self.admin_site.admin_view(self.reassign_view),
+				name='gregory_team_reassign',
+			),
+		]
+		return custom + urls
+
+	def reassign_view(self, request, team_id):
+		"""Detail-level reassign view (accessible from the change form)."""
+		from gregory.services.team_reassignment import reassign_team
+
+		from_team = Team.all_objects.get(pk=team_id)
+		org_id = from_team.organization_id
+		target_qs = Team.objects.filter(organization_id=org_id).exclude(pk=team_id)
+
+		if request.method == 'POST':
+			form = ReassignTeamForm(request.POST)
+			form.fields['target_team'].queryset = target_qs
+			if form.is_valid():
+				to_team = form.cleaned_data['target_team']
+				conflict = form.cleaned_data['conflict']
+				try:
+					report = reassign_team(from_team=from_team, to_team=to_team, conflict=conflict)
+					self.message_user(request, f"Reassignment complete.\n{report.summary()}")
+				except ValueError as exc:
+					self.message_user(request, str(exc), level=messages.ERROR)
+				return self._response_post_save(request, from_team)
+		else:
+			form = ReassignTeamForm()
+			form.fields['target_team'].queryset = target_qs
+
+		return render(
+			request,
+			'admin/gregory/team/reassign_intermediate.html',
+			{
+				'title': f'Reassign objects from "{from_team}"',
+				'teams': [from_team],
+				'form': form,
+				'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
+				'original': from_team,
+				'opts': self.model._meta,
+			},
+		)
 
 	def save_related(self, request, form, formsets, change):
 		super().save_related(request, form, formsets, change)
