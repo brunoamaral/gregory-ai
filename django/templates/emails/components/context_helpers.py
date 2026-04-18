@@ -116,7 +116,7 @@ def prepare_weekly_summary_context(articles, trials, subscriber, site, customset
     # Add any weekly-specific enhancements
     base_context.update({
         'subscriber': subscriber,
-        'title': customsettings.title,
+        'title': customsettings.get('title', 'Gregory AI') if isinstance(customsettings, dict) else getattr(customsettings, 'title', 'Gregory AI'),
         'greeting_time': get_greeting_time(),
     })
     
@@ -149,8 +149,8 @@ def prepare_admin_summary_context(articles, trials, subscriber, site, customsett
     base_context.update({
         'subscriber': subscriber,
         'admin': admin_email,
-        'title': getattr(customsettings, 'title', 'Gregory AI') if hasattr(customsettings, 'title') else customsettings.get('title', 'Gregory AI'),
-		'show_ml_predictions': True,
+        'title': customsettings.get('title', 'Gregory AI') if isinstance(customsettings, dict) else getattr(customsettings, 'title', 'Gregory AI'),
+        'show_ml_predictions': True,
         'show_admin_links': True,
     })
     
@@ -175,7 +175,7 @@ def prepare_trial_notification_context(trials, subscriber, site, customsettings)
     # Add trial notification specific enhancements
     base_context.update({
         'subscriber': subscriber,
-        'title': customsettings.title,
+        'title': customsettings.get('title', 'Gregory AI') if isinstance(customsettings, dict) else getattr(customsettings, 'title', 'Gregory AI'),
         'show_trial_details': True,
     })
     

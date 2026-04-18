@@ -122,7 +122,7 @@ def email_template_preview(request, template_name):
             'articles': articles,
             'trials': trials,
             'now': timezone.now(),
-            'title': customsettings.title if hasattr(customsettings, 'title') else 'Gregory AI',
+            'title': customsettings.get('title', 'Gregory AI') if isinstance(customsettings, dict) else getattr(customsettings, 'title', 'Gregory AI'),
         }
     else:
         return HttpResponse('Template not found', status=404)
