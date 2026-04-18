@@ -1,0 +1,30 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Send Test: {{ announcement.subject }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 20px auto; padding: 20px;">
+	<h2>Send Test Email</h2>
+	<p>This will send a test copy of the announcement to your email address:</p>
+	<p style="font-size: 18px; font-weight: bold; color: #1e3a8a;">{{ user_email }}</p>
+
+	<div style="margin: 20px 0; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
+		<strong>Subject:</strong> [TEST] {{ announcement.subject }}
+	</div>
+
+	<form method="post">
+		{% csrf_token %}
+		<div style="margin-top: 20px;">
+			<a href="{% url 'admin:subscriptions_announcement_change' announcement.pk %}"
+			   style="display: inline-block; padding: 8px 20px; background: #6b7280; color: white; text-decoration: none; border-radius: 5px; margin-right: 10px;">
+				Cancel
+			</a>
+			<button type="submit"
+					style="padding: 8px 20px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
+				Send Test Email
+			</button>
+		</div>
+	</form>
+</div>
+{% endblock %}

@@ -1,0 +1,176 @@
+from unittest.mock import patch, MagicMock
+
+from django.contrib.admin import site as admin_site
+from django.contrib.auth.models import User
+from django.contrib.messages import get_messages
+from django.contrib.sites.models import Site
+from django.db import IntegrityError
+from django.test import TestCase, Client
+from django.urls import reverse
+
+from organizations.models import Organization
+from gregory.models import Team
+from subscriptions.admin import AnnouncementAdmin
+from subscriptions.models import (
+	Announcement,
+	AnnouncementRecipient,
+	Lists,
+	Subscribers,
+	ListSubscription,
+)
+
+
+class AnnouncementStrTest(TestCase):
+	def test_str_draft(self):
+		ann = Announcement(subject='Hello world', status='draft')
+		self.assertEqual(str(ann), 'Hello world (Draft)')
+
+	def test_str_sent(self):
+		ann = Announcement(subject='Hello world', status='sent')
+		self.assertEqual(str(ann), 'Hello world (Sent)')
+
+	def test_status_choices(self):
+		values = [v for v, _ in Announcement.STATUS_CHOICES]
+		self.assertIn('draft', values)
+		self.assertIn('sending', values)
+		self.assertIn('sent', values)
+		self.assertIn('failed', values)
+
+
+class AnnouncementRecipientUniqueTogetherTest(TestCase):
+	def setUp(self):
+		org = Organization.objects.create(name='Test Org')
+		team = Team.objects.create(organization=org, name='Team A', slug='team-a')
+		self.lst = Lists.objects.create(list_name='Weekly', team=team)
+		self.ann = Announcement.objects.create(subject='Notice', body='<p>Hi</p>')
+		self.sub = Subscribers.objects.create(
+			first_name='Alice', last_name='Smith', email='alice@example.com'
+		)
+
+	def test_duplicate_raises_integrity_error(self):
+		AnnouncementRecipient.objects.create(
+			announcement=self.ann,
+			subscriber=self.sub,
+			list=self.lst,
+		)
+		with self.assertRaises(IntegrityError):
+			AnnouncementRecipient.objects.create(
+				announcement=self.ann,
+				subscriber=self.sub,
+				list=self.lst,
+			)
+
+	def test_update_or_create_does_not_raise(self):
+		"""Retrying via update_or_create must not raise IntegrityError."""
+		AnnouncementRecipient.objects.create(
+			announcement=self.ann,
+			subscriber=self.sub,
+			list=self.lst,
+			success=False,
+			error_message='timeout',
+		)
+		obj, created = AnnouncementRecipient.objects.update_or_create(
+			announcement=self.ann,
+			subscriber=self.sub,
+			defaults={'list': self.lst, 'success': True, 'error_message': ''},
+		)
+		self.assertFalse(created)
+		self.assertTrue(obj.success)
+
+
+class RenderAnnouncementEmailContextTest(TestCase):
+	def setUp(self):
+		org = Organization.objects.create(name='Ctx Org')
+		self.team = Team.objects.create(organization=org, name='Ctx Team', slug='ctx-team')
+		self.lst = Lists.objects.create(list_name='Digest', team=self.team)
+		self.ann = Announcement.objects.create(
+			subject='Test Email',
+			body='<p>Hello</p>',
+			header_title='My Title',
+			header_tagline='My Tagline',
+		)
+		self.site = Site.objects.get_or_create(id=1, defaults={'domain': 'example.com', 'name': 'Example'})[0]
+		self.site.domain = 'example.com'
+		self.site.save()
+		self.admin = AnnouncementAdmin(Announcement, admin_site)
+
+	def _render_and_capture_context(self, **kwargs):
+		"""Call _render_announcement_email and capture the context passed to render_to_string."""
+		captured = {}
+
+		def fake_render(template_name, context):
+			captured.update(context)
+			return '<html></html>'
+
+		with patch('subscriptions.admin.render_to_string', side_effect=fake_render):
+			self.admin._render_announcement_email(self.ann, **kwargs)
+
+		return captured
+
+	def test_current_date_always_present(self):
+		ctx = self._render_and_capture_context()
+		self.assertIn('current_date', ctx)
+		self.assertIsNotNone(ctx['current_date'])
+
+	def test_unsubscribe_base_url_is_site_root(self):
+		sub = Subscribers.objects.create(
+			first_name='Bob', last_name='Jones', email='bob@example.com'
+		)
+		ctx = self._render_and_capture_context(subscriber=sub, site=self.site, list_id=self.lst.list_id)
+		self.assertIn('unsubscribe_base_url', ctx)
+		url = ctx['unsubscribe_base_url']
+		# Must be the site root — not a token-specific path
+		self.assertEqual(url, 'https://example.com')
+		self.assertNotIn('unsubscribe', url)
+		self.assertNotIn('token', url)
+
+	def test_list_id_passed_into_context(self):
+		ctx = self._render_and_capture_context(list_id=self.lst.list_id)
+		self.assertIn('list_id', ctx)
+		self.assertEqual(ctx['list_id'], self.lst.list_id)
+
+	def test_list_id_absent_when_not_provided(self):
+		ctx = self._render_and_capture_context()
+		self.assertNotIn('list_id', ctx)
+
+
+class SendViewRedirectTest(TestCase):
+	def setUp(self):
+		self.superuser = User.objects.create_superuser(
+			username='admin', password='password', email='admin@example.com'
+		)
+		org = Organization.objects.create(name='Send Org')
+		self.team = Team.objects.create(organization=org, name='Send Team', slug='send-team')
+		self.lst = Lists.objects.create(list_name='News', team=self.team)
+		self.client = Client()
+		self.client.force_login(self.superuser)
+
+	def _make_announcement(self, status):
+		ann = Announcement.objects.create(subject='Already sent', body='<p>content</p>', status=status)
+		ann.lists.add(self.lst)
+		return ann
+
+	def _send_url(self, pk):
+		return reverse('admin:subscriptions_announcement_send', args=[pk])
+
+	def test_redirects_with_warning_when_already_sent(self):
+		ann = self._make_announcement('sent')
+		response = self.client.post(self._send_url(ann.pk))
+		self.assertRedirects(
+			response,
+			reverse('admin:subscriptions_announcement_change', args=[ann.pk]),
+			fetch_redirect_response=False,
+		)
+		msgs = list(get_messages(response.wsgi_request))
+		self.assertTrue(any('already been sent' in str(m) for m in msgs))
+
+	def test_redirects_with_warning_when_sending(self):
+		ann = self._make_announcement('sending')
+		response = self.client.post(self._send_url(ann.pk))
+		self.assertRedirects(
+			response,
+			reverse('admin:subscriptions_announcement_change', args=[ann.pk]),
+			fetch_redirect_response=False,
+		)
+		msgs = list(get_messages(response.wsgi_request))
+		self.assertTrue(any('already been sent' in str(m) for m in msgs))

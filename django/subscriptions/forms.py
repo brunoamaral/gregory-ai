@@ -1,7 +1,8 @@
 from django import forms
 from django.forms import ModelForm
+from django_ckeditor_5.widgets import CKEditor5Widget
 
-from .models import Subscribers, Lists
+from .models import Subscribers, Lists, Announcement
 
 class ListsAdminForm(ModelForm):
     class Meta:
@@ -24,6 +25,28 @@ class ListsAdminForm(ModelForm):
             'subjects': 'Subjects for Main Content',
             'latest_research_categories': 'Team Categories for Latest Research'
         }
+
+
+class AnnouncementAdminForm(ModelForm):
+    def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop('request', None)
+        super().__init__(*args, **kwargs)
+        if self.request:
+            from gregory.admin import get_user_organizations
+            user_orgs = get_user_organizations(self.request.user)
+            if user_orgs is not None:
+                self.fields['lists'].queryset = Lists.objects.filter(
+                    team__organization__id__in=user_orgs
+                )
+
+    class Meta:
+        model = Announcement
+        fields = ['subject', 'header_title', 'header_tagline', 'body', 'lists']
+        widgets = {
+            'body': CKEditor5Widget(config_name='default'),
+            'lists': forms.CheckboxSelectMultiple,
+        }
+
 
 class SubscribersForm(ModelForm):
 	first_name = forms.CharField(max_length=100)
