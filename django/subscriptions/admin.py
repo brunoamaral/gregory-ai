@@ -796,9 +796,13 @@ class AnnouncementAdmin(admin.ModelAdmin):
 				error_msg = ''
 				success = False
 				try:
+					# Strip any [TEST] prefix from subject for live sends
+					live_subject = announcement.subject
+					if live_subject.startswith('[TEST] '):
+						live_subject = live_subject[7:]
 					response = send_email(
 						to=subscriber.email,
-						subject=announcement.subject,
+						subject=live_subject,
 						html=html,
 						text=text,
 						site=site,
