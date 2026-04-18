@@ -45,23 +45,48 @@ class ListSubscriptionInline(admin.TabularInline):
 	verbose_name_plural = 'List Subscriptions'
 
 
+class SubscriptionListFilter(admin.SimpleListFilter):
+	"""Filter subscribers by the list they are subscribed to."""
+	title = 'list'
+	parameter_name = 'list'
+
+	def lookups(self, request, model_admin):
+		from gregory.admin import get_user_organizations
+		user_orgs = get_user_organizations(request.user)
+		if user_orgs is not None:
+			qs = Lists.objects.filter(team__organization__id__in=user_orgs)
+		else:
+			qs = Lists.objects.all()
+		return qs.values_list('list_id', 'list_name').order_by('list_name')
+
+	def queryset(self, request, queryset):
+		if self.value():
+			return queryset.filter(list_subscriptions__list_id=self.value())
+		return queryset
+
+
 class SubscriberAdmin(admin.ModelAdmin):
 	list_display = ['subscriber_id', 'first_name', 'last_name', 'email', 'active', 'number_of_subscriptions', 'created_at', 'updated_at']
-	list_filter = ['active', 'created_at', 'updated_at']
+	list_filter = ['active', SubscriptionListFilter, 'created_at', 'updated_at']
 	search_fields = ['first_name', 'last_name', 'email']
 	actions = ['make_active', 'make_inactive']
 	readonly_fields = ['created_at', 'updated_at', 'unsubscribe_token']
 	inlines = [SubscriberSiteProfileInline, ListSubscriptionInline]
 
 	def get_queryset(self, request):
+		from gregory.admin import get_user_organizations
 		qs = super().get_queryset(request)
-		return qs.annotate(
+		qs = qs.annotate(
 			active_subscription_count=Count(
 				'list_subscriptions',
 				filter=Q(list_subscriptions__is_active=True),
 				distinct=True,
 			)
 		)
+		user_orgs = get_user_organizations(request.user)
+		if user_orgs is not None:
+			qs = qs.filter(list_subscriptions__list__team__organization__id__in=user_orgs).distinct()
+		return qs
 
 	def get_urls(self):
 		urls = super().get_urls()
