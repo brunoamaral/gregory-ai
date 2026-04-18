@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('sitesettings', '0004_customsetting_about_url_customsetting_api_domain_and_more'),
+        ('sitesettings', '0006_backfill_credentials_from_team'),
     ]
 
     operations = [

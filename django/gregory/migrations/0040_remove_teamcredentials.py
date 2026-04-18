@@ -7,6 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('gregory', '0039_add_team_is_active'),
+        ('sitesettings', '0006_backfill_credentials_from_team'),
     ]
 
     operations = [
