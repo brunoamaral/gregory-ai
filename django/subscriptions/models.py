@@ -58,6 +58,14 @@ class Lists(models.Model):
 		blank=False,
 		help_text="The team this list belongs to."
 	)
+	site = models.ForeignKey(
+		Site,
+		on_delete=models.PROTECT,
+		related_name="lists",
+		null=False,
+		blank=False,
+		help_text="The site this list sends emails from. Determines footer branding, links, and unsubscribe URLs."
+	)
 
 	class Meta:
 		managed = True

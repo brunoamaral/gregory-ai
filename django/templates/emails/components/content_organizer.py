@@ -430,6 +430,17 @@ class EmailRenderingPipeline:
                 # UTM parameters for link tracking
                 'utm_params': utm_params or {},
                 
+                # Footer context from CustomSetting
+                'website_url': getattr(custom_settings, 'website_url', ''),
+                'support_url': getattr(custom_settings, 'support_url', ''),
+                'about_url': getattr(custom_settings, 'about_url', ''),
+                'contact_url': getattr(custom_settings, 'contact_url', ''),
+                'bluesky_url': getattr(custom_settings, 'bluesky_url', ''),
+                'github_url': getattr(custom_settings, 'github_url', ''),
+                'mastodon_url': getattr(custom_settings, 'mastodon_url', ''),
+                'privacy_policy_url': '',
+                'terms_url': '',
+                
                 # Organized content
                 'articles': organized_articles.get('featured_articles', []),
                 'additional_articles': organized_articles.get('regular_articles', []),
@@ -527,7 +538,18 @@ class EmailRenderingPipeline:
                 'recruiting_trials': 0
             },
             'optimization_enabled': False,
-            'error_mode': True
+            'error_mode': True,
+            'title': getattr(custom_settings, 'title', 'Gregory AI'),
+            'email_footer': getattr(custom_settings, 'email_footer', ''),
+            'website_url': getattr(custom_settings, 'website_url', ''),
+            'support_url': getattr(custom_settings, 'support_url', ''),
+            'about_url': getattr(custom_settings, 'about_url', ''),
+            'contact_url': getattr(custom_settings, 'contact_url', ''),
+            'bluesky_url': getattr(custom_settings, 'bluesky_url', ''),
+            'github_url': getattr(custom_settings, 'github_url', ''),
+            'mastodon_url': getattr(custom_settings, 'mastodon_url', ''),
+            'privacy_policy_url': '',
+            'terms_url': '',
         }
         
         # Add email-type specific context for fallback
@@ -535,8 +557,6 @@ class EmailRenderingPipeline:
             base_context.update({
                 'greeting_time': 'morning',
                 'user': subscriber,
-                'title': getattr(custom_settings, 'title', 'Gregory AI'),
-                'email_footer': getattr(custom_settings, 'email_footer', '')
             })
         
         elif email_type == 'admin_summary':
@@ -549,8 +569,6 @@ class EmailRenderingPipeline:
             base_context.update({
                 'admin': admin_email,
                 'now': timezone.now(),
-                'title': getattr(custom_settings, 'title', 'Gregory AI'),
-                'email_footer': getattr(custom_settings, 'email_footer', ''),
                 'show_ml_predictions': True,
                 'show_admin_links': True
             })
@@ -558,8 +576,6 @@ class EmailRenderingPipeline:
         elif email_type == 'trial_notification':
             base_context.update({
                 'now': timezone.now(),
-                'title': getattr(custom_settings, 'title', 'Gregory AI'),
-                'email_footer': getattr(custom_settings, 'email_footer', ''),
                 'notification_type': 'trial_update'
             })
         
