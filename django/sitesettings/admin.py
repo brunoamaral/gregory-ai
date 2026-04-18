@@ -12,7 +12,6 @@ class CustomSettingInline(admin.StackedInline):
 	max_num = 1
 	fields = [
 		'title', 'sender_email_prefix', 'admin_email', 'api_domain',
-		'email_footer',
 		'website_url', 'support_url', 'about_url', 'contact_url',
 		'bluesky_url', 'github_url', 'mastodon_url',
 		'postmark_api_token', 'postmark_api_url',

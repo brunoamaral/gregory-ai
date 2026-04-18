@@ -471,7 +471,6 @@ class EmailRenderingPipeline:
                     'user': subscriber,
                     'list': list_obj,
                     'title': getattr(custom_settings, 'title', 'Gregory AI'),
-                    'email_footer': getattr(custom_settings, 'email_footer', ''),
                     'latest_research': latest_research
                 })
             
@@ -487,7 +486,6 @@ class EmailRenderingPipeline:
                     'now': timezone.now(),
                     'list': list_obj,
                     'title': getattr(custom_settings, 'title', 'Gregory AI'),
-                    'email_footer': getattr(custom_settings, 'email_footer', ''),
                     'show_ml_predictions': True,
                     'show_admin_links': True
                 })
@@ -496,7 +494,6 @@ class EmailRenderingPipeline:
                 context.update({
                     'now': timezone.now(),
                     'title': getattr(custom_settings, 'title', 'Gregory AI'),
-                    'email_footer': getattr(custom_settings, 'email_footer', ''),
                     'notification_type': 'trial_update'
                 })
             
@@ -540,7 +537,6 @@ class EmailRenderingPipeline:
             'optimization_enabled': False,
             'error_mode': True,
             'title': getattr(custom_settings, 'title', 'Gregory AI'),
-            'email_footer': getattr(custom_settings, 'email_footer', ''),
             'website_url': getattr(custom_settings, 'website_url', ''),
             'support_url': getattr(custom_settings, 'support_url', ''),
             'about_url': getattr(custom_settings, 'about_url', ''),

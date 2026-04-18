@@ -64,7 +64,6 @@ class EmailPerformanceTester:
             self.site = {'domain': 'gregory-ms.com', 'name': 'Gregory AI'}
             self.custom_settings = type('obj', (object,), {
                 'title': 'Gregory AI - MS Research Updates',
-                'email_footer': 'Thank you for using Gregory AI.'
             })()
             self.test_subscriber = type('obj', (object,), {
                 'email': 'test@example.com',
