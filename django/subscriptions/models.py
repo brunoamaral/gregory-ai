@@ -92,19 +92,10 @@ class Lists(models.Model):
 
 
 class Subscribers(models.Model):
-	PROFILEOPTIONS = [
-		('patient', 'Patient'),
-		('caregiver', 'Caregiver'),
-		('doctor', 'Doctor'),
-		('clinical centre', 'Clinical Centre'),
-		('researcher', 'Researcher')
-	]
-
 	subscriber_id = models.AutoField(primary_key=True)
 	first_name = models.CharField(max_length=150, null=False, blank=False)
 	last_name = models.CharField(max_length=150, null=True, blank=True)
 	email = models.EmailField(max_length=254, unique=True, null=False, blank=False)
-	profile = models.CharField(choices=PROFILEOPTIONS, max_length=50, default='')
 	active = models.BooleanField(default=True)
 	is_admin = models.BooleanField(default=False)
 	unsubscribe_token = models.UUIDField(
@@ -228,9 +219,15 @@ class ListSubscription(models.Model):
 
 
 class SubscriberSiteProfile(models.Model):
-	"""Per-site profile for a subscriber. Overrides the global Subscribers.profile."""
+	"""Per-site profile for a subscriber."""
 
-	PROFILEOPTIONS = Subscribers.PROFILEOPTIONS
+	PROFILEOPTIONS = [
+		('patient', 'Patient'),
+		('caregiver', 'Caregiver'),
+		('doctor', 'Doctor'),
+		('clinical centre', 'Clinical Centre'),
+		('researcher', 'Researcher'),
+	]
 
 	subscriber = models.ForeignKey(
 		Subscribers,

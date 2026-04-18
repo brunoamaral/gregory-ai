@@ -47,7 +47,7 @@ class ListSubscriptionInline(admin.TabularInline):
 
 class SubscriberAdmin(admin.ModelAdmin):
 	list_display = ['subscriber_id', 'first_name', 'last_name', 'email', 'active', 'number_of_subscriptions', 'created_at', 'updated_at']
-	list_filter = ['active', 'profile', 'created_at', 'updated_at']
+	list_filter = ['active', 'created_at', 'updated_at']
 	search_fields = ['first_name', 'last_name', 'email']
 	actions = ['make_active', 'make_inactive']
 	readonly_fields = ['created_at', 'updated_at', 'unsubscribe_token']
