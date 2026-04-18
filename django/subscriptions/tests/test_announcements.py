@@ -174,3 +174,52 @@ class SendViewRedirectTest(TestCase):
 		)
 		msgs = list(get_messages(response.wsgi_request))
 		self.assertTrue(any('already been sent' in str(m) for m in msgs))
+
+
+class SendViewSubjectNormalisationTest(TestCase):
+	"""send_view must strip any leading [TEST] prefix from the subject on live sends."""
+
+	def setUp(self):
+		self.superuser = User.objects.create_superuser(
+			username='admin2', password='password', email='admin2@example.com'
+		)
+		org = Organization.objects.create(name='Norm Org')
+		self.team = Team.objects.create(organization=org, name='Norm Team', slug='norm-team')
+		self.lst = Lists.objects.create(list_name='Norm List', team=self.team)
+		self.sub = Subscribers.objects.create(
+			first_name='Carol', last_name='Danvers', email='carol@example.com'
+		)
+		ListSubscription.objects.create(subscriber=self.sub, list=self.lst, is_active=True)
+		self.sub.active = True
+		self.sub.save()
+		self.client = Client()
+		self.client.force_login(self.superuser)
+
+	def _send_url(self, pk):
+		return reverse('admin:subscriptions_announcement_send', args=[pk])
+
+	def _make_announcement(self, subject):
+		ann = Announcement.objects.create(subject=subject, body='<p>Body</p>', status='draft')
+		ann.lists.add(self.lst)
+		return ann
+
+	def _post_send(self, ann):
+		mock_response = MagicMock()
+		mock_response.status_code = 200
+		with patch('subscriptions.management.commands.utils.send_email.send_email', return_value=mock_response) as mock_send:
+			self.client.post(self._send_url(ann.pk))
+		return mock_send
+
+	def test_test_prefix_stripped_on_live_send(self):
+		ann = self._make_announcement('[TEST] My Announcement')
+		mock_send = self._post_send(ann)
+		mock_send.assert_called_once()
+		_, kwargs = mock_send.call_args
+		self.assertEqual(kwargs['subject'], 'My Announcement')
+
+	def test_clean_subject_unchanged_on_live_send(self):
+		ann = self._make_announcement('My Announcement')
+		mock_send = self._post_send(ann)
+		mock_send.assert_called_once()
+		_, kwargs = mock_send.call_args
+		self.assertEqual(kwargs['subject'], 'My Announcement')
