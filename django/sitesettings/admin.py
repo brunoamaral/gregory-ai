@@ -3,6 +3,7 @@ from django.contrib.sites.admin import SiteAdmin
 from django.contrib.sites.models import Site
 
 from .models import CustomSetting
+from gregory.models import OrganizationSite
 
 
 class CustomSettingInline(admin.StackedInline):
@@ -19,8 +20,28 @@ class CustomSettingInline(admin.StackedInline):
 	]
 
 
+class OrganizationSiteInline(admin.TabularInline):
+	"""Allows changing which organisation this site belongs to (superusers only)."""
+	model = OrganizationSite
+	extra = 0
+	fields = ('organization', 'is_default')
+	verbose_name = 'Organisation'
+	verbose_name_plural = 'Organisations'
+
+	def get_readonly_fields(self, request, obj=None):
+		if not request.user.is_superuser:
+			return ('organization', 'is_default')
+		return ()
+
+	def has_add_permission(self, request, obj=None):
+		return request.user.is_superuser
+
+	def has_delete_permission(self, request, obj=None):
+		return request.user.is_superuser
+
+
 class SiteWithSettingsAdmin(SiteAdmin):
-	inlines = [CustomSettingInline]
+	inlines = [CustomSettingInline, OrganizationSiteInline]
 
 
 admin.site.unregister(Site)
