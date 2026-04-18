@@ -12,83 +12,221 @@
 </div>
 {% endblock %}
 
+{% block extrahead %}
+{{ block.super }}
+<style>
+.analytics-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 20px;
+}
+.period-selector {
+	display: flex;
+	gap: 6px;
+}
+.period-btn {
+	padding: 6px 14px;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	background: #fff;
+	cursor: pointer;
+	font-size: 13px;
+	color: #444;
+	text-decoration: none;
+}
+.period-btn:hover,
+.period-btn.active {
+	background: #007cba;
+	border-color: #007cba;
+	color: #fff;
+}
+.summary-cards {
+	display: flex;
+	gap: 16px;
+	flex-wrap: wrap;
+	margin-bottom: 24px;
+}
+.summary-card {
+	flex: 1;
+	min-width: 160px;
+	padding: 16px 20px;
+	background: #fff;
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	text-align: center;
+}
+.summary-card .card-value {
+	font-size: 28px;
+	font-weight: 700;
+	color: #1a1a1a;
+	line-height: 1.2;
+}
+.summary-card .card-label {
+	font-size: 12px;
+	color: #666;
+	margin-top: 4px;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+.summary-card.subscribers .card-value { color: #2563eb; }
+.summary-card.subscriptions .card-value { color: #16a34a; }
+.summary-card.unsubscriptions .card-value { color: #dc2626; }
+.chart-container {
+	background: #fff;
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	padding: 20px;
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="form-row">
-    
-    <div style="margin: 20px 0;">
-        <a href="{% url 'admin:subscriptions_subscribers_changelist' %}" class="button">← Back to Subscribers</a>
-    </div>
-    
-    <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 5px;">
-        <h2>New Subscribers - Last 30 Days</h2>
-        <div style="margin: 10px 0;">
-            <strong>Total new subscribers in the last 30 days: <span id="total-count">Loading...</span></strong>
-        </div>
-        <div style="width: 100%; height: 400px; margin: 20px 0;">
-            <canvas id="subscribersChart"></canvas>
-        </div>
-    </div>
+<div style="margin-bottom: 16px;">
+	<a href="{% url 'admin:subscriptions_subscribers_changelist' %}" class="button">← Back to Subscribers</a>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<div class="analytics-header">
+	<h2 style="margin: 0;">Subscriber Analytics</h2>
+	<div class="period-selector">
+		<button class="period-btn" data-range="7d">7 days</button>
+		<button class="period-btn active" data-range="30d">30 days</button>
+		<button class="period-btn" data-range="90d">90 days</button>
+		<button class="period-btn" data-range="365d">12 months</button>
+	</div>
+</div>
+
+<div class="summary-cards">
+	<div class="summary-card subscribers">
+		<div class="card-value" id="total-new-subscribers">—</div>
+		<div class="card-label">New Subscribers</div>
+	</div>
+	<div class="summary-card subscriptions">
+		<div class="card-value" id="total-new-subscriptions">—</div>
+		<div class="card-label">New Subscriptions</div>
+	</div>
+	<div class="summary-card unsubscriptions">
+		<div class="card-value" id="total-unsubscriptions">—</div>
+		<div class="card-label">Unsubscriptions</div>
+	</div>
+</div>
+
+<div class="chart-container">
+	<div style="height: 400px;">
+		<canvas id="analyticsChart"></canvas>
+	</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const ctx = document.getElementById('subscribersChart').getContext('2d');
-    
-    // Fetch data from our custom endpoint
-    fetch('{% url "admin:subscriptions_subscribers_analytics_data" %}')
-        .then(response => response.json())
-        .then(data => {
-            // Update total count
-            document.getElementById('total-count').textContent = data.total_new_subscribers;
-            
-            // Create the chart
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: data.labels,
-                    datasets: [{
-                        label: 'New Subscribers',
-                        data: data.data,
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        tension: 0.1,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1
-                            }
-                        },
-                        x: {
-                            ticks: {
-                                maxTicksLimit: 10
-                            }
-                        }
-                    },
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Daily New Subscribers (Last 30 Days)'
-                        },
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        }
-                    }
-                }
-            });
-        })
-        .catch(error => {
-            console.error('Error fetching analytics data:', error);
-            document.getElementById('total-count').textContent = 'Error loading data';
-        });
-});
+(function () {
+	const DATA_URL = '{% url "admin:subscriptions_subscribers_analytics_data" %}';
+	let chart = null;
+	let activeRange = '30d';
+
+	function fetchAndRender(range) {
+		fetch(DATA_URL + '?range=' + range)
+			.then(r => r.json())
+			.then(data => {
+				document.getElementById('total-new-subscribers').textContent = data.totals.new_subscribers;
+				document.getElementById('total-new-subscriptions').textContent = data.totals.new_subscriptions;
+				document.getElementById('total-unsubscriptions').textContent = data.totals.unsubscriptions;
+
+				const chartTitle = {
+					'7d':   'Daily — Last 7 Days',
+					'30d':  'Daily — Last 30 Days',
+					'90d':  'Weekly — Last 90 Days',
+					'365d': 'Monthly — Last 12 Months',
+				}[range] || '';
+
+				if (chart) {
+					chart.data.labels = data.labels;
+					chart.data.datasets[0].data = data.new_subscribers;
+					chart.data.datasets[1].data = data.new_subscriptions;
+					chart.data.datasets[2].data = data.unsubscriptions;
+					chart.options.plugins.title.text = chartTitle;
+					chart.update();
+				} else {
+					const ctx = document.getElementById('analyticsChart').getContext('2d');
+					chart = new Chart(ctx, {
+						type: 'line',
+						data: {
+							labels: data.labels,
+							datasets: [
+								{
+									label: 'New Subscribers',
+									data: data.new_subscribers,
+									borderColor: '#2563eb',
+									backgroundColor: 'rgba(37,99,235,0.08)',
+									tension: 0.2,
+									fill: true,
+									pointRadius: 3,
+								},
+								{
+									label: 'New Subscriptions',
+									data: data.new_subscriptions,
+									borderColor: '#16a34a',
+									backgroundColor: 'rgba(22,163,74,0.08)',
+									tension: 0.2,
+									fill: true,
+									pointRadius: 3,
+								},
+								{
+									label: 'Unsubscriptions',
+									data: data.unsubscriptions,
+									borderColor: '#dc2626',
+									backgroundColor: 'rgba(220,38,38,0.08)',
+									tension: 0.2,
+									fill: true,
+									pointRadius: 3,
+								},
+							],
+						},
+						options: {
+							responsive: true,
+							maintainAspectRatio: false,
+							interaction: { mode: 'index', intersect: false },
+							scales: {
+								y: {
+									beginAtZero: true,
+									ticks: { stepSize: 1, precision: 0 },
+								},
+								x: {
+									ticks: { maxTicksLimit: 12 },
+								},
+							},
+							plugins: {
+								title: {
+									display: true,
+									text: chartTitle,
+									font: { size: 14 },
+								},
+								legend: {
+									display: true,
+									position: 'top',
+								},
+							},
+						},
+					});
+				}
+			})
+			.catch(err => {
+				console.error('Analytics fetch error:', err);
+			});
+	}
+
+	document.querySelectorAll('.period-btn').forEach(btn => {
+		btn.addEventListener('click', function () {
+			document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+			this.classList.add('active');
+			activeRange = this.dataset.range;
+			fetchAndRender(activeRange);
+		});
+	});
+
+	fetchAndRender(activeRange);
+})();
 </script>
 {% endblock %}

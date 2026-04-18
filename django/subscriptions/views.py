@@ -95,7 +95,7 @@ def subscribe_view(request):
 		first_name = subscriber_form.cleaned_data['first_name']
 		last_name = subscriber_form.cleaned_data['last_name']
 		email = subscriber_form.cleaned_data['email']
-		profile = subscriber_form.cleaned_data['profile']
+		profile = subscriber_form.cleaned_data.get('profile', '')
 
 		try:
 			subscriber, created = Subscribers.objects.get_or_create(
@@ -103,13 +103,11 @@ def subscribe_view(request):
 				defaults={
 					'first_name': first_name,
 					'last_name': last_name,
-					'profile': profile
 				}
 			)
 			if not created:
 				subscriber.first_name = first_name
 				subscriber.last_name = last_name
-				subscriber.profile = profile
 				subscriber.save()
 
 			# Resolve consent context

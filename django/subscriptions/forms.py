@@ -2,7 +2,7 @@ from django import forms
 from django.forms import ModelForm
 from django_ckeditor_5.widgets import CKEditor5Widget
 
-from .models import Subscribers, Lists, Announcement
+from .models import Subscribers, Lists, Announcement, SubscriberSiteProfile
 
 class ListsAdminForm(ModelForm):
     class Meta:
@@ -52,6 +52,10 @@ class SubscribersForm(ModelForm):
 	first_name = forms.CharField(max_length=100)
 	last_name = forms.CharField(max_length=100, required=False)
 	email = forms.EmailField(max_length=120)
+	profile = forms.ChoiceField(
+		choices=[('', '---------')] + SubscriberSiteProfile.PROFILEOPTIONS,
+		required=False,
+	)
 	# ``list`` was previously an ``IntegerField`` which only captured a
 	# single checkbox value.  It has been removed so the view can obtain all
 	# selected list IDs using ``request.POST.getlist('list')``.
@@ -60,9 +64,8 @@ class SubscribersForm(ModelForm):
 		fields = [
 			'first_name',
 			'last_name',
-			'profile',
 		]
-		exclude = ['subscriber_id','active','is_admin','email']
+		exclude = ['subscriber_id', 'active', 'is_admin', 'email']
 
 
 

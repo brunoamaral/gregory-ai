@@ -3,7 +3,9 @@ from django.utils.html import format_html
 from django.urls import path, reverse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
+import csv
 from django.db.models import Count, Q
+from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
@@ -44,13 +46,51 @@ class ListSubscriptionInline(admin.TabularInline):
 	verbose_name_plural = 'List Subscriptions'
 
 
+class SubscriptionListFilter(admin.SimpleListFilter):
+	"""Filter subscribers by the list they are subscribed to."""
+	title = 'list'
+	parameter_name = 'list'
+
+	def lookups(self, request, model_admin):
+		from gregory.admin import get_user_organizations
+		user_orgs = get_user_organizations(request.user)
+		if user_orgs is not None:
+			qs = Lists.objects.filter(team__organization__id__in=user_orgs)
+		else:
+			qs = Lists.objects.all()
+		return qs.values_list('list_id', 'list_name').order_by('list_name')
+
+	def queryset(self, request, queryset):
+		if self.value():
+			return queryset.filter(
+				list_subscriptions__list_id=self.value(),
+				list_subscriptions__is_active=True,
+			)
+		return queryset
+
+
 class SubscriberAdmin(admin.ModelAdmin):
-	list_display = ['subscriber_id', 'first_name', 'last_name', 'email', 'active', 'number_of_subscriptions', 'created_at', 'updated_at']
-	list_filter = ['active', 'profile', 'created_at', 'updated_at']
+	list_display = ['first_name', 'last_name', 'email', 'active', 'list_names', 'number_of_subscriptions', 'created_at']
+	list_filter = ['active', SubscriptionListFilter, 'created_at']
 	search_fields = ['first_name', 'last_name', 'email']
-	actions = ['make_active', 'make_inactive']
+	actions = ['make_active', 'make_inactive', 'export_csv', 'add_to_list']
 	readonly_fields = ['created_at', 'updated_at', 'unsubscribe_token']
 	inlines = [SubscriberSiteProfileInline, ListSubscriptionInline]
+
+	def get_queryset(self, request):
+		from gregory.admin import get_user_organizations
+		qs = super().get_queryset(request)
+		qs = qs.annotate(
+			active_subscription_count=Count(
+				'list_subscriptions',
+				filter=Q(list_subscriptions__is_active=True),
+				distinct=True,
+			)
+		).prefetch_related('list_subscriptions__list')
+		user_orgs = get_user_organizations(request.user)
+		if user_orgs is not None:
+			qs = qs.filter(list_subscriptions__list__team__organization__id__in=user_orgs).distinct()
+		return qs
 
 	def get_urls(self):
 		urls = super().get_urls()
@@ -69,38 +109,115 @@ class SubscriberAdmin(admin.ModelAdmin):
 		return render(request, 'admin/subscriptions/subscribers/analytics.html', context)
 
 	def analytics_data(self, request):
-		# Get data for the last 30 days
+		# Determine range and granularity from query param
+		range_param = request.GET.get('range', '30d')
+		RANGES = {
+			'7d':   (7,   TruncDate,  '%Y-%m-%d'),
+			'30d':  (30,  TruncDate,  '%Y-%m-%d'),
+			'90d':  (90,  TruncWeek,  '%Y-%m-%d'),
+			'365d': (365, TruncMonth, '%Y-%m'),
+		}
+		if range_param not in RANGES:
+			range_param = '30d'
+		days, trunc_fn, date_fmt = RANGES[range_param]
+
 		end_date = timezone.now().date()
-		start_date = end_date - timedelta(days=29)  # 30 days including today
-		
-		# Create a list of all dates in the range
-		date_range = []
-		current_date = start_date
-		while current_date <= end_date:
-			date_range.append(current_date)
-			current_date += timedelta(days=1)
-		
-		# Get subscriber counts by date
-		subscriber_counts = (
-			Subscribers.objects
-			.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
-			.extra(select={'date': 'DATE(created_at)'})
-			.values('date')
-			.annotate(count=Count('subscriber_id'))
-			.order_by('date')
+		start_date = end_date - timedelta(days=days - 1)
+
+		# Build full period sequence for zero-filling
+		if trunc_fn is TruncDate:
+			period_range = []
+			d = start_date
+			while d <= end_date:
+				period_range.append(d)
+				d += timedelta(days=1)
+		elif trunc_fn is TruncWeek:
+			# ISO week starts on Monday
+			from datetime import date
+			period_range = []
+			d = start_date - timedelta(days=start_date.weekday())
+			while d <= end_date:
+				period_range.append(d)
+				d += timedelta(weeks=1)
+		else:  # TruncMonth
+			from datetime import date
+			period_range = []
+			d = start_date.replace(day=1)
+			while d <= end_date:
+				period_range.append(d)
+				# advance to first day of next month
+				if d.month == 12:
+					d = date(d.year + 1, 1, 1)
+				else:
+					d = date(d.year, d.month + 1, 1)
+
+		def _build_series(qs, date_field):
+			counts = (
+				qs
+				.annotate(period=trunc_fn(date_field))
+				.values('period')
+				.annotate(count=Count('pk'))
+				.order_by('period')
+			)
+			lookup = {}
+			for item in counts:
+				period = item['period']
+				if not period:
+					continue
+				if hasattr(period, 'date'):
+					period = period.date()
+				lookup[period] = item['count']
+			return [lookup.get(p, 0) for p in period_range]
+
+		# Apply org scoping
+		from gregory.admin import get_user_organizations
+		user_orgs = get_user_organizations(request.user)
+
+		# New subscribers
+		new_subscribers_qs = Subscribers.objects.filter(
+			created_at__date__gte=start_date,
+			created_at__date__lte=end_date,
 		)
-		
-		# Create a dictionary for easy lookup
-		counts_dict = {item['date']: item['count'] for item in subscriber_counts}
-		
-		# Prepare data for the chart
-		labels = [date.strftime('%Y-%m-%d') for date in date_range]
-		data = [counts_dict.get(date, 0) for date in date_range]
-		
+		if user_orgs is not None:
+			new_subscribers_qs = new_subscribers_qs.filter(
+				list_subscriptions__list__team__organization__id__in=user_orgs
+			).distinct()
+		new_subscribers_data = _build_series(new_subscribers_qs, 'created_at')
+
+		# New subscriptions (list joins)
+		new_subs_qs = ListSubscription.objects.filter(
+			subscribed_at__date__gte=start_date,
+			subscribed_at__date__lte=end_date,
+		)
+		if user_orgs is not None:
+			new_subs_qs = new_subs_qs.filter(
+				list__team__organization__id__in=user_orgs
+			)
+		new_subscriptions_data = _build_series(new_subs_qs, 'subscribed_at')
+
+		# Unsubscriptions
+		unsubs_qs = ListSubscription.objects.filter(
+			unsubscribed_at__date__gte=start_date,
+			unsubscribed_at__date__lte=end_date,
+		)
+		if user_orgs is not None:
+			unsubs_qs = unsubs_qs.filter(
+				list__team__organization__id__in=user_orgs
+			)
+		unsubscriptions_data = _build_series(unsubs_qs, 'unsubscribed_at')
+
+		labels = [p.strftime(date_fmt) for p in period_range]
+
 		return JsonResponse({
 			'labels': labels,
-			'data': data,
-			'total_new_subscribers': sum(data),
+			'new_subscribers': new_subscribers_data,
+			'new_subscriptions': new_subscriptions_data,
+			'unsubscriptions': unsubscriptions_data,
+			'totals': {
+				'new_subscribers': sum(new_subscribers_data),
+				'new_subscriptions': sum(new_subscriptions_data),
+				'unsubscriptions': sum(unsubscriptions_data),
+			},
 		})
 
 	def changelist_view(self, request, extra_context=None):
@@ -108,9 +225,19 @@ class SubscriberAdmin(admin.ModelAdmin):
 		extra_context['analytics_url'] = reverse('admin:subscriptions_subscribers_analytics')
 		return super().changelist_view(request, extra_context)
 
+	def list_names(self, obj):
+		names = [
+			ls.list.list_name
+			for ls in obj.list_subscriptions.all()
+			if ls.is_active and ls.list_id
+		]
+		return ', '.join(names) if names else '—'
+	list_names.short_description = 'Lists'
+
 	def number_of_subscriptions(self, obj):
-		return obj.subscriptions.count()
-	number_of_subscriptions.short_description = 'Number of Subscriptions'
+		return obj.active_subscription_count
+	number_of_subscriptions.short_description = 'Subscriptions'
+	number_of_subscriptions.admin_order_field = 'active_subscription_count'
 
 	def make_active(self, request, queryset):
 		updated_count = queryset.update(active=True)
@@ -121,6 +248,96 @@ class SubscriberAdmin(admin.ModelAdmin):
 		updated_count = queryset.update(active=False)
 		self.message_user(request, f"{updated_count} subscriber(s) marked as inactive.")
 	make_inactive.short_description = "Mark selected subscribers as inactive"
+
+	@admin.action(description="Export selected subscribers as CSV")
+	def export_csv(self, request, queryset):
+		response = HttpResponse(content_type='text/csv')
+		response['Content-Disposition'] = 'attachment; filename="subscribers.csv"'
+		writer = csv.writer(response)
+		def _csv_safe(value):
+			"""Prevent CSV injection by prefixing dangerous leading characters."""
+			s = str(value)
+			if s and s[0] in ('=', '+', '-', '@', '\t', '\r'):
+				s = "'" + s
+			return s
+
+		writer.writerow(['email', 'first_name', 'last_name', 'active', 'lists', 'created_at'])
+		qs = queryset.prefetch_related('list_subscriptions__list')
+		for sub in qs:
+			active_lists = ', '.join(
+				ls.list.list_name
+				for ls in sub.list_subscriptions.all()
+				if ls.is_active and ls.list_id
+			)
+			writer.writerow([
+				_csv_safe(sub.email),
+				_csv_safe(sub.first_name),
+				_csv_safe(sub.last_name or ''),
+				sub.active,
+				_csv_safe(active_lists),
+				sub.created_at.strftime('%Y-%m-%d %H:%M'),
+			])
+		return response
+
+	@admin.action(description="Add selected subscribers to a list…")
+	def add_to_list(self, request, queryset):
+		from gregory.admin import get_user_organizations
+
+		class AddToListForm(forms.Form):
+			target_list = forms.ModelChoiceField(
+				queryset=Lists.objects.none(),
+				label='Target list',
+				help_text='Selected subscribers will be added to this list.',
+			)
+
+		user_orgs = get_user_organizations(request.user)
+		if user_orgs is not None:
+			available_lists = Lists.objects.filter(team__organization__id__in=user_orgs)
+		else:
+			available_lists = Lists.objects.all()
+
+		if 'apply' not in request.POST:
+			form = AddToListForm()
+			form.fields['target_list'].queryset = available_lists
+			return render(
+				request,
+				'admin/subscriptions/subscribers/add_to_list_intermediate.html',
+				{
+					'title': 'Add subscribers to list',
+					'objects': queryset,
+					'form': form,
+					'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
+				},
+			)
+
+		form = AddToListForm(request.POST)
+		form.fields['target_list'].queryset = available_lists
+		if not form.is_valid():
+			self.message_user(request, 'Invalid form — please try again.', level=messages.ERROR)
+			return
+
+		target_list = form.cleaned_data['target_list']
+		added = 0
+		for sub in queryset:
+			_, created = ListSubscription.objects.get_or_create(
+				subscriber=sub,
+				list=target_list,
+				defaults={
+					'consent_method': 'admin',
+					'is_active': True,
+				},
+			)
+			if created:
+				added += 1
+			else:
+				# Re-activate if they previously unsubscribed
+				ListSubscription.objects.filter(
+					subscriber=sub, list=target_list, is_active=False
+				).update(is_active=True, unsubscribed_at=None)
+		self.message_user(
+			request,
+			f"{added} subscriber(s) added to '{target_list}' ({queryset.count() - added} already subscribed).",
+		)
 
 admin.site.register(Subscribers, SubscriberAdmin)
 
@@ -143,7 +360,7 @@ class ListSubscriberInline(admin.TabularInline):
 
 	def subscriber_link(self, obj):
 		if obj.subscriber_id:
-			url = f"/admin/subscriptions/subscribers/{obj.subscriber_id}/change/"
+			url = reverse('admin:subscriptions_subscribers_change', args=[obj.subscriber_id])
 			return format_html('<a href="{}" target="_blank">{} {}</a>', url, obj.subscriber.first_name, obj.subscriber.last_name)
 		return ''
 	subscriber_link.short_description = 'Subscriber'
