@@ -379,41 +379,58 @@
     </style>
     <![endif]-->
 </head>
-<body>
-    <div class="email-wrapper">
-        <!-- Preheader (hidden preview text) -->
-        {% include 'emails/components/preheader.html' %}
-        
-        <!-- Email Container -->
-        <table role="presentation" border="0" cellpadding="0" cellspacing="0" class="email-container">
-            <!-- Header -->
-            <tr>
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; -webkit-font-smoothing: antialiased; font-size: 16px; line-height: 1.6; -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%;">
+    <!-- Full-width centering table for Gmail compatibility -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" class="email-wrapper" style="background-color: #f3f4f6; margin: 0; padding: 0; width: 100%; min-height: 100vh;">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <!-- Preheader (hidden preview text) -->
+                {% include 'emails/components/preheader.html' %}
+                
+                <!--[if mso]>
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" align="center">
+                <tr>
                 <td>
-                    {% block header %}
-                        {% include 'emails/components/header.html' %}
-                    {% endblock %}
+                <![endif]-->
+                
+                <!-- Email Container -->
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" class="email-container" width="600" style="max-width: 600px; width: 100%; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1), 0 8px 16px rgba(0, 0, 0, 0.06); overflow: hidden;">
+                    <!-- Header -->
+                    <tr>
+                        <td>
+                            {% block header %}
+                                {% include 'emails/components/header.html' %}
+                            {% endblock %}
+                        </td>
+                    </tr>
+                    
+                    <!-- Main Content -->
+                    <tr>
+                        <td class="email-content" style="padding: 40px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;">
+                            {% block content %}
+                            <h2 class="content-title">Email Content</h2>
+                            <p class="content-text">This is the main content area of the email.</p>
+                            {% endblock %}
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td>
+                            {% block footer %}
+                                {% include 'emails/components/footer.html' %}
+                            {% endblock %}
+                        </td>
+                    </tr>
+                </table>
+                
+                <!--[if mso]>
                 </td>
-            </tr>
-            
-            <!-- Main Content -->
-            <tr>
-                <td class="email-content">
-                    {% block content %}
-                    <h2 class="content-title">Email Content</h2>
-                    <p class="content-text">This is the main content area of the email.</p>
-                    {% endblock %}
-                </td>
-            </tr>
-            
-            <!-- Footer -->
-            <tr>
-                <td>
-                    {% block footer %}
-                        {% include 'emails/components/footer.html' %}
-                    {% endblock %}
-                </td>
-            </tr>
-        </table>
-    </div>
+                </tr>
+                </table>
+                <![endif]-->
+            </td>
+        </tr>
+    </table>
 </body>
 </html>
