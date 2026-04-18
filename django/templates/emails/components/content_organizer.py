@@ -438,8 +438,8 @@ class EmailRenderingPipeline:
                 'bluesky_url': getattr(custom_settings, 'bluesky_url', ''),
                 'github_url': getattr(custom_settings, 'github_url', ''),
                 'mastodon_url': getattr(custom_settings, 'mastodon_url', ''),
-                'privacy_policy_url': '',
-                'terms_url': '',
+                'privacy_policy_url': getattr(custom_settings, 'privacy_policy_url', ''),
+                'terms_url': getattr(custom_settings, 'terms_url', ''),
                 
                 # Organized content
                 'articles': organized_articles.get('featured_articles', []),
@@ -548,8 +548,8 @@ class EmailRenderingPipeline:
             'bluesky_url': getattr(custom_settings, 'bluesky_url', ''),
             'github_url': getattr(custom_settings, 'github_url', ''),
             'mastodon_url': getattr(custom_settings, 'mastodon_url', ''),
-            'privacy_policy_url': '',
-            'terms_url': '',
+            'privacy_policy_url': getattr(custom_settings, 'privacy_policy_url', ''),
+            'terms_url': getattr(custom_settings, 'terms_url', ''),
         }
         
         # Add email-type specific context for fallback

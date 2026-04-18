@@ -54,3 +54,13 @@ class CustomSetting(models.Model):
 		default='',
 		help_text="Mastodon profile URL for the email footer."
 	)
+	privacy_policy_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="Privacy policy page URL for the email footer."
+	)
+	terms_url = models.URLField(
+		blank=True,
+		default='',
+		help_text="Terms of service page URL for the email footer."
+	)
