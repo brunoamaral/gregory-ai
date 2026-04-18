@@ -1,0 +1,58 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<p>
+    The following team(s) will have <strong>all their objects</strong> moved to the selected target team:
+</p>
+
+<ul>
+{% for team in teams %}
+    <li><strong>{{ team }}</strong>
+        ({{ team.subjects.count }} subjects,
+         {{ team.sources.count }} sources,
+         {{ team.team_categories.count }} categories,
+         {{ team.lists.count }} lists,
+         {{ team.prediction_run_logs.count }} prediction logs)
+    </li>
+{% endfor %}
+</ul>
+
+<p>
+    <strong>Note:</strong> TeamCredentials are <em>not</em> transferred.
+    The target team must have its own credentials configured.
+    Model files on disk will be moved automatically.
+</p>
+
+<form method="post">
+    {% csrf_token %}
+
+    {% for team in teams %}
+        <input type="hidden" name="{{ action_checkbox_name }}" value="{{ team.pk }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="reassign_to_team">
+    <input type="hidden" name="apply" value="1">
+
+    <fieldset class="module aligned">
+        {% for field in form %}
+        <div class="form-row">
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}
+                <p class="help">{{ field.help_text }}</p>
+            {% endif %}
+            {% for error in field.errors %}
+                <p class="errornote">{{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </fieldset>
+
+    <div class="submit-row">
+        <input type="submit" value="Confirm reassignment" class="default">
+        <a href="{% url 'admin:gregory_team_changelist' %}" class="button cancel-link">Cancel</a>
+    </div>
+</form>
+{% endblock %}

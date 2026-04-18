@@ -493,6 +493,12 @@ class EncryptedTextField(models.TextField):
 		fernet = get_fernet()
 		return base64.b64encode(fernet.encrypt(value.encode())).decode()
 
+class ActiveTeamManager(models.Manager):
+	"""Default manager: returns only active (non-soft-deleted) teams."""
+	def get_queryset(self):
+		return super().get_queryset().filter(is_active=True)
+
+
 class Team(models.Model):
 	organization = models.ForeignKey(
 		Organization, 
@@ -508,6 +514,15 @@ class Team(models.Model):
 		blank=True,
 		help_text="The website (Site) this team sends emails from. Overrides the global SITE_ID setting."
 	)
+	is_active = models.BooleanField(
+		default=True,
+		help_text="Inactive teams are soft-deleted: their data is preserved and can be reassigned to another team.",
+		db_index=True,
+	)
+
+	# Default manager returns only active teams; all_objects returns everything.
+	objects = ActiveTeamManager()
+	all_objects = models.Manager()
 
 	class Meta:
 		constraints = [
@@ -524,11 +539,22 @@ class Team(models.Model):
 	)
 
 	def __str__(self):
+		label = self.name
 		if self.organization:
-			# Only show organization name if it's different from team name
 			if self.name.lower() != self.organization.name.lower():
-				return f"{self.name} ({self.organization.name})"
-		return self.name
+				label = f"{self.name} ({self.organization.name})"
+		if not self.is_active:
+			label = f"[Inactive] {label}"
+		return label
+
+	def delete(self, using=None, keep_parents=False):
+		"""Soft-delete: mark as inactive instead of removing from the database."""
+		self.is_active = False
+		self.save(using=using, update_fields=['is_active'])
+
+	def hard_delete(self, using=None, keep_parents=False):
+		"""Physically remove the team row. Only safe once all related objects have been reassigned or removed."""
+		super().delete(using=using, keep_parents=keep_parents)
 
 class OrganizationCredentials(models.Model):
 	organization = models.OneToOneField(
