@@ -80,7 +80,7 @@ def copy_credentials_forward(apps, schema_editor):
 				placeholders = ', '.join(['%s'] * len(site_ids))
 				with schema_editor.connection.cursor() as cursor:
 					cursor.execute(
-						f"SELECT id, postmark_api_token, postmark_api_url"
+						f"SELECT setting_id, postmark_api_token, postmark_api_url"
 						f" FROM {cs_table} WHERE site_id IN ({placeholders})",
 						site_ids,
 					)
@@ -92,8 +92,8 @@ def copy_credentials_forward(apps, schema_editor):
 							f"UPDATE {cs_table}"
 							" SET postmark_api_token = %s"
 							", postmark_api_url = COALESCE(NULLIF(postmark_api_url, ''), %s)"
-							" WHERE id = %s",
-							[_encrypt(postmark_token), postmark_url, cs_row['id']],
+							" WHERE setting_id = %s",
+							[_encrypt(postmark_token), postmark_url, cs_row['setting_id']],
 						)
 
 		# --- ORCID: copy to OrganizationCredentials for the team's organisation ---
