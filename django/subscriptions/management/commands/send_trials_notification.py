@@ -6,7 +6,7 @@ from django.utils.html import strip_tags
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list
 from subscriptions.models import Lists, Subscribers, SentTrialNotification, FailedNotification
-from gregory.models import TeamCredentials
+
 from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
 from templates.emails.components.content_organizer import get_optimized_email_context
 
@@ -38,17 +38,17 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.ERROR(f"No team associated with list '{lst.list_name}'. Skipping."))
 				continue
 
-			# Step 2: Resolve Postmark credentials (Team → Organization → Django settings)
-			postmark_api_token, api_url = get_postmark_credentials(team)
-			if not postmark_api_token or not api_url:
-				self.stdout.write(self.style.ERROR(f"No Postmark credentials found for team '{team.name}', its organization, or Django settings. Skipping list '{lst.list_name}'."))
-				continue
-
-			# Resolve site and custom settings for this list (List.site → Team.site → Org default → global)
+			# Step 2: Resolve site and custom settings for this list (List.site → Org default → global)
 			try:
 				site, customsettings = get_site_and_settings(team, list_obj=lst)
 			except Exception as e:
 				self.stdout.write(self.style.ERROR(f"Could not resolve site/settings for team '{team.name}': {e}. Skipping list '{lst.list_name}'."))
+				continue
+
+			# Resolve Postmark credentials (Site-level CustomSetting → Organization → Django settings)
+			postmark_api_token, api_url = get_postmark_credentials(custom_settings=customsettings, organization=team.organization)
+			if not postmark_api_token or not api_url:
+				self.stdout.write(self.style.ERROR(f"No Postmark credentials found for site, organisation, or Django settings. Skipping list '{lst.list_name}'."))
 				continue
 
 			# Step 3: Use the shared utility function to fetch trials

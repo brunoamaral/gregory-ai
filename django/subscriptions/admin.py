@@ -480,8 +480,8 @@ class AnnouncementAdmin(admin.ModelAdmin):
 				return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
 
 			try:
-				api_token, api_url = get_postmark_credentials(first_list.team)
 				site, custom_settings = get_site_and_settings(first_list.team, list_obj=first_list)
+				api_token, api_url = get_postmark_credentials(custom_settings=custom_settings, organization=first_list.team.organization)
 			except Exception:
 				api_token, api_url, site, custom_settings = None, None, None, None
 
@@ -562,8 +562,8 @@ class AnnouncementAdmin(admin.ModelAdmin):
 				pk = _lst.list_id
 				if pk not in list_credentials:
 					try:
-						_api_token, _api_url = get_postmark_credentials(_lst.team)
 						_site, _cs = get_site_and_settings(_lst.team, list_obj=_lst)
+						_api_token, _api_url = get_postmark_credentials(custom_settings=_cs, organization=_lst.team.organization)
 					except Exception:
 						_api_token, _api_url, _site, _cs = None, None, None, None
 					list_credentials[pk] = (_api_token, _api_url, _site, _cs)

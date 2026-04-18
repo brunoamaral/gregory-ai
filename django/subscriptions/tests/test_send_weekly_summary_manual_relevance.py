@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.utils import timezone
 from datetime import timedelta
 from django.contrib.sites.models import Site
-from gregory.models import Subject, Articles, Team, TeamCredentials, ArticleSubjectRelevance
+from gregory.models import Subject, Articles, Team, ArticleSubjectRelevance
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers
@@ -30,13 +30,6 @@ class TestManualRelevanceFiltering(TestCase):
 		# Create basic test infrastructure
 		self.organization = Organization.objects.create(name="Test Organization", slug="test-org")
 		self.team = Team.objects.create(name="Test Team", organization=self.organization, slug="test-team")
-		
-		# Create team credentials for email sending
-		self.credentials = TeamCredentials.objects.create(
-			team=self.team,
-			postmark_api_token="test-token",
-			postmark_api_url="https://api.postmarkapp.com/"
-		)
 		
 		# Create subjects
 		self.subject_a = Subject.objects.create(
@@ -116,7 +109,11 @@ class TestManualRelevanceFiltering(TestCase):
 		)[0]
 		self.custom_settings = CustomSetting.objects.get_or_create(
 			site=self.site,
-			defaults={'title': 'Test Site'}
+			defaults={
+				'title': 'Test Site',
+				'postmark_api_token': 'test-token',
+				'postmark_api_url': 'https://api.postmarkapp.com/email',
+			}
 		)[0]
 	
 	def _create_manual_relevance_tag(self, article, subject, is_relevant):
@@ -280,13 +277,6 @@ class TestManualRelevanceFilteringEdgeCases(TestCase):
 		self.organization = Organization.objects.create(name="Test Organization", slug="test-org")
 		self.team = Team.objects.create(name="Test Team", organization=self.organization, slug="test-team")
 		
-		# Create team credentials
-		self.credentials = TeamCredentials.objects.create(
-			team=self.team,
-			postmark_api_token="test-token",
-			postmark_api_url="https://api.postmarkapp.com/"
-		)
-		
 		# Create subjects
 		self.subject_a = Subject.objects.create(
 			subject_name="Subject A", 
@@ -319,7 +309,11 @@ class TestManualRelevanceFilteringEdgeCases(TestCase):
 		)[0]
 		self.custom_settings = CustomSetting.objects.get_or_create(
 			site=self.site,
-			defaults={'title': 'Test Site'}
+			defaults={
+				'title': 'Test Site',
+				'postmark_api_token': 'test-token',
+				'postmark_api_url': 'https://api.postmarkapp.com/email',
+			}
 		)[0]
 	
 	def test_single_subject_list_filtering(self):

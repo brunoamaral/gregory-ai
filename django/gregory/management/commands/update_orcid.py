@@ -31,11 +31,11 @@ class Command(BaseCommand):
 				self.stderr.write(self.style.ERROR(f"Team with slug '{team_slug}' not found."))
 				return
 
-		orcid_key, orcid_secret = get_orcid_credentials(team)
+		orcid_key, orcid_secret = get_orcid_credentials(organization=team.organization if team else None)
 		if not orcid_key or not orcid_secret:
 			self.stderr.write(self.style.ERROR(
 				"ORCID credentials not found. Set ORCID_CLIENT_ID and ORCID_CLIENT_SECRET "
-				"in the environment, or configure them on the team or organisation."
+				"in the environment, or configure them on the organisation."
 			))
 			return
 
