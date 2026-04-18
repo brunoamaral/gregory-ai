@@ -441,26 +441,24 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			from django.http import HttpResponseForbidden
 			return HttpResponseForbidden("Access denied.")
 
-		if announcement.status == 'sent':
+		if announcement.status in ('sent', 'sending'):
 			messages.warning(request, "This announcement has already been sent.")
 			return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
 
-		target_lists = announcement.lists.select_related('team__organization').prefetch_related(
-			'list_subscriptions__subscriber'
-		).all()
+		target_lists = announcement.lists.select_related('team__organization').all()
 
 		# Build subscriber info per list for display and sending
 		list_info = []
 		all_subscribers = {}  # email -> (subscriber, list) — deduplicate by email
 		for lst in target_lists:
-			active_subs = Subscribers.objects.filter(
+			active_subs = list(Subscribers.objects.filter(
 				list_subscriptions__list=lst,
 				list_subscriptions__is_active=True,
 				active=True,
-			).distinct()
+			).distinct())
 			list_info.append({
 				'list': lst,
-				'subscriber_count': active_subs.count(),
+				'subscriber_count': len(active_subs),
 			})
 			for sub in active_subs:
 				if sub.email not in all_subscribers:
@@ -476,14 +474,22 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			success_count = 0
 			failure_count = 0
 
+			# Pre-compute credentials per team to avoid re-fetching for every subscriber
+			team_credentials = {}
+			for _email, (_sub, _lst) in all_subscribers.items():
+				pk = _lst.team_id
+				if pk not in team_credentials:
+					try:
+						_api_token, _api_url = get_postmark_credentials(_lst.team)
+						_site, _ = get_site_and_settings(_lst.team)
+					except Exception:
+						_api_token, _api_url, _site = None, None, None
+					team_credentials[pk] = (_api_token, _api_url, _site)
+
 			# Group subscribers by the list (for credentials resolution)
 			# Use the list from which we first encountered them
 			for email, (subscriber, lst) in all_subscribers.items():
-				try:
-					api_token, api_url = get_postmark_credentials(lst.team)
-					site, _ = get_site_and_settings(lst.team)
-				except Exception:
-					api_token, api_url, site = None, None, None
+				api_token, api_url, site = team_credentials.get(lst.team_id, (None, None, None))
 
 				html = self._render_announcement_email(announcement, subscriber=subscriber, site=site, list_id=lst.list_id)
 				text = self._render_announcement_text(announcement, subscriber=subscriber)
@@ -510,12 +516,14 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					error_msg = str(e)[:500]
 					failure_count += 1
 
-				AnnouncementRecipient.objects.create(
+				AnnouncementRecipient.objects.update_or_create(
 					announcement=announcement,
 					subscriber=subscriber,
-					list=lst,
-					success=success,
-					error_message=error_msg,
+					defaults={
+						'list': lst,
+						'success': success,
+						'error_message': error_msg,
+					},
 				)
 
 			announcement.status = 'sent' if failure_count == 0 else 'failed'
