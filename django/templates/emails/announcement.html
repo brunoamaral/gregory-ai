@@ -10,6 +10,6 @@
     </p>
     {% endif %}
 
-    {{ announcement_body|bleach }}
+    {{ announcement_body|safe }}
 </div>
 {% endblock %}
