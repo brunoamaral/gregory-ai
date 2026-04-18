@@ -4,6 +4,7 @@ from django.urls import path, reverse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
 from django.db.models import Count, Q
+from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
@@ -52,6 +53,16 @@ class SubscriberAdmin(admin.ModelAdmin):
 	readonly_fields = ['created_at', 'updated_at', 'unsubscribe_token']
 	inlines = [SubscriberSiteProfileInline, ListSubscriptionInline]
 
+	def get_queryset(self, request):
+		qs = super().get_queryset(request)
+		return qs.annotate(
+			active_subscription_count=Count(
+				'list_subscriptions',
+				filter=Q(list_subscriptions__is_active=True),
+				distinct=True,
+			)
+		)
+
 	def get_urls(self):
 		urls = super().get_urls()
 		custom_urls = [
@@ -84,7 +95,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 		subscriber_counts = (
 			Subscribers.objects
 			.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
-			.extra(select={'date': 'DATE(created_at)'})
+			.annotate(date=TruncDate('created_at'))
 			.values('date')
 			.annotate(count=Count('subscriber_id'))
 			.order_by('date')
@@ -109,8 +120,9 @@ class SubscriberAdmin(admin.ModelAdmin):
 		return super().changelist_view(request, extra_context)
 
 	def number_of_subscriptions(self, obj):
-		return obj.subscriptions.count()
-	number_of_subscriptions.short_description = 'Number of Subscriptions'
+		return obj.active_subscription_count
+	number_of_subscriptions.short_description = 'Subscriptions'
+	number_of_subscriptions.admin_order_field = 'active_subscription_count'
 
 	def make_active(self, request, queryset):
 		updated_count = queryset.update(active=True)
