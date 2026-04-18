@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.apps import apps
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.http import HttpResponse
@@ -1038,17 +1039,23 @@ class OrganizationAdmin(BaseOrganizationAdmin):
 
 	def lists_display(self, obj):
 		from subscriptions.models import Lists
-		lists = Lists.objects.filter(team__organization=obj).select_related('team').order_by('team__name', 'list_name')
-		if not lists.exists():
+		lists = list(
+			Lists.objects.filter(team__organization=obj)
+			.select_related('team')
+			.order_by('team__name', 'list_name')
+		)
+		if not lists:
 			return '-'
-		items = []
-		for lst in lists:
-			url = reverse('admin:subscriptions_lists_change', args=[lst.pk])
-			items.append(format_html(
-				'<li><a href="{}">{}</a> <span style="color:#666;font-size:0.9em">({})</span></li>',
-				url, lst.list_name, lst.team.name
-			))
-		return format_html('<ul style="margin:0;padding-left:1.2em">{}</ul>', mark_safe(''.join(str(i) for i in items)))
+		from django.utils.html import format_html_join
+		items = format_html_join(
+			'',
+			'<li><a href="{}">{}</a> <span style="color:#666;font-size:0.9em">({})</span></li>',
+			(
+				(reverse('admin:subscriptions_lists_change', args=[lst.pk]), lst.list_name, lst.team.name)
+				for lst in lists
+			),
+		)
+		return format_html('<ul style="margin:0;padding-left:1.2em">{}</ul>', items)
 	lists_display.short_description = 'Lists'
 
 
@@ -1170,8 +1177,7 @@ class TeamMembersInline(admin.TabularInline):
 
 class TeamListsInline(admin.TabularInline):
 	"""Inline to display lists belonging to a team."""
-	from subscriptions.models import Lists
-	model = Lists
+	model = apps.get_model('subscriptions', 'Lists')
 	extra = 0
 	fields = ('list_name', 'list_description', 'weekly_digest', 'admin_summary')
 	readonly_fields = ('list_name', 'list_description', 'weekly_digest', 'admin_summary')
