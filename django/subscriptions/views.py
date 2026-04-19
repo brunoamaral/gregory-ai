@@ -1,9 +1,10 @@
 from subscriptions.forms import SubscribersForm
 from subscriptions.models import Subscribers, Lists, ListSubscription, SubscriberSiteProfile
 from django.views.decorators.csrf import csrf_exempt
-from django.http import HttpResponseRedirect, HttpResponseBadRequest
+from django.http import HttpResponseRedirect, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.contrib.sites.models import Site
+from django.core.exceptions import DisallowedHost
 from django.utils.timezone import now as tz_now
 from urllib.parse import urlparse
 import logging
@@ -50,13 +51,83 @@ def _get_client_ip(request):
 	return request.META.get('REMOTE_ADDR')
 
 
-def _resolve_site_from_request(request):
-	"""Best-effort resolution of the current Site from the request host."""
-	host = request.get_host().split(':')[0]
+def _find_site_by_domain(hostname):
+	"""
+	Look up a Site by exact domain, then by stripping one subdomain level.
+
+	e.g. 'www.example.com' → tries exact, then tries 'example.com'.
+	Returns the matching Site or None.
+	"""
+	hostname = hostname.split(':')[0].lower()
 	try:
-		return Site.objects.get(domain=host)
+		return Site.objects.get(domain=hostname)
 	except Site.DoesNotExist:
-		return Site.objects.get_current()
+		pass
+	parts = hostname.split('.')
+	if len(parts) >= 3:
+		parent = '.'.join(parts[1:])
+		try:
+			return Site.objects.get(domain=parent)
+		except Site.DoesNotExist:
+			pass
+	return None
+
+
+def _origin_matches_allowed(origin_host, allowed_domains_str):
+	"""
+	Return True if origin_host (or its parent domain after stripping one
+	subdomain level) appears in the comma-separated allowed_domains_str.
+	"""
+	origin_host = origin_host.split(':')[0].lower()
+	allowed = {d.strip().lower() for d in (allowed_domains_str or '').split(',') if d.strip()}
+	if origin_host in allowed:
+		return True
+	parts = origin_host.split('.')
+	if len(parts) >= 3:
+		parent = '.'.join(parts[1:])
+		if parent in allowed:
+			return True
+	return False
+
+
+def _check_origin_allowed(origin_host, subscription_lists):
+	"""
+	Return True if origin_host is permitted to submit to all requested lists.
+
+	A list with no allowed_domains configured imposes no origin restriction.
+	A list with allowed_domains configured requires the origin to match at
+	least one of those domains (subdomain-aware).
+	"""
+	for lst in subscription_lists:
+		if lst.allowed_domains and not _origin_matches_allowed(origin_host, lst.allowed_domains):
+			return False
+	return True
+
+
+def _resolve_site_from_request(request):
+	"""
+	Resolve the current Site from Origin/Referer headers, falling back to
+	the request Host header and finally to the default SITE_ID site.
+
+	Subdomain-aware: 'www.example.com' resolves to the 'example.com' Site.
+	"""
+	origin = request.META.get('HTTP_ORIGIN') or request.META.get('HTTP_REFERER', '')
+	if origin:
+		parsed = urlparse(origin)
+		hostname = parsed.netloc
+		if hostname:
+			site = _find_site_by_domain(hostname)
+			if site:
+				return site
+	try:
+		host = request.get_host()
+	except DisallowedHost:
+		host = None
+	if host:
+		site = _find_site_by_domain(host)
+		if site:
+			return site
+	return Site.objects.get_current()
 
 
 @csrf_exempt
@@ -88,6 +159,26 @@ def subscribe_view(request):
 			"The form must include at least one 'list' field value.",
 		)
 		return HttpResponseRedirect(f'{redirect_base}/error/')
+
+	# Origin validation: reject requests from domains not authorised by any
+	# of the requested lists. A list with no allowed_domains configured
+	# imposes no restriction. If no Origin/Referer header is present (e.g.
+	# server-side or API usage) the request is allowed through with a warning.
+	origin_header = request.META.get('HTTP_ORIGIN') or request.META.get('HTTP_REFERER', '')
+	if origin_header:
+		parsed_origin = urlparse(origin_header)
+		origin_host = parsed_origin.netloc
+		if origin_host and not _check_origin_allowed(origin_host, subscription_lists):
+			logger.warning(
+				"subscribe_view: request from unauthorized origin '%s' rejected.",
+				origin_host,
+			)
+			return JsonResponse({'error': 'Origin not permitted.'}, status=403)
+	else:
+		logger.warning(
+			"subscribe_view: no Origin or Referer header present; "
+			"site attribution may be inaccurate."
+		)
 
 	subscriber_form = SubscribersForm(request.POST)
 
