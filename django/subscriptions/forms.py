@@ -41,7 +41,7 @@ class AnnouncementAdminForm(ModelForm):
 
     class Meta:
         model = Announcement
-        fields = ['subject', 'header_title', 'header_tagline', 'body', 'lists']
+        fields = ['subject', 'header_title', 'header_tagline', 'show_header_tagline', 'preheader_text', 'body', 'lists']
         widgets = {
             'body': CKEditor5Widget(config_name='default'),
             'lists': forms.CheckboxSelectMultiple,

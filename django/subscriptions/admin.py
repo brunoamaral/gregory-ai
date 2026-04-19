@@ -531,7 +531,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 	fieldsets = [
 		(None, {'fields': ['subject']}),
 		('Email Header', {
-			'fields': ['header_title', 'header_tagline'],
+			'fields': ['header_title', 'header_tagline', 'show_header_tagline', 'preheader_text'],
 			'description': 'Optionally override the title (defaults to "Gregory AI") and the tagline shown in the email header.',
 		}),
 		('Body', {'fields': ['body']}),
@@ -637,6 +637,8 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			'current_date': timezone.now(),
 			'header_title': announcement.header_title,
 			'header_tagline': announcement.header_tagline,
+			'show_header_tagline': announcement.show_header_tagline,
+			'preheader_text': announcement.preheader_text,
 			'title': getattr(custom_settings, 'title', 'Gregory AI') if custom_settings else 'Gregory AI',
 			'website_url': getattr(custom_settings, 'website_url', '') if custom_settings else '',
 			'support_url': getattr(custom_settings, 'support_url', '') if custom_settings else '',
@@ -674,7 +676,35 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if announcement is None:
 			from django.http import HttpResponseForbidden
 			return HttpResponseForbidden("Access denied.")
-		html = self._render_announcement_email(announcement)
+
+		from subscriptions.management.commands.utils.get_credentials import get_site_and_settings
+		from types import SimpleNamespace
+
+		# Resolve branding from the first selected list so the footer matches
+		# what recipients actually see.
+		site, custom_settings = None, None
+		first_list = announcement.lists.select_related('team').first()
+		if first_list:
+			try:
+				site, custom_settings = get_site_and_settings(first_list.team, list_obj=first_list)
+			except Exception:
+				pass
+
+		# Mock subscriber so the greeting and footer unsubscribe block render.
+		mock_subscriber = SimpleNamespace(
+			first_name="Gregory",
+			email="subscriber@example.com",
+			unsubscribe_token="preview-token",
+		)
+
+		list_id = first_list.list_id if first_list else None
+		html = self._render_announcement_email(
+			announcement,
+			subscriber=mock_subscriber,
+			site=site,
+			list_id=list_id,
+			custom_settings=custom_settings,
+		)
 		response = HttpResponse(html)
 		response['X-Frame-Options'] = 'SAMEORIGIN'
 		return response

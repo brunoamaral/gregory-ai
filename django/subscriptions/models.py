@@ -283,6 +283,18 @@ class Announcement(models.Model):
 		help_text="Optional subtitle/tagline shown below the site name in the email header. Leave blank for default.",
 		verbose_name="Header Tagline",
 	)
+	show_header_tagline = models.BooleanField(
+		default=True,
+		help_text="Uncheck to hide the tagline from the email header entirely.",
+		verbose_name="Show Header Tagline",
+	)
+	preheader_text = models.CharField(
+		max_length=200,
+		blank=True,
+		default='',
+		help_text="Short preview text shown in email clients before the email is opened. Leave blank for a default message.",
+		verbose_name="Preheader Text",
+	)
 	body = CKEditor5Field(
 		config_name='default',
 		help_text="The content of the announcement email.",

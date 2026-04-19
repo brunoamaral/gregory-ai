@@ -22,7 +22,7 @@
                 New clinical trial notifications from {{ title|default:"Gregory AI" }}
             {% endif %}
         {% else %}
-            {% block custom_preheader %}Latest updates powered by Gregory AI Scientific Research Intelligence{% endblock %}
+            {% block custom_preheader %}{% if preheader_text %}{{ preheader_text }}{% else %}Latest updates powered by Gregory AI Scientific Research Intelligence{% endif %}{% endblock %}
         {% endif %}
     {% endblock %}
     
