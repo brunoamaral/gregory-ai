@@ -12,6 +12,7 @@ from django.utils.html import strip_tags
 from django.contrib import messages
 from datetime import timedelta
 from django import forms
+from django.forms import BaseInlineFormSet
 import bleach
 from .models import Subscribers, Lists, FailedNotification, ListSubscription, SubscriberSiteProfile, Announcement, AnnouncementRecipient
 from .forms import ListsAdminForm, AnnouncementAdminForm
@@ -46,9 +47,22 @@ class ListSubscriptionInline(admin.TabularInline):
 	verbose_name_plural = 'List Subscriptions'
 
 
+class FailedNotificationFormSet(BaseInlineFormSet):
+	"""Limits the inline to the 5 most recent failed notifications.
+
+	The limit is applied here — after the formset has already filtered by the
+	parent Subscriber instance — to avoid the 'cannot filter a sliced queryset'
+	error that would occur if the slice were applied in the inline's own
+	get_queryset().
+	"""
+	def get_queryset(self):
+		return super().get_queryset().order_by('-created_at')[:5]
+
+
 class FailedNotificationInline(admin.TabularInline):
 	"""Shows the last 5 failed notifications for this subscriber (read-only)."""
 	model = FailedNotification
+	formset = FailedNotificationFormSet
 	extra = 0
 	max_num = 0
 	can_delete = False
@@ -59,10 +73,6 @@ class FailedNotificationInline(admin.TabularInline):
 
 	def has_add_permission(self, request, obj=None):
 		return False
-
-	def get_queryset(self, request):
-		qs = super().get_queryset(request)
-		return qs.order_by('-created_at')[:5]
 
 
 class SubscriptionListFilter(admin.SimpleListFilter):
