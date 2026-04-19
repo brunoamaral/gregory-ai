@@ -683,7 +683,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		# Resolve branding from the first selected list so the footer matches
 		# what recipients actually see.
 		site, custom_settings = None, None
-		first_list = announcement.lists.select_related('team').first()
+		first_list = announcement.lists.select_related('team', 'site').first()
 		if first_list:
 			try:
 				site, custom_settings = get_site_and_settings(first_list.team, list_obj=first_list)
