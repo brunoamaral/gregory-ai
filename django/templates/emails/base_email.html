@@ -71,43 +71,8 @@
         }
         
         /* Typography Hierarchy */
-        .email-header {
-            background-color: #1e3a8a;
-            background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%);
-            border-radius: 12px 12px 0 0;
-            color: #ffffff;
-            padding: 40px;
-            text-align: center;
-        }
-        
-        .email-header h1 {
-            color: #ffffff;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-size: 28px;
-            font-weight: 700;
-            line-height: 1.2;
-            margin: 0 0 10px 0;
-        }
-        
-        .email-header .subtitle {
-            color: #dbeafe;
-            font-size: 16px;
-            font-weight: 400;
-            margin: 0;
-        }
-        
         .email-content {
             padding: 40px;
-        }
-        
-        .email-footer {
-            background-color: #f9fafb;
-            border-radius: 0 0 12px 12px;
-            border-top: 1px solid #e5e7eb;
-            color: #6b7280;
-            font-size: 14px;
-            padding: 30px 40px;
-            text-align: center;
         }
         
         /* Content Typography */
@@ -136,13 +101,6 @@
             margin: 0 0 20px 0;
         }
         
-        .content-text-small {
-            color: #6b7280;
-            font-size: 14px;
-            line-height: 1.5;
-            margin: 0 0 15px 0;
-        }
-        
         /* Links */
         a {
             color: #3b82f6;
@@ -154,42 +112,10 @@
             text-decoration: none;
         }
         
-        /* Utility Classes */
-        .text-center {
-            text-align: center !important;
-        }
-        
-        .text-left {
-            text-align: left !important;
-        }
-        
-        .mb-0 {
-            margin-bottom: 0 !important;
-        }
-        
-        .mb-10 {
-            margin-bottom: 10px !important;
-        }
-        
-        .mb-20 {
-            margin-bottom: 20px !important;
-        }
-        
-        .mt-20 {
-            margin-top: 20px !important;
-        }
-        
         /* Header Component Styles */
         .email-header-container {
             background-color: var(--primary-blue);
             border-radius: 8px 8px 0 0;
-        }
-        
-        .header-date-info {
-            background-color: rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            padding: 12px 20px;
-            display: inline-block;
         }
         
         /* Footer Component Styles */
@@ -197,31 +123,6 @@
             background-color: #f9fafb;
             border-radius: 0 0 8px 8px;
             border-top: 1px solid #e5e7eb;
-        }
-        
-        .footer-brand {
-            color: var(--primary-blue);
-            font-weight: 700;
-            margin-bottom: 5px;
-        }
-        
-        .footer-links a {
-            color: var(--secondary-blue);
-            text-decoration: underline;
-            margin: 0 8px;
-        }
-        
-        .footer-links a:hover {
-            color: var(--text-blue);
-            text-decoration: none;
-        }
-        
-        .footer-legal {
-            color: #9ca3af;
-            font-size: 11px;
-            border-top: 1px solid #e5e7eb;
-            padding-top: 15px;
-            margin-top: 15px;
         }
         
         /* Responsive Design */
@@ -237,22 +138,8 @@
                 border-radius: 0 !important;
             }
             
-            .email-header {
+            .email-content {
                 padding: 25px 20px;
-                border-radius: 8px 8px 0 0;
-            }
-            
-            .email-content,
-            .email-footer {
-                padding: 25px 20px;
-            }
-            
-            .email-footer {
-                border-radius: 0 0 8px 8px;
-            }
-            
-            .email-header h1 {
-                font-size: 24px;
             }
             
             .content-title {
@@ -269,14 +156,8 @@
         }
         
         @media only screen and (max-width: 480px) {
-            .email-header,
-            .email-content,
-            .email-footer {
+            .email-content {
                 padding: 20px 15px;
-            }
-            
-            .email-header h1 {
-                font-size: 22px;
             }
             
             .content-title {
@@ -290,14 +171,6 @@
         [owa] .email-container {
             border-radius: 0;
             box-shadow: none;
-        }
-        
-        [owa] .email-header {
-            border-radius: 0;
-        }
-        
-        [owa] .email-footer {
-            border-radius: 0;
         }
         
         /* Apple Mail */
@@ -323,18 +196,8 @@
                 border-color: #374151 !important;
             }
             
-            .email-header {
-                background: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #3b82f6 100%) !important;
-            }
-            
             .email-content {
                 background-color: #1f2937 !important;
-            }
-            
-            .email-footer {
-                background-color: #111827 !important;
-                border-color: #374151 !important;
-                color: #9ca3af !important;
             }
             
             .content-title {
@@ -349,9 +212,6 @@
                 color: #d1d5db !important;
             }
             
-            .content-text-small {
-                color: #9ca3af !important;
-            }
         }
     </style>
     
@@ -362,9 +222,7 @@
             width: 600px !important;
         }
         
-        .email-header,
-        .email-content,
-        .email-footer {
+        .email-content {
             width: 600px !important;
         }
         
