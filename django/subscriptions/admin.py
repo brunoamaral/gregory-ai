@@ -12,6 +12,7 @@ from django.utils.html import strip_tags
 from django.contrib import messages
 from datetime import timedelta
 from django import forms
+from django.forms import BaseInlineFormSet
 import bleach
 from .models import Subscribers, Lists, FailedNotification, ListSubscription, SubscriberSiteProfile, Announcement, AnnouncementRecipient
 from .forms import ListsAdminForm, AnnouncementAdminForm
@@ -46,6 +47,34 @@ class ListSubscriptionInline(admin.TabularInline):
 	verbose_name_plural = 'List Subscriptions'
 
 
+class FailedNotificationFormSet(BaseInlineFormSet):
+	"""Limits the inline to the 5 most recent failed notifications.
+
+	The limit is applied here — after the formset has already filtered by the
+	parent Subscriber instance — to avoid the 'cannot filter a sliced queryset'
+	error that would occur if the slice were applied in the inline's own
+	get_queryset().
+	"""
+	def get_queryset(self):
+		return super().get_queryset().order_by('-created_at')[:5]
+
+
+class FailedNotificationInline(admin.TabularInline):
+	"""Shows the last 5 failed notifications for this subscriber (read-only)."""
+	model = FailedNotification
+	formset = FailedNotificationFormSet
+	extra = 0
+	max_num = 0
+	can_delete = False
+	fields = ['list', 'reason', 'created_at']
+	readonly_fields = ['list', 'reason', 'created_at']
+	verbose_name = 'Failed Notification'
+	verbose_name_plural = 'Last 5 Failed Notifications'
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+
 class SubscriptionListFilter(admin.SimpleListFilter):
 	"""Filter subscribers by the list they are subscribed to."""
 	title = 'list'
@@ -75,7 +104,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 	search_fields = ['first_name', 'last_name', 'email']
 	actions = ['make_active', 'make_inactive', 'export_csv', 'add_to_list']
 	readonly_fields = ['created_at', 'updated_at', 'unsubscribe_token']
-	inlines = [SubscriberSiteProfileInline, ListSubscriptionInline]
+	inlines = [SubscriberSiteProfileInline, ListSubscriptionInline, FailedNotificationInline]
 
 	def get_queryset(self, request):
 		from gregory.admin import get_user_organizations
