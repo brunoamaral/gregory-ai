@@ -223,3 +223,51 @@ class SendViewSubjectNormalisationTest(TestCase):
 		mock_send.assert_called_once()
 		_, kwargs = mock_send.call_args
 		self.assertEqual(kwargs['subject'], 'My Announcement')
+
+
+class RenderAnnouncementTaglineAndPreheaderTest(TestCase):
+	"""Tests for show_header_tagline and preheader_text rendering."""
+
+	def setUp(self):
+		org = Organization.objects.create(name='Tag Org')
+		team = Team.objects.create(organization=org, name='Tag Team', slug='tag-team')
+		self.lst = Lists.objects.create(list_name='Tag List', team=team)
+		self.admin = AnnouncementAdmin(Announcement, admin_site)
+
+	def _render(self, **ann_kwargs):
+		ann = Announcement(subject='Test', body='<p>Body</p>', **ann_kwargs)
+		# Bypass DB so we can test rendering without saving
+		with patch('subscriptions.admin.render_to_string', wraps=lambda tpl, ctx: __import__('django.template.loader', fromlist=['render_to_string']).render_to_string(tpl, ctx)):
+			pass
+		return self.admin._render_announcement_email(ann)
+
+	def test_tagline_present_by_default(self):
+		html = self._render()
+		# Default tagline text should appear
+		self.assertIn('Scientific Research Intelligence', html)
+
+	def test_show_header_tagline_false_hides_tagline(self):
+		# Supply a custom preheader_text so the fallback "Scientific Research Intelligence"
+		# doesn't appear in the preheader and pollute this assertion.
+		html = self._render(show_header_tagline=False, preheader_text='Custom preview text')
+		self.assertNotIn('Scientific Research Intelligence', html)
+
+	def test_custom_tagline_shown_when_show_tagline_true(self):
+		html = self._render(header_tagline='My Custom Tagline', show_header_tagline=True)
+		self.assertIn('My Custom Tagline', html)
+
+	def test_custom_tagline_hidden_when_show_tagline_false(self):
+		html = self._render(header_tagline='My Custom Tagline', show_header_tagline=False)
+		self.assertNotIn('My Custom Tagline', html)
+
+	def test_preheader_text_used_when_set(self):
+		html = self._render(preheader_text='Read the latest news')
+		self.assertIn('Read the latest news', html)
+
+	def test_preheader_fallback_when_empty(self):
+		html = self._render(preheader_text='')
+		self.assertIn('Latest updates powered by Gregory AI Scientific Research Intelligence', html)
+
+	def test_preheader_fallback_not_shown_when_custom_set(self):
+		html = self._render(preheader_text='Custom preview')
+		self.assertNotIn('Latest updates powered by Gregory AI Scientific Research Intelligence', html)
