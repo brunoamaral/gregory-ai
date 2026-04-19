@@ -532,7 +532,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		(None, {'fields': ['subject']}),
 		('Email Header', {
 			'fields': ['header_title', 'header_tagline', 'show_header_tagline', 'preheader_text'],
-			'description': 'Optionally override the title (defaults to "Gregory AI") and the tagline shown in the email header.',
+			'description': 'Optionally override the title (defaults to "Gregory AI"), override or hide the tagline shown in the email header, and set the email preheader text.',
 		}),
 		('Body', {'fields': ['body']}),
 		('Destination', {'fields': ['lists']}),
@@ -685,10 +685,15 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		site, custom_settings = None, None
 		first_list = announcement.lists.select_related('team', 'site').first()
 		if first_list:
+			from django.contrib.sites.models import Site
+			from sitesettings.models import CustomSetting
 			try:
 				site, custom_settings = get_site_and_settings(first_list.team, list_obj=first_list)
-			except Exception:
-				pass
+			except CustomSetting.DoesNotExist:
+				# No CustomSetting for the resolved site — fall back to the global
+				# current site so branding is still populated.
+				site = first_list.site or Site.objects.get_current()
+				custom_settings = None
 
 		# Mock subscriber so the greeting and footer unsubscribe block render.
 		mock_subscriber = SimpleNamespace(
