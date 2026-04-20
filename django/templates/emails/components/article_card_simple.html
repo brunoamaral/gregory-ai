@@ -22,7 +22,7 @@ This is a simplified version for contexts where we just need basic article displ
         {% if article.authors.exists %}
         <p class="article-card-meta" style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
             <strong>Authors:</strong>
-            {% for author in article.authors.all %}{% if author.ORCID %}<a href="{{ author.ORCID }}" class="article-card-link" style="color: #3b82f6; text-decoration: underline;">{{ author.full_name }}</a>{% else %}{{ author.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% for author in article.authors.all %}{% if author.ORCID %}<a href="https://orcid.org/{{ author.ORCID }}" class="article-card-link" style="color: #3b82f6; text-decoration: underline;">{{ author.full_name }}</a>{% else %}{{ author.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
         </p>
         {% endif %}
     </div>
