@@ -22,7 +22,7 @@
     <!-- Articles Section -->
     {% if articles or additional_articles %}
     <div style="margin-bottom: 40px;">
-        <h2 class="content-subtitle" style="color: #1e3a8a; font-size: 22px; margin: 0 0 25px 0; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;">
+        <h2 class="content-subtitle section-subtitle" style="color: #1e3a8a; font-size: 22px; margin: 0 0 25px 0; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;">
             📄 New Articles for Review ({{ content_stats.total_articles }})
         </h2>
         
@@ -49,7 +49,7 @@
     <!-- Clinical Trials Section -->
     {% if trials or additional_trials %}
     <div style="margin-bottom: 40px;">
-        <h2 class="content-subtitle" style="color: #1e3a8a; font-size: 22px; margin: 0 0 25px 0; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;">
+        <h2 class="content-subtitle section-subtitle" style="color: #1e3a8a; font-size: 22px; margin: 0 0 25px 0; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb;">
             🧪 New Clinical Trials ({{ content_stats.total_trials }})
         </h2>
         
@@ -75,18 +75,18 @@
     
     <!-- No Content Message -->
     {% if not articles and not additional_articles and not trials and not additional_trials %}
-    <div style="text-align: center; padding: 40px 20px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e5e7eb;">
-        <h3 style="color: #6b7280; font-size: 18px; margin: 0 0 10px 0;">No New Content for Review</h3>
-        <p style="color: #9ca3af; font-size: 14px; margin: 0;">
+    <div class="no-content-box" style="text-align: center; padding: 40px 20px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e5e7eb;">
+        <h3 class="no-content-title" style="color: #6b7280; font-size: 18px; margin: 0 0 10px 0;">No New Content for Review</h3>
+        <p class="no-content-text" style="color: #9ca3af; font-size: 14px; margin: 0;">
             No new articles or clinical trials were discovered in the last 48 hours.
         </p>
     </div>
     {% endif %}
     
     <!-- Admin Actions -->
-    <div style="margin-top: 40px; padding: 20px; background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px;">
-        <h3 style="color: #92400e; font-size: 16px; margin: 0 0 10px 0;">📋 Admin Actions</h3>
-        <p style="color: #92400e; font-size: 14px; margin: 0;">
+    <div class="admin-action-box" style="margin-top: 40px; padding: 20px; background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px;">
+        <h3 class="admin-action-title" style="color: #92400e; font-size: 16px; margin: 0 0 10px 0;">📋 Admin Actions</h3>
+        <p class="admin-action-text" style="color: #92400e; font-size: 14px; margin: 0;">
             Review the articles above and mark them as relevant using the EDIT ARTICLE buttons. 
             This helps improve our machine learning accuracy for future recommendations.
         </p>

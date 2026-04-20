@@ -12,7 +12,7 @@
                         <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 20px;">
                             <tr>
                                 <td style="text-align: center;">
-                                    <h3 style="color: #1e3a8a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 18px; font-weight: 700; margin: 0 0 5px 0;">
+                                    <h3 class="footer-brand" style="color: #1e3a8a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 18px; font-weight: 700; margin: 0 0 5px 0;">
                                         {% block footer_brand %}{{ title|default:"Gregory AI" }}{% endblock %}
                                     </h3>
                                 </td>
@@ -24,7 +24,7 @@
                         <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 20px;">
                             <tr>
                                 <td style="text-align: center;">
-                                    <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0; line-height: 1.5;">
+                                    <p class="footer-text" style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0; line-height: 1.5;">
                                         For more information visit 
                                         <a href="{{ website_url }}" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
                                             {{ website_url }}
@@ -40,8 +40,8 @@
                         <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 20px;">
                             <tr>
                                 <td style="text-align: center;">
-                                    <p style="color: #6b7280; font-size: 13px; margin: 0; line-height: 1.4;">
-                                        {% if support_url %}<a href="{{ support_url }}" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Support</a>{% endif %}{% if support_url and about_url %} | {% endif %}{% if about_url %}<a href="{{ about_url }}" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">About</a>{% endif %}{% if contact_url and about_url or contact_url and support_url %} | {% endif %}{% if contact_url %}<a href="{{ contact_url }}" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Contact</a>{% endif %}
+                                    <p class="footer-text" style="color: #6b7280; font-size: 13px; margin: 0; line-height: 1.4;">
+                                        {% if support_url %}<a href="{{ support_url }}" class="footer-link" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Support</a>{% endif %}{% if support_url and about_url %} | {% endif %}{% if about_url %}<a href="{{ about_url }}" class="footer-link" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">About</a>{% endif %}{% if contact_url and about_url or contact_url and support_url %} | {% endif %}{% if contact_url %}<a href="{{ contact_url }}" class="footer-link" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Contact</a>{% endif %}
                                     </p>
                                 </td>
                             </tr>
@@ -53,22 +53,22 @@
                         <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 20px;">
                             <tr>
                                 <td style="text-align: center;">
-                                    <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Follow us:</p>
+                                    <p class="footer-text" style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Follow us:</p>
                                     <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="display: inline-table;">
                                         <tr>
                                             {% if bluesky_url %}
                                             <td style="padding: 0 8px;">
-                                                <a href="{{ bluesky_url }}" style="color: #3b82f6; text-decoration: none; font-size: 13px;">Blue Sky</a>
+                                                <a href="{{ bluesky_url }}" class="footer-link" style="color: #3b82f6; text-decoration: none; font-size: 13px;">Blue Sky</a>
                                             </td>
                                             {% endif %}
                                             {% if github_url %}
                                             <td style="padding: 0 8px;">
-                                                <a href="{{ github_url }}" style="color: #3b82f6; text-decoration: none; font-size: 13px;">GitHub</a>
+                                                <a href="{{ github_url }}" class="footer-link" style="color: #3b82f6; text-decoration: none; font-size: 13px;">GitHub</a>
                                             </td>
                                             {% endif %}
                                             {% if mastodon_url %}
                                             <td style="padding: 0 8px;">
-                                                <a href="{{ mastodon_url }}" style="color: #3b82f6; text-decoration: none; font-size: 13px;">Mastodon</a>
+                                                <a href="{{ mastodon_url }}" class="footer-link" style="color: #3b82f6; text-decoration: none; font-size: 13px;">Mastodon</a>
                                             </td>
                                             {% endif %}
                                         </tr>
@@ -82,17 +82,17 @@
                         <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 15px; border-top: 1px solid #e5e7eb; padding-top: 20px;">
                             <tr>
                                 <td style="text-align: center;">
-                                    <p style="color: #6b7280; font-size: 12px; margin: 0 0 8px 0; line-height: 1.4;">
+                                    <p class="footer-muted" style="color: #6b7280; font-size: 12px; margin: 0 0 8px 0; line-height: 1.4;">
                                         This email was sent to {{ subscriber.email|default:"you" }}
                                     </p>
                                     {% if subscriber.unsubscribe_token and list_id %}
-                                    <p style="color: #9ca3af; font-size: 11px; margin: 0; line-height: 1.8;">
-                                        <a href="{{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/list/{{ list_id }}/" style="color: #9ca3af; text-decoration: underline; margin: 0 4px;">Unsubscribe from this list</a>
+                                    <p class="footer-muted" style="color: #9ca3af; font-size: 11px; margin: 0; line-height: 1.8;">
+                                        <a href="{{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/list/{{ list_id }}/" class="footer-muted-link" style="color: #9ca3af; text-decoration: underline; margin: 0 4px;">Unsubscribe from this list</a>
                                         {% if site %}&nbsp;|&nbsp;
-                                        <a href="{{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/site/{{ site.id }}/" style="color: #9ca3af; text-decoration: underline; margin: 0 4px;">Unsubscribe from all lists on {{ site.domain }}</a>
+                                        <a href="{{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/site/{{ site.id }}/" class="footer-muted-link" style="color: #9ca3af; text-decoration: underline; margin: 0 4px;">Unsubscribe from all lists on {{ site.domain }}</a>
                                         {% endif %}
                                         &nbsp;|&nbsp;
-                                        <a href="{{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/all/" style="color: #9ca3af; text-decoration: underline; margin: 0 4px;">Unsubscribe from everything</a>
+                                        <a href="{{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/all/" class="footer-muted-link" style="color: #9ca3af; text-decoration: underline; margin: 0 4px;">Unsubscribe from everything</a>
                                     </p>
                                     {% endif %}
                                 </td>
@@ -104,15 +104,15 @@
                             <tr>
                                 <td style="text-align: center;">
                                     {% if privacy_policy_url or terms_url %}
-                                    <p style="color: #9ca3af; font-size: 11px; margin: 0 0 5px 0; line-height: 1.3;">
-                                        {% if privacy_policy_url %}<a href="{{ privacy_policy_url }}" style="color: #9ca3af; text-decoration: underline; margin: 0 5px;">Privacy Policy</a>{% endif %}{% if privacy_policy_url and terms_url %} | {% endif %}{% if terms_url %}<a href="{{ terms_url }}" style="color: #9ca3af; text-decoration: underline; margin: 0 5px;">Terms of Service</a>{% endif %}
+                                    <p class="footer-muted" style="color: #9ca3af; font-size: 11px; margin: 0 0 5px 0; line-height: 1.3;">
+                                        {% if privacy_policy_url %}<a href="{{ privacy_policy_url }}" class="footer-muted-link" style="color: #9ca3af; text-decoration: underline; margin: 0 5px;">Privacy Policy</a>{% endif %}{% if privacy_policy_url and terms_url %} | {% endif %}{% if terms_url %}<a href="{{ terms_url }}" class="footer-muted-link" style="color: #9ca3af; text-decoration: underline; margin: 0 5px;">Terms of Service</a>{% endif %}
                                     </p>
                                     {% endif %}
-                                    <p style="color: #9ca3af; font-size: 11px; margin: 5px 0 0 0; line-height: 1.3;">
+                                    <p class="footer-muted" style="color: #9ca3af; font-size: 11px; margin: 5px 0 0 0; line-height: 1.3;">
                                         © {% now "Y" %} {{ title|default:"Gregory AI" }}. All rights reserved.
                                     </p>
-                                    <p style="color: #d1d5db; font-size: 10px; margin: 8px 0 0 0; line-height: 1.3;">
-                                        Powered by <a href="https://gregory-ai.com/" style="color: #d1d5db; text-decoration: underline;">Gregory AI</a>
+                                    <p class="footer-powered" style="color: #d1d5db; font-size: 10px; margin: 8px 0 0 0; line-height: 1.3;">
+                                        Powered by <a href="https://gregory-ai.com/" class="footer-powered-link" style="color: #d1d5db; text-decoration: underline;">Gregory AI</a>
                                     </p>
                                 </td>
                             </tr>
