@@ -52,7 +52,5 @@ nginx-example-configuration/
 scripts/
 specs/
 utils/
-setup.py
-main.py
 PLAN.md
 Makefile

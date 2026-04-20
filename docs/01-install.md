@@ -38,7 +38,7 @@ POSTGRES_USER=
 SECRET_KEY='Yeah well, you know, that is just, like, your DJANGO SECRET_KEY, man' # you should set this manually https://docs.djangoproject.com/en/4.0/ref/settings/#secret-key
 ```
 
-3. **Execute** `python3 setup.py`. 
+3. **Execute** `python3 scripts/bootstrap.py`. 
 
 The script will check if you have all the requirements and run help you setup the containers
 

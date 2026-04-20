@@ -29,7 +29,7 @@ help:
 ## Build the Gregory Docker image.
 ## Override image name or tag: make build IMAGE=myrepo/myimage TAG=v1.0
 build:
-	docker build -t $(IMAGE):$(TAG) -t $(IMAGE):latest -f django/Dockerfile django/
+	docker build -t $(IMAGE):$(TAG) -t $(IMAGE):latest -f Dockerfile .
 	@echo "==> Built $(IMAGE):$(TAG) and $(IMAGE):latest"
 
 ## Push the image to Docker Hub. Builds first if needed.
