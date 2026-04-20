@@ -7,20 +7,6 @@
             text-decoration: none;
         }
         
-        /* Color Palette - Medical Journal Blues */
-        :root {
-            --primary-blue: #1e3a8a;      /* Deep professional blue */
-            --secondary-blue: #3b82f6;    /* Bright blue for accents */
-            --light-blue: #dbeafe;        /* Light blue for backgrounds */
-            --text-blue: #1e40af;         /* Readable blue for text */
-            --dark-gray: #374151;         /* Professional dark gray */
-            --medium-gray: #6b7280;       /* Medium gray for secondary text */
-            --light-gray: #f3f4f6;        /* Light gray for borders */
-            --white: #ffffff;
-            --green: #10b981;             /* Success/relevant color */
-            --red: #ef4444;               /* Error/not relevant color */
-        }
-        
         /* Reset Styles */
         img {
             -ms-interpolation-mode: bicubic;
@@ -114,7 +100,7 @@
         
         /* Header Component Styles */
         .email-header-container {
-            background-color: var(--primary-blue);
+            background-color: #1e3a8a;
             border-radius: 8px 8px 0 0;
         }
         
@@ -185,34 +171,196 @@
             width: 100%;
         }
         
-        /* Dark Mode Support */
+        /* Dark Mode Support — iOS Mail, macOS Mail */
         @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #111827 !important;
+            }
+
             .email-wrapper {
                 background: linear-gradient(135deg, #111827 0%, #1f2937 100%) !important;
             }
-            
+
             .email-container {
                 background-color: #1f2937 !important;
-                border-color: #374151 !important;
+                border-color: #4b5563 !important;
             }
-            
+
             .email-content {
                 background-color: #1f2937 !important;
             }
-            
-            .content-title {
-                color: #dbeafe !important;
+
+            /* Typography */
+            .content-title { color: #93c5fd !important; }
+            .content-subtitle { color: #60a5fa !important; }
+            .content-text { color: #e5e7eb !important; }
+            .section-subtitle { color: #93c5fd !important; border-bottom-color: #4b5563 !important; }
+            .category-heading { color: #9ca3af !important; border-bottom-color: #4b5563 !important; }
+
+            /* Header */
+            .email-header-gradient {
+                background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #1e40af 100%) !important;
             }
-            
-            .content-subtitle {
+            .header-type-box {
+                background-color: #1e3a8a !important;
+                border-color: #2563eb !important;
+            }
+
+            /* Footer */
+            .email-footer-container {
+                background-color: #111827 !important;
+                border-top-color: #374151 !important;
+            }
+            .footer-brand { color: #93c5fd !important; }
+            .footer-text { color: #9ca3af !important; }
+            .footer-link { color: #60a5fa !important; }
+            .footer-muted { color: #6b7280 !important; }
+            .footer-muted-link { color: #6b7280 !important; }
+            .footer-powered { color: #4b5563 !important; }
+            .footer-powered-link { color: #4b5563 !important; }
+
+            /* Article cards */
+            .article-card {
+                background-color: #374151 !important;
+                border-color: #4b5563 !important;
+            }
+            .article-card-title { color: #93c5fd !important; }
+            .article-card-meta { color: #9ca3af !important; }
+            .article-card-link { color: #60a5fa !important; }
+            .article-summary-box {
+                background-color: #1e293b !important;
+                border-left-color: #475569 !important;
+            }
+            .article-summary-title { color: #94a3b8 !important; }
+            .article-summary-text { color: #d1d5db !important; }
+            .article-takeaway-box {
+                background-color: #1e293b !important;
+                border-left-color: #3b82f6 !important;
+            }
+            .article-takeaway-title { color: #60a5fa !important; }
+            .article-takeaway-text { color: #d1d5db !important; }
+
+            /* Article link (simple) */
+            .article-link-row { border-bottom-color: #4b5563 !important; }
+            .article-link-title { color: #60a5fa !important; }
+            .article-link-doi { color: #6b7280 !important; }
+
+            /* Trial cards */
+            .trial-card {
+                background-color: #374151 !important;
+                border-color: #4b5563 !important;
+            }
+            .trial-card-title { color: #93c5fd !important; }
+            .trial-card-meta { color: #9ca3af !important; }
+            .trial-card-link { color: #60a5fa !important; }
+            .trial-summary-box {
+                background-color: #1e293b !important;
+                border-left-color: #059669 !important;
+            }
+            .trial-summary-title { color: #34d399 !important; }
+            .trial-summary-text { color: #d1d5db !important; }
+            .trial-desc-box {
+                background-color: #1e293b !important;
+                border-left-color: #4b5563 !important;
+            }
+            .trial-desc-title { color: #9ca3af !important; }
+            .trial-desc-text { color: #d1d5db !important; }
+            .trial-condition-tag {
+                background-color: #374151 !important;
+                color: #d1d5db !important;
+                border-color: #4b5563 !important;
+            }
+
+            /* ML badges */
+            .ml-badge-not-relevant {
+                background-color: #1e3a8a !important;
                 color: #93c5fd !important;
             }
-            
-            .content-text {
-                color: #d1d5db !important;
+
+            /* No-content / admin boxes */
+            .no-content-box {
+                background-color: #1e293b !important;
+                border-color: #374151 !important;
             }
-            
+            .no-content-title { color: #9ca3af !important; }
+            .no-content-text { color: #6b7280 !important; }
+            .admin-action-box {
+                background-color: #78350f !important;
+                border-color: #92400e !important;
+            }
+            .admin-action-title { color: #fde68a !important; }
+            .admin-action-text { color: #fde68a !important; }
+
+            /* Announcement body */
+            .announcement-body { color: #d1d5db !important; background-color: #1f2937 !important; }
+            .announcement-body p,
+            .announcement-body li,
+            .announcement-body strong,
+            .announcement-body em,
+            .announcement-body u,
+            .announcement-body h1,
+            .announcement-body h2,
+            .announcement-body h3,
+            .announcement-body h4 { color: #d1d5db !important; }
+            .announcement-body a { color: #60a5fa !important; }
         }
+
+        /* Outlook Desktop Dark Mode — [data-ogsc]/[data-ogsb] selectors */
+        [data-ogsc] .content-title,
+        [data-ogsc] .section-subtitle { color: #93c5fd !important; }
+        [data-ogsc] .content-subtitle { color: #60a5fa !important; }
+        [data-ogsc] .content-text { color: #e5e7eb !important; }
+        [data-ogsc] .category-heading { color: #9ca3af !important; }
+        [data-ogsc] .footer-brand { color: #93c5fd !important; }
+        [data-ogsc] .footer-text,
+        [data-ogsc] .footer-link { color: #9ca3af !important; }
+        [data-ogsc] .footer-muted,
+        [data-ogsc] .footer-muted-link { color: #6b7280 !important; }
+        [data-ogsc] .article-card-title,
+        [data-ogsc] .trial-card-title { color: #93c5fd !important; }
+        [data-ogsc] .article-card-meta,
+        [data-ogsc] .trial-card-meta { color: #9ca3af !important; }
+        [data-ogsc] .article-card-link,
+        [data-ogsc] .trial-card-link,
+        [data-ogsc] .article-link-title { color: #60a5fa !important; }
+        [data-ogsc] .article-summary-title { color: #94a3b8 !important; }
+        [data-ogsc] .article-summary-text,
+        [data-ogsc] .article-takeaway-text,
+        [data-ogsc] .trial-summary-text,
+        [data-ogsc] .trial-desc-text { color: #d1d5db !important; }
+        [data-ogsc] .article-takeaway-title { color: #60a5fa !important; }
+        [data-ogsc] .trial-summary-title { color: #34d399 !important; }
+        [data-ogsc] .no-content-title { color: #9ca3af !important; }
+        [data-ogsc] .no-content-text { color: #6b7280 !important; }
+        [data-ogsc] .admin-action-title,
+        [data-ogsc] .admin-action-text { color: #fde68a !important; }
+        [data-ogsc] .announcement-body,
+        [data-ogsc] .announcement-body p,
+        [data-ogsc] .announcement-body li,
+        [data-ogsc] .announcement-body strong,
+        [data-ogsc] .announcement-body em,
+        [data-ogsc] .announcement-body h1,
+        [data-ogsc] .announcement-body h2,
+        [data-ogsc] .announcement-body h3,
+        [data-ogsc] .announcement-body h4 { color: #d1d5db !important; }
+        [data-ogsc] .announcement-body a { color: #60a5fa !important; }
+        [data-ogsc] .ml-badge-not-relevant { color: #93c5fd !important; }
+
+        [data-ogsb] .email-header-gradient { background-color: #0f172a !important; }
+        [data-ogsb] .header-type-box { background-color: #1e3a8a !important; }
+        [data-ogsb] .email-container,
+        [data-ogsb] .email-content { background-color: #1f2937 !important; }
+        [data-ogsb] .email-footer-container { background-color: #111827 !important; }
+        [data-ogsb] .article-card,
+        [data-ogsb] .trial-card { background-color: #374151 !important; }
+        [data-ogsb] .article-summary-box,
+        [data-ogsb] .article-takeaway-box,
+        [data-ogsb] .trial-summary-box,
+        [data-ogsb] .trial-desc-box,
+        [data-ogsb] .no-content-box { background-color: #1e293b !important; }
+        [data-ogsb] .admin-action-box { background-color: #78350f !important; }
+        [data-ogsb] .announcement-body { background-color: #1f2937 !important; }
+        [data-ogsb] .ml-badge-not-relevant { background-color: #1e3a8a !important; }
     </style>
     
     <!-- MSO specific styles -->
