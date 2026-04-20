@@ -1,0 +1,58 @@
+# === OS / editor ===
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# === Git ===
+.git/
+.gitignore
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.eggs/
+dist/
+build/
+*.whl
+.venv/
+env/
+
+# === Environment / secrets ===
+.env
+*.env
+
+# === Database ===
+postgres-data/
+backups/
+*.sql
+
+# === ML model artifacts (large, built at runtime) ===
+django/models/
+
+# === Documentation / research (not needed in image) ===
+docs/
+files_repo_PBL_nsbe/
+images/
+clinicaltrialsgov-api/
+
+# === Tests / dev scripts ===
+ai_tests/
+test_*.py
+
+# === Misc repo files ===
+*.md
+*.ipynb
+*.code-workspace
+LICENSE
+nginx-example-configuration/
+scripts/
+specs/
+utils/
+setup.py
+main.py
+PLAN.md
+Makefile
