@@ -80,5 +80,3 @@ ai_tests/
 scripts/sync-production-db.sh
 specs/
 
-# GitHub
-.github/workflows/
