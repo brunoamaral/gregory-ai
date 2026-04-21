@@ -3,34 +3,33 @@ from django.contrib.sites.models import Site
 
 from gregory.models import OrganizationCredentials, OrganizationSite
 from sitesettings.models import CustomSetting
-import os
 
 
-def get_orcid_credentials(organization=None):
+def get_orcid_credentials(organization):
 	"""
-	Resolve ORCID API credentials using the fallback chain:
-	Organization → environment variables.
+	Resolve ORCID API credentials for the given organisation.
 
-	All-or-nothing: if the organization has both client_id and client_secret set,
-	use them. Otherwise fall back to environment variables.
+	All-or-nothing: returns (client_id, client_secret) only when both fields are
+	populated on the organisation's OrganizationCredentials row.  Returns
+	(None, None) when the credentials row is missing or either field is blank.
 
-	Pass organization=None to skip org lookups and go straight to env vars.
+	Parameters
+	----------
+	organization : Organization
+		A django-organizations Organisation instance (required).
 
-	Returns a tuple (client_id, client_secret).
+	Returns
+	-------
+	tuple[str | None, str | None]
 	"""
-	if organization is not None:
-		try:
-			org_creds = organization.credentials
-			if org_creds.orcid_client_id and org_creds.orcid_client_secret:
-				return (org_creds.orcid_client_id, org_creds.orcid_client_secret)
-		except OrganizationCredentials.DoesNotExist:
-			pass
+	try:
+		org_creds = organization.credentials
+		if org_creds.orcid_client_id and org_creds.orcid_client_secret:
+			return (org_creds.orcid_client_id, org_creds.orcid_client_secret)
+	except OrganizationCredentials.DoesNotExist:
+		pass
 
-	# Fall back to environment variables
-	return (
-		os.environ.get('ORCID_CLIENT_ID'),
-		os.environ.get('ORCID_CLIENT_SECRET'),
-	)
+	return (None, None)
 
 
 def get_postmark_credentials(custom_settings=None, organization=None):
