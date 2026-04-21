@@ -46,7 +46,7 @@ class Command(BaseCommand):
 			return  # Stop execution if token retrieval fails
 
 		three_months_ago = timezone.now() - timezone.timedelta(days=90)
-		authors = Authors.objects.annotate(num_articles=Count('articles')).filter(
+		authors = Authors.objects.annotate(num_articles=Count('articles', distinct=True)).filter(
 						Q(orcid_check__lte=three_months_ago) | Q(orcid_check__isnull=True),
 						ORCID__isnull=False,
 						country__isnull=True,
@@ -57,13 +57,15 @@ class Command(BaseCommand):
 		error_count = 0
 		no_address_count = 0
 
+		verbosity = kwargs.get('verbosity', 1)
 		for author in authors:
 			try:
 				initial_country = author.country
 				
 				# Clean up ORCID ID to ensure proper format
 				author_orcid_number = normalize_orcid(author.ORCID)
-				self.stdout.write(f"[{org_slug}] Cleaned ORCID ID: {author_orcid_number}")
+				if verbosity >= 2:
+					self.stdout.write(f"[{org_slug}] Processing ORCID: {author_orcid_number}")
 				record = orcid_api.read_record_public(author_orcid_number, 'record', token)
 				addresses = record.get('person', {}).get('addresses', {}).get('address', [])
 				orcid_check = timezone.now()
@@ -75,7 +77,8 @@ class Command(BaseCommand):
 					change_reason = 'Updated country from ORCID API.'
 					success_count += 1
 				else:
-					self.stdout.write(f"[{org_slug}] No address found for author with ORCID: {author_orcid_number}")
+					if verbosity >= 2:
+						self.stdout.write(f"[{org_slug}] No address found for author with ORCID: {author_orcid_number}")
 					change_reason = 'Attempted to update country from ORCID API but no address found.'
 					no_address_count += 1
 

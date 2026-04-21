@@ -37,9 +37,13 @@ class Command(BaseCommand):
 
 		# Run update_orcid per organisation — each org uses its own ORCID credentials
 		from django.apps import apps
+		from gregory.models import OrganizationCredentials
 		Organization = apps.get_model('organizations', 'Organization')
 		for org in Organization.objects.all().order_by('slug'):
-			creds = getattr(org, 'credentials', None)
+			try:
+				creds = org.credentials
+			except OrganizationCredentials.DoesNotExist:
+				creds = None
 			if not creds or not creds.orcid_client_id or not creds.orcid_client_secret:
 				self.stdout.write(self.style.WARNING(
 					f'Skipping update_orcid for organisation "{org.slug}": no ORCID credentials configured.'
