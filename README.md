@@ -191,7 +191,7 @@ ORCID_CLIENT_SECRET=
 
 
 
-1. **Execute** `python3 setup.py`.
+1. **Execute** `python3 scripts/bootstrap.py`.
 
 The script checks if you have all the requirements and run to help you setup the containers.
 
