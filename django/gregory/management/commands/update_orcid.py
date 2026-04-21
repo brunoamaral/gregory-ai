@@ -1,41 +1,40 @@
 from django.core.management.base import BaseCommand
 from django.db.models import Count, Q
 from django.utils import timezone
-from gregory.models import Authors, Team
+from gregory.models import Authors
 from gregory.functions import normalize_orcid
 from subscriptions.management.commands.utils.get_credentials import get_orcid_credentials
 import orcid
-from dotenv import load_dotenv
 from simple_history.utils import update_change_reason
 import requests
-load_dotenv()
 
 class Command(BaseCommand):
 	help = 'Updates authors\' country information and ORCID check timestamp from the ORCID public API based on specific criteria.'
 
 	def add_arguments(self, parser):
 		parser.add_argument(
-			'--team',
+			'--organization',
 			type=str,
-			default=None,
-			help='Team slug to use for ORCID credentials. Falls back to organisation credentials then environment variables if not set.',
+			required=True,
+			help='Organisation slug to use for ORCID credentials and author scoping.',
 		)
 
 	def handle(self, *args, **kwargs):
-		team_slug = kwargs.get('team')
-		team = None
-		if team_slug:
-			try:
-				team = Team.objects.get(slug=team_slug)
-			except Team.DoesNotExist:
-				self.stderr.write(self.style.ERROR(f"Team with slug '{team_slug}' not found."))
-				return
+		from django.apps import apps
+		Organization = apps.get_model('organizations', 'Organization')
 
-		orcid_key, orcid_secret = get_orcid_credentials(organization=team.organization if team else None)
+		org_slug = kwargs['organization']
+		try:
+			org = Organization.objects.get(slug=org_slug)
+		except Organization.DoesNotExist:
+			self.stderr.write(self.style.ERROR(f"Organisation with slug '{org_slug}' not found."))
+			return
+
+		orcid_key, orcid_secret = get_orcid_credentials(organization=org)
 		if not orcid_key or not orcid_secret:
 			self.stderr.write(self.style.ERROR(
-				"ORCID credentials not found. Set ORCID_CLIENT_ID and ORCID_CLIENT_SECRET "
-				"in the environment, or configure them on the organisation."
+				f"[{org_slug}] ORCID credentials not found. Configure orcid_client_id and "
+				f"orcid_client_secret on the organisation via the admin."
 			))
 			return
 
@@ -43,27 +42,30 @@ class Command(BaseCommand):
 		try:
 			token = orcid_api.get_search_token_from_orcid()
 		except requests.exceptions.HTTPError as e:
-			print(f"Failed to retrieve token from ORCID API: {e}")
+			self.stderr.write(self.style.ERROR(f"[{org_slug}] Failed to retrieve token from ORCID API: {e}"))
 			return  # Stop execution if token retrieval fails
 
 		three_months_ago = timezone.now() - timezone.timedelta(days=90)
-		authors = Authors.objects.annotate(num_articles=Count('articles')).filter(
+		authors = Authors.objects.annotate(num_articles=Count('articles', distinct=True)).filter(
 						Q(orcid_check__lte=three_months_ago) | Q(orcid_check__isnull=True),
 						ORCID__isnull=False,
-						country__isnull=True
-		).order_by('-num_articles')[:1000]
+						country__isnull=True,
+						articles__teams__organization=org,
+		).distinct().order_by('-num_articles')[:1000]
 		# Initialize counters for summary
 		success_count = 0
 		error_count = 0
 		no_address_count = 0
 
+		verbosity = kwargs.get('verbosity', 1)
 		for author in authors:
 			try:
 				initial_country = author.country
 				
 				# Clean up ORCID ID to ensure proper format
 				author_orcid_number = normalize_orcid(author.ORCID)
-				print(f"Cleaned ORCID ID: {author_orcid_number}")  # Debug
+				if verbosity >= 2:
+					self.stdout.write(f"[{org_slug}] Processing ORCID: {author_orcid_number}")
 				record = orcid_api.read_record_public(author_orcid_number, 'record', token)
 				addresses = record.get('person', {}).get('addresses', {}).get('address', [])
 				orcid_check = timezone.now()
@@ -75,7 +77,8 @@ class Command(BaseCommand):
 					change_reason = 'Updated country from ORCID API.'
 					success_count += 1
 				else:
-					print(f"No address found for author with ORCID: {author_orcid_number}")
+					if verbosity >= 2:
+						self.stdout.write(f"[{org_slug}] No address found for author with ORCID: {author_orcid_number}")
 					change_reason = 'Attempted to update country from ORCID API but no address found.'
 					no_address_count += 1
 
@@ -84,17 +87,17 @@ class Command(BaseCommand):
 					update_change_reason(author, change_reason)
 					
 			except requests.exceptions.HTTPError as e:
-				print(f"Failed to update author with ORCID: {author_orcid_number}. Error: {e}")
+				self.stderr.write(self.style.ERROR(f"[{org_slug}] Failed to update author with ORCID: {author_orcid_number}. Error: {e}"))
 				# Print more detailed error information
 				if hasattr(e, 'response') and e.response is not None:
-					print(f"Response status code: {e.response.status_code}")
-					print(f"Response content: {e.response.text}")
+					self.stderr.write(self.style.ERROR(f"Response status code: {e.response.status_code}"))
+					self.stderr.write(self.style.ERROR(f"Response content: {e.response.text}"))
 				error_count += 1
 				continue
 
 		# Print summary
-		print(f"\nSummary:")
-		print(f"Total authors processed: {len(authors)}")
-		print(f"Successful updates: {success_count}")
-		print(f"Authors with no address: {no_address_count}")
-		print(f"Failed updates: {error_count}")
+		self.stdout.write(f"\n[{org_slug}] Summary:")
+		self.stdout.write(f"[{org_slug}] Total authors processed: {len(authors)}")
+		self.stdout.write(f"[{org_slug}] Successful updates: {success_count}")
+		self.stdout.write(f"[{org_slug}] Authors with no address: {no_address_count}")
+		self.stdout.write(f"[{org_slug}] Failed updates: {error_count}")
