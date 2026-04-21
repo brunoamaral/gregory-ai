@@ -37,7 +37,15 @@ build:
 ## Push a multi-arch image manifest to Docker Hub.
 ## Override platforms if needed: make push PLATFORMS=linux/amd64
 push:
-	@docker buildx inspect $(BUILDER) >/dev/null 2>&1 || docker buildx create --name $(BUILDER) --driver docker-container --use
+	@driver="$$(docker buildx inspect $(BUILDER) --format '{{.Driver}}' 2>/dev/null || true)"; \
+	if [ "$$driver" = "docker-container" ]; then \
+		:; \
+	else \
+		if [ -n "$$driver" ]; then \
+			docker buildx rm $(BUILDER) >/dev/null 2>&1 || true; \
+		fi; \
+		docker buildx create --name $(BUILDER) --driver docker-container --use >/dev/null; \
+	fi
 	@docker buildx use $(BUILDER)
 	@docker buildx inspect --bootstrap >/dev/null
 	docker buildx build --builder $(BUILDER) --platform $(PLATFORMS) -t $(IMAGE):$(TAG) -t $(IMAGE):latest -f Dockerfile . --push
