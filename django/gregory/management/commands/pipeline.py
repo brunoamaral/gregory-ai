@@ -21,9 +21,8 @@ class Command(BaseCommand):
 			'find_doi',         		# 4. Find missing DOI
 			'update_articles_info', # 5. Find missing data
 			'get_authors',      		# 6. Find missing authors
-			'update_orcid',     		# 7. Find missing ORCID for authors
-			'rebuild_categories',   # 8. Assign categories
-			'get_takeaways',    		# 9. Get takeaways
+			'rebuild_categories',   # 7. Assign categories
+			'get_takeaways',    		# 8. Get takeaways
 		]
 
 		# First run all the standard commands
@@ -35,6 +34,26 @@ class Command(BaseCommand):
 			except Exception as e:
 				self.stderr.write(self.style.ERROR(f'Error running command {cmd}: {str(e)}'))
 				self.stdout.write(self.style.WARNING(f'Skipping command: {cmd}'))
+
+		# Run update_orcid per organisation — each org uses its own ORCID credentials
+		from django.apps import apps
+		from gregory.models import OrganizationCredentials
+		Organization = apps.get_model('organizations', 'Organization')
+		for org in Organization.objects.all().order_by('slug'):
+			try:
+				creds = org.credentials
+			except OrganizationCredentials.DoesNotExist:
+				creds = None
+			if not creds or not creds.orcid_client_id or not creds.orcid_client_secret:
+				self.stdout.write(self.style.WARNING(
+					f'Skipping update_orcid for organisation "{org.slug}": no ORCID credentials configured.'
+				))
+				continue
+			try:
+				self.stdout.write(self.style.SUCCESS(f'Running update_orcid for organisation: {org.slug}'))
+				call_command('update_orcid', organization=org.slug)
+			except Exception as e:
+				self.stderr.write(self.style.ERROR(f'Error running update_orcid for {org.slug}: {e}'))
 		
 		# Now run predict_articles with the --all-teams flag
 		try:
