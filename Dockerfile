@@ -10,7 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	gcc \
 	libpq-dev \
 	python3-dev \
-	libatlas-base-dev \
 	libffi-dev \
 	libxml2-dev \
 	libxslt1-dev \
