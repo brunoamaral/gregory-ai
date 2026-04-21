@@ -16,13 +16,15 @@ DUMP_FILE := $(BACKUP_DIR)/db_pull_$(shell date +%Y%m%d_%H%M%S).sql
 # Docker image settings
 IMAGE ?= amaralbruno/gregory-ai
 TAG   ?= $(shell git rev-parse --short HEAD)
+PLATFORMS ?= linux/amd64,linux/arm64
+BUILDER ?= gregory-multiarch
 
 .PHONY: help build push db-pull db-restore
 
 help:
 	@echo "Available targets:"
 	@echo "  build       Build the Docker image (tagged :latest and :TAG)"
-	@echo "  push        Push the Docker image to Docker Hub"
+	@echo "  push        Build and push a multi-arch image to Docker Hub"
 	@echo "  db-pull     Dump the production database and restore it locally"
 	@echo "  db-restore  Restore the most recent backup in $(BACKUP_DIR)/"
 
@@ -32,11 +34,22 @@ build:
 	docker build -t $(IMAGE):$(TAG) -t $(IMAGE):latest -f Dockerfile .
 	@echo "==> Built $(IMAGE):$(TAG) and $(IMAGE):latest"
 
-## Push the image to Docker Hub. Builds first if needed.
-push: build
-	docker push $(IMAGE):$(TAG)
-	docker push $(IMAGE):latest
-	@echo "==> Pushed $(IMAGE):$(TAG) and $(IMAGE):latest"
+## Push a multi-arch image manifest to Docker Hub.
+## Override platforms if needed: make push PLATFORMS=linux/amd64
+push:
+	@driver="$$(docker buildx inspect $(BUILDER) --format '{{.Driver}}' 2>/dev/null || true)"; \
+	if [ "$$driver" = "docker-container" ]; then \
+		:; \
+	else \
+		if [ -n "$$driver" ]; then \
+			docker buildx rm $(BUILDER) >/dev/null 2>&1 || true; \
+		fi; \
+		docker buildx create --name $(BUILDER) --driver docker-container --use >/dev/null; \
+	fi
+	@docker buildx use $(BUILDER)
+	@docker buildx inspect --bootstrap >/dev/null
+	docker buildx build --builder $(BUILDER) --platform $(PLATFORMS) -t $(IMAGE):$(TAG) -t $(IMAGE):latest -f Dockerfile . --push
+	@echo "==> Pushed multi-arch $(IMAGE):$(TAG) and $(IMAGE):latest for $(PLATFORMS)"
 
 ## Fetch the production DB and restore it into the local Docker postgres container.
 ##
