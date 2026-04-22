@@ -3,7 +3,7 @@
 ###
 
 import json
-import psycopg2
+import psycopg
 import pandas as pd
 import numpy as np
 from os import path
@@ -22,7 +22,7 @@ postgres_db = os.getenv('POSTGRES_DB')
 
 ## GET DATA
 try:
-	conn = psycopg2.connect("dbname='"+ postgres_db +"' user='" + postgres_user + "' host='" + db_host + "' password='" + postgres_password + "'")
+	conn = psycopg.connect("dbname='"+ postgres_db +"' user='" + postgres_user + "' host='" + db_host + "' password='" + postgres_password + "'")
 except:
 	print("I am unable to connect to the database")
 
