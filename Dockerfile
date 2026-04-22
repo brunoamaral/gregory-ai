@@ -39,9 +39,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /code
 
-# Copy wheels from builder and install them
-COPY --from=builder /wheels /wheels
-RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
+# Install wheels from builder via bind-mount (never copies them into the image)
+RUN --mount=type=bind,from=builder,source=/wheels,target=/wheels \
+	pip install --no-cache-dir --no-compile /wheels/*
 
 # Copy application code
 COPY django/ /code/
