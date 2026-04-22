@@ -631,7 +631,7 @@ class TrialViewSet(viewsets.ModelViewSet):
 	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
 	filterset_class = TrialFilter
 	search_fields = ['title', 'summary']
-	ordering_fields = ['discovery_date', 'published_date', 'title', 'trial_id']
+	ordering_fields = ['discovery_date', 'published_date', 'title', 'trial_id', 'last_updated']
 	ordering = ['-discovery_date']
 
 	def list(self, request, *args, **kwargs):
@@ -1333,7 +1333,7 @@ class TrialSearchView(generics.ListAPIView):
     - page: Page number for pagination (default: 1)
     - page_size: Number of results per page (default: 10, max: 100)
     - all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
-    - ordering: Order results by field (e.g., -discovery_date, -published_date, title, trial_id)
+    - ordering: Order results by field (e.g., -discovery_date, -published_date, title, trial_id, -last_updated)
     
     Results are ordered by discovery date (newest first) by default.
 	
@@ -1345,7 +1345,7 @@ class TrialSearchView(generics.ListAPIView):
     filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = TrialFilter
     search_fields = ['title', 'summary']
-    ordering_fields = ['discovery_date', 'published_date', 'title', 'trial_id']
+    ordering_fields = ['discovery_date', 'published_date', 'title', 'trial_id', 'last_updated']
     ordering = ['-discovery_date']  # Default ordering by newest first
     pagination_class = FlexiblePagination
     http_method_names = ['get', 'post']  # Support both GET and POST
