@@ -222,20 +222,72 @@ class SearchOrderingTestCase(TestCase):
     def test_trial_search_ordering_with_post(self):
         """Test that POST requests also support ordering for trials"""
         url = reverse('trial-search')
-        
+
         data = {
             'team_id': self.team.id,
             'subject_id': self.subject.id,
             'search': 'Test Search',
             'ordering': 'trial_id'  # Order by ID
         }
-        
+
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+
         results = response.data['results']
         self.assertEqual(len(results), 3)
-        
+
         # Check that trials are ordered by trial_id (ascending)
         trial_ids = [result['trial_id'] for result in results]
         self.assertEqual(trial_ids, sorted(trial_ids))
+
+    def test_trial_search_ordering_by_last_updated(self):
+        """Test that trial search supports ordering by last_updated"""
+        now = timezone.now()
+        # Override auto_now via queryset update so we control the timestamps
+        Trials.objects.filter(pk=self.trial1.pk).update(last_updated=now - timedelta(days=8))
+        Trials.objects.filter(pk=self.trial2.pk).update(last_updated=now - timedelta(days=4))
+        Trials.objects.filter(pk=self.trial3.pk).update(last_updated=now - timedelta(days=1))
+
+        url = reverse('trial-search')
+        params = {
+            'team_id': self.team.id,
+            'subject_id': self.subject.id,
+            'search': 'Test Search',
+            'ordering': '-last_updated',
+        }
+
+        response = self.client.get(url, params)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        results = response.data['results']
+        self.assertEqual(len(results), 3)
+
+        # trial3 most recently updated, trial1 least recently updated
+        self.assertEqual(results[0]['trial_id'], self.trial3.trial_id)
+        self.assertEqual(results[1]['trial_id'], self.trial2.trial_id)
+        self.assertEqual(results[2]['trial_id'], self.trial1.trial_id)
+
+    def test_trial_list_ordering_by_last_updated(self):
+        """Test that the /trials/ endpoint supports ordering by last_updated"""
+        now = timezone.now()
+        Trials.objects.filter(pk=self.trial1.pk).update(last_updated=now - timedelta(days=8))
+        Trials.objects.filter(pk=self.trial2.pk).update(last_updated=now - timedelta(days=4))
+        Trials.objects.filter(pk=self.trial3.pk).update(last_updated=now - timedelta(days=1))
+
+        url = reverse('trials-list')
+        params = {
+            'team_id': self.team.id,
+            'ordering': '-last_updated',
+        }
+
+        response = self.client.get(url, params)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        results = response.data['results']
+        self.assertGreaterEqual(len(results), 3)
+
+        # The three test trials should appear at the top in last_updated desc order
+        top_ids = [r['trial_id'] for r in results[:3]]
+        self.assertEqual(top_ids[0], self.trial3.trial_id)
+        self.assertEqual(top_ids[1], self.trial2.trial_id)
+        self.assertEqual(top_ids[2], self.trial1.trial_id)
