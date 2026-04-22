@@ -1,5 +1,7 @@
 [TOC]
 
+[![Build & Push Docker Image](https://github.com/brunoamaral/gregory-ai/actions/workflows/build-push.yaml/badge.svg)](https://github.com/brunoamaral/gregory-ai/actions/workflows/build-push.yaml)
+
 # GregoryAI
 
 Gregory is an AI system that uses Machine Learning and Natural Language Processing to track
