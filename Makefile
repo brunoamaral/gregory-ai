@@ -31,19 +31,18 @@ help:
 ## Build the Gregory Docker image.
 ## Override image name or tag: make build IMAGE=myrepo/myimage TAG=v1.0
 build:
-	docker build -t $(IMAGE):$(TAG) -t $(IMAGE):latest -f Dockerfile .
+	DOCKER_BUILDKIT=1 docker build -t $(IMAGE):$(TAG) -t $(IMAGE):latest -f Dockerfile .
 	@echo "==> Built $(IMAGE):$(TAG) and $(IMAGE):latest"
 
 ## Push a multi-arch image manifest to Docker Hub.
 ## Override platforms if needed: make push PLATFORMS=linux/amd64
 push:
-	@driver="$$(docker buildx inspect $(BUILDER) --format '{{.Driver}}' 2>/dev/null || true)"; \
-	if [ "$$driver" = "docker-container" ]; then \
-		:; \
+	@if docker buildx inspect $(BUILDER) >/dev/null 2>&1; then \
+		if [ "$$(docker buildx inspect $(BUILDER) --format '{{.Driver}}')" != "docker-container" ]; then \
+			docker buildx rm $(BUILDER) >/dev/null; \
+			docker buildx create --name $(BUILDER) --driver docker-container --use >/dev/null; \
+		fi \
 	else \
-		if [ -n "$$driver" ]; then \
-			docker buildx rm $(BUILDER) >/dev/null 2>&1 || true; \
-		fi; \
 		docker buildx create --name $(BUILDER) --driver docker-container --use >/dev/null; \
 	fi
 	@docker buildx use $(BUILDER)

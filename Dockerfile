@@ -30,6 +30,7 @@ FROM python:3.12-slim
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
 	libpq5 \
+	libgomp1 \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Environment variables
@@ -39,9 +40,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /code
 
-# Copy wheels from builder and install them
-COPY --from=builder /wheels /wheels
-RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
+# Install wheels from builder via bind-mount (never copies them into the image)
+RUN --mount=type=bind,from=builder,source=/wheels,target=/wheels \
+	--mount=type=bind,source=django/requirements.txt,target=/tmp/requirements.txt \
+	pip install --no-cache-dir --no-compile --no-index --find-links /wheels -r /tmp/requirements.txt
 
 # Copy application code
 COPY django/ /code/

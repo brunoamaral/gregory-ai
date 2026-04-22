@@ -1,5 +1,6 @@
 # === OS / editor ===
 .DS_Store
+**/.DS_Store
 Thumbs.db
 *.swp
 *.swo
@@ -32,6 +33,8 @@ backups/
 
 # === ML model artifacts (large, built at runtime) ===
 django/models/
+django/summary_cache/
+django/.DS_Store
 
 # === Documentation / research (not needed in image) ===
 docs/
