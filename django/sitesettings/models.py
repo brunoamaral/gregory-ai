@@ -76,3 +76,9 @@ class CustomSetting(models.Model):
 		default='',
 		help_text="Terms of service page URL for the email footer."
 	)
+	allowed_domains = models.TextField(
+		blank=True,
+		default='',
+		help_text="Comma-separated list of domains (e.g. example.com, other-site.org) allowed to submit subscribers for any list on this site. The origin domain is used for post-subscription redirects. The site's own domain is always accepted.",
+		verbose_name="Allowed Domains"
+	)

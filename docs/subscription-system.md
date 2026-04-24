@@ -99,7 +99,7 @@ Subscribes a visitor to one or more lists.
 - On success: redirect to `{origin}/thank-you/`
 - On error: redirect to `{origin}/error/`
 
-The redirect origin is validated against the `allowed_domains` field on each list. If the origin doesn't match any allowed domain, the redirect falls back to the current site's domain. Configure `allowed_domains` on each `Lists` record in the admin.
+The request origin is validated against the `allowed_domains` field on the current site's `CustomSetting`. The site's own `Site.domain` is always accepted; additional domains can be added (comma-separated) in the **Sites → [site] → Custom Setting** inline. If the origin doesn't match, the request is rejected and the redirect falls back to the current site's domain.
 
 ---
 
@@ -167,7 +167,7 @@ Post to `POST /subscriptions/new/` with `Content-Type: application/x-www-form-ur
 
 **Key points:**
 - The `list` field must appear **once per list ID** — use `name="list"` repeated, not `name="list[]"`.
-- The form's `Origin` header (set automatically by the browser) must match a domain in the list's `allowed_domains` setting, otherwise the post-subscribe redirect falls back to the API domain. Ask your backend team to add your frontend domain to `allowed_domains` for each relevant list.
+- The form's `Origin` header (set automatically by the browser) must match a domain in the site's `CustomSetting.allowed_domains` (or the site's own domain), otherwise the request is rejected and the redirect falls back to the API domain. Ask your backend team to add your frontend domain to the site's `allowed_domains` in the admin (one site-level setting covers every list on that site).
 - The endpoint redirects on both success and failure (no JSON response). Handle the destination pages:
   - `/thank-you/` — shown after a successful subscription
   - `/error/` — shown when the form is invalid

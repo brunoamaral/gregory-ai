@@ -16,6 +16,7 @@ class CustomSettingInline(admin.StackedInline):
 		'bluesky_url', 'github_url', 'mastodon_url',
 		'postmark_api_token', 'postmark_api_url',
 		'privacy_policy_url', 'terms_url',
+		'allowed_domains',
 	]
 
 

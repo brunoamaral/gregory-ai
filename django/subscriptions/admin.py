@@ -402,9 +402,7 @@ class ListsAdmin(admin.ModelAdmin):
 	filter_horizontal = ['subjects', 'latest_research_categories']
 	actions = ['reassign_to_team_action']
 	fieldsets = [
-		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team', 'site', 'allowed_domains']}),
-					# allowed_domains: comma-separated domains (e.g. example.com) whose subscription
-					# forms are permitted to add subscribers to this list and receive redirects.
+		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team', 'site']}),
 		('Email Types', {'fields': ['admin_summary', 'weekly_digest', 'clinical_trials_notifications']}),
 		('Content Settings', {
 			'fields': ['article_limit', 'ml_threshold'],
