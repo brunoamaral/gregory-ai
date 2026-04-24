@@ -40,7 +40,7 @@ def copy_allowed_domains_forward(apps, schema_editor):
 				continue
 			custom = CustomSetting.objects.create(
 				site_id=site_id,
-				title=f'Settings for {site.domain}',
+				title=f'Settings for {site.domain} (site {site_id})',
 				allowed_domains=_join_domains(new_domains),
 			)
 			continue
