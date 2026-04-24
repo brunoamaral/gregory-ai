@@ -10,13 +10,26 @@ class CustomSettingInline(admin.StackedInline):
 	model = CustomSetting
 	extra = 1
 	max_num = 1
-	fields = [
-		'title', 'sender_email_prefix', 'admin_email', 'api_domain',
-		'website_url', 'support_url', 'about_url', 'contact_url',
-		'bluesky_url', 'github_url', 'mastodon_url',
-		'postmark_api_token', 'postmark_api_url',
-		'privacy_policy_url', 'terms_url',
-		'allowed_domains',
+	fieldsets = [
+		(None, {
+			'fields': ['title'],
+		}),
+		('Email', {
+			'fields': ['admin_email', 'sender_email_prefix'],
+		}),
+		('API & Domain', {
+			'fields': ['api_domain', 'allowed_domains'],
+		}),
+		('Postmark Integration', {
+			'fields': ['postmark_api_token', 'postmark_api_url'],
+		}),
+		('Website URLs', {
+			'fields': ['website_url', 'support_url', 'about_url', 'contact_url', 'privacy_policy_url', 'terms_url'],
+		}),
+		('Social Links', {
+			'classes': ['collapse'],
+			'fields': ['bluesky_url', 'github_url', 'mastodon_url'],
+		}),
 	]
 
 
