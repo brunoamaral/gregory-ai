@@ -32,16 +32,15 @@ def _site_allowed_domains(site):
 	return own or configured
 
 
-def _get_redirect_base(request, subscription_lists):
+def _get_redirect_base(request, site):
 	"""
 	Return a validated base URL (scheme + netloc) for post-subscription redirects.
 
-	The request Origin (or Referer) must match a domain in the current site's
+	The request Origin (or Referer) must match a domain in ``site``'s
 	``CustomSetting.allowed_domains`` (or the site's own domain), using
-	subdomain-aware matching. If no match is found the current Site domain is
+	subdomain-aware matching. If no match is found the site's own domain is
 	used as a safe fallback.
 	"""
-	site = Site.objects.get_current()
 	origin = request.META.get('HTTP_ORIGIN') or request.META.get('HTTP_REFERER', '')
 	if origin:
 		parsed = urlparse(origin)
@@ -161,9 +160,25 @@ def subscribe_view(request):
 	list_ids = request.POST.getlist('list')
 	subscription_lists = list(Lists.objects.filter(pk__in=list_ids)) if list_ids else []
 
+	# Derive the target site from the submitted lists so that origin validation
+	# and redirect-base calculation use the correct site's allowed_domains in
+	# multi-site deployments. Fall back to the global default when lists span
+	# multiple sites or no lists have been resolved yet.
+	site_ids = {lst.site_id for lst in subscription_lists}
+	if len(site_ids) == 1:
+		target_site = Site.objects.get(pk=next(iter(site_ids)))
+	else:
+		if len(site_ids) > 1:
+			logger.warning(
+				"subscribe_view: lists span multiple sites (%s); "
+				"falling back to default site for origin validation.",
+				site_ids,
+			)
+		target_site = Site.objects.get_current()
+
 	# Determine redirect base before processing the form so we can redirect
 	# to the correct domain even when the form is invalid.
-	redirect_base = _get_redirect_base(request, subscription_lists)
+	redirect_base = _get_redirect_base(request, target_site)
 
 	# Validate that every requested list ID resolved to a real List.
 	if list_ids:
@@ -185,15 +200,14 @@ def subscribe_view(request):
 		return HttpResponseRedirect(f'{redirect_base}/error/')
 
 	# Origin validation: reject requests unless the origin matches the
-	# current site's CustomSetting.allowed_domains (or the site's own domain).
+	# target site's CustomSetting.allowed_domains (or the site's own domain).
 	# If no Origin/Referer header is present (e.g. server-side or API usage)
 	# the request is allowed through with a warning.
-	current_site = Site.objects.get_current()
 	origin_header = request.META.get('HTTP_ORIGIN') or request.META.get('HTTP_REFERER', '')
 	if origin_header:
 		parsed_origin = urlparse(origin_header)
 		origin_host = parsed_origin.hostname  # IPv6-safe, no port
-		if origin_host and not _check_origin_allowed(origin_host, current_site):
+		if origin_host and not _check_origin_allowed(origin_host, target_site):
 			logger.warning(
 				"subscribe_view: request from unauthorized origin '%s' rejected.",
 				origin_host,
