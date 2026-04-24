@@ -99,7 +99,7 @@ Subscribes a visitor to one or more lists.
 - On success: redirect to `{origin}/thank-you/`
 - On error: redirect to `{origin}/error/`
 
-The request origin is validated against the `allowed_domains` field on the current site's `CustomSetting`. The site's own `Site.domain` is always accepted; additional domains can be added (comma-separated) in the **Sites → [site] → Custom Setting** inline. If the origin doesn't match, the request is rejected and the redirect falls back to the current site's domain.
+The request origin is validated against the `allowed_domains` field on the current site's `CustomSetting`. The site's own `Site.domain` is always accepted; additional domains can be added (comma-separated) in the **Sites → [site] → Custom Setting** inline. If the origin doesn't match, the request is rejected. For standard non-AJAX browser form submissions, any redirect fallback uses the current site's domain. AJAX or JSON-oriented clients may instead receive a `403` JSON response and should not assume the request will be redirected.
 
 ---
 
