@@ -9,6 +9,7 @@ from django.contrib.sites.models import Site
 from django.conf import settings
 from organizations.models import Organization
 from gregory.models import Team
+from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers
 from subscriptions.views import (
 	subscribe_view,
@@ -16,6 +17,7 @@ from subscriptions.views import (
 	_origin_matches_allowed,
 	_check_origin_allowed,
 	_resolve_site_from_request,
+	_site_allowed_domains,
 )
 
 class SubscribeViewTest(TestCase):
@@ -228,19 +230,18 @@ class OriginValidationTest(TestCase):
 		self.team = Team.objects.create(
 			organization=self.org, name='OriginTeam', slug='origin-team',
 		)
-		Site.objects.update_or_create(
+		self.site, _ = Site.objects.update_or_create(
 			id=settings.SITE_ID,
 			defaults={'domain': 'example.com', 'name': 'example'},
 		)
-		self.restricted_list = Lists.objects.create(
-			list_name='Restricted',
-			team=self.team,
-			allowed_domains='example.com',
+		self.custom = CustomSetting.objects.create(
+			site=self.site,
+			title='example settings',
+			allowed_domains='partner.org',
 		)
-		self.open_list = Lists.objects.create(
-			list_name='Open',
+		self.lst = Lists.objects.create(
+			list_name='Daily',
 			team=self.team,
-			# allowed_domains left blank — no restriction
 		)
 
 	def _post(self, list_obj, email, origin=None, accept=None, ajax=False):
@@ -257,17 +258,21 @@ class OriginValidationTest(TestCase):
 			**headers,
 		)
 
-	def test_exact_allowed_origin_succeeds(self):
-		request = self._post(self.restricted_list, 'ok@example.com', 'https://example.com')
+	def test_exact_site_domain_origin_succeeds(self):
+		request = self._post(self.lst, 'ok@example.com', 'https://example.com')
 		self.assertNotEqual(subscribe_view(request).status_code, 403)
 
-	def test_www_subdomain_of_allowed_origin_succeeds(self):
-		request = self._post(self.restricted_list, 'www@example.com', 'https://www.example.com')
+	def test_www_subdomain_of_site_domain_succeeds(self):
+		request = self._post(self.lst, 'www@example.com', 'https://www.example.com')
+		self.assertNotEqual(subscribe_view(request).status_code, 403)
+
+	def test_configured_allowed_domain_origin_succeeds(self):
+		request = self._post(self.lst, 'ok@partner.org', 'https://partner.org')
 		self.assertNotEqual(subscribe_view(request).status_code, 403)
 
 	def test_malicious_origin_redirects_browser_to_error(self):
 		"""A plain browser form POST from an unauthorized origin redirects to /error/."""
-		request = self._post(self.restricted_list, 'hax@evil.com', 'https://evil.com')
+		request = self._post(self.lst, 'hax@evil.com', 'https://evil.com')
 		with self.assertLogs('subscriptions.views', level='WARNING') as log:
 			response = subscribe_view(request)
 		self.assertEqual(response.status_code, 302)
@@ -278,7 +283,7 @@ class OriginValidationTest(TestCase):
 	def test_malicious_origin_returns_json_403_for_ajax(self):
 		"""An XHR from an unauthorized origin gets a JSON 403."""
 		request = self._post(
-			self.restricted_list, 'hax2@evil.com', 'https://evil.com', ajax=True,
+			self.lst, 'hax2@evil.com', 'https://evil.com', ajax=True,
 		)
 		with self.assertLogs('subscriptions.views', level='WARNING'):
 			response = subscribe_view(request)
@@ -288,7 +293,7 @@ class OriginValidationTest(TestCase):
 	def test_malicious_origin_returns_json_403_for_json_accept(self):
 		"""A fetch() client sending Accept: application/json gets a JSON 403."""
 		request = self._post(
-			self.restricted_list, 'hax3@evil.com', 'https://evil.com',
+			self.lst, 'hax3@evil.com', 'https://evil.com',
 			accept='application/json',
 		)
 		with self.assertLogs('subscriptions.views', level='WARNING'):
@@ -297,16 +302,28 @@ class OriginValidationTest(TestCase):
 
 	def test_no_origin_header_allowed_through_with_warning(self):
 		"""Server-side / API requests without Origin are allowed (with a warning log)."""
-		request = self._post(self.restricted_list, 'noorigin@example.com', origin=None)
+		request = self._post(self.lst, 'noorigin@example.com', origin=None)
 		with self.assertLogs('subscriptions.views', level='WARNING') as log:
 			response = subscribe_view(request)
 		self.assertNotEqual(response.status_code, 403)
 		self.assertTrue(any('no Origin or Referer header' in msg for msg in log.output))
 
-	def test_unrestricted_list_allows_any_origin(self):
-		"""A list with empty allowed_domains imposes no origin restriction."""
-		request = self._post(self.open_list, 'any@evil.com', 'https://evil.com')
+	def test_blank_custom_setting_still_accepts_site_domain(self):
+		"""With no configured allowed_domains, the site's own domain is still accepted."""
+		self.custom.allowed_domains = ''
+		self.custom.save(update_fields=['allowed_domains'])
+		request = self._post(self.lst, 'bare@example.com', 'https://example.com')
 		self.assertNotEqual(subscribe_view(request).status_code, 403)
+
+	def test_blank_custom_setting_rejects_foreign_origin(self):
+		"""With no configured allowed_domains, a foreign origin is rejected."""
+		self.custom.allowed_domains = ''
+		self.custom.save(update_fields=['allowed_domains'])
+		request = self._post(self.lst, 'hax@evil.com', 'https://evil.com')
+		with self.assertLogs('subscriptions.views', level='WARNING'):
+			response = subscribe_view(request)
+		self.assertEqual(response.status_code, 302)
+		self.assertIn('/error/', response['Location'])
 
 	def test_site_profile_recorded_from_origin_not_host(self):
 		"""SubscriberSiteProfile.site must match the Origin header domain, not the API host."""
@@ -317,7 +334,7 @@ class OriginValidationTest(TestCase):
 				'first_name': 'Origin',
 				'email': 'originsite@example.com',
 				'profile': 'patient',
-				'list': [str(self.restricted_list.pk)],
+				'list': [str(self.lst.pk)],
 			},
 			HTTP_ORIGIN='https://example.com',
 		)
@@ -328,3 +345,60 @@ class OriginValidationTest(TestCase):
 		).first()
 		self.assertIsNotNone(profile)
 		self.assertEqual(profile.site.domain, 'example.com')
+
+
+# ---------------------------------------------------------------------------
+# _site_allowed_domains / _check_origin_allowed
+# ---------------------------------------------------------------------------
+
+class SiteAllowedDomainsTest(TestCase):
+	def setUp(self):
+		self.site, _ = Site.objects.update_or_create(
+			id=settings.SITE_ID,
+			defaults={'domain': 'example.com', 'name': 'example'},
+		)
+
+	def test_returns_site_domain_when_no_custom_setting(self):
+		self.assertEqual(_site_allowed_domains(self.site), 'example.com')
+
+	def test_returns_site_domain_when_custom_setting_blank(self):
+		CustomSetting.objects.create(site=self.site, title='bare', allowed_domains='')
+		self.assertEqual(_site_allowed_domains(self.site), 'example.com')
+
+	def test_combines_site_domain_with_configured_domains(self):
+		CustomSetting.objects.create(
+			site=self.site, title='combined', allowed_domains='partner.org, friend.net',
+		)
+		combined = _site_allowed_domains(self.site)
+		self.assertIn('example.com', combined)
+		self.assertIn('partner.org', combined)
+		self.assertIn('friend.net', combined)
+
+
+class CheckOriginAllowedTest(TestCase):
+	def setUp(self):
+		self.site, _ = Site.objects.update_or_create(
+			id=settings.SITE_ID,
+			defaults={'domain': 'example.com', 'name': 'example'},
+		)
+
+	def test_site_domain_is_always_allowed(self):
+		self.assertTrue(_check_origin_allowed('example.com', self.site))
+
+	def test_site_subdomain_is_allowed(self):
+		self.assertTrue(_check_origin_allowed('www.example.com', self.site))
+
+	def test_foreign_origin_rejected_without_custom_setting(self):
+		self.assertFalse(_check_origin_allowed('evil.com', self.site))
+
+	def test_configured_domain_is_allowed(self):
+		CustomSetting.objects.create(
+			site=self.site, title='cfg', allowed_domains='partner.org',
+		)
+		self.assertTrue(_check_origin_allowed('partner.org', self.site))
+
+	def test_non_configured_domain_is_rejected(self):
+		CustomSetting.objects.create(
+			site=self.site, title='cfg', allowed_domains='partner.org',
+		)
+		self.assertFalse(_check_origin_allowed('evil.com', self.site))
