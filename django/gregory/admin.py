@@ -970,6 +970,7 @@ class TeamSubjectInline(admin.TabularInline):
 	show_change_link = True
 	verbose_name = 'Subject'
 	verbose_name_plural = 'Subjects'
+	classes = ('collapse',)
 	can_delete = False
 
 	def has_add_permission(self, request, obj=None):
@@ -1067,6 +1068,22 @@ class TeamSourceInline(admin.TabularInline):
 	show_change_link = True
 	verbose_name = 'Source'
 	verbose_name_plural = 'Sources'
+	classes = ('collapse',)
+	can_delete = False
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+
+class TeamCategoryInline(admin.TabularInline):
+	model = TeamCategory
+	extra = 0
+	fields = ('category_name', 'category_slug', 'category_description')
+	readonly_fields = ('category_name', 'category_slug', 'category_description')
+	show_change_link = True
+	verbose_name = 'Category'
+	verbose_name_plural = 'Categories'
+	classes = ('collapse',)
 	can_delete = False
 
 	def has_add_permission(self, request, obj=None):
@@ -1172,6 +1189,7 @@ class TeamMembersInline(admin.TabularInline):
 	extra = 1
 	verbose_name = 'Member'
 	verbose_name_plural = 'Members'
+	classes = ('collapse',)
 	autocomplete_fields = ['user']
 
 
@@ -1184,6 +1202,7 @@ class TeamListsInline(admin.TabularInline):
 	show_change_link = True
 	verbose_name = 'List'
 	verbose_name_plural = 'Lists'
+	classes = ('collapse',)
 	can_delete = False
 
 	def has_add_permission(self, request, obj=None):
@@ -1217,7 +1236,7 @@ class ReassignTeamForm(forms.Form):
 @admin.register(Team)
 class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	form = TeamAdminForm
-	inlines = [TeamMembersInline, TeamSubjectInline, TeamSourceInline, TeamListsInline]
+	inlines = [TeamMembersInline, TeamSubjectInline, TeamCategoryInline, TeamSourceInline, TeamListsInline]
 	list_display = ['id', 'formatted_team_name', 'organization_link', 'slug', 'subjects_count', 'sources_count', 'active_badge']
 	list_display_links = ['id', 'formatted_team_name']
 	list_filter = ['organization', 'is_active']
