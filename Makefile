@@ -114,8 +114,12 @@ db-upgrade: | $(BACKUP_DIR)
 		--no-owner --no-privileges -F p > $(UPGRADE_DUMP)
 	@echo "==> Removing db container (data dir on host is untouched)"
 	docker compose rm -sf db
-	@echo "==> Moving postgres-data aside (rollback safety)"
-	mv postgres-data postgres-data.pre-upgrade.$(UPGRADE_TIMESTAMP)
+	@echo "==> Moving ./postgres-data aside (rollback safety)"
+	@if [ ! -d "./postgres-data" ]; then \
+		echo "ERROR: ./postgres-data does not exist. Run this target from the repo root after starting the db container at least once."; \
+		exit 1; \
+	fi
+	mv ./postgres-data ./postgres-data.pre-upgrade.$(UPGRADE_TIMESTAMP)
 	@echo "==> NEXT: run: make db-upgrade-finish"
 
 db-upgrade-finish: | $(BACKUP_DIR)
