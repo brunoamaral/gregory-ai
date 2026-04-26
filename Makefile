@@ -28,7 +28,7 @@ help:
 	@echo "  db-pull            Dump the production database and restore it locally"
 	@echo "  db-restore         Restore the most recent backup in $(BACKUP_DIR)/"
 	@echo "  db-upgrade         Step 1 of major-version upgrade: dump current DB, stop db, move data dir aside"
-	@echo "  db-upgrade-finish  Step 2: start new db image (edit docker-compose.yaml first), restore dump, migrate"
+	@echo "  db-upgrade-finish  Step 2: recreate db container from new image, restore dump, migrate"
 
 ## Build the Gregory Docker image.
 ## Override image name or tag: make build IMAGE=myrepo/myimage TAG=v1.0
@@ -95,9 +95,9 @@ db-restore: | $(BACKUP_DIR)
 
 ## Major-version Postgres upgrade (two-step for rollback safety).
 ##
-## Pre-condition: docker-compose.yaml's `db` image tag already points at the NEW major version
-## (this branch sets it to postgres:17). The currently running `db` container can still be on the
-## OLD version — that is exactly what step 1 expects.
+## Pre-condition: docker-compose.yaml's `db` image tag already points at the NEW major version.
+## The currently running `db` container can still be on the OLD version — that is exactly what
+## step 1 expects.
 ##
 ## Workflow:
 ##   1. make db-upgrade         # dumps current DB -> removes db container -> renames postgres-data
@@ -109,16 +109,16 @@ UPGRADE_TIMESTAMP := $(shell date +%Y%m%d_%H%M%S)
 UPGRADE_DUMP      := $(BACKUP_DIR)/pre_upgrade_$(UPGRADE_TIMESTAMP).sql
 
 db-upgrade: | $(BACKUP_DIR)
+	@if [ ! -d "./postgres-data" ]; then \
+		echo "ERROR: ./postgres-data does not exist. Run this target from the repo root after starting the db container at least once."; \
+		exit 1; \
+	fi
 	@echo "==> Dumping current DB to $(UPGRADE_DUMP)"
 	docker exec db pg_dump -U $(POSTGRES_USER) -d $(POSTGRES_DB) \
 		--no-owner --no-privileges -F p > $(UPGRADE_DUMP)
 	@echo "==> Removing db container (data dir on host is untouched)"
 	docker compose rm -sf db
 	@echo "==> Moving ./postgres-data aside (rollback safety)"
-	@if [ ! -d "./postgres-data" ]; then \
-		echo "ERROR: ./postgres-data does not exist. Run this target from the repo root after starting the db container at least once."; \
-		exit 1; \
-	fi
 	mv ./postgres-data ./postgres-data.pre-upgrade.$(UPGRADE_TIMESTAMP)
 	@echo "==> NEXT: run: make db-upgrade-finish"
 
@@ -132,6 +132,9 @@ db-upgrade-finish: | $(BACKUP_DIR)
 	docker exec db psql -U $(POSTGRES_USER) -d postgres -c "DROP DATABASE IF EXISTS \"$(POSTGRES_DB)\";"
 	docker exec db psql -U $(POSTGRES_USER) -d postgres -c "CREATE DATABASE \"$(POSTGRES_DB)\";"
 	docker exec -i db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < $(DUMP)
+	@echo "==> Ensuring gregory app container is running"
+	docker compose up -d gregory
+	@echo "==> Running Django migrations"
 	docker exec gregory python manage.py migrate --run-syncdb
 	@echo "==> Done. Verify, then remove postgres-data.pre-upgrade.* once happy."
 
