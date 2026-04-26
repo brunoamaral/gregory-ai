@@ -84,7 +84,7 @@ Q6 = BASE_CTE + """
 	          FROM articles_subjects s JOIN subjects sub ON sub.id = s.subject_id
 	         WHERE s.articles_id = a.article_id) AS subjects
 	FROM base b
-	JOIN articles a ON a.article_id = b.article_id
+	JOIN articles a ON a.article_id = b.articles_id
 	ORDER BY a.article_id
 	LIMIT 50
 """
