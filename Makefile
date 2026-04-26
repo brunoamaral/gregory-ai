@@ -19,14 +19,16 @@ TAG   ?= $(shell git rev-parse --short HEAD)
 PLATFORMS ?= linux/amd64,linux/arm64
 BUILDER ?= gregory-multiarch
 
-.PHONY: help build push db-pull db-restore
+.PHONY: help build push db-pull db-restore db-upgrade db-upgrade-finish
 
 help:
 	@echo "Available targets:"
-	@echo "  build       Build the Docker image (tagged :latest and :TAG)"
-	@echo "  push        Build and push a multi-arch image to Docker Hub"
-	@echo "  db-pull     Dump the production database and restore it locally"
-	@echo "  db-restore  Restore the most recent backup in $(BACKUP_DIR)/"
+	@echo "  build              Build the Docker image (tagged :latest and :TAG)"
+	@echo "  push               Build and push a multi-arch image to Docker Hub"
+	@echo "  db-pull            Dump the production database and restore it locally"
+	@echo "  db-restore         Restore the most recent backup in $(BACKUP_DIR)/"
+	@echo "  db-upgrade         Step 1 of major-version upgrade: dump current DB, stop db, move data dir aside"
+	@echo "  db-upgrade-finish  Step 2: start new db image (edit docker-compose.yaml first), restore dump, migrate"
 
 ## Build the Gregory Docker image.
 ## Override image name or tag: make build IMAGE=myrepo/myimage TAG=v1.0
@@ -90,6 +92,44 @@ db-restore: | $(BACKUP_DIR)
 	docker exec -i db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < $(LATEST)
 	docker exec gregory python manage.py migrate --run-syncdb
 	@echo "==> Done."
+
+## Major-version Postgres upgrade (two-step for rollback safety).
+##
+## Pre-condition: docker-compose.yaml's `db` image tag already points at the NEW major version
+## (this branch sets it to postgres:17). The currently running `db` container can still be on the
+## OLD version — that is exactly what step 1 expects.
+##
+## Workflow:
+##   1. make db-upgrade         # dumps current DB -> removes db container -> renames postgres-data
+##   2. make db-upgrade-finish  # recreates db container from the new image, restores dump, migrates
+##
+## Rollback before step 2: revert docker-compose.yaml's image tag,
+##   `mv postgres-data.pre-upgrade.* postgres-data`, then `docker compose up -d db`.
+UPGRADE_TIMESTAMP := $(shell date +%Y%m%d_%H%M%S)
+UPGRADE_DUMP      := $(BACKUP_DIR)/pre_upgrade_$(UPGRADE_TIMESTAMP).sql
+
+db-upgrade: | $(BACKUP_DIR)
+	@echo "==> Dumping current DB to $(UPGRADE_DUMP)"
+	docker exec db pg_dump -U $(POSTGRES_USER) -d $(POSTGRES_DB) \
+		--no-owner --no-privileges -F p > $(UPGRADE_DUMP)
+	@echo "==> Removing db container (data dir on host is untouched)"
+	docker compose rm -sf db
+	@echo "==> Moving postgres-data aside (rollback safety)"
+	mv postgres-data postgres-data.pre-upgrade.$(UPGRADE_TIMESTAMP)
+	@echo "==> NEXT: run: make db-upgrade-finish"
+
+db-upgrade-finish: | $(BACKUP_DIR)
+	@echo "==> Starting db container from new image (empty data dir)"
+	docker compose up -d db
+	@until docker exec db pg_isready -U $(POSTGRES_USER) -q; do sleep 1; done
+	$(eval DUMP := $(shell ls -t $(BACKUP_DIR)/pre_upgrade_*.sql 2>/dev/null | head -1))
+	@if [ -z "$(DUMP)" ]; then echo "No pre_upgrade_*.sql found in $(BACKUP_DIR)/"; exit 1; fi
+	@echo "==> Restoring $(DUMP)"
+	docker exec db psql -U $(POSTGRES_USER) -d postgres -c "DROP DATABASE IF EXISTS \"$(POSTGRES_DB)\";"
+	docker exec db psql -U $(POSTGRES_USER) -d postgres -c "CREATE DATABASE \"$(POSTGRES_DB)\";"
+	docker exec -i db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < $(DUMP)
+	docker exec gregory python manage.py migrate --run-syncdb
+	@echo "==> Done. Verify, then remove postgres-data.pre-upgrade.* once happy."
 
 $(BACKUP_DIR):
 	mkdir -p $(BACKUP_DIR)
