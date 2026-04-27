@@ -756,13 +756,22 @@ class SubjectAdminForm(forms.ModelForm):
 
 @admin.register(Subject)
 class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
-	list_display = ['formatted_subject_name', 'description', 'view_sources', 'team']  # Updated list display
+	list_display = ['formatted_subject_name', 'description', 'article_count', 'view_sources', 'team']  # Updated list display
 	readonly_fields = ['linked_sources']  # Display in the edit form
 	list_filter = [('team', OrganizationRestrictedFieldListFilter)]  # Add the team filter
 	form = SubjectAdminForm
 	inlines = [SourcesInline]  # Add the inline for managing sources
 	actions = ['reassign_to_team_action']
 	
+	def get_queryset(self, request):
+		qs = super().get_queryset(request)
+		return qs.annotate(article_count=models.Count('articles', distinct=True))
+
+	def article_count(self, obj):
+		return obj.article_count
+	article_count.short_description = 'Articles'
+	article_count.admin_order_field = 'article_count'
+
 	def formatted_subject_name(self, obj):
 		"""Display subject name with emphasis"""
 		return format_html('<strong>{}</strong>', obj.subject_name)
