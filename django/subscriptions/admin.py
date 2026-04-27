@@ -128,6 +128,8 @@ class SubscriberAdmin(admin.ModelAdmin):
 			path('analytics/data/', self.admin_site.admin_view(self.analytics_data), name='subscriptions_subscribers_analytics_data'),
 			path('analytics/list-distribution/', self.admin_site.admin_view(self.analytics_list_distribution), name='subscriptions_subscribers_analytics_list_distribution'),
 			path('analytics/profile-distribution/', self.admin_site.admin_view(self.analytics_profile_distribution), name='subscriptions_subscribers_analytics_profile_distribution'),
+			path('analytics/recent-subscribers/', self.admin_site.admin_view(self.analytics_recent_subscribers), name='subscriptions_subscribers_analytics_recent_subscribers'),
+			path('analytics/recent-unsubscriptions/', self.admin_site.admin_view(self.analytics_recent_unsubscriptions), name='subscriptions_subscribers_analytics_recent_unsubscriptions'),
 		]
 		return custom_urls + urls
 
@@ -361,6 +363,76 @@ class SubscriberAdmin(admin.ModelAdmin):
 			'profiles': profiles_data,
 			'total': total,
 		})
+
+	def analytics_recent_subscribers(self, request):
+		"""Return the 20 most recently created active subscribers with their profile and active lists."""
+		from gregory.admin import get_user_organizations
+		from subscriptions.models import SubscriberSiteProfile
+		profile_labels = dict(SubscriberSiteProfile.PROFILEOPTIONS)
+		user_orgs = get_user_organizations(request.user)
+
+		qs = Subscribers.objects.filter(active=True).order_by('-created_at')
+		if user_orgs is not None:
+			qs = qs.filter(
+				list_subscriptions__list__team__organization__id__in=user_orgs
+			).distinct()
+		qs = qs.prefetch_related('site_profiles', 'list_subscriptions__list')[:20]
+
+		result = []
+		for sub in qs:
+			profiles = [
+				profile_labels.get(sp.profile, sp.profile)
+				for sp in sub.site_profiles.all()
+			]
+			active_lists = [
+				ls.list.list_name
+				for ls in sub.list_subscriptions.all()
+				if ls.is_active and ls.list_id
+			]
+			result.append({
+				'name': f"{sub.first_name} {sub.last_name or ''}".strip() or sub.email,
+				'profiles': profiles,
+				'lists': active_lists,
+				'subscribed_at': sub.created_at.strftime('%Y-%m-%d'),
+			})
+
+		return JsonResponse({'subscribers': result})
+
+	def analytics_recent_unsubscriptions(self, request):
+		"""Return the 20 most recent list opt-outs with subscriber profile and remaining lists."""
+		from gregory.admin import get_user_organizations
+		from subscriptions.models import SubscriberSiteProfile
+		profile_labels = dict(SubscriberSiteProfile.PROFILEOPTIONS)
+		user_orgs = get_user_organizations(request.user)
+
+		qs = ListSubscription.objects.filter(
+			is_active=False,
+			unsubscribed_at__isnull=False,
+		).select_related('subscriber', 'list').order_by('-unsubscribed_at')
+		if user_orgs is not None:
+			qs = qs.filter(list__team__organization__id__in=user_orgs)
+		qs = qs[:20]
+
+		result = []
+		for ls in qs:
+			sub = ls.subscriber
+			profiles = [
+				profile_labels.get(sp.profile, sp.profile)
+				for sp in sub.site_profiles.all()
+			]
+			kept_lists = [
+				active_ls.list.list_name
+				for active_ls in sub.list_subscriptions.filter(is_active=True).select_related('list')
+			]
+			result.append({
+				'name': f"{sub.first_name} {sub.last_name or ''}".strip() or sub.email,
+				'profiles': profiles,
+				'removed_list': ls.list.list_name,
+				'kept_lists': kept_lists,
+				'unsubscribed_at': ls.unsubscribed_at.strftime('%Y-%m-%d'),
+			})
+
+		return JsonResponse({'unsubscriptions': result})
 
 	def changelist_view(self, request, extra_context=None):
 		extra_context = extra_context or {}
