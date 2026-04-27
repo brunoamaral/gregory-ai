@@ -126,6 +126,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 		custom_urls = [
 			path('analytics/', self.admin_site.admin_view(self.analytics_view), name='subscriptions_subscribers_analytics'),
 			path('analytics/data/', self.admin_site.admin_view(self.analytics_data), name='subscriptions_subscribers_analytics_data'),
+			path('analytics/list-distribution/', self.admin_site.admin_view(self.analytics_list_distribution), name='subscriptions_subscribers_analytics_list_distribution'),
 		]
 		return custom_urls + urls
 
@@ -247,6 +248,79 @@ class SubscriberAdmin(admin.ModelAdmin):
 				'new_subscriptions': sum(new_subscriptions_data),
 				'unsubscriptions': sum(unsubscriptions_data),
 			},
+		})
+
+	def analytics_list_distribution(self, request):
+		"""Return current snapshot: active subscribers/subscriptions + per-list breakdown.
+
+		Both KPI totals and the pie chart percentages are derived from the same base
+		queryset (active ListSubscription rows where the subscriber is also active)
+		so all numbers are internally consistent.
+		"""
+		from gregory.admin import get_user_organizations
+		user_orgs = get_user_organizations(request.user)
+
+		# Single base queryset — active subscriptions belonging to active subscribers.
+		# All downstream numbers derive from this so they are consistent.
+		base_qs = ListSubscription.objects.filter(is_active=True, subscriber__active=True)
+		if user_orgs is not None:
+			base_qs = base_qs.filter(list__team__organization__id__in=user_orgs)
+
+		# Distinct people with at least one active subscription
+		total_active_subscribers = base_qs.values('subscriber').distinct().count()
+
+		# Total active subscription rows — this is the pie chart's 100%
+		total_active_subscriptions = base_qs.count()
+
+		# Inactive subscribers: account marked active=False OR active account with
+		# no active list subscriptions. Annotate first to avoid ambiguous ORM
+		# negation on reverse FK.
+		inactive_sub_qs = Subscribers.objects.annotate(
+			active_subs_count=Count(
+				'list_subscriptions',
+				filter=Q(list_subscriptions__is_active=True),
+				distinct=True,
+			)
+		).filter(Q(active=False) | Q(active_subs_count=0))
+		if user_orgs is not None:
+			inactive_sub_qs = inactive_sub_qs.filter(
+				list_subscriptions__list__team__organization__id__in=user_orgs
+			).distinct()
+		total_inactive_subscribers = inactive_sub_qs.count()
+
+		# Inactive subscriptions: is_active=False (opt-outs)
+		inactive_ls_qs = ListSubscription.objects.filter(is_active=False)
+		if user_orgs is not None:
+			inactive_ls_qs = inactive_ls_qs.filter(list__team__organization__id__in=user_orgs)
+		total_inactive_subscriptions = inactive_ls_qs.count()
+
+		# Per-list active subscription totals, grouped by list ID to avoid name
+		# collisions across teams. Count rows directly — ListSubscription is unique
+		# per (subscriber, list) so distinct=True would be redundant overhead.
+		list_counts = (
+			base_qs
+			.values('list__id', 'list__list_name')
+			.annotate(count=Count('pk'))
+			.order_by('-count')
+		)
+
+		lists_data = []
+		for item in list_counts:
+			count = item['count']
+			percentage = round(count / total_active_subscriptions * 100, 1) if total_active_subscriptions else 0.0
+			lists_data.append({
+				'id': item['list__id'],
+				'name': item['list__list_name'],
+				'count': count,
+				'percentage': percentage,
+			})
+
+		return JsonResponse({
+			'total_active_subscribers': total_active_subscribers,
+			'total_active_subscriptions': total_active_subscriptions,
+			'total_inactive_subscribers': total_inactive_subscribers,
+			'total_inactive_subscriptions': total_inactive_subscriptions,
+			'lists': lists_data,
 		})
 
 	def changelist_view(self, request, extra_context=None):

@@ -80,6 +80,51 @@
 	border-radius: 6px;
 	padding: 20px;
 }
+.snapshot-section {
+	margin-top: 32px;
+}
+.snapshot-section h3 {
+	margin-bottom: 16px;
+}
+.snapshot-grid {
+	display: flex;
+	gap: 24px;
+	flex-wrap: wrap;
+	align-items: flex-start;
+}
+.kpi-card {
+	flex: 0 0 180px;
+	background: #fff;
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	padding: 24px 20px;
+	text-align: center;
+}
+.kpi-card .kpi-value {
+	font-size: 48px;
+	font-weight: 700;
+	color: #2563eb;
+	line-height: 1.1;
+}
+.kpi-card.inactive .kpi-value {
+	color: #6b7280;
+}
+.kpi-card .kpi-label {
+	font-size: 12px;
+	color: #666;
+	margin-top: 6px;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+.pie-chart-container {
+	flex: 1;
+	min-width: 300px;
+	max-width: 480px;
+	background: #fff;
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	padding: 20px;
+}
 </style>
 {% endblock %}
 
@@ -116,6 +161,31 @@
 <div class="chart-container">
 	<div style="height: 400px;">
 		<canvas id="analyticsChart"></canvas>
+	</div>
+</div>
+
+<div class="snapshot-section">
+	<h3>Current Subscription Snapshot</h3>
+	<div class="snapshot-grid">
+		<div class="kpi-card">
+			<div class="kpi-value" id="total-active-subscribers">—</div>
+			<div class="kpi-label">Active Subscribers</div>
+		</div>
+		<div class="kpi-card inactive">
+			<div class="kpi-value" id="total-inactive-subscribers">—</div>
+			<div class="kpi-label">Inactive Subscribers</div>
+		</div>
+		<div class="kpi-card">
+			<div class="kpi-value" id="total-active-subscriptions">—</div>
+			<div class="kpi-label">Active Subscriptions</div>
+		</div>
+		<div class="kpi-card inactive">
+			<div class="kpi-value" id="total-inactive-subscriptions">—</div>
+			<div class="kpi-label">Inactive Subscriptions</div>
+		</div>
+		<div class="pie-chart-container">
+			<canvas id="listDistributionChart"></canvas>
+		</div>
 	</div>
 </div>
 
@@ -228,5 +298,110 @@
 
 	fetchAndRender(activeRange);
 })();
+
+(function () {
+	const DIST_URL = '{% url "admin:subscriptions_subscribers_analytics_list_distribution" %}';
+	const COLORS = [
+		'#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed',
+		'#0891b2', '#db2777', '#65a30d', '#ea580c', '#6366f1',
+	];
+	let pieChart = null;
+
+	function fetchDistribution() {
+		fetch(DIST_URL)
+			.then(r => r.json())
+			.then(data => {
+				document.getElementById('total-active-subscribers').textContent = data.total_active_subscribers;
+				document.getElementById('total-active-subscriptions').textContent = data.total_active_subscriptions;
+				document.getElementById('total-inactive-subscribers').textContent = data.total_inactive_subscribers;
+				document.getElementById('total-inactive-subscriptions').textContent = data.total_inactive_subscriptions;
+
+				const labels = data.lists.map(
+					l => l.name + ' (' + l.count + ' — ' + l.percentage + '%)'
+				);
+				const counts = data.lists.map(l => l.count);
+				const colors = data.lists.map((_, i) => COLORS[i % COLORS.length]);
+
+				if (pieChart) {
+					pieChart.data.labels = labels;
+					pieChart.data.datasets[0].data = counts;
+					pieChart.data.datasets[0].backgroundColor = colors;
+					pieChart.update();
+				} else {
+					const ctx = document.getElementById('listDistributionChart').getContext('2d');
+					pieChart = new Chart(ctx, {
+						type: 'pie',
+						data: {
+							labels: labels,
+							datasets: [{
+								data: counts,
+								backgroundColor: colors,
+								borderWidth: 2,
+								borderColor: '#fff',
+							}],
+						},
+						options: {
+							responsive: true,
+							plugins: {
+								legend: {
+									position: 'bottom',
+									labels: { boxWidth: 14, padding: 12, font: { size: 12 } },
+								},
+								tooltip: {
+									callbacks: {
+										label: function(ctx) {
+											const item = data.lists[ctx.dataIndex];
+											return ' ' + item.name + ': ' + item.count + ' (' + item.percentage + '%)';
+										},
+									},
+								},
+								title: {
+									display: true,
+									text: 'Active Subscriptions per List',
+									font: { size: 14 },
+								},
+							},
+						},
+					});
+				}
+			})
+			.catch(err => console.error('Distribution fetch error:', err));
+	}
+
+	fetchDistribution();
+})();
 </script>
+
+<div class="snapshot-section" style="margin-top: 40px;">
+	<h3>Metric Definitions</h3>
+	<dl style="display: grid; grid-template-columns: max-content 1fr; gap: 8px 24px; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px 24px; margin: 0;">
+		<dt style="font-weight: 600; color: #1a1a1a;">Subscriber</dt>
+		<dd style="margin: 0; color: #444;">A distinct person or organisation registered in the system. One subscriber can belong to multiple lists.</dd>
+
+		<dt style="font-weight: 600; color: #1a1a1a;">Subscription</dt>
+		<dd style="margin: 0; color: #444;">A link between a subscriber and a specific mailing list. One subscriber on three lists counts as three subscriptions.</dd>
+
+		<dt style="font-weight: 600; color: #1a1a1a;">New Subscribers</dt>
+		<dd style="margin: 0; color: #444;">Subscriber accounts created during the selected period.</dd>
+
+		<dt style="font-weight: 600; color: #1a1a1a;">New Subscriptions</dt>
+		<dd style="margin: 0; color: #444;">New subscriber–list links established during the selected period (including re-activations).</dd>
+
+		<dt style="font-weight: 600; color: #1a1a1a;">Unsubscriptions</dt>
+		<dd style="margin: 0; color: #444;">List opt-outs recorded during the selected period.</dd>
+
+		<dt style="font-weight: 600; color: #1a1a1a;">Active Subscribers</dt>
+		<dd style="margin: 0; color: #444;">Distinct subscribers currently marked active who have at least one active list subscription.</dd>
+
+		<dt style="font-weight: 600; color: #1a1a1a;">Active Subscriptions</dt>
+		<dd style="margin: 0; color: #444;">Total active subscriber–list links right now. This is the denominator used for percentages in the pie chart.</dd>
+
+		<dt style="font-weight: 600; color: #1a1a1a;">Inactive Subscribers</dt>
+		<dd style="margin: 0; color: #444;">Subscribers whose account is marked inactive, or whose account is active but have no active list subscriptions.</dd>
+
+		<dt style="font-weight: 600; color: #1a1a1a;">Inactive Subscriptions</dt>
+		<dd style="margin: 0; color: #444;">Subscriber–list links that have been opted out of, regardless of whether the subscriber account is active.</dd>
+	</dl>
+</div>
+
 {% endblock %}
