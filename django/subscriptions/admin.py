@@ -299,7 +299,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 		# per (subscriber, list) so distinct=True would be redundant overhead.
 		list_counts = (
 			base_qs
-			.values('list__id', 'list__list_name')
+			.values('list__list_id', 'list__list_name')
 			.annotate(count=Count('pk'))
 			.order_by('-count')
 		)
@@ -309,7 +309,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 			count = item['count']
 			percentage = round(count / total_active_subscriptions * 100, 1) if total_active_subscriptions else 0.0
 			lists_data.append({
-				'id': item['list__id'],
+				'id': item['list__list_id'],
 				'name': item['list__list_name'],
 				'count': count,
 				'percentage': percentage,
