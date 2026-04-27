@@ -143,7 +143,7 @@ class Sources(models.Model):
 	source_for = models.CharField(choices=TABLES, max_length=50, default='science paper')
 	name = models.TextField(blank=True, null=True)
 	link = models.TextField(blank=True, null=True)
-	subject = models.ForeignKey(Subject,on_delete=models.PROTECT,null=True,blank=True,unique=False)
+	subject = models.ForeignKey(Subject,on_delete=models.SET_NULL,null=True,blank=True,unique=False)
 	method = models.CharField(choices=METHODS, max_length=10, default='rss')
 	ignore_ssl = models.BooleanField(default=False)
 	description = models.TextField(blank=True, null=True)

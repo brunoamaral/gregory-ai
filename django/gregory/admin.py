@@ -845,6 +845,34 @@ class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmi
 
 	linked_sources.short_description = "Linked Sources"
 
+	def delete_view(self, request, object_id, extra_context=None):
+		from django.contrib.admin.utils import unquote
+		obj = self.get_object(request, unquote(object_id))
+
+		if obj:
+			can_view_sources = request.user.has_perm('gregory.view_sources')
+			can_delete_sources = request.user.has_perm('gregory.delete_sources')
+
+			orphaned_sources = Sources.objects.filter(subject=obj)
+
+			if orphaned_sources.exists() and request.method == 'POST':
+				if request.POST.get('delete_orphaned_sources') == 'yes':
+					if can_delete_sources:
+						orphaned_sources.delete()
+					else:
+						self.message_user(
+							request,
+							'You do not have permission to delete sources. The subject was deleted but the sources were kept.',
+							level=messages.WARNING,
+						)
+
+			extra_context = extra_context or {}
+			if orphaned_sources.exists() and can_view_sources:
+				extra_context['orphaned_sources'] = orphaned_sources
+				extra_context['can_delete_sources'] = can_delete_sources
+
+		return super().delete_view(request, object_id, extra_context=extra_context)
+
 
 class AuthorArticlesInline(admin.TabularInline):
 	model = Articles.authors.through
