@@ -272,8 +272,16 @@ class SubscriberAdmin(admin.ModelAdmin):
 		# Total active subscription rows — this is the pie chart's 100%
 		total_active_subscriptions = base_qs.count()
 
-		# Inactive subscribers: active=False OR no active subscription
-		inactive_sub_qs = Subscribers.objects.filter(active=False)
+		# Inactive subscribers: account marked active=False OR active account with
+		# no active list subscriptions. Annotate first to avoid ambiguous ORM
+		# negation on reverse FK.
+		inactive_sub_qs = Subscribers.objects.annotate(
+			active_subs_count=Count(
+				'list_subscriptions',
+				filter=Q(list_subscriptions__is_active=True),
+				distinct=True,
+			)
+		).filter(Q(active=False) | Q(active_subs_count=0))
 		if user_orgs is not None:
 			inactive_sub_qs = inactive_sub_qs.filter(
 				list_subscriptions__list__team__organization__id__in=user_orgs
@@ -286,11 +294,13 @@ class SubscriberAdmin(admin.ModelAdmin):
 			inactive_ls_qs = inactive_ls_qs.filter(list__team__organization__id__in=user_orgs)
 		total_inactive_subscriptions = inactive_ls_qs.count()
 
-		# Per-list counts, grouped by list ID to avoid name collisions across teams
+		# Per-list active subscription totals, grouped by list ID to avoid name
+		# collisions across teams. Count rows directly — ListSubscription is unique
+		# per (subscriber, list) so distinct=True would be redundant overhead.
 		list_counts = (
 			base_qs
 			.values('list__id', 'list__list_name')
-			.annotate(count=Count('subscriber', distinct=True))
+			.annotate(count=Count('pk'))
 			.order_by('-count')
 		)
 
