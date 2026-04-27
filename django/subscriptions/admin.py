@@ -126,6 +126,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 		custom_urls = [
 			path('analytics/', self.admin_site.admin_view(self.analytics_view), name='subscriptions_subscribers_analytics'),
 			path('analytics/data/', self.admin_site.admin_view(self.analytics_data), name='subscriptions_subscribers_analytics_data'),
+			path('analytics/list-distribution/', self.admin_site.admin_view(self.analytics_list_distribution), name='subscriptions_subscribers_analytics_list_distribution'),
 		]
 		return custom_urls + urls
 
@@ -247,6 +248,45 @@ class SubscriberAdmin(admin.ModelAdmin):
 				'new_subscriptions': sum(new_subscriptions_data),
 				'unsubscriptions': sum(unsubscriptions_data),
 			},
+		})
+
+	def analytics_list_distribution(self, request):
+		"""Return current snapshot: total active subscribers + breakdown per list."""
+		from gregory.admin import get_user_organizations
+		user_orgs = get_user_organizations(request.user)
+
+		# Total active subscribers
+		total_qs = Subscribers.objects.filter(active=True)
+		if user_orgs is not None:
+			total_qs = total_qs.filter(
+				list_subscriptions__list__team__organization__id__in=user_orgs
+			).distinct()
+		total_active = total_qs.count()
+
+		# Per-list active subscription counts
+		list_qs = ListSubscription.objects.filter(is_active=True)
+		if user_orgs is not None:
+			list_qs = list_qs.filter(list__team__organization__id__in=user_orgs)
+		list_counts = (
+			list_qs
+			.values('list__list_name')
+			.annotate(count=Count('subscriber'))
+			.order_by('-count')
+		)
+
+		lists_data = []
+		for item in list_counts:
+			count = item['count']
+			percentage = round(count / total_active * 100, 1) if total_active else 0.0
+			lists_data.append({
+				'name': item['list__list_name'],
+				'count': count,
+				'percentage': percentage,
+			})
+
+		return JsonResponse({
+			'total_active': total_active,
+			'lists': lists_data,
 		})
 
 	def changelist_view(self, request, extra_context=None):

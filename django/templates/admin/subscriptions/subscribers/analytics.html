@@ -80,6 +80,48 @@
 	border-radius: 6px;
 	padding: 20px;
 }
+.snapshot-section {
+	margin-top: 32px;
+}
+.snapshot-section h3 {
+	margin-bottom: 16px;
+}
+.snapshot-grid {
+	display: flex;
+	gap: 24px;
+	flex-wrap: wrap;
+	align-items: flex-start;
+}
+.kpi-card {
+	flex: 0 0 180px;
+	background: #fff;
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	padding: 24px 20px;
+	text-align: center;
+}
+.kpi-card .kpi-value {
+	font-size: 48px;
+	font-weight: 700;
+	color: #2563eb;
+	line-height: 1.1;
+}
+.kpi-card .kpi-label {
+	font-size: 12px;
+	color: #666;
+	margin-top: 6px;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+.pie-chart-container {
+	flex: 1;
+	min-width: 300px;
+	max-width: 480px;
+	background: #fff;
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	padding: 20px;
+}
 </style>
 {% endblock %}
 
@@ -116,6 +158,19 @@
 <div class="chart-container">
 	<div style="height: 400px;">
 		<canvas id="analyticsChart"></canvas>
+	</div>
+</div>
+
+<div class="snapshot-section">
+	<h3>Current Snapshot</h3>
+	<div class="snapshot-grid">
+		<div class="kpi-card">
+			<div class="kpi-value" id="total-active-subscribers">—</div>
+			<div class="kpi-label">Active Subscribers</div>
+		</div>
+		<div class="pie-chart-container">
+			<canvas id="listDistributionChart"></canvas>
+		</div>
 	</div>
 </div>
 
@@ -227,6 +282,75 @@
 	});
 
 	fetchAndRender(activeRange);
+})();
+
+(function () {
+	const DIST_URL = '{% url "admin:subscriptions_subscribers_analytics_list_distribution" %}';
+	const COLORS = [
+		'#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed',
+		'#0891b2', '#db2777', '#65a30d', '#ea580c', '#6366f1',
+	];
+	let pieChart = null;
+
+	function fetchDistribution() {
+		fetch(DIST_URL)
+			.then(r => r.json())
+			.then(data => {
+				document.getElementById('total-active-subscribers').textContent = data.total_active;
+
+				const labels = data.lists.map(
+					l => l.name + ' (' + l.count + ' — ' + l.percentage + '%)'
+				);
+				const counts = data.lists.map(l => l.count);
+				const colors = data.lists.map((_, i) => COLORS[i % COLORS.length]);
+
+				if (pieChart) {
+					pieChart.data.labels = labels;
+					pieChart.data.datasets[0].data = counts;
+					pieChart.data.datasets[0].backgroundColor = colors;
+					pieChart.update();
+				} else {
+					const ctx = document.getElementById('listDistributionChart').getContext('2d');
+					pieChart = new Chart(ctx, {
+						type: 'pie',
+						data: {
+							labels: labels,
+							datasets: [{
+								data: counts,
+								backgroundColor: colors,
+								borderWidth: 2,
+								borderColor: '#fff',
+							}],
+						},
+						options: {
+							responsive: true,
+							plugins: {
+								legend: {
+									position: 'bottom',
+									labels: { boxWidth: 14, padding: 12, font: { size: 12 } },
+								},
+								tooltip: {
+									callbacks: {
+										label: function(ctx) {
+											const item = data.lists[ctx.dataIndex];
+											return ' ' + item.name + ': ' + item.count + ' (' + item.percentage + '%)';
+										},
+									},
+								},
+								title: {
+									display: true,
+									text: 'Active Subscriptions per List',
+									font: { size: 14 },
+								},
+							},
+						},
+					});
+				}
+			})
+			.catch(err => console.error('Distribution fetch error:', err));
+	}
+
+	fetchDistribution();
 })();
 </script>
 {% endblock %}
