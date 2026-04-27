@@ -1,0 +1,39 @@
+{% extends "admin/delete_confirmation.html" %}
+{% load i18n %}
+
+{% block content %}
+{% if orphaned_sources %}
+<div class="help" style="margin-top: 1em; margin-bottom: 1em; padding: 1em; border: 1px solid #c0c0c0; background: #fff9e6;">
+	<h3>{% trans "Sources that will become orphaned" %}</h3>
+	<p>{% blocktrans with count=orphaned_sources.count %}The following {{ count }} source(s) are only linked to this subject. Do you also want to delete them?{% endblocktrans %}</p>
+	<ul>
+		{% for source in orphaned_sources %}
+		<li><strong>{{ source.name }}</strong>{% if source.link %} — <a href="{{ source.link }}" target="_blank">{{ source.link }}</a>{% endif %}</li>
+		{% endfor %}
+	</ul>
+	<label style="display: inline-flex; align-items: center; gap: 0.5em; margin-top: 0.5em;">
+		<input type="checkbox" id="delete_orphaned_sources_cb">
+		{% blocktrans with count=orphaned_sources.count %}Also delete these {{ count }} orphaned source(s){% endblocktrans %}
+	</label>
+</div>
+<script>
+(function () {
+	document.addEventListener('DOMContentLoaded', function () {
+		var form = document.querySelector('#content form');
+		if (!form) return;
+		form.addEventListener('submit', function () {
+			var cb = document.getElementById('delete_orphaned_sources_cb');
+			if (cb && cb.checked) {
+				var input = document.createElement('input');
+				input.type = 'hidden';
+				input.name = 'delete_orphaned_sources';
+				input.value = 'yes';
+				form.appendChild(input);
+			}
+		});
+	});
+}());
+</script>
+{% endif %}
+{{ block.super }}
+{% endblock %}

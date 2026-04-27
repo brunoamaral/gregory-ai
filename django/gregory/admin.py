@@ -845,6 +845,22 @@ class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmi
 
 	linked_sources.short_description = "Linked Sources"
 
+	def delete_view(self, request, object_id, extra_context=None):
+		from django.contrib.admin.utils import unquote
+		obj = self.get_object(request, unquote(object_id))
+
+		if obj:
+			orphaned_sources = Sources.objects.filter(subject=obj)
+
+			if orphaned_sources.exists() and request.method == 'POST':
+				if request.POST.get('delete_orphaned_sources') == 'yes':
+					orphaned_sources.delete()
+
+			extra_context = extra_context or {}
+			extra_context['orphaned_sources'] = orphaned_sources if orphaned_sources.exists() else None
+
+		return super().delete_view(request, object_id, extra_context=extra_context)
+
 
 class AuthorArticlesInline(admin.TabularInline):
 	model = Articles.authors.through
