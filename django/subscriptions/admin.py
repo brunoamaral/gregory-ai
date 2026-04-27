@@ -127,6 +127,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 			path('analytics/', self.admin_site.admin_view(self.analytics_view), name='subscriptions_subscribers_analytics'),
 			path('analytics/data/', self.admin_site.admin_view(self.analytics_data), name='subscriptions_subscribers_analytics_data'),
 			path('analytics/list-distribution/', self.admin_site.admin_view(self.analytics_list_distribution), name='subscriptions_subscribers_analytics_list_distribution'),
+			path('analytics/profile-distribution/', self.admin_site.admin_view(self.analytics_profile_distribution), name='subscriptions_subscribers_analytics_profile_distribution'),
 		]
 		return custom_urls + urls
 
@@ -321,6 +322,44 @@ class SubscriberAdmin(admin.ModelAdmin):
 			'total_inactive_subscribers': total_inactive_subscribers,
 			'total_inactive_subscriptions': total_inactive_subscriptions,
 			'lists': lists_data,
+		})
+
+	def analytics_profile_distribution(self, request):
+		"""Return a breakdown of active subscribers by their site profile."""
+		from gregory.admin import get_user_organizations
+		from subscriptions.models import SubscriberSiteProfile
+		user_orgs = get_user_organizations(request.user)
+
+		qs = SubscriberSiteProfile.objects.filter(subscriber__active=True)
+		if user_orgs is not None:
+			qs = qs.filter(
+				subscriber__list_subscriptions__list__team__organization__id__in=user_orgs
+			).distinct()
+
+		profile_counts = (
+			qs
+			.values('profile')
+			.annotate(count=Count('subscriber', distinct=True))
+			.order_by('-count')
+		)
+
+		profile_labels = dict(SubscriberSiteProfile.PROFILEOPTIONS)
+		total = sum(item['count'] for item in profile_counts)
+
+		profiles_data = []
+		for item in profile_counts:
+			count = item['count']
+			percentage = round(count / total * 100, 1) if total else 0.0
+			profiles_data.append({
+				'profile': item['profile'],
+				'label': profile_labels.get(item['profile'], item['profile']),
+				'count': count,
+				'percentage': percentage,
+			})
+
+		return JsonResponse({
+			'profiles': profiles_data,
+			'total': total,
 		})
 
 	def changelist_view(self, request, extra_context=None):

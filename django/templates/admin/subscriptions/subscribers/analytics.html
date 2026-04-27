@@ -86,14 +86,15 @@
 .snapshot-section h3 {
 	margin-bottom: 16px;
 }
-.snapshot-grid {
+.kpi-row {
 	display: flex;
-	gap: 24px;
+	gap: 16px;
 	flex-wrap: wrap;
-	align-items: flex-start;
+	margin-bottom: 24px;
 }
 .kpi-card {
-	flex: 0 0 180px;
+	flex: 1;
+	min-width: 160px;
 	background: #fff;
 	border: 1px solid #e0e0e0;
 	border-radius: 6px;
@@ -116,10 +117,15 @@
 	text-transform: uppercase;
 	letter-spacing: 0.05em;
 }
+.pie-charts-row {
+	display: flex;
+	gap: 24px;
+	flex-wrap: wrap;
+	align-items: flex-start;
+}
 .pie-chart-container {
 	flex: 1;
 	min-width: 300px;
-	max-width: 480px;
 	background: #fff;
 	border: 1px solid #e0e0e0;
 	border-radius: 6px;
@@ -166,7 +172,7 @@
 
 <div class="snapshot-section">
 	<h3>Current Subscription Snapshot</h3>
-	<div class="snapshot-grid">
+	<div class="kpi-row">
 		<div class="kpi-card">
 			<div class="kpi-value" id="total-active-subscribers">—</div>
 			<div class="kpi-label">Active Subscribers</div>
@@ -183,14 +189,43 @@
 			<div class="kpi-value" id="total-inactive-subscriptions">—</div>
 			<div class="kpi-label">Inactive Subscriptions</div>
 		</div>
+	</div>
+	<div class="pie-charts-row">
 		<div class="pie-chart-container">
 			<canvas id="listDistributionChart"></canvas>
+		</div>
+		<div class="pie-chart-container">
+			<canvas id="profileDistributionChart"></canvas>
 		</div>
 	</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script>
+Chart.register(ChartDataLabels);
+
+// Shared datalabels config for pie charts: show count + % only on slices >= 5%
+function pieDataLabels(itemsArray) {
+	return {
+		formatter: function(value, ctx) {
+			const item = itemsArray[ctx.dataIndex];
+			return item.count + '\n(' + item.percentage + '%)';
+		},
+		color: '#fff',
+		font: { weight: 'bold', size: 12 },
+		textAlign: 'center',
+		display: function(ctx) {
+			const item = itemsArray[ctx.dataIndex];
+			return item.percentage >= 5;
+		},
+		anchor: 'center',
+		align: 'center',
+		textStrokeColor: 'rgba(0,0,0,0.25)',
+		textStrokeWidth: 2,
+	};
+}
+
 (function () {
 	const DATA_URL = '{% url "admin:subscriptions_subscribers_analytics_data" %}';
 	let chart = null;
@@ -277,6 +312,7 @@
 									display: true,
 									position: 'top',
 								},
+								datalabels: { display: false },
 							},
 						},
 					});
@@ -360,6 +396,7 @@
 									text: 'Active Subscriptions per List',
 									font: { size: 14 },
 								},
+								datalabels: pieDataLabels(data.lists),
 							},
 						},
 					});
@@ -369,6 +406,74 @@
 	}
 
 	fetchDistribution();
+})();
+
+(function () {
+	const PROFILE_URL = '{% url "admin:subscriptions_subscribers_analytics_profile_distribution" %}';
+	const COLORS = [
+		'#7c3aed', '#2563eb', '#16a34a', '#dc2626', '#d97706',
+		'#0891b2', '#db2777', '#65a30d', '#ea580c', '#6366f1',
+	];
+	let profileChart = null;
+
+	function fetchProfileDistribution() {
+		fetch(PROFILE_URL)
+			.then(r => r.json())
+			.then(data => {
+				const labels = data.profiles.map(
+					p => p.label + ' (' + p.count + ' — ' + p.percentage + '%)'
+				);
+				const counts = data.profiles.map(p => p.count);
+				const colors = data.profiles.map((_, i) => COLORS[i % COLORS.length]);
+
+				if (profileChart) {
+					profileChart.data.labels = labels;
+					profileChart.data.datasets[0].data = counts;
+					profileChart.data.datasets[0].backgroundColor = colors;
+					profileChart.update();
+				} else {
+					const ctx = document.getElementById('profileDistributionChart').getContext('2d');
+					profileChart = new Chart(ctx, {
+						type: 'pie',
+						data: {
+							labels: labels,
+							datasets: [{
+								data: counts,
+								backgroundColor: colors,
+								borderWidth: 2,
+								borderColor: '#fff',
+							}],
+						},
+						options: {
+							responsive: true,
+							plugins: {
+								legend: {
+									position: 'bottom',
+									labels: { boxWidth: 14, padding: 12, font: { size: 12 } },
+								},
+								tooltip: {
+									callbacks: {
+										label: function(ctx) {
+											const item = data.profiles[ctx.dataIndex];
+											return ' ' + item.label + ': ' + item.count + ' (' + item.percentage + '%)';
+										},
+									},
+								},
+								title: {
+									display: true,
+									text: 'Profile of Active Subscribers',
+									font: { size: 14 },
+								},
+								datalabels: pieDataLabels(data.profiles),
+							},
+						},
+					});
+				}
+			})
+			.catch(err => console.error('Profile distribution fetch error:', err));
+	}
+
+	fetchProfileDistribution();
 })();
 </script>
 
