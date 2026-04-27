@@ -9,6 +9,7 @@ import csv
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
 from .admin_filters import DateRangeFilter, SourceHealthFilter
 from django.db import models  # Add this import for models.Count
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 from django import forms
 from django.utils.html import format_html, mark_safe
@@ -765,9 +766,21 @@ class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmi
 	
 	def get_queryset(self, request):
 		qs = super().get_queryset(request)
-		return qs.annotate(
-			article_count=models.Count('articles', distinct=True),
-			trial_count=models.Count('trials', distinct=True),
+		article_subq = (
+			Articles.objects.filter(subjects=OuterRef('pk'))
+			.values('subjects')
+			.annotate(c=models.Count('pk'))
+			.values('c')
+		)
+		trial_subq = (
+			Trials.objects.filter(subjects=OuterRef('pk'))
+			.values('subjects')
+			.annotate(c=models.Count('pk'))
+			.values('c')
+		)
+		return qs.prefetch_related('sources_set').annotate(
+			article_count=Subquery(article_subq),
+			trial_count=Subquery(trial_subq),
 		)
 
 	def article_count(self, obj):
