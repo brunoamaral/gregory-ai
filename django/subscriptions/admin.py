@@ -251,41 +251,65 @@ class SubscriberAdmin(admin.ModelAdmin):
 		})
 
 	def analytics_list_distribution(self, request):
-		"""Return current snapshot: total active subscribers + breakdown per list."""
+		"""Return current snapshot: active subscribers/subscriptions + per-list breakdown.
+
+		Both KPI totals and the pie chart percentages are derived from the same base
+		queryset (active ListSubscription rows where the subscriber is also active)
+		so all numbers are internally consistent.
+		"""
 		from gregory.admin import get_user_organizations
 		user_orgs = get_user_organizations(request.user)
 
-		# Total active subscribers
-		total_qs = Subscribers.objects.filter(active=True)
+		# Single base queryset — active subscriptions belonging to active subscribers.
+		# All downstream numbers derive from this so they are consistent.
+		base_qs = ListSubscription.objects.filter(is_active=True, subscriber__active=True)
 		if user_orgs is not None:
-			total_qs = total_qs.filter(
+			base_qs = base_qs.filter(list__team__organization__id__in=user_orgs)
+
+		# Distinct people with at least one active subscription
+		total_active_subscribers = base_qs.values('subscriber').distinct().count()
+
+		# Total active subscription rows — this is the pie chart's 100%
+		total_active_subscriptions = base_qs.count()
+
+		# Inactive subscribers: active=False OR no active subscription
+		inactive_sub_qs = Subscribers.objects.filter(active=False)
+		if user_orgs is not None:
+			inactive_sub_qs = inactive_sub_qs.filter(
 				list_subscriptions__list__team__organization__id__in=user_orgs
 			).distinct()
-		total_active = total_qs.count()
+		total_inactive_subscribers = inactive_sub_qs.count()
 
-		# Per-list active subscription counts
-		list_qs = ListSubscription.objects.filter(is_active=True)
+		# Inactive subscriptions: is_active=False (opt-outs)
+		inactive_ls_qs = ListSubscription.objects.filter(is_active=False)
 		if user_orgs is not None:
-			list_qs = list_qs.filter(list__team__organization__id__in=user_orgs)
+			inactive_ls_qs = inactive_ls_qs.filter(list__team__organization__id__in=user_orgs)
+		total_inactive_subscriptions = inactive_ls_qs.count()
+
+		# Per-list counts, grouped by list ID to avoid name collisions across teams
 		list_counts = (
-			list_qs
-			.values('list__list_name')
-			.annotate(count=Count('subscriber'))
+			base_qs
+			.values('list__id', 'list__list_name')
+			.annotate(count=Count('subscriber', distinct=True))
 			.order_by('-count')
 		)
 
 		lists_data = []
 		for item in list_counts:
 			count = item['count']
-			percentage = round(count / total_active * 100, 1) if total_active else 0.0
+			percentage = round(count / total_active_subscriptions * 100, 1) if total_active_subscriptions else 0.0
 			lists_data.append({
+				'id': item['list__id'],
 				'name': item['list__list_name'],
 				'count': count,
 				'percentage': percentage,
 			})
 
 		return JsonResponse({
-			'total_active': total_active,
+			'total_active_subscribers': total_active_subscribers,
+			'total_active_subscriptions': total_active_subscriptions,
+			'total_inactive_subscribers': total_inactive_subscribers,
+			'total_inactive_subscriptions': total_inactive_subscriptions,
 			'lists': lists_data,
 		})
 
