@@ -8,13 +8,17 @@
 	<p>{% blocktrans with count=orphaned_sources.count %}The following {{ count }} source(s) are only linked to this subject. Do you also want to delete them?{% endblocktrans %}</p>
 	<ul>
 		{% for source in orphaned_sources %}
-		<li><strong>{{ source.name }}</strong>{% if source.link %} — <a href="{{ source.link }}" target="_blank">{{ source.link }}</a>{% endif %}</li>
+		<li><strong>{{ source.name }}</strong>{% if source.link %} — <a href="{{ source.link }}" target="_blank" rel="noopener noreferrer">{{ source.link }}</a>{% endif %}</li>
 		{% endfor %}
 	</ul>
+	{% if can_delete_sources %}
 	<label style="display: inline-flex; align-items: center; gap: 0.5em; margin-top: 0.5em;">
 		<input type="checkbox" id="delete_orphaned_sources_cb">
 		{% blocktrans with count=orphaned_sources.count %}Also delete these {{ count }} orphaned source(s){% endblocktrans %}
 	</label>
+	{% else %}
+	<p><em>{% trans "You do not have permission to delete sources. They will be kept with no subject assigned." %}</em></p>
+	{% endif %}
 </div>
 <script>
 (function () {

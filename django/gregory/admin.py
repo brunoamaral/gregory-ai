@@ -850,14 +850,26 @@ class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmi
 		obj = self.get_object(request, unquote(object_id))
 
 		if obj:
+			can_view_sources = request.user.has_perm('gregory.view_sources')
+			can_delete_sources = request.user.has_perm('gregory.delete_sources')
+
 			orphaned_sources = Sources.objects.filter(subject=obj)
 
 			if orphaned_sources.exists() and request.method == 'POST':
 				if request.POST.get('delete_orphaned_sources') == 'yes':
-					orphaned_sources.delete()
+					if can_delete_sources:
+						orphaned_sources.delete()
+					else:
+						self.message_user(
+							request,
+							'You do not have permission to delete sources. The subject was deleted but the sources were kept.',
+							level=messages.WARNING,
+						)
 
 			extra_context = extra_context or {}
-			extra_context['orphaned_sources'] = orphaned_sources if orphaned_sources.exists() else None
+			if orphaned_sources.exists() and can_view_sources:
+				extra_context['orphaned_sources'] = orphaned_sources
+				extra_context['can_delete_sources'] = can_delete_sources
 
 		return super().delete_view(request, object_id, extra_context=extra_context)
 
