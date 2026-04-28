@@ -261,10 +261,6 @@
 	border-radius: 4px;
 	font-size: 13px;
 }
-.chart-filter-bar select[multiple] {
-	min-height: 70px;
-	min-width: 200px;
-}
 .chart-filter-bar button {
 	padding: 4px 12px;
 	background: #007cba;
@@ -277,6 +273,93 @@
 }
 .chart-filter-bar button:hover {
 	background: #005f8e;
+}
+/* Checkbox dropdown */
+.multiselect-wrap {
+	position: relative;
+	display: inline-block;
+}
+.multiselect-trigger {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 10px;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	background: #fff;
+	cursor: pointer;
+	font-size: 13px;
+	color: #333;
+	min-width: 200px;
+	justify-content: space-between;
+	user-select: none;
+}
+.multiselect-trigger:hover {
+	border-color: #007cba;
+}
+.multiselect-trigger .ms-arrow {
+	font-size: 10px;
+	color: #888;
+	transition: transform 0.15s;
+}
+.multiselect-trigger.open .ms-arrow {
+	transform: rotate(180deg);
+}
+.multiselect-panel {
+	display: none;
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	min-width: 220px;
+	max-height: 260px;
+	overflow-y: auto;
+	background: #fff;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+	z-index: 200;
+	padding: 4px 0;
+}
+.multiselect-panel.open {
+	display: block;
+}
+.multiselect-action {
+	display: flex;
+	gap: 8px;
+	padding: 6px 10px;
+	border-bottom: 1px solid #f0f0f0;
+}
+.multiselect-action button {
+	flex: 1;
+	padding: 3px 6px;
+	font-size: 11px;
+	background: #f1f5f9;
+	color: #444;
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	cursor: pointer;
+}
+.multiselect-action button:hover {
+	background: #e2e8f0;
+}
+.multiselect-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px;
+	cursor: pointer;
+	font-size: 13px;
+	color: #333;
+}
+.multiselect-item:hover {
+	background: #f0f6ff;
+}
+.multiselect-item input[type=checkbox] {
+	margin: 0;
+	cursor: pointer;
+}
+.multiselect-placeholder {
+	color: #999;
 }
 </style>
 {% endblock %}
@@ -359,11 +442,21 @@
 		<div class="pie-chart-container">
 			<div class="chart-filter-bar">
 				<div>
-					<label for="profile-list-filter">Filter by list:</label><br>
-					<select id="profile-list-filter" multiple title="Hold Ctrl/Cmd to select multiple">
-					</select>
+					<label style="font-weight:600;color:#555;font-size:13px;">Filter by list:</label><br style="margin-bottom:4px">
+					<div class="multiselect-wrap" id="profile-list-wrap">
+						<div class="multiselect-trigger" id="profile-list-trigger" role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false">
+							<span class="multiselect-placeholder" id="profile-list-label">All lists</span>
+							<span class="ms-arrow">&#9660;</span>
+						</div>
+						<div class="multiselect-panel" id="profile-list-panel" role="listbox" aria-multiselectable="true">
+							<div class="multiselect-action">
+								<button type="button" id="profile-list-select-all">Select all</button>
+								<button type="button" id="profile-list-clear">Clear</button>
+							</div>
+							<div id="profile-list-items"></div>
+						</div>
+					</div>
 				</div>
-				<button id="profile-list-apply">Apply</button>
 			</div>
 			<canvas id="profileDistributionChart"></canvas>
 		</div>
@@ -452,8 +545,9 @@ function reloadAll() {
 		// Reset dependent selects
 		var teamSel = document.getElementById('list-team-filter');
 		if (teamSel) teamSel.value = '';
-		var listSel = document.getElementById('profile-list-filter');
-		if (listSel) Array.from(listSel.options).forEach(function(o) { o.selected = false; });
+		// Reset checkbox dropdown
+		document.querySelectorAll('#profile-list-items input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
+		updateProfileListTrigger();
 		reloadAll();
 	});
 })();
@@ -494,38 +588,110 @@ document.addEventListener('DOMContentLoaded', function() {
 	}
 });
 
-// ── List filter for profile chart ─────────────────────────────────────────
+// ── List filter for profile chart (checkbox dropdown) ────────────────────
+function updateProfileListTrigger() {
+	var label = document.getElementById('profile-list-label');
+	if (!label) return;
+	if (activeProfileLists.length === 0) {
+		label.textContent = 'All lists';
+		label.classList.add('multiselect-placeholder');
+	} else {
+		label.textContent = activeProfileLists.length === 1
+			? '1 list selected'
+			: activeProfileLists.length + ' lists selected';
+		label.classList.remove('multiselect-placeholder');
+	}
+}
+
 function reloadAvailableLists() {
-	var listSelect = document.getElementById('profile-list-filter');
-	if (!listSelect) return;
+	var container = document.getElementById('profile-list-items');
+	if (!container) return;
 	var params = buildParams();
 	fetch(URLS.availableLists + '?' + params.toString())
 		.then(function(r) { return r.json(); })
 		.then(function(data) {
-			listSelect.innerHTML = '';
-			data.lists.forEach(function(l) {
-				var opt = document.createElement('option');
-				opt.value = l.id;
-				opt.textContent = l.name;
-				// Re-select if previously chosen and still in scope
-				if (activeProfileLists.indexOf(l.id) !== -1) opt.selected = true;
-				listSelect.appendChild(opt);
-			});
 			// If previous selections are gone, clear state
 			var validIds = data.lists.map(function(l) { return l.id; });
 			activeProfileLists = activeProfileLists.filter(function(id) { return validIds.indexOf(id) !== -1; });
+
+			container.innerHTML = '';
+			data.lists.forEach(function(l) {
+				var item = document.createElement('label');
+				item.className = 'multiselect-item';
+				item.setAttribute('role', 'option');
+
+				var cb = document.createElement('input');
+				cb.type = 'checkbox';
+				cb.value = l.id;
+				cb.checked = activeProfileLists.indexOf(l.id) !== -1;
+				cb.addEventListener('change', function() {
+					if (this.checked) {
+						if (activeProfileLists.indexOf(l.id) === -1) activeProfileLists.push(l.id);
+					} else {
+						activeProfileLists = activeProfileLists.filter(function(id) { return id !== l.id; });
+					}
+					updateProfileListTrigger();
+					fetchProfileDistribution();
+				});
+
+				item.appendChild(cb);
+				item.appendChild(document.createTextNode(l.name));
+				container.appendChild(item);
+			});
+			updateProfileListTrigger();
 		});
 }
 
+// Dropdown open/close
 document.addEventListener('DOMContentLoaded', function() {
-	var applyBtn = document.getElementById('profile-list-apply');
-	if (applyBtn) {
-		applyBtn.addEventListener('click', function() {
-			var listSelect = document.getElementById('profile-list-filter');
-			activeProfileLists = Array.from(listSelect.selectedOptions).map(function(o) { return parseInt(o.value); });
-			fetchProfileDistribution();
-		});
+	var trigger = document.getElementById('profile-list-trigger');
+	var panel   = document.getElementById('profile-list-panel');
+	if (!trigger || !panel) return;
+
+	function openPanel() {
+		panel.classList.add('open');
+		trigger.classList.add('open');
+		trigger.setAttribute('aria-expanded', 'true');
 	}
+	function closePanel() {
+		panel.classList.remove('open');
+		trigger.classList.remove('open');
+		trigger.setAttribute('aria-expanded', 'false');
+	}
+
+	trigger.addEventListener('click', function(e) {
+		e.stopPropagation();
+		panel.classList.contains('open') ? closePanel() : openPanel();
+	});
+	trigger.addEventListener('keydown', function(e) {
+		if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); trigger.click(); }
+		if (e.key === 'Escape') closePanel();
+	});
+	document.addEventListener('click', function(e) {
+		var wrap = document.getElementById('profile-list-wrap');
+		if (wrap && !wrap.contains(e.target)) closePanel();
+	});
+
+	// Select all / Clear buttons
+	document.getElementById('profile-list-select-all').addEventListener('click', function(e) {
+		e.stopPropagation();
+		var checkboxes = document.querySelectorAll('#profile-list-items input[type=checkbox]');
+		activeProfileLists = [];
+		checkboxes.forEach(function(cb) {
+			cb.checked = true;
+			activeProfileLists.push(parseInt(cb.value));
+		});
+		updateProfileListTrigger();
+		fetchProfileDistribution();
+	});
+	document.getElementById('profile-list-clear').addEventListener('click', function(e) {
+		e.stopPropagation();
+		var checkboxes = document.querySelectorAll('#profile-list-items input[type=checkbox]');
+		checkboxes.forEach(function(cb) { cb.checked = false; });
+		activeProfileLists = [];
+		updateProfileListTrigger();
+		fetchProfileDistribution();
+	});
 });
 
 // ── Line chart ────────────────────────────────────────────────────────────
