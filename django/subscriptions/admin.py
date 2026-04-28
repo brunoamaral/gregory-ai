@@ -411,27 +411,35 @@ class SubscriberAdmin(admin.ModelAdmin):
 		).select_related('subscriber', 'list').order_by('-unsubscribed_at')
 		if user_orgs is not None:
 			qs = qs.filter(list__team__organization__id__in=user_orgs)
-		qs = qs[:20]
+		qs = qs[:100]
 
-		result = []
+		# Group by subscriber + date so multiple same-day opt-outs appear as one row
+		from collections import OrderedDict
+		grouped = OrderedDict()
 		for ls in qs:
 			sub = ls.subscriber
-			profiles = [
-				profile_labels.get(sp.profile, sp.profile)
-				for sp in sub.site_profiles.all()
-			]
-			kept_lists = [
-				active_ls.list.list_name
-				for active_ls in sub.list_subscriptions.filter(is_active=True).select_related('list')
-			]
-			result.append({
-				'name': f"{sub.first_name} {sub.last_name or ''}".strip() or sub.email,
-				'profiles': profiles,
-				'removed_list': ls.list.list_name,
-				'kept_lists': kept_lists,
-				'unsubscribed_at': ls.unsubscribed_at.strftime('%Y-%m-%d'),
-			})
+			date_str = ls.unsubscribed_at.strftime('%Y-%m-%d')
+			key = (sub.subscriber_id, date_str)
+			if key not in grouped:
+				profiles = [
+					profile_labels.get(sp.profile, sp.profile)
+					for sp in sub.site_profiles.all()
+				]
+				kept_lists = [
+					active_ls.list.list_name
+					for active_ls in sub.list_subscriptions.filter(is_active=True).select_related('list')
+				]
+				grouped[key] = {
+					'name': f"{sub.first_name} {sub.last_name or ''}".strip() or sub.email,
+					'profiles': profiles,
+					'removed_lists': [ls.list.list_name],
+					'kept_lists': kept_lists,
+					'unsubscribed_at': date_str,
+				}
+			else:
+				grouped[key]['removed_lists'].append(ls.list.list_name)
 
+		result = list(grouped.values())[:20]
 		return JsonResponse({'unsubscriptions': result})
 
 	def changelist_view(self, request, extra_context=None):

@@ -644,13 +644,16 @@ function pieDataLabels(itemsArray) {
 			const profiles = u.profiles.length
 				? u.profiles.map(function(p) { return tag(p, 'tag-profile'); }).join('')
 				: '<span style="color:#bbb">—</span>';
+			const removed = u.removed_lists.length
+				? u.removed_lists.map(function(l) { return tag(l, 'tag-removed'); }).join('')
+				: '<span style="color:#bbb">—</span>';
 			const kept = u.kept_lists.length
 				? u.kept_lists.map(function(l) { return tag(l, 'tag-kept'); }).join('')
 				: '<span style="color:#bbb">none</span>';
 			return '<tr>'
 				+ '<td>' + u.name + '</td>'
 				+ '<td>' + profiles + '</td>'
-				+ '<td>' + tag(u.removed_list, 'tag-removed') + '</td>'
+				+ '<td>' + removed + '</td>'
 				+ '<td>' + kept + '</td>'
 				+ '<td class="date-cell">' + u.unsubscribed_at + '</td>'
 				+ '</tr>';
