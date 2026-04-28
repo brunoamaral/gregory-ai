@@ -219,6 +219,65 @@
 	font-size: 13px;
 	italic;
 }
+.global-filter-bar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 16px;
+	background: #f0f4ff;
+	border: 1px solid #c7d3f0;
+	border-radius: 6px;
+	margin-bottom: 20px;
+	font-size: 13px;
+}
+.global-filter-bar label {
+	font-weight: 600;
+	color: #1a1a1a;
+}
+.global-filter-bar select {
+	padding: 4px 8px;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	font-size: 13px;
+	min-width: 200px;
+}
+.chart-filter-bar {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	flex-wrap: wrap;
+	margin-bottom: 14px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid #f0f0f0;
+	font-size: 13px;
+}
+.chart-filter-bar label {
+	font-weight: 600;
+	color: #555;
+}
+.chart-filter-bar select {
+	padding: 4px 8px;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	font-size: 13px;
+}
+.chart-filter-bar select[multiple] {
+	min-height: 70px;
+	min-width: 200px;
+}
+.chart-filter-bar button {
+	padding: 4px 12px;
+	background: #007cba;
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 13px;
+	align-self: flex-end;
+}
+.chart-filter-bar button:hover {
+	background: #005f8e;
+}
 </style>
 {% endblock %}
 
@@ -226,6 +285,15 @@
 <div style="margin-bottom: 16px;">
 	<a href="{% url 'admin:subscriptions_subscribers_changelist' %}" class="button">← Back to Subscribers</a>
 </div>
+
+{% if is_superuser %}
+<div class="global-filter-bar" id="org-filter-bar">
+	<label for="org-filter">Organisation:</label>
+	<select id="org-filter">
+		<option value="">All Organisations</option>
+	</select>
+</div>
+{% endif %}
 
 <div class="analytics-header">
 	<h2 style="margin: 0;">Subscriber Analytics</h2>
@@ -280,9 +348,23 @@
 	</div>
 	<div class="pie-charts-row">
 		<div class="pie-chart-container">
+			<div class="chart-filter-bar">
+				<label for="list-team-filter">Filter by team:</label>
+				<select id="list-team-filter">
+					<option value="">All Teams</option>
+				</select>
+			</div>
 			<canvas id="listDistributionChart"></canvas>
 		</div>
 		<div class="pie-chart-container">
+			<div class="chart-filter-bar">
+				<div>
+					<label for="profile-list-filter">Filter by list:</label><br>
+					<select id="profile-list-filter" multiple title="Hold Ctrl/Cmd to select multiple">
+					</select>
+				</div>
+				<button id="profile-list-apply">Apply</button>
+			</div>
 			<canvas id="profileDistributionChart"></canvas>
 		</div>
 	</div>
@@ -293,18 +375,41 @@
 <script>
 Chart.register(ChartDataLabels);
 
-// Shared datalabels config for pie charts: show count + % only on slices >= 5%
+// ── Global filter state ────────────────────────────────────────────────────
+var activeOrg  = '';   // '' = all; set by org dropdown (superusers only)
+var activeTeam = '';   // '' = all; set by team dropdown on list chart
+var activeProfileLists = []; // list IDs selected on profile chart
+
+// ── Endpoint URLs ──────────────────────────────────────────────────────────
+var URLS = {
+	data:            '{% url "admin:subscriptions_subscribers_analytics_data" %}',
+	listDist:        '{% url "admin:subscriptions_subscribers_analytics_list_distribution" %}',
+	profileDist:     '{% url "admin:subscriptions_subscribers_analytics_profile_distribution" %}',
+	recentSubs:      '{% url "admin:subscriptions_subscribers_analytics_recent_subscribers" %}',
+	recentUnsubs:    '{% url "admin:subscriptions_subscribers_analytics_recent_unsubscriptions" %}',
+	orgs:            '{% url "admin:subscriptions_subscribers_analytics_organisations" %}',
+	teams:           '{% url "admin:subscriptions_subscribers_analytics_teams" %}',
+	availableLists:  '{% url "admin:subscriptions_subscribers_analytics_available_lists" %}',
+};
+
+function buildParams(extra) {
+	var p = new URLSearchParams(extra || {});
+	if (activeOrg) p.set('org', activeOrg);
+	return p;
+}
+
+// ── Shared datalabels config ───────────────────────────────────────────────
 function pieDataLabels(itemsArray) {
 	return {
 		formatter: function(value, ctx) {
-			const item = itemsArray[ctx.dataIndex];
+			var item = itemsArray[ctx.dataIndex];
 			return item.count + '\n(' + item.percentage + '%)';
 		},
 		color: '#fff',
 		font: { weight: 'bold', size: 12 },
 		textAlign: 'center',
 		display: function(ctx) {
-			const item = itemsArray[ctx.dataIndex];
+			var item = itemsArray[ctx.dataIndex];
 			return item.percentage >= 5;
 		},
 		anchor: 'center',
@@ -314,255 +419,437 @@ function pieDataLabels(itemsArray) {
 	};
 }
 
-(function () {
-	const DATA_URL = '{% url "admin:subscriptions_subscribers_analytics_data" %}';
-	let chart = null;
-	let activeRange = '30d';
-
-	function fetchAndRender(range) {
-		fetch(DATA_URL + '?range=' + range)
-			.then(r => r.json())
-			.then(data => {
-				document.getElementById('total-new-subscribers').textContent = data.totals.new_subscribers;
-				document.getElementById('total-new-subscriptions').textContent = data.totals.new_subscriptions;
-				document.getElementById('total-unsubscriptions').textContent = data.totals.unsubscriptions;
-
-				const chartTitle = {
-					'7d':   'Daily — Last 7 Days',
-					'30d':  'Daily — Last 30 Days',
-					'90d':  'Weekly — Last 90 Days',
-					'365d': 'Monthly — Last 12 Months',
-				}[range] || '';
-
-				if (chart) {
-					chart.data.labels = data.labels;
-					chart.data.datasets[0].data = data.new_subscribers;
-					chart.data.datasets[1].data = data.new_subscriptions;
-					chart.data.datasets[2].data = data.unsubscriptions;
-					chart.options.plugins.title.text = chartTitle;
-					chart.update();
-				} else {
-					const ctx = document.getElementById('analyticsChart').getContext('2d');
-					chart = new Chart(ctx, {
-						type: 'line',
-						data: {
-							labels: data.labels,
-							datasets: [
-								{
-									label: 'New Subscribers',
-									data: data.new_subscribers,
-									borderColor: '#2563eb',
-									backgroundColor: 'rgba(37,99,235,0.08)',
-									tension: 0.2,
-									fill: true,
-									pointRadius: 3,
-								},
-								{
-									label: 'New Subscriptions',
-									data: data.new_subscriptions,
-									borderColor: '#16a34a',
-									backgroundColor: 'rgba(22,163,74,0.08)',
-									tension: 0.2,
-									fill: true,
-									pointRadius: 3,
-								},
-								{
-									label: 'Unsubscriptions',
-									data: data.unsubscriptions,
-									borderColor: '#dc2626',
-									backgroundColor: 'rgba(220,38,38,0.08)',
-									tension: 0.2,
-									fill: true,
-									pointRadius: 3,
-								},
-							],
-						},
-						options: {
-							responsive: true,
-							maintainAspectRatio: false,
-							interaction: { mode: 'index', intersect: false },
-							scales: {
-								y: {
-									beginAtZero: true,
-									ticks: { stepSize: 1, precision: 0 },
-								},
-								x: {
-									ticks: { maxTicksLimit: 12 },
-								},
-							},
-							plugins: {
-								title: {
-									display: true,
-									text: chartTitle,
-									font: { size: 14 },
-								},
-								legend: {
-									display: true,
-									position: 'top',
-								},
-								datalabels: { display: false },
-							},
-						},
-					});
-				}
-			})
-			.catch(err => {
-				console.error('Analytics fetch error:', err);
-			});
-	}
-
-	document.querySelectorAll('.period-btn').forEach(btn => {
-		btn.addEventListener('click', function () {
-			document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-			this.classList.add('active');
-			activeRange = this.dataset.range;
-			fetchAndRender(activeRange);
-		});
-	});
-
+// ── Reload everything ──────────────────────────────────────────────────────
+function reloadAll() {
 	fetchAndRender(activeRange);
-})();
-
-(function () {
-	const DIST_URL = '{% url "admin:subscriptions_subscribers_analytics_list_distribution" %}';
-	const COLORS = [
-		'#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed',
-		'#0891b2', '#db2777', '#65a30d', '#ea580c', '#6366f1',
-	];
-	let pieChart = null;
-
-	function fetchDistribution() {
-		fetch(DIST_URL)
-			.then(r => r.json())
-			.then(data => {
-				document.getElementById('total-active-subscribers').textContent = data.total_active_subscribers;
-				document.getElementById('total-active-subscriptions').textContent = data.total_active_subscriptions;
-				document.getElementById('total-inactive-subscribers').textContent = data.total_inactive_subscribers;
-				document.getElementById('total-inactive-subscriptions').textContent = data.total_inactive_subscriptions;
-
-				const labels = data.lists.map(
-					l => l.name + ' (' + l.count + ' — ' + l.percentage + '%)'
-				);
-				const counts = data.lists.map(l => l.count);
-				const colors = data.lists.map((_, i) => COLORS[i % COLORS.length]);
-
-				if (pieChart) {
-					pieChart.data.labels = labels;
-					pieChart.data.datasets[0].data = counts;
-					pieChart.data.datasets[0].backgroundColor = colors;
-					pieChart.update();
-				} else {
-					const ctx = document.getElementById('listDistributionChart').getContext('2d');
-					pieChart = new Chart(ctx, {
-						type: 'pie',
-						data: {
-							labels: labels,
-							datasets: [{
-								data: counts,
-								backgroundColor: colors,
-								borderWidth: 2,
-								borderColor: '#fff',
-							}],
-						},
-						options: {
-							responsive: true,
-							plugins: {
-								legend: {
-									position: 'bottom',
-									labels: { boxWidth: 14, padding: 12, font: { size: 12 } },
-								},
-								tooltip: {
-									callbacks: {
-										label: function(ctx) {
-											const item = data.lists[ctx.dataIndex];
-											return ' ' + item.name + ': ' + item.count + ' (' + item.percentage + '%)';
-										},
-									},
-								},
-								title: {
-									display: true,
-									text: 'Active Subscriptions per List',
-									font: { size: 14 },
-								},
-								datalabels: pieDataLabels(data.lists),
-							},
-						},
-					});
-				}
-			})
-			.catch(err => console.error('Distribution fetch error:', err));
-	}
-
+	reloadTeams();
+	reloadAvailableLists();
 	fetchDistribution();
+	fetchProfileDistribution();
+	fetchRecentActivity();
+}
+
+// ── Org selector (superusers only) ────────────────────────────────────────
+(function () {
+	var orgSelect = document.getElementById('org-filter');
+	if (!orgSelect) return;
+
+	fetch(URLS.orgs)
+		.then(function(r) { return r.json(); })
+		.then(function(data) {
+			data.organisations.forEach(function(o) {
+				var opt = document.createElement('option');
+				opt.value = o.id;
+				opt.textContent = o.name;
+				orgSelect.appendChild(opt);
+			});
+		});
+
+	orgSelect.addEventListener('change', function() {
+		activeOrg = this.value;
+		activeTeam = '';
+		activeProfileLists = [];
+		// Reset dependent selects
+		var teamSel = document.getElementById('list-team-filter');
+		if (teamSel) teamSel.value = '';
+		var listSel = document.getElementById('profile-list-filter');
+		if (listSel) Array.from(listSel.options).forEach(function(o) { o.selected = false; });
+		reloadAll();
+	});
 })();
 
-(function () {
-	const PROFILE_URL = '{% url "admin:subscriptions_subscribers_analytics_profile_distribution" %}';
-	const COLORS = [
-		'#7c3aed', '#2563eb', '#16a34a', '#dc2626', '#d97706',
-		'#0891b2', '#db2777', '#65a30d', '#ea580c', '#6366f1',
-	];
-	let profileChart = null;
+// ── Team filter for list-distribution chart ────────────────────────────────
+function reloadTeams() {
+	var teamSelect = document.getElementById('list-team-filter');
+	if (!teamSelect) return;
+	var params = buildParams();
+	fetch(URLS.teams + '?' + params.toString())
+		.then(function(r) { return r.json(); })
+		.then(function(data) {
+			// Keep the "All Teams" option, replace the rest
+			while (teamSelect.options.length > 1) teamSelect.remove(1);
+			data.teams.forEach(function(t) {
+				var opt = document.createElement('option');
+				opt.value = t.id;
+				opt.textContent = t.name;
+				teamSelect.appendChild(opt);
+			});
+			// Restore selection if still valid
+			if (activeTeam && Array.from(teamSelect.options).some(function(o) { return o.value == activeTeam; })) {
+				teamSelect.value = activeTeam;
+			} else {
+				activeTeam = '';
+				teamSelect.value = '';
+			}
+		});
+}
 
-	function fetchProfileDistribution() {
-		fetch(PROFILE_URL)
-			.then(r => r.json())
-			.then(data => {
-				const labels = data.profiles.map(
-					p => p.label + ' (' + p.count + ' — ' + p.percentage + '%)'
-				);
-				const counts = data.profiles.map(p => p.count);
-				const colors = data.profiles.map((_, i) => COLORS[i % COLORS.length]);
+document.addEventListener('DOMContentLoaded', function() {
+	var teamSelect = document.getElementById('list-team-filter');
+	if (teamSelect) {
+		teamSelect.addEventListener('change', function() {
+			activeTeam = this.value;
+			fetchDistribution();
+		});
+	}
+});
 
-				if (profileChart) {
-					profileChart.data.labels = labels;
-					profileChart.data.datasets[0].data = counts;
-					profileChart.data.datasets[0].backgroundColor = colors;
-					profileChart.update();
-				} else {
-					const ctx = document.getElementById('profileDistributionChart').getContext('2d');
-					profileChart = new Chart(ctx, {
-						type: 'pie',
-						data: {
-							labels: labels,
-							datasets: [{
-								data: counts,
-								backgroundColor: colors,
-								borderWidth: 2,
-								borderColor: '#fff',
-							}],
-						},
-						options: {
-							responsive: true,
-							plugins: {
-								legend: {
-									position: 'bottom',
-									labels: { boxWidth: 14, padding: 12, font: { size: 12 } },
-								},
-								tooltip: {
-									callbacks: {
-										label: function(ctx) {
-											const item = data.profiles[ctx.dataIndex];
-											return ' ' + item.label + ': ' + item.count + ' (' + item.percentage + '%)';
-										},
-									},
-								},
-								title: {
-									display: true,
-									text: 'Profile of Active Subscribers',
-									font: { size: 14 },
-								},
-								datalabels: pieDataLabels(data.profiles),
+// ── List filter for profile chart ─────────────────────────────────────────
+function reloadAvailableLists() {
+	var listSelect = document.getElementById('profile-list-filter');
+	if (!listSelect) return;
+	var params = buildParams();
+	fetch(URLS.availableLists + '?' + params.toString())
+		.then(function(r) { return r.json(); })
+		.then(function(data) {
+			listSelect.innerHTML = '';
+			data.lists.forEach(function(l) {
+				var opt = document.createElement('option');
+				opt.value = l.id;
+				opt.textContent = l.name;
+				// Re-select if previously chosen and still in scope
+				if (activeProfileLists.indexOf(l.id) !== -1) opt.selected = true;
+				listSelect.appendChild(opt);
+			});
+			// If previous selections are gone, clear state
+			var validIds = data.lists.map(function(l) { return l.id; });
+			activeProfileLists = activeProfileLists.filter(function(id) { return validIds.indexOf(id) !== -1; });
+		});
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+	var applyBtn = document.getElementById('profile-list-apply');
+	if (applyBtn) {
+		applyBtn.addEventListener('click', function() {
+			var listSelect = document.getElementById('profile-list-filter');
+			activeProfileLists = Array.from(listSelect.selectedOptions).map(function(o) { return parseInt(o.value); });
+			fetchProfileDistribution();
+		});
+	}
+});
+
+// ── Line chart ────────────────────────────────────────────────────────────
+var activeRange = '30d';
+var lineChart = null;
+
+function fetchAndRender(range) {
+	var params = buildParams({ range: range });
+	fetch(URLS.data + '?' + params.toString())
+		.then(function(r) { return r.json(); })
+		.then(function(data) {
+			document.getElementById('total-new-subscribers').textContent = data.totals.new_subscribers;
+			document.getElementById('total-new-subscriptions').textContent = data.totals.new_subscriptions;
+			document.getElementById('total-unsubscriptions').textContent = data.totals.unsubscriptions;
+
+			var chartTitle = {
+				'7d':   'Daily — Last 7 Days',
+				'30d':  'Daily — Last 30 Days',
+				'90d':  'Weekly — Last 90 Days',
+				'365d': 'Monthly — Last 12 Months',
+			}[range] || '';
+
+			if (lineChart) {
+				lineChart.data.labels = data.labels;
+				lineChart.data.datasets[0].data = data.new_subscribers;
+				lineChart.data.datasets[1].data = data.new_subscriptions;
+				lineChart.data.datasets[2].data = data.unsubscriptions;
+				lineChart.options.plugins.title.text = chartTitle;
+				lineChart.update();
+			} else {
+				var ctx = document.getElementById('analyticsChart').getContext('2d');
+				lineChart = new Chart(ctx, {
+					type: 'line',
+					data: {
+						labels: data.labels,
+						datasets: [
+							{
+								label: 'New Subscribers',
+								data: data.new_subscribers,
+								borderColor: '#2563eb',
+								backgroundColor: 'rgba(37,99,235,0.08)',
+								tension: 0.2,
+								fill: true,
+								pointRadius: 3,
+							},
+							{
+								label: 'New Subscriptions',
+								data: data.new_subscriptions,
+								borderColor: '#16a34a',
+								backgroundColor: 'rgba(22,163,74,0.08)',
+								tension: 0.2,
+								fill: true,
+								pointRadius: 3,
+							},
+							{
+								label: 'Unsubscriptions',
+								data: data.unsubscriptions,
+								borderColor: '#dc2626',
+								backgroundColor: 'rgba(220,38,38,0.08)',
+								tension: 0.2,
+								fill: true,
+								pointRadius: 3,
+							},
+						],
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: false,
+						interaction: { mode: 'index', intersect: false },
+						scales: {
+							y: {
+								beginAtZero: true,
+								ticks: { stepSize: 1, precision: 0 },
+							},
+							x: {
+								ticks: { maxTicksLimit: 12 },
 							},
 						},
-					});
-				}
-			})
-			.catch(err => console.error('Profile distribution fetch error:', err));
+						plugins: {
+							title: {
+								display: true,
+								text: chartTitle,
+								font: { size: 14 },
+							},
+							legend: {
+								display: true,
+								position: 'top',
+							},
+							datalabels: { display: false },
+						},
+					},
+				});
+			}
+		})
+		.catch(function(err) { console.error('Analytics fetch error:', err); });
+}
+
+document.querySelectorAll('.period-btn').forEach(function(btn) {
+	btn.addEventListener('click', function() {
+		document.querySelectorAll('.period-btn').forEach(function(b) { b.classList.remove('active'); });
+		this.classList.add('active');
+		activeRange = this.dataset.range;
+		fetchAndRender(activeRange);
+	});
+});
+
+// ── List distribution pie chart ───────────────────────────────────────────
+var LIST_COLORS = [
+	'#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed',
+	'#0891b2', '#db2777', '#65a30d', '#ea580c', '#6366f1',
+];
+var listPieChart = null;
+
+function fetchDistribution() {
+	var params = buildParams();
+	if (activeTeam) params.set('team', activeTeam);
+	fetch(URLS.listDist + '?' + params.toString())
+		.then(function(r) { return r.json(); })
+		.then(function(data) {
+			document.getElementById('total-active-subscribers').textContent = data.total_active_subscribers;
+			document.getElementById('total-active-subscriptions').textContent = data.total_active_subscriptions;
+			document.getElementById('total-inactive-subscribers').textContent = data.total_inactive_subscribers;
+			document.getElementById('total-inactive-subscriptions').textContent = data.total_inactive_subscriptions;
+
+			var labels = data.lists.map(function(l) {
+				return l.name + ' (' + l.count + ' — ' + l.percentage + '%)';
+			});
+			var counts = data.lists.map(function(l) { return l.count; });
+			var colors = data.lists.map(function(_, i) { return LIST_COLORS[i % LIST_COLORS.length]; });
+
+			if (listPieChart) {
+				listPieChart.data.labels = labels;
+				listPieChart.data.datasets[0].data = counts;
+				listPieChart.data.datasets[0].backgroundColor = colors;
+				listPieChart.options.plugins.datalabels = pieDataLabels(data.lists);
+				listPieChart.update();
+			} else {
+				var ctx = document.getElementById('listDistributionChart').getContext('2d');
+				listPieChart = new Chart(ctx, {
+					type: 'pie',
+					data: {
+						labels: labels,
+						datasets: [{
+							data: counts,
+							backgroundColor: colors,
+							borderWidth: 2,
+							borderColor: '#fff',
+						}],
+					},
+					options: {
+						responsive: true,
+						plugins: {
+							legend: {
+								position: 'bottom',
+								labels: { boxWidth: 14, padding: 12, font: { size: 12 } },
+							},
+							tooltip: {
+								callbacks: {
+									label: function(ctx) {
+										var item = data.lists[ctx.dataIndex];
+										return ' ' + item.name + ': ' + item.count + ' (' + item.percentage + '%)';
+									},
+								},
+							},
+							title: {
+								display: true,
+								text: 'Active Subscriptions per List',
+								font: { size: 14 },
+							},
+							datalabels: pieDataLabels(data.lists),
+						},
+					},
+				});
+			}
+		})
+		.catch(function(err) { console.error('Distribution fetch error:', err); });
+}
+
+// ── Profile distribution pie chart ────────────────────────────────────────
+var PROFILE_COLORS = [
+	'#7c3aed', '#2563eb', '#16a34a', '#dc2626', '#d97706',
+	'#0891b2', '#db2777', '#65a30d', '#ea580c', '#6366f1',
+];
+var profileChart = null;
+
+function fetchProfileDistribution() {
+	var params = buildParams();
+	activeProfileLists.forEach(function(id) { params.append('lists[]', id); });
+	fetch(URLS.profileDist + '?' + params.toString())
+		.then(function(r) { return r.json(); })
+		.then(function(data) {
+			var labels = data.profiles.map(function(p) {
+				return p.label + ' (' + p.count + ' — ' + p.percentage + '%)';
+			});
+			var counts = data.profiles.map(function(p) { return p.count; });
+			var colors = data.profiles.map(function(_, i) { return PROFILE_COLORS[i % PROFILE_COLORS.length]; });
+
+			if (profileChart) {
+				profileChart.data.labels = labels;
+				profileChart.data.datasets[0].data = counts;
+				profileChart.data.datasets[0].backgroundColor = colors;
+				profileChart.options.plugins.datalabels = pieDataLabels(data.profiles);
+				profileChart.update();
+			} else {
+				var ctx = document.getElementById('profileDistributionChart').getContext('2d');
+				profileChart = new Chart(ctx, {
+					type: 'pie',
+					data: {
+						labels: labels,
+						datasets: [{
+							data: counts,
+							backgroundColor: colors,
+							borderWidth: 2,
+							borderColor: '#fff',
+						}],
+					},
+					options: {
+						responsive: true,
+						plugins: {
+							legend: {
+								position: 'bottom',
+								labels: { boxWidth: 14, padding: 12, font: { size: 12 } },
+							},
+							tooltip: {
+								callbacks: {
+									label: function(ctx) {
+										var item = data.profiles[ctx.dataIndex];
+										return ' ' + item.label + ': ' + item.count + ' (' + item.percentage + '%)';
+									},
+								},
+							},
+							title: {
+								display: true,
+								text: 'Profile of Active Subscribers',
+								font: { size: 14 },
+							},
+							datalabels: pieDataLabels(data.profiles),
+						},
+					},
+				});
+			}
+		})
+		.catch(function(err) { console.error('Profile distribution fetch error:', err); });
+}
+
+// ── Recent activity tables ─────────────────────────────────────────────────
+function fetchRecentActivity() {
+	var params = buildParams();
+	var qs = params.toString() ? '?' + params.toString() : '';
+
+	function tag(text, cls) {
+		return '<span class="tag ' + cls + '">' + text + '</span>';
 	}
 
-	fetchProfileDistribution();
-})();
+	fetch(URLS.recentSubs + qs)
+		.then(function(r) { return r.json(); })
+		.then(function(data) {
+			var tbody = document.getElementById('recent-subscribers-body');
+			if (!data.subscribers.length) {
+				tbody.innerHTML = '<tr><td colspan="4" class="activity-empty">No recent subscribers.</td></tr>';
+				return;
+			}
+			tbody.innerHTML = data.subscribers.map(function(s) {
+				var profiles = s.profiles.length
+					? s.profiles.map(function(p) { return tag(p, 'tag-profile'); }).join('')
+					: '<span style="color:#bbb">—</span>';
+				var lists = s.lists.length
+					? s.lists.map(function(l) { return tag(l, 'tag-list'); }).join('')
+					: '<span style="color:#bbb">—</span>';
+				return '<tr>'
+					+ '<td>' + s.name + '</td>'
+					+ '<td>' + profiles + '</td>'
+					+ '<td>' + lists + '</td>'
+					+ '<td class="date-cell">' + s.subscribed_at + '</td>'
+					+ '</tr>';
+			}).join('');
+		})
+		.catch(function(err) {
+			document.getElementById('recent-subscribers-body').innerHTML =
+				'<tr><td colspan="4" class="activity-empty">Failed to load.</td></tr>';
+			console.error(err);
+		});
+
+	fetch(URLS.recentUnsubs + qs)
+		.then(function(r) { return r.json(); })
+		.then(function(data) {
+			var tbody = document.getElementById('recent-unsubscriptions-body');
+			if (!data.unsubscriptions.length) {
+				tbody.innerHTML = '<tr><td colspan="5" class="activity-empty">No recent unsubscriptions.</td></tr>';
+				return;
+			}
+			tbody.innerHTML = data.unsubscriptions.map(function(u) {
+				var profiles = u.profiles.length
+					? u.profiles.map(function(p) { return tag(p, 'tag-profile'); }).join('')
+					: '<span style="color:#bbb">—</span>';
+				var removed = u.removed_lists.length
+					? u.removed_lists.map(function(l) { return tag(l, 'tag-removed'); }).join('')
+					: '<span style="color:#bbb">—</span>';
+				var kept = u.kept_lists.length
+					? u.kept_lists.map(function(l) { return tag(l, 'tag-kept'); }).join('')
+					: '<span style="color:#bbb">none</span>';
+				return '<tr>'
+					+ '<td>' + u.name + '</td>'
+					+ '<td>' + profiles + '</td>'
+					+ '<td>' + removed + '</td>'
+					+ '<td>' + kept + '</td>'
+					+ '<td class="date-cell">' + u.unsubscribed_at + '</td>'
+					+ '</tr>';
+			}).join('');
+		})
+		.catch(function(err) {
+			document.getElementById('recent-unsubscriptions-body').innerHTML =
+				'<tr><td colspan="5" class="activity-empty">Failed to load.</td></tr>';
+			console.error(err);
+		});
+}
+
+// ── Initial page load ──────────────────────────────────────────────────────
+reloadTeams();
+reloadAvailableLists();
+fetchAndRender(activeRange);
+fetchDistribution();
+fetchProfileDistribution();
+fetchRecentActivity();
 </script>
 
 <div class="activity-tables">
@@ -600,85 +887,6 @@ function pieDataLabels(itemsArray) {
 		</table>
 	</div>
 </div>
-
-<script>
-(function () {
-	'use strict';
-
-	const SUB_URL   = '{% url "admin:subscriptions_subscribers_analytics_recent_subscribers" %}';
-	const UNSUB_URL = '{% url "admin:subscriptions_subscribers_analytics_recent_unsubscriptions" %}';
-
-	function tag(text, cls) {
-		return '<span class="tag ' + cls + '">' + text + '</span>';
-	}
-
-	function renderSubscribers(data) {
-		const tbody = document.getElementById('recent-subscribers-body');
-		if (!data.subscribers.length) {
-			tbody.innerHTML = '<tr><td colspan="4" class="activity-empty">No recent subscribers.</td></tr>';
-			return;
-		}
-		tbody.innerHTML = data.subscribers.map(function(s) {
-			const profiles = s.profiles.length
-				? s.profiles.map(function(p) { return tag(p, 'tag-profile'); }).join('')
-				: '<span style="color:#bbb">—</span>';
-			const lists = s.lists.length
-				? s.lists.map(function(l) { return tag(l, 'tag-list'); }).join('')
-				: '<span style="color:#bbb">—</span>';
-			return '<tr>'
-				+ '<td>' + s.name + '</td>'
-				+ '<td>' + profiles + '</td>'
-				+ '<td>' + lists + '</td>'
-				+ '<td class="date-cell">' + s.subscribed_at + '</td>'
-				+ '</tr>';
-		}).join('');
-	}
-
-	function renderUnsubscriptions(data) {
-		const tbody = document.getElementById('recent-unsubscriptions-body');
-		if (!data.unsubscriptions.length) {
-			tbody.innerHTML = '<tr><td colspan="5" class="activity-empty">No recent unsubscriptions.</td></tr>';
-			return;
-		}
-		tbody.innerHTML = data.unsubscriptions.map(function(u) {
-			const profiles = u.profiles.length
-				? u.profiles.map(function(p) { return tag(p, 'tag-profile'); }).join('')
-				: '<span style="color:#bbb">—</span>';
-			const removed = u.removed_lists.length
-				? u.removed_lists.map(function(l) { return tag(l, 'tag-removed'); }).join('')
-				: '<span style="color:#bbb">—</span>';
-			const kept = u.kept_lists.length
-				? u.kept_lists.map(function(l) { return tag(l, 'tag-kept'); }).join('')
-				: '<span style="color:#bbb">none</span>';
-			return '<tr>'
-				+ '<td>' + u.name + '</td>'
-				+ '<td>' + profiles + '</td>'
-				+ '<td>' + removed + '</td>'
-				+ '<td>' + kept + '</td>'
-				+ '<td class="date-cell">' + u.unsubscribed_at + '</td>'
-				+ '</tr>';
-		}).join('');
-	}
-
-	fetch(SUB_URL)
-		.then(function(r) { return r.json(); })
-		.then(renderSubscribers)
-		.catch(function(err) {
-			document.getElementById('recent-subscribers-body').innerHTML =
-				'<tr><td colspan="4" class="activity-empty">Failed to load.</td></tr>';
-			console.error(err);
-		});
-
-	fetch(UNSUB_URL)
-		.then(function(r) { return r.json(); })
-		.then(renderUnsubscriptions)
-		.catch(function(err) {
-			document.getElementById('recent-unsubscriptions-body').innerHTML =
-				'<tr><td colspan="5" class="activity-empty">Failed to load.</td></tr>';
-			console.error(err);
-		});
-})();
-</script>
 
 <div class="snapshot-section" style="margin-top: 40px;">
 	<h3>Metric Definitions</h3>

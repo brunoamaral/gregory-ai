@@ -121,6 +121,24 @@ class SubscriberAdmin(admin.ModelAdmin):
 			qs = qs.filter(list_subscriptions__list__team__organization__id__in=user_orgs).distinct()
 		return qs
 
+	def _get_scoped_org_ids(self, request):
+		"""
+		Return the effective org ID filter for the current user/request.
+		- Superusers: honour the ?org= param; if absent return None (all orgs).
+		- Non-superusers: always restricted to their own orgs; ?org= param is ignored.
+		"""
+		from gregory.admin import get_user_organizations
+		user_orgs = get_user_organizations(request.user)
+		if request.user.is_superuser:
+			org_param = request.GET.get('org')
+			if org_param:
+				try:
+					return [int(org_param)]
+				except (ValueError, TypeError):
+					pass
+			return None
+		return user_orgs
+
 	def get_urls(self):
 		urls = super().get_urls()
 		custom_urls = [
@@ -130,6 +148,9 @@ class SubscriberAdmin(admin.ModelAdmin):
 			path('analytics/profile-distribution/', self.admin_site.admin_view(self.analytics_profile_distribution), name='subscriptions_subscribers_analytics_profile_distribution'),
 			path('analytics/recent-subscribers/', self.admin_site.admin_view(self.analytics_recent_subscribers), name='subscriptions_subscribers_analytics_recent_subscribers'),
 			path('analytics/recent-unsubscriptions/', self.admin_site.admin_view(self.analytics_recent_unsubscriptions), name='subscriptions_subscribers_analytics_recent_unsubscriptions'),
+			path('analytics/organisations/', self.admin_site.admin_view(self.analytics_organisations), name='subscriptions_subscribers_analytics_organisations'),
+			path('analytics/teams/', self.admin_site.admin_view(self.analytics_teams), name='subscriptions_subscribers_analytics_teams'),
+			path('analytics/available-lists/', self.admin_site.admin_view(self.analytics_available_lists), name='subscriptions_subscribers_analytics_available_lists'),
 		]
 		return custom_urls + urls
 
@@ -138,8 +159,44 @@ class SubscriberAdmin(admin.ModelAdmin):
 			'title': 'Subscriber Analytics',
 			'opts': self.model._meta,
 			'has_view_permission': self.has_view_permission(request),
+			'is_superuser': request.user.is_superuser,
 		}
 		return render(request, 'admin/subscriptions/subscribers/analytics.html', context)
+
+	def analytics_organisations(self, request):
+		"""Return organisations the current user may filter by."""
+		from organizations.models import Organization
+		from gregory.admin import get_user_organizations
+		user_orgs = get_user_organizations(request.user)
+		qs = Organization.objects.all()
+		if user_orgs is not None:
+			qs = qs.filter(id__in=user_orgs)
+		orgs = [{'id': o.id, 'name': o.name} for o in qs.order_by('name')]
+		return JsonResponse({'organisations': orgs})
+
+	def analytics_teams(self, request):
+		"""Return teams scoped to the effective org."""
+		org_ids = self._get_scoped_org_ids(request)
+		qs = Team.objects.filter(is_active=True)
+		if org_ids is not None:
+			qs = qs.filter(organization__id__in=org_ids)
+		teams = [{'id': t.id, 'name': t.name} for t in qs.order_by('name')]
+		return JsonResponse({'teams': teams})
+
+	def analytics_available_lists(self, request):
+		"""Return lists scoped to the effective org (and optionally a team)."""
+		org_ids = self._get_scoped_org_ids(request)
+		team_param = request.GET.get('team')
+		qs = Lists.objects.all()
+		if org_ids is not None:
+			qs = qs.filter(team__organization__id__in=org_ids)
+		if team_param:
+			try:
+				qs = qs.filter(team_id=int(team_param))
+			except (ValueError, TypeError):
+				pass
+		lists = [{'id': l.list_id, 'name': l.list_name} for l in qs.order_by('list_name')]
+		return JsonResponse({'lists': lists})
 
 	def analytics_data(self, request):
 		# Determine range and granularity from query param
@@ -203,17 +260,16 @@ class SubscriberAdmin(admin.ModelAdmin):
 			return [lookup.get(p, 0) for p in period_range]
 
 		# Apply org scoping
-		from gregory.admin import get_user_organizations
-		user_orgs = get_user_organizations(request.user)
+		org_ids = self._get_scoped_org_ids(request)
 
 		# New subscribers
 		new_subscribers_qs = Subscribers.objects.filter(
 			created_at__date__gte=start_date,
 			created_at__date__lte=end_date,
 		)
-		if user_orgs is not None:
+		if org_ids is not None:
 			new_subscribers_qs = new_subscribers_qs.filter(
-				list_subscriptions__list__team__organization__id__in=user_orgs
+				list_subscriptions__list__team__organization__id__in=org_ids
 			).distinct()
 		new_subscribers_data = _build_series(new_subscribers_qs, 'created_at')
 
@@ -222,9 +278,9 @@ class SubscriberAdmin(admin.ModelAdmin):
 			subscribed_at__date__gte=start_date,
 			subscribed_at__date__lte=end_date,
 		)
-		if user_orgs is not None:
+		if org_ids is not None:
 			new_subs_qs = new_subs_qs.filter(
-				list__team__organization__id__in=user_orgs
+				list__team__organization__id__in=org_ids
 			)
 		new_subscriptions_data = _build_series(new_subs_qs, 'subscribed_at')
 
@@ -233,9 +289,9 @@ class SubscriberAdmin(admin.ModelAdmin):
 			unsubscribed_at__date__gte=start_date,
 			unsubscribed_at__date__lte=end_date,
 		)
-		if user_orgs is not None:
+		if org_ids is not None:
 			unsubs_qs = unsubs_qs.filter(
-				list__team__organization__id__in=user_orgs
+				list__team__organization__id__in=org_ids
 			)
 		unsubscriptions_data = _build_series(unsubs_qs, 'unsubscribed_at')
 
@@ -260,14 +316,20 @@ class SubscriberAdmin(admin.ModelAdmin):
 		queryset (active ListSubscription rows where the subscriber is also active)
 		so all numbers are internally consistent.
 		"""
-		from gregory.admin import get_user_organizations
-		user_orgs = get_user_organizations(request.user)
+		org_ids = self._get_scoped_org_ids(request)
+
+		# Optional team filter for the per-list pie chart
+		team_param = request.GET.get('team')
+		try:
+			team_id = int(team_param) if team_param else None
+		except (ValueError, TypeError):
+			team_id = None
 
 		# Single base queryset — active subscriptions belonging to active subscribers.
 		# All downstream numbers derive from this so they are consistent.
 		base_qs = ListSubscription.objects.filter(is_active=True, subscriber__active=True)
-		if user_orgs is not None:
-			base_qs = base_qs.filter(list__team__organization__id__in=user_orgs)
+		if org_ids is not None:
+			base_qs = base_qs.filter(list__team__organization__id__in=org_ids)
 
 		# Distinct people with at least one active subscription
 		total_active_subscribers = base_qs.values('subscriber').distinct().count()
@@ -285,32 +347,39 @@ class SubscriberAdmin(admin.ModelAdmin):
 				distinct=True,
 			)
 		).filter(Q(active=False) | Q(active_subs_count=0))
-		if user_orgs is not None:
+		if org_ids is not None:
 			inactive_sub_qs = inactive_sub_qs.filter(
-				list_subscriptions__list__team__organization__id__in=user_orgs
+				list_subscriptions__list__team__organization__id__in=org_ids
 			).distinct()
 		total_inactive_subscribers = inactive_sub_qs.count()
 
 		# Inactive subscriptions: is_active=False (opt-outs)
 		inactive_ls_qs = ListSubscription.objects.filter(is_active=False)
-		if user_orgs is not None:
-			inactive_ls_qs = inactive_ls_qs.filter(list__team__organization__id__in=user_orgs)
+		if org_ids is not None:
+			inactive_ls_qs = inactive_ls_qs.filter(list__team__organization__id__in=org_ids)
 		total_inactive_subscriptions = inactive_ls_qs.count()
+
+		# Per-list breakdown — apply optional team filter only to the pie chart data.
+		list_base_qs = base_qs
+		if team_id is not None:
+			list_base_qs = list_base_qs.filter(list__team_id=team_id)
 
 		# Per-list active subscription totals, grouped by list ID to avoid name
 		# collisions across teams. Count rows directly — ListSubscription is unique
 		# per (subscriber, list) so distinct=True would be redundant overhead.
 		list_counts = (
-			base_qs
+			list_base_qs
 			.values('list__list_id', 'list__list_name')
 			.annotate(count=Count('pk'))
 			.order_by('-count')
 		)
 
+		# Use the filtered total for percentage denominator so they sum to 100%
+		filtered_total = list_base_qs.count()
 		lists_data = []
 		for item in list_counts:
 			count = item['count']
-			percentage = round(count / total_active_subscriptions * 100, 1) if total_active_subscriptions else 0.0
+			percentage = round(count / filtered_total * 100, 1) if filtered_total else 0.0
 			lists_data.append({
 				'id': item['list__list_id'],
 				'name': item['list__list_name'],
@@ -328,14 +397,25 @@ class SubscriberAdmin(admin.ModelAdmin):
 
 	def analytics_profile_distribution(self, request):
 		"""Return a breakdown of active subscribers by their site profile."""
-		from gregory.admin import get_user_organizations
 		from subscriptions.models import SubscriberSiteProfile
-		user_orgs = get_user_organizations(request.user)
+		org_ids = self._get_scoped_org_ids(request)
+
+		# Optional list filter: ?lists=1&lists=2 or ?lists[]=1&lists[]=2
+		list_params = request.GET.getlist('lists') or request.GET.getlist('lists[]')
+		try:
+			list_ids = [int(x) for x in list_params if x]
+		except (ValueError, TypeError):
+			list_ids = []
 
 		qs = SubscriberSiteProfile.objects.filter(subscriber__active=True)
-		if user_orgs is not None:
+		if org_ids is not None:
 			qs = qs.filter(
-				subscriber__list_subscriptions__list__team__organization__id__in=user_orgs
+				subscriber__list_subscriptions__list__team__organization__id__in=org_ids
+			).distinct()
+		if list_ids:
+			qs = qs.filter(
+				subscriber__list_subscriptions__list_id__in=list_ids,
+				subscriber__list_subscriptions__is_active=True,
 			).distinct()
 
 		profile_counts = (
@@ -366,15 +446,14 @@ class SubscriberAdmin(admin.ModelAdmin):
 
 	def analytics_recent_subscribers(self, request):
 		"""Return the 20 most recently created active subscribers with their profile and active lists."""
-		from gregory.admin import get_user_organizations
 		from subscriptions.models import SubscriberSiteProfile
 		profile_labels = dict(SubscriberSiteProfile.PROFILEOPTIONS)
-		user_orgs = get_user_organizations(request.user)
+		org_ids = self._get_scoped_org_ids(request)
 
 		qs = Subscribers.objects.filter(active=True).order_by('-created_at')
-		if user_orgs is not None:
+		if org_ids is not None:
 			qs = qs.filter(
-				list_subscriptions__list__team__organization__id__in=user_orgs
+				list_subscriptions__list__team__organization__id__in=org_ids
 			).distinct()
 		qs = qs.prefetch_related('site_profiles', 'list_subscriptions__list')[:20]
 
@@ -400,17 +479,16 @@ class SubscriberAdmin(admin.ModelAdmin):
 
 	def analytics_recent_unsubscriptions(self, request):
 		"""Return the 20 most recent list opt-outs with subscriber profile and remaining lists."""
-		from gregory.admin import get_user_organizations
 		from subscriptions.models import SubscriberSiteProfile
 		profile_labels = dict(SubscriberSiteProfile.PROFILEOPTIONS)
-		user_orgs = get_user_organizations(request.user)
+		org_ids = self._get_scoped_org_ids(request)
 
 		qs = ListSubscription.objects.filter(
 			is_active=False,
 			unsubscribed_at__isnull=False,
 		).select_related('subscriber', 'list').order_by('-unsubscribed_at')
-		if user_orgs is not None:
-			qs = qs.filter(list__team__organization__id__in=user_orgs)
+		if org_ids is not None:
+			qs = qs.filter(list__team__organization__id__in=org_ids)
 		qs = qs[:100]
 
 		# Group by subscriber + date so multiple same-day opt-outs appear as one row
