@@ -526,6 +526,7 @@ var URLS = {
 	profileDist:     '{% url "admin:subscriptions_subscribers_analytics_profile_distribution" %}',
 	recentSubs:      '{% url "admin:subscriptions_subscribers_analytics_recent_subscribers" %}',
 	recentUnsubs:    '{% url "admin:subscriptions_subscribers_analytics_recent_unsubscriptions" %}',
+	listActivity:    '{% url "admin:subscriptions_subscribers_analytics_list_activity" %}',
 	orgs:            '{% url "admin:subscriptions_subscribers_analytics_organisations" %}',
 	teams:           '{% url "admin:subscriptions_subscribers_analytics_teams" %}',
 	availableLists:  '{% url "admin:subscriptions_subscribers_analytics_available_lists" %}',
@@ -570,6 +571,7 @@ function reloadAll() {
 	fetchDistribution();
 	fetchProfileDistribution();
 	fetchRecentActivity();
+	fetchListActivity();
 }
 
 // ── Org selector (superusers only) ────────────────────────────────────────
@@ -853,6 +855,7 @@ document.querySelectorAll('.period-btn').forEach(function(btn) {
 			customStart = '';
 			customEnd   = '';
 			fetchAndRender(activeRange);
+			fetchListActivity();
 		}
 	});
 });
@@ -871,6 +874,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		customStart = startInput.value;
 		customEnd   = endInput.value;
 		fetchAndRender('custom');
+		fetchListActivity();
 		fetchRecentActivity();
 	});
 });
@@ -1014,6 +1018,36 @@ function fetchProfileDistribution() {
 		.catch(function(err) { console.error('Profile distribution fetch error:', err); });
 }
 
+// ── Per-list activity table ────────────────────────────────────────────────
+function fetchListActivity() {
+	var params = buildParams({ range: activeRange });
+	fetch(URLS.listActivity + '?' + params.toString())
+		.then(function(r) { return r.json(); })
+		.then(function(data) {
+			var tbody = document.getElementById('list-activity-body');
+			var heading = document.getElementById('list-activity-heading');
+			if (heading && data.start && data.end) {
+				heading.textContent = 'Activity per List (' + data.start + ' – ' + data.end + ')';
+			}
+			if (!data.lists || !data.lists.length) {
+				tbody.innerHTML = '<tr><td colspan="3" class="activity-empty">No activity in this period.</td></tr>';
+				return;
+			}
+			tbody.innerHTML = data.lists.map(function(row) {
+				return '<tr>'
+					+ '<td>' + row.name + '</td>'
+					+ '<td style="text-align:right;color:#16a34a;font-weight:600">' + row.new + '</td>'
+					+ '<td style="text-align:right;color:#dc2626;font-weight:600">' + row.unsubs + '</td>'
+					+ '</tr>';
+			}).join('');
+		})
+		.catch(function(err) {
+			var tbody = document.getElementById('list-activity-body');
+			if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="activity-empty">Failed to load.</td></tr>';
+			console.error(err);
+		});
+}
+
 // ── Recent activity tables ─────────────────────────────────────────────────
 function fetchRecentActivity() {
 	var params = buildParams();
@@ -1093,7 +1127,24 @@ fetchAndRender(activeRange);
 fetchDistribution();
 fetchProfileDistribution();
 fetchRecentActivity();
+fetchListActivity();
 </script>
+
+<div class="activity-table-card" style="margin-top:32px;margin-bottom:24px">
+	<h3 id="list-activity-heading">Activity per List</h3>
+	<table>
+		<thead>
+			<tr>
+				<th>List</th>
+				<th style="text-align:right">New</th>
+				<th style="text-align:right">Unsubs</th>
+			</tr>
+		</thead>
+		<tbody id="list-activity-body">
+			<tr><td colspan="3" class="activity-empty">Loading&hellip;</td></tr>
+		</tbody>
+	</table>
+</div>
 
 <div class="activity-tables">
 	<div class="activity-table-card">

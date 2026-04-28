@@ -148,6 +148,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 			path('analytics/profile-distribution/', self.admin_site.admin_view(self.analytics_profile_distribution), name='subscriptions_subscribers_analytics_profile_distribution'),
 			path('analytics/recent-subscribers/', self.admin_site.admin_view(self.analytics_recent_subscribers), name='subscriptions_subscribers_analytics_recent_subscribers'),
 			path('analytics/recent-unsubscriptions/', self.admin_site.admin_view(self.analytics_recent_unsubscriptions), name='subscriptions_subscribers_analytics_recent_unsubscriptions'),
+			path('analytics/list-activity/', self.admin_site.admin_view(self.analytics_list_activity), name='subscriptions_subscribers_analytics_list_activity'),
 			path('analytics/organisations/', self.admin_site.admin_view(self.analytics_organisations), name='subscriptions_subscribers_analytics_organisations'),
 			path('analytics/teams/', self.admin_site.admin_view(self.analytics_teams), name='subscriptions_subscribers_analytics_teams'),
 			path('analytics/available-lists/', self.admin_site.admin_view(self.analytics_available_lists), name='subscriptions_subscribers_analytics_available_lists'),
@@ -504,6 +505,69 @@ class SubscriberAdmin(admin.ModelAdmin):
 			})
 
 		return JsonResponse({'subscribers': result})
+
+	def analytics_list_activity(self, request):
+		"""Return per-list counts of new subscriptions and unsubscriptions for the active date range."""
+		from datetime import date as date_type
+		org_ids = self._get_scoped_org_ids(request)
+
+		# Resolve date range (mirrors analytics_data logic)
+		range_param = request.GET.get('range', '30d')
+		RANGES = {'7d': 7, '30d': 30, '90d': 90, '365d': 365}
+		if range_param == 'custom':
+			start_str = request.GET.get('start', '')
+			end_str   = request.GET.get('end', '')
+			try:
+				start_date = date_type.fromisoformat(start_str)
+				end_date   = date_type.fromisoformat(end_str)
+			except (ValueError, TypeError):
+				return JsonResponse({'error': 'Invalid custom date range'}, status=400)
+			if end_date < start_date:
+				start_date, end_date = end_date, start_date
+		else:
+			days = RANGES.get(range_param, 30)
+			end_date   = timezone.now().date()
+			start_date = end_date - timedelta(days=days - 1)
+
+		# New subscriptions per list
+		new_qs = ListSubscription.objects.filter(
+			subscribed_at__date__gte=start_date,
+			subscribed_at__date__lte=end_date,
+		)
+		if org_ids is not None:
+			new_qs = new_qs.filter(list__team__organization__id__in=org_ids)
+
+		new_counts = (
+			new_qs
+			.values('list__list_id', 'list__list_name')
+			.annotate(count=Count('pk'))
+		)
+		new_lookup = {item['list__list_id']: {'name': item['list__list_name'], 'new': item['count'], 'unsubs': 0}
+		              for item in new_counts}
+
+		# Unsubscriptions per list
+		unsub_qs = ListSubscription.objects.filter(
+			is_active=False,
+			unsubscribed_at__date__gte=start_date,
+			unsubscribed_at__date__lte=end_date,
+		)
+		if org_ids is not None:
+			unsub_qs = unsub_qs.filter(list__team__organization__id__in=org_ids)
+
+		unsub_counts = (
+			unsub_qs
+			.values('list__list_id', 'list__list_name')
+			.annotate(count=Count('pk'))
+		)
+		for item in unsub_counts:
+			lid = item['list__list_id']
+			if lid in new_lookup:
+				new_lookup[lid]['unsubs'] = item['count']
+			else:
+				new_lookup[lid] = {'name': item['list__list_name'], 'new': 0, 'unsubs': item['count']}
+
+		rows = sorted(new_lookup.values(), key=lambda r: -(r['new'] + r['unsubs']))
+		return JsonResponse({'lists': rows, 'start': start_date.isoformat(), 'end': end_date.isoformat()})
 
 	def analytics_recent_unsubscriptions(self, request):
 		"""Return the 20 most recent list opt-outs with subscriber profile and remaining lists."""
