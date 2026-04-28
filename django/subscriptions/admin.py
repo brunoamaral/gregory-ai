@@ -199,6 +199,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 		return JsonResponse({'lists': lists})
 
 	def analytics_data(self, request):
+		from datetime import date as date_type
 		# Determine range and granularity from query param
 		range_param = request.GET.get('range', '30d')
 		RANGES = {
@@ -207,12 +208,29 @@ class SubscriberAdmin(admin.ModelAdmin):
 			'90d':  (90,  TruncWeek,  '%Y-%m-%d'),
 			'365d': (365, TruncMonth, '%Y-%m'),
 		}
-		if range_param not in RANGES:
-			range_param = '30d'
-		days, trunc_fn, date_fmt = RANGES[range_param]
-
-		end_date = timezone.now().date()
-		start_date = end_date - timedelta(days=days - 1)
+		if range_param == 'custom':
+			start_str = request.GET.get('start', '')
+			end_str   = request.GET.get('end', '')
+			try:
+				start_date = date_type.fromisoformat(start_str)
+				end_date   = date_type.fromisoformat(end_str)
+			except (ValueError, TypeError):
+				return JsonResponse({'error': 'Invalid custom date range'}, status=400)
+			if end_date < start_date:
+				start_date, end_date = end_date, start_date
+			span = (end_date - start_date).days
+			if span <= 60:
+				trunc_fn, date_fmt = TruncDate, '%Y-%m-%d'
+			elif span <= 180:
+				trunc_fn, date_fmt = TruncWeek, '%Y-%m-%d'
+			else:
+				trunc_fn, date_fmt = TruncMonth, '%Y-%m'
+		else:
+			if range_param not in RANGES:
+				range_param = '30d'
+			days, trunc_fn, date_fmt = RANGES[range_param]
+			end_date   = timezone.now().date()
+			start_date = end_date - timedelta(days=days - 1)
 
 		# Build full period sequence for zero-filling
 		if trunc_fn is TruncDate:
@@ -447,10 +465,20 @@ class SubscriberAdmin(admin.ModelAdmin):
 	def analytics_recent_subscribers(self, request):
 		"""Return the 20 most recently created active subscribers with their profile and active lists."""
 		from subscriptions.models import SubscriberSiteProfile
+		from datetime import date as date_type
 		profile_labels = dict(SubscriberSiteProfile.PROFILEOPTIONS)
 		org_ids = self._get_scoped_org_ids(request)
 
 		qs = Subscribers.objects.filter(active=True).order_by('-created_at')
+		start_str = request.GET.get('start')
+		end_str   = request.GET.get('end')
+		if start_str and end_str:
+			try:
+				start_date = date_type.fromisoformat(start_str)
+				end_date   = date_type.fromisoformat(end_str)
+				qs = qs.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
+			except (ValueError, TypeError):
+				pass
 		if org_ids is not None:
 			qs = qs.filter(
 				list_subscriptions__list__team__organization__id__in=org_ids
@@ -480,6 +508,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 	def analytics_recent_unsubscriptions(self, request):
 		"""Return the 20 most recent list opt-outs with subscriber profile and remaining lists."""
 		from subscriptions.models import SubscriberSiteProfile
+		from datetime import date as date_type
 		profile_labels = dict(SubscriberSiteProfile.PROFILEOPTIONS)
 		org_ids = self._get_scoped_org_ids(request)
 
@@ -489,6 +518,15 @@ class SubscriberAdmin(admin.ModelAdmin):
 		).select_related('subscriber', 'list').order_by('-unsubscribed_at')
 		if org_ids is not None:
 			qs = qs.filter(list__team__organization__id__in=org_ids)
+		start_str = request.GET.get('start')
+		end_str   = request.GET.get('end')
+		if start_str and end_str:
+			try:
+				start_date = date_type.fromisoformat(start_str)
+				end_date   = date_type.fromisoformat(end_str)
+				qs = qs.filter(unsubscribed_at__date__gte=start_date, unsubscribed_at__date__lte=end_date)
+			except (ValueError, TypeError):
+				pass
 		qs = qs[:100]
 
 		# Group by subscriber + date so multiple same-day opt-outs appear as one row

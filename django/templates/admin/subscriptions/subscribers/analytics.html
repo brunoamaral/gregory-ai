@@ -361,6 +361,41 @@
 .multiselect-placeholder {
 	color: #999;
 }
+/* Custom date range bar */
+#custom-range-bar {
+	display: none;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	margin-bottom: 16px;
+	padding: 10px 16px;
+	background: #f8fafc;
+	border: 1px solid #e0e0e0;
+	border-radius: 6px;
+	font-size: 13px;
+}
+#custom-range-bar label {
+	font-weight: 600;
+	color: #555;
+}
+#custom-range-bar input[type=date] {
+	padding: 5px 8px;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	font-size: 13px;
+}
+#custom-range-bar button {
+	padding: 5px 14px;
+	background: #007cba;
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 13px;
+}
+#custom-range-bar button:hover {
+	background: #005f8e;
+}
 </style>
 {% endblock %}
 
@@ -385,7 +420,16 @@
 		<button class="period-btn active" data-range="30d">30 days</button>
 		<button class="period-btn" data-range="90d">90 days</button>
 		<button class="period-btn" data-range="365d">12 months</button>
+		<button class="period-btn" data-range="custom">Custom</button>
 	</div>
+</div>
+
+<div id="custom-range-bar">
+	<label for="custom-start">From:</label>
+	<input type="date" id="custom-start">
+	<label for="custom-end">To:</label>
+	<input type="date" id="custom-end">
+	<button id="custom-apply-btn" type="button">Apply</button>
 </div>
 
 <div class="summary-cards">
@@ -472,6 +516,8 @@ Chart.register(ChartDataLabels);
 var activeOrg  = '';   // '' = all; set by org dropdown (superusers only)
 var activeTeam = '';   // '' = all; set by team dropdown on list chart
 var activeProfileLists = []; // list IDs selected on profile chart
+var customStart = '';  // YYYY-MM-DD; set when custom range is active
+var customEnd   = '';  // YYYY-MM-DD; set when custom range is active
 
 // ── Endpoint URLs ──────────────────────────────────────────────────────────
 var URLS = {
@@ -488,6 +534,10 @@ var URLS = {
 function buildParams(extra) {
 	var p = new URLSearchParams(extra || {});
 	if (activeOrg) p.set('org', activeOrg);
+	if (activeRange === 'custom' && customStart && customEnd) {
+		p.set('start', customStart);
+		p.set('end',   customEnd);
+	}
 	return p;
 }
 
@@ -712,6 +762,7 @@ function fetchAndRender(range) {
 				'30d':  'Daily — Last 30 Days',
 				'90d':  'Weekly — Last 90 Days',
 				'365d': 'Monthly — Last 12 Months',
+				'custom': customStart && customEnd ? customStart + ' to ' + customEnd : 'Custom Range',
 			}[range] || '';
 
 			if (lineChart) {
@@ -794,7 +845,33 @@ document.querySelectorAll('.period-btn').forEach(function(btn) {
 		document.querySelectorAll('.period-btn').forEach(function(b) { b.classList.remove('active'); });
 		this.classList.add('active');
 		activeRange = this.dataset.range;
-		fetchAndRender(activeRange);
+		var customBar = document.getElementById('custom-range-bar');
+		if (activeRange === 'custom') {
+			if (customBar) customBar.style.display = 'flex';
+		} else {
+			if (customBar) customBar.style.display = 'none';
+			customStart = '';
+			customEnd   = '';
+			fetchAndRender(activeRange);
+		}
+	});
+});
+
+// ── Custom date range apply ───────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+	var applyBtn = document.getElementById('custom-apply-btn');
+	if (!applyBtn) return;
+	applyBtn.addEventListener('click', function() {
+		var startInput = document.getElementById('custom-start');
+		var endInput   = document.getElementById('custom-end');
+		if (!startInput.value || !endInput.value) {
+			alert('Please select both a start and end date.');
+			return;
+		}
+		customStart = startInput.value;
+		customEnd   = endInput.value;
+		fetchAndRender('custom');
+		fetchRecentActivity();
 	});
 });
 
