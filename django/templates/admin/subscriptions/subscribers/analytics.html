@@ -74,6 +74,7 @@
 .summary-card.subscribers .card-value { color: #2563eb; }
 .summary-card.subscriptions .card-value { color: #16a34a; }
 .summary-card.unsubscriptions .card-value { color: #dc2626; }
+.summary-card.became-inactive .card-value { color: #6b7280; }
 .chart-container {
 	background: #fff;
 	border: 1px solid #e0e0e0;
@@ -445,6 +446,10 @@
 		<div class="card-value" id="total-unsubscriptions">—</div>
 		<div class="card-label">Unsubscriptions</div>
 	</div>
+	<div class="summary-card became-inactive">
+		<div class="card-value" id="total-became-inactive">—</div>
+		<div class="card-label">Became Inactive</div>
+	</div>
 </div>
 
 <div class="chart-container">
@@ -758,6 +763,7 @@ function fetchAndRender(range) {
 			document.getElementById('total-new-subscribers').textContent = data.totals.new_subscribers;
 			document.getElementById('total-new-subscriptions').textContent = data.totals.new_subscriptions;
 			document.getElementById('total-unsubscriptions').textContent = data.totals.unsubscriptions;
+			document.getElementById('total-became-inactive').textContent = data.totals.became_inactive;
 
 			var chartTitle = {
 				'7d':   'Daily — Last 7 Days',
@@ -1199,6 +1205,9 @@ fetchListActivity();
 
 		<dt style="font-weight: 600; color: #1a1a1a;">Unsubscriptions</dt>
 		<dd style="margin: 0; color: #444;">List opt-outs recorded during the selected period.</dd>
+
+		<dt style="font-weight: 600; color: #1a1a1a;">Became Inactive</dt>
+		<dd style="margin: 0; color: #444;">Subscribers who transitioned to an inactive state during the selected period: either their account was explicitly deactivated, or they unsubscribed from all lists leaving them with no active list subscriptions.</dd>
 
 		<dt style="font-weight: 600; color: #1a1a1a;">Active Subscribers</dt>
 		<dd style="margin: 0; color: #444;">Distinct subscribers currently marked active who have at least one active list subscription.</dd>

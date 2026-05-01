@@ -314,6 +314,68 @@ class SubscriberAdmin(admin.ModelAdmin):
 			)
 		unsubscriptions_data = _build_series(unsubs_qs, 'unsubscribed_at')
 
+		# Became inactive: subscribers who transitioned to an inactive state during the period.
+		# Two cases:
+		#   1. Active account whose last active list subscription was removed in the period
+		#      (they now have zero active subscriptions).
+		#   2. Account explicitly deactivated (active=False) during the period — detected via
+		#      simple-history: present in period with active=False but NOT seen inactive before
+		#      the period start.
+		HistoricalSubscribers = Subscribers.history.model
+
+		# Case 1 — active account, lost all subscriptions in period
+		lost_subs_qs = (
+			Subscribers.objects.filter(active=True)
+			.annotate(
+				active_subs_count=Count(
+					'list_subscriptions',
+					filter=Q(list_subscriptions__is_active=True),
+					distinct=True,
+				),
+				unsub_in_period=Count(
+					'list_subscriptions',
+					filter=Q(
+						list_subscriptions__is_active=False,
+						list_subscriptions__unsubscribed_at__date__gte=start_date,
+						list_subscriptions__unsubscribed_at__date__lte=end_date,
+					),
+					distinct=True,
+				),
+			)
+			.filter(active_subs_count=0, unsub_in_period__gt=0)
+		)
+		if org_ids is not None:
+			lost_subs_qs = lost_subs_qs.filter(
+				list_subscriptions__list__team__organization__id__in=org_ids
+			).distinct()
+		lost_subs_ids = set(lost_subs_qs.values_list('subscriber_id', flat=True).distinct())
+
+		# Case 2 — account explicitly deactivated during the period
+		in_period_inactive_ids = set(
+			HistoricalSubscribers.objects
+			.filter(
+				history_date__date__gte=start_date,
+				history_date__date__lte=end_date,
+				active=False,
+			)
+			.values_list('subscriber_id', flat=True)
+			.distinct()
+		)
+		# Exclude subscribers that were already inactive before the period
+		already_inactive_ids = set(
+			HistoricalSubscribers.objects
+			.filter(
+				subscriber_id__in=in_period_inactive_ids,
+				history_date__date__lt=start_date,
+				active=False,
+			)
+			.values_list('subscriber_id', flat=True)
+			.distinct()
+		)
+		newly_deactivated_ids = in_period_inactive_ids - already_inactive_ids
+
+		became_inactive_count = len(lost_subs_ids | newly_deactivated_ids)
+
 		labels = [p.strftime(date_fmt) for p in period_range]
 
 		return JsonResponse({
@@ -325,6 +387,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 				'new_subscribers': sum(new_subscribers_data),
 				'new_subscriptions': sum(new_subscriptions_data),
 				'unsubscriptions': sum(unsubscriptions_data),
+				'became_inactive': became_inactive_count,
 			},
 		})
 
