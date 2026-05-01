@@ -218,6 +218,7 @@ class SubscriberSiteProfile(models.Model):
 		('patient', 'Patient'),
 		('caregiver', 'Caregiver'),
 		('doctor', 'Doctor'),
+		('nurse', 'Nurse'),
 		('clinical centre', 'Clinical Centre'),
 		('researcher', 'Researcher'),
 		('other', 'Other'),
