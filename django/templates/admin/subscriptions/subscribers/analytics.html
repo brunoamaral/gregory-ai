@@ -463,19 +463,19 @@
 	<div class="kpi-row">
 		<div class="kpi-card">
 			<div class="kpi-value" id="total-active-subscribers">—</div>
-			<div class="kpi-label">Active Subscribers</div>
+			<div class="kpi-label">Total Active Subscribers</div>
 		</div>
 		<div class="kpi-card inactive">
 			<div class="kpi-value" id="total-inactive-subscribers">—</div>
-			<div class="kpi-label">Inactive Subscribers</div>
+			<div class="kpi-label">Total Inactive Subscribers</div>
 		</div>
 		<div class="kpi-card">
 			<div class="kpi-value" id="total-active-subscriptions">—</div>
-			<div class="kpi-label">Active Subscriptions</div>
+			<div class="kpi-label">Total Active Subscriptions</div>
 		</div>
 		<div class="kpi-card inactive">
 			<div class="kpi-value" id="total-inactive-subscriptions">—</div>
-			<div class="kpi-label">Inactive Subscriptions</div>
+			<div class="kpi-label">Total Opt-outs</div>
 		</div>
 	</div>
 	<div class="pie-charts-row">
@@ -873,9 +873,14 @@ document.addEventListener('DOMContentLoaded', function() {
 	applyBtn.addEventListener('click', function() {
 		var startInput = document.getElementById('custom-start');
 		var endInput   = document.getElementById('custom-end');
-		if (!startInput.value || !endInput.value) {
-			alert('Please select both a start and end date.');
+		if (!startInput.value) {
+			alert('Please select a start date.');
 			return;
+		}
+		// Default end date to today if not set
+		if (!endInput.value) {
+			var today = new Date().toISOString().slice(0, 10);
+			endInput.value = today;
 		}
 		customStart = startInput.value;
 		customEnd   = endInput.value;

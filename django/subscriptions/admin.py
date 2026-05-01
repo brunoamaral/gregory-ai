@@ -265,7 +265,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 				qs
 				.annotate(period=trunc_fn(date_field))
 				.values('period')
-				.annotate(count=Count('pk'))
+				.annotate(count=Count('pk', distinct=True))
 				.order_by('period')
 			)
 			lookup = {}
@@ -392,8 +392,10 @@ class SubscriberAdmin(admin.ModelAdmin):
 		})
 
 	def analytics_list_distribution(self, request):
-		"""Return current snapshot: active subscribers/subscriptions + per-list breakdown.
+		"""Return current snapshot: total active subscribers/subscriptions + per-list breakdown.
 
+		This is an all-time current-state view (no date range filter). The period-scoped
+		'new subscribers' numbers are already shown by analytics_data / the summary cards.
 		Both KPI totals and the pie chart percentages are derived from the same base
 		queryset (active ListSubscription rows where the subscriber is also active)
 		so all numbers are internally consistent.
