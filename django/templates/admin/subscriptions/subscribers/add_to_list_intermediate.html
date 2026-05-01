@@ -12,9 +12,11 @@
 <form method="post">
 	{% csrf_token %}
 
-	{% for obj in objects %}
-		<input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk }}">
-	{% endfor %}
+	{% if not use_session %}
+		{% for obj in objects %}
+			<input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk }}">
+		{% endfor %}
+	{% endif %}
 	<input type="hidden" name="action" value="add_to_list">
 	<input type="hidden" name="apply" value="1">
 

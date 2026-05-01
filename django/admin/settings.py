@@ -44,6 +44,10 @@ if FERNET_SECRET_KEY == 'DEFAULT KEY GOES HERE':
     print("Using default FERNET_SECRET_KEY for development. DO NOT use in production!")
 FORMS_URLFIELD_ASSUME_HTTPS = True
 
+# Django admin handles bulk actions on large datasets; raise the POST field limit
+# accordingly. The default of 1000 is too low when selecting hundreds of subscribers.
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
+
 ALLOWED_HOSTS = [
 	'0.0.0.0',
 	'localhost',

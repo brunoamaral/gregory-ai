@@ -764,6 +764,10 @@ class SubscriberAdmin(admin.ModelAdmin):
 		if 'apply' not in request.POST:
 			form = AddToListForm()
 			form.fields['target_list'].queryset = available_lists
+			# Store PKs in session to avoid hitting DATA_UPLOAD_MAX_NUMBER_FIELDS
+			# when large numbers of subscribers are selected.
+			pks = list(queryset.values_list('pk', flat=True))
+			request.session['add_to_list_pks'] = pks
 			return render(
 				request,
 				'admin/subscriptions/subscribers/add_to_list_intermediate.html',
@@ -772,6 +776,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 					'objects': queryset,
 					'form': form,
 					'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
+					'use_session': True,
 				},
 			)
 
@@ -782,6 +787,13 @@ class SubscriberAdmin(admin.ModelAdmin):
 			return
 
 		target_list = form.cleaned_data['target_list']
+
+		# Resolve the queryset: prefer session-stored PKs (avoids large POST bodies)
+		# but fall back to POST-submitted _selected_action values for compatibility.
+		session_pks = request.session.pop('add_to_list_pks', None)
+		if session_pks is not None:
+			queryset = self.model.objects.filter(pk__in=session_pks)
+
 		added = 0
 		for sub in queryset:
 			_, created = ListSubscription.objects.get_or_create(
