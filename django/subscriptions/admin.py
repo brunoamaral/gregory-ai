@@ -950,8 +950,9 @@ class ListsAdmin(admin.ModelAdmin):
 
 class FailedNotificationAdmin(admin.ModelAdmin):
 	list_display = ['subscriber','reason','list','created_at']
-	list_filter = ['subscriber','list']
-	readonly_fields = ['subscriber','reason','list']
+	list_filter = ['list']
+	search_fields = ['subscriber__email', 'subscriber__first_name', 'subscriber__last_name', 'reason']
+	readonly_fields = ['subscriber','reason','list','created_at']
 admin.site.register(FailedNotification,FailedNotificationAdmin)
 admin.site.register(Lists, ListsAdmin)
 
