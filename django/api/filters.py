@@ -21,6 +21,7 @@ class ArticleFilter(filters.FilterSet):
     journal_slug = filters.CharFilter(method='filter_journal', label='Journal')
     team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact', label='Team ID')
     subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact', label='Subject ID')
+    subjects = filters.BaseInFilter(method='filter_subjects_all', label='All subject IDs (comma-separated, AND match)')
     source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact', label='Source ID')
     
     # New parameters for special article types
@@ -264,6 +265,25 @@ class ArticleFilter(filters.FilterSet):
         """
         return queryset
 
+    def filter_subjects_all(self, queryset, name, value):
+        """
+        AND-filter: return only articles that belong to every listed subject ID.
+        value is a list of strings (from BaseInFilter).
+        """
+        if not value:
+            return queryset
+        ids = []
+        for raw in value:
+            try:
+                ids.append(int(raw))
+            except (TypeError, ValueError):
+                continue
+        if not ids:
+            return queryset.none()
+        for sid in set(ids):
+            queryset = queryset.filter(subjects__id=sid)
+        return queryset.distinct()
+
 class TrialFilter(filters.FilterSet):
     """
     Filter class for Trials, allowing searching by title, summary,
@@ -279,6 +299,7 @@ class TrialFilter(filters.FilterSet):
     trial_id = filters.NumberFilter(field_name='trial_id', lookup_expr='exact', label='Trial ID')
     team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact', label='Team ID')
     subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact', label='Subject ID')
+    subjects = filters.BaseInFilter(method='filter_subjects_all', label='All subject IDs (comma-separated, AND match)')
     category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact', label='Category Slug')
     category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact', label='Category ID')
     source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact', label='Source ID')
@@ -332,6 +353,25 @@ class TrialFilter(filters.FilterSet):
             models.Q(utitle__contains=upper_value) |
             models.Q(usummary__contains=upper_value)
         )
+
+    def filter_subjects_all(self, queryset, name, value):
+        """
+        AND-filter: return only trials that belong to every listed subject ID.
+        value is a list of strings (from BaseInFilter).
+        """
+        if not value:
+            return queryset
+        ids = []
+        for raw in value:
+            try:
+                ids.append(int(raw))
+            except (TypeError, ValueError):
+                continue
+        if not ids:
+            return queryset.none()
+        for sid in set(ids):
+            queryset = queryset.filter(subjects__id=sid)
+        return queryset.distinct()
 
 class AuthorFilter(filters.FilterSet):
     """Filter class for Authors, allowing searching by full name, given name, family name and filtering by author ID."""
