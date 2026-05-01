@@ -220,6 +220,7 @@ class SubscriberSiteProfile(models.Model):
 		('doctor', 'Doctor'),
 		('clinical centre', 'Clinical Centre'),
 		('researcher', 'Researcher'),
+		('other', 'Other'),
 	]
 
 	subscriber = models.ForeignKey(
