@@ -5,7 +5,42 @@ from django import forms
 from datetime import datetime, timedelta
 from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject
 
-class ArticleFilter(filters.FilterSet):
+
+class SubjectANDFilterMixin:
+	"""
+	Mixin that provides an AND-semantics subject filter.
+	Returns only objects linked to *every* subject ID in the comma-separated list.
+	Uses a single join (subjects__id__in) plus a Count annotation instead of
+	chaining one .filter() per ID, so the SQL stays to a single extra join.
+	"""
+	def filter_subjects_all(self, queryset, name, value):
+		if not value:
+			return queryset
+		ids = []
+		for raw in value:
+			try:
+				ids.append(int(raw))
+			except (TypeError, ValueError):
+				continue
+		if not ids:
+			return queryset.none()
+		unique_ids = set(ids)
+		return (
+			queryset
+			.filter(subjects__id__in=unique_ids)
+			.annotate(
+				matched_subjects_count=models.Count(
+					'subjects',
+					filter=models.Q(subjects__id__in=unique_ids),
+					distinct=True,
+				)
+			)
+			.filter(matched_subjects_count=len(unique_ids))
+			.distinct()
+		)
+
+
+class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
     """
     Filter class for Articles, allowing searching by title, summary,
     and combined search across both fields, plus filtering by author,
@@ -265,26 +300,7 @@ class ArticleFilter(filters.FilterSet):
         """
         return queryset
 
-    def filter_subjects_all(self, queryset, name, value):
-        """
-        AND-filter: return only articles that belong to every listed subject ID.
-        value is a list of strings (from BaseInFilter).
-        """
-        if not value:
-            return queryset
-        ids = []
-        for raw in value:
-            try:
-                ids.append(int(raw))
-            except (TypeError, ValueError):
-                continue
-        if not ids:
-            return queryset.none()
-        for sid in set(ids):
-            queryset = queryset.filter(subjects__id=sid)
-        return queryset.distinct()
-
-class TrialFilter(filters.FilterSet):
+class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
     """
     Filter class for Trials, allowing searching by title, summary,
     and combined search across both fields, plus filtering by recruitment status,
@@ -353,25 +369,6 @@ class TrialFilter(filters.FilterSet):
             models.Q(utitle__contains=upper_value) |
             models.Q(usummary__contains=upper_value)
         )
-
-    def filter_subjects_all(self, queryset, name, value):
-        """
-        AND-filter: return only trials that belong to every listed subject ID.
-        value is a list of strings (from BaseInFilter).
-        """
-        if not value:
-            return queryset
-        ids = []
-        for raw in value:
-            try:
-                ids.append(int(raw))
-            except (TypeError, ValueError):
-                continue
-        if not ids:
-            return queryset.none()
-        for sid in set(ids):
-            queryset = queryset.filter(subjects__id=sid)
-        return queryset.distinct()
 
 class AuthorFilter(filters.FilterSet):
     """Filter class for Authors, allowing searching by full name, given name, family name and filtering by author ID."""
