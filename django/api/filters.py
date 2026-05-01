@@ -5,7 +5,42 @@ from django import forms
 from datetime import datetime, timedelta
 from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject
 
-class ArticleFilter(filters.FilterSet):
+
+class SubjectANDFilterMixin:
+	"""
+	Mixin that provides an AND-semantics subject filter.
+	Returns only objects linked to *every* subject ID in the comma-separated list.
+	Uses a single join (subjects__id__in) plus a Count annotation instead of
+	chaining one .filter() per ID, so the SQL stays to a single extra join.
+	"""
+	def filter_subjects_all(self, queryset, name, value):
+		if not value:
+			return queryset
+		ids = []
+		for raw in value:
+			try:
+				ids.append(int(raw))
+			except (TypeError, ValueError):
+				continue
+		if not ids:
+			return queryset.none()
+		unique_ids = set(ids)
+		return (
+			queryset
+			.filter(subjects__id__in=unique_ids)
+			.annotate(
+				matched_subjects_count=models.Count(
+					'subjects',
+					filter=models.Q(subjects__id__in=unique_ids),
+					distinct=True,
+				)
+			)
+			.filter(matched_subjects_count=len(unique_ids))
+			.distinct()
+		)
+
+
+class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
     """
     Filter class for Articles, allowing searching by title, summary,
     and combined search across both fields, plus filtering by author,
@@ -21,6 +56,7 @@ class ArticleFilter(filters.FilterSet):
     journal_slug = filters.CharFilter(method='filter_journal', label='Journal')
     team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact', label='Team ID')
     subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact', label='Subject ID')
+    subjects = filters.BaseInFilter(method='filter_subjects_all', label='All subject IDs (comma-separated, AND match)')
     source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact', label='Source ID')
     
     # New parameters for special article types
@@ -264,7 +300,7 @@ class ArticleFilter(filters.FilterSet):
         """
         return queryset
 
-class TrialFilter(filters.FilterSet):
+class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
     """
     Filter class for Trials, allowing searching by title, summary,
     and combined search across both fields, plus filtering by recruitment status,
@@ -279,6 +315,7 @@ class TrialFilter(filters.FilterSet):
     trial_id = filters.NumberFilter(field_name='trial_id', lookup_expr='exact', label='Trial ID')
     team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact', label='Team ID')
     subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact', label='Subject ID')
+    subjects = filters.BaseInFilter(method='filter_subjects_all', label='All subject IDs (comma-separated, AND match)')
     category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact', label='Category Slug')
     category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact', label='Category ID')
     source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact', label='Source ID')
