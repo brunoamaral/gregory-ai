@@ -1,335 +1,337 @@
 """
 Django views for email template rendering and preview functionality.
-Provides endpoints for testing and previewing email templates with proper context.
+Provides endpoints for previewing email templates with real or mock data.
 """
 
-from django.http import HttpResponse, JsonResponse
-from django.template.loader import get_template
-from django.contrib.sites.models import Site
-from django.views.decorators.http import require_http_methods
-from django.contrib.admin.views.decorators import staff_member_required
-from django.shortcuts import render
-from django.utils import timezone
-from datetime import timedelta
-import json
+import types
+import uuid
+from datetime import date as date_type, timedelta
 
-from sitesettings.models import CustomSetting
+from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.sites.models import Site
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render
+from django.template.loader import get_template
+from django.utils import timezone
+from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.views.decorators.http import require_http_methods
+
 from gregory.models import Articles, Trials
+from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers
-from templates.emails.components.context_helpers import (
-    prepare_weekly_summary_context,
-    prepare_admin_summary_context,
-    prepare_trial_notification_context,
-    sort_articles_by_ml_score,
-    filter_high_confidence_articles,
-    get_optimized_context_for_management_commands
-)
 from templates.emails.components.content_organizer import get_optimized_email_context
 
+# ── Helpers ─────────────────────────────────────────────────────────────────
+
+def _make_mock_subscriber():
+	"""Return a SimpleNamespace that satisfies all template attribute accesses."""
+	return types.SimpleNamespace(
+		subscriber_id=0,
+		first_name='Preview',
+		last_name='User',
+		email='preview@example.com',
+		active=True,
+		unsubscribe_token=uuid.uuid4(),
+	)
+
+
+def _resolve_date_range(request):
+	"""
+	Parse GET params into (start_date, end_date).
+	Priority: explicit start/end > days param > default 30 days.
+	"""
+	start_str = request.GET.get('start', '')
+	end_str   = request.GET.get('end', '')
+	if start_str and end_str:
+		try:
+			start_date = date_type.fromisoformat(start_str)
+			end_date   = date_type.fromisoformat(end_str)
+			if end_date < start_date:
+				start_date, end_date = end_date, start_date
+			return start_date, end_date
+		except ValueError:
+			pass
+
+	try:
+		days = int(request.GET.get('days', 30))
+	except (ValueError, TypeError):
+		days = 30
+	end_date   = timezone.now().date()
+	start_date = end_date - timedelta(days=days - 1)
+	return start_date, end_date
+
+
+def _get_site_and_settings(list_obj=None):
+	"""Resolve site + CustomSetting, mirroring the management command fallback chain."""
+	try:
+		if list_obj is not None and list_obj.site_id:
+			site = list_obj.site
+		else:
+			site = Site.objects.get_current()
+		custom_settings = CustomSetting.objects.get(site=site)
+		return site, custom_settings
+	except Exception:
+		site = Site.objects.get_current()
+		try:
+			custom_settings = CustomSetting.objects.get(site=site)
+		except CustomSetting.DoesNotExist:
+			custom_settings = None
+		return site, custom_settings
+
+
+def _build_preview_context(request, template_name):
+	"""
+	Core logic shared by the HTML preview and JSON context endpoints.
+	Accepts GET params: list_id, subscriber_id, days, start, end.
+	Returns a context dict or raises ValueError for unknown template names.
+	"""
+	if template_name not in ('weekly_summary', 'admin_summary', 'trial_notification', 'test_components'):
+		raise ValueError(f"Unknown template: {template_name}")
+
+	start_date, end_date = _resolve_date_range(request)
+
+	# --- Subscriber ---
+	subscriber_id = request.GET.get('subscriber_id')
+	if subscriber_id:
+		try:
+			subscriber = Subscribers.objects.get(pk=int(subscriber_id))
+		except (Subscribers.DoesNotExist, ValueError, TypeError):
+			subscriber = _make_mock_subscriber()
+	else:
+		subscriber = _make_mock_subscriber()
+
+	# --- List ---
+	list_id = request.GET.get('list_id')
+	list_obj = None
+	if list_id:
+		try:
+			list_obj = (
+				Lists.objects
+				.select_related('team')
+				.prefetch_related('subjects')
+				.get(pk=int(list_id))
+			)
+		except (Lists.DoesNotExist, ValueError, TypeError):
+			pass
+
+	# --- Site & settings ---
+	site, custom_settings = _get_site_and_settings(list_obj)
+
+	# --- Articles ---
+	article_qs = Articles.objects.filter(
+		discovery_date__date__gte=start_date,
+		discovery_date__date__lte=end_date,
+	).prefetch_related('authors', 'ml_predictions__subject', 'article_subject_relevances__subject')
+
+	if list_obj is not None and list_obj.subjects.exists():
+		article_qs = article_qs.filter(subjects__in=list_obj.subjects.all()).distinct()
+	else:
+		article_qs = article_qs.order_by('-discovery_date')[:50]
+
+	# Apply article_limit from the list, same as send_weekly_summary does pre-send
+	if list_obj is not None:
+		article_limit = getattr(list_obj, 'article_limit', 15) or 15
+		article_qs = list(article_qs.order_by('-discovery_date')[:article_limit])
+
+	# --- Trials ---
+	trial_qs = Trials.objects.filter(
+		discovery_date__date__gte=start_date,
+		discovery_date__date__lte=end_date,
+	)
+	if list_obj is not None and list_obj.subjects.exists():
+		trial_qs = trial_qs.filter(subjects__in=list_obj.subjects.all()).distinct()
+	else:
+		trial_qs = trial_qs.order_by('-discovery_date')[:20]
+
+	email_type = template_name if template_name != 'test_components' else 'weekly_summary'
+
+	context = get_optimized_email_context(
+		email_type=email_type,
+		articles=article_qs,
+		trials=trial_qs,
+		subscriber=subscriber,
+		list_obj=list_obj,
+		site=site,
+		custom_settings=custom_settings,
+	)
+
+	# Inject unsubscribe footer helpers (same as management commands post-call)
+	if list_obj:
+		context['list_id'] = list_obj.list_id
+	scheme = 'https'
+	domain = getattr(site, 'domain', 'gregory-ms.com') or 'gregory-ms.com'
+	context['unsubscribe_base_url'] = f"{scheme}://{domain}"
+	context['subscriber'] = subscriber
+
+	return context
+
+
+# ── Public endpoints ─────────────────────────────────────────────────────────
 
 @staff_member_required
 def email_preview_dashboard(request):
-    """
-    Dashboard for previewing email templates during development.
-    Requires staff-level authentication for security.
-    """
-    context = {
-        'email_types': [
-            ('weekly_summary', 'Weekly Summary'),
-            ('admin_summary', 'Admin Summary'),
-            ('trial_notification', 'Clinical Trials'),
-            ('test_components', 'Component Test'),
-        ]
-    }
-    return render(request, 'emails/email_preview.html', context)
+	"""Dashboard for previewing email templates. Requires staff authentication."""
+	context = {
+		'email_types': [
+			('weekly_summary',      'Weekly Summary'),
+			('admin_summary',       'Admin Summary'),
+			('trial_notification',  'Clinical Trials'),
+			('test_components',     'Component Test'),
+		]
+	}
+	return render(request, 'emails/email_preview.html', context)
 
 
 @staff_member_required
+@xframe_options_sameorigin
 @require_http_methods(["GET"])
 def email_template_preview(request, template_name):
-    """
-    Render email templates with mock data for preview purposes.
-    Requires staff-level authentication for security.
-    """
-    # Get site and settings
-    try:
-        site = Site.objects.get_current()
-        customsettings = CustomSetting.objects.get(site=site)
-    except:
-        # Fallback for development
-        site = {'domain': 'gregory-ms.com', 'name': 'Gregory AI'}
-        customsettings = {
-            'title': 'Gregory AI - MS Research Updates'
-        }
-    
-    # Create mock subscriber
-    mock_subscriber = {
-        'email': 'preview@example.com',
-        'first_name': 'Preview',
-        'last_name': 'User'
-    }
-    
-    # Get sample articles and trials (limit for preview)
-    articles = Articles.objects.filter(
-        discovery_date__gte=timezone.now() - timedelta(days=30)
-    ).prefetch_related('authors', 'ml_predictions__subject').order_by('-discovery_date')[:5]
-    
-    trials = Trials.objects.filter(
-        discovery_date__gte=timezone.now() - timedelta(days=30)
-    ).order_by('-discovery_date')[:3]
-    
-    # Prepare context based on template type
-    if template_name == 'weekly_summary':
-        context = prepare_weekly_summary_context(
-            articles=articles,
-            trials=trials,
-            subscriber=mock_subscriber,
-            site=site,
-            customsettings=customsettings
-        )
-        # Add user field for weekly summary compatibility
-        context['user'] = mock_subscriber
-        context['greeting_time'] = 'morning'
-        
-    elif template_name == 'admin_summary':
-        context = prepare_admin_summary_context(
-            articles=articles,
-            trials=trials,
-            subscriber=mock_subscriber,
-            site=site,
-            customsettings=customsettings
-        )
-        # Add now field for admin template
-        context['now'] = timezone.now()
-        
-    elif template_name == 'trial_notification':
-        context = prepare_trial_notification_context(
-            trials=trials,
-            subscriber=mock_subscriber,
-            site=site,
-            customsettings=customsettings
-        )
-        context['now'] = timezone.now()
-        
-    elif template_name == 'test_components':
-        # Special template for testing components
-        context = {
-            'email_type': 'test',
-            'current_date': timezone.now(),
-            'site': site,
-            'customsettings': customsettings,
-            'subscriber': mock_subscriber,
-            'articles': articles,
-            'trials': trials,
-            'now': timezone.now(),
-            'title': customsettings.get('title', 'Gregory AI') if isinstance(customsettings, dict) else getattr(customsettings, 'title', 'Gregory AI'),
-        }
-    else:
-        return HttpResponse('Template not found', status=404)
-    
-    try:
-        template = get_template(f'emails/{template_name}.html')
-        rendered_email = template.render(context)
-        return HttpResponse(rendered_email, content_type='text/html')
-    except Exception as e:
-        return HttpResponse(f'Error rendering template: {str(e)}', status=500)
+	"""
+	Render an email template with real or mock data.
+	GET params: list_id, subscriber_id, days (default 30), start (YYYY-MM-DD), end (YYYY-MM-DD)
+	"""
+	try:
+		context = _build_preview_context(request, template_name)
+	except ValueError as exc:
+		return HttpResponse(str(exc), status=404)
+	except Exception as exc:
+		return HttpResponse(f'Error building preview context: {exc}', status=500)
+
+	try:
+		tmpl = get_template(f'emails/{template_name}.html')
+		rendered = tmpl.render(context)
+		return HttpResponse(rendered, content_type='text/html')
+	except Exception as exc:
+		return HttpResponse(f'Error rendering template: {exc}', status=500)
 
 
 @staff_member_required
 @require_http_methods(["GET"])
 def email_template_json_context(request, template_name):
-    """
-    Return the context data that would be used for a template as JSON.
-    Useful for debugging template context issues.
-    Requires staff-level authentication for security.
-    """
-    # This is the same logic as email_template_preview but returns JSON
-    try:
-        site = Site.objects.get_current()
-        customsettings = CustomSetting.objects.get(site=site)
-    except:
-        site = {'domain': 'gregory-ms.com', 'name': 'Gregory AI'}
-        customsettings = {
-            'title': 'Gregory AI - MS Research Updates'
-        }
-    
-    mock_subscriber = {
-        'email': 'preview@example.com',
-        'first_name': 'Preview',
-        'last_name': 'User'
-    }
-    
-    articles = Articles.objects.filter(
-        discovery_date__gte=timezone.now() - timedelta(days=30)
-    ).prefetch_related('authors', 'ml_predictions__subject').order_by('-discovery_date')[:5]
-    
-    trials = Trials.objects.filter(
-        discovery_date__gte=timezone.now() - timedelta(days=30)
-    ).order_by('-discovery_date')[:3]
-    
-    if template_name == 'weekly_summary':
-        context = prepare_weekly_summary_context(
-            articles=articles,
-            trials=trials,
-            subscriber=mock_subscriber,
-            site=site,
-            customsettings=customsettings
-        )
-    elif template_name == 'admin_summary':
-        context = prepare_admin_summary_context(
-            articles=articles,
-            trials=trials,
-            subscriber=mock_subscriber,
-            site=site,
-            customsettings=customsettings
-        )
-    elif template_name == 'trial_notification':
-        context = prepare_trial_notification_context(
-            trials=trials,
-            subscriber=mock_subscriber,
-            site=site,
-            customsettings=customsettings
-        )
-    else:
-        return JsonResponse({'error': 'Template not found'}, status=404)
-    
-    # Convert context to JSON-serializable format
-    serializable_context = {}
-    for key, value in context.items():
-        if hasattr(value, '__dict__'):
-            # Convert model instances to dict
-            serializable_context[key] = str(value)
-        elif hasattr(value, 'isoformat'):
-            # Convert datetime objects
-            serializable_context[key] = value.isoformat()
-        else:
-            serializable_context[key] = value
-    
-    return JsonResponse(serializable_context, json_dumps_params={'indent': 2})
+	"""
+	Return the context that would be used for a template as JSON.
+	Same GET params as email_template_preview.
+	"""
+	try:
+		context = _build_preview_context(request, template_name)
+	except ValueError as exc:
+		return JsonResponse({'error': str(exc)}, status=404)
+	except Exception as exc:
+		return JsonResponse({'error': str(exc)}, status=500)
+
+	def _serialise(value):
+		if hasattr(value, 'isoformat'):
+			return value.isoformat()
+		if hasattr(value, '__dict__') and not isinstance(value, type):
+			return str(value)
+		if hasattr(value, '__iter__') and not isinstance(value, (str, bytes, dict)):
+			return [_serialise(v) for v in value]
+		return value
+
+	serialised = {k: _serialise(v) for k, v in context.items()}
+	return JsonResponse(serialised, json_dumps_params={'indent': 2})
 
 
+@staff_member_required
+@require_http_methods(["GET"])
+def email_preview_lists(request):
+	"""
+	Return lists available for preview filtered by email type.
+	GET param: email_type = weekly_summary | admin_summary | trial_notification
+	"""
+	email_type = request.GET.get('email_type', 'weekly_summary')
+
+	type_filter = {
+		'weekly_summary':     {'weekly_digest': True},
+		'admin_summary':      {'admin_summary': True},
+		'trial_notification': {'clinical_trials_notifications': True},
+	}.get(email_type, {'weekly_digest': True})
+
+	qs = (
+		Lists.objects
+		.filter(**type_filter)
+		.select_related('team')
+		.prefetch_related('subjects')
+		.order_by('list_name')
+	)
+
+	data = [
+		{
+			'id':            lst.list_id,
+			'name':          lst.list_name,
+			'team_name':     lst.team.name if lst.team else '',
+			'subject_names': [s.subject_name for s in lst.subjects.all()],
+		}
+		for lst in qs
+	]
+	return JsonResponse({'lists': data})
 
 
-def get_email_context_for_management_command(email_type, articles=None, trials=None, subscriber=None, site=None, customsettings=None):
-    """
-    Utility function for management commands to get properly formatted context.
-    This bridges the gap between our new template system and existing management commands.
-    
-    Args:
-        email_type (str): Type of email ('weekly_summary', 'admin_summary', 'trial_notification')
-        articles: QuerySet of Article objects
-        trials: QuerySet of Trial objects
-        subscriber: Subscriber object
-        site: Site object
-        customsettings: CustomSetting object
-    
-    Returns:
-        dict: Context dictionary ready for template rendering
-    """
-    
-    if email_type == 'weekly_summary':
-        context = prepare_weekly_summary_context(
-            articles=articles or Articles.objects.none(),
-            trials=trials or Trials.objects.none(), 
-            subscriber=subscriber,
-            site=site,
-            customsettings=customsettings
-        )
-        # Add legacy field for compatibility
-        context['user'] = subscriber
-        context['greeting_time'] = 'morning'
-        
-    elif email_type == 'admin_summary':
-        context = prepare_admin_summary_context(
-            articles=articles or Articles.objects.none(),
-            trials=trials or Trials.objects.none(),
-            subscriber=subscriber, 
-            site=site,
-            customsettings=customsettings
-        )
-        context['now'] = timezone.now()
-        
-    elif email_type == 'trial_notification':
-        context = prepare_trial_notification_context(
-            trials=trials or Trials.objects.none(),
-            subscriber=subscriber,
-            site=site, 
-            customsettings=customsettings
-        )
-        context['now'] = timezone.now()
-        
-    else:
-        raise ValueError(f"Unknown email_type: {email_type}")
-    
-    return context
+@staff_member_required
+@require_http_methods(["GET"])
+def email_preview_subscribers(request):
+	"""
+	Return active subscribers matching a search term and/or list (max 100).
+	GET params: q (search string), list_id (optional)
+	"""
+	from django.db.models import Q as DQ
+
+	q       = request.GET.get('q', '').strip()
+	list_id = request.GET.get('list_id', '')
+
+	qs = Subscribers.objects.filter(active=True)
+
+	if list_id:
+		try:
+			qs = qs.filter(
+				list_subscriptions__list_id=int(list_id),
+				list_subscriptions__is_active=True,
+			).distinct()
+		except (ValueError, TypeError):
+			pass
+
+	if q:
+		qs = qs.filter(
+			DQ(first_name__icontains=q)
+			| DQ(last_name__icontains=q)
+			| DQ(email__icontains=q)
+		)
+
+	qs = qs.order_by('first_name', 'last_name')[:100]
+
+	data = [
+		{
+			'id':           s.subscriber_id,
+			'display_name': f"{s.first_name} {s.last_name or ''}".strip(),
+			'email':        s.email,
+		}
+		for s in qs
+	]
+	return JsonResponse({'subscribers': data})
 
 
-def prepare_email_context(email_type, articles=None, trials=None, subscriber=None, list_obj=None, site=None, custom_settings=None, admin_email=None):
-    """
-    Main function for preparing email context for management commands.
-    This is the function imported by management commands.
-    Enhanced with Phase 5 optimizations for better performance.
-    
-    Args:
-        email_type (str): Type of email ('weekly_summary', 'admin_summary', 'trial_notification')
-        articles: QuerySet of Article objects
-        trials: QuerySet of Trial objects  
-        subscriber: Subscriber object
-        list_obj: Lists object (subscription list)
-        site: Site object
-        custom_settings: CustomSetting object
-        admin_email: Admin email address (for admin summaries)
-    
-    Returns:
-        dict: Context dictionary ready for template rendering
-    """
-    
-    # Use the optimized Phase 5 email context preparation
-    return get_optimized_email_context(
-        email_type=email_type,
-        articles=articles,
-        trials=trials,
-        subscriber=subscriber,
-        list_obj=list_obj,
-        site=site,
-        custom_settings=custom_settings
-    )
+# ── Legacy compatibility helpers used by management commands ─────────────────
+
+def get_email_context_for_management_command(email_type, articles=None, trials=None,
+		subscriber=None, site=None, customsettings=None):
+	return get_optimized_email_context(
+		email_type=email_type,
+		articles=articles,
+		trials=trials,
+		subscriber=subscriber,
+		site=site,
+		custom_settings=customsettings,
+	)
 
 
-def sort_articles_for_email(articles, email_type='weekly_summary'):
-    """
-    Sort articles appropriately for different email types.
-    
-    Args:
-        articles: QuerySet or list of Article objects
-        email_type (str): Type of email to sort for
-    
-    Returns:
-        list: Sorted articles
-    """
-    if email_type == 'admin_summary':
-        # For admin emails, sort by ML score with high-confidence articles first
-        return sort_articles_by_ml_score(articles)
-    else:
-        # For user emails, use discovery date order
-        return list(articles.order_by('-discovery_date'))
-
-
-def filter_articles_for_email(articles, email_type='weekly_summary', confidence_threshold=0.8):
-    """
-    Filter articles appropriately for different email types.
-    
-    Args:
-        articles: QuerySet or list of Article objects
-        email_type (str): Type of email to filter for
-        confidence_threshold (float): ML confidence threshold for filtering
-    
-    Returns:
-        list: Filtered articles
-    """
-    if email_type == 'weekly_summary':
-        # For weekly summaries, only include high-confidence articles
-        return filter_high_confidence_articles(articles, confidence_threshold)
-    else:
-        # For admin emails, include all articles for review
-        return list(articles)
+def prepare_email_context(email_type, articles=None, trials=None, subscriber=None,
+		list_obj=None, site=None, custom_settings=None, admin_email=None):
+	return get_optimized_email_context(
+		email_type=email_type,
+		articles=articles,
+		trials=trials,
+		subscriber=subscriber,
+		list_obj=list_obj,
+		site=site,
+		custom_settings=custom_settings,
+	)
