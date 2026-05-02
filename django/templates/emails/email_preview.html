@@ -1,272 +1,695 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Email Template Preview Dashboard</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            color: #333;
-        }
-        
-        .dashboard-container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            overflow: hidden;
-        }
-        
-        .header {
-            background: #2c5aa0;
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-        
-        .header h1 {
-            margin: 0;
-            font-size: 2.5em;
-            font-weight: 300;
-        }
-        
-        .header p {
-            margin: 10px 0 0 0;
-            opacity: 0.9;
-            font-size: 1.1em;
-        }
-        
-        .content {
-            padding: 40px;
-        }
-        
-        .template-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 25px;
-            margin-bottom: 40px;
-        }
-        
-        .template-card {
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            overflow: hidden;
-            transition: all 0.3s ease;
-            background: white;
-        }
-        
-        .template-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-            border-color: #2c5aa0;
-        }
-        
-        .card-header {
-            background: #f8f9fa;
-            padding: 20px;
-            border-bottom: 1px solid #e0e0e0;
-        }
-        
-        .card-title {
-            margin: 0;
-            color: #2c5aa0;
-            font-size: 1.3em;
-            font-weight: 600;
-        }
-        
-        .card-description {
-            margin: 8px 0 0 0;
-            color: #666;
-            font-size: 0.95em;
-            line-height: 1.5;
-        }
-        
-        .card-actions {
-            padding: 20px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        
-        .btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 5px;
-            text-decoration: none;
-            font-size: 0.9em;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .btn-primary {
-            background: #2c5aa0;
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: #1e3f73;
-        }
-        
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        
-        .btn-secondary:hover {
-            background: #545b62;
-        }
-        
-        .btn-info {
-            background: #17a2b8;
-            color: white;
-        }
-        
-        .btn-info:hover {
-            background: #117a8b;
-        }
-        
-        .utilities-section {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 30px;
-            margin-top: 30px;
-        }
-        
-        .utilities-title {
-            color: #2c5aa0;
-            margin: 0 0 20px 0;
-            font-size: 1.4em;
-        }
-        
-        .utility-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-        
-        .utility-button {
-            display: block;
-            padding: 15px;
-            background: white;
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
-            text-decoration: none;
-            color: #495057;
-            text-align: center;
-            transition: all 0.2s ease;
-        }
-        
-        .utility-button:hover {
-            background: #e9ecef;
-            border-color: #2c5aa0;
-            color: #2c5aa0;
-        }
-        
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Email Preview – Gregory AI</title>
+	<style>
+		*, *::before, *::after { box-sizing: border-box; }
 
-        .info-box {
-            background: #e3f2fd;
-            border: 1px solid #bbdefb;
-            border-radius: 6px;
-            padding: 15px;
-            margin-top: 20px;
-        }
-        
-        .info-box h4 {
-            color: #1976d2;
-            margin: 0 0 10px 0;
-        }
-        
-        .info-box p {
-            margin: 0;
-            color: #424242;
-            line-height: 1.5;
-        }
-    </style>
+		body {
+			margin: 0;
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+			background: #f1f3f6;
+			color: #222;
+			height: 100vh;
+			display: flex;
+			flex-direction: column;
+		}
+
+		/* ── Top bar ─────────────────────────────────────────── */
+		.topbar {
+			background: #1e3a5f;
+			color: #fff;
+			padding: 10px 20px;
+			display: flex;
+			align-items: center;
+			gap: 16px;
+			flex-shrink: 0;
+			box-shadow: 0 2px 6px rgba(0,0,0,.25);
+		}
+		.topbar h1 { margin: 0; font-size: 17px; font-weight: 600; flex: 1; }
+		.topbar a { color: #93c5fd; font-size: 13px; text-decoration: none; }
+		.topbar a:hover { text-decoration: underline; }
+
+		/* ── Layout ──────────────────────────────────────────── */
+		.layout {
+			display: flex;
+			flex: 1;
+			min-height: 0;
+		}
+
+		/* ── Left panel ──────────────────────────────────────── */
+		.panel {
+			width: 340px;
+			flex-shrink: 0;
+			background: #fff;
+			border-right: 1px solid #dde1e8;
+			display: flex;
+			flex-direction: column;
+			overflow-y: auto;
+		}
+
+		.panel-section {
+			padding: 16px 18px;
+			border-bottom: 1px solid #edf0f4;
+		}
+		.panel-section:last-child { border-bottom: none; }
+
+		.panel-section h2 {
+			margin: 0 0 12px 0;
+			font-size: 11px;
+			text-transform: uppercase;
+			letter-spacing: .06em;
+			color: #6b7280;
+			font-weight: 600;
+		}
+
+		/* Type tabs */
+		.type-tabs {
+			display: flex;
+			gap: 6px;
+			flex-wrap: wrap;
+		}
+		.type-tab {
+			padding: 6px 12px;
+			border: 1px solid #d1d5db;
+			border-radius: 20px;
+			background: #fff;
+			cursor: pointer;
+			font-size: 12px;
+			color: #374151;
+			transition: all .15s;
+		}
+		.type-tab:hover { border-color: #2563eb; color: #2563eb; }
+		.type-tab.active {
+			background: #2563eb;
+			border-color: #2563eb;
+			color: #fff;
+		}
+
+		/* Form controls */
+		label.field-label {
+			display: block;
+			font-size: 12px;
+			font-weight: 600;
+			color: #374151;
+			margin-bottom: 5px;
+		}
+		select, input[type=text], input[type=date], input[type=search] {
+			width: 100%;
+			padding: 7px 10px;
+			border: 1px solid #d1d5db;
+			border-radius: 5px;
+			font-size: 13px;
+			color: #111;
+			background: #fff;
+			outline: none;
+			transition: border-color .15s;
+		}
+		select:focus, input:focus { border-color: #2563eb; }
+
+		.field { margin-bottom: 12px; }
+		.field:last-child { margin-bottom: 0; }
+
+		/* Date presets */
+		.date-presets {
+			display: flex;
+			gap: 5px;
+			flex-wrap: wrap;
+			margin-bottom: 8px;
+		}
+		.preset-btn {
+			padding: 4px 10px;
+			border: 1px solid #d1d5db;
+			border-radius: 4px;
+			background: #fff;
+			font-size: 12px;
+			cursor: pointer;
+			color: #374151;
+			transition: all .15s;
+		}
+		.preset-btn:hover { border-color: #2563eb; color: #2563eb; }
+		.preset-btn.active {
+			background: #eff6ff;
+			border-color: #2563eb;
+			color: #1d4ed8;
+			font-weight: 600;
+		}
+
+		.custom-dates {
+			display: none;
+			gap: 8px;
+		}
+		.custom-dates.visible { display: flex; }
+		.custom-dates .half { flex: 1; }
+		.custom-dates label { font-size: 11px; color: #6b7280; margin-bottom: 3px; display: block; }
+
+		/* Subscriber autocomplete */
+		.autocomplete-wrap { position: relative; }
+		.autocomplete-dropdown {
+			display: none;
+			position: absolute;
+			top: calc(100% + 3px);
+			left: 0; right: 0;
+			background: #fff;
+			border: 1px solid #d1d5db;
+			border-radius: 5px;
+			box-shadow: 0 4px 12px rgba(0,0,0,.12);
+			z-index: 300;
+			max-height: 200px;
+			overflow-y: auto;
+		}
+		.autocomplete-dropdown.open { display: block; }
+		.ac-item {
+			padding: 8px 12px;
+			font-size: 13px;
+			cursor: pointer;
+		}
+		.ac-item:hover { background: #eff6ff; }
+		.ac-item .ac-name { font-weight: 500; }
+		.ac-item .ac-email { font-size: 11px; color: #6b7280; }
+
+		.subscriber-badge {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			padding: 6px 10px;
+			background: #eff6ff;
+			border: 1px solid #bfdbfe;
+			border-radius: 5px;
+			font-size: 12px;
+			margin-top: 6px;
+		}
+		.subscriber-badge .badge-name { flex: 1; font-weight: 500; }
+		.subscriber-badge button {
+			background: none;
+			border: none;
+			cursor: pointer;
+			color: #6b7280;
+			font-size: 14px;
+			padding: 0 2px;
+			line-height: 1;
+		}
+		.subscriber-badge button:hover { color: #dc2626; }
+
+		.mock-notice {
+			font-size: 11px;
+			color: #6b7280;
+			margin-top: 4px;
+			font-style: italic;
+		}
+
+		/* Refresh button */
+		.btn-refresh {
+			width: 100%;
+			padding: 9px;
+			background: #2563eb;
+			color: #fff;
+			border: none;
+			border-radius: 6px;
+			font-size: 14px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: background .15s;
+		}
+		.btn-refresh:hover { background: #1d4ed8; }
+
+		/* Status bar */
+		.status-bar {
+			font-size: 11px;
+			color: #6b7280;
+			padding: 6px 18px;
+			background: #f8fafc;
+			border-top: 1px solid #edf0f4;
+			margin-top: auto;
+			flex-shrink: 0;
+		}
+		.status-bar span { margin-right: 12px; }
+
+		/* ── Right panel ─────────────────────────────────────── */
+		.preview-pane {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+			min-width: 0;
+			background: #f1f3f6;
+		}
+
+		.preview-toolbar {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			padding: 8px 16px;
+			background: #fff;
+			border-bottom: 1px solid #dde1e8;
+			flex-shrink: 0;
+		}
+		.preview-toolbar span {
+			font-size: 12px;
+			color: #6b7280;
+			flex: 1;
+		}
+		.preview-toolbar a, .preview-toolbar button {
+			font-size: 12px;
+			padding: 5px 12px;
+			border-radius: 4px;
+			text-decoration: none;
+			cursor: pointer;
+			border: 1px solid #d1d5db;
+			background: #fff;
+			color: #374151;
+			transition: all .15s;
+		}
+		.preview-toolbar a:hover, .preview-toolbar button:hover {
+			border-color: #2563eb;
+			color: #2563eb;
+		}
+
+		.iframe-wrap {
+			flex: 1;
+			position: relative;
+			overflow: hidden;
+		}
+		#preview-frame {
+			width: 100%;
+			height: 100%;
+			border: none;
+			display: block;
+			background: #fff;
+		}
+		.loading-overlay {
+			display: none;
+			position: absolute;
+			inset: 0;
+			background: rgba(255,255,255,.75);
+			align-items: center;
+			justify-content: center;
+			font-size: 14px;
+			color: #6b7280;
+		}
+		.loading-overlay.visible { display: flex; }
+		.spinner {
+			width: 20px; height: 20px;
+			border: 3px solid #e5e7eb;
+			border-top-color: #2563eb;
+			border-radius: 50%;
+			animation: spin .6s linear infinite;
+			margin-right: 10px;
+		}
+		@keyframes spin { to { transform: rotate(360deg); } }
+
+		/* placeholder before first load */
+		.placeholder {
+			flex: 1;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			flex-direction: column;
+			gap: 12px;
+			color: #9ca3af;
+		}
+		.placeholder svg { opacity: .4; }
+		.placeholder p { font-size: 14px; margin: 0; }
+	</style>
 </head>
 <body>
-    <div class="dashboard-container">
-        <div class="header">
-            <h1>Email Template System</h1>
-            <p>Preview and test email templates for {{ title|default:"Gregory AI" }}</p>
-        </div>
-        
-        <div class="content">
-            <div class="template-grid">
-                {% for template_key, template_name in email_types %}
-                <div class="template-card">
-                    <div class="card-header">
-                        <h3 class="card-title">
-                            {{ template_name }}
-                        </h3>
-                        <p class="card-description">
-                            {% if template_key == 'weekly_summary' %}
-                                User-facing weekly digest with modular components, ML predictions, and responsive design optimized for Gmail.
-                            {% elif template_key == 'admin_summary' %}
-                                Admin interface with edit links, ML confidence scores, and comprehensive article management tools.
-                            {% elif template_key == 'trial_notification' %}
-                                Real-time clinical trial notifications with trial metadata, status indicators, and smart formatting.
-                            {% elif template_key == 'test_components' %}
-                                Component testing interface for validating individual template elements and styling.
-                            {% endif %}
-                        </p>
-                    </div>
-                    
-                    <div class="card-actions">
-                        <a href="{% url 'email_template_preview' template_key %}" class="btn btn-primary" target="_blank">
-                            Preview Template
-                        </a>
-                        <a href="{% url 'email_template_json_context' template_key %}" class="btn btn-info" target="_blank">
-                            View Context JSON
-                        </a>
-                        {% if template_key != 'test_components' %}
-                        <a href="{% url 'email_template_preview' template_key %}?format=text" class="btn btn-secondary" target="_blank">
-                            Text Version
-                        </a>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            
-            <div class="utilities-section">
-                <h3 class="utilities-title">Development Utilities</h3>
-                <div class="utility-grid">
 
-                    <a href="/admin/subscriptions/lists/" class="utility-button" target="_blank">
-                        Manage Subscription Lists
-                    </a>
-                    <a href="/admin/subscriptions/subscribers/" class="utility-button" target="_blank">
-                        Manage Subscribers
-                    </a>
-                    <a href="/admin/gregory/articles/" class="utility-button" target="_blank">
-                        Article Database
-                    </a>
-                    <a href="/admin/gregory/trials/" class="utility-button" target="_blank">
-                        Clinical Trials
-                    </a>
-                    <a href="/admin/sites/site/" class="utility-button" target="_blank">
-                        Email Settings
-                    </a>
-                </div>
-            </div>
-            
-            <div class="info-box">
-                <h4>Template System Status</h4>
-                <p>
-                    <strong>Phase 5: Advanced Content Organization</strong> - Management commands have been updated to use the new modular template system with enhanced content organization and rendering pipeline optimization.
-                </p>
-                <p style="margin-top: 10px;">
-                    <strong>Current:</strong> All three email types (Weekly Summary, Admin Summary, Clinical Trials) now use component-based templates with ML prediction integration and optimized content organization.
-                </p>
-            </div>
-        </div>
-    </div>
+<div class="topbar">
+	<h1>📧 Email Preview</h1>
+	<a href="/admin/">Django Admin</a>
+	<a href="/admin/subscriptions/subscribers/">Subscribers</a>
+	<a href="/admin/subscriptions/lists/">Lists</a>
+</div>
+
+<div class="layout">
+
+	<!-- ── Left panel ──────────────────────────────────────── -->
+	<aside class="panel">
+
+		<div class="panel-section">
+			<h2>Email Type</h2>
+			<div class="type-tabs" id="type-tabs">
+				<button class="type-tab active" data-type="weekly_summary">Weekly Summary</button>
+				<button class="type-tab" data-type="admin_summary">Admin Summary</button>
+				<button class="type-tab" data-type="trial_notification">Clinical Trials</button>
+				<button class="type-tab" data-type="test_components">Components</button>
+			</div>
+		</div>
+
+		<div class="panel-section">
+			<h2>Mailing List</h2>
+			<div class="field">
+				<select id="list-select">
+					<option value="">— No list (generic preview) —</option>
+				</select>
+			</div>
+			<div id="list-subjects" class="mock-notice" style="display:none;"></div>
+		</div>
+
+		<div class="panel-section">
+			<h2>Subscriber</h2>
+			<div class="field">
+				<div class="autocomplete-wrap">
+					<input type="search" id="subscriber-search" placeholder="Search by name or email…" autocomplete="off">
+					<div class="autocomplete-dropdown" id="ac-dropdown"></div>
+				</div>
+				<div id="subscriber-badge" style="display:none;"></div>
+				<p class="mock-notice" id="mock-notice">Using mock subscriber (Preview User)</p>
+				<input type="hidden" id="subscriber-id" value="">
+			</div>
+		</div>
+
+		<div class="panel-section">
+			<h2>Date Range</h2>
+			<div class="date-presets" id="date-presets">
+				<button class="preset-btn" data-days="7">7 days</button>
+				<button class="preset-btn active" data-days="30">30 days</button>
+				<button class="preset-btn" data-days="90">90 days</button>
+				<button class="preset-btn" data-days="365">12 months</button>
+				<button class="preset-btn" data-days="custom">Custom</button>
+			</div>
+			<div class="custom-dates" id="custom-dates">
+				<div class="half">
+					<label>From</label>
+					<input type="date" id="date-start">
+				</div>
+				<div class="half">
+					<label>To</label>
+					<input type="date" id="date-end">
+				</div>
+			</div>
+		</div>
+
+		<div class="panel-section">
+			<button class="btn-refresh" id="refresh-btn">Refresh Preview</button>
+		</div>
+
+		<div class="status-bar" id="status-bar">
+			<span>No preview loaded</span>
+		</div>
+
+	</aside>
+
+	<!-- ── Right panel ─────────────────────────────────────── -->
+	<div class="preview-pane">
+		<div class="preview-toolbar">
+			<span id="toolbar-label">Configure options on the left, then click Refresh Preview.</span>
+			<a href="#" id="open-tab-btn" target="_blank" style="display:none;">Open in new tab ↗</a>
+			<a href="#" id="json-ctx-btn" target="_blank" style="display:none;">JSON Context</a>
+		</div>
+
+		<div class="iframe-wrap">
+			<div class="loading-overlay" id="loading-overlay">
+				<div class="spinner"></div> Loading preview…
+			</div>
+			<div class="placeholder" id="placeholder">
+				<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+					<rect x="2" y="4" width="20" height="16" rx="2"/>
+					<path d="M2 8l10 7 10-7"/>
+				</svg>
+				<p>Select an email type and click <strong>Refresh Preview</strong></p>
+			</div>
+			<iframe id="preview-frame" style="display:none;" title="Email preview"></iframe>
+		</div>
+	</div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+var state = {
+	emailType:    'weekly_summary',
+	listId:       '',
+	listName:     '',
+	listSubjects: [],
+	subscriberId: '',
+	subscriberName: '',
+	activeDays:   30,
+	customStart:  '',
+	customEnd:    '',
+};
+
+var debounceTimer = null;
+var acDebounceTimer = null;
+
+// ── URL builders ───────────────────────────────────────────────────────────
+function buildPreviewUrl() {
+	var params = new URLSearchParams();
+	if (state.listId)       params.set('list_id', state.listId);
+	if (state.subscriberId) params.set('subscriber_id', state.subscriberId);
+	if (state.activeDays === 'custom') {
+		if (state.customStart) params.set('start', state.customStart);
+		if (state.customEnd)   params.set('end',   state.customEnd);
+	} else {
+		params.set('days', state.activeDays);
+	}
+	return '/emails/preview/' + state.emailType + '/?' + params.toString();
+}
+
+function buildJsonUrl() {
+	var url = buildPreviewUrl();
+	return url.replace('/emails/preview/', '/emails/context/');
+}
+
+// ── Load preview ───────────────────────────────────────────────────────────
+function loadPreview() {
+	var url = buildPreviewUrl();
+	var frame  = document.getElementById('preview-frame');
+	var overlay = document.getElementById('loading-overlay');
+	var ph     = document.getElementById('placeholder');
+
+	ph.style.display = 'none';
+	frame.style.display = 'block';
+	overlay.classList.add('visible');
+
+	frame.onload = function() { overlay.classList.remove('visible'); };
+	frame.src = url;
+
+	// Update toolbar
+	var openBtn = document.getElementById('open-tab-btn');
+	var jsonBtn = document.getElementById('json-ctx-btn');
+	openBtn.href = url;
+	openBtn.style.display = '';
+	jsonBtn.href = buildJsonUrl();
+	jsonBtn.style.display = '';
+	document.getElementById('toolbar-label').textContent = 'Previewing: ' + state.emailType.replace(/_/g, ' ');
+
+	// Update status bar
+	var parts = [];
+	if (state.listName) parts.push('List: ' + state.listName);
+	if (state.subscriberName) parts.push('Subscriber: ' + state.subscriberName);
+	else parts.push('Subscriber: mock');
+	if (state.activeDays === 'custom' && state.customStart && state.customEnd) {
+		parts.push('Range: ' + state.customStart + ' – ' + state.customEnd);
+	} else {
+		parts.push('Range: last ' + state.activeDays + ' days');
+	}
+	var statusBar = document.getElementById('status-bar');
+	statusBar.textContent = '';
+	parts.forEach(function(p) {
+		var span = document.createElement('span');
+		span.textContent = p;
+		statusBar.appendChild(span);
+	});
+}
+
+function scheduleRefresh() {
+	clearTimeout(debounceTimer);
+	debounceTimer = setTimeout(loadPreview, 500);
+}
+
+// ── Type tabs ──────────────────────────────────────────────────────────────
+document.getElementById('type-tabs').addEventListener('click', function(e) {
+	var btn = e.target.closest('.type-tab');
+	if (!btn) return;
+	document.querySelectorAll('.type-tab').forEach(function(b) { b.classList.remove('active'); });
+	btn.classList.add('active');
+	state.emailType = btn.dataset.type;
+	state.listId    = '';
+	state.listName  = '';
+	state.listSubjects = [];
+	document.getElementById('list-select').value = '';
+	document.getElementById('list-subjects').style.display = 'none';
+	loadLists(state.emailType);
+	scheduleRefresh();
+});
+
+// ── List select ────────────────────────────────────────────────────────────
+function loadLists(emailType) {
+	var sel = document.getElementById('list-select');
+	sel.innerHTML = '<option value="">— Loading… —</option>';
+	fetch('/emails/lists/?email_type=' + emailType)
+		.then(function(r) { return r.json(); })
+		.then(function(data) {
+			sel.innerHTML = '<option value="">— No list (generic preview) —</option>';
+			data.lists.forEach(function(l) {
+				var opt = document.createElement('option');
+				opt.value = l.id;
+				opt.textContent = l.name + (l.team_name ? ' (' + l.team_name + ')' : '');
+				sel.appendChild(opt);
+			});
+			if (state.listId && Array.from(sel.options).some(function(o) { return o.value == state.listId; })) {
+				sel.value = state.listId;
+			}
+		})
+		.catch(function() {
+			sel.innerHTML = '<option value="">— No list (generic preview) —</option>';
+		});
+}
+
+document.getElementById('list-select').addEventListener('change', function() {
+	var sel = this;
+	var opt = sel.options[sel.selectedIndex];
+	state.listId   = sel.value;
+	state.listName = sel.value ? opt.textContent : '';
+
+	var subjectsEl = document.getElementById('list-subjects');
+	if (sel.value) {
+		// Fetch full list info to show subjects
+		fetch('/emails/lists/?email_type=' + state.emailType)
+			.then(function(r) { return r.json(); })
+			.then(function(data) {
+				var found = data.lists.find(function(l) { return l.id == sel.value; });
+				if (found && found.subject_names.length) {
+					subjectsEl.textContent = 'Subjects: ' + found.subject_names.join(', ');
+					subjectsEl.style.display = '';
+				} else {
+					subjectsEl.style.display = 'none';
+				}
+			});
+	} else {
+		subjectsEl.style.display = 'none';
+	}
+
+	scheduleRefresh();
+});
+
+// ── Subscriber autocomplete ────────────────────────────────────────────────
+var acDropdown = document.getElementById('ac-dropdown');
+
+document.getElementById('subscriber-search').addEventListener('input', function() {
+	var q = this.value.trim();
+	clearTimeout(acDebounceTimer);
+	if (!q) {
+		acDropdown.classList.remove('open');
+		return;
+	}
+	acDebounceTimer = setTimeout(function() {
+		var params = new URLSearchParams({ q: q });
+		if (state.listId) params.set('list_id', state.listId);
+		fetch('/emails/subscribers/?' + params.toString())
+			.then(function(r) { return r.json(); })
+			.then(function(data) {
+				acDropdown.innerHTML = '';
+				if (!data.subscribers.length) {
+					acDropdown.innerHTML = '<div class="ac-item" style="color:#9ca3af">No results</div>';
+					acDropdown.classList.add('open');
+					return;
+				}
+				data.subscribers.forEach(function(s) {
+					var item = document.createElement('div');
+					item.className = 'ac-item';
+					var nameEl = document.createElement('div');
+					nameEl.className = 'ac-name';
+					nameEl.textContent = s.display_name;
+					var emailEl = document.createElement('div');
+					emailEl.className = 'ac-email';
+					emailEl.textContent = s.email;
+					item.appendChild(nameEl);
+					item.appendChild(emailEl);
+					item.addEventListener('click', function() {
+						selectSubscriber(s);
+					});
+					acDropdown.appendChild(item);
+				});
+				acDropdown.classList.add('open');
+			})
+			.catch(function() { acDropdown.classList.remove('open'); });
+	}, 300);
+});
+
+document.addEventListener('click', function(e) {
+	if (!e.target.closest('.autocomplete-wrap')) {
+		acDropdown.classList.remove('open');
+	}
+});
+
+function selectSubscriber(s) {
+	state.subscriberId   = s.id;
+	state.subscriberName = s.display_name || s.email;
+	document.getElementById('subscriber-id').value = s.id;
+	document.getElementById('subscriber-search').value = '';
+	acDropdown.classList.remove('open');
+	document.getElementById('mock-notice').style.display = 'none';
+
+	var badge = document.getElementById('subscriber-badge');
+	badge.style.display = '';
+	badge.textContent = '';
+	var nameSpan = document.createElement('span');
+	nameSpan.className = 'badge-name';
+	nameSpan.textContent = '👤 ' + state.subscriberName;
+	var emailSpan = document.createElement('span');
+	emailSpan.style.cssText = 'color:#6b7280;font-size:11px';
+	emailSpan.textContent = s.email;
+	var removeBtn = document.createElement('button');
+	removeBtn.title = 'Remove';
+	removeBtn.textContent = '✕';
+	removeBtn.addEventListener('click', clearSubscriber);
+	badge.appendChild(nameSpan);
+	badge.appendChild(emailSpan);
+	badge.appendChild(removeBtn);
+
+	scheduleRefresh();
+}
+
+function clearSubscriber() {
+	state.subscriberId   = '';
+	state.subscriberName = '';
+	document.getElementById('subscriber-id').value = '';
+	document.getElementById('subscriber-badge').style.display = 'none';
+	document.getElementById('mock-notice').style.display = '';
+	scheduleRefresh();
+}
+
+// ── Date presets ───────────────────────────────────────────────────────────
+document.getElementById('date-presets').addEventListener('click', function(e) {
+	var btn = e.target.closest('.preset-btn');
+	if (!btn) return;
+	document.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('active'); });
+	btn.classList.add('active');
+
+	var val = btn.dataset.days;
+	var customDates = document.getElementById('custom-dates');
+	if (val === 'custom') {
+		state.activeDays = 'custom';
+		customDates.classList.add('visible');
+	} else {
+		state.activeDays = parseInt(val, 10);
+		state.customStart = '';
+		state.customEnd   = '';
+		customDates.classList.remove('visible');
+		scheduleRefresh();
+	}
+});
+
+document.getElementById('date-start').addEventListener('change', function() {
+	state.customStart = this.value;
+	if (state.activeDays === 'custom' && state.customStart && state.customEnd) scheduleRefresh();
+});
+document.getElementById('date-end').addEventListener('change', function() {
+	state.customEnd = this.value;
+	if (state.activeDays === 'custom' && state.customStart && state.customEnd) scheduleRefresh();
+});
+
+// ── Refresh button ─────────────────────────────────────────────────────────
+document.getElementById('refresh-btn').addEventListener('click', function() {
+	clearTimeout(debounceTimer);
+	loadPreview();
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────
+loadLists(state.emailType);
+</script>
 </body>
 </html>

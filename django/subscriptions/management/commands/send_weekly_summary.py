@@ -402,6 +402,9 @@ class Command(BaseCommand):
 				_scheme = 'https' if _api_domain not in ('localhost', '127.0.0.1') else 'http'
 				summary_context['list_id'] = digest_list.list_id
 				summary_context['unsubscribe_base_url'] = f"{_scheme}://{_api_domain}"
+				summary_context['header_title'] = digest_list.header_title or ''
+				summary_context['header_tagline'] = digest_list.header_tagline or ''
+				summary_context['show_header_tagline'] = digest_list.show_header_tagline
 				
 				# Extract the actual articles that will be rendered in the email
 				articles_to_be_sent = list(summary_context.get('articles', [])) + list(summary_context.get('additional_articles', []))
