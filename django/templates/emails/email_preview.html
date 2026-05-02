@@ -485,9 +485,13 @@ function loadPreview() {
 	} else {
 		parts.push('Range: last ' + state.activeDays + ' days');
 	}
-	document.getElementById('status-bar').innerHTML = parts.map(function(p) {
-		return '<span>' + p + '</span>';
-	}).join('');
+	var statusBar = document.getElementById('status-bar');
+	statusBar.textContent = '';
+	parts.forEach(function(p) {
+		var span = document.createElement('span');
+		span.textContent = p;
+		statusBar.appendChild(span);
+	});
 }
 
 function scheduleRefresh() {
@@ -586,8 +590,14 @@ document.getElementById('subscriber-search').addEventListener('input', function(
 				data.subscribers.forEach(function(s) {
 					var item = document.createElement('div');
 					item.className = 'ac-item';
-					item.innerHTML = '<div class="ac-name">' + s.display_name + '</div>'
-						+ '<div class="ac-email">' + s.email + '</div>';
+					var nameEl = document.createElement('div');
+					nameEl.className = 'ac-name';
+					nameEl.textContent = s.display_name;
+					var emailEl = document.createElement('div');
+					emailEl.className = 'ac-email';
+					emailEl.textContent = s.email;
+					item.appendChild(nameEl);
+					item.appendChild(emailEl);
 					item.addEventListener('click', function() {
 						selectSubscriber(s);
 					});
@@ -615,9 +625,20 @@ function selectSubscriber(s) {
 
 	var badge = document.getElementById('subscriber-badge');
 	badge.style.display = '';
-	badge.innerHTML = '<span class="badge-name">👤 ' + state.subscriberName + '</span>'
-		+ '<span style="color:#6b7280;font-size:11px">' + s.email + '</span>'
-		+ '<button title="Remove" onclick="clearSubscriber()">✕</button>';
+	badge.textContent = '';
+	var nameSpan = document.createElement('span');
+	nameSpan.className = 'badge-name';
+	nameSpan.textContent = '👤 ' + state.subscriberName;
+	var emailSpan = document.createElement('span');
+	emailSpan.style.cssText = 'color:#6b7280;font-size:11px';
+	emailSpan.textContent = s.email;
+	var removeBtn = document.createElement('button');
+	removeBtn.title = 'Remove';
+	removeBtn.textContent = '✕';
+	removeBtn.addEventListener('click', clearSubscriber);
+	badge.appendChild(nameSpan);
+	badge.appendChild(emailSpan);
+	badge.appendChild(removeBtn);
 
 	scheduleRefresh();
 }
