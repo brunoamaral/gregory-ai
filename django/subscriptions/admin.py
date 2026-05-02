@@ -383,7 +383,12 @@ class SubscriberAdmin(admin.ModelAdmin):
 		# cumulative total at each period point.  This approximation tracks the
 		# growth trajectory of the current active base; subscribers who churned
 		# between their join date and now are not included.
-		active_subs_qs = Subscribers.objects.filter(active=True)
+		# Mirror the KPI scorecard definition: active account + at least one active
+		# list subscription, so the final data point matches the scorecard value.
+		active_subs_qs = Subscribers.objects.filter(
+			active=True,
+			list_subscriptions__is_active=True,
+		).distinct()
 		if org_ids is not None:
 			active_subs_qs = active_subs_qs.filter(
 				list_subscriptions__list__team__organization__id__in=org_ids
