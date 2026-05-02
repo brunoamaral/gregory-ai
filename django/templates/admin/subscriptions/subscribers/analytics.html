@@ -458,6 +458,12 @@
 	</div>
 </div>
 
+<div class="chart-container" style="margin-top: 24px;">
+	<div style="height: 320px;">
+		<canvas id="activeSubscribersChart"></canvas>
+	</div>
+</div>
+
 <div class="snapshot-section">
 	<h3>Current Subscription Snapshot</h3>
 	<div class="kpi-row">
@@ -754,6 +760,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // ── Line chart ────────────────────────────────────────────────────────────
 var activeRange = '30d';
 var lineChart = null;
+var activeSubsChart = null;
 
 function fetchAndRender(range) {
 	var params = buildParams({ range: range });
@@ -772,6 +779,56 @@ function fetchAndRender(range) {
 				'365d': 'Monthly — Last 12 Months',
 				'custom': customStart && customEnd ? customStart + ' to ' + customEnd : 'Custom Range',
 			}[range] || '';
+
+			// ── Active subscribers over time chart ────────────────────────────
+			if (data.active_subscribers) {
+				if (activeSubsChart) {
+					activeSubsChart.data.labels = data.labels;
+					activeSubsChart.data.datasets[0].data = data.active_subscribers;
+					activeSubsChart.options.plugins.title.text = 'Total Active Subscribers — ' + chartTitle;
+					activeSubsChart.update();
+				} else {
+					var actCtx = document.getElementById('activeSubscribersChart').getContext('2d');
+					activeSubsChart = new Chart(actCtx, {
+						type: 'line',
+						data: {
+							labels: data.labels,
+							datasets: [{
+								label: 'Total Active Subscribers',
+								data: data.active_subscribers,
+								borderColor: '#7c3aed',
+								backgroundColor: 'rgba(124,58,237,0.08)',
+								tension: 0.2,
+								fill: true,
+								pointRadius: 3,
+							}],
+						},
+						options: {
+							responsive: true,
+							maintainAspectRatio: false,
+							interaction: { mode: 'index', intersect: false },
+							scales: {
+								y: {
+									beginAtZero: false,
+									ticks: { stepSize: 1, precision: 0 },
+								},
+								x: {
+									ticks: { maxTicksLimit: 12 },
+								},
+							},
+							plugins: {
+								title: {
+									display: true,
+									text: 'Total Active Subscribers — ' + chartTitle,
+									font: { size: 14 },
+								},
+								legend: { display: false },
+								datalabels: { display: false },
+							},
+						},
+					});
+				}
+			}
 
 			if (lineChart) {
 				lineChart.data.labels = data.labels;

@@ -378,11 +378,49 @@ class SubscriberAdmin(admin.ModelAdmin):
 
 		labels = [p.strftime(date_fmt) for p in period_range]
 
+		# ── Active subscribers over time ───────────────────────────────────────
+		# Counts currently-active subscribers by when they joined, building a
+		# cumulative total at each period point.  This approximation tracks the
+		# growth trajectory of the current active base; subscribers who churned
+		# between their join date and now are not included.
+		active_subs_qs = Subscribers.objects.filter(active=True)
+		if org_ids is not None:
+			active_subs_qs = active_subs_qs.filter(
+				list_subscriptions__list__team__organization__id__in=org_ids
+			).distinct()
+
+		pre_existing = active_subs_qs.filter(created_at__date__lt=start_date).count()
+		creation_rows = (
+			active_subs_qs
+			.filter(
+				created_at__date__gte=start_date,
+				created_at__date__lte=end_date,
+			)
+			.annotate(period=trunc_fn('created_at'))
+			.values('period')
+			.annotate(count=Count('subscriber_id', distinct=True))
+			.order_by('period')
+		)
+		creation_by_period = {}
+		for row in creation_rows:
+			pk = row['period']
+			if pk:
+				if hasattr(pk, 'date'):
+					pk = pk.date()
+				creation_by_period[pk] = row['count']
+
+		cumulative = pre_existing
+		active_subscribers_series = []
+		for p in period_range:
+			cumulative += creation_by_period.get(p, 0)
+			active_subscribers_series.append(cumulative)
+
 		return JsonResponse({
 			'labels': labels,
 			'new_subscribers': new_subscribers_data,
 			'new_subscriptions': new_subscriptions_data,
 			'unsubscriptions': unsubscriptions_data,
+			'active_subscribers': active_subscribers_series,
 			'totals': {
 				'new_subscribers': sum(new_subscribers_data),
 				'new_subscriptions': sum(new_subscriptions_data),
