@@ -59,6 +59,23 @@ class Lists(models.Model):
 		blank=True,
 		help_text="The site this list sends emails from. Determines footer branding, links, and unsubscribe URLs. Auto-populated from the organisation default site if not set."
 	)
+	# Email header customization
+	header_title = models.CharField(
+		max_length=200,
+		null=True,
+		blank=True,
+		help_text="Optional override for the email header title (defaults to \"Gregory AI\")."
+	)
+	header_tagline = models.CharField(
+		max_length=300,
+		null=True,
+		blank=True,
+		help_text="Optional tagline to display in the email header."
+	)
+	show_header_tagline = models.BooleanField(
+		default=True,
+		help_text="Show the tagline in the email header."
+	)
 
 	def save(self, *args, **kwargs):
 		if not self.site_id:

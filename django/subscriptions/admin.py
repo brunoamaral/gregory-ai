@@ -853,6 +853,10 @@ class ListsAdmin(admin.ModelAdmin):
 	actions = ['reassign_to_team_action']
 	fieldsets = [
 		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team', 'site']}),
+		('Email Header', {
+			'fields': ['header_title', 'header_tagline', 'show_header_tagline'],
+			'description': 'Optionally override the email header title, set a tagline, and control its visibility.',
+		}),
 		('Email Types', {'fields': ['admin_summary', 'weekly_digest', 'clinical_trials_notifications']}),
 		('Content Settings', {
 			'fields': ['article_limit', 'ml_threshold'],
