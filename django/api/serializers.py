@@ -287,7 +287,7 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 		model = Articles
 		depth = 1
 		fields = [
-			'article_id', 'title', 'summary', 'link', 'published_date', 'sources', 'teams',
+			'article_id', 'title', 'summary', 'summary_plain_english', 'link', 'published_date', 'sources', 'teams',
 			'subjects', 'publisher', 'container_title', 'authors',
 			'discovery_date', 'article_subject_relevances',
 			'doi', 'access', 'takeaways', 'team_categories', 'ml_predictions', 'clinical_trials',
@@ -308,7 +308,7 @@ class TrialSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:
 		model = Trials
 		fields = [
-			'trial_id', 'title', 'summary', 'published_date', 'discovery_date', 'link', 'source',
+			'trial_id', 'title', 'summary', 'summary_plain_english', 'published_date', 'discovery_date', 'link', 'source',
 			'identifiers', 'team_categories', 'export_date', 'internal_number', 'last_refreshed_on',
 			'scientific_title', 'primary_sponsor', 'retrospective_flag', 'date_registration',
 			'source_register', 'recruitment_status', 'other_records', 'inclusion_agemin',
