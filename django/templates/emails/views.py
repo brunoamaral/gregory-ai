@@ -158,6 +158,9 @@ def _build_preview_context(request, template_name):
 	# Inject unsubscribe footer helpers (same as management commands post-call)
 	if list_obj:
 		context['list_id'] = list_obj.list_id
+		context['header_title'] = list_obj.header_title or ''
+		context['header_tagline'] = list_obj.header_tagline or ''
+		context['show_header_tagline'] = list_obj.show_header_tagline
 	scheme = 'https'
 	domain = getattr(site, 'domain', 'gregory-ms.com') or 'gregory-ms.com'
 	context['unsubscribe_base_url'] = f"{scheme}://{domain}"
