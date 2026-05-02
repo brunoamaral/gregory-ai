@@ -63,20 +63,15 @@ def _resolve_date_range(request):
 
 def _get_site_and_settings(list_obj=None):
 	"""Resolve site + CustomSetting, mirroring the management command fallback chain."""
-	try:
-		if list_obj is not None and list_obj.site_id:
-			site = list_obj.site
-		else:
-			site = Site.objects.get_current()
-		custom_settings = CustomSetting.objects.get(site=site)
-		return site, custom_settings
-	except Exception:
+	if list_obj is not None and list_obj.site_id:
+		site = list_obj.site
+	else:
 		site = Site.objects.get_current()
-		try:
-			custom_settings = CustomSetting.objects.get(site=site)
-		except CustomSetting.DoesNotExist:
-			custom_settings = None
-		return site, custom_settings
+	try:
+		custom_settings = CustomSetting.objects.get(site=site)
+	except CustomSetting.DoesNotExist:
+		custom_settings = None
+	return site, custom_settings
 
 
 def _build_preview_context(request, template_name):
@@ -139,7 +134,8 @@ def _build_preview_context(request, template_name):
 		discovery_date__date__lte=end_date,
 	)
 	if list_obj is not None and list_obj.subjects.exists():
-		trial_qs = trial_qs.filter(subjects__in=list_obj.subjects.all()).distinct()
+		trial_limit = getattr(list_obj, 'article_limit', 20) or 20
+		trial_qs = trial_qs.filter(subjects__in=list_obj.subjects.all()).distinct().order_by('-discovery_date')[:trial_limit]
 	else:
 		trial_qs = trial_qs.order_by('-discovery_date')[:20]
 
