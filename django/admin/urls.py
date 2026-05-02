@@ -34,8 +34,10 @@ from organizations.backends import invitation_backend
 # Email template views (direct import to avoid module issues)
 from templates.emails.views import (
 	email_preview_dashboard,
-	email_template_preview, 
+	email_template_preview,
 	email_template_json_context,
+	email_preview_lists,
+	email_preview_subscribers,
 )
 
 # Initialize the router and register some endpoints
@@ -85,6 +87,8 @@ urlpatterns = [
 	path('emails/', email_preview_dashboard, name='email_preview_dashboard'),
 	path('emails/preview/<str:template_name>/', email_template_preview, name='email_template_preview'),
 	path('emails/context/<str:template_name>/', email_template_json_context, name='email_template_json_context'),
+	path('emails/lists/', email_preview_lists, name='email_preview_lists'),
+	path('emails/subscribers/', email_preview_subscribers, name='email_preview_subscribers'),
 
 
 	# Team API (excluded from API root, requires authentication)
