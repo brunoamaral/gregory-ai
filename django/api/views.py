@@ -1244,6 +1244,13 @@ class ArticleSearchView(generics.ListAPIView):
         if not team_id or not subject_id:
             return Articles.objects.none()
 
+        # Cast to int early — non-numeric values get a 404 rather than a 500.
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            raise Http404
+
         # Visibility check: hidden teams return 404 (before the broad except block)
         if hasattr(self.request, 'visible_org_ids'):
             if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
@@ -1399,6 +1406,13 @@ class TrialSearchView(generics.ListAPIView):
         # Validate required parameters
         if not team_id or not subject_id:
             return Trials.objects.none()
+
+        # Cast to int early — non-numeric values get a 404 rather than a 500.
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            raise Http404
 
         # Visibility check: hidden teams return 404 (before the broad except block)
         if hasattr(self.request, 'visible_org_ids'):
