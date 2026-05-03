@@ -27,11 +27,12 @@ Query strategy (avoiding N+1 on list endpoints)
   column.  Visible team IDs are resolved once per request and cached on
   ``request._org_scoped_mixin_team_ids`` so the query runs at most once per
   request regardless of list length.
-- ``ml_predictions``:  ``prediction.subject_id`` is a direct FK column.
-  Visible subject IDs are resolved once per request and cached on
-  ``request._org_scoped_mixin_subject_ids`` so the query runs at most once
-  per request regardless of list length.  Iterating ``.all()`` in Python
-  then respects any ``prefetch_related('ml_predictions_detail')`` cache.
+- ``ml_predictions``:  Each serialised item already contains a ``subject``
+  key (the FK integer) from ``MLPredictionsSerializer``.  Visible subject IDs
+  are resolved once per request and cached on
+  ``request._org_scoped_mixin_subject_ids``.  Filtering is done entirely on
+  ``ret['ml_predictions']`` — no extra DB query, no dependency on whether
+  ``ml_predictions_detail`` was prefetched.
 """
 
 
@@ -108,10 +109,13 @@ class OrgScopedSerializerMixin:
 			visible_cat_ids = {c.id for c in instance.team_categories.all() if c.team_id in vt}
 			ret['team_categories'] = [c for c in ret['team_categories'] if c.get('id') in visible_cat_ids]
 
-		# --- ml_predictions: iterate Python, uses prefetch_related cache ---
-		if 'ml_predictions' in ret and hasattr(instance, 'ml_predictions_detail'):
+		# --- ml_predictions: filter directly on already-serialised data ---
+		# Each item in ret['ml_predictions'] already has a 'subject' key (the FK
+		# integer) from MLPredictionsSerializer.  Filtering here avoids hitting
+		# instance.ml_predictions_detail.all() a second time, which would cause
+		# an extra per-object query when the relation is not prefetched.
+		if 'ml_predictions' in ret:
 			vs = _request_visible_subject_ids(request, visible)
-			visible_pred_ids = {p.id for p in instance.ml_predictions_detail.all() if p.subject_id in vs}
-			ret['ml_predictions'] = [p for p in ret['ml_predictions'] if p.get('id') in visible_pred_ids]
+			ret['ml_predictions'] = [p for p in ret['ml_predictions'] if p.get('subject') in vs]
 
 		return ret
