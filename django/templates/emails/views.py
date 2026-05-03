@@ -13,7 +13,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.template.loader import get_template
 from django.utils import timezone
-from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_http_methods
 
 from gregory.models import Articles, Trials
@@ -182,7 +182,7 @@ def email_preview_dashboard(request):
 
 
 @staff_member_required
-@xframe_options_sameorigin
+@xframe_options_exempt
 @require_http_methods(["GET"])
 def email_template_preview(request, template_name):
 	"""
