@@ -1,4 +1,3 @@
-from django.shortcuts import render
 from django.contrib.syndication.views import Feed
 from django.contrib.sites.models import Site
 from django.http import Http404
