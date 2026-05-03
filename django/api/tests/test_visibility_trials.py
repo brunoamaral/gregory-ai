@@ -298,7 +298,7 @@ class NullOrgAPIKeyTrialVisibilityTest(TrialVisibilityBase):
 # ---------------------------------------------------------------------------
 
 class CSVExportTrialVisibilityTest(TrialVisibilityBase):
-	"""CSV responses from /trials/?format=csv must respect the same visibility rules.\""""
+	"""CSV responses from /trials/?format=csv must respect the same visibility rules."""
 
 	def _csv_titles(self, response):
 		"""Return the set of trial titles found in a CSV StreamingHttpResponse.\""""
