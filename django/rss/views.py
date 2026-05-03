@@ -1,11 +1,13 @@
 from django.shortcuts import render
 from django.contrib.syndication.views import Feed
 from django.contrib.sites.models import Site
+from django.http import Http404
 from gregory.models import Articles, Authors, Trials, Subject
 from django.urls import reverse
 from django.contrib.sites.models import Site
 from sitesettings.models import CustomSetting
 from gregory.functions import normalize_orcid
+from gregory.visibility import visible_org_ids as _visible_org_ids
 
 def get_website_domain():
 	current_site = Site.objects.get_current()
@@ -19,7 +21,18 @@ class ArticlesByAuthorFeed(Feed):
 		normalized = normalize_orcid(orcid)
 		if not normalized:
 			raise Authors.DoesNotExist
-		return Authors.objects.get(ORCID=normalized)
+		author = Authors.objects.get(ORCID=normalized)
+
+		# Compute visibility and attach to self for use in items()
+		self._visible_org_ids = _visible_org_ids(request)
+
+		# 404 if author has no articles in any visible org
+		if not author.articles_set.filter(
+			teams__organization_id__in=self._visible_org_ids
+		).exists():
+			raise Http404
+
+		return author
 
 	# Feed metadata (dynamic per author)
 	def title(self, obj):
@@ -32,7 +45,14 @@ class ArticlesByAuthorFeed(Feed):
 	description = "RSS feed for articles by a specific author."
 
 	def items(self, obj):
-		return Articles.objects.filter(authors=obj).order_by('-published_date')[:50]
+		return (
+			Articles.objects.filter(
+				authors=obj,
+				teams__organization_id__in=self._visible_org_ids,
+			)
+			.distinct()
+			.order_by('-published_date')[:50]
+		)
 
 	def item_title(self, item):
 		return item.title
@@ -54,15 +74,29 @@ class ArticlesByAuthorFeed(Feed):
 		return item.published_date
 
 	def item_updateddate(self, item):
-		return item.last_updated
+		return item.discovery_date
 
 
 class TrialsBySubjectFeed(Feed):
 	"""RSS feed for clinical trials filtered by subject slug."""
 
 	def get_object(self, request, subject_slug):
-		# Look up subject by slug
-		return Subject.objects.get(subject_slug=subject_slug)
+		subject = Subject.objects.get(subject_slug=subject_slug)
+
+		# Compute visibility and attach to self for use in items()
+		self._visible_org_ids = _visible_org_ids(request)
+
+		# 404 if subject belongs to an org that isn't visible
+		if subject.team_id is not None:
+			from gregory.models import Team as _Team
+			try:
+				team = _Team.objects.get(id=subject.team_id)
+				if team.organization_id not in self._visible_org_ids:
+					raise Http404
+			except _Team.DoesNotExist:
+				raise Http404
+
+		return subject
 
 	# Feed metadata (dynamic per subject)
 	def title(self, obj):
@@ -75,7 +109,14 @@ class TrialsBySubjectFeed(Feed):
 		return f"RSS feed for clinical trials related to {obj.subject_name}."
 
 	def items(self, obj):
-		return Trials.objects.filter(subjects=obj).order_by('-discovery_date')[:50]
+		return (
+			Trials.objects.filter(
+				subjects=obj,
+				teams__organization_id__in=self._visible_org_ids,
+			)
+			.distinct()
+			.order_by('-discovery_date')[:50]
+		)
 
 	def item_title(self, item):
 		return item.title
