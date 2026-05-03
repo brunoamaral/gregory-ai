@@ -14,6 +14,7 @@
 - `unsent=true` - Filter for articles not yet sent to subscribers
 - `last_days=N` - Filter for articles from the last N days (can combine with other filters)
 - `week=N&year=YYYY` - Filter for articles from a specific week (can combine with other filters)
+- `has_clinical_trials=true/false` - Filter for articles that are (or are not) linked to at least one clinical trial
 
 **Usage Examples:**
 ```bash
@@ -48,6 +49,8 @@ The endpoints use a flexible query parameter system that allows combining multip
 | Weekly relevant articles | `GET /articles/?relevant=true&week=52&year=2024` | Specific week filtering with relevance |
 | Open access articles | `GET /articles/?open_access=true` | Filter by accessibility |
 | Unsent articles | `GET /articles/?unsent=true` | Filter by notification status |
+| Articles with clinical trials | `GET /articles/?has_clinical_trials=true` | Filter articles linked to at least one clinical trial |
+| Articles without clinical trials | `GET /articles/?has_clinical_trials=false` | Filter articles not linked to any clinical trial |
 | Complex filtering | `GET /articles/?team_id=1&subject_id=4&author_id=123&search=stem&relevant=true` | Only possible with new approach |
 
 
@@ -132,7 +135,7 @@ curl https://api.example.com/trials/search/?team_id=1&subject_id=1&status=Recrui
 | Sources                 | GET /sources/{id}/                       | Retrieve a specific source by ID                    | `id` (path)                                             | ✅ **Available**                                       |
 | Sources                 | PUT /sources/{id}/                       | Update a specific source by ID                      | N/A                                                     | ❌ **Not Available**                                  |
 | Sources                 | DELETE /sources/{id}/                    | Delete a specific source by ID                      | N/A                                                     | ❌ **Not Available**                                  |
-| Articles                | GET /articles/                           | List all articles with comprehensive filters        | `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `unsent`, `last_days`, `week`, `year`, pagination | ✅ **Available**                                       |
+| Articles                | GET /articles/                           | List all articles with comprehensive filters        | `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `unsent`, `last_days`, `week`, `year`, `has_clinical_trials`, pagination | ✅ **Available**                                       |
 | Articles                | POST /articles/                          | Create a new article                                | `title`, `link`, `doi`, `summary`, `source_id`, etc.   | ✅ **Available** (via /articles/post/)                |
 | Articles                | GET /articles/{id}/                      | Retrieve a specific article by ID                   | `id` (path)                                             | ✅ **Available**                                       |
 | Articles                | PUT /articles/{id}/                      | Update a specific article by ID                     | N/A                                                     | ❌ **Not Available**                                  |
@@ -283,7 +286,7 @@ GET /subjects/?team_id=1&search=multiple&ordering=subject_name
 - **Common Parameters**: `page`, `page_size`
 - **Format params**: `format` (json, csv, html), `all_results` (true/false for CSV export)
 - **Author filter params**: `author_id`, `full_name`, `orcid`, `country`, `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe`
-- **Articles filter params**: `team_id`, `subject_id`, `author_id`, `category_slug`, `journal_slug` (URL-encoded journal name), `source_id`, `search` (title/summary), `ordering` (discovery_date, published_date, title, article_id)
+- **Articles filter params**: `team_id`, `subject_id`, `author_id`, `category_slug`, `journal_slug` (URL-encoded journal name), `source_id`, `search` (title/summary), `ordering` (discovery_date, published_date, title, article_id), `has_clinical_trials` (true/false — filter by link to clinical trials)
 - **Subjects filter params**: `team_id`, `search` (subject_name/description), `ordering` (id, subject_name, team)
 - **Sources filter params**: `source_id`, `team_id`, `subject_id`, `active`, `source_for` (articles, trials, both), `link`, `search` (name/description), `ordering` (name, source_id)
 - **Categories filter params**: `category_id`, `team_id`, `subject_id`, `category_terms`, `search` (name/description), `ordering` (category_name, id)
