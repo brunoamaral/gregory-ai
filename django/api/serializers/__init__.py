@@ -7,6 +7,8 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count, Q
 
+from api.serializers.mixins import OrgScopedSerializerMixin  # noqa: F401
+
 def get_custom_settings():
 		try:
 			return CustomSetting.objects.get(site=settings.SITE_ID)
