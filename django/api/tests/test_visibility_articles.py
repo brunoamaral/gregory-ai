@@ -14,8 +14,7 @@ Covers the four caller archetypes × the test matrix from the PR plan:
 Run with:
     docker exec gregory python manage.py test api.tests.test_visibility_articles
 """
-import json
-from datetime import date, timedelta
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
