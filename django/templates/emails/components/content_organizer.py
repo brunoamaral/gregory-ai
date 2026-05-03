@@ -93,7 +93,10 @@ class EmailContentOrganizer:
             }
         
         # Sort by discovery date and status
-        organized_trials = list(trials.order_by('-discovery_date'))
+        if hasattr(trials, 'order_by'):
+            organized_trials = list(trials.order_by('-discovery_date'))
+        else:
+            organized_trials = sorted(trials, key=lambda x: x.discovery_date, reverse=True)
         
         # Split into categories
         recruiting_trials = [t for t in organized_trials if t.recruitment_status and 'recruit' in str(t.recruitment_status).lower()]
@@ -192,7 +195,10 @@ class EmailContentOrganizer:
     
     def _organize_default_articles(self, articles):
         """Default organization for unknown email types."""
-        sorted_articles = list(articles.order_by('-discovery_date'))
+        if hasattr(articles, 'order_by'):
+            sorted_articles = list(articles.order_by('-discovery_date'))
+        else:
+            sorted_articles = sorted(articles, key=lambda x: x.discovery_date, reverse=True)
         
         return {
             'featured_articles': sorted_articles,  # Include ALL articles - no limits

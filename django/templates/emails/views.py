@@ -121,7 +121,7 @@ def _build_preview_context(request, template_name):
 	if list_obj is not None and list_obj.subjects.exists():
 		article_qs = article_qs.filter(subjects__in=list_obj.subjects.all()).distinct()
 	else:
-		article_qs = article_qs.order_by('-discovery_date')[:50]
+		article_qs = list(article_qs.order_by('-discovery_date')[:50])
 
 	# Apply article_limit from the list, same as send_weekly_summary does pre-send
 	if list_obj is not None:
@@ -135,9 +135,9 @@ def _build_preview_context(request, template_name):
 	)
 	if list_obj is not None and list_obj.subjects.exists():
 		trial_limit = getattr(list_obj, 'article_limit', 20) or 20
-		trial_qs = trial_qs.filter(subjects__in=list_obj.subjects.all()).distinct().order_by('-discovery_date')[:trial_limit]
+		trial_qs = list(trial_qs.filter(subjects__in=list_obj.subjects.all()).distinct().order_by('-discovery_date')[:trial_limit])
 	else:
-		trial_qs = trial_qs.order_by('-discovery_date')[:20]
+		trial_qs = list(trial_qs.order_by('-discovery_date')[:20])
 
 	email_type = template_name if template_name != 'test_components' else 'weekly_summary'
 
