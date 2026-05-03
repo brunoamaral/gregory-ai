@@ -285,7 +285,7 @@ class NullOrgAPIKeyTrialVisibilityTest(TrialVisibilityBase):
 		self.assertEqual(resp.status_code, 404)
 
 	def test_include_public_is_noop(self):
-		"""Null-org key already behaves like anonymous; include_public changes nothing.\""""
+		"""Null-org key already behaves like anonymous; include_public changes nothing."""
 		resp_plain = self.client.get('/trials/')
 		resp_flag = self.client.get('/trials/?include_public=true')
 		plain_ids = {t['trial_id'] for t in resp_plain.data['results']}
