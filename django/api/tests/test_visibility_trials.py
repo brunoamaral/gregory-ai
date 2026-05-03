@@ -236,7 +236,7 @@ class APIKeyTrialVisibilityTest(TrialVisibilityBase):
 		self.assertEqual(resp.status_code, 200)
 
 	def test_list_excludes_public_trial_without_flag(self):
-		"""Without include_public, API key sees only its own org.\""""
+		"""Without include_public, API key sees only its own org."""
 		resp = self.client.get('/trials/')
 		ids = [t['trial_id'] for t in resp.data['results']]
 		self.assertNotIn(self.trial_pub.trial_id, ids)
