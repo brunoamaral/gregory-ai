@@ -1,4 +1,5 @@
 from simple_history.signals import post_create_historical_record
+from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 MAX_AUTHOR_HISTORY = 5
@@ -12,3 +13,11 @@ def trim_author_history(sender, instance, history_instance, **kwargs):
 		instance.history.order_by('-history_date').values_list('pk', flat=True)[:MAX_AUTHOR_HISTORY]
 	)
 	instance.history.exclude(pk__in=keep_ids).delete()
+
+
+@receiver(post_save, sender='organizations.Organization')
+def create_organization_api_settings(sender, instance, created, **kwargs):
+	"""Create an OrganizationApiSettings row for every newly created Organisation."""
+	if created:
+		from gregory.models import OrganizationApiSettings
+		OrganizationApiSettings.objects.get_or_create(organization=instance)

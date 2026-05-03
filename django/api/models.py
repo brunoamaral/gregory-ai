@@ -2,6 +2,7 @@ from django.db import models
 from django.utils.crypto import get_random_string
 from django.utils.timezone import now
 from datetime import timedelta
+from organizations.models import Organization
 
 DEFAULT_MAX_CALLS_MINUTE = 60
 DEFAULT_MAX_CALLS_HOUR = DEFAULT_MAX_CALLS_MINUTE * 60
@@ -49,6 +50,17 @@ class APIAccessScheme(models.Model):
 
     # Maximum number of calls permitted per day
     max_calls_day = models.IntegerField(default=DEFAULT_MAX_CALLS_DAY, blank=False)
+
+    # The organisation this API key represents.
+    # Null is permitted during the transition window (PR 2); will become required in PR 8.
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='api_access_schemes',
+        help_text='Organisation this key represents. Required after the transition window.',
+    )
 
     def __str__(self):
         return self.client_name
