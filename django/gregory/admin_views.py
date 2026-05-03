@@ -85,10 +85,11 @@ def article_review_status_view(request):
                 article_subject_relevances__is_relevant__isnull=False
             )
         elif review_status == 'not_reviewed':
-            # Articles where the relevance for the selected subject has not been reviewed
-            queryset = queryset.filter(
+            # Articles where the relevance for the selected subject has not been reviewed:
+            # includes articles with no ArticleSubjectRelevance record OR one with is_relevant=None
+            queryset = queryset.exclude(
                 article_subject_relevances__subject__id=selected_subject_id,
-                article_subject_relevances__is_relevant__isnull=True
+                article_subject_relevances__is_relevant__isnull=False
             )
         
         # Order by discovery date
