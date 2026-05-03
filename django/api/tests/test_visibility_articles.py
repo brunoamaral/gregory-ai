@@ -327,3 +327,65 @@ class NullOrgAPIKeyArticleVisibilityTest(ArticleVisibilityBase):
 	def test_detail_of_private_article_returns_404(self):
 		resp = self.client.get(f'/articles/{self.art_mine.article_id}/')
 		self.assertEqual(resp.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# CSV export honours visibility rules
+# ---------------------------------------------------------------------------
+
+class CSVExportArticleVisibilityTest(ArticleVisibilityBase):
+	"""CSV responses from /articles/?format=csv must respect the same visibility rules."""
+
+	def _csv_titles(self, response):
+		"""Return the set of article titles found in a CSV StreamingHttpResponse."""
+		content = b''.join(response.streaming_content).decode()
+		# Title is the second column in the CSV; skip the header row.
+		titles = set()
+		for line in content.splitlines()[1:]:
+			if line.strip():
+				# Split on comma but handle quoted fields minimally.
+				titles.add(line.split(',')[1].strip('"'))
+		return titles
+
+	def test_anonymous_csv_shows_only_public_articles(self):
+		resp = self.client.get('/articles/?format=csv&all_results=true')
+		self.assertIn(resp.status_code, (200, 206))
+		titles = self._csv_titles(resp)
+		self.assertIn('Public Only', titles)
+		self.assertNotIn('Mine Only', titles)
+		self.assertNotIn('Private Only', titles)
+
+	def test_api_key_csv_shows_own_org_articles(self):
+		from api.models import APIAccessScheme
+		scheme = APIAccessScheme.objects.create(
+			client_name='csv-key',
+			client_contacts='csv@example.com',
+			organization=self.my_org,
+			ip_addresses='',
+			begin_date=now() - timedelta(days=1),
+			end_date=now() + timedelta(days=30),
+		)
+		self.client.credentials(HTTP_AUTHORIZATION=scheme.api_key)
+		resp = self.client.get('/articles/?format=csv&all_results=true')
+		self.assertIn(resp.status_code, (200, 206))
+		titles = self._csv_titles(resp)
+		self.assertIn('Mine Only', titles)
+		self.assertNotIn('Private Only', titles)
+
+	def test_api_key_csv_with_include_public_adds_public_articles(self):
+		from api.models import APIAccessScheme
+		scheme = APIAccessScheme.objects.create(
+			client_name='csv-key-pub',
+			client_contacts='csvpub@example.com',
+			organization=self.my_org,
+			ip_addresses='',
+			begin_date=now() - timedelta(days=1),
+			end_date=now() + timedelta(days=30),
+		)
+		self.client.credentials(HTTP_AUTHORIZATION=scheme.api_key)
+		resp = self.client.get('/articles/?format=csv&all_results=true&include_public=true')
+		self.assertIn(resp.status_code, (200, 206))
+		titles = self._csv_titles(resp)
+		self.assertIn('Mine Only', titles)
+		self.assertIn('Public Only', titles)
+		self.assertNotIn('Private Only', titles)
