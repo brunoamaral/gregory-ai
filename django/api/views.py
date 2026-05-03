@@ -14,7 +14,7 @@ from rest_framework.decorators import api_view, action
 from django_filters import rest_framework as django_filters
 from api.filters import ArticleFilter, TrialFilter, AuthorFilter, SourceFilter, CategoryFilter, SubjectFilter
 from rest_framework.response import Response
-from django.http import StreamingHttpResponse
+from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 import json
@@ -32,6 +32,24 @@ from api.utils.responses import (
 		ACCESS_DENIED, INVALID_API_KEY, INVALID_IP_ADDRESS, NO_API_KEY,
 		UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError
 )
+
+class OrgVisibilityMixin:
+	"""
+	Viewset mixin that scopes the queryset to organisations the caller can see.
+
+	Uses ``request.visible_org_ids`` (set by ``VisibleOrgMiddleware``).  Falls
+	back to the full queryset when the attribute is absent so tests and
+	management commands that bypass middleware are not broken.
+
+	Articles and Trials link to organisations via the ``teams`` M2M relation.
+	"""
+
+	def get_queryset(self):
+		qs = super().get_queryset()
+		if not hasattr(self.request, 'visible_org_ids'):
+			return qs
+		return qs.filter(teams__organization_id__in=self.request.visible_org_ids).distinct()
+
 
 def add_deprecation_headers(response, deprecated_endpoint, replacement_endpoint, message=None):
 	"""
@@ -224,7 +242,7 @@ def post_article(request):
 ###
 # ARTICLES
 ### 
-class ArticleViewSet(viewsets.ModelViewSet):
+class ArticleViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	"""
 	List all articles in the database with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
@@ -589,7 +607,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 # TRIALS
 ### 
 
-class TrialViewSet(viewsets.ModelViewSet):
+class TrialViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	"""
 	List all clinical trials by discovery date with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
@@ -1031,6 +1049,9 @@ class ArticlesByTeam(viewsets.ModelViewSet):
 
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
+		if hasattr(self.request, 'visible_org_ids'):
+			if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+				raise Http404
 		return Articles.objects.filter(teams__id=team_id).order_by('-discovery_date')
 	
 	def list(self, request, *args, **kwargs):
@@ -1073,6 +1094,9 @@ class ArticlesBySubject(viewsets.ModelViewSet):
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
 		subject_id = self.kwargs.get('subject_id')
+		if hasattr(self.request, 'visible_org_ids'):
+			if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+				raise Http404
 		return Articles.objects.filter(subjects__id=subject_id, teams=team_id).order_by('-discovery_date')
 	
 	def list(self, request, *args, **kwargs):
@@ -1155,6 +1179,9 @@ class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
 		def get_queryset(self):
 				team_id = self.kwargs.get('team_id')
 				category_slug = self.kwargs.get('category_slug')
+				if hasattr(self.request, 'visible_org_ids'):
+						if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+								raise Http404
 				team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
 				return Articles.objects.filter(team_categories=team_category).prefetch_related(
 						'team_categories', 'sources', 'authors', 'teams', 'subjects', 'ml_predictions'
@@ -1216,7 +1243,19 @@ class ArticleSearchView(generics.ListAPIView):
         # Validate required parameters
         if not team_id or not subject_id:
             return Articles.objects.none()
-        
+
+        # Cast to int early — non-numeric values get a 404 rather than a 500.
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            raise Http404
+
+        # Visibility check: hidden teams return 404 (before the broad except block)
+        if hasattr(self.request, 'visible_org_ids'):
+            if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+                raise Http404
+
         try:
             # Start with articles filtered by team and subject
             # Remove distinct constraint to allow proper ordering
@@ -1271,7 +1310,13 @@ class ArticleSearchView(generics.ListAPIView):
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-            
+
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+
         try:
             # Check if team and subject exist
             Team.objects.get(id=team_id)
@@ -1300,7 +1345,13 @@ class ArticleSearchView(generics.ListAPIView):
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-            
+
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+
         try:
             # Check if team and subject exist
             Team.objects.get(id=team_id)
@@ -1367,7 +1418,19 @@ class TrialSearchView(generics.ListAPIView):
         # Validate required parameters
         if not team_id or not subject_id:
             return Trials.objects.none()
-            
+
+        # Cast to int early — non-numeric values get a 404 rather than a 500.
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            raise Http404
+
+        # Visibility check: hidden teams return 404 (before the broad except block)
+        if hasattr(self.request, 'visible_org_ids'):
+            if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+                raise Http404
+
         try:
             # Check if team and subject exist
             team = Team.objects.get(id=team_id)
@@ -1426,7 +1489,13 @@ class TrialSearchView(generics.ListAPIView):
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-            
+
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+
         try:
             # Check if team and subject exist
             Team.objects.get(id=team_id)
@@ -1455,7 +1524,13 @@ class TrialSearchView(generics.ListAPIView):
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-            
+
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+
         try:
             # Check if team and subject exist
             Team.objects.get(id=team_id)

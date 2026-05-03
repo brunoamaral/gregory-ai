@@ -33,13 +33,19 @@ def _resolve_api_scheme(request):
 	Deliberately does NOT run quota-counting queries — those remain in the
 	actual API views.  This avoids doubling up on DB work for every request.
 
-	Returns the scheme object on success, None on any failure.  Never raises.
+	Returns the scheme object on success, None when no key is present or the
+	key is invalid/expired/IP-blocked.  Re-raises unexpected exceptions.
 	"""
+	# Fast-path: skip entirely when no Authorization header is present.
+	# This avoids any exception overhead for ordinary anonymous/session requests.
+	api_key = request.headers.get('Authorization', '').strip()
+	if not api_key:
+		return None
+
 	try:
-		from api.utils.utils import getAPIKey, getIPAddress
 		from api.models import APIAccessScheme
+		from api.utils.utils import getIPAddress
 		from django.utils.timezone import now as tz_now
-		api_key = getAPIKey(request)
 		ip_addr = getIPAddress(request)
 		current_time = tz_now()
 		scheme = APIAccessScheme.objects.filter(
@@ -56,7 +62,11 @@ def _resolve_api_scheme(request):
 				return None
 		return scheme
 	except Exception:
-		return None
+		# Unexpected DB or import errors should not silently grant/deny access.
+		# Log and re-raise so they surface in Sentry / server logs.
+		import logging
+		logging.getLogger(__name__).exception('Unexpected error in _resolve_api_scheme')
+		raise
 
 
 def visible_org_ids(request) -> set[int]:

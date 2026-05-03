@@ -1,0 +1,337 @@
+"""
+Tests for trial visibility enforcement (PR 4).
+
+Mirrors the article visibility test matrix for clinical trials.
+
+Run with:
+    docker exec gregory python manage.py test api.tests.test_visibility_trials
+"""
+from datetime import timedelta
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.utils.timezone import now
+from organizations.models import Organization, OrganizationUser
+from rest_framework.test import APIClient
+
+from api.models import APIAccessScheme
+from gregory.models import OrganizationApiSettings, Subject, Team, Trials
+
+User = get_user_model()
+
+
+# ---------------------------------------------------------------------------
+# Helpers (duplicated from article tests to keep test files self-contained)
+# ---------------------------------------------------------------------------
+
+def _make_org(name, slug, public=False):
+	org = Organization.objects.create(name=name, slug=slug)
+	OrganizationApiSettings.objects.filter(organization=org).update(make_api_public=public)
+	return org
+
+
+def _make_team(org, name):
+	slug = name.lower().replace(' ', '-')
+	return Team.objects.create(organization=org, name=name, slug=slug)
+
+
+def _make_subject(team, name):
+	from django.utils.text import slugify
+	return Subject.objects.create(team=team, subject_name=name, subject_slug=slugify(name))
+
+
+def _make_trial(title, link, teams=(), subjects=()):
+	trial = Trials.objects.create(title=title, link=link)
+	for t in teams:
+		trial.teams.add(t)
+	for s in subjects:
+		trial.subjects.add(s)
+	return trial
+
+
+def _make_api_scheme(org, name):
+	return APIAccessScheme.objects.create(
+		client_name=name,
+		client_contacts=f'{name}@example.com',
+		organization=org,
+		ip_addresses='',
+		begin_date=now() - timedelta(days=1),
+		end_date=now() + timedelta(days=30),
+	)
+
+
+# ---------------------------------------------------------------------------
+# Base
+# ---------------------------------------------------------------------------
+
+class TrialVisibilityBase(TestCase):
+	def setUp(self):
+		self.my_org = _make_org('My Org T', 'my-org-t', public=False)
+		self.pub_org = _make_org('Public Org T', 'pub-org-t', public=True)
+		self.priv_org = _make_org('Private Org T', 'priv-org-t', public=False)
+
+		self.my_team = _make_team(self.my_org, 'My Team T')
+		self.pub_team = _make_team(self.pub_org, 'Pub Team T')
+		self.priv_team = _make_team(self.priv_org, 'Priv Team T')
+
+		self.my_subj = _make_subject(self.my_team, 'My Subject T')
+		self.pub_subj = _make_subject(self.pub_team, 'Pub Subject T')
+
+		self.trial_mine = _make_trial('Mine Only', 'https://trial.com/1', teams=[self.my_team])
+		self.trial_pub = _make_trial('Public Only', 'https://trial.com/2', teams=[self.pub_team])
+		self.trial_priv = _make_trial('Private Only', 'https://trial.com/3', teams=[self.priv_team])
+		self.trial_mine_pub = _make_trial('Mine+Pub', 'https://trial.com/4', teams=[self.my_team, self.pub_team])
+		self.trial_mine_priv = _make_trial('Mine+Priv', 'https://trial.com/5', teams=[self.my_team, self.priv_team])
+
+		self.client = APIClient()
+
+
+# ---------------------------------------------------------------------------
+# Anonymous
+# ---------------------------------------------------------------------------
+
+class AnonymousTrialVisibilityTest(TrialVisibilityBase):
+	def test_list_shows_public_trial(self):
+		resp = self.client.get('/trials/')
+		self.assertEqual(resp.status_code, 200)
+		ids = [t['trial_id'] for t in resp.data['results']]
+		self.assertIn(self.trial_pub.trial_id, ids)
+
+	def test_list_excludes_private_trial(self):
+		resp = self.client.get('/trials/')
+		ids = [t['trial_id'] for t in resp.data['results']]
+		self.assertNotIn(self.trial_priv.trial_id, ids)
+		self.assertNotIn(self.trial_mine.trial_id, ids)
+
+	def test_list_includes_cross_org_trial_when_one_team_public(self):
+		"""trial_mine_pub has pub_team → visible; trial_mine_priv has no public team → not visible."""
+		resp = self.client.get('/trials/')
+		ids = [t['trial_id'] for t in resp.data['results']]
+		self.assertIn(self.trial_mine_pub.trial_id, ids)
+		self.assertNotIn(self.trial_mine_priv.trial_id, ids)
+
+	def test_detail_of_all_hidden_trial_returns_404(self):
+		resp = self.client.get(f'/trials/{self.trial_mine.trial_id}/')
+		self.assertEqual(resp.status_code, 404)
+
+	def test_detail_of_public_trial_returns_200(self):
+		resp = self.client.get(f'/trials/{self.trial_pub.trial_id}/')
+		self.assertEqual(resp.status_code, 200)
+
+	def test_search_with_hidden_team_returns_404(self):
+		resp = self.client.get('/trials/search/', {
+			'team_id': self.my_team.id,
+			'subject_id': self.my_subj.id,
+		})
+		self.assertEqual(resp.status_code, 404)
+
+	def test_search_with_public_team_returns_200(self):
+		resp = self.client.get('/trials/search/', {
+			'team_id': self.pub_team.id,
+			'subject_id': self.pub_subj.id,
+		})
+		self.assertEqual(resp.status_code, 200)
+
+	def test_include_public_is_noop_for_anonymous(self):
+		"""include_public=true is a no-op for anonymous callers (already see public only)."""
+		resp_plain = self.client.get('/trials/')
+		resp_flag = self.client.get('/trials/?include_public=true')
+		plain_ids = {t['trial_id'] for t in resp_plain.data['results']}
+		flag_ids = {t['trial_id'] for t in resp_flag.data['results']}
+		self.assertEqual(plain_ids, flag_ids)
+
+
+# ---------------------------------------------------------------------------
+# Authenticated user (member of my_org)
+# ---------------------------------------------------------------------------
+
+class AuthenticatedUserTrialVisibilityTest(TrialVisibilityBase):
+	def setUp(self):
+		super().setUp()
+		self.user = User.objects.create_user(username='member-t', password='pw')
+		OrganizationUser.objects.create(organization=self.my_org, user=self.user)
+		# force_login creates a real Django session so VisibleOrgMiddleware
+		# sees the authenticated user.
+		self.client.force_login(self.user)
+
+	def test_list_shows_my_org_trial(self):
+		resp = self.client.get('/trials/')
+		ids = [t['trial_id'] for t in resp.data['results']]
+		self.assertIn(self.trial_mine.trial_id, ids)
+
+	def test_list_excludes_unrelated_private_trial(self):
+		resp = self.client.get('/trials/')
+		ids = [t['trial_id'] for t in resp.data['results']]
+		self.assertNotIn(self.trial_priv.trial_id, ids)
+
+	def test_list_excludes_public_trial_by_default(self):
+		"""Without include_public, only the owned org is visible."""
+		resp = self.client.get('/trials/')
+		ids = [t['trial_id'] for t in resp.data['results']]
+		self.assertNotIn(self.trial_pub.trial_id, ids)
+
+	def test_include_public_adds_public_trials(self):
+		resp = self.client.get('/trials/?include_public=true')
+		ids = [t['trial_id'] for t in resp.data['results']]
+		self.assertIn(self.trial_mine.trial_id, ids)
+		self.assertIn(self.trial_pub.trial_id, ids)
+		self.assertNotIn(self.trial_priv.trial_id, ids)
+
+	def test_detail_of_hidden_trial_returns_404(self):
+		resp = self.client.get(f'/trials/{self.trial_priv.trial_id}/')
+		self.assertEqual(resp.status_code, 404)
+
+	def test_detail_of_own_trial_returns_200(self):
+		resp = self.client.get(f'/trials/{self.trial_mine.trial_id}/')
+		self.assertEqual(resp.status_code, 200)
+
+	def test_search_hidden_team_returns_404(self):
+		resp = self.client.get('/trials/search/', {
+			'team_id': self.priv_team.id,
+			'subject_id': self.my_subj.id,
+		})
+		self.assertEqual(resp.status_code, 404)
+
+	def test_search_own_team_returns_200(self):
+		resp = self.client.get('/trials/search/', {
+			'team_id': self.my_team.id,
+			'subject_id': self.my_subj.id,
+		})
+		self.assertEqual(resp.status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# API key (bound to my_org)
+# ---------------------------------------------------------------------------
+
+class APIKeyTrialVisibilityTest(TrialVisibilityBase):
+	def setUp(self):
+		super().setUp()
+		self.scheme = _make_api_scheme(self.my_org, 'my-key-t')
+		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
+
+	def test_list_shows_my_org_trial(self):
+		resp = self.client.get('/trials/')
+		ids = [t['trial_id'] for t in resp.data['results']]
+		self.assertIn(self.trial_mine.trial_id, ids)
+
+	def test_list_excludes_other_private_trial(self):
+		resp = self.client.get('/trials/')
+		ids = [t['trial_id'] for t in resp.data['results']]
+		self.assertNotIn(self.trial_priv.trial_id, ids)
+
+	def test_include_public_adds_public_trials(self):
+		resp = self.client.get('/trials/?include_public=true')
+		ids = [t['trial_id'] for t in resp.data['results']]
+		self.assertIn(self.trial_mine.trial_id, ids)
+		self.assertIn(self.trial_pub.trial_id, ids)
+		self.assertNotIn(self.trial_priv.trial_id, ids)
+
+	def test_detail_hidden_returns_404(self):
+		resp = self.client.get(f'/trials/{self.trial_priv.trial_id}/')
+		self.assertEqual(resp.status_code, 404)
+
+	def test_detail_own_returns_200(self):
+		resp = self.client.get(f'/trials/{self.trial_mine.trial_id}/')
+		self.assertEqual(resp.status_code, 200)
+
+	def test_list_excludes_public_trial_without_flag(self):
+		"""Without include_public, API key sees only its own org."""
+		resp = self.client.get('/trials/')
+		ids = [t['trial_id'] for t in resp.data['results']]
+		self.assertNotIn(self.trial_pub.trial_id, ids)
+
+	def test_search_hidden_team_returns_404(self):
+		resp = self.client.get('/trials/search/', {
+			'team_id': self.pub_team.id,
+			'subject_id': self.pub_subj.id,
+		})
+		self.assertEqual(resp.status_code, 404)
+
+	def test_search_own_team_returns_200(self):
+		resp = self.client.get('/trials/search/', {
+			'team_id': self.my_team.id,
+			'subject_id': self.my_subj.id,
+		})
+		self.assertEqual(resp.status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# Null-org API key (anonymous-equivalent)
+# ---------------------------------------------------------------------------
+
+class NullOrgAPIKeyTrialVisibilityTest(TrialVisibilityBase):
+	def setUp(self):
+		super().setUp()
+		self.scheme = APIAccessScheme.objects.create(
+			client_name='null-org-key-t',
+			client_contacts='null-t@example.com',
+			organization=None,
+			ip_addresses='',
+			begin_date=now() - timedelta(days=1),
+			end_date=now() + timedelta(days=30),
+		)
+		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
+
+	def test_list_shows_only_public(self):
+		resp = self.client.get('/trials/')
+		ids = [t['trial_id'] for t in resp.data['results']]
+		self.assertIn(self.trial_pub.trial_id, ids)
+		self.assertNotIn(self.trial_mine.trial_id, ids)
+		self.assertNotIn(self.trial_priv.trial_id, ids)
+
+	def test_detail_of_private_trial_returns_404(self):
+		resp = self.client.get(f'/trials/{self.trial_mine.trial_id}/')
+		self.assertEqual(resp.status_code, 404)
+
+	def test_include_public_is_noop(self):
+		"""Null-org key already behaves like anonymous; include_public changes nothing."""
+		resp_plain = self.client.get('/trials/')
+		resp_flag = self.client.get('/trials/?include_public=true')
+		plain_ids = {t['trial_id'] for t in resp_plain.data['results']}
+		flag_ids = {t['trial_id'] for t in resp_flag.data['results']}
+		self.assertEqual(plain_ids, flag_ids)
+
+
+# ---------------------------------------------------------------------------
+# CSV export honours visibility rules
+# ---------------------------------------------------------------------------
+
+class CSVExportTrialVisibilityTest(TrialVisibilityBase):
+	"""CSV responses from /trials/?format=csv must respect the same visibility rules."""
+
+	def _csv_titles(self, response):
+		"""Return the set of trial titles found in a CSV StreamingHttpResponse.\""""
+		content = b''.join(response.streaming_content).decode()
+		titles = set()
+		for line in content.splitlines()[1:]:
+			if line.strip():
+				titles.add(line.split(',')[1].strip('"'))
+		return titles
+
+	def test_anonymous_csv_shows_only_public_trials(self):
+		resp = self.client.get('/trials/?format=csv&all_results=true')
+		self.assertIn(resp.status_code, (200, 206))
+		titles = self._csv_titles(resp)
+		self.assertIn('Public Only', titles)
+		self.assertNotIn('Mine Only', titles)
+		self.assertNotIn('Private Only', titles)
+
+	def test_api_key_csv_shows_own_org_trials(self):
+		scheme = _make_api_scheme(self.my_org, 'csv-key-t')
+		self.client.credentials(HTTP_AUTHORIZATION=scheme.api_key)
+		resp = self.client.get('/trials/?format=csv&all_results=true')
+		self.assertIn(resp.status_code, (200, 206))
+		titles = self._csv_titles(resp)
+		self.assertIn('Mine Only', titles)
+		self.assertNotIn('Private Only', titles)
+
+	def test_api_key_csv_with_include_public_adds_public_trials(self):
+		scheme = _make_api_scheme(self.my_org, 'csv-key-pub-t')
+		self.client.credentials(HTTP_AUTHORIZATION=scheme.api_key)
+		resp = self.client.get('/trials/?format=csv&all_results=true&include_public=true')
+		self.assertIn(resp.status_code, (200, 206))
+		titles = self._csv_titles(resp)
+		self.assertIn('Mine Only', titles)
+		self.assertIn('Public Only', titles)
+		self.assertNotIn('Private Only', titles)

@@ -27,9 +27,12 @@ Query strategy (avoiding N+1 on list endpoints)
   column.  Visible team IDs are resolved once per request and cached on
   ``request._org_scoped_mixin_team_ids`` so the query runs at most once per
   request regardless of list length.
-- ``ml_predictions``:  ``prediction.subject_id`` is a direct FK column.
-  Visible subject IDs are built in Python from the already-iterated subjects
-  manager (uses prefetch cache when ``prefetch_related('subjects')`` is active).
+- ``ml_predictions``:  Each serialised item already contains a ``subject``
+  key (the FK integer) from ``MLPredictionsSerializer``.  Visible subject IDs
+  are resolved once per request and cached on
+  ``request._org_scoped_mixin_subject_ids``.  Filtering is done entirely on
+  ``ret['ml_predictions']`` — no extra DB query, no dependency on whether
+  ``ml_predictions_detail`` was prefetched.
 """
 
 
@@ -46,6 +49,24 @@ def _request_visible_team_ids(request, visible_org_ids: set) -> set:
 			request,
 			cache_attr,
 			set(Team.objects.filter(organization_id__in=visible_org_ids).values_list('id', flat=True)),
+		)
+	return getattr(request, cache_attr)
+
+
+def _request_visible_subject_ids(request, visible_org_ids: set) -> set:
+	"""Return all subject IDs belonging to visible orgs, cached once per request.
+
+	Caching avoids issuing a subject-lookup query for every object in a list
+	endpoint response (used when filtering ml_predictions in Python).
+	"""
+	cache_attr = '_org_scoped_mixin_subject_ids'
+	if not hasattr(request, cache_attr):
+		from gregory.models import Subject
+		vt = _request_visible_team_ids(request, visible_org_ids)
+		setattr(
+			request,
+			cache_attr,
+			set(Subject.objects.filter(team_id__in=vt).values_list('id', flat=True)),
 		)
 	return getattr(request, cache_attr)
 
@@ -88,17 +109,13 @@ class OrgScopedSerializerMixin:
 			visible_cat_ids = {c.id for c in instance.team_categories.all() if c.team_id in vt}
 			ret['team_categories'] = [c for c in ret['team_categories'] if c.get('id') in visible_cat_ids]
 
-		# --- ml_predictions: one-level join using cached visible team IDs ---
-		# (subject__team_id__in=vt is simpler than subject__team__organization_id__in=visible;
-		# a full zero-query solution requires prefetch_related('ml_predictions_detail__subject')
-		# with select_related('team'), which is a viewset concern.)
-		if 'ml_predictions' in ret and hasattr(instance, 'ml_predictions_detail'):
-			vt = _request_visible_team_ids(request, visible)
-			visible_pred_ids = set(
-				instance.ml_predictions_detail.filter(
-					subject__team_id__in=vt
-				).values_list('id', flat=True)
-			)
-			ret['ml_predictions'] = [p for p in ret['ml_predictions'] if p.get('id') in visible_pred_ids]
+		# --- ml_predictions: filter directly on already-serialised data ---
+		# Each item in ret['ml_predictions'] already has a 'subject' key (the FK
+		# integer) from MLPredictionsSerializer.  Filtering here avoids hitting
+		# instance.ml_predictions_detail.all() a second time, which would cause
+		# an extra per-object query when the relation is not prefetched.
+		if 'ml_predictions' in ret:
+			vs = _request_visible_subject_ids(request, visible)
+			ret['ml_predictions'] = [p for p in ret['ml_predictions'] if p.get('subject') in vs]
 
 		return ret
