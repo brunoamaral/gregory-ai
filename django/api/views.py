@@ -9,6 +9,7 @@ from django.db.models.functions import Length, TruncMonth
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper
 from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, TeamCategory
+from organizations.models import Organization
 from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
 from django_filters import rest_framework as django_filters
@@ -41,14 +42,22 @@ class OrgVisibilityMixin:
 	back to the full queryset when the attribute is absent so tests and
 	management commands that bypass middleware are not broken.
 
-	Articles and Trials link to organisations via the ``teams`` M2M relation.
+	Override ``_org_filter_path`` in the subclass to set the ORM lookup path
+	from the model to the Organisation PK.  Defaults to
+	``teams__organization_id`` (Articles and Trials via M2M teams relation).
+
+	Examples:
+	  - Team:          _org_filter_path = 'organization_id'
+	  - Subject/Source/Category:  _org_filter_path = 'team__organization_id'
 	"""
+
+	_org_filter_path = 'teams__organization_id'
 
 	def get_queryset(self):
 		qs = super().get_queryset()
 		if not hasattr(self.request, 'visible_org_ids'):
 			return qs
-		return qs.filter(teams__organization_id__in=self.request.visible_org_ids).distinct()
+		return qs.filter(**{f'{self._org_filter_path}__in': self.request.visible_org_ids}).distinct()
 
 
 def add_deprecation_headers(response, deprecated_endpoint, replacement_endpoint, message=None):
@@ -410,6 +419,10 @@ class CategoryViewSet(viewsets.ModelViewSet):
 		3. Use select_related for foreign keys
 		"""
 		queryset = TeamCategory.objects.all()
+
+		# --- Org visibility: only categories whose team's org is visible ---
+		if hasattr(self.request, 'visible_org_ids'):
+			queryset = queryset.filter(team__organization_id__in=self.request.visible_org_ids)
 		
 		# Apply filters without expensive annotations
 		team_id = self.request.query_params.get('team_id')
@@ -699,7 +712,7 @@ class AllTrialViewSet(generics.ListAPIView):
 # SOURCES
 ### 
 
-class SourceViewSet(viewsets.ModelViewSet):
+class SourceViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	"""
 	List all sources of data with optional filters for team and subject.
 	
@@ -707,6 +720,7 @@ class SourceViewSet(viewsets.ModelViewSet):
 	- **team_id** - filter by team ID
 	- **subject_id** - filter by subject ID
 	"""
+	_org_filter_path = 'team__organization_id'
 	queryset = Sources.objects.all().order_by('name')
 	serializer_class = SourceSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -768,6 +782,12 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	
 	def get_queryset(self):
 		queryset = Authors.objects.all()
+
+		# --- Org visibility: only authors with at least one article in a visible org ---
+		if hasattr(self.request, 'visible_org_ids'):
+			queryset = queryset.filter(
+				articles__teams__organization_id__in=self.request.visible_org_ids
+			).distinct()
 		
 		# Get query parameters
 		author_id = self.request.query_params.get('author_id')
@@ -980,19 +1000,49 @@ class ProtectedEndpointView(APIView):
 # TEAMS
 ###
 
-class TeamsViewSet(viewsets.ModelViewSet):
+class TeamsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	"""
 	List all teams
 	"""
+	_org_filter_path = 'organization_id'
 	queryset = Team.objects.all().order_by('id')
 	serializer_class = TeamSerializer
-	permission_classes  = [permissions.IsAuthenticated]
+	permission_classes  = [permissions.IsAuthenticatedOrReadOnly]
+
+###
+# ORGANISATIONS
+###
+
+class OrganizationsViewSet(viewsets.ReadOnlyModelViewSet):
+	"""
+	List organisations visible to the caller.
+
+	Anonymous callers see only organisations where ``make_api_public=True``.
+	Authenticated users and API-key holders see their own org; add
+	``?include_public=true`` to also see public orgs.
+
+	Detail endpoint (``/organizations/<id>/``) returns 404 rather than 403
+	when the organisation is not visible (hide-existence rule).
+	"""
+	from api.serializers import OrganizationSerializer
+	serializer_class = None  # set in get_serializer_class
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_serializer_class(self):
+		from api.serializers import OrganizationSerializer
+		return OrganizationSerializer
+
+	def get_queryset(self):
+		qs = Organization.objects.all().order_by('id')
+		if not hasattr(self.request, 'visible_org_ids'):
+			return qs
+		return qs.filter(id__in=self.request.visible_org_ids)
 
 ###
 # SUBJECTS
 ###
 
-class SubjectsViewSet(viewsets.ModelViewSet):
+class SubjectsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	"""
 	✅ **PREFERRED ENDPOINT**: This is the main subjects endpoint that supports filtering options.
 	
@@ -1009,6 +1059,7 @@ class SubjectsViewSet(viewsets.ModelViewSet):
 	- Team filter with search: `/subjects/?team_id=1&search=sclerosis`
 	- Order by name: `/subjects/?ordering=subject_name`
 	"""
+	_org_filter_path = 'team__organization_id'
 	queryset = Subject.objects.all().order_by('id')
 	serializer_class = SubjectsSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -1134,6 +1185,9 @@ class SubjectsByTeam(viewsets.ModelViewSet):
 
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
+		if hasattr(self.request, 'visible_org_ids'):
+			if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+				raise Http404
 		return Subject.objects.filter(team__id=team_id).order_by('-id')
 	
 	def list(self, request, *args, **kwargs):
@@ -1154,6 +1208,9 @@ class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
 		subject_id = self.kwargs.get('subject_id')
+		if hasattr(self.request, 'visible_org_ids'):
+			if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+				raise Http404
 		return TeamCategory.objects.filter(
 			team__id=team_id,
 			subjects__id=subject_id
@@ -1566,6 +1623,12 @@ class AuthorSearchView(generics.ListAPIView):
     pagination_class = FlexiblePagination
     http_method_names = ['get', 'post']
 
+    def _check_team_visibility(self, team_id):
+        """Raise Http404 if team_id is not in the caller's visible orgs."""
+        if hasattr(self.request, 'visible_org_ids'):
+            if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+                raise Http404
+
     def get_queryset(self):
         params = self.request.query_params if self.request.method == 'GET' else self.request.data
 
@@ -1624,7 +1687,8 @@ class AuthorSearchView(generics.ListAPIView):
                 {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
                 status=404
             )
-            
+
+        self._check_team_visibility(team_id)
         return self.list(request, *args, **kwargs)
         
     def get(self, request, *args, **kwargs):
@@ -1652,7 +1716,8 @@ class AuthorSearchView(generics.ListAPIView):
                 {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
                 status=404
             )
-            
+
+        self._check_team_visibility(team_id)
         # Delegate to the list method
         return self.list(request, *args, **kwargs)
 

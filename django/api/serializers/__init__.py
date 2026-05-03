@@ -349,6 +349,10 @@ class AuthorSerializer(serializers.ModelSerializer):
 		# If the queryset has annotated article_count, use it for efficiency
 		if hasattr(obj, 'article_count'):
 			return obj.article_count
+		# Filter by visible orgs when request context is available
+		request = self.context.get('request')
+		if request is not None and hasattr(request, 'visible_org_ids'):
+			return obj.articles_set.filter(teams__organization_id__in=request.visible_org_ids).distinct().count()
 		# Fallback to counting all articles
 		return obj.articles_set.count()
 
@@ -392,3 +396,10 @@ class ArticlesByCategoryAndTeamSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = TeamCategory
 		fields = ['id', 'team', 'category', 'articles']
+
+
+class OrganizationSerializer(serializers.ModelSerializer):
+	"""Minimal serializer for the Organizations list/detail endpoints."""
+	class Meta:
+		model = Organization
+		fields = ['id', 'name', 'slug', 'is_active']
