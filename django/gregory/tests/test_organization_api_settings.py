@@ -13,10 +13,9 @@ class OrganizationApiSettingsRoundTripTest(TestCase):
 	"""Basic create/read round-trip for OrganizationApiSettings."""
 
 	def setUp(self):
-		# Suppress the signal so we control creation manually in these tests.
+		# Creating an org fires the post_save signal which creates a settings row.
+		# Delete that row so each test can assert on explicitly created rows.
 		self.org = Organization.objects.create(name='Round Trip Org', slug='round-trip-org')
-		# The signal will have created a row already; clean it up so the tests
-		# can assert on explicit creation.
 		OrganizationApiSettings.objects.filter(organization=self.org).delete()
 
 	def test_create_with_default_false(self):
@@ -56,8 +55,9 @@ class OrganizationApiSettingsSignalTest(TestCase):
 		settings = OrganizationApiSettings.objects.get(organization=org)
 		self.assertFalse(settings.make_api_public)
 
-	def test_signal_is_idempotent(self):
-		"""get_or_create in the signal means a second save doesn't create a duplicate."""
+	def test_signal_only_fires_on_create(self):
+		"""The signal handler guards on `created=True`, so saving an existing org
+		does not fire the handler and cannot produce a duplicate settings row."""
 		org = Organization.objects.create(name='Idempotent Org', slug='idempotent-org')
 		# Force another post_save (e.g. an org update)
 		org.name = 'Idempotent Org Updated'

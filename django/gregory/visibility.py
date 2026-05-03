@@ -7,7 +7,7 @@ Rules (see spec §4.1):
   - Anonymous caller (no auth, no valid API key, or null-org key)
       → public orgs only; ?include_public flag is a no-op
   - Authenticated user
-      → orgs they are a member of (via any team); ?include_public=true adds public orgs
+      → orgs they are a member of (via OrganizationUser membership); ?include_public=true adds public orgs
   - API key bound to org X
       → {X}; ?include_public=true adds public orgs
 """
@@ -27,16 +27,34 @@ def _public_org_ids() -> set[int]:
 
 def _resolve_api_scheme(request):
 	"""
-	Try to resolve an APIAccessScheme from the request's Authorization header.
+	Lightweight resolution of an APIAccessScheme from the Authorization header.
 
-	Returns the scheme object on success, None on any failure (missing key,
-	invalid key, expired, IP mismatch, etc.).  Never raises.
+	Only validates key existence, date window, and (if configured) IP address.
+	Deliberately does NOT run quota-counting queries — those remain in the
+	actual API views.  This avoids doubling up on DB work for every request.
+
+	Returns the scheme object on success, None on any failure.  Never raises.
 	"""
 	try:
-		from api.utils.utils import getAPIKey, checkValidAccess, getIPAddress
+		from api.utils.utils import getAPIKey, getIPAddress
+		from api.models import APIAccessScheme
+		from django.utils.timezone import now as tz_now
 		api_key = getAPIKey(request)
 		ip_addr = getIPAddress(request)
-		return checkValidAccess(api_key, ip_addr)
+		current_time = tz_now()
+		scheme = APIAccessScheme.objects.filter(
+			api_key=api_key,
+			begin_date__lte=current_time,
+			end_date__gte=current_time,
+		).first()
+		if scheme is None:
+			return None
+		# Enforce IP allowlist only when the scheme has one configured
+		if scheme.ip_addresses:
+			allowed = [i.strip() for i in scheme.ip_addresses.split(',')]
+			if ip_addr not in allowed:
+				return None
+		return scheme
 	except Exception:
 		return None
 
