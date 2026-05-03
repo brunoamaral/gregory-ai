@@ -170,7 +170,7 @@ class AuthenticatedUserTrialVisibilityTest(TrialVisibilityBase):
 		ids = [t['trial_id'] for t in resp.data['results']]
 		self.assertNotIn(self.trial_pub.trial_id, ids)
 
-	def test_include_public_adds_public_trials:
+	def test_include_public_adds_public_trials(self):
 		resp = self.client.get('/trials/?include_public=true')
 		ids = [t['trial_id'] for t in resp.data['results']]
 		self.assertIn(self.trial_mine.trial_id, ids)
