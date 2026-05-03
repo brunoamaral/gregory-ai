@@ -44,6 +44,7 @@ class Command(BaseCommand):
 
 			self.stdout.write("Loading the model")
 			summarizer = pipeline("summarization", model='philschmid/bart-large-cnn-samsum')
+			summarizer.tokenizer.model_max_length = 1024
 			self.stdout.write("Summarizer model ready for use")
 
 			for article in queryset:
