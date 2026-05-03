@@ -1,4 +1,7 @@
 Below you’ll find a three-pass planning sequence that gradually refines the work into right-sized tasks, followed by a set of ready-to-run prompts you can feed to a code-generation LLM (e.g., ChatGPT o3, Codex, etc.).
+
+> This is a historical implementation note. For current behaviour, see the relevant reference doc in [docs/](../).
+
 Each prompt is fenced in a ```text block and builds on the artifacts produced by the previous ones, so nothing is left dangling.
 
 ⸻
@@ -257,4 +260,3 @@ Push all code, ensure `pytest` passes.
 
 
 ⸻
-

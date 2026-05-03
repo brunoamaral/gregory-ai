@@ -1,5 +1,8 @@
 # Manual Relevance Filtering Implementation Summary
 
+> This is a historical implementation note. For current behaviour, see the relevant reference doc in [docs/](../).
+
+
 ## Requirement
 Articles should be excluded from weekly digest emails if they are manually tagged as not relevant for ALL subjects they are associated with in that specific digest list.
 

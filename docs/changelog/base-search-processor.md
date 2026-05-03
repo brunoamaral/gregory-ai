@@ -1,5 +1,8 @@
 # BASE Search Feed Processor - Implementation Summary
 
+> This is a historical implementation note. For current behaviour, see the relevant reference doc in [docs/](../).
+
+
 ## Overview
 Added support for BASE (Bielefeld Academic Search Engine) RSS feeds to the GregoryAI article ingestion system.
 

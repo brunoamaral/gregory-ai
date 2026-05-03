@@ -1,10 +1,12 @@
-# Training Machine Learning Models
+# Training machine learning models
 
-This guide covers how to train the ML models used by Gregory AI to predict article relevance.
+> Audience: data scientists and operators training GregoryAI relevance models.
+
+This guide covers how to train the ML models used by GregoryAI to predict article relevance.
 
 ## Overview
 
-Gregory AI uses three ML algorithms for predicting article relevance:
+GregoryAI uses three ML algorithms for predicting article relevance:
 - **pubmed_bert**: PubMed BERT fine-tuned model (highest accuracy, slowest)
 - **lgbm_tfidf**: LightGBM with TF-IDF features (fast, good accuracy)
 - **lstm**: LSTM neural network (moderate speed and accuracy)
@@ -168,7 +170,7 @@ docker stats gregory
 ## Model Output
 
 Trained models are saved to:
-```
+```text
 django/models/{team_slug}/{subject_slug}/{algorithm}/{version}/
 ```
 
@@ -207,7 +209,7 @@ python manage.py train_models --team ms-research --subject ms --debug
 
 If you see a `bus error` when training BERT with TensorFlow Metal:
 
-```
+```text
 [1] 36717 bus error  python manage.py train_models --all-teams
 ```
 
@@ -358,4 +360,4 @@ For automated retraining, add to crontab:
 ## See Also
 
 - [04-machine-learning.md](04-machine-learning.md) - ML architecture details
-- [spec for ML Training.md](spec%20for%20ML%20Training.md) - Technical specification
+- [spec-ml-training.md](spec-ml-training.md) - Original technical specification (informational)

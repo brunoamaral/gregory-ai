@@ -1,87 +1,66 @@
-# Gregory, an AI to assist research and monitor science
+# GregoryAI — introduction
 
-Gregory is an Artificial Intelligence (AI) to index and identify relevant content from any number of sources.
+GregoryAI is an AI system that uses Machine Learning and Natural Language Processing to track research and identify papers that improve the wellbeing of patients. It ingests content from RSS feeds, API endpoints, and manual submissions, applies ML relevance predictions, and delivers curated digests via email and API.
 
-It uses Machine Learning (ML) to predict relevancy. And includes a [Metabase](https://metabase.com/) instance to classify and quantify information.
+A public instance tracking Multiple Sclerosis research is available at [gregory-ms.com](https://gregory-ms.com), with its API at [api.gregory-ms.com](https://api.gregory-ms.com).
 
-A full version is available at [Gregory-MS.com](https://gregory-ms.com), where we have indexed over 16,000 articles on Multiple Sclerosis Research to assist Neurologists and Researchers.
+---
+
+## Who uses GregoryAI
+
+| Audience | What they get from it |
+|:---------|:----------------------|
+| Researchers | Literature review, trend mapping across categories, identification of crowded vs. underexplored topics |
+| Healthcare professionals | Real-time updates on diseases, conditions, and therapeutics they follow |
+| Filtered-news readers | Daily/weekly digests with noise removed by ML and human feedback |
+| Developers and integrators | API access to articles, trials, authors, and categories for embedding in other systems |
+
+---
 
 ## Features
 
 - Machine Learning prediction of relevant content
-- Key takeaways extracted using Artificial Intelligence
-- Configure RSS feeds to gather search results for any keyword
-- Configure searches on any public website, not just medical publications
-- Set up automatic email notifications
-- Manage and segment subscribers
-- Public and Private API  
-- Customize your own categories to get personalized search results
-- Breakdown broader subjects into different segments
-- Identify and subscribe to authors
+- Key takeaways extracted using AI
+- RSS feed ingestion from PubMed and other sources
+- Configurable searches on any public website
+- Automatic email notifications with admin and subscriber digests
+- Subscriber management with per-list consent tracking
+- Public and private REST API and RSS feeds
+- Configurable categories based on keyword matching
+- Multiple subjects to segment research areas
+- Author identification with ORCID support
 
-## Use Cases
-
-### For researchers of any field
-
-Gregory can act as a research assistant by fetching the latest articles and organising them into categories. These categories can then be plotted in a chart to see which need further research, and which are “too crowded”.
-
-#### Jobs to be done
-
-- Literature review
-- Map out areas of current research
-- Identify Research trends
-
-### For healthcare professionals of any specialty
-
-Using the right sources, it’s possible to have Gregory stay up to date with what is being published about any disease, condition, or medication. Turn it into an observatory for one or more subjects.
-
-#### Jobs to be done
-
-- Get relevant information in real time
-- Track research around specific therapeutics
-
-### For everyone filtering for important news
-
-With the machine learning algorithm, Gregory learns what is important to its users and cut the noise from the river of news . 
-By creating an email list, teams can receive a digest of the relevant articles found, or real time notifications.
-
-This allows you to chart the news and identify trends with greater ease.
-
-#### Jobs to be done
-
-- Real time notification of relevant news (no Fear Of Missing Out)
-- Identify trends
-
-### Build a central point of knowledge
-
-Developers can use the Application Protocol Interface (API) to connect Gregory to any system, displaying the articles filtered by any query, or embedding the charts.
-
-### Keep everyone in the loop
-
-The email notifications can be sent to any email address, without the need for a registered user account.
-
-#### Jobs to be done
-
-- Send newsletters or other digests to teams
-- Feed a website with curated information in real time
+---
 
 ## How it works
 
-
-Gregory's workflow:
-
 ```mermaid
-flowchart LR;
- SourcesA(fa:fa-newspaper Source A) --> DB[("Gregory Database")];
- SourcesB(fa:fa-newspaper Source B) --> DB;
- SourcesC(fa:fa-newspaper Source C) --> DB;
- DB --> Model("Machine Learning Prediction");
- Model --> RF{{"Human Feedback"}};
- RF --> Model;
- RF --> PD{{"Digest"}};
- PD --> site("Website")
- PD --> email("Email")
+flowchart LR
+  SourcesA(Source A) --> DB[("GregoryAI Database")]
+  SourcesB(Source B) --> DB
+  SourcesC(Source C) --> DB
+  DB --> Model("Machine Learning Prediction")
+  Model --> RF{{"Human Feedback"}}
+  RF --> Model
+  RF --> PD{{"Digest"}}
+  PD --> site("Website")
+  PD --> email("Email")
 ```
 
+Sources feed into the database. ML models score each article for relevance. Human reviewers flag articles as relevant or not, which in turn improves the models over time. Relevant articles are published via the website and sent to email subscribers.
 
+---
 
+## Core concepts
+
+**Article** — a published piece of content: a science paper, a news article, or a clinical trial summary.
+
+**Source** — a website or feed from which GregoryAI pulls articles. Sources are configured with a method (`rss`), a subject, and a content type (`science paper`, `news`, or `trials`).
+
+**Subject** — a named research area (e.g., "Multiple Sclerosis"). Groups sources and their articles. ML models are trained per subject.
+
+**Category** — a keyword-based filter applied across subjects. Articles whose titles match at least one keyword in a category's term list are tagged with that category.
+
+**Team** — a logical group that owns subjects, sources, and subscribers. Multiple teams can run on a single GregoryAI instance.
+
+See the [glossary](glossary.md) for a full list of terms.

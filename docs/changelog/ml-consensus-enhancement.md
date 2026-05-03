@@ -1,0 +1,162 @@
+# ML Consensus Enhancement for Article Relevance
+
+> This is a historical implementation note. For current behaviour, see [ml-consensus.md](../ml-consensus.md).
+
+
+## Overview
+
+This enhancement adds granular control over how ML models determine article relevance. Instead of using just a simple threshold, the system now combines **consensus requirements** with **probability thresholds** to provide precise control over article selection.
+
+## Dual Filter Approach
+
+### 1. ML Consensus Types
+
+Each subject now has a `ml_consensus_type` field with three options:
+
+- **Any Model**: Article is relevant if at least 1 ML model predicts relevance above threshold
+- **Majority Vote**: Article is relevant if at least 2 out of 3 ML models agree above threshold  
+- **Unanimous**: Article is relevant if all 3 ML models predict relevance above threshold
+
+### 2. Probability Threshold
+
+Each ML prediction must also meet a minimum probability score (default: 0.8) to be considered in consensus calculation.
+
+**Example**: Article with predictions:
+- BERT: 0.9 (relevant) ✓
+- LGBM: 0.7 (relevant) ✗ (below threshold)
+- LSTM: 0.85 (relevant) ✓
+
+With `majority` consensus + 0.8 threshold = **2 models above threshold** → **INCLUDED**
+
+## Enhanced API Endpoints
+
+#### Existing `/articles/?relevant=true` Endpoint
+Now supports both consensus settings and threshold filtering.
+
+**Example API Calls:**
+```bash
+# Get relevant articles with default threshold (0.8)
+GET /api/articles/?relevant=true
+
+# Get relevant articles with custom threshold
+GET /api/articles/?relevant=true&ml_threshold=0.9
+
+# Combined with team/subject filtering
+GET /api/articles/?relevant=true&team_id=1&subject_id=4&ml_threshold=0.85
+```
+
+#### Enhanced `/articles/relevance_counts/` Endpoint
+Now shows which threshold was used in the analysis.
+
+**Example API Call:**
+```bash
+GET /api/articles/relevance_counts/?team_id=1&ml_threshold=0.9
+```
+
+**Example Response:**
+```json
+{
+    "manual_relevant": 45,
+    "ml_relevant": 67,
+    "both_relevant": 12,
+    "total_unique_relevant": 100,
+    "ml_threshold_used": 0.9,
+    "breakdown": {
+        "manual_only": 33,
+        "ml_only": 55,
+        "both": 12
+    }
+}
+```
+
+### 3. Database Changes
+
+#### New Field: `Subject.ml_consensus_type`
+- **Type**: CharField with choices
+- **Default**: 'any'
+- **Options**: 'any', 'majority', 'all'
+- **Help Text**: "How ML models should agree for an article to be considered relevant"
+
+## Configuration Guide
+
+### Setting ML Consensus for Subjects
+
+1. **Django Admin Interface**:
+   - Navigate to Subjects in the admin
+   - Edit a subject
+   - Set the "ML consensus type" field to desired option
+   - Save changes
+
+2. **API Configuration** (if implemented):
+   ```bash
+   PATCH /api/subjects/4/
+   {
+       "ml_consensus_type": "majority"
+   }
+   ```
+
+### Recommended Settings
+
+- **High Precision Needed**: Use "all" (unanimous) - fewer false positives
+- **Balanced Approach**: Use "majority" - good balance of precision and recall
+- **High Recall Needed**: Use "any" - captures more potentially relevant articles
+
+## Impact on Existing Functionality
+
+### What Changes
+- Article relevance filtering now respects subject-specific consensus settings
+- More granular control over ML prediction sensitivity
+
+### What Stays the Same
+- Manual relevance markings work exactly as before
+- Existing API endpoints maintain backward compatibility
+- Newsletter and admin email logic automatically adapts
+
+## Implementation Details
+
+### New Model Methods
+
+#### `Articles.is_ml_relevant_for_subject(subject)`
+Checks if an article meets the ML consensus criteria for a specific subject.
+
+#### `Articles.is_ml_relevant_any_subject()`
+Checks if an article meets ML consensus criteria for any of its associated subjects.
+
+### Filter Logic Update
+The `filter_relevant` method now:
+1. Gets manually relevant articles (unchanged)
+2. Gets ML-relevant articles using new consensus logic
+3. Combines both using OR logic
+
+## Migration
+
+A Django migration `0025_add_ml_consensus_type_to_subject.py` adds the new field with a default value of 'any', ensuring no existing functionality is disrupted.
+
+## Testing the Feature
+
+### Test Different Consensus Levels
+1. Create test subjects with different consensus types
+2. Ensure articles have predictions from multiple ML models
+3. Verify filtering behavior matches expected consensus rules
+
+### Example Test Scenarios
+```python
+# Article with BERT=relevant, LGBM=not_relevant, LSTM=relevant
+# Should be included for subjects with consensus_type='any' or 'majority'
+# Should be excluded for subjects with consensus_type='all'
+```
+
+## Monitoring and Analytics
+
+Use the new `/articles/relevance_counts/` endpoint to:
+- Monitor the effectiveness of different consensus settings
+- Compare manual vs ML identification rates
+- Identify subjects that may need consensus adjustment
+
+## Future Enhancements
+
+Potential future improvements:
+- Weighted consensus (give more weight to certain models)
+- Confidence threshold settings
+- Per-model enable/disable options
+- Historical consensus effectiveness tracking

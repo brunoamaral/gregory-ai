@@ -1,5 +1,8 @@
 # Authors API Enhancement - Final Summary
 
+> This is a historical implementation note. For current behaviour, see the relevant reference doc in [docs/](../).
+
+
 ## 🎯 Task Completion Status: ✅ COMPLETE
 
 ### Task Overview

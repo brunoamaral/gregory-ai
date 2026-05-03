@@ -1,13 +1,3 @@
----
-title: "Study Data Structure | ClinicalTrials.gov"
-source: "https://clinicaltrials.gov/data-api/about-api/study-data-structure"
-author:
-published:
-created: 2025-12-25
-description: "Information about clinical study data fields on ClinicalTrials.gov, their data type, and JSON attributes"
-tags:
-  - "clippings"
----
 ## Introduction
 
 The information below shows study data fields and their data type and other JSON attributes.

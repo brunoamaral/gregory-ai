@@ -1,5 +1,8 @@
 # Enhanced Categories API with Author Statistics
 
+> This is a historical implementation note. For current behaviour, see the relevant reference doc in [docs/](../).
+
+
 This document describes the enhancements made to the `/categories/` endpoint to include author statistics.
 
 ## What's New

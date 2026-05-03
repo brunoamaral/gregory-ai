@@ -1,57 +1,124 @@
-# Install
+# Local development setup
 
-## Server Requirements
+> Audience: developers setting up GregoryAI on a local machine.
 
-- [ ] Python 3.9
-- [ ] [Docker](https://www.docker.com/) and [docker-compose](https://docs.docker.com/compose/) with 2GB of swap memory to be able to build the MachineLearning Models. ([Adding swap for Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-add-swap-space-on-ubuntu-20-04))
-- [ ] [Hugo](https://gohugo.io/)
-- [ ] [Mailgun](https://www.mailgun.com/) (optional)
+For server and production installation, see the project [README](../README.md).
 
-## Installing Gregory
+---
 
-1. **Install python dependencies locally**
-2. **Edit the .env file** to reflect your settings and credentials.
+## Requirements
+
+- Python 3.12 (the project uses `pyproject.toml` with `uv`)
+- Docker Desktop (or Docker Engine with the Compose plugin)
+- 2 GB of available RAM minimum — 16 GB recommended if you plan to train BERT locally (see [05-training-models.md](05-training-models.md))
+- Optional: Postmark account if you want to test outgoing emails locally
+
+---
+
+## Setup
+
+### 1. Clone and configure the environment
 
 ```bash
-DOMAIN_NAME=DOMAIN.COM
-# Set this to the subdomain you configured with Mailgun. Example: mg.domain.com
-EMAIL_DOMAIN=
-# The SMTP server and credentials you are using. For example: smtp.eu.mailgun.org
-EMAIL_HOST=
-EMAIL_HOST_PASSWORD=
-EMAIL_HOST_PASSWORD=
-EMAIL_HOST_USER=
-# We use Mailgun by default on the newsletters, input your API key here
-EMAIL_MAILGUN_API_URL=
-EMAIL_PORT=587
-EMAIL_USE_TLS='True'
-# Where you cloned the repository>
-GREGORY_DIR=
-# Leave this blank and come back to them when you're finished installing Metabase.
-METABASE_SECRET_KEY=
-# Where do you want to host Metabase?
-METABASE_SITE_URL='https://metabase.DOMAIN.COM/'
-# Set your postgres DB and credentials
-POSTGRES_DB=
-POSTGRES_PASSWORD=
-POSTGRES_USER=
-SECRET_KEY='Yeah well, you know, that is just, like, your DJANGO SECRET_KEY, man' # you should set this manually https://docs.djangoproject.com/en/4.0/ref/settings/#secret-key
+git clone https://github.com/brunoamaral/gregory-ai.git
+cd gregory-ai
+cp example.env .env
 ```
 
-3. **Execute** `python3 scripts/bootstrap.py`. 
+Edit `.env` with your local settings. Minimum required variables:
 
-The script will check if you have all the requirements and run help you setup the containers
+```bash
+SECRET_KEY='your-django-secret-key'
+FERNET_SECRET_KEY='your-fernet-key'
+POSTGRES_DB=gregory
+POSTGRES_USER=gregory
+POSTGRES_PASSWORD=gregory
+DOMAIN_NAME=localhost
+```
 
-Once finished, login at <https://api.DOMAIN.TLD/admin> or wherever your reverse proxy is listening on.
+Optional — add Postmark credentials if you want to test email sending:
 
-4. **Configure** your RSS Sources in the Django admin page
+```bash
+EMAIL_POSTMARK_API_KEY=your-postmark-server-token
+EMAIL_POSTMARK_API_URL=https://api.postmarkapp.com/email
+```
 
-5. **Setup** database maintenance tasks
+Optional — add ORCID credentials if you want to test author enrichment:
 
-Gregory needs to run a series of tasks to fetch missing information and apply the machine learning algorithm. For that, we are using [Django-Con](https://github.com/Tivix/django-cron). Add the following to your crontab:
+```bash
+ORCID_CLIENT_ID=your-orcid-client-id
+ORCID_CLIENT_SECRET=your-orcid-client-secret
+```
 
-```cron
-*/10 * * * * /usr/bin/docker exec admin ./manage.py runcrons > /root/log
-*/5 * * * * /usr/bin/flock -n /tmp/get_takeaways /usr/bin/docker exec admin ./manage.py get_takeaways
-*/5 * * * * /usr/bin/flock -n /tmp/update_orcid /usr/bin/docker exec -it admin python manage.py update_orcid
+### 2. Start the containers
+
+```bash
+docker compose up -d
+```
+
+This starts the Django application, PostgreSQL, and any supporting services defined in `docker-compose.yaml`. The container is named `gregory`.
+
+### 3. Run migrations and create a superuser
+
+```bash
+docker exec gregory python manage.py migrate
+docker exec gregory python manage.py createsuperuser
+```
+
+### 4. Set up a Python virtual environment (for running management commands locally)
+
+```bash
+cd django
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
+```
+
+### 5. Verify the installation
+
+Open the Django admin at `http://localhost/admin/` and log in with the superuser credentials you created.
+
+---
+
+## Seeding test data
+
+To add a source and run the ingestion pipeline for the first time:
+
+1. Log into the admin at `/admin/`.
+2. Go to **Gregory > Sources** and add a PubMed RSS feed.
+3. Run the pipeline to fetch articles:
+
+```bash
+docker exec gregory python manage.py pipeline
+```
+
+---
+
+## Running tests
+
+```bash
+docker exec gregory python manage.py test
+```
+
+To run a specific test file:
+
+```bash
+docker exec gregory python manage.py test gregory.tests.test_filename
+```
+
+---
+
+## Scheduled tasks
+
+GregoryAI relies on cron jobs to keep the data fresh. For local development you can run commands manually. For production setup see the [README](../README.md#automated-tasks).
+
+```bash
+# Admin digest email (every 2 days in production)
+docker exec gregory python manage.py send_admin_summary
+
+# Weekly subscriber digest (every Tuesday in production)
+docker exec gregory python manage.py send_weekly_summary
+
+# Full ingestion and ML pipeline (every 12 hours in production)
+docker exec gregory python manage.py pipeline
 ```

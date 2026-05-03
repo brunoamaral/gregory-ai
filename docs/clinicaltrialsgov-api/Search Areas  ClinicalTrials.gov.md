@@ -1,13 +1,3 @@
----
-title: "Search Areas | ClinicalTrials.gov"
-source: "https://clinicaltrials.gov/data-api/about-api/search-areas"
-author:
-published:
-created: 2025-12-25
-description: "Description of the parts of a study record that can be searched using different fields. This applies to the API and the ClinicalTrials.gov search form"
-tags:
-  - "clippings"
----
 ## Introduction
 
 The Search Areas describe the parts of a study record that are searched for content using different fields. Some search areas consist of groups of weighted study fields that can be searched at once (for example, BasicSearch area consists of 43 data fields). This also applies to the search form on the ClinicalTrials.gov homepage.

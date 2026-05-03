@@ -1,13 +1,3 @@
----
-title: "ClinicalTrials.gov API | ClinicalTrials.gov"
-source: "https://clinicaltrials.gov/data-api/api"
-author:
-published:
-created: 2025-12-25
-description: "ClinicalTrials.gov API | ClinicalTrials.gov"
-tags:
-  - "clippings"
----
 ### Notice to API users:
 
 ClinicalTrials.gov has a modernized data ingest as of August 26, 2025. Two major groups of data are impacted.

@@ -1,5 +1,8 @@
 # Truncated Summary Detection - Enhancement to update_articles_info
 
+> This is a historical implementation note. For current behaviour, see the relevant reference doc in [docs/](../).
+
+
 ## Overview
 Enhanced the `update_articles_info` management command to detect and replace truncated article summaries with complete abstracts from CrossRef.
 

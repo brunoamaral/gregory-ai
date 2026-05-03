@@ -1,4 +1,6 @@
-# Organisations, Teams, and Sites
+# Organisations, teams, and sites
+
+> Audience: operators configuring a multi-tenant GregoryAI instance.
 
 GregoryAI supports a multi-tenant structure where content, credentials, and email sending can be scoped at the **Organisation** or **Team** level. This document explains how to configure each layer and how the system resolves which settings to use when sending emails.
 

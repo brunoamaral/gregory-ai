@@ -1,5 +1,8 @@
 # Algorithm Tracking Feature Implementation
 
+> This is a historical implementation note. For current behaviour, see the relevant reference doc in [docs/](../).
+
+
 This document outlines the changes made to add ML algorithm tracking capabilities to the Gregory AI project.
 
 ## 1. Changes Made

@@ -1,5 +1,8 @@
 # Fix: Training Error with Null Relevance Values
 
+> This is a historical implementation note. For current behaviour, see the relevant reference doc in [docs/](../).
+
+
 ## Problem
 
 When running `train_models` command in production, the training was failing with the error:

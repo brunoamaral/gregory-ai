@@ -1,164 +1,214 @@
-# RSS feeds
+# API and RSS feeds
 
-Gregory's API is open and doesn't require authentication unless you need to use it to add Articles or Clinical Trials.
+> Audience: developers integrating with the GregoryAI REST API.
 
-1. **Admin Routes:**
-   - `admin/`: Admin site routes.
-2. **API Authentication:**
-   - `api-auth/`: Default REST framework authentication routes.
-3. **Article Routes:**
-   - `articles/relevant/`: Access relevant articles.
-   - `articles/post/`: Endpoint for posting an article.
-4. **Feed Routes:**
-   - `feed/author/<str:orcid>/`: Feed for articles by a specific author using their ORCID identifier. Ordered by `-published_date` (newest first), limited to 50 items.
-   - `feed/trials/subject/<str:subject_slug>/`: Feed for clinical trials filtered by subject slug. Ordered by `-discovery_date` (newest first), limited to 50 items.
-5. **Subscriptions Route:**
-   - `subscriptions/new/`: Endpoint for new subscriptions.
+GregoryAI's API is open and does not require authentication unless you need to create articles or clinical trials. JWT authentication is available for write operations.
 
-## Subscription form endpoint
+---
 
-`POST /subscriptions/new/` accepts HTML form submissions (no CSRF token required). Fields:
+## RSS feeds
+
+| Feed | URL pattern |
+|:-----|:------------|
+| Articles by author (ORCID) | `GET /feed/author/{orcid}/` |
+| Clinical trials by subject | `GET /feed/trials/subject/{subject_slug}/` |
+
+Both feeds return the 50 most recent items, ordered by newest first.
+
+---
+
+## Subscription endpoint
+
+`POST /subscriptions/new/` accepts HTML form submissions (no CSRF token required).
 
 | Field | Required | Description |
-|---|---|---|
+|:------|:---------|:------------|
 | `first_name` | yes | Subscriber first name |
 | `last_name` | no | Subscriber last name |
 | `email` | yes | Subscriber email address |
 | `profile` | yes | One of: `patient`, `caregiver`, `doctor`, `clinical centre`, `researcher` |
-| `list` | no | List ID(s) to subscribe to; may be repeated for multiple selections |
+| `list` | no | List ID(s) to subscribe to; may be repeated for multiple lists |
 
-On success the subscriber is created or updated, subscribed to the selected lists, and the browser is redirected to `/thank-you/`. On failure it is redirected to `/error/`.
+On success the subscriber is created or updated and the browser redirects to `/thank-you/`. On failure it redirects to `/error/`.
 
-### Redirect domain and allowed domains
+### Redirect domain
 
-The redirect base URL is **not** hardcoded. Instead, the view reads the `Origin` header (falling back to `Referer`) from the request and checks whether that domain appears in the **Allowed Domains** field of at least one of the selected lists. If it matches, the subscriber is redirected back to that origin domain. If no match is found, the redirect falls back to the current Django `Site` domain.
+The redirect base URL is not hardcoded. The view reads the `Origin` header (falling back to `Referer`) and checks whether that domain appears in the **Allowed Domains** field of at least one selected list. Configure allowed origins per list in the Django admin under **Subscriptions → Lists → Allowed Domains** as a comma-separated list:
 
-Configure allowed origins per list in the Django admin under **Subscriptions → Lists → Allowed Domains** as a comma-separated list of hostnames:
-
-```
+```text
 example.com, staging.example.com
 ```
 
-This prevents open-redirect attacks: only explicitly whitelisted domains are used for redirects.
+This prevents open-redirect attacks — only explicitly whitelisted domains are used.
 
-## Articles Query Parameters
+---
 
-The `/articles/` endpoint supports the following query parameters for filtering:
+## Authentication
+
+| Endpoint | Description |
+|:---------|:------------|
+| `POST /api/token/` | Obtain JWT token |
+| `POST /api/token/get/` | Obtain auth token (alternative) |
+| `GET /protected_endpoint/` | Test protected endpoint (requires auth header) |
+
+---
+
+## Articles query parameters
+
+The `/articles/` endpoint supports the following filters. Multiple parameters can be combined.
 
 | Parameter | Type | Description |
-|---|---|---|
-| `team_id` | integer | Filter by team ID |
-| `subject_id` | integer | Filter by subject ID |
-| `author_id` | integer | Filter by author ID |
-| `doi` | string | Filter by exact DOI (case-insensitive) |
+|:----------|:-----|:------------|
+| `team_id` | integer | Filter by team |
+| `subject_id` | integer | Filter by subject |
+| `author_id` | integer | Filter by author |
+| `doi` | string | Exact DOI match (case-insensitive) |
 | `category_slug` | string | Filter by category slug |
 | `category_id` | integer | Filter by category ID |
-| `journal_slug` | string | Filter by journal (convert spaces to dashes) |
-| `source_id` | integer | Filter by source ID |
+| `journal_slug` | string | Filter by journal (spaces → dashes) |
+| `source_id` | integer | Filter by source |
 | `search` | string | Search in title and summary |
-| `relevant` | boolean | Filter for relevant articles. When combined with `subject_id`, relevance is scoped to that specific subject — only articles relevant *for that subject* (via ML predictions or manual marking) are returned. Without `subject_id`, relevance is checked across all subjects. |
-| `ml_threshold` | float (0.0–1.0) | Minimum ML prediction confidence score. Also scoped to `subject_id` when provided. |
-| `open_access` | boolean | Filter for open access articles |
-| `last_days` | integer | Filter for articles from the last N days |
-| `week` | integer (1–52) | Filter by week number (requires `year`) |
-| `year` | integer | Year for week filtering (used with `week`) |
+| `relevant` | boolean | Relevant articles only. Scoped to `subject_id` when provided. |
+| `ml_threshold` | float 0–1 | Minimum ML prediction confidence. Scoped to `subject_id` when provided. |
+| `open_access` | boolean | Open access articles only |
+| `has_clinical_trials` | boolean | Filter by whether articles are linked to at least one trial |
+| `unsent` | boolean | Articles not yet sent to subscribers |
+| `last_days` | integer | Articles from the last N days |
+| `week` | integer 1–52 | Filter by week number (requires `year`) |
+| `year` | integer | Year for week filtering |
 | `ordering` | string | Order results (e.g., `-published_date`, `title`) |
-| `page` | integer | Page number for pagination |
+| `page` | integer | Page number |
 | `page_size` | integer | Items per page (max 100) |
-| `all_results` | boolean | Bypass pagination and return all results (useful for CSV export) |
-| `format` | string | Response format: `json` (default) or `csv` |
+| `all_results` | boolean | Bypass pagination (useful for CSV export) |
+| `format` | string | `json` (default) or `csv` |
 
-## Examples
+### Examples
 
-```
+```bash
 GET /articles/?team_id=1&subject_id=4&relevant=true
 GET /articles/?relevant=true&ml_threshold=0.75
 GET /articles/?relevant=true&last_days=15
 GET /articles/?team_id=1&search=stem+cells
 GET /articles/?format=csv&all_results=true
+GET /articles/?has_clinical_trials=true
 ```
 
-## API EndPoints
+---
 
-| Model                   | API Endpoint                             | Description                                         | Status                                                   |
-| ----------------------- | ---------------------------------------- | --------------------------------------------------- | -------------------------------------------------------- |
-| Authors                 | GET /authors/                            | List all authors                                    | ✅                                       |
-| Authors                 | POST /authors/                           | Create a new author                                 | 🛑                                              |
-| Authors                 | GET /authors/{id}/                       | Retrieve a specific author by ID                    | ✅                                       |
-| Authors                 | PUT /authors/{id}/                       | Update a specific author by ID                      | 🛑                                              |
-| Authors                 | DELETE /authors/{id}/                    | Delete a specific author by ID                      | 🛑                                              |
-| Categories              | GET /categories/                         | List all categories                                 | ✅                                                        |
-| Categories              | POST /categories/                        | Create a new category                               | 🛑                                              |
-| Categories              | GET /categories/{id}/                    | Retrieve a specific category by ID                  | ✅                                                        |
-| Categories              | PUT /categories/{id}/                    | Update a specific category by ID                    | 🛑                                              |
-| Categories              | DELETE /categories/{id}/                 | Delete a specific category by ID                    | 🛑                                              |
-| Categories              | GET /categories/<str:category_slug>/monthly-counts/ | Get monthly counts of articles and trials for a specific category by slug | |
-| Team Categories         | GET /team-categories/                    | List all team categories                            |                                                          |
-| Team Categories         | POST /team-categories/                   | Create a new team category                          | 🛑                                              |
-| Team Categories         | GET /team-categories/{id}/               | Retrieve a specific team category by ID             |                                                          |
-| Team Categories         | PUT /team-categories/{id}/               | Update a specific team category by ID               | 🛑                                              |
-| Team Categories         | DELETE /team-categories/{id}/            | Delete a specific team category by ID               | 🛑                                              |
-| Entities                | GET /entities/                           | List all entities                                   | 🛑                                              |
-| Entities                | POST /entities/                          | Create a new entity                                 | 🛑                                              |
-| Entities                | GET /entities/{id}/                      | Retrieve a specific entity by ID                    | 🛑                                              |
-| Entities                | PUT /entities/{id}/                      | Update a specific entity by ID                      | 🛑                                              |
-| Entities                | DELETE /entities/{id}/                   | Delete a specific entity by ID                      | 🛑                                              |
-| Subjects                | GET /subjects/                           | List all subjects                                   | ✅                                       |
-| Subjects                | POST /subjects/                          | Create a new subject                                | 🛑                                              |
-| Subjects                | GET /subjects/{id}/                      | Retrieve a specific subject by ID                   | ✅                                       |
-| Subjects                | PUT /subjects/{id}/                      | Update a specific subject by ID                     | 🛑                                              |
-| Subjects                | DELETE /subjects/{id}/                   | Delete a specific subject by ID                     | 🛑                                              |
-| Sources                 | GET /sources/                            | List all sources                                    | ✅ needs to migrate to new sources model |
-| Sources                 | POST /sources/                           | Create a new source                                 | 🛑                                              |
-| Sources                 | GET /sources/{id}/                       | Retrieve a specific source by ID                    | ✅ needs to migrate to new sources model |
-| Sources                 | PUT /sources/{id}/                       | Update a specific source by ID                      | 🛑                                              |
-| Sources                 | DELETE /sources/{id}/                    | Delete a specific source by ID                      | 🛑                                              |
-| Articles                | GET /articles/                           | List all articles                                   | ✅                                       |
-| Articles                | POST /articles/                          | Create a new article                                | ✅                                       |
-| Articles                | GET /articles/{id}/                      | Retrieve a specific article by ID                   | ✅                                       |
-| Articles                | PUT /articles/{id}/                      | Update a specific article by ID                     | 🛑                                              |
-| Articles                | DELETE /articles/{id}/                   | Delete a specific article by ID                     | 🛑                                              |
-| Articles                | GET /articles/relevant/                  | List relevant articles                              |                                                          |
-| Articles                | POST /articles/post/                     | Post a new article                                  |                                                          |
-| Articles                | GET /articles/author/{author_id}/        | List articles by author                             |                                                          |
-| Articles                | GET /articles/category/{category_slug}/  | List articles by category                           |                                                          |
-| Articles                | GET /articles/source/{source_id}/        | List articles by source                             |                                                          |
-| Articles                | GET /articles/journal/{journal_slug}/    | List articles by journal                            |                                                          |
-| Articles                | GET /articles/open-access/               | List open access articles                           |                                                          |
-| Articles                | GET /articles/unsent/                    | List unsent articles                                |                                                          |
-| Articles                | GET /articles/relevant/week/{year}/{week}/| List relevant articles for a specific week          |                                                          |
-| Articles                | GET /articles/relevant/last/{days}/      | List relevant articles for the last number of days  |                                                          |
-| Trials                  | GET /trials/                             | List all trials                                     | ✅                                       |
-| Trials                  | POST /trials/                            | Create a new trial                                  | 🛑                                              |
-| Trials                  | GET /trials/{id}/                        | Retrieve a specific trial by ID                     | ✅                                       |
-| Trials                  | PUT /trials/{id}/                        | Update a specific trial by ID                       | 🛑                                              |
-| Trials                  | DELETE /trials/{id}/                     | Delete a specific trial by ID                       | 🛑                                              |
-| Trials                  | GET /trials/category/{category_slug}/    | List trials by category                             |                                                          |
-| Trials                  | GET /trials/source/{source}/             | List trials by source                               |                                                          |
-| Teams                   | GET /teams/                              | List all teams                                      | ✅                                       |
-| Teams                   | POST /teams/                             | Create a new team                                   |                                                          |
-| Teams                   | GET /teams/{id}/                         | Retrieve a specific team by ID                      | ✅                                       |
-| Teams                   | PUT /teams/{id}/                         | Update a specific team by ID                        |                                                          |
-| Teams                   | DELETE /teams/{id}/                      | Delete a specific team by ID                        |                                                          |
-| Teams                   | GET /teams/{id}/articles                 | List all articles for a specific team by ID         | ✅                                       |
-| Teams                   | GET /teams/{id}/trials                   | List all clinical trials for a specific team by ID  | ✅                                       |
-| Teams                   | GET /teams/{id}/subjects                 | List all subjects for specific team by ID           | ✅                                       |
-| Teams                   | GET /teams/{id}/sources                  | List all sources for specific team by ID            | ✅                                       |
-| Teams                   | GET /teams/{id}/categories               | List all categories for specific team by ID         | ✅                                       |
-| Teams                   | GET /teams/{id}/articles/subject/{subject_id}/     | List all articles for a team filtered by subject    | ✅              |
-| Teams                   | GET /teams/{id}/articles/category/{category_slug}/ | List all articles for a team filtered by category   | ✅              |
-| Teams                   | GET /teams/{id}/articles/source/{source_id}/       | List all articles for a team filtered by source     | ✅              |
-| Teams                   | GET /teams/{id}/trials/category/{category_slug}/   | List clinical trials for a team filtered by category | ✅              |
-| Teams                   | GET /teams/{id}/trials/subject/{subject_id}/       | List clinical trials for a team filtered by subject | ✅              |
-| Teams                   | GET /teams/{id}/trials/source/{source_id}/         | List clinical trials for a team filtered by source  | ✅              |
-| Teams                   | GET /teams/{id}/categories/{category_slug}/monthly-counts/ | Monthly article and trial counts for a team category | ✅              |
-| MLPredictions           | GET /ml-predictions/                     | List all ML predictions                             | 🛑                                              |
-| MLPredictions           | POST /ml-predictions/                    | Create a new ML prediction                          | 🛑                                              |
-| MLPredictions           | GET /ml-predictions/{id}/                | Retrieve a specific ML prediction by ID             | 🛑                                              |
-| MLPredictions           | PUT /ml-predictions/{id}/                | Update a specific ML prediction by ID               | 🛑                                              |
-| MLPredictions           | DELETE /ml-predictions/{id}/             | Delete a specific ML prediction by ID               | 🛑                                              |
-| ArticleSubjectRelevance | GET /article-subject-relevances/         | List all article subject relevances                 | 🛑                                              |
-| ArticleSubjectRelevance | POST /article-subject-relevances/        | Create a new article subject relevance              | 🛑                                              |
-| ArticleSubjectRelevance | GET /article-subject-relevances/{id}/    | Retrieve a specific article subject relevance by ID | 🛑                                              |
-| ArticleSubjectRelevance | PUT /article-subject-relevances/{id}/    | Update a specific article subject relevance by ID   | 🛑                                              |
-| ArticleSubjectRelevance | DELETE /article-subject-relevances/{id}/ | Delete a specific article subject relevance by ID   | 🛑                                              |
+## Available endpoints
+
+| Model | Endpoint | Parameters | Notes |
+|:------|:---------|:-----------|:------|
+| Articles | `GET /articles/` | `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `unsent`, `last_days`, `week`, `year`, `has_clinical_trials`, pagination | |
+| Articles | `POST /articles/post/` | `title`, `link`, `doi`, `summary`, `source_id` | Create article |
+| Articles | `GET /articles/{id}/` | `id` (path) | |
+| Articles | `GET /articles/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `format`, `all_results` | See [article-search-api.md](article-search-api.md) |
+| Articles | `POST /articles/search/` | Same fields in request body | |
+| Authors | `GET /authors/` | `author_id`, `full_name`, `orcid`, `country`, `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe` | See [authors-api.md](authors-api.md) |
+| Authors | `GET /authors/{id}/` | `id` (path) | |
+| Authors | `GET /authors/search/` | `team_id` *(req)*, `subject_id` *(req)*, `full_name`, `format`, `all_results` | |
+| Authors | `GET /authors/by_team_subject/` | `team_id` *(req)*, `subject_id` *(req)* | |
+| Authors | `GET /authors/by_team_category/` | `team_id` *(req)*, `category_slug` or `category_id` *(req)* | |
+| Categories | `GET /categories/` | `team_id`, `subject_id`, `category_id`, `search`, `ordering`, `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | |
+| Categories | `GET /categories/{id}/` | `id` (path) | |
+| Categories | `GET /categories/{id}/authors/` | `id` (path), `min_articles`, `sort_by`, `order`, date filters | Author stats for a category |
+| Categories | `GET /categories/{slug}/monthly-counts/` | `slug` (path) | Monthly article and trial counts |
+| Sources | `GET /sources/` | `team_id`, `subject_id`, `source_for`, `search`, `ordering`, pagination | |
+| Sources | `GET /sources/{id}/` | `id` (path) | |
+| Subjects | `GET /subjects/` | `team_id`, `search`, `ordering`, pagination | |
+| Subjects | `GET /subjects/{id}/` | `id` (path) | |
+| Teams | `GET /teams/` | Standard pagination | |
+| Teams | `GET /teams/{id}/` | `id` (path) | |
+| Teams | `GET /teams/{id}/subjects/{subject_id}/categories/` | `id`, `subject_id` (path) | |
+| Trials | `GET /trials/` | `team_id`, `subject_id`, `category_id`, `source_id`, `status`, `search`, `ordering`, trial-specific filters, pagination | See parameter details below |
+| Trials | `GET /trials/{id}/` | `id` (path) | |
+| Trials | `GET /trials/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `status`, `format`, `all_results` | See [trial-search-api.md](trial-search-api.md) |
+| Trials | `POST /trials/search/` | Same fields in request body | |
+| Email templates | `GET /emails/` | None | Template preview dashboard |
+| Email templates | `GET /emails/preview/{template_name}/` | `template_name` (path) | |
+| Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | |
+| RSS feeds | `GET /feed/author/{orcid}/` | `orcid` (path) | |
+| RSS feeds | `GET /feed/trials/subject/{subject_slug}/` | `subject_slug` (path) | |
+| Subscriptions | `POST /subscriptions/new/` | `first_name`, `last_name`, `email`, `profile`, `list` | |
+
+### Trials-specific filter parameters
+
+| Parameter | Description |
+|:----------|:------------|
+| `trial_id` | Filter by specific trial ID |
+| `internal_number` | Filter by WHO internal number |
+| `phase` | Filter by trial phase (e.g., `Phase III`) |
+| `study_type` | Filter by study type (e.g., `Interventional`) |
+| `primary_sponsor` | Filter by sponsor organisation |
+| `source_register` | Filter by source registry (e.g., `ClinicalTrials.gov`) |
+| `countries` | Filter by trial countries |
+| `condition` | Filter by medical condition |
+| `intervention` | Filter by intervention type |
+| `therapeutic_areas` | Filter by therapeutic areas |
+| `inclusion_agemin` / `inclusion_agemax` | Filter by age range |
+| `inclusion_gender` | Filter by gender inclusion |
+
+---
+
+## Planned endpoints (not yet implemented)
+
+<details>
+<summary>Endpoints not yet available</summary>
+
+| Model | Endpoint | Notes |
+|:------|:---------|:------|
+| Authors | `POST /authors/` | Write disabled |
+| Authors | `PUT /authors/{id}/` | Write disabled |
+| Authors | `DELETE /authors/{id}/` | Write disabled |
+| Categories | `POST /categories/` | Write disabled |
+| Categories | `PUT /categories/{id}/` | Write disabled |
+| Categories | `DELETE /categories/{id}/` | Write disabled |
+| Entities | All endpoints | Not implemented |
+| Subjects | `POST /subjects/` | Write disabled |
+| Subjects | `PUT /subjects/{id}/` | Write disabled |
+| Subjects | `DELETE /subjects/{id}/` | Write disabled |
+| Sources | `POST /sources/` | Write disabled |
+| Sources | `PUT /sources/{id}/` | Write disabled |
+| Sources | `DELETE /sources/{id}/` | Write disabled |
+| Articles | `PUT /articles/{id}/` | Write disabled |
+| Articles | `DELETE /articles/{id}/` | Write disabled |
+| Trials | `POST /trials/` | Write disabled |
+| Trials | `PUT /trials/{id}/` | Write disabled |
+| Trials | `DELETE /trials/{id}/` | Write disabled |
+| Teams | `POST /teams/` | Write disabled |
+| Teams | `PUT /teams/{id}/` | Write disabled |
+| Teams | `DELETE /teams/{id}/` | Write disabled |
+| MLPredictions | All endpoints | Not implemented |
+| ArticleSubjectRelevance | All endpoints | Not implemented |
+
+</details>
+
+---
+
+## Deprecated team-based endpoints
+
+The following URL patterns still function but are deprecated. Migrate to the parameter-based equivalents shown:
+
+| Deprecated | Preferred equivalent |
+|:-----------|:--------------------|
+| `GET /teams/{id}/articles/` | `GET /articles/?team_id={id}` |
+| `GET /teams/{id}/articles/subject/{subject_id}/` | `GET /articles/?team_id={id}&subject_id={subject_id}` |
+| `GET /teams/{id}/articles/category/{category_slug}/` | `GET /articles/?team_id={id}&category_slug={slug}` |
+| `GET /teams/{id}/articles/source/{source_id}/` | `GET /articles/?team_id={id}&source_id={source_id}` |
+| `GET /teams/{id}/subjects/` | `GET /subjects/?team_id={id}` |
+
+The parameter-based approach supports combining any set of filters in a single request.
+
+---
+
+## Data formats
+
+All endpoints support three formats. Specify via the `format` query parameter or `Accept` header.
+
+| Format | `format=` value | `Accept` header |
+|:-------|:----------------|:----------------|
+| JSON (default) | `json` | `application/json` |
+| Browsable API | `html` | `text/html` |
+| CSV | `csv` | `text/csv` |
+
+For CSV export details and streaming behaviour, see [csv-export.md](csv-export.md).

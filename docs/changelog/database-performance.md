@@ -1,5 +1,8 @@
 # Database Performance Optimization: Uppercase Search Columns
 
+> This is a historical implementation note. For current behaviour, see the relevant reference doc in [docs/](../).
+
+
 ## Overview
 
 This implementation adds persisted uppercase columns (`utitle`, `usummary`, `ufull_name`) to the `articles`, `trials`, and `authors` tables to dramatically improve case-insensitive search performance.
