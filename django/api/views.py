@@ -1,6 +1,7 @@
 from api.serializers import (
-		ArticleSerializer, TrialSerializer, SourceSerializer, AuthorSerializer, 
-		CategorySerializer, CategoryTopAuthorSerializer, TeamSerializer, SubjectsSerializer, ArticlesByCategoryAndTeamSerializer
+		ArticleSerializer, TrialSerializer, SourceSerializer, AuthorSerializer,
+		CategorySerializer, CategoryTopAuthorSerializer, TeamSerializer, SubjectsSerializer,
+		ArticlesByCategoryAndTeamSerializer, OrganizationSerializer
 )
 from api.pagination import FlexiblePagination
 from datetime import datetime, timedelta
@@ -52,12 +53,16 @@ class OrgVisibilityMixin:
 	"""
 
 	_org_filter_path = 'teams__organization_id'
+	# Set to False for viewsets that reach orgs via a simple FK (not M2M) to
+	# avoid unnecessary DISTINCT overhead on those queries.
+	_org_filter_distinct = True
 
 	def get_queryset(self):
 		qs = super().get_queryset()
 		if not hasattr(self.request, 'visible_org_ids'):
 			return qs
-		return qs.filter(**{f'{self._org_filter_path}__in': self.request.visible_org_ids}).distinct()
+		qs = qs.filter(**{f'{self._org_filter_path}__in': self.request.visible_org_ids})
+		return qs.distinct() if self._org_filter_distinct else qs
 
 
 def add_deprecation_headers(response, deprecated_endpoint, replacement_endpoint, message=None):
@@ -721,6 +726,7 @@ class SourceViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	- **subject_id** - filter by subject ID
 	"""
 	_org_filter_path = 'team__organization_id'
+	_org_filter_distinct = False
 	queryset = Sources.objects.all().order_by('name')
 	serializer_class = SourceSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -890,23 +896,34 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 		
 		# Add date filters to count filters
 		count_filters.update(date_filters)
-		
+
+		# Build an org-visibility filter for the Count annotation so that
+		# article_count always reflects only visible articles (fixes sorting/
+		# filtering by article_count leaking hidden-org data).
+		has_org_scope = hasattr(self.request, 'visible_org_ids')
+		org_q = Q(articles__teams__organization_id__in=self.request.visible_org_ids) if has_org_scope else Q()
+
 		# Add article count annotation for sorting
 		if sort_by == 'article_count':
 			if count_filters:
-				# Annotate with count and filter to only include authors with articles matching criteria
+				combined_q = Q(**count_filters) & org_q if has_org_scope else Q(**count_filters)
 				queryset = queryset.annotate(
-					article_count=Count('articles', filter=Q(**count_filters), distinct=True)
+					article_count=Count('articles', filter=combined_q, distinct=True)
 				).filter(article_count__gt=0)
+			elif has_org_scope:
+				queryset = queryset.annotate(
+					article_count=Count('articles', filter=org_q, distinct=True)
+				)
 			else:
 				queryset = queryset.annotate(
 					article_count=Count('articles', distinct=True)
 				)
 		elif count_filters:
-			# Even if not sorting by article_count, we still need to filter authors 
+			# Even if not sorting by article_count, we still need to filter authors
 			# to only those who have articles matching the criteria
+			combined_q = Q(**count_filters) & org_q if has_org_scope else Q(**count_filters)
 			queryset = queryset.annotate(
-				article_count=Count('articles', filter=Q(**count_filters), distinct=True)
+				article_count=Count('articles', filter=combined_q, distinct=True)
 			).filter(article_count__gt=0)
 		
 		# Apply sorting
@@ -1005,6 +1022,7 @@ class TeamsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	List all teams
 	"""
 	_org_filter_path = 'organization_id'
+	_org_filter_distinct = False
 	queryset = Team.objects.all().order_by('id')
 	serializer_class = TeamSerializer
 	permission_classes  = [permissions.IsAuthenticatedOrReadOnly]
@@ -1024,13 +1042,8 @@ class OrganizationsViewSet(viewsets.ReadOnlyModelViewSet):
 	Detail endpoint (``/organizations/<id>/``) returns 404 rather than 403
 	when the organisation is not visible (hide-existence rule).
 	"""
-	from api.serializers import OrganizationSerializer
-	serializer_class = None  # set in get_serializer_class
+	serializer_class = OrganizationSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-	def get_serializer_class(self):
-		from api.serializers import OrganizationSerializer
-		return OrganizationSerializer
 
 	def get_queryset(self):
 		qs = Organization.objects.all().order_by('id')
@@ -1060,6 +1073,7 @@ class SubjectsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	- Order by name: `/subjects/?ordering=subject_name`
 	"""
 	_org_filter_path = 'team__organization_id'
+	_org_filter_distinct = False
 	queryset = Subject.objects.all().order_by('id')
 	serializer_class = SubjectsSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
