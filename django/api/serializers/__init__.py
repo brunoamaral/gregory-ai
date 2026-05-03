@@ -275,7 +275,7 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
 	def get_full_name(self, obj):
 		return obj.full_name
 
-class ArticleSerializer(serializers.HyperlinkedModelSerializer):
+class ArticleSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field='name')
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 	authors = ArticleAuthorSerializer(many=True, read_only=True)
@@ -302,7 +302,7 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 		trials = [ref.trial for ref in references]
 		return TrialReferenceSerializer(trials, many=True).data
 
-class TrialSerializer(serializers.HyperlinkedModelSerializer):
+class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 	articles = serializers.SerializerMethodField()
