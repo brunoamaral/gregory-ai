@@ -67,13 +67,14 @@ class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
     last_days = filters.NumberFilter(method='filter_last_days', label='Last Days')
     week = filters.NumberFilter(method='filter_week', label='Week')
     year = filters.NumberFilter(method='filter_year', label='Year')
+    has_clinical_trials = filters.BooleanFilter(method='filter_has_clinical_trials', label='Has Clinical Trials')
     
     class Meta:
         model = Articles
         fields = [
             'title', 'summary', 'search', 'author_id', 'doi', 'category_slug', 'category_id', 
             'journal_slug', 'team_id', 'subject_id', 'source_id', 'relevant', 'ml_threshold',
-            'open_access', 'last_days', 'week', 'year'
+            'open_access', 'last_days', 'week', 'year', 'has_clinical_trials'
         ]
     
     def filter_title(self, queryset, name, value):
@@ -299,6 +300,17 @@ class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
         This filter doesn't modify the queryset directly - it's used by filter_week
         """
         return queryset
+
+    def filter_has_clinical_trials(self, queryset, name, value):
+        """
+        Filter articles by whether they are linked to at least one clinical trial.
+        When value is None (parameter absent or empty), all articles are returned.
+        """
+        if value is None:
+            return queryset
+        if value:
+            return queryset.filter(trial_references__isnull=False).distinct()
+        return queryset.filter(trial_references__isnull=True)
 
 class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
     """
