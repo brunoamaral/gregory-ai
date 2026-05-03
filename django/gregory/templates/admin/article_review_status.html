@@ -1,662 +1,795 @@
-{% extends "admin/base_site.html" %}
-{% load i18n admin_urls static admin_list %}
-
-{% block extrastyle %}
-  {{ block.super }}
-  <link rel="stylesheet" type="text/css" href="{% static "admin/css/changelists.css" %}">
+{% load i18n static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }} — Gregory AI</title>
   <style>
-    .subject-selector {
-      margin: 20px 0;
-      padding: 20px;
-      background-color: #f8f8f8;
-      border-radius: 5px;
-      border: 1px solid #ddd;
-    }
-    
-    .review-filter {
-      margin: 10px 0;
-    }
-    
-    .search-box {
-      margin: 10px 0;
-    }
-    
-    .status-column {
-      width: 120px;
-      text-align: center;
-    }
-    
-    .title-column {
-      width: 50%;
-    }
-    
-    .date-column {
-      width: 150px;
-    }
-    
-    .action-column {
-      width: 180px;
-      text-align: center;
-    }
-    
-    .pagination {
-      margin: 20px 0;
-      text-align: center;
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background-color: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+      color: #374151;
     }
 
-    .back-to-articles {
-      margin-bottom: 15px;
-    }
-    
-    .select-column {
-      width: 50px;
-      text-align: center;
-    }
-    
-    .batch-actions {
-      margin: 15px 0;
-      padding: 15px;
-      background-color: #f0f8ff;
-      border-radius: 5px;
-      border: 1px solid #cce5ff;
+    /* ── Page header ── */
+    .page-header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%);
+      padding: 32px 40px 28px;
       display: flex;
       align-items: center;
+      justify-content: space-between;
     }
-    
-    .batch-actions select {
-      margin-right: 10px;
-      padding: 5px;
+
+    .page-header-brand {
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin: 0;
     }
-    
-    .batch-actions button {
-      padding: 5px 10px;
-      background-color: #417690;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
+
+    .page-header-subtitle {
+      color: #dbeafe;
+      font-size: 14px;
+      margin: 4px 0 0;
     }
-    
-    .batch-actions button:hover {
-      background-color: #2b5070;
+
+    .back-link {
+      color: #bfdbfe;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid rgba(255,255,255,0.25);
+      padding: 6px 14px;
+      border-radius: 6px;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
     }
-    
-    .messages {
-      margin-bottom: 15px;
+
+    .back-link:hover {
+      background: rgba(255,255,255,0.15);
+      color: #ffffff;
+      text-decoration: none;
     }
-    
-    .select-all-checkbox {
-      margin-right: 5px;
+
+    /* ── Layout wrapper ── */
+    .page-body {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px 24px 60px;
     }
-    
-    .date-filter {
-      margin-top: 15px; 
-      padding-top: 15px; 
-      border-top: 1px solid #eee;
-    }
-    
-    .date-filter-label {
-      display: block; 
-      margin-bottom: 10px; 
-      font-weight: bold;
-    }
-    
-    .date-filter-options {
+
+    /* ── Messages ── */
+    .messages { margin-bottom: 20px; }
+
+    .message {
+      padding: 12px 16px;
       margin-bottom: 10px;
+      border-radius: 8px;
+      font-size: 14px;
+      border-left: 4px solid;
     }
-    
-    .date-inputs {
-      display: flex; 
-      gap: 10px;
+
+    .message.success { background-color: #d1fae5; border-color: #10b981; color: #065f46; }
+    .message.error   { background-color: #fee2e2; border-color: #ef4444; color: #7f1d1d; }
+    .message.warning { background-color: #fef3c7; border-color: #f59e0b; color: #78350f; }
+    .message.info    { background-color: #dbeafe; border-color: #3b82f6; color: #1e3a8a; }
+
+    /* ── Filter panel ── */
+    .filter-panel {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      padding: 24px 28px;
+      margin-bottom: 24px;
     }
-    
-    .date-inputs.hidden {
-      display: none;
+
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      align-items: flex-start;
     }
-    
-    .success-message {
-      padding: 10px; 
-      margin-bottom: 10px; 
-      border-radius: 4px; 
-      background-color: #dff0d8;
-    }
-    
-    .error-message {
-      padding: 10px; 
-      margin-bottom: 10px; 
-      border-radius: 4px; 
-      background-color: #f2dede;
-    }
-    
-    .info-message {
-      padding: 10px; 
-      margin-bottom: 10px; 
-      border-radius: 4px; 
-      background-color: #d9edf7;
-    }
-    
-    .predictions-column {
-      width: 200px;
-      font-size: 0.9em;
-    }
-    
-    .prediction-score {
-      display: inline-block;
-      margin: 2px 0;
-      padding: 2px 6px;
-      border-radius: 3px;
-      background-color: #f5f5f5;
-    }
-    
-    .prediction-label {
-      font-weight: bold;
-      margin-right: 5px;
-    }
-    
-    .score-high {
-      background-color: #d4edda;
-      color: #155724;
-    }
-    
-    .score-medium {
-      background-color: #fff3cd;
-      color: #856404;
-    }
-    
-    .score-low {
-      background-color: #f8d7da;
-      color: #721c24;
-    }
-    
-    .action-buttons {
+
+    .filter-group {
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 8px;
     }
-    
-    .action-btn {
-      padding: 5px 10px;
-      font-size: 0.85em;
-      border: 1px solid rgba(0, 0, 0, 0.15);
-      border-radius: 4px;
+
+    .filter-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #6b7280;
+    }
+
+    .filter-group select,
+    .filter-group input[type="text"],
+    .filter-group input[type="date"] {
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 14px;
+      color: #374151;
+      background: #fff;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      min-width: 180px;
+    }
+
+    .filter-group select:focus,
+    .filter-group input[type="text"]:focus,
+    .filter-group input[type="date"]:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+    }
+
+    /* Radio pill group */
+    .radio-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .radio-pills input[type="radio"] { display: none; }
+
+    .radio-pills label {
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid #d1d5db;
+      font-size: 13px;
+      font-weight: 500;
+      color: #6b7280;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: #fff;
+      white-space: nowrap;
+    }
+
+    .radio-pills input[type="radio"]:checked + label {
+      background: #1e3a8a;
+      border-color: #1e3a8a;
+      color: #fff;
+    }
+
+    .radio-pills label:hover {
+      border-color: #3b82f6;
+      color: #1e40af;
+    }
+
+    .filter-divider {
+      width: 1px;
+      background: #e5e7eb;
+      align-self: stretch;
+      margin: 0;
+    }
+
+    /* Search row */
+    .search-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .search-row input[type="text"] {
+      flex: 1;
+      min-width: 220px;
+    }
+
+    /* Date custom inputs */
+    .date-inputs {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      align-items: center;
+    }
+
+    .date-inputs.hidden { display: none; }
+
+    .date-inputs label {
+      font-size: 13px;
+      color: #374151;
+      margin-right: 4px;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 7px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      border: none;
       cursor: pointer;
       text-decoration: none;
       display: inline-block;
       text-align: center;
-      transition: all 0.2s;
-      font-weight: 500;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      transition: all 0.15s;
+      white-space: nowrap;
     }
-    
-    .action-btn:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+    .btn-primary {
+      background: #1e40af;
+      color: #fff;
     }
-    
-    .action-btn:active:not(:disabled) {
-      transform: translateY(0);
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    .btn-primary:hover { background: #1e3a8a; color: #fff; text-decoration: none; }
+
+    .btn-sm {
+      padding: 5px 11px;
+      font-size: 12px;
+      border-radius: 5px;
+      border: 1px solid transparent;
     }
-    
-    .btn-relevant {
-      background: linear-gradient(to bottom, #28a745, #218838);
-      color: white;
-      border-color: #1e7e34;
+
+    .btn-relevant   { background: #10b981; color: #fff; border-color: #059669; }
+    .btn-relevant:hover:not(:disabled) { background: #059669; }
+
+    .btn-not-relevant { background: #ef4444; color: #fff; border-color: #dc2626; }
+    .btn-not-relevant:hover:not(:disabled) { background: #dc2626; }
+
+    .btn-review  { background: #f59e0b; color: #1f2937; border-color: #d97706; }
+    .btn-review:hover:not(:disabled) { background: #d97706; }
+
+    .btn-edit {
+      background: #1e40af;
+      color: #fff;
+      border-color: #1e3a8a;
     }
-    
-    .btn-relevant:hover:not(:disabled) {
-      background: linear-gradient(to bottom, #218838, #1e7e34);
-    }
-    
-    .btn-not-relevant {
-      background: linear-gradient(to bottom, #dc3545, #c82333);
-      color: white;
-      border-color: #bd2130;
-    }
-    
-    .btn-not-relevant:hover:not(:disabled) {
-      background: linear-gradient(to bottom, #c82333, #bd2130);
-    }
-    
-    .btn-review {
-      background: linear-gradient(to bottom, #ffc107, #e0a800);
-      color: #333;
-      border-color: #d39e00;
-    }
-    
-    .btn-review:hover:not(:disabled) {
-      background: linear-gradient(to bottom, #e0a800, #d39e00);
-    }
-    
-    a.btn-edit {
-      background: linear-gradient(to bottom, #417690, #356a80);
-      color: white;
-      border-color: #2b566a;
-      text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.25);
-    }
-    
-    .btn-edit:hover {
-      background: linear-gradient(to bottom, #356a80, #2b566a);
-      color: white;
-      text-decoration: none;
-    }
-    
-    .btn-disabled {
-      opacity: 0.6;
+    .btn-edit:hover { background: #1e3a8a; color: #fff; text-decoration: none; }
+
+    .btn:disabled, .btn-sm:disabled {
+      opacity: 0.45;
       cursor: not-allowed;
-      box-shadow: none;
     }
-    
-    .btn-disabled:hover {
-      transform: none;
-      box-shadow: none;
+
+    /* ── Batch actions bar ── */
+    .batch-bar {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
     }
-    
+
+    .batch-bar select {
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      color: #374151;
+      background: #fff;
+    }
+
+    .batch-bar .select-all-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #374151;
+      cursor: pointer;
+      margin-left: auto;
+    }
+
+    /* ── Table ── */
+    .table-wrap {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      overflow: hidden;
+    }
+
+    table#result_list {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    table#result_list thead th {
+      background: #f8fafc;
+      color: #1e3a8a;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 12px 16px;
+      border-bottom: 2px solid #e5e7eb;
+      white-space: nowrap;
+    }
+
+    table#result_list tbody tr {
+      border-bottom: 1px solid #f1f5f9;
+      transition: background 0.1s;
+    }
+
+    table#result_list tbody tr:last-child { border-bottom: none; }
+    table#result_list tbody tr:hover { background: #f8fafc; }
+
+    table#result_list tbody td {
+      padding: 13px 16px;
+      vertical-align: middle;
+      color: #374151;
+    }
+
+    /* Title cell */
+    .article-title {
+      color: #1e3a8a;
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    /* Discovery date */
+    .date-text {
+      color: #6b7280;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    /* ── ML Prediction badges ── */
+    .predict-badges { display: flex; flex-direction: column; gap: 4px; }
+
+    .predict-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .predict-badge .algo { font-weight: 700; }
+
+    .badge-high   { background: #d1fae5; color: #065f46; }
+    .badge-medium { background: #fef3c7; color: #78350f; }
+    .badge-low    { background: #fee2e2; color: #7f1d1d; }
+
+    .avg-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-top: 2px;
+      border: 1px solid rgba(0,0,0,0.08);
+    }
+
+    .no-predictions { color: #9ca3af; font-size: 12px; font-style: italic; }
+
+    /* ── Action buttons stack ── */
+    .action-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    /* Sortable header */
     .sortable {
       cursor: pointer;
       user-select: none;
-      position: relative;
     }
-    
-    .sortable:hover {
-      background-color: #f0f0f0;
-    }
-    
+
+    .sortable:hover { color: #2563eb; }
+
     .sortable::after {
-      content: ' ⇅';
-      color: #999;
+      content: ' \u21C5';
+      color: #9ca3af;
       font-size: 0.8em;
     }
-    
-    .sortable.sorted-asc::after {
-      content: ' ▲';
-      color: #417690;
+
+    .sortable.sorted-asc::after  { content: ' \u25B2'; color: #3b82f6; }
+    .sortable.sorted-desc::after { content: ' \u25BC'; color: #3b82f6; }
+
+    /* ── Pagination ── */
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      margin-top: 24px;
+      font-size: 13px;
     }
-    
-    .sortable.sorted-desc::after {
-      content: ' ▼';
-      color: #417690;
+
+    .pagination a {
+      color: #1e40af;
+      text-decoration: none;
+      padding: 6px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      transition: all 0.15s;
     }
-    
-    .avg-score {
-      display: block;
-      font-size: 0.85em;
-      color: #666;
-      margin-top: 4px;
-      font-weight: bold;
+
+    .pagination a:hover {
+      background: #1e3a8a;
+      color: #fff;
+      border-color: #1e3a8a;
+    }
+
+    .pagination .current {
+      color: #6b7280;
+      padding: 6px 12px;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 60px 40px;
+      text-align: center;
+    }
+
+    .empty-state-icon {
+      font-size: 40px;
+      margin-bottom: 16px;
+    }
+
+    .empty-state h3 {
+      color: #1e3a8a;
+      font-size: 18px;
+      margin: 0 0 8px;
+    }
+
+    .empty-state p {
+      color: #6b7280;
+      font-size: 14px;
+      margin: 0;
+    }
+
+    /* checkbox */
+    input[type="checkbox"] { accent-color: #1e40af; width: 15px; height: 15px; cursor: pointer; }
+
+    /* date-filter section below main filter row */
+    .date-filter-section {
+      border-top: 1px solid #f1f5f9;
+      padding-top: 18px;
+      margin-top: 18px;
     }
   </style>
-{% endblock %}
+</head>
+<body>
 
-{% block content %}
-<div id="content-main">
-  <div class="back-to-articles">
-    <a href="{% url 'admin:gregory_articles_changelist' %}" class="button" style="background-color: #417690; color: white;">
-      ← Back to Articles List
-    </a>
-  </div>
-
-  {% if messages %}
-  <div class="messages">
-    {% for message in messages %}
-    <div class="message {% if message.tags %}{{ message.tags }}{% endif %} {% if 'success' in message.tags %}success-message{% elif 'error' in message.tags %}error-message{% else %}info-message{% endif %}">
-      {{ message }}
+  <!-- Page header -->
+  <header class="page-header">
+    <div>
+      <h1 class="page-header-brand">Gregory AI</h1>
+      <p class="page-header-subtitle">{{ title }}</p>
     </div>
-    {% endfor %}
-  </div>
-  {% endif %}
+    <a href="{% url 'admin:gregory_articles_changelist' %}" class="back-link">← Back to Articles</a>
+  </header>
 
-  <h1>{{ title }}</h1>
-  
-  <div class="subject-selector">
-    <form method="get">
-      <div>
-        <label for="subject_id">Select Subject:</label>
-        <select name="subject_id" id="subject_id" onchange="this.form.submit()">
-          {% for subject in subjects %}
-          <option value="{{ subject.id }}" {% if subject.id == selected_subject_id %}selected{% endif %}>
-            {{ subject.subject_name }}
-          </option>
-          {% endfor %}
-        </select>
+  <div class="page-body">
+
+    {% if messages %}
+    <div class="messages">
+      {% for message in messages %}
+      <div class="message {% if 'success' in message.tags %}success{% elif 'error' in message.tags %}error{% elif 'warning' in message.tags %}warning{% else %}info{% endif %}">
+        {{ message }}
       </div>
-      
-      <div class="review-filter">
-        <label>Review Status:</label>
-        <input type="radio" name="review_status" id="review_status_all" value="all" 
-          {% if review_status == 'all' %}checked{% endif %} onchange="this.form.submit()">
-        <label for="review_status_all">All</label>
-        
-        <input type="radio" name="review_status" id="review_status_reviewed" value="reviewed" 
-          {% if review_status == 'reviewed' %}checked{% endif %} onchange="this.form.submit()">
-        <label for="review_status_reviewed">Reviewed</label>
-        
-        <input type="radio" name="review_status" id="review_status_not_reviewed" value="not_reviewed" 
-          {% if review_status == 'not_reviewed' %}checked{% endif %} onchange="this.form.submit()">
-        <label for="review_status_not_reviewed">Not Reviewed</label>
-      </div>
-      
-      <div class="search-box">
-        <label for="search_input">Search:</label>
-        <input type="text" name="q" id="search_input" value="{{ search_query }}">
-        <button type="submit">Search</button>
-      </div>
-      
-      <div class="date-filter">
-        <label class="date-filter-label">Discovery Date Filter:</label>
-        
-        <div class="date-filter-options">
-          <input type="radio" name="date_option" id="date_option_none" value="" 
-                 {% if not date_option %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
-          <label for="date_option_none">None</label>
-          
-          <input type="radio" name="date_option" id="date_option_today" value="today" 
-                 {% if date_option == 'today' %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
-          <label for="date_option_today">Today</label>
-          
-          <input type="radio" name="date_option" id="date_option_last_7_days" value="last_7_days" 
-                 {% if date_option == 'last_7_days' %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
-          <label for="date_option_last_7_days">Last 7 Days</label>
-          
-          <input type="radio" name="date_option" id="date_option_this_month" value="this_month" 
-                 {% if date_option == 'this_month' %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
-          <label for="date_option_this_month">This Month</label>
-          
-          <input type="radio" name="date_option" id="date_option_this_year" value="this_year" 
-                 {% if date_option == 'this_year' %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
-          <label for="date_option_this_year">This Year</label>
-          
-          <input type="radio" name="date_option" id="date_option_custom" value="custom" 
-                 {% if date_option == 'custom' %}checked{% endif %} onchange="toggleDateInputs(this.value)">
-          <label for="date_option_custom">Custom Range</label>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Filter panel -->
+    <div class="filter-panel">
+      <form method="get" id="filter-form">
+
+        <div class="filter-row">
+
+          <!-- Subject selector -->
+          <div class="filter-group">
+            <span class="filter-label">Subject</span>
+            <select name="subject_id" id="subject_id" onchange="this.form.submit()">
+              {% for subject in subjects %}
+              <option value="{{ subject.id }}" {% if subject.id == selected_subject_id %}selected{% endif %}>
+                {{ subject.subject_name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="filter-divider"></div>
+
+          <!-- Review status -->
+          <div class="filter-group">
+            <span class="filter-label">Review Status</span>
+            <div class="radio-pills">
+              <input type="radio" name="review_status" id="rs_all" value="all"
+                {% if review_status == 'all' %}checked{% endif %} onchange="this.form.submit()">
+              <label for="rs_all">All</label>
+
+              <input type="radio" name="review_status" id="rs_reviewed" value="reviewed"
+                {% if review_status == 'reviewed' %}checked{% endif %} onchange="this.form.submit()">
+              <label for="rs_reviewed">Reviewed</label>
+
+              <input type="radio" name="review_status" id="rs_not_reviewed" value="not_reviewed"
+                {% if review_status == 'not_reviewed' %}checked{% endif %} onchange="this.form.submit()">
+              <label for="rs_not_reviewed">Not Reviewed</label>
+            </div>
+          </div>
+
+          <div class="filter-divider"></div>
+
+          <!-- Search -->
+          <div class="filter-group" style="flex: 1; min-width: 220px;">
+            <span class="filter-label">Search</span>
+            <div class="search-row">
+              <input type="text" name="q" id="search_input" value="{{ search_query }}" placeholder="Search titles, DOIs…">
+              <button type="submit" class="btn btn-primary">Search</button>
+            </div>
+          </div>
+
         </div>
-        
-        <div id="date-inputs" class="date-inputs {% if date_option != 'custom' %}hidden{% endif %}">
-          <div>
-            <label for="date_from">From:</label>
-            <input type="date" name="date_from" id="date_from" value="{{ date_from }}">
-          </div>
-          <div>
-            <label for="date_to">To:</label>
-            <input type="date" name="date_to" id="date_to" value="{{ date_to }}">
-          </div>
-          <div>
-            <button type="submit">Apply Date Filter</button>
+
+        <!-- Date filter -->
+        <div class="date-filter-section">
+          <div class="filter-group">
+            <span class="filter-label">Discovery Date</span>
+            <div class="radio-pills">
+              <input type="radio" name="date_option" id="do_none" value=""
+                {% if not date_option %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
+              <label for="do_none">Any time</label>
+
+              <input type="radio" name="date_option" id="do_today" value="today"
+                {% if date_option == 'today' %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
+              <label for="do_today">Today</label>
+
+              <input type="radio" name="date_option" id="do_7d" value="last_7_days"
+                {% if date_option == 'last_7_days' %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
+              <label for="do_7d">Last 7 days</label>
+
+              <input type="radio" name="date_option" id="do_month" value="this_month"
+                {% if date_option == 'this_month' %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
+              <label for="do_month">This month</label>
+
+              <input type="radio" name="date_option" id="do_year" value="this_year"
+                {% if date_option == 'this_year' %}checked{% endif %} onchange="toggleDateInputs(this.value); this.form.submit()">
+              <label for="do_year">This year</label>
+
+              <input type="radio" name="date_option" id="do_custom" value="custom"
+                {% if date_option == 'custom' %}checked{% endif %} onchange="toggleDateInputs(this.value)">
+              <label for="do_custom">Custom range</label>
+            </div>
+
+            <div id="date-inputs" class="date-inputs {% if date_option != 'custom' %}hidden{% endif %}">
+              <div>
+                <label for="date_from">From:</label>
+                <input type="date" name="date_from" id="date_from" value="{{ date_from }}">
+              </div>
+              <div>
+                <label for="date_to">To:</label>
+                <input type="date" name="date_to" id="date_to" value="{{ date_to }}">
+              </div>
+              <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
           </div>
         </div>
-      </div>
-    </form>
-  </div>
-  
-  {% if page_obj.object_list %}
+
+      </form>
+    </div><!-- /filter-panel -->
+
+    {% if page_obj.object_list %}
+
     <form method="post" id="article-action-form">
       {% csrf_token %}
-      <div class="batch-actions">
-        <span style="margin-right: 10px;">With selected:</span>
+
+      <!-- Batch actions bar -->
+      <div class="batch-bar">
+        <span style="font-size:13px; font-weight:600; color:#374151;">With selected:</span>
         <select name="action" id="action-select">
-          <option value="">Choose an action</option>
+          <option value="">Choose an action…</option>
           <option value="mark_relevant">Mark as Relevant</option>
           <option value="mark_not_relevant">Mark as Not Relevant</option>
           <option value="mark_for_review">Mark for Review</option>
         </select>
-        <button type="submit">Apply</button>
-        <span style="margin-left: 15px;">
-          <input type="checkbox" id="select-all-checkbox" class="select-all-checkbox">
-          <label for="select-all-checkbox">Select All</label>
-        </span>
+        <button type="submit" class="btn btn-primary">Apply</button>
+        <label class="select-all-label">
+          <input type="checkbox" id="select-all-checkbox"> Select All
+        </label>
       </div>
-      
-      <div class="results">
+
+      <!-- Table -->
+      <div class="table-wrap">
         <table id="result_list">
           <thead>
             <tr>
-              <th class="select-column">Select</th>
-              <th class="title-column">Title</th>
-              <th class="date-column">Discovery Date</th>
-              <th class="status-column">Review Status</th>
-              <th class="predictions-column sortable {% if sort_by == '-ml_score' %}sorted-desc{% elif sort_by == 'ml_score' %}sorted-asc{% endif %}" 
+              <th style="width:44px; text-align:center;"></th>
+              <th style="width:40%;">Title</th>
+              <th style="width:120px;">Discovered</th>
+              <th style="width:110px; text-align:center;">Status</th>
+              <th class="sortable {% if sort_by == '-ml_score' %}sorted-desc{% elif sort_by == 'ml_score' %}sorted-asc{% endif %}"
+                  style="width:190px;"
                   onclick="sortBy('{% if sort_by == '-ml_score' %}ml_score{% else %}-ml_score{% endif %}')">
-                Predictions (Avg)
+                Predictions
               </th>
-              <th class="action-column">Actions</th>
+              <th style="width:170px; text-align:center;">Actions</th>
             </tr>
           </thead>
           <tbody>
             {% for item in articles_with_review_status %}
-              <tr class="{% cycle 'row1' 'row2' %}" data-article-id="{{ item.article.article_id }}">
-                <td class="select-column">
-                  <input type="checkbox" name="selected_articles" value="{{ item.article.article_id }}" 
-                         class="article-checkbox" {% if item.is_relevant is not None %}data-reviewed="true"{% endif %}>
-                </td>
-                <td class="title-column">{{ item.article.title }}</td>
-                <td class="date-column">{{ item.article.discovery_date|date:"M d, Y" }}</td>
-                <td class="status-column status-cell">{{ item.status_html }}</td>
-                <td class="predictions-column">
-                  {% if item.ml_predictions %}
-                    {% for algo, pred_data in item.ml_predictions.items %}
-                      {% if pred_data.score is not None %}
-                        <div class="prediction-score {% if pred_data.score >= 0.7 %}score-high{% elif pred_data.score >= 0.4 %}score-medium{% else %}score-low{% endif %}">
-                          <span class="prediction-label">
-                            {% if algo == 'pubmed_bert' %}BERT{% elif algo == 'lgbm_tfidf' %}LGBM{% elif algo == 'lstm' %}LSTM{% else %}{{ algo }}{% endif %}:
-                          </span>
-                          {{ pred_data.score|floatformat:3 }}
-                        </div>
-                      {% endif %}
-                    {% endfor %}
-                    {% if item.avg_ml_score is not None %}
-                      <div class="avg-score {% if item.avg_ml_score >= 0.7 %}score-high{% elif item.avg_ml_score >= 0.4 %}score-medium{% else %}score-low{% endif %}" style="padding: 3px 6px; border-radius: 3px; margin-top: 4px;">
-                        Avg: {{ item.avg_ml_score|floatformat:3 }}
-                      </div>
+            <tr data-article-id="{{ item.article.article_id }}">
+              <td style="text-align:center;">
+                <input type="checkbox" name="selected_articles" value="{{ item.article.article_id }}"
+                       class="article-checkbox" {% if item.is_relevant is not None %}data-reviewed="true"{% endif %}>
+              </td>
+              <td>
+                <span class="article-title">{{ item.article.title }}</span>
+              </td>
+              <td>
+                <span class="date-text">{{ item.article.discovery_date|date:"M d, Y" }}</span>
+              </td>
+              <td style="text-align:center;" class="status-cell">{{ item.status_html }}</td>
+              <td>
+                {% if item.ml_predictions %}
+                <div class="predict-badges">
+                  {% for algo, pred_data in item.ml_predictions.items %}
+                    {% if pred_data.score is not None %}
+                    <span class="predict-badge {% if pred_data.score >= 0.7 %}badge-high{% elif pred_data.score >= 0.4 %}badge-medium{% else %}badge-low{% endif %}">
+                      <span class="algo">{% if algo == 'pubmed_bert' %}BERT{% elif algo == 'lgbm_tfidf' %}LGBM{% elif algo == 'lstm' %}LSTM{% else %}{{ algo }}{% endif %}</span>
+                      {{ pred_data.score|floatformat:3 }}
+                    </span>
                     {% endif %}
-                  {% else %}
-                    <span style="color: #999;">No predictions</span>
+                  {% endfor %}
+                  {% if item.avg_ml_score is not None %}
+                  <span class="avg-badge {% if item.avg_ml_score >= 0.7 %}badge-high{% elif item.avg_ml_score >= 0.4 %}badge-medium{% else %}badge-low{% endif %}">
+                    Avg: {{ item.avg_ml_score|floatformat:3 }}
+                  </span>
                   {% endif %}
-                </td>
-                <td class="action-column">
-                  <div class="action-buttons">
-                    <button class="action-btn btn-relevant" 
-                            onclick="updateRelevance({{ item.article.article_id }}, 'mark_relevant')"
-                            {% if item.is_relevant == True %}disabled{% endif %}>
-                      ✓ Relevant
-                    </button>
-                    <button class="action-btn btn-not-relevant" 
-                            onclick="updateRelevance({{ item.article.article_id }}, 'mark_not_relevant')"
-                            {% if item.is_relevant == False %}disabled{% endif %}>
-                      ✗ Not Relevant
-                    </button>
-                    <button class="action-btn btn-review" 
-                            onclick="updateRelevance({{ item.article.article_id }}, 'mark_for_review')"
-                            {% if item.is_relevant == None %}disabled{% endif %}>
-                      ↺ For Review
-                    </button>
-                    <a href="{{ item.edit_url }}" class="action-btn btn-edit" target="_blank">Edit</a>
-                  </div>
-                </td>
-              </tr>
+                </div>
+                {% else %}
+                <span class="no-predictions">No predictions</span>
+                {% endif %}
+              </td>
+              <td style="text-align:center;">
+                <div class="action-stack">
+                  <button class="btn btn-sm btn-relevant"
+                          onclick="updateRelevance({{ item.article.article_id }}, 'mark_relevant')"
+                          {% if item.is_relevant == True %}disabled{% endif %}>
+                    &#10003; Relevant
+                  </button>
+                  <button class="btn btn-sm btn-not-relevant"
+                          onclick="updateRelevance({{ item.article.article_id }}, 'mark_not_relevant')"
+                          {% if item.is_relevant == False %}disabled{% endif %}>
+                    &#10007; Not Relevant
+                  </button>
+                  <button class="btn btn-sm btn-review"
+                          onclick="updateRelevance({{ item.article.article_id }}, 'mark_for_review')"
+                          {% if item.is_relevant == None %}disabled{% endif %}>
+                    &#8635; For Review
+                  </button>
+                  <a href="{{ item.edit_url }}" class="btn btn-sm btn-edit" target="_blank">Edit</a>
+                </div>
+              </td>
+            </tr>
             {% endfor %}
           </tbody>
         </table>
-      </div>
+      </div><!-- /table-wrap -->
+
     </form>
-    
-    <div class="pagination">        <span class="step-links">
-        {% if page_obj.has_previous %}
-          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}&page=1">&laquo; first</a>
-          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}&page={{ page_obj.previous_page_number }}">previous</a>
-        {% endif %}
 
-        <span class="current">
-          Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.
-        </span>
-
-        {% if page_obj.has_next %}
-          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}&page={{ page_obj.next_page_number }}">next</a>
-          <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}&page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
-        {% endif %}
-      </span>
+    <!-- Pagination -->
+    <div class="pagination">
+      {% if page_obj.has_previous %}
+        <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}&page=1">&laquo; first</a>
+        <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}&page={{ page_obj.previous_page_number }}">&#8249; previous</a>
+      {% endif %}
+      <span class="current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+        <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}&page={{ page_obj.next_page_number }}">next &#8250;</a>
+        <a href="?subject_id={{ selected_subject_id }}&review_status={{ review_status }}&q={{ search_query }}{% if date_option %}&date_option={{ date_option }}{% if date_option == 'custom' %}&date_from={{ date_from }}&date_to={{ date_to }}{% endif %}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}{% endif %}&page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
+      {% endif %}
     </div>
-  {% else %}
-    <p>No articles found for the selected subject and filters.</p>
-  {% endif %}
-</div>
 
-<script type="text/javascript">
-  // Initialize date filter visibility
-  document.addEventListener('DOMContentLoaded', function() {
-    // Handle select all checkbox
-    const selectAllCheckbox = document.getElementById('select-all-checkbox');
-    const articleCheckboxes = document.querySelectorAll('.article-checkbox');
-    
-    if (selectAllCheckbox) {
-      selectAllCheckbox.addEventListener('change', function() {
-        const isChecked = this.checked;
-        
-        articleCheckboxes.forEach(function(checkbox) {
-          checkbox.checked = isChecked;
-        });
+    {% else %}
+
+    <!-- Empty state -->
+    <div class="empty-state">
+      <div class="empty-state-icon">&#128269;</div>
+      <h3>No articles found</h3>
+      <p>No articles match the selected subject and filters.</p>
+    </div>
+
+    {% endif %}
+
+  </div><!-- /page-body -->
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // Select-all checkbox
+    const selectAll = document.getElementById('select-all-checkbox');
+    if (selectAll) {
+      selectAll.addEventListener('change', function () {
+        document.querySelectorAll('.article-checkbox').forEach(cb => cb.checked = this.checked);
       });
     }
-    
-    // Form submission validation
-    const form = document.getElementById('article-action-form');
-    
-    if (form) {
-      form.addEventListener('submit', function(e) {
-        const actionSelect = document.getElementById('action-select');
-        const selectedArticles = document.querySelectorAll('.article-checkbox:checked');
-        
-        if (actionSelect.value === '') {
-          e.preventDefault();
-          alert('Please select an action to perform.');
-          return false;
-        }
-        
-        if (selectedArticles.length === 0) {
-          e.preventDefault();
-          alert('Please select at least one article.');
-          return false;
-        }
-        
+
+    // Batch form validation
+    const batchForm = document.getElementById('article-action-form');
+    if (batchForm) {
+      batchForm.addEventListener('submit', function (e) {
+        const action = document.getElementById('action-select').value;
+        const checked = document.querySelectorAll('.article-checkbox:checked');
+        if (!action) { e.preventDefault(); alert('Please select an action.'); return false; }
+        if (!checked.length) { e.preventDefault(); alert('Please select at least one article.'); return false; }
         return true;
       });
     }
-    
-    // Initialize date filter visibility
-    toggleDateInputs(document.querySelector('input[name="date_option"]:checked')?.value || '');
+
+    // Initialise date-inputs visibility
+    const checkedDate = document.querySelector('input[name="date_option"]:checked');
+    toggleDateInputs(checkedDate ? checkedDate.value : '');
   });
-  
-  // Function to toggle date input fields visibility
+
   function toggleDateInputs(value) {
-    const dateInputs = document.getElementById('date-inputs');
-    if (dateInputs) {
-      if (value === 'custom') {
-        dateInputs.classList.remove('hidden');
-      } else {
-        dateInputs.classList.add('hidden');
-      }
-    }
+    const el = document.getElementById('date-inputs');
+    if (!el) return;
+    el.classList.toggle('hidden', value !== 'custom');
   }
-  
-  // Function to sort by a specific field
-  function sortBy(sortField) {
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.set('sort_by', sortField);
-    currentUrl.searchParams.set('page', '1'); // Reset to first page when sorting
-    window.location.href = currentUrl.toString();
+
+  function sortBy(field) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('sort_by', field);
+    url.searchParams.set('page', '1');
+    window.location.href = url.toString();
   }
-  
-  // Function to get CSRF token from cookie
+
   function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-      const cookies = document.cookie.split(';');
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim();
-        if (cookie.substring(0, name.length + 1) === (name + '=')) {
-          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-          break;
-        }
-      }
-    }
-    return cookieValue;
+    const match = document.cookie.split(';')
+      .map(c => c.trim())
+      .find(c => c.startsWith(name + '='));
+    return match ? decodeURIComponent(match.split('=')[1]) : null;
   }
-  
-  // Function to update article relevance via AJAX
+
   function updateRelevance(articleId, action) {
     const subjectId = {{ selected_subject_id }};
     const csrftoken = getCookie('csrftoken');
-    const row = document.querySelector(`tr[data-article-id="${articleId}"]`);
+    const row = document.querySelector('tr[data-article-id="' + articleId + '"]');
     const statusCell = row.querySelector('.status-cell');
-    const buttons = row.querySelectorAll('.action-btn');
-    
-    // Disable all buttons during request
-    buttons.forEach(btn => {
-      if (btn.tagName === 'BUTTON') {
-        btn.disabled = true;
-        btn.classList.add('btn-disabled');
-      }
-    });
-    
+    const buttons = row.querySelectorAll('button.btn');
+
+    buttons.forEach(btn => { btn.disabled = true; });
+
     fetch('/admin/gregory/articles/update-article-relevance/', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrftoken
-      },
-      body: JSON.stringify({
-        article_id: articleId,
-        subject_id: subjectId,
-        action: action
-      })
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+      body: JSON.stringify({ article_id: articleId, subject_id: subjectId, action: action })
     })
-    .then(response => response.json())
+    .then(r => r.json())
     .then(data => {
       if (data.success) {
-        // Update the status cell
         statusCell.innerHTML = data.status_html;
-        
-        // Re-enable all buttons
-        buttons.forEach(btn => {
-          if (btn.tagName === 'BUTTON') {
-            btn.disabled = false;
-            btn.classList.remove('btn-disabled');
-          }
-        });
-        
-        // Disable the button for the current action
-        if (action === 'mark_relevant') {
-          row.querySelector('.btn-relevant').disabled = true;
-        } else if (action === 'mark_not_relevant') {
-          row.querySelector('.btn-not-relevant').disabled = true;
-        } else if (action === 'mark_for_review') {
-          row.querySelector('.btn-review').disabled = true;
-        }
-        
-        // Show success message (optional - you can add a toast notification here)
-        console.log(data.message);
+        buttons.forEach(btn => { btn.disabled = false; });
+        if (action === 'mark_relevant')          row.querySelector('.btn-relevant').disabled = true;
+        else if (action === 'mark_not_relevant') row.querySelector('.btn-not-relevant').disabled = true;
+        else if (action === 'mark_for_review')   row.querySelector('.btn-review').disabled = true;
       } else {
         alert('Error: ' + data.error);
-        // Re-enable all buttons on error
-        buttons.forEach(btn => {
-          if (btn.tagName === 'BUTTON') {
-            btn.disabled = false;
-            btn.classList.remove('btn-disabled');
-          }
-        });
+        buttons.forEach(btn => { btn.disabled = false; });
       }
     })
-    .catch(error => {
-      console.error('Error:', error);
-      alert('An error occurred while updating the article status.');
-      // Re-enable all buttons on error
-      buttons.forEach(btn => {
-        if (btn.tagName === 'BUTTON') {
-          btn.disabled = false;
-          btn.classList.remove('btn-disabled');
-        }
-      });
+    .catch(function () {
+      alert('An error occurred while updating the article.');
+      buttons.forEach(btn => { btn.disabled = false; });
     });
   }
-
 </script>
-{% endblock %}
+</body>
+</html>
