@@ -1310,7 +1310,13 @@ class ArticleSearchView(generics.ListAPIView):
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-            
+
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+
         try:
             # Check if team and subject exist
             Team.objects.get(id=team_id)
@@ -1339,7 +1345,13 @@ class ArticleSearchView(generics.ListAPIView):
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-            
+
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+
         try:
             # Check if team and subject exist
             Team.objects.get(id=team_id)
@@ -1477,7 +1489,13 @@ class TrialSearchView(generics.ListAPIView):
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-            
+
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+
         try:
             # Check if team and subject exist
             Team.objects.get(id=team_id)
@@ -1506,7 +1524,13 @@ class TrialSearchView(generics.ListAPIView):
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-            
+
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+
         try:
             # Check if team and subject exist
             Team.objects.get(id=team_id)
