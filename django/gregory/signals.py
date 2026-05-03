@@ -1,6 +1,7 @@
 from simple_history.signals import post_create_historical_record
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from organizations.models import Organization
 
 MAX_AUTHOR_HISTORY = 5
 
@@ -15,7 +16,7 @@ def trim_author_history(sender, instance, history_instance, **kwargs):
 	instance.history.exclude(pk__in=keep_ids).delete()
 
 
-@receiver(post_save, sender='organizations.Organization')
+@receiver(post_save, sender=Organization)
 def create_organization_api_settings(sender, instance, created, **kwargs):
 	"""Create an OrganizationApiSettings row for every newly created Organisation."""
 	if created:
