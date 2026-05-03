@@ -2,5 +2,8 @@ from django.apps import AppConfig
 
 
 class GregoryConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'gregory'
+	default_auto_field = 'django.db.models.BigAutoField'
+	name = 'gregory'
+
+	def ready(self):
+		import gregory.signals  # noqa: F401

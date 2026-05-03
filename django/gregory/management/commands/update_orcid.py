@@ -87,11 +87,33 @@ class Command(BaseCommand):
 					update_change_reason(author, change_reason)
 					
 			except requests.exceptions.HTTPError as e:
-				self.stderr.write(self.style.ERROR(f"[{org_slug}] Failed to update author with ORCID: {author_orcid_number}. Error: {e}"))
-				# Print more detailed error information
-				if hasattr(e, 'response') and e.response is not None:
-					self.stderr.write(self.style.ERROR(f"Response status code: {e.response.status_code}"))
-					self.stderr.write(self.style.ERROR(f"Response content: {e.response.text}"))
+				if hasattr(e, 'response') and e.response is not None and e.response.status_code == 409:
+					try:
+						error_body = e.response.json()
+						error_code = error_body.get('error-code')
+					except Exception:
+						error_code = None
+
+					if error_code == 9044:
+						reason = 'deactivated'
+					elif error_code == 9018:
+						reason = 'locked'
+					else:
+						reason = 'unavailable (409)'
+
+					self.stderr.write(self.style.WARNING(
+						f"[{org_slug}] Skipping ORCID {author_orcid_number}: record is {reason}. "
+						f"Suppressing for 90 days."
+					))
+					author.orcid_check = timezone.now()
+					author.save()
+				else:
+					self.stderr.write(self.style.ERROR(
+						f"[{org_slug}] Failed to update author with ORCID: {author_orcid_number}. Error: {e}"
+					))
+					if hasattr(e, 'response') and e.response is not None:
+						self.stderr.write(self.style.ERROR(f"Response status code: {e.response.status_code}"))
+						self.stderr.write(self.style.ERROR(f"Response content: {e.response.text}"))
 				error_count += 1
 				continue
 

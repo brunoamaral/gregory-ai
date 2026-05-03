@@ -27,6 +27,7 @@ class Authors(models.Model):
 		output_field=models.TextField(),
 		db_persist=True
 	)
+	history = HistoricalRecords()
 
 	def save(self, *args, **kwargs):
 		# Auto-populate full_name from given_name and family_name
