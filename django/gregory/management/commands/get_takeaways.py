@@ -24,10 +24,10 @@ class Command(BaseCommand):
 			max_length = Command.get_summary_max_length(abstract)
 			if max_length > min_length:
 					print(f"Summarizing abstract {article_id} with lengths [{min_length}, {max_length}]")
-					summary = summarizer(abstract, min_length=min_length, max_length=max_length)
+					summary = summarizer(abstract, min_length=min_length, max_length=max_length, truncation=True)
 					end = time.time()
 					print(f" => Ellapsed time: {end - start} sec.")
-					return summary[0]['summary_text']
+					return summary[0]['summary_text'] if summary else ""
 			return ""
 
 	def handle(self, *args, **options):
@@ -47,7 +47,10 @@ class Command(BaseCommand):
 			self.stdout.write("Summarizer model ready for use")
 
 			for article in queryset:
-					abstract = self.clean_html(html.unescape(article.summary)).replace('\n', ' ').replace('\r', ' ')
-					takeaways = self.summarize_abstract(article.article_id,abstract, summarizer)
-					article.takeaways = takeaways
-					article.save()
+					try:
+							abstract = self.clean_html(html.unescape(article.summary)).replace('\n', ' ').replace('\r', ' ')
+							takeaways = self.summarize_abstract(article.article_id, abstract, summarizer)
+							article.takeaways = takeaways
+							article.save()
+					except Exception as e:
+							self.stderr.write(self.style.WARNING(f'Skipping article {article.article_id}: {e}'))
