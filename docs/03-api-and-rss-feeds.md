@@ -53,6 +53,46 @@ This prevents open-redirect attacks — only explicitly whitelisted domains are 
 
 ---
 
+## Accessing private organisation data
+
+By default the API only exposes data belonging to **public organisations** (`OrganizationApiSettings.make_api_public = True`). Callers that need to read a **private** organisation's data must identify themselves in one of two ways.
+
+### Option 1 — API key bound to the organisation
+
+Create an `APIAccessScheme` record in the Django admin with `organization` set to the target private org. The client sends the raw key in the `Authorization` header (no prefix):
+
+```http
+GET /articles/
+Authorization: <raw_api_key>
+```
+
+The key is validated against its date window (`begin_date` / `end_date`) and, if configured, an IP allowlist. A valid key grants access to all data owned by its organisation.
+
+### Option 2 — Authenticated Django user
+
+A user account that is a member of the organisation (an `OrganizationUser` record exists) sees that organisation's data automatically after logging in via the session-based endpoints.
+
+### Including public organisations alongside private data
+
+Both caller types can append `?include_public=true` to any request to also receive data from organisations that have `make_api_public = True`.
+
+```bash
+GET /articles/?include_public=true
+```
+
+### Visibility rules summary
+
+| Caller | Visible organisations |
+|:-------|:----------------------|
+| Anonymous (no credentials) | Public orgs only |
+| API key with no org (`organization = null`) | Public orgs only |
+| API key bound to org X | Org X only (+ public if `?include_public=true`) |
+| Authenticated user member of org X | Org X only (+ public if `?include_public=true`) |
+
+> **Note:** An expired key or a key used from a non-allowed IP is treated as anonymous.
+
+---
+
 ## Articles query parameters
 
 The `/articles/` endpoint supports the following filters. Multiple parameters can be combined.
@@ -100,7 +140,7 @@ GET /articles/?has_clinical_trials=true
 | Model | Endpoint | Parameters | Notes |
 |:------|:---------|:-----------|:------|
 | Articles | `GET /articles/` | `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `unsent`, `last_days`, `week`, `year`, `has_clinical_trials`, pagination | |
-| Articles | `POST /articles/post/` | `title`, `link`, `doi`, `summary`, `source_id` | Create article |
+| Articles | `POST /articles/post/` | `title`, `link`, `doi`, `summary`, `source_id`, `kind` | Create article — see [response codes below](#post-articlespost-response-codes) |
 | Articles | `GET /articles/{id}/` | `id` (path) | |
 | Articles | `GET /articles/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `format`, `all_results` | See [article-search-api.md](article-search-api.md) |
 | Articles | `POST /articles/search/` | Same fields in request body | |
@@ -147,6 +187,37 @@ GET /articles/?has_clinical_trials=true
 | `therapeutic_areas` | Filter by therapeutic areas |
 | `inclusion_agemin` / `inclusion_agemax` | Filter by age range |
 | `inclusion_gender` | Filter by gender inclusion |
+
+---
+
+## `POST /articles/post/` response codes
+
+This endpoint requires an `APIAccessScheme` API key (sent as the raw value in the `Authorization` header). The following status codes are returned:
+
+| HTTP status | Condition |
+|:------------|:----------|
+| `200 OK` | Article or trial created successfully |
+| `200 OK` | Duplicate — an item with the same DOI, title, or trial identifier already exists; the source/team/subject links on the existing record were updated |
+| `400 Bad Request` | A required field is missing or invalid: `kind`, `source_id`, both `doi` and `title` absent, `kind` value does not match the source's `source_for`, or unsupported `kind` value |
+| `400 Bad Request` | The `source_id` belongs to an organisation different from the one bound to the API key (cross-org payload) |
+| `401 Unauthorized` | No API key provided, key is invalid, or the request IP is not in the key's allowlist |
+| `403 Forbidden` | The API key has no organisation assigned (`organization = null`) |
+| `404 Not Found` | The `source_id` does not exist in the database, or the source has no team assigned |
+| `500 Internal Server Error` | The article or trial could not be saved, or an unexpected error occurred |
+
+> **Breaking change (introduced in this release):** Prior to this release, `FieldNotFoundError` returned `200`, `SourceNotFoundError` returned a non-standard code, and `ArticleNotSavedError` returned `204`. These have been standardised to `400`, `404`, and `500` respectively.
+
+### Required fields
+
+| Field | Required | Description |
+|:------|:---------|:------------|
+| `kind` | yes | One of: `science paper`, `trials`, `news article` — must match the source's `source_for` value |
+| `source_id` | yes | ID of the `Sources` record; must belong to the same org as the API key |
+| `doi` or `title` | at least one | Used for dedup and CrossRef enrichment (`science paper` only) |
+| `link` | no | URL of the article or trial |
+| `summary` | no | Abstract or description |
+| `published_date` | no | ISO 8601 date string |
+| `identifiers` | no | JSON object with trial identifiers (`euct`, `nct`, `eudract`) — `trials` kind only |
 
 ---
 

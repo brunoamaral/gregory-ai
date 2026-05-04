@@ -1,20 +1,22 @@
 from api.serializers import (
-		ArticleSerializer, TrialSerializer, SourceSerializer, AuthorSerializer, 
-		CategorySerializer, CategoryTopAuthorSerializer, TeamSerializer, SubjectsSerializer, ArticlesByCategoryAndTeamSerializer
+		ArticleSerializer, TrialSerializer, SourceSerializer, AuthorSerializer,
+		CategorySerializer, CategoryTopAuthorSerializer, TeamSerializer, SubjectsSerializer,
+		ArticlesByCategoryAndTeamSerializer, OrganizationSerializer
 )
 from api.pagination import FlexiblePagination
 from datetime import datetime, timedelta
 from django.db.models import Count, Q, Prefetch
 from django.db.models.functions import Length, TruncMonth
 from django.shortcuts import get_object_or_404
-from gregory.classes import SciencePaper
+from gregory.classes import SciencePaper, ClinicalTrial
 from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, TeamCategory
+from organizations.models import Organization
 from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
 from django_filters import rest_framework as django_filters
 from api.filters import ArticleFilter, TrialFilter, AuthorFilter, SourceFilter, CategoryFilter, SubjectFilter
 from rest_framework.response import Response
-from django.http import StreamingHttpResponse
+from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 import json
@@ -25,13 +27,43 @@ from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 		APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError,
-		APINoAPIKeyError, ArticleExistsError, ArticleNotSavedError, DoiNotFound, 
-		FieldNotFoundError, SourceNotFoundError
+		APINoAPIKeyError, ArticleExistsError, ArticleNotSavedError, CrossOrgPayloadError,
+		DoiNotFound, FieldNotFoundError, SourceNotFoundError
 )
 from api.utils.responses import (
-		ACCESS_DENIED, INVALID_API_KEY, INVALID_IP_ADDRESS, NO_API_KEY,
+		ACCESS_DENIED, CROSS_ORG_PAYLOAD, INVALID_API_KEY, INVALID_IP_ADDRESS, NO_API_KEY,
 		UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError
 )
+
+class OrgVisibilityMixin:
+	"""
+	Viewset mixin that scopes the queryset to organisations the caller can see.
+
+	Uses ``request.visible_org_ids`` (set by ``VisibleOrgMiddleware``).  Falls
+	back to the full queryset when the attribute is absent so tests and
+	management commands that bypass middleware are not broken.
+
+	Override ``_org_filter_path`` in the subclass to set the ORM lookup path
+	from the model to the Organisation PK.  Defaults to
+	``teams__organization_id`` (Articles and Trials via M2M teams relation).
+
+	Examples:
+	  - Team:          _org_filter_path = 'organization_id'
+	  - Subject/Source/Category:  _org_filter_path = 'team__organization_id'
+	"""
+
+	_org_filter_path = 'teams__organization_id'
+	# Set to False for viewsets that reach orgs via a simple FK (not M2M) to
+	# avoid unnecessary DISTINCT overhead on those queries.
+	_org_filter_distinct = True
+
+	def get_queryset(self):
+		qs = super().get_queryset()
+		if not hasattr(self.request, 'visible_org_ids'):
+			return qs
+		qs = qs.filter(**{f'{self._org_filter_path}__in': self.request.visible_org_ids})
+		return qs.distinct() if self._org_filter_distinct else qs
+
 
 def add_deprecation_headers(response, deprecated_endpoint, replacement_endpoint, message=None):
 	"""
@@ -73,164 +105,291 @@ def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_
 
 @api_view(['POST'])
 def post_article(request):
-		"""
-		Allows authenticated clients to add new articles to the database
-		"""
-		access_scheme = None  # Define access_scheme at the start
-		call_type = request.method + " " + request.path
-		ip_addr = getIPAddress(request)
-		post_data = json.loads(request.body)
+	"""
+	Allows authenticated clients to add new articles or trials to the database.
+
+	The ``kind`` field in the payload must match the ``source_for`` value of the
+	indicated source.  Routing per kind:
+	  - ``science paper``  → CrossRef enrichment, saved to Articles
+	  - ``trials``         → saved to Trials (dedup by identifier then title)
+	  - ``news article``   → saved to Articles, no CrossRef lookup
+	"""
+	access_scheme = None
+	call_type = request.method + " " + request.path
+	ip_addr = getIPAddress(request)
+	post_data = json.loads(request.body)
+	try:
+		api_key = getAPIKey(request)
+		access_scheme = checkValidAccess(api_key, ip_addr)
+
+		# PR 7: keys without an org cannot post
+		if access_scheme.organization is None:
+			raise APIAccessDeniedError('API keys without an associated organisation cannot post articles.')
+
+		# --- Field presence checks -------------------------------------------
+		if 'kind' not in post_data or post_data['kind'] is None:
+			raise FieldNotFoundError('field `kind` was not found in the payload')
+		if 'source_id' not in post_data or post_data['source_id'] is None:
+			raise FieldNotFoundError('source_id field not found in payload')
+		if 'title' not in post_data and 'doi' not in post_data:
+			raise FieldNotFoundError('field `doi` and `title` not in the payload. You need at least one.')
+
+		# --- Source validation (existence, org, kind match) ------------------
 		try:
-			api_key = getAPIKey(request)
+			source = Sources.objects.get(pk=post_data['source_id'])
+		except Sources.DoesNotExist:
+			raise SourceNotFoundError(f'source_id {post_data["source_id"]} was not found in the database')
+		if source.team is None:
+			raise SourceNotFoundError(f'source_id {source.pk} has no team assigned')
+		if source.team.organization_id != access_scheme.organization_id:
+			raise CrossOrgPayloadError(
+				f'source_id {source.pk} belongs to a different organisation than your API key.'
+			)
+		if post_data['kind'] != source.source_for:
+			raise FieldNotFoundError(
+				f'payload kind \'{post_data["kind"]}\' does not match source kind \'{source.source_for}\''
+			)
 
-			# This checks if this API key and IP address are authorized to access
-			# this API endpoint. If so, the valid client access scheme is returned
-			access_scheme = checkValidAccess(api_key, ip_addr)
+		# Helper: coerce empty strings to None
+		def _val(key):
+			v = post_data.get(key)
+			return None if v == '' else v
 
-			# At this point, the API client is authorized
-			# Check for fields
-			if 'kind' not in post_data or post_data['kind'] == None:
-				raise FieldNotFoundError('field `kind` was not found in the payload')
-			if 'title' not in post_data and 'doi' not in post_data:
-				if post_data['title'] == None and post_data['doi'] == None:
-					raise FieldNotFoundError('field `doi` and `title` not in the payload. You need at least one.')
-			if 'source_id' not in post_data or post_data['source_id'] == None:
-					raise FieldNotFoundError('source_id field not found in payload')
-			
+		kind = post_data['kind']
+
+		# =================================================================
+		# Branch: science paper
+		# =================================================================
+		if kind == 'science paper':
 			new_article = {
-				"title": None if 'title' not in post_data or post_data['title'] == '' else post_data['title'],
-				"link": None if 'link' not in post_data or post_data['link'] == '' else post_data['link'],
-				"doi": None if 'doi' not in post_data or post_data['doi'] == '' else post_data['doi'],
-				"access": None if 'access' not in post_data or post_data['access'] == '' else post_data['access'],
-				"summary": None if 'summary' not in post_data or post_data['summary'] == '' else post_data['summary'],
-				"source_id": None if 'source_id' not in post_data or post_data['source_id'] == '' else post_data['source_id'],
-				"published_date": None if 'published_date' not in post_data or post_data['published_date'] == '' else post_data['published_date'],
-				# Not sure if and how we should post the authors
-				# "authors": post_data['authors'],
-				"kind": None if 'kind' not in post_data or post_data['kind'] == '' else post_data['kind'],
-				"access": None if 'access' not in post_data or post_data['access'] == '' else post_data['access'],
-				"publisher": None if 'publisher' not in post_data or post_data['publisher'] == '' else post_data['publisher'],
-				"container_title": None if 'container_title' not in post_data or post_data['container_title'] == '' else post_data['container_title']
+				'title': _val('title'),
+				'link': _val('link'),
+				'doi': _val('doi'),
+				'access': _val('access'),
+				'summary': _val('summary'),
+				'published_date': _val('published_date'),
+				'kind': kind,
+				'publisher': _val('publisher'),
+				'container_title': _val('container_title'),
 			}
-
-
-			science_paper = None
-			if new_article['kind'] == 'science paper':
-				science_paper = SciencePaper(doi=new_article['doi'],title=new_article['title'])
-			if science_paper.doi == None:
+			science_paper = SciencePaper(doi=new_article['doi'], title=new_article['title'])
+			if science_paper.doi is None:
 				science_paper.doi = science_paper.find_doi(title=science_paper.title)
-
-			if science_paper.doi != None:
+			if science_paper.doi is not None:
 				science_paper.refresh()
-			if new_article['doi'] == None:
+			if new_article['doi'] is None:
 				new_article['doi'] = science_paper.doi
-			if new_article['title'] == None:
+			if new_article['title'] is None:
 				new_article['title'] = science_paper.title
-			if new_article['link'] == None:
+			if new_article['link'] is None:
 				new_article['link'] = science_paper.link
-			if new_article['summary'] == None:
+			if new_article['summary'] is None:
 				new_article['summary'] = science_paper.clean_abstract()
-			if new_article['published_date'] == None:
+			if new_article['published_date'] is None:
 				new_article['published_date'] = science_paper.published_date
-			if new_article['access'] == None:
+			if new_article['access'] is None:
 				new_article['access'] = science_paper.access
-			if new_article['publisher'] == None:
+			if new_article['publisher'] is None:
 				new_article['publisher'] = science_paper.publisher
-			if new_article['container_title'] == None:
+			if new_article['container_title'] is None:
 				new_article['container_title'] = science_paper.journal
-			if new_article['access'] == None:
-				new_article['access'] == science_paper.access
-			
-			article_on_gregory = None
-			if new_article['doi'] != None:
-				article_on_gregory = Articles.objects.filter(doi=new_article['doi'])
-			if article_on_gregory != None and article_on_gregory.count() > 0:
-				for article in article_on_gregory:
-					new_source = Sources.objects.get(pk=new_article['source_id'])
-					article.sources.add(new_source)
-					article.teams.add(new_source.team)
-					article.subjects.add(new_source.subject)
-				raise ArticleExistsError('There is already an article with the specified DOI. If the source, team, or subject were different, the article was updated.')
 
-			if new_article['title'] != None:
-				article_on_gregory = Articles.objects.filter(title=new_article['title'])
-			if article_on_gregory != None and article_on_gregory.count() > 0:
-				raise ArticleExistsError('There is already an article with the specified Title')
+			# Dedup by DOI
+			if new_article['doi'] is not None:
+				existing = Articles.objects.filter(doi=new_article['doi'])
+				if existing.exists():
+					for article in existing:
+						article.sources.add(source)
+						article.teams.add(source.team)
+						if source.subject:
+							article.subjects.add(source.subject)
+					raise ArticleExistsError(
+						'There is already an article with the specified DOI. '
+						'If the source, team, or subject were different, the article was updated.'
+					)
+			# Dedup by title
+			if new_article['title'] is not None:
+				if Articles.objects.filter(title=new_article['title']).exists():
+					raise ArticleExistsError('There is already an article with the specified Title')
 
-			source = Sources.objects.get(pk=new_article['source_id'])
-			if source.pk == None:
-				raise SourceNotFoundError('source_id was not found in the database')
 			save_article = Articles.objects.create(
 				discovery_date=datetime.now(),
-				title = new_article['title'],
-				summary = new_article['summary'],
-				link = new_article['link'],
-				published_date = new_article['published_date'], 
-				doi = new_article['doi'], kind = new_article['kind'],
-				publisher=new_article['publisher'], container_title=new_article['container_title'])
+				title=new_article['title'],
+				summary=new_article['summary'],
+				link=new_article['link'],
+				published_date=new_article['published_date'],
+				doi=new_article['doi'],
+				kind=kind,
+				publisher=new_article['publisher'],
+				container_title=new_article['container_title'],
+			)
 			save_article.sources.add(source)
 			save_article.teams.add(source.team)
-			save_article.subjects.add(source.subject)
-
-			if save_article.pk == None:
+			if source.subject:
+				save_article.subjects.add(source.subject)
+			if save_article.pk is None:
 				raise ArticleNotSavedError('Could not create the article')
-			save_article.sources.add(source)
-			# Prepare some data to be returned to the API client
-			data = {
-				'name': 'Gregory | API',
-				'version': '0.1b',
-				"data_received": json.loads(request.body),
+
+			log_data = {'article_id': save_article.pk}
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, 'Article created', log_data)
+			return returnData({
+				'name': 'Gregory | API', 'version': '0.1b',
+				'data_received': post_data,
 				'data_processed_from_doi': new_article,
 				'article_id': save_article.article_id,
+			})
+
+		# =================================================================
+		# Branch: trials
+		# =================================================================
+		elif kind == 'trials':
+			trial_data = ClinicalTrial(
+				title=_val('title'),
+				summary=_val('summary'),
+				link=_val('link'),
+				published_date=_val('published_date'),
+				identifiers=post_data.get('identifiers') or {},
+			)
+
+			# Dedup: identifiers first, then title (mirrors feedreader_trials logic)
+			existing_trial = None
+			ident = trial_data.identifiers or {}
+			id_query = Q()
+			if ident.get('euct'):
+				id_query |= Q(identifiers__euct=ident['euct'])
+			if ident.get('nct'):
+				id_query |= Q(identifiers__nct=ident['nct'])
+			if ident.get('eudract'):
+				id_query |= Q(identifiers__eudract=ident['eudract'])
+			if id_query:
+				existing_trial = Trials.objects.filter(id_query).first()
+			if existing_trial is None and trial_data.title:
+				existing_trial = Trials.objects.filter(title__iexact=trial_data.title).first()
+
+			if existing_trial:
+				existing_trial.sources.add(source)
+				existing_trial.teams.add(source.team)
+				if source.subject:
+					existing_trial.subjects.add(source.subject)
+				raise ArticleExistsError(
+					'There is already a trial matching the provided identifiers or title. '
+					'If the source, team, or subject were different, the trial was updated.'
+				)
+
+			save_trial = Trials.objects.create(
+				discovery_date=datetime.now(),
+				title=trial_data.title,
+				summary=trial_data.summary,
+				link=trial_data.link,
+				published_date=trial_data.published_date,
+				identifiers=trial_data.identifiers or {},
+			)
+			save_trial.sources.add(source)
+			save_trial.teams.add(source.team)
+			if source.subject:
+				save_trial.subjects.add(source.subject)
+			if save_trial.pk is None:
+				raise ArticleNotSavedError('Could not create the trial')
+
+			log_data = {'trial_id': save_trial.pk}
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, 'Trial created', log_data)
+			return returnData({
+				'name': 'Gregory | API', 'version': '0.1b',
+				'data_received': post_data,
+				'trial_id': save_trial.trial_id,
+			})
+
+		# =================================================================
+		# Branch: news article
+		# =================================================================
+		elif kind == 'news article':
+			new_article = {
+				'title': _val('title'),
+				'link': _val('link'),
+				'summary': _val('summary'),
+				'published_date': _val('published_date'),
+				'kind': kind,
 			}
-			log_data = {
-				'name': 'Gregory | API',
-				'version': '0.1b',
-				"article_id": save_article.pk,
-			}
-			# This creates an access log for this client in the DB
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, 'Article created', log_data)
-			# Actually return the data to the API client
-			return returnData(data)
-		except APINoAPIKeyError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
-			return returnError(NO_API_KEY, str(exception), 401)
-		except APIInvalidAPIKeyError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
-			return returnError(INVALID_API_KEY, str(exception), 401)
-		except APIInvalidIPAddressError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
-			return returnError(INVALID_IP_ADDRESS, str(exception), 401)
-		except APIAccessDeniedError as exception:
-			if access_scheme is not None:
-					generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
-			else:
-					generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception), str(post_data))
-			return returnError(ACCESS_DENIED, str(exception), 403)
-		except FieldNotFoundError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 202, str(exception), str(post_data))
-			return returnError(FIELD_NOT_FOUND, str(exception), 200)
-		except ArticleExistsError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 204, str(exception), str(post_data))
-			return returnError(ARTICLE_EXISTS, str(exception), 200)
-		except ArticleNotSavedError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 204, str(exception), str(post_data))
-			return returnError(ARTICLE_NOT_SAVED, str(exception), 204)
-		except Exception as exception:
-			print(traceback.format_exc())
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
-			return returnError(UNEXPECTED, str(exception), 500)
+			# Dedup by title
+			if new_article['title'] is not None:
+				if Articles.objects.filter(title=new_article['title']).exists():
+					raise ArticleExistsError('There is already an article with the specified Title')
+			# Dedup by link
+			if new_article['link'] is not None:
+				if Articles.objects.filter(link=new_article['link']).exists():
+					raise ArticleExistsError('There is already an article with the specified link')
+
+			save_article = Articles.objects.create(
+				discovery_date=datetime.now(),
+				title=new_article['title'],
+				summary=new_article['summary'],
+				link=new_article['link'],
+				published_date=new_article['published_date'],
+				kind=kind,
+			)
+			save_article.sources.add(source)
+			save_article.teams.add(source.team)
+			if source.subject:
+				save_article.subjects.add(source.subject)
+			if save_article.pk is None:
+				raise ArticleNotSavedError('Could not create the news article')
+
+			log_data = {'article_id': save_article.pk}
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, 'News article created', log_data)
+			return returnData({
+				'name': 'Gregory | API', 'version': '0.1b',
+				'data_received': post_data,
+				'article_id': save_article.article_id,
+			})
+
+		else:
+			raise FieldNotFoundError(f'Unsupported kind \'{kind}\'')
+
+	except APINoAPIKeyError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(NO_API_KEY, str(exception), 401)
+	except APIInvalidAPIKeyError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(INVALID_API_KEY, str(exception), 401)
+	except APIInvalidIPAddressError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(INVALID_IP_ADDRESS, str(exception), 401)
+	except APIAccessDeniedError as exception:
+		if access_scheme is not None:
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+		else:
+			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception), str(post_data))
+		return returnError(ACCESS_DENIED, str(exception), 403)
+	except SourceNotFoundError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 404, str(exception), str(post_data))
+		return returnError(SOURCE_NOT_FOUND, str(exception), 404)
+	except FieldNotFoundError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+		return returnError(FIELD_NOT_FOUND, str(exception), 400)
+	except CrossOrgPayloadError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+		return returnError(CROSS_ORG_PAYLOAD, str(exception), 400)
+	except ArticleExistsError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, str(exception), str(post_data))
+		return returnError(ARTICLE_EXISTS, str(exception), 200)
+	except ArticleNotSavedError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
+		return returnError(ARTICLE_NOT_SAVED, str(exception), 500)
+	except Exception as exception:
+		print(traceback.format_exc())
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
+		return returnError(UNEXPECTED, str(exception), 500)
 
 ###
 # ARTICLES
 ### 
-class ArticleViewSet(viewsets.ModelViewSet):
+class ArticleViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	"""
 	List all articles in the database with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
 	
 	# Query Parameters:
-	- **team_id** - filter by team ID (replaces /teams/{id}/articles/)
+	- **team_id** - filter by team ID 
 	- **doi** - filter by exact DOI (case-insensitive)
 	- **subject_id** - filter by subject ID (used with team_id)
 	- **subjects** - comma-separated list of subject IDs with AND semantics — returns only articles tagged with *all* listed subjects (e.g., `?subjects=1,2`)
@@ -392,6 +551,10 @@ class CategoryViewSet(viewsets.ModelViewSet):
 		3. Use select_related for foreign keys
 		"""
 		queryset = TeamCategory.objects.all()
+
+		# --- Org visibility: only categories whose team's org is visible ---
+		if hasattr(self.request, 'visible_org_ids'):
+			queryset = queryset.filter(team__organization_id__in=self.request.visible_org_ids)
 		
 		# Apply filters without expensive annotations
 		team_id = self.request.query_params.get('team_id')
@@ -589,7 +752,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 # TRIALS
 ### 
 
-class TrialViewSet(viewsets.ModelViewSet):
+class TrialViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	"""
 	List all clinical trials by discovery date with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
@@ -681,7 +844,7 @@ class AllTrialViewSet(generics.ListAPIView):
 # SOURCES
 ### 
 
-class SourceViewSet(viewsets.ModelViewSet):
+class SourceViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	"""
 	List all sources of data with optional filters for team and subject.
 	
@@ -689,6 +852,8 @@ class SourceViewSet(viewsets.ModelViewSet):
 	- **team_id** - filter by team ID
 	- **subject_id** - filter by subject ID
 	"""
+	_org_filter_path = 'team__organization_id'
+	_org_filter_distinct = False
 	queryset = Sources.objects.all().order_by('name')
 	serializer_class = SourceSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -750,6 +915,12 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	
 	def get_queryset(self):
 		queryset = Authors.objects.all()
+
+		# --- Org visibility: only authors with at least one article in a visible org ---
+		if hasattr(self.request, 'visible_org_ids'):
+			queryset = queryset.filter(
+				articles__teams__organization_id__in=self.request.visible_org_ids
+			).distinct()
 		
 		# Get query parameters
 		author_id = self.request.query_params.get('author_id')
@@ -852,23 +1023,34 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 		
 		# Add date filters to count filters
 		count_filters.update(date_filters)
-		
+
+		# Build an org-visibility filter for the Count annotation so that
+		# article_count always reflects only visible articles (fixes sorting/
+		# filtering by article_count leaking hidden-org data).
+		has_org_scope = hasattr(self.request, 'visible_org_ids')
+		org_q = Q(articles__teams__organization_id__in=self.request.visible_org_ids) if has_org_scope else Q()
+
 		# Add article count annotation for sorting
 		if sort_by == 'article_count':
 			if count_filters:
-				# Annotate with count and filter to only include authors with articles matching criteria
+				combined_q = Q(**count_filters) & org_q if has_org_scope else Q(**count_filters)
 				queryset = queryset.annotate(
-					article_count=Count('articles', filter=Q(**count_filters), distinct=True)
+					article_count=Count('articles', filter=combined_q, distinct=True)
 				).filter(article_count__gt=0)
+			elif has_org_scope:
+				queryset = queryset.annotate(
+					article_count=Count('articles', filter=org_q, distinct=True)
+				)
 			else:
 				queryset = queryset.annotate(
 					article_count=Count('articles', distinct=True)
 				)
 		elif count_filters:
-			# Even if not sorting by article_count, we still need to filter authors 
+			# Even if not sorting by article_count, we still need to filter authors
 			# to only those who have articles matching the criteria
+			combined_q = Q(**count_filters) & org_q if has_org_scope else Q(**count_filters)
 			queryset = queryset.annotate(
-				article_count=Count('articles', filter=Q(**count_filters), distinct=True)
+				article_count=Count('articles', filter=combined_q, distinct=True)
 			).filter(article_count__gt=0)
 		
 		# Apply sorting
@@ -962,19 +1144,45 @@ class ProtectedEndpointView(APIView):
 # TEAMS
 ###
 
-class TeamsViewSet(viewsets.ModelViewSet):
+class TeamsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	"""
 	List all teams
 	"""
+	_org_filter_path = 'organization_id'
+	_org_filter_distinct = False
 	queryset = Team.objects.all().order_by('id')
 	serializer_class = TeamSerializer
-	permission_classes  = [permissions.IsAuthenticated]
+	permission_classes  = [permissions.IsAuthenticatedOrReadOnly]
+
+###
+# ORGANISATIONS
+###
+
+class OrganizationsViewSet(viewsets.ReadOnlyModelViewSet):
+	"""
+	List organisations visible to the caller.
+
+	Anonymous callers see only organisations where ``make_api_public=True``.
+	Authenticated users and API-key holders see their own org; add
+	``?include_public=true`` to also see public orgs.
+
+	Detail endpoint (``/organizations/<id>/``) returns 404 rather than 403
+	when the organisation is not visible (hide-existence rule).
+	"""
+	serializer_class = OrganizationSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		qs = Organization.objects.all().order_by('id')
+		if not hasattr(self.request, 'visible_org_ids'):
+			return qs
+		return qs.filter(id__in=self.request.visible_org_ids)
 
 ###
 # SUBJECTS
 ###
 
-class SubjectsViewSet(viewsets.ModelViewSet):
+class SubjectsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	"""
 	✅ **PREFERRED ENDPOINT**: This is the main subjects endpoint that supports filtering options.
 	
@@ -991,6 +1199,8 @@ class SubjectsViewSet(viewsets.ModelViewSet):
 	- Team filter with search: `/subjects/?team_id=1&search=sclerosis`
 	- Order by name: `/subjects/?ordering=subject_name`
 	"""
+	_org_filter_path = 'team__organization_id'
+	_org_filter_distinct = False
 	queryset = Subject.objects.all().order_by('id')
 	serializer_class = SubjectsSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -1031,6 +1241,9 @@ class ArticlesByTeam(viewsets.ModelViewSet):
 
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
+		if hasattr(self.request, 'visible_org_ids'):
+			if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+				raise Http404
 		return Articles.objects.filter(teams__id=team_id).order_by('-discovery_date')
 	
 	def list(self, request, *args, **kwargs):
@@ -1073,6 +1286,9 @@ class ArticlesBySubject(viewsets.ModelViewSet):
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
 		subject_id = self.kwargs.get('subject_id')
+		if hasattr(self.request, 'visible_org_ids'):
+			if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+				raise Http404
 		return Articles.objects.filter(subjects__id=subject_id, teams=team_id).order_by('-discovery_date')
 	
 	def list(self, request, *args, **kwargs):
@@ -1110,6 +1326,9 @@ class SubjectsByTeam(viewsets.ModelViewSet):
 
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
+		if hasattr(self.request, 'visible_org_ids'):
+			if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+				raise Http404
 		return Subject.objects.filter(team__id=team_id).order_by('-id')
 	
 	def list(self, request, *args, **kwargs):
@@ -1130,6 +1349,9 @@ class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 	def get_queryset(self):
 		team_id = self.kwargs.get('team_id')
 		subject_id = self.kwargs.get('subject_id')
+		if hasattr(self.request, 'visible_org_ids'):
+			if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+				raise Http404
 		return TeamCategory.objects.filter(
 			team__id=team_id,
 			subjects__id=subject_id
@@ -1155,6 +1377,9 @@ class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
 		def get_queryset(self):
 				team_id = self.kwargs.get('team_id')
 				category_slug = self.kwargs.get('category_slug')
+				if hasattr(self.request, 'visible_org_ids'):
+						if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+								raise Http404
 				team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
 				return Articles.objects.filter(team_categories=team_category).prefetch_related(
 						'team_categories', 'sources', 'authors', 'teams', 'subjects', 'ml_predictions'
@@ -1216,7 +1441,19 @@ class ArticleSearchView(generics.ListAPIView):
         # Validate required parameters
         if not team_id or not subject_id:
             return Articles.objects.none()
-        
+
+        # Cast to int early — non-numeric values get a 404 rather than a 500.
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            raise Http404
+
+        # Visibility check: hidden teams return 404 (before the broad except block)
+        if hasattr(self.request, 'visible_org_ids'):
+            if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+                raise Http404
+
         try:
             # Start with articles filtered by team and subject
             # Remove distinct constraint to allow proper ordering
@@ -1271,7 +1508,13 @@ class ArticleSearchView(generics.ListAPIView):
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-            
+
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+
         try:
             # Check if team and subject exist
             Team.objects.get(id=team_id)
@@ -1300,7 +1543,13 @@ class ArticleSearchView(generics.ListAPIView):
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-            
+
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+
         try:
             # Check if team and subject exist
             Team.objects.get(id=team_id)
@@ -1367,7 +1616,19 @@ class TrialSearchView(generics.ListAPIView):
         # Validate required parameters
         if not team_id or not subject_id:
             return Trials.objects.none()
-            
+
+        # Cast to int early — non-numeric values get a 404 rather than a 500.
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            raise Http404
+
+        # Visibility check: hidden teams return 404 (before the broad except block)
+        if hasattr(self.request, 'visible_org_ids'):
+            if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+                raise Http404
+
         try:
             # Check if team and subject exist
             team = Team.objects.get(id=team_id)
@@ -1426,7 +1687,13 @@ class TrialSearchView(generics.ListAPIView):
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-            
+
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+
         try:
             # Check if team and subject exist
             Team.objects.get(id=team_id)
@@ -1455,7 +1722,13 @@ class TrialSearchView(generics.ListAPIView):
                 {"error": "Missing required parameters: team_id, subject_id"}, 
                 status=400
             )
-            
+
+        try:
+            team_id = int(team_id)
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+
         try:
             # Check if team and subject exist
             Team.objects.get(id=team_id)
@@ -1490,6 +1763,12 @@ class AuthorSearchView(generics.ListAPIView):
     search_fields = ['full_name']
     pagination_class = FlexiblePagination
     http_method_names = ['get', 'post']
+
+    def _check_team_visibility(self, team_id):
+        """Raise Http404 if team_id is not in the caller's visible orgs."""
+        if hasattr(self.request, 'visible_org_ids'):
+            if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+                raise Http404
 
     def get_queryset(self):
         params = self.request.query_params if self.request.method == 'GET' else self.request.data
@@ -1549,7 +1828,8 @@ class AuthorSearchView(generics.ListAPIView):
                 {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
                 status=404
             )
-            
+
+        self._check_team_visibility(team_id)
         return self.list(request, *args, **kwargs)
         
     def get(self, request, *args, **kwargs):
@@ -1577,7 +1857,8 @@ class AuthorSearchView(generics.ListAPIView):
                 {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
                 status=404
             )
-            
+
+        self._check_team_visibility(team_id)
         # Delegate to the list method
         return self.list(request, *args, **kwargs)
 
@@ -1590,12 +1871,22 @@ class StatsView(APIView):
 	"""
 	Returns aggregate statistics about the data in the system.
 	All counts can be optionally scoped to one or more teams via ?team=1 or ?team=1,2,3.
+
+	Counts are filtered to organisations visible to the caller when
+	``request.visible_org_ids`` is present (set by VisibleOrgMiddleware).
+	If the attribute is absent — e.g. in management commands or tests that
+	bypass middleware — the fallback is unscoped querysets that span all
+	organisations.  In production the middleware is always active, so callers
+	will always receive org-filtered results.
 	"""
 	permission_classes = [permissions.AllowAny]
 
 	def get(self, request):
 		from urllib.parse import urlparse
 		from subscriptions.models import Subscribers
+
+		# --- Org visibility ------------------------------------------------
+		visible_org_ids = getattr(request, 'visible_org_ids', None)
 
 		# Parse team IDs from query params
 		team_param = request.query_params.get('team', None)
@@ -1608,41 +1899,60 @@ class StatsView(APIView):
 					{'error': 'Invalid team parameter. Expected integer or comma-separated integers.'},
 					status=status.HTTP_400_BAD_REQUEST
 				)
+			# 404 if any requested team is not in a visible org
+			if visible_org_ids is not None:
+				visible = Team.objects.filter(id__in=team_ids, organization_id__in=visible_org_ids)
+				if visible.count() != len(set(team_ids)):
+					raise Http404
+
+		# Base querysets scoped to visible orgs (no-op when middleware absent)
+		if visible_org_ids is not None:
+			articles_base     = Articles.objects.filter(teams__organization_id__in=visible_org_ids).distinct()
+			trials_base       = Trials.objects.filter(teams__organization_id__in=visible_org_ids).distinct()
+			authors_base      = Authors.objects.filter(articles__teams__organization_id__in=visible_org_ids).distinct()
+			sources_base      = Sources.objects.filter(team__organization_id__in=visible_org_ids)
+			subscribers_base  = Subscribers.objects.filter(subscriptions__team__organization_id__in=visible_org_ids)
+		else:
+			articles_base     = Articles.objects.all()
+			trials_base       = Trials.objects.all()
+			authors_base      = Authors.objects.all()
+			sources_base      = Sources.objects.all()
+			subscribers_base  = Subscribers.objects.all()
 
 		# Articles count
 		if team_ids:
-			articles_count = Articles.objects.filter(teams__in=team_ids).distinct().count()
+			articles_count = articles_base.filter(teams__in=team_ids).distinct().count()
 		else:
-			articles_count = Articles.objects.count()
+			articles_count = articles_base.count()
 
 		# Trials count
 		if team_ids:
-			trials_count = Trials.objects.filter(teams__in=team_ids).distinct().count()
+			trials_count = trials_base.filter(teams__in=team_ids).distinct().count()
 		else:
-			trials_count = Trials.objects.count()
+			trials_count = trials_base.count()
 
 		# Subscribers count (active only)
 		if team_ids:
-			subscribers_count = Subscribers.objects.filter(
+			subscribers_count = subscribers_base.filter(
 				active=True,
 				subscriptions__team__in=team_ids
 			).distinct().count()
 		else:
-			subscribers_count = Subscribers.objects.filter(active=True).count()
+			subscribers_count = subscribers_base.filter(active=True).distinct().count()
 
 		# Authors count (distinct authors linked to articles in scope)
 		if team_ids:
-			authors_count = Authors.objects.filter(
+			authors_count = authors_base.filter(
 				articles__teams__in=team_ids
 			).distinct().count()
 		else:
-			authors_count = Authors.objects.count()
+			authors_count = authors_base.count()
 
 		# Sources queryset scoped to team(s)
 		if team_ids:
-			sources_qs = Sources.objects.filter(team__in=team_ids)
+			sources_qs = sources_base.filter(team__in=team_ids)
 		else:
-			sources_qs = Sources.objects.all()
+			sources_qs = sources_base
 
 		def extract_domain(url):
 			if not url:

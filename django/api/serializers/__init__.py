@@ -7,6 +7,8 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count, Q
 
+from api.serializers.mixins import OrgScopedSerializerMixin  # noqa: F401
+
 def get_custom_settings():
 		try:
 			return CustomSetting.objects.get(site=settings.SITE_ID)
@@ -273,7 +275,7 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
 	def get_full_name(self, obj):
 		return obj.full_name
 
-class ArticleSerializer(serializers.HyperlinkedModelSerializer):
+class ArticleSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field='name')
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 	authors = ArticleAuthorSerializer(many=True, read_only=True)
@@ -300,7 +302,7 @@ class ArticleSerializer(serializers.HyperlinkedModelSerializer):
 		trials = [ref.trial for ref in references]
 		return TrialReferenceSerializer(trials, many=True).data
 
-class TrialSerializer(serializers.HyperlinkedModelSerializer):
+class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 	articles = serializers.SerializerMethodField()
@@ -344,10 +346,17 @@ class AuthorSerializer(serializers.ModelSerializer):
 		fields = ['author_id', 'given_name', 'family_name', 'full_name', 'ORCID', 'country', 'articles_count', 'articles_list']
 
 	def get_articles_count(self, obj):
-		# If the queryset has annotated article_count, use it for efficiency
+		request = self.context.get('request')
+		# When org-visibility is active, always compute the scoped count so the
+		# value is correct even if an un-scoped article_count was annotated by
+		# an earlier queryset stage (e.g. a cached queryset without visibility).
+		if request is not None and hasattr(request, 'visible_org_ids'):
+			return obj.articles_set.filter(
+				teams__organization_id__in=request.visible_org_ids
+			).distinct().count()
+		# No visibility active — use the pre-annotated count for efficiency.
 		if hasattr(obj, 'article_count'):
 			return obj.article_count
-		# Fallback to counting all articles
 		return obj.articles_set.count()
 
 	def get_country(self, obj):
@@ -390,3 +399,10 @@ class ArticlesByCategoryAndTeamSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = TeamCategory
 		fields = ['id', 'team', 'category', 'articles']
+
+
+class OrganizationSerializer(serializers.ModelSerializer):
+	"""Minimal serializer for the Organizations list/detail endpoints."""
+	class Meta:
+		model = Organization
+		fields = ['id', 'name', 'slug', 'is_active']

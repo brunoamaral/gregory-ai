@@ -19,7 +19,8 @@ from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 from .models import (
     Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, 
     ArticleSubjectRelevance, TeamCategory, PredictionRunLog, Team,
-    ArticleTrialReference, OrganizationCredentials, OrganizationSite
+    ArticleTrialReference, OrganizationCredentials, OrganizationSite,
+    OrganizationApiSettings
 )
 from .widgets import MLPredictionsWidget
 from django import forms
@@ -1054,6 +1055,20 @@ class OrganizationCredentialsInline(admin.StackedInline):
 	verbose_name_plural = 'Credentials'
 
 
+class OrganizationApiSettingsInline(admin.StackedInline):
+	"""Inline to manage API visibility settings for an organization."""
+	model = OrganizationApiSettings
+	extra = 0
+	max_num = 1
+	fields = ('make_api_public',)
+	verbose_name = 'API settings'
+	verbose_name_plural = 'API settings'
+	can_delete = False
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+
 class OrganizationTeamInline(admin.TabularInline):
 	"""Inline to display teams belonging to an organization."""
 	model = Team
@@ -1090,6 +1105,7 @@ class OrganizationAdmin(BaseOrganizationAdmin):
 			inlines.append(OrganizationTeamInline(self.model, self.admin_site))
 			inlines.append(OrganizationSiteInline(self.model, self.admin_site))
 			inlines.append(OrganizationCredentialsInline(self.model, self.admin_site))
+			inlines.append(OrganizationApiSettingsInline(self.model, self.admin_site))
 		return inlines
 
 	def teams_count(self, obj):

@@ -13,6 +13,7 @@ FIELD_NOT_FOUND = 6
 ARTICLE_EXISTS = 7
 ARTICLE_NOT_SAVED = 8
 DOI_NOT_FOUND = 9
+CROSS_ORG_PAYLOAD = 10
 
 ERRORS = {
     UNEXPECTED: 'Unexpected error. Please contact the support team.',
@@ -24,7 +25,8 @@ ERRORS = {
     FIELD_NOT_FOUND: 'One or more fields wasn\'t found in the payload',
     ARTICLE_EXISTS: 'An article already exists with one of these fields: title, doi.',
     ARTICLE_NOT_SAVED: 'Could not save the article that was received',
-    DOI_NOT_FOUND: 'Tried query on Crossref.org for articles with a matching title, got no results.'
+    DOI_NOT_FOUND: 'Tried query on Crossref.org for articles with a matching title, got no results.',
+    CROSS_ORG_PAYLOAD: 'The source_id belongs to an organisation different from the one bound to your API key.',
 }
 
 def returnData(data):

@@ -25,7 +25,7 @@ from api.views import (
 	post_article, CategoryViewSet, LoginView, ProtectedEndpointView,
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, SubjectsByTeam,
     ArticlesByCategoryAndTeam, ArticleSearchView, TrialSearchView, AuthorSearchView, CategoriesByTeamAndSubject,
-    StatsView
+    StatsView, OrganizationsViewSet
 )
 from rss.views import	ArticlesByAuthorFeed, TrialsBySubjectFeed
 from subscriptions.views import subscribe_view, unsubscribe_list, unsubscribe_site, unsubscribe_all
@@ -45,6 +45,7 @@ router = routers.DefaultRouter()
 router.register(r'articles', ArticleViewSet)
 router.register(r'authors', AuthorsViewSet, basename='authors')
 router.register(r'categories', CategoryViewSet, basename='categories')
+router.register(r'organizations', OrganizationsViewSet, basename='organizations')
 router.register(r'sources', SourceViewSet)
 router.register(r'trials', TrialViewSet)
 router.register(r'subjects', SubjectsViewSet)

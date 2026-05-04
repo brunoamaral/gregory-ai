@@ -624,6 +624,28 @@ class OrganizationSite(models.Model):
 		default_label = " (default)" if self.is_default else ""
 		return f"{self.site.domain}{default_label} — {self.organization.name}"
 
+class OrganizationApiSettings(models.Model):
+	organization = models.OneToOneField(
+		Organization,
+		on_delete=models.CASCADE,
+		related_name='api_settings',
+		help_text='Organisation whose API exposure these settings govern.',
+	)
+	make_api_public = models.BooleanField(
+		default=False,
+		help_text="When true, anonymous API and RSS consumers can see this org's data.",
+	)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	def __str__(self):
+		return f"API settings for {self.organization.name}"
+
+	class Meta:
+		verbose_name = 'Organisation API settings'
+		verbose_name_plural = 'Organisation API settings'
+
+
 class TeamMember(OrganizationUser):
 	class Meta:
 		proxy = True

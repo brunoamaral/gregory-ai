@@ -100,6 +100,7 @@ MIDDLEWARE = [
 	'django.middleware.gzip.GZipMiddleware',
 	'django.contrib.sites.middleware.CurrentSiteMiddleware',
 	'simple_history.middleware.HistoryRequestMiddleware',
+	'gregory.middleware.visibility.VisibleOrgMiddleware',
 ]
 
 ROOT_URLCONF = 'admin.urls'
