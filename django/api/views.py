@@ -389,7 +389,7 @@ class ArticleViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	CSV responses are automatically streamed for better performance with large datasets.
 	
 	# Query Parameters:
-	- **team_id** - filter by team ID (replaces /teams/{id}/articles/)
+	- **team_id** - filter by team ID 
 	- **doi** - filter by exact DOI (case-insensitive)
 	- **subject_id** - filter by subject ID (used with team_id)
 	- **subjects** - comma-separated list of subject IDs with AND semantics — returns only articles tagged with *all* listed subjects (e.g., `?subjects=1,2`)
