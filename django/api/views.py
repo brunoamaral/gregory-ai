@@ -1774,15 +1774,17 @@ class StatsView(APIView):
 
 		# Base querysets scoped to visible orgs (no-op when middleware absent)
 		if visible_org_ids is not None:
-			articles_base = Articles.objects.filter(teams__organization_id__in=visible_org_ids).distinct()
-			trials_base   = Trials.objects.filter(teams__organization_id__in=visible_org_ids).distinct()
-			authors_base  = Authors.objects.filter(articles__teams__organization_id__in=visible_org_ids).distinct()
-			sources_base  = Sources.objects.filter(team__organization_id__in=visible_org_ids)
+			articles_base     = Articles.objects.filter(teams__organization_id__in=visible_org_ids).distinct()
+			trials_base       = Trials.objects.filter(teams__organization_id__in=visible_org_ids).distinct()
+			authors_base      = Authors.objects.filter(articles__teams__organization_id__in=visible_org_ids).distinct()
+			sources_base      = Sources.objects.filter(team__organization_id__in=visible_org_ids)
+			subscribers_base  = Subscribers.objects.filter(subscriptions__team__organization_id__in=visible_org_ids)
 		else:
-			articles_base = Articles.objects.all()
-			trials_base   = Trials.objects.all()
-			authors_base  = Authors.objects.all()
-			sources_base  = Sources.objects.all()
+			articles_base     = Articles.objects.all()
+			trials_base       = Trials.objects.all()
+			authors_base      = Authors.objects.all()
+			sources_base      = Sources.objects.all()
+			subscribers_base  = Subscribers.objects.all()
 
 		# Articles count
 		if team_ids:
@@ -1798,12 +1800,12 @@ class StatsView(APIView):
 
 		# Subscribers count (active only)
 		if team_ids:
-			subscribers_count = Subscribers.objects.filter(
+			subscribers_count = subscribers_base.filter(
 				active=True,
 				subscriptions__team__in=team_ids
 			).distinct().count()
 		else:
-			subscribers_count = Subscribers.objects.filter(active=True).count()
+			subscribers_count = subscribers_base.filter(active=True).distinct().count()
 
 		# Authors count (distinct authors linked to articles in scope)
 		if team_ids:
