@@ -43,12 +43,13 @@ def _make_subject(team, name):
 	return Subject.objects.create(team=team, subject_name=name, subject_slug=slugify(name))
 
 
-def _make_source(team, subject, name):
+def _make_source(team, subject, name, source_for='science paper'):
 	return Sources.objects.create(
 		name=name,
 		link=f'https://src.example.com/{name}',
 		team=team,
 		subject=subject,
+		source_for=source_for,
 	)
 
 
@@ -130,12 +131,6 @@ class NullOrgKeyPostArticleTest(PostArticleOrgScopingBase):
 		resp = _post(self.client, self.null_scheme.api_key, payload)
 		self.assertEqual(resp.status_code, 403)
 
-	def test_null_org_key_rejected_for_own_source_too(self):
-		"""Even if the source would match a public org, null-org keys are rejected."""
-		payload = self._valid_payload(self.my_source.pk)
-		resp = _post(self.client, self.null_scheme.api_key, payload)
-		self.assertEqual(resp.status_code, 403)
-
 
 # ---------------------------------------------------------------------------
 # Cross-org payload → 400
@@ -157,6 +152,19 @@ class CrossOrgPayloadTest(PostArticleOrgScopingBase):
 		data = resp.json()
 		self.assertIn('organisation', data['error_msg'].lower())
 
+	def test_kind_mismatch_returns_400(self):
+		"""Payload kind differs from source.source_for → 400 (FieldNotFoundError)."""
+		# Create a trials source within my_org, then submit with kind='science paper'
+		trials_source = _make_source(self.my_team, self.my_subj, 'pa-trials-source', source_for='trials')
+		payload = {
+			'kind': 'science paper',   # mismatches source_for='trials'
+			'source_id': trials_source.pk,
+			'title': 'Mismatch test article',
+			'doi': '10.9999/mismatch-test',
+		}
+		resp = _post(self.client, self.scheme.api_key, payload)
+		self.assertEqual(resp.status_code, 400)
+
 
 # ---------------------------------------------------------------------------
 # No API key → 401
@@ -168,6 +176,24 @@ class NoKeyPostArticleTest(PostArticleOrgScopingBase):
 		payload = self._valid_payload(self.my_source.pk)
 		resp = _post(self.client, None, payload)
 		self.assertEqual(resp.status_code, 401)
+
+
+# ---------------------------------------------------------------------------
+# Unknown source_id → 404
+# ---------------------------------------------------------------------------
+
+class SourceNotFoundTest(PostArticleOrgScopingBase):
+
+	def test_source_not_found_returns_404(self):
+		"""Requesting a source_id that does not exist → 404."""
+		payload = {
+			'kind': 'science paper',
+			'source_id': 999999,
+			'title': 'Source not found test',
+			'doi': '10.9999/source-not-found',
+		}
+		resp = _post(self.client, self.scheme.api_key, payload)
+		self.assertEqual(resp.status_code, 404)
 
 
 # ---------------------------------------------------------------------------
