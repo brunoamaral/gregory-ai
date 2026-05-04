@@ -1744,7 +1744,13 @@ class StatsView(APIView):
 	"""
 	Returns aggregate statistics about the data in the system.
 	All counts can be optionally scoped to one or more teams via ?team=1 or ?team=1,2,3.
-	Counts are always filtered to organisations visible to the caller (see §4.1 of the spec).
+
+	Counts are filtered to organisations visible to the caller when
+	``request.visible_org_ids`` is present (set by VisibleOrgMiddleware).
+	If the attribute is absent — e.g. in management commands or tests that
+	bypass middleware — the fallback is unscoped querysets that span all
+	organisations.  In production the middleware is always active, so callers
+	will always receive org-filtered results.
 	"""
 	permission_classes = [permissions.AllowAny]
 
