@@ -1744,12 +1744,22 @@ class StatsView(APIView):
 	"""
 	Returns aggregate statistics about the data in the system.
 	All counts can be optionally scoped to one or more teams via ?team=1 or ?team=1,2,3.
+
+	Counts are filtered to organisations visible to the caller when
+	``request.visible_org_ids`` is present (set by VisibleOrgMiddleware).
+	If the attribute is absent — e.g. in management commands or tests that
+	bypass middleware — the fallback is unscoped querysets that span all
+	organisations.  In production the middleware is always active, so callers
+	will always receive org-filtered results.
 	"""
 	permission_classes = [permissions.AllowAny]
 
 	def get(self, request):
 		from urllib.parse import urlparse
 		from subscriptions.models import Subscribers
+
+		# --- Org visibility ------------------------------------------------
+		visible_org_ids = getattr(request, 'visible_org_ids', None)
 
 		# Parse team IDs from query params
 		team_param = request.query_params.get('team', None)
@@ -1762,41 +1772,60 @@ class StatsView(APIView):
 					{'error': 'Invalid team parameter. Expected integer or comma-separated integers.'},
 					status=status.HTTP_400_BAD_REQUEST
 				)
+			# 404 if any requested team is not in a visible org
+			if visible_org_ids is not None:
+				visible = Team.objects.filter(id__in=team_ids, organization_id__in=visible_org_ids)
+				if visible.count() != len(set(team_ids)):
+					raise Http404
+
+		# Base querysets scoped to visible orgs (no-op when middleware absent)
+		if visible_org_ids is not None:
+			articles_base     = Articles.objects.filter(teams__organization_id__in=visible_org_ids).distinct()
+			trials_base       = Trials.objects.filter(teams__organization_id__in=visible_org_ids).distinct()
+			authors_base      = Authors.objects.filter(articles__teams__organization_id__in=visible_org_ids).distinct()
+			sources_base      = Sources.objects.filter(team__organization_id__in=visible_org_ids)
+			subscribers_base  = Subscribers.objects.filter(subscriptions__team__organization_id__in=visible_org_ids)
+		else:
+			articles_base     = Articles.objects.all()
+			trials_base       = Trials.objects.all()
+			authors_base      = Authors.objects.all()
+			sources_base      = Sources.objects.all()
+			subscribers_base  = Subscribers.objects.all()
 
 		# Articles count
 		if team_ids:
-			articles_count = Articles.objects.filter(teams__in=team_ids).distinct().count()
+			articles_count = articles_base.filter(teams__in=team_ids).distinct().count()
 		else:
-			articles_count = Articles.objects.count()
+			articles_count = articles_base.count()
 
 		# Trials count
 		if team_ids:
-			trials_count = Trials.objects.filter(teams__in=team_ids).distinct().count()
+			trials_count = trials_base.filter(teams__in=team_ids).distinct().count()
 		else:
-			trials_count = Trials.objects.count()
+			trials_count = trials_base.count()
 
 		# Subscribers count (active only)
 		if team_ids:
-			subscribers_count = Subscribers.objects.filter(
+			subscribers_count = subscribers_base.filter(
 				active=True,
 				subscriptions__team__in=team_ids
 			).distinct().count()
 		else:
-			subscribers_count = Subscribers.objects.filter(active=True).count()
+			subscribers_count = subscribers_base.filter(active=True).distinct().count()
 
 		# Authors count (distinct authors linked to articles in scope)
 		if team_ids:
-			authors_count = Authors.objects.filter(
+			authors_count = authors_base.filter(
 				articles__teams__in=team_ids
 			).distinct().count()
 		else:
-			authors_count = Authors.objects.count()
+			authors_count = authors_base.count()
 
 		# Sources queryset scoped to team(s)
 		if team_ids:
-			sources_qs = Sources.objects.filter(team__in=team_ids)
+			sources_qs = sources_base.filter(team__in=team_ids)
 		else:
-			sources_qs = Sources.objects.all()
+			sources_qs = sources_base
 
 		def extract_domain(url):
 			if not url:
