@@ -1063,6 +1063,10 @@ class OrganizationApiSettingsInline(admin.StackedInline):
 	fields = ('make_api_public',)
 	verbose_name = 'API settings'
 	verbose_name_plural = 'API settings'
+	can_delete = False
+
+	def has_add_permission(self, request, obj=None):
+		return False
 
 
 class OrganizationTeamInline(admin.TabularInline):
