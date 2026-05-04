@@ -20,6 +20,38 @@ GregoryAI supports a multi-tenant structure where content, credentials, and emai
 
 ---
 
+## API visibility for private organisations
+
+Each Organisation has an `OrganizationApiSettings` record with a `make_api_public` flag.
+
+- When `make_api_public = True` the organisation's data is visible to **all callers**, including anonymous requests.
+- When `make_api_public = False` (the default) the data is **private** — only callers that have been explicitly granted access can read it.
+
+### Granting access to a private organisation
+
+**Via API key** — create an `APIAccessScheme` in the admin under **API > API Access Schemes**:
+
+| Field | Value |
+|:------|:------|
+| Client name | Descriptive label for the consumer |
+| Organisation | The private organisation |
+| Begin / end date | Validity window |
+| IP addresses | Optional comma-separated allowlist |
+
+The consumer sends the generated key in every request:
+
+```http
+Authorization: <raw_api_key>
+```
+
+**Via user account** — add the user to the organisation as an `OrganizationUser`. After logging in they will see the organisation's data automatically.
+
+In both cases the caller can append `?include_public=true` to a request to also receive data from public organisations.
+
+See [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#accessing-private-organisation-data) for the full visibility rules table.
+
+---
+
 ## Setting Up Sites
 
 Sites are managed at **Sites > Sites** in the Django admin (`/admin/sites/site/`).
