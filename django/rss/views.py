@@ -19,12 +19,13 @@ class ArticlesByAuthorFeed(Feed):
 			raise Authors.DoesNotExist
 		author = Authors.objects.get(ORCID=normalized)
 
-		# Compute visibility and attach to self for use in items()
-		self._visible_org_ids = _visible_org_ids(request)
+		# Compute visibility and attach to the per-request obj (not self)
+		# so concurrent requests on the shared Feed instance don't interfere.
+		author._visible_org_ids = _visible_org_ids(request)
 
 		# 404 if author has no articles in any visible org
 		if not author.articles_set.filter(
-			teams__organization_id__in=self._visible_org_ids
+			teams__organization_id__in=author._visible_org_ids
 		).exists():
 			raise Http404
 
@@ -44,7 +45,7 @@ class ArticlesByAuthorFeed(Feed):
 		return (
 			Articles.objects.filter(
 				authors=obj,
-				teams__organization_id__in=self._visible_org_ids,
+				teams__organization_id__in=obj._visible_org_ids,
 			)
 			.distinct()
 			.order_by('-published_date')[:50]
@@ -79,15 +80,16 @@ class TrialsBySubjectFeed(Feed):
 	def get_object(self, request, subject_slug):
 		subject = Subject.objects.get(subject_slug=subject_slug)
 
-		# Compute visibility and attach to self for use in items()
-		self._visible_org_ids = _visible_org_ids(request)
+		# Compute visibility and attach to the per-request obj (not self)
+		# so concurrent requests on the shared Feed instance don't interfere.
+		subject._visible_org_ids = _visible_org_ids(request)
 
 		# 404 if subject belongs to an org that isn't visible
 		if subject.team_id is not None:
 			from gregory.models import Team as _Team
 			try:
 				team = _Team.objects.get(id=subject.team_id)
-				if team.organization_id not in self._visible_org_ids:
+				if team.organization_id not in subject._visible_org_ids:
 					raise Http404
 			except _Team.DoesNotExist:
 				raise Http404
@@ -108,7 +110,7 @@ class TrialsBySubjectFeed(Feed):
 		return (
 			Trials.objects.filter(
 				subjects=obj,
-				teams__organization_id__in=self._visible_org_ids,
+				teams__organization_id__in=obj._visible_org_ids,
 			)
 			.distinct()
 			.order_by('-discovery_date')[:50]
