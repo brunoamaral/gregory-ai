@@ -27,11 +27,11 @@ from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 		APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError,
-		APINoAPIKeyError, ArticleExistsError, ArticleNotSavedError, DoiNotFound, 
-		FieldNotFoundError, SourceNotFoundError
+		APINoAPIKeyError, ArticleExistsError, ArticleNotSavedError, CrossOrgPayloadError,
+		DoiNotFound, FieldNotFoundError, SourceNotFoundError
 )
 from api.utils.responses import (
-		ACCESS_DENIED, INVALID_API_KEY, INVALID_IP_ADDRESS, NO_API_KEY,
+		ACCESS_DENIED, CROSS_ORG_PAYLOAD, INVALID_API_KEY, INVALID_IP_ADDRESS, NO_API_KEY,
 		UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError
 )
 
@@ -119,6 +119,10 @@ def post_article(request):
 			# this API endpoint. If so, the valid client access scheme is returned
 			access_scheme = checkValidAccess(api_key, ip_addr)
 
+			# PR 7: keys without an org cannot post articles
+			if access_scheme.organization is None:
+				raise APIAccessDeniedError('API keys without an associated organisation cannot post articles.')
+
 			# At this point, the API client is authorized
 			# Check for fields
 			if 'kind' not in post_data or post_data['kind'] == None:
@@ -149,6 +153,14 @@ def post_article(request):
 			science_paper = None
 			if new_article['kind'] == 'science paper':
 				science_paper = SciencePaper(doi=new_article['doi'],title=new_article['title'])
+
+			# PR 7: validate source org before any expensive external calls
+			source = Sources.objects.get(pk=new_article['source_id'])
+			if source.team.organization_id != access_scheme.organization_id:
+				raise CrossOrgPayloadError(
+					f'source_id {source.pk} belongs to a different organisation than your API key.'
+				)
+
 			if science_paper.doi == None:
 				science_paper.doi = science_paper.find_doi(title=science_paper.title)
 
@@ -178,10 +190,9 @@ def post_article(request):
 				article_on_gregory = Articles.objects.filter(doi=new_article['doi'])
 			if article_on_gregory != None and article_on_gregory.count() > 0:
 				for article in article_on_gregory:
-					new_source = Sources.objects.get(pk=new_article['source_id'])
-					article.sources.add(new_source)
-					article.teams.add(new_source.team)
-					article.subjects.add(new_source.subject)
+					article.sources.add(source)
+					article.teams.add(source.team)
+					article.subjects.add(source.subject)
 				raise ArticleExistsError('There is already an article with the specified DOI. If the source, team, or subject were different, the article was updated.')
 
 			if new_article['title'] != None:
@@ -189,7 +200,6 @@ def post_article(request):
 			if article_on_gregory != None and article_on_gregory.count() > 0:
 				raise ArticleExistsError('There is already an article with the specified Title')
 
-			source = Sources.objects.get(pk=new_article['source_id'])
 			if source.pk == None:
 				raise SourceNotFoundError('source_id was not found in the database')
 			save_article = Articles.objects.create(
@@ -242,6 +252,9 @@ def post_article(request):
 		except FieldNotFoundError as exception:
 			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 202, str(exception), str(post_data))
 			return returnError(FIELD_NOT_FOUND, str(exception), 200)
+		except CrossOrgPayloadError as exception:
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+			return returnError(CROSS_ORG_PAYLOAD, str(exception), 400)
 		except ArticleExistsError as exception:
 			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 204, str(exception), str(post_data))
 			return returnError(ARTICLE_EXISTS, str(exception), 200)
