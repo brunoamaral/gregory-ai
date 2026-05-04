@@ -10,6 +10,13 @@ Rules (see spec §4.1):
       → orgs they are a member of (via OrganizationUser membership); ?include_public=true adds public orgs
   - API key bound to org X
       → {X}; ?include_public=true adds public orgs
+
+Note: ``request.visible_org_ids`` is attached by ``VisibleOrgMiddleware`` as a
+``SimpleLazyObject`` so that computation is deferred until first access.  This
+ensures DRF authentication (JWT, Bearer token) has already resolved
+``request.user`` before visibility is evaluated — DRF propagates the
+authenticated user back to ``request._request.user`` via its user-property
+setter, so reading ``request.user`` here always reflects the DRF identity.
 """
 
 from __future__ import annotations
