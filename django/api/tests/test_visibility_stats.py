@@ -111,10 +111,9 @@ class AnonymousStatsVisibilityTest(StatsVisibilityBase):
 	def test_articles_count_only_public(self):
 		resp = self.client.get('/stats/')
 		self.assertEqual(resp.status_code, 200)
-		# Only pub article visible; mine and priv are hidden
-		self.assertGreaterEqual(resp.data['articles'], 1)
-		# The private article should not inflate the count beyond what pub provides
-		# Verify by checking counts with team scope
+		# Exactly 1 public article (pub_team) visible; mine and priv are hidden
+		self.assertEqual(resp.data['articles'], 1)
+		self.assertEqual(resp.data['trials'], 1)
 		resp_pub = self.client.get('/stats/', {'team': self.pub_team.id})
 		resp_priv = self.client.get('/stats/', {'team': self.priv_team.id})
 		self.assertEqual(resp_pub.status_code, 200)
@@ -179,8 +178,12 @@ class AuthenticatedUserStatsVisibilityTest(StatsVisibilityBase):
 	def test_include_public_expands_global_count(self):
 		resp_no_flag = self.client.get('/stats/')
 		resp_with_flag = self.client.get('/stats/?include_public=true')
-		# With flag → pub articles also counted
-		self.assertGreaterEqual(resp_with_flag.data['articles'], resp_no_flag.data['articles'])
+		# Without flag: only own org → 1 article (mine)
+		self.assertEqual(resp_no_flag.data['articles'], 1)
+		# With flag: own org + public org → 2 articles (mine + pub)
+		self.assertEqual(resp_with_flag.data['articles'], 2)
+		# Private org article never counted
+		self.assertLess(resp_with_flag.data['articles'], 3)
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +218,12 @@ class APIKeyStatsVisibilityTest(StatsVisibilityBase):
 	def test_include_public_expands_global_count(self):
 		resp_no_flag = self.client.get('/stats/')
 		resp_with_flag = self.client.get('/stats/?include_public=true')
-		self.assertGreaterEqual(resp_with_flag.data['articles'], resp_no_flag.data['articles'])
+		# Without flag: only own org → 1 article (mine)
+		self.assertEqual(resp_no_flag.data['articles'], 1)
+		# With flag: own org + public org → 2 articles (mine + pub)
+		self.assertEqual(resp_with_flag.data['articles'], 2)
+		# Private org article never counted
+		self.assertLess(resp_with_flag.data['articles'], 3)
 
 
 # ---------------------------------------------------------------------------
