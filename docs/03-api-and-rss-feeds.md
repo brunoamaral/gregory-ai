@@ -53,6 +53,46 @@ This prevents open-redirect attacks — only explicitly whitelisted domains are 
 
 ---
 
+## Accessing private organisation data
+
+By default the API only exposes data belonging to **public organisations** (`OrganizationApiSettings.make_api_public = True`). Callers that need to read a **private** organisation's data must identify themselves in one of two ways.
+
+### Option 1 — API key bound to the organisation
+
+Create an `APIAccessScheme` record in the Django admin with `organization` set to the target private org. The client sends the raw key in the `Authorization` header (no prefix):
+
+```http
+GET /articles/
+Authorization: <raw_api_key>
+```
+
+The key is validated against its date window (`begin_date` / `end_date`) and, if configured, an IP allowlist. A valid key grants access to all data owned by its organisation.
+
+### Option 2 — Authenticated Django user
+
+A user account that is a member of the organisation (an `OrganizationUser` record exists) sees that organisation's data automatically after logging in via the session-based endpoints.
+
+### Including public organisations alongside private data
+
+Both caller types can append `?include_public=true` to any request to also receive data from organisations that have `make_api_public = True`.
+
+```bash
+GET /articles/?include_public=true
+```
+
+### Visibility rules summary
+
+| Caller | Visible organisations |
+|:-------|:----------------------|
+| Anonymous (no credentials) | Public orgs only |
+| API key with no org (`organization = null`) | Public orgs only |
+| API key bound to org X | Org X only (+ public if `?include_public=true`) |
+| Authenticated user member of org X | Org X only (+ public if `?include_public=true`) |
+
+> **Note:** An expired key or a key used from a non-allowed IP is treated as anonymous.
+
+---
+
 ## Articles query parameters
 
 The `/articles/` endpoint supports the following filters. Multiple parameters can be combined.
