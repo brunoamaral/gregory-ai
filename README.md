@@ -191,6 +191,21 @@ ORCID_CLIENT_SECRET=
 25 */12 * * * /usr/bin/flock -n /tmp/pipeline /usr/bin/docker exec gregory python manage.py pipeline
 ```
 
+To keep API access logs under control, schedule the API log pruning command with one retention policy.
+
+```cron
+# Keep only the last 30 days (run daily)
+40 2 * * * /usr/bin/docker exec gregory python manage.py prune_api_access_scheme_logs --window 30d
+
+# Keep only the last 90 days (run weekly)
+45 2 * * 0 /usr/bin/docker exec gregory python manage.py prune_api_access_scheme_logs --window 90d
+
+# Keep only the last 1 year (run monthly)
+50 2 1 * * /usr/bin/docker exec gregory python manage.py prune_api_access_scheme_logs --window 1y
+```
+
+Use only one of the three prune schedules above based on your retention policy.
+
 
 
 1. **Execute** `python3 scripts/bootstrap.py`.
