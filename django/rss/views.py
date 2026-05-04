@@ -1,11 +1,7 @@
-from django.shortcuts import render
 from django.contrib.syndication.views import Feed
 from django.contrib.sites.models import Site
 from django.http import Http404
 from gregory.models import Articles, Authors, Trials, Subject
-from django.urls import reverse
-from django.contrib.sites.models import Site
-from sitesettings.models import CustomSetting
 from gregory.functions import normalize_orcid
 from gregory.visibility import visible_org_ids as _visible_org_ids
 
