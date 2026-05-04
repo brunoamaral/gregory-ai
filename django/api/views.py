@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from django.db.models import Count, Q, Prefetch
 from django.db.models.functions import Length, TruncMonth
 from django.shortcuts import get_object_or_404
-from gregory.classes import SciencePaper
+from gregory.classes import SciencePaper, ClinicalTrial
 from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, TeamCategory
 from organizations.models import Organization
 from rest_framework import permissions, viewsets, generics, filters, status
@@ -27,11 +27,11 @@ from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 		APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError,
-		APINoAPIKeyError, ArticleExistsError, ArticleNotSavedError, DoiNotFound, 
-		FieldNotFoundError, SourceNotFoundError
+		APINoAPIKeyError, ArticleExistsError, ArticleNotSavedError, CrossOrgPayloadError,
+		DoiNotFound, FieldNotFoundError, SourceNotFoundError
 )
 from api.utils.responses import (
-		ACCESS_DENIED, INVALID_API_KEY, INVALID_IP_ADDRESS, NO_API_KEY,
+		ACCESS_DENIED, CROSS_ORG_PAYLOAD, INVALID_API_KEY, INVALID_IP_ADDRESS, NO_API_KEY,
 		UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError
 )
 
@@ -105,153 +105,280 @@ def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_
 
 @api_view(['POST'])
 def post_article(request):
-		"""
-		Allows authenticated clients to add new articles to the database
-		"""
-		access_scheme = None  # Define access_scheme at the start
-		call_type = request.method + " " + request.path
-		ip_addr = getIPAddress(request)
-		post_data = json.loads(request.body)
+	"""
+	Allows authenticated clients to add new articles or trials to the database.
+
+	The ``kind`` field in the payload must match the ``source_for`` value of the
+	indicated source.  Routing per kind:
+	  - ``science paper``  → CrossRef enrichment, saved to Articles
+	  - ``trials``         → saved to Trials (dedup by identifier then title)
+	  - ``news article``   → saved to Articles, no CrossRef lookup
+	"""
+	access_scheme = None
+	call_type = request.method + " " + request.path
+	ip_addr = getIPAddress(request)
+	post_data = json.loads(request.body)
+	try:
+		api_key = getAPIKey(request)
+		access_scheme = checkValidAccess(api_key, ip_addr)
+
+		# PR 7: keys without an org cannot post
+		if access_scheme.organization is None:
+			raise APIAccessDeniedError('API keys without an associated organisation cannot post articles.')
+
+		# --- Field presence checks -------------------------------------------
+		if 'kind' not in post_data or post_data['kind'] is None:
+			raise FieldNotFoundError('field `kind` was not found in the payload')
+		if 'source_id' not in post_data or post_data['source_id'] is None:
+			raise FieldNotFoundError('source_id field not found in payload')
+		if 'title' not in post_data and 'doi' not in post_data:
+			raise FieldNotFoundError('field `doi` and `title` not in the payload. You need at least one.')
+
+		# --- Source validation (existence, org, kind match) ------------------
 		try:
-			api_key = getAPIKey(request)
+			source = Sources.objects.get(pk=post_data['source_id'])
+		except Sources.DoesNotExist:
+			raise SourceNotFoundError(f'source_id {post_data["source_id"]} was not found in the database')
+		if source.team is None:
+			raise SourceNotFoundError(f'source_id {source.pk} has no team assigned')
+		if source.team.organization_id != access_scheme.organization_id:
+			raise CrossOrgPayloadError(
+				f'source_id {source.pk} belongs to a different organisation than your API key.'
+			)
+		if post_data['kind'] != source.source_for:
+			raise FieldNotFoundError(
+				f'payload kind \'{post_data["kind"]}\' does not match source kind \'{source.source_for}\''
+			)
 
-			# This checks if this API key and IP address are authorized to access
-			# this API endpoint. If so, the valid client access scheme is returned
-			access_scheme = checkValidAccess(api_key, ip_addr)
+		# Helper: coerce empty strings to None
+		def _val(key):
+			v = post_data.get(key)
+			return None if v == '' else v
 
-			# At this point, the API client is authorized
-			# Check for fields
-			if 'kind' not in post_data or post_data['kind'] == None:
-				raise FieldNotFoundError('field `kind` was not found in the payload')
-			if 'title' not in post_data and 'doi' not in post_data:
-				if post_data['title'] == None and post_data['doi'] == None:
-					raise FieldNotFoundError('field `doi` and `title` not in the payload. You need at least one.')
-			if 'source_id' not in post_data or post_data['source_id'] == None:
-					raise FieldNotFoundError('source_id field not found in payload')
-			
+		kind = post_data['kind']
+
+		# =================================================================
+		# Branch: science paper
+		# =================================================================
+		if kind == 'science paper':
 			new_article = {
-				"title": None if 'title' not in post_data or post_data['title'] == '' else post_data['title'],
-				"link": None if 'link' not in post_data or post_data['link'] == '' else post_data['link'],
-				"doi": None if 'doi' not in post_data or post_data['doi'] == '' else post_data['doi'],
-				"access": None if 'access' not in post_data or post_data['access'] == '' else post_data['access'],
-				"summary": None if 'summary' not in post_data or post_data['summary'] == '' else post_data['summary'],
-				"source_id": None if 'source_id' not in post_data or post_data['source_id'] == '' else post_data['source_id'],
-				"published_date": None if 'published_date' not in post_data or post_data['published_date'] == '' else post_data['published_date'],
-				# Not sure if and how we should post the authors
-				# "authors": post_data['authors'],
-				"kind": None if 'kind' not in post_data or post_data['kind'] == '' else post_data['kind'],
-				"access": None if 'access' not in post_data or post_data['access'] == '' else post_data['access'],
-				"publisher": None if 'publisher' not in post_data or post_data['publisher'] == '' else post_data['publisher'],
-				"container_title": None if 'container_title' not in post_data or post_data['container_title'] == '' else post_data['container_title']
+				'title': _val('title'),
+				'link': _val('link'),
+				'doi': _val('doi'),
+				'access': _val('access'),
+				'summary': _val('summary'),
+				'published_date': _val('published_date'),
+				'kind': kind,
+				'publisher': _val('publisher'),
+				'container_title': _val('container_title'),
 			}
-
-
-			science_paper = None
-			if new_article['kind'] == 'science paper':
-				science_paper = SciencePaper(doi=new_article['doi'],title=new_article['title'])
-			if science_paper.doi == None:
+			science_paper = SciencePaper(doi=new_article['doi'], title=new_article['title'])
+			if science_paper.doi is None:
 				science_paper.doi = science_paper.find_doi(title=science_paper.title)
-
-			if science_paper.doi != None:
+			if science_paper.doi is not None:
 				science_paper.refresh()
-			if new_article['doi'] == None:
+			if new_article['doi'] is None:
 				new_article['doi'] = science_paper.doi
-			if new_article['title'] == None:
+			if new_article['title'] is None:
 				new_article['title'] = science_paper.title
-			if new_article['link'] == None:
+			if new_article['link'] is None:
 				new_article['link'] = science_paper.link
-			if new_article['summary'] == None:
+			if new_article['summary'] is None:
 				new_article['summary'] = science_paper.clean_abstract()
-			if new_article['published_date'] == None:
+			if new_article['published_date'] is None:
 				new_article['published_date'] = science_paper.published_date
-			if new_article['access'] == None:
+			if new_article['access'] is None:
 				new_article['access'] = science_paper.access
-			if new_article['publisher'] == None:
+			if new_article['publisher'] is None:
 				new_article['publisher'] = science_paper.publisher
-			if new_article['container_title'] == None:
+			if new_article['container_title'] is None:
 				new_article['container_title'] = science_paper.journal
-			if new_article['access'] == None:
-				new_article['access'] == science_paper.access
-			
-			article_on_gregory = None
-			if new_article['doi'] != None:
-				article_on_gregory = Articles.objects.filter(doi=new_article['doi'])
-			if article_on_gregory != None and article_on_gregory.count() > 0:
-				for article in article_on_gregory:
-					new_source = Sources.objects.get(pk=new_article['source_id'])
-					article.sources.add(new_source)
-					article.teams.add(new_source.team)
-					article.subjects.add(new_source.subject)
-				raise ArticleExistsError('There is already an article with the specified DOI. If the source, team, or subject were different, the article was updated.')
 
-			if new_article['title'] != None:
-				article_on_gregory = Articles.objects.filter(title=new_article['title'])
-			if article_on_gregory != None and article_on_gregory.count() > 0:
-				raise ArticleExistsError('There is already an article with the specified Title')
+			# Dedup by DOI
+			if new_article['doi'] is not None:
+				existing = Articles.objects.filter(doi=new_article['doi'])
+				if existing.exists():
+					for article in existing:
+						article.sources.add(source)
+						article.teams.add(source.team)
+						if source.subject:
+							article.subjects.add(source.subject)
+					raise ArticleExistsError(
+						'There is already an article with the specified DOI. '
+						'If the source, team, or subject were different, the article was updated.'
+					)
+			# Dedup by title
+			if new_article['title'] is not None:
+				if Articles.objects.filter(title=new_article['title']).exists():
+					raise ArticleExistsError('There is already an article with the specified Title')
 
-			source = Sources.objects.get(pk=new_article['source_id'])
-			if source.pk == None:
-				raise SourceNotFoundError('source_id was not found in the database')
 			save_article = Articles.objects.create(
 				discovery_date=datetime.now(),
-				title = new_article['title'],
-				summary = new_article['summary'],
-				link = new_article['link'],
-				published_date = new_article['published_date'], 
-				doi = new_article['doi'], kind = new_article['kind'],
-				publisher=new_article['publisher'], container_title=new_article['container_title'])
+				title=new_article['title'],
+				summary=new_article['summary'],
+				link=new_article['link'],
+				published_date=new_article['published_date'],
+				doi=new_article['doi'],
+				kind=kind,
+				publisher=new_article['publisher'],
+				container_title=new_article['container_title'],
+			)
 			save_article.sources.add(source)
 			save_article.teams.add(source.team)
-			save_article.subjects.add(source.subject)
-
-			if save_article.pk == None:
+			if source.subject:
+				save_article.subjects.add(source.subject)
+			if save_article.pk is None:
 				raise ArticleNotSavedError('Could not create the article')
-			save_article.sources.add(source)
-			# Prepare some data to be returned to the API client
-			data = {
-				'name': 'Gregory | API',
-				'version': '0.1b',
-				"data_received": json.loads(request.body),
+
+			log_data = {'article_id': save_article.pk}
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, 'Article created', log_data)
+			return returnData({
+				'name': 'Gregory | API', 'version': '0.1b',
+				'data_received': post_data,
 				'data_processed_from_doi': new_article,
 				'article_id': save_article.article_id,
+			})
+
+		# =================================================================
+		# Branch: trials
+		# =================================================================
+		elif kind == 'trials':
+			trial_data = ClinicalTrial(
+				title=_val('title'),
+				summary=_val('summary'),
+				link=_val('link'),
+				published_date=_val('published_date'),
+				identifiers=post_data.get('identifiers') or {},
+			)
+
+			# Dedup: identifiers first, then title (mirrors feedreader_trials logic)
+			existing_trial = None
+			ident = trial_data.identifiers or {}
+			id_query = Q()
+			if ident.get('euct'):
+				id_query |= Q(identifiers__euct=ident['euct'])
+			if ident.get('nct'):
+				id_query |= Q(identifiers__nct=ident['nct'])
+			if ident.get('eudract'):
+				id_query |= Q(identifiers__eudract=ident['eudract'])
+			if id_query:
+				existing_trial = Trials.objects.filter(id_query).first()
+			if existing_trial is None and trial_data.title:
+				existing_trial = Trials.objects.filter(title__iexact=trial_data.title).first()
+
+			if existing_trial:
+				existing_trial.sources.add(source)
+				existing_trial.teams.add(source.team)
+				if source.subject:
+					existing_trial.subjects.add(source.subject)
+				raise ArticleExistsError(
+					'There is already a trial matching the provided identifiers or title. '
+					'If the source, team, or subject were different, the trial was updated.'
+				)
+
+			save_trial = Trials.objects.create(
+				discovery_date=datetime.now(),
+				title=trial_data.title,
+				summary=trial_data.summary,
+				link=trial_data.link,
+				published_date=trial_data.published_date,
+				identifiers=trial_data.identifiers or {},
+			)
+			save_trial.sources.add(source)
+			save_trial.teams.add(source.team)
+			if source.subject:
+				save_trial.subjects.add(source.subject)
+			if save_trial.pk is None:
+				raise ArticleNotSavedError('Could not create the trial')
+
+			log_data = {'trial_id': save_trial.pk}
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, 'Trial created', log_data)
+			return returnData({
+				'name': 'Gregory | API', 'version': '0.1b',
+				'data_received': post_data,
+				'trial_id': save_trial.trial_id,
+			})
+
+		# =================================================================
+		# Branch: news article
+		# =================================================================
+		elif kind == 'news article':
+			new_article = {
+				'title': _val('title'),
+				'link': _val('link'),
+				'summary': _val('summary'),
+				'published_date': _val('published_date'),
+				'kind': kind,
 			}
-			log_data = {
-				'name': 'Gregory | API',
-				'version': '0.1b',
-				"article_id": save_article.pk,
-			}
-			# This creates an access log for this client in the DB
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, 'Article created', log_data)
-			# Actually return the data to the API client
-			return returnData(data)
-		except APINoAPIKeyError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
-			return returnError(NO_API_KEY, str(exception), 401)
-		except APIInvalidAPIKeyError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
-			return returnError(INVALID_API_KEY, str(exception), 401)
-		except APIInvalidIPAddressError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
-			return returnError(INVALID_IP_ADDRESS, str(exception), 401)
-		except APIAccessDeniedError as exception:
-			if access_scheme is not None:
-					generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
-			else:
-					generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception), str(post_data))
-			return returnError(ACCESS_DENIED, str(exception), 403)
-		except FieldNotFoundError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 202, str(exception), str(post_data))
-			return returnError(FIELD_NOT_FOUND, str(exception), 200)
-		except ArticleExistsError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 204, str(exception), str(post_data))
-			return returnError(ARTICLE_EXISTS, str(exception), 200)
-		except ArticleNotSavedError as exception:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 204, str(exception), str(post_data))
-			return returnError(ARTICLE_NOT_SAVED, str(exception), 204)
-		except Exception as exception:
-			print(traceback.format_exc())
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
-			return returnError(UNEXPECTED, str(exception), 500)
+			# Dedup by title
+			if new_article['title'] is not None:
+				if Articles.objects.filter(title=new_article['title']).exists():
+					raise ArticleExistsError('There is already an article with the specified Title')
+			# Dedup by link
+			if new_article['link'] is not None:
+				if Articles.objects.filter(link=new_article['link']).exists():
+					raise ArticleExistsError('There is already an article with the specified link')
+
+			save_article = Articles.objects.create(
+				discovery_date=datetime.now(),
+				title=new_article['title'],
+				summary=new_article['summary'],
+				link=new_article['link'],
+				published_date=new_article['published_date'],
+				kind=kind,
+			)
+			save_article.sources.add(source)
+			save_article.teams.add(source.team)
+			if source.subject:
+				save_article.subjects.add(source.subject)
+			if save_article.pk is None:
+				raise ArticleNotSavedError('Could not create the news article')
+
+			log_data = {'article_id': save_article.pk}
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, 'News article created', log_data)
+			return returnData({
+				'name': 'Gregory | API', 'version': '0.1b',
+				'data_received': post_data,
+				'article_id': save_article.article_id,
+			})
+
+		else:
+			raise FieldNotFoundError(f'Unsupported kind \'{kind}\'')
+
+	except APINoAPIKeyError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(NO_API_KEY, str(exception), 401)
+	except APIInvalidAPIKeyError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(INVALID_API_KEY, str(exception), 401)
+	except APIInvalidIPAddressError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(INVALID_IP_ADDRESS, str(exception), 401)
+	except APIAccessDeniedError as exception:
+		if access_scheme is not None:
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+		else:
+			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception), str(post_data))
+		return returnError(ACCESS_DENIED, str(exception), 403)
+	except SourceNotFoundError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 404, str(exception), str(post_data))
+		return returnError(SOURCE_NOT_FOUND, str(exception), 404)
+	except FieldNotFoundError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+		return returnError(FIELD_NOT_FOUND, str(exception), 400)
+	except CrossOrgPayloadError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+		return returnError(CROSS_ORG_PAYLOAD, str(exception), 400)
+	except ArticleExistsError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, str(exception), str(post_data))
+		return returnError(ARTICLE_EXISTS, str(exception), 200)
+	except ArticleNotSavedError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
+		return returnError(ARTICLE_NOT_SAVED, str(exception), 500)
+	except Exception as exception:
+		print(traceback.format_exc())
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
+		return returnError(UNEXPECTED, str(exception), 500)
 
 ###
 # ARTICLES
