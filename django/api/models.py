@@ -51,15 +51,12 @@ class APIAccessScheme(models.Model):
     # Maximum number of calls permitted per day
     max_calls_day = models.IntegerField(default=DEFAULT_MAX_CALLS_DAY, blank=False)
 
-    # The organisation this API key represents.
-    # Null is permitted during the transition window (PR 2); will become required in PR 8.
+    # The organisation this API key represents. Required — null=True dropped in PR 8.
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
-        null=True,
-        blank=True,
         related_name='api_access_schemes',
-        help_text='Organisation this key represents. Required after the transition window.',
+        help_text='Organisation this key represents.',
     )
 
     def __str__(self):

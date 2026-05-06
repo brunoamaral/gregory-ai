@@ -10,19 +10,20 @@ from api.models import APIAccessScheme
 
 
 class APIAccessSchemeOrganizationFKTest(TestCase):
-	"""Tests for the APIAccessScheme.organization FK introduced in PR 2."""
+	"""Tests for the APIAccessScheme.organization FK (PR 2) and required constraint (PR 8)."""
 
 	def setUp(self):
 		self.org = Organization.objects.create(name='Test Org', slug='test-org')
 
-	def test_create_without_organization(self):
-		"""Existing keys with no org (null) must still work."""
-		scheme = APIAccessScheme.objects.create(
-			client_name='No Org Client',
-			client_contacts='noorg@example.com',
-		)
-		retrieved = APIAccessScheme.objects.get(pk=scheme.pk)
-		self.assertIsNone(retrieved.organization)
+	def test_create_without_organization_raises(self):
+		"""organization is required (PR 8); creating a key without it must raise IntegrityError."""
+		from django.db import IntegrityError
+		with self.assertRaises(IntegrityError):
+			APIAccessScheme.objects.create(
+				client_name='No Org Client',
+				client_contacts='noorg@example.com',
+				organization=None,
+			)
 
 	def test_create_with_organization(self):
 		"""New keys can be bound to an organisation."""
@@ -43,14 +44,15 @@ class APIAccessSchemeOrganizationFKTest(TestCase):
 		)
 		self.assertIn(scheme, self.org.api_access_schemes.all())
 
-	def test_null_org_does_not_break_existing_schemes(self):
-		"""Rows created before the migration (simulated as null org) survive."""
-		scheme = APIAccessScheme.objects.create(
-			client_name='Legacy Client',
-			client_contacts='legacy@example.com',
-			organization=None,
+	def test_all_schemes_have_organization(self):
+		"""After PR 8, no APIAccessScheme row can have organization=None."""
+		_scheme = APIAccessScheme.objects.create(
+			client_name='Org-required Client',
+			client_contacts='org@example.com',
+			organization=self.org,
 		)
-		self.assertIsNone(APIAccessScheme.objects.get(pk=scheme.pk).organization)
+		null_count = APIAccessScheme.objects.filter(organization__isnull=True).count()
+		self.assertEqual(null_count, 0)
 
 	def test_cascade_delete(self):
 		"""Deleting an org cascades to its API keys."""
