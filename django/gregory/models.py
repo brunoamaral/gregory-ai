@@ -241,7 +241,7 @@ class Articles(models.Model):
 	article_id = models.AutoField(primary_key=True)
 	title = models.TextField(blank=False, null=False, unique=True)
 	link = models.URLField(blank=False, null=False, max_length=2000)
-	doi = models.CharField(max_length=280, blank=True, null=True)
+	doi = models.CharField(max_length=280, blank=True, null=True, db_index=True)
 	summary = models.TextField(blank=True, null=True)
 	summary_plain_english = models.TextField(blank=True, null=True) # Used for plain English version
 	
@@ -258,8 +258,8 @@ class Articles(models.Model):
 	)
 	
 	sources = models.ManyToManyField(Sources, blank=True)
-	published_date = models.DateTimeField(blank=True, null=True)
-	discovery_date = models.DateTimeField(auto_now_add=True)
+	published_date = models.DateTimeField(blank=True, null=True, db_index=True)
+	discovery_date = models.DateTimeField(auto_now_add=True, db_index=True)
 	authors = models.ManyToManyField(Authors, blank=True)
 	team_categories = models.ManyToManyField('TeamCategory', related_name='articles', blank=True)
 	entities = models.ManyToManyField('Entities')
@@ -274,7 +274,7 @@ class Articles(models.Model):
 	history = HistoricalRecords(excluded_fields=['crossref_check', 'utitle', 'usummary'])
 	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
-	retracted = models.BooleanField(default=False)
+	retracted = models.BooleanField(default=False, db_index=True)
 	
 	def is_ml_relevant_for_subject(self, subject, threshold=0.8):
 		"""
@@ -358,8 +358,8 @@ class Articles(models.Model):
 class Trials(models.Model):
 	trial_id = models.AutoField(primary_key=True)
 	discovery_date = models.DateTimeField(blank=True, null=True)
-	last_updated = models.DateTimeField(auto_now=True, null=True)
-	title = models.TextField(blank=False,null=False, unique=True)
+	last_updated = models.DateTimeField(auto_now=True, null=True, db_index=True)
+	title = models.TextField(blank=False, null=False)
 	summary = models.TextField(blank=True, null=True)
 	summary_plain_english = models.TextField(blank=True, null=True) # Used for plain English summary
 	
@@ -376,7 +376,7 @@ class Trials(models.Model):
 	)
 	
 	link = models.URLField(blank=False, null=False, max_length=2000)
-	published_date = models.DateTimeField(blank=True, null=True)
+	published_date = models.DateTimeField(blank=True, null=True, db_index=True)
 	sources = models.ManyToManyField('Sources', blank=True)
 	team_categories = models.ManyToManyField('TeamCategory', related_name='trials')
 	identifiers = models.JSONField(blank=True, null=True)
@@ -393,7 +393,7 @@ class Trials(models.Model):
 	retrospective_flag = models.CharField(max_length=10, null=True, blank=True)
 	date_registration = models.DateField(null=True, blank=True)
 	source_register = models.CharField(max_length=200, null=True, blank=True)
-	recruitment_status = models.CharField(max_length=200, null=True, blank=True)
+	recruitment_status = models.CharField(max_length=200, null=True, blank=True, db_index=True)
 	inclusion_agemin = models.CharField(max_length=100, null=True, blank=True)
 	inclusion_agemax = models.CharField(max_length=100, null=True, blank=True)
 	inclusion_gender = models.CharField(max_length=500, null=True, blank=True)
@@ -671,6 +671,9 @@ class MLPredictions(models.Model):
 			models.UniqueConstraint(
 				fields=['article', 'subject', 'model_version', 'algorithm'],
 				name='unique_article_subject_prediction')
+		]
+		indexes = [
+			models.Index(fields=['article', 'subject', '-created_date'], name='mlpred_art_subj_date_idx'),
 		]
 	
 	@classmethod
