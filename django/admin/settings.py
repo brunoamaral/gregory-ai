@@ -54,14 +54,12 @@ ALLOWED_HOSTS = [
 	'127.0.0.1',
 	'gregory',
 	'api.' + os.environ.get('DOMAIN_NAME', ''),
-	'manage.' + os.environ.get('DOMAIN_NAME', ''),
-	'example.com',  
+	'example.com',
 ]
 
 CSRF_TRUSTED_ORIGINS = [
 	'https://' + os.environ.get('DOMAIN_NAME', ''),
 	'https://api.' + os.environ.get('DOMAIN_NAME', ''),
-	'https://manage.' + os.environ.get('DOMAIN_NAME', ''),
 ]
 
 # Application definition
