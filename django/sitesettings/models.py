@@ -82,3 +82,9 @@ class CustomSetting(models.Model):
 		help_text="Comma-separated list of domains (e.g. example.com, other-site.org) allowed to submit subscribers for any list on this site. The origin domain is used for post-subscription redirects. The site's own domain is always accepted.",
 		verbose_name="Allowed Domains"
 	)
+	csrf_trusted_origins = models.TextField(
+		blank=True,
+		default='',
+		help_text="Comma-separated list of origins (e.g. https://partner.example.com) that Django should trust for cross-site POST requests (CSRF). Only add domains that are authorised to make credentialed requests to this Django backend.",
+		verbose_name="CSRF Trusted Origins"
+	)

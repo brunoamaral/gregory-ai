@@ -18,7 +18,7 @@ class CustomSettingInline(admin.StackedInline):
 			'fields': ['admin_email', 'sender_email_prefix'],
 		}),
 		('API & Domain', {
-			'fields': ['api_domain', 'allowed_domains'],
+			'fields': ['api_domain', 'allowed_domains', 'csrf_trusted_origins'],
 		}),
 		('Postmark Integration', {
 			'fields': ['postmark_api_token', 'postmark_api_url'],

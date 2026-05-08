@@ -33,8 +33,11 @@ class Command(BaseCommand):
 	def handle(self, *args, **options):
 		verbose = options['verbose']
 
-		# Collect DB-sourced domains so we can annotate them
-		db_hosts = {}  # host -> source label
+		# Collect DB-sourced domains annotated by their source
+		# host_sources: hostname -> source label (for ALLOWED_HOSTS annotation)
+		# csrf_sources: hostname -> source label (for CSRF_TRUSTED_ORIGINS annotation)
+		host_sources = {}
+		csrf_sources = {}
 
 		with warnings.catch_warnings():
 			warnings.simplefilter('ignore', RuntimeWarning)
@@ -42,23 +45,34 @@ class Command(BaseCommand):
 			for domain in Site.objects.values_list('domain', flat=True):
 				domain = domain.strip() if domain else ''
 				if domain:
-					db_hosts[domain] = 'Site.domain'
+					host_sources[domain] = 'Site.domain'
+					csrf_sources[domain] = 'Site.domain'
 
 			for api_domain in CustomSetting.objects.exclude(api_domain='').values_list('api_domain', flat=True):
 				api_domain = api_domain.strip() if api_domain else ''
 				if api_domain:
-					db_hosts.setdefault(api_domain, 'CustomSetting.api_domain')
+					host_sources.setdefault(api_domain, 'CustomSetting.api_domain')
+					csrf_sources.setdefault(api_domain, 'CustomSetting.api_domain')
 
 			for raw in CustomSetting.objects.exclude(allowed_domains='').values_list('allowed_domains', flat=True):
 				for part in raw.split(','):
 					domain = part.strip()
 					if domain and '.' in domain:
-						db_hosts.setdefault(domain, 'CustomSetting.allowed_domains')
+						host_sources.setdefault(domain, 'CustomSetting.allowed_domains')
+
+			for raw in CustomSetting.objects.exclude(csrf_trusted_origins='').values_list('csrf_trusted_origins', flat=True):
+				for part in raw.split(','):
+					origin = part.strip()
+					if not origin:
+						continue
+					hostname = origin.removeprefix('https://').removeprefix('http://')
+					if '.' in hostname:
+						csrf_sources.setdefault(hostname, 'CustomSetting.csrf_trusted_origins')
 
 		self.stdout.write(self.style.SUCCESS('\n=== ALLOWED_HOSTS ==='))
 		for host in settings.ALLOWED_HOSTS:
 			if verbose:
-				source = db_hosts.get(host, 'static / env')
+				source = host_sources.get(host, 'static / env')
 				self.stdout.write(f'  {host}  ({source})')
 			else:
 				self.stdout.write(f'  {host}')
@@ -66,16 +80,16 @@ class Command(BaseCommand):
 		self.stdout.write(self.style.SUCCESS('\n=== CSRF_TRUSTED_ORIGINS ==='))
 		for origin in settings.CSRF_TRUSTED_ORIGINS:
 			if verbose:
-				# Strip scheme for source lookup
-				host = origin.removeprefix('https://').removeprefix('http://')
-				source = db_hosts.get(host, 'static / env')
+				hostname = origin.removeprefix('https://').removeprefix('http://')
+				source = csrf_sources.get(hostname, 'static / env')
 				self.stdout.write(f'  {origin}  ({source})')
 			else:
 				self.stdout.write(f'  {origin}')
 
+		db_count = len(set(host_sources) | set(csrf_sources))
 		self.stdout.write('')
 		self.stdout.write(
 			f'Total: {len(settings.ALLOWED_HOSTS)} ALLOWED_HOSTS, '
 			f'{len(settings.CSRF_TRUSTED_ORIGINS)} CSRF_TRUSTED_ORIGINS '
-			f'({len(db_hosts)} from database)'
+			f'({db_count} from database)'
 		)
