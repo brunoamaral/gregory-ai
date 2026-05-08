@@ -81,7 +81,7 @@ INSTALLED_APPS = [
 	'django.contrib.sites',
 	'organizations',
 	'simple_history',
-	'sitesettings',
+	'sitesettings.apps.SitesettingsConfig',
 	'indexers',
 	'api',
 	'django_ckeditor_5',

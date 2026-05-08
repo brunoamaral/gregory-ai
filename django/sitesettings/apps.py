@@ -1,4 +1,22 @@
 from django.apps import AppConfig
+from urllib.parse import urlparse
+
+
+def _to_hostname(value):
+	"""
+	Normalise a raw domain/origin string to a bare lowercase hostname.
+	Handles scheme prefixes (https://, http://), port suffixes, and IPv6 brackets.
+	Returns None for empty, whitespace-only, or unparseable values.
+	"""
+	if not value:
+		return None
+	v = value.strip()
+	if not v:
+		return None
+	# Prefix with // so urlparse treats the value as a netloc, not a path
+	if '://' not in v:
+		v = f'//{v}'
+	return urlparse(v).hostname or None
 
 
 class SitesettingsConfig(AppConfig):
@@ -31,7 +49,12 @@ class SitesettingsConfig(AppConfig):
 		Wrapped in a broad try/except so ``manage.py migrate`` on a fresh DB (where
 		the sites/sitesettings tables don't yet exist) doesn't crash.
 		"""
+		import logging
 		import warnings
+
+		from django.db.utils import OperationalError, ProgrammingError
+
+		logger = logging.getLogger(__name__)
 
 		try:
 			from django.conf import settings
@@ -50,35 +73,31 @@ class SitesettingsConfig(AppConfig):
 				warnings.simplefilter('ignore', RuntimeWarning)
 
 				for domain in Site.objects.values_list('domain', flat=True):
-					domain = domain.strip() if domain else ''
-					if domain:
-						allowed_hosts.add(domain)
-						csrf_origins.add(domain)
+					h = _to_hostname(domain)
+					if h:
+						allowed_hosts.add(h)
+						csrf_origins.add(h)
 
 				for api_domain in CustomSetting.objects.exclude(api_domain='').values_list('api_domain', flat=True):
-					api_domain = api_domain.strip() if api_domain else ''
-					if api_domain:
-						allowed_hosts.add(api_domain)
-						csrf_origins.add(api_domain)
+					h = _to_hostname(api_domain)
+					if h:
+						allowed_hosts.add(h)
+						csrf_origins.add(h)
 
+				# allowed_domains: subscription-form origin allowlist; add to ALLOWED_HOSTS
+				# only (not CSRF). Dot-check rejects single-label/malformed entries.
 				for raw in CustomSetting.objects.exclude(allowed_domains='').values_list('allowed_domains', flat=True):
 					for part in raw.split(','):
-						domain = part.strip()
-						if domain and '.' in domain:
-							allowed_hosts.add(domain)
+						h = _to_hostname(part)
+						if h and '.' in h:
+							allowed_hosts.add(h)
 
-				# csrf_trusted_origins is an explicit opt-in for CSRF only;
-				# values may be full origins (https://...) or bare hostnames.
+				# csrf_trusted_origins: explicit opt-in for CSRF only.
 				for raw in CustomSetting.objects.exclude(csrf_trusted_origins='').values_list('csrf_trusted_origins', flat=True):
 					for part in raw.split(','):
-						origin = part.strip()
-						if not origin:
-							continue
-						# Normalise: strip scheme so we store a bare hostname
-						# and re-add https:// when writing CSRF_TRUSTED_ORIGINS.
-						hostname = origin.removeprefix('https://').removeprefix('http://')
-						if '.' in hostname:
-							csrf_origins.add(hostname)
+						h = _to_hostname(part)
+						if h and '.' in h:
+							csrf_origins.add(h)
 
 			# Append new entries only — preserve existing static values
 			current_hosts = set(settings.ALLOWED_HOSTS)
@@ -93,6 +112,11 @@ class SitesettingsConfig(AppConfig):
 				if https_origin not in current_csrf:
 					settings.CSRF_TRUSTED_ORIGINS.append(https_origin)
 
-		except Exception:
-			# Gracefully handle fresh DB (missing tables), test environments, etc.
+		except (OperationalError, ProgrammingError, LookupError):
+			# DB not ready yet: fresh install, manage.py migrate, or app not registered.
 			pass
+		except Exception:
+			logger.warning(
+				'sitesettings: unexpected error while populating ALLOWED_HOSTS/CSRF_TRUSTED_ORIGINS',
+				exc_info=True,
+			)

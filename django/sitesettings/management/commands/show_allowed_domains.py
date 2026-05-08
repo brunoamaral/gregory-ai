@@ -15,6 +15,7 @@ import warnings
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand
+from django.db.utils import OperationalError, ProgrammingError
 
 from sitesettings.models import CustomSetting
 
@@ -24,7 +25,7 @@ class Command(BaseCommand):
 
 	def add_arguments(self, parser):
 		parser.add_argument(
-			'--verbose', '-v2',
+			'--verbose',
 			action='store_true',
 			default=False,
 			help='Show each domain with its source (Site, api_domain, allowed_domains, or static).',
@@ -38,36 +39,47 @@ class Command(BaseCommand):
 		# csrf_sources: hostname -> source label (for CSRF_TRUSTED_ORIGINS annotation)
 		host_sources = {}
 		csrf_sources = {}
+		db_available = True
 
-		with warnings.catch_warnings():
-			warnings.simplefilter('ignore', RuntimeWarning)
+		try:
+			with warnings.catch_warnings():
+				warnings.simplefilter('ignore', RuntimeWarning)
 
-			for domain in Site.objects.values_list('domain', flat=True):
-				domain = domain.strip() if domain else ''
-				if domain:
-					host_sources[domain] = 'Site.domain'
-					csrf_sources[domain] = 'Site.domain'
+				for domain in Site.objects.values_list('domain', flat=True):
+					domain = domain.strip() if domain else ''
+					if domain:
+						host_sources[domain] = 'Site.domain'
+						csrf_sources[domain] = 'Site.domain'
 
-			for api_domain in CustomSetting.objects.exclude(api_domain='').values_list('api_domain', flat=True):
-				api_domain = api_domain.strip() if api_domain else ''
-				if api_domain:
-					host_sources.setdefault(api_domain, 'CustomSetting.api_domain')
-					csrf_sources.setdefault(api_domain, 'CustomSetting.api_domain')
+				for api_domain in CustomSetting.objects.exclude(api_domain='').values_list('api_domain', flat=True):
+					api_domain = api_domain.strip() if api_domain else ''
+					if api_domain:
+						host_sources.setdefault(api_domain, 'CustomSetting.api_domain')
+						csrf_sources.setdefault(api_domain, 'CustomSetting.api_domain')
 
-			for raw in CustomSetting.objects.exclude(allowed_domains='').values_list('allowed_domains', flat=True):
-				for part in raw.split(','):
-					domain = part.strip()
-					if domain and '.' in domain:
-						host_sources.setdefault(domain, 'CustomSetting.allowed_domains')
+				for raw in CustomSetting.objects.exclude(allowed_domains='').values_list('allowed_domains', flat=True):
+					for part in raw.split(','):
+						domain = part.strip()
+						if domain and '.' in domain:
+							host_sources.setdefault(domain, 'CustomSetting.allowed_domains')
 
-			for raw in CustomSetting.objects.exclude(csrf_trusted_origins='').values_list('csrf_trusted_origins', flat=True):
-				for part in raw.split(','):
-					origin = part.strip()
-					if not origin:
-						continue
-					hostname = origin.removeprefix('https://').removeprefix('http://')
-					if '.' in hostname:
-						csrf_sources.setdefault(hostname, 'CustomSetting.csrf_trusted_origins')
+				for raw in CustomSetting.objects.exclude(csrf_trusted_origins='').values_list('csrf_trusted_origins', flat=True):
+					for part in raw.split(','):
+						origin = part.strip()
+						if not origin:
+							continue
+						hostname = origin.removeprefix('https://').removeprefix('http://')
+						if '.' in hostname:
+							csrf_sources.setdefault(hostname, 'CustomSetting.csrf_trusted_origins')
+
+		except (OperationalError, ProgrammingError):
+			db_available = False
+			self.stderr.write(self.style.WARNING(
+				'Database unavailable or not yet migrated; showing static settings only.'
+			))
+		except Exception as exc:
+			db_available = False
+			self.stderr.write(self.style.WARNING(f'Could not query database: {exc}'))
 
 		self.stdout.write(self.style.SUCCESS('\n=== ALLOWED_HOSTS ==='))
 		for host in settings.ALLOWED_HOSTS:
@@ -86,7 +98,7 @@ class Command(BaseCommand):
 			else:
 				self.stdout.write(f'  {origin}')
 
-		db_count = len(set(host_sources) | set(csrf_sources))
+		db_count = len(set(host_sources) | set(csrf_sources)) if db_available else 0
 		self.stdout.write('')
 		self.stdout.write(
 			f'Total: {len(settings.ALLOWED_HOSTS)} ALLOWED_HOSTS, '
