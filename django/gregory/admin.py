@@ -94,6 +94,25 @@ class ArticleOrganizationFilter(admin.SimpleListFilter):
 		return queryset
 
 
+class SourceOrganizationFilter(admin.SimpleListFilter):
+	"""Filter sources by organisation (via team__organization)."""
+	title = 'organisation'
+	parameter_name = 'organisation'
+
+	def lookups(self, request, model_admin):
+		if request.user.is_superuser:
+			orgs = Organization.objects.all().order_by('name')
+		else:
+			user_org_ids = get_user_organizations(request.user)
+			orgs = Organization.objects.filter(id__in=user_org_ids).order_by('name')
+		return [(org.pk, org.name) for org in orgs]
+
+	def queryset(self, request, queryset):
+		if self.value():
+			return queryset.filter(team__organization__id=self.value())
+		return queryset
+
+
 class OrganizationFilterMixin:
 	"""
 	Mixin to restrict admin queryset visibility based on user's organization.
@@ -598,6 +617,7 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator', 'has_keyword_filter']
 	list_filter = [
 		'active', 'source_for', 'method', SourceHealthFilter,
+		SourceOrganizationFilter,
 		('team', OrganizationRestrictedFieldListFilter),
 		('subject', OrganizationRestrictedFieldListFilter),
 	]
