@@ -170,7 +170,7 @@ class Command(BaseCommand):
 			elif sort_order == 'date':
 				# DATE SORT MODE: include all subject-matched articles (no ML filtering), ordered newest first.
 				if debug:
-					self.stdout.write(self.style.NOTICE(f"DATE SORT MODE: Skipping ML/manual relevance filter for list '{digest_list.list_name}'"))
+					self.stdout.write(self.style.NOTICE(f"DATE SORT MODE: Skipping ML relevance filtering for list '{digest_list.list_name}' but still excluding articles manually tagged as not relevant for ALL their subjects in this list"))
 				base_articles = Articles.objects.filter(
 					subjects__in=digest_list.subjects.all(),
 					discovery_date__gte=now() - timedelta(days=days_to_look_back)
