@@ -155,3 +155,32 @@ Reference: [ml-consensus.md](ml-consensus.md)
 The change takes effect immediately on the next digest send and on `/articles/?relevant=true` API calls.
 
 Reference: [ml-consensus.md](ml-consensus.md)
+
+---
+
+## How do I choose a sort order for a weekly digest list?
+
+Each digest list has an **Article Sort Order** setting with two options:
+
+| Mode | Behaviour |
+|---|---|
+| `relevancy` (default) | Only articles that pass ML consensus or are manually marked relevant are included. Ranked by confidence score. |
+| `date` | All articles matching the list's subjects are included (no ML filtering), ordered by discovery date newest first. Manually excluded articles (marked not-relevant for all their subjects) are still suppressed. |
+
+**To change the sort order:**
+
+1. Go to Django admin → **Subscriptions > Lists**.
+2. Open the list you want to configure.
+3. Under **Content Settings**, change **Article Sort Order**.
+4. Save.
+
+> When **Date** mode is selected, the **ML Threshold** field is greyed out in the admin — it has no effect in this mode.
+
+**To preview the effect before the next send:**
+
+```bash
+# Show what would be sent in date mode (no emails sent)
+docker exec gregory python manage.py send_weekly_summary --dry-run --debug --days 30
+```
+
+The `--days` flag controls the lookback window; articles older than N days are excluded regardless of sort order.
