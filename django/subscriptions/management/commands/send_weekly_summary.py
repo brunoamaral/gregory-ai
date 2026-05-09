@@ -30,15 +30,25 @@ class Command(BaseCommand):
 		Return a list of PKs from base_qs, excluding articles that are manually
 		tagged as not-relevant for ALL of their subjects that appear in digest_list.
 		Articles with no relevance records are always included.
+
+		Uses prefetch_related to load subjects and relevance records in bulk,
+		avoiding N+1 / N*M queries.
 		"""
-		list_subject_ids = digest_list.subjects.values_list('id', flat=True)
+		list_subject_ids = set(digest_list.subjects.values_list('id', flat=True))
+		# Prefetch both relations so the inner loop hits no extra queries.
+		articles = base_qs.prefetch_related('subjects', 'article_subject_relevances')
 		filtered_pks = []
-		for article in base_qs:
-			article_list_subjects = article.subjects.filter(id__in=list_subject_ids)
+		for article in articles:
+			# In-memory filter: only subjects shared with this digest list.
+			article_list_subjects = [s for s in article.subjects.all() if s.pk in list_subject_ids]
 			explicit_irrelevant_count = 0
 			total_relevance_records = 0
 			for subject in article_list_subjects:
-				relevance = article.article_subject_relevances.filter(subject=subject).first()
+				# Use the prefetch cache — no extra query per subject.
+				relevance = next(
+					(r for r in article.article_subject_relevances.all() if r.subject_id == subject.pk),
+					None,
+				)
 				if relevance is not None:
 					total_relevance_records += 1
 					if relevance.is_relevant is False:
