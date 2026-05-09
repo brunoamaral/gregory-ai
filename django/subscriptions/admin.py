@@ -894,6 +894,10 @@ class ListsAdmin(admin.ModelAdmin):
 	inlines = [ListSubscriberInline]
 	filter_horizontal = ['subjects', 'latest_research_categories']
 	actions = ['reassign_to_team_action']
+
+	class Media:
+		js = ('subscriptions/admin/list_sort_toggle.js',)
+
 	fieldsets = [
 		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team', 'site']}),
 		('Email Header', {
@@ -902,9 +906,10 @@ class ListsAdmin(admin.ModelAdmin):
 		}),
 		('Email Types', {'fields': ['admin_summary', 'weekly_digest', 'clinical_trials_notifications']}),
 		('Content Settings', {
-			'fields': ['article_limit', 'ml_threshold'],
+			'fields': ['article_sort_order', 'article_limit', 'ml_threshold'],
 			'description': 'Configure content limits and ML prediction thresholds for weekly digest emails. '
-						'The ML threshold determines the minimum confidence level required for ML predictions to be considered relevant.'
+						'The ML threshold determines the minimum confidence level required for ML predictions to be considered relevant. '
+						'When sort order is set to "Date", the ML threshold is not used for article selection.'
 		}),
 		('Main Content', {
 			'fields': ['subjects'],
