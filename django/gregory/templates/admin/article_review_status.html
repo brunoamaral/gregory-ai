@@ -332,6 +332,20 @@
       font-weight: 600;
       font-size: 14px;
       line-height: 1.4;
+      text-decoration: none;
+    }
+
+    .article-title:hover {
+      text-decoration: underline;
+      color: #2563eb;
+    }
+
+    .article-title .ext-icon {
+      display: inline-block;
+      margin-left: 4px;
+      font-size: 11px;
+      opacity: 0.6;
+      vertical-align: middle;
     }
 
     /* Discovery date */
@@ -630,7 +644,9 @@
                        class="article-checkbox" {% if item.is_relevant is not None %}data-reviewed="true"{% endif %}>
               </td>
               <td>
-                <span class="article-title">{{ item.article.title }}</span>
+                <a class="article-title" href="{{ item.article.link }}" target="_blank" rel="noopener noreferrer">
+                  {{ item.article.title }}<span class="ext-icon">&#8599;</span>
+                </a>
               </td>
               <td>
                 <span class="date-text">{{ item.article.discovery_date|date:"M d, Y" }}</span>
