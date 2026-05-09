@@ -12,13 +12,15 @@
 		var thresholdFormRow = thresholdRow.closest('.form-row') || thresholdRow.parentElement;
 
 		if (isDateMode) {
-			thresholdRow.disabled = true;
+			thresholdRow.readOnly = true;
+			thresholdRow.setAttribute('aria-disabled', 'true');
 			if (thresholdFormRow) {
 				thresholdFormRow.style.opacity = '0.4';
 				thresholdFormRow.style.pointerEvents = 'none';
 			}
 		} else {
-			thresholdRow.disabled = false;
+			thresholdRow.readOnly = false;
+			thresholdRow.removeAttribute('aria-disabled');
 			if (thresholdFormRow) {
 				thresholdFormRow.style.opacity = '';
 				thresholdFormRow.style.pointerEvents = '';
