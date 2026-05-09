@@ -23,6 +23,31 @@ from django.utils.timezone import now
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 class Command(BaseCommand):
+
+	@staticmethod
+	def _filter_articles_excluding_all_irrelevant(base_qs, digest_list):
+		"""
+		Return a list of PKs from base_qs, excluding articles that are manually
+		tagged as not-relevant for ALL of their subjects that appear in digest_list.
+		Articles with no relevance records are always included.
+		"""
+		list_subject_ids = digest_list.subjects.values_list('id', flat=True)
+		filtered_pks = []
+		for article in base_qs:
+			article_list_subjects = article.subjects.filter(id__in=list_subject_ids)
+			explicit_irrelevant_count = 0
+			total_relevance_records = 0
+			for subject in article_list_subjects:
+				relevance = article.article_subject_relevances.filter(subject=subject).first()
+				if relevance is not None:
+					total_relevance_records += 1
+					if relevance.is_relevant is False:
+						explicit_irrelevant_count += 1
+			if total_relevance_records > 0 and explicit_irrelevant_count == total_relevance_records:
+				continue
+			filtered_pks.append(article.pk)
+		return filtered_pks
+
 	help = '''Sends a weekly digest email for all weekly digest lists.
 	
 	The ML prediction threshold is now configured per list in the admin interface,
@@ -76,7 +101,7 @@ class Command(BaseCommand):
 		if debug:
 			self.stdout.write(self.style.NOTICE(f"Running with days: {days_to_look_back}, all_articles: {all_articles}"))
 			if not all_articles:
-				self.stdout.write(self.style.NOTICE(f"Using ML consensus logic with per-list threshold configuration"))
+				self.stdout.write(self.style.NOTICE(f"Sort order determined per-list; ML consensus logic used when sort_order='relevancy'"))
 		
 		if dry_run:
 			self.stdout.write(self.style.WARNING("DRY RUN MODE: No emails will be sent and no records will be updated"))
@@ -92,8 +117,9 @@ class Command(BaseCommand):
 			return
 
 		for digest_list in weekly_digest_lists:
-			# Get ML threshold from the list configuration
+			# Get ML threshold and sort order from the list configuration
 			threshold = digest_list.ml_threshold
+			sort_order = digest_list.article_sort_order
 			
 			# Fetch the team directly from the list
 			team = digest_list.team  # Assumes Lists has a ForeignKey to Team
@@ -102,7 +128,7 @@ class Command(BaseCommand):
 			if debug:
 				self.stdout.write(
 					self.style.NOTICE(
-						f"Processing list '{digest_list.list_name}' - Using ML threshold: {threshold} (configured for this list)"
+						f"Processing list '{digest_list.list_name}' - sort_order={sort_order}, ML threshold={threshold}"
 					)
 				)
 			
@@ -128,76 +154,38 @@ class Command(BaseCommand):
 			self.stdout.write(self.style.NOTICE(f"Looking for articles for list '{digest_list.list_name}'..."))
 			
 			if all_articles:
-				# When --all-articles flag is used, get all articles for the subjects regardless of ML predictions or manual review
-				# BUT exclude articles manually tagged as not relevant for ALL subjects they're associated with in this list
+				# --all-articles CLI flag: include everything regardless of ML/manual, ordered newest first.
 				base_articles = Articles.objects.filter(
 					subjects__in=digest_list.subjects.all(),
 					discovery_date__gte=now() - timedelta(days=days_to_look_back)
 				).distinct()
-				
-				# Filter out articles that are manually tagged as not relevant for ALL subjects they're associated with in this list
-				filtered_articles = []
-				for article in base_articles:
-					# Get the subjects this article belongs to that are also in this digest list
-					article_list_subjects = article.subjects.filter(id__in=digest_list.subjects.all())
-					
-					# Check manual relevance for each subject this article is associated with in this list
-					should_include = True
-					explicit_irrelevant_count = 0
-					total_relevance_records = 0
-					
-					for subject in article_list_subjects:
-						relevance = article.article_subject_relevances.filter(subject=subject).first()
-						if relevance is not None:
-							total_relevance_records += 1
-							if relevance.is_relevant is False:
-								explicit_irrelevant_count += 1
-					
-					# Exclude article only if ALL of its subjects in this list have been manually tagged as not relevant
-					if total_relevance_records > 0 and explicit_irrelevant_count == total_relevance_records:
-						should_include = False
-					
-					if should_include:
-						filtered_articles.append(article.pk)
-				
-				articles = Articles.objects.filter(pk__in=filtered_articles).order_by('-discovery_date')
+				filtered_pks = self._filter_articles_excluding_all_irrelevant(base_articles, digest_list)
+				articles = Articles.objects.filter(pk__in=filtered_pks).order_by('-discovery_date')
 				self.stdout.write(self.style.NOTICE(f"ALL ARTICLES MODE: Found {articles.count()} total articles (excluding articles manually tagged as not relevant for ALL their subjects in this list)"))
 				
+			elif sort_order == 'date':
+				# DATE SORT MODE: include all subject-matched articles (no ML filtering), ordered newest first.
+				if debug:
+					self.stdout.write(self.style.NOTICE(f"DATE SORT MODE: Skipping ML/manual relevance filter for list '{digest_list.list_name}'"))
+				base_articles = Articles.objects.filter(
+					subjects__in=digest_list.subjects.all(),
+					discovery_date__gte=now() - timedelta(days=days_to_look_back)
+				).distinct()
+				filtered_pks = self._filter_articles_excluding_all_irrelevant(base_articles, digest_list)
+				articles = Articles.objects.filter(pk__in=filtered_pks).order_by('-discovery_date')
+				self.stdout.write(self.style.NOTICE(f"DATE SORT MODE: Found {articles.count()} total articles (excluding articles manually tagged as not relevant for ALL their subjects in this list)"))
+				
 			else:
-				# Standard filtering: manually reviewed OR ML-relevant based on consensus settings
-				# First, get articles by subject, excluding articles manually tagged as not relevant for ALL their subjects in this list
+				# RELEVANCY MODE (default): manually reviewed OR ML-relevant based on consensus settings.
+				if debug:
+					self.stdout.write(self.style.NOTICE(f"RELEVANCY SORT MODE: Using ML consensus logic with threshold={threshold}"))
 				base_subject_articles = Articles.objects.filter(
 					subjects__in=digest_list.subjects.all(),
 					discovery_date__gte=now() - timedelta(days=days_to_look_back)
 				).distinct()
-				
-				# Apply smart filtering logic for manual relevance
-				filtered_article_ids = []
-				for article in base_subject_articles:
-					# Get the subjects this article belongs to that are also in this digest list
-					article_list_subjects = article.subjects.filter(id__in=digest_list.subjects.all())
-					
-					# Check manual relevance for each subject this article is associated with in this list
-					should_include = True
-					explicit_irrelevant_count = 0
-					total_relevance_records = 0
-					
-					for subject in article_list_subjects:
-						relevance = article.article_subject_relevances.filter(subject=subject).first()
-						if relevance is not None:
-							total_relevance_records += 1
-							if relevance.is_relevant is False:
-								explicit_irrelevant_count += 1
-					
-					# Exclude article only if ALL of its subjects in this list have been manually tagged as not relevant
-					if total_relevance_records > 0 and explicit_irrelevant_count == total_relevance_records:
-						should_include = False
-					
-					if should_include:
-						filtered_article_ids.append(article.pk)
-				
+				filtered_article_ids = self._filter_articles_excluding_all_irrelevant(base_subject_articles, digest_list)
 				subject_articles = Articles.objects.filter(pk__in=filtered_article_ids)
-				self.stdout.write(self.style.NOTICE(f"Found {subject_articles.count()} articles by subject (excluding articles manually tagged as not relevant for ALL their subjects in this list)"))
+				self.stdout.write(self.style.NOTICE(f"RELEVANCY SORT MODE: Found {subject_articles.count()} articles by subject (after excluding articles manually tagged as not relevant for ALL their subjects in this list)"))
 				
 				# Then, get manually reviewed articles (only those tagged as relevant for at least one subject)
 				manual_reviewed = Articles.objects.filter(
@@ -325,11 +313,12 @@ class Command(BaseCommand):
 				# Handle both QuerySet and list cases
 				articles_count = len(unsent_articles) if isinstance(unsent_articles, list) else unsent_articles.count()
 				if articles_count > article_limit:
-					if all_articles:
-						# When using --all-articles, order by discovery date (newest first) only
+					if all_articles or sort_order == 'date':
+						# Date-ordered modes: slice newest first
 						limited_articles = unsent_articles.order_by('-discovery_date')[:article_limit]
 						if debug:
-							self.stdout.write(self.style.NOTICE(f"Applied article limit in ALL ARTICLES mode: showing {article_limit} most recent articles out of {articles_count} available"))
+							mode_label = 'ALL ARTICLES' if all_articles else 'DATE SORT'
+							self.stdout.write(self.style.NOTICE(f"Applied article limit in {mode_label} mode: showing {article_limit} most recent articles out of {articles_count} available"))
 					else:
 						# Standard mode: Order by manual relevance first, then ML consensus count, then discovery date
 						# Prioritize manually relevant articles, then those with more ML model agreement
@@ -499,7 +488,12 @@ class Command(BaseCommand):
 
 				if dry_run:
 					# In dry-run mode, just log what would be sent without actually sending
-					mode_info = "ALL ARTICLES mode" if all_articles else f"ML consensus mode (threshold >= {threshold})"
+					if all_articles:
+						mode_info = "ALL ARTICLES mode"
+					elif sort_order == 'date':
+						mode_info = "DATE SORT mode"
+					else:
+						mode_info = f"RELEVANCY mode (ML consensus, threshold >= {threshold})"
 					self.stdout.write(self.style.SUCCESS(f'[DRY RUN] Would send weekly digest email to {subscriber.email} for list "{digest_list.list_name}" ({mode_info})'))
 					self.stdout.write(self.style.NOTICE(f'  - Subject: {email_subject}'))
 					# Show the actual articles that would be sent based on content organizer
