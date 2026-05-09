@@ -12,18 +12,18 @@
 		var thresholdFormRow = thresholdRow.closest('.form-row') || thresholdRow.parentElement;
 
 		if (isDateMode) {
-			thresholdRow.readOnly = true;
+			thresholdRow.disabled = true;
+			thresholdRow.tabIndex = -1;
 			thresholdRow.setAttribute('aria-disabled', 'true');
 			if (thresholdFormRow) {
 				thresholdFormRow.style.opacity = '0.4';
-				thresholdFormRow.style.pointerEvents = 'none';
 			}
 		} else {
-			thresholdRow.readOnly = false;
+			thresholdRow.disabled = false;
+			thresholdRow.removeAttribute('tabindex');
 			thresholdRow.removeAttribute('aria-disabled');
 			if (thresholdFormRow) {
 				thresholdFormRow.style.opacity = '';
-				thresholdFormRow.style.pointerEvents = '';
 			}
 		}
 	}
