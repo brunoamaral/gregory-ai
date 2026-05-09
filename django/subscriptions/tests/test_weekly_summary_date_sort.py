@@ -267,10 +267,12 @@ class TestEmailContentOrganizerDateMode(TestCase):
 		return lst
 
 	def _make_article(self, title, days_ago):
+		doi = f"10.8888/{title.replace(' ', '-').lower()}"
 		article = Articles.objects.create(
 			title=title,
 			discovery_date=timezone.now() - timedelta(days=days_ago),
-			doi=f"10.8888/{title.replace(' ', '-').lower()}",
+			doi=doi,
+			link=f"https://doi.org/{doi}",
 		)
 		article.subjects.add(self.subject)
 		return article
