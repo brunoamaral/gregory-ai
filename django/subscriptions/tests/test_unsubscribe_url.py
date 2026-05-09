@@ -3,15 +3,18 @@ Tests for the unsubscribe_base_url logic in send_weekly_summary.
 
 The command derives the URL as:
 
-    api_domain           = customsettings.api_domain or site.domain
-    scheme               = 'http' if api_domain in ('localhost', '127.0.0.1') else 'https'
-    unsubscribe_base_url = f"{scheme}://{api_domain}"
+    scheme               = 'http' if site.domain in ('localhost', '127.0.0.1') else 'https'
+    unsubscribe_base_url = f"{scheme}://{site.domain}"
+
+The footer always uses the domain from Lists.site, ensuring consistency with
+the domain the distribution list is explicitly linked to. The CustomSetting
+api_domain field is no longer used for unsubscribe links.
 
 Scenarios:
-1. api_domain set on CustomSetting  → that domain is used with https://
-2. api_domain empty / not set       → falls back to site.domain with https://
-3. api_domain == 'localhost'        → http:// scheme
-4. api_domain == '127.0.0.1'       → http:// scheme
+1. api_domain set on CustomSetting  → ignored; site.domain is used
+2. api_domain empty / not set       → site.domain used (same as before)
+3. site.domain == 'localhost'       → http:// scheme
+4. site.domain == '127.0.0.1'      → http:// scheme
 """
 import os
 import django
@@ -127,8 +130,8 @@ class TestUnsubscribeBaseUrl(TestCase):
 		return_value=("test-token", "https://api.postmarkapp.com/email"),
 	)
 	@patch("subscriptions.management.commands.send_weekly_summary.send_email")
-	def test_api_domain_used_when_set(self, mock_send_email, _mock_creds):
-		"""When api_domain is set, unsubscribe links use that domain with https://."""
+	def test_api_domain_ignored_site_domain_always_used(self, mock_send_email, _mock_creds):
+		"""api_domain is no longer used for unsubscribe links; site.domain is always used."""
 		self.custom_settings.api_domain = "api.example.com"
 		self.custom_settings.save()
 
@@ -136,9 +139,14 @@ class TestUnsubscribeBaseUrl(TestCase):
 
 		html = self._captured_html(mock_send_email)
 		self.assertIn(
+			"https://testserver.example.com/subscriptions/unsubscribe/",
+			html,
+			"Unsubscribe link should always use site.domain, not api_domain",
+		)
+		self.assertNotIn(
 			"https://api.example.com/subscriptions/unsubscribe/",
 			html,
-			"Unsubscribe link should use api_domain with https://",
+			"Unsubscribe link must NOT use api_domain",
 		)
 
 	@patch(
@@ -146,8 +154,8 @@ class TestUnsubscribeBaseUrl(TestCase):
 		return_value=("test-token", "https://api.postmarkapp.com/email"),
 	)
 	@patch("subscriptions.management.commands.send_weekly_summary.send_email")
-	def test_site_domain_fallback_when_api_domain_empty(self, mock_send_email, _mock_creds):
-		"""When api_domain is empty, unsubscribe links fall back to site.domain."""
+	def test_site_domain_used_when_api_domain_empty(self, mock_send_email, _mock_creds):
+		"""When api_domain is empty, unsubscribe links use site.domain."""
 		self.custom_settings.api_domain = ""
 		self.custom_settings.save()
 
@@ -157,7 +165,7 @@ class TestUnsubscribeBaseUrl(TestCase):
 		self.assertIn(
 			"https://testserver.example.com/subscriptions/unsubscribe/",
 			html,
-			"Unsubscribe link should fall back to site.domain when api_domain is empty",
+			"Unsubscribe link should use site.domain",
 		)
 
 	@patch(
@@ -166,9 +174,9 @@ class TestUnsubscribeBaseUrl(TestCase):
 	)
 	@patch("subscriptions.management.commands.send_weekly_summary.send_email")
 	def test_http_scheme_for_localhost(self, mock_send_email, _mock_creds):
-		"""When api_domain is 'localhost', the scheme must be http://."""
-		self.custom_settings.api_domain = "localhost"
-		self.custom_settings.save()
+		"""When site.domain is 'localhost', the scheme must be http://."""
+		self.site.domain = "localhost"
+		self.site.save()
 
 		self._run(mock_send_email)
 
@@ -190,9 +198,9 @@ class TestUnsubscribeBaseUrl(TestCase):
 	)
 	@patch("subscriptions.management.commands.send_weekly_summary.send_email")
 	def test_http_scheme_for_loopback_ip(self, mock_send_email, _mock_creds):
-		"""When api_domain is '127.0.0.1', the scheme must be http://."""
-		self.custom_settings.api_domain = "127.0.0.1"
-		self.custom_settings.save()
+		"""When site.domain is '127.0.0.1', the scheme must be http://."""
+		self.site.domain = "127.0.0.1"
+		self.site.save()
 
 		self._run(mock_send_email)
 

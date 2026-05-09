@@ -398,10 +398,11 @@ class Command(BaseCommand):
 				)
 
 				# Inject unsubscribe context for the footer template
-				_api_domain = getattr(customsettings, 'api_domain', '') or site.domain
-				_scheme = 'https' if _api_domain not in ('localhost', '127.0.0.1') else 'http'
+				# Always use site.domain (the domain the list is linked to) so that
+				# all footer links are consistent with Lists.site.
+				_scheme = 'https' if site.domain not in ('localhost', '127.0.0.1') else 'http'
 				summary_context['list_id'] = digest_list.list_id
-				summary_context['unsubscribe_base_url'] = f"{_scheme}://{_api_domain}"
+				summary_context['unsubscribe_base_url'] = f"{_scheme}://{site.domain}"
 				summary_context['header_title'] = digest_list.header_title or ''
 				summary_context['header_tagline'] = digest_list.header_tagline or ''
 				summary_context['show_header_tagline'] = digest_list.show_header_tagline

@@ -1178,10 +1178,10 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if subscriber:
 			context['subscriber'] = subscriber
 		if site:
-			_api_domain = getattr(custom_settings, 'api_domain', '') if custom_settings else ''
-			_api_domain = _api_domain or site.domain
-			_scheme = 'https' if _api_domain not in ('localhost', '127.0.0.1') else 'http'
-			context['unsubscribe_base_url'] = f"{_scheme}://{_api_domain}"
+			# Always use site.domain (the domain the list is linked to) so that
+			# all footer links are consistent with Lists.site.
+			_scheme = 'https' if site.domain not in ('localhost', '127.0.0.1') else 'http'
+			context['unsubscribe_base_url'] = f"{_scheme}://{site.domain}"
 			context['site'] = site
 		if list_id:
 			context['list_id'] = list_id

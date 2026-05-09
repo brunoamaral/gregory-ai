@@ -157,9 +157,9 @@ def _build_preview_context(request, template_name):
 		context['header_title'] = list_obj.header_title or ''
 		context['header_tagline'] = list_obj.header_tagline or ''
 		context['show_header_tagline'] = list_obj.show_header_tagline
-	scheme = 'https'
-	domain = getattr(site, 'domain', 'gregory-ms.com') or 'gregory-ms.com'
-	context['unsubscribe_base_url'] = f"{scheme}://{domain}"
+	_domain = getattr(site, 'domain', '') or ''
+	_scheme = 'https' if _domain not in ('localhost', '127.0.0.1') else 'http'
+	context['unsubscribe_base_url'] = f"{_scheme}://{_domain}" if _domain else ''
 	context['subscriber'] = subscriber
 
 	return context
