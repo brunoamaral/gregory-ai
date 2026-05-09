@@ -92,6 +92,7 @@ class TestWeeklySummaryDateSort(TestCase):
 			title=title,
 			discovery_date=timezone.now() - timedelta(days=days_ago),
 			doi=doi or f"10.9999/{title.replace(' ', '-').lower()}",
+			link=f"https://example.com/articles/{title.replace(' ', '-').lower()}",
 		)
 		article.subjects.add(self.subject)
 		return article
