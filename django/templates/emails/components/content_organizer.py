@@ -115,6 +115,20 @@ class EmailContentOrganizer:
     
     def _organize_weekly_articles(self, articles, subscriber, list_obj):
         """Organize articles for weekly summary emails."""
+        # Date mode: flat list ordered by discovery_date, no featured/regular split.
+        if getattr(list_obj, 'article_sort_order', 'relevancy') == 'date':
+            if hasattr(articles, 'order_by'):
+                sorted_list = list(articles.order_by('-discovery_date'))
+            else:
+                sorted_list = sorted(articles, key=lambda x: x.discovery_date, reverse=True)
+            return {
+                'featured_articles': [],
+                'regular_articles': sorted_list,
+                'total_count': len(sorted_list),
+                'high_confidence_count': 0,
+            }
+
+        # Relevancy mode: split into high-confidence (featured) and regular.
         # Get high-confidence articles first
         high_confidence_articles = self._filter_high_confidence(articles)
         
