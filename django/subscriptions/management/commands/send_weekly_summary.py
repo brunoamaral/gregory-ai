@@ -320,33 +320,26 @@ class Command(BaseCommand):
 					if all_articles or sort_order == 'date':
 						# Date-ordered modes: slice newest first
 						limited_articles = unsent_articles.order_by('-discovery_date')[:article_limit]
-					mode_label = 'ALL ARTICLES' if all_articles else 'DATE SORT'
-					self.stdout.write(self.style.WARNING(
-						f"WARNING: List '{digest_list.list_name}' had {articles_count} articles in the "
-						f"{days_to_look_back}-day window; truncated to article_limit={article_limit}. "
-						f"Consider shortening lookback_days or raising article_limit if this is unintended."
-					))
-					if debug:
+						self.stdout.write(self.style.WARNING(
+							f"WARNING: List '{digest_list.list_name}' had {articles_count} articles in the "
+							f"{days_to_look_back}-day window; truncated to article_limit={article_limit}. "
+							f"Consider shortening lookback_days or raising article_limit if this is unintended."
+						))
+						if debug:
+							mode_label = 'ALL ARTICLES' if all_articles else 'DATE SORT'
 							self.stdout.write(self.style.NOTICE(f"Applied article limit in {mode_label} mode: showing {article_limit} most recent articles out of {articles_count} available"))
 					else:
-						# Standard mode: Order by manual relevance first, then ML consensus count, then discovery date
-						# Prioritize manually relevant articles, then those with more ML model agreement
+						# Relevancy mode: order by manual relevance first, then ML consensus count, then date
 						manual_relevant_ids = set(Articles.objects.filter(
 							pk__in=[a.pk for a in unsent_articles],
 							article_subject_relevances__is_relevant=True
 						).values_list('pk', flat=True))
-						
-						# Create a list with priority scoring for sorting
+
 						article_priorities = []
 						for article in unsent_articles:
-							# Calculate priority score
 							priority_score = 0
-							
-							# Manual relevance gets highest priority (1000 points)
 							if article.pk in manual_relevant_ids:
 								priority_score += 1000
-							
-							# ML consensus gets points based on number of models agreeing above threshold
 							for subject in article.subjects.filter(auto_predict=True):
 								predictions = article.ml_predictions_detail.filter(
 									subject=subject,
@@ -354,11 +347,9 @@ class Command(BaseCommand):
 									probability_score__gte=threshold
 								).values_list('algorithm', flat=True)
 								relevant_count = len(set(predictions)) if predictions else 0
-								priority_score += relevant_count * 100  # 100 points per agreeing model above threshold
-							
+								priority_score += relevant_count * 100
 							article_priorities.append((article, priority_score))
-						
-						# Sort by priority score (descending), then by discovery date (newest first)
+
 						article_priorities.sort(key=lambda x: (-x[1], -x[0].discovery_date.timestamp()))
 						limited_articles = [item[0] for item in article_priorities[:article_limit]]
 						self.stdout.write(self.style.WARNING(
@@ -368,11 +359,10 @@ class Command(BaseCommand):
 						))
 						if debug:
 							self.stdout.write(self.style.NOTICE(f"Applied article limit: showing {article_limit} highest-priority articles (manual + ML consensus >= {threshold}) out of {articles_count} available"))
-							# Show priority breakdown for top articles
 							for i, (article, score) in enumerate(article_priorities[:min(5, article_limit)]):
 								manual_flag = "✓" if article.pk in manual_relevant_ids else "✗"
 								self.stdout.write(self.style.NOTICE(f"  {i+1}. Score {score}: Manual {manual_flag} | {article.title[:40]}..."))
-					
+
 					# Convert to list to avoid "Cannot filter a query once a slice has been taken" error
 					unsent_articles = list(limited_articles)
 
