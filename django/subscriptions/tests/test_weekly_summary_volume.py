@@ -79,11 +79,12 @@ class TestWeeklySummaryVolume(TestCase):
 			},
 		)[0]
 
-	def _make_article(self, title, days_ago=0, doi=None):
+	def _make_article(self, title, days_ago=0, doi=None, link=None):
 		"""Create an article and force its discovery_date via .update() (bypasses auto_now_add)."""
 		article = Articles.objects.create(
 			title=title,
 			doi=doi or f"10.9999/{title.replace(' ', '-').lower()}",
+			link=link or f"https://example.com/articles/{title.replace(' ', '-').lower()}",
 		)
 		article.subjects.add(self.subject)
 		if days_ago:
