@@ -58,7 +58,7 @@ class Command(BaseCommand):
 	subjects they are associated with in the specific digest list.
 	
 	Options:
-	--days: Number of days to look back for articles (default: 30)
+	--days: Number of days to look back for articles. If omitted, each list uses its own `lookback_days` setting (default: 30).
 	--debug: Enable detailed debugging output
 	--dry-run: Simulate sending emails without actually sending them
 	--all-articles: Include all unsent articles regardless of ML predictions or manual review status, ordered by most recent (but still excludes articles not relevant for all their subjects)
@@ -73,8 +73,8 @@ class Command(BaseCommand):
 		parser.add_argument(
 			'--days',
 			type=int,
-			default=30,
-			help='Number of days to look back for articles (default: 30)'
+			default=None,
+			help='Override lookback window for all lists (days). If omitted, each list uses its own lookback_days setting.'
 		)
 		parser.add_argument(
 			'--debug',
@@ -93,13 +93,16 @@ class Command(BaseCommand):
 		)
 
 	def handle(self, *args, **options):
-		days_to_look_back = options['days']
+		cli_days_override = options['days']  # None if not passed by user
 		debug = options['debug']
 		dry_run = options['dry_run']
 		all_articles = options['all_articles']
 
 		if debug:
-			self.stdout.write(self.style.NOTICE(f"Running with days: {days_to_look_back}, all_articles: {all_articles}"))
+			if cli_days_override is not None:
+				self.stdout.write(self.style.NOTICE(f"Running with --days override: {cli_days_override}, all_articles: {all_articles}"))
+			else:
+				self.stdout.write(self.style.NOTICE(f"Running with per-list lookback_days, all_articles: {all_articles}"))
 			if not all_articles:
 				self.stdout.write(self.style.NOTICE(f"Sort order determined per-list; ML consensus logic used when sort_order='relevancy'"))
 		
@@ -117,9 +120,10 @@ class Command(BaseCommand):
 			return
 
 		for digest_list in weekly_digest_lists:
-			# Get ML threshold and sort order from the list configuration
+			# Get ML threshold, sort order, and lookback window from the list configuration
 			threshold = digest_list.ml_threshold
 			sort_order = digest_list.article_sort_order
+			days_to_look_back = cli_days_override if cli_days_override is not None else digest_list.lookback_days
 			
 			# Fetch the team directly from the list
 			team = digest_list.team  # Assumes Lists has a ForeignKey to Team
@@ -128,7 +132,7 @@ class Command(BaseCommand):
 			if debug:
 				self.stdout.write(
 					self.style.NOTICE(
-						f"Processing list '{digest_list.list_name}' - sort_order={sort_order}, ML threshold={threshold}"
+						f"Processing list '{digest_list.list_name}' - sort_order={sort_order}, ML threshold={threshold}, lookback={days_to_look_back}d"
 					)
 				)
 			
@@ -158,7 +162,7 @@ class Command(BaseCommand):
 				base_articles = Articles.objects.filter(
 					subjects__in=digest_list.subjects.all(),
 					discovery_date__gte=now() - timedelta(days=days_to_look_back)
-				).distinct()
+				).order_by('-discovery_date').distinct()
 				filtered_pks = self._filter_articles_excluding_all_irrelevant(base_articles, digest_list)
 				articles = Articles.objects.filter(pk__in=filtered_pks).order_by('-discovery_date')
 				self.stdout.write(self.style.NOTICE(f"ALL ARTICLES MODE: Found {articles.count()} total articles (excluding articles manually tagged as not relevant for ALL their subjects in this list)"))
@@ -170,7 +174,7 @@ class Command(BaseCommand):
 				base_articles = Articles.objects.filter(
 					subjects__in=digest_list.subjects.all(),
 					discovery_date__gte=now() - timedelta(days=days_to_look_back)
-				).distinct()
+				).order_by('-discovery_date').distinct()
 				filtered_pks = self._filter_articles_excluding_all_irrelevant(base_articles, digest_list)
 				articles = Articles.objects.filter(pk__in=filtered_pks).order_by('-discovery_date')
 				self.stdout.write(self.style.NOTICE(f"DATE SORT MODE: Found {articles.count()} total articles (excluding articles manually tagged as not relevant for ALL their subjects in this list)"))
@@ -182,7 +186,7 @@ class Command(BaseCommand):
 				base_subject_articles = Articles.objects.filter(
 					subjects__in=digest_list.subjects.all(),
 					discovery_date__gte=now() - timedelta(days=days_to_look_back)
-				).distinct()
+				).order_by('-discovery_date').distinct()
 				filtered_article_ids = self._filter_articles_excluding_all_irrelevant(base_subject_articles, digest_list)
 				subject_articles = Articles.objects.filter(pk__in=filtered_article_ids)
 				self.stdout.write(self.style.NOTICE(f"RELEVANCY SORT MODE: Found {subject_articles.count()} articles by subject (after excluding articles manually tagged as not relevant for ALL their subjects in this list)"))
@@ -316,8 +320,13 @@ class Command(BaseCommand):
 					if all_articles or sort_order == 'date':
 						# Date-ordered modes: slice newest first
 						limited_articles = unsent_articles.order_by('-discovery_date')[:article_limit]
-						if debug:
-							mode_label = 'ALL ARTICLES' if all_articles else 'DATE SORT'
+					mode_label = 'ALL ARTICLES' if all_articles else 'DATE SORT'
+					self.stdout.write(self.style.WARNING(
+						f"WARNING: List '{digest_list.list_name}' had {articles_count} articles in the "
+						f"{days_to_look_back}-day window; truncated to article_limit={article_limit}. "
+						f"Consider shortening lookback_days or raising article_limit if this is unintended."
+					))
+					if debug:
 							self.stdout.write(self.style.NOTICE(f"Applied article limit in {mode_label} mode: showing {article_limit} most recent articles out of {articles_count} available"))
 					else:
 						# Standard mode: Order by manual relevance first, then ML consensus count, then discovery date
@@ -352,7 +361,11 @@ class Command(BaseCommand):
 						# Sort by priority score (descending), then by discovery date (newest first)
 						article_priorities.sort(key=lambda x: (-x[1], -x[0].discovery_date.timestamp()))
 						limited_articles = [item[0] for item in article_priorities[:article_limit]]
-						
+						self.stdout.write(self.style.WARNING(
+							f"WARNING: List '{digest_list.list_name}' had {articles_count} articles in the "
+							f"{days_to_look_back}-day window; truncated to article_limit={article_limit}. "
+							f"Consider shortening lookback_days or raising article_limit if this is unintended."
+						))
 						if debug:
 							self.stdout.write(self.style.NOTICE(f"Applied article limit: showing {article_limit} highest-priority articles (manual + ML consensus >= {threshold}) out of {articles_count} available"))
 							# Show priority breakdown for top articles

@@ -906,7 +906,7 @@ class ListsAdmin(admin.ModelAdmin):
 		}),
 		('Email Types', {'fields': ['admin_summary', 'weekly_digest', 'clinical_trials_notifications']}),
 		('Content Settings', {
-			'fields': ['article_sort_order', 'article_limit', 'ml_threshold'],
+			'fields': ['article_sort_order', 'lookback_days', 'article_limit', 'ml_threshold'],
 			'description': 'Configure content limits and ML prediction thresholds for weekly digest emails. '
 						'The ML threshold determines the minimum confidence level required for ML predictions to be considered relevant. '
 						'When sort order is set to "Date", the ML threshold is not used for article selection.'
