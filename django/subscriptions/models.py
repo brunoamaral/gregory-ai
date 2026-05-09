@@ -35,6 +35,32 @@ class Lists(models.Model):
 		help_text="ML prediction confidence threshold (0.0-1.0). Only articles with ML predictions above this threshold will be considered relevant.",
 		verbose_name="ML Threshold for Relevance"
 	)
+	# Lookback window for weekly digest emails
+	lookback_days = models.PositiveIntegerField(
+		default=30,
+		validators=[MinValueValidator(1), MaxValueValidator(365)],
+		help_text=(
+			"How many days back to look for articles and trials in the weekly digest. "
+			"Common values: 8, 15, 30. Maximum 365."
+		),
+		verbose_name="Lookback Window (days)",
+	)
+	# Article sort order for weekly digest emails
+	ARTICLE_SORT_CHOICES = [
+		('relevancy', 'Relevancy (manual + ML consensus, ranked)'),
+		('date', 'Date (all subject-matched articles, newest first)'),
+	]
+	article_sort_order = models.CharField(
+		max_length=20,
+		choices=ARTICLE_SORT_CHOICES,
+		default='relevancy',
+		help_text=(
+			"How articles are selected and ordered in weekly digest emails. "
+			"'relevancy' applies ML/manual filtering and priority ranking. "
+			"'date' includes all subject-matched articles ordered by discovery date (newest first)."
+		),
+		verbose_name="Article Sort Order",
+	)
 	# Latest research categories
 	latest_research_categories = models.ManyToManyField(
 		'gregory.TeamCategory', 
