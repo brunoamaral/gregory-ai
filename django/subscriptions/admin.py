@@ -1180,8 +1180,10 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if site:
 			# Always use site.domain (the domain the list is linked to) so that
 			# all footer links are consistent with Lists.site.
-			_scheme = 'https' if site.domain not in ('localhost', '127.0.0.1') else 'http'
-			context['unsubscribe_base_url'] = f"{_scheme}://{site.domain}"
+			# Strip whitespace to guard against accidental spaces in Site.domain.
+			_domain = site.domain.strip()
+			_scheme = 'https' if _domain not in ('localhost', '127.0.0.1') else 'http'
+			context['unsubscribe_base_url'] = f"{_scheme}://{_domain}"
 			context['site'] = site
 		if list_id:
 			context['list_id'] = list_id

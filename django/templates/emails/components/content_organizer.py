@@ -423,8 +423,10 @@ class EmailRenderingPipeline:
             
             # Build optimized context
             # Derive site domain for URL fallbacks from the site linked to the list.
-            _site_domain = site.domain if site and site.domain and site.domain.strip() else ''
-            _site_url_base = f'https://{_site_domain}' if _site_domain else ''
+            # Strip whitespace to guard against accidental spaces in Site.domain.
+            _site_domain = site.domain.strip() if site and site.domain else ''
+            _site_scheme = 'http' if _site_domain in ('localhost', '127.0.0.1') else 'https'
+            _site_url_base = f'{_site_scheme}://{_site_domain}' if _site_domain else ''
 
             context = {
                 'email_type': email_type,
@@ -531,8 +533,10 @@ class EmailRenderingPipeline:
     
     def _get_fallback_context(self, email_type, subscriber, site, custom_settings):
         """Provide fallback context if optimization fails."""
-        _site_domain = site.domain if site and site.domain and site.domain.strip() else ''
-        _site_url_base = f'https://{_site_domain}' if _site_domain else ''
+        # Strip whitespace to guard against accidental spaces in Site.domain.
+        _site_domain = site.domain.strip() if site and site.domain else ''
+        _site_scheme = 'http' if _site_domain in ('localhost', '127.0.0.1') else 'https'
+        _site_url_base = f'{_site_scheme}://{_site_domain}' if _site_domain else ''
         base_context = {
             'email_type': email_type,
             'current_date': timezone.now(),

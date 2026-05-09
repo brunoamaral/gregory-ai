@@ -100,9 +100,11 @@ class Command(BaseCommand):
 				# Inject unsubscribe context for the footer template
 				# Always use site.domain (the domain the list is linked to) so that
 				# all footer links are consistent with Lists.site.
-				_scheme = 'https' if site.domain not in ('localhost', '127.0.0.1') else 'http'
+				# Strip whitespace to guard against accidental spaces in Site.domain.
+				_domain = site.domain.strip()
+				_scheme = 'https' if _domain not in ('localhost', '127.0.0.1') else 'http'
 				summary_context['list_id'] = lst.list_id
-				summary_context['unsubscribe_base_url'] = f"{_scheme}://{site.domain}"
+				summary_context['unsubscribe_base_url'] = f"{_scheme}://{_domain}"
 				summary_context['header_title'] = lst.header_title or ''
 				summary_context['header_tagline'] = lst.header_tagline or ''
 				summary_context['show_header_tagline'] = lst.show_header_tagline
