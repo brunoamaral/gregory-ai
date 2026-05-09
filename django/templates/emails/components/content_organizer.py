@@ -422,6 +422,12 @@ class EmailRenderingPipeline:
             )
             
             # Build optimized context
+            # Derive site domain for URL fallbacks from the site linked to the list.
+            # Strip whitespace to guard against accidental spaces in Site.domain.
+            _site_domain = site.domain.strip() if site and site.domain else ''
+            _site_scheme = 'http' if _site_domain in ('localhost', '127.0.0.1') else 'https'
+            _site_url_base = f'{_site_scheme}://{_site_domain}' if _site_domain else ''
+
             context = {
                 'email_type': email_type,
                 'current_date': timezone.now(),
@@ -430,14 +436,15 @@ class EmailRenderingPipeline:
                 'custom_settings': custom_settings,
                 'customsettings': custom_settings,  # Template compatibility
                 
-                # Site domain for URL construction (fallback logic same as send_weekly_summary.py)
-                'site_domain': site.domain if site and site.domain and site.domain.strip() else 'gregory-ms.com',
+                # Site domain for URL construction
+                'site_domain': _site_domain,
                 
                 # UTM parameters for link tracking
                 'utm_params': utm_params or {},
                 
-                # Footer context from CustomSetting
-                'website_url': getattr(custom_settings, 'website_url', ''),
+                # Footer context from CustomSetting, falling back to site domain when not set.
+                # This ensures footer links always reflect the domain the list is linked to.
+                'website_url': getattr(custom_settings, 'website_url', '') or _site_url_base,
                 'support_url': getattr(custom_settings, 'support_url', ''),
                 'about_url': getattr(custom_settings, 'about_url', ''),
                 'contact_url': getattr(custom_settings, 'contact_url', ''),
@@ -526,6 +533,10 @@ class EmailRenderingPipeline:
     
     def _get_fallback_context(self, email_type, subscriber, site, custom_settings):
         """Provide fallback context if optimization fails."""
+        # Strip whitespace to guard against accidental spaces in Site.domain.
+        _site_domain = site.domain.strip() if site and site.domain else ''
+        _site_scheme = 'http' if _site_domain in ('localhost', '127.0.0.1') else 'https'
+        _site_url_base = f'{_site_scheme}://{_site_domain}' if _site_domain else ''
         base_context = {
             'email_type': email_type,
             'current_date': timezone.now(),
@@ -543,7 +554,7 @@ class EmailRenderingPipeline:
             'optimization_enabled': False,
             'error_mode': True,
             'title': getattr(custom_settings, 'title', 'Gregory AI'),
-            'website_url': getattr(custom_settings, 'website_url', ''),
+            'website_url': getattr(custom_settings, 'website_url', '') or _site_url_base,
             'support_url': getattr(custom_settings, 'support_url', ''),
             'about_url': getattr(custom_settings, 'about_url', ''),
             'contact_url': getattr(custom_settings, 'contact_url', ''),
