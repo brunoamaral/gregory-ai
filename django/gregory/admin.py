@@ -75,8 +75,8 @@ class OrganizationRestrictedFieldListFilter(admin.RelatedFieldListFilter):
 		return filtered_choices
 
 
-class ArticleOrganizationFilter(admin.SimpleListFilter):
-	"""Filter articles by organisation (via teams__organization)."""
+class BaseOrganizationFilter(admin.SimpleListFilter):
+	"""Base filter that lists organisations scoped to the current user's access."""
 	title = 'organisation'
 	parameter_name = 'organisation'
 
@@ -87,6 +87,10 @@ class ArticleOrganizationFilter(admin.SimpleListFilter):
 			user_org_ids = get_user_organizations(request.user)
 			orgs = Organization.objects.filter(id__in=user_org_ids).order_by('name')
 		return [(org.pk, org.name) for org in orgs]
+
+
+class ArticleOrganizationFilter(BaseOrganizationFilter):
+	"""Filter articles by organisation (via teams M2M → organization)."""
 
 	def queryset(self, request, queryset):
 		if self.value():
@@ -94,22 +98,12 @@ class ArticleOrganizationFilter(admin.SimpleListFilter):
 		return queryset
 
 
-class SourceOrganizationFilter(admin.SimpleListFilter):
-	"""Filter sources by organisation (via team__organization)."""
-	title = 'organisation'
-	parameter_name = 'organisation'
-
-	def lookups(self, request, model_admin):
-		if request.user.is_superuser:
-			orgs = Organization.objects.all().order_by('name')
-		else:
-			user_org_ids = get_user_organizations(request.user)
-			orgs = Organization.objects.filter(id__in=user_org_ids).order_by('name')
-		return [(org.pk, org.name) for org in orgs]
+class SourceOrganizationFilter(BaseOrganizationFilter):
+	"""Filter sources by organisation (via team FK → organization)."""
 
 	def queryset(self, request, queryset):
 		if self.value():
-			return queryset.filter(team__organization__id=self.value())
+			return queryset.filter(team__organization_id=self.value())
 		return queryset
 
 
