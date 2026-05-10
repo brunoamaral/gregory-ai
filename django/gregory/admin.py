@@ -75,8 +75,8 @@ class OrganizationRestrictedFieldListFilter(admin.RelatedFieldListFilter):
 		return filtered_choices
 
 
-class ArticleOrganizationFilter(admin.SimpleListFilter):
-	"""Filter articles by organisation (via teams__organization)."""
+class BaseOrganizationFilter(admin.SimpleListFilter):
+	"""Base filter that lists organisations scoped to the current user's access."""
 	title = 'organisation'
 	parameter_name = 'organisation'
 
@@ -88,9 +88,22 @@ class ArticleOrganizationFilter(admin.SimpleListFilter):
 			orgs = Organization.objects.filter(id__in=user_org_ids).order_by('name')
 		return [(org.pk, org.name) for org in orgs]
 
+
+class ArticleOrganizationFilter(BaseOrganizationFilter):
+	"""Filter articles by organisation (via teams M2M → organization)."""
+
 	def queryset(self, request, queryset):
 		if self.value():
 			return queryset.filter(teams__organization__id=self.value()).distinct()
+		return queryset
+
+
+class SourceOrganizationFilter(BaseOrganizationFilter):
+	"""Filter sources by organisation (via team FK → organization)."""
+
+	def queryset(self, request, queryset):
+		if self.value():
+			return queryset.filter(team__organization_id=self.value())
 		return queryset
 
 
@@ -598,6 +611,7 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator', 'has_keyword_filter']
 	list_filter = [
 		'active', 'source_for', 'method', SourceHealthFilter,
+		SourceOrganizationFilter,
 		('team', OrganizationRestrictedFieldListFilter),
 		('subject', OrganizationRestrictedFieldListFilter),
 	]
