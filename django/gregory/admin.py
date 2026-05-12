@@ -896,6 +896,30 @@ class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmi
 
 		return super().delete_view(request, object_id, extra_context=extra_context)
 
+	def get_urls(self):
+		from django.urls import path
+		from .admin_views import (
+			subject_analytics_view,
+			subject_analytics_data,
+			subject_analytics_orgs,
+			subject_analytics_teams,
+			subject_analytics_subjects,
+		)
+		urls = super().get_urls()
+		custom_urls = [
+			path('analytics/', self.admin_site.admin_view(subject_analytics_view), name='gregory_subject_analytics'),
+			path('analytics/data/', self.admin_site.admin_view(subject_analytics_data), name='gregory_subject_analytics_data'),
+			path('analytics/orgs/', self.admin_site.admin_view(subject_analytics_orgs), name='gregory_subject_analytics_orgs'),
+			path('analytics/teams/', self.admin_site.admin_view(subject_analytics_teams), name='gregory_subject_analytics_teams'),
+			path('analytics/subjects/', self.admin_site.admin_view(subject_analytics_subjects), name='gregory_subject_analytics_subjects'),
+		]
+		return custom_urls + urls
+
+	def changelist_view(self, request, extra_context=None):
+		extra_context = extra_context or {}
+		extra_context['subject_analytics_url'] = reverse('admin:gregory_subject_analytics')
+		return super().changelist_view(request, extra_context=extra_context)
+
 
 class AuthorArticlesInline(admin.TabularInline):
 	model = Articles.authors.through
