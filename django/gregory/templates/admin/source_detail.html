@@ -224,118 +224,6 @@
       color: #fff;
     }
     .btn-primary:hover { background: #1e3a8a; color: #fff; text-decoration: none; }
-
-    /* ── Messages ── */
-    .messages { list-style: none; padding: 0; margin: 0 0 20px; }
-    .messages li {
-      padding: 10px 16px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 8px;
-      border: 1px solid transparent;
-    }
-    .messages .success { background: #f0fdf4; border-color: #86efac; color: #166534; }
-    .messages .error   { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
-    .messages .warning { background: #fffbeb; border-color: #fde68a; color: #92400e; }
-    .messages .info    { background: #eff6ff; border-color: #93c5fd; color: #1e40af; }
-
-    /* ── Edit form ── */
-    .form-section { margin-bottom: 24px; }
-
-    fieldset.form-section {
-      border: 1px solid #e5e7eb;
-      border-radius: 6px;
-      padding: 16px 20px;
-      margin: 0 0 24px;
-    }
-
-    .form-section-title {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      color: #6b7280;
-      margin: 0 0 16px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #f3f4f6;
-    }
-
-    fieldset.form-section legend.form-section-title {
-      padding: 0 8px;
-      margin-bottom: 12px;
-      border-bottom: none;
-    }
-
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-
-    .form-group { display: flex; flex-direction: column; gap: 4px; }
-    .form-group--full { grid-column: 1 / -1; }
-
-    .form-group--checkbox {
-      flex-direction: row;
-      align-items: center;
-      gap: 8px;
-      padding-top: 18px;
-    }
-
-    .form-group label {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #6b7280;
-    }
-
-    .form-group--checkbox label {
-      font-size: 13px;
-      font-weight: 500;
-      text-transform: none;
-      letter-spacing: 0;
-      color: #374151;
-      padding-top: 0;
-    }
-
-    .form-group input[type="text"],
-    .form-group input[type="url"],
-    .form-group select,
-    .form-group textarea {
-      padding: 8px 10px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 14px;
-      color: #111827;
-      background: #ffffff;
-      width: 100%;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-
-    .form-group input[type="text"]:focus,
-    .form-group input[type="url"]:focus,
-    .form-group select:focus,
-    .form-group textarea:focus {
-      outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
-    }
-
-    .form-group textarea { min-height: 80px; resize: vertical; }
-
-    .field-help { font-size: 11px; color: #9ca3af; margin-top: 2px; }
-    .field-error { font-size: 12px; color: #dc2626; margin-top: 3px; }
-
-    .form-actions {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      padding-top: 16px;
-      border-top: 1px solid #f3f4f6;
-      margin-top: 8px;
-    }
   </style>
 </head>
 <body>
@@ -351,14 +239,6 @@
 </div>
 
 <div class="page-body">
-
-  {% if messages %}
-  <ul class="messages">
-    {% for message in messages %}
-    <li class="{{ message.tags }}">{{ message }}</li>
-    {% endfor %}
-  </ul>
-  {% endif %}
 
   <!-- Health card -->
   <div class="card">
@@ -399,104 +279,10 @@
     </div>
   </div>
 
-  <!-- Edit source form -->
-  {% if can_edit and form %}
-  <div class="card">
-    <div class="card-title">Edit Source</div>
-    <form method="post">
-      {% csrf_token %}
-
-      <!-- Basic Information -->
-      <div class="form-section">
-        <div class="form-section-title">Basic Information</div>
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
-            {{ form.name }}
-            {% if form.name.errors %}<div class="field-error">{{ form.name.errors.as_text }}</div>{% endif %}
-          </div>
-          <div class="form-group">
-            <label for="{{ form.source_for.id_for_label }}">{{ form.source_for.label }}</label>
-            {{ form.source_for }}
-            {% if form.source_for.errors %}<div class="field-error">{{ form.source_for.errors.as_text }}</div>{% endif %}
-          </div>
-          <div class="form-group">
-            <label for="{{ form.method.id_for_label }}">{{ form.method.label }}</label>
-            {{ form.method }}
-            {% if form.method.errors %}<div class="field-error">{{ form.method.errors.as_text }}</div>{% endif %}
-          </div>
-          <div class="form-group form-group--checkbox">
-            <input type="checkbox" id="{{ form.active.id_for_label }}" name="active"{% if form.active.value %} checked{% endif %}>
-            <label for="{{ form.active.id_for_label }}">Active</label>
-          </div>
-          <div class="form-group form-group--full">
-            <label for="{{ form.link.id_for_label }}">{{ form.link.label }}</label>
-            {{ form.link }}
-            {% if form.link.errors %}<div class="field-error">{{ form.link.errors.as_text }}</div>{% endif %}
-          </div>
-          <div class="form-group form-group--checkbox">
-            <input type="checkbox" id="{{ form.ignore_ssl.id_for_label }}" name="ignore_ssl"{% if form.ignore_ssl.value %} checked{% endif %}>
-            <label for="{{ form.ignore_ssl.id_for_label }}">Ignore SSL errors</label>
-          </div>
-          <div class="form-group form-group--full">
-            <label for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>
-            {{ form.description }}
-            {% if form.description.errors %}<div class="field-error">{{ form.description.errors.as_text }}</div>{% endif %}
-          </div>
-        </div>
-      </div>
-
-      <!-- Organization -->
-      <div class="form-section">
-        <div class="form-section-title">Organization</div>
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="{{ form.team.id_for_label }}">{{ form.team.label }}</label>
-            {{ form.team }}
-            {% if form.team.errors %}<div class="field-error">{{ form.team.errors.as_text }}</div>{% endif %}
-          </div>
-          <div class="form-group">
-            <label for="{{ form.subject.id_for_label }}">{{ form.subject.label }}</label>
-            {{ form.subject }}
-            {% if form.subject.errors %}<div class="field-error">{{ form.subject.errors.as_text }}</div>{% endif %}
-          </div>
-        </div>
-      </div>
-
-      <!-- Keyword filter — fieldset class enables the JS toggle -->
-      <fieldset class="keyword-filter-settings form-section">
-        <legend class="form-section-title">Filtering (bioRxiv and medRxiv)</legend>
-        <div class="form-grid">
-          <div class="form-group form-group--full">
-            <label for="{{ form.keyword_filter.id_for_label }}">{{ form.keyword_filter.label }}</label>
-            {{ form.keyword_filter }}
-            {% if form.keyword_filter.help_text %}<div class="field-help">{{ form.keyword_filter.help_text }}</div>{% endif %}
-            {% if form.keyword_filter.errors %}<div class="field-error">{{ form.keyword_filter.errors.as_text }}</div>{% endif %}
-          </div>
-        </div>
-      </fieldset>
-
-      <!-- ClinicalTrials.gov — fieldset class enables the JS toggle -->
-      <fieldset class="ctgov-settings form-section">
-        <legend class="form-section-title">ClinicalTrials.gov API Settings</legend>
-        <div class="form-grid">
-          <div class="form-group form-group--full">
-            <label for="{{ form.ctgov_search_condition.id_for_label }}">{{ form.ctgov_search_condition.label }}</label>
-            {{ form.ctgov_search_condition }}
-            {% if form.ctgov_search_condition.help_text %}<div class="field-help">{{ form.ctgov_search_condition.help_text }}</div>{% endif %}
-            {% if form.ctgov_search_condition.errors %}<div class="field-error">{{ form.ctgov_search_condition.errors.as_text }}</div>{% endif %}
-          </div>
-        </div>
-      </fieldset>
-
-      {% if form.non_field_errors %}
-      <div class="field-error" style="margin-bottom:16px;">{{ form.non_field_errors }}</div>
-      {% endif %}
-
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Save changes</button>
-      </div>
-    </form>
+  <!-- Edit source -->
+  {% if perms.gregory.change_sources %}
+  <div style="margin-bottom: 16px;">
+    <a class="btn btn-primary" href="{% url 'admin:gregory_sources_change' source.pk %}">&#9998; Edit source details</a>
   </div>
   {% endif %}
 
@@ -538,7 +324,6 @@
 </div>
 
 {% include "admin/_chartjs.html" %}
-<script src="{% static 'admin/js/source_for_toggle.js' %}"></script>
 <script>
 (function () {
   var ACTIVITY_URL = '{% url "admin:sources_activity_json" source.pk %}';

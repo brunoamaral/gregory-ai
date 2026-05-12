@@ -1,7 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse, JsonResponse, Http404
-from django import forms as django_forms
 from django.core.paginator import Paginator
 from django.utils.html import format_html, mark_safe
 from django.db.models import Q, Case, When, Value, BooleanField, Count
@@ -336,30 +335,6 @@ def update_article_relevance_ajax(request):
 
 # ── Source detail views ────────────────────────────────────────────────────
 
-class SourceEditForm(django_forms.ModelForm):
-	class Meta:
-		model = Sources
-		fields = [
-			'name', 'source_for', 'method', 'active', 'link', 'ignore_ssl',
-			'description', 'team', 'subject', 'keyword_filter', 'ctgov_search_condition',
-		]
-
-	def __init__(self, *args, request=None, **kwargs):
-		super().__init__(*args, **kwargs)
-		if request:
-			if request.user.is_superuser:
-				self.fields['team'].queryset = Team.objects.all()
-				self.fields['subject'].queryset = Subject.objects.all()
-			else:
-				user_orgs = request.user.organizations_organizationuser.values_list(
-					'organization__id', flat=True
-				)
-				self.fields['team'].queryset = Team.objects.filter(organization__id__in=user_orgs)
-				self.fields['subject'].queryset = Subject.objects.filter(
-					team__organization__id__in=user_orgs
-				)
-
-
 def _get_source_for_user(request, source_id):
     """Return the Source or raise 404/403 based on org scoping."""
     source = get_object_or_404(Sources, pk=source_id)
@@ -378,18 +353,6 @@ def _get_source_for_user(request, source_id):
 @staff_member_required
 def source_detail_view(request, source_id):
     source = _get_source_for_user(request, source_id)
-    can_edit = request.user.has_perm('gregory.change_sources')
-
-    if request.method == 'POST' and can_edit:
-        form = SourceEditForm(request.POST, instance=source, request=request)
-        if form.is_valid():
-            form.save()
-            # Refresh the source object to reflect saved changes
-            source = _get_source_for_user(request, source_id)
-            messages.success(request, f"Source '{source.name}' updated successfully.")
-            return redirect(request.path)
-    else:
-        form = SourceEditForm(instance=source, request=request) if can_edit else None
 
     if source.source_for == 'trials':
         total_count = source.trials_set.count()
@@ -431,8 +394,6 @@ def source_detail_view(request, source_id):
         'status_info': status_info,
         'title': source.name or f'Source {source_id}',
         'has_permission': True,
-        'form': form,
-        'can_edit': can_edit,
     }
     return render(request, 'admin/source_detail.html', context)
 
