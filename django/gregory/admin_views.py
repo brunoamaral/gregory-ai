@@ -1,15 +1,15 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, Http404
 from django.core.paginator import Paginator
 from django.utils.html import format_html, mark_safe
 from django.db.models import Q, Case, When, Value, BooleanField, Count
 from django.contrib import messages
 from django.utils.dateparse import parse_date
 from django.utils import timezone
-from .models import Articles, Subject, ArticleSubjectRelevance, MLPredictions
+from .models import Articles, Subject, ArticleSubjectRelevance, MLPredictions, Sources, Trials
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 @staff_member_required
 def article_review_status_view(request):
@@ -330,3 +330,97 @@ def update_article_relevance_ajax(request):
             }, status=400)
     
     return JsonResponse({'success': False, 'error': 'Invalid request method'}, status=405)
+
+
+# ── Source detail views ────────────────────────────────────────────────────
+
+def _get_source_for_user(request, source_id):
+    """Return the Source or raise 404/403 based on org scoping."""
+    source = get_object_or_404(Sources, pk=source_id)
+    if not request.user.is_superuser:
+        user_orgs = request.user.organizations_organizationuser.values_list(
+            'organization__id', flat=True
+        )
+        if not Sources.objects.filter(
+            pk=source_id, team__organization__id__in=user_orgs
+        ).exists():
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied
+    return source
+
+
+@staff_member_required
+def source_detail_view(request, source_id):
+    source = _get_source_for_user(request, source_id)
+
+    if source.source_for == 'trials':
+        total_count = source.trials_set.count()
+        last_date = source.get_latest_trial_date()
+        recent_items = list(
+            source.trials_set.order_by('-discovery_date')
+            .values('trial_id', 'title', 'discovery_date')[:10]
+        )
+        item_type = 'trials'
+    else:
+        total_count = source.articles_set.count()
+        last_date = source.get_latest_article_date()
+        recent_items = list(
+            source.articles_set.order_by('-discovery_date')
+            .values('article_id', 'title', 'discovery_date')[:10]
+        )
+        item_type = 'articles'
+
+    days_since = (timezone.now() - last_date).days if last_date else None
+
+    health_status = source.get_health_status()
+    status_config = {
+        'healthy':    {'label': 'Healthy',    'color': '#16a34a'},
+        'warning':    {'label': 'Warning',    'color': '#f59e0b'},
+        'error':      {'label': 'Error',      'color': '#dc2626'},
+        'inactive':   {'label': 'Inactive',   'color': '#6b7280'},
+        'no_content': {'label': 'No Content', 'color': '#2563eb'},
+    }
+    status_info = status_config.get(health_status, status_config['no_content'])
+
+    context = {
+        'source': source,
+        'total_count': total_count,
+        'last_date': last_date,
+        'days_since': days_since,
+        'recent_items': recent_items,
+        'item_type': item_type,
+        'health_status': health_status,
+        'status_info': status_info,
+        'title': source.name or f'Source {source_id}',
+        'has_permission': True,
+    }
+    return render(request, 'admin/source_detail.html', context)
+
+
+@staff_member_required
+def source_activity_json(request, source_id):
+    source = _get_source_for_user(request, source_id)
+
+    today = timezone.now().date()
+    start = today - timedelta(days=29)
+    date_range = [start + timedelta(days=i) for i in range(30)]
+
+    if source.source_for == 'trials':
+        qs = source.trials_set.filter(
+            discovery_date__date__gte=start,
+            discovery_date__date__lte=today,
+        ).values_list('discovery_date__date', flat=True)
+    else:
+        qs = source.articles_set.filter(
+            discovery_date__date__gte=start,
+            discovery_date__date__lte=today,
+        ).values_list('discovery_date__date', flat=True)
+
+    counts_map = {}
+    for d in qs:
+        counts_map[d] = counts_map.get(d, 0) + 1
+
+    labels = [d.strftime('%b %-d') for d in date_range]
+    counts = [counts_map.get(d, 0) for d in date_range]
+
+    return JsonResponse({'labels': labels, 'counts': counts})

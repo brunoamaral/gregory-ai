@@ -1,0 +1,368 @@
+{% load i18n static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }} — Gregory AI</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background-color: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+      color: #374151;
+    }
+
+    .page-header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%);
+      padding: 32px 40px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .page-header-brand {
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin: 0;
+    }
+
+    .page-header-subtitle {
+      color: #dbeafe;
+      font-size: 14px;
+      margin: 4px 0 0;
+    }
+
+    .back-link {
+      color: #bfdbfe;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid rgba(255,255,255,0.25);
+      padding: 6px 14px;
+      border-radius: 6px;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+
+    .back-link:hover {
+      background: rgba(255,255,255,0.15);
+      color: #ffffff;
+      text-decoration: none;
+    }
+
+    .page-body {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px 24px 60px;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      border: 1px solid #e5e7eb;
+      padding: 28px 32px;
+      margin-bottom: 24px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #111827;
+      margin: 0 0 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Inactive banner ── */
+    .inactive-banner {
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-left: 4px solid #6b7280;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 14px;
+      color: #6b7280;
+      margin-bottom: 20px;
+    }
+
+    /* ── Status pill ── */
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: #f9fafb;
+    }
+
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* ── KPI tiles ── */
+    .kpi-row {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin: 20px 0;
+    }
+
+    .kpi-tile {
+      flex: 1;
+      min-width: 160px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 18px 20px;
+    }
+
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #6b7280;
+      margin-bottom: 6px;
+    }
+
+    .kpi-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .kpi-sub {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 2px;
+    }
+
+    /* ── Chart ── */
+    .chart-container {
+      position: relative;
+      height: 200px;
+      margin-top: 20px;
+    }
+
+    /* ── Recent items table ── */
+    details summary {
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      padding: 4px 0;
+      user-select: none;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 14px;
+    }
+
+    .items-table th {
+      text-align: left;
+      padding: 8px 12px;
+      background: #f9fafb;
+      border-bottom: 2px solid #e5e7eb;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #6b7280;
+    }
+
+    .items-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: top;
+    }
+
+    .items-table tr:last-child td { border-bottom: none; }
+    .items-table tr:hover td { background: #fafafa; }
+
+    .no-content {
+      color: #9ca3af;
+      font-style: italic;
+      padding: 16px 0;
+      text-align: center;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 8px 18px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.15s;
+    }
+
+    .btn-primary {
+      background: #1e40af;
+      color: #fff;
+    }
+    .btn-primary:hover { background: #1e3a8a; color: #fff; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-header-brand">{{ source.name }}</h1>
+    <p class="page-header-subtitle">
+      {{ source.get_source_for_display }} &middot; {{ source.get_method_display }}{% if source.team %} &middot; {{ source.team }}{% endif %}
+    </p>
+  </div>
+  <a class="back-link" href="{% url 'admin:gregory_sources_changelist' %}">&#8592; Back to sources</a>
+</div>
+
+<div class="page-body">
+
+  <!-- Health card -->
+  <div class="card">
+    <div class="card-title">Source Health</div>
+
+    {% if not source.active %}
+    <div class="inactive-banner">&#9679; This source is inactive and will not be fetched by the pipeline.</div>
+    {% endif %}
+
+    <span class="status-pill">
+      <span class="status-dot" style="background-color: {{ status_info.color }};"></span>
+      {{ status_info.label }}
+    </span>
+
+    <div class="kpi-row">
+      <div class="kpi-tile">
+        <div class="kpi-label">Total Content</div>
+        <div class="kpi-value">{{ total_count }}</div>
+        <div class="kpi-sub">{% if item_type == 'trials' %}trials{% else %}articles{% endif %}</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-label">Last Content</div>
+        <div class="kpi-value" style="font-size:18px;">
+          {% if last_date %}{{ last_date|date:"Y-m-d" }}{% else %}&mdash;{% endif %}
+        </div>
+      </div>
+      <div class="kpi-tile">
+        <div class="kpi-label">Days Since Last</div>
+        <div class="kpi-value">
+          {% if days_since is not None %}{{ days_since }}{% else %}&mdash;{% endif %}
+        </div>
+        <div class="kpi-sub">days ago</div>
+      </div>
+    </div>
+
+    <div class="chart-container">
+      <canvas id="activityChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Recent content -->
+  <div class="card">
+    <details {% if recent_items %}open{% endif %}>
+      <summary>Latest 10 items ({{ recent_items|length }})</summary>
+      {% if recent_items %}
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Discovery Date</th>
+            <th>Open</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in recent_items %}
+          <tr>
+            <td>{{ item.title|default:"(no title)" }}</td>
+            <td>{% if item.discovery_date %}{{ item.discovery_date|date:"Y-m-d" }}{% else %}&mdash;{% endif %}</td>
+            <td>
+              {% if item_type == 'trials' %}
+                <a href="{% url 'admin:gregory_trials_change' item.trial_id %}">Edit</a>
+              {% else %}
+                <a href="{% url 'admin:gregory_articles_change' item.article_id %}">Edit</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="no-content">No content yet.</p>
+      {% endif %}
+    </details>
+  </div>
+
+  <!-- Edit button -->
+  <a class="btn btn-primary" href="{% url 'admin:gregory_sources_change' source.pk %}">Edit source details</a>
+
+</div>
+
+{% include "admin/_chartjs.html" %}
+<script>
+(function () {
+  var ACTIVITY_URL = '{% url "admin:sources_activity_json" source.pk %}';
+
+  fetch(ACTIVITY_URL)
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var ctx = document.getElementById('activityChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: data.labels,
+          datasets: [{
+            label: '{% if item_type == "trials" %}Trials{% else %}Articles{% endif %}',
+            data: data.counts,
+            backgroundColor: 'rgba(37, 99, 235, 0.6)',
+            borderColor: 'rgba(37, 99, 235, 0.9)',
+            borderWidth: 1,
+            borderRadius: 3,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            datalabels: { display: false },
+          },
+          scales: {
+            x: {
+              ticks: { font: { size: 11 }, maxRotation: 45 },
+              grid: { display: false },
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { precision: 0 },
+            }
+          }
+        }
+      });
+    });
+})();
+</script>
+
+</body>
+</html>

@@ -595,7 +595,7 @@ class ReassignToTeamMixin:
 
 class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
 	form = SourceAdminForm
-	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator']
+	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator', 'dashboard_link']
 	list_filter = [
 		'active', 'source_for', 'method', SourceHealthFilter,
 		('team', OrganizationRestrictedFieldListFilter),
@@ -704,6 +704,21 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 			f'Successfully deactivated {updated_count} source(s).'
 		)
 	deactivate_sources.short_description = "Deactivate selected sources"
+
+	def get_urls(self):
+		from django.urls import path
+		from .admin_views import source_detail_view, source_activity_json
+		urls = super().get_urls()
+		custom_urls = [
+			path('<int:source_id>/detail/', self.admin_site.admin_view(source_detail_view), name='sources_detail'),
+			path('<int:source_id>/detail/activity.json/', self.admin_site.admin_view(source_activity_json), name='sources_activity_json'),
+		]
+		return custom_urls + urls
+
+	def dashboard_link(self, obj):
+		url = reverse('admin:sources_detail', args=[obj.pk])
+		return format_html('<a href="{}">Dashboard</a>', url)
+	dashboard_link.short_description = 'Dashboard'
 
 class SourcesInline(admin.StackedInline):
 	"""Inline admin for managing sources within a subject"""
