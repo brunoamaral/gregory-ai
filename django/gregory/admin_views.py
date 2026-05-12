@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import HttpResponse, JsonResponse, Http404
+from django.http import HttpResponse, JsonResponse
 from django.core.paginator import Paginator
 from django.utils.html import format_html, mark_safe
 from django.db.models import Q, Case, When, Value, BooleanField, Count
@@ -8,7 +8,6 @@ from django.contrib import messages
 from django.utils.dateparse import parse_date
 from django.utils import timezone
 from .models import Articles, Subject, ArticleSubjectRelevance, MLPredictions, Sources, Trials, Team
-from django.db.models import Max, Count
 import json
 from datetime import datetime, timedelta, date
 
@@ -356,7 +355,11 @@ def source_detail_view(request, source_id):
 
     if source.source_for == 'trials':
         total_count = source.trials_set.count()
-        last_date = source.get_latest_trial_date()
+        last_date_val = (
+            source.trials_set.order_by('-discovery_date')
+            .values_list('discovery_date', flat=True).first()
+        )
+        last_date = last_date_val.date() if last_date_val else None
         recent_items = list(
             source.trials_set.order_by('-discovery_date')
             .values('trial_id', 'title', 'discovery_date')[:10]
@@ -364,14 +367,18 @@ def source_detail_view(request, source_id):
         item_type = 'trials'
     else:
         total_count = source.articles_set.count()
-        last_date = source.get_latest_article_date()
+        last_date_val = (
+            source.articles_set.order_by('-discovery_date')
+            .values_list('discovery_date', flat=True).first()
+        )
+        last_date = last_date_val.date() if last_date_val else None
         recent_items = list(
             source.articles_set.order_by('-discovery_date')
             .values('article_id', 'title', 'discovery_date')[:10]
         )
         item_type = 'articles'
 
-    days_since = (timezone.now() - last_date).days if last_date else None
+    days_since = (timezone.now().date() - last_date).days if last_date else None
 
     health_status = source.get_health_status()
     status_config = {
@@ -400,6 +407,9 @@ def source_detail_view(request, source_id):
 
 @staff_member_required
 def source_activity_json(request, source_id):
+    from django.db.models import Count
+    from django.db.models.functions import TruncDate
+
     source = _get_source_for_user(request, source_id)
 
     today = timezone.now().date()
@@ -407,19 +417,25 @@ def source_activity_json(request, source_id):
     date_range = [start + timedelta(days=i) for i in range(30)]
 
     if source.source_for == 'trials':
-        qs = source.trials_set.filter(
-            discovery_date__date__gte=start,
-            discovery_date__date__lte=today,
-        ).values_list('discovery_date__date', flat=True)
+        rows = (
+            source.trials_set
+            .filter(discovery_date__date__gte=start, discovery_date__date__lte=today)
+            .annotate(day=TruncDate('discovery_date'))
+            .values('day')
+            .annotate(count=Count('pk'))
+            .values_list('day', 'count')
+        )
     else:
-        qs = source.articles_set.filter(
-            discovery_date__date__gte=start,
-            discovery_date__date__lte=today,
-        ).values_list('discovery_date__date', flat=True)
+        rows = (
+            source.articles_set
+            .filter(discovery_date__date__gte=start, discovery_date__date__lte=today)
+            .annotate(day=TruncDate('discovery_date'))
+            .values('day')
+            .annotate(count=Count('pk'))
+            .values_list('day', 'count')
+        )
 
-    counts_map = {}
-    for d in qs:
-        counts_map[d] = counts_map.get(d, 0) + 1
+    counts_map = dict(rows)
 
     labels = [d.strftime('%b %-d') for d in date_range]
     counts = [counts_map.get(d, 0) for d in date_range]
@@ -442,9 +458,9 @@ def _annotate_sources(qs):
     """Annotate a Sources queryset with last_content_date and content_count."""
     from django.db.models import Max, Count
     return qs.annotate(
-        last_article_date_ann=Max('articles__discovery_date'),
+        last_article_date_ann=Max('articles__published_date'),
         article_count_ann=Count('articles', distinct=True),
-        last_trial_date_ann=Max('trials__discovery_date'),
+        last_trial_date_ann=Max('trials__last_updated'),
         trial_count_ann=Count('trials', distinct=True),
     )
 
@@ -482,6 +498,9 @@ def sources_overview_view(request):
     # ── Bulk-action POST ──────────────────────────────────────────────────
     if request.method == 'POST':
         action = request.POST.get('bulk_action')
+        # The shared intermediate template posts 'action=reassign_to_team_action' on confirmation
+        if not action and request.POST.get('action') == 'reassign_to_team_action':
+            action = 'reassign_to_team'
         selected_ids = request.POST.getlist('selected_sources')
 
         if selected_ids and action in ('activate', 'deactivate', 'reassign_to_team'):
@@ -498,7 +517,6 @@ def sources_overview_view(request):
             elif action == 'reassign_to_team':
                 # Gather org of selected sources (must be single org)
                 team_ids = selected_qs.values_list('team_id', flat=True).distinct()
-                from organizations.models import Organization
                 from .admin import ReassignToTeamForm
                 org_ids = list(
                     Team.objects.filter(pk__in=team_ids)
