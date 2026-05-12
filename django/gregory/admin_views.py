@@ -656,7 +656,13 @@ def sources_overview_view(request):
 # ── Subject analytics views ────────────────────────────────────────────────
 
 def _get_scoped_org_ids_for_user(request):
-    """Return list of org IDs the request user may see, or None for all."""
+    """Return list of org IDs the request user may see, or None for all.
+
+    Delegates to get_user_organizations() for the non-superuser branch so that
+    org-visibility rules stay consistent across admin views. Superusers can
+    further narrow scope to a single org via the ?org= query parameter.
+    """
+    from .admin import get_user_organizations
     if request.user.is_superuser:
         org_param = request.GET.get('org')
         if org_param:
@@ -665,11 +671,7 @@ def _get_scoped_org_ids_for_user(request):
             except (ValueError, TypeError):
                 pass
         return None
-    return list(
-        request.user.organizations_organizationuser.values_list(
-            'organization__id', flat=True
-        )
-    )
+    return list(get_user_organizations(request.user))
 
 
 @staff_member_required
