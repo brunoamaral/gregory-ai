@@ -612,6 +612,7 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 		}),
 		('Filtering (bioRxiv and medRxiv)', {
 			'fields': ('keyword_filter',),
+			'classes': ('keyword-filter-settings',),
 			'description': 'For bioRxiv and medRxiv sources, specify keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson).'
 		}),
 		('ClinicalTrials.gov API Settings', {
@@ -622,7 +623,7 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 	)
 	
 	class Media:
-		pass
+		js = ('admin/js/source_for_toggle.js',)
 	
 	def get_form(self, request, obj=None, **kwargs):
 		"""Pass the request to the form so it can filter field choices."""
