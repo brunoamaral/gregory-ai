@@ -595,7 +595,7 @@ class ReassignToTeamMixin:
 
 class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
 	form = SourceAdminForm
-	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator', 'has_keyword_filter']
+	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator']
 	list_filter = [
 		'active', 'source_for', 'method', SourceHealthFilter,
 		('team', OrganizationRestrictedFieldListFilter),
@@ -605,13 +605,10 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 	actions = ['activate_sources', 'deactivate_sources', 'reassign_to_team_action']
 	fieldsets = (
 		('Basic Information', {
-			'fields': ('name', 'source_for', 'method', 'active', 'link')
+			'fields': ('name', 'source_for', 'method', 'active', 'link', 'ignore_ssl', 'description')
 		}),
 		('Organization', {
 			'fields': ('team', 'subject')
-		}),
-		('Settings', {
-			'fields': ('ignore_ssl', 'description')
 		}),
 		('Filtering (bioRxiv and medRxiv)', {
 			'fields': ('keyword_filter',),
@@ -625,7 +622,7 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 	)
 	
 	class Media:
-		js = ('admin/js/source_method_toggle.js',)
+		pass
 	
 	def get_form(self, request, obj=None, **kwargs):
 		"""Pass the request to the form so it can filter field choices."""
@@ -638,12 +635,6 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 		
 		return FormWithRequest
 	
-	def has_keyword_filter(self, obj):
-		"""Display whether source has keyword filtering enabled."""
-		return bool(obj.keyword_filter)
-	has_keyword_filter.boolean = True
-	has_keyword_filter.short_description = 'Has Filter'
-
 	def save_model(self, request, obj, form, change):
 		"""Warn admin if source has no team assigned."""
 		super().save_model(request, obj, form, change)
