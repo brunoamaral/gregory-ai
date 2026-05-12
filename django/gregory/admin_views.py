@@ -4,6 +4,7 @@ from django.http import HttpResponse, JsonResponse
 from django.core.paginator import Paginator
 from django.utils.html import format_html, mark_safe
 from django.db.models import Q, Case, When, Value, BooleanField, Count
+from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.contrib import messages
 from django.utils.dateparse import parse_date
 from django.utils import timezone
@@ -650,3 +651,214 @@ def sources_overview_view(request):
         'filter_params': filter_params,
     }
     return render(request, 'admin/sources_overview.html', context)
+
+
+# ── Subject analytics views ────────────────────────────────────────────────
+
+def _get_scoped_org_ids_for_user(request):
+    """Return list of org IDs the request user may see, or None for all."""
+    if request.user.is_superuser:
+        org_param = request.GET.get('org')
+        if org_param:
+            try:
+                return [int(org_param)]
+            except (ValueError, TypeError):
+                pass
+        return None
+    return list(
+        request.user.organizations_organizationuser.values_list(
+            'organization__id', flat=True
+        )
+    )
+
+
+@staff_member_required
+def subject_analytics_view(request):
+    """Landing page for subject content analytics."""
+    from organizations.models import Organization
+    if request.user.is_superuser:
+        orgs = Organization.objects.order_by('name')
+    else:
+        user_org_ids = list(
+            request.user.organizations_organizationuser.values_list(
+                'organization__id', flat=True
+            )
+        )
+        orgs = Organization.objects.filter(id__in=user_org_ids).order_by('name')
+
+    context = {
+        'title': 'Subject Content Analytics',
+        'orgs': orgs,
+        'is_superuser': request.user.is_superuser,
+    }
+    return render(request, 'admin/gregory/subject/analytics.html', context)
+
+
+@staff_member_required
+def subject_analytics_orgs(request):
+    """JSON: organisations visible to the current user."""
+    from organizations.models import Organization
+    org_ids = _get_scoped_org_ids_for_user(request)
+    qs = Organization.objects.all()
+    if org_ids is not None:
+        qs = qs.filter(id__in=org_ids)
+    return JsonResponse({'organisations': [{'id': o.id, 'name': o.name} for o in qs.order_by('name')]})
+
+
+@staff_member_required
+def subject_analytics_teams(request):
+    """JSON: teams scoped to the effective org."""
+    org_ids = _get_scoped_org_ids_for_user(request)
+    qs = Team.objects.filter(is_active=True)
+    if org_ids is not None:
+        qs = qs.filter(organization__id__in=org_ids)
+    return JsonResponse({'teams': [{'id': t.id, 'name': str(t)} for t in qs.order_by('name')]})
+
+
+@staff_member_required
+def subject_analytics_subjects(request):
+    """JSON: subjects scoped to the effective org and/or team."""
+    org_ids = _get_scoped_org_ids_for_user(request)
+    team_param = request.GET.get('team')
+    qs = Subject.objects.all()
+    if org_ids is not None:
+        qs = qs.filter(team__organization__id__in=org_ids)
+    if team_param:
+        try:
+            qs = qs.filter(team_id=int(team_param))
+        except (ValueError, TypeError):
+            pass
+    return JsonResponse({'subjects': [{'id': s.id, 'name': s.subject_name} for s in qs.order_by('subject_name')]})
+
+
+@staff_member_required
+def subject_analytics_data(request):
+    """
+    JSON: articles and trials counts over time for a subject (and optional org/team scope).
+    Query params: range (7d|30d|90d|365d|custom), start, end, org, team, subject
+    """
+    range_param = request.GET.get('range', '30d')
+    subject_param = request.GET.get('subject', '')
+    team_param = request.GET.get('team', '')
+
+    RANGES = {
+        '7d':   (7,   TruncDate,  '%Y-%m-%d'),
+        '30d':  (30,  TruncDate,  '%Y-%m-%d'),
+        '90d':  (90,  TruncWeek,  '%Y-%m-%d'),
+        '365d': (365, TruncMonth, '%Y-%m'),
+    }
+
+    if range_param == 'custom':
+        start_str = request.GET.get('start', '')
+        end_str   = request.GET.get('end', '')
+        try:
+            start_date = date.fromisoformat(start_str)
+            end_date   = date.fromisoformat(end_str)
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Invalid custom date range'}, status=400)
+        if end_date < start_date:
+            start_date, end_date = end_date, start_date
+        span = (end_date - start_date).days
+        if span <= 60:
+            trunc_fn, date_fmt = TruncDate, '%Y-%m-%d'
+        elif span <= 180:
+            trunc_fn, date_fmt = TruncWeek, '%Y-%m-%d'
+        else:
+            trunc_fn, date_fmt = TruncMonth, '%Y-%m'
+    else:
+        if range_param not in RANGES:
+            range_param = '30d'
+        days, trunc_fn, date_fmt = RANGES[range_param]
+        end_date   = timezone.now().date()
+        start_date = end_date - timedelta(days=days - 1)
+
+    # Build full period sequence for zero-filling
+    if trunc_fn is TruncDate:
+        period_range = []
+        d = start_date
+        while d <= end_date:
+            period_range.append(d)
+            d += timedelta(days=1)
+    elif trunc_fn is TruncWeek:
+        period_range = []
+        d = start_date - timedelta(days=start_date.weekday())
+        while d <= end_date:
+            period_range.append(d)
+            d += timedelta(weeks=1)
+    else:  # TruncMonth
+        period_range = []
+        d = start_date.replace(day=1)
+        while d <= end_date:
+            period_range.append(d)
+            if d.month == 12:
+                d = date(d.year + 1, 1, 1)
+            else:
+                d = date(d.year, d.month + 1, 1)
+
+    def _build_series(qs, date_field):
+        counts = (
+            qs
+            .annotate(period=trunc_fn(date_field))
+            .values('period')
+            .annotate(count=Count('pk', distinct=True))
+            .order_by('period')
+        )
+        lookup = {}
+        for item in counts:
+            p = item['period']
+            if not p:
+                continue
+            if hasattr(p, 'date'):
+                p = p.date()
+            lookup[p] = item['count']
+        return [lookup.get(p, 0) for p in period_range]
+
+    # Scope: org → team → subject
+    org_ids = _get_scoped_org_ids_for_user(request)
+
+    articles_qs = Articles.objects.filter(
+        published_date__date__gte=start_date,
+        published_date__date__lte=end_date,
+    )
+    trials_qs = Trials.objects.filter(
+        discovery_date__date__gte=start_date,
+        discovery_date__date__lte=end_date,
+    )
+
+    if org_ids is not None:
+        articles_qs = articles_qs.filter(teams__organization__id__in=org_ids)
+        trials_qs   = trials_qs.filter(teams__organization__id__in=org_ids)
+
+    if team_param:
+        try:
+            tid = int(team_param)
+            articles_qs = articles_qs.filter(teams__id=tid)
+            trials_qs   = trials_qs.filter(teams__id=tid)
+        except (ValueError, TypeError):
+            pass
+
+    if subject_param:
+        try:
+            sid = int(subject_param)
+            articles_qs = articles_qs.filter(subjects__id=sid)
+            trials_qs   = trials_qs.filter(subjects__id=sid)
+        except (ValueError, TypeError):
+            pass
+
+    articles_qs = articles_qs.distinct()
+    trials_qs   = trials_qs.distinct()
+
+    articles_data = _build_series(articles_qs, 'published_date')
+    trials_data   = _build_series(trials_qs, 'discovery_date')
+
+    labels = [p.strftime(date_fmt) for p in period_range]
+
+    return JsonResponse({
+        'labels':   labels,
+        'articles': articles_data,
+        'trials':   trials_data,
+        'totals': {
+            'articles': sum(articles_data),
+            'trials':   sum(trials_data),
+        },
+    })

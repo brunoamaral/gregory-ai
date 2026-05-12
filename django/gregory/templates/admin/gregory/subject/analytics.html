@@ -1,0 +1,556 @@
+{% load i18n static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subject Content Analytics — Gregory AI</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background-color: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+      color: #374151;
+    }
+
+    .page-header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%);
+      padding: 32px 40px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .page-header-brand {
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin: 0;
+    }
+
+    .page-header-subtitle {
+      color: #dbeafe;
+      font-size: 14px;
+      margin: 4px 0 0;
+    }
+
+    .back-link {
+      color: #bfdbfe;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid rgba(255,255,255,0.25);
+      padding: 6px 14px;
+      border-radius: 6px;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+
+    .back-link:hover {
+      background: rgba(255,255,255,0.15);
+      color: #ffffff;
+      text-decoration: none;
+    }
+
+    .page-body {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px 24px 60px;
+    }
+
+    /* ── Filter panel ── */
+    .filter-panel {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      padding: 20px 24px;
+      margin-bottom: 24px;
+    }
+
+    .filter-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-end;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .filter-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #6b7280;
+    }
+
+    .filter-group select {
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 14px;
+      color: #374151;
+      background: #fff;
+      outline: none;
+      min-width: 160px;
+    }
+
+    .filter-group select:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+    }
+
+    /* ── Summary cards ── */
+    .summary-cards {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .summary-card {
+      flex: 1;
+      min-width: 160px;
+      padding: 16px 20px;
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    .summary-card .card-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #1a1a1a;
+      line-height: 1.2;
+    }
+
+    .summary-card .card-label {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .summary-card.articles .card-value { color: #2563eb; }
+    .summary-card.trials   .card-value { color: #16a34a; }
+
+    /* ── Period selector ── */
+    .analytics-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .period-selector {
+      display: flex;
+      gap: 6px;
+    }
+
+    .period-btn {
+      padding: 6px 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      color: #444;
+      text-decoration: none;
+    }
+
+    .period-btn:hover,
+    .period-btn.active {
+      background: #1e40af;
+      border-color: #1e40af;
+      color: #fff;
+    }
+
+    /* ── Custom date range bar ── */
+    #custom-range-bar {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    #custom-range-bar label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+    }
+
+    #custom-range-bar input[type="date"] {
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 13px;
+    }
+
+    #custom-apply-btn {
+      padding: 6px 16px;
+      background: #1e40af;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    #custom-apply-btn:hover { background: #1e3a8a; }
+
+    /* ── Chart cards ── */
+    .chart-card {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .chart-card h3 {
+      margin: 0 0 16px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #1f2937;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-header-brand">Subject Content Analytics</h1>
+    <p class="page-header-subtitle">Articles and clinical trials over time, scoped by organisation, team and subject</p>
+  </div>
+  <a class="back-link" href="{% url 'admin:gregory_subject_changelist' %}">&#8592; Subjects</a>
+</div>
+
+<div class="page-body">
+
+  <!-- Scope filters -->
+  <div class="filter-panel">
+    <div class="filter-form">
+      {% if is_superuser %}
+      <div class="filter-group">
+        <label class="filter-label" for="org-filter">Organisation</label>
+        <select id="org-filter">
+          <option value="">All Organisations</option>
+          {% for org in orgs %}
+          <option value="{{ org.id }}">{{ org.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="filter-group">
+        <label class="filter-label" for="team-filter">Team</label>
+        <select id="team-filter">
+          <option value="">All Teams</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label" for="subject-filter">Subject</label>
+        <select id="subject-filter">
+          <option value="">All Subjects</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Period selector -->
+  <div class="analytics-header">
+    <h2 style="margin: 0; font-size: 18px; color: #1f2937;">Content Over Time</h2>
+    <div class="period-selector">
+      <button class="period-btn" data-range="7d">7 days</button>
+      <button class="period-btn active" data-range="30d">30 days</button>
+      <button class="period-btn" data-range="90d">90 days</button>
+      <button class="period-btn" data-range="365d">12 months</button>
+      <button class="period-btn" data-range="custom">Custom</button>
+    </div>
+  </div>
+
+  <div id="custom-range-bar">
+    <label for="custom-start">From:</label>
+    <input type="date" id="custom-start">
+    <label for="custom-end">To:</label>
+    <input type="date" id="custom-end">
+    <button id="custom-apply-btn" type="button">Apply</button>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="summary-cards">
+    <div class="summary-card articles">
+      <div class="card-value" id="total-articles">—</div>
+      <div class="card-label">Articles</div>
+    </div>
+    <div class="summary-card trials">
+      <div class="card-value" id="total-trials">—</div>
+      <div class="card-label">Clinical Trials</div>
+    </div>
+  </div>
+
+  <!-- Main chart -->
+  <div class="chart-card">
+    <div style="height: 420px;">
+      <canvas id="contentChart"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+
+// ── State ──────────────────────────────────────────────────────────────────
+var activeOrg     = '';
+var activeTeam    = '';
+var activeSubject = '';
+var activeRange   = '30d';
+var customStart   = '';
+var customEnd     = '';
+
+// ── URLs ───────────────────────────────────────────────────────────────────
+var URLS = {
+  data:     '{% url "admin:gregory_subject_analytics_data" %}',
+  orgs:     '{% url "admin:gregory_subject_analytics_orgs" %}',
+  teams:    '{% url "admin:gregory_subject_analytics_teams" %}',
+  subjects: '{% url "admin:gregory_subject_analytics_subjects" %}',
+};
+
+// ── Build query params ─────────────────────────────────────────────────────
+function buildParams(extra) {
+  var p = new URLSearchParams(extra || {});
+  if (activeOrg)     p.set('org',     activeOrg);
+  if (activeTeam)    p.set('team',    activeTeam);
+  if (activeSubject) p.set('subject', activeSubject);
+  if (activeRange === 'custom' && customStart && customEnd) {
+    p.set('range', 'custom');
+    p.set('start', customStart);
+    p.set('end',   customEnd);
+  }
+  return p;
+}
+
+// ── Chart instance ─────────────────────────────────────────────────────────
+var contentChart = null;
+
+function fetchAndRender(range) {
+  var params = buildParams({ range: range });
+  fetch(URLS.data + '?' + params.toString())
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      document.getElementById('total-articles').textContent = data.totals.articles;
+      document.getElementById('total-trials').textContent   = data.totals.trials;
+
+      var chartTitle = {
+        '7d':    'Daily — Last 7 Days',
+        '30d':   'Daily — Last 30 Days',
+        '90d':   'Weekly — Last 90 Days',
+        '365d':  'Monthly — Last 12 Months',
+        'custom': customStart && customEnd ? customStart + ' to ' + customEnd : 'Custom Range',
+      }[range] || '';
+
+      if (contentChart) {
+        contentChart.data.labels                    = data.labels;
+        contentChart.data.datasets[0].data          = data.articles;
+        contentChart.data.datasets[1].data          = data.trials;
+        contentChart.options.plugins.title.text     = chartTitle;
+        contentChart.update();
+      } else {
+        var ctx = document.getElementById('contentChart').getContext('2d');
+        contentChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: data.labels,
+            datasets: [
+              {
+                label: 'Articles',
+                data: data.articles,
+                borderColor: '#2563eb',
+                backgroundColor: 'rgba(37,99,235,0.08)',
+                tension: 0.2,
+                fill: true,
+                pointRadius: 3,
+              },
+              {
+                label: 'Clinical Trials',
+                data: data.trials,
+                borderColor: '#16a34a',
+                backgroundColor: 'rgba(22,163,74,0.08)',
+                tension: 0.2,
+                fill: true,
+                pointRadius: 3,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+              y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 } },
+              x: { ticks: { maxTicksLimit: 12 } },
+            },
+            plugins: {
+              title: {
+                display: true,
+                text: chartTitle,
+                font: { size: 14 },
+              },
+              legend: { display: true, position: 'top' },
+            },
+          },
+        });
+      }
+    })
+    .catch(function(err) { console.error('Subject analytics fetch error:', err); });
+}
+
+// ── Reload team + subject dropdowns, then chart ────────────────────────────
+function reloadTeams() {
+  var sel = document.getElementById('team-filter');
+  if (!sel) return;
+  var params = buildParams();
+  fetch(URLS.teams + '?' + params.toString())
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      while (sel.options.length > 1) sel.remove(1);
+      data.teams.forEach(function(t) {
+        var opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        sel.appendChild(opt);
+      });
+      if (activeTeam && Array.from(sel.options).some(function(o) { return o.value == activeTeam; })) {
+        sel.value = activeTeam;
+      } else {
+        activeTeam = '';
+        sel.value = '';
+      }
+    });
+}
+
+function reloadSubjects() {
+  var sel = document.getElementById('subject-filter');
+  if (!sel) return;
+  var params = buildParams();
+  fetch(URLS.subjects + '?' + params.toString())
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      while (sel.options.length > 1) sel.remove(1);
+      data.subjects.forEach(function(s) {
+        var opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        sel.appendChild(opt);
+      });
+      if (activeSubject && Array.from(sel.options).some(function(o) { return o.value == activeSubject; })) {
+        sel.value = activeSubject;
+      } else {
+        activeSubject = '';
+        sel.value = '';
+      }
+    });
+}
+
+function reloadAll() {
+  reloadTeams();
+  reloadSubjects();
+  fetchAndRender(activeRange);
+}
+
+// ── Org selector ───────────────────────────────────────────────────────────
+(function () {
+  var orgSel = document.getElementById('org-filter');
+  if (!orgSel) return;
+  orgSel.addEventListener('change', function() {
+    activeOrg     = this.value;
+    activeTeam    = '';
+    activeSubject = '';
+    reloadAll();
+  });
+})();
+
+// ── Team selector ──────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  var teamSel = document.getElementById('team-filter');
+  if (teamSel) {
+    teamSel.addEventListener('change', function() {
+      activeTeam    = this.value;
+      activeSubject = '';
+      reloadSubjects();
+      fetchAndRender(activeRange);
+    });
+  }
+
+  var subjectSel = document.getElementById('subject-filter');
+  if (subjectSel) {
+    subjectSel.addEventListener('change', function() {
+      activeSubject = this.value;
+      fetchAndRender(activeRange);
+    });
+  }
+
+  // Initial load
+  reloadAll();
+});
+
+// ── Period buttons ─────────────────────────────────────────────────────────
+document.querySelectorAll('.period-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.period-btn').forEach(function(b) { b.classList.remove('active'); });
+    this.classList.add('active');
+    activeRange = this.dataset.range;
+    var customBar = document.getElementById('custom-range-bar');
+    if (activeRange === 'custom') {
+      if (customBar) customBar.style.display = 'flex';
+    } else {
+      if (customBar) customBar.style.display = 'none';
+      customStart = '';
+      customEnd   = '';
+      fetchAndRender(activeRange);
+    }
+  });
+});
+
+// ── Custom date range ──────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  var applyBtn = document.getElementById('custom-apply-btn');
+  if (!applyBtn) return;
+  applyBtn.addEventListener('click', function() {
+    var startInput = document.getElementById('custom-start');
+    var endInput   = document.getElementById('custom-end');
+    if (!startInput.value) {
+      alert('Please select a start date.');
+      return;
+    }
+    if (!endInput.value) {
+      endInput.value = new Date().toISOString().slice(0, 10);
+    }
+    customStart = startInput.value;
+    customEnd   = endInput.value;
+    fetchAndRender('custom');
+  });
+});
+
+</script>
+</body>
+</html>
