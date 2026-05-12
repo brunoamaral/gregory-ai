@@ -587,6 +587,11 @@ def sources_overview_view(request):
     page_num  = request.GET.get('page', 1)
     page_obj  = paginator.get_page(page_num)
 
+    # Build URL-safe filter params string for pagination links (excludes 'page')
+    _filter_params = request.GET.copy()
+    _filter_params.pop('page', None)
+    filter_params = _filter_params.urlencode()
+
     # ── Filter option lists ────────────────────────────────────────────────
     if request.user.is_superuser:
         teams    = Team.objects.order_by('name')
@@ -624,5 +629,6 @@ def sources_overview_view(request):
         'title': 'Sources Overview',
         'has_permission': True,
         'now': now,
+        'filter_params': filter_params,
     }
     return render(request, 'admin/sources_overview.html', context)

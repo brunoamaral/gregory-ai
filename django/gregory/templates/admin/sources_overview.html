@@ -432,21 +432,21 @@
   {% if page_obj.has_other_pages %}
   <div class="pagination">
     {% if page_obj.has_previous %}
-      <a href="?{% for k,v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}">&laquo; Prev</a>
+      <a href="?{% if filter_params %}{{ filter_params }}&{% endif %}page={{ page_obj.previous_page_number }}">&laquo; Prev</a>
     {% endif %}
 
     {% for num in paginator.page_range %}
       {% if num == page_obj.number %}
         <span class="current">{{ num }}</span>
       {% elif num == 1 or num == paginator.num_pages or num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}
-        <a href="?{% for k,v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ num }}">{{ num }}</a>
+        <a href="?{% if filter_params %}{{ filter_params }}&{% endif %}page={{ num }}">{{ num }}</a>
       {% elif num == page_obj.number|add:"-3" or num == page_obj.number|add:"3" %}
         <span>…</span>
       {% endif %}
     {% endfor %}
 
     {% if page_obj.has_next %}
-      <a href="?{% for k,v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}">Next &raquo;</a>
+      <a href="?{% if filter_params %}{{ filter_params }}&{% endif %}page={{ page_obj.next_page_number }}">Next &raquo;</a>
     {% endif %}
 
     <span class="pagination-info">{{ paginator.count }} total</span>
