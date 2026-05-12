@@ -1,0 +1,468 @@
+{% load i18n static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sources Overview — Gregory AI</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background-color: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+      color: #374151;
+    }
+
+    .page-header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%);
+      padding: 32px 40px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .page-header-brand {
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin: 0;
+    }
+
+    .page-header-subtitle {
+      color: #dbeafe;
+      font-size: 14px;
+      margin: 4px 0 0;
+    }
+
+    .back-link {
+      color: #bfdbfe;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid rgba(255,255,255,0.25);
+      padding: 6px 14px;
+      border-radius: 6px;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+
+    .back-link:hover {
+      background: rgba(255,255,255,0.15);
+      color: #ffffff;
+      text-decoration: none;
+    }
+
+    .page-body {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px 24px 60px;
+    }
+
+    /* ── Messages ── */
+    .messages { margin-bottom: 20px; }
+    .message {
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      font-size: 14px;
+      border-left: 4px solid;
+    }
+    .message.success { background-color: #d1fae5; border-color: #10b981; color: #065f46; }
+    .message.error   { background-color: #fee2e2; border-color: #ef4444; color: #7f1d1d; }
+    .message.warning { background-color: #fef3c7; border-color: #f59e0b; color: #78350f; }
+    .message.info    { background-color: #dbeafe; border-color: #3b82f6; color: #1e3a8a; }
+
+    /* ── Filter panel ── */
+    .filter-panel {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      padding: 20px 24px;
+      margin-bottom: 24px;
+    }
+
+    .filter-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-end;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .filter-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #6b7280;
+    }
+
+    .filter-group select,
+    .filter-group input[type="text"] {
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 14px;
+      color: #374151;
+      background: #fff;
+      outline: none;
+      min-width: 150px;
+    }
+
+    .filter-group select:focus,
+    .filter-group input[type="text"]:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+    }
+
+    /* ── Table ── */
+    .card {
+      background: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      border: 1px solid #e5e7eb;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    .sources-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .sources-table th {
+      text-align: left;
+      padding: 10px 14px;
+      background: #f9fafb;
+      border-bottom: 2px solid #e5e7eb;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #6b7280;
+      white-space: nowrap;
+    }
+
+    .sources-table th.checkbox-col { width: 36px; }
+
+    .sources-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: middle;
+    }
+
+    .sources-table tr:last-child td { border-bottom: none; }
+    .sources-table tr:hover td { background: #fafafa; }
+
+    .source-name-link {
+      font-weight: 600;
+      color: #1e40af;
+      text-decoration: none;
+    }
+    .source-name-link:hover { text-decoration: underline; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid transparent;
+    }
+
+    .badge-active   { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+    .badge-inactive { background: #f3f4f6; color: #6b7280; border-color: #d1d5db; }
+
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+
+    /* ── Bulk action bar ── */
+    .bulk-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      background: #f9fafb;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .bulk-bar select {
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 13px;
+      background: #fff;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 7px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.15s;
+    }
+
+    .btn-primary { background: #1e40af; color: #fff; }
+    .btn-primary:hover { background: #1e3a8a; color: #fff; text-decoration: none; }
+
+    .btn-sm { padding: 5px 11px; font-size: 12px; }
+
+    /* ── Pagination ── */
+    .pagination {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 20px;
+      font-size: 14px;
+    }
+
+    .pagination a, .pagination span {
+      padding: 5px 11px;
+      border-radius: 6px;
+      border: 1px solid #e5e7eb;
+      text-decoration: none;
+      color: #374151;
+      background: #fff;
+    }
+
+    .pagination a:hover { background: #f3f4f6; }
+    .pagination .current { background: #1e40af; color: #fff; border-color: #1e40af; font-weight: 700; }
+    .pagination-info { color: #6b7280; font-size: 13px; margin-left: 8px; }
+
+    .empty-state {
+      text-align: center;
+      color: #9ca3af;
+      font-style: italic;
+      padding: 40px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-header-brand">Sources Overview</h1>
+    <p class="page-header-subtitle">{{ paginator.count }} source{{ paginator.count|pluralize }} found</p>
+  </div>
+  <a class="back-link" href="{% url 'admin:index' %}">&#8592; Admin home</a>
+</div>
+
+<div class="page-body">
+
+  {% if messages %}
+  <div class="messages">
+    {% for message in messages %}
+    <div class="message {{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Filter panel -->
+  <div class="filter-panel">
+    <form method="get" class="filter-form" id="filter-form">
+      <div class="filter-group">
+        <label class="filter-label" for="f-active">Active</label>
+        <select name="active" id="f-active" onchange="this.form.submit()">
+          <option value="">All</option>
+          <option value="true"  {% if filters.active == 'true' %}selected{% endif %}>Active</option>
+          <option value="false" {% if filters.active == 'false' %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label" for="f-source-for">Type</label>
+        <select name="source_for" id="f-source-for" onchange="this.form.submit()">
+          <option value="">All types</option>
+          {% for val, label in source_for_choices %}
+          <option value="{{ val }}" {% if filters.source_for == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label" for="f-method">Method</label>
+        <select name="method" id="f-method" onchange="this.form.submit()">
+          <option value="">All methods</option>
+          {% for val, label in method_choices %}
+          <option value="{{ val }}" {% if filters.method == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label" for="f-health">Health</label>
+        <select name="health" id="f-health" onchange="this.form.submit()">
+          <option value="">All statuses</option>
+          {% for val, label in health_choices %}
+          <option value="{{ val }}" {% if filters.health == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label" for="f-team">Team</label>
+        <select name="team" id="f-team" onchange="this.form.submit()">
+          <option value="">All teams</option>
+          {% for team in teams %}
+          <option value="{{ team.pk }}" {% if filters.team == team.pk|stringformat:"s" %}selected{% endif %}>{{ team.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label" for="f-subject">Subject</label>
+        <select name="subject" id="f-subject" onchange="this.form.submit()">
+          <option value="">All subjects</option>
+          {% for subject in subjects %}
+          <option value="{{ subject.pk }}" {% if filters.subject == subject.pk|stringformat:"s" %}selected{% endif %}>{{ subject.subject_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label" for="f-q">Search</label>
+        <input type="text" name="q" id="f-q" value="{{ filters.q }}" placeholder="name, link, description…">
+      </div>
+
+      <div class="filter-group" style="justify-content: flex-end;">
+        <button type="submit" class="btn btn-primary btn-sm">Search</button>
+      </div>
+
+      {% if filters.active or filters.source_for or filters.method or filters.health or filters.team or filters.subject or filters.q %}
+      <div class="filter-group" style="justify-content: flex-end;">
+        <a href="{% url 'admin:sources_overview' %}" class="btn btn-sm" style="background:#f3f4f6;border:1px solid #d1d5db;color:#374151;">Clear filters</a>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+
+  <!-- Table -->
+  <form method="post" id="bulk-form">
+    {% csrf_token %}
+    <div class="card">
+      {% if page_obj.object_list %}
+      <table class="sources-table">
+        <thead>
+          <tr>
+            <th class="checkbox-col"><input type="checkbox" id="select-all" title="Select all"></th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Method</th>
+            <th>Active</th>
+            <th>Subject</th>
+            <th>Last Content</th>
+            <th>Count</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for source in page_obj %}
+          <tr>
+            <td><input type="checkbox" name="selected_sources" value="{{ source.pk }}" class="row-check"></td>
+            <td><a class="source-name-link" href="{% url 'admin:sources_detail' source.pk %}">{{ source.name }}</a></td>
+            <td>{{ source.get_source_for_display }}</td>
+            <td>{{ source.get_method_display }}</td>
+            <td>
+              {% if source.active %}
+                <span class="badge badge-active">Active</span>
+              {% else %}
+                <span class="badge badge-inactive">Inactive</span>
+              {% endif %}
+            </td>
+            <td>{{ source.subject|default:"—" }}</td>
+            <td>
+              {% if source.last_content %}
+                {{ source.last_content|date:"Y-m-d" }}
+                <br><small style="color:#9ca3af;">{{ source.last_content|timesince }} ago</small>
+              {% else %}
+                <span style="color:#9ca3af;">—</span>
+              {% endif %}
+            </td>
+            <td>{{ source.content_count }}</td>
+            <td>
+              <span class="status-dot" style="background-color: {{ source.health_info.color }};"></span>
+              {{ source.health_info.label }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty-state">No sources match the current filters.</p>
+      {% endif %}
+
+      <div class="bulk-bar">
+        <select name="bulk_action">
+          <option value="">— Bulk action —</option>
+          <option value="activate">Activate</option>
+          <option value="deactivate">Deactivate</option>
+          <option value="reassign_to_team">Reassign to team…</option>
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+      </div>
+    </div>
+  </form>
+
+  <!-- Pagination -->
+  {% if page_obj.has_other_pages %}
+  <div class="pagination">
+    {% if page_obj.has_previous %}
+      <a href="?{% for k,v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}">&laquo; Prev</a>
+    {% endif %}
+
+    {% for num in paginator.page_range %}
+      {% if num == page_obj.number %}
+        <span class="current">{{ num }}</span>
+      {% elif num == 1 or num == paginator.num_pages or num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}
+        <a href="?{% for k,v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ num }}">{{ num }}</a>
+      {% elif num == page_obj.number|add:"-3" or num == page_obj.number|add:"3" %}
+        <span>…</span>
+      {% endif %}
+    {% endfor %}
+
+    {% if page_obj.has_next %}
+      <a href="?{% for k,v in request.GET.items %}{% if k != 'page' %}{{ k }}={{ v }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}">Next &raquo;</a>
+    {% endif %}
+
+    <span class="pagination-info">{{ paginator.count }} total</span>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+// Select-all checkbox
+document.getElementById('select-all').addEventListener('change', function () {
+  document.querySelectorAll('.row-check').forEach(function (cb) {
+    cb.checked = this.checked;
+  }, this);
+});
+</script>
+
+</body>
+</html>
