@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls %}
+
+{% block object-tools-items %}
+  <li>
+    <a href="{{ sources_overview_url }}" class="addlink" style="background-color: #417690;">
+      Sources Overview
+    </a>
+  </li>
+  {{ block.super }}
+{% endblock %}

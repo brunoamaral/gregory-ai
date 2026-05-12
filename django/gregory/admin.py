@@ -608,7 +608,7 @@ class ReassignToTeamMixin:
 
 class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
 	form = SourceAdminForm
-	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator', 'has_keyword_filter']
+	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator']
 	list_filter = [
 		'active', 'source_for', 'method', SourceHealthFilter,
 		SourceOrganizationFilter,
@@ -619,16 +619,14 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 	actions = ['activate_sources', 'deactivate_sources', 'reassign_to_team_action']
 	fieldsets = (
 		('Basic Information', {
-			'fields': ('name', 'source_for', 'method', 'active', 'link')
+			'fields': ('name', 'source_for', 'method', 'active', 'link', 'ignore_ssl', 'description')
 		}),
 		('Organization', {
 			'fields': ('team', 'subject')
 		}),
-		('Settings', {
-			'fields': ('ignore_ssl', 'description')
-		}),
 		('Filtering (bioRxiv and medRxiv)', {
 			'fields': ('keyword_filter',),
+			'classes': ('keyword-filter-settings',),
 			'description': 'For bioRxiv and medRxiv sources, specify keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson).'
 		}),
 		('ClinicalTrials.gov API Settings', {
@@ -639,7 +637,7 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 	)
 	
 	class Media:
-		js = ('admin/js/source_method_toggle.js',)
+		js = ('admin/js/source_for_toggle.js',)
 	
 	def get_form(self, request, obj=None, **kwargs):
 		"""Pass the request to the form so it can filter field choices."""
@@ -652,12 +650,6 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 		
 		return FormWithRequest
 	
-	def has_keyword_filter(self, obj):
-		"""Display whether source has keyword filtering enabled."""
-		return bool(obj.keyword_filter)
-	has_keyword_filter.boolean = True
-	has_keyword_filter.short_description = 'Has Filter'
-
 	def save_model(self, request, obj, form, change):
 		"""Warn admin if source has no team assigned."""
 		super().save_model(request, obj, form, change)
@@ -726,6 +718,22 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 			f'Successfully deactivated {updated_count} source(s).'
 		)
 	deactivate_sources.short_description = "Deactivate selected sources"
+
+	def get_urls(self):
+		from django.urls import path
+		from .admin_views import source_detail_view, source_activity_json, sources_overview_view
+		urls = super().get_urls()
+		custom_urls = [
+			path('overview/', self.admin_site.admin_view(sources_overview_view), name='sources_overview'),
+			path('<int:source_id>/detail/', self.admin_site.admin_view(source_detail_view), name='sources_detail'),
+			path('<int:source_id>/detail/activity.json/', self.admin_site.admin_view(source_activity_json), name='sources_activity_json'),
+		]
+		return custom_urls + urls
+
+	def changelist_view(self, request, extra_context=None):
+		extra_context = extra_context or {}
+		extra_context['sources_overview_url'] = reverse('admin:sources_overview')
+		return super().changelist_view(request, extra_context=extra_context)
 
 class SourcesInline(admin.StackedInline):
 	"""Inline admin for managing sources within a subject"""
