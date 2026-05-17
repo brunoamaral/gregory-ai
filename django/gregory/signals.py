@@ -11,14 +11,14 @@ def stamp_api_access_scheme_on_history(sender, history_instance, **kwargs):
 	model that carries ApiKeyHistoryMixin fields.
 
 	Reads request.api_access_scheme set by ApiKeyMiddleware via simple-history's
-	HistoryRequestMiddleware thread local.  No-ops silently for admin/shell
+	HistoryRequestMiddleware context. No-ops silently for admin/shell
 	saves where the request or the field is absent.
 	"""
 	if not hasattr(history_instance, 'api_access_scheme_id'):
 		return
 	try:
-		from simple_history.middleware import _thread_local
-		request = getattr(_thread_local, 'request', None)
+		from simple_history.models import HistoricalRecords
+		request = getattr(HistoricalRecords.context, 'request', None)
 		if request is None:
 			return
 		# api_access_scheme is a SimpleLazyObject; resolving it here is safe

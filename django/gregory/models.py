@@ -306,7 +306,11 @@ class Articles(models.Model):
 	container_title = models.CharField(max_length=150, blank=True, null=True, default=None)
 	crossref_check = models.DateTimeField(blank=True, null=True)
 	takeaways = models.TextField(blank=True, null=True)
-	history = HistoricalRecords(excluded_fields=['crossref_check', 'utitle', 'usummary'], bases=[ApiKeyHistoryMixin])
+	history = HistoricalRecords(
+		excluded_fields=['crossref_check', 'utitle', 'usummary'],
+		bases=[ApiKeyHistoryMixin],
+		m2m_fields=['sources', 'subjects', 'teams']
+	)
 	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
 	retracted = models.BooleanField(default=False)
@@ -417,7 +421,10 @@ class Trials(models.Model):
 	identifiers = models.JSONField(blank=True, null=True)
 	teams = models.ManyToManyField('Team', related_name='trials')
 	subjects = models.ManyToManyField('Subject', related_name='trials')
-	history = HistoricalRecords(bases=[ApiKeyHistoryMixin])
+	history = HistoricalRecords(
+		bases=[ApiKeyHistoryMixin],
+		m2m_fields=['sources', 'teams', 'subjects'],
+	)
 
 	# WHO Fields
 	export_date = models.DateTimeField(null=True, blank=True)
