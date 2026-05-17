@@ -82,18 +82,20 @@ def _resolve_per_org_fields_org(request):
 	if org is None:
 		team_id = request.GET.get('team_id')
 		if team_id:
+			from gregory.models import Team
 			try:
-				from gregory.models import Team
 				team = (
 					Team.objects
 					.select_related('organization__api_settings')
 					.get(pk=int(team_id))
 				)
+			except (ValueError, TypeError, Team.DoesNotExist):
+				# Bad/unknown team_id — treat as "no org context".
+				team = None
+			if team is not None:
 				api_settings = getattr(team.organization, 'api_settings', None)
 				if api_settings and api_settings.make_api_public:
 					org = team.organization
-			except Exception:
-				pass
 
 	setattr(request, _ORG_CACHE_ATTR, org)
 	return org

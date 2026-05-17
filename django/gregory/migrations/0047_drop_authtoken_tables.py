@@ -25,5 +25,11 @@ class Migration(migrations.Migration):
 				'DROP TABLE IF EXISTS authtoken_token CASCADE;',
 				'DROP TABLE IF EXISTS authtoken_tokenproxy CASCADE;',
 			],
+			# We can't recover the dropped rows, but make the migration
+			# reversible (no-op on the way back) so `manage.py migrate
+			# gregory 0046` doesn't fail with IrreversibleError.  Restoring
+			# the tables would require re-adding rest_framework.authtoken
+			# to INSTALLED_APPS, which is the deliberate way to roll back.
+			reverse_sql=migrations.RunSQL.noop,
 		),
 	]

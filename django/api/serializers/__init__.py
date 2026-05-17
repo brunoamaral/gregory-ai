@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from gregory.models import Articles, Trials, Sources, Authors, Subject, Team, MLPredictions, ArticleSubjectRelevance, TeamCategory, ArticleTrialReference
+from gregory.models import Articles, Trials, Sources, Authors, Subject, Team, MLPredictions, ArticleSubjectRelevance, TeamCategory, ArticleTrialReference, ArticleOrgContent, TrialOrgContent
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
 from django.contrib.sites.models import Site
@@ -308,16 +308,33 @@ class ArticleSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSe
 		return TrialReferenceSerializer(trials, many=True).data
 
 	def _get_org_content(self, obj, org):
-		"""Fetch ArticleOrgContent for (obj, org), cached per serializer instance."""
+		"""Return the caller-org's ArticleOrgContent for *obj*, or None.
+
+		Uses the per-org prefetch attached by ``ArticleViewSet.get_queryset``
+		when present (zero extra queries per row); falls back to a single
+		``.get()`` lookup for detail responses and other callers that didn't
+		prefetch.  Result is cached per serializer instance so calling this
+		from both ``get_takeaways`` and ``get_summary_plain_english`` only
+		costs one lookup.
+		"""
 		if not hasattr(self, '_org_content_cache'):
 			self._org_content_cache = {}
 		key = (obj.pk, org.pk)
-		if key not in self._org_content_cache:
-			try:
-				self._org_content_cache[key] = obj.org_contents.get(organization=org)
-			except Exception:
-				self._org_content_cache[key] = None
-		return self._org_content_cache[key]
+		if key in self._org_content_cache:
+			return self._org_content_cache[key]
+
+		prefetched = getattr(obj, '_prefetched_org_contents', None)
+		if prefetched is not None:
+			match = next((c for c in prefetched if c.organization_id == org.pk), None)
+			self._org_content_cache[key] = match
+			return match
+
+		try:
+			content = obj.org_contents.get(organization=org)
+		except ArticleOrgContent.DoesNotExist:
+			content = None
+		self._org_content_cache[key] = content
+		return content
 
 	def get_takeaways(self, obj):
 		"""Return takeaways from ArticleOrgContent for the caller's org, or None."""
@@ -371,16 +388,31 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		return ArticleReferenceSerializer(articles, many=True).data
 
 	def _get_org_content(self, obj, org):
-		"""Fetch TrialOrgContent for (obj, org), cached per serializer instance."""
+		"""Return the caller-org's TrialOrgContent for *obj*, or None.
+
+		Uses the per-org prefetch attached by ``TrialViewSet.get_queryset``
+		when present (zero extra queries per row); falls back to a single
+		``.get()`` lookup for detail responses and other callers that didn't
+		prefetch.  Result is cached per serializer instance.
+		"""
 		if not hasattr(self, '_org_content_cache'):
 			self._org_content_cache = {}
 		key = (obj.pk, org.pk)
-		if key not in self._org_content_cache:
-			try:
-				self._org_content_cache[key] = obj.org_contents.get(organization=org)
-			except Exception:
-				self._org_content_cache[key] = None
-		return self._org_content_cache[key]
+		if key in self._org_content_cache:
+			return self._org_content_cache[key]
+
+		prefetched = getattr(obj, '_prefetched_org_contents', None)
+		if prefetched is not None:
+			match = next((c for c in prefetched if c.organization_id == org.pk), None)
+			self._org_content_cache[key] = match
+			return match
+
+		try:
+			content = obj.org_contents.get(organization=org)
+		except TrialOrgContent.DoesNotExist:
+			content = None
+		self._org_content_cache[key] = content
+		return content
 
 	def get_takeaways(self, obj):
 		"""Return takeaways from TrialOrgContent for the caller's org, or None."""

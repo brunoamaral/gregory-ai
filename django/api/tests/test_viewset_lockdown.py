@@ -1,11 +1,8 @@
 """
-Tests for viewset lockdown (Phase 5) — all write methods must return 405.
+Tests for viewset lockdown — all write methods must return 405.
 
-These tests verify that ArticleViewSet and other viewsets only allow
-GET/HEAD/OPTIONS after switching to ReadOnlyModelViewSet.
-
-They will FAIL until phase-5-lock-viewsets is merged (currently viewsets
-use ModelViewSet which allows PATCH/PUT/DELETE).
+Verify that ArticleViewSet and the other API viewsets only allow
+GET/HEAD/OPTIONS now that they subclass ReadOnlyModelViewSet.
 
 Covers spec §10.4:
   - PATCH /articles/<id>/ → 405

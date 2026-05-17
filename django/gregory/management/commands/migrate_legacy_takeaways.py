@@ -128,11 +128,15 @@ class Command(BaseCommand):
 				return
 
 		# --- gather candidate articles ---
+		# Only articles that belong to the chosen organisation (via a team).
+		# Without this scope the command would copy legacy takeaways onto
+		# articles that have no relationship to the target org.
 		articles_qs = (
 			Articles.objects
-			.filter(takeaways__isnull=False)
+			.filter(takeaways__isnull=False, teams__organization=org)
 			.exclude(takeaways='')
 			.only('article_id', 'takeaways')
+			.distinct()
 		)
 		total_candidates = articles_qs.count()
 

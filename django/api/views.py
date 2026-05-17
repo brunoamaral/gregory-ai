@@ -23,6 +23,7 @@ import json
 import traceback
 from django.utils.dateparse import parse_date
 
+from api.serializers.mixins import _resolve_per_org_fields_org
 from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress, find_trial_by_identifier
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
@@ -677,6 +678,26 @@ class ArticleViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	ordering_fields = ['discovery_date', 'published_date', 'title', 'article_id']
 	ordering = ['-discovery_date']
 
+	def get_queryset(self):
+		"""Prefetch the caller-org's ArticleOrgContent to avoid N+1 on list responses.
+
+		When a request resolves to an organisation (API key or public-org
+		filter), attach the matching ``ArticleOrgContent`` rows as
+		``_prefetched_org_contents`` so the serializer can resolve per-org
+		fields without issuing one query per article.
+		"""
+		qs = super().get_queryset()
+		org = _resolve_per_org_fields_org(self.request)
+		if org is not None:
+			qs = qs.prefetch_related(
+				Prefetch(
+					'org_contents',
+					queryset=ArticleOrgContent.objects.filter(organization=org),
+					to_attr='_prefetched_org_contents',
+				)
+			)
+		return qs
+
 	def finalize_response(self, request, response, *args, **kwargs):
 		"""
 		Override to handle CSV streaming. If CSV format is requested, convert the response
@@ -1035,6 +1056,26 @@ class TrialViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	pagination_class = FlexiblePagination
 	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
 	filterset_class = TrialFilter
+
+	def get_queryset(self):
+		"""Prefetch the caller-org's TrialOrgContent to avoid N+1 on list responses.
+
+		When a request resolves to an organisation (API key or public-org
+		filter), attach the matching ``TrialOrgContent`` rows as
+		``_prefetched_org_contents`` so the serializer can resolve per-org
+		fields without issuing one query per trial.
+		"""
+		qs = super().get_queryset()
+		org = _resolve_per_org_fields_org(self.request)
+		if org is not None:
+			qs = qs.prefetch_related(
+				Prefetch(
+					'org_contents',
+					queryset=TrialOrgContent.objects.filter(organization=org),
+					to_attr='_prefetched_org_contents',
+				)
+			)
+		return qs
 	search_fields = ['title', 'summary']
 	ordering_fields = ['discovery_date', 'published_date', 'title', 'trial_id', 'last_updated']
 	ordering = ['-discovery_date']

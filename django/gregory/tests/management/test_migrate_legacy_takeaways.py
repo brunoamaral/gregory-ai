@@ -1,8 +1,5 @@
 """
-Tests for the migrate_legacy_takeaways management command (Phase 7).
-
-These tests will FAIL until phase-7-migrate-legacy-takeaways is merged into
-api-improvements (the command does not exist on main yet).
+Tests for the migrate_legacy_takeaways management command.
 
 Covers spec §10.5:
   - 2 articles (one with takeaways, one without) → exactly 1 ArticleOrgContent created
@@ -10,6 +7,7 @@ Covers spec §10.5:
   - --dry-run reports counts and writes nothing
   - --org-id <bad-id> exits non-zero with clear error
   - --org-id <id> --noinput runs without prompting
+  - Articles outside the chosen org are not migrated.
 
 Run with:
     docker exec gregory python manage.py test gregory.tests.management.test_migrate_legacy_takeaways

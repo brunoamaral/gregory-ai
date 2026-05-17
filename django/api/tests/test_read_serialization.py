@@ -1,9 +1,8 @@
 """
 Tests for org-scoped takeaways read serialization.
 
-These tests verify Phase 4 behaviour (ArticleSerializer.get_takeaways and
-get_summary_plain_english methods on OrgScopedSerializerMixin).  They will
-FAIL until the phase-4-serializers branch is merged into api-improvements.
+Verify ``ArticleSerializer.get_takeaways`` / ``get_summary_plain_english``
+and the omission behaviour added by ``OrgScopedSerializerMixin``.
 
 Covers spec §10.3:
   - With API key for Org A: takeaways resolves to Org A's ArticleOrgContent
@@ -123,12 +122,7 @@ class TakeawaysReadWithApiKeyTest(TestCase):
 
 
 class TakeawaysReadAnonymousTest(TestCase):
-	"""
-	Anonymous request → takeaways field absent from response (Phase 4).
-
-	Note: before Phase 4 merges, this test will FAIL because the field is
-	present (it reads Articles.takeaways directly).
-	"""
+	"""Anonymous request → takeaways field absent from response."""
 
 	def setUp(self):
 		self.client = APIClient()
