@@ -18,7 +18,6 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path, re_path
 from rest_framework import routers
-from rest_framework.authtoken import views
 
 from api.views import (
 	ArticleViewSet, AuthorsViewSet, SourceViewSet, TrialViewSet, 
@@ -61,7 +60,6 @@ urlpatterns = [
 	# API auth route
 	path('api-auth/', include('rest_framework.urls')),
 	path('api/token/', LoginView.as_view(), name='token_obtain_pair'),
-	path('api/token/get/', views.obtain_auth_token),
 
 	# API routes
 	path('articles/post/', post_article),
