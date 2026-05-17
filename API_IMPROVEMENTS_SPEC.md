@@ -38,7 +38,7 @@ Per-organisation editorial content for an article.
 | `summary_plain_english` | `TextField(blank=True, null=True)` | Plain-English rewrite per org. |
 | `created_at` | `DateTimeField(auto_now_add=True)` | |
 | `updated_at` | `DateTimeField(auto_now=True)` | |
-| `history` | `HistoricalRecords()` | Audit trail (matches `Articles`). |
+| `history` | `HistoricalRecords(...)` | Audit trail with API-key attribution (see §3.4). |
 
 Constraints:
 - `UniqueConstraint(fields=['article', 'organization'], name='unique_article_org_content')`
@@ -58,7 +58,7 @@ Same shape as `ArticleOrgContent`, for `Trials`.
 | `summary_plain_english` | `TextField(blank=True, null=True)` | Mirrors `Trials.summary_plain_english`. |
 | `created_at` | `DateTimeField(auto_now_add=True)` | |
 | `updated_at` | `DateTimeField(auto_now=True)` | |
-| `history` | `HistoricalRecords()` | |
+| `history` | `HistoricalRecords(...)` | Audit trail with API-key attribution (see §3.4). |
 
 Constraints:
 - `UniqueConstraint(fields=['trial', 'organization'], name='unique_trial_org_content')`
@@ -69,7 +69,59 @@ Constraints:
 - **Organization deleted** → its `*OrgContent` rows cascade away. The article/trial itself is **not** affected.
 - **Orphan articles/trials**: if an article ends up with no teams associated (and therefore no orgs that reference it), it should be deletable as part of routine cleanup. A management command `cleanup_orphan_articles` is added that deletes articles with `teams=None`. **Not run automatically** — operator-triggered for now. Same for trials.
 
-### 3.4 Field deprecation: `Articles.takeaways`
+### 3.4 Historical records and API-key attribution
+
+`ArticleOrgContent` and `TrialOrgContent` use `HistoricalRecords` for field-level audit, with an explicit `api_access_scheme` FK on the historical model so it's clear which API key made the change.
+
+Implementation pattern (in `django/gregory/models.py`):
+
+```python
+from simple_history.models import HistoricalRecords
+
+class ArticleOrgContent(models.Model):
+    # …regular fields…
+    history = HistoricalRecords(
+        excluded_fields=['updated_at'],
+        cascade_delete_history=True,
+    )
+```
+
+To attribute changes to an `APIAccessScheme` rather than to a Django auth user, add an extra field to the *historical* model only, via simple-history's `inherit` / `additional_fields` pattern. The cleanest expression is to define a custom historical model:
+
+```python
+from simple_history.models import HistoricalRecords
+
+class ArticleOrgContent(models.Model):
+    # …regular fields…
+    history = HistoricalRecords(
+        excluded_fields=['updated_at'],
+        cascade_delete_history=True,
+        history_change_reason_field=models.TextField(null=True, blank=True),
+        bases=[models.Model],
+    )
+```
+
+…and populate `api_access_scheme` through a thin abstraction the edit views use when they save:
+
+```python
+def _save_with_api_audit(instance, api_access_scheme):
+    instance._history_user = None  # no Django user
+    instance.save()
+    # Attach the API key to the most recent history row
+    instance.history.first().api_access_scheme = api_access_scheme
+    instance.history.first().save(update_fields=['api_access_scheme'])
+```
+
+The simplest concrete shape: include an explicit FK on the historical model by subclassing `HistoricalRecords` or using `history.register(... extra_fields={...})`. The implementation may pick whichever simple-history API surface is least invasive; the requirement is just that **every historical row for `ArticleOrgContent` and `TrialOrgContent` carries an `api_access_scheme_id` populated at save time**. Nullable, because admin edits or fixture loads have no API key.
+
+Required behaviour:
+- Every save through the API edit endpoints sets the historical row's `api_access_scheme_id`.
+- Admin/shell saves leave it `NULL` — those are attributed via `history_user` instead (Django's auth user).
+- The historical model is readable from the Django admin's "History" button on each object.
+
+`Articles` already has `HistoricalRecords` ([django/gregory/models.py:274](django/gregory/models.py#L274)). When the edit endpoint updates `access`/`retracted`/`kind` on `Articles` directly, the same attribution mechanism applies: stamp the API key onto that historical row too. This requires extending the existing `Articles.history` definition with the same `api_access_scheme` field. Same for `Trials.history` if `/trials/edit/` ever writes back to per-trial fields (currently it doesn't — only per-org content — so this is a no-op for trials today, but the field gets added for symmetry and future-proofing).
+
+### 3.5 Field deprecation: `Articles.takeaways`
 
 The existing `Articles.takeaways` column stays in place for the duration of this spec's PR, but:
 - Read endpoints stop returning it directly (see §6).
@@ -244,7 +296,11 @@ Out of scope: any change to JWT auth. `POST /api/token/` (SimpleJWT) continues t
 
 ---
 
-## 9. Logging
+## 9. Logging and audit
+
+Two complementary systems are used: `APIAccessSchemeLog` for the **call**, and `HistoricalRecords` for the **data**. They are not substitutes — the former records that a request happened (including failures and security-relevant attempts), the latter records what a field used to say.
+
+### 9.1 Call log — `APIAccessSchemeLog`
 
 Every call to `edit_article` and `edit_trial` writes one row to `APIAccessSchemeLog` ([django/api/models.py:67](django/api/models.py#L67)), matching `post_article`'s pattern:
 
@@ -254,6 +310,25 @@ Every call to `edit_article` and `edit_trial` writes one row to `APIAccessScheme
 - `http_code`: the response status
 - `error_message`: error class name + message on failure
 - `payload_received`: truncated request body (existing `post_article` truncation rules apply)
+
+Rejected calls (404, 403, 409, 400) **must** still log here. This is the audit trail for security investigations.
+
+### 9.2 Data audit — `HistoricalRecords`
+
+Every successful save on `ArticleOrgContent`, `TrialOrgContent`, and edits to `Articles` per-article fields (`access`, `retracted`, `kind`) creates a historical row. Each historical row carries:
+
+- The full snapshot of the post-save fields (simple-history default).
+- `history_date`, `history_type` (`+`/`~`/`-`) (simple-history default).
+- `history_user` — the Django auth user if the change came from the admin/shell; `NULL` if from an API-key call.
+- `api_access_scheme` — FK to `APIAccessScheme`, populated when the change came from `/articles/edit/` or `/trials/edit/`; `NULL` for admin/shell edits.
+
+Failed edits do **not** create historical rows. To investigate a rejected attempt, use the `APIAccessSchemeLog` from §9.1.
+
+### 9.3 Reading the audit
+
+- "What did this article's takeaways say a week ago, for org X?" → `ArticleOrgContent.history.filter(organization_id=X, history_date__lt=…)`.
+- "Who edited this article last?" → check both `history_user` (Django admin) and `api_access_scheme` (API call) on the most recent historical row.
+- "Did anyone try to edit articles outside their org last month?" → `APIAccessSchemeLog.objects.filter(call_type__startswith='POST /articles/edit/', http_code=403)`.
 
 ---
 
@@ -271,7 +346,9 @@ Add tests under `django/api/tests/`. Minimum coverage:
    - Invalid `access` / `kind` values → 400.
    - Missing API key → 401.
    - API key without org → 403.
-   - `HistoricalRecords` row is created on update.
+   - `HistoricalRecords` row is created on update with `api_access_scheme` populated to the calling key.
+   - Admin/shell save creates a `HistoricalRecords` row with `api_access_scheme = NULL` and `history_user` populated.
+   - Failed edits (403/404/409/400) do **not** create historical rows but **do** create an `APIAccessSchemeLog` row with the right `http_code`.
    - Empty string `takeaways` clears the field (saved as `NULL`).
 2. **`/trials/edit/`**: same matrix, with `DuplicateTrialError` in place of `DuplicateArticleError` and identifier-based lookup.
 3. **Read serialization**
