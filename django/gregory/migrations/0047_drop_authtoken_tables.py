@@ -25,11 +25,5 @@ class Migration(migrations.Migration):
 				'DROP TABLE IF EXISTS authtoken_token CASCADE;',
 				'DROP TABLE IF EXISTS authtoken_tokenproxy CASCADE;',
 			],
-			reverse_sql=[
-				# Recreating authtoken tables by hand is impractical; mark as
-				# non-reversible so rollback fails fast rather than silently
-				# leaving the database in an inconsistent state.
-				migrations.RunSQL.noop,
-			],
 		),
 	]
