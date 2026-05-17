@@ -33,7 +33,55 @@ Query strategy (avoiding N+1 on list endpoints)
   ``request._org_scoped_mixin_subject_ids``.  Filtering is done entirely on
   ``ret['ml_predictions']`` — no extra DB query, no dependency on whether
   ``ml_predictions_detail`` was prefetched.
+
+Per-org fields (``_per_org_fields``)
+-------------------------------------
+Subclasses may declare a list of field names that should only appear in
+the response when an organisation context is available.  When no org can
+be resolved (anonymous request, no public-org filter), those keys are
+removed from the serialised output entirely — not just set to ``null``.
+
+Resolution order (spec §6):
+  1. Valid API key on the request → that key's organisation.
+  2. ``?team_id=<id>`` query-param on a request where that team's org has
+     ``OrganizationApiSettings.make_api_public=True`` → that organisation.
+  3. Otherwise → no org, per-org fields omitted.
 """
+
+
+def _resolve_per_org_fields_org(request):
+	"""Return the Organisation whose per-org content should be exposed, or None.
+
+	See mixin docstring for the full resolution order.  Returns None when there
+	is no organisation context, which tells the caller to omit per-org fields.
+	"""
+	if request is None:
+		return None
+
+	# 1. API key path (set by ApiKeyMiddleware as a SimpleLazyObject)
+	scheme = getattr(request, 'api_access_scheme', None)
+	if scheme is not None:
+		org = getattr(scheme, 'organization', None)
+		if org is not None:
+			return org
+
+	# 2. Public org via ?team_id filter
+	team_id = request.GET.get('team_id')
+	if team_id:
+		try:
+			from gregory.models import Team
+			team = (
+				Team.objects
+				.select_related('organization__api_settings')
+				.get(pk=int(team_id))
+			)
+			api_settings = getattr(team.organization, 'api_settings', None)
+			if api_settings and api_settings.make_api_public:
+				return team.organization
+		except Exception:
+			pass
+
+	return None
 
 
 def _request_visible_team_ids(request, visible_org_ids: set) -> set:
@@ -81,12 +129,26 @@ class OrgScopedSerializerMixin:
 	    class ArticleSerializer(OrgScopedSerializerMixin,
 	                            serializers.HyperlinkedModelSerializer):
 	        ...
+
+	Set ``_per_org_fields`` to a list of field names that should be omitted
+	entirely when there is no organisation context (spec §6.2).
 	"""
+
+	#: Field names to omit from the response when no org context is available.
+	_per_org_fields: list = []
 
 	def to_representation(self, instance):
 		ret = super().to_representation(instance)
 
 		request = self.context.get('request')
+
+		# ---- Per-org field omission (spec §6.2) ----------------------------
+		if self._per_org_fields:
+			org = _resolve_per_org_fields_org(request)
+			if org is None:
+				for field in self._per_org_fields:
+					ret.pop(field, None)
+
 		if request is None or not hasattr(request, 'visible_org_ids'):
 			return ret
 

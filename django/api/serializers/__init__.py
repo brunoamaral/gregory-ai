@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count, Q
 
-from api.serializers.mixins import OrgScopedSerializerMixin  # noqa: F401
+from api.serializers.mixins import OrgScopedSerializerMixin, _resolve_per_org_fields_org  # noqa: F401
 
 def get_custom_settings():
 		try:
@@ -284,6 +284,11 @@ class ArticleSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSe
 	ml_predictions = MLPredictionsSerializer(many=True, read_only=True, source='ml_predictions_detail')
 	article_subject_relevances = ArticleSubjectRelevanceSerializer(many=True, read_only=True)
 	clinical_trials = serializers.SerializerMethodField()
+	takeaways = serializers.SerializerMethodField()
+	summary_plain_english = serializers.SerializerMethodField()
+
+	# Omit these fields from the response when there is no organisation context
+	_per_org_fields = ['takeaways', 'summary_plain_english']
 
 	class Meta:
 		model = Articles
@@ -294,18 +299,43 @@ class ArticleSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSe
 			'discovery_date', 'article_subject_relevances',
 			'doi', 'access', 'takeaways', 'team_categories', 'ml_predictions', 'clinical_trials',
 		]
-		read_only_fields = ('discovery_date', 'ml_predictions', 'takeaways', 'clinical_trials')
-	
+		read_only_fields = ('discovery_date', 'ml_predictions', 'clinical_trials')
+
 	def get_clinical_trials(self, obj):
 		"""Get trials referenced in the article"""
 		references = ArticleTrialReference.objects.filter(article=obj)
 		trials = [ref.trial for ref in references]
 		return TrialReferenceSerializer(trials, many=True).data
 
+	def get_takeaways(self, obj):
+		"""Return takeaways from ArticleOrgContent for the caller's org, or None."""
+		org = _resolve_per_org_fields_org(self.context.get('request'))
+		if org is None:
+			return None  # field will be popped in to_representation
+		try:
+			return obj.org_contents.get(organization=org).takeaways
+		except Exception:
+			return None
+
+	def get_summary_plain_english(self, obj):
+		"""Return plain-English summary from ArticleOrgContent for the caller's org, or None."""
+		org = _resolve_per_org_fields_org(self.context.get('request'))
+		if org is None:
+			return None  # field will be popped in to_representation
+		try:
+			return obj.org_contents.get(organization=org).summary_plain_english
+		except Exception:
+			return None
+
 class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 	articles = serializers.SerializerMethodField()
+	takeaways = serializers.SerializerMethodField()
+	summary_plain_english = serializers.SerializerMethodField()
+
+	# Omit these fields from the response when there is no organisation context
+	_per_org_fields = ['takeaways', 'summary_plain_english']
 
 	class Meta:
 		model = Trials
@@ -321,15 +351,36 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 			'intervention', 'primary_outcome', 'secondary_outcome', 'secondary_id',
 			'source_support', 'ethics_review_status', 'ethics_review_approval_date',
 			'ethics_review_contact_name', 'ethics_review_contact_address', 'ethics_review_contact_phone',
-			'ethics_review_contact_email', 'results_date_completed', 'results_url_link', 'articles'
+			'ethics_review_contact_email', 'results_date_completed', 'results_url_link',
+			'takeaways', 'articles'
 		]
 		read_only_fields = ('discovery_date', 'articles')
-		
+
 	def get_articles(self, obj):
 		"""Get articles that reference this trial"""
 		references = ArticleTrialReference.objects.filter(trial=obj)
 		articles = [ref.article for ref in references]
 		return ArticleReferenceSerializer(articles, many=True).data
+
+	def get_takeaways(self, obj):
+		"""Return takeaways from TrialOrgContent for the caller's org, or None."""
+		org = _resolve_per_org_fields_org(self.context.get('request'))
+		if org is None:
+			return None  # field will be popped in to_representation
+		try:
+			return obj.org_contents.get(organization=org).takeaways
+		except Exception:
+			return None
+
+	def get_summary_plain_english(self, obj):
+		"""Return plain-English summary from TrialOrgContent for the caller's org, or None."""
+		org = _resolve_per_org_fields_org(self.context.get('request'))
+		if org is None:
+			return None  # field will be popped in to_representation
+		try:
+			return obj.org_contents.get(organization=org).summary_plain_english
+		except Exception:
+			return None
 
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:
