@@ -237,11 +237,20 @@ class Sources(models.Model):
 
 
 class ApiKeyHistoryMixin(models.Model):
-	"""Abstract mixin that adds an api_access_scheme FK to historical models.
+	"""Abstract mixin that adds API-key attribution fields to historical models.
 
 	Attach to HistoricalRecords via bases=[ApiKeyHistoryMixin] so every
-	historical row can record which API key triggered the change.  Nullable
-	so admin / shell saves leave the field NULL.
+	historical row can record which API key triggered the change.
+
+	Two complementary fields:
+	- api_access_scheme (FK, SET_NULL): live link; NULL for admin/shell saves
+	  or after key deletion.
+	- api_access_scheme_label (CharField): snapshot of the key's client_name at
+	  save time.  Preserved permanently even after the key or its organisation
+	  is deleted, keeping the audit trail readable.
+
+	Both fields are populated automatically by the
+	``stamp_api_access_scheme_on_history`` signal handler in gregory/signals.py.
 	"""
 	api_access_scheme = models.ForeignKey(
 		'api.APIAccessScheme',
@@ -249,6 +258,12 @@ class ApiKeyHistoryMixin(models.Model):
 		blank=True,
 		on_delete=models.SET_NULL,
 		related_name='+',
+	)
+	api_access_scheme_label = models.CharField(
+		max_length=200,
+		blank=True,
+		help_text='Snapshot of APIAccessScheme.client_name at the time of the change. '
+		          'Preserved after key deletion.',
 	)
 
 	class Meta:
