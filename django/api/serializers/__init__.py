@@ -307,25 +307,33 @@ class ArticleSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSe
 		trials = [ref.trial for ref in references]
 		return TrialReferenceSerializer(trials, many=True).data
 
+	def _get_org_content(self, obj, org):
+		"""Fetch ArticleOrgContent for (obj, org), cached per serializer instance."""
+		if not hasattr(self, '_org_content_cache'):
+			self._org_content_cache = {}
+		key = (obj.pk, org.pk)
+		if key not in self._org_content_cache:
+			try:
+				self._org_content_cache[key] = obj.org_contents.get(organization=org)
+			except Exception:
+				self._org_content_cache[key] = None
+		return self._org_content_cache[key]
+
 	def get_takeaways(self, obj):
 		"""Return takeaways from ArticleOrgContent for the caller's org, or None."""
 		org = _resolve_per_org_fields_org(self.context.get('request'))
 		if org is None:
 			return None  # field will be popped in to_representation
-		try:
-			return obj.org_contents.get(organization=org).takeaways
-		except Exception:
-			return None
+		content = self._get_org_content(obj, org)
+		return content.takeaways if content else None
 
 	def get_summary_plain_english(self, obj):
 		"""Return plain-English summary from ArticleOrgContent for the caller's org, or None."""
 		org = _resolve_per_org_fields_org(self.context.get('request'))
 		if org is None:
 			return None  # field will be popped in to_representation
-		try:
-			return obj.org_contents.get(organization=org).summary_plain_english
-		except Exception:
-			return None
+		content = self._get_org_content(obj, org)
+		return content.summary_plain_english if content else None
 
 class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
 	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
@@ -362,25 +370,33 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		articles = [ref.article for ref in references]
 		return ArticleReferenceSerializer(articles, many=True).data
 
+	def _get_org_content(self, obj, org):
+		"""Fetch TrialOrgContent for (obj, org), cached per serializer instance."""
+		if not hasattr(self, '_org_content_cache'):
+			self._org_content_cache = {}
+		key = (obj.pk, org.pk)
+		if key not in self._org_content_cache:
+			try:
+				self._org_content_cache[key] = obj.org_contents.get(organization=org)
+			except Exception:
+				self._org_content_cache[key] = None
+		return self._org_content_cache[key]
+
 	def get_takeaways(self, obj):
 		"""Return takeaways from TrialOrgContent for the caller's org, or None."""
 		org = _resolve_per_org_fields_org(self.context.get('request'))
 		if org is None:
 			return None  # field will be popped in to_representation
-		try:
-			return obj.org_contents.get(organization=org).takeaways
-		except Exception:
-			return None
+		content = self._get_org_content(obj, org)
+		return content.takeaways if content else None
 
 	def get_summary_plain_english(self, obj):
 		"""Return plain-English summary from TrialOrgContent for the caller's org, or None."""
 		org = _resolve_per_org_fields_org(self.context.get('request'))
 		if org is None:
 			return None  # field will be popped in to_representation
-		try:
-			return obj.org_contents.get(organization=org).summary_plain_english
-		except Exception:
-			return None
+		content = self._get_org_content(obj, org)
+		return content.summary_plain_english if content else None
 
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
 	class Meta:

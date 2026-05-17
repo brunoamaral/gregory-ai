@@ -49,39 +49,54 @@ Resolution order (spec §6):
 """
 
 
+# Sentinel for "not yet cached" — distinct from None ("no org").
+_ORG_CACHE_MISSING = object()
+_ORG_CACHE_ATTR = '_per_org_fields_org_cache'
+
+
 def _resolve_per_org_fields_org(request):
 	"""Return the Organisation whose per-org content should be exposed, or None.
 
 	See mixin docstring for the full resolution order.  Returns None when there
 	is no organisation context, which tells the caller to omit per-org fields.
+
+	The result is cached on the request object so the team/api_settings DB
+	lookup is issued at most once per request, regardless of how many objects
+	the serializer processes.
 	"""
 	if request is None:
 		return None
+
+	cached = getattr(request, _ORG_CACHE_ATTR, _ORG_CACHE_MISSING)
+	if cached is not _ORG_CACHE_MISSING:
+		return cached
+
+	org = None
 
 	# 1. API key path (set by ApiKeyMiddleware as a SimpleLazyObject)
 	scheme = getattr(request, 'api_access_scheme', None)
 	if scheme is not None:
 		org = getattr(scheme, 'organization', None)
-		if org is not None:
-			return org
 
 	# 2. Public org via ?team_id filter
-	team_id = request.GET.get('team_id')
-	if team_id:
-		try:
-			from gregory.models import Team
-			team = (
-				Team.objects
-				.select_related('organization__api_settings')
-				.get(pk=int(team_id))
-			)
-			api_settings = getattr(team.organization, 'api_settings', None)
-			if api_settings and api_settings.make_api_public:
-				return team.organization
-		except Exception:
-			pass
+	if org is None:
+		team_id = request.GET.get('team_id')
+		if team_id:
+			try:
+				from gregory.models import Team
+				team = (
+					Team.objects
+					.select_related('organization__api_settings')
+					.get(pk=int(team_id))
+				)
+				api_settings = getattr(team.organization, 'api_settings', None)
+				if api_settings and api_settings.make_api_public:
+					org = team.organization
+			except Exception:
+				pass
 
-	return None
+	setattr(request, _ORG_CACHE_ATTR, org)
+	return org
 
 
 def _request_visible_team_ids(request, visible_org_ids: set) -> set:
