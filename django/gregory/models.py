@@ -235,6 +235,26 @@ class Sources(models.Model):
 		verbose_name_plural = 'sources'
 		db_table = 'sources'
 
+
+class ApiKeyHistoryMixin(models.Model):
+	"""Abstract mixin that adds an api_access_scheme FK to historical models.
+
+	Attach to HistoricalRecords via bases=[ApiKeyHistoryMixin] so every
+	historical row can record which API key triggered the change.  Nullable
+	so admin / shell saves leave the field NULL.
+	"""
+	api_access_scheme = models.ForeignKey(
+		'api.APIAccessScheme',
+		null=True,
+		blank=True,
+		on_delete=models.SET_NULL,
+		related_name='+',
+	)
+
+	class Meta:
+		abstract = True
+
+
 class Articles(models.Model):
 	KINDS = [('science paper', 'Science Paper'),('news article','News Article')]
 	ACCESS_OPTIONS = [('unknown','Unknown'),('open','Open'),('restricted','Restricted')]
@@ -271,7 +291,7 @@ class Articles(models.Model):
 	container_title = models.CharField(max_length=150, blank=True, null=True, default=None)
 	crossref_check = models.DateTimeField(blank=True, null=True)
 	takeaways = models.TextField(blank=True, null=True)
-	history = HistoricalRecords(excluded_fields=['crossref_check', 'utitle', 'usummary'])
+	history = HistoricalRecords(excluded_fields=['crossref_check', 'utitle', 'usummary'], bases=[ApiKeyHistoryMixin])
 	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
 	retracted = models.BooleanField(default=False)
@@ -382,7 +402,7 @@ class Trials(models.Model):
 	identifiers = models.JSONField(blank=True, null=True)
 	teams = models.ManyToManyField('Team', related_name='trials')
 	subjects = models.ManyToManyField('Subject', related_name='trials')
-	history = HistoricalRecords()
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin])
 
 	# WHO Fields
 	export_date = models.DateTimeField(null=True, blank=True)
@@ -468,6 +488,72 @@ class Trials(models.Model):
 				opclasses=['gin_trgm_ops']
 			),
 		]
+
+
+class ArticleOrgContent(models.Model):
+	"""Per-organisation editorial content for an article."""
+	article = models.ForeignKey(
+		Articles,
+		on_delete=models.CASCADE,
+		related_name='org_contents',
+	)
+	organization = models.ForeignKey(
+		Organization,
+		on_delete=models.CASCADE,
+		related_name='article_contents',
+	)
+	takeaways = models.TextField(blank=True, null=True)
+	summary_plain_english = models.TextField(blank=True, null=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin])
+
+	def __str__(self):
+		return f"{self.article_id}/{self.organization_id}"
+
+	class Meta:
+		constraints = [
+			models.UniqueConstraint(
+				fields=['article', 'organization'],
+				name='unique_article_org_content'
+			)
+		]
+		verbose_name = 'article org content'
+		verbose_name_plural = 'article org contents'
+
+
+class TrialOrgContent(models.Model):
+	"""Per-organisation editorial content for a trial."""
+	trial = models.ForeignKey(
+		Trials,
+		on_delete=models.CASCADE,
+		related_name='org_contents',
+	)
+	organization = models.ForeignKey(
+		Organization,
+		on_delete=models.CASCADE,
+		related_name='trial_contents',
+	)
+	takeaways = models.TextField(blank=True, null=True)
+	summary_plain_english = models.TextField(blank=True, null=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin])
+
+	def __str__(self):
+		return f"{self.trial_id}/{self.organization_id}"
+
+	class Meta:
+		constraints = [
+			models.UniqueConstraint(
+				fields=['trial', 'organization'],
+				name='unique_trial_org_content'
+			)
+		]
+		verbose_name = 'trial org content'
+		verbose_name_plural = 'trial org contents'
+
+
 def get_fernet():
 	try:
 		secret_key = settings.FERNET_SECRET_KEY
