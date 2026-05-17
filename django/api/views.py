@@ -9,7 +9,7 @@ from django.db.models import Count, Q, Prefetch
 from django.db.models.functions import Length, TruncMonth
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper, ClinicalTrial
-from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, TeamCategory
+from gregory.models import Articles, ArticleOrgContent, Trials, TrialOrgContent, Sources, Authors, Team, Subject, TeamCategory
 from organizations.models import Organization
 from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
@@ -27,12 +27,14 @@ from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress, find_tria
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 		APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError,
-		APINoAPIKeyError, ArticleExistsError, ArticleNotSavedError, CrossOrgPayloadError,
-		DoiNotFound, FieldNotFoundError, SourceNotFoundError
+		APINoAPIKeyError, ArticleExistsError, ArticleNotFoundError, ArticleNotSavedError,
+		CrossOrgPayloadError, DoiNotFound, DuplicateArticleError, DuplicateTrialError,
+		FieldNotFoundError, SourceNotFoundError, TrialNotFoundError
 )
 from api.utils.responses import (
-		ACCESS_DENIED, CROSS_ORG_PAYLOAD, INVALID_API_KEY, INVALID_IP_ADDRESS, NO_API_KEY,
-		UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError
+		ACCESS_DENIED, ARTICLE_NOT_FOUND, ARTICLE_NOT_SAVED, ARTICLE_EXISTS, CROSS_ORG_PAYLOAD,
+		DUPLICATE_ARTICLE, DUPLICATE_TRIAL, FIELD_NOT_FOUND, INVALID_API_KEY, INVALID_IP_ADDRESS,
+		NO_API_KEY, SOURCE_NOT_FOUND, TRIAL_NOT_FOUND, UNEXPECTED, returnData, returnError
 )
 
 class OrgVisibilityMixin:
@@ -369,6 +371,253 @@ def post_article(request):
 		print(traceback.format_exc())
 		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
 		return returnError(UNEXPECTED, str(exception), 500)
+
+
+###
+# API Edit Article
+###
+
+@api_view(['POST'])
+def edit_article(request):
+	"""
+	Edit editorial and metadata fields on an existing article.
+
+	Lookup is by ``doi`` (required).  Raises 404 if not found, 409 if the DOI
+	matches multiple articles (data quality issue), and 403 if the article is
+	not associated with the API key's organisation.
+
+	Per-org fields (``takeaways``, ``summary_plain_english``) are upserted into
+	``ArticleOrgContent`` for the key's organisation.  Empty string clears the
+	field (stored as NULL).
+
+	Per-article fields (``access``, ``retracted``, ``kind``) are written back to
+	the ``Articles`` row directly.
+	"""
+	access_scheme = None
+	call_type = request.method + " " + request.path
+	ip_addr = getIPAddress(request)
+	post_data = json.loads(request.body)
+	try:
+		api_key = getAPIKey(request)
+		access_scheme = checkValidAccess(api_key, ip_addr)
+
+		if access_scheme.organization is None:
+			raise APIAccessDeniedError('API keys without an associated organisation cannot edit articles.')
+
+		doi = post_data.get('doi')
+		if not doi:
+			raise FieldNotFoundError('field `doi` is required')
+
+		matching = Articles.objects.filter(doi=doi)
+		count = matching.count()
+		if count == 0:
+			raise ArticleNotFoundError(f'No article found with DOI {doi}')
+		if count > 1:
+			raise DuplicateArticleError(
+				ids=list(matching.values_list('article_id', flat=True)),
+				message=f'{count} articles match DOI {doi}. Resolve duplicates before editing.',
+			)
+		article = matching.first()
+
+		# Cross-org check: at least one of the article's teams must belong to the key's org
+		if not article.teams.filter(organization=access_scheme.organization).exists():
+			raise CrossOrgPayloadError('this article is not visible to your organisation.')
+
+		updated_fields = []
+
+		# --- Per-article fields -------------------------------------------
+		VALID_ACCESS = [v for v, _ in Articles.ACCESS_OPTIONS]
+		VALID_KINDS = [v for v, _ in Articles.KINDS]
+
+		if 'access' in post_data:
+			val = post_data['access']
+			if val not in VALID_ACCESS:
+				raise FieldNotFoundError(f'`access` must be one of {VALID_ACCESS}')
+			article.access = val
+			updated_fields.append('access')
+
+		if 'retracted' in post_data:
+			val = post_data['retracted']
+			if not isinstance(val, bool):
+				raise FieldNotFoundError('`retracted` must be a boolean')
+			article.retracted = val
+			updated_fields.append('retracted')
+
+		if 'kind' in post_data:
+			val = post_data['kind']
+			if val not in VALID_KINDS:
+				raise FieldNotFoundError(f'`kind` must be one of {VALID_KINDS}')
+			article.kind = val
+			updated_fields.append('kind')
+
+		article_fields_changed = [f for f in updated_fields if f in ('access', 'retracted', 'kind')]
+		if article_fields_changed:
+			article.save(update_fields=article_fields_changed)
+
+		# --- Per-org fields -----------------------------------------------
+		org_fields = {}
+		for field in ('takeaways', 'summary_plain_english'):
+			if field in post_data:
+				val = post_data[field]
+				org_fields[field] = None if val == '' else val
+
+		if org_fields:
+			org_content, _ = ArticleOrgContent.objects.get_or_create(
+				article=article,
+				organization=access_scheme.organization,
+			)
+			for field, val in org_fields.items():
+				setattr(org_content, field, val)
+				updated_fields.append(field)
+			org_content.save()
+
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, 'Article edited', {'article_id': article.article_id})
+		return returnData({
+			'article_id': article.article_id,
+			'doi': article.doi,
+			'organization_id': access_scheme.organization_id,
+			'updated_fields': updated_fields,
+		})
+
+	except APINoAPIKeyError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(NO_API_KEY, str(exception), 401)
+	except APIInvalidAPIKeyError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(INVALID_API_KEY, str(exception), 401)
+	except APIInvalidIPAddressError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(INVALID_IP_ADDRESS, str(exception), 401)
+	except APIAccessDeniedError as exception:
+		if access_scheme is not None:
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+		else:
+			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception), str(post_data))
+		return returnError(ACCESS_DENIED, str(exception), 403)
+	except ArticleNotFoundError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 404, str(exception), str(post_data))
+		return returnError(ARTICLE_NOT_FOUND, str(exception), 404)
+	except DuplicateArticleError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 409, str(exception), str(post_data))
+		return returnError(DUPLICATE_ARTICLE, {'message': str(exception), 'article_ids': exception.ids}, 409)
+	except FieldNotFoundError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+		return returnError(FIELD_NOT_FOUND, str(exception), 400)
+	except CrossOrgPayloadError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+		return returnError(CROSS_ORG_PAYLOAD, str(exception), 403)
+	except Exception as exception:
+		print(traceback.format_exc())
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
+		return returnError(UNEXPECTED, str(exception), 500)
+
+
+###
+# API Edit Trial
+###
+
+@api_view(['POST'])
+def edit_trial(request):
+	"""
+	Edit per-organisation editorial fields on an existing trial.
+
+	Lookup is by ``identifiers`` dict (required, same format as ``post_article``
+	trial branch: keys ``nct``, ``euct``, ``eudract``).  Raises 404 if not
+	found, 409 if multiple trials match (dedup issue).
+
+	Only per-org fields (``takeaways``, ``summary_plain_english``) are
+	editable — trial metadata comes from registries and is not client-editable.
+	"""
+	access_scheme = None
+	call_type = request.method + " " + request.path
+	ip_addr = getIPAddress(request)
+	post_data = json.loads(request.body)
+	try:
+		api_key = getAPIKey(request)
+		access_scheme = checkValidAccess(api_key, ip_addr)
+
+		if access_scheme.organization is None:
+			raise APIAccessDeniedError('API keys without an associated organisation cannot edit trials.')
+
+		identifiers = post_data.get('identifiers')
+		if not identifiers:
+			raise FieldNotFoundError(
+				'field `identifiers` is required (e.g. {"nct": "NCT..."} or {"euct": "..."})'
+			)
+
+		matching = find_trial_by_identifier(identifiers)
+		count = matching.count()
+		if count == 0:
+			raise TrialNotFoundError('No trial found matching the provided identifiers.')
+		if count > 1:
+			raise DuplicateTrialError(
+				ids=list(matching.values_list('trial_id', flat=True)),
+				message=f'{count} trials match the provided identifiers. Resolve duplicates before editing.',
+			)
+		trial = matching.first()
+
+		# Cross-org check
+		if not trial.teams.filter(organization=access_scheme.organization).exists():
+			raise CrossOrgPayloadError('this trial is not visible to your organisation.')
+
+		updated_fields = []
+
+		# --- Per-org fields -----------------------------------------------
+		org_fields = {}
+		for field in ('takeaways', 'summary_plain_english'):
+			if field in post_data:
+				val = post_data[field]
+				org_fields[field] = None if val == '' else val
+
+		if org_fields:
+			org_content, _ = TrialOrgContent.objects.get_or_create(
+				trial=trial,
+				organization=access_scheme.organization,
+			)
+			for field, val in org_fields.items():
+				setattr(org_content, field, val)
+				updated_fields.append(field)
+			org_content.save()
+
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, 'Trial edited', {'trial_id': trial.trial_id})
+		return returnData({
+			'trial_id': trial.trial_id,
+			'organization_id': access_scheme.organization_id,
+			'updated_fields': updated_fields,
+		})
+
+	except APINoAPIKeyError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(NO_API_KEY, str(exception), 401)
+	except APIInvalidAPIKeyError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(INVALID_API_KEY, str(exception), 401)
+	except APIInvalidIPAddressError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(INVALID_IP_ADDRESS, str(exception), 401)
+	except APIAccessDeniedError as exception:
+		if access_scheme is not None:
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+		else:
+			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception), str(post_data))
+		return returnError(ACCESS_DENIED, str(exception), 403)
+	except TrialNotFoundError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 404, str(exception), str(post_data))
+		return returnError(TRIAL_NOT_FOUND, str(exception), 404)
+	except DuplicateTrialError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 409, str(exception), str(post_data))
+		return returnError(DUPLICATE_TRIAL, {'message': str(exception), 'trial_ids': exception.ids}, 409)
+	except FieldNotFoundError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+		return returnError(FIELD_NOT_FOUND, str(exception), 400)
+	except CrossOrgPayloadError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+		return returnError(CROSS_ORG_PAYLOAD, str(exception), 403)
+	except Exception as exception:
+		print(traceback.format_exc())
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
+		return returnError(UNEXPECTED, str(exception), 500)
+
 
 ###
 # ARTICLES

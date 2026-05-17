@@ -22,7 +22,7 @@ from rest_framework.authtoken import views
 
 from api.views import (
 	ArticleViewSet, AuthorsViewSet, SourceViewSet, TrialViewSet, 
-	post_article, CategoryViewSet, LoginView, ProtectedEndpointView,
+	post_article, edit_article, edit_trial, CategoryViewSet, LoginView, ProtectedEndpointView,
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, SubjectsByTeam,
 	ArticlesByCategoryAndTeam, ArticleSearchView, TrialSearchView, AuthorSearchView, CategoriesByTeamAndSubject,
 	StatsView
@@ -65,7 +65,8 @@ urlpatterns = [
 
 	# API routes
 	path('articles/post/', post_article),
-
+	path('articles/edit/', edit_article),
+	path('trials/edit/', edit_trial),
 	# Feed routes (supports ORCID or numeric author_id)
 	path('feed/author/<str:orcid>/', ArticlesByAuthorFeed(), name='articles_by_author_feed'),
 	path('feed/trials/subject/<str:subject_slug>/', TrialsBySubjectFeed(), name='trials_by_subject_feed'),
