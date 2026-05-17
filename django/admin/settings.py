@@ -101,6 +101,7 @@ MIDDLEWARE = [
 	'django.contrib.sites.middleware.CurrentSiteMiddleware',
 	'simple_history.middleware.HistoryRequestMiddleware',
 	'gregory.middleware.visibility.VisibleOrgMiddleware',
+	'api.middleware.ApiKeyMiddleware',
 ]
 
 ROOT_URLCONF = 'admin.urls'

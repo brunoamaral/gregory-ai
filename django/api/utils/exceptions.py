@@ -48,3 +48,21 @@ class CrossOrgPayloadError(APIError):
 class DoiNotFound(APIError):
 	def __init__(self, message):
 		super().__init__(message)
+
+class ArticleNotFoundError(APIError):
+	def __init__(self, message):
+		super().__init__(message)
+
+class TrialNotFoundError(APIError):
+	def __init__(self, message):
+		super().__init__(message)
+
+class DuplicateArticleError(APIError):
+	def __init__(self, ids, message=''):
+		self.ids = ids
+		super().__init__(message or 'Multiple articles match the provided DOI.')
+
+class DuplicateTrialError(APIError):
+	def __init__(self, ids, message=''):
+		self.ids = ids
+		super().__init__(message or 'Multiple trials match the provided identifier.')

@@ -23,7 +23,7 @@ import json
 import traceback
 from django.utils.dateparse import parse_date
 
-from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress
+from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress, find_trial_by_identifier
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 		APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError,
@@ -251,18 +251,8 @@ def post_article(request):
 				identifiers=post_data.get('identifiers') or {},
 			)
 
-			# Dedup: identifiers first, then title (mirrors feedreader_trials logic)
-			existing_trial = None
-			ident = trial_data.identifiers or {}
-			id_query = Q()
-			if ident.get('euct'):
-				id_query |= Q(identifiers__euct=ident['euct'])
-			if ident.get('nct'):
-				id_query |= Q(identifiers__nct=ident['nct'])
-			if ident.get('eudract'):
-				id_query |= Q(identifiers__eudract=ident['eudract'])
-			if id_query:
-				existing_trial = Trials.objects.filter(id_query).first()
+			# Dedup: identifiers first (via helper), then title (mirrors feedreader_trials logic)
+			existing_trial = find_trial_by_identifier(trial_data.identifiers or {}).first()
 			if existing_trial is None and trial_data.title:
 				existing_trial = Trials.objects.filter(title__iexact=trial_data.title).first()
 
