@@ -622,7 +622,7 @@ def edit_trial(request):
 ###
 # ARTICLES
 ### 
-class ArticleViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class ArticleViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all articles in the database with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
@@ -667,7 +667,6 @@ class ArticleViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	- CSV export all results: `/articles/?format=csv&all_results=true`
 	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&relevant=true&ml_threshold=0.8&ordering=-published_date`
 	"""
-	http_method_names = ['get', 'head', 'options']
 	queryset = Articles.objects.all().order_by('-discovery_date')
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -735,7 +734,7 @@ class ArticlesByKeyword(generics.ListAPIView):
 # CATEGORIES
 ###
 
-class CategoryViewSet(viewsets.ModelViewSet):
+class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	List all categories in the database with optional filters for team and subject.
 	Now includes author statistics for each category.
@@ -773,7 +772,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
 	- Single category with monthly counts: `GET /categories/?category_id=6&monthly_counts=true`
 	- Multiple categories by ID: `GET /categories/?get_categories=1,2,3`
 	"""
-	http_method_names = ['get', 'head', 'options']
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -993,7 +991,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 # TRIALS
 ### 
 
-class TrialViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class TrialViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all clinical trials by discovery date with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
@@ -1031,7 +1029,6 @@ class TrialViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	- All trials as CSV: `/trials/?format=csv&all_results=true`
 	- Filtered trials: `/trials/?team_id=1&status=Recruiting&format=csv&all_results=true`
 	"""
-	http_method_names = ['get', 'head', 'options']
 	queryset = Trials.objects.all().order_by('-discovery_date')
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -1086,7 +1083,7 @@ class AllTrialViewSet(generics.ListAPIView):
 # SOURCES
 ### 
 
-class SourceViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class SourceViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all sources of data with optional filters for team and subject.
 	
@@ -1096,7 +1093,6 @@ class SourceViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	"""
 	_org_filter_path = 'team__organization_id'
 	_org_filter_distinct = False
-	http_method_names = ['get', 'head', 'options']
 	queryset = Sources.objects.all().order_by('name')
 	serializer_class = SourceSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -1110,7 +1106,7 @@ class SourceViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 # AUTHORS
 ### 
 
-class AuthorsViewSet(viewsets.ModelViewSet):
+class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	Enhanced Authors API with sorting and filtering capabilities.
 	
@@ -1148,7 +1144,6 @@ class AuthorsViewSet(viewsets.ModelViewSet):
 	- Category with timeframe: `?team_id=1&category_slug=natalizumab&timeframe=year&sort_by=article_count`
 	- Date range: `?date_from=2024-06-01&date_to=2024-12-31&team_id=1&subject_id=1&sort_by=article_count`
 	"""
-	http_method_names = ['get', 'head', 'options']
 	serializer_class = AuthorSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter]
@@ -1388,13 +1383,12 @@ class ProtectedEndpointView(APIView):
 # TEAMS
 ###
 
-class TeamsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class TeamsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all teams
 	"""
 	_org_filter_path = 'organization_id'
 	_org_filter_distinct = False
-	http_method_names = ['get', 'head', 'options']
 	queryset = Team.objects.all().order_by('id')
 	serializer_class = TeamSerializer
 	permission_classes  = [permissions.IsAuthenticatedOrReadOnly]
@@ -1427,7 +1421,7 @@ class OrganizationsViewSet(viewsets.ReadOnlyModelViewSet):
 # SUBJECTS
 ###
 
-class SubjectsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class SubjectsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	✅ **PREFERRED ENDPOINT**: This is the main subjects endpoint that supports filtering options.
 	
@@ -1446,7 +1440,6 @@ class SubjectsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	"""
 	_org_filter_path = 'team__organization_id'
 	_org_filter_distinct = False
-	http_method_names = ['get', 'head', 'options']
 	queryset = Subject.objects.all().order_by('id')
 	serializer_class = SubjectsSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
