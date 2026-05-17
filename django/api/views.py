@@ -622,7 +622,7 @@ def edit_trial(request):
 ###
 # ARTICLES
 ### 
-class ArticleViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class ArticleViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all articles in the database with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
@@ -734,7 +734,7 @@ class ArticlesByKeyword(generics.ListAPIView):
 # CATEGORIES
 ###
 
-class CategoryViewSet(viewsets.ModelViewSet):
+class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	List all categories in the database with optional filters for team and subject.
 	Now includes author statistics for each category.
@@ -991,7 +991,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 # TRIALS
 ### 
 
-class TrialViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class TrialViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all clinical trials by discovery date with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
@@ -1083,7 +1083,7 @@ class AllTrialViewSet(generics.ListAPIView):
 # SOURCES
 ### 
 
-class SourceViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class SourceViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all sources of data with optional filters for team and subject.
 	
@@ -1106,7 +1106,7 @@ class SourceViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 # AUTHORS
 ### 
 
-class AuthorsViewSet(viewsets.ModelViewSet):
+class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	Enhanced Authors API with sorting and filtering capabilities.
 	
@@ -1383,7 +1383,7 @@ class ProtectedEndpointView(APIView):
 # TEAMS
 ###
 
-class TeamsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class TeamsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all teams
 	"""
@@ -1421,7 +1421,7 @@ class OrganizationsViewSet(viewsets.ReadOnlyModelViewSet):
 # SUBJECTS
 ###
 
-class SubjectsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class SubjectsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	✅ **PREFERRED ENDPOINT**: This is the main subjects endpoint that supports filtering options.
 	
