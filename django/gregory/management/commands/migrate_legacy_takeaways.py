@@ -23,6 +23,7 @@ Removal is handled in a follow-up migration after a release of co-existence.
 """
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import Count, Q
 
 from gregory.models import Articles, ArticleOrgContent
 from organizations.models import Organization
@@ -63,21 +64,21 @@ class Command(BaseCommand):
 		"""Print a table of organisations with their article counts."""
 		orgs = (
 			Organization.objects
-			.prefetch_related('article_contents')
+			.annotate(
+				article_count=Count(
+					'teams__articles',
+					filter=Q(teams__articles__takeaways__isnull=False)
+					& ~Q(teams__articles__takeaways=''),
+					distinct=True,
+				)
+			)
 			.order_by('id')
 		)
 		self.stdout.write('\nAvailable organisations:\n')
 		self.stdout.write(f'  {"ID":>5}  {"Name":<40}  {"Articles with takeaways":>23}')
 		self.stdout.write('  ' + '-' * 72)
 		for org in orgs:
-			article_count = (
-				Articles.objects
-				.filter(teams__organization=org, takeaways__isnull=False)
-				.exclude(takeaways='')
-				.distinct()
-				.count()
-			)
-			self.stdout.write(f'  {org.id:>5}  {str(org.name):<40}  {article_count:>23}')
+			self.stdout.write(f'  {org.id:>5}  {str(org.name):<40}  {org.article_count:>23}')
 		self.stdout.write('')
 
 	def _prompt_org_id(self):
