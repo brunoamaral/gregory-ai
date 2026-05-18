@@ -56,13 +56,43 @@ class OrgContentMapTest(TestCase):
 		oc = context['org_content_map'][self.article.article_id]
 		self.assertEqual(oc.takeaways, 'Key finding')
 
-	def test_org_content_map_empty_without_organization(self):
-		"""Non-team path: organization=None should produce an empty map (with a warning)."""
+	def test_org_content_map_empty_and_warns_for_team_type_without_organization(self):
+		"""
+		For email types that expect an org (weekly_summary, admin_summary),
+		omitting organization= must produce an empty map AND emit a WARNING so
+		the caller can be identified and fixed.
+		"""
 		pipeline = EmailRenderingPipeline()
-		context = pipeline.prepare_optimized_context(
-			email_type='trial_notification',
-			articles=Articles.objects.none(),
-			organization=None,
-			site=self.site,
-		)
+		logger_name = 'templates.emails.components.content_organizer'
+		with self.assertLogs(logger_name, level='WARNING') as cm:
+			context = pipeline.prepare_optimized_context(
+				email_type='weekly_summary',
+				articles=Articles.objects.none(),
+				organization=None,
+				site=self.site,
+			)
 		self.assertEqual(context['org_content_map'], {})
+		self.assertTrue(
+			any('org_content_map' in msg or 'organization' in msg for msg in cm.output),
+			msg=f"Expected org warning in logs, got: {cm.output}",
+		)
+
+	def test_org_content_map_empty_no_warning_for_non_org_type(self):
+		"""Non-team paths (trial_notification, etc.) omit organization= without a warning."""
+		pipeline = EmailRenderingPipeline()
+		logger_name = 'templates.emails.components.content_organizer'
+		import logging
+		with self.assertLogs(logger_name, level='DEBUG') as cm:
+			# Emit a dummy DEBUG so assertLogs doesn't raise on empty log output
+			logging.getLogger(logger_name).debug('sentinel')
+			context = pipeline.prepare_optimized_context(
+				email_type='trial_notification',
+				articles=Articles.objects.none(),
+				organization=None,
+				site=self.site,
+			)
+		self.assertEqual(context['org_content_map'], {})
+		self.assertFalse(
+			any('WARNING' in msg and 'organization' in msg for msg in cm.output),
+			msg=f"Unexpected WARNING for trial_notification: {cm.output}",
+		)

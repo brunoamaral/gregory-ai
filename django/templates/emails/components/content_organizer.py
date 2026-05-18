@@ -546,11 +546,13 @@ class EmailRenderingPipeline:
                 }
                 context['org_content_map'] = org_contents
             else:
-                logger.warning(
-                    "prepare_optimized_context called without organization for email_type=%s; "
-                    "org_content_map will be empty. Pass organization= for team-owned emails.",
-                    email_type,
-                )
+                _ORG_EXPECTED_TYPES = {'weekly_summary', 'admin_summary'}
+                if email_type in _ORG_EXPECTED_TYPES:
+                    logger.warning(
+                        "prepare_optimized_context called without organization for email_type=%s; "
+                        "org_content_map will be empty. Pass organization= for team-owned emails.",
+                        email_type,
+                    )
                 context['org_content_map'] = {}
             
             return context
