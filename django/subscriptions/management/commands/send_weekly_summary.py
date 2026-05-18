@@ -1,6 +1,5 @@
 from datetime import timedelta
 from django.utils.timezone import now
-from django.core.exceptions import ObjectDoesNotExist
 from django.core.management.base import BaseCommand, CommandError
 from django.template.loader import get_template
 from django.utils.html import strip_tags
@@ -150,18 +149,7 @@ class Command(BaseCommand):
 			if not team:
 				self.stdout.write(self.style.ERROR(f"No team associated with list '{digest_list.list_name}'. Skipping."))
 				continue
-			if not getattr(team, 'organization_id', None):
-				raise CommandError(
-					f"Team '{team.name}' (id={team.pk}) has no organization FK. "
-					"Teams must always belong to an organization."
-				)
-			try:
-				organization = team.organization
-			except ObjectDoesNotExist as exc:
-				raise CommandError(
-					f"Team '{team.name}' (id={team.pk}) points to a missing organization. "
-					"Fix orphan teams before sending summaries."
-				) from exc
+			organization = team.organization
 
 			# Step 2: Resolve site and custom settings for this list (List.site → Org default → global)
 			try:
