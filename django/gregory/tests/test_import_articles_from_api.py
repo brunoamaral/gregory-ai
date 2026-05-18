@@ -71,7 +71,8 @@ class ImportArticlesFromApiTest(TestCase):
 		self.assertEqual(ArticleOrgContent.objects.filter(article=article, organization=self.org).count(), 1)
 
 	@patch("gregory.management.commands.import_articles_from_api.requests.get")
-	def test_empty_takeaways_leaves_existing_row_untouched(self, mock_get):
+	def test_none_takeaways_leaves_existing_row_untouched(self, mock_get):
+		"""Absent / null fields must not overwrite existing ArticleOrgContent values."""
 		article = Articles.objects.create(title="Test Article", link="https://example.com/article/1")
 		ArticleOrgContent.objects.create(
 			article=article,
@@ -80,13 +81,32 @@ class ImportArticlesFromApiTest(TestCase):
 			summary_plain_english="Original summary.",
 		)
 
-		empty = {**ARTICLE, "takeaways": None, "summary_plain_english": None}
-		mock_get.return_value = _make_response([empty])
+		null_fields = {**ARTICLE, "takeaways": None, "summary_plain_english": None}
+		mock_get.return_value = _make_response([null_fields])
 		call_command("import_articles_from_api", "https://api.example.com/articles/", "--target-org", "test-org")
 
 		content = ArticleOrgContent.objects.get(article=article, organization=self.org)
 		self.assertEqual(content.takeaways, "Original takeaway.")
 		self.assertEqual(content.summary_plain_english, "Original summary.")
+
+	@patch("gregory.management.commands.import_articles_from_api.requests.get")
+	def test_empty_string_takeaways_clears_existing_row(self, mock_get):
+		"""Upstream sending '' should normalize to None and clear the stored value."""
+		article = Articles.objects.create(title="Test Article", link="https://example.com/article/1")
+		ArticleOrgContent.objects.create(
+			article=article,
+			organization=self.org,
+			takeaways="Stale takeaway.",
+			summary_plain_english="Stale summary.",
+		)
+
+		empty_strings = {**ARTICLE, "takeaways": "", "summary_plain_english": ""}
+		mock_get.return_value = _make_response([empty_strings])
+		call_command("import_articles_from_api", "https://api.example.com/articles/", "--target-org", "test-org")
+
+		content = ArticleOrgContent.objects.get(article=article, organization=self.org)
+		self.assertIsNone(content.takeaways)
+		self.assertIsNone(content.summary_plain_english)
 
 	def test_missing_target_org_raises_command_error(self):
 		with self.assertRaises((CommandError, SystemExit)):

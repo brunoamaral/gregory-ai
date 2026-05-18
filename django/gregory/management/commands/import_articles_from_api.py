@@ -57,8 +57,9 @@ class Command(BaseCommand):
 				publisher = item.get("publisher")
 				container_title = item.get("container_title")
 				access = item.get("access")
-				takeaways = item.get("takeaways")
-				summary_plain_english = item.get("summary_plain_english")
+				_missing = object()
+				takeaways_raw = item.get("takeaways", _missing)
+				spe_raw = item.get("summary_plain_english", _missing)
 				discovery_date = parse_datetime(item.get("discovery_date")) if item.get("discovery_date") else timezone.now()
 
 				# Create or update the Article instance using title and link as unique identifiers
@@ -76,13 +77,15 @@ class Command(BaseCommand):
 					}
 				)
 
-				# Upsert per-org editorial content if the upstream provided any
-				if takeaways or summary_plain_english:
-					org_defaults = {}
-					if takeaways:
-						org_defaults["takeaways"] = takeaways
-					if summary_plain_english:
-						org_defaults["summary_plain_english"] = summary_plain_english
+				# Upsert per-org editorial content for fields the upstream explicitly provided.
+				# Absent keys and None are skipped; empty strings are normalized to None so
+				# they clear stale values rather than being silently ignored.
+				org_defaults = {}
+				if takeaways_raw is not _missing and takeaways_raw is not None:
+					org_defaults["takeaways"] = takeaways_raw or None
+				if spe_raw is not _missing and spe_raw is not None:
+					org_defaults["summary_plain_english"] = spe_raw or None
+				if org_defaults:
 					ArticleOrgContent.objects.update_or_create(
 						article=article,
 						organization=target_org,
