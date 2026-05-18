@@ -1893,6 +1893,9 @@ class ArticleOrgContentAdmin(_BaseOrgContentAdmin):
 	raw_id_fields = ('article',)
 	search_fields = _BaseOrgContentAdmin.search_fields + ('article__title', 'article__doi')
 
+	def has_module_perms(self, request):
+		return False
+
 
 @admin.register(TrialOrgContent)
 class TrialOrgContentAdmin(_BaseOrgContentAdmin):
