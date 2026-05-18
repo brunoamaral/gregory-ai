@@ -17,10 +17,10 @@ from organizations.models import Organization, OrganizationUser
 from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 
 from .models import (
-    Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, 
+    Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions,
     ArticleSubjectRelevance, TeamCategory, PredictionRunLog, Team,
     ArticleTrialReference, OrganizationCredentials, OrganizationSite,
-    OrganizationApiSettings
+    OrganizationApiSettings, ArticleOrgContent, TrialOrgContent
 )
 from .widgets import MLPredictionsWidget
 from django import forms
@@ -330,6 +330,102 @@ class ArticleSubjectRelevanceInline(admin.TabularInline):
 			qs = qs.filter(subject__auto_predict=True)
 		return qs.order_by('subject__subject_name')
 
+class _BaseOrgContentInline(admin.StackedInline):
+	"""Shared inline behaviour for ArticleOrgContent / TrialOrgContent.
+
+	- Staff users only see/edit rows for their own organisation(s).
+	- Superusers see every row and can add new rows for any organisation.
+	- For staff, the organisation field is pre-filled and locked so they can
+	  never reassign content between orgs.
+	- Empty extra rows (both textareas blank) are skipped at save time, so
+	  opening an article without typing anything does not pollute the table.
+	"""
+	extra = 0
+	classes = ('collapse',)
+	fields = ('organization', 'takeaways', 'summary_plain_english', 'updated_at')
+	readonly_fields = ('updated_at',)
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request).select_related('organization')
+		if request.user.is_superuser:
+			return qs
+		user_orgs = get_user_organizations(request.user)
+		return qs.filter(organization_id__in=user_orgs)
+
+	def has_add_permission(self, request, obj=None):
+		if request.user.is_superuser:
+			return True
+		return bool(get_user_organizations(request.user))
+
+	def _missing_org_ids(self, request, obj):
+		"""Return user-orgs that don't yet have a content row for this parent."""
+		if obj is None or not obj.pk:
+			return []
+		user_orgs = list(get_user_organizations(request.user) or [])
+		if not user_orgs:
+			return []
+		existing = set(
+			obj.org_contents.filter(organization_id__in=user_orgs)
+			.values_list('organization_id', flat=True)
+		)
+		return [oid for oid in user_orgs if oid not in existing]
+
+	def get_extra(self, request, obj=None, **kwargs):
+		if obj is None or not obj.pk:
+			return 0
+		if request.user.is_superuser:
+			return 1
+		return len(self._missing_org_ids(request, obj))
+
+	def get_max_num(self, request, obj=None, **kwargs):
+		if request.user.is_superuser:
+			return None
+		# Cap at user's org count so they can't create rows for orgs they don't belong to.
+		user_orgs = list(get_user_organizations(request.user) or [])
+		return len(user_orgs)
+
+	def get_formset(self, request, obj=None, **kwargs):
+		formset_class = super().get_formset(request, obj, **kwargs)
+		is_superuser = request.user.is_superuser
+
+		if is_superuser:
+			allowed_org_qs = Organization.objects.all().order_by('name')
+			extra_org_ids = []
+		else:
+			user_org_ids = list(get_user_organizations(request.user) or [])
+			allowed_org_qs = Organization.objects.filter(id__in=user_org_ids).order_by('name')
+			extra_org_ids = self._missing_org_ids(request, obj)
+
+		class ScopedOrgContentFormSet(formset_class):
+			def _construct_form(self, i, **form_kwargs):
+				form = super()._construct_form(i, **form_kwargs)
+				form.fields['organization'].queryset = allowed_org_qs
+				if form.instance.pk:
+					# Existing row: lock the org so content can't be reassigned.
+					form.fields['organization'].disabled = True
+				elif not is_superuser:
+					# Extra row for staff: pre-fill and lock to their next missing org.
+					extra_index = i - self.initial_form_count()
+					if 0 <= extra_index < len(extra_org_ids):
+						form.fields['organization'].initial = extra_org_ids[extra_index]
+						form.fields['organization'].disabled = True
+				return form
+
+		return ScopedOrgContentFormSet
+
+
+class ArticleOrgContentInline(_BaseOrgContentInline):
+	model = ArticleOrgContent
+	verbose_name = 'Editorial content (per organisation)'
+	verbose_name_plural = 'Editorial content (per organisation)'
+
+
+class TrialOrgContentInline(_BaseOrgContentInline):
+	model = TrialOrgContent
+	verbose_name = 'Editorial content (per organisation)'
+	verbose_name_plural = 'Editorial content (per organisation)'
+
+
 class ArticleAdminForm(forms.ModelForm):
 	ml_predictions_display = MLPredictionsField(required=False)
 
@@ -359,14 +455,14 @@ class ArticleAdminForm(forms.ModelForm):
 
 class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	form = ArticleAdminForm
-	inlines = [ArticleSubjectRelevanceInline, ArticleTrialReferenceInline]
+	inlines = [ArticleOrgContentInline, ArticleSubjectRelevanceInline, ArticleTrialReferenceInline]
 	fieldsets = (
 		('Article Information', {
 			'fields': (
-				'title', 'link', 'doi', 'summary','summary_plain_english', 'teams', 'subjects', 'sources',
+				'title', 'link', 'doi', 'summary', 'teams', 'subjects', 'sources',
 				'published_date', 'discovery_date', 'authors', 'team_categories',
 				'entities', 'kind', 'access',
-				'publisher', 'container_title', 'crossref_check', 'takeaways',
+				'publisher', 'container_title', 'crossref_check',
 			),
 			'description': 'This section contains general information about the article'
 		}),
@@ -374,6 +470,16 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 			'fields': ('ml_predictions_display',),
 			'description': 'Grouping machine learning prediction indicators',
 			'classes': ('ml-predictions-section',),
+		}),
+		('Legacy editorial fields (read-only)', {
+			'fields': ('takeaways', 'summary_plain_english'),
+			'classes': ('collapse',),
+			'description': (
+				"Deprecated. Editorial content is now per-organisation — edit it in "
+				"the 'Editorial content (per organisation)' section above. These "
+				"legacy columns are kept read-only until the follow-up migration "
+				"drops them."
+			),
 		}),
 	)
 	list_display = ['article_id', 'title', 'discovery_date', 'display_sources']
@@ -389,7 +495,7 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		qs = super().get_queryset(request)
 		return qs.prefetch_related('sources')
 	
-	readonly_fields = ['entities', 'discovery_date']
+	readonly_fields = ['entities', 'discovery_date', 'takeaways', 'summary_plain_english']
 	search_fields = ['article_id', 'title', 'doi']
 	list_filter = [
 		ArticleOrganizationFilter,
@@ -435,8 +541,8 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
 	exclude = ['ml_predictions']
-	readonly_fields = ['last_updated', 'team_categories']
-	inlines = [TrialArticleReferenceInline]
+	readonly_fields = ['last_updated', 'team_categories', 'summary_plain_english']
+	inlines = [TrialOrgContentInline, TrialArticleReferenceInline]
 	search_fields = [
 		'trial_id', 'title', 'summary', 'summary_plain_english', 'scientific_title',
 		'primary_sponsor', 'source_register', 'recruitment_status', 'condition',
@@ -456,7 +562,7 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 			'fields': ('title', 'scientific_title', 'link', 'identifiers', 'discovery_date', 'published_date', 'last_updated')
 		}),
 		('Description', {
-			'fields': ('summary', 'summary_plain_english', 'ctg_detailed_description'),
+			'fields': ('summary', 'ctg_detailed_description'),
 			'classes': ('collapse',),
 		}),
 		('Study Details', {
@@ -493,6 +599,15 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		('Results', {
 			'fields': ('results_date_completed', 'results_url_link'),
 			'classes': ('collapse',),
+		}),
+		('Legacy editorial fields (read-only)', {
+			'fields': ('summary_plain_english',),
+			'classes': ('collapse',),
+			'description': (
+				"Deprecated. Plain-English summaries are now per-organisation — "
+				"edit them in the 'Editorial content (per organisation)' section "
+				"at the top of the page."
+			),
 		}),
 	)
 
@@ -1759,6 +1874,51 @@ admin.site.register(Authors, AuthorsAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)
+
+
+class _BaseOrgContentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
+	"""Shared admin for ArticleOrgContent / TrialOrgContent standalone pages.
+
+	Use the parent Article/Trial admin for routine editing; this admin exists
+	so users can browse audit history and so superusers can clean up rows
+	across organisations.
+	"""
+	list_filter = ('organization',)
+	readonly_fields = ('created_at', 'updated_at')
+	search_fields = ('takeaways', 'summary_plain_english')
+
+	def get_form(self, request, obj=None, **kwargs):
+		form_class = super().get_form(request, obj, **kwargs)
+		if request.user.is_superuser:
+			return form_class
+
+		user_org_ids = list(get_user_organizations(request.user) or [])
+
+		class ScopedOrgForm(form_class):
+			def __init__(self, *args, **form_kwargs):
+				super().__init__(*args, **form_kwargs)
+				if 'organization' in self.fields:
+					self.fields['organization'].queryset = (
+						Organization.objects.filter(id__in=user_org_ids).order_by('name')
+					)
+					if self.instance and self.instance.pk:
+						self.fields['organization'].disabled = True
+
+		return ScopedOrgForm
+
+
+@admin.register(ArticleOrgContent)
+class ArticleOrgContentAdmin(_BaseOrgContentAdmin):
+	list_display = ('article', 'organization', 'updated_at')
+	raw_id_fields = ('article',)
+	search_fields = _BaseOrgContentAdmin.search_fields + ('article__title', 'article__doi')
+
+
+@admin.register(TrialOrgContent)
+class TrialOrgContentAdmin(_BaseOrgContentAdmin):
+	list_display = ('trial', 'organization', 'updated_at')
+	raw_id_fields = ('trial',)
+	search_fields = _BaseOrgContentAdmin.search_fields + ('trial__title',)
 
 
 # --- Custom UserAdmin with Team membership inline ---

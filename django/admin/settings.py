@@ -69,7 +69,6 @@ INSTALLED_APPS = [
 	'gregory.apps.GregoryConfig',
 	'subscriptions.apps.SubscriptionsConfig',
 	'rest_framework',
-	'rest_framework.authtoken',
 	'rest_framework_simplejwt',
 	'rest_framework_csv',  # Add CSV renderer support
 	'django_filters',

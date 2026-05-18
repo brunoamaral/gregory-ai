@@ -23,6 +23,7 @@ import json
 import traceback
 from django.utils.dateparse import parse_date
 
+from api.serializers.mixins import _resolve_per_org_fields_org
 from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress, find_trial_by_identifier
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
@@ -622,7 +623,7 @@ def edit_trial(request):
 ###
 # ARTICLES
 ### 
-class ArticleViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class ArticleViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all articles in the database with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
@@ -676,6 +677,26 @@ class ArticleViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	search_fields = ['title', 'summary']
 	ordering_fields = ['discovery_date', 'published_date', 'title', 'article_id']
 	ordering = ['-discovery_date']
+
+	def get_queryset(self):
+		"""Prefetch the caller-org's ArticleOrgContent to avoid N+1 on list responses.
+
+		When a request resolves to an organisation (API key or public-org
+		filter), attach the matching ``ArticleOrgContent`` rows as
+		``_prefetched_org_contents`` so the serializer can resolve per-org
+		fields without issuing one query per article.
+		"""
+		qs = super().get_queryset()
+		org = _resolve_per_org_fields_org(self.request)
+		if org is not None:
+			qs = qs.prefetch_related(
+				Prefetch(
+					'org_contents',
+					queryset=ArticleOrgContent.objects.filter(organization=org),
+					to_attr='_prefetched_org_contents',
+				)
+			)
+		return qs
 
 	def finalize_response(self, request, response, *args, **kwargs):
 		"""
@@ -734,7 +755,7 @@ class ArticlesByKeyword(generics.ListAPIView):
 # CATEGORIES
 ###
 
-class CategoryViewSet(viewsets.ModelViewSet):
+class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	List all categories in the database with optional filters for team and subject.
 	Now includes author statistics for each category.
@@ -991,7 +1012,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 # TRIALS
 ### 
 
-class TrialViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class TrialViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all clinical trials by discovery date with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
@@ -1035,6 +1056,26 @@ class TrialViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	pagination_class = FlexiblePagination
 	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
 	filterset_class = TrialFilter
+
+	def get_queryset(self):
+		"""Prefetch the caller-org's TrialOrgContent to avoid N+1 on list responses.
+
+		When a request resolves to an organisation (API key or public-org
+		filter), attach the matching ``TrialOrgContent`` rows as
+		``_prefetched_org_contents`` so the serializer can resolve per-org
+		fields without issuing one query per trial.
+		"""
+		qs = super().get_queryset()
+		org = _resolve_per_org_fields_org(self.request)
+		if org is not None:
+			qs = qs.prefetch_related(
+				Prefetch(
+					'org_contents',
+					queryset=TrialOrgContent.objects.filter(organization=org),
+					to_attr='_prefetched_org_contents',
+				)
+			)
+		return qs
 	search_fields = ['title', 'summary']
 	ordering_fields = ['discovery_date', 'published_date', 'title', 'trial_id', 'last_updated']
 	ordering = ['-discovery_date']
@@ -1083,7 +1124,7 @@ class AllTrialViewSet(generics.ListAPIView):
 # SOURCES
 ### 
 
-class SourceViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class SourceViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all sources of data with optional filters for team and subject.
 	
@@ -1106,7 +1147,7 @@ class SourceViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 # AUTHORS
 ### 
 
-class AuthorsViewSet(viewsets.ModelViewSet):
+class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	Enhanced Authors API with sorting and filtering capabilities.
 	
@@ -1383,7 +1424,7 @@ class ProtectedEndpointView(APIView):
 # TEAMS
 ###
 
-class TeamsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class TeamsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all teams
 	"""
@@ -1421,7 +1462,7 @@ class OrganizationsViewSet(viewsets.ReadOnlyModelViewSet):
 # SUBJECTS
 ###
 
-class SubjectsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class SubjectsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	✅ **PREFERRED ENDPOINT**: This is the main subjects endpoint that supports filtering options.
 	
