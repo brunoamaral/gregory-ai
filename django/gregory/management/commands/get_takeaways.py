@@ -117,7 +117,9 @@ class Command(BaseCommand):
 
 	def handle(self, *args, **options):
 		org_id = options.get('org_id')
-		limit = options.get('limit') or 20
+		limit = options.get('limit')
+		if limit is None:
+			limit = 20
 		dry_run = options.get('dry_run')
 
 		if limit <= 0:
