@@ -23,7 +23,6 @@ class EmailTemplateTestUtils:
             'link': 'https://example.com/article/test-001',
             'discovery_date': timezone.now() - timedelta(days=1),
             'published_date': timezone.now() - timedelta(days=2),
-            'takeaways': 'This study demonstrates significant improvements in patient outcomes with 85% reduction in relapse rates.',
             'authors': {
                 'exists': lambda: True,
                 'all': lambda: [

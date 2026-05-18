@@ -470,16 +470,6 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 			'description': 'Grouping machine learning prediction indicators',
 			'classes': ('ml-predictions-section',),
 		}),
-		('Legacy editorial fields (read-only)', {
-			'fields': ('takeaways', 'summary_plain_english'),
-			'classes': ('collapse',),
-			'description': (
-				"Deprecated. Editorial content is now per-organisation — edit it in "
-				"the 'Editorial content (per organisation)' section above. These "
-				"legacy columns are kept read-only until the follow-up migration "
-				"drops them."
-			),
-		}),
 	)
 	list_display = ['article_id', 'title', 'discovery_date', 'display_sources']
 	ordering = ['-discovery_date']
@@ -494,7 +484,7 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		qs = super().get_queryset(request)
 		return qs.prefetch_related('sources')
 	
-	readonly_fields = ['entities', 'discovery_date', 'takeaways', 'summary_plain_english']
+	readonly_fields = ['entities', 'discovery_date']
 	search_fields = ['article_id', 'title', 'doi']
 	list_filter = [
 		ArticleOrganizationFilter,
@@ -540,10 +530,10 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
 	exclude = ['ml_predictions']
-	readonly_fields = ['last_updated', 'team_categories', 'summary_plain_english']
+	readonly_fields = ['last_updated', 'team_categories']
 	inlines = [TrialOrgContentInline, TrialArticleReferenceInline]
 	search_fields = [
-		'trial_id', 'title', 'summary', 'summary_plain_english', 'scientific_title',
+		'trial_id', 'title', 'summary', 'scientific_title',
 		'primary_sponsor', 'source_register', 'recruitment_status', 'condition',
 		'intervention', 'primary_outcome', 'secondary_outcome', 'inclusion_criteria',
 		'exclusion_criteria', 'study_type', 'study_design', 'phase', 'countries',
@@ -598,15 +588,6 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		('Results', {
 			'fields': ('results_date_completed', 'results_url_link'),
 			'classes': ('collapse',),
-		}),
-		('Legacy editorial fields (read-only)', {
-			'fields': ('summary_plain_english',),
-			'classes': ('collapse',),
-			'description': (
-				"Deprecated. Plain-English summaries are now per-organisation — "
-				"edit them in the 'Editorial content (per organisation)' section "
-				"at the top of the page."
-			),
 		}),
 	)
 

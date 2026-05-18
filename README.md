@@ -222,7 +222,6 @@ Gregory needs to run a series of tasks to fetch missing information before apply
 
 ```cron
 */3 * * * * /usr/bin/docker exec -t gregory python manage.py runcrons
-*/5 * * * * /usr/bin/flock -n /tmp/get_takeaways /usr/bin/docker exec gregory python manage.py get_takeaways
 ```
 
 ## How everything fits together

@@ -396,7 +396,8 @@ class Command(BaseCommand):
 					list_obj=digest_list,
 					site=site,
 					custom_settings=customsettings,
-					utm_params=utm_params,  # Add UTM parameters to context
+					utm_params=utm_params,
+					organization=team.organization,
 				)
 
 				# Inject unsubscribe context for the footer template

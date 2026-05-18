@@ -34,13 +34,15 @@ This is a simplified version for contexts where we just need basic article displ
         </a>
     </div>
     
-    <!-- Key Takeaways -->
-    {% if article.takeaways %}
+    <!-- Key Takeaways (per-organisation) -->
+    {% with org_content=org_content_map|get_item:article.article_id %}
+    {% if org_content.takeaways %}
     <div class="article-takeaway-box" style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px; margin-top: 15px; border-radius: 0 4px 4px 0;">
         <h4 class="article-takeaway-title" style="color: #1e40af; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">Key Takeaways:</h4>
         <p class="article-takeaway-text" style="color: #374151; font-size: 14px; line-height: 1.5; margin: 0;">
-            {{ article.takeaways }}
+            {{ org_content.takeaways }}
         </p>
     </div>
     {% endif %}
+    {% endwith %}
 </div>

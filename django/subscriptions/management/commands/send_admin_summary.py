@@ -109,7 +109,8 @@ class Command(BaseCommand):
 					subscriber=subscriber,
 					list_obj=admin_list,
 					site=site,
-					custom_settings=customsettings
+					custom_settings=customsettings,
+					organization=team.organization,
 				)
 				# Inject unsubscribe context for the footer template
 				# Always use site.domain (the domain the list is linked to) so that

@@ -278,7 +278,6 @@ class Articles(models.Model):
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	doi = models.CharField(max_length=280, blank=True, null=True)
 	summary = models.TextField(blank=True, null=True)
-	summary_plain_english = models.TextField(blank=True, null=True) # Used for plain English version
 	
 	# Persisted uppercase columns for performant case-insensitive search
 	utitle = GeneratedField(
@@ -305,7 +304,6 @@ class Articles(models.Model):
 	publisher = models.CharField(max_length=150, blank=True, null=True, default=None)
 	container_title = models.CharField(max_length=150, blank=True, null=True, default=None)
 	crossref_check = models.DateTimeField(blank=True, null=True)
-	takeaways = models.TextField(blank=True, null=True)
 	history = HistoricalRecords(
 		excluded_fields=['crossref_check', 'utitle', 'usummary'],
 		bases=[ApiKeyHistoryMixin],
@@ -400,7 +398,6 @@ class Trials(models.Model):
 	last_updated = models.DateTimeField(auto_now=True, null=True)
 	title = models.TextField(blank=False,null=False, unique=True)
 	summary = models.TextField(blank=True, null=True)
-	summary_plain_english = models.TextField(blank=True, null=True) # Used for plain English summary
 	
 	# Persisted uppercase columns for performant case-insensitive search
 	utitle = GeneratedField(
