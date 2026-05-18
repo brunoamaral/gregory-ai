@@ -1,5 +1,4 @@
 import os
-import json
 from unittest.mock import patch, MagicMock
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gregory.tests.test_settings')
