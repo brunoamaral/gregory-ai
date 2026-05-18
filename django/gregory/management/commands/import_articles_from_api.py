@@ -2,8 +2,9 @@ import requests
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
+from organizations.models import Organization
 
-from gregory.models import Articles, Authors, Sources, Team, Subject, ArticleSubjectRelevance
+from gregory.models import Articles, Authors, Sources, Team, Subject, ArticleSubjectRelevance, ArticleOrgContent
 
 class Command(BaseCommand):
 	help = 'Fetches articles from the API and imports them into the Django app.'
@@ -14,9 +15,25 @@ class Command(BaseCommand):
 			type=str,
 			help='The API URL to fetch articles from.',
 		)
+		parser.add_argument(
+			'--target-org',
+			type=str,
+			required=True,
+			help='Organization slug or ID that owns the imported takeaways/summaries.',
+		)
 
 	def handle(self, *args, **options):
 		api_url = options['api_url']
+		target_org_arg = options['target_org']
+
+		try:
+			if target_org_arg.isdigit():
+				target_org = Organization.objects.get(pk=int(target_org_arg))
+			else:
+				target_org = Organization.objects.get(slug=target_org_arg)
+		except Organization.DoesNotExist:
+			raise CommandError("Organization not found: %s" % target_org_arg)
+
 		imported_count = 0
 		self.stdout.write("Starting import from %s" % api_url)
 
@@ -29,7 +46,7 @@ class Command(BaseCommand):
 				raise CommandError("Error fetching data from API: %s" % e)
 			data = response.json()
 			results = data.get("results", [])
-			
+
 			for item in results:
 				# Extract basic article fields
 				title = item.get("title")
@@ -41,6 +58,7 @@ class Command(BaseCommand):
 				container_title = item.get("container_title")
 				access = item.get("access")
 				takeaways = item.get("takeaways")
+				summary_plain_english = item.get("summary_plain_english")
 				discovery_date = parse_datetime(item.get("discovery_date")) if item.get("discovery_date") else timezone.now()
 
 				# Create or update the Article instance using title and link as unique identifiers
@@ -54,10 +72,22 @@ class Command(BaseCommand):
 						"publisher": publisher,
 						"container_title": container_title,
 						"access": access,
-						"takeaways": takeaways,
 						"discovery_date": discovery_date,
 					}
 				)
+
+				# Upsert per-org editorial content if the upstream provided any
+				if takeaways or summary_plain_english:
+					org_defaults = {}
+					if takeaways:
+						org_defaults["takeaways"] = takeaways
+					if summary_plain_english:
+						org_defaults["summary_plain_english"] = summary_plain_english
+					ArticleOrgContent.objects.update_or_create(
+						article=article,
+						organization=target_org,
+						defaults=org_defaults,
+					)
 
 				# Process ManyToMany relationships
 
