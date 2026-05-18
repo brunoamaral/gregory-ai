@@ -1,6 +1,6 @@
 from datetime import timedelta
 from django.utils.timezone import now
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
 from subscriptions.management.commands.utils.send_email import send_email
