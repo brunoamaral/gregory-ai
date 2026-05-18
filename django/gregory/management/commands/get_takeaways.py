@@ -84,7 +84,7 @@ class Command(BaseCommand):
 			print(f"Summarizing abstract {article_id} with lengths [{min_length}, {max_length}]")
 			summary = summarizer(abstract, min_length=min_length, max_length=max_length, truncation=True)
 			end = time.time()
-			print(f" => Ellapsed time: {end - start} sec.")
+			print(f" => Elapsed time: {end - start} sec.")
 			return summary[0]['summary_text'] if summary else ""
 		return ""
 
