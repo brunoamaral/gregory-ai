@@ -1,8 +1,8 @@
 """
-Regression guard: Team.organization must never be NULL.
+Regression guard: Team.organization must remain required.
 
-If someone re-adds null=True to Team.organization the full_clean() call below
-will stop raising ValidationError and this test will fail.
+If Team.organization becomes optional (null/blank), the full_clean() call
+below should stop raising ValidationError and this test should fail.
 """
 import os
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gregory.tests.test_settings')
