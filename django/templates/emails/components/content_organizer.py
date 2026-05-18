@@ -370,7 +370,8 @@ class EmailRenderingPipeline:
         
     def prepare_optimized_context(self, email_type, articles=None, trials=None, 
                                 subscriber=None, list_obj=None, site=None, 
-                                custom_settings=None, confidence_threshold=None, utm_params=None):
+                                custom_settings=None, confidence_threshold=None, utm_params=None,
+                                organization=None):
         """
         Prepare optimized context with content organization and performance enhancements.
         
@@ -527,6 +528,25 @@ class EmailRenderingPipeline:
             logger.info(f"Optimized context prepared for {email_type}: "
                        f"{content_stats['total_articles']} articles, "
                        f"{content_stats['total_trials']} trials")
+            
+            # Build per-org content map for email templates
+            if organization is not None:
+                from gregory.models import ArticleOrgContent
+                all_email_articles = (
+                    list(context.get('articles', []))
+                    + list(context.get('additional_articles', []))
+                )
+                article_ids = [a.article_id for a in all_email_articles if hasattr(a, 'article_id')]
+                org_contents = {
+                    oc.article_id: oc
+                    for oc in ArticleOrgContent.objects.filter(
+                        article_id__in=article_ids,
+                        organization=organization,
+                    )
+                }
+                context['org_content_map'] = org_contents
+            else:
+                context['org_content_map'] = {}
             
             return context
             
