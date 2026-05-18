@@ -341,7 +341,6 @@ class _BaseOrgContentInline(admin.StackedInline):
 	  opening an article without typing anything does not pollute the table.
 	"""
 	extra = 0
-	classes = ('collapse',)
 	fields = ('organization', 'takeaways', 'summary_plain_english', 'updated_at')
 	readonly_fields = ('updated_at',)
 
