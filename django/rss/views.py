@@ -120,13 +120,16 @@ class TrialsBySubjectFeed(Feed):
 		return item.title
 
 	def item_description(self, item):
-		"""Build a rich description from available trial metadata."""
+		"""Build a rich description from available trial metadata.
+
+		Only non-per-org fields are surfaced: editorial fields such as
+		``summary_plain_english`` and ``takeaways`` now live on
+		``TrialOrgContent`` and would require an org context the feed
+		does not have.
+		"""
 		parts = []
-		
-		# Primary summary - prefer plain English summary if available
-		if item.summary_plain_english:
-			parts.append(f"<p>{item.summary_plain_english}</p>")
-		elif item.summary:
+
+		if item.summary:
 			parts.append(f"<p>{item.summary}</p>")
 		
 		# Trial metadata section
