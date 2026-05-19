@@ -10,7 +10,7 @@ from subscriptions.management.commands.utils.subscription import (
 	get_latest_research_by_category,
 )
 from gregory.models import Articles, Authors, Trials, MLPredictions
-from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
+from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url, get_postmark_credentials, get_site_and_settings
 from subscriptions.models import (
 	Lists,
 	Subscribers,
@@ -402,13 +402,8 @@ class Command(BaseCommand):
 				)
 
 				# Inject unsubscribe context for the footer template
-				# Always use site.domain (the domain the list is linked to) so that
-				# all footer links are consistent with Lists.site.
-				# Strip whitespace to guard against accidental spaces in Site.domain.
-				_domain = site.domain.strip()
-				_scheme = 'https' if _domain not in ('localhost', '127.0.0.1') else 'http'
 				summary_context['list_id'] = digest_list.list_id
-				summary_context['unsubscribe_base_url'] = f"{_scheme}://{_domain}"
+				summary_context['unsubscribe_base_url'] = build_unsubscribe_base_url(site, customsettings)
 				summary_context['header_title'] = digest_list.header_title or ''
 				summary_context['header_tagline'] = digest_list.header_tagline or ''
 				summary_context['show_header_tagline'] = digest_list.show_header_tagline

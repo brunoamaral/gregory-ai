@@ -17,6 +17,7 @@ import bleach
 from .models import Subscribers, Lists, FailedNotification, ListSubscription, SubscriberSiteProfile, Announcement, AnnouncementRecipient
 from .forms import ListsAdminForm, AnnouncementAdminForm
 from gregory.models import Team
+from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url
 
 # Allowlist for announcement body HTML (used by bleach sanitization)
 _ANNOUNCEMENT_ALLOWED_TAGS = [
@@ -1183,12 +1184,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if subscriber:
 			context['subscriber'] = subscriber
 		if site:
-			# Always use site.domain (the domain the list is linked to) so that
-			# all footer links are consistent with Lists.site.
-			# Strip whitespace to guard against accidental spaces in Site.domain.
-			_domain = site.domain.strip()
-			_scheme = 'https' if _domain not in ('localhost', '127.0.0.1') else 'http'
-			context['unsubscribe_base_url'] = f"{_scheme}://{_domain}"
+			context['unsubscribe_base_url'] = build_unsubscribe_base_url(site, custom_settings)
 			context['site'] = site
 		if list_id:
 			context['list_id'] = list_id

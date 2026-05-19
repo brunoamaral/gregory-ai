@@ -1,20 +1,24 @@
 """
-Tests for the unsubscribe_base_url logic in send_weekly_summary.
+Tests for unsubscribe_base_url logic.
 
-The command derives the URL as:
+Covers two layers:
+  1. build_unsubscribe_base_url() unit tests — scheme selection, api_domain
+     precedence, whitespace stripping, and scheme-prefix normalisation.
+  2. send_weekly_summary integration tests — end-to-end email output.
 
-    scheme               = 'http' if site.domain in ('localhost', '127.0.0.1') else 'https'
-    unsubscribe_base_url = f"{scheme}://{site.domain}"
-
-The footer always uses the domain from Lists.site, ensuring consistency with
-the domain the distribution list is explicitly linked to. The CustomSetting
-api_domain field is no longer used for unsubscribe links.
+Resolution order:
+    api_domain  = CustomSetting.api_domain stripped, scheme-prefix removed
+    domain      = api_domain if non-empty, else site.domain stripped
+    scheme      = 'http' if domain in ('localhost', '127.0.0.1') else 'https'
+    base_url    = f"{scheme}://{domain}"
 
 Scenarios:
-1. api_domain set on CustomSetting  → ignored; site.domain is used
-2. api_domain empty / not set       → site.domain used (same as before)
-3. site.domain == 'localhost'       → http:// scheme
-4. site.domain == '127.0.0.1'      → http:// scheme
+1. api_domain set                              → api_domain used
+2. api_domain empty / whitespace-only          → site.domain fallback
+3. api_domain with leading scheme prefix       → prefix stripped
+4. api_domain with leading/trailing whitespace → whitespace stripped
+5. site.domain == 'localhost'                  → http:// scheme
+6. site.domain == '127.0.0.1'                 → http:// scheme
 """
 import os
 import django
@@ -32,6 +36,7 @@ from django.utils.timezone import now
 from gregory.models import Subject, Articles, Team
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
+from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url
 from subscriptions.models import Lists, Subscribers, ListSubscription
 
 
@@ -42,6 +47,84 @@ def _ok_response():
 	mock.json.return_value = {"ErrorCode": 0, "Message": "OK"}
 	return mock
 
+
+# ── Unit tests for the helper ─────────────────────────────────────────────────
+
+class TestBuildUnsubscribeBaseUrl(TestCase):
+	"""Unit tests for build_unsubscribe_base_url()."""
+
+	def _site(self, domain):
+		site = MagicMock()
+		site.domain = domain
+		return site
+
+	def _cs(self, api_domain):
+		cs = MagicMock(spec=CustomSetting)
+		cs.api_domain = api_domain
+		return cs
+
+	def test_api_domain_preferred_over_site_domain(self):
+		self.assertEqual(
+			build_unsubscribe_base_url(self._site('site.example.com'), self._cs('api.example.com')),
+			'https://api.example.com',
+		)
+
+	def test_fallback_to_site_domain_when_api_domain_empty(self):
+		self.assertEqual(
+			build_unsubscribe_base_url(self._site('site.example.com'), self._cs('')),
+			'https://site.example.com',
+		)
+
+	def test_fallback_to_site_domain_when_api_domain_whitespace_only(self):
+		self.assertEqual(
+			build_unsubscribe_base_url(self._site('site.example.com'), self._cs('   ')),
+			'https://site.example.com',
+		)
+
+	def test_whitespace_stripped_from_api_domain(self):
+		self.assertEqual(
+			build_unsubscribe_base_url(self._site('site.example.com'), self._cs('  api.example.com  ')),
+			'https://api.example.com',
+		)
+
+	def test_https_scheme_prefix_stripped_from_api_domain(self):
+		self.assertEqual(
+			build_unsubscribe_base_url(self._site('site.example.com'), self._cs('https://api.example.com')),
+			'https://api.example.com',
+		)
+
+	def test_http_scheme_prefix_stripped_from_api_domain(self):
+		self.assertEqual(
+			build_unsubscribe_base_url(self._site('site.example.com'), self._cs('http://api.example.com')),
+			'https://api.example.com',
+		)
+
+	def test_http_scheme_for_localhost(self):
+		self.assertEqual(
+			build_unsubscribe_base_url(self._site('localhost'), None),
+			'http://localhost',
+		)
+
+	def test_http_scheme_for_loopback_ip(self):
+		self.assertEqual(
+			build_unsubscribe_base_url(self._site('127.0.0.1'), None),
+			'http://127.0.0.1',
+		)
+
+	def test_no_customsettings(self):
+		self.assertEqual(
+			build_unsubscribe_base_url(self._site('site.example.com'), None),
+			'https://site.example.com',
+		)
+
+	def test_empty_site_domain_returns_empty(self):
+		self.assertEqual(
+			build_unsubscribe_base_url(self._site(''), self._cs('')),
+			'',
+		)
+
+
+# ── Integration tests via send_weekly_summary ─────────────────────────────────
 
 class TestUnsubscribeBaseUrl(TestCase):
 	"""Ensure send_weekly_summary injects the correct unsubscribe_base_url."""
@@ -130,9 +213,57 @@ class TestUnsubscribeBaseUrl(TestCase):
 		return_value=("test-token", "https://api.postmarkapp.com/email"),
 	)
 	@patch("subscriptions.management.commands.send_weekly_summary.send_email")
-	def test_api_domain_ignored_site_domain_always_used(self, mock_send_email, _mock_creds):
-		"""api_domain is no longer used for unsubscribe links; site.domain is always used."""
+	def test_api_domain_used_when_set(self, mock_send_email, _mock_creds):
+		"""When api_domain is set on CustomSetting, unsubscribe links use it."""
 		self.custom_settings.api_domain = "api.example.com"
+		self.custom_settings.save()
+
+		self._run(mock_send_email)
+
+		html = self._captured_html(mock_send_email)
+		self.assertIn(
+			"https://api.example.com/subscriptions/unsubscribe/",
+			html,
+			"Unsubscribe link should use CustomSetting.api_domain when set",
+		)
+		self.assertNotIn(
+			"https://testserver.example.com/subscriptions/unsubscribe/",
+			html,
+			"Unsubscribe link must NOT use site.domain when api_domain is set",
+		)
+
+	@patch(
+		"subscriptions.management.commands.send_weekly_summary.get_postmark_credentials",
+		return_value=("test-token", "https://api.postmarkapp.com/email"),
+	)
+	@patch("subscriptions.management.commands.send_weekly_summary.send_email")
+	def test_api_domain_with_scheme_prefix(self, mock_send_email, _mock_creds):
+		"""api_domain containing a scheme prefix must not produce a double-scheme URL."""
+		self.custom_settings.api_domain = "https://api.example.com"
+		self.custom_settings.save()
+
+		self._run(mock_send_email)
+
+		html = self._captured_html(mock_send_email)
+		self.assertIn(
+			"https://api.example.com/subscriptions/unsubscribe/",
+			html,
+			"Scheme prefix in api_domain should be stripped before building the URL",
+		)
+		self.assertNotIn(
+			"https://https://",
+			html,
+			"Double-scheme must never appear in the unsubscribe URL",
+		)
+
+	@patch(
+		"subscriptions.management.commands.send_weekly_summary.get_postmark_credentials",
+		return_value=("test-token", "https://api.postmarkapp.com/email"),
+	)
+	@patch("subscriptions.management.commands.send_weekly_summary.send_email")
+	def test_whitespace_only_api_domain_falls_back_to_site_domain(self, mock_send_email, _mock_creds):
+		"""Whitespace-only api_domain is treated as unset; site.domain is used."""
+		self.custom_settings.api_domain = "   "
 		self.custom_settings.save()
 
 		self._run(mock_send_email)
@@ -141,12 +272,7 @@ class TestUnsubscribeBaseUrl(TestCase):
 		self.assertIn(
 			"https://testserver.example.com/subscriptions/unsubscribe/",
 			html,
-			"Unsubscribe link should always use site.domain, not api_domain",
-		)
-		self.assertNotIn(
-			"https://api.example.com/subscriptions/unsubscribe/",
-			html,
-			"Unsubscribe link must NOT use api_domain",
+			"Whitespace-only api_domain should fall back to site.domain",
 		)
 
 	@patch(
@@ -155,7 +281,7 @@ class TestUnsubscribeBaseUrl(TestCase):
 	)
 	@patch("subscriptions.management.commands.send_weekly_summary.send_email")
 	def test_site_domain_used_when_api_domain_empty(self, mock_send_email, _mock_creds):
-		"""When api_domain is empty, unsubscribe links use site.domain."""
+		"""When api_domain is empty, unsubscribe links fall back to site.domain."""
 		self.custom_settings.api_domain = ""
 		self.custom_settings.save()
 
@@ -165,7 +291,7 @@ class TestUnsubscribeBaseUrl(TestCase):
 		self.assertIn(
 			"https://testserver.example.com/subscriptions/unsubscribe/",
 			html,
-			"Unsubscribe link should use site.domain",
+			"Unsubscribe link should fall back to site.domain when api_domain is empty",
 		)
 
 	@patch(
@@ -174,9 +300,11 @@ class TestUnsubscribeBaseUrl(TestCase):
 	)
 	@patch("subscriptions.management.commands.send_weekly_summary.send_email")
 	def test_http_scheme_for_localhost(self, mock_send_email, _mock_creds):
-		"""When site.domain is 'localhost', the scheme must be http://."""
+		"""When the resolved domain is 'localhost', the scheme must be http://."""
 		self.site.domain = "localhost"
 		self.site.save()
+		self.custom_settings.api_domain = ""
+		self.custom_settings.save()
 
 		self._run(mock_send_email)
 
@@ -198,9 +326,11 @@ class TestUnsubscribeBaseUrl(TestCase):
 	)
 	@patch("subscriptions.management.commands.send_weekly_summary.send_email")
 	def test_http_scheme_for_loopback_ip(self, mock_send_email, _mock_creds):
-		"""When site.domain is '127.0.0.1', the scheme must be http://."""
+		"""When the resolved domain is '127.0.0.1', the scheme must be http://."""
 		self.site.domain = "127.0.0.1"
 		self.site.save()
+		self.custom_settings.api_domain = ""
+		self.custom_settings.save()
 
 		self._run(mock_send_email)
 
