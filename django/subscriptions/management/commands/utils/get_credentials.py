@@ -1,8 +1,34 @@
+import re
+
 from django.conf import settings
 from django.contrib.sites.models import Site
 
 from gregory.models import OrganizationCredentials, OrganizationSite
 from sitesettings.models import CustomSetting
+
+_SCHEME_RE = re.compile(r'^https?://', re.IGNORECASE)
+
+
+def build_unsubscribe_base_url(site, customsettings=None):
+	"""
+	Return the base URL (scheme + host) used for unsubscribe links.
+
+	Prefers CustomSetting.api_domain when non-empty; falls back to site.domain.
+	Strips any scheme prefix an admin may have pasted into api_domain (e.g.
+	"https://api.example.com" → "api.example.com") to prevent double-scheme URLs.
+	"""
+	raw = ''
+	if customsettings and customsettings.api_domain:
+		raw = customsettings.api_domain.strip()
+	if not raw:
+		raw = (site.domain.strip() if site and site.domain else '')
+
+	domain = _SCHEME_RE.sub('', raw).rstrip('/')
+	if not domain:
+		return ''
+
+	scheme = 'http' if domain in ('localhost', '127.0.0.1') else 'https'
+	return f"{scheme}://{domain}"
 
 
 def get_orcid_credentials(organization):

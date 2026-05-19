@@ -10,7 +10,7 @@ from subscriptions.management.commands.utils.subscription import (
 	get_latest_research_by_category,
 )
 from gregory.models import Articles, Authors, Trials, MLPredictions
-from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
+from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url, get_postmark_credentials, get_site_and_settings
 from subscriptions.models import (
 	Lists,
 	Subscribers,
@@ -402,13 +402,8 @@ class Command(BaseCommand):
 				)
 
 				# Inject unsubscribe context for the footer template
-				# Prefer CustomSetting.api_domain (the backend-reachable domain) for
-				# unsubscribe links; fall back to site.domain when api_domain is unset.
-				_api_domain = customsettings.api_domain.strip() if customsettings and customsettings.api_domain else ''
-				_domain = _api_domain or site.domain.strip()
-				_scheme = 'https' if _domain not in ('localhost', '127.0.0.1') else 'http'
 				summary_context['list_id'] = digest_list.list_id
-				summary_context['unsubscribe_base_url'] = f"{_scheme}://{_domain}"
+				summary_context['unsubscribe_base_url'] = build_unsubscribe_base_url(site, customsettings)
 				summary_context['header_title'] = digest_list.header_title or ''
 				summary_context['header_tagline'] = digest_list.header_tagline or ''
 				summary_context['show_header_tagline'] = digest_list.show_header_tagline

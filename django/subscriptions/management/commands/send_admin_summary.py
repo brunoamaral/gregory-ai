@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
 from gregory.models import Articles, Trials, MLPredictions
-from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
+from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url, get_postmark_credentials, get_site_and_settings
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list, get_articles_for_list
 from subscriptions.models import Lists, Subscribers, SentArticleNotification, SentTrialNotification, FailedNotification
@@ -114,13 +114,8 @@ class Command(BaseCommand):
 					organization=organization,
 				)
 				# Inject unsubscribe context for the footer template
-				# Prefer CustomSetting.api_domain (the backend-reachable domain) for
-				# unsubscribe links; fall back to site.domain when api_domain is unset.
-				_api_domain = customsettings.api_domain.strip() if customsettings and customsettings.api_domain else ''
-				_domain = _api_domain or site.domain.strip()
-				_scheme = 'https' if _domain not in ('localhost', '127.0.0.1') else 'http'
 				summary_context['list_id'] = admin_list.list_id
-				summary_context['unsubscribe_base_url'] = f"{_scheme}://{_domain}"
+				summary_context['unsubscribe_base_url'] = build_unsubscribe_base_url(site, customsettings)
 				summary_context['header_title'] = admin_list.header_title or ''
 				summary_context['header_tagline'] = admin_list.header_tagline or ''
 				summary_context['show_header_tagline'] = admin_list.show_header_tagline
