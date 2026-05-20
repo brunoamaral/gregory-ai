@@ -300,37 +300,47 @@ class OrgFilterStatsTest(StatsVisibilityBase):
 
 
 class OrgAndTeamIntersectionTest(StatsVisibilityBase):
-	"""?organization= + ?team= intersection semantics."""
+	"""?organization= + ?team= intersection semantics.
+
+	Uses an authenticated member of my_org with ?include_public=true so that
+	both my_org and pub_org are visible, allowing precise intersection tests.
+	"""
 
 	def setUp(self):
 		super().setUp()
 		from django.core.cache import cache
 		cache.clear()
+		self.user = User.objects.create_user(username='intersect-member', password='pw')
+		OrganizationUser.objects.create(organization=self.my_org, user=self.user)
+		self.client.force_login(self.user)
 
 	def test_team_in_org_returns_correct_count(self):
 		"""team belonging to the requested org → counts scoped to that team."""
 		resp = self.client.get(
 			'/stats/',
-			{'organization': self.pub_org.id, 'team': self.pub_team.id},
+			{'organization': self.pub_org.id, 'team': self.pub_team.id, 'include_public': 'true'},
 		)
 		self.assertEqual(resp.status_code, 200)
 		self.assertEqual(resp.data['articles'], 1)
 
 	def test_team_not_in_org_returns_zero_not_404(self):
-		"""team valid + org valid but team not in org → 200 with zero counts."""
+		"""Both team and org are visible but team belongs to a different org.
+
+		my_team (in my_org) + ?organization=pub_org → intersection empty
+		→ 200 with zero counts (both params individually valid, result is empty).
+		"""
 		resp = self.client.get(
 			'/stats/',
-			{'organization': self.pub_org.id, 'team': self.pub_team.id + 999},
+			{'organization': self.pub_org.id, 'team': self.my_team.id, 'include_public': 'true'},
 		)
-		# The team ID doesn't exist so it resolves to an empty team_id_list;
-		# that is a well-formed request that yields zero results, not 404.
-		self.assertIn(resp.status_code, (200, 404))
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data['articles'], 0)
 
 	def test_hidden_team_with_visible_org_returns_404(self):
 		"""A hidden team requested alongside a visible org is still 404."""
 		resp = self.client.get(
 			'/stats/',
-			{'organization': self.pub_org.id, 'team': self.priv_team.id},
+			{'organization': self.pub_org.id, 'team': self.priv_team.id, 'include_public': 'true'},
 		)
 		self.assertEqual(resp.status_code, 404)
 
@@ -346,6 +356,11 @@ class StatsCacheTest(StatsVisibilityBase):
 		super().setUp()
 		from django.core.cache import cache
 		cache.clear()
+		# Second public org/team so both cache entries can be populated by an
+		# anonymous caller (my_team is private; only public teams are visible).
+		self.pub_org2 = _make_org('Public Org 2', 'pub-org2-cache-stats', public=True)
+		self.pub_team2 = _make_team(self.pub_org2, 'Pub Team 2 Cache Stats')
+		_make_article('Pub Art 2 Cache', 'https://st.ex/cache/a2', teams=[self.pub_team2])
 
 	def test_second_request_served_from_cache(self):
 		"""Two identical requests issue DB count queries only on the first."""
@@ -370,15 +385,18 @@ class StatsCacheTest(StatsVisibilityBase):
 		self.assertLess(second_count, first_count)
 
 	def test_cache_key_differs_by_team(self):
-		"""Requests for different teams are cached independently."""
+		"""Requests for different visible teams are cached independently."""
 		from django.core.cache import cache as django_cache
 
 		self.client.get('/stats/', {'team': self.pub_team.id})
-		self.client.get('/stats/', {'team': self.my_team.id})
+		self.client.get('/stats/', {'team': self.pub_team2.id})
 
-		# Two distinct cache entries should exist (neither evicts the other).
-		pub_key = f'stats:{self.pub_team.id}'
-		self.assertIsNotNone(django_cache.get(pub_key))
+		# Both requests must produce distinct, non-None cache entries.
+		key1 = f'stats:{self.pub_team.id}'
+		key2 = f'stats:{self.pub_team2.id}'
+		self.assertIsNotNone(django_cache.get(key1))
+		self.assertIsNotNone(django_cache.get(key2))
+		self.assertNotEqual(key1, key2)
 
 	def test_cache_cleared_between_tests(self):
 		"""setUp.cache.clear() isolates test runs."""
