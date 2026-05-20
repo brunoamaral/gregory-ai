@@ -135,6 +135,18 @@ DATABASES = {
 	}
 }
 
+# Cache backend — shared across gunicorn workers via the existing Postgres DB.
+# Run `python manage.py createcachetable gregory_cache` once after deploy to create the table.
+CACHES = {
+	'default': {
+		'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+		'LOCATION': 'gregory_cache',
+	}
+}
+
+# TTL (seconds) for the /stats/ response cache. Override via STATS_CACHE_TTL env var.
+STATS_CACHE_TTL = int(os.environ.get('STATS_CACHE_TTL', '600'))
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
 	{'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
