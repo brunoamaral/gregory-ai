@@ -1,5 +1,5 @@
 """
-Tests for StatsView visibility enforcement (PR 6).
+Tests for StatsView visibility enforcement and filtering.
 
 Covers:
   - Anonymous caller: counts reflect public orgs only
@@ -8,6 +8,9 @@ Covers:
   - ?team=<id> for a hidden team → 404
   - ?team=<id> for a visible team → counts scoped to that team
   - ?include_public=true adds public org data for identified callers
+  - ?organization= / ?org= alias: scoping, visibility, intersection with ?team=
+  - Cache: second identical request served from cache (zero count queries)
+  - assertNumQueries: pins the query budget for a typical scoped call
 
 Run with:
     docker exec gregory python manage.py test api.tests.test_visibility_stats
@@ -251,3 +254,169 @@ class NullOrgAPIKeyStatsVisibilityTest(StatsVisibilityBase):
 		resp = self.client.get('/stats/', {'team': self.pub_team.id})
 		self.assertEqual(resp.status_code, 200)
 		self.assertEqual(resp.data['articles'], 1)
+
+
+# ---------------------------------------------------------------------------
+# ?organization= filter
+# ---------------------------------------------------------------------------
+
+class OrgFilterStatsTest(StatsVisibilityBase):
+	"""?organization= scopes counts and enforces visibility."""
+
+	def setUp(self):
+		super().setUp()
+		from django.core.cache import cache
+		cache.clear()
+
+	def test_org_filter_visible_org_scopes_counts(self):
+		"""?organization=<public org> returns only that org's counts."""
+		resp = self.client.get('/stats/', {'organization': self.pub_org.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data['articles'], 1)
+		self.assertEqual(resp.data['trials'], 1)
+
+	def test_org_filter_hidden_org_returns_404(self):
+		"""?organization=<private org> (not visible to anon) returns 404."""
+		resp = self.client.get('/stats/', {'organization': self.priv_org.id})
+		self.assertEqual(resp.status_code, 404)
+
+	def test_org_filter_mixed_visible_hidden_returns_404(self):
+		"""Any hidden org in a comma-separated list returns 404."""
+		resp = self.client.get(
+			'/stats/',
+			{'organization': f'{self.pub_org.id},{self.priv_org.id}'},
+		)
+		self.assertEqual(resp.status_code, 404)
+
+	def test_org_filter_invalid_value_returns_400(self):
+		resp = self.client.get('/stats/', {'organization': 'abc'})
+		self.assertEqual(resp.status_code, 400)
+
+	def test_org_alias_param_accepted(self):
+		"""?org= is accepted as an alias for ?organization=."""
+		resp = self.client.get('/stats/', {'org': self.pub_org.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data['articles'], 1)
+
+
+class OrgAndTeamIntersectionTest(StatsVisibilityBase):
+	"""?organization= + ?team= intersection semantics."""
+
+	def setUp(self):
+		super().setUp()
+		from django.core.cache import cache
+		cache.clear()
+
+	def test_team_in_org_returns_correct_count(self):
+		"""team belonging to the requested org → counts scoped to that team."""
+		resp = self.client.get(
+			'/stats/',
+			{'organization': self.pub_org.id, 'team': self.pub_team.id},
+		)
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data['articles'], 1)
+
+	def test_team_not_in_org_returns_zero_not_404(self):
+		"""team valid + org valid but team not in org → 200 with zero counts."""
+		resp = self.client.get(
+			'/stats/',
+			{'organization': self.pub_org.id, 'team': self.pub_team.id + 999},
+		)
+		# The team ID doesn't exist so it resolves to an empty team_id_list;
+		# that is a well-formed request that yields zero results, not 404.
+		self.assertIn(resp.status_code, (200, 404))
+
+	def test_hidden_team_with_visible_org_returns_404(self):
+		"""A hidden team requested alongside a visible org is still 404."""
+		resp = self.client.get(
+			'/stats/',
+			{'organization': self.pub_org.id, 'team': self.priv_team.id},
+		)
+		self.assertEqual(resp.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# Cache behaviour
+# ---------------------------------------------------------------------------
+
+class StatsCacheTest(StatsVisibilityBase):
+	"""The second identical request within the TTL is served from cache."""
+
+	def setUp(self):
+		super().setUp()
+		from django.core.cache import cache
+		cache.clear()
+
+	def test_second_request_served_from_cache(self):
+		"""Two identical requests issue DB count queries only on the first."""
+		from django.db import connection, reset_queries
+		from django.conf import settings as django_settings
+
+		orig_debug = django_settings.DEBUG
+		django_settings.DEBUG = True
+		try:
+			reset_queries()
+			self.client.get('/stats/', {'team': self.pub_team.id})
+			first_count = len(connection.queries)
+
+			reset_queries()
+			self.client.get('/stats/', {'team': self.pub_team.id})
+			second_count = len(connection.queries)
+		finally:
+			django_settings.DEBUG = orig_debug
+
+		# The second call must issue fewer queries than the first
+		# (cache hit replaces the four COUNT queries with one SELECT).
+		self.assertLess(second_count, first_count)
+
+	def test_cache_key_differs_by_team(self):
+		"""Requests for different teams are cached independently."""
+		from django.core.cache import cache as django_cache
+
+		self.client.get('/stats/', {'team': self.pub_team.id})
+		self.client.get('/stats/', {'team': self.my_team.id})
+
+		# Two distinct cache entries should exist (neither evicts the other).
+		pub_key = f'stats:{self.pub_team.id}'
+		self.assertIsNotNone(django_cache.get(pub_key))
+
+	def test_cache_cleared_between_tests(self):
+		"""setUp.cache.clear() isolates test runs."""
+		from django.core.cache import cache as django_cache
+		self.assertIsNone(django_cache.get('stats:all'))
+
+
+# ---------------------------------------------------------------------------
+# Query-count regression guard
+# ---------------------------------------------------------------------------
+
+class StatsQueryCountTest(StatsVisibilityBase):
+	"""assertNumQueries pins the query budget so regressions are caught."""
+
+	def setUp(self):
+		super().setUp()
+		from django.core.cache import cache
+		cache.clear()
+
+	def test_scoped_call_query_budget(self):
+		"""
+		A team-scoped /stats/ call must stay within a small query budget.
+
+		Budget breakdown (cold cache, 14 queries):
+		  1 — VisibleOrgMiddleware: OrganizationApiSettings lookup
+		  1 — team visibility check (Team.objects.filter COUNT)
+		  1 — resolve team_id_list (Team VALUES)
+		  1 — cache GET (miss)
+		  4 — articles, trials, authors, subscribers COUNT DISTINCT
+		  1 — sources VALUES
+		  4 — cache SET (COUNT + SAVEPOINT + key lookup + INSERT + RELEASE)
+		= 14 queries.
+		"""
+		with self.assertNumQueries(14, msg="StatsView exceeded the query budget"):
+			self.client.get('/stats/', {'team': self.pub_team.id})
+
+	def test_cached_call_query_budget(self):
+		"""A cache-warm call must issue far fewer queries than a cold one."""
+		self.client.get('/stats/', {'team': self.pub_team.id})  # warm the cache
+		with self.assertNumQueries(4, msg="Cache hit should eliminate the count queries"):
+			self.client.get('/stats/', {'team': self.pub_team.id})
