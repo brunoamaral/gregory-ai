@@ -34,7 +34,7 @@ if SECRET_KEY == 'DEFAULT SECRET_KEY':
     print("Using default SECRET_KEY for development. DO NOT use in production!")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG= True
+DEBUG = False 
 SITE_ID = 1
 # FERNET SECRET KEY
 FERNET_SECRET_KEY = os.environ.get('FERNET_SECRET_KEY', 'DEFAULT KEY GOES HERE')
@@ -49,19 +49,21 @@ FORMS_URLFIELD_ASSUME_HTTPS = True
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 
 ALLOWED_HOSTS = [
+    '142.93.160.186',
 	'0.0.0.0',
 	'localhost',
 	'127.0.0.1',
 	'gregory',
+    'brain-regeneration.com',
+    'api.brain-regeneration.com',
 	'api.' + os.environ.get('DOMAIN_NAME', ''),
-	'manage.' + os.environ.get('DOMAIN_NAME', ''),
-	'example.com',  
 ]
 
 CSRF_TRUSTED_ORIGINS = [
+    'https://brain-regeneration.com',
+    'https://api.brain-regeneration.com',
 	'https://' + os.environ.get('DOMAIN_NAME', ''),
 	'https://api.' + os.environ.get('DOMAIN_NAME', ''),
-	'https://manage.' + os.environ.get('DOMAIN_NAME', ''),
 ]
 
 # Application definition
