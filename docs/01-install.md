@@ -62,6 +62,7 @@ This starts the Django application, PostgreSQL, and any supporting services defi
 
 ```bash
 docker exec gregory python manage.py migrate
+docker exec gregory python manage.py createcachetable
 docker exec gregory python manage.py createsuperuser
 ```
 
