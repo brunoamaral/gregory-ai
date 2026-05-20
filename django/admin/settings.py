@@ -136,7 +136,7 @@ DATABASES = {
 }
 
 # Cache backend — shared across gunicorn workers via the existing Postgres DB.
-# Run `python manage.py createcachetable` once after deploy to create the table.
+# Run `python manage.py createcachetable gregory_cache` once after deploy to create the table.
 CACHES = {
 	'default': {
 		'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
