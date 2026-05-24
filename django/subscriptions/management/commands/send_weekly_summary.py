@@ -538,10 +538,13 @@ class Command(BaseCommand):
 					_status_code = 200 if result.get('status') == 'ok' else result.get('status_code', 0)
 					_get_json = lambda: result
 				else:
-					_status_code = result.status_code if result else None
-					_get_json = result.json if result else (lambda: {})
+					# Use `is not None` rather than truthiness: requests.Response
+					# is falsy for 4xx/5xx responses (Response.__bool__ == self.ok),
+					# so `if result` would wrongly treat error responses as missing.
+					_status_code = result.status_code if result is not None else None
+					_get_json = result.json if result is not None else (lambda: {})
 
-				if result and _status_code == 200:
+				if result is not None and _status_code == 200:
 					response_data = _get_json()
 					error_code = response_data.get("ErrorCode", 0)
 					message = response_data.get("Message", "Unknown error")
