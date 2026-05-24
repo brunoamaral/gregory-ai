@@ -1053,6 +1053,13 @@ class AnnouncementAdmin(admin.ModelAdmin):
 	readonly_fields = ['status', 'sent_at', 'recipients_count', 'failures_count', 'created_by', 'created_at']
 	inlines = [AnnouncementRecipientInline]
 
+	class Media:
+		# Loaded as a plain <script> tag AFTER the CKEditor bundle (widget
+		# media loads first via form media, admin class media appends after).
+		# Uses window.ckeditorRegisterCallback — no CKEditor plugin
+		# infrastructure needed.
+		js = ('subscriptions/ckeditor/button_plugin.js',)
+
 	fieldsets = [
 		(None, {'fields': ['subject']}),
 		('Email Header', {

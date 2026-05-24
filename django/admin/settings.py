@@ -197,8 +197,11 @@ CKEDITOR_5_CONFIGS = {
 				{'name': 'a', 'classes': ['btn-cta']},
 			],
 		},
-		# Custom CTA button inserter plugin (loaded via Django staticfiles).
-		'extraPlugins': ['subscriptions/ckeditor/button_plugin.js'],
+		# NOTE: button_plugin.js is NOT listed here as an extraPlugin.
+		# CKEditor 5's extraPlugins expects constructor references, not file
+		# paths — loading it that way throws plugincollection-plugin-not-found.
+		# The script is instead loaded as a regular Django Media JS on the
+		# AnnouncementAdmin page (see subscriptions/admin.py).
 	},
 }
 CKEDITOR_5_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
