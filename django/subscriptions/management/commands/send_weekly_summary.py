@@ -531,8 +531,18 @@ class Command(BaseCommand):
 					sender_prefix=customsettings.sender_email_prefix,
 				)
 
-				if result and result.status_code == 200:
-					response_data = result.json()
+				# Normalize result so the rest of the block works with both a
+				# real requests.Response object and a plain dict (e.g. returned
+				# by test mocks or alternative send_email implementations).
+				if isinstance(result, dict):
+					_status_code = 200 if result.get('status') == 'ok' else result.get('status_code', 0)
+					_get_json = lambda: result
+				else:
+					_status_code = result.status_code if result else None
+					_get_json = result.json if result else (lambda: {})
+
+				if result and _status_code == 200:
+					response_data = _get_json()
 					error_code = response_data.get("ErrorCode", 0)
 					message = response_data.get("Message", "Unknown error")
 
@@ -548,7 +558,7 @@ class Command(BaseCommand):
 							)
 							new_sent_count += 1
 						self.stdout.write(self.style.NOTICE(f'  - Recorded {new_sent_count} new sent article notifications (actually rendered in email)'))
-						
+
 						new_trial_sent_count = 0
 						for trial in trials_to_be_sent:
 							SentTrialNotification.objects.get_or_create(
@@ -567,18 +577,18 @@ class Command(BaseCommand):
 						)
 				else:
 					# Enhanced error handling for non-200 status codes
-					error_details = f"HTTP Status {result.status_code}"
-					
+					error_details = f"HTTP Status {_status_code}"
+
 					# For 422 errors, extract detailed Postmark error information
-					if result.status_code == 422:
+					if _status_code == 422:
 						try:
-							error_response = result.json()
+							error_response = _get_json()
 							error_code = error_response.get("ErrorCode", "Unknown")
 							error_message = error_response.get("Message", "No details provided")
 							error_details = f"422 Unprocessable Entity - ErrorCode: {error_code}, Message: {error_message}"
 						except (ValueError, KeyError):
 							error_details = f"422 Unprocessable Entity - Unable to parse error details"
-					
+
 					self.stdout.write(self.style.ERROR(f"Failed to send weekly digest email to {subscriber.email} for list '{digest_list.list_name}'. {error_details}"))
 					FailedNotification.objects.create(
 						subscriber=subscriber,
