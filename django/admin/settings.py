@@ -210,6 +210,12 @@ CKEDITOR_5_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
 # (django/subscriptions/views.py::ckeditor_upload).
 CK_EDITOR_5_UPLOAD_FILE_VIEW_NAME = 'subscriptions_ckeditor_upload'
 
+# When True, the announcement send-validation helper probes each /media/ image
+# URL with a HEAD request to confirm the file is reachable before sending.
+# Off by default because it makes an outbound HTTP call during an admin request;
+# useful in staging to catch missing files.
+ANNOUNCEMENT_PROBE_MEDIA = False
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

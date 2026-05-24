@@ -172,6 +172,22 @@ def render_announcement_html(
 			if src.startswith('/media/'):
 				img['src'] = base + src
 
+	# Warn when an absolute https:// <img> points at a different host than expected.
+	# The send path will have already blocked this case via validate_announcement_send_config;
+	# the log line here creates a trail for anything that slips through a future code path.
+	if base:
+		api_host = _strip_scheme(api_domain) or _strip_scheme(site_domain)
+		for img in soup.find_all('img'):
+			src = img.get('src', '')
+			if src.startswith('https://'):
+				host = urlparse(src).netloc
+				if api_host and host and host != api_host:
+					logger.warning(
+						'render_announcement_html: <img src=%r> points at %s, '
+						'expected %s; leaving as-is.',
+						src, host, api_host,
+					)
+
 	return str(soup)
 
 
@@ -209,7 +225,7 @@ def render_announcement_text(html: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _strip_scheme(domain: str | None) -> str:
+def strip_scheme(domain: str | None) -> str:
 	"""
 	Return *domain* with any leading ``http://`` or ``https://`` scheme
 	stripped, and any trailing slash removed.
@@ -224,6 +240,10 @@ def _strip_scheme(domain: str | None) -> str:
 	parsed = urlparse(domain)
 	host = parsed.netloc or parsed.path
 	return host.strip().rstrip('/')
+
+
+# Private alias kept for internal callers — use strip_scheme in new code.
+_strip_scheme = strip_scheme
 
 
 def _build_button_table(href: str, label: str) -> str:

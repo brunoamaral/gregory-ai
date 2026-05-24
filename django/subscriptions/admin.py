@@ -1250,18 +1250,41 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if request.method == 'POST':
 			from subscriptions.management.commands.utils.send_email import send_email
 			from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
+			from sitesettings.models import CustomSetting
+			from django.contrib.sites.models import Site
+			from subscriptions.utils.announcement_send_validation import validate_announcement_send_config
+			from django.conf import settings as dj_settings
 
 			# Use the first list's team for credentials
-			first_list = announcement.lists.select_related('team').first()
+			first_list = announcement.lists.select_related('team', 'site').first()
 			if not first_list:
 				messages.error(request, "No lists selected. Please select at least one list before sending a test.")
 				return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
 
 			try:
 				site, custom_settings = get_site_and_settings(first_list.team, list_obj=first_list)
-				api_token, api_url = get_postmark_credentials(custom_settings=custom_settings, organization=first_list.team.organization)
-			except Exception:
-				api_token, api_url, site, custom_settings = None, None, None, None
+			except CustomSetting.DoesNotExist:
+				# Resolve site without CustomSetting so we can still report it.
+				site = first_list.site or Site.objects.get_current()
+				custom_settings = None
+
+			# Validate before attempting to send — abort with clear error if broken.
+			errors = validate_announcement_send_config(
+				announcement,
+				site,
+				custom_settings,
+				probe_media=getattr(dj_settings, 'ANNOUNCEMENT_PROBE_MEDIA', False),
+			)
+			if errors:
+				for msg in errors:
+					messages.error(request, msg)
+				return redirect(
+					reverse('admin:subscriptions_announcement_change', args=[announcement.pk])
+				)
+
+			api_token, api_url = get_postmark_credentials(
+				custom_settings=custom_settings, organization=first_list.team.organization
+			)
 
 			html = self._render_announcement_email(announcement, site=site, custom_settings=custom_settings)
 			text = self._render_announcement_text(announcement)
@@ -1286,12 +1309,47 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
 
 		# GET — show confirmation form
+		from subscriptions.management.commands.utils.get_credentials import get_site_and_settings
+		from sitesettings.models import CustomSetting
+		from django.contrib.sites.models import Site
+		from bs4 import BeautifulSoup as _BeautifulSoup
+
+		preview_info = None
+		first_list = announcement.lists.select_related('team', 'site').first()
+		if first_list:
+			try:
+				_site, _cs = get_site_and_settings(first_list.team, list_obj=first_list)
+			except CustomSetting.DoesNotExist:
+				_site = first_list.site or Site.objects.get_current()
+				_cs = None
+			_api_domain = (getattr(_cs, 'api_domain', '') or '').strip()
+			_sender_prefix = (getattr(_cs, 'sender_email_prefix', '') or 'gregory').strip()
+			_sender_addr = f"{_sender_prefix}@{_site.domain}" if _site else ''
+			# Compute rewritten src for every /media/ image in the body.
+			_soup = _BeautifulSoup(announcement.body or '', 'html.parser')
+			image_rewrites = []
+			for _img in _soup.find_all('img'):
+				_src = _img.get('src', '')
+				if _src.startswith('/media/') and _api_domain:
+					image_rewrites.append((_src, f"https://{_api_domain}{_src}"))
+				else:
+					image_rewrites.append((_src, _src))
+			preview_info = {
+				'site_domain': _site.domain if _site else '',
+				'api_domain': _api_domain,
+				'sender_addr': _sender_addr,
+				'sender_name': 'Gregory AI',
+				'image_rewrites': image_rewrites,
+				'list_name': first_list.list_name,
+			}
+
 		context = {
 			**self.admin_site.each_context(request),
 			'announcement': announcement,
 			'user_email': request.user.email,
 			'title': f'Send Test: {announcement.subject}',
 			'opts': self.model._meta,
+			'preview_info': preview_info,
 		}
 		return render(request, 'admin/subscriptions/announcement/send_test.html', context)
 
@@ -1327,24 +1385,56 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if request.method == 'POST':
 			from subscriptions.management.commands.utils.send_email import send_email
 			from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
-
-			announcement.status = 'sending'
-			announcement.save(update_fields=['status'])
+			from sitesettings.models import CustomSetting
+			from django.contrib.sites.models import Site
+			from subscriptions.utils.announcement_send_validation import validate_announcement_send_config
+			from django.conf import settings as dj_settings
 
 			success_count = 0
 			failure_count = 0
 
-			# Pre-compute credentials per list to avoid re-fetching for every subscriber
+			# Pre-compute credentials per list to avoid re-fetching for every subscriber.
+			# Validate each list's config BEFORE marking the announcement as 'sending' so
+			# a broken config leaves the announcement in its prior state (draft/scheduled)
+			# and the author can fix and retry.
 			list_credentials = {}
+			list_errors: dict[int, list[str]] = {}
 			for _email, (_sub, _lst) in all_subscribers.items():
 				pk = _lst.list_id
-				if pk not in list_credentials:
-					try:
-						_site, _cs = get_site_and_settings(_lst.team, list_obj=_lst)
-						_api_token, _api_url = get_postmark_credentials(custom_settings=_cs, organization=_lst.team.organization)
-					except Exception:
-						_api_token, _api_url, _site, _cs = None, None, None, None
-					list_credentials[pk] = (_api_token, _api_url, _site, _cs)
+				if pk in list_credentials or pk in list_errors:
+					continue
+				try:
+					_site, _cs = get_site_and_settings(_lst.team, list_obj=_lst)
+				except CustomSetting.DoesNotExist:
+					_site = _lst.site or Site.objects.get_current()
+					_cs = None
+				errs = validate_announcement_send_config(
+					announcement, _site, _cs,
+					probe_media=getattr(dj_settings, 'ANNOUNCEMENT_PROBE_MEDIA', False),
+				)
+				if errs:
+					list_errors[pk] = errs
+					continue
+				_api_token, _api_url = get_postmark_credentials(
+					custom_settings=_cs, organization=_lst.team.organization,
+				)
+				list_credentials[pk] = (_api_token, _api_url, _site, _cs)
+
+			if list_errors:
+				for pk, errs in list_errors.items():
+					list_name = next(
+						(lst.list_name for lst in target_lists if lst.list_id == pk),
+						f"List {pk}",
+					)
+					for msg in errs:
+						messages.error(request, f"{list_name}: {msg}")
+				return redirect(
+					reverse('admin:subscriptions_announcement_change', args=[announcement.pk])
+				)
+
+			# All lists validated — safe to flip status.
+			announcement.status = 'sending'
+			announcement.save(update_fields=['status'])
 
 			# Group subscribers by the list (for credentials resolution)
 			# Use the list from which we first encountered them
