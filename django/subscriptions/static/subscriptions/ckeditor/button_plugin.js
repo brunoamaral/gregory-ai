@@ -40,14 +40,23 @@
 	 * @param {string} url     Button URL (must start with http:// or https://).
 	 */
 	function insertCtaButton(editor, label, url) {
-		// Escape user input to avoid injecting HTML through the label.
-		var escapedLabel = label
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;')
-			.replace(/"/g, '&quot;');
+		// Escape user input to avoid injecting HTML through the label or URL.
+		// Both values appear inside HTML attribute or text content so all four
+		// special characters must be escaped.
+		function escapeHtml(str) {
+			return String(str)
+				.replace(/&/g, '&amp;')
+				.replace(/</g, '&lt;')
+				.replace(/>/g, '&gt;')
+				.replace(/"/g, '&quot;');
+		}
 
-		var html = '<a class="btn-cta" href="' + url + '">' + escapedLabel + '</a>';
+		var escapedLabel = escapeHtml(label);
+		// URL goes into an href attribute; escape it so a crafted URL cannot
+		// break out of the attribute and inject additional markup.
+		var escapedUrl = escapeHtml(url);
+
+		var html = '<a class="btn-cta" href="' + escapedUrl + '">' + escapedLabel + '</a>';
 
 		// Convert the HTML string to a model fragment and insert it.
 		// editor.data.processor.toView() uses CKEditor's data processor

@@ -18,6 +18,7 @@ Call these in order: sanitize first, then render (HTML or text).
 import html as _html_module
 import logging
 import re
+from urllib.parse import urlparse
 
 import bleach
 from bs4 import BeautifulSoup, NavigableString
@@ -28,8 +29,10 @@ logger = logging.getLogger(__name__)
 # Brand constant
 # ---------------------------------------------------------------------------
 
-# Dominant accent colour read from templates/emails/components/header.html
-# (``background-color: #1e3a8a`` on the header table).
+# Hard-coded brand accent colour.  The value ``#1e3a8a`` is the
+# ``background-color`` of the header table in
+# ``templates/emails/components/header.html``.  If the header colour ever
+# changes, update this constant to match.
 BUTTON_BRAND_HEX = '#1e3a8a'
 
 # ---------------------------------------------------------------------------
@@ -124,9 +127,13 @@ def render_announcement_html(
 
 	1. Replaces every ``<a class="btn-cta" href="X">L</a>`` with a
 	   bulletproof email ``<table>`` (background ``BUTTON_BRAND_HEX``).
-	2. Rewrites every ``<img src="/media/…">`` to an absolute URL using
+	2. Rewrites every ``<img src="/media/...">`` to an absolute URL using
 	   ``api_domain`` (preferred) or ``site_domain`` as the host.  Images
 	   with ``src`` already starting with ``https://`` are left unchanged.
+
+	``api_domain`` / ``site_domain`` may contain a scheme prefix (e.g.
+	``https://api.example.com``); any such prefix is stripped before the
+	``https://`` we prepend, preventing double-scheme URLs.
 
 	*html* must be the output of ``sanitize_announcement_html``; this
 	function does not re-sanitize.
@@ -141,12 +148,17 @@ def render_announcement_html(
 		table_tag = table_soup.find('table')
 		a_tag.replace_with(table_tag)
 
-	# 2. Rewrite /media/… src attributes to absolute URLs
+	# 2. Rewrite /media/... src attributes to absolute URLs
+	# Normalise: strip any existing scheme so we never produce
+	# double-scheme URLs like https://https://api.example.com/...
+	clean_api = _strip_scheme(api_domain)
+	clean_site = _strip_scheme(site_domain)
+
 	base: str | None = None
-	if api_domain:
-		base = f'https://{api_domain}'
-	elif site_domain:
-		base = f'https://{site_domain}'
+	if clean_api:
+		base = f'https://{clean_api}'
+	elif clean_site:
+		base = f'https://{clean_site}'
 	else:
 		logger.warning(
 			'render_announcement_html: neither api_domain nor site_domain is '
@@ -195,6 +207,23 @@ def render_announcement_text(html: str) -> str:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _strip_scheme(domain: str | None) -> str:
+	"""
+	Return *domain* with any leading ``http://`` or ``https://`` scheme
+	stripped, and any trailing slash removed.
+
+	This prevents double-scheme URLs (``https://https://…``) when
+	``CustomSetting.api_domain`` was saved with a full URL instead of a
+	bare hostname.
+	"""
+	if not domain:
+		return ''
+	# Use urlparse: if no scheme is present the whole value lands in path.
+	parsed = urlparse(domain)
+	host = parsed.netloc or parsed.path
+	return host.strip().rstrip('/')
 
 
 def _build_button_table(href: str, label: str) -> str:

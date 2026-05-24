@@ -15,8 +15,7 @@ from bs4 import BeautifulSoup
 from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, RequestFactory, Client
-from django.urls import reverse
+from django.test import TestCase, Client
 from PIL import Image
 
 from subscriptions.utils.render_email_body import (
@@ -32,6 +31,15 @@ User = get_user_model()
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _delete_if_exists(storage_path: str) -> None:
+	"""Silently delete *storage_path* from default_storage if it exists."""
+	try:
+		if default_storage.exists(storage_path):
+			default_storage.delete(storage_path)
+	except Exception:
+		pass
+
 
 def _make_jpeg(width=800, height=400, color='red') -> bytes:
 	buf = io.BytesIO()
@@ -202,6 +210,15 @@ class RenderAnnouncementHtmlTests(TestCase):
 		tables = soup.find_all('table')
 		self.assertEqual(len(tables), 2)
 
+	def test_api_domain_with_scheme_does_not_produce_double_scheme(self):
+		"""api_domain stored as 'https://api.example.com' must not yield
+		https://https://api.example.com/media/…"""
+		html = '<img src="/media/uploads/photo.jpg" alt="photo">'
+		sanitized = sanitize_announcement_html(html)
+		result = render_announcement_html(sanitized, 'https://api.example.com', None)
+		self.assertIn('https://api.example.com/media/uploads/photo.jpg', result)
+		self.assertNotIn('https://https://', result)
+
 
 # ---------------------------------------------------------------------------
 # render_announcement_text
@@ -303,6 +320,13 @@ class AnnouncementAdminFormTests(TestCase):
 # ---------------------------------------------------------------------------
 
 class CKEditorUploadViewTests(TestCase):
+	"""
+	Tests for the hardened CKEditor 5 upload endpoint.
+
+	Each successful upload registers a cleanup callback (via ``addCleanup``)
+	that deletes the stored file from ``default_storage``, keeping the
+	MEDIA_ROOT clean across test runs and preventing leftover files in CI.
+	"""
 
 	UPLOAD_URL = '/ckeditor5/image_upload/'
 
@@ -315,10 +339,20 @@ class CKEditorUploadViewTests(TestCase):
 			username='plain', password='pass', is_staff=False
 		)
 
-	def _post(self, data=None, files=None, user=None):
+	def _post(self, files=None, user=None):
 		if user:
 			self.client.force_login(user)
-		return self.client.post(self.UPLOAD_URL, data=files or {})
+		resp = self.client.post(self.UPLOAD_URL, data=files or {})
+		# Register cleanup for any file the endpoint stored successfully.
+		if resp.status_code == 200:
+			url = resp.json().get('url', '')
+			if url:
+				# The URL is /media/<path>; extract the relative storage path.
+				storage_path = url.lstrip('/')
+				if storage_path.startswith('media/'):
+					storage_path = storage_path[len('media/'):]
+				self.addCleanup(_delete_if_exists, storage_path)
+		return resp
 
 	# ---- auth -----------------------------------------------------------
 
@@ -363,8 +397,7 @@ class CKEditorUploadViewTests(TestCase):
 		self.assertEqual(resp.status_code, 200)
 		url = resp.json().get('url', '')
 		self.assertTrue(url, 'Response should contain a url key')
-		# Derive the storage path from the URL and verify pixel width
-		# default_storage paths are relative to MEDIA_ROOT
+		# Derive the storage path from the URL and verify pixel width.
 		storage_path = url.lstrip('/')
 		if storage_path.startswith('media/'):
 			storage_path = storage_path[len('media/'):]

@@ -1,14 +1,21 @@
-from subscriptions.forms import SubscribersForm
-from subscriptions.models import Subscribers, Lists, ListSubscription, SubscriberSiteProfile
-from sitesettings.models import CustomSetting
-from django.views.decorators.csrf import csrf_exempt
-from django.http import HttpResponseRedirect, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import render, get_object_or_404
+import io
+import logging
+
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.sites.models import Site
 from django.core.exceptions import DisallowedHost
+from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.http import HttpResponseRedirect, HttpResponseBadRequest, JsonResponse
+from django.shortcuts import render, get_object_or_404
 from django.utils.timezone import now as tz_now
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from PIL import Image
 from urllib.parse import urlparse
-import logging
+
+from sitesettings.models import CustomSetting
+from subscriptions.forms import SubscribersForm
+from subscriptions.models import Subscribers, Lists, ListSubscription, SubscriberSiteProfile
 
 logger = logging.getLogger(__name__)
 
@@ -361,21 +368,17 @@ def unsubscribe_all(request, token):
 # Hardened CKEditor 5 upload endpoint
 # ---------------------------------------------------------------------------
 
-import io
-
-from django.contrib.admin.views.decorators import staff_member_required
-from django.core.files.uploadedfile import InMemoryUploadedFile
-from django.views.decorators.http import require_POST
-from PIL import Image
-
 _UPLOAD_MAX_SIZE = 2 * 1024 * 1024  # 2 MB
 _UPLOAD_MAX_WIDTH = 600
+# User-controlled content_type is the first gate; Pillow-detected format is
+# the authoritative second gate (see comment in the view).
 _UPLOAD_ALLOWED_TYPES = frozenset({'image/jpeg', 'image/png', 'image/gif', 'image/webp'})
-_UPLOAD_TYPE_TO_FORMAT = {
-	'image/jpeg': 'JPEG',
-	'image/png':  'PNG',
-	'image/gif':  'GIF',
-	'image/webp': 'WEBP',
+_UPLOAD_ALLOWED_FORMATS = frozenset({'JPEG', 'PNG', 'GIF', 'WEBP'})
+_FORMAT_TO_CONTENT_TYPE = {
+	'JPEG': 'image/jpeg',
+	'PNG':  'image/png',
+	'GIF':  'image/gif',
+	'WEBP': 'image/webp',
 }
 
 
@@ -438,13 +441,24 @@ def ckeditor_upload(request):
 			status=400,
 		)
 
+	# ---- Pillow-reported format check ------------------------------------
+	# content_type is user-controlled and unreliable; validate the format
+	# Pillow detected from the actual file bytes.  This prevents a TIFF (or
+	# other disallowed format) from slipping through with a spoofed MIME type.
+	canonical_fmt = image.format  # e.g. 'JPEG', 'PNG', 'GIF', 'WEBP'
+	if canonical_fmt not in _UPLOAD_ALLOWED_FORMATS:
+		return JsonResponse(
+			{'error': {'message': 'File type not allowed. Please upload a JPEG, PNG, GIF, or WebP image.'}},
+			status=400,
+		)
+	canonical_content_type = _FORMAT_TO_CONTENT_TYPE[canonical_fmt]
+
 	# ---- resize if necessary ----------------------------------------------
 	if image.width > _UPLOAD_MAX_WIDTH:
 		image.thumbnail((_UPLOAD_MAX_WIDTH, 10_000), Image.LANCZOS)
 		buf = io.BytesIO()
-		fmt = image.format or _UPLOAD_TYPE_TO_FORMAT.get(upload.content_type, 'JPEG')
-		save_kwargs = {'format': fmt}
-		if fmt == 'GIF':
+		save_kwargs = {'format': canonical_fmt}
+		if canonical_fmt == 'GIF':
 			# Animated GIFs are flattened to the first frame on resize.
 			save_kwargs['save_all'] = False
 		image.save(buf, **save_kwargs)
@@ -453,7 +467,7 @@ def ckeditor_upload(request):
 			file=buf,
 			field_name='upload',
 			name=upload.name,
-			content_type=upload.content_type,
+			content_type=canonical_content_type,
 			size=buf.getbuffer().nbytes,
 			charset=None,
 		)
