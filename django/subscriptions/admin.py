@@ -8,25 +8,19 @@ from django.db.models import Count, Q
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
 from django.template.loader import render_to_string
-from django.utils.html import strip_tags
 from django.contrib import messages
 from datetime import timedelta
 from django import forms
 from django.forms import BaseInlineFormSet
-import bleach
 from .models import Subscribers, Lists, FailedNotification, ListSubscription, SubscriberSiteProfile, Announcement, AnnouncementRecipient
 from .forms import ListsAdminForm, AnnouncementAdminForm
 from gregory.models import Team
 from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url
-
-# Allowlist for announcement body HTML (used by bleach sanitization)
-_ANNOUNCEMENT_ALLOWED_TAGS = [
-	'p', 'strong', 'em', 'u', 's', 'ul', 'ol', 'li',
-	'a', 'h2', 'h3', 'h4', 'blockquote', 'br', 'hr',
-]
-_ANNOUNCEMENT_ALLOWED_ATTRS = {
-	'a': ['href', 'target', 'rel'],
-}
+from subscriptions.utils.render_email_body import (
+	sanitize_announcement_html,
+	render_announcement_html,
+	render_announcement_text as _render_text_body,
+)
 
 
 class SubscriberSiteProfileInline(admin.TabularInline):
@@ -1154,15 +1148,13 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 	def _render_announcement_email(self, announcement, subscriber=None, site=None, list_id=None, custom_settings=None):
 		"""Render announcement as HTML email using the base template."""
-		safe_body = bleach.clean(
-			announcement.body,
-			tags=_ANNOUNCEMENT_ALLOWED_TAGS,
-			attributes=_ANNOUNCEMENT_ALLOWED_ATTRS,
-			strip=True,
-		)
+		api_domain = (getattr(custom_settings, 'api_domain', '') or '') if custom_settings else ''
+		site_domain = (getattr(site, 'domain', '') or '') if site else ''
+		sanitized = sanitize_announcement_html(announcement.body)
+		rendered_body = render_announcement_html(sanitized, api_domain, site_domain)
 		context = {
 			'announcement_subject': announcement.subject,
-			'announcement_body': safe_body,
+			'announcement_body': rendered_body,
 			'email_type': 'announcement',
 			'show_date': True,
 			'current_date': timezone.now(),
@@ -1196,7 +1188,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		lines = []
 		if subscriber and subscriber.first_name:
 			lines.append(f"Hello {subscriber.first_name},\n")
-		lines.append(strip_tags(announcement.body))
+		lines.append(_render_text_body(sanitize_announcement_html(announcement.body)))
 		return '\n'.join(lines)
 
 	def preview_view(self, request, announcement_id):

@@ -27,7 +27,7 @@ from api.views import (
 	StatsView
 )
 from rss.views import	ArticlesByAuthorFeed, TrialsBySubjectFeed
-from subscriptions.views import subscribe_view, unsubscribe_list, unsubscribe_site, unsubscribe_all
+from subscriptions.views import subscribe_view, unsubscribe_list, unsubscribe_site, unsubscribe_all, ckeditor_upload
 from organizations.backends import invitation_backend
 
 # Email template views (direct import to avoid module issues)
@@ -119,7 +119,11 @@ urlpatterns = [
 	# Include router routes
 	path('', include(router.urls)),
 
-	# CKEditor 5 routes
+	# CKEditor 5 routes — hardened upload view must come BEFORE the package include
+	# so Django's URL resolver picks it up first.
+	# CK_EDITOR_5_UPLOAD_FILE_VIEW_NAME in settings.py points to this name so
+	# the widget's upload_url is built from our view, not the package's.
+	path('ckeditor5/image_upload/', ckeditor_upload, name='subscriptions_ckeditor_upload'),
 	path('ckeditor5/', include('django_ckeditor_5.urls')),
 
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) + (

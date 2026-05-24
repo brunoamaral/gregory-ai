@@ -180,12 +180,32 @@ CKEDITOR_5_CONFIGS = {
 			'bulletedList', 'numberedList', '|',
 			'link', 'blockQuote', '|',
 			'horizontalLine', '|',
+			'imageUpload', 'insertImage', '|',
 			'undo', 'redo',
 		],
 		'language': 'en',
+		'image': {
+			'toolbar': [
+				'imageTextAlternative', '|',
+				'imageStyle:full', 'imageStyle:side',
+			],
+		},
+		# General HTML Support — allow <a class="btn-cta"> to be preserved
+		# in the CKEditor model and output so the button plugin can insert it.
+		'htmlSupport': {
+			'allow': [
+				{'name': 'a', 'classes': ['btn-cta']},
+			],
+		},
+		# Custom CTA button inserter plugin (loaded via Django staticfiles).
+		'extraPlugins': ['subscriptions/ckeditor/button_plugin.js'],
 	},
 }
 CKEDITOR_5_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
+
+# Point the CKEditor 5 widget's upload URL at our hardened view
+# (django/subscriptions/views.py::ckeditor_upload).
+CK_EDITOR_5_UPLOAD_FILE_VIEW_NAME = 'subscriptions_ckeditor_upload'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
