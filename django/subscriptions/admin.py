@@ -20,6 +20,7 @@ from subscriptions.utils.render_email_body import (
 	sanitize_announcement_html,
 	render_announcement_html,
 	render_announcement_text as _render_text_body,
+	strip_scheme,
 )
 
 
@@ -1322,7 +1323,10 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			except CustomSetting.DoesNotExist:
 				_site = first_list.site or Site.objects.get_current()
 				_cs = None
-			_api_domain = (getattr(_cs, 'api_domain', '') or '').strip()
+			# Normalise api_domain: strip any scheme/path so we never build
+			# double-scheme preview URLs like https://https://api.example.com/...
+			_api_domain_raw = (getattr(_cs, 'api_domain', '') or '').strip()
+			_api_domain = strip_scheme(_api_domain_raw)  # bare host[:port] or ''
 			_sender_prefix = (getattr(_cs, 'sender_email_prefix', '') or 'gregory').strip()
 			_sender_addr = f"{_sender_prefix}@{_site.domain}" if _site else ''
 			# Compute rewritten src for every /media/ image in the body.
@@ -1397,12 +1401,12 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			# Validate each list's config BEFORE marking the announcement as 'sending' so
 			# a broken config leaves the announcement in its prior state (draft/scheduled)
 			# and the author can fix and retry.
+			# Iterate target_lists (not all_subscribers) so that lists with zero active
+			# subscribers are also validated and can block the send.
 			list_credentials = {}
 			list_errors: dict[int, list[str]] = {}
-			for _email, (_sub, _lst) in all_subscribers.items():
+			for _lst in target_lists:
 				pk = _lst.list_id
-				if pk in list_credentials or pk in list_errors:
-					continue
 				try:
 					_site, _cs = get_site_and_settings(_lst.team, list_obj=_lst)
 				except CustomSetting.DoesNotExist:
