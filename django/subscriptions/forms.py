@@ -39,6 +39,25 @@ class AnnouncementAdminForm(ModelForm):
                     team__organization__id__in=user_orgs
                 )
 
+    def clean_body(self):
+        """Reject any <img> that lacks a non-empty alt attribute."""
+        from bs4 import BeautifulSoup
+        body = self.cleaned_data.get('body', '')
+        soup = BeautifulSoup(body, 'html.parser')
+        imgs = soup.find_all('img')
+        offenders = [
+            str(i)
+            for i, img in enumerate(imgs, start=1)
+            if not img.get('alt', '').strip()
+        ]
+        if offenders:
+            total = len(imgs)
+            raise forms.ValidationError(
+                f"Alt text is required for image(s) {', '.join(offenders)} of {total}. "
+                "Add a description in the image properties dialog."
+            )
+        return body
+
     class Meta:
         model = Announcement
         fields = ['subject', 'header_title', 'header_tagline', 'show_header_tagline', 'preheader_text', 'body', 'lists']
