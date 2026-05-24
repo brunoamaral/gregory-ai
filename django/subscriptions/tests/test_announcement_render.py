@@ -219,6 +219,29 @@ class RenderAnnouncementHtmlTests(TestCase):
 		self.assertIn('https://api.example.com/media/uploads/photo.jpg', result)
 		self.assertNotIn('https://https://', result)
 
+	def test_api_domain_with_path_does_not_contaminate_media_url(self):
+		"""api_domain stored with a trailing path (e.g. 'api.example.com/foo')
+		must not produce https://api.example.com/foo/media/..."""
+		html = '<img src="/media/uploads/photo.jpg" alt="photo">'
+		sanitized = sanitize_announcement_html(html)
+		result = render_announcement_html(sanitized, 'api.example.com/foo', None)
+		self.assertIn('https://api.example.com/media/uploads/photo.jpg', result)
+		self.assertNotIn('/foo/media/', result)
+
+	def test_logs_warning_on_foreign_absolute_img_host(self):
+		"""A foreign-host <img src="https://..."> must emit a logger.warning and
+		be left unchanged in the rendered output (not silently rewritten)."""
+		html = '<img src="https://other.com/x.png" alt="external">'
+		sanitized = sanitize_announcement_html(html)
+		with self.assertLogs('subscriptions.utils.render_email_body', level='WARNING') as cm:
+			result = render_announcement_html(sanitized, 'api.ex.com', None)
+		# Warning must name both the offending host and the expected host.
+		warning_text = '\n'.join(cm.output)
+		self.assertIn('other.com', warning_text)
+		self.assertIn('api.ex.com', warning_text)
+		# The src must NOT be silently rewritten.
+		self.assertIn('https://other.com/x.png', result)
+
 
 # ---------------------------------------------------------------------------
 # render_announcement_text

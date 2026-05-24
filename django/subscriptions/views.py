@@ -474,5 +474,12 @@ def ckeditor_upload(request):
 
 	# ---- delegate to django_ckeditor_5 storage ----------------------------
 	from django_ckeditor_5.views import handle_uploaded_file
+	from urllib.parse import urlparse as _urlparse
 	url = handle_uploaded_file(upload)
+	# Defensive: if the storage backend ever returns an absolute URL (e.g. S3),
+	# collapse it to the relative /media/... path so CKEditor always inserts
+	# relative srcs (decision D1 in specs/announcement-image-host-per-site.md).
+	_parsed = _urlparse(url)
+	if _parsed.scheme or _parsed.netloc:
+		url = _parsed.path
 	return JsonResponse({'url': url})

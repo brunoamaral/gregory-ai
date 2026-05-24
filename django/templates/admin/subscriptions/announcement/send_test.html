@@ -4,10 +4,59 @@
 {% block title %}Send Test: {{ announcement.subject }}{% endblock %}
 
 {% block content %}
-<div style="max-width: 600px; margin: 20px auto; padding: 20px;">
+<div style="max-width: 700px; margin: 20px auto; padding: 20px;">
 	<h2>Send Test Email</h2>
 	<p>This will send a test copy of the announcement to your email address:</p>
 	<p style="font-size: 18px; font-weight: bold; color: #1e3a8a;">{{ user_email }}</p>
+
+	{% if preview_info %}
+	<h3 style="margin-top: 28px; margin-bottom: 8px; color: #374151;">Resolved send configuration</h3>
+	<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
+		<tbody>
+			<tr style="border-bottom: 1px solid #e5e7eb;">
+				<th style="text-align: left; padding: 8px 12px; background: #f9fafb; width: 160px; color: #6b7280; font-weight: 600;">List</th>
+				<td style="padding: 8px 12px;">{{ preview_info.list_name }}</td>
+			</tr>
+			<tr style="border-bottom: 1px solid #e5e7eb;">
+				<th style="text-align: left; padding: 8px 12px; background: #f9fafb; color: #6b7280; font-weight: 600;">Site</th>
+				<td style="padding: 8px 12px;">{{ preview_info.site_domain|default:"(none)" }}</td>
+			</tr>
+			<tr style="border-bottom: 1px solid #e5e7eb;">
+				<th style="text-align: left; padding: 8px 12px; background: #f9fafb; color: #6b7280; font-weight: 600;">API domain</th>
+				<td style="padding: 8px 12px;">
+					{% if preview_info.api_domain %}
+						<code>{{ preview_info.api_domain }}</code>
+					{% else %}
+						<span style="color: #dc2626; font-weight: 600;">
+							⚠ (blank — send will be blocked until api_domain is set in Site settings)
+						</span>
+					{% endif %}
+				</td>
+			</tr>
+			<tr style="border-bottom: 1px solid #e5e7eb;">
+				<th style="text-align: left; padding: 8px 12px; background: #f9fafb; color: #6b7280; font-weight: 600;">From</th>
+				<td style="padding: 8px 12px;">{{ preview_info.sender_name }} &lt;{{ preview_info.sender_addr }}&gt;</td>
+			</tr>
+		</tbody>
+	</table>
+
+	{% if preview_info.image_rewrites %}
+	<h4 style="margin-top: 16px; margin-bottom: 6px; color: #374151;">Images in this announcement</h4>
+	<ul style="font-size: 13px; margin: 0; padding-left: 20px; line-height: 2;">
+		{% for original, rewritten in preview_info.image_rewrites %}
+		<li>
+			<code>{{ original }}</code>
+			{% if original != rewritten %}
+			→
+			<a href="{{ rewritten }}" target="_blank" rel="noopener" title="Click to verify the image loads">
+				<code>{{ rewritten }}</code>
+			</a>
+			{% endif %}
+		</li>
+		{% endfor %}
+	</ul>
+	{% endif %}
+	{% endif %}
 
 	<div style="margin: 20px 0; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
 		<strong>Subject:</strong> [TEST] {{ announcement.subject }}

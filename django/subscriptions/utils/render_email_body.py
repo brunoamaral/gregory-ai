@@ -172,6 +172,22 @@ def render_announcement_html(
 			if src.startswith('/media/'):
 				img['src'] = base + src
 
+	# Warn when an absolute https:// <img> points at a different host than expected.
+	# The send path will have already blocked this case via validate_announcement_send_config;
+	# the log line here creates a trail for anything that slips through a future code path.
+	if base:
+		api_host = _strip_scheme(api_domain) or _strip_scheme(site_domain)
+		for img in soup.find_all('img'):
+			src = img.get('src', '')
+			if src.startswith('https://'):
+				host = urlparse(src).netloc
+				if api_host and host and host != api_host:
+					logger.warning(
+						'render_announcement_html: <img src=%r> points at %s, '
+						'expected %s; leaving as-is.',
+						src, host, api_host,
+					)
+
 	return str(soup)
 
 
@@ -209,21 +225,39 @@ def render_announcement_text(html: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _strip_scheme(domain: str | None) -> str:
+def strip_scheme(domain: str | None) -> str:
 	"""
 	Return *domain* with any leading ``http://`` or ``https://`` scheme
-	stripped, and any trailing slash removed.
+	stripped, keeping only the authority (host + optional port).
 
-	This prevents double-scheme URLs (``https://https://…``) when
-	``CustomSetting.api_domain`` was saved with a full URL instead of a
-	bare hostname.
+	Handles three input shapes:
+	- ``'api.example.com'``          → ``'api.example.com'``
+	- ``'https://api.example.com'``  → ``'api.example.com'``
+	- ``'api.example.com/path'``     → ``'api.example.com'``
+	  (path component is discarded so it never contaminates image URLs)
+
+	Without the ``//`` prefix, ``urlparse`` treats a bare hostname or
+	``host/path`` string as a *path*, meaning the path component would
+	be returned verbatim and produce invalid bases such as
+	``https://api.example.com/path/media/...``.
 	"""
 	if not domain:
 		return ''
-	# Use urlparse: if no scheme is present the whole value lands in path.
-	parsed = urlparse(domain)
-	host = parsed.netloc or parsed.path
-	return host.strip().rstrip('/')
+	raw = domain.strip()
+	if not raw:
+		return ''
+	# Prepend '//' only when no scheme is already present so that urlparse
+	# places the authority in netloc rather than path.
+	if not raw.startswith(('http://', 'https://')):
+		raw = '//' + raw
+	parsed = urlparse(raw)
+	# netloc may include a port (e.g. 'host:8080'); return it as-is so
+	# callers that need to keep the port (for non-standard deployments) can.
+	return parsed.netloc.rstrip('/')
+
+
+# Private alias kept for internal callers — use strip_scheme in new code.
+_strip_scheme = strip_scheme
 
 
 def _build_button_table(href: str, label: str) -> str:
