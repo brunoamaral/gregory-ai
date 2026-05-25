@@ -1053,6 +1053,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 	search_fields = ['subject']
 	readonly_fields = ['status', 'sent_at', 'recipients_count', 'failures_count', 'created_by', 'created_at']
 	inlines = [AnnouncementRecipientInline]
+	actions = ['duplicate_announcements']
 
 	class Media:
 		# Loaded as a plain <script> tag AFTER the CKEditor bundle (widget
@@ -1121,6 +1122,93 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if not change:
 			obj.created_by = request.user
 		super().save_model(request, obj, form, change)
+
+	@admin.action(description="Duplicate selected announcements as drafts")
+	def duplicate_announcements(self, request, queryset):
+		from gregory.admin import get_user_organizations
+
+		if not self.has_add_permission(request):
+			self.message_user(
+				request,
+				"You don't have permission to create announcements.",
+				level=messages.ERROR,
+			)
+			return None
+
+		user_orgs = None if request.user.is_superuser else get_user_organizations(request.user)
+
+		created = []
+		skipped_sending = []
+		skipped_perm = 0
+
+		for source in queryset:
+			# Per-source permission re-check. Mirrors _get_announcement_or_404.
+			if user_orgs is not None:
+				if not source.lists.filter(team__organization__id__in=user_orgs).exists():
+					skipped_perm += 1
+					continue
+
+			if source.status == 'sending':
+				skipped_sending.append(source.subject)
+				continue
+
+			copy = Announcement.objects.create(
+				subject=source.subject,
+				header_title=source.header_title,
+				header_tagline=source.header_tagline,
+				show_header_tagline=source.show_header_tagline,
+				preheader_text=source.preheader_text,
+				body=source.body,
+				created_by=request.user,
+				status='draft',
+			)
+			# Defensive: ensure no recipients_count/failures_count/sent_at
+			# carry over (defaults already handle this; keep explicit for
+			# readers).
+			# lists M2M intentionally left empty (see spec, Goal 4).
+			created.append(copy)
+
+		if skipped_sending:
+			self.message_user(
+				request,
+				"Skipped %d announcement(s) currently sending: %s" % (
+					len(skipped_sending),
+					", ".join(skipped_sending),
+				),
+				level=messages.WARNING,
+			)
+
+		if skipped_perm:
+			self.message_user(
+				request,
+				"Skipped %d announcement(s) you don't have permission to duplicate." % skipped_perm,
+				level=messages.WARNING,
+			)
+
+		if not created:
+			self.message_user(
+				request,
+				"No announcements were duplicated.",
+				level=messages.INFO,
+			)
+			return None
+
+		if len(created) == 1:
+			self.message_user(
+				request,
+				"Duplicated 1 announcement as a draft.",
+				level=messages.SUCCESS,
+			)
+			return redirect(
+				reverse('admin:subscriptions_announcement_change', args=[created[0].pk])
+			)
+
+		self.message_user(
+			request,
+			"Duplicated %d announcements as drafts." % len(created),
+			level=messages.SUCCESS,
+		)
+		return None
 
 	def get_urls(self):
 		urls = super().get_urls()
