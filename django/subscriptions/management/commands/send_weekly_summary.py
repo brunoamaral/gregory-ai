@@ -525,7 +525,7 @@ class Command(BaseCommand):
 					html=html_content,
 					text=text_content,
 					site=site,
-					sender_name=customsettings.title,
+					sender_name=customsettings.sender_name or customsettings.title,
 					api_token=postmark_api_token,
 					api_url=api_url,
 					sender_prefix=customsettings.sender_email_prefix,

@@ -15,7 +15,7 @@ class CustomSettingInline(admin.StackedInline):
 			'fields': ['title'],
 		}),
 		('Email', {
-			'fields': ['admin_email', 'sender_email_prefix'],
+			'fields': ['admin_email', 'sender_name', 'sender_email_prefix'],
 		}),
 		('API & Domain', {
 			'fields': ['api_domain', 'allowed_domains'],

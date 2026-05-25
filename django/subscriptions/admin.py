@@ -1399,6 +1399,10 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			html = self._render_announcement_email(announcement, site=site, custom_settings=custom_settings)
 			text = self._render_announcement_text(announcement)
 
+			sender_name = (
+				(custom_settings.sender_name or custom_settings.title)
+				if custom_settings else None
+			) or 'Gregory AI'
 			try:
 				response = send_email(
 					to=request.user.email,
@@ -1406,6 +1410,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					html=html,
 					text=text,
 					site=site,
+					sender_name=sender_name,
 					api_token=api_token,
 					api_url=api_url,
 				)
@@ -1451,7 +1456,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 				'site_domain': _site.domain if _site else '',
 				'api_domain': _api_domain,
 				'sender_addr': _sender_addr,
-				'sender_name': 'Gregory AI',
+				'sender_name': (getattr(_cs, 'sender_name', '') or getattr(_cs, 'title', '') or 'Gregory AI'),
 				'image_rewrites': image_rewrites,
 				'list_name': first_list.list_name,
 			}
@@ -1564,12 +1569,17 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					live_subject = announcement.subject
 					if live_subject.startswith('[TEST] '):
 						live_subject = live_subject[7:]
+					_sender_name = (
+						(custom_settings.sender_name or custom_settings.title)
+						if custom_settings else None
+					) or 'Gregory AI'
 					response = send_email(
 						to=subscriber.email,
 						subject=live_subject,
 						html=html,
 						text=text,
 						site=site,
+						sender_name=_sender_name,
 						api_token=api_token,
 						api_url=api_url,
 					)
