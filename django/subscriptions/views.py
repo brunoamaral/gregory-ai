@@ -10,7 +10,7 @@ from django.shortcuts import render, get_object_or_404
 from django.utils.timezone import now as tz_now
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from PIL import Image
+from PIL import Image, ImageOps
 from urllib.parse import urlparse
 
 from sitesettings.models import CustomSetting
@@ -369,7 +369,16 @@ def unsubscribe_all(request, token):
 # ---------------------------------------------------------------------------
 
 _UPLOAD_MAX_SIZE = 2 * 1024 * 1024  # 2 MB
-_UPLOAD_MAX_WIDTH = 600
+# 1 200 px — 2× the standard 600 px email body width, so images stay sharp
+# on retina / HiDPI mail clients when the browser scales them to 600 css px.
+_UPLOAD_MAX_WIDTH = 1200
+# Per-format save quality settings (used only when a resize or EXIF-orient
+# correction is needed; images already ≤ _UPLOAD_MAX_WIDTH pass through
+# byte-for-byte unchanged).
+_JPEG_QUALITY = 88        # above the ringing threshold on screenshots/text
+_WEBP_QUALITY = 90        # WebP scale ≠ JPEG scale; ~90 gives visual parity
+_PNG_COMPRESS_LEVEL = 9   # PNG is lossless — max zlib effort is safe
+
 # User-controlled content_type is the first gate; Pillow-detected format is
 # the authoritative second gate (see comment in the view).
 _UPLOAD_ALLOWED_TYPES = frozenset({'image/jpeg', 'image/png', 'image/gif', 'image/webp'})
@@ -389,11 +398,18 @@ def ckeditor_upload(request):
 	Hardened CKEditor 5 image upload endpoint.
 
 	Validates file size (≤ 2 MB), MIME type (JPEG / PNG / GIF / WebP),
-	and Pillow readability.  Images wider than 600 px are resized
-	(LANCZOS, aspect ratio preserved) before storage.
+	and Pillow readability.  Images wider than 1 200 px are resized
+	(LANCZOS, aspect ratio preserved) before storage.  1 200 px is 2× the
+	standard 600 px email body width, which keeps images sharp on retina /
+	HiDPI mail clients.
+
+	Images already ≤ 1 200 px wide are passed through byte-for-byte
+	unchanged *unless* they carry a non-default EXIF orientation tag, in
+	which case the orientation is baked in and the image is re-saved at
+	high quality.
 
 	Animated GIFs are flattened to their first frame when resizing is
-	required; GIFs already ≤ 600 px wide pass through unchanged.
+	required; GIFs already ≤ 1 200 px wide pass through unchanged.
 
 	Delegates storage to ``django_ckeditor_5.views.handle_uploaded_file``
 	so the file ends up in the same place as a native CKEditor upload.
@@ -453,14 +469,58 @@ def ckeditor_upload(request):
 		)
 	canonical_content_type = _FORMAT_TO_CONTENT_TYPE[canonical_fmt]
 
-	# ---- resize if necessary ----------------------------------------------
-	if image.width > _UPLOAD_MAX_WIDTH:
-		image.thumbnail((_UPLOAD_MAX_WIDTH, 10_000), Image.LANCZOS)
-		buf = io.BytesIO()
+	# ---- EXIF orientation --------------------------------------------------
+	# Bake in the EXIF orientation tag (e.g. portrait phone photos stored
+	# rotated).  This is a no-op for images without an orientation tag.
+	# We detect whether a correction was actually needed so we can decide
+	# whether to pass small images through unchanged.
+	exif_orientation = image.getexif().get(0x0112, 1)  # tag 274 = Orientation
+	needs_orient_fix = exif_orientation != 1
+	image = ImageOps.exif_transpose(image)
+
+	# ---- resize / re-encode if necessary ----------------------------------
+	# If the image is already ≤ max width AND no EXIF fix was needed, send
+	# the original bytes straight to storage without re-encoding, so there
+	# is zero quality loss.
+	needs_resize = image.width > _UPLOAD_MAX_WIDTH
+
+	if not needs_resize and not needs_orient_fix:
+		# Pass through original bytes unchanged.
+		upload.seek(0)
+	else:
+		if needs_resize:
+			image.thumbnail((_UPLOAD_MAX_WIDTH, 10_000), Image.LANCZOS)
+
+		# Build per-format save kwargs with quality-preserving settings.
 		save_kwargs = {'format': canonical_fmt}
-		if canonical_fmt == 'GIF':
+
+		# Preserve ICC colour profile so colours don't shift.
+		icc = image.info.get('icc_profile')
+		if icc:
+			save_kwargs['icc_profile'] = icc
+
+		if canonical_fmt == 'JPEG':
+			save_kwargs.update(
+				quality=_JPEG_QUALITY,
+				optimize=True,
+				progressive=True,
+				subsampling=2,  # 4:2:0 — Pillow default; keeps files small
+			)
+		elif canonical_fmt == 'WEBP':
+			save_kwargs.update(
+				quality=_WEBP_QUALITY,
+				method=6,  # slower encoder pass, better compression ratio
+			)
+		elif canonical_fmt == 'PNG':
+			save_kwargs.update(
+				optimize=True,
+				compress_level=_PNG_COMPRESS_LEVEL,
+			)
+		elif canonical_fmt == 'GIF':
 			# Animated GIFs are flattened to the first frame on resize.
 			save_kwargs['save_all'] = False
+
+		buf = io.BytesIO()
 		image.save(buf, **save_kwargs)
 		buf.seek(0)
 		upload = InMemoryUploadedFile(
