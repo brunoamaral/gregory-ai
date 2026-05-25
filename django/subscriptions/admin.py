@@ -1069,7 +1069,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			'description': 'Optionally override the title (defaults to "Gregory AI"), override or hide the tagline shown in the email header, and set the email preheader text.',
 		}),
 		('Body', {'fields': ['body']}),
-		('Destination', {'fields': ['lists']}),
+		('Destination', {'fields': ['organization', 'lists']}),
 
 		('Send Status', {
 			'fields': ['status', 'created_by', 'created_at', 'sent_at', 'recipients_count', 'failures_count'],
@@ -1109,18 +1109,32 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		from gregory.admin import get_user_organizations
 		user_orgs = get_user_organizations(request.user)
 		if user_orgs is not None:
-			return qs.filter(lists__team__organization__id__in=user_orgs).distinct()
+			return qs.filter(organization_id__in=user_orgs)
 		return qs
 
 	def get_readonly_fields(self, request, obj=None):
 		readonly = list(super().get_readonly_fields(request, obj))
 		if obj and obj.status == 'sent':
-			readonly.extend(['subject', 'header_title', 'header_tagline', 'body', 'lists'])
+			readonly.extend([
+				'subject', 'header_title', 'header_tagline',
+				'body', 'lists', 'organization',
+			])
 		return readonly
 
 	def save_model(self, request, obj, form, change):
 		if not change:
 			obj.created_by = request.user
+			if obj.organization_id is None:
+				# Defence in depth — the form should always set this.
+				from organizations.models import Organization
+				user_orgs = (
+					request.user.organizations_organizationuser
+					.order_by('pk').first()
+				)
+				obj.organization = (
+					user_orgs.organization if user_orgs
+					else Organization.objects.order_by('pk').first()
+				)
 		super().save_model(request, obj, form, change)
 
 	@admin.action(description="Duplicate selected announcements as drafts")
@@ -1144,7 +1158,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		for source in queryset:
 			# Per-source permission re-check. Mirrors _get_announcement_or_404.
 			if user_orgs is not None:
-				if not source.lists.filter(team__organization__id__in=user_orgs).exists():
+				if source.organization_id not in list(user_orgs):
 					skipped_perm += 1
 					continue
 
@@ -1160,6 +1174,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 				preheader_text=source.preheader_text,
 				body=source.body,
 				created_by=request.user,
+				organization=source.organization,
 				status='draft',
 			)
 			# Defensive: ensure no recipients_count/failures_count/sent_at
@@ -1238,7 +1253,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			from gregory.admin import get_user_organizations
 			user_orgs = get_user_organizations(request.user)
 			if user_orgs is not None:
-				if not announcement.lists.filter(team__organization__id__in=user_orgs).exists():
+				if announcement.organization_id not in list(user_orgs):
 					return None
 		return announcement
 

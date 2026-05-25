@@ -26,6 +26,9 @@ def _make_cs(api_domain='api.example.com'):
 def _make_announcement(body=''):
 	ann = MagicMock()
 	ann.body = body
+	# Ensure lists.all().select_related() returns an empty iterable so the
+	# new org-check in validate_announcement_send_config does not raise.
+	ann.lists.all.return_value.select_related.return_value = []
 	return ann
 
 

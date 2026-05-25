@@ -31,13 +31,75 @@ class AnnouncementAdminForm(ModelForm):
     def __init__(self, *args, **kwargs):
         self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
-        if self.request:
-            from gregory.admin import get_user_organizations
-            user_orgs = get_user_organizations(self.request.user)
-            if user_orgs is not None:
-                self.fields['lists'].queryset = Lists.objects.filter(
-                    team__organization__id__in=user_orgs
-                )
+        if not self.request:
+            return
+
+        from gregory.admin import get_user_organizations
+        from organizations.models import Organization
+
+        user = self.request.user
+        user_org_ids = get_user_organizations(user)
+
+        # Scope the organization choices and pick the default.
+        if user.is_superuser:
+            org_qs = Organization.objects.order_by('pk')
+            membership = (
+                user.organizations_organizationuser.order_by('pk').first()
+            )
+            default_org = (
+                membership.organization if membership else org_qs.first()
+            )
+        else:
+            org_qs = Organization.objects.filter(
+                pk__in=list(user_org_ids or [])
+            ).order_by('pk')
+            default_org = org_qs.first()
+
+        self.fields['organization'].queryset = org_qs
+        if not self.instance.pk and default_org is not None:
+            self.fields['organization'].initial = default_org
+        # Lock the field when the user has only one valid choice.
+        if org_qs.count() <= 1:
+            self.fields['organization'].disabled = True
+
+        # Lock the field post-send (defence in depth — admin also gates it).
+        if self.instance.pk and self.instance.status == 'sent':
+            self.fields['organization'].disabled = True
+
+        # Scope list choices to the currently selected (or default) org.
+        current_org = (
+            self.data.get('organization')
+            or (default_org.pk if default_org else None)
+        )
+        if current_org:
+            self.fields['lists'].queryset = Lists.objects.filter(
+                team__organization_id=current_org
+            )
+        elif user_org_ids is not None:
+            # Non-superuser with no org yet picked: limit to their orgs.
+            self.fields['lists'].queryset = Lists.objects.filter(
+                team__organization__id__in=user_org_ids
+            )
+
+    def clean(self):
+        cleaned = super().clean()
+        org = cleaned.get('organization')
+        lists_selected = cleaned.get('lists') or []
+        if org and lists_selected:
+            offenders = [
+                lst.list_name
+                for lst in lists_selected
+                if lst.team.organization_id != org.pk
+            ]
+            if offenders:
+                raise forms.ValidationError({
+                    'lists': (
+                        "Lists must belong to the same organization as the "
+                        "announcement. Offending lists: "
+                        + ", ".join(offenders)
+                    ),
+                })
+        return cleaned
 
     def clean_body(self):
         """Reject any <img> that lacks a non-empty alt attribute."""
@@ -60,7 +122,8 @@ class AnnouncementAdminForm(ModelForm):
 
     class Meta:
         model = Announcement
-        fields = ['subject', 'header_title', 'header_tagline', 'show_header_tagline', 'preheader_text', 'body', 'lists']
+        fields = ['subject', 'header_title', 'header_tagline', 'show_header_tagline',
+                  'preheader_text', 'body', 'lists', 'organization']
         widgets = {
             'body': CKEditor5Widget(config_name='default'),
             'lists': forms.CheckboxSelectMultiple,

@@ -46,6 +46,18 @@ def validate_announcement_send_config(
 	"""
 	errors: list[str] = []
 
+	# --- Check 0: every list belongs to the announcement's organization ---
+	offending = []
+	for lst in announcement.lists.all().select_related('team'):
+		if lst.team.organization_id != announcement.organization_id:
+			offending.append(lst.list_name)
+	if offending:
+		errors.append(
+			"These lists belong to a different organization than this "
+			f"announcement: {', '.join(offending)}. Remove them or "
+			"reassign the announcement."
+		)
+
 	# --- Check 1: site ---------------------------------------------------
 	if site is None or not (site.domain or '').strip():
 		errors.append("No Site is configured for this list.")

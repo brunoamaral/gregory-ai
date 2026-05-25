@@ -48,6 +48,7 @@ class _BaseTest(TestCase):
 			preheader_text='Original preheader',
 			body='<p>Original body</p>',
 			status=status,
+			organization=self.org,
 		)
 		defaults.update(kwargs)
 		ann = Announcement.objects.create(**defaults)
@@ -199,7 +200,8 @@ class TestDuplicateOrgScopeEnforcement(TestCase):
 		"""Submitting the PK of a source the user cannot see is silently ignored
 		by Django's bulk-action machinery — no copy is created."""
 		source_a = Announcement.objects.create(
-			subject='Org A Only', body='<p>content</p>', status='sent'
+			subject='Org A Only', body='<p>content</p>', status='sent',
+			organization=self.lst_a.team.organization,
 		)
 		source_a.lists.add(self.lst_a)  # only org A — invisible to user_b
 
@@ -211,7 +213,8 @@ class TestDuplicateOrgScopeEnforcement(TestCase):
 		"""A non-superuser can duplicate an announcement whose list belongs to
 		their organisation — the copy is created without a permission warning."""
 		source_b = Announcement.objects.create(
-			subject='Org B Source', body='<p>body</p>', status='sent'
+			subject='Org B Source', body='<p>body</p>', status='sent',
+			organization=self.org_b,
 		)
 		source_b.lists.add(self.lst_b)  # org B list — visible to user_b
 
@@ -227,13 +230,12 @@ class TestDuplicateOrgScopeEnforcement(TestCase):
 
 
 class TestDuplicateVisibilityForNonSuperuser(TestCase):
-	"""Documents the known consequence: a list-less draft is excluded from
-	org-scoped changelist queries until at least one list is assigned.
-	See spec section 'Known consequence — empty lists and admin visibility'."""
+	"""With the organization FK fix, list-less drafts now appear in the changelist.
+	This tests the resolution of the 'Known consequence' from the duplicate spec."""
 
 	def setUp(self):
-		org = Organization.objects.create(name='Vis Org')
-		team = Team.objects.create(organization=org, name='Vis Team', slug='vis-team')
+		self.org = Organization.objects.create(name='Vis Org')
+		team = Team.objects.create(organization=self.org, name='Vis Team', slug='vis-team')
 		self.lst = Lists.objects.create(list_name='Vis List', team=team)
 
 		self.staff_user = User.objects.create_user(
@@ -246,23 +248,26 @@ class TestDuplicateVisibilityForNonSuperuser(TestCase):
 			Permission.objects.get(codename='view_announcement'),
 		)
 		from organizations.models import OrganizationUser
-		OrganizationUser.objects.create(organization=org, user=self.staff_user)
+		OrganizationUser.objects.create(organization=self.org, user=self.staff_user)
 
 		self.source = Announcement.objects.create(
-			subject='Vis Source', body='<p>body</p>', status='sent'
+			subject='Vis Source', body='<p>body</p>', status='sent',
+			organization=self.org,
 		)
 		self.source.lists.add(self.lst)
 
 		self.client = Client()
 		self.client.force_login(self.staff_user)
 
-	def test_list_less_draft_absent_from_non_superuser_changelist(self):
-		"""The new list-less draft does not appear in an org-scoped changelist.
-		This is the accepted known consequence documented in the spec."""
+	def test_list_less_draft_now_visible_in_non_superuser_changelist(self):
+		"""The list-less draft copy is now visible to org-scoped users because
+		visibility is determined by organization_id, not by lists M2M.
+		This resolves the 'Known consequence' documented in the spec."""
 		_post_action(self.client, [self.source.pk])
 
 		copy = Announcement.objects.exclude(pk=self.source.pk).get()
 		self.assertEqual(copy.lists.count(), 0, "copy should have no lists")
+		self.assertEqual(copy.organization, self.org, "copy should inherit org from source")
 
 		response = self.client.get(CHANGELIST_URL)
 		self.assertEqual(response.status_code, 200)
@@ -270,7 +275,7 @@ class TestDuplicateVisibilityForNonSuperuser(TestCase):
 			response.context['cl'].queryset.values_list('pk', flat=True)
 		)
 		self.assertIn(self.source.pk, result_pks, "original source should still be visible")
-		self.assertNotIn(copy.pk, result_pks, "list-less copy must not appear for org-scoped user")
+		self.assertIn(copy.pk, result_pks, "list-less copy should now appear for org-scoped user")
 
 
 class TestDuplicateSingleRedirectsToChangePage(_BaseTest):
@@ -291,7 +296,8 @@ class TestDuplicateMultipleStaysOnChangelist(_BaseTest):
 	def test_duplicate_multiple_stays_on_changelist(self):
 		source1 = self._make_source(subject='Source 1')
 		source2 = Announcement.objects.create(
-			subject='Source 2', body='<p>body 2</p>', status='sent'
+			subject='Source 2', body='<p>body 2</p>', status='sent',
+			organization=self.org,
 		)
 		source2.lists.add(self.lst)
 
@@ -356,7 +362,8 @@ class TestDuplicateWithoutAddPermissionIsBlocked(TestCase):
 		self.lst = Lists.objects.create(list_name='Perm List', team=team)
 
 		self.source = Announcement.objects.create(
-			subject='Locked Source', body='<p>body</p>', status='sent'
+			subject='Locked Source', body='<p>body</p>', status='sent',
+			organization=org,
 		)
 		self.source.lists.add(self.lst)
 
