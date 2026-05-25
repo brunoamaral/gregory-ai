@@ -5,26 +5,36 @@ from django_ckeditor_5.widgets import CKEditor5Widget
 from .models import Subscribers, Lists, Announcement, SubscriberSiteProfile
 
 class ListsAdminForm(ModelForm):
+    ml_threshold = forms.FloatField(
+        required=False,
+        min_value=0.0,
+        max_value=1.0,
+        widget=forms.NumberInput(attrs={
+            'step': '0.01',
+            'min': '0.0',
+            'max': '1.0',
+            'style': 'width: 100px;'
+        }),
+        help_text='ML prediction confidence threshold (0.0-1.0). Only articles with ML predictions above this threshold will be considered relevant. Use increments of 0.01.',
+    )
+
     class Meta:
         model = Lists
         fields = '__all__'
-        widgets = {
-            'ml_threshold': forms.NumberInput(attrs={
-                'step': '0.01',
-                'min': '0.0',
-                'max': '1.0',
-                'style': 'width: 100px;'
-            })
-        }
         help_texts = {
             'subjects': 'Select subjects for relevant articles and trials in the main content of your emails.',
             'latest_research_categories': 'Select team categories to show the latest research for in a dedicated section.',
-            'ml_threshold': 'ML prediction confidence threshold (0.0-1.0). Only articles with ML predictions above this threshold will be considered relevant. Use increments of 0.01.'
         }
         labels = {
             'subjects': 'Subjects for Main Content',
             'latest_research_categories': 'Team Categories for Latest Research'
         }
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get('ml_threshold') is None:
+            cleaned['ml_threshold'] = 0.8
+        return cleaned
 
 
 class AnnouncementAdminForm(ModelForm):
