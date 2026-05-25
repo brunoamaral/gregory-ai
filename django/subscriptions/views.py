@@ -522,13 +522,26 @@ def ckeditor_upload(request):
 
 		buf = io.BytesIO()
 		image.save(buf, **save_kwargs)
+		encoded_size = buf.getbuffer().nbytes
+		if encoded_size > _UPLOAD_MAX_SIZE:
+			# The re-encoded output is larger than the original upload cap
+			# (possible when a heavily-compressed original is re-saved at a
+			# higher quality for EXIF-orientation baking).  We proceed rather
+			# than reject — the user already passed validation and a post-
+			# processing rejection would be confusing UX.  Log so operators
+			# can monitor and adjust _JPEG_QUALITY / _UPLOAD_MAX_SIZE if needed.
+			logger.warning(
+				'ckeditor_upload: re-encoded %s (%s) grew from %d to %d bytes '
+				'(exceeds _UPLOAD_MAX_SIZE=%d); storing anyway.',
+				upload.name, canonical_fmt, upload.size, encoded_size, _UPLOAD_MAX_SIZE,
+			)
 		buf.seek(0)
 		upload = InMemoryUploadedFile(
 			file=buf,
 			field_name='upload',
 			name=upload.name,
 			content_type=canonical_content_type,
-			size=buf.getbuffer().nbytes,
+			size=encoded_size,
 			charset=None,
 		)
 
