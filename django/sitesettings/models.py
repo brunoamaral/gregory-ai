@@ -7,6 +7,12 @@ class CustomSetting(models.Model):
 	site = models.ForeignKey(Site, on_delete=models.PROTECT)
 	title = models.CharField(max_length=280,blank=False, null=False, unique=True)
 	admin_email = models.EmailField(max_length=254, unique=False, null=True,blank=True)
+	sender_name = models.CharField(
+		max_length=100,
+		blank=True,
+		default='',
+		help_text="Display name shown in the email From header (e.g. 'Gregory AI'). Leave blank to fall back to the site title."
+	)
 	sender_email_prefix = models.CharField(
 		max_length=64,
 		default='gregory',

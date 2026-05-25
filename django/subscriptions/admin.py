@@ -1451,7 +1451,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 				'site_domain': _site.domain if _site else '',
 				'api_domain': _api_domain,
 				'sender_addr': _sender_addr,
-				'sender_name': 'Gregory AI',
+				'sender_name': (getattr(_cs, 'sender_name', '') or getattr(_cs, 'title', '') or 'Gregory AI'),
 				'image_rewrites': image_rewrites,
 				'list_name': first_list.list_name,
 			}
