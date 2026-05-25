@@ -43,7 +43,7 @@ class AnnouncementRecipientUniqueTogetherTest(TestCase):
 		org = Organization.objects.create(name='Test Org')
 		team = Team.objects.create(organization=org, name='Team A', slug='team-a')
 		self.lst = Lists.objects.create(list_name='Weekly', team=team)
-		self.ann = Announcement.objects.create(subject='Notice', body='<p>Hi</p>')
+		self.ann = Announcement.objects.create(subject='Notice', body='<p>Hi</p>', organization=org)
 		self.sub = Subscribers.objects.create(
 			first_name='Alice', last_name='Smith', email='alice@example.com'
 		)
@@ -89,6 +89,7 @@ class RenderAnnouncementEmailContextTest(TestCase):
 			body='<p>Hello</p>',
 			header_title='My Title',
 			header_tagline='My Tagline',
+			organization=org,
 		)
 		self.site = Site.objects.get_or_create(id=1, defaults={'domain': 'example.com', 'name': 'Example'})[0]
 		self.site.domain = 'example.com'
@@ -140,14 +141,14 @@ class SendViewRedirectTest(TestCase):
 		self.superuser = User.objects.create_superuser(
 			username='admin', password='password', email='admin@example.com'
 		)
-		org = Organization.objects.create(name='Send Org')
-		self.team = Team.objects.create(organization=org, name='Send Team', slug='send-team')
+		self.org = Organization.objects.create(name='Send Org')
+		self.team = Team.objects.create(organization=self.org, name='Send Team', slug='send-team')
 		self.lst = Lists.objects.create(list_name='News', team=self.team)
 		self.client = Client()
 		self.client.force_login(self.superuser)
 
 	def _make_announcement(self, status):
-		ann = Announcement.objects.create(subject='Already sent', body='<p>content</p>', status=status)
+		ann = Announcement.objects.create(subject='Already sent', body='<p>content</p>', status=status, organization=self.org)
 		ann.lists.add(self.lst)
 		return ann
 
@@ -184,8 +185,8 @@ class SendViewSubjectNormalisationTest(TestCase):
 		self.superuser = User.objects.create_superuser(
 			username='admin2', password='password', email='admin2@example.com'
 		)
-		org = Organization.objects.create(name='Norm Org')
-		self.team = Team.objects.create(organization=org, name='Norm Team', slug='norm-team')
+		self.org = Organization.objects.create(name='Norm Org')
+		self.team = Team.objects.create(organization=self.org, name='Norm Team', slug='norm-team')
 		# Give the list a Site + CustomSetting so the validation gate passes.
 		self.norm_site = Site.objects.get_or_create(
 			id=20, defaults={'domain': 'norm.example.com', 'name': 'Norm'}
@@ -210,7 +211,7 @@ class SendViewSubjectNormalisationTest(TestCase):
 		return reverse('admin:subscriptions_announcement_send', args=[pk])
 
 	def _make_announcement(self, subject):
-		ann = Announcement.objects.create(subject=subject, body='<p>Body</p>', status='draft')
+		ann = Announcement.objects.create(subject=subject, body='<p>Body</p>', status='draft', organization=self.org)
 		ann.lists.add(self.lst)
 		return ann
 
@@ -320,7 +321,7 @@ class _SendValidationBase(TestCase):
 		self.client.force_login(self.superuser)
 
 	def _make_announcement(self, body='<p>Hello</p>', status='draft'):
-		ann = Announcement.objects.create(subject='Test Ann', body=body, status=status)
+		ann = Announcement.objects.create(subject='Test Ann', body=body, status=status, organization=self.org)
 		ann.lists.add(self.lst)
 		return ann
 

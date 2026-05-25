@@ -337,6 +337,13 @@ class Announcement(models.Model):
 		config_name='default',
 		help_text="The content of the announcement email.",
 	)
+	organization = models.ForeignKey(
+		'organizations.Organization',
+		on_delete=models.PROTECT,
+		related_name='announcements',
+		help_text="The organization that owns this announcement. "
+		          "Determines who can see and edit it.",
+	)
 	lists = models.ManyToManyField(
 		Lists,
 		related_name='announcements',
