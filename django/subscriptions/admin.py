@@ -1149,7 +1149,12 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			)
 			return None
 
-		user_orgs = None if request.user.is_superuser else get_user_organizations(request.user)
+		# Materialize org IDs once as a set to avoid re-evaluating the queryset
+		# on every per-source permission check inside the loop.
+		user_org_ids = (
+			None if request.user.is_superuser
+			else set(get_user_organizations(request.user))
+		)
 
 		created = []
 		skipped_sending = []
@@ -1157,8 +1162,8 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 		for source in queryset:
 			# Per-source permission re-check. Mirrors _get_announcement_or_404.
-			if user_orgs is not None:
-				if source.organization_id not in list(user_orgs):
+			if user_org_ids is not None:
+				if source.organization_id not in user_org_ids:
 					skipped_perm += 1
 					continue
 
@@ -1253,7 +1258,8 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			from gregory.admin import get_user_organizations
 			user_orgs = get_user_organizations(request.user)
 			if user_orgs is not None:
-				if announcement.organization_id not in list(user_orgs):
+				# Evaluate the queryset once into a set for O(1) membership check.
+				if announcement.organization_id not in set(user_orgs):
 					return None
 		return announcement
 

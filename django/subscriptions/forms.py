@@ -66,9 +66,12 @@ class AnnouncementAdminForm(ModelForm):
         if self.instance.pk and self.instance.status == 'sent':
             self.fields['organization'].disabled = True
 
-        # Scope list choices to the currently selected (or default) org.
+        # Scope list choices to the currently selected (or saved) org.
+        # Priority: (1) POSTed org value, (2) saved instance org on edit,
+        # (3) default org for new announcements.
         current_org = (
             self.data.get('organization')
+            or (self.instance.organization_id if self.instance.pk else None)
             or (default_org.pk if default_org else None)
         )
         if current_org:
