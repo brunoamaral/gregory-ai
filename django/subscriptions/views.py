@@ -485,8 +485,23 @@ def ckeditor_upload(request):
 	needs_resize = image.width > _UPLOAD_MAX_WIDTH
 
 	if not needs_resize and not needs_orient_fix:
-		# Pass through original bytes unchanged.
+		# Pass through original bytes unchanged, but normalise content_type to
+		# the Pillow-detected canonical value.  A client could legally declare
+		# 'image/jpeg' while uploading a PNG (both are in _UPLOAD_ALLOWED_TYPES)
+		# and the user-supplied content_type would otherwise be forwarded to
+		# handle_uploaded_file(), causing the stored file's metadata to lie
+		# about its format.
 		upload.seek(0)
+		if upload.content_type != canonical_content_type:
+			raw = upload.read()
+			upload = InMemoryUploadedFile(
+				file=io.BytesIO(raw),
+				field_name='upload',
+				name=upload.name,
+				content_type=canonical_content_type,
+				size=len(raw),
+				charset=None,
+			)
 	else:
 		if needs_resize:
 			image.thumbnail((_UPLOAD_MAX_WIDTH, 10_000), Image.LANCZOS)
