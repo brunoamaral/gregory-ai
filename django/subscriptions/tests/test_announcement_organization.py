@@ -514,3 +514,54 @@ class TestSaveModelFallbackForMissingOrganization(TestCase):
 
 		obj.refresh_from_db()
 		self.assertEqual(obj.organization, self.org)
+
+
+# ---------------------------------------------------------------------------
+# Form init must not KeyError when organization/lists are readonly (sent)
+# ---------------------------------------------------------------------------
+
+class TestFormInitHandlesReadonlyOrgAndLists(TestCase):
+	"""When status='sent', the admin moves 'organization' and 'lists' into
+	readonly_fields, which removes them from the ModelForm's fields. The
+	form's __init__ must not blow up trying to scope queryset/initial on
+	those missing fields."""
+
+	def setUp(self):
+		self.org = Organization.objects.create(name='Readonly Init Org')
+		team = Team.objects.create(organization=self.org, name='RI', slug='ri-team')
+		self.lst = Lists.objects.create(list_name='RI List', team=team)
+		self.admin = AnnouncementAdmin(Announcement, admin_site)
+		self.superuser = User.objects.create_superuser(
+			username='ri_su', password='pass', email='ri_su@example.com'
+		)
+		self.ann = Announcement.objects.create(
+			subject='Sent Init Ann', body='<p>x</p>', status='sent',
+			organization=self.org,
+		)
+
+	def test_form_init_does_not_keyerror_on_sent(self):
+		req = MagicMock()
+		req.user = self.superuser
+		req.data = {}
+		# Mirror how AnnouncementAdmin.get_form builds the ModelForm — Django
+		# strips readonly fields from the form via fields/exclude.
+		form_class = self.admin.get_form(req, obj=self.ann)
+		form = form_class(instance=self.ann, request=req)
+		# organization and lists must be excluded (moved to readonly) — that
+		# is what triggered the original KeyError. Reaching this line at all
+		# proves __init__ did not crash.
+		self.assertNotIn('organization', form.fields)
+		self.assertNotIn('lists', form.fields)
+
+	def test_form_init_still_works_on_draft(self):
+		draft = Announcement.objects.create(
+			subject='Draft Init Ann', body='<p>x</p>', status='draft',
+			organization=self.org,
+		)
+		req = MagicMock()
+		req.user = self.superuser
+		req.data = {}
+		form_class = self.admin.get_form(req, obj=draft)
+		form = form_class(instance=draft, request=req)
+		self.assertIn('organization', form.fields)
+		self.assertIn('lists', form.fields)
