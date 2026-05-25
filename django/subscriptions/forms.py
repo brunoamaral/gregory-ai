@@ -55,34 +55,39 @@ class AnnouncementAdminForm(ModelForm):
             ).order_by('pk')
             default_org = org_qs.first()
 
-        self.fields['organization'].queryset = org_qs
-        if not self.instance.pk and default_org is not None:
-            self.fields['organization'].initial = default_org
-        # Lock the field when the user has only one valid choice.
-        if org_qs.count() <= 1:
-            self.fields['organization'].disabled = True
+        # Sent announcements get organization/lists moved to readonly by the
+        # admin, which removes them from self.fields. Skip the scoping logic
+        # in that case — there's nothing editable to scope.
+        if 'organization' in self.fields:
+            self.fields['organization'].queryset = org_qs
+            if not self.instance.pk and default_org is not None:
+                self.fields['organization'].initial = default_org
+            # Lock the field when the user has only one valid choice.
+            if org_qs.count() <= 1:
+                self.fields['organization'].disabled = True
 
-        # Lock the field post-send (defence in depth — admin also gates it).
-        if self.instance.pk and self.instance.status == 'sent':
-            self.fields['organization'].disabled = True
+            # Lock the field post-send (defence in depth — admin also gates it).
+            if self.instance.pk and self.instance.status == 'sent':
+                self.fields['organization'].disabled = True
 
-        # Scope list choices to the currently selected (or saved) org.
-        # Priority: (1) POSTed org value, (2) saved instance org on edit,
-        # (3) default org for new announcements.
-        current_org = (
-            self.data.get('organization')
-            or (self.instance.organization_id if self.instance.pk else None)
-            or (default_org.pk if default_org else None)
-        )
-        if current_org:
-            self.fields['lists'].queryset = Lists.objects.filter(
-                team__organization_id=current_org
+        if 'lists' in self.fields:
+            # Scope list choices to the currently selected (or saved) org.
+            # Priority: (1) POSTed org value, (2) saved instance org on edit,
+            # (3) default org for new announcements.
+            current_org = (
+                self.data.get('organization')
+                or (self.instance.organization_id if self.instance.pk else None)
+                or (default_org.pk if default_org else None)
             )
-        elif user_org_ids is not None:
-            # Non-superuser with no org yet picked: limit to their orgs.
-            self.fields['lists'].queryset = Lists.objects.filter(
-                team__organization__id__in=user_org_ids
-            )
+            if current_org:
+                self.fields['lists'].queryset = Lists.objects.filter(
+                    team__organization_id=current_org
+                )
+            elif user_org_ids is not None:
+                # Non-superuser with no org yet picked: limit to their orgs.
+                self.fields['lists'].queryset = Lists.objects.filter(
+                    team__organization__id__in=user_org_ids
+                )
 
     def clean(self):
         cleaned = super().clean()
