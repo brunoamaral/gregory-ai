@@ -13,7 +13,6 @@ from subscriptions.models import (
 	AnnouncementRecipient,
 	Lists,
 	Subscribers,
-	ListSubscription,
 )
 
 CHANGELIST_URL = reverse('admin:subscriptions_announcement_changelist')
@@ -166,91 +165,112 @@ class TestDuplicateSkipsSendingStatus(_BaseTest):
 		)
 
 
-class TestDuplicateSkipsUnauthorizedSource(TestCase):
-	"""A non-superuser cannot duplicate announcements from a different org."""
+class TestDuplicateOrgScopeEnforcement(TestCase):
+	"""Org-scope rules govern which announcements a non-superuser may duplicate."""
 
 	def setUp(self):
-		# Org A — owns the source
+		# Org A — owns the source announcement
 		org_a = Organization.objects.create(name='Org A')
 		team_a = Team.objects.create(organization=org_a, name='Team A', slug='team-a-dup')
 		self.lst_a = Lists.objects.create(list_name='List A', team=team_a)
 
-		# Org B — the user only belongs to this org
+		# Org B — the acting user belongs only to this org
 		self.org_b = Organization.objects.create(name='Org B')
 		team_b = Team.objects.create(organization=self.org_b, name='Team B', slug='team-b-dup')
 		self.lst_b = Lists.objects.create(list_name='List B', team=team_b)
 
-		# Source announcement owned by org A
-		self.source = Announcement.objects.create(
-			subject='Org A Announcement', body='<p>content</p>', status='sent'
+		# Non-superuser staff who belongs only to org B
+		self.user_b = User.objects.create_user(
+			username='user_b_auth', password='pass', email='user_b_auth@example.com',
+			is_staff=True,
 		)
-		self.source.lists.add(self.lst_a)
-
-		# User who only belongs to org B
-		self.user_b = User.objects.create_superuser(
-			username='user_b_auth', password='pass', email='user_b_auth@example.com'
-		)
-		# Make user non-superuser but with add permission so the action is visible
-		self.user_b.is_superuser = False
-		self.user_b.save()
 		self.user_b.user_permissions.add(
 			Permission.objects.get(codename='add_announcement'),
 			Permission.objects.get(codename='change_announcement'),
 			Permission.objects.get(codename='view_announcement'),
 		)
-		# Add user to org B via organizations membership
 		from organizations.models import OrganizationUser
 		OrganizationUser.objects.create(organization=self.org_b, user=self.user_b)
-
-		# Give the source an additional list from org B so it appears in user_b's queryset
-		# (otherwise it's filtered out before the action even sees it — which is also
-		# correct but tested separately). Here we want to reach the per-source check.
-		self.source.lists.add(self.lst_b)
 
 		self.client = Client()
 		self.client.force_login(self.user_b)
 
-	def test_duplicate_skips_unauthorized_source(self):
-		# Remove lst_b from source so org B user cannot see this announcement
-		self.source.lists.remove(self.lst_b)
-
-		# Superuser triggers the action (to bypass the queryset filter) by
-		# using a fresh client that IS superuser.
-		superuser = User.objects.create_superuser(
-			username='super_skip', password='pass', email='super_skip@example.com'
+	def test_queryset_filter_blocks_cross_org_duplicate(self):
+		"""Submitting the PK of a source the user cannot see is silently ignored
+		by Django's bulk-action machinery — no copy is created."""
+		source_a = Announcement.objects.create(
+			subject='Org A Only', body='<p>content</p>', status='sent'
 		)
-		super_client = Client()
-		super_client.force_login(superuser)
+		source_a.lists.add(self.lst_a)  # only org A — invisible to user_b
 
-		initial_count = Announcement.objects.count()
-		# Post the action as superuser targeting the source.
-		# The per-source re-check inside duplicate_announcements will
-		# correctly block only when user_orgs is non-None.
-		# To actually test the per-source check with user_b, we need
-		# user_b to have the source in their queryset.
-		# Re-add lst_b so the queryset includes it, then remove from the
-		# org-scope check by testing the guard directly.
-		# Simplest: just re-add lst_b, run action as user_b, assert copy
-		# created (user_b IS in org_b, lst_b IS in org_b → allowed).
-		self.source.lists.add(self.lst_b)
-		response = _post_action(self.client, [self.source.pk])
-
-		# user_b belongs to org_b which owns lst_b, so source is visible → copy IS made
-		self.assertEqual(Announcement.objects.count(), initial_count + 1)
-
-		# Remove lst_b again and create a *new* source that user_b truly cannot see
-		self.source.lists.remove(self.lst_b)
-		source_only_a = Announcement.objects.create(
-			subject='Only Org A', body='<p>x</p>', status='sent'
-		)
-		source_only_a.lists.add(self.lst_a)
-
-		# Try to duplicate it — the queryset filter will prevent user_b from
-		# seeing source_only_a at all, so _selected_action pk will be silently
-		# ignored by Django's admin bulk-action machinery.
 		count_before = Announcement.objects.count()
-		_post_action(self.client, [source_only_a.pk])
+		_post_action(self.client, [source_a.pk])
 		self.assertEqual(Announcement.objects.count(), count_before)
+
+	def test_user_can_duplicate_source_in_own_org(self):
+		"""A non-superuser can duplicate an announcement whose list belongs to
+		their organisation — the copy is created without a permission warning."""
+		source_b = Announcement.objects.create(
+			subject='Org B Source', body='<p>body</p>', status='sent'
+		)
+		source_b.lists.add(self.lst_b)  # org B list — visible to user_b
+
+		count_before = Announcement.objects.count()
+		response = _post_action(self.client, [source_b.pk])
+
+		self.assertEqual(Announcement.objects.count(), count_before + 1)
+		msgs = [str(m) for m in get_messages(response.wsgi_request)]
+		self.assertFalse(
+			any('permission' in m.lower() for m in msgs),
+			f"Unexpected permission warning: {msgs}",
+		)
+
+
+class TestDuplicateVisibilityForNonSuperuser(TestCase):
+	"""Documents the known consequence: a list-less draft is excluded from
+	org-scoped changelist queries until at least one list is assigned.
+	See spec section 'Known consequence — empty lists and admin visibility'."""
+
+	def setUp(self):
+		org = Organization.objects.create(name='Vis Org')
+		team = Team.objects.create(organization=org, name='Vis Team', slug='vis-team')
+		self.lst = Lists.objects.create(list_name='Vis List', team=team)
+
+		self.staff_user = User.objects.create_user(
+			username='staff_vis', password='pass', email='staff_vis@example.com',
+			is_staff=True,
+		)
+		self.staff_user.user_permissions.add(
+			Permission.objects.get(codename='add_announcement'),
+			Permission.objects.get(codename='change_announcement'),
+			Permission.objects.get(codename='view_announcement'),
+		)
+		from organizations.models import OrganizationUser
+		OrganizationUser.objects.create(organization=org, user=self.staff_user)
+
+		self.source = Announcement.objects.create(
+			subject='Vis Source', body='<p>body</p>', status='sent'
+		)
+		self.source.lists.add(self.lst)
+
+		self.client = Client()
+		self.client.force_login(self.staff_user)
+
+	def test_list_less_draft_absent_from_non_superuser_changelist(self):
+		"""The new list-less draft does not appear in an org-scoped changelist.
+		This is the accepted known consequence documented in the spec."""
+		_post_action(self.client, [self.source.pk])
+
+		copy = Announcement.objects.exclude(pk=self.source.pk).get()
+		self.assertEqual(copy.lists.count(), 0, "copy should have no lists")
+
+		response = self.client.get(CHANGELIST_URL)
+		self.assertEqual(response.status_code, 200)
+		result_pks = set(
+			response.context['cl'].queryset.values_list('pk', flat=True)
+		)
+		self.assertIn(self.source.pk, result_pks, "original source should still be visible")
+		self.assertNotIn(copy.pk, result_pks, "list-less copy must not appear for org-scoped user")
 
 
 class TestDuplicateSingleRedirectsToChangePage(_BaseTest):
