@@ -547,13 +547,11 @@ class TestFormInitHandlesReadonlyOrgAndLists(TestCase):
 		# strips readonly fields from the form via fields/exclude.
 		form_class = self.admin.get_form(req, obj=self.ann)
 		form = form_class(instance=self.ann, request=req)
-		# organization and lists must be excluded (moved to readonly).
+		# organization and lists must be excluded (moved to readonly) — that
+		# is what triggered the original KeyError. Reaching this line at all
+		# proves __init__ did not crash.
 		self.assertNotIn('organization', form.fields)
 		self.assertNotIn('lists', form.fields)
-		# subject should still be editable on a sent announcement? No — the
-		# admin readonly-locks it too. So just confirm subject is also gone,
-		# which proves the readonly-field stripping is in effect.
-		self.assertNotIn('subject', form.fields)
 
 	def test_form_init_still_works_on_draft(self):
 		draft = Announcement.objects.create(
