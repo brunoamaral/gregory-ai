@@ -375,46 +375,62 @@ class SubscriberAdmin(admin.ModelAdmin):
 		labels = [p.strftime(date_fmt) for p in period_range]
 
 		# ── Active subscribers over time ───────────────────────────────────────
-		# Counts currently-active subscribers by when they joined, building a
-		# cumulative total at each period point.  This approximation tracks the
-		# growth trajectory of the current active base; subscribers who churned
-		# between their join date and now are not included.
-		# Mirror the KPI scorecard definition: active account + at least one active
-		# list subscription, so the final data point matches the scorecard value.
-		active_subs_qs = Subscribers.objects.filter(
-			active=True,
-			list_subscriptions__is_active=True,
-		).distinct()
+		# True historical headcount: at each period point we count the distinct
+		# subscribers who had at least one active list subscription on that date,
+		# reconstructed from each subscription's active interval. Unlike a cumulative
+		# join-date count, this can rise *and* fall, so past peaks (e.g. 190 → 187)
+		# are visible. Subscription churn (unsubscribed_at) is the dominant signal.
+		#
+		# Subscribers are gated by their *current* account-active flag (active=True),
+		# mirroring the KPI scorecard so the final data point equals the "Total Active
+		# Subscribers" card. We do not replay Subscribers.history, so an account
+		# deactivated today is excluded from earlier points too; subscription opt-outs
+		# (unsubscribed_at) remain the dominant churn signal that makes the line dip.
+		from collections import defaultdict
+
+		# As-of date for each bucket = last day of the bucket, clamped to end_date.
+		# For preset ranges the final bucket's as-of date is today, so the last
+		# data point matches the "Total Active Subscribers" KPI card.
+		as_of_dates = []
+		for i, p in enumerate(period_range):
+			if i + 1 < len(period_range):
+				as_of_dates.append(min(period_range[i + 1] - timedelta(days=1), end_date))
+			else:
+				as_of_dates.append(end_date)
+
+		sub_rows = ListSubscription.objects.filter(subscriber__active=True)
 		if org_ids is not None:
-			active_subs_qs = active_subs_qs.filter(
-				list_subscriptions__list__team__organization__id__in=org_ids
-			).distinct()
-
-		pre_existing = active_subs_qs.filter(created_at__date__lt=start_date).count()
-		creation_rows = (
-			active_subs_qs
-			.filter(
-				created_at__date__gte=start_date,
-				created_at__date__lte=end_date,
-			)
-			.annotate(period=trunc_fn('created_at'))
-			.values('period')
-			.annotate(count=Count('subscriber_id', distinct=True))
-			.order_by('period')
+			sub_rows = sub_rows.filter(list__team__organization__id__in=org_ids)
+		sub_rows = sub_rows.values_list(
+			'subscriber_id', 'subscribed_at', 'unsubscribed_at', 'is_active'
 		)
-		creation_by_period = {}
-		for row in creation_rows:
-			pk = row['period']
-			if pk:
-				if hasattr(pk, 'date'):
-					pk = pk.date()
-				creation_by_period[pk] = row['count']
 
-		cumulative = pre_existing
+		# Build each subscriber's active intervals as (start_date, end_date_or_None).
+		# Trust is_active over a possibly-stale unsubscribed_at (re-subscription reuses
+		# the same row). An inactive row with no unsubscribed_at can't be placed in time,
+		# so it is skipped (rare).
+		intervals_by_sub = defaultdict(list)
+		for sub_id, sub_at, unsub_at, is_active in sub_rows:
+			if not sub_at:
+				continue
+			start = timezone.localtime(sub_at).date()
+			if is_active:
+				end = None
+			elif unsub_at is not None:
+				end = timezone.localtime(unsub_at).date()
+			else:
+				continue
+			intervals_by_sub[sub_id].append((start, end))
+
 		active_subscribers_series = []
-		for p in period_range:
-			cumulative += creation_by_period.get(p, 0)
-			active_subscribers_series.append(cumulative)
+		for as_of in as_of_dates:
+			count = 0
+			for intervals in intervals_by_sub.values():
+				for start, end in intervals:
+					if start <= as_of and (end is None or end > as_of):
+						count += 1
+						break
+			active_subscribers_series.append(count)
 
 		return JsonResponse({
 			'labels': labels,
