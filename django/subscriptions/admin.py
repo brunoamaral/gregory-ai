@@ -99,10 +99,12 @@ class SubscriberAdmin(admin.ModelAdmin):
 
 	The `active` column/filter is the subscriber's GLOBAL email switch: active=False
 	means they receive no email from any list (a master opt-out), independent of the
-	per-list subscriptions shown in the inline below. It is distinct from analytics'
-	notion of an "active subscriber" (someone holding at least one active list
-	subscription). See the Subscribers.active help text and the make_active/make_inactive
-	actions.
+	per-list subscriptions shown in the inline below. It is distinct from the
+	"Total Active Subscribers" analytics chart/KPIs, which count someone as active when
+	they hold at least one active list subscription rather than by this flag. (Some
+	other analytics endpoints — e.g. profile distribution and recent subscribers — do
+	still filter on this flag.) See the Subscribers.active help text and the
+	make_active/make_inactive actions.
 	"""
 	list_display = ['first_name', 'last_name', 'email', 'active', 'list_names', 'number_of_subscriptions', 'created_at']
 	list_filter = ['active', SubscriptionListFilter, 'created_at']
@@ -783,8 +785,9 @@ class SubscriberAdmin(admin.ModelAdmin):
 		updated_count = queryset.update(active=True)
 		self.message_user(
 			request,
-			f"{updated_count} subscriber(s) marked active — they will receive list emails again. "
-			f"Their individual list subscriptions were not changed.",
+			f"{updated_count} subscriber(s) marked active — global email suppression removed. "
+			f"They will receive emails only for lists they are still actively subscribed to; "
+			f"individual list subscriptions were not changed.",
 		)
 	make_active.short_description = "Enable all emails (mark as active)"
 
