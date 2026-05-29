@@ -132,7 +132,21 @@ class Subscribers(models.Model):
 	first_name = models.CharField(max_length=150, null=False, blank=False)
 	last_name = models.CharField(max_length=150, null=True, blank=True)
 	email = models.EmailField(max_length=254, unique=True, null=False, blank=False)
-	active = models.BooleanField(default=True)
+	active = models.BooleanField(
+		default=True,
+		help_text=(
+			"Global email switch for this subscriber. When unchecked, they receive NO "
+			"emails from any list — a master opt-out that is independent of the individual "
+			"list subscriptions below. It is set automatically when someone unsubscribes "
+			"from everything, and manually via the 'Disable all emails' admin action. "
+			"Per-list opt-outs do NOT change this flag. Note: the 'Total Active "
+			"Subscribers' analytics chart and snapshot KPIs count someone as 'active' by "
+			"whether they hold at least one active list subscription, not by this flag, so "
+			"those numbers can differ from the active/inactive account counts. (Other "
+			"analytics surfaces, such as the profile and recent-subscriber views, do still "
+			"filter on this flag.)"
+		),
+	)
 	is_admin = models.BooleanField(default=False)
 	unsubscribe_token = models.UUIDField(
 		default=uuid.uuid4,
