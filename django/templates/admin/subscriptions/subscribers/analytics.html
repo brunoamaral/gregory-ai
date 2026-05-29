@@ -1283,13 +1283,13 @@ document.addEventListener('DOMContentLoaded', reloadAll);
 		<dd style="margin: 0; color: #444;">Subscribers who transitioned to an inactive state during the selected period: either their account was explicitly deactivated, or they unsubscribed from all lists leaving them with no active list subscriptions.</dd>
 
 		<dt style="font-weight: 600; color: #1a1a1a;">Active Subscribers</dt>
-		<dd style="margin: 0; color: #444;">Distinct subscribers currently marked active who have at least one active list subscription. The "Total Active Subscribers" chart reconstructs this headcount at each point in the selected period from each subscription's active interval (subscribe → unsubscribe), so it can rise and fall and reflect past peaks — not just current totals.</dd>
+		<dd style="margin: 0; color: #444;">Distinct subscribers with at least one active list subscription. Defined by subscription state only — the account active/inactive flag is not used. The "Total Active Subscribers" chart reconstructs this headcount at each point in the selected period from each subscription's active interval (subscribe → unsubscribe), so it can rise and fall and reflect past peaks — not just current totals.</dd>
 
 		<dt style="font-weight: 600; color: #1a1a1a;">Active Subscriptions</dt>
 		<dd style="margin: 0; color: #444;">Total active subscriber–list links right now. This is the denominator used for percentages in the pie chart.</dd>
 
 		<dt style="font-weight: 600; color: #1a1a1a;">Inactive Subscribers</dt>
-		<dd style="margin: 0; color: #444;">Subscribers whose account is marked inactive, or whose account is active but have no active list subscriptions.</dd>
+		<dd style="margin: 0; color: #444;">Subscribers who have at least one subscription but none currently active — i.e. they have opted out of every list. Defined by subscription state only.</dd>
 
 		<dt style="font-weight: 600; color: #1a1a1a;">Inactive Subscriptions</dt>
 		<dd style="margin: 0; color: #444;">Subscriber–list links that have been opted out of, regardless of whether the subscriber account is active.</dd>

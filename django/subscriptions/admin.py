@@ -376,16 +376,17 @@ class SubscriberAdmin(admin.ModelAdmin):
 
 		# ── Active subscribers over time ───────────────────────────────────────
 		# True historical headcount: at each period point we count the distinct
-		# subscribers who had at least one active list subscription on that date,
-		# reconstructed from each subscription's active interval. Unlike a cumulative
-		# join-date count, this can rise *and* fall, so past peaks (e.g. 190 → 187)
-		# are visible. Subscription churn (unsubscribed_at) is the dominant signal.
+		# subscribers who held at least one active list subscription on that date,
+		# reconstructed from each subscription's active interval (subscribed_at ->
+		# unsubscribed_at). Unlike a cumulative join-date count this can rise *and*
+		# fall, so past peaks are visible.
 		#
-		# Subscribers are gated by their *current* account-active flag (active=True),
-		# mirroring the KPI scorecard so the final data point equals the "Total Active
-		# Subscribers" card. We do not replay Subscribers.history, so an account
-		# deactivated today is excluded from earlier points too; subscription opt-outs
-		# (unsubscribed_at) remain the dominant churn signal that makes the line dip.
+		# "Active subscriber" is defined purely by subscription state (>=1 active
+		# subscription), NOT by the Subscribers.active account flag. That flag has no
+		# reliable history (most deactivations carry no timestamp) and has drifted out
+		# of sync with subscription state, so it cannot be reconstructed over time. The
+		# snapshot KPI (analytics_list_distribution) uses the same subscription-only
+		# definition, so the final data point equals the "Total Active Subscribers" card.
 		from collections import defaultdict
 
 		# As-of date for each bucket = last day of the bucket, clamped to end_date.
@@ -398,7 +399,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 			else:
 				as_of_dates.append(end_date)
 
-		sub_rows = ListSubscription.objects.filter(subscriber__active=True)
+		sub_rows = ListSubscription.objects.all()
 		if org_ids is not None:
 			sub_rows = sub_rows.filter(list__team__organization__id__in=org_ids)
 		sub_rows = sub_rows.values_list(
@@ -451,9 +452,13 @@ class SubscriberAdmin(admin.ModelAdmin):
 
 		This is an all-time current-state view (no date range filter). The period-scoped
 		'new subscribers' numbers are already shown by analytics_data / the summary cards.
-		Both KPI totals and the pie chart percentages are derived from the same base
-		queryset (active ListSubscription rows where the subscriber is also active)
-		so all numbers are internally consistent.
+
+		"Active" is defined purely by subscription state — a ListSubscription row with
+		is_active=True — NOT by the Subscribers.active account flag. That flag has drifted
+		out of sync with subscription state (accounts marked inactive that still hold active
+		subscriptions) and has no reliable history, so it is intentionally not used here.
+		The analytics_data time-series uses the same definition, so its final point matches
+		the "Total Active Subscribers" card below.
 		"""
 		org_ids = self._get_scoped_org_ids(request)
 
@@ -464,9 +469,9 @@ class SubscriberAdmin(admin.ModelAdmin):
 		except (ValueError, TypeError):
 			team_id = None
 
-		# Single base queryset — active subscriptions belonging to active subscribers.
+		# Single base queryset — active subscription rows (is_active=True).
 		# All downstream numbers derive from this so they are consistent.
-		base_qs = ListSubscription.objects.filter(is_active=True, subscriber__active=True)
+		base_qs = ListSubscription.objects.filter(is_active=True)
 		if org_ids is not None:
 			base_qs = base_qs.filter(list__team__organization__id__in=org_ids)
 
@@ -476,16 +481,16 @@ class SubscriberAdmin(admin.ModelAdmin):
 		# Total active subscription rows — this is the pie chart's 100%
 		total_active_subscriptions = base_qs.count()
 
-		# Inactive subscribers: account marked active=False OR active account with
-		# no active list subscriptions. Annotate first to avoid ambiguous ORM
-		# negation on reverse FK.
+		# Inactive subscribers: people who have at least one subscription but none
+		# currently active (i.e. they have opted out of every list). Annotate first to
+		# avoid ambiguous ORM negation on reverse FK.
 		inactive_sub_qs = Subscribers.objects.annotate(
 			active_subs_count=Count(
 				'list_subscriptions',
 				filter=Q(list_subscriptions__is_active=True),
 				distinct=True,
 			)
-		).filter(Q(active=False) | Q(active_subs_count=0))
+		).filter(active_subs_count=0)
 		if org_ids is not None:
 			inactive_sub_qs = inactive_sub_qs.filter(
 				list_subscriptions__list__team__organization__id__in=org_ids
