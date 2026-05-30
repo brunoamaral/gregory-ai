@@ -8,27 +8,65 @@ for the entire build. On prod the biggest tables are `gregory_historicalarticles
 (~375 MB table / 277k rows) and `articles` (~55 MB), so that's a multi-minute
 write stall on the history table the pipeline writes to on every save.
 
-Two options below. **Run `inspect_db_pre_0050.sql` first** and confirm:
-`mlpred_art_subj_date_idx` absent, no INVALID indexes, `0050` not yet applied.
+**Recommended: Option A** (short maintenance window). It is the safest path —
+Django builds *and names* the indexes itself, all inside one transaction, so
+there is no `--fake`, no chance of an index-name mismatch, and the whole change
+is atomic (it either fully applies or rolls back). The trade-off is a few minutes
+of blocked writes; with these table sizes the build is expected to take roughly
+1–3 minutes, not hours. Use Option B only if you truly cannot pause writes.
+
+**Run `inspect_db_pre_0050.sql` first** and confirm: `mlpred_art_subj_date_idx`
+absent, no INVALID indexes, `0050` not yet applied.
 
 ---
 
-## Option A — small maintenance window (simplest)
+## Option A — short maintenance window (recommended)
 
-If a few minutes of blocked writes is acceptable (e.g. pause the pipeline cron),
-just let Django do it:
+The only writer that touches these tables on a schedule is the `pipeline` cron
+(it writes `articles`/`trials` and, via simple-history, the history tables on
+every save). Pause it for the duration, then let Django do everything:
 
-```bash
-# stop the pipeline cron / writers first, then:
-docker exec gregory python manage.py migrate gregory 0050
-```
+1. **Make sure no pipeline is mid-run** and stop the cron from starting a new one.
+   The cron uses `flock -n /tmp/pipeline`, so either wait for any running job to
+   finish or comment out the `pipeline` line in crontab during the window:
+   ```bash
+   crontab -l                      # find the pipeline line
+   crontab -e                      # comment out the `... manage.py pipeline` line
+   ```
 
-Re-run `inspect_db_pre_0050.sql` afterwards to confirm the new indexes exist and
-the three `idx_*` duplicates are gone.
+2. **Apply the migration** (builds 19 indexes, drops the 3 redundant manual ones,
+   all atomically):
+   ```bash
+   docker exec gregory python manage.py migrate gregory 0050
+   ```
+   If anything goes wrong mid-build, the transaction rolls back and the DB is
+   left exactly as before — safe to retry.
+
+3. **Verify** Django and the DB agree:
+   ```bash
+   docker exec gregory python manage.py showmigrations gregory | tail -3   # 0050 = [X]
+   docker exec gregory python manage.py migrate --check                    # no pending
+   docker exec -i gregory python manage.py shell < docs/releases/v24/inspect_db_pre_0050.py
+   ```
+   Expect: all 19 new indexes present and valid; the three `idx_*` duplicates
+   gone; `idx_trials_discovery_date` + both `idx_*_covering` still present;
+   `unique_title_case_insensitive` untouched.
+
+4. **Re-enable the `pipeline` cron** (uncomment the crontab line).
 
 ---
 
 ## Option B — zero-downtime (`CONCURRENTLY` + fake-apply)
+
+> Only needed if you cannot tolerate a short write pause. This path uses
+> `--fake`, which trusts that the hand-built indexes match `0050` exactly.
+> **Do not copy the index names below by hand** — generate them from the
+> deployed code so they are guaranteed correct:
+> ```bash
+> docker exec gregory python manage.py sqlmigrate gregory 0050
+> ```
+> Then add `CONCURRENTLY` to each `CREATE INDEX` / `DROP INDEX` it prints, run
+> them one at a time (not in a transaction), and finish with the `--fake` step.
 
 `CREATE INDEX CONCURRENTLY` builds without blocking writes but **cannot run inside
 a transaction**, so it can't be expressed in a normal Django migration. Build the
