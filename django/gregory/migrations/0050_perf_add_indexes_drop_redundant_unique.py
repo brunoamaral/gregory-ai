@@ -94,4 +94,22 @@ class Migration(migrations.Migration):
             model_name='mlpredictions',
             index=models.Index(fields=['article', 'subject', '-created_date'], name='mlpred_art_subj_date_idx'),
         ),
+        # Drop pre-existing hand-made single-column indexes now made redundant
+        # by the db_index=True AlterFields above (Django creates equivalent,
+        # model-managed indexes). Keeps a single index per column. The covering
+        # indexes (idx_articles_covering, idx_trials_covering) and
+        # idx_trials_discovery_date are NOT duplicated by this migration and are
+        # intentionally left in place.
+        migrations.RunSQL(
+            sql='DROP INDEX IF EXISTS idx_articles_discovery_date;',
+            reverse_sql='CREATE INDEX IF NOT EXISTS idx_articles_discovery_date ON articles (discovery_date);',
+        ),
+        migrations.RunSQL(
+            sql='DROP INDEX IF EXISTS idx_articles_published_date;',
+            reverse_sql='CREATE INDEX IF NOT EXISTS idx_articles_published_date ON articles (published_date);',
+        ),
+        migrations.RunSQL(
+            sql='DROP INDEX IF EXISTS idx_trials_published_date;',
+            reverse_sql='CREATE INDEX IF NOT EXISTS idx_trials_published_date ON trials (published_date);',
+        ),
     ]
