@@ -5,7 +5,6 @@ This migration adds indexes that will prevent the hanging database queries
 when counting articles, trials, and authors for categories.
 
 Note: We use regular CREATE INDEX instead of CONCURRENTLY for tests and migrations.
-For production, run the optimize_category_queries management command instead.
 """
 
 from django.db import migrations
