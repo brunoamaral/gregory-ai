@@ -17,10 +17,10 @@ from organizations.models import Organization, OrganizationUser
 from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 
 from .models import (
-    Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions, 
+    Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions,
     ArticleSubjectRelevance, TeamCategory, PredictionRunLog, Team,
     ArticleTrialReference, OrganizationCredentials, OrganizationSite,
-    OrganizationApiSettings
+    OrganizationApiSettings, ArticleOrgContent, TrialOrgContent
 )
 from .widgets import MLPredictionsWidget
 from django import forms
@@ -75,8 +75,8 @@ class OrganizationRestrictedFieldListFilter(admin.RelatedFieldListFilter):
 		return filtered_choices
 
 
-class ArticleOrganizationFilter(admin.SimpleListFilter):
-	"""Filter articles by organisation (via teams__organization)."""
+class BaseOrganizationFilter(admin.SimpleListFilter):
+	"""Base filter that lists organisations scoped to the current user's access."""
 	title = 'organisation'
 	parameter_name = 'organisation'
 
@@ -88,9 +88,22 @@ class ArticleOrganizationFilter(admin.SimpleListFilter):
 			orgs = Organization.objects.filter(id__in=user_org_ids).order_by('name')
 		return [(org.pk, org.name) for org in orgs]
 
+
+class ArticleOrganizationFilter(BaseOrganizationFilter):
+	"""Filter articles by organisation (via teams M2M → organization)."""
+
 	def queryset(self, request, queryset):
 		if self.value():
 			return queryset.filter(teams__organization__id=self.value()).distinct()
+		return queryset
+
+
+class SourceOrganizationFilter(BaseOrganizationFilter):
+	"""Filter sources by organisation (via team FK → organization)."""
+
+	def queryset(self, request, queryset):
+		if self.value():
+			return queryset.filter(team__organization_id=self.value())
 		return queryset
 
 
@@ -317,6 +330,101 @@ class ArticleSubjectRelevanceInline(admin.TabularInline):
 			qs = qs.filter(subject__auto_predict=True)
 		return qs.order_by('subject__subject_name')
 
+class _BaseOrgContentInline(admin.StackedInline):
+	"""Shared inline behaviour for ArticleOrgContent / TrialOrgContent.
+
+	- Staff users only see/edit rows for their own organisation(s).
+	- Superusers see every row and can add new rows for any organisation.
+	- For staff, the organisation field is pre-filled and locked so they can
+	  never reassign content between orgs.
+	- Empty extra rows (both textareas blank) are skipped at save time, so
+	  opening an article without typing anything does not pollute the table.
+	"""
+	extra = 0
+	fields = ('organization', 'takeaways', 'summary_plain_english', 'updated_at')
+	readonly_fields = ('updated_at',)
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request).select_related('organization')
+		if request.user.is_superuser:
+			return qs
+		user_orgs = get_user_organizations(request.user)
+		return qs.filter(organization_id__in=user_orgs)
+
+	def has_add_permission(self, request, obj=None):
+		if request.user.is_superuser:
+			return True
+		return bool(get_user_organizations(request.user))
+
+	def _missing_org_ids(self, request, obj):
+		"""Return user-orgs that don't yet have a content row for this parent."""
+		if obj is None or not obj.pk:
+			return []
+		user_orgs = list(get_user_organizations(request.user) or [])
+		if not user_orgs:
+			return []
+		existing = set(
+			obj.org_contents.filter(organization_id__in=user_orgs)
+			.values_list('organization_id', flat=True)
+		)
+		return [oid for oid in user_orgs if oid not in existing]
+
+	def get_extra(self, request, obj=None, **kwargs):
+		if obj is None or not obj.pk:
+			return 0
+		if request.user.is_superuser:
+			return 1
+		return len(self._missing_org_ids(request, obj))
+
+	def get_max_num(self, request, obj=None, **kwargs):
+		if request.user.is_superuser:
+			return None
+		# Cap at user's org count so they can't create rows for orgs they don't belong to.
+		user_orgs = list(get_user_organizations(request.user) or [])
+		return len(user_orgs)
+
+	def get_formset(self, request, obj=None, **kwargs):
+		formset_class = super().get_formset(request, obj, **kwargs)
+		is_superuser = request.user.is_superuser
+
+		if is_superuser:
+			allowed_org_qs = Organization.objects.all().order_by('name')
+			extra_org_ids = []
+		else:
+			user_org_ids = list(get_user_organizations(request.user) or [])
+			allowed_org_qs = Organization.objects.filter(id__in=user_org_ids).order_by('name')
+			extra_org_ids = self._missing_org_ids(request, obj)
+
+		class ScopedOrgContentFormSet(formset_class):
+			def _construct_form(self, i, **form_kwargs):
+				form = super()._construct_form(i, **form_kwargs)
+				form.fields['organization'].queryset = allowed_org_qs
+				if form.instance.pk:
+					# Existing row: lock the org so content can't be reassigned.
+					form.fields['organization'].disabled = True
+				elif not is_superuser:
+					# Extra row for staff: pre-fill and lock to their next missing org.
+					extra_index = i - self.initial_form_count()
+					if 0 <= extra_index < len(extra_org_ids):
+						form.fields['organization'].initial = extra_org_ids[extra_index]
+						form.fields['organization'].disabled = True
+				return form
+
+		return ScopedOrgContentFormSet
+
+
+class ArticleOrgContentInline(_BaseOrgContentInline):
+	model = ArticleOrgContent
+	verbose_name = 'Editorial content (per organisation)'
+	verbose_name_plural = 'Editorial content (per organisation)'
+
+
+class TrialOrgContentInline(_BaseOrgContentInline):
+	model = TrialOrgContent
+	verbose_name = 'Editorial content (per organisation)'
+	verbose_name_plural = 'Editorial content (per organisation)'
+
+
 class ArticleAdminForm(forms.ModelForm):
 	ml_predictions_display = MLPredictionsField(required=False)
 
@@ -346,14 +454,14 @@ class ArticleAdminForm(forms.ModelForm):
 
 class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	form = ArticleAdminForm
-	inlines = [ArticleSubjectRelevanceInline, ArticleTrialReferenceInline]
+	inlines = [ArticleOrgContentInline, ArticleSubjectRelevanceInline, ArticleTrialReferenceInline]
 	fieldsets = (
 		('Article Information', {
 			'fields': (
-				'title', 'link', 'doi', 'summary','summary_plain_english', 'teams', 'subjects', 'sources',
+				'title', 'link', 'doi', 'summary', 'teams', 'subjects', 'sources',
 				'published_date', 'discovery_date', 'authors', 'team_categories',
 				'entities', 'kind', 'access',
-				'publisher', 'container_title', 'crossref_check', 'takeaways',
+				'publisher', 'container_title', 'crossref_check',
 			),
 			'description': 'This section contains general information about the article'
 		}),
@@ -423,9 +531,9 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
 	exclude = ['ml_predictions']
 	readonly_fields = ['last_updated', 'team_categories']
-	inlines = [TrialArticleReferenceInline]
+	inlines = [TrialOrgContentInline, TrialArticleReferenceInline]
 	search_fields = [
-		'trial_id', 'title', 'summary', 'summary_plain_english', 'scientific_title',
+		'trial_id', 'title', 'summary', 'scientific_title',
 		'primary_sponsor', 'source_register', 'recruitment_status', 'condition',
 		'intervention', 'primary_outcome', 'secondary_outcome', 'inclusion_criteria',
 		'exclusion_criteria', 'study_type', 'study_design', 'phase', 'countries',
@@ -443,7 +551,7 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 			'fields': ('title', 'scientific_title', 'link', 'identifiers', 'discovery_date', 'published_date', 'last_updated')
 		}),
 		('Description', {
-			'fields': ('summary', 'summary_plain_english', 'ctg_detailed_description'),
+			'fields': ('summary', 'ctg_detailed_description'),
 			'classes': ('collapse',),
 		}),
 		('Study Details', {
@@ -595,9 +703,10 @@ class ReassignToTeamMixin:
 
 class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
 	form = SourceAdminForm
-	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator', 'has_keyword_filter']
+	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator']
 	list_filter = [
 		'active', 'source_for', 'method', SourceHealthFilter,
+		SourceOrganizationFilter,
 		('team', OrganizationRestrictedFieldListFilter),
 		('subject', OrganizationRestrictedFieldListFilter),
 	]
@@ -605,16 +714,14 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 	actions = ['activate_sources', 'deactivate_sources', 'reassign_to_team_action']
 	fieldsets = (
 		('Basic Information', {
-			'fields': ('name', 'source_for', 'method', 'active', 'link')
+			'fields': ('name', 'source_for', 'method', 'active', 'link', 'ignore_ssl', 'description')
 		}),
 		('Organization', {
 			'fields': ('team', 'subject')
 		}),
-		('Settings', {
-			'fields': ('ignore_ssl', 'description')
-		}),
 		('Filtering (bioRxiv and medRxiv)', {
 			'fields': ('keyword_filter',),
+			'classes': ('keyword-filter-settings',),
 			'description': 'For bioRxiv and medRxiv sources, specify keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson).'
 		}),
 		('ClinicalTrials.gov API Settings', {
@@ -625,7 +732,7 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 	)
 	
 	class Media:
-		js = ('admin/js/source_method_toggle.js',)
+		js = ('admin/js/source_for_toggle.js',)
 	
 	def get_form(self, request, obj=None, **kwargs):
 		"""Pass the request to the form so it can filter field choices."""
@@ -638,12 +745,6 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 		
 		return FormWithRequest
 	
-	def has_keyword_filter(self, obj):
-		"""Display whether source has keyword filtering enabled."""
-		return bool(obj.keyword_filter)
-	has_keyword_filter.boolean = True
-	has_keyword_filter.short_description = 'Has Filter'
-
 	def save_model(self, request, obj, form, change):
 		"""Warn admin if source has no team assigned."""
 		super().save_model(request, obj, form, change)
@@ -712,6 +813,22 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 			f'Successfully deactivated {updated_count} source(s).'
 		)
 	deactivate_sources.short_description = "Deactivate selected sources"
+
+	def get_urls(self):
+		from django.urls import path
+		from .admin_views import source_detail_view, source_activity_json, sources_overview_view
+		urls = super().get_urls()
+		custom_urls = [
+			path('overview/', self.admin_site.admin_view(sources_overview_view), name='sources_overview'),
+			path('<int:source_id>/detail/', self.admin_site.admin_view(source_detail_view), name='sources_detail'),
+			path('<int:source_id>/detail/activity.json/', self.admin_site.admin_view(source_activity_json), name='sources_activity_json'),
+		]
+		return custom_urls + urls
+
+	def changelist_view(self, request, extra_context=None):
+		extra_context = extra_context or {}
+		extra_context['sources_overview_url'] = reverse('admin:sources_overview')
+		return super().changelist_view(request, extra_context=extra_context)
 
 class SourcesInline(admin.StackedInline):
 	"""Inline admin for managing sources within a subject"""
@@ -873,6 +990,30 @@ class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmi
 				extra_context['can_delete_sources'] = can_delete_sources
 
 		return super().delete_view(request, object_id, extra_context=extra_context)
+
+	def get_urls(self):
+		from django.urls import path
+		from .admin_views import (
+			subject_analytics_view,
+			subject_analytics_data,
+			subject_analytics_orgs,
+			subject_analytics_teams,
+			subject_analytics_subjects,
+		)
+		urls = super().get_urls()
+		custom_urls = [
+			path('analytics/', self.admin_site.admin_view(subject_analytics_view), name='gregory_subject_analytics'),
+			path('analytics/data/', self.admin_site.admin_view(subject_analytics_data), name='gregory_subject_analytics_data'),
+			path('analytics/orgs/', self.admin_site.admin_view(subject_analytics_orgs), name='gregory_subject_analytics_orgs'),
+			path('analytics/teams/', self.admin_site.admin_view(subject_analytics_teams), name='gregory_subject_analytics_teams'),
+			path('analytics/subjects/', self.admin_site.admin_view(subject_analytics_subjects), name='gregory_subject_analytics_subjects'),
+		]
+		return custom_urls + urls
+
+	def changelist_view(self, request, extra_context=None):
+		extra_context = extra_context or {}
+		extra_context['subject_analytics_url'] = reverse('admin:gregory_subject_analytics')
+		return super().changelist_view(request, extra_context=extra_context)
 
 
 class AuthorArticlesInline(admin.TabularInline):
@@ -1713,6 +1854,54 @@ admin.site.register(Authors, AuthorsAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)
+
+
+class _BaseOrgContentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
+	"""Shared admin for ArticleOrgContent / TrialOrgContent standalone pages.
+
+	Use the parent Article/Trial admin for routine editing; this admin exists
+	so users can browse audit history and so superusers can clean up rows
+	across organisations.
+	"""
+	list_filter = ('organization',)
+	readonly_fields = ('created_at', 'updated_at')
+	search_fields = ('takeaways', 'summary_plain_english')
+
+	def get_form(self, request, obj=None, **kwargs):
+		form_class = super().get_form(request, obj, **kwargs)
+		if request.user.is_superuser:
+			return form_class
+
+		user_org_ids = list(get_user_organizations(request.user) or [])
+
+		class ScopedOrgForm(form_class):
+			def __init__(self, *args, **form_kwargs):
+				super().__init__(*args, **form_kwargs)
+				if 'organization' in self.fields:
+					self.fields['organization'].queryset = (
+						Organization.objects.filter(id__in=user_org_ids).order_by('name')
+					)
+					if self.instance and self.instance.pk:
+						self.fields['organization'].disabled = True
+
+		return ScopedOrgForm
+
+
+@admin.register(ArticleOrgContent)
+class ArticleOrgContentAdmin(_BaseOrgContentAdmin):
+	list_display = ('article', 'organization', 'updated_at')
+	raw_id_fields = ('article',)
+	search_fields = _BaseOrgContentAdmin.search_fields + ('article__title', 'article__doi')
+
+	def has_module_perms(self, request):
+		return False
+
+
+@admin.register(TrialOrgContent)
+class TrialOrgContentAdmin(_BaseOrgContentAdmin):
+	list_display = ('trial', 'organization', 'updated_at')
+	raw_id_fields = ('trial',)
+	search_fields = _BaseOrgContentAdmin.search_fields + ('trial__title',)
 
 
 # --- Custom UserAdmin with Team membership inline ---

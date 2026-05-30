@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
 from gregory.models import Articles, Trials, MLPredictions
-from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
+from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url, get_postmark_credentials, get_site_and_settings
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list, get_articles_for_list
 from subscriptions.models import Lists, Subscribers, SentArticleNotification, SentTrialNotification, FailedNotification
@@ -34,6 +34,7 @@ class Command(BaseCommand):
 			if not team:
 				self.stdout.write(self.style.ERROR(f"No team associated with list '{admin_list.list_name}'. Skipping."))
 				continue
+			organization = team.organization
 
 			# Resolve site and custom settings for this list (List.site → Org default → global)
 			try:
@@ -43,7 +44,7 @@ class Command(BaseCommand):
 				continue
 
 			# Resolve Postmark credentials (Site-level CustomSetting → Organization → Django settings)
-			postmark_api_token, api_url = get_postmark_credentials(custom_settings=customsettings, organization=team.organization)
+			postmark_api_token, api_url = get_postmark_credentials(custom_settings=customsettings, organization=organization)
 			if not postmark_api_token or not api_url:
 				self.stdout.write(self.style.ERROR(f"No Postmark credentials found for site, organisation, or Django settings. Skipping list '{admin_list.list_name}'."))
 				continue
@@ -109,13 +110,12 @@ class Command(BaseCommand):
 					subscriber=subscriber,
 					list_obj=admin_list,
 					site=site,
-					custom_settings=customsettings
+					custom_settings=customsettings,
+					organization=organization,
 				)
 				# Inject unsubscribe context for the footer template
-				_api_domain = getattr(customsettings, 'api_domain', '') or site.domain
-				_scheme = 'https' if _api_domain not in ('localhost', '127.0.0.1') else 'http'
 				summary_context['list_id'] = admin_list.list_id
-				summary_context['unsubscribe_base_url'] = f"{_scheme}://{_api_domain}"
+				summary_context['unsubscribe_base_url'] = build_unsubscribe_base_url(site, customsettings)
 				summary_context['header_title'] = admin_list.header_title or ''
 				summary_context['header_tagline'] = admin_list.header_tagline or ''
 				summary_context['show_header_tagline'] = admin_list.show_header_tagline
@@ -131,7 +131,7 @@ class Command(BaseCommand):
 					html=html_content,
 					text=text_content,
 					site=site,
-					sender_name=customsettings.title,
+					sender_name=customsettings.sender_name or customsettings.title,
 					api_token=postmark_api_token,
 					api_url=api_url,
 					sender_prefix=customsettings.sender_email_prefix,

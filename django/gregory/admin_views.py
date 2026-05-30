@@ -1,15 +1,16 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse, JsonResponse
 from django.core.paginator import Paginator
 from django.utils.html import format_html, mark_safe
 from django.db.models import Q, Case, When, Value, BooleanField, Count
+from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.contrib import messages
 from django.utils.dateparse import parse_date
 from django.utils import timezone
-from .models import Articles, Subject, ArticleSubjectRelevance, MLPredictions
+from .models import Articles, Subject, ArticleSubjectRelevance, MLPredictions, Sources, Trials, Team
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 @staff_member_required
 def article_review_status_view(request):
@@ -330,3 +331,536 @@ def update_article_relevance_ajax(request):
             }, status=400)
     
     return JsonResponse({'success': False, 'error': 'Invalid request method'}, status=405)
+
+
+# ── Source detail views ────────────────────────────────────────────────────
+
+def _get_source_for_user(request, source_id):
+    """Return the Source or raise 404/403 based on org scoping."""
+    source = get_object_or_404(Sources, pk=source_id)
+    if not request.user.is_superuser:
+        user_orgs = request.user.organizations_organizationuser.values_list(
+            'organization__id', flat=True
+        )
+        if not Sources.objects.filter(
+            pk=source_id, team__organization__id__in=user_orgs
+        ).exists():
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied
+    return source
+
+
+@staff_member_required
+def source_detail_view(request, source_id):
+    source = _get_source_for_user(request, source_id)
+
+    if source.source_for == 'trials':
+        total_count = source.trials_set.count()
+        last_date_val = (
+            source.trials_set.order_by('-discovery_date')
+            .values_list('discovery_date', flat=True).first()
+        )
+        last_date = last_date_val.date() if last_date_val else None
+        recent_items = list(
+            source.trials_set.order_by('-discovery_date')
+            .values('trial_id', 'title', 'discovery_date')[:10]
+        )
+        item_type = 'trials'
+    else:
+        total_count = source.articles_set.count()
+        last_date_val = (
+            source.articles_set.order_by('-discovery_date')
+            .values_list('discovery_date', flat=True).first()
+        )
+        last_date = last_date_val.date() if last_date_val else None
+        recent_items = list(
+            source.articles_set.order_by('-discovery_date')
+            .values('article_id', 'title', 'discovery_date')[:10]
+        )
+        item_type = 'articles'
+
+    days_since = (timezone.now().date() - last_date).days if last_date else None
+
+    health_status = source.get_health_status()
+    status_config = {
+        'healthy':    {'label': 'Healthy',    'color': '#16a34a'},
+        'warning':    {'label': 'Warning',    'color': '#f59e0b'},
+        'error':      {'label': 'Error',      'color': '#dc2626'},
+        'inactive':   {'label': 'Inactive',   'color': '#6b7280'},
+        'no_content': {'label': 'No Content', 'color': '#2563eb'},
+    }
+    status_info = status_config.get(health_status, status_config['no_content'])
+
+    context = {
+        'source': source,
+        'total_count': total_count,
+        'last_date': last_date,
+        'days_since': days_since,
+        'recent_items': recent_items,
+        'item_type': item_type,
+        'health_status': health_status,
+        'status_info': status_info,
+        'title': source.name or f'Source {source_id}',
+        'has_permission': True,
+    }
+    return render(request, 'admin/source_detail.html', context)
+
+
+@staff_member_required
+def source_activity_json(request, source_id):
+    from django.db.models import Count
+    from django.db.models.functions import TruncDate
+
+    source = _get_source_for_user(request, source_id)
+
+    today = timezone.now().date()
+    start = today - timedelta(days=29)
+    date_range = [start + timedelta(days=i) for i in range(30)]
+
+    if source.source_for == 'trials':
+        rows = (
+            source.trials_set
+            .filter(discovery_date__date__gte=start, discovery_date__date__lte=today)
+            .annotate(day=TruncDate('discovery_date'))
+            .values('day')
+            .annotate(count=Count('pk'))
+            .values_list('day', 'count')
+        )
+    else:
+        rows = (
+            source.articles_set
+            .filter(discovery_date__date__gte=start, discovery_date__date__lte=today)
+            .annotate(day=TruncDate('discovery_date'))
+            .values('day')
+            .annotate(count=Count('pk'))
+            .values_list('day', 'count')
+        )
+
+    counts_map = dict(rows)
+
+    labels = [d.strftime('%b %-d') for d in date_range]
+    counts = [counts_map.get(d, 0) for d in date_range]
+
+    return JsonResponse({'labels': labels, 'counts': counts})
+
+
+# ── Sources overview view ──────────────────────────────────────────────────
+
+STATUS_CONFIG = {
+    'healthy':    {'label': 'Healthy',    'color': '#16a34a'},
+    'warning':    {'label': 'Warning',    'color': '#f59e0b'},
+    'error':      {'label': 'Error',      'color': '#dc2626'},
+    'inactive':   {'label': 'Inactive',   'color': '#6b7280'},
+    'no_content': {'label': 'No Content', 'color': '#2563eb'},
+}
+
+
+def _annotate_sources(qs):
+    """Annotate a Sources queryset with last_content_date and content_count."""
+    from django.db.models import Max, Count
+    return qs.annotate(
+        last_article_date_ann=Max('articles__published_date'),
+        article_count_ann=Count('articles', distinct=True),
+        last_trial_date_ann=Max('trials__last_updated'),
+        trial_count_ann=Count('trials', distinct=True),
+    )
+
+
+def _health_from_source(source):
+    """Compute health status for an annotated source row without extra queries."""
+    if not source.active:
+        return 'inactive'
+    now = timezone.now()
+    if source.source_for == 'trials':
+        last_date = source.last_trial_date_ann
+    else:
+        last_date = source.last_article_date_ann
+    if not last_date:
+        return 'no_content'
+    days = (now - last_date).days
+    if days > 60:
+        return 'error'
+    elif days > 30:
+        return 'warning'
+    return 'healthy'
+
+
+@staff_member_required
+def sources_overview_view(request):
+    # ── Base queryset (org-scoped) ────────────────────────────────────────
+    if request.user.is_superuser:
+        qs = Sources.objects.all()
+    else:
+        user_orgs = request.user.organizations_organizationuser.values_list(
+            'organization__id', flat=True
+        )
+        qs = Sources.objects.filter(team__organization__id__in=user_orgs)
+
+    # ── Bulk-action POST ──────────────────────────────────────────────────
+    if request.method == 'POST':
+        action = request.POST.get('bulk_action')
+        # The shared intermediate template posts 'action=reassign_to_team_action' on confirmation
+        if not action and request.POST.get('action') == 'reassign_to_team_action':
+            action = 'reassign_to_team'
+        selected_ids = request.POST.getlist('selected_sources')
+
+        if selected_ids and action in ('activate', 'deactivate', 'reassign_to_team'):
+            selected_qs = qs.filter(pk__in=selected_ids)
+
+            if action == 'activate':
+                count = selected_qs.update(active=True)
+                messages.success(request, f'{count} source(s) activated.')
+
+            elif action == 'deactivate':
+                count = selected_qs.update(active=False)
+                messages.success(request, f'{count} source(s) deactivated.')
+
+            elif action == 'reassign_to_team':
+                # Gather org of selected sources (must be single org)
+                team_ids = selected_qs.values_list('team_id', flat=True).distinct()
+                from .admin import ReassignToTeamForm
+                org_ids = list(
+                    Team.objects.filter(pk__in=team_ids)
+                    .values_list('organization_id', flat=True).distinct()
+                )
+                if len(org_ids) != 1:
+                    messages.error(request, 'Selected sources span multiple organisations. Please select sources from a single organisation.')
+                else:
+                    target_qs = Team.objects.filter(organization_id=org_ids[0])
+                    if 'apply' not in request.POST:
+                        form = ReassignToTeamForm()
+                        form.fields['target_team'].queryset = target_qs
+                        return render(request, 'admin/gregory/reassign_to_team_intermediate.html', {
+                            'title': 'Reassign to team',
+                            'objects': selected_qs,
+                            'form': form,
+                            'action_checkbox_name': 'selected_sources',
+                            'model_name': 'sources',
+                            'extra_post': {'bulk_action': 'reassign_to_team', 'selected_sources': selected_ids},
+                        })
+                    form = ReassignToTeamForm(request.POST)
+                    form.fields['target_team'].queryset = target_qs
+                    if form.is_valid():
+                        to_team = form.cleaned_data['target_team']
+                        if to_team.organization_id == org_ids[0]:
+                            count = selected_qs.update(team=to_team)
+                            messages.success(request, f'{count} source(s) reassigned to "{to_team}".')
+                        else:
+                            messages.error(request, 'Target team must belong to the same organisation.')
+                    else:
+                        messages.error(request, 'Invalid form — please try again.')
+
+        from django.shortcuts import redirect as _redirect
+        return _redirect(request.path + ('?' + request.META.get('QUERY_STRING', '') if request.META.get('QUERY_STRING') else ''))
+
+    # ── GET filters ───────────────────────────────────────────────────────
+    f_active     = request.GET.get('active', '')
+    f_source_for = request.GET.get('source_for', '')
+    f_method     = request.GET.get('method', '')
+    f_health     = request.GET.get('health', '')
+    f_team       = request.GET.get('team', '')
+    f_subject    = request.GET.get('subject', '')
+    f_q          = request.GET.get('q', '').strip()
+
+    if f_active == 'true':
+        qs = qs.filter(active=True)
+    elif f_active == 'false':
+        qs = qs.filter(active=False)
+
+    if f_source_for:
+        qs = qs.filter(source_for=f_source_for)
+    if f_method:
+        qs = qs.filter(method=f_method)
+    if f_team:
+        qs = qs.filter(team_id=f_team)
+    if f_subject:
+        qs = qs.filter(subject_id=f_subject)
+    if f_q:
+        qs = qs.filter(
+            Q(name__icontains=f_q) | Q(link__icontains=f_q) |
+            Q(description__icontains=f_q) | Q(keyword_filter__icontains=f_q)
+        )
+
+    qs = _annotate_sources(qs).select_related('team', 'subject').order_by('name')
+
+    # Health filter is applied in-Python after annotation (same logic as SourceHealthFilter)
+    if f_health:
+        qs = [s for s in qs if _health_from_source(s) == f_health]
+    else:
+        qs = list(qs)
+
+    # Attach computed health to each source row
+    for s in qs:
+        h = _health_from_source(s)
+        s.health = h
+        s.health_info = STATUS_CONFIG.get(h, STATUS_CONFIG['no_content'])
+        if s.source_for == 'trials':
+            s.last_content = s.last_trial_date_ann
+            s.content_count = s.trial_count_ann
+        else:
+            s.last_content = s.last_article_date_ann
+            s.content_count = s.article_count_ann
+
+    # ── Pagination ─────────────────────────────────────────────────────────
+    paginator = Paginator(qs, 50)
+    page_num  = request.GET.get('page', 1)
+    page_obj  = paginator.get_page(page_num)
+
+    # Build URL-safe filter params string for pagination links (excludes 'page')
+    _filter_params = request.GET.copy()
+    _filter_params.pop('page', None)
+    filter_params = _filter_params.urlencode()
+
+    # ── Filter option lists ────────────────────────────────────────────────
+    if request.user.is_superuser:
+        teams    = Team.objects.order_by('name')
+        subjects = Subject.objects.order_by('subject_name')
+    else:
+        user_orgs = request.user.organizations_organizationuser.values_list('organization__id', flat=True)
+        teams    = Team.objects.filter(organization__id__in=user_orgs).order_by('name')
+        subjects = Subject.objects.filter(team__organization__id__in=user_orgs).distinct().order_by('subject_name')
+
+    now = timezone.now()
+
+    context = {
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'teams': teams,
+        'subjects': subjects,
+        'filters': {
+            'active': f_active,
+            'source_for': f_source_for,
+            'method': f_method,
+            'health': f_health,
+            'team': f_team,
+            'subject': f_subject,
+            'q': f_q,
+        },
+        'source_for_choices': Sources.TABLES,
+        'method_choices': Sources.METHODS,
+        'health_choices': [
+            ('healthy', 'Healthy'),
+            ('warning', 'Warning'),
+            ('error', 'Error'),
+            ('no_content', 'No Content'),
+            ('inactive', 'Inactive'),
+        ],
+        'title': 'Sources Overview',
+        'has_permission': True,
+        'now': now,
+        'filter_params': filter_params,
+    }
+    return render(request, 'admin/sources_overview.html', context)
+
+
+# ── Subject analytics views ────────────────────────────────────────────────
+
+def _get_scoped_org_ids_for_user(request):
+    """Return list of org IDs the request user may see, or None for all.
+
+    Delegates to get_user_organizations() for the non-superuser branch so that
+    org-visibility rules stay consistent across admin views. Superusers can
+    further narrow scope to a single org via the ?org= query parameter.
+    """
+    from .admin import get_user_organizations
+    if request.user.is_superuser:
+        org_param = request.GET.get('org')
+        if org_param:
+            try:
+                return [int(org_param)]
+            except (ValueError, TypeError):
+                pass
+        return None
+    return list(get_user_organizations(request.user))
+
+
+@staff_member_required
+def subject_analytics_view(request):
+    """Landing page for subject content analytics."""
+    from organizations.models import Organization
+    if request.user.is_superuser:
+        orgs = Organization.objects.order_by('name')
+    else:
+        user_org_ids = list(
+            request.user.organizations_organizationuser.values_list(
+                'organization__id', flat=True
+            )
+        )
+        orgs = Organization.objects.filter(id__in=user_org_ids).order_by('name')
+
+    context = {
+        'title': 'Subject Content Analytics',
+        'orgs': orgs,
+        'is_superuser': request.user.is_superuser,
+    }
+    return render(request, 'admin/gregory/subject/analytics.html', context)
+
+
+@staff_member_required
+def subject_analytics_orgs(request):
+    """JSON: organisations visible to the current user."""
+    from organizations.models import Organization
+    org_ids = _get_scoped_org_ids_for_user(request)
+    qs = Organization.objects.all()
+    if org_ids is not None:
+        qs = qs.filter(id__in=org_ids)
+    return JsonResponse({'organisations': [{'id': o.id, 'name': o.name} for o in qs.order_by('name')]})
+
+
+@staff_member_required
+def subject_analytics_teams(request):
+    """JSON: teams scoped to the effective org."""
+    org_ids = _get_scoped_org_ids_for_user(request)
+    qs = Team.objects.filter(is_active=True)
+    if org_ids is not None:
+        qs = qs.filter(organization__id__in=org_ids)
+    return JsonResponse({'teams': [{'id': t.id, 'name': str(t)} for t in qs.order_by('name')]})
+
+
+@staff_member_required
+def subject_analytics_subjects(request):
+    """JSON: subjects scoped to the effective org and/or team."""
+    org_ids = _get_scoped_org_ids_for_user(request)
+    team_param = request.GET.get('team')
+    qs = Subject.objects.all()
+    if org_ids is not None:
+        qs = qs.filter(team__organization__id__in=org_ids)
+    if team_param:
+        try:
+            qs = qs.filter(team_id=int(team_param))
+        except (ValueError, TypeError):
+            pass
+    return JsonResponse({'subjects': [{'id': s.id, 'name': s.subject_name} for s in qs.order_by('subject_name')]})
+
+
+@staff_member_required
+def subject_analytics_data(request):
+    """
+    JSON: articles and trials counts over time for a subject (and optional org/team scope).
+    Query params: range (7d|30d|90d|365d|custom), start, end, org, team, subject
+    """
+    range_param = request.GET.get('range', '30d')
+    subject_param = request.GET.get('subject', '')
+    team_param = request.GET.get('team', '')
+
+    RANGES = {
+        '7d':   (7,   TruncDate,  '%Y-%m-%d'),
+        '30d':  (30,  TruncDate,  '%Y-%m-%d'),
+        '90d':  (90,  TruncWeek,  '%Y-%m-%d'),
+        '365d': (365, TruncMonth, '%Y-%m'),
+    }
+
+    if range_param == 'custom':
+        start_str = request.GET.get('start', '')
+        end_str   = request.GET.get('end', '')
+        try:
+            start_date = date.fromisoformat(start_str)
+            end_date   = date.fromisoformat(end_str)
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Invalid custom date range'}, status=400)
+        if end_date < start_date:
+            start_date, end_date = end_date, start_date
+        span = (end_date - start_date).days
+        if span <= 60:
+            trunc_fn, date_fmt = TruncDate, '%Y-%m-%d'
+        elif span <= 180:
+            trunc_fn, date_fmt = TruncWeek, '%Y-%m-%d'
+        else:
+            trunc_fn, date_fmt = TruncMonth, '%Y-%m'
+    else:
+        if range_param not in RANGES:
+            range_param = '30d'
+        days, trunc_fn, date_fmt = RANGES[range_param]
+        end_date   = timezone.now().date()
+        start_date = end_date - timedelta(days=days - 1)
+
+    # Build full period sequence for zero-filling
+    if trunc_fn is TruncDate:
+        period_range = []
+        d = start_date
+        while d <= end_date:
+            period_range.append(d)
+            d += timedelta(days=1)
+    elif trunc_fn is TruncWeek:
+        period_range = []
+        d = start_date - timedelta(days=start_date.weekday())
+        while d <= end_date:
+            period_range.append(d)
+            d += timedelta(weeks=1)
+    else:  # TruncMonth
+        period_range = []
+        d = start_date.replace(day=1)
+        while d <= end_date:
+            period_range.append(d)
+            if d.month == 12:
+                d = date(d.year + 1, 1, 1)
+            else:
+                d = date(d.year, d.month + 1, 1)
+
+    def _build_series(qs, date_field):
+        counts = (
+            qs
+            .annotate(period=trunc_fn(date_field))
+            .values('period')
+            .annotate(count=Count('pk', distinct=True))
+            .order_by('period')
+        )
+        lookup = {}
+        for item in counts:
+            p = item['period']
+            if not p:
+                continue
+            if hasattr(p, 'date'):
+                p = p.date()
+            lookup[p] = item['count']
+        return [lookup.get(p, 0) for p in period_range]
+
+    # Scope: org → team → subject
+    org_ids = _get_scoped_org_ids_for_user(request)
+
+    articles_qs = Articles.objects.filter(
+        published_date__date__gte=start_date,
+        published_date__date__lte=end_date,
+    )
+    trials_qs = Trials.objects.filter(
+        discovery_date__date__gte=start_date,
+        discovery_date__date__lte=end_date,
+    )
+
+    if org_ids is not None:
+        articles_qs = articles_qs.filter(teams__organization__id__in=org_ids)
+        trials_qs   = trials_qs.filter(teams__organization__id__in=org_ids)
+
+    if team_param:
+        try:
+            tid = int(team_param)
+            articles_qs = articles_qs.filter(teams__id=tid)
+            trials_qs   = trials_qs.filter(teams__id=tid)
+        except (ValueError, TypeError):
+            pass
+
+    if subject_param:
+        try:
+            sid = int(subject_param)
+            articles_qs = articles_qs.filter(subjects__id=sid)
+            trials_qs   = trials_qs.filter(subjects__id=sid)
+        except (ValueError, TypeError):
+            pass
+
+    articles_qs = articles_qs.distinct()
+    trials_qs   = trials_qs.distinct()
+
+    articles_data = _build_series(articles_qs, 'published_date')
+    trials_data   = _build_series(trials_qs, 'discovery_date')
+
+    labels = [p.strftime(date_fmt) for p in period_range]
+
+    return JsonResponse({
+        'labels':   labels,
+        'articles': articles_data,
+        'trials':   trials_data,
+        'totals': {
+            'articles': sum(articles_data),
+            'trials':   sum(trials_data),
+        },
+    })

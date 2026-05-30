@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from organizations.models import Organization
 from gregory.models import Team
+from sitesettings.models import CustomSetting
 from subscriptions.admin import AnnouncementAdmin
 from subscriptions.models import (
 	Announcement,
@@ -42,7 +43,7 @@ class AnnouncementRecipientUniqueTogetherTest(TestCase):
 		org = Organization.objects.create(name='Test Org')
 		team = Team.objects.create(organization=org, name='Team A', slug='team-a')
 		self.lst = Lists.objects.create(list_name='Weekly', team=team)
-		self.ann = Announcement.objects.create(subject='Notice', body='<p>Hi</p>')
+		self.ann = Announcement.objects.create(subject='Notice', body='<p>Hi</p>', organization=org)
 		self.sub = Subscribers.objects.create(
 			first_name='Alice', last_name='Smith', email='alice@example.com'
 		)
@@ -88,6 +89,7 @@ class RenderAnnouncementEmailContextTest(TestCase):
 			body='<p>Hello</p>',
 			header_title='My Title',
 			header_tagline='My Tagline',
+			organization=org,
 		)
 		self.site = Site.objects.get_or_create(id=1, defaults={'domain': 'example.com', 'name': 'Example'})[0]
 		self.site.domain = 'example.com'
@@ -139,14 +141,14 @@ class SendViewRedirectTest(TestCase):
 		self.superuser = User.objects.create_superuser(
 			username='admin', password='password', email='admin@example.com'
 		)
-		org = Organization.objects.create(name='Send Org')
-		self.team = Team.objects.create(organization=org, name='Send Team', slug='send-team')
+		self.org = Organization.objects.create(name='Send Org')
+		self.team = Team.objects.create(organization=self.org, name='Send Team', slug='send-team')
 		self.lst = Lists.objects.create(list_name='News', team=self.team)
 		self.client = Client()
 		self.client.force_login(self.superuser)
 
 	def _make_announcement(self, status):
-		ann = Announcement.objects.create(subject='Already sent', body='<p>content</p>', status=status)
+		ann = Announcement.objects.create(subject='Already sent', body='<p>content</p>', status=status, organization=self.org)
 		ann.lists.add(self.lst)
 		return ann
 
@@ -183,9 +185,19 @@ class SendViewSubjectNormalisationTest(TestCase):
 		self.superuser = User.objects.create_superuser(
 			username='admin2', password='password', email='admin2@example.com'
 		)
-		org = Organization.objects.create(name='Norm Org')
-		self.team = Team.objects.create(organization=org, name='Norm Team', slug='norm-team')
-		self.lst = Lists.objects.create(list_name='Norm List', team=self.team)
+		self.org = Organization.objects.create(name='Norm Org')
+		self.team = Team.objects.create(organization=self.org, name='Norm Team', slug='norm-team')
+		# Give the list a Site + CustomSetting so the validation gate passes.
+		self.norm_site = Site.objects.get_or_create(
+			id=20, defaults={'domain': 'norm.example.com', 'name': 'Norm'}
+		)[0]
+		self.norm_site.domain = 'norm.example.com'
+		self.norm_site.save()
+		CustomSetting.objects.get_or_create(
+			site=self.norm_site,
+			defaults={'title': 'Norm CS', 'api_domain': 'api.norm.example.com'},
+		)
+		self.lst = Lists.objects.create(list_name='Norm List', team=self.team, site=self.norm_site)
 		self.sub = Subscribers.objects.create(
 			first_name='Carol', last_name='Danvers', email='carol@example.com'
 		)
@@ -199,7 +211,7 @@ class SendViewSubjectNormalisationTest(TestCase):
 		return reverse('admin:subscriptions_announcement_send', args=[pk])
 
 	def _make_announcement(self, subject):
-		ann = Announcement.objects.create(subject=subject, body='<p>Body</p>', status='draft')
+		ann = Announcement.objects.create(subject=subject, body='<p>Body</p>', status='draft', organization=self.org)
 		ann.lists.add(self.lst)
 		return ann
 
@@ -271,3 +283,169 @@ class RenderAnnouncementTaglineAndPreheaderTest(TestCase):
 	def test_preheader_fallback_not_shown_when_custom_set(self):
 		html = self._render(preheader_text='Custom preview')
 		self.assertNotIn('Latest updates powered by Gregory AI Scientific Research Intelligence', html)
+
+
+# ---------------------------------------------------------------------------
+# Validation-gate tests — send_test_view and send_view
+# ---------------------------------------------------------------------------
+
+class _SendValidationBase(TestCase):
+	"""Shared setUp for validation-gate tests."""
+
+	def setUp(self):
+		self.superuser = User.objects.create_superuser(
+			username='val_admin', password='password', email='val_admin@example.com'
+		)
+		self.org = Organization.objects.create(name='Val Org')
+		self.team = Team.objects.create(organization=self.org, name='Val Team', slug='val-team')
+
+		# Site used by tests
+		self.site = Site.objects.get_or_create(
+			id=10, defaults={'domain': 'val.example.com', 'name': 'Val Example'}
+		)[0]
+		self.site.domain = 'val.example.com'
+		self.site.save()
+
+		# Default valid CustomSetting — individual tests may mutate api_domain or delete it.
+		self.cs = CustomSetting.objects.create(
+			site=self.site,
+			title='Val CS',
+			api_domain='api.val.example.com',
+		)
+
+		self.lst = Lists.objects.create(
+			list_name='Val List', team=self.team, site=self.site
+		)
+
+		self.client = Client()
+		self.client.force_login(self.superuser)
+
+	def _make_announcement(self, body='<p>Hello</p>', status='draft'):
+		ann = Announcement.objects.create(subject='Test Ann', body=body, status=status, organization=self.org)
+		ann.lists.add(self.lst)
+		return ann
+
+	def _send_test_url(self, pk):
+		return reverse('admin:subscriptions_announcement_send_test', args=[pk])
+
+	def _send_url(self, pk):
+		return reverse('admin:subscriptions_announcement_send', args=[pk])
+
+	def _postmark_mock(self, status_code=200):
+		r = MagicMock()
+		r.status_code = status_code
+		r.text = '{"MessageID":"test"}'
+		return r
+
+
+class SendTestValidationTests(_SendValidationBase):
+	"""send_test_view validation gate."""
+
+	def test_send_test_blocks_when_api_domain_blank(self):
+		"""Blank api_domain must block the test send and show an error."""
+		self.cs.api_domain = ''
+		self.cs.save()
+		ann = self._make_announcement()
+		with patch(
+			'subscriptions.management.commands.utils.send_email.requests.post',
+			side_effect=AssertionError("Postmark must not be called"),
+		):
+			response = self.client.post(self._send_test_url(ann.pk))
+		self.assertRedirects(
+			response,
+			reverse('admin:subscriptions_announcement_change', args=[ann.pk]),
+			fetch_redirect_response=False,
+		)
+		msgs = [str(m) for m in get_messages(response.wsgi_request)]
+		self.assertTrue(any('api_domain' in m for m in msgs), msgs)
+
+	def test_send_test_blocks_when_custom_settings_missing(self):
+		"""No CustomSetting for the list's site must block the send."""
+		self.cs.delete()
+		ann = self._make_announcement()
+		with patch(
+			'subscriptions.management.commands.utils.send_email.requests.post',
+			side_effect=AssertionError("Postmark must not be called"),
+		):
+			response = self.client.post(self._send_test_url(ann.pk))
+		self.assertRedirects(
+			response,
+			reverse('admin:subscriptions_announcement_change', args=[ann.pk]),
+			fetch_redirect_response=False,
+		)
+		msgs = [str(m) for m in get_messages(response.wsgi_request)]
+		self.assertTrue(any('CustomSetting' in m for m in msgs), msgs)
+
+	def test_send_test_blocks_when_body_has_foreign_img_host(self):
+		"""Absolute <img> pointing at a different host must block the send."""
+		body = '<img src="https://api.other.com/media/x.png" alt="x">'
+		ann = self._make_announcement(body=body)
+		with patch(
+			'subscriptions.management.commands.utils.send_email.requests.post',
+			side_effect=AssertionError("Postmark must not be called"),
+		):
+			response = self.client.post(self._send_test_url(ann.pk))
+		self.assertRedirects(
+			response,
+			reverse('admin:subscriptions_announcement_change', args=[ann.pk]),
+			fetch_redirect_response=False,
+		)
+		msgs = [str(m) for m in get_messages(response.wsgi_request)]
+		combined = ' '.join(msgs)
+		self.assertIn('api.other.com', combined)
+		self.assertIn('api.val.example.com', combined)
+
+	def test_send_test_succeeds_with_valid_config(self):
+		"""Valid config + relative /media/ src must reach Postmark exactly once."""
+		ann = self._make_announcement(body='<p>Hello <img src="/media/x.png" alt="x"></p>')
+		mock_resp = self._postmark_mock()
+		with patch(
+			'subscriptions.management.commands.utils.send_email.requests.post',
+			return_value=mock_resp,
+		) as mock_post:
+			response = self.client.post(self._send_test_url(ann.pk))
+		self.assertRedirects(
+			response,
+			reverse('admin:subscriptions_announcement_change', args=[ann.pk]),
+			fetch_redirect_response=False,
+		)
+		mock_post.assert_called_once()
+
+
+class SendLiveValidationTests(_SendValidationBase):
+	"""send_view validation gate."""
+
+	def test_send_live_aborts_before_marking_sending(self):
+		"""Broken config on both lists must leave announcement.status unchanged."""
+		# Second list with a different site that has no CustomSetting
+		site2 = Site.objects.get_or_create(
+			id=11, defaults={'domain': 'broken.example.com', 'name': 'Broken'}
+		)[0]
+		site2.domain = 'broken.example.com'
+		site2.save()
+		lst2 = Lists.objects.create(list_name='Broken List', team=self.team, site=site2)
+
+		# First list also gets broken by blanking api_domain
+		self.cs.api_domain = ''
+		self.cs.save()
+
+		ann = self._make_announcement()
+		ann.lists.add(lst2)  # Two lists, both broken
+
+		sub = Subscribers.objects.create(
+			first_name='Dave', last_name='D', email='dave@example.com'
+		)
+		ListSubscription.objects.create(subscriber=sub, list=self.lst, is_active=True)
+		sub.active = True
+		sub.save()
+
+		initial_status = ann.status
+		with patch(
+			'subscriptions.management.commands.utils.send_email.requests.post',
+			side_effect=AssertionError("Postmark must not be called"),
+		):
+			self.client.post(self._send_url(ann.pk))
+
+		ann.refresh_from_db()
+		self.assertEqual(ann.status, initial_status,
+			"announcement.status must remain unchanged when validation fails")

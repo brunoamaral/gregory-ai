@@ -218,7 +218,7 @@
 	color: #aaa;
 	padding: 24px;
 	font-size: 13px;
-	italic;
+	font-style: italic;
 }
 .global-filter-bar {
 	display: flex;
@@ -492,12 +492,14 @@
 					<option value="">All Teams</option>
 				</select>
 			</div>
-			<canvas id="listDistributionChart"></canvas>
+			<div style="height: 300px;">
+				<canvas id="listDistributionChart"></canvas>
+			</div>
 		</div>
 		<div class="pie-chart-container">
 			<div class="chart-filter-bar">
 				<div>
-					<label style="font-weight:600;color:#555;font-size:13px;">Filter by list:</label><br style="margin-bottom:4px">
+					<label style="font-weight:600;color:#555;font-size:13px;display:block;margin-bottom:4px;">Filter by list:</label>
 					<div class="multiselect-wrap" id="profile-list-wrap">
 						<div class="multiselect-trigger" id="profile-list-trigger" role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false">
 							<span class="multiselect-placeholder" id="profile-list-label">All lists</span>
@@ -513,15 +515,15 @@
 					</div>
 				</div>
 			</div>
-			<canvas id="profileDistributionChart"></canvas>
+			<div style="height: 300px;">
+				<canvas id="profileDistributionChart"></canvas>
+			</div>
 		</div>
 	</div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+{% include "admin/_chartjs.html" %}
 <script>
-Chart.register(ChartDataLabels);
 
 // ── Global filter state ────────────────────────────────────────────────────
 var activeOrg  = '';   // '' = all; set by org dropdown (superusers only)
@@ -529,6 +531,13 @@ var activeTeam = '';   // '' = all; set by team dropdown on list chart
 var activeProfileLists = []; // list IDs selected on profile chart
 var customStart = '';  // YYYY-MM-DD; set when custom range is active
 var customEnd   = '';  // YYYY-MM-DD; set when custom range is active
+
+// ── HTML escaping for values injected via innerHTML ─────────────────────────
+function escapeHtml(s) {
+	return String(s == null ? '' : s)
+		.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 // ── Endpoint URLs ──────────────────────────────────────────────────────────
 var URLS = {
@@ -919,6 +928,7 @@ document.querySelectorAll('.period-btn').forEach(function(btn) {
 			customEnd   = '';
 			fetchAndRender(activeRange);
 			fetchListActivity();
+			fetchRecentActivity();
 		}
 	});
 });
@@ -938,6 +948,10 @@ document.addEventListener('DOMContentLoaded', function() {
 		if (!endInput.value) {
 			var today = new Date().toISOString().slice(0, 10);
 			endInput.value = today;
+		}
+		if (endInput.value < startInput.value) {
+			alert('The end date cannot be before the start date.');
+			return;
 		}
 		customStart = startInput.value;
 		customEnd   = endInput.value;
@@ -992,6 +1006,7 @@ function fetchDistribution() {
 					},
 					options: {
 						responsive: true,
+						maintainAspectRatio: false,
 						plugins: {
 							legend: {
 								position: 'bottom',
@@ -1059,6 +1074,7 @@ function fetchProfileDistribution() {
 					},
 					options: {
 						responsive: true,
+						maintainAspectRatio: false,
 						plugins: {
 							legend: {
 								position: 'bottom',
@@ -1103,7 +1119,7 @@ function fetchListActivity() {
 			}
 			tbody.innerHTML = data.lists.map(function(row) {
 				return '<tr>'
-					+ '<td>' + row.name + '</td>'
+					+ '<td>' + escapeHtml(row.name) + '</td>'
 					+ '<td style="text-align:right;color:#16a34a;font-weight:600">' + row.new + '</td>'
 					+ '<td style="text-align:right;color:#dc2626;font-weight:600">' + row.unsubs + '</td>'
 					+ '</tr>';
@@ -1122,7 +1138,7 @@ function fetchRecentActivity() {
 	var qs = params.toString() ? '?' + params.toString() : '';
 
 	function tag(text, cls) {
-		return '<span class="tag ' + cls + '">' + text + '</span>';
+		return '<span class="tag ' + cls + '">' + escapeHtml(text) + '</span>';
 	}
 
 	fetch(URLS.recentSubs + qs)
@@ -1141,10 +1157,10 @@ function fetchRecentActivity() {
 					? s.lists.map(function(l) { return tag(l, 'tag-list'); }).join('')
 					: '<span style="color:#bbb">—</span>';
 				return '<tr>'
-					+ '<td>' + s.name + '</td>'
+					+ '<td>' + escapeHtml(s.name) + '</td>'
 					+ '<td>' + profiles + '</td>'
 					+ '<td>' + lists + '</td>'
-					+ '<td class="date-cell">' + s.subscribed_at + '</td>'
+					+ '<td class="date-cell">' + escapeHtml(s.subscribed_at) + '</td>'
 					+ '</tr>';
 			}).join('');
 		})
@@ -1173,11 +1189,11 @@ function fetchRecentActivity() {
 					? u.kept_lists.map(function(l) { return tag(l, 'tag-kept'); }).join('')
 					: '<span style="color:#bbb">none</span>';
 				return '<tr>'
-					+ '<td>' + u.name + '</td>'
+					+ '<td>' + escapeHtml(u.name) + '</td>'
 					+ '<td>' + profiles + '</td>'
 					+ '<td>' + removed + '</td>'
 					+ '<td>' + kept + '</td>'
-					+ '<td class="date-cell">' + u.unsubscribed_at + '</td>'
+					+ '<td class="date-cell">' + escapeHtml(u.unsubscribed_at) + '</td>'
 					+ '</tr>';
 			}).join('');
 		})
@@ -1189,13 +1205,8 @@ function fetchRecentActivity() {
 }
 
 // ── Initial page load ──────────────────────────────────────────────────────
-reloadTeams();
-reloadAvailableLists();
-fetchAndRender(activeRange);
-fetchDistribution();
-fetchProfileDistribution();
-fetchRecentActivity();
-fetchListActivity();
+// Wait for the DOM so the activity-table bodies (declared after this script) exist.
+document.addEventListener('DOMContentLoaded', reloadAll);
 </script>
 
 <div class="activity-table-card" style="margin-top:32px;margin-bottom:24px">
@@ -1272,13 +1283,13 @@ fetchListActivity();
 		<dd style="margin: 0; color: #444;">Subscribers who transitioned to an inactive state during the selected period: either their account was explicitly deactivated, or they unsubscribed from all lists leaving them with no active list subscriptions.</dd>
 
 		<dt style="font-weight: 600; color: #1a1a1a;">Active Subscribers</dt>
-		<dd style="margin: 0; color: #444;">Distinct subscribers currently marked active who have at least one active list subscription.</dd>
+		<dd style="margin: 0; color: #444;">Distinct subscribers with at least one active list subscription. Defined by subscription state only — the account active/inactive flag is not used. The "Total Active Subscribers" chart reconstructs this headcount at each point in the selected period from each subscription's active interval (subscribe → unsubscribe), so it can rise and fall and reflect past peaks — not just current totals.</dd>
 
 		<dt style="font-weight: 600; color: #1a1a1a;">Active Subscriptions</dt>
 		<dd style="margin: 0; color: #444;">Total active subscriber–list links right now. This is the denominator used for percentages in the pie chart.</dd>
 
 		<dt style="font-weight: 600; color: #1a1a1a;">Inactive Subscribers</dt>
-		<dd style="margin: 0; color: #444;">Subscribers whose account is marked inactive, or whose account is active but have no active list subscriptions.</dd>
+		<dd style="margin: 0; color: #444;">Subscribers who have at least one subscription but none currently active — i.e. they have opted out of every list. Defined by subscription state only.</dd>
 
 		<dt style="font-weight: 600; color: #1a1a1a;">Inactive Subscriptions</dt>
 		<dd style="margin: 0; color: #444;">Subscriber–list links that have been opted out of, regardless of whether the subscriber account is active.</dd>

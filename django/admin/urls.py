@@ -18,17 +18,16 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path, re_path
 from rest_framework import routers
-from rest_framework.authtoken import views
 
 from api.views import (
 	ArticleViewSet, AuthorsViewSet, SourceViewSet, TrialViewSet, 
-	post_article, CategoryViewSet, LoginView, ProtectedEndpointView,
+	post_article, edit_article, edit_trial, CategoryViewSet, LoginView, ProtectedEndpointView,
 	ArticlesByTeam, ArticlesBySubject, TeamsViewSet, SubjectsViewSet, SubjectsByTeam,
 	ArticlesByCategoryAndTeam, ArticleSearchView, TrialSearchView, AuthorSearchView, CategoriesByTeamAndSubject,
 	StatsView
 )
 from rss.views import	ArticlesByAuthorFeed, TrialsBySubjectFeed
-from subscriptions.views import subscribe_view, unsubscribe_list, unsubscribe_site, unsubscribe_all
+from subscriptions.views import subscribe_view, unsubscribe_list, unsubscribe_site, unsubscribe_all, ckeditor_upload
 from organizations.backends import invitation_backend
 
 # Email template views (direct import to avoid module issues)
@@ -61,11 +60,11 @@ urlpatterns = [
 	# API auth route
 	path('api-auth/', include('rest_framework.urls')),
 	path('api/token/', LoginView.as_view(), name='token_obtain_pair'),
-	path('api/token/get/', views.obtain_auth_token),
 
 	# API routes
 	path('articles/post/', post_article),
-
+	path('articles/edit/', edit_article),
+	path('trials/edit/', edit_trial),
 	# Feed routes (supports ORCID or numeric author_id)
 	path('feed/author/<str:orcid>/', ArticlesByAuthorFeed(), name='articles_by_author_feed'),
 	path('feed/trials/subject/<str:subject_slug>/', TrialsBySubjectFeed(), name='trials_by_subject_feed'),
@@ -120,7 +119,11 @@ urlpatterns = [
 	# Include router routes
 	path('', include(router.urls)),
 
-	# CKEditor 5 routes
+	# CKEditor 5 routes — hardened upload view must come BEFORE the package include
+	# so Django's URL resolver picks it up first.
+	# CK_EDITOR_5_UPLOAD_FILE_VIEW_NAME in settings.py points to this name so
+	# the widget's upload_url is built from our view, not the package's.
+	path('ckeditor5/image_upload/', ckeditor_upload, name='subscriptions_ckeditor_upload'),
 	path('ckeditor5/', include('django_ckeditor_5.urls')),
 
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) + (

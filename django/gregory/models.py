@@ -142,8 +142,8 @@ class Sources(models.Model):
 	active = models.BooleanField(default=True)
 	source_id = models.AutoField(primary_key=True)
 	source_for = models.CharField(choices=TABLES, max_length=50, default='science paper')
-	name = models.TextField(blank=True, null=True)
-	link = models.TextField(blank=True, null=True)
+	name = models.CharField(max_length=255, blank=True, null=True)
+	link = models.URLField(max_length=2000, blank=True, null=True)
 	subject = models.ForeignKey(Subject,on_delete=models.SET_NULL,null=True,blank=True,unique=False)
 	method = models.CharField(choices=METHODS, max_length=10, default='rss')
 	ignore_ssl = models.BooleanField(default=False)
@@ -235,6 +235,41 @@ class Sources(models.Model):
 		verbose_name_plural = 'sources'
 		db_table = 'sources'
 
+
+class ApiKeyHistoryMixin(models.Model):
+	"""Abstract mixin that adds API-key attribution fields to historical models.
+
+	Attach to HistoricalRecords via bases=[ApiKeyHistoryMixin] so every
+	historical row can record which API key triggered the change.
+
+	Two complementary fields:
+	- api_access_scheme (FK, SET_NULL): live link; NULL for admin/shell saves
+	  or after key deletion.
+	- api_access_scheme_label (CharField): snapshot of the key's client_name at
+	  save time.  Preserved permanently even after the key or its organisation
+	  is deleted, keeping the audit trail readable.
+
+	Both fields are populated automatically by the
+	``stamp_api_access_scheme_on_history`` signal handler in gregory/signals.py.
+	"""
+	api_access_scheme = models.ForeignKey(
+		'api.APIAccessScheme',
+		null=True,
+		blank=True,
+		on_delete=models.SET_NULL,
+		related_name='+',
+	)
+	api_access_scheme_label = models.CharField(
+		max_length=200,
+		blank=True,
+		help_text='Snapshot of APIAccessScheme.client_name at the time of the change. '
+		          'Preserved after key deletion.',
+	)
+
+	class Meta:
+		abstract = True
+
+
 class Articles(models.Model):
 	KINDS = [('science paper', 'Science Paper'),('news article','News Article')]
 	ACCESS_OPTIONS = [('unknown','Unknown'),('open','Open'),('restricted','Restricted')]
@@ -243,7 +278,6 @@ class Articles(models.Model):
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	doi = models.CharField(max_length=280, blank=True, null=True, db_index=True)
 	summary = models.TextField(blank=True, null=True)
-	summary_plain_english = models.TextField(blank=True, null=True) # Used for plain English version
 	
 	# Persisted uppercase columns for performant case-insensitive search
 	utitle = GeneratedField(
@@ -270,8 +304,11 @@ class Articles(models.Model):
 	publisher = models.CharField(max_length=150, blank=True, null=True, default=None)
 	container_title = models.CharField(max_length=150, blank=True, null=True, default=None)
 	crossref_check = models.DateTimeField(blank=True, null=True)
-	takeaways = models.TextField(blank=True, null=True)
-	history = HistoricalRecords(excluded_fields=['crossref_check', 'utitle', 'usummary'])
+	history = HistoricalRecords(
+		excluded_fields=['crossref_check', 'utitle', 'usummary'],
+		bases=[ApiKeyHistoryMixin],
+		m2m_fields=['sources', 'subjects', 'teams']
+	)
 	subjects = models.ManyToManyField('Subject', related_name='articles')  # Ensuring that article has one or more subjects 
 	teams = models.ManyToManyField('Team', related_name='articles')  # Allows an article to belong to one or more teams
 	retracted = models.BooleanField(default=False, db_index=True)
@@ -361,7 +398,6 @@ class Trials(models.Model):
 	last_updated = models.DateTimeField(auto_now=True, null=True, db_index=True)
 	title = models.TextField(blank=False, null=False)
 	summary = models.TextField(blank=True, null=True)
-	summary_plain_english = models.TextField(blank=True, null=True) # Used for plain English summary
 	
 	# Persisted uppercase columns for performant case-insensitive search
 	utitle = GeneratedField(
@@ -382,7 +418,10 @@ class Trials(models.Model):
 	identifiers = models.JSONField(blank=True, null=True)
 	teams = models.ManyToManyField('Team', related_name='trials')
 	subjects = models.ManyToManyField('Subject', related_name='trials')
-	history = HistoricalRecords()
+	history = HistoricalRecords(
+		bases=[ApiKeyHistoryMixin],
+		m2m_fields=['sources', 'teams', 'subjects'],
+	)
 
 	# WHO Fields
 	export_date = models.DateTimeField(null=True, blank=True)
@@ -468,6 +507,72 @@ class Trials(models.Model):
 				opclasses=['gin_trgm_ops']
 			),
 		]
+
+
+class ArticleOrgContent(models.Model):
+	"""Per-organisation editorial content for an article."""
+	article = models.ForeignKey(
+		Articles,
+		on_delete=models.CASCADE,
+		related_name='org_contents',
+	)
+	organization = models.ForeignKey(
+		Organization,
+		on_delete=models.CASCADE,
+		related_name='article_contents',
+	)
+	takeaways = models.TextField(blank=True, null=True)
+	summary_plain_english = models.TextField(blank=True, null=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin])
+
+	def __str__(self):
+		return f"{self.article_id}/{self.organization_id}"
+
+	class Meta:
+		constraints = [
+			models.UniqueConstraint(
+				fields=['article', 'organization'],
+				name='unique_article_org_content'
+			)
+		]
+		verbose_name = 'article org content'
+		verbose_name_plural = 'article org contents'
+
+
+class TrialOrgContent(models.Model):
+	"""Per-organisation editorial content for a trial."""
+	trial = models.ForeignKey(
+		Trials,
+		on_delete=models.CASCADE,
+		related_name='org_contents',
+	)
+	organization = models.ForeignKey(
+		Organization,
+		on_delete=models.CASCADE,
+		related_name='trial_contents',
+	)
+	takeaways = models.TextField(blank=True, null=True)
+	summary_plain_english = models.TextField(blank=True, null=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin])
+
+	def __str__(self):
+		return f"{self.trial_id}/{self.organization_id}"
+
+	class Meta:
+		constraints = [
+			models.UniqueConstraint(
+				fields=['trial', 'organization'],
+				name='unique_trial_org_content'
+			)
+		]
+		verbose_name = 'trial org content'
+		verbose_name_plural = 'trial org contents'
+
+
 def get_fernet():
 	try:
 		secret_key = settings.FERNET_SECRET_KEY

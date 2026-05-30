@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.core.cache import cache
 from api.serializers import (
 		ArticleSerializer, TrialSerializer, SourceSerializer, AuthorSerializer,
 		CategorySerializer, CategoryTopAuthorSerializer, TeamSerializer, SubjectsSerializer,
@@ -9,7 +11,7 @@ from django.db.models import Count, Q, Prefetch
 from django.db.models.functions import Length, TruncMonth
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper, ClinicalTrial
-from gregory.models import Articles, Trials, Sources, Authors, Team, Subject, TeamCategory
+from gregory.models import Articles, ArticleOrgContent, Trials, TrialOrgContent, Sources, Authors, Team, Subject, TeamCategory
 from organizations.models import Organization
 from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
@@ -23,16 +25,19 @@ import json
 import traceback
 from django.utils.dateparse import parse_date
 
-from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress
+from api.serializers.mixins import _resolve_per_org_fields_org
+from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress, find_trial_by_identifier
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 		APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError,
-		APINoAPIKeyError, ArticleExistsError, ArticleNotSavedError, CrossOrgPayloadError,
-		DoiNotFound, FieldNotFoundError, SourceNotFoundError
+		APINoAPIKeyError, ArticleExistsError, ArticleNotFoundError, ArticleNotSavedError,
+		CrossOrgPayloadError, DoiNotFound, DuplicateArticleError, DuplicateTrialError,
+		FieldNotFoundError, SourceNotFoundError, TrialNotFoundError
 )
 from api.utils.responses import (
-		ACCESS_DENIED, CROSS_ORG_PAYLOAD, INVALID_API_KEY, INVALID_IP_ADDRESS, NO_API_KEY,
-		UNEXPECTED, SOURCE_NOT_FOUND, FIELD_NOT_FOUND, ARTICLE_EXISTS, ARTICLE_NOT_SAVED, returnData, returnError
+		ACCESS_DENIED, ARTICLE_NOT_FOUND, ARTICLE_NOT_SAVED, ARTICLE_EXISTS, CROSS_ORG_PAYLOAD,
+		DUPLICATE_ARTICLE, DUPLICATE_TRIAL, FIELD_NOT_FOUND, INVALID_API_KEY, INVALID_IP_ADDRESS,
+		NO_API_KEY, SOURCE_NOT_FOUND, TRIAL_NOT_FOUND, UNEXPECTED, returnData, returnError
 )
 
 class OrgVisibilityMixin:
@@ -251,18 +256,8 @@ def post_article(request):
 				identifiers=post_data.get('identifiers') or {},
 			)
 
-			# Dedup: identifiers first, then title (mirrors feedreader_trials logic)
-			existing_trial = None
-			ident = trial_data.identifiers or {}
-			id_query = Q()
-			if ident.get('euct'):
-				id_query |= Q(identifiers__euct=ident['euct'])
-			if ident.get('nct'):
-				id_query |= Q(identifiers__nct=ident['nct'])
-			if ident.get('eudract'):
-				id_query |= Q(identifiers__eudract=ident['eudract'])
-			if id_query:
-				existing_trial = Trials.objects.filter(id_query).first()
+			# Dedup: identifiers first (via helper), then title (mirrors feedreader_trials logic)
+			existing_trial = find_trial_by_identifier(trial_data.identifiers or {}).first()
 			if existing_trial is None and trial_data.title:
 				existing_trial = Trials.objects.filter(title__iexact=trial_data.title).first()
 
@@ -380,10 +375,257 @@ def post_article(request):
 		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
 		return returnError(UNEXPECTED, str(exception), 500)
 
+
+###
+# API Edit Article
+###
+
+@api_view(['POST'])
+def edit_article(request):
+	"""
+	Edit editorial and metadata fields on an existing article.
+
+	Lookup is by ``doi`` (required).  Raises 404 if not found, 409 if the DOI
+	matches multiple articles (data quality issue), and 403 if the article is
+	not associated with the API key's organisation.
+
+	Per-org fields (``takeaways``, ``summary_plain_english``) are upserted into
+	``ArticleOrgContent`` for the key's organisation.  Empty string clears the
+	field (stored as NULL).
+
+	Per-article fields (``access``, ``retracted``, ``kind``) are written back to
+	the ``Articles`` row directly.
+	"""
+	access_scheme = None
+	call_type = request.method + " " + request.path
+	ip_addr = getIPAddress(request)
+	post_data = json.loads(request.body)
+	try:
+		api_key = getAPIKey(request)
+		access_scheme = checkValidAccess(api_key, ip_addr)
+
+		if access_scheme.organization is None:
+			raise APIAccessDeniedError('API keys without an associated organisation cannot edit articles.')
+
+		doi = post_data.get('doi')
+		if not doi:
+			raise FieldNotFoundError('field `doi` is required')
+
+		matching = Articles.objects.filter(doi=doi)
+		count = matching.count()
+		if count == 0:
+			raise ArticleNotFoundError(f'No article found with DOI {doi}')
+		if count > 1:
+			raise DuplicateArticleError(
+				ids=list(matching.values_list('article_id', flat=True)),
+				message=f'{count} articles match DOI {doi}. Resolve duplicates before editing.',
+			)
+		article = matching.first()
+
+		# Cross-org check: at least one of the article's teams must belong to the key's org
+		if not article.teams.filter(organization=access_scheme.organization).exists():
+			raise CrossOrgPayloadError('this article is not visible to your organisation.')
+
+		updated_fields = []
+
+		# --- Per-article fields -------------------------------------------
+		VALID_ACCESS = [v for v, _ in Articles.ACCESS_OPTIONS]
+		VALID_KINDS = [v for v, _ in Articles.KINDS]
+
+		if 'access' in post_data:
+			val = post_data['access']
+			if val not in VALID_ACCESS:
+				raise FieldNotFoundError(f'`access` must be one of {VALID_ACCESS}')
+			article.access = val
+			updated_fields.append('access')
+
+		if 'retracted' in post_data:
+			val = post_data['retracted']
+			if not isinstance(val, bool):
+				raise FieldNotFoundError('`retracted` must be a boolean')
+			article.retracted = val
+			updated_fields.append('retracted')
+
+		if 'kind' in post_data:
+			val = post_data['kind']
+			if val not in VALID_KINDS:
+				raise FieldNotFoundError(f'`kind` must be one of {VALID_KINDS}')
+			article.kind = val
+			updated_fields.append('kind')
+
+		article_fields_changed = [f for f in updated_fields if f in ('access', 'retracted', 'kind')]
+		if article_fields_changed:
+			article.save(update_fields=article_fields_changed)
+
+		# --- Per-org fields -----------------------------------------------
+		org_fields = {}
+		for field in ('takeaways', 'summary_plain_english'):
+			if field in post_data:
+				val = post_data[field]
+				org_fields[field] = None if val == '' else val
+
+		if org_fields:
+			org_content, _ = ArticleOrgContent.objects.get_or_create(
+				article=article,
+				organization=access_scheme.organization,
+			)
+			for field, val in org_fields.items():
+				setattr(org_content, field, val)
+				updated_fields.append(field)
+			org_content.save()
+
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, 'Article edited', {'article_id': article.article_id})
+		return returnData({
+			'article_id': article.article_id,
+			'doi': article.doi,
+			'organization_id': access_scheme.organization_id,
+			'updated_fields': updated_fields,
+		})
+
+	except APINoAPIKeyError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(NO_API_KEY, str(exception), 401)
+	except APIInvalidAPIKeyError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(INVALID_API_KEY, str(exception), 401)
+	except APIInvalidIPAddressError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(INVALID_IP_ADDRESS, str(exception), 401)
+	except APIAccessDeniedError as exception:
+		if access_scheme is not None:
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+		else:
+			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception), str(post_data))
+		return returnError(ACCESS_DENIED, str(exception), 403)
+	except ArticleNotFoundError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 404, str(exception), str(post_data))
+		return returnError(ARTICLE_NOT_FOUND, str(exception), 404)
+	except DuplicateArticleError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 409, str(exception), str(post_data))
+		return returnError(DUPLICATE_ARTICLE, {'message': str(exception), 'article_ids': exception.ids}, 409)
+	except FieldNotFoundError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+		return returnError(FIELD_NOT_FOUND, str(exception), 400)
+	except CrossOrgPayloadError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+		return returnError(CROSS_ORG_PAYLOAD, str(exception), 403)
+	except Exception as exception:
+		print(traceback.format_exc())
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
+		return returnError(UNEXPECTED, str(exception), 500)
+
+
+###
+# API Edit Trial
+###
+
+@api_view(['POST'])
+def edit_trial(request):
+	"""
+	Edit per-organisation editorial fields on an existing trial.
+
+	Lookup is by ``identifiers`` dict (required, same format as ``post_article``
+	trial branch: keys ``nct``, ``euct``, ``eudract``).  Raises 404 if not
+	found, 409 if multiple trials match (dedup issue).
+
+	Only per-org fields (``takeaways``, ``summary_plain_english``) are
+	editable — trial metadata comes from registries and is not client-editable.
+	"""
+	access_scheme = None
+	call_type = request.method + " " + request.path
+	ip_addr = getIPAddress(request)
+	post_data = json.loads(request.body)
+	try:
+		api_key = getAPIKey(request)
+		access_scheme = checkValidAccess(api_key, ip_addr)
+
+		if access_scheme.organization is None:
+			raise APIAccessDeniedError('API keys without an associated organisation cannot edit trials.')
+
+		identifiers = post_data.get('identifiers')
+		if not identifiers:
+			raise FieldNotFoundError(
+				'field `identifiers` is required (e.g. {"nct": "NCT..."} or {"euct": "..."})'
+			)
+
+		matching = find_trial_by_identifier(identifiers)
+		count = matching.count()
+		if count == 0:
+			raise TrialNotFoundError('No trial found matching the provided identifiers.')
+		if count > 1:
+			raise DuplicateTrialError(
+				ids=list(matching.values_list('trial_id', flat=True)),
+				message=f'{count} trials match the provided identifiers. Resolve duplicates before editing.',
+			)
+		trial = matching.first()
+
+		# Cross-org check
+		if not trial.teams.filter(organization=access_scheme.organization).exists():
+			raise CrossOrgPayloadError('this trial is not visible to your organisation.')
+
+		updated_fields = []
+
+		# --- Per-org fields -----------------------------------------------
+		org_fields = {}
+		for field in ('takeaways', 'summary_plain_english'):
+			if field in post_data:
+				val = post_data[field]
+				org_fields[field] = None if val == '' else val
+
+		if org_fields:
+			org_content, _ = TrialOrgContent.objects.get_or_create(
+				trial=trial,
+				organization=access_scheme.organization,
+			)
+			for field, val in org_fields.items():
+				setattr(org_content, field, val)
+				updated_fields.append(field)
+			org_content.save()
+
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, 'Trial edited', {'trial_id': trial.trial_id})
+		return returnData({
+			'trial_id': trial.trial_id,
+			'organization_id': access_scheme.organization_id,
+			'updated_fields': updated_fields,
+		})
+
+	except APINoAPIKeyError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(NO_API_KEY, str(exception), 401)
+	except APIInvalidAPIKeyError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(INVALID_API_KEY, str(exception), 401)
+	except APIInvalidIPAddressError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		return returnError(INVALID_IP_ADDRESS, str(exception), 401)
+	except APIAccessDeniedError as exception:
+		if access_scheme is not None:
+			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+		else:
+			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception), str(post_data))
+		return returnError(ACCESS_DENIED, str(exception), 403)
+	except TrialNotFoundError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 404, str(exception), str(post_data))
+		return returnError(TRIAL_NOT_FOUND, str(exception), 404)
+	except DuplicateTrialError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 409, str(exception), str(post_data))
+		return returnError(DUPLICATE_TRIAL, {'message': str(exception), 'trial_ids': exception.ids}, 409)
+	except FieldNotFoundError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+		return returnError(FIELD_NOT_FOUND, str(exception), 400)
+	except CrossOrgPayloadError as exception:
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+		return returnError(CROSS_ORG_PAYLOAD, str(exception), 403)
+	except Exception as exception:
+		print(traceback.format_exc())
+		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
+		return returnError(UNEXPECTED, str(exception), 500)
+
+
 ###
 # ARTICLES
 ### 
-class ArticleViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class ArticleViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all articles in the database with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
@@ -437,6 +679,26 @@ class ArticleViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	search_fields = ['title', 'summary']
 	ordering_fields = ['discovery_date', 'published_date', 'title', 'article_id']
 	ordering = ['-discovery_date']
+
+	def get_queryset(self):
+		"""Prefetch the caller-org's ArticleOrgContent to avoid N+1 on list responses.
+
+		When a request resolves to an organisation (API key or public-org
+		filter), attach the matching ``ArticleOrgContent`` rows as
+		``_prefetched_org_contents`` so the serializer can resolve per-org
+		fields without issuing one query per article.
+		"""
+		qs = super().get_queryset()
+		org = _resolve_per_org_fields_org(self.request)
+		if org is not None:
+			qs = qs.prefetch_related(
+				Prefetch(
+					'org_contents',
+					queryset=ArticleOrgContent.objects.filter(organization=org),
+					to_attr='_prefetched_org_contents',
+				)
+			)
+		return qs
 
 	def finalize_response(self, request, response, *args, **kwargs):
 		"""
@@ -495,7 +757,7 @@ class ArticlesByKeyword(generics.ListAPIView):
 # CATEGORIES
 ###
 
-class CategoryViewSet(viewsets.ModelViewSet):
+class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	List all categories in the database with optional filters for team and subject.
 	Now includes author statistics for each category.
@@ -752,7 +1014,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 # TRIALS
 ### 
 
-class TrialViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class TrialViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all clinical trials by discovery date with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
@@ -796,6 +1058,26 @@ class TrialViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 	pagination_class = FlexiblePagination
 	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
 	filterset_class = TrialFilter
+
+	def get_queryset(self):
+		"""Prefetch the caller-org's TrialOrgContent to avoid N+1 on list responses.
+
+		When a request resolves to an organisation (API key or public-org
+		filter), attach the matching ``TrialOrgContent`` rows as
+		``_prefetched_org_contents`` so the serializer can resolve per-org
+		fields without issuing one query per trial.
+		"""
+		qs = super().get_queryset()
+		org = _resolve_per_org_fields_org(self.request)
+		if org is not None:
+			qs = qs.prefetch_related(
+				Prefetch(
+					'org_contents',
+					queryset=TrialOrgContent.objects.filter(organization=org),
+					to_attr='_prefetched_org_contents',
+				)
+			)
+		return qs
 	search_fields = ['title', 'summary']
 	ordering_fields = ['discovery_date', 'published_date', 'title', 'trial_id', 'last_updated']
 	ordering = ['-discovery_date']
@@ -844,7 +1126,7 @@ class AllTrialViewSet(generics.ListAPIView):
 # SOURCES
 ### 
 
-class SourceViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class SourceViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all sources of data with optional filters for team and subject.
 	
@@ -867,7 +1149,7 @@ class SourceViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
 # AUTHORS
 ### 
 
-class AuthorsViewSet(viewsets.ModelViewSet):
+class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	Enhanced Authors API with sorting and filtering capabilities.
 	
@@ -1144,7 +1426,7 @@ class ProtectedEndpointView(APIView):
 # TEAMS
 ###
 
-class TeamsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class TeamsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all teams
 	"""
@@ -1182,7 +1464,7 @@ class OrganizationsViewSet(viewsets.ReadOnlyModelViewSet):
 # SUBJECTS
 ###
 
-class SubjectsViewSet(OrgVisibilityMixin, viewsets.ModelViewSet):
+class SubjectsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	✅ **PREFERRED ENDPOINT**: This is the main subjects endpoint that supports filtering options.
 	
@@ -1870,14 +2152,24 @@ class AuthorSearchView(generics.ListAPIView):
 class StatsView(APIView):
 	"""
 	Returns aggregate statistics about the data in the system.
-	All counts can be optionally scoped to one or more teams via ?team=1 or ?team=1,2,3.
 
-	Counts are filtered to organisations visible to the caller when
-	``request.visible_org_ids`` is present (set by VisibleOrgMiddleware).
-	If the attribute is absent — e.g. in management commands or tests that
-	bypass middleware — the fallback is unscoped querysets that span all
-	organisations.  In production the middleware is always active, so callers
-	will always receive org-filtered results.
+	Filters
+	-------
+	?team=1,2,3
+	    Scope to one or more teams (comma-separated integer IDs).
+	?organization=1,2  (alias: ?org=)
+	    Scope to one or more organisations (comma-separated integer IDs).
+	    When combined with ?team=, the effective scope is the intersection:
+	    teams that belong to the requested org(s).
+
+	Both params are validated against ``request.visible_org_ids``
+	(set by VisibleOrgMiddleware).  A team or org that is not visible to the
+	caller returns 404 so that existence is not leaked.  When the middleware
+	attribute is absent (management commands, tests bypassing middleware) the
+	visibility check is skipped and the params still narrow the queryset.
+
+	Results are short-lived cached (STATS_CACHE_TTL seconds, default 600) using
+	Django's database cache so all gunicorn workers share the same value.
 	"""
 	permission_classes = [permissions.AllowAny]
 
@@ -1885,10 +2177,9 @@ class StatsView(APIView):
 		from urllib.parse import urlparse
 		from subscriptions.models import Subscribers
 
-		# --- Org visibility ------------------------------------------------
 		visible_org_ids = getattr(request, 'visible_org_ids', None)
 
-		# Parse team IDs from query params
+		# --- Parse ?team= -----------------------------------------------
 		team_param = request.query_params.get('team', None)
 		team_ids = None
 		if team_param:
@@ -1897,63 +2188,93 @@ class StatsView(APIView):
 			except ValueError:
 				return Response(
 					{'error': 'Invalid team parameter. Expected integer or comma-separated integers.'},
-					status=status.HTTP_400_BAD_REQUEST
+					status=status.HTTP_400_BAD_REQUEST,
 				)
-			# 404 if any requested team is not in a visible org
-			if visible_org_ids is not None:
-				visible = Team.objects.filter(id__in=team_ids, organization_id__in=visible_org_ids)
-				if visible.count() != len(set(team_ids)):
-					raise Http404
 
-		# Base querysets scoped to visible orgs (no-op when middleware absent)
-		if visible_org_ids is not None:
-			articles_base     = Articles.objects.filter(teams__organization_id__in=visible_org_ids).distinct()
-			trials_base       = Trials.objects.filter(teams__organization_id__in=visible_org_ids).distinct()
-			authors_base      = Authors.objects.filter(articles__teams__organization_id__in=visible_org_ids).distinct()
-			sources_base      = Sources.objects.filter(team__organization_id__in=visible_org_ids)
-			subscribers_base  = Subscribers.objects.filter(subscriptions__team__organization_id__in=visible_org_ids)
+		# --- Parse ?organization= (alias ?org=) -------------------------
+		org_param = request.query_params.get('organization') or request.query_params.get('org')
+		org_ids = None
+		if org_param:
+			try:
+				org_ids = [int(o.strip()) for o in org_param.split(',') if o.strip()]
+			except ValueError:
+				return Response(
+					{'error': 'Invalid organization parameter. Expected integer or comma-separated integers.'},
+					status=status.HTTP_400_BAD_REQUEST,
+				)
+
+		# --- Visibility validation (no extra DB queries for org check) --
+		if org_ids and visible_org_ids is not None:
+			if not set(org_ids).issubset(visible_org_ids):
+				raise Http404
+
+		if team_ids and visible_org_ids is not None:
+			visible = Team.objects.filter(id__in=team_ids, organization_id__in=visible_org_ids)
+			if visible.count() != len(set(team_ids)):
+				raise Http404
+
+		# --- Resolve effective org scope --------------------------------
+		# org_ids already validated as a subset of visible_org_ids above,
+		# so the effective set is exactly org_ids when given.
+		if org_ids is not None:
+			effective_org_ids = set(org_ids)
 		else:
-			articles_base     = Articles.objects.all()
-			trials_base       = Trials.objects.all()
-			authors_base      = Authors.objects.all()
-			sources_base      = Sources.objects.all()
-			subscribers_base  = Subscribers.objects.all()
+			effective_org_ids = visible_org_ids  # may be None (middleware absent)
 
-		# Articles count
-		if team_ids:
-			articles_count = articles_base.filter(teams__in=team_ids).distinct().count()
+		# --- Resolve in-scope team IDs (one query, reused for all counts)
+		# When there is no scoping at all, fall through to .objects.all()
+		# to preserve teamless articles/trials in the unscoped count.
+		fully_unscoped = effective_org_ids is None and not team_ids
+
+		if not fully_unscoped:
+			teams_qs = Team.objects.all()
+			if effective_org_ids is not None:
+				teams_qs = teams_qs.filter(organization_id__in=effective_org_ids)
+			if team_ids:
+				teams_qs = teams_qs.filter(id__in=team_ids)
+			team_id_list = list(teams_qs.values_list('id', flat=True))
 		else:
-			articles_count = articles_base.count()
+			team_id_list = None
 
-		# Trials count
-		if team_ids:
-			trials_count = trials_base.filter(teams__in=team_ids).distinct().count()
+		# --- Cache lookup -----------------------------------------------
+		cache_key = 'stats:' + (
+			'all' if team_id_list is None
+			else ','.join(str(i) for i in sorted(team_id_list))
+		)
+		cached = cache.get(cache_key)
+		if cached is not None:
+			return Response(cached)
+
+		# --- Counts (single join per queryset) --------------------------
+		if fully_unscoped:
+			articles_count    = Articles.objects.count()
+			trials_count      = Trials.objects.count()
+			authors_count     = Authors.objects.count()
+			subscribers_count = Subscribers.objects.filter(active=True).distinct().count()
+			sources_qs        = Sources.objects.all()
 		else:
-			trials_count = trials_base.count()
+			articles_count = (
+				Articles.objects.filter(teams__in=team_id_list).distinct().count()
+			)
+			trials_count = (
+				Trials.objects.filter(teams__in=team_id_list).distinct().count()
+			)
+			authors_count = (
+				Authors.objects
+				.filter(articles__teams__in=team_id_list)
+				.distinct()
+				.count()
+			)
+			subscribers_count = (
+				Subscribers.objects
+				.filter(active=True, subscriptions__team__in=team_id_list)
+				.distinct()
+				.count()
+			)
+			# Sources has a direct FK to Team — no distinct needed.
+			sources_qs = Sources.objects.filter(team_id__in=team_id_list)
 
-		# Subscribers count (active only)
-		if team_ids:
-			subscribers_count = subscribers_base.filter(
-				active=True,
-				subscriptions__team__in=team_ids
-			).distinct().count()
-		else:
-			subscribers_count = subscribers_base.filter(active=True).distinct().count()
-
-		# Authors count (distinct authors linked to articles in scope)
-		if team_ids:
-			authors_count = authors_base.filter(
-				articles__teams__in=team_ids
-			).distinct().count()
-		else:
-			authors_count = authors_base.count()
-
-		# Sources queryset scoped to team(s)
-		if team_ids:
-			sources_qs = sources_base.filter(team__in=team_ids)
-		else:
-			sources_qs = sources_base
-
+		# --- Sources domain aggregation (single pass) -------------------
 		def extract_domain(url):
 			if not url:
 				return None
@@ -1964,34 +2285,24 @@ class StatsView(APIView):
 
 		source_data = list(sources_qs.values('link', 'source_for'))
 
-		# sources.total = number of unique domains
 		all_domains = set()
-		for s in source_data:
-			d = extract_domain(s['link'])
-			if d:
-				all_domains.add(d)
-
-		# sources.by_type = unique domain count per source type
 		type_domains = {}
-		for s in source_data:
-			d = extract_domain(s['link'])
-			if d:
-				type_domains.setdefault(s['source_for'], set()).add(d)
-		sources_by_type = {k: len(v) for k, v in type_domains.items()}
-
-		# sources.by_domain = each unique domain with count of individual feeds
 		domain_feed_count = {}
 		for s in source_data:
 			d = extract_domain(s['link'])
 			if d:
+				all_domains.add(d)
+				type_domains.setdefault(s['source_for'], set()).add(d)
 				domain_feed_count[d] = domain_feed_count.get(d, 0) + 1
+
+		sources_by_type = {k: len(v) for k, v in type_domains.items()}
 		sources_by_domain = sorted(
 			[{'domain': d, 'count': c} for d, c in domain_feed_count.items()],
 			key=lambda x: x['count'],
-			reverse=True
+			reverse=True,
 		)
 
-		return Response({
+		payload = {
 			'articles': articles_count,
 			'trials': trials_count,
 			'subscribers': subscribers_count,
@@ -2000,5 +2311,7 @@ class StatsView(APIView):
 				'total': len(all_domains),
 				'by_type': sources_by_type,
 				'by_domain': sources_by_domain,
-			}
-		})
+			},
+		}
+		cache.set(cache_key, payload, settings.STATS_CACHE_TTL)
+		return Response(payload)

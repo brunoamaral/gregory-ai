@@ -1,5 +1,6 @@
 from django.utils.timezone import now
 from datetime import timedelta
+from django.db.models import Q
 
 from api.models import APIAccessScheme, APIAccessSchemeLog
 from api.utils.exceptions import APIAccessDeniedError, APIError, APIInvalidAPIKeyError, APIInvalidIPAddressError, APINoAPIKeyError
@@ -86,3 +87,25 @@ def getNumberOfCallsInLastDay(access_scheme: APIAccessScheme) -> int:
 # Util function to get the number of calls made by the access scheme in a date range
 def getNumberOfCallsForDateRange(earlier_date, later_date) -> int:
     return APIAccessSchemeLog.objects.filter(access_date__range=(earlier_date, later_date)).count()
+
+
+def find_trial_by_identifier(identifiers: dict | None):
+    """Return a queryset of Trials matching any identifier key (euct, nct, eudract).
+
+    Caller decides whether to use .first() or .count()/.all() depending on
+    whether duplicates should be allowed.  The queryset is unevaluated so the
+    caller controls evaluation timing.
+    """
+    from gregory.models import Trials
+    if not identifiers:
+        return Trials.objects.none()
+    id_query = Q()
+    if identifiers.get('euct'):
+        id_query |= Q(identifiers__euct=identifiers['euct'])
+    if identifiers.get('nct'):
+        id_query |= Q(identifiers__nct=identifiers['nct'])
+    if identifiers.get('eudract'):
+        id_query |= Q(identifiers__eudract=identifiers['eudract'])
+    if not id_query:
+        return Trials.objects.none()
+    return Trials.objects.filter(id_query)

@@ -7,7 +7,7 @@ from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list
 from subscriptions.models import Lists, Subscribers, SentTrialNotification, FailedNotification
 
-from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
+from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url, get_postmark_credentials, get_site_and_settings
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 
@@ -98,10 +98,8 @@ class Command(BaseCommand):
 					custom_settings=customsettings
 				)
 				# Inject unsubscribe context for the footer template
-				_api_domain = getattr(customsettings, 'api_domain', '') or site.domain
-				_scheme = 'https' if _api_domain not in ('localhost', '127.0.0.1') else 'http'
 				summary_context['list_id'] = lst.list_id
-				summary_context['unsubscribe_base_url'] = f"{_scheme}://{_api_domain}"
+				summary_context['unsubscribe_base_url'] = build_unsubscribe_base_url(site, customsettings)
 				summary_context['header_title'] = lst.header_title or ''
 				summary_context['header_tagline'] = lst.header_tagline or ''
 				summary_context['show_header_tagline'] = lst.show_header_tagline
@@ -124,7 +122,7 @@ class Command(BaseCommand):
 					html=html_content,
 					text=text_content,
 					site=site,
-					sender_name=customsettings.title,
+					sender_name=customsettings.sender_name or customsettings.title,
 					api_token=postmark_api_token,
 					api_url=api_url,
 					sender_prefix=customsettings.sender_email_prefix,

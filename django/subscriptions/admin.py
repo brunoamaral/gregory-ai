@@ -4,28 +4,25 @@ from django.urls import path, reverse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
 import csv
+from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
 from django.template.loader import render_to_string
-from django.utils.html import strip_tags
 from django.contrib import messages
 from datetime import timedelta
 from django import forms
 from django.forms import BaseInlineFormSet
-import bleach
 from .models import Subscribers, Lists, FailedNotification, ListSubscription, SubscriberSiteProfile, Announcement, AnnouncementRecipient
 from .forms import ListsAdminForm, AnnouncementAdminForm
 from gregory.models import Team
-
-# Allowlist for announcement body HTML (used by bleach sanitization)
-_ANNOUNCEMENT_ALLOWED_TAGS = [
-	'p', 'strong', 'em', 'u', 's', 'ul', 'ol', 'li',
-	'a', 'h2', 'h3', 'h4', 'blockquote', 'br', 'hr',
-]
-_ANNOUNCEMENT_ALLOWED_ATTRS = {
-	'a': ['href', 'target', 'rel'],
-}
+from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url
+from subscriptions.utils.render_email_body import (
+	sanitize_announcement_html,
+	render_announcement_html,
+	render_announcement_text as _render_text_body,
+	strip_scheme,
+)
 
 
 class SubscriberSiteProfileInline(admin.TabularInline):
@@ -99,6 +96,17 @@ class SubscriptionListFilter(admin.SimpleListFilter):
 
 
 class SubscriberAdmin(admin.ModelAdmin):
+	"""Admin for subscribers.
+
+	The `active` column/filter is the subscriber's GLOBAL email switch: active=False
+	means they receive no email from any list (a master opt-out), independent of the
+	per-list subscriptions shown in the inline below. It is distinct from the
+	"Total Active Subscribers" analytics chart/KPIs, which count someone as active when
+	they hold at least one active list subscription rather than by this flag. (Some
+	other analytics endpoints — e.g. profile distribution and recent subscribers — do
+	still filter on this flag.) See the Subscribers.active help text and the
+	make_active/make_inactive actions.
+	"""
 	list_display = ['first_name', 'last_name', 'email', 'active', 'list_names', 'number_of_subscriptions', 'created_at']
 	list_filter = ['active', SubscriptionListFilter, 'created_at']
 	search_fields = ['first_name', 'last_name', 'email']
@@ -379,46 +387,63 @@ class SubscriberAdmin(admin.ModelAdmin):
 		labels = [p.strftime(date_fmt) for p in period_range]
 
 		# ── Active subscribers over time ───────────────────────────────────────
-		# Counts currently-active subscribers by when they joined, building a
-		# cumulative total at each period point.  This approximation tracks the
-		# growth trajectory of the current active base; subscribers who churned
-		# between their join date and now are not included.
-		# Mirror the KPI scorecard definition: active account + at least one active
-		# list subscription, so the final data point matches the scorecard value.
-		active_subs_qs = Subscribers.objects.filter(
-			active=True,
-			list_subscriptions__is_active=True,
-		).distinct()
+		# True historical headcount: at each period point we count the distinct
+		# subscribers who held at least one active list subscription on that date,
+		# reconstructed from each subscription's active interval (subscribed_at ->
+		# unsubscribed_at). Unlike a cumulative join-date count this can rise *and*
+		# fall, so past peaks are visible.
+		#
+		# "Active subscriber" is defined purely by subscription state (>=1 active
+		# subscription), NOT by the Subscribers.active account flag. That flag has no
+		# reliable history (most deactivations carry no timestamp) and has drifted out
+		# of sync with subscription state, so it cannot be reconstructed over time. The
+		# snapshot KPI (analytics_list_distribution) uses the same subscription-only
+		# definition, so the final data point equals the "Total Active Subscribers" card.
+		from collections import defaultdict
+
+		# As-of date for each bucket = last day of the bucket, clamped to end_date.
+		# For preset ranges the final bucket's as-of date is today, so the last
+		# data point matches the "Total Active Subscribers" KPI card.
+		as_of_dates = []
+		for i, p in enumerate(period_range):
+			if i + 1 < len(period_range):
+				as_of_dates.append(min(period_range[i + 1] - timedelta(days=1), end_date))
+			else:
+				as_of_dates.append(end_date)
+
+		sub_rows = ListSubscription.objects.all()
 		if org_ids is not None:
-			active_subs_qs = active_subs_qs.filter(
-				list_subscriptions__list__team__organization__id__in=org_ids
-			).distinct()
-
-		pre_existing = active_subs_qs.filter(created_at__date__lt=start_date).count()
-		creation_rows = (
-			active_subs_qs
-			.filter(
-				created_at__date__gte=start_date,
-				created_at__date__lte=end_date,
-			)
-			.annotate(period=trunc_fn('created_at'))
-			.values('period')
-			.annotate(count=Count('subscriber_id', distinct=True))
-			.order_by('period')
+			sub_rows = sub_rows.filter(list__team__organization__id__in=org_ids)
+		sub_rows = sub_rows.values_list(
+			'subscriber_id', 'subscribed_at', 'unsubscribed_at', 'is_active'
 		)
-		creation_by_period = {}
-		for row in creation_rows:
-			pk = row['period']
-			if pk:
-				if hasattr(pk, 'date'):
-					pk = pk.date()
-				creation_by_period[pk] = row['count']
 
-		cumulative = pre_existing
+		# Build each subscriber's active intervals as (start_date, end_date_or_None).
+		# Trust is_active over a possibly-stale unsubscribed_at (re-subscription reuses
+		# the same row). An inactive row with no unsubscribed_at can't be placed in time,
+		# so it is skipped (rare).
+		intervals_by_sub = defaultdict(list)
+		for sub_id, sub_at, unsub_at, is_active in sub_rows:
+			if not sub_at:
+				continue
+			start = timezone.localtime(sub_at).date()
+			if is_active:
+				end = None
+			elif unsub_at is not None:
+				end = timezone.localtime(unsub_at).date()
+			else:
+				continue
+			intervals_by_sub[sub_id].append((start, end))
+
 		active_subscribers_series = []
-		for p in period_range:
-			cumulative += creation_by_period.get(p, 0)
-			active_subscribers_series.append(cumulative)
+		for as_of in as_of_dates:
+			count = 0
+			for intervals in intervals_by_sub.values():
+				for start, end in intervals:
+					if start <= as_of and (end is None or end > as_of):
+						count += 1
+						break
+			active_subscribers_series.append(count)
 
 		return JsonResponse({
 			'labels': labels,
@@ -439,9 +464,13 @@ class SubscriberAdmin(admin.ModelAdmin):
 
 		This is an all-time current-state view (no date range filter). The period-scoped
 		'new subscribers' numbers are already shown by analytics_data / the summary cards.
-		Both KPI totals and the pie chart percentages are derived from the same base
-		queryset (active ListSubscription rows where the subscriber is also active)
-		so all numbers are internally consistent.
+
+		"Active" is defined purely by subscription state — a ListSubscription row with
+		is_active=True — NOT by the Subscribers.active account flag. That flag has drifted
+		out of sync with subscription state (accounts marked inactive that still hold active
+		subscriptions) and has no reliable history, so it is intentionally not used here.
+		The analytics_data time-series uses the same definition, so its final point matches
+		the "Total Active Subscribers" card below.
 		"""
 		org_ids = self._get_scoped_org_ids(request)
 
@@ -452,9 +481,9 @@ class SubscriberAdmin(admin.ModelAdmin):
 		except (ValueError, TypeError):
 			team_id = None
 
-		# Single base queryset — active subscriptions belonging to active subscribers.
+		# Single base queryset — active subscription rows (is_active=True).
 		# All downstream numbers derive from this so they are consistent.
-		base_qs = ListSubscription.objects.filter(is_active=True, subscriber__active=True)
+		base_qs = ListSubscription.objects.filter(is_active=True)
 		if org_ids is not None:
 			base_qs = base_qs.filter(list__team__organization__id__in=org_ids)
 
@@ -464,16 +493,16 @@ class SubscriberAdmin(admin.ModelAdmin):
 		# Total active subscription rows — this is the pie chart's 100%
 		total_active_subscriptions = base_qs.count()
 
-		# Inactive subscribers: account marked active=False OR active account with
-		# no active list subscriptions. Annotate first to avoid ambiguous ORM
-		# negation on reverse FK.
+		# Inactive subscribers: people who have at least one subscription but none
+		# currently active (i.e. they have opted out of every list). Annotate first to
+		# avoid ambiguous ORM negation on reverse FK.
 		inactive_sub_qs = Subscribers.objects.annotate(
 			active_subs_count=Count(
 				'list_subscriptions',
 				filter=Q(list_subscriptions__is_active=True),
 				distinct=True,
 			)
-		).filter(Q(active=False) | Q(active_subs_count=0))
+		).filter(active_subs_count=0)
 		if org_ids is not None:
 			inactive_sub_qs = inactive_sub_qs.filter(
 				list_subscriptions__list__team__organization__id__in=org_ids
@@ -749,15 +778,45 @@ class SubscriberAdmin(admin.ModelAdmin):
 	number_of_subscriptions.short_description = 'Subscriptions'
 	number_of_subscriptions.admin_order_field = 'active_subscription_count'
 
+	# The `active` flag is a GLOBAL email switch (see Subscribers.active help text):
+	# active=False suppresses all email for the subscriber regardless of their list
+	# subscriptions.
+	#
+	# make_active only clears that flag — it does NOT re-subscribe anyone to lists
+	# (re-subscription is an opt-in and must be done explicitly). make_inactive mirrors
+	# the "unsubscribe from everything" flow: it sets the flag AND opts the subscriber
+	# out of every list, so the global switch and per-list state stay consistent and the
+	# subscription-based analytics agree with the account flag (no drift).
 	def make_active(self, request, queryset):
 		updated_count = queryset.update(active=True)
-		self.message_user(request, f"{updated_count} subscriber(s) marked as active.")
-	make_active.short_description = "Mark selected subscribers as active"
+		self.message_user(
+			request,
+			f"{updated_count} subscriber(s) marked active — global email suppression removed. "
+			f"They will receive emails only for lists they are still actively subscribed to; "
+			f"individual list subscriptions were not changed.",
+		)
+	make_active.short_description = "Enable all emails (mark as active)"
 
 	def make_inactive(self, request, queryset):
-		updated_count = queryset.update(active=False)
-		self.message_user(request, f"{updated_count} subscriber(s) marked as inactive.")
-	make_inactive.short_description = "Mark selected subscribers as inactive"
+		now = timezone.now()
+		# Materialise the selected IDs: get_queryset() is annotated/distinct, which makes
+		# it unreliable as an `__in` subquery.
+		subscriber_ids = list(queryset.values_list('pk', flat=True))
+		with transaction.atomic():
+			updated_count = Subscribers.objects.filter(pk__in=subscriber_ids).update(active=False)
+			# Opt the selected subscribers out of every list they are still on, mirroring
+			# the global "unsubscribe from everything" flow. Preserve any existing
+			# unsubscribed_at; only stamp the rows that lack one.
+			stale_subs = ListSubscription.objects.filter(subscriber_id__in=subscriber_ids, is_active=True)
+			stale_subs.filter(unsubscribed_at__isnull=True).update(unsubscribed_at=now)
+			unsubscribed = stale_subs.update(is_active=False)
+		self.message_user(
+			request,
+			f"{updated_count} subscriber(s) marked inactive — they will receive no emails from any "
+			f"list. Also opted them out of {unsubscribed} active list subscription(s) so their list "
+			f"state matches this global opt-out.",
+		)
+	make_inactive.short_description = "Disable all emails (mark as inactive)"
 
 	@admin.action(description="Export selected subscribers as CSV")
 	def export_csv(self, request, queryset):
@@ -894,6 +953,10 @@ class ListsAdmin(admin.ModelAdmin):
 	inlines = [ListSubscriberInline]
 	filter_horizontal = ['subjects', 'latest_research_categories']
 	actions = ['reassign_to_team_action']
+
+	class Media:
+		js = ('subscriptions/admin/list_sort_toggle.js',)
+
 	fieldsets = [
 		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team', 'site']}),
 		('Email Header', {
@@ -902,9 +965,10 @@ class ListsAdmin(admin.ModelAdmin):
 		}),
 		('Email Types', {'fields': ['admin_summary', 'weekly_digest', 'clinical_trials_notifications']}),
 		('Content Settings', {
-			'fields': ['article_limit', 'ml_threshold'],
+			'fields': ['article_sort_order', 'lookback_days', 'article_limit', 'ml_threshold'],
 			'description': 'Configure content limits and ML prediction thresholds for weekly digest emails. '
-						'The ML threshold determines the minimum confidence level required for ML predictions to be considered relevant.'
+						'The ML threshold determines the minimum confidence level required for ML predictions to be considered relevant. '
+						'When sort order is set to "Date", the ML threshold is not used for article selection.'
 		}),
 		('Main Content', {
 			'fields': ['subjects'],
@@ -1052,6 +1116,14 @@ class AnnouncementAdmin(admin.ModelAdmin):
 	search_fields = ['subject']
 	readonly_fields = ['status', 'sent_at', 'recipients_count', 'failures_count', 'created_by', 'created_at']
 	inlines = [AnnouncementRecipientInline]
+	actions = ['duplicate_announcements']
+
+	class Media:
+		# Loaded as a plain <script> tag AFTER the CKEditor bundle (widget
+		# media loads first via form media, admin class media appends after).
+		# Uses window.ckeditorRegisterCallback — no CKEditor plugin
+		# infrastructure needed.
+		js = ('subscriptions/ckeditor/button_plugin.js',)
 
 	fieldsets = [
 		(None, {'fields': ['subject']}),
@@ -1060,7 +1132,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			'description': 'Optionally override the title (defaults to "Gregory AI"), override or hide the tagline shown in the email header, and set the email preheader text.',
 		}),
 		('Body', {'fields': ['body']}),
-		('Destination', {'fields': ['lists']}),
+		('Destination', {'fields': ['organization', 'lists']}),
 
 		('Send Status', {
 			'fields': ['status', 'created_by', 'created_at', 'sent_at', 'recipients_count', 'failures_count'],
@@ -1100,19 +1172,126 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		from gregory.admin import get_user_organizations
 		user_orgs = get_user_organizations(request.user)
 		if user_orgs is not None:
-			return qs.filter(lists__team__organization__id__in=user_orgs).distinct()
+			return qs.filter(organization_id__in=user_orgs)
 		return qs
 
 	def get_readonly_fields(self, request, obj=None):
 		readonly = list(super().get_readonly_fields(request, obj))
 		if obj and obj.status == 'sent':
-			readonly.extend(['subject', 'header_title', 'header_tagline', 'body', 'lists'])
+			readonly.extend([
+				'subject', 'header_title', 'header_tagline',
+				'body', 'lists', 'organization',
+			])
 		return readonly
 
 	def save_model(self, request, obj, form, change):
 		if not change:
 			obj.created_by = request.user
+			if obj.organization_id is None:
+				# Defence in depth — the form should always set this.
+				from organizations.models import Organization
+				user_orgs = (
+					request.user.organizations_organizationuser
+					.order_by('pk').first()
+				)
+				obj.organization = (
+					user_orgs.organization if user_orgs
+					else Organization.objects.order_by('pk').first()
+				)
 		super().save_model(request, obj, form, change)
+
+	@admin.action(description="Duplicate selected announcements as drafts")
+	def duplicate_announcements(self, request, queryset):
+		from gregory.admin import get_user_organizations
+
+		if not self.has_add_permission(request):
+			self.message_user(
+				request,
+				"You don't have permission to create announcements.",
+				level=messages.ERROR,
+			)
+			return None
+
+		# Materialize org IDs once as a set to avoid re-evaluating the queryset
+		# on every per-source permission check inside the loop.
+		user_org_ids = (
+			None if request.user.is_superuser
+			else set(get_user_organizations(request.user))
+		)
+
+		created = []
+		skipped_sending = []
+		skipped_perm = 0
+
+		for source in queryset:
+			# Per-source permission re-check. Mirrors _get_announcement_or_404.
+			if user_org_ids is not None:
+				if source.organization_id not in user_org_ids:
+					skipped_perm += 1
+					continue
+
+			if source.status == 'sending':
+				skipped_sending.append(source.subject)
+				continue
+
+			copy = Announcement.objects.create(
+				subject=source.subject,
+				header_title=source.header_title,
+				header_tagline=source.header_tagline,
+				show_header_tagline=source.show_header_tagline,
+				preheader_text=source.preheader_text,
+				body=source.body,
+				created_by=request.user,
+				organization=source.organization,
+				status='draft',
+			)
+			# Defensive: ensure no recipients_count/failures_count/sent_at
+			# carry over (defaults already handle this; keep explicit for
+			# readers).
+			# lists M2M intentionally left empty (see spec, Goal 4).
+			created.append(copy)
+
+		if skipped_sending:
+			self.message_user(
+				request,
+				"Skipped %d announcement(s) currently sending: %s" % (
+					len(skipped_sending),
+					", ".join(skipped_sending),
+				),
+				level=messages.WARNING,
+			)
+
+		if skipped_perm:
+			self.message_user(
+				request,
+				"Skipped %d announcement(s) you don't have permission to duplicate." % skipped_perm,
+				level=messages.WARNING,
+			)
+
+		if not created:
+			self.message_user(
+				request,
+				"No announcements were duplicated.",
+				level=messages.INFO,
+			)
+			return None
+
+		if len(created) == 1:
+			self.message_user(
+				request,
+				"Duplicated 1 announcement as a draft.",
+				level=messages.SUCCESS,
+			)
+			return redirect(
+				reverse('admin:subscriptions_announcement_change', args=[created[0].pk])
+			)
+
+		self.message_user(
+			request,
+			"Duplicated %d announcements as drafts." % len(created),
+			level=messages.SUCCESS,
+		)
+		return None
 
 	def get_urls(self):
 		urls = super().get_urls()
@@ -1142,21 +1321,20 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			from gregory.admin import get_user_organizations
 			user_orgs = get_user_organizations(request.user)
 			if user_orgs is not None:
-				if not announcement.lists.filter(team__organization__id__in=user_orgs).exists():
+				# Evaluate the queryset once into a set for O(1) membership check.
+				if announcement.organization_id not in set(user_orgs):
 					return None
 		return announcement
 
 	def _render_announcement_email(self, announcement, subscriber=None, site=None, list_id=None, custom_settings=None):
 		"""Render announcement as HTML email using the base template."""
-		safe_body = bleach.clean(
-			announcement.body,
-			tags=_ANNOUNCEMENT_ALLOWED_TAGS,
-			attributes=_ANNOUNCEMENT_ALLOWED_ATTRS,
-			strip=True,
-		)
+		api_domain = (getattr(custom_settings, 'api_domain', '') or '') if custom_settings else ''
+		site_domain = (getattr(site, 'domain', '') or '') if site else ''
+		sanitized = sanitize_announcement_html(announcement.body)
+		rendered_body = render_announcement_html(sanitized, api_domain, site_domain)
 		context = {
 			'announcement_subject': announcement.subject,
-			'announcement_body': safe_body,
+			'announcement_body': rendered_body,
 			'email_type': 'announcement',
 			'show_date': True,
 			'current_date': timezone.now(),
@@ -1178,10 +1356,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if subscriber:
 			context['subscriber'] = subscriber
 		if site:
-			_api_domain = getattr(custom_settings, 'api_domain', '') if custom_settings else ''
-			_api_domain = _api_domain or site.domain
-			_scheme = 'https' if _api_domain not in ('localhost', '127.0.0.1') else 'http'
-			context['unsubscribe_base_url'] = f"{_scheme}://{_api_domain}"
+			context['unsubscribe_base_url'] = build_unsubscribe_base_url(site, custom_settings)
 			context['site'] = site
 		if list_id:
 			context['list_id'] = list_id
@@ -1193,7 +1368,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		lines = []
 		if subscriber and subscriber.first_name:
 			lines.append(f"Hello {subscriber.first_name},\n")
-		lines.append(strip_tags(announcement.body))
+		lines.append(_render_text_body(sanitize_announcement_html(announcement.body)))
 		return '\n'.join(lines)
 
 	def preview_view(self, request, announcement_id):
@@ -1248,22 +1423,49 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if request.method == 'POST':
 			from subscriptions.management.commands.utils.send_email import send_email
 			from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
+			from sitesettings.models import CustomSetting
+			from django.contrib.sites.models import Site
+			from subscriptions.utils.announcement_send_validation import validate_announcement_send_config
+			from django.conf import settings as dj_settings
 
 			# Use the first list's team for credentials
-			first_list = announcement.lists.select_related('team').first()
+			first_list = announcement.lists.select_related('team', 'site').first()
 			if not first_list:
 				messages.error(request, "No lists selected. Please select at least one list before sending a test.")
 				return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
 
 			try:
 				site, custom_settings = get_site_and_settings(first_list.team, list_obj=first_list)
-				api_token, api_url = get_postmark_credentials(custom_settings=custom_settings, organization=first_list.team.organization)
-			except Exception:
-				api_token, api_url, site, custom_settings = None, None, None, None
+			except CustomSetting.DoesNotExist:
+				# Resolve site without CustomSetting so we can still report it.
+				site = first_list.site or Site.objects.get_current()
+				custom_settings = None
+
+			# Validate before attempting to send — abort with clear error if broken.
+			errors = validate_announcement_send_config(
+				announcement,
+				site,
+				custom_settings,
+				probe_media=getattr(dj_settings, 'ANNOUNCEMENT_PROBE_MEDIA', False),
+			)
+			if errors:
+				for msg in errors:
+					messages.error(request, msg)
+				return redirect(
+					reverse('admin:subscriptions_announcement_change', args=[announcement.pk])
+				)
+
+			api_token, api_url = get_postmark_credentials(
+				custom_settings=custom_settings, organization=first_list.team.organization
+			)
 
 			html = self._render_announcement_email(announcement, site=site, custom_settings=custom_settings)
 			text = self._render_announcement_text(announcement)
 
+			sender_name = (
+				(custom_settings.sender_name or custom_settings.title)
+				if custom_settings else None
+			) or 'Gregory AI'
 			try:
 				response = send_email(
 					to=request.user.email,
@@ -1271,6 +1473,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					html=html,
 					text=text,
 					site=site,
+					sender_name=sender_name,
 					api_token=api_token,
 					api_url=api_url,
 				)
@@ -1284,12 +1487,50 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
 
 		# GET — show confirmation form
+		from subscriptions.management.commands.utils.get_credentials import get_site_and_settings
+		from sitesettings.models import CustomSetting
+		from django.contrib.sites.models import Site
+		from bs4 import BeautifulSoup as _BeautifulSoup
+
+		preview_info = None
+		first_list = announcement.lists.select_related('team', 'site').first()
+		if first_list:
+			try:
+				_site, _cs = get_site_and_settings(first_list.team, list_obj=first_list)
+			except CustomSetting.DoesNotExist:
+				_site = first_list.site or Site.objects.get_current()
+				_cs = None
+			# Normalise api_domain: strip any scheme/path so we never build
+			# double-scheme preview URLs like https://https://api.example.com/...
+			_api_domain_raw = (getattr(_cs, 'api_domain', '') or '').strip()
+			_api_domain = strip_scheme(_api_domain_raw)  # bare host[:port] or ''
+			_sender_prefix = (getattr(_cs, 'sender_email_prefix', '') or 'gregory').strip()
+			_sender_addr = f"{_sender_prefix}@{_site.domain}" if _site else ''
+			# Compute rewritten src for every /media/ image in the body.
+			_soup = _BeautifulSoup(announcement.body or '', 'html.parser')
+			image_rewrites = []
+			for _img in _soup.find_all('img'):
+				_src = _img.get('src', '')
+				if _src.startswith('/media/') and _api_domain:
+					image_rewrites.append((_src, f"https://{_api_domain}{_src}"))
+				else:
+					image_rewrites.append((_src, _src))
+			preview_info = {
+				'site_domain': _site.domain if _site else '',
+				'api_domain': _api_domain,
+				'sender_addr': _sender_addr,
+				'sender_name': (getattr(_cs, 'sender_name', '') or getattr(_cs, 'title', '') or 'Gregory AI'),
+				'image_rewrites': image_rewrites,
+				'list_name': first_list.list_name,
+			}
+
 		context = {
 			**self.admin_site.each_context(request),
 			'announcement': announcement,
 			'user_email': request.user.email,
 			'title': f'Send Test: {announcement.subject}',
 			'opts': self.model._meta,
+			'preview_info': preview_info,
 		}
 		return render(request, 'admin/subscriptions/announcement/send_test.html', context)
 
@@ -1325,24 +1566,56 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if request.method == 'POST':
 			from subscriptions.management.commands.utils.send_email import send_email
 			from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
-
-			announcement.status = 'sending'
-			announcement.save(update_fields=['status'])
+			from sitesettings.models import CustomSetting
+			from django.contrib.sites.models import Site
+			from subscriptions.utils.announcement_send_validation import validate_announcement_send_config
+			from django.conf import settings as dj_settings
 
 			success_count = 0
 			failure_count = 0
 
-			# Pre-compute credentials per list to avoid re-fetching for every subscriber
+			# Pre-compute credentials per list to avoid re-fetching for every subscriber.
+			# Validate each list's config BEFORE marking the announcement as 'sending' so
+			# a broken config leaves the announcement in its prior state (draft/scheduled)
+			# and the author can fix and retry.
+			# Iterate target_lists (not all_subscribers) so that lists with zero active
+			# subscribers are also validated and can block the send.
 			list_credentials = {}
-			for _email, (_sub, _lst) in all_subscribers.items():
+			list_errors: dict[int, list[str]] = {}
+			for _lst in target_lists:
 				pk = _lst.list_id
-				if pk not in list_credentials:
-					try:
-						_site, _cs = get_site_and_settings(_lst.team, list_obj=_lst)
-						_api_token, _api_url = get_postmark_credentials(custom_settings=_cs, organization=_lst.team.organization)
-					except Exception:
-						_api_token, _api_url, _site, _cs = None, None, None, None
-					list_credentials[pk] = (_api_token, _api_url, _site, _cs)
+				try:
+					_site, _cs = get_site_and_settings(_lst.team, list_obj=_lst)
+				except CustomSetting.DoesNotExist:
+					_site = _lst.site or Site.objects.get_current()
+					_cs = None
+				errs = validate_announcement_send_config(
+					announcement, _site, _cs,
+					probe_media=getattr(dj_settings, 'ANNOUNCEMENT_PROBE_MEDIA', False),
+				)
+				if errs:
+					list_errors[pk] = errs
+					continue
+				_api_token, _api_url = get_postmark_credentials(
+					custom_settings=_cs, organization=_lst.team.organization,
+				)
+				list_credentials[pk] = (_api_token, _api_url, _site, _cs)
+
+			if list_errors:
+				for pk, errs in list_errors.items():
+					list_name = next(
+						(lst.list_name for lst in target_lists if lst.list_id == pk),
+						f"List {pk}",
+					)
+					for msg in errs:
+						messages.error(request, f"{list_name}: {msg}")
+				return redirect(
+					reverse('admin:subscriptions_announcement_change', args=[announcement.pk])
+				)
+
+			# All lists validated — safe to flip status.
+			announcement.status = 'sending'
+			announcement.save(update_fields=['status'])
 
 			# Group subscribers by the list (for credentials resolution)
 			# Use the list from which we first encountered them
@@ -1359,12 +1632,17 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					live_subject = announcement.subject
 					if live_subject.startswith('[TEST] '):
 						live_subject = live_subject[7:]
+					_sender_name = (
+						(custom_settings.sender_name or custom_settings.title)
+						if custom_settings else None
+					) or 'Gregory AI'
 					response = send_email(
 						to=subscriber.email,
 						subject=live_subject,
 						html=html,
 						text=text,
 						site=site,
+						sender_name=_sender_name,
 						api_token=api_token,
 						api_url=api_url,
 					)

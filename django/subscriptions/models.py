@@ -35,6 +35,32 @@ class Lists(models.Model):
 		help_text="ML prediction confidence threshold (0.0-1.0). Only articles with ML predictions above this threshold will be considered relevant.",
 		verbose_name="ML Threshold for Relevance"
 	)
+	# Lookback window for weekly digest emails
+	lookback_days = models.PositiveIntegerField(
+		default=30,
+		validators=[MinValueValidator(1), MaxValueValidator(365)],
+		help_text=(
+			"How many days back to look for articles and trials in the weekly digest. "
+			"Common values: 8, 15, 30. Maximum 365."
+		),
+		verbose_name="Lookback Window (days)",
+	)
+	# Article sort order for weekly digest emails
+	ARTICLE_SORT_CHOICES = [
+		('relevancy', 'Relevancy (manual + ML consensus, ranked)'),
+		('date', 'Date (all subject-matched articles, newest first)'),
+	]
+	article_sort_order = models.CharField(
+		max_length=20,
+		choices=ARTICLE_SORT_CHOICES,
+		default='relevancy',
+		help_text=(
+			"How articles are selected and ordered in weekly digest emails. "
+			"'relevancy' applies ML/manual filtering and priority ranking. "
+			"'date' includes all subject-matched articles ordered by discovery date (newest first)."
+		),
+		verbose_name="Article Sort Order",
+	)
 	# Latest research categories
 	latest_research_categories = models.ManyToManyField(
 		'gregory.TeamCategory', 
@@ -106,7 +132,21 @@ class Subscribers(models.Model):
 	first_name = models.CharField(max_length=150, null=False, blank=False)
 	last_name = models.CharField(max_length=150, null=True, blank=True)
 	email = models.EmailField(max_length=254, unique=True, null=False, blank=False)
-	active = models.BooleanField(default=True)
+	active = models.BooleanField(
+		default=True,
+		help_text=(
+			"Global email switch for this subscriber. When unchecked, they receive NO "
+			"emails from any list — a master opt-out that is independent of the individual "
+			"list subscriptions below. It is set automatically when someone unsubscribes "
+			"from everything, and manually via the 'Disable all emails' admin action. "
+			"Per-list opt-outs do NOT change this flag. Note: the 'Total Active "
+			"Subscribers' analytics chart and snapshot KPIs count someone as 'active' by "
+			"whether they hold at least one active list subscription, not by this flag, so "
+			"those numbers can differ from the active/inactive account counts. (Other "
+			"analytics surfaces, such as the profile and recent-subscriber views, do still "
+			"filter on this flag.)"
+		),
+	)
 	is_admin = models.BooleanField(default=False)
 	unsubscribe_token = models.UUIDField(
 		default=uuid.uuid4,
@@ -310,6 +350,13 @@ class Announcement(models.Model):
 	body = CKEditor5Field(
 		config_name='default',
 		help_text="The content of the announcement email.",
+	)
+	organization = models.ForeignKey(
+		'organizations.Organization',
+		on_delete=models.PROTECT,
+		related_name='announcements',
+		help_text="The organization that owns this announcement. "
+		          "Determines who can see and edit it.",
 	)
 	lists = models.ManyToManyField(
 		Lists,

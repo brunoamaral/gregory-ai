@@ -79,6 +79,7 @@ db-pull: | $(BACKUP_DIR)
 	docker exec -i db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < $(DUMP_FILE)
 	@echo "==> Running Django migrations ..."
 	docker exec gregory python manage.py migrate --run-syncdb
+	docker exec gregory python manage.py createcachetable gregory_cache
 	@echo "==> Done. Local database is now a copy of production."
 
 ## Restore the most recently modified SQL file in $(BACKUP_DIR)/
@@ -136,6 +137,7 @@ db-upgrade-finish: | $(BACKUP_DIR)
 	docker compose up -d gregory
 	@echo "==> Running Django migrations"
 	docker exec gregory python manage.py migrate --run-syncdb
+	docker exec gregory python manage.py createcachetable gregory_cache
 	@echo "==> Done. Verify, then remove postgres-data.pre-upgrade.* once happy."
 
 $(BACKUP_DIR):

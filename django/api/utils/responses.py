@@ -14,6 +14,10 @@ ARTICLE_EXISTS = 7
 ARTICLE_NOT_SAVED = 8
 DOI_NOT_FOUND = 9
 CROSS_ORG_PAYLOAD = 10
+ARTICLE_NOT_FOUND = 11
+TRIAL_NOT_FOUND = 12
+DUPLICATE_ARTICLE = 13
+DUPLICATE_TRIAL = 14
 
 ERRORS = {
     UNEXPECTED: 'Unexpected error. Please contact the support team.',
@@ -27,6 +31,10 @@ ERRORS = {
     ARTICLE_NOT_SAVED: 'Could not save the article that was received',
     DOI_NOT_FOUND: 'Tried query on Crossref.org for articles with a matching title, got no results.',
     CROSS_ORG_PAYLOAD: 'The source_id belongs to an organisation different from the one bound to your API key.',
+    ARTICLE_NOT_FOUND: 'No article was found matching the provided DOI.',
+    TRIAL_NOT_FOUND: 'No trial was found matching the provided identifier.',
+    DUPLICATE_ARTICLE: 'Multiple articles match the provided DOI. Resolve duplicates before editing.',
+    DUPLICATE_TRIAL: 'Multiple trials match the provided identifier. Resolve duplicates before editing.',
 }
 
 def returnData(data):

@@ -115,6 +115,20 @@ class EmailContentOrganizer:
     
     def _organize_weekly_articles(self, articles, subscriber, list_obj):
         """Organize articles for weekly summary emails."""
+        # Date mode: flat list ordered by discovery_date, no featured/regular split.
+        if getattr(list_obj, 'article_sort_order', 'relevancy') == 'date':
+            if hasattr(articles, 'order_by'):
+                sorted_list = list(articles.order_by('-discovery_date'))
+            else:
+                sorted_list = sorted(articles, key=lambda x: x.discovery_date, reverse=True)
+            return {
+                'featured_articles': [],
+                'regular_articles': sorted_list,
+                'total_count': len(sorted_list),
+                'high_confidence_count': 0,
+            }
+
+        # Relevancy mode: split into high-confidence (featured) and regular.
         # Get high-confidence articles first
         high_confidence_articles = self._filter_high_confidence(articles)
         
@@ -356,7 +370,8 @@ class EmailRenderingPipeline:
         
     def prepare_optimized_context(self, email_type, articles=None, trials=None, 
                                 subscriber=None, list_obj=None, site=None, 
-                                custom_settings=None, confidence_threshold=None, utm_params=None):
+                                custom_settings=None, confidence_threshold=None, utm_params=None,
+                                organization=None):
         """
         Prepare optimized context with content organization and performance enhancements.
         
@@ -422,6 +437,12 @@ class EmailRenderingPipeline:
             )
             
             # Build optimized context
+            # Derive site domain for URL fallbacks from the site linked to the list.
+            # Strip whitespace to guard against accidental spaces in Site.domain.
+            _site_domain = site.domain.strip() if site and site.domain else ''
+            _site_scheme = 'http' if _site_domain in ('localhost', '127.0.0.1') else 'https'
+            _site_url_base = f'{_site_scheme}://{_site_domain}' if _site_domain else ''
+
             context = {
                 'email_type': email_type,
                 'current_date': timezone.now(),
@@ -430,14 +451,15 @@ class EmailRenderingPipeline:
                 'custom_settings': custom_settings,
                 'customsettings': custom_settings,  # Template compatibility
                 
-                # Site domain for URL construction (fallback logic same as send_weekly_summary.py)
-                'site_domain': site.domain if site and site.domain and site.domain.strip() else 'gregory-ms.com',
+                # Site domain for URL construction
+                'site_domain': _site_domain,
                 
                 # UTM parameters for link tracking
                 'utm_params': utm_params or {},
                 
-                # Footer context from CustomSetting
-                'website_url': getattr(custom_settings, 'website_url', ''),
+                # Footer context from CustomSetting, falling back to site domain when not set.
+                # This ensures footer links always reflect the domain the list is linked to.
+                'website_url': getattr(custom_settings, 'website_url', '') or _site_url_base,
                 'support_url': getattr(custom_settings, 'support_url', ''),
                 'about_url': getattr(custom_settings, 'about_url', ''),
                 'contact_url': getattr(custom_settings, 'contact_url', ''),
@@ -507,6 +529,32 @@ class EmailRenderingPipeline:
                        f"{content_stats['total_articles']} articles, "
                        f"{content_stats['total_trials']} trials")
             
+            # Build per-org content map for email templates
+            if organization is not None:
+                from gregory.models import ArticleOrgContent
+                all_email_articles = (
+                    list(context.get('articles', []))
+                    + list(context.get('additional_articles', []))
+                )
+                article_ids = [a.article_id for a in all_email_articles if hasattr(a, 'article_id')]
+                org_contents = {
+                    oc.article_id: oc
+                    for oc in ArticleOrgContent.objects.filter(
+                        article_id__in=article_ids,
+                        organization=organization,
+                    )
+                }
+                context['org_content_map'] = org_contents
+            else:
+                _ORG_EXPECTED_TYPES = {'weekly_summary', 'admin_summary'}
+                if email_type in _ORG_EXPECTED_TYPES:
+                    logger.warning(
+                        "prepare_optimized_context called without organization for email_type=%s; "
+                        "org_content_map will be empty. Pass organization= for team-owned emails.",
+                        email_type,
+                    )
+                context['org_content_map'] = {}
+            
             return context
             
         except Exception as e:
@@ -526,6 +574,10 @@ class EmailRenderingPipeline:
     
     def _get_fallback_context(self, email_type, subscriber, site, custom_settings):
         """Provide fallback context if optimization fails."""
+        # Strip whitespace to guard against accidental spaces in Site.domain.
+        _site_domain = site.domain.strip() if site and site.domain else ''
+        _site_scheme = 'http' if _site_domain in ('localhost', '127.0.0.1') else 'https'
+        _site_url_base = f'{_site_scheme}://{_site_domain}' if _site_domain else ''
         base_context = {
             'email_type': email_type,
             'current_date': timezone.now(),
@@ -543,7 +595,7 @@ class EmailRenderingPipeline:
             'optimization_enabled': False,
             'error_mode': True,
             'title': getattr(custom_settings, 'title', 'Gregory AI'),
-            'website_url': getattr(custom_settings, 'website_url', ''),
+            'website_url': getattr(custom_settings, 'website_url', '') or _site_url_base,
             'support_url': getattr(custom_settings, 'support_url', ''),
             'about_url': getattr(custom_settings, 'about_url', ''),
             'contact_url': getattr(custom_settings, 'contact_url', ''),

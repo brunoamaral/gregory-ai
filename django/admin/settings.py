@@ -34,7 +34,9 @@ if SECRET_KEY == 'DEFAULT SECRET_KEY':
     print("Using default SECRET_KEY for development. DO NOT use in production!")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG= True
+# Secure by default: production is safe even if DJANGO_DEBUG is unset.
+# For local development, set DJANGO_DEBUG=True in your .env file.
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('true', '1', 'yes')
 SITE_ID = 1
 # FERNET SECRET KEY
 FERNET_SECRET_KEY = os.environ.get('FERNET_SECRET_KEY', 'DEFAULT KEY GOES HERE')
@@ -49,19 +51,21 @@ FORMS_URLFIELD_ASSUME_HTTPS = True
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 
 ALLOWED_HOSTS = [
+    '142.93.160.186',
 	'0.0.0.0',
 	'localhost',
 	'127.0.0.1',
 	'gregory',
+    'brain-regeneration.com',
+    'api.brain-regeneration.com',
 	'api.' + os.environ.get('DOMAIN_NAME', ''),
-	'manage.' + os.environ.get('DOMAIN_NAME', ''),
-	'example.com',  
 ]
 
 CSRF_TRUSTED_ORIGINS = [
+    'https://brain-regeneration.com',
+    'https://api.brain-regeneration.com',
 	'https://' + os.environ.get('DOMAIN_NAME', ''),
 	'https://api.' + os.environ.get('DOMAIN_NAME', ''),
-	'https://manage.' + os.environ.get('DOMAIN_NAME', ''),
 ]
 
 # Application definition
@@ -69,7 +73,6 @@ INSTALLED_APPS = [
 	'gregory.apps.GregoryConfig',
 	'subscriptions.apps.SubscriptionsConfig',
 	'rest_framework',
-	'rest_framework.authtoken',
 	'rest_framework_simplejwt',
 	'rest_framework_csv',  # Add CSV renderer support
 	'django_filters',
@@ -101,6 +104,7 @@ MIDDLEWARE = [
 	'django.contrib.sites.middleware.CurrentSiteMiddleware',
 	'simple_history.middleware.HistoryRequestMiddleware',
 	'gregory.middleware.visibility.VisibleOrgMiddleware',
+	'api.middleware.ApiKeyMiddleware',
 ]
 
 ROOT_URLCONF = 'admin.urls'
@@ -135,6 +139,18 @@ DATABASES = {
 	}
 }
 
+# Cache backend — shared across gunicorn workers via the existing Postgres DB.
+# Run `python manage.py createcachetable gregory_cache` once after deploy to create the table.
+CACHES = {
+	'default': {
+		'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+		'LOCATION': 'gregory_cache',
+	}
+}
+
+# TTL (seconds) for the /stats/ response cache. Override via STATS_CACHE_TTL env var.
+STATS_CACHE_TTL = int(os.environ.get('STATS_CACHE_TTL', '600'))
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
 	{'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -166,12 +182,41 @@ CKEDITOR_5_CONFIGS = {
 			'bulletedList', 'numberedList', '|',
 			'link', 'blockQuote', '|',
 			'horizontalLine', '|',
+			'imageUpload', 'insertImage', '|',
 			'undo', 'redo',
 		],
 		'language': 'en',
+		'image': {
+			'toolbar': [
+				'imageTextAlternative', '|',
+				'imageStyle:full', 'imageStyle:side',
+			],
+		},
+		# General HTML Support — allow <a class="btn-cta"> to be preserved
+		# in the CKEditor model and output so the button plugin can insert it.
+		'htmlSupport': {
+			'allow': [
+				{'name': 'a', 'classes': ['btn-cta']},
+			],
+		},
+		# NOTE: button_plugin.js is NOT listed here as an extraPlugin.
+		# CKEditor 5's extraPlugins expects constructor references, not file
+		# paths — loading it that way throws plugincollection-plugin-not-found.
+		# The script is instead loaded as a regular Django Media JS on the
+		# AnnouncementAdmin page (see subscriptions/admin.py).
 	},
 }
 CKEDITOR_5_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
+
+# Point the CKEditor 5 widget's upload URL at our hardened view
+# (django/subscriptions/views.py::ckeditor_upload).
+CK_EDITOR_5_UPLOAD_FILE_VIEW_NAME = 'subscriptions_ckeditor_upload'
+
+# When True, the announcement send-validation helper probes each /media/ image
+# URL with a HEAD request to confirm the file is reachable before sending.
+# Off by default because it makes an outbound HTTP call during an admin request;
+# useful in staging to catch missing files.
+ANNOUNCEMENT_PROBE_MEDIA = False
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

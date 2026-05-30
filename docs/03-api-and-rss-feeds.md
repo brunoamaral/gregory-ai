@@ -169,7 +169,61 @@ GET /articles/?has_clinical_trials=true
 | Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | |
 | RSS feeds | `GET /feed/author/{orcid}/` | `orcid` (path) | |
 | RSS feeds | `GET /feed/trials/subject/{subject_slug}/` | `subject_slug` (path) | |
+| Stats | `GET /stats/` | `team`, `organization` (alias `org`), `include_public` | See [Stats endpoint](#stats-endpoint) below |
 | Subscriptions | `POST /subscriptions/new/` | `first_name`, `last_name`, `email`, `profile`, `list` | |
+
+### Stats endpoint
+
+`GET /stats/` returns aggregate counts for the data visible to the caller.
+
+```
+GET /stats/
+GET /stats/?organization=3
+GET /stats/?organization=3,7
+GET /stats/?team=12
+GET /stats/?organization=3&team=12
+GET /stats/?include_public=true
+```
+
+Response shape (unchanged across all filter combinations):
+
+```json
+{
+  "articles": 1234,
+  "trials": 56,
+  "subscribers": 78,
+  "authors": 910,
+  "sources": {
+    "total": 42,
+    "by_type": { "science paper": 35, "clinical trial": 7 },
+    "by_domain": [
+      { "domain": "pubmed.ncbi.nlm.nih.gov", "count": 12 },
+      ...
+    ]
+  }
+}
+```
+
+#### Filter parameters
+
+| Parameter | Type | Behaviour |
+|:----------|:-----|:----------|
+| `organization` | int or CSV of ints | Scope counts to one or more organisations. Alias `org` is accepted. |
+| `team` | int or CSV of ints | Scope counts to one or more teams. |
+| `include_public` | bool (`true`/`false`) | Handled by the visibility layer — adds public-org data for identified callers. |
+
+When both `organization` and `team` are given the effective scope is their **intersection**: teams that belong to the requested org(s).
+
+#### Error responses
+
+| Status | Condition |
+|:-------|:----------|
+| `400 Bad Request` | Non-integer value in `team` or `organization`. |
+| `404 Not Found` | Any requested `team` or `organization` is not visible to the caller (hidden org — existence is not leaked). |
+
+#### Caching
+
+Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using Django's database cache. All gunicorn workers share the same cached value. The cache key encodes the resolved set of in-scope team IDs, so different filter combinations are cached independently.
 
 ### Trials-specific filter parameters
 

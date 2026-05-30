@@ -18,6 +18,7 @@ from django.views.decorators.http import require_http_methods
 
 from gregory.models import Articles, Trials
 from sitesettings.models import CustomSetting
+from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url
 from subscriptions.models import Lists, Subscribers
 from templates.emails.components.content_organizer import get_optimized_email_context
 
@@ -157,9 +158,7 @@ def _build_preview_context(request, template_name):
 		context['header_title'] = list_obj.header_title or ''
 		context['header_tagline'] = list_obj.header_tagline or ''
 		context['show_header_tagline'] = list_obj.show_header_tagline
-	scheme = 'https'
-	domain = getattr(site, 'domain', 'gregory-ms.com') or 'gregory-ms.com'
-	context['unsubscribe_base_url'] = f"{scheme}://{domain}"
+	context['unsubscribe_base_url'] = build_unsubscribe_base_url(site, custom_settings)
 	context['subscriber'] = subscriber
 
 	return context
