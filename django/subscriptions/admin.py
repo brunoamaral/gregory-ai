@@ -4,6 +4,7 @@ from django.urls import path, reverse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
 import csv
+from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
@@ -779,8 +780,13 @@ class SubscriberAdmin(admin.ModelAdmin):
 
 	# The `active` flag is a GLOBAL email switch (see Subscribers.active help text):
 	# active=False suppresses all email for the subscriber regardless of their list
-	# subscriptions. These actions only flip that flag — they do NOT change the
-	# per-list ListSubscription.is_active opt-outs.
+	# subscriptions.
+	#
+	# make_active only clears that flag — it does NOT re-subscribe anyone to lists
+	# (re-subscription is an opt-in and must be done explicitly). make_inactive mirrors
+	# the "unsubscribe from everything" flow: it sets the flag AND opts the subscriber
+	# out of every list, so the global switch and per-list state stay consistent and the
+	# subscription-based analytics agree with the account flag (no drift).
 	def make_active(self, request, queryset):
 		updated_count = queryset.update(active=True)
 		self.message_user(
@@ -792,11 +798,23 @@ class SubscriberAdmin(admin.ModelAdmin):
 	make_active.short_description = "Enable all emails (mark as active)"
 
 	def make_inactive(self, request, queryset):
-		updated_count = queryset.update(active=False)
+		now = timezone.now()
+		# Materialise the selected IDs: get_queryset() is annotated/distinct, which makes
+		# it unreliable as an `__in` subquery.
+		subscriber_ids = list(queryset.values_list('pk', flat=True))
+		with transaction.atomic():
+			updated_count = Subscribers.objects.filter(pk__in=subscriber_ids).update(active=False)
+			# Opt the selected subscribers out of every list they are still on, mirroring
+			# the global "unsubscribe from everything" flow. Preserve any existing
+			# unsubscribed_at; only stamp the rows that lack one.
+			stale_subs = ListSubscription.objects.filter(subscriber_id__in=subscriber_ids, is_active=True)
+			stale_subs.filter(unsubscribed_at__isnull=True).update(unsubscribed_at=now)
+			unsubscribed = stale_subs.update(is_active=False)
 		self.message_user(
 			request,
 			f"{updated_count} subscriber(s) marked inactive — they will receive no emails from any "
-			f"list. This is a global opt-out; their individual list subscriptions were not changed.",
+			f"list. Also opted them out of {unsubscribed} active list subscription(s) so their list "
+			f"state matches this global opt-out.",
 		)
 	make_inactive.short_description = "Disable all emails (mark as inactive)"
 
