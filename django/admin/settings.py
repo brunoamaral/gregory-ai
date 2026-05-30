@@ -34,7 +34,9 @@ if SECRET_KEY == 'DEFAULT SECRET_KEY':
     print("Using default SECRET_KEY for development. DO NOT use in production!")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False 
+# Secure by default: production is safe even if DJANGO_DEBUG is unset.
+# For local development, set DJANGO_DEBUG=True in your .env file.
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('true', '1', 'yes')
 SITE_ID = 1
 # FERNET SECRET KEY
 FERNET_SECRET_KEY = os.environ.get('FERNET_SECRET_KEY', 'DEFAULT KEY GOES HERE')
