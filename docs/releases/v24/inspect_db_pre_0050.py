@@ -86,28 +86,47 @@ print('  EXISTS ALREADY -> 0050 will fail, fake-apply or drop first:' if rows el
 for name, definition in rows:
 	print(f'      {definition}')
 
-# 4) unique constraint on trials.title
-header(4, 'UNIQUE backing on trials.title (0050 DROPS this)')
-cons = run("""
-	SELECT conname, pg_get_constraintdef(oid)
-	FROM pg_constraint
-	WHERE conrelid='public.trials'::regclass AND contype='u';
-""")
-for name, definition in cons:
-	print(f'  constraint {name}: {definition}')
-idx = run("""
+# 4) unique backing on trials.title -- the PLAIN UNIQUE(title) is what 0050 drops
+header(4, 'UNIQUE backing on trials.title (0050 drops the PLAIN unique only)')
+# Plain unique on exactly (title): a real constraint or a non-expression unique
+# index whose only key column is `title`. This is what removing field-level
+# unique=True targets. The case-insensitive lower(title) index is reported
+# separately and is NOT touched by 0050.
+plain = run("""
 	SELECT i.relname, pg_get_indexdef(i.oid)
-	FROM pg_class t
-	JOIN pg_index ix    ON t.oid=ix.indrelid
-	JOIN pg_class i     ON i.oid=ix.indexrelid
-	JOIN pg_namespace n ON n.oid=t.relnamespace
+	FROM pg_index ix
+	JOIN pg_class i     ON i.oid = ix.indexrelid
+	JOIN pg_class t     ON t.oid = ix.indrelid
+	JOIN pg_namespace n ON n.oid = t.relnamespace
 	WHERE n.nspname='public' AND t.relname='trials'
-	  AND ix.indisunique AND pg_get_indexdef(i.oid) ILIKE '%%(title%%';
+	  AND ix.indisunique
+	  AND ix.indexprs IS NULL                 -- exclude lower(title) expression index
+	  AND ix.indkey::text = (
+	        SELECT a.attnum::text FROM pg_attribute a
+	        WHERE a.attrelid = t.oid AND a.attname = 'title');
 """)
-for name, definition in idx:
-	print(f'  unique index {name}: {definition}')
-if not cons and not idx:
-	print('  WARNING: no unique on trials.title found -- 0050 AlterField will be a no-op')
+expr = run("""
+	SELECT i.relname, pg_get_indexdef(i.oid)
+	FROM pg_index ix
+	JOIN pg_class i     ON i.oid = ix.indexrelid
+	JOIN pg_class t     ON t.oid = ix.indrelid
+	JOIN pg_namespace n ON n.oid = t.relnamespace
+	WHERE n.nspname='public' AND t.relname='trials'
+	  AND ix.indisunique
+	  AND ix.indexprs IS NOT NULL;            -- expression indexes, e.g. lower(title)
+""")
+if plain:
+	for name, definition in plain:
+		print(f'  PLAIN UNIQUE(title) present -> 0050 WILL DROP this: {name}')
+		print(f'      {definition}')
+else:
+	print('  no plain UNIQUE(title) -> 0050 drop-unique is a no-op here (good)')
+for name, definition in expr:
+	print(f'  case-insensitive unique (NOT touched by 0050): {name}')
+	print(f'      {definition}')
+if not expr:
+	print('  NOTE: no lower(title) unique index found either -- title has no '
+	      'uniqueness guard at all; confirm that is intended')
 
 # 5) duplicate titles
 header(5, 'DUPLICATE trials.title values (informational, want 0 rows)')

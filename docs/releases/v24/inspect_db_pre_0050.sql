@@ -96,24 +96,37 @@ WHERE schemaname = 'public'
 
 \echo ''
 \echo '================================================================'
-\echo '4) UNIQUE CONSTRAINT on trials.title -- 0050 DROPS it'
-\echo '   Confirm exactly what backs uniqueness today (constraint vs'
-\echo '   bare unique index). Expect to see the title unique here.'
+\echo '4) UNIQUE backing on trials.title -- 0050 drops the PLAIN unique only'
+\echo '   The first query finds a PLAIN UNIQUE(title) (real constraint or a'
+\echo '   non-expression unique index on exactly the title column) -- that is'
+\echo '   what removing field-level unique=True targets. The second query lists'
+\echo '   expression-based unique indexes (e.g. lower(title)) which 0050 does'
+\echo '   NOT touch. Typical prod state: 0 plain rows, 1 lower(title) row.'
 \echo '================================================================'
-SELECT conname AS constraint_name, pg_get_constraintdef(oid) AS definition
-FROM pg_constraint
-WHERE conrelid = 'public.trials'::regclass
-  AND contype = 'u';
-
-SELECT i.relname AS unique_index_name, pg_get_indexdef(i.oid) AS definition
-FROM pg_class t
-JOIN pg_index ix     ON t.oid = ix.indrelid
+\echo '-- (4a) PLAIN UNIQUE(title) -- 0050 WILL drop this if present:'
+SELECT i.relname AS plain_unique_index, pg_get_indexdef(i.oid) AS definition
+FROM pg_index ix
 JOIN pg_class i      ON i.oid = ix.indexrelid
+JOIN pg_class t      ON t.oid = ix.indrelid
 JOIN pg_namespace n  ON n.oid = t.relnamespace
 WHERE n.nspname = 'public'
   AND t.relname = 'trials'
   AND ix.indisunique
-  AND pg_get_indexdef(i.oid) ILIKE '%(title%';
+  AND ix.indexprs IS NULL                       -- exclude lower(title) expression index
+  AND ix.indkey::text = (
+        SELECT a.attnum::text FROM pg_attribute a
+        WHERE a.attrelid = t.oid AND a.attname = 'title');
+
+\echo '-- (4b) expression-based unique indexes (e.g. lower(title)) -- NOT touched by 0050:'
+SELECT i.relname AS expr_unique_index, pg_get_indexdef(i.oid) AS definition
+FROM pg_index ix
+JOIN pg_class i      ON i.oid = ix.indexrelid
+JOIN pg_class t      ON t.oid = ix.indrelid
+JOIN pg_namespace n  ON n.oid = t.relnamespace
+WHERE n.nspname = 'public'
+  AND t.relname = 'trials'
+  AND ix.indisunique
+  AND ix.indexprs IS NOT NULL;
 
 \echo ''
 \echo '================================================================'
