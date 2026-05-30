@@ -18,17 +18,25 @@ Read [`MIGRATION_SAFETY.md`](./MIGRATION_SAFETY.md) before starting.
       docker exec gregory python manage.py prepare_v24_upgrade
       ```
       It reports the **critical** takeaways gate and the **moderate** index-lock
-      table sizes, and tells you the exact next command. Three outcomes:
+      table sizes, and tells you the exact next command. Possible outcomes:
   - *"Legacy columns already removed … Nothing to back up"* → gate clear, go to step 1.
   - *"Columns exist but hold no data"* → gate clear, go to step 1.
-  - *"⚠ N row(s) carry legacy data"* → **back them up first**, then migrate:
+  - *"⚠ N row(s) carry legacy data"* → **back them up between 0045 and 0048**
+      (the per-org tables don't exist until `gregory/0045`, and `0048` drops the
+      legacy columns). Use the split-migration flow below.
+- [ ] **If the helper flags pending legacy data, split the migration** so the
+      backfill runs after the per-org tables exist but before the drop:
       ```bash
+      # 1. create per-org tables, stop before 0048 drops the legacy columns
+      docker exec gregory python manage.py migrate gregory 0047
+      # 2. back up legacy data into the per-org tables (idempotent; fills empty
+      #    fields on existing rows). Preview with --dry-run first.
       docker exec -it gregory python manage.py prepare_v24_upgrade --backfill --org-id <id>
-      # or scripted:  --backfill --org-id <id> --noinput   (preview with --dry-run)
+      # 3. (the full `migrate` in step 3 then applies 0048 + everything else)
       ```
       This copies `articles.takeaways` / `summary_plain_english` and
       `trials.summary_plain_english` into `ArticleOrgContent` / `TrialOrgContent`
-      (idempotent) so migration `0048` cannot drop live data.
+      so migration `0048` cannot drop live data.
 - [ ] Verify `requirements.txt` installs cleanly on Python 3.12 in a scratch build
       (`pyproject.toml` was removed).
 
@@ -78,9 +86,8 @@ Read [`MIGRATION_SAFETY.md`](./MIGRATION_SAFETY.md) before starting.
 ## 5. Publish the release
 
 - [ ] Push the `v24` tag.
-- [ ] Create the GitHub Release from `RELEASE_NOTES.md`, mark it **Latest**.
-- [ ] Fix the stale label: v22 currently still shows "Latest" — moving Latest to
-      v24 corrects it.
+- [ ] Create the GitHub Release from `RELEASE_NOTES.md`, mark it **Latest**
+      (this moves the "Latest" label from v23 to v24 automatically).
 
 ---
 

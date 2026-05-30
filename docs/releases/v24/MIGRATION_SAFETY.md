@@ -95,13 +95,22 @@ moderate checks above:
   pending, and the sizes of the tables `0022` will lock.
 - **`--backfill --org-id <id>`:** idempotently copies legacy
   takeaways/summaries into `ArticleOrgContent` / `TrialOrgContent` so `0048`
-  can't drop live data. Reads the legacy columns via raw SQL, so it works on
-  both pre- and post-`0048` databases. Supports `--dry-run` and `--noinput`.
+  can't drop live data. Reads the legacy columns via raw SQL; for existing
+  per-org rows it fills only the fields that are currently empty (safe to
+  re-run). Supports `--dry-run` and `--noinput`.
+
+The per-org tables are created by `0045` and the legacy columns dropped by
+`0048`, so the backfill must run **between** them via a split migration:
 
 ```bash
-docker exec gregory python manage.py prepare_v24_upgrade            # check
-docker exec -it gregory python manage.py prepare_v24_upgrade --backfill --org-id 3
+docker exec gregory python manage.py prepare_v24_upgrade            # 0. check
+docker exec gregory python manage.py migrate gregory 0047          # 1. create per-org tables
+docker exec -it gregory python manage.py prepare_v24_upgrade --backfill --org-id 3  # 2. back up
+docker exec gregory python manage.py migrate                       # 3. apply 0048 + rest
 ```
+
+The command detects this state and refuses to back up (with guidance) if the
+per-org tables don't exist yet, rather than erroring on a missing table.
 
 ## Summary checklist
 

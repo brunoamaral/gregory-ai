@@ -1,6 +1,6 @@
 # Gregory AI v24
 
-_Range: v23 (2025-06-21) → main (2025-05-30). 113 merged PRs, ~717 commits._
+_Range: v23 (2025-06-21) → main (2026-05-30). 113 merged PRs, ~717 commits._
 
 The multi-organization release: Gregory now runs as a true multi-tenant platform —
 API keys, ORCID credentials, content, and visibility are all scoped per

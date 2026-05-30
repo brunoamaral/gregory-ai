@@ -2,25 +2,38 @@
 prepare_v24_upgrade
 ===================
 Friendly, idempotent helper that de-risks the v24 upgrade. It handles the
-**critical** and **moderate** items flagged in docs/releases/v24/MIGRATION_SAFETY.md
-*before* you run ``python manage.py migrate``.
+**critical** and **moderate** items flagged in docs/releases/v24/MIGRATION_SAFETY.md.
+
+Where it fits in the upgrade
+----------------------------
+The per-org content tables (``ArticleOrgContent`` / ``TrialOrgContent``) are
+created by migration ``gregory/0045``, and the legacy columns are dropped by
+``gregory/0048``. So the backfill must run **between** those two migrations:
+
+    1. migrate gregory up to 0047   # creates per-org tables, keeps legacy columns
+    2. prepare_v24_upgrade --backfill --org-id <id>
+    3. migrate                       # applies 0048 (drops legacy columns) + the rest
+
+The command detects which of those states the database is in and guides you,
+rather than assuming the tables already exist.
 
 What it does
 ------------
 1. **Pre-flight check** (default, read-only): reports whether the legacy
-   takeaway columns still hold data, how much is already in the per-org
-   content tables, and how big the tables that migration ``0022`` will index
-   are (so you can judge the write-lock window).
+   takeaway columns still hold data, whether the per-org tables exist yet, how
+   much is already migrated, and the size of the tables that migration ``0022``
+   will lock while building indexes.
 
-2. **Backfill** (``--backfill``): copies the legacy
-   ``articles.takeaways`` / ``articles.summary_plain_english`` and
-   ``trials.summary_plain_english`` values into ``ArticleOrgContent`` /
-   ``TrialOrgContent`` for a chosen organisation, so that migration
-   ``0048`` (which *drops* those columns) cannot lose data.
+2. **Backfill** (``--backfill``): copies the legacy ``articles.takeaways`` /
+   ``articles.summary_plain_english`` and ``trials.summary_plain_english``
+   values into ``ArticleOrgContent`` / ``TrialOrgContent`` for a chosen
+   organisation, so migration ``0048`` cannot lose data. For rows that already
+   exist it fills **only** the per-org fields that are currently empty, so a
+   partial previous run can be safely re-run.
 
 The legacy columns are read with raw SQL on purpose: on the v24 code the model
-fields no longer exist, so this command keeps working whether it runs against a
-pre- or post-``0048`` database.
+fields no longer exist, so this command works whether it runs against a pre- or
+post-``0048`` database.
 
 Usage
 -----
@@ -54,6 +67,10 @@ LEGACY = {
 }
 # Tables whose write-lock during the 0022 index build is worth sizing up.
 INDEXED_TABLES = ['articles', 'trials', 'articles_team_categories', 'articles_authors']
+
+# Last gregory migration before 0048 drops the legacy columns. Migrating to this
+# creates the per-org tables (0045) while leaving the legacy columns intact.
+PRE_DROP_MIGRATION = '0047'
 
 
 class Command(BaseCommand):
@@ -102,6 +119,19 @@ class Command(BaseCommand):
 			)
 			return {row[0] for row in cur.fetchall()}
 
+	def _table_exists(self, table):
+		"""True if *table* exists in the current database."""
+		with connection.cursor() as cur:
+			cur.execute("SELECT to_regclass(%s)", [table])
+			return cur.fetchone()[0] is not None
+
+	def _orgcontent_ready(self):
+		"""True once both per-org content tables exist (created by 0045)."""
+		return (
+			self._table_exists(ArticleOrgContent._meta.db_table)
+			and self._table_exists(TrialOrgContent._meta.db_table)
+		)
+
 	def _rows_with_data(self, table, columns):
 		"""Count rows where any of *columns* is non-null and non-empty."""
 		if not columns:
@@ -141,38 +171,51 @@ class Command(BaseCommand):
 
 		state = self._legacy_state()
 		any_legacy_cols = any(present for present, _ in state.values())
+		pending = sum(rows for _, rows in state.values())
+		oc_ready = self._orgcontent_ready()
 
 		# --- Critical: legacy takeaway data ---
 		self.stdout.write('Critical — legacy takeaway/summary data (dropped by 0048):')
+		next_step = None
 		if not any_legacy_cols:
 			self.stdout.write(self.style.SUCCESS(
 				'  ✓ Legacy columns already removed. 0048 has run (or DB post-dates it). '
 				'Nothing to back up.'
 			))
 		else:
-			pending = 0
 			for table, (present, rows) in state.items():
-				if not present:
-					continue
-				self.stdout.write(
-					f'  • {table}: {rows} row(s) still hold data in '
-					f'{", ".join(sorted(present))}'
-				)
-				pending += rows
-			art_oc = ArticleOrgContent.objects.count()
-			trial_oc = TrialOrgContent.objects.count()
-			self.stdout.write(
-				f'  • already migrated: ArticleOrgContent={art_oc}, TrialOrgContent={trial_oc}'
-			)
-			if pending:
-				self.stdout.write(self.style.WARNING(
-					f'  ⚠ {pending} row(s) carry legacy data. Run '
-					f'`--backfill` BEFORE migrate, or 0048 will drop them.'
-				))
-			else:
+				if present:
+					self.stdout.write(
+						f'  • {table}: {rows} row(s) still hold data in '
+						f'{", ".join(sorted(present))}'
+					)
+			if not pending:
 				self.stdout.write(self.style.SUCCESS(
 					'  ✓ Columns exist but hold no data — safe to migrate.'
 				))
+			elif not oc_ready:
+				# Per-org tables (0045) don't exist yet — cannot back up safely.
+				self.stdout.write(self.style.WARNING(
+					f'  ⚠ {pending} row(s) carry legacy data, but the per-org tables '
+					f'do not exist yet (created by 0045).'
+				))
+				self.stdout.write(
+					f'    Apply schema up to {PRE_DROP_MIGRATION} first, then back up, '
+					f'then finish:'
+				)
+				self.stdout.write(f'      python manage.py migrate gregory {PRE_DROP_MIGRATION}')
+				self.stdout.write('      python manage.py prepare_v24_upgrade --backfill --org-id <id>')
+				next_step = 'split'
+			else:
+				art_oc = ArticleOrgContent.objects.count()
+				trial_oc = TrialOrgContent.objects.count()
+				self.stdout.write(
+					f'  • already migrated: ArticleOrgContent={art_oc}, TrialOrgContent={trial_oc}'
+				)
+				self.stdout.write(self.style.WARNING(
+					'  ⚠ Run `--backfill` BEFORE the final migrate, or 0048 will drop them.'
+				))
+				next_step = 'backfill'
 
 		# --- Moderate: index-build write lock (0022) ---
 		self.stdout.write('\nModerate — 0022 builds indexes with a plain CREATE INDEX')
@@ -186,7 +229,12 @@ class Command(BaseCommand):
 
 		# --- Verdict ---
 		self.stdout.write('')
-		if any_legacy_cols and any(rows for _, rows in state.values()):
+		if next_step == 'split':
+			self.stdout.write(self.style.NOTICE(
+				f'Next: python manage.py migrate gregory {PRE_DROP_MIGRATION}  →  '
+				f'--backfill  →  migrate'
+			))
+		elif next_step == 'backfill':
 			self.stdout.write(self.style.NOTICE(
 				'Next: python manage.py prepare_v24_upgrade --backfill --org-id <id>'
 			))
@@ -242,45 +290,61 @@ class Command(BaseCommand):
 			))
 			return
 
+		if not self._orgcontent_ready():
+			raise CommandError(
+				'Per-org tables (ArticleOrgContent/TrialOrgContent) do not exist yet. '
+				f'Run `python manage.py migrate gregory {PRE_DROP_MIGRATION}` first, '
+				'then re-run this backfill.'
+			)
+
 		plan = [
 			('articles', 'article_id', ArticleOrgContent, 'article_id'),
 			('trials', 'trial_id', TrialOrgContent, 'trial_id'),
 		]
-		created = skipped = 0
+		created = updated = skipped = 0
 
 		for table, pk, model, fk in plan:
-			present = state[table][0]
+			present = sorted(state[table][0])
 			if not present:
 				continue
-			rows = list(self._fetch_legacy(table, pk, sorted(present)))
-			existing = set(
-				model.objects
-				.filter(organization=org, **{f'{fk}__in': [r[0] for r in rows]})
-				.values_list(fk, flat=True)
-			)
-			for obj_id, values in rows:
-				if obj_id in existing:
-					skipped += 1
-					continue
-				if dry_run:
+			legacy = dict(self._fetch_legacy(table, pk, present))
+			if not legacy:
+				continue
+			# Existing per-org rows for this org, keyed by FK, with current field values.
+			existing = {
+				row[fk]: row
+				for row in model.objects
+				.filter(organization=org, **{f'{fk}__in': list(legacy)})
+				.values(fk, *present)
+			}
+			for obj_id, values in legacy.items():
+				row = existing.get(obj_id)
+				if row is None:
+					if not dry_run:
+						with transaction.atomic():
+							model.objects.create(organization=org, **{fk: obj_id}, **values)
 					created += 1
 					continue
-				with transaction.atomic():
-					model.objects.create(
-						organization=org,
-						**{fk: obj_id},
-						**values,
-					)
-				created += 1
+				# Existing row: fill only the fields that are currently empty,
+				# so a partial previous run can be re-run without losing data.
+				fills = {c: v for c, v in values.items() if v and not row.get(c)}
+				if not fills:
+					skipped += 1
+					continue
+				if not dry_run:
+					with transaction.atomic():
+						model.objects.filter(organization=org, **{fk: obj_id}).update(**fills)
+				updated += 1
 
 		verb = 'Would create' if dry_run else 'Created'
 		style = self.style.WARNING if dry_run else self.style.SUCCESS
 		self.stdout.write(style(
-			f'{verb} {created} per-org content row(s); skipped {skipped} existing.'
+			f'{verb} {created} new row(s), filled {updated} existing row(s); '
+			f'skipped {skipped} already-complete row(s).'
 		))
 		if not dry_run:
 			self.stdout.write(self.style.SUCCESS(
-				'✓ Legacy data preserved. Safe to run migrate.'
+				'✓ Legacy data preserved. Safe to run the final migrate.'
 			))
 
 	# ------------------------------------------------------------------
