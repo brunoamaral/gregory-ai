@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gregory', '0043_organizationapisettings'),
+        ('gregory', '0049_historicalarticles_sources_and_more'),
     ]
 
     operations = [
