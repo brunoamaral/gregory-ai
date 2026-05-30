@@ -95,6 +95,17 @@ class SubscriptionListFilter(admin.SimpleListFilter):
 
 
 class SubscriberAdmin(admin.ModelAdmin):
+	"""Admin for subscribers.
+
+	The `active` column/filter is the subscriber's GLOBAL email switch: active=False
+	means they receive no email from any list (a master opt-out), independent of the
+	per-list subscriptions shown in the inline below. It is distinct from the
+	"Total Active Subscribers" analytics chart/KPIs, which count someone as active when
+	they hold at least one active list subscription rather than by this flag. (Some
+	other analytics endpoints — e.g. profile distribution and recent subscribers — do
+	still filter on this flag.) See the Subscribers.active help text and the
+	make_active/make_inactive actions.
+	"""
 	list_display = ['first_name', 'last_name', 'email', 'active', 'list_names', 'number_of_subscriptions', 'created_at']
 	list_filter = ['active', SubscriptionListFilter, 'created_at']
 	search_fields = ['first_name', 'last_name', 'email']
@@ -766,15 +777,28 @@ class SubscriberAdmin(admin.ModelAdmin):
 	number_of_subscriptions.short_description = 'Subscriptions'
 	number_of_subscriptions.admin_order_field = 'active_subscription_count'
 
+	# The `active` flag is a GLOBAL email switch (see Subscribers.active help text):
+	# active=False suppresses all email for the subscriber regardless of their list
+	# subscriptions. These actions only flip that flag — they do NOT change the
+	# per-list ListSubscription.is_active opt-outs.
 	def make_active(self, request, queryset):
 		updated_count = queryset.update(active=True)
-		self.message_user(request, f"{updated_count} subscriber(s) marked as active.")
-	make_active.short_description = "Mark selected subscribers as active"
+		self.message_user(
+			request,
+			f"{updated_count} subscriber(s) marked active — global email suppression removed. "
+			f"They will receive emails only for lists they are still actively subscribed to; "
+			f"individual list subscriptions were not changed.",
+		)
+	make_active.short_description = "Enable all emails (mark as active)"
 
 	def make_inactive(self, request, queryset):
 		updated_count = queryset.update(active=False)
-		self.message_user(request, f"{updated_count} subscriber(s) marked as inactive.")
-	make_inactive.short_description = "Mark selected subscribers as inactive"
+		self.message_user(
+			request,
+			f"{updated_count} subscriber(s) marked inactive — they will receive no emails from any "
+			f"list. This is a global opt-out; their individual list subscriptions were not changed.",
+		)
+	make_inactive.short_description = "Disable all emails (mark as inactive)"
 
 	@admin.action(description="Export selected subscribers as CSV")
 	def export_csv(self, request, queryset):
