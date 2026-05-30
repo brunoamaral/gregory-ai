@@ -239,10 +239,10 @@ def optimize_category_queries():
         "CREATE INDEX IF NOT EXISTS idx_articles_authors_article_id ON articles_authors (articles_id);",
         "CREATE INDEX IF NOT EXISTS idx_articles_authors_author_id ON articles_authors (authors_id);",
         
-        # Add indexes for date filtering
-        "CREATE INDEX IF NOT EXISTS idx_articles_published_date ON articles (published_date);",
-        "CREATE INDEX IF NOT EXISTS idx_articles_discovery_date ON articles (discovery_date);",
-        "CREATE INDEX IF NOT EXISTS idx_trials_published_date ON trials (published_date);",
+        # Date filtering: articles.published_date/discovery_date and
+        # trials.published_date are now model-managed via db_index=True
+        # (migration 0050); do not recreate them here or you reintroduce the
+        # duplicate indexes 0050 drops. trials.discovery_date is not db_indexed.
         "CREATE INDEX IF NOT EXISTS idx_trials_discovery_date ON trials (discovery_date);",
         
         # Add composite indexes for common query patterns
