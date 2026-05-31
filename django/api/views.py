@@ -1118,6 +1118,34 @@ class TrialViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 			}
 		return response
 
+	def finalize_response(self, request, response, *args, **kwargs):
+		"""
+		Override to handle CSV streaming. If CSV format is requested, convert the response
+		to a StreamingHttpResponse with proper headers.
+		"""
+		response = super().finalize_response(request, response, *args, **kwargs)
+
+		if request.query_params.get('format', '').lower() == 'csv':
+			response.render()
+			csv_bytes = response.content if isinstance(response.content, bytes) else response.content.encode('utf-8')
+
+			def csv_stream():
+				yield csv_bytes
+
+			from api.direct_streaming import DirectStreamingCSVRenderer
+			renderer = DirectStreamingCSVRenderer()
+			filename = renderer.get_filename({'request': request})
+
+			streaming_response = StreamingHttpResponse(
+				streaming_content=csv_stream(),
+				content_type='text/csv; charset=utf-8'
+			)
+			streaming_response['Content-Disposition'] = f'attachment; filename="{filename}"'
+			streaming_response['Content-Type'] = 'text/csv; charset=utf-8'
+			return streaming_response
+
+		return response
+
 class AllTrialViewSet(generics.ListAPIView):
 	"""
 	List all clinical trials by discovery date
