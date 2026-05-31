@@ -349,7 +349,13 @@ class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
     inclusion_agemin = filters.CharFilter(field_name='inclusion_agemin', lookup_expr='exact')
     inclusion_agemax = filters.CharFilter(field_name='inclusion_agemax', lookup_expr='exact')
     inclusion_gender = filters.CharFilter(field_name='inclusion_gender', lookup_expr='icontains')
-    
+
+    # Results filters
+    has_results = filters.BooleanFilter(
+        method='filter_has_results',
+        label='Has results posted (results_posted flag, results completion date, results link, or results available = Yes)'
+    )
+
     class Meta:
         model = Trials
         fields = [
@@ -357,7 +363,7 @@ class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
             'team_id', 'subject_id', 'category_slug', 'category_id', 'source_id',
             'internal_number', 'phase', 'study_type', 'primary_sponsor', 'source_register',
             'countries', 'condition', 'intervention', 'therapeutic_areas',
-            'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender'
+            'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender', 'has_results'
         ]
     
     def filter_title(self, queryset, name, value):
@@ -381,6 +387,29 @@ class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
             models.Q(utitle__contains=upper_value) |
             models.Q(usummary__contains=upper_value)
         )
+
+    def filter_has_results(self, queryset, name, value):
+        """
+        Filter trials by whether results have been posted.
+
+        A trial is considered to have results when any of the following holds:
+        - results_posted is True;
+        - results completion date is set;
+        - results link is set (not null and not an empty string);
+        - "results available" is "Yes" (case-insensitive).
+
+        ?has_results=true  -> only trials with results
+        ?has_results=false -> only trials without results
+        """
+        has_results_q = (
+            models.Q(results_posted=True) |
+            models.Q(results_date_completed__isnull=False) |
+            (models.Q(results_url_link__isnull=False) & ~models.Q(results_url_link='')) |
+            models.Q(results_yes_no__iexact='yes')
+        )
+        if value:
+            return queryset.filter(has_results_q)
+        return queryset.exclude(has_results_q)
 
 class AuthorFilter(filters.FilterSet):
     """Filter class for Authors, allowing searching by full name, given name, family name and filtering by author ID."""
