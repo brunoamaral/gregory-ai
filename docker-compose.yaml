@@ -19,9 +19,7 @@ services:
     restart: always
     image: amaralbruno/gregory-ai:latest
     build: .
-    # used for local development
-    # command: python manage.py runserver 0.0.0.0:8000
-    command: gunicorn --workers 4 --threads 2 --log-level debug -b 0.0.0.0:8000 admin.wsgi
+    command: sh -c 'if [ "$$DJANGO_DEBUG" = "False" ]; then gunicorn --workers 4 --threads 2 --log-level debug -b 0.0.0.0:8000 admin.wsgi; else python manage.py runserver 0.0.0.0:8000; fi'
     volumes:
       - ./django:/code
     ports:
@@ -42,7 +40,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - SECRET_KEY=${SECRET_KEY}
       - FERNET_SECRET_KEY=${FERNET_SECRET_KEY}
-
+      - DJANGO_DEBUG=${DJANGO_DEBUG}
     networks:
       - gregory_network
     depends_on:
