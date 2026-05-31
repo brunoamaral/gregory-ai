@@ -195,7 +195,8 @@ class Command(BaseCommand):
 				'Contact_Affiliation', 'Inclusion_Criteria', 'Exclusion_Criteria', 'Condition',
 				'Intervention', 'Primary_outcome', 'Secondary_outcome', 'Secondary_ID',
 				'Source_Support', 'Ethics_review_status', 'Ethics_review_contact_name',
-				'Ethics_review_contact_address', 'Ethics_review_contact_phone', 'Ethics_review_contact_email'
+				'Ethics_review_contact_address', 'Ethics_review_contact_phone', 'Ethics_review_contact_email',
+				'Acronym', 'Secondary_Sponsor', 'results_yes_no', 'results_ipd_plan', 'results_ipd_description'
 			]:
 				trial_data[field.lower()] = self.get_text(trial, field)
 
