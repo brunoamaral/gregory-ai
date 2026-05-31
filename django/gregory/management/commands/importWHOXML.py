@@ -48,7 +48,7 @@ class Command(BaseCommand):
 			current_value = getattr(trial, key, None)
 
 			# Handle datetime fields: Normalize and compare only the date part
-			if key in ['export_date', 'date_enrollement', 'ethics_review_approval_date', 'results_date_completed', 'last_refreshed_on']:
+			if key in ['export_date', 'date_enrollement', 'ethics_review_approval_date', 'results_date_completed', 'last_refreshed_on', 'date_registration']:
 					if isinstance(current_value, datetime.datetime):
 						current_date = current_value.date()
 					elif isinstance(current_value, datetime.date):
@@ -63,7 +63,10 @@ class Command(BaseCommand):
 					else:
 						value_date = None
 
-					if current_date != value_date:  # Compare only the date part
+					# Only overwrite when the incoming date is present, so a missing XML
+					# field never blanks a date a previous source populated
+					# (see docs/trials-multi-source-merge.md).
+					if value_date is not None and current_date != value_date:
 						setattr(trial, key, value)
 						has_changes = True
 						updated_fields.append(key)
@@ -81,7 +84,9 @@ class Command(BaseCommand):
 					trial.identifiers = value
 					has_changes = True
 					updated_fields.append(key)
-			elif current_value != value:
+			# Only overwrite when the incoming value is non-empty, so a missing XML
+			# field never blanks data a previous source populated.
+			elif value not in (None, '') and current_value != value:
 				setattr(trial, key, value)
 				has_changes = True
 				updated_fields.append(key)
@@ -188,14 +193,15 @@ class Command(BaseCommand):
 			
 			for field in [
 				'Internal_Number', 'Last_Refreshed_on', 'Scientific_title', 'Primary_sponsor',
-				'Retrospective_flag', 'Source_Register', 'Recruitment_Status', 'other_records',
+				'Prospective_registration', 'Source_Register', 'Recruitment_Status', 'other_records',
 				'Inclusion_agemin', 'Inclusion_agemax', 'Inclusion_gender', 'Target_size',
 				'Study_type', 'Study_design', 'Phase', 'Countries', 'Contact_Firstname',
 				'Contact_Lastname', 'Contact_Address', 'Contact_Email', 'Contact_Tel',
 				'Contact_Affiliation', 'Inclusion_Criteria', 'Exclusion_Criteria', 'Condition',
 				'Intervention', 'Primary_outcome', 'Secondary_outcome', 'Secondary_ID',
 				'Source_Support', 'Ethics_review_status', 'Ethics_review_contact_name',
-				'Ethics_review_contact_address', 'Ethics_review_contact_phone', 'Ethics_review_contact_email'
+				'Ethics_review_contact_address', 'Ethics_review_contact_phone', 'Ethics_review_contact_email',
+				'Acronym', 'Secondary_Sponsor', 'results_yes_no', 'results_ipd_plan', 'results_ipd_description'
 			]:
 				trial_data[field.lower()] = self.get_text(trial, field)
 
@@ -211,7 +217,11 @@ class Command(BaseCommand):
 				trial_data[date_field.lower()] = self.robust_parse_date(raw_date)
 
 			date_registration_raw = self.get_text(trial, 'Date_registration')
-			trial_data['published_date'] = self.robust_parse_date(date_registration_raw)
+			parsed_registration = self.robust_parse_date(date_registration_raw)
+			# WHO ICTRP only provides a single "Date of registration"; mirror it into both
+			# published_date (used across the app) and date_registration (registry field).
+			trial_data['published_date'] = parsed_registration
+			trial_data['date_registration'] = parsed_registration
 
 			# Add logging for each trial being processed
 			self.stdout.write(self.style.NOTICE(f"Processing trial: {trial_data['title']} with TrialID: {trial_data['identifiers']}"))

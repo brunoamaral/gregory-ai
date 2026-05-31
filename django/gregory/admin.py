@@ -527,7 +527,138 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 			'all': ['admin/css/ml_predictions.css'],
 		}
 
+class TrialAdminForm(forms.ModelForm):
+	"""Adds plain-language labels and help text for fields that use clinical-trial jargon."""
+
+	class Meta:
+		model = Trials
+		fields = '__all__'
+		labels = {
+			# Titles & identity
+			'title': 'Public title',
+			'scientific_title': 'Scientific title',
+			'acronym': 'Study acronym',
+			'link': 'Registry web page',
+			'identifiers': 'Trial IDs',
+			'internal_number': 'Registry internal number',
+			'secondary_id': 'Other IDs',
+			# Dates & registry metadata
+			'published_date': 'Headline date',
+			'date_registration': 'Registration date',
+			'date_enrollement': 'Enrolment start date',
+			'last_refreshed_on': 'Registry last updated on',
+			'export_date': 'Exported from registry on',
+			'source_register': 'Source registry',
+			'other_records': 'Listed in other registries?',
+			'prospective_registration': 'Registered before it started?',
+			# Study details
+			'study_type': 'Study type',
+			'study_design': 'Study design',
+			'phase': 'Trial phase',
+			'recruitment_status': 'Recruitment status',
+			'target_size': 'Target enrolment',
+			'countries': 'Countries',
+			# Conditions & interventions
+			'condition': 'Health condition',
+			'intervention': 'Intervention',
+			'primary_outcome': 'Primary outcome',
+			'secondary_outcome': 'Secondary outcomes',
+			# Eligibility
+			'inclusion_criteria': 'Who can take part (inclusion)',
+			'exclusion_criteria': 'Who cannot take part (exclusion)',
+			'inclusion_agemin': 'Minimum age',
+			'inclusion_agemax': 'Maximum age',
+			'inclusion_gender': 'Eligible sex / gender',
+			# Sponsors & contacts
+			'primary_sponsor': 'Main sponsor',
+			'secondary_sponsor': 'Co-sponsors',
+			'source_support': 'Funding source',
+			'contact_firstname': 'Contact first name',
+			'contact_lastname': 'Contact last name',
+			'contact_address': 'Contact address',
+			'contact_email': 'Contact email',
+			'contact_tel': 'Contact phone',
+			'contact_affiliation': 'Contact organisation',
+			# Ethics review
+			'ethics_review_status': 'Ethics approval status',
+			'ethics_review_approval_date': 'Ethics approval date',
+			'ethics_review_contact_name': 'Ethics committee contact',
+			'ethics_review_contact_address': 'Ethics contact address',
+			'ethics_review_contact_phone': 'Ethics contact phone',
+			'ethics_review_contact_email': 'Ethics contact email',
+			# Results
+			'results_posted': 'Results posted?',
+			'results_date_completed': 'Results completion date',
+			'results_url_link': 'Results link',
+			'results_yes_no': 'Results available?',
+			'results_ipd_plan': 'Plans to share participant data?',
+			'results_ipd_description': 'Data-sharing details',
+		}
+		help_texts = {
+			# Titles & identity
+			'title': 'The plain-language title of the trial, intended for the general public. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
+			'scientific_title': 'The technical title of the trial, written using medical terminology. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'acronym': 'Short nickname or abbreviation for the trial (e.g. “IMPACT-MS”). Source: WHO ICTRP.',
+			'link': 'Link to this trial’s page on its source registry. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
+			'identifiers': 'Registry identifiers for this trial (e.g. NCT, ChiCTR, or EUCTR numbers). Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
+			'internal_number': 'Internal record number assigned by the source registry. Rarely meaningful to patients. Source: WHO ICTRP.',
+			'secondary_id': 'Additional identifiers used by other registries or by the sponsor. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			# Dates & registry metadata
+			'published_date': 'The trial’s headline date — its exact meaning depends on the source: WHO ICTRP uses the “Date of registration”, ClinicalTrials.gov uses the study start date, and EU CTIS feeds use the date the trial was listed in the feed. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
+			'date_registration': 'The date the trial was registered with its registry, where the source provides one: from the WHO ICTRP “Date of registration” (mirrored into the headline date above) or the ClinicalTrials.gov “first submitted” date. Not available for EU CTIS trials. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'date_enrollement': 'Date the first participant was (or is expected to be) enrolled. Source: WHO ICTRP.',
+			'last_refreshed_on': 'Date the source registry last updated this record. Source: WHO ICTRP.',
+			'export_date': 'Date this record was exported from the WHO ICTRP database. Source: WHO ICTRP.',
+			'source_register': 'The registry this record came from (e.g. ClinicalTrials.gov, ChiCTR, EU-CTR). Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'other_records': 'Whether the same trial is also registered in other registries. Source: WHO ICTRP.',
+			'prospective_registration': '“Yes” means the trial was listed in a public registry before it enrolled any participants — the recommended practice. “No” means it was registered afterwards. Source: WHO ICTRP.',
+			# Study details
+			'study_type': 'The kind of study — for example interventional (testing a treatment) or observational (only observing). Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'study_design': 'How the study is structured — for example randomised, controlled, or single-group. Source: WHO ICTRP.',
+			'phase': 'The stage of testing (Phase 1–4). Early phases check safety in small groups; later phases test effectiveness in larger groups. “N/A” means not applicable. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'recruitment_status': 'Whether the trial is recruiting participants, not yet recruiting, completed, etc. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'target_size': 'The number of participants the trial aims to enrol. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'countries': 'Countries where the trial takes place. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			# Conditions & interventions
+			'condition': 'The disease or health condition being studied. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
+			'intervention': 'The treatment, drug, device, or procedure being tested or compared. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'primary_outcome': 'The main result the trial is designed to measure. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
+			'secondary_outcome': 'Additional results the trial measures beyond the main one. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
+			# Eligibility
+			'inclusion_criteria': 'Requirements a person must meet to take part in the trial. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'exclusion_criteria': 'Conditions that prevent a person from taking part in the trial. Source: WHO ICTRP (ClinicalTrials.gov combines this into the inclusion criteria).',
+			'inclusion_agemin': 'Youngest age eligible to participate. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'inclusion_agemax': 'Oldest age eligible to participate. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'inclusion_gender': 'Which sexes / genders can take part (e.g. both, female, male). Sources: WHO ICTRP, ClinicalTrials.gov.',
+			# Sponsors & contacts
+			'primary_sponsor': 'The lead organisation responsible for the trial. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
+			'secondary_sponsor': 'Additional organisations funding or running the trial, besides the main sponsor. May list several, separated by semicolons. Source: WHO ICTRP.',
+			'source_support': 'Organisations providing funding or material support for the trial. Source: WHO ICTRP.',
+			'contact_firstname': 'First name of the public contact person for the trial. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'contact_lastname': 'Last name of the public contact person for the trial. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'contact_address': 'Postal address of the trial’s contact person. Source: WHO ICTRP.',
+			'contact_email': 'Email address for enquiries about the trial. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'contact_tel': 'Phone number for enquiries about the trial. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'contact_affiliation': 'The organisation the contact person belongs to. Source: WHO ICTRP.',
+			# Ethics review
+			'ethics_review_status': 'Whether the trial has been approved by an ethics committee / institutional review board. Source: WHO ICTRP.',
+			'ethics_review_approval_date': 'Date the ethics committee approved the trial. Source: WHO ICTRP.',
+			'ethics_review_contact_name': 'Name (or email) of the ethics committee contact. Source: WHO ICTRP.',
+			'ethics_review_contact_address': 'Postal address of the ethics committee. Source: WHO ICTRP.',
+			'ethics_review_contact_phone': 'Phone number of the ethics committee. Source: WHO ICTRP.',
+			'ethics_review_contact_email': 'Email address of the ethics committee. Source: WHO ICTRP.',
+			# Results
+			'results_posted': 'Whether results have been posted/published for the trial. Sources: ClinicalTrials.gov (from the “has results” flag), EU CTIS (from the “Results posted” field).',
+			'results_date_completed': 'When the trial’s results became available. For WHO ICTRP this is the source “results completed” date; for ClinicalTrials.gov it is the date results were first posted. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			'results_url_link': 'Link to where the trial’s results are published. Source: ClinicalTrials.gov.',
+			'results_yes_no': 'Whether the trial’s results have been published or posted. Source: WHO ICTRP.',
+			'results_ipd_plan': 'Whether the researchers plan to share de-identified data about each participant (IPD) with other researchers. Source: WHO ICTRP.',
+			'results_ipd_description': 'Free-text explanation of how and when the individual participant data will be shared. Source: WHO ICTRP.',
+		}
+
+
 class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
+	form = TrialAdminForm
 	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
 	exclude = ['ml_predictions']
 	readonly_fields = ['last_updated', 'team_categories']
@@ -548,14 +679,14 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	]
 	fieldsets = (
 		(None, {
-			'fields': ('title', 'scientific_title', 'link', 'identifiers', 'discovery_date', 'published_date', 'last_updated')
+			'fields': ('title', 'acronym', 'scientific_title', 'link', 'identifiers', 'discovery_date', 'published_date', 'last_updated')
 		}),
 		('Description', {
 			'fields': ('summary', 'ctg_detailed_description'),
 			'classes': ('collapse',),
 		}),
 		('Study Details', {
-			'fields': ('study_type', 'study_design', 'phase', 'recruitment_status', 'target_size', 'date_registration'),
+			'fields': ('study_type', 'study_design', 'phase', 'recruitment_status', 'target_size', 'date_enrollement', 'date_registration', 'prospective_registration'),
 			'classes': ('collapse',),
 		}),
 		('Conditions & Interventions', {
@@ -567,18 +698,18 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 			'classes': ('collapse',),
 		}),
 		('Sponsors & Contacts', {
-			'fields': ('primary_sponsor', 'sponsor_type', 'contact_firstname', 'contact_lastname', 'contact_email', 'contact_tel', 'contact_affiliation'),
+			'fields': ('primary_sponsor', 'secondary_sponsor', 'source_support', 'sponsor_type', 'contact_firstname', 'contact_lastname', 'contact_address', 'contact_email', 'contact_tel', 'contact_affiliation'),
 			'classes': ('collapse',),
 		}),
 		('Location & Registry', {
-			'fields': ('countries', 'source_register', 'secondary_id', 'internal_number', 'other_records'),
+			'fields': ('countries', 'source_register', 'secondary_id', 'internal_number', 'other_records', 'last_refreshed_on', 'export_date'),
 			'classes': ('collapse',),
 		}),
 		('Relationships', {
 			'fields': ('sources', 'teams', 'subjects', 'team_categories'),
 		}),
 		('EU Clinical Trials', {
-			'fields': ('therapeutic_areas', 'country_status', 'trial_region', 'results_posted', 'overall_decision_date', 'countries_decision_date'),
+			'fields': ('therapeutic_areas', 'country_status', 'trial_region', 'overall_decision_date', 'countries_decision_date'),
 			'classes': ('collapse',),
 		}),
 		('Ethics Review', {
@@ -586,7 +717,7 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 			'classes': ('collapse',),
 		}),
 		('Results', {
-			'fields': ('results_date_completed', 'results_url_link'),
+			'fields': ('results_posted', 'results_date_completed', 'results_url_link', 'results_yes_no', 'results_ipd_plan', 'results_ipd_description'),
 			'classes': ('collapse',),
 		}),
 	)

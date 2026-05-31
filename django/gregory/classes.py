@@ -554,6 +554,11 @@ class ClinicalTrialsGovAPI:
 				'phone': first_contact.get('phone'),
 			}
 		
+		# Extract results availability and dates
+		has_results = bool(study_data.get('hasResults', False))
+		results_url_link = f"https://clinicaltrials.gov/study/{nct_id}?tab=results" if (has_results and nct_id) else None
+		results_date_completed = self._parse_date(status_module.get('resultsFirstPostDateStruct', {}).get('date'))
+
 		# Build extra_fields for ClinicalTrial object
 		extra_fields = {
 			'scientific_title': identification.get('officialTitle'),
@@ -580,6 +585,9 @@ class ClinicalTrialsGovAPI:
 			'contact_tel': contact_info.get('phone'),
 			'source_register': 'ClinicalTrials.gov',
 			'ctg_detailed_description': detailed_description,
+			'results_posted': has_results,
+			'results_url_link': results_url_link,
+			'results_date_completed': results_date_completed,
 		}
 		
 		return ClinicalTrial(
@@ -609,3 +617,127 @@ class ClinicalTrialsGovAPI:
 					return datetime.strptime(date_str, '%Y').date()
 				except ValueError:
 					return None
+
+
+class EUTrialParser:
+	"""Parse euclinicaltrials.eu (EU CTIS) RSS feed entries into structured trial data.
+
+	Keeps all EU-specific extraction in one place, mirroring how ClinicalTrialsGovAPI
+	handles ClinicalTrials.gov data.
+	"""
+
+	SOURCE_REGISTER = 'EU CTIS'
+
+	def extract_identifiers(self, link: str, guid: str) -> dict:
+		"""Extract registry identifiers from an RSS entry's link and guid.
+
+		eudract / euct come from the link query string; nct comes from the guid
+		when the entry points at ClinicalTrials.gov.
+		"""
+		import re
+		eudract = re.search(r'(?:eudract_number%3A|EUDRACT=)(\d{4}-\d{6}-\d{2}-\d{2})', link, re.IGNORECASE)
+		euct = re.search(r'(?:EUCT=)(\d{4}-\d{6}-\d{2}-\d{2})', link, re.IGNORECASE)
+		nct = guid if 'clinicaltrials.gov' in link else None
+		return {
+			"eudract": eudract.group(1) if eudract else None,
+			"nct": nct,
+			"euct": euct.group(1) if euct else None,
+		}
+
+	def parse_summary(self, summary_html: str) -> dict:
+		"""Extract EU CTIS fields from the RSS summary HTML.
+
+		Returns a dict of extra_fields, including source_register and the EU-specific
+		columns. recruitment_status is derived from the "Overall trial status" line.
+		"""
+		import re
+		from dateutil.parser import parse
+
+		def _extract(pattern):
+			match = re.search(pattern, summary_html, re.IGNORECASE)
+			if not match:
+				return None
+			# Strip any leading colon/whitespace left over from the label
+			return match.group(1).lstrip(': ').strip()
+
+		therapeutic_areas = _extract(r'Therapeutic Areas[^>]*>([^<]+)')
+		country_status = _extract(r'Status in each country[^>]*>([^<]+)')
+		trial_region = _extract(r'Trial region[^>]*>([^<]+)')
+		# Only commit to a boolean when the feed explicitly states it. If the line is
+		# absent, leave results_posted as None so the non-destructive update guard skips
+		# it and doesn't blank a value set by another source (e.g. ClinicalTrials.gov).
+		results_posted_str = _extract(r'Results posted[^>]*>([^<]+)')
+		results_posted = (results_posted_str.lower() == 'yes') if results_posted_str else None
+		medical_conditions = _extract(r'Medical conditions[^>]*>([^<]+)')
+		overall_status = _extract(r'Overall trial status[^>]*>([^<]+)')
+		primary_end_point = _extract(r'Primary end point[^>]*>([^<]+)')
+		secondary_end_point = _extract(r'Secondary end point[^>]*>([^<]+)')
+		overall_decision_date_str = _extract(r'Overall decision date[^>]*>([^<]+)')
+		countries_decision_date_str = _extract(r'Countries decision date[^>]*>([^<]+)')
+		sponsor = _extract(r'Sponsor[^>]*>([^<]+)')
+		sponsor_type = _extract(r'Sponsor type[^>]*>([^<]+)')
+		phase = _extract(r'Trial phase[^>]*>([^<]+)')
+		gender = _extract(r'Gender of participants[^>]*>([^<]+)')
+		target_size = _extract(r'Planned number of participants[^>]*>([^<]+)')
+		intervention = _extract(r'Trial product[^>]*>([^<]+)')
+
+		# "Age of participants" looks like "18-64 years"; split into min/max.
+		age_min = age_max = None
+		age_raw = _extract(r'Age of participants[^>]*>([^<]+)')
+		if age_raw:
+			age_match = re.search(r'(\d+)\s*-\s*(\d+)', age_raw)
+			if age_match:
+				age_min, age_max = age_match.group(1), age_match.group(2)
+
+		# "Last updated date" is day-first (DD/MM/YYYY).
+		last_refreshed_on = None
+		last_updated_str = _extract(r'Last updated date[^>]*>([^<]+)')
+		if last_updated_str:
+			try:
+				last_refreshed_on = parse(last_updated_str, dayfirst=True).date()
+			except (ValueError, TypeError):
+				pass
+
+		# EU CTIS feed dates are day-first (DD/MM/YYYY); without dayfirst=True,
+		# dateutil misreads e.g. 08/12/2025 (8 Dec) as 12 Aug.
+		overall_decision_date = None
+		if overall_decision_date_str:
+			try:
+				overall_decision_date = parse(overall_decision_date_str, dayfirst=True).date()
+			except (ValueError, TypeError):
+				pass
+
+		countries_decision_date = {}
+		if countries_decision_date_str:
+			for chunk in re.split(r'[;,]', countries_decision_date_str):
+				chunk_parts = chunk.strip().split(':')
+				if len(chunk_parts) == 2:
+					country_code = chunk_parts[0].strip()
+					date_val = chunk_parts[1].strip()
+					try:
+						countries_decision_date[country_code] = str(parse(date_val, dayfirst=True).date())
+					except (ValueError, TypeError):
+						countries_decision_date[country_code] = date_val
+
+		return {
+			'source_register': self.SOURCE_REGISTER,
+			'condition': medical_conditions,
+			'recruitment_status': overall_status,
+			'primary_sponsor': sponsor,
+			'primary_outcome': primary_end_point,
+			'secondary_outcome': secondary_end_point,
+			'therapeutic_areas': therapeutic_areas,
+			'country_status': country_status,
+			'trial_region': trial_region,
+			'results_posted': results_posted,
+			'overall_decision_date': overall_decision_date,
+			'countries_decision_date': countries_decision_date if countries_decision_date else None,
+			'sponsor_type': sponsor_type,
+			'phase': phase,
+			'intervention': intervention,
+			'inclusion_agemin': age_min,
+			'inclusion_agemax': age_max,
+			'inclusion_gender': gender,
+			'target_size': target_size,
+			'last_refreshed_on': last_refreshed_on,
+		}

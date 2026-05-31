@@ -429,7 +429,7 @@ class Trials(models.Model):
 	last_refreshed_on = models.DateField(null=True, blank=True)
 	scientific_title = models.TextField(null=True, blank=True)
 	primary_sponsor = models.TextField(null=True, blank=True)
-	retrospective_flag = models.CharField(max_length=10, null=True, blank=True)
+	prospective_registration = models.CharField(max_length=10, null=True, blank=True)
 	date_registration = models.DateField(null=True, blank=True)
 	source_register = models.CharField(max_length=200, null=True, blank=True)
 	recruitment_status = models.CharField(max_length=200, null=True, blank=True, db_index=True)
@@ -464,6 +464,11 @@ class Trials(models.Model):
 	ethics_review_contact_email = models.EmailField(max_length=1000, null=True, blank=True)
 	results_date_completed = models.DateField(null=True, blank=True)
 	results_url_link = models.URLField(null=True, blank=True, max_length=2000)
+	acronym = models.CharField(max_length=200, null=True, blank=True)
+	secondary_sponsor = models.TextField(null=True, blank=True)
+	results_yes_no = models.CharField(max_length=10, null=True, blank=True)
+	results_ipd_plan = models.CharField(max_length=10, null=True, blank=True)
+	results_ipd_description = models.TextField(null=True, blank=True)
 	ml_predictions = models.ManyToManyField('MLPredictions', blank=True)
 
 	# Fields for euclinicaltrials.eu data

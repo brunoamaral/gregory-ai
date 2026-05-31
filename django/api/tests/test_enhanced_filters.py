@@ -174,11 +174,72 @@ class TrialFilterTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data['results']), 1)
         self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-        
+
         # Test combination that should return no results
         response = self.client.get('/trials/?phase=Phase III&condition=Multiple Sclerosis')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data['results']), 0)
+
+    def test_has_results_filter(self):
+        """Test filtering trials by whether results have been posted.
+
+        Exercised at the FilterSet/queryset level: the /trials/ HTTP endpoint is
+        org-scoped by OrgVisibilityMixin, which returns nothing for anonymous test
+        requests, so we apply TrialFilter directly.
+        """
+        from api.filters import TrialFilter
+
+        # A trial with results via each of the three qualifying fields
+        trial_date = Trials.objects.create(
+            title="Trial with results completion date",
+            link="https://example.com/res-date",
+            results_date_completed=timezone.now().date(),
+        )
+        trial_link = Trials.objects.create(
+            title="Trial with results link",
+            link="https://example.com/res-link",
+            results_url_link="https://example.com/results",
+        )
+        trial_yesno = Trials.objects.create(
+            title="Trial with results available (lowercase)",
+            link="https://example.com/res-yesno",
+            results_yes_no="yes",  # lowercase must still match
+        )
+        trial_posted = Trials.objects.create(
+            title="Trial with results_posted flag",
+            link="https://example.com/res-posted",
+            results_posted=True,
+        )
+        # A trial whose results fields are empty strings should NOT count
+        trial_empty = Trials.objects.create(
+            title="Trial with empty results fields",
+            link="https://example.com/res-empty",
+            results_url_link="",
+            results_yes_no="",
+        )
+        # "No"/"no" in results_yes_no must NOT count
+        trial_no = Trials.objects.create(
+            title="Trial with results available = No",
+            link="https://example.com/res-no",
+            results_yes_no="No",
+        )
+
+        with_results = {
+            trial_date.trial_id, trial_link.trial_id,
+            trial_yesno.trial_id, trial_posted.trial_id,
+        }
+        without_results = {
+            self.trial1.trial_id, self.trial2.trial_id,
+            trial_empty.trial_id, trial_no.trial_id,
+        }
+
+        # has_results=true returns only trials with results
+        f_true = TrialFilter({'has_results': 'true'}, queryset=Trials.objects.all())
+        self.assertEqual(set(f_true.qs.values_list('trial_id', flat=True)), with_results)
+
+        # has_results=false returns only trials without results
+        f_false = TrialFilter({'has_results': 'false'}, queryset=Trials.objects.all())
+        self.assertEqual(set(f_false.qs.values_list('trial_id', flat=True)), without_results)
 
 
 class AuthorFilterTests(TestCase):
