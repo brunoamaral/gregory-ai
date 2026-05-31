@@ -3,7 +3,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 from django.utils import timezone
 
-from gregory.models import Articles, Trials, Subject, Team, Organization, ArticleSubjectRelevance
+from gregory.models import Articles, Trials, Subject, Team, Organization, ArticleSubjectRelevance, OrganizationApiSettings
 
 
 class ArticleMultiSubjectFilterTests(TestCase):
@@ -12,7 +12,8 @@ class ArticleMultiSubjectFilterTests(TestCase):
 	def setUp(self):
 		self.client = APIClient()
 
-		self.org = Organization.objects.create(name="Test Org")
+		self.org = Organization.objects.create(name="Test Org", slug="ms-filter-org")
+		OrganizationApiSettings.objects.filter(organization=self.org).update(make_api_public=True)
 		self.team = Team.objects.create(name="Test Team", slug="test-team-ms", organization=self.org)
 
 		self.subject_a = Subject.objects.create(
@@ -206,7 +207,8 @@ class TrialMultiSubjectFilterTests(TestCase):
 	def setUp(self):
 		self.client = APIClient()
 
-		self.org = Organization.objects.create(name="Trial Org")
+		self.org = Organization.objects.create(name="Trial Org", slug="ms-trial-org")
+		OrganizationApiSettings.objects.filter(organization=self.org).update(make_api_public=True)
 		self.team = Team.objects.create(name="Trial Team", slug="trial-team-slug", organization=self.org)
 
 		self.subject_a = Subject.objects.create(

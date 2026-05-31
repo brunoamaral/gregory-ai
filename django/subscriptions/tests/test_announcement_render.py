@@ -413,8 +413,8 @@ class CKEditorUploadViewTests(TestCase):
 	# ---- resize ---------------------------------------------------------
 
 	def test_oversized_jpeg_is_resized(self):
-		"""Upload an 800×400 JPEG; the stored file must be ≤ 600 px wide."""
-		jpeg_data = _make_jpeg(width=800, height=400)
+		"""Upload a 1600×400 JPEG; the stored file must be ≤ 1200 px wide."""
+		jpeg_data = _make_jpeg(width=1600, height=400)
 		upload = SimpleUploadedFile('wide.jpg', jpeg_data, content_type='image/jpeg')
 		resp = self._post(files={'upload': upload}, user=self.staff_user)
 		self.assertEqual(resp.status_code, 200)
@@ -427,7 +427,7 @@ class CKEditorUploadViewTests(TestCase):
 		with default_storage.open(storage_path, 'rb') as f:
 			img = Image.open(f)
 			img.load()
-			self.assertLessEqual(img.width, 600)
+			self.assertLessEqual(img.width, 1200)
 
 	def test_small_png_passes_through_unchanged(self):
 		"""Upload a 100×100 PNG; it must be accepted and returned as-is."""

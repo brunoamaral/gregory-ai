@@ -5,6 +5,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gregory.tests.test_settings')
 django.setup()
 
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 from unittest.mock import patch, MagicMock
 
@@ -41,7 +42,7 @@ class UpdateOrcidCommandTest(TestCase):
 		instance.get_search_token_from_orcid.assert_called_once()
 
 	def test_handle_requires_organization_argument(self):
-		with self.assertRaises(SystemExit):
+		with self.assertRaises(CommandError):
 			call_command('update_orcid')
 
 	@patch('gregory.management.commands.update_orcid.get_orcid_credentials', return_value=(None, None))

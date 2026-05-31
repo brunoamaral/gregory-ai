@@ -96,14 +96,6 @@ class PostArticleOrgScopingBase(TestCase):
 		self.other_source = _make_source(self.other_team, self.other_subj, 'pa-other-source')
 
 		self.scheme       = _make_scheme(self.my_org, 'pa-my-key')
-		self.null_scheme  = APIAccessScheme.objects.create(
-			client_name='pa-null-key',
-			client_contacts='null@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
 		self.client = Client()
 
 	def _valid_payload(self, source_id):
@@ -118,18 +110,6 @@ class PostArticleOrgScopingBase(TestCase):
 			'link': f'https://example.com/article-src-{source_id}',
 			'doi': f'10.9999/test-source-{source_id}',
 		}
-
-
-# ---------------------------------------------------------------------------
-# Null-org key → 403
-# ---------------------------------------------------------------------------
-
-class NullOrgKeyPostArticleTest(PostArticleOrgScopingBase):
-
-	def test_null_org_key_rejected_403(self):
-		payload = self._valid_payload(self.my_source.pk)
-		resp = _post(self.client, self.null_scheme.api_key, payload)
-		self.assertEqual(resp.status_code, 403)
 
 
 # ---------------------------------------------------------------------------

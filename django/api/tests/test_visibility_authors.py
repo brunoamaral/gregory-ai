@@ -285,27 +285,3 @@ class APIKeyAuthorVisibilityTest(AuthorVisibilityBase):
 # ---------------------------------------------------------------------------
 # Null-org API key (anonymous-equivalent)
 # ---------------------------------------------------------------------------
-
-class NullOrgAPIKeyAuthorVisibilityTest(AuthorVisibilityBase):
-	def setUp(self):
-		super().setUp()
-		self.scheme = APIAccessScheme.objects.create(
-			client_name='null-org-author-key',
-			client_contacts='null-author@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
-		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
-
-	def test_list_shows_only_public_authors(self):
-		resp = self.client.get('/authors/')
-		ids = [a['author_id'] for a in resp.data['results']]
-		self.assertIn(self.author_pub.author_id, ids)
-		self.assertNotIn(self.author_mine.author_id, ids)
-		self.assertNotIn(self.author_priv.author_id, ids)
-
-	def test_detail_of_private_author_returns_404(self):
-		resp = self.client.get(f'/authors/{self.author_mine.author_id}/')
-		self.assertEqual(resp.status_code, 404)

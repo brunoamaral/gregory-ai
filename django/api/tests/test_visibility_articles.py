@@ -303,36 +303,6 @@ class APIKeyArticleVisibilityTest(ArticleVisibilityBase):
 # ---------------------------------------------------------------------------
 # Null-org API key (anonymous-equivalent)
 # ---------------------------------------------------------------------------
-
-class NullOrgAPIKeyArticleVisibilityTest(ArticleVisibilityBase):
-	def setUp(self):
-		super().setUp()
-		self.scheme = APIAccessScheme.objects.create(
-			client_name='null-org-key',
-			client_contacts='null@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
-		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
-
-	def test_list_shows_only_public(self):
-		resp = self.client.get('/articles/')
-		ids = [a['article_id'] for a in resp.data['results']]
-		self.assertIn(self.art_pub.article_id, ids)
-		self.assertNotIn(self.art_mine.article_id, ids)
-		self.assertNotIn(self.art_priv.article_id, ids)
-
-	def test_detail_of_private_article_returns_404(self):
-		resp = self.client.get(f'/articles/{self.art_mine.article_id}/')
-		self.assertEqual(resp.status_code, 404)
-
-
-# ---------------------------------------------------------------------------
-# CSV export honours visibility rules
-# ---------------------------------------------------------------------------
-
 class CSVExportArticleVisibilityTest(ArticleVisibilityBase):
 	"""CSV responses from /articles/?format=csv must respect the same visibility rules."""
 

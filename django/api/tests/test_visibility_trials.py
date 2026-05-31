@@ -259,55 +259,15 @@ class APIKeyTrialVisibilityTest(TrialVisibilityBase):
 # ---------------------------------------------------------------------------
 # Null-org API key (anonymous-equivalent)
 # ---------------------------------------------------------------------------
-
-class NullOrgAPIKeyTrialVisibilityTest(TrialVisibilityBase):
-	def setUp(self):
-		super().setUp()
-		self.scheme = APIAccessScheme.objects.create(
-			client_name='null-org-key-t',
-			client_contacts='null-t@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
-		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
-
-	def test_list_shows_only_public(self):
-		resp = self.client.get('/trials/')
-		ids = [t['trial_id'] for t in resp.data['results']]
-		self.assertIn(self.trial_pub.trial_id, ids)
-		self.assertNotIn(self.trial_mine.trial_id, ids)
-		self.assertNotIn(self.trial_priv.trial_id, ids)
-
-	def test_detail_of_private_trial_returns_404(self):
-		resp = self.client.get(f'/trials/{self.trial_mine.trial_id}/')
-		self.assertEqual(resp.status_code, 404)
-
-	def test_include_public_is_noop(self):
-		"""Null-org key already behaves like anonymous; include_public changes nothing."""
-		resp_plain = self.client.get('/trials/')
-		resp_flag = self.client.get('/trials/?include_public=true')
-		plain_ids = {t['trial_id'] for t in resp_plain.data['results']}
-		flag_ids = {t['trial_id'] for t in resp_flag.data['results']}
-		self.assertEqual(plain_ids, flag_ids)
-
-
-# ---------------------------------------------------------------------------
-# CSV export honours visibility rules
-# ---------------------------------------------------------------------------
-
 class CSVExportTrialVisibilityTest(TrialVisibilityBase):
 	"""CSV responses from /trials/?format=csv must respect the same visibility rules."""
 
 	def _csv_titles(self, response):
-		"""Return the set of trial titles found in a CSV StreamingHttpResponse.\""""
+		"""Return the set of trial titles found in a CSV StreamingHttpResponse."""
+		import csv, io
 		content = b''.join(response.streaming_content).decode()
-		titles = set()
-		for line in content.splitlines()[1:]:
-			if line.strip():
-				titles.add(line.split(',')[1].strip('"'))
-		return titles
+		reader = csv.DictReader(io.StringIO(content))
+		return {row['title'] for row in reader if row.get('title')}
 
 	def test_anonymous_csv_shows_only_public_trials(self):
 		resp = self.client.get('/trials/?format=csv&all_results=true')

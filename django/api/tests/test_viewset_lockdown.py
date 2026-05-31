@@ -16,10 +16,13 @@ Run with:
 """
 from datetime import timedelta
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils.timezone import now
 from organizations.models import Organization
 from rest_framework.test import APIClient
+
+User = get_user_model()
 
 from api.models import APIAccessScheme
 from gregory.models import (
@@ -74,9 +77,11 @@ class ArticleViewSetLockdownTest(TestCase):
 			link='https://example.com/lock',
 		)
 		self.article.teams.add(self.team)
+		self.user = User.objects.create_user(username='lockdown-user', password='pw')
+		self.client.force_login(self.user)
 
 	def _auth_headers(self):
-		return {'HTTP_AUTHORIZATION': self.scheme.api_key}
+		return {}
 
 	def test_patch_returns_405(self):
 		resp = self.client.patch(
@@ -127,20 +132,20 @@ class TrialViewSetLockdownTest(TestCase):
 			identifiers={'nct': 'NCT9999998'},
 		)
 		self.trial.teams.add(self.team)
+		self.user = User.objects.create_user(username='trial-lockdown-user', password='pw')
+		self.client.force_login(self.user)
 
 	def test_patch_returns_405(self):
 		resp = self.client.patch(
 			f'/trials/{self.trial.trial_id}/',
 			data={'title': 'Patched'},
 			format='json',
-			HTTP_AUTHORIZATION=self.scheme.api_key,
 		)
 		self.assertEqual(resp.status_code, 405)
 
 	def test_delete_returns_405(self):
 		resp = self.client.delete(
 			f'/trials/{self.trial.trial_id}/',
-			HTTP_AUTHORIZATION=self.scheme.api_key,
 		)
 		self.assertEqual(resp.status_code, 405)
 
@@ -172,16 +177,14 @@ class OtherViewSetsLockdownTest(TestCase):
 			given_name='Test',
 			family_name='Author',
 		)
-
-	def _auth(self):
-		return {'HTTP_AUTHORIZATION': self.scheme.api_key}
+		self.user = User.objects.create_user(username='other-lockdown-user', password='pw')
+		self.client.force_login(self.user)
 
 	def test_patch_authors_returns_405(self):
 		resp = self.client.patch(
 			f'/authors/{self.author.author_id}/',
 			data={'given_name': 'Changed'},
 			format='json',
-			**self._auth(),
 		)
 		self.assertEqual(resp.status_code, 405)
 
@@ -190,7 +193,6 @@ class OtherViewSetsLockdownTest(TestCase):
 			f'/sources/{self.source.source_id}/',
 			data={'name': 'Changed'},
 			format='json',
-			**self._auth(),
 		)
 		self.assertEqual(resp.status_code, 405)
 
@@ -199,7 +201,6 @@ class OtherViewSetsLockdownTest(TestCase):
 			f'/subjects/{self.subject.id}/',
 			data={'subject_name': 'Changed'},
 			format='json',
-			**self._auth(),
 		)
 		self.assertEqual(resp.status_code, 405)
 
@@ -208,6 +209,5 @@ class OtherViewSetsLockdownTest(TestCase):
 			f'/teams/{self.team.id}/',
 			data={'name': 'Changed'},
 			format='json',
-			**self._auth(),
 		)
 		self.assertEqual(resp.status_code, 405)

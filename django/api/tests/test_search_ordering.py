@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from datetime import datetime, timedelta
-from gregory.models import Articles, Trials, Team, Subject, Sources
+from gregory.models import Articles, Trials, Team, Subject, Sources, OrganizationApiSettings
 from organizations.models import Organization
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -23,6 +23,7 @@ class SearchOrderingTestCase(TestCase):
         
         # Create test organization and team
         self.organization = Organization.objects.create(name="Test Organization")
+        OrganizationApiSettings.objects.filter(organization=self.organization).update(make_api_public=True)
         self.team = Team.objects.create(
             name="Test Team",
             organization=self.organization,

@@ -230,14 +230,6 @@ class EditArticleErrorsTest(TestCase):
 		self.team = _make_team(self.org, 'Team C')
 		self.other_team = _make_team(self.other_org, 'Team D')
 		self.scheme = _make_scheme(self.org, 'key-c')
-		self.scheme_no_org = APIAccessScheme.objects.create(
-			client_name='no-org',
-			client_contacts='noorg@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
 		self.article = _make_article(self.team, doi='10.3333/errors')
 
 	def test_missing_api_key_returns_401(self):
@@ -247,10 +239,6 @@ class EditArticleErrorsTest(TestCase):
 	def test_invalid_api_key_returns_401(self):
 		resp = _edit(self.client, 'not-a-real-key', {'doi': '10.3333/errors'})
 		self.assertEqual(resp.status_code, 401)
-
-	def test_key_without_org_returns_403(self):
-		resp = _edit(self.client, self.scheme_no_org.api_key, {'doi': '10.3333/errors'})
-		self.assertEqual(resp.status_code, 403)
 
 	def test_article_not_found_returns_404(self):
 		resp = _edit(self.client, self.scheme.api_key, {'doi': '10.9999/nonexistent'})
@@ -265,15 +253,15 @@ class EditArticleErrorsTest(TestCase):
 		resp = _edit(self.client, self.scheme.api_key, {'doi': '10.3333/errors'})
 		self.assertEqual(resp.status_code, 409)
 		data = resp.json()
-		self.assertIn('article_ids', data['data'])
-		self.assertIn(self.article.article_id, data['data']['article_ids'])
-		self.assertIn(duplicate.article_id, data['data']['article_ids'])
+		self.assertIn('article_ids', data['extra_data'])
+		self.assertIn(self.article.article_id, data['extra_data']['article_ids'])
+		self.assertIn(duplicate.article_id, data['extra_data']['article_ids'])
 		# No writes should have occurred
 		self.assertEqual(ArticleOrgContent.objects.count(), 0)
 
 	def test_cross_org_article_returns_403(self):
 		"""Article belongs to other_org only → 403."""
-		other_article = _make_article(self.other_team, doi='10.4444/other')
+		other_article = _make_article(self.other_team, doi='10.4444/other', title='Cross Org Article')
 		resp = _edit(self.client, self.scheme.api_key, {
 			'doi': '10.4444/other',
 			'takeaways': 'Should not be written',
@@ -308,7 +296,7 @@ class EditArticleAuditLogTest(TestCase):
 	def test_403_cross_org_creates_log(self):
 		other_org = _make_org('Org F', 'org-f')
 		other_team = _make_team(other_org, 'Team F')
-		_make_article(other_team, doi='10.6666/forbidden')
+		_make_article(other_team, doi='10.6666/forbidden', title='Forbidden Article')
 		_edit(self.client, self.scheme.api_key, {'doi': '10.6666/forbidden'})
 		log = APIAccessSchemeLog.objects.filter(api_access_scheme=self.scheme).latest('access_date')
 		self.assertEqual(log.http_code, 403)

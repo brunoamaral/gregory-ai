@@ -2,7 +2,8 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from gregory.models import Articles, Trials, ArticleTrialReference
+from gregory.models import Articles, Trials, ArticleTrialReference, Team, OrganizationApiSettings
+from organizations.models import Organization
 
 
 class HasClinicalTrialsFilterTests(TestCase):
@@ -11,17 +12,24 @@ class HasClinicalTrialsFilterTests(TestCase):
 	def setUp(self):
 		self.client = APIClient()
 
+		# Public org so anonymous requests can see the articles
+		org = Organization.objects.create(name="Clinical Trials Filter Org", slug="clin-filter-org")
+		OrganizationApiSettings.objects.filter(organization=org).update(make_api_public=True)
+		self.team = Team.objects.create(name="Clin Filter Team", slug="clin-filter-team", organization=org)
+
 		# Article linked to a trial
 		self.article_with_trial = Articles.objects.create(
 			title="Article referencing a clinical trial",
 			link="https://example.com/article-with-trial",
 		)
+		self.article_with_trial.teams.add(self.team)
 
 		# Article with no trial link
 		self.article_without_trial = Articles.objects.create(
 			title="Article with no clinical trial",
 			link="https://example.com/article-without-trial",
 		)
+		self.article_without_trial.teams.add(self.team)
 
 		# Trial to link
 		self.trial = Trials.objects.create(

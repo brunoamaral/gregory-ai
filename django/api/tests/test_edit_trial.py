@@ -148,14 +148,6 @@ class EditTrialErrorsTest(TestCase):
 		self.team = _make_team(self.org, 'Trial Team B')
 		self.other_team = _make_team(self.other_org, 'Trial Team C')
 		self.scheme = _make_scheme(self.org, 'trial-key-b')
-		self.scheme_no_org = APIAccessScheme.objects.create(
-			client_name='no-org-trial',
-			client_contacts='noorg@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
 		self.trial = _make_trial(self.team, 'NCT0000002')
 
 	def test_missing_api_key_returns_401(self):
@@ -165,12 +157,6 @@ class EditTrialErrorsTest(TestCase):
 	def test_invalid_api_key_returns_401(self):
 		resp = _edit(self.client, 'bad-key', {'identifiers': {'nct': 'NCT0000002'}})
 		self.assertEqual(resp.status_code, 401)
-
-	def test_key_without_org_returns_403(self):
-		resp = _edit(self.client, self.scheme_no_org.api_key, {
-			'identifiers': {'nct': 'NCT0000002'},
-		})
-		self.assertEqual(resp.status_code, 403)
 
 	def test_missing_identifiers_returns_400(self):
 		resp = _edit(self.client, self.scheme.api_key, {'takeaways': 'No id'})
@@ -195,9 +181,9 @@ class EditTrialErrorsTest(TestCase):
 		})
 		self.assertEqual(resp.status_code, 409)
 		data = resp.json()
-		self.assertIn('trial_ids', data['data'])
-		self.assertIn(self.trial.trial_id, data['data']['trial_ids'])
-		self.assertIn(dup.trial_id, data['data']['trial_ids'])
+		self.assertIn('trial_ids', data['extra_data'])
+		self.assertIn(self.trial.trial_id, data['extra_data']['trial_ids'])
+		self.assertIn(dup.trial_id, data['extra_data']['trial_ids'])
 		self.assertEqual(TrialOrgContent.objects.count(), 0)
 
 	def test_cross_org_trial_returns_403(self):

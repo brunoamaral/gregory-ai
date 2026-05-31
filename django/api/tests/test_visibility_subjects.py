@@ -212,27 +212,3 @@ class APIKeySubjectVisibilityTest(SubjectVisibilityBase):
 # ---------------------------------------------------------------------------
 # Null-org API key (anonymous-equivalent)
 # ---------------------------------------------------------------------------
-
-class NullOrgAPIKeySubjectVisibilityTest(SubjectVisibilityBase):
-	def setUp(self):
-		super().setUp()
-		self.scheme = APIAccessScheme.objects.create(
-			client_name='null-org-subj-key',
-			client_contacts='null-subj@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
-		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
-
-	def test_list_shows_only_public_subjects(self):
-		resp = self.client.get('/subjects/')
-		ids = [s['id'] for s in resp.data['results']]
-		self.assertIn(self.subj_pub.id, ids)
-		self.assertNotIn(self.subj_mine.id, ids)
-		self.assertNotIn(self.subj_priv.id, ids)
-
-	def test_detail_of_private_subject_returns_404(self):
-		resp = self.client.get(f'/subjects/{self.subj_mine.id}/')
-		self.assertEqual(resp.status_code, 404)

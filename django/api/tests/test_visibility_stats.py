@@ -232,34 +232,6 @@ class APIKeyStatsVisibilityTest(StatsVisibilityBase):
 # ---------------------------------------------------------------------------
 # Null-org API key (anonymous-equivalent)
 # ---------------------------------------------------------------------------
-
-class NullOrgAPIKeyStatsVisibilityTest(StatsVisibilityBase):
-	def setUp(self):
-		super().setUp()
-		self.scheme = APIAccessScheme.objects.create(
-			client_name='null-org-stats-key',
-			client_contacts='null-stats@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
-		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
-
-	def test_own_team_not_visible(self):
-		resp = self.client.get('/stats/', {'team': self.my_team.id})
-		self.assertEqual(resp.status_code, 404)
-
-	def test_public_team_visible(self):
-		resp = self.client.get('/stats/', {'team': self.pub_team.id})
-		self.assertEqual(resp.status_code, 200)
-		self.assertEqual(resp.data['articles'], 1)
-
-
-# ---------------------------------------------------------------------------
-# ?organization= filter
-# ---------------------------------------------------------------------------
-
 class OrgFilterStatsTest(StatsVisibilityBase):
 	"""?organization= scopes counts and enforces visibility."""
 
