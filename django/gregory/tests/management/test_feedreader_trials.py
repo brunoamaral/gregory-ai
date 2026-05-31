@@ -10,6 +10,7 @@ from unittest.mock import patch, MagicMock
 import pytz
 
 from gregory.management.commands.feedreader_trials import Command
+from gregory.classes import EUTrialParser
 
 class FeedreaderTrialsCommandTest(TestCase):
 	@patch('gregory.management.commands.feedreader_trials.Command.setup')
@@ -33,16 +34,16 @@ class FeedreaderTrialsCommandTest(TestCase):
 		self.assertEqual(dt.year, 2024)
 
 	def test_extract_identifiers_from_link_and_guid(self):
-		cmd = Command()
+		parser = EUTrialParser()
 		# Use a link that includes clinicaltrials.gov to make the test pass
 		link = 'https://clinicaltrials.gov/example/?EUDRACT=2024-123456-12-34&EUCT=2024-123456-12-34'
-		result = cmd.extract_identifiers(link, 'NCT12345678')
+		result = parser.extract_identifiers(link, 'NCT12345678')
 		self.assertEqual(result['eudract'], '2024-123456-12-34')
 		self.assertEqual(result['nct'], 'NCT12345678')
 		self.assertEqual(result['euct'], '2024-123456-12-34')
 
-	def test_parse_eu_clinical_trial_data_parses_html(self):
-		cmd = Command()
+	def test_parse_summary_parses_html(self):
+		parser = EUTrialParser()
 		html = (
 			'Trial number</b>: 2024-123456-12<br>'
 			'Therapeutic Areas</b>: Oncology<br>'
@@ -58,10 +59,13 @@ class FeedreaderTrialsCommandTest(TestCase):
 			'Sponsor</b>: Example Inc<br>'
 			'Sponsor type</b>: Industry'
 		)
-		data = cmd.parse_eu_clinical_trial_data(html)
+		data = parser.parse_summary(html)
 		self.assertEqual(data['therapeutic_areas'], 'Oncology')
 		self.assertTrue(data['results_posted'])
 		self.assertEqual(data['trial_region'], 'Europe')
+		# Consolidation additions: source_register set, overall status -> recruitment_status
+		self.assertEqual(data['source_register'], 'EU CTIS')
+		self.assertEqual(data['recruitment_status'], 'Completed')
 
 	@patch('gregory.management.commands.feedreader_trials.feedparser.parse')
 	@patch('gregory.management.commands.feedreader_trials.requests.get')

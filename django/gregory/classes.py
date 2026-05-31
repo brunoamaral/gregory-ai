@@ -617,3 +617,94 @@ class ClinicalTrialsGovAPI:
 					return datetime.strptime(date_str, '%Y').date()
 				except ValueError:
 					return None
+
+
+class EUTrialParser:
+	"""Parse euclinicaltrials.eu (EU CTIS) RSS feed entries into structured trial data.
+
+	Keeps all EU-specific extraction in one place, mirroring how ClinicalTrialsGovAPI
+	handles ClinicalTrials.gov data.
+	"""
+
+	SOURCE_REGISTER = 'EU CTIS'
+
+	def extract_identifiers(self, link: str, guid: str) -> dict:
+		"""Extract registry identifiers from an RSS entry's link and guid.
+
+		eudract / euct come from the link query string; nct comes from the guid
+		when the entry points at ClinicalTrials.gov.
+		"""
+		import re
+		eudract = re.search(r'(?:eudract_number%3A|EUDRACT=)(\d{4}-\d{6}-\d{2}-\d{2})', link, re.IGNORECASE)
+		euct = re.search(r'(?:EUCT=)(\d{4}-\d{6}-\d{2}-\d{2})', link, re.IGNORECASE)
+		nct = guid if 'clinicaltrials.gov' in link else None
+		return {
+			"eudract": eudract.group(1) if eudract else None,
+			"nct": nct,
+			"euct": euct.group(1) if euct else None,
+		}
+
+	def parse_summary(self, summary_html: str) -> dict:
+		"""Extract EU CTIS fields from the RSS summary HTML.
+
+		Returns a dict of extra_fields, including source_register and the EU-specific
+		columns. recruitment_status is derived from the "Overall trial status" line.
+		"""
+		import re
+		from dateutil.parser import parse
+
+		def _extract(pattern):
+			match = re.search(pattern, summary_html, re.IGNORECASE)
+			if not match:
+				return None
+			# Strip any leading colon/whitespace left over from the label
+			return match.group(1).lstrip(': ').strip()
+
+		therapeutic_areas = _extract(r'Therapeutic Areas[^>]*>([^<]+)')
+		country_status = _extract(r'Status in each country[^>]*>([^<]+)')
+		trial_region = _extract(r'Trial region[^>]*>([^<]+)')
+		results_posted_str = _extract(r'Results posted[^>]*>([^<]+)')
+		results_posted = (results_posted_str.lower() == 'yes') if results_posted_str else False
+		medical_conditions = _extract(r'Medical conditions[^>]*>([^<]+)')
+		overall_status = _extract(r'Overall trial status[^>]*>([^<]+)')
+		primary_end_point = _extract(r'Primary end point[^>]*>([^<]+)')
+		secondary_end_point = _extract(r'Secondary end point[^>]*>([^<]+)')
+		overall_decision_date_str = _extract(r'Overall decision date[^>]*>([^<]+)')
+		countries_decision_date_str = _extract(r'Countries decision date[^>]*>([^<]+)')
+		sponsor = _extract(r'Sponsor[^>]*>([^<]+)')
+		sponsor_type = _extract(r'Sponsor type[^>]*>([^<]+)')
+
+		overall_decision_date = None
+		if overall_decision_date_str:
+			try:
+				overall_decision_date = parse(overall_decision_date_str).date()
+			except (ValueError, TypeError):
+				pass
+
+		countries_decision_date = {}
+		if countries_decision_date_str:
+			for chunk in re.split(r'[;,]', countries_decision_date_str):
+				chunk_parts = chunk.strip().split(':')
+				if len(chunk_parts) == 2:
+					country_code = chunk_parts[0].strip()
+					date_val = chunk_parts[1].strip()
+					try:
+						countries_decision_date[country_code] = str(parse(date_val).date())
+					except (ValueError, TypeError):
+						countries_decision_date[country_code] = date_val
+
+		return {
+			'source_register': self.SOURCE_REGISTER,
+			'condition': medical_conditions,
+			'recruitment_status': overall_status,
+			'primary_sponsor': sponsor,
+			'primary_outcome': primary_end_point,
+			'secondary_outcome': secondary_end_point,
+			'therapeutic_areas': therapeutic_areas,
+			'country_status': country_status,
+			'trial_region': trial_region,
+			'results_posted': results_posted,
+			'overall_decision_date': overall_decision_date,
+			'countries_decision_date': countries_decision_date if countries_decision_date else None,
+			'sponsor_type': sponsor_type,
+		}

@@ -4,19 +4,19 @@ from django.db import IntegrityError
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils import timezone
-from gregory.classes import ClinicalTrial
+from gregory.classes import ClinicalTrial, EUTrialParser
 from gregory.functions import remove_utm
 from gregory.models import Trials, Sources
 import feedparser
 import pytz
-import re
 import requests
 
 class Command(BaseCommand):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.verbosity = 1  # Default verbosity level
-		
+		self.eu_parser = EUTrialParser()
+
 	def handle(self, *args, **options):
 		self.verbosity = options.get('verbosity', 1)
 		self.setup()
@@ -64,10 +64,10 @@ class Command(BaseCommand):
 					summary_html = entry.get('summary_detail', {}).get('value', '') or entry.get('summary', '')
 					published = self.parse_date(entry.get('published'))
 					link = remove_utm(entry['link'])
-					identifiers = self.extract_identifiers(link, entry.get('guid'))
+					identifiers = self.eu_parser.extract_identifiers(link, entry.get('guid'))
 					extra_fields = {}
 					if 'euclinicaltrials.eu' in link:
-						extra_fields = self.parse_eu_clinical_trial_data(summary_html)
+						extra_fields = self.eu_parser.parse_summary(summary_html)
 
 					# Create ClinicalTrial object
 					incoming_clinical_trial = ClinicalTrial(
@@ -104,81 +104,6 @@ class Command(BaseCommand):
 			return None
 		return parse(date_str, tzinfos=self.tzinfos).astimezone(pytz.utc)
 
-	def extract_identifiers(self, link: str, guid: str) -> dict:
-		"""
-		Extract identifiers from the link or guid.
-		eudract/euct might come from the link if present,
-		nct from guid if 'clinicaltrials.gov' is in the link.
-		However, for euclinicaltrials.eu, we now rely on parse_eu_clinical_trial_data.
-		"""
-		eudract = re.search(r'(?:eudract_number%3A|EUDRACT=)(\d{4}-\d{6}-\d{2}-\d{2})', link, re.IGNORECASE)
-		euct = re.search(r'(?:EUCT=)(\d{4}-\d{6}-\d{2}-\d{2})', link, re.IGNORECASE)
-		nct = guid if 'clinicaltrials.gov' in link else None
-		return {
-			"eudract": eudract.group(1) if eudract else None,
-			"nct": nct,
-			"euct": euct.group(1) if euct else None
-		}
-
-	def parse_eu_clinical_trial_data(self, summary_html: str) -> dict:
-		"""Extract relevant fields from euclinicaltrials.eu summary."""
-		def _extract(pattern):
-			match = re.search(pattern, summary_html, re.IGNORECASE)
-			if not match:
-				return None
-			# Get the raw matched text
-			raw_val = match.group(1)
-			# Strip off any leading colon and whitespace
-			raw_val = raw_val.lstrip(': ').strip()
-			return raw_val
-		eudract_pattern = r'Trial number</b>:\s*([0-9]{4}-[0-9]{6}-[0-9]{2})'
-		therapeutic_areas = _extract(r'Therapeutic Areas[^>]*>([^<]+)')
-		country_status = _extract(r'Status in each country[^>]*>([^<]+)')
-		trial_region = _extract(r'Trial region[^>]*>([^<]+)')
-		results_posted_str = _extract(r'Results posted[^>]*>([^<]+)')
-		results_posted = (results_posted_str.lower() == 'yes') if results_posted_str else False
-		medical_conditions = _extract(r'Medical conditions[^>]*>([^<]+)')
-		overall_status = _extract(r'Overall trial status[^>]*>([^<]+)')
-		primary_end_point = _extract(r'Primary end point[^>]*>([^<]+)')
-		secondary_end_point = _extract(r'Secondary end point[^>]*>([^<]+)')
-		overall_decision_date_str = _extract(r'Overall decision date[^>]*>([^<]+)')
-		countries_decision_date_str = _extract(r'Countries decision date[^>]*>([^<]+)')
-		sponsor = _extract(r'Sponsor[^>]*>([^<]+)')
-		sponsor_type = _extract(r'Sponsor type[^>]*>([^<]+)')
-		overall_decision_date = None
-		if overall_decision_date_str:
-			try:
-				overall_decision_date = parse(overall_decision_date_str).date()
-			except:
-				pass
-
-		countries_decision_date = {}
-		if countries_decision_date_str:
-			chunks = re.split(r'[;,]', countries_decision_date_str)
-			for chunk in chunks:
-				chunk_parts = chunk.strip().split(':')
-				if len(chunk_parts) == 2:
-					country_code = chunk_parts[0].strip()
-					date_val = chunk_parts[1].strip()
-					try:
-						countries_decision_date[country_code] = str(parse(date_val).date())
-					except:
-						countries_decision_date[country_code] = date_val
-		return {
-			'condition': medical_conditions, 
-			'primary_sponsor': sponsor,  
-			'primary_outcome': primary_end_point,
-			'secondary_outcome': secondary_end_point,
-			'therapeutic_areas': therapeutic_areas,
-			'country_status': country_status,
-			'trial_region': trial_region,
-			'results_posted': results_posted,
-			'overall_decision_date': overall_decision_date,
-			'countries_decision_date': countries_decision_date if countries_decision_date else None,
-			'sponsor_type': sponsor_type,
-			'results_posted': results_posted,
-		}
-
 	def find_existing_trial(self, clinical_trial: ClinicalTrial):
 		identifiers = clinical_trial.identifiers
 		title = clinical_trial.title.lower() if clinical_trial.title else None
@@ -188,12 +113,17 @@ class Command(BaseCommand):
 			query |= Q(identifiers__euct=identifiers['euct'])
 		if identifiers.get('nct'):
 			query |= Q(identifiers__nct=identifiers['nct'])
+		if identifiers.get('eudract'):
+			query |= Q(identifiers__eudract=identifiers['eudract'])
 		if identifiers.get('ctis'):
 			query |= Q(identifiers__ctis=identifiers['ctis'])
 
-		trial = Trials.objects.filter(query).first()
-		if trial:
-			return trial
+		# Only match by identifiers when we actually have one; an empty Q() would
+		# match every trial and return an arbitrary, unrelated record.
+		if query:
+			trial = Trials.objects.filter(query).first()
+			if trial:
+				return trial
 
 		if title:
 			trial = Trials.objects.filter(title__iexact=title).first()
@@ -212,6 +142,7 @@ class Command(BaseCommand):
 				link=clinical_trial.link,
 				published_date=clinical_trial.published_date,
 				identifiers=clinical_trial.identifiers,
+				source_register=extras.get('source_register'),
 				therapeutic_areas=extras.get('therapeutic_areas'),
 				country_status=extras.get('country_status'),
 				trial_region=extras.get('trial_region'),
@@ -280,7 +211,7 @@ class Command(BaseCommand):
 			'therapeutic_areas', 'country_status', 'trial_region', 'results_posted',
 			'overall_decision_date', 'countries_decision_date', 'sponsor_type',
 			'condition', 'primary_outcome', 'secondary_outcome', 'primary_sponsor',
-			'recruitment_status'
+			'recruitment_status', 'source_register'
 		]:
 			if field in extras and getattr(existing_trial, field) != extras[field]:
 				setattr(existing_trial, field, extras[field])
