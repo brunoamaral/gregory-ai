@@ -12,7 +12,7 @@ class TrialFilterTests(TestCase):
         # Create test organization, team and subject
         self.organization = Organization.objects.create(name="Test Organization")
         OrganizationApiSettings.objects.filter(organization=self.organization).update(make_api_public=True)
-        self.team = Team.objects.create(name="Test Team", organization=self.organization)
+        self.team = Team.objects.create(name="Test Team", slug="trial-filter-team", organization=self.organization)
         self.subject = Subject.objects.create(
             subject_name="Test Subject",
             subject_slug="test-subject",
