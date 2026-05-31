@@ -363,17 +363,20 @@ class Command(BaseCommand):
 				ids = [int(x.strip()) for x in raw.split(',') if x.strip()]
 			except ValueError:
 				raise CommandError('--subjects must be comma-separated integers.')
+			subject_qs = Subject.objects.all()
+			if options['team']:
+				subject_qs = subject_qs.filter(team_id=options['team'])
 			valid_ids = set(
-				Subject.objects.filter(pk__in=ids).values_list('pk', flat=True)
+				subject_qs.filter(pk__in=ids).values_list('pk', flat=True)
 			)
 			missing = set(ids) - valid_ids
 			if missing:
-				all_subs = Subject.objects.values_list('pk', 'subject_name')
+				all_subs = subject_qs.values_list('pk', 'subject_name')
 				valid_list = ', '.join(f'{pk} ({name})' for pk, name in all_subs)
 				raise CommandError(
 					f'Subject ID(s) not found: {sorted(missing)}. Valid IDs: {valid_list}'
 				)
-			subjects = list(Subject.objects.filter(pk__in=ids).order_by('subject_name'))
+			subjects = list(subject_qs.filter(pk__in=ids).order_by('subject_name'))
 
 		if not subjects:
 			raise CommandError('No subjects found.')
