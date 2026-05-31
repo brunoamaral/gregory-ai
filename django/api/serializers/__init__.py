@@ -367,7 +367,8 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		fields = [
 			'trial_id', 'title', 'summary', 'summary_plain_english', 'published_date', 'discovery_date', 'link', 'source',
 			'identifiers', 'team_categories', 'export_date', 'internal_number', 'last_refreshed_on',
-			'scientific_title', 'primary_sponsor', 'prospective_registration', 'date_registration',
+			'acronym', 'scientific_title', 'primary_sponsor', 'secondary_sponsor',
+			'prospective_registration', 'date_registration',
 			'source_register', 'recruitment_status', 'other_records', 'inclusion_agemin',
 			'inclusion_agemax', 'inclusion_gender', 'date_enrollement', 'target_size',
 			'study_type', 'study_design', 'phase', 'countries', 'contact_firstname',
@@ -377,6 +378,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 			'source_support', 'ethics_review_status', 'ethics_review_approval_date',
 			'ethics_review_contact_name', 'ethics_review_contact_address', 'ethics_review_contact_phone',
 			'ethics_review_contact_email', 'results_date_completed', 'results_url_link',
+			'results_yes_no', 'results_ipd_plan', 'results_ipd_description',
 			'takeaways', 'articles'
 		]
 		read_only_fields = ('discovery_date', 'articles')
