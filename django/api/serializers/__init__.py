@@ -353,7 +353,7 @@ class ArticleSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSe
 		return content.summary_plain_english if content else None
 
 class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
-	source = serializers.SlugRelatedField(read_only=True, slug_field='name')
+	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field='name')
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 	articles = serializers.SerializerMethodField()
 	takeaways = serializers.SerializerMethodField()
@@ -365,9 +365,10 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 	class Meta:
 		model = Trials
 		fields = [
-			'trial_id', 'title', 'summary', 'summary_plain_english', 'published_date', 'discovery_date', 'link', 'source',
+			'trial_id', 'title', 'summary', 'summary_plain_english', 'ctg_detailed_description',
+			'published_date', 'discovery_date', 'last_updated', 'link', 'sources',
 			'identifiers', 'team_categories', 'export_date', 'internal_number', 'last_refreshed_on',
-			'acronym', 'scientific_title', 'primary_sponsor', 'secondary_sponsor',
+			'acronym', 'scientific_title', 'primary_sponsor', 'secondary_sponsor', 'sponsor_type',
 			'prospective_registration', 'date_registration',
 			'source_register', 'recruitment_status', 'other_records', 'inclusion_agemin',
 			'inclusion_agemax', 'inclusion_gender', 'date_enrollement', 'target_size',
@@ -379,13 +380,21 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 			'ethics_review_contact_name', 'ethics_review_contact_address', 'ethics_review_contact_phone',
 			'ethics_review_contact_email', 'results_date_completed', 'results_url_link',
 			'results_yes_no', 'results_ipd_plan', 'results_ipd_description',
+			# EU Clinical Trials (CTIS) fields
+			'therapeutic_areas', 'country_status', 'trial_region', 'results_posted',
+			'overall_decision_date', 'countries_decision_date',
 			'takeaways', 'articles'
 		]
 		read_only_fields = ('discovery_date', 'articles')
 
 	def get_articles(self, obj):
-		"""Get articles that reference this trial"""
-		references = ArticleTrialReference.objects.filter(trial=obj)
+		"""Get articles that reference this trial.
+
+		Uses the prefetched ``article_references`` cache when available (populated
+		by TrialViewSet/AllTrialViewSet via prefetch_related('article_references__article'))
+		to avoid one query per trial on list responses.
+		"""
+		references = obj.article_references.all()
 		articles = [ref.article for ref in references]
 		return ArticleReferenceSerializer(articles, many=True).data
 
