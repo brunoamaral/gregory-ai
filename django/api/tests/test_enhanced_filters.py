@@ -10,7 +10,7 @@ class TrialFilterTests(TestCase):
     
     def setUp(self):
         # Create test organization, team and subject
-        self.organization = Organization.objects.create(name="Test Organization")
+        self.organization = Organization.objects.create(name="Test Organization", slug="trial-filter-org")
         OrganizationApiSettings.objects.filter(organization=self.organization).update(make_api_public=True)
         self.team = Team.objects.create(name="Test Team", slug="trial-filter-team", organization=self.organization)
         self.subject = Subject.objects.create(
@@ -313,11 +313,11 @@ class AuthorFilterTests(TestCase):
 
 class SourceFilterTests(TestCase):
     """Test cases for enhanced source filtering"""
-    
+
     def setUp(self):
         # Create test data
-        self.organization = Organization.objects.create(name="Test Organization")
-        self.team = Team.objects.create(name="Test Team", organization=self.organization)
+        self.organization = Organization.objects.create(name="Test Organization", slug="src-filter-org")
+        self.team = Team.objects.create(name="Test Team", slug="src-filter-team", organization=self.organization)
         self.subject = Subject.objects.create(
             subject_name="Test Subject",
             subject_slug="test-subject",

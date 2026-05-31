@@ -4,7 +4,7 @@ gregory/visibility.py
 Computes the set of Organisation IDs visible to a given request.
 
 Rules (see spec §4.1):
-  - Anonymous caller (no auth, no valid API key, or null-org key)
+  - Anonymous caller (no auth, no valid API key)
       → public orgs only; ?include_public flag is a no-op
   - Authenticated user
       → orgs they are a member of (via OrganizationUser membership); ?include_public=true adds public orgs
@@ -106,7 +106,7 @@ def visible_org_ids(request) -> set[int]:
 
 	# --- 3. Resolve final set ---
 	if not is_identified:
-		# Anonymous or null-org key → public orgs only (flag is a no-op)
+		# Anonymous caller → public orgs only (flag is a no-op)
 		return _public_org_ids()
 
 	if include_public:

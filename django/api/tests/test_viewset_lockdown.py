@@ -14,8 +14,6 @@ Covers spec §10.4:
 Run with:
     docker exec gregory python manage.py test api.tests.test_viewset_lockdown
 """
-from datetime import timedelta
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils.timezone import now
@@ -24,7 +22,6 @@ from rest_framework.test import APIClient
 
 User = get_user_model()
 
-from api.models import APIAccessScheme
 from gregory.models import (
 	Articles, Trials, Authors, Sources, Team, Subject,
 	OrganizationApiSettings,
@@ -46,17 +43,6 @@ def _make_team(org, name):
 	return Team.objects.create(organization=org, name=name, slug=name.lower().replace(' ', '-'))
 
 
-def _make_scheme(org, name):
-	return APIAccessScheme.objects.create(
-		client_name=name,
-		client_contacts=f'{name}@example.com',
-		organization=org,
-		ip_addresses='',
-		begin_date=now() - timedelta(days=1),
-		end_date=now() + timedelta(days=30),
-	)
-
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -71,7 +57,6 @@ class ArticleViewSetLockdownTest(TestCase):
 		self.client = APIClient()
 		self.org = _make_org('Lockdown Org')
 		self.team = _make_team(self.org, 'Lockdown Team')
-		self.scheme = _make_scheme(self.org, 'lockdown-key')
 		self.article = Articles.objects.create(
 			title='Lockdown Article',
 			link='https://example.com/lock',
@@ -125,7 +110,6 @@ class TrialViewSetLockdownTest(TestCase):
 		self.client = APIClient()
 		self.org = _make_org('Trial Lockdown Org')
 		self.team = _make_team(self.org, 'Trial Lockdown Team')
-		self.scheme = _make_scheme(self.org, 'trial-lockdown-key')
 		self.trial = Trials.objects.create(
 			title='Lockdown Trial',
 			link='https://example.com/trial-lock',
@@ -160,7 +144,6 @@ class OtherViewSetsLockdownTest(TestCase):
 		self.client = APIClient()
 		self.org = _make_org('Other Lockdown Org')
 		self.team = _make_team(self.org, 'Other Lockdown Team')
-		self.scheme = _make_scheme(self.org, 'other-lockdown-key')
 		from django.utils.text import slugify
 		self.subject = Subject.objects.create(
 			team=self.team,
