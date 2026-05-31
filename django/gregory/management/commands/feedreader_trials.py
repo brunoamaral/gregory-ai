@@ -184,23 +184,25 @@ class Command(BaseCommand):
 		has_changes = False
 		updated_fields = []  # Track which fields are updated
 
-		# Update fields directly from ClinicalTrial object
-		if existing_trial.title != clinical_trial.title:
+		# Update fields directly from ClinicalTrial object.
+		# Only overwrite when the incoming value is non-empty so a sparse feed entry
+		# never blanks a field a previous source populated (see docs/trials-multi-source-merge.md).
+		if clinical_trial.title and existing_trial.title != clinical_trial.title:
 			existing_trial.title = clinical_trial.title
 			has_changes = True
 			updated_fields.append('title')
 
-		if existing_trial.summary != clinical_trial.summary:
+		if clinical_trial.summary and existing_trial.summary != clinical_trial.summary:
 			existing_trial.summary = clinical_trial.summary
 			has_changes = True
 			updated_fields.append('summary')
 
-		if existing_trial.link != clinical_trial.link:
+		if clinical_trial.link and existing_trial.link != clinical_trial.link:
 			existing_trial.link = clinical_trial.link
 			has_changes = True
 			updated_fields.append('link')
 
-		if existing_trial.published_date != clinical_trial.published_date:
+		if clinical_trial.published_date and existing_trial.published_date != clinical_trial.published_date:
 			existing_trial.published_date = clinical_trial.published_date
 			has_changes = True
 			updated_fields.append('published_date')
@@ -220,7 +222,7 @@ class Command(BaseCommand):
 			'condition', 'primary_outcome', 'secondary_outcome', 'primary_sponsor',
 			'recruitment_status', 'source_register'
 		]:
-			if field in extras and getattr(existing_trial, field) != extras[field]:
+			if field in extras and extras[field] not in (None, '') and getattr(existing_trial, field) != extras[field]:
 				setattr(existing_trial, field, extras[field])
 				has_changes = True
 				updated_fields.append(field)
@@ -233,7 +235,7 @@ class Command(BaseCommand):
 			'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender',
 			'target_size', 'last_refreshed_on'
 		]:
-			if who_field in extras and getattr(existing_trial, who_field) != extras[who_field]:
+			if who_field in extras and extras[who_field] not in (None, '') and getattr(existing_trial, who_field) != extras[who_field]:
 				setattr(existing_trial, who_field, extras[who_field])
 				has_changes = True
 				updated_fields.append(who_field)

@@ -63,7 +63,10 @@ class Command(BaseCommand):
 					else:
 						value_date = None
 
-					if current_date != value_date:  # Compare only the date part
+					# Only overwrite when the incoming date is present, so a missing XML
+					# field never blanks a date a previous source populated
+					# (see docs/trials-multi-source-merge.md).
+					if value_date is not None and current_date != value_date:
 						setattr(trial, key, value)
 						has_changes = True
 						updated_fields.append(key)
@@ -81,7 +84,9 @@ class Command(BaseCommand):
 					trial.identifiers = value
 					has_changes = True
 					updated_fields.append(key)
-			elif current_value != value:
+			# Only overwrite when the incoming value is non-empty, so a missing XML
+			# field never blanks data a previous source populated.
+			elif value not in (None, '') and current_value != value:
 				setattr(trial, key, value)
 				has_changes = True
 				updated_fields.append(key)
