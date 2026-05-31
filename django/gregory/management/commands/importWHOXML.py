@@ -48,7 +48,7 @@ class Command(BaseCommand):
 			current_value = getattr(trial, key, None)
 
 			# Handle datetime fields: Normalize and compare only the date part
-			if key in ['export_date', 'date_enrollement', 'ethics_review_approval_date', 'results_date_completed', 'last_refreshed_on']:
+			if key in ['export_date', 'date_enrollement', 'ethics_review_approval_date', 'results_date_completed', 'last_refreshed_on', 'date_registration']:
 					if isinstance(current_value, datetime.datetime):
 						current_date = current_value.date()
 					elif isinstance(current_value, datetime.date):
@@ -212,7 +212,11 @@ class Command(BaseCommand):
 				trial_data[date_field.lower()] = self.robust_parse_date(raw_date)
 
 			date_registration_raw = self.get_text(trial, 'Date_registration')
-			trial_data['published_date'] = self.robust_parse_date(date_registration_raw)
+			parsed_registration = self.robust_parse_date(date_registration_raw)
+			# WHO ICTRP only provides a single "Date of registration"; mirror it into both
+			# published_date (used across the app) and date_registration (registry field).
+			trial_data['published_date'] = parsed_registration
+			trial_data['date_registration'] = parsed_registration
 
 			# Add logging for each trial being processed
 			self.stdout.write(self.style.NOTICE(f"Processing trial: {trial_data['title']} with TrialID: {trial_data['identifiers']}"))
