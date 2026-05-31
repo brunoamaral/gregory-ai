@@ -90,7 +90,7 @@ def generate_pseudo_labels(
     class_counts = train_df[label_column].value_counts()
     min_class_count = class_counts.min() if len(class_counts) > 0 else 0
     
-    if len(class_counts) < 2 or min_class_count < 2:
+    if len(class_counts) < 2 or min_class_count < 1:
         if verbose:
             print(f"WARNING: Training data has insufficient examples in the minority class ({min_class_count})")
             print(f"Class distribution: {class_counts.to_dict()}")
@@ -365,7 +365,7 @@ def load_and_filter_pseudo_labels(
     if include_original:
         result_df = df[~df['pseudo_labelled']].copy()
     else:
-        result_df = df[[]].copy()  # Empty DataFrame with same columns
+        result_df = df.iloc[0:0].copy()  # Empty DataFrame with same columns, zero rows
     
     # Filter pseudo-labeled examples
     pseudo_df = df[df['pseudo_labelled']].copy()
