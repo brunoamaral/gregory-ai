@@ -19,7 +19,9 @@ jobs:
         env:
           POSTGRES_DB: gregory_test
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          # Throwaway CI database reachable only on the job network; trust auth
+          # avoids hardcoding a password (which secret scanners flag).
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -30,10 +32,7 @@ jobs:
     env:
       POSTGRES_DB: gregory_test
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
       DB_HOST: postgres
-      SECRET_KEY: ci-secret-key
-      FERNET_SECRET_KEY: pSD0ZVXNIHPUzPcHwf1DBMgHjli3M6dBW011JA3991I=
     steps:
       - uses: actions/checkout@v4
 
@@ -43,4 +42,9 @@ jobs:
 
       - name: Run pytest
         working-directory: django
-        run: pytest -p no:cacheprovider
+        # SECRET_KEY / FERNET_SECRET_KEY are generated per-run so no secrets
+        # live in the repo; they only need to be valid for the test process.
+        run: |
+          export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(50))')"
+          export FERNET_SECRET_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+          pytest -p no:cacheprovider
