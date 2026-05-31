@@ -543,8 +543,8 @@ class TrialAdminForm(forms.ModelForm):
 			'internal_number': 'Registry internal number',
 			'secondary_id': 'Other IDs',
 			# Dates & registry metadata
-			'published_date': 'Registration date',
-			'date_registration': 'Registration date (WHO source)',
+			'published_date': 'Headline date',
+			'date_registration': 'Registration date',
 			'date_enrollement': 'Enrolment start date',
 			'last_refreshed_on': 'Registry last updated on',
 			'export_date': 'Exported from registry on',
@@ -603,8 +603,8 @@ class TrialAdminForm(forms.ModelForm):
 			'internal_number': 'Internal record number assigned by the source registry. Rarely meaningful to patients.',
 			'secondary_id': 'Additional identifiers used by other registries or by the sponsor.',
 			# Dates & registry metadata
-			'published_date': 'Date the trial was registered in its registry. For WHO ICTRP trials this is taken from the source “Date of registration”.',
-			'date_registration': 'Same value as the registration date above, stored straight from the WHO ICTRP “Date of registration” field.',
+			'published_date': 'The trial’s headline date — its exact meaning depends on the source: WHO ICTRP uses the “Date of registration”, ClinicalTrials.gov uses the study start date, and EU CTIS feeds use the date the trial was listed in the feed.',
+			'date_registration': 'The date the trial was registered with its registry, where the source provides one: from the WHO ICTRP “Date of registration” (mirrored into the headline date above) or the ClinicalTrials.gov “first submitted” date. Not available for EU CTIS trials.',
 			'date_enrollement': 'Date the first participant was (or is expected to be) enrolled.',
 			'last_refreshed_on': 'Date the source registry last updated this record.',
 			'export_date': 'Date this record was exported from the WHO ICTRP database.',
