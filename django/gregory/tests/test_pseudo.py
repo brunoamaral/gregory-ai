@@ -131,11 +131,6 @@ class TestSavePseudoCsv:
 class TestGeneratePseudoLabels:
     """Tests for the generate_pseudo_labels function."""
 
-    @pytest.mark.xfail(
-        reason="Pre-existing bug surfaced by pytest (was never run under manage.py test). "
-               "Mock setup does not match current generate_pseudo_labels implementation.",
-        strict=True,
-    )
     @patch('gregory.ml.pseudo.get_trainer')
     def test_pseudo_labeling_loop(self, mock_get_trainer):
         """Test the pseudo-labeling loop logic using mocks."""
@@ -144,13 +139,13 @@ class TestGeneratePseudoLabels:
         mock_get_trainer.return_value = mock_trainer_instance
         
         # Configure predict method to return different confidence scores in each call
-        # First call: high confidence for 3 examples
-        # Second call: high confidence for 2 examples
-        # Third call: no high confidence examples
+        # First call: 2 confident (0.95, 0.92 >= 0.9), 1 not (max(0.15,0.85)=0.85 < 0.9)
+        # Second call: 1 confident (0.91 >= 0.9), 1 not (0.89 < 0.9)
+        # Third call: no confident examples
         mock_trainer_instance.predict.side_effect = [
-            ([1, 0, 1], [0.95, 0.1, 0.92]),  # First iteration: 2 confident examples
-            ([1, 0], [0.91, 0.89]),          # Second iteration: 1 confident example
-            ([0], [0.7]),                     # Third iteration: no confident examples
+            ([1, 0, 1], [0.95, 0.15, 0.92]),  # First iteration: 2 confident examples
+            ([1, 0], [0.91, 0.89]),            # Second iteration: 1 confident example
+            ([0], [0.7]),                       # Third iteration: no confident examples
         ]
         
         # Create test data
@@ -211,6 +206,8 @@ class TestGeneratePseudoLabels:
         
         # Test with a different algorithm
         mock_get_trainer.reset_mock()
+        # Reset predict so the exhausted side_effect doesn't raise StopIteration
+        mock_trainer_instance.predict.side_effect = [([0], [0.5])]
         generate_pseudo_labels(
             train_df=train_df,
             val_df=val_df,
@@ -255,11 +252,6 @@ class TestPseudoLabelStats:
 class TestLoadAndFilterPseudoLabels:
     """Tests for the load_and_filter_pseudo_labels function."""
 
-    @pytest.mark.xfail(
-        reason="Pre-existing bug surfaced by pytest (was never run under manage.py test). "
-               "include_original=False filter returns unexpected rows.",
-        strict=True,
-    )
     def test_load_and_filter(self):
         """Test loading and filtering pseudo-labeled data."""
         with tempfile.TemporaryDirectory() as tmp_dir:
