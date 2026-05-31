@@ -72,7 +72,7 @@ class _TeamCategorySerializer(serializers.ModelSerializer):
 class _MLPredictionsSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = MLPredictions
-		fields = ['id', 'algorithm', 'probability_score']
+		fields = ['id', 'subject', 'algorithm', 'probability_score']
 
 
 class _TestArticleSerializer(OrgScopedSerializerMixin, serializers.ModelSerializer):

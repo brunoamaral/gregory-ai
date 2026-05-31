@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework import status
 from django.contrib.auth.models import User
-from gregory.models import Authors, Articles, Team, Subject
+from gregory.models import Authors, Articles, Team, Subject, OrganizationApiSettings
 from organizations.models import Organization
 from django.db.models import Count, Q
 
@@ -25,9 +25,11 @@ class AuthorsAPISortingTestCase(TestCase):
 		
 		# Create test organization
 		self.organization = Organization.objects.create(
-			name="Test Organization"
+			name="Test Organization",
+			slug="sorting-org"
 		)
-		
+		OrganizationApiSettings.objects.filter(organization=self.organization).update(make_api_public=True)
+
 		# Create test teams
 		self.team1 = Team.objects.create(
 			name="Test Team 1",

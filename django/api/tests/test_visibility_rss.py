@@ -217,37 +217,6 @@ class APIKeyAuthorFeedTest(AuthorFeedBase):
 
 
 # ---------------------------------------------------------------------------
-# Null-org key: author feed
-# ---------------------------------------------------------------------------
-
-class NullOrgKeyAuthorFeedTest(AuthorFeedBase):
-	def setUp(self):
-		super().setUp()
-		self.scheme = APIAccessScheme.objects.create(
-			client_name='null-org-rss-auth',
-			client_contacts='null-rss-auth@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
-		self.client.defaults['HTTP_AUTHORIZATION'] = self.scheme.api_key
-
-	def test_public_author_returns_200(self):
-		resp = self.client.get(f'/feed/author/{ORCID_PUB}/')
-		self.assertEqual(resp.status_code, 200)
-
-	def test_private_author_returns_404(self):
-		resp = self.client.get(f'/feed/author/{ORCID_PRIV}/')
-		self.assertEqual(resp.status_code, 404)
-
-	def test_mine_author_with_pub_article_returns_200(self):
-		"""author_mine has a public article → visible even to null-org key."""
-		resp = self.client.get(f'/feed/author/{ORCID_MINE}/')
-		self.assertEqual(resp.status_code, 200)
-
-
-# ---------------------------------------------------------------------------
 # Base setUp for trials feed tests
 # ---------------------------------------------------------------------------
 
@@ -371,30 +340,3 @@ class APIKeyTrialsFeedTest(TrialsFeedBase):
 
 
 # ---------------------------------------------------------------------------
-# Null-org key: trials feed
-# ---------------------------------------------------------------------------
-
-class NullOrgKeyTrialsFeedTest(TrialsFeedBase):
-	def setUp(self):
-		super().setUp()
-		self.scheme = APIAccessScheme.objects.create(
-			client_name='null-org-rss-trial',
-			client_contacts='null-rss-trial@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
-		self.client.defaults['HTTP_AUTHORIZATION'] = self.scheme.api_key
-
-	def test_public_subject_returns_200(self):
-		resp = self.client.get(f'/feed/trials/subject/{self.pub_subj.subject_slug}/')
-		self.assertEqual(resp.status_code, 200)
-
-	def test_private_subject_returns_404(self):
-		resp = self.client.get(f'/feed/trials/subject/{self.priv_subj.subject_slug}/')
-		self.assertEqual(resp.status_code, 404)
-
-	def test_mine_subject_returns_404(self):
-		resp = self.client.get(f'/feed/trials/subject/{self.my_subj.subject_slug}/')
-		self.assertEqual(resp.status_code, 404)

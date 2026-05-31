@@ -1,26 +1,40 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
-from gregory.models import Authors
+from gregory.models import Authors, Articles, Team, OrganizationApiSettings
 from api.serializers import AuthorSerializer
 from django.contrib.sites.models import Site
+from organizations.models import Organization
 
 class AuthorURLFormatTests(TestCase):
     """Test cases specifically for verifying the correct URL format in author responses"""
     
     def setUp(self):
+        # Public org so anonymous API calls can see this author
+        org = Organization.objects.create(name="URL Format Org", slug="url-fmt-org")
+        OrganizationApiSettings.objects.filter(organization=org).update(make_api_public=True)
+        team = Team.objects.create(name="URL Format Team", slug="url-fmt-team", organization=org)
+
         # Create test author
         self.author = Authors.objects.create(
             family_name="Smith",
             given_name="John",
             full_name="John Smith"
         )
-        
+
+        # Link author through an article in the public team
+        article = Articles.objects.create(
+            title="URL Format Article",
+            link="https://example.com/url-fmt",
+        )
+        article.teams.add(team)
+        article.authors.add(self.author)
+
         # Set up site for URL generation
         site = Site.objects.get_current()
         site.domain = 'api.gregory-ms.com'
         site.save()
-        
+
         self.client = APIClient()
     
     def test_author_serializer_articles_list_url_format(self):

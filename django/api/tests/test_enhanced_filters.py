@@ -1,7 +1,7 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
-from gregory.models import Trials, Authors, Sources, TeamCategory, Team, Subject, Organization
+from gregory.models import Trials, Articles, Authors, Sources, TeamCategory, Team, Subject, Organization, OrganizationApiSettings
 from django.utils import timezone
 import json
 
@@ -10,14 +10,15 @@ class TrialFilterTests(TestCase):
     
     def setUp(self):
         # Create test organization, team and subject
-        self.organization = Organization.objects.create(name="Test Organization")
-        self.team = Team.objects.create(name="Test Team", organization=self.organization)
+        self.organization = Organization.objects.create(name="Test Organization", slug="trial-filter-org")
+        OrganizationApiSettings.objects.filter(organization=self.organization).update(make_api_public=True)
+        self.team = Team.objects.create(name="Test Team", slug="trial-filter-team", organization=self.organization)
         self.subject = Subject.objects.create(
             subject_name="Test Subject",
             subject_slug="test-subject",
             team=self.team
         )
-        
+
         # Create test trials with various fields
         self.trial1 = Trials.objects.create(
             title="COVID-19 Vaccine Trial",
@@ -248,7 +249,12 @@ class AuthorFilterTests(TestCase):
     def setUp(self):
         # Clear any existing authors to avoid interference
         Authors.objects.all().delete()
-        
+
+        # Public org so anonymous API calls can see the data
+        self.org = Organization.objects.create(name="Author Filter Org", slug="author-filter-org")
+        OrganizationApiSettings.objects.filter(organization=self.org).update(make_api_public=True)
+        self.team = Team.objects.create(name="Author Filter Team", slug="author-filter-team", organization=self.org)
+
         # Create test authors
         self.author1 = Authors.objects.create(
             family_name="Smith",
@@ -264,7 +270,16 @@ class AuthorFilterTests(TestCase):
             ORCID="0000-0000-0000-0002",
             country="GB"
         )
-        
+
+        # Link each author through an article in the public team so visibility filter passes
+        for author in [self.author1, self.author2]:
+            a = Articles.objects.create(
+                title=f"Article for {author.full_name}",
+                link=f"https://example.com/{author.ORCID}",
+            )
+            a.teams.add(self.team)
+            a.authors.add(author)
+
         self.client = APIClient()
     
     def test_orcid_filter(self):
@@ -298,11 +313,11 @@ class AuthorFilterTests(TestCase):
 
 class SourceFilterTests(TestCase):
     """Test cases for enhanced source filtering"""
-    
+
     def setUp(self):
         # Create test data
-        self.organization = Organization.objects.create(name="Test Organization")
-        self.team = Team.objects.create(name="Test Team", organization=self.organization)
+        self.organization = Organization.objects.create(name="Test Organization", slug="src-filter-org")
+        self.team = Team.objects.create(name="Test Team", slug="src-filter-team", organization=self.organization)
         self.subject = Subject.objects.create(
             subject_name="Test Subject",
             subject_slug="test-subject",
@@ -330,14 +345,15 @@ class CategoryFilterTests(TestCase):
     
     def setUp(self):
         # Create test data
-        self.organization = Organization.objects.create(name="Test Organization")
-        self.team = Team.objects.create(name="Test Team", organization=self.organization)
+        self.organization = Organization.objects.create(name="Test Organization", slug="cat-filter-org")
+        OrganizationApiSettings.objects.filter(organization=self.organization).update(make_api_public=True)
+        self.team = Team.objects.create(name="Test Team", slug="cat-filter-team", organization=self.organization)
         self.subject = Subject.objects.create(
             subject_name="Test Subject",
             subject_slug="test-subject",
             team=self.team
         )
-        
+
         self.category = TeamCategory.objects.create(
             team=self.team,
             category_name="Test Category",
@@ -345,7 +361,7 @@ class CategoryFilterTests(TestCase):
             category_terms=["test", "category", "example"]
         )
         self.category.subjects.add(self.subject)
-        
+
         self.client = APIClient()
     
     def test_category_terms_filter(self):

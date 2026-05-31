@@ -196,27 +196,3 @@ class APIKeySourceVisibilityTest(SourceVisibilityBase):
 # ---------------------------------------------------------------------------
 # Null-org API key (anonymous-equivalent)
 # ---------------------------------------------------------------------------
-
-class NullOrgAPIKeySourceVisibilityTest(SourceVisibilityBase):
-	def setUp(self):
-		super().setUp()
-		self.scheme = APIAccessScheme.objects.create(
-			client_name='null-org-src-key',
-			client_contacts='null-src@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
-		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
-
-	def test_list_shows_only_public_sources(self):
-		resp = self.client.get('/sources/')
-		ids = [s['source_id'] for s in resp.data['results']]
-		self.assertIn(self.src_pub.source_id, ids)
-		self.assertNotIn(self.src_mine.source_id, ids)
-		self.assertNotIn(self.src_priv.source_id, ids)
-
-	def test_detail_of_private_source_returns_404(self):
-		resp = self.client.get(f'/sources/{self.src_mine.source_id}/')
-		self.assertEqual(resp.status_code, 404)

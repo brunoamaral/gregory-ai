@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
-from gregory.models import Authors, Articles, Team, Subject, Organization
+from gregory.models import Authors, Articles, Team, Subject, Organization, OrganizationApiSettings
 from django.utils import timezone
 
 
@@ -9,8 +9,9 @@ class AuthorSearchViewTests(TestCase):
 	"""Test cases for the author search endpoint"""
 
 	def setUp(self):
-		self.organization = Organization.objects.create(name="Test Organization")
-		self.team = Team.objects.create(name="Test Team", organization=self.organization)
+		self.organization = Organization.objects.create(name="Test Organization", slug="auth-search-org")
+		OrganizationApiSettings.objects.filter(organization=self.organization).update(make_api_public=True)
+		self.team = Team.objects.create(name="Test Team", slug="auth-search-team", organization=self.organization)
 		self.subject = Subject.objects.create(
 			subject_name="Test Subject",
 			subject_slug="test-subject",

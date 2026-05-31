@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
 from django.db.models import Count
-from gregory.models import Authors, Articles, Team, Subject, TeamCategory, Sources
+from gregory.models import Authors, Articles, Team, Subject, TeamCategory, Sources, OrganizationApiSettings
 from organizations.models import Organization
 from django_countries.fields import Country
 import json
@@ -16,6 +16,7 @@ class AuthorAPITest(TestCase):
         """Set up test data"""
         # Create test organization and team
         self.organization = Organization.objects.create(name="Test Org")
+        OrganizationApiSettings.objects.filter(organization=self.organization).update(make_api_public=True)
         self.team = Team.objects.create(
             organization=self.organization,
             name="Test Team",

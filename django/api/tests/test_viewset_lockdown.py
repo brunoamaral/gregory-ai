@@ -14,14 +14,14 @@ Covers spec §10.4:
 Run with:
     docker exec gregory python manage.py test api.tests.test_viewset_lockdown
 """
-from datetime import timedelta
-
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils.timezone import now
 from organizations.models import Organization
 from rest_framework.test import APIClient
 
-from api.models import APIAccessScheme
+User = get_user_model()
+
 from gregory.models import (
 	Articles, Trials, Authors, Sources, Team, Subject,
 	OrganizationApiSettings,
@@ -43,17 +43,6 @@ def _make_team(org, name):
 	return Team.objects.create(organization=org, name=name, slug=name.lower().replace(' ', '-'))
 
 
-def _make_scheme(org, name):
-	return APIAccessScheme.objects.create(
-		client_name=name,
-		client_contacts=f'{name}@example.com',
-		organization=org,
-		ip_addresses='',
-		begin_date=now() - timedelta(days=1),
-		end_date=now() + timedelta(days=30),
-	)
-
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -68,15 +57,16 @@ class ArticleViewSetLockdownTest(TestCase):
 		self.client = APIClient()
 		self.org = _make_org('Lockdown Org')
 		self.team = _make_team(self.org, 'Lockdown Team')
-		self.scheme = _make_scheme(self.org, 'lockdown-key')
 		self.article = Articles.objects.create(
 			title='Lockdown Article',
 			link='https://example.com/lock',
 		)
 		self.article.teams.add(self.team)
+		self.user = User.objects.create_user(username='lockdown-user', password='pw')
+		self.client.force_login(self.user)
 
 	def _auth_headers(self):
-		return {'HTTP_AUTHORIZATION': self.scheme.api_key}
+		return {}
 
 	def test_patch_returns_405(self):
 		resp = self.client.patch(
@@ -120,27 +110,26 @@ class TrialViewSetLockdownTest(TestCase):
 		self.client = APIClient()
 		self.org = _make_org('Trial Lockdown Org')
 		self.team = _make_team(self.org, 'Trial Lockdown Team')
-		self.scheme = _make_scheme(self.org, 'trial-lockdown-key')
 		self.trial = Trials.objects.create(
 			title='Lockdown Trial',
 			link='https://example.com/trial-lock',
 			identifiers={'nct': 'NCT9999998'},
 		)
 		self.trial.teams.add(self.team)
+		self.user = User.objects.create_user(username='trial-lockdown-user', password='pw')
+		self.client.force_login(self.user)
 
 	def test_patch_returns_405(self):
 		resp = self.client.patch(
 			f'/trials/{self.trial.trial_id}/',
 			data={'title': 'Patched'},
 			format='json',
-			HTTP_AUTHORIZATION=self.scheme.api_key,
 		)
 		self.assertEqual(resp.status_code, 405)
 
 	def test_delete_returns_405(self):
 		resp = self.client.delete(
 			f'/trials/{self.trial.trial_id}/',
-			HTTP_AUTHORIZATION=self.scheme.api_key,
 		)
 		self.assertEqual(resp.status_code, 405)
 
@@ -155,7 +144,6 @@ class OtherViewSetsLockdownTest(TestCase):
 		self.client = APIClient()
 		self.org = _make_org('Other Lockdown Org')
 		self.team = _make_team(self.org, 'Other Lockdown Team')
-		self.scheme = _make_scheme(self.org, 'other-lockdown-key')
 		from django.utils.text import slugify
 		self.subject = Subject.objects.create(
 			team=self.team,
@@ -172,16 +160,14 @@ class OtherViewSetsLockdownTest(TestCase):
 			given_name='Test',
 			family_name='Author',
 		)
-
-	def _auth(self):
-		return {'HTTP_AUTHORIZATION': self.scheme.api_key}
+		self.user = User.objects.create_user(username='other-lockdown-user', password='pw')
+		self.client.force_login(self.user)
 
 	def test_patch_authors_returns_405(self):
 		resp = self.client.patch(
 			f'/authors/{self.author.author_id}/',
 			data={'given_name': 'Changed'},
 			format='json',
-			**self._auth(),
 		)
 		self.assertEqual(resp.status_code, 405)
 
@@ -190,7 +176,6 @@ class OtherViewSetsLockdownTest(TestCase):
 			f'/sources/{self.source.source_id}/',
 			data={'name': 'Changed'},
 			format='json',
-			**self._auth(),
 		)
 		self.assertEqual(resp.status_code, 405)
 
@@ -199,7 +184,6 @@ class OtherViewSetsLockdownTest(TestCase):
 			f'/subjects/{self.subject.id}/',
 			data={'subject_name': 'Changed'},
 			format='json',
-			**self._auth(),
 		)
 		self.assertEqual(resp.status_code, 405)
 
@@ -208,6 +192,5 @@ class OtherViewSetsLockdownTest(TestCase):
 			f'/teams/{self.team.id}/',
 			data={'name': 'Changed'},
 			format='json',
-			**self._auth(),
 		)
 		self.assertEqual(resp.status_code, 405)

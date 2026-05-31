@@ -1,12 +1,18 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
-from gregory.models import Authors
+from gregory.models import Authors, Articles, Team, OrganizationApiSettings
+from organizations.models import Organization
 
 class AuthorFilterTests(TestCase):
     """Test cases for filtering authors by author_id and full_name parameters"""
     
     def setUp(self):
+        # Public org so anonymous API calls can see these authors
+        org = Organization.objects.create(name="Author Filter Org", slug="aut-filter-org")
+        OrganizationApiSettings.objects.filter(organization=org).update(make_api_public=True)
+        team = Team.objects.create(name="Author Filter Team", slug="aut-filter-team", organization=org)
+
         # Create test authors
         self.author1 = Authors.objects.create(
             family_name="Smith",
@@ -23,7 +29,16 @@ class AuthorFilterTests(TestCase):
             given_name="Bob",
             full_name="Bob Johnson"
         )
-        
+
+        # Link each author through an article in the public team
+        for author in [self.author1, self.author2, self.author3]:
+            a = Articles.objects.create(
+                title=f"Article for {author.full_name}",
+                link=f"https://example.com/aut-filter/{author.author_id}",
+            )
+            a.teams.add(team)
+            a.authors.add(author)
+
         self.client = APIClient()
     
     def test_filter_authors_by_author_id(self):

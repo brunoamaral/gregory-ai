@@ -4,7 +4,7 @@ gregory/visibility.py
 Computes the set of Organisation IDs visible to a given request.
 
 Rules (see spec §4.1):
-  - Anonymous caller (no auth, no valid API key, or null-org key)
+  - Anonymous caller (no auth, no valid API key)
       → public orgs only; ?include_public flag is a no-op
   - Authenticated user
       → orgs they are a member of (via OrganizationUser membership); ?include_public=true adds public orgs
@@ -92,10 +92,8 @@ def visible_org_ids(request) -> set[int]:
 	# --- 1. Try API key identity ---
 	api_scheme = _resolve_api_scheme(request)
 	if api_scheme is not None:
-		if api_scheme.organization_id is not None:
-			owned_ids.add(api_scheme.organization_id)
-			is_identified = True
-		# null-org key → anonymous-equivalent; is_identified stays False
+		owned_ids.add(api_scheme.organization_id)
+		is_identified = True
 
 	# --- 2. Try authenticated-user identity (only if no API key found) ---
 	elif getattr(request, 'user', None) is not None and request.user.is_authenticated:
@@ -108,7 +106,7 @@ def visible_org_ids(request) -> set[int]:
 
 	# --- 3. Resolve final set ---
 	if not is_identified:
-		# Anonymous or null-org key → public orgs only (flag is a no-op)
+		# Anonymous caller → public orgs only (flag is a no-op)
 		return _public_org_ids()
 
 	if include_public:

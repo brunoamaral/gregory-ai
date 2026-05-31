@@ -123,11 +123,10 @@ class TrialsBySubjectFeed(Feed):
 		"""Build a rich description from available trial metadata."""
 		parts = []
 		
-		# Primary summary - prefer plain English summary if available
-		if item.summary_plain_english:
-			parts.append(f"<p>{item.summary_plain_english}</p>")
-		elif item.summary:
+		# Primary summary
+		if item.summary:
 			parts.append(f"<p>{item.summary}</p>")
+
 		
 		# Trial metadata section
 		metadata = []

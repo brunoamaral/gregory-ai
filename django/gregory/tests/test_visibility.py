@@ -114,12 +114,6 @@ class VisibleOrgIdsAPIKeyTest(TestCase):
 			organization=self.org_x,
 			ip_addresses='',
 		)
-		self.scheme_no_org = APIAccessScheme.objects.create(
-			client_name='Key No Org',
-			client_contacts='c@d.com',
-			organization=None,
-			ip_addresses='',
-		)
 
 	def _key_request(self, scheme, include_public=False):
 		qs = '?include_public=true' if include_public else ''
@@ -141,15 +135,3 @@ class VisibleOrgIdsAPIKeyTest(TestCase):
 		self.assertIn(self.pub_org.id, result)
 		self.assertNotIn(self.other_priv_org.id, result)
 
-	def test_null_org_key_no_include_public_sees_only_public(self):
-		req = self._key_request(self.scheme_no_org)
-		result = visible_org_ids(req)
-		self.assertIn(self.pub_org.id, result)
-		self.assertNotIn(self.org_x.id, result)
-
-	def test_null_org_key_with_include_public_sees_only_public(self):
-		"""Flag is still a no-op for null-org keys (anonymous-equivalent)."""
-		req = self._key_request(self.scheme_no_org, include_public=True)
-		result = visible_org_ids(req)
-		self.assertIn(self.pub_org.id, result)
-		self.assertNotIn(self.org_x.id, result)

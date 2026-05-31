@@ -214,27 +214,3 @@ class APIKeyCategoryVisibilityTest(CategoryVisibilityBase):
 # ---------------------------------------------------------------------------
 # Null-org API key (anonymous-equivalent)
 # ---------------------------------------------------------------------------
-
-class NullOrgAPIKeyCategoryVisibilityTest(CategoryVisibilityBase):
-	def setUp(self):
-		super().setUp()
-		self.scheme = APIAccessScheme.objects.create(
-			client_name='null-org-cat-key',
-			client_contacts='null-cat@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
-		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
-
-	def test_list_shows_only_public_categories(self):
-		resp = self.client.get('/categories/')
-		ids = [c['id'] for c in resp.data['results']]
-		self.assertIn(self.cat_pub.id, ids)
-		self.assertNotIn(self.cat_mine.id, ids)
-		self.assertNotIn(self.cat_priv.id, ids)
-
-	def test_detail_of_private_category_returns_404(self):
-		resp = self.client.get(f'/categories/{self.cat_mine.id}/')
-		self.assertEqual(resp.status_code, 404)

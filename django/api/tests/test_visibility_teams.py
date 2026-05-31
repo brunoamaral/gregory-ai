@@ -184,27 +184,3 @@ class APIKeyTeamVisibilityTest(TeamVisibilityBase):
 # ---------------------------------------------------------------------------
 # Null-org API key (anonymous-equivalent)
 # ---------------------------------------------------------------------------
-
-class NullOrgAPIKeyTeamVisibilityTest(TeamVisibilityBase):
-	def setUp(self):
-		super().setUp()
-		self.scheme = APIAccessScheme.objects.create(
-			client_name='null-org-team-key',
-			client_contacts='null-team@example.com',
-			organization=None,
-			ip_addresses='',
-			begin_date=now() - timedelta(days=1),
-			end_date=now() + timedelta(days=30),
-		)
-		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
-
-	def test_list_shows_only_public_teams(self):
-		resp = self.client.get('/teams/')
-		ids = [t['id'] for t in resp.data['results']]
-		self.assertIn(self.pub_team.id, ids)
-		self.assertNotIn(self.my_team.id, ids)
-		self.assertNotIn(self.priv_team.id, ids)
-
-	def test_detail_of_private_team_returns_404(self):
-		resp = self.client.get(f'/teams/{self.my_team.id}/')
-		self.assertEqual(resp.status_code, 404)
