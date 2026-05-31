@@ -674,10 +674,12 @@ class EUTrialParser:
 		sponsor = _extract(r'Sponsor[^>]*>([^<]+)')
 		sponsor_type = _extract(r'Sponsor type[^>]*>([^<]+)')
 
+		# EU CTIS feed dates are day-first (DD/MM/YYYY); without dayfirst=True,
+		# dateutil misreads e.g. 08/12/2025 (8 Dec) as 12 Aug.
 		overall_decision_date = None
 		if overall_decision_date_str:
 			try:
-				overall_decision_date = parse(overall_decision_date_str).date()
+				overall_decision_date = parse(overall_decision_date_str, dayfirst=True).date()
 			except (ValueError, TypeError):
 				pass
 
@@ -689,7 +691,7 @@ class EUTrialParser:
 					country_code = chunk_parts[0].strip()
 					date_val = chunk_parts[1].strip()
 					try:
-						countries_decision_date[country_code] = str(parse(date_val).date())
+						countries_decision_date[country_code] = str(parse(date_val, dayfirst=True).date())
 					except (ValueError, TypeError):
 						countries_decision_date[country_code] = date_val
 
