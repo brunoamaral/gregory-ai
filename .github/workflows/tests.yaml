@@ -1,0 +1,50 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    # Reuse the published image: it already has the heavy deps (torch,
+    # tensorflow, transformers) installed, so CI doesn't reinstall them.
+    container:
+      image: amaralbruno/gregory-ai:latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: gregory_test
+          POSTGRES_USER: postgres
+          # Throwaway CI database reachable only on the job network; trust auth
+          # avoids hardcoding a password (which secret scanners flag).
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_DB: gregory_test
+      POSTGRES_USER: postgres
+      DB_HOST: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      # pytest-django is new; install it until it lands in the base image.
+      - name: Install pytest-django
+        run: pip install --no-cache-dir "pytest-django>=4.9.0"
+
+      - name: Run pytest
+        working-directory: django
+        # SECRET_KEY / FERNET_SECRET_KEY are generated per-run so no secrets
+        # live in the repo; they only need to be valid for the test process.
+        run: |
+          export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(50))')"
+          export FERNET_SECRET_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+          pytest -p no:cacheprovider
