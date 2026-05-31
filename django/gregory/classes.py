@@ -663,8 +663,11 @@ class EUTrialParser:
 		therapeutic_areas = _extract(r'Therapeutic Areas[^>]*>([^<]+)')
 		country_status = _extract(r'Status in each country[^>]*>([^<]+)')
 		trial_region = _extract(r'Trial region[^>]*>([^<]+)')
+		# Only commit to a boolean when the feed explicitly states it. If the line is
+		# absent, leave results_posted as None so the non-destructive update guard skips
+		# it and doesn't blank a value set by another source (e.g. ClinicalTrials.gov).
 		results_posted_str = _extract(r'Results posted[^>]*>([^<]+)')
-		results_posted = (results_posted_str.lower() == 'yes') if results_posted_str else False
+		results_posted = (results_posted_str.lower() == 'yes') if results_posted_str else None
 		medical_conditions = _extract(r'Medical conditions[^>]*>([^<]+)')
 		overall_status = _extract(r'Overall trial status[^>]*>([^<]+)')
 		primary_end_point = _extract(r'Primary end point[^>]*>([^<]+)')

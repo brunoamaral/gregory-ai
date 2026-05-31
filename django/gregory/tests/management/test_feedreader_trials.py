@@ -93,10 +93,23 @@ class FeedreaderTrialsCommandTest(TestCase):
 		self.assertEqual(data['inclusion_gender'], 'Female, Male')
 		self.assertEqual(data['target_size'], '398')
 		self.assertEqual(data['intervention'], 'Orelabrutinib, Placebo tablets')
-		self.assertFalse(data['results_posted'])
+		# Explicit "No" -> False (a real value, not None)
+		self.assertIs(data['results_posted'], False)
 		self.assertEqual(data['last_refreshed_on'], datetime.date(2026, 5, 25))
 		# Day-first parsing: 08/12/2025 is 8 December, not 12 August
 		self.assertEqual(data['overall_decision_date'], datetime.date(2025, 12, 8))
+
+	def test_parse_summary_results_posted_absent_is_none(self):
+		"""When the feed omits the Results posted line, results_posted is None (not False)
+		so a non-destructive update won't blank a value set by another source."""
+		parser = EUTrialParser()
+		html = (
+			'<b>Trial number</b>: 2025-524316-11-00<br />'
+			'<b>Overall trial status</b>: Ongoing, recruiting<br />'
+			'<b>Medical conditions</b>: Multiple Sclerosis<br />'
+		)
+		data = parser.parse_summary(html)
+		self.assertIsNone(data['results_posted'])
 
 	@patch('gregory.management.commands.feedreader_trials.feedparser.parse')
 	@patch('gregory.management.commands.feedreader_trials.requests.get')

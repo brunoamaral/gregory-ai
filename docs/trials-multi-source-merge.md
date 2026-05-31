@@ -107,7 +107,10 @@ read time by priority.
 1. **Now — Option A. ✅ Implemented.** WHO (`importWHOXML.py`) and EU
    (`feedreader_trials.py`) updates now skip writes when the incoming value is empty
    (`None`/`''`), matching CT.gov. `False`/`0` still count as real values, so e.g.
-   `results_posted=False` can still be written. Low risk; prerequisite for everything else.
+   `results_posted=False` can still be written. To avoid blanking on absence, a source
+   that doesn't mention a boolean field must emit `None` (not `False`) — e.g. the EU CTIS
+   parser returns `None` for `results_posted` when the "Results posted" line is missing, so
+   it won't clobber a `True` set by ClinicalTrials.gov. Low risk; prerequisite for everything else.
 2. **Next — Option B.** Add a single source-priority helper and a minimal provenance field
    (start row-level: a `last_source` / reuse `source_register`; upgrade to a per-field JSON
    map if needed). Encode the "home registry beats aggregator" rule so WHO can't overwrite

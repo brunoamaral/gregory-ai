@@ -146,7 +146,7 @@ class Command(BaseCommand):
 				therapeutic_areas=extras.get('therapeutic_areas'),
 				country_status=extras.get('country_status'),
 				trial_region=extras.get('trial_region'),
-				results_posted=extras.get('results_posted', False),
+				results_posted=extras.get('results_posted') or False,
 				overall_decision_date=extras.get('overall_decision_date'),
 				countries_decision_date=extras.get('countries_decision_date'),
 				sponsor_type=extras.get('sponsor_type'),
