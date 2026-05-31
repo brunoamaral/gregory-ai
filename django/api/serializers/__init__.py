@@ -388,8 +388,13 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		read_only_fields = ('discovery_date', 'articles')
 
 	def get_articles(self, obj):
-		"""Get articles that reference this trial"""
-		references = ArticleTrialReference.objects.filter(trial=obj)
+		"""Get articles that reference this trial.
+
+		Uses the prefetched ``article_references`` cache when available (populated
+		by TrialViewSet/AllTrialViewSet via prefetch_related('article_references__article'))
+		to avoid one query per trial on list responses.
+		"""
+		references = obj.article_references.all()
 		articles = [ref.article for ref in references]
 		return ArticleReferenceSerializer(articles, many=True).data
 
