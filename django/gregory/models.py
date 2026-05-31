@@ -429,7 +429,7 @@ class Trials(models.Model):
 	last_refreshed_on = models.DateField(null=True, blank=True)
 	scientific_title = models.TextField(null=True, blank=True)
 	primary_sponsor = models.TextField(null=True, blank=True)
-	retrospective_flag = models.CharField(max_length=10, null=True, blank=True)
+	prospective_registration = models.CharField(max_length=10, null=True, blank=True)
 	date_registration = models.DateField(null=True, blank=True)
 	source_register = models.CharField(max_length=200, null=True, blank=True)
 	recruitment_status = models.CharField(max_length=200, null=True, blank=True, db_index=True)

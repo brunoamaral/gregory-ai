@@ -188,7 +188,7 @@ class Command(BaseCommand):
 			
 			for field in [
 				'Internal_Number', 'Last_Refreshed_on', 'Scientific_title', 'Primary_sponsor',
-				'Retrospective_flag', 'Source_Register', 'Recruitment_Status', 'other_records',
+				'Prospective_registration', 'Source_Register', 'Recruitment_Status', 'other_records',
 				'Inclusion_agemin', 'Inclusion_agemax', 'Inclusion_gender', 'Target_size',
 				'Study_type', 'Study_design', 'Phase', 'Countries', 'Contact_Firstname',
 				'Contact_Lastname', 'Contact_Address', 'Contact_Email', 'Contact_Tel',

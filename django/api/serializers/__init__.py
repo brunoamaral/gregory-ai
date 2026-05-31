@@ -367,7 +367,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		fields = [
 			'trial_id', 'title', 'summary', 'summary_plain_english', 'published_date', 'discovery_date', 'link', 'source',
 			'identifiers', 'team_categories', 'export_date', 'internal_number', 'last_refreshed_on',
-			'scientific_title', 'primary_sponsor', 'retrospective_flag', 'date_registration',
+			'scientific_title', 'primary_sponsor', 'prospective_registration', 'date_registration',
 			'source_register', 'recruitment_status', 'other_records', 'inclusion_agemin',
 			'inclusion_agemax', 'inclusion_gender', 'date_enrollement', 'target_size',
 			'study_type', 'study_design', 'phase', 'countries', 'contact_firstname',
