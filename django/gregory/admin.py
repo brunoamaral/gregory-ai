@@ -709,7 +709,7 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 			'fields': ('sources', 'teams', 'subjects', 'team_categories'),
 		}),
 		('EU Clinical Trials', {
-			'fields': ('therapeutic_areas', 'country_status', 'trial_region', 'results_posted', 'overall_decision_date', 'countries_decision_date'),
+			'fields': ('therapeutic_areas', 'country_status', 'trial_region', 'overall_decision_date', 'countries_decision_date'),
 			'classes': ('collapse',),
 		}),
 		('Ethics Review', {
@@ -717,7 +717,7 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 			'classes': ('collapse',),
 		}),
 		('Results', {
-			'fields': ('results_date_completed', 'results_url_link', 'results_yes_no', 'results_ipd_plan', 'results_ipd_description'),
+			'fields': ('results_posted', 'results_date_completed', 'results_url_link', 'results_yes_no', 'results_ipd_plan', 'results_ipd_description'),
 			'classes': ('collapse',),
 		}),
 	)
