@@ -647,7 +647,7 @@ class TrialAdminForm(forms.ModelForm):
 			'ethics_review_contact_phone': 'Phone number of the ethics committee.',
 			'ethics_review_contact_email': 'Email address of the ethics committee.',
 			# Results
-			'results_date_completed': 'Date the trial’s results were completed.',
+			'results_date_completed': 'When the trial’s results became available. For WHO ICTRP this is the source “results completed” date; for ClinicalTrials.gov it is the date results were first posted.',
 			'results_url_link': 'Link to where the trial’s results are published.',
 			'results_yes_no': 'Whether the trial’s results have been published or posted.',
 			'results_ipd_plan': 'Whether the researchers plan to share de-identified data about each participant (IPD) with other researchers.',
