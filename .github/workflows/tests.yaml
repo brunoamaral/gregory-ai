@@ -1,0 +1,46 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    # Reuse the published image: it already has the heavy deps (torch,
+    # tensorflow, transformers) installed, so CI doesn't reinstall them.
+    container:
+      image: amaralbruno/gregory-ai:latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: gregory_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_DB: gregory_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      DB_HOST: postgres
+      SECRET_KEY: ci-secret-key
+      FERNET_SECRET_KEY: pSD0ZVXNIHPUzPcHwf1DBMgHjli3M6dBW011JA3991I=
+    steps:
+      - uses: actions/checkout@v4
+
+      # pytest-django is new; install it until it lands in the base image.
+      - name: Install pytest-django
+        run: pip install --no-cache-dir "pytest-django>=4.9.0"
+
+      - name: Run pytest
+        working-directory: django
+        run: pytest -p no:cacheprovider
