@@ -1047,10 +1047,14 @@ class TrialViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	- **therapeutic_areas** - filter by therapeutic areas
 	- **inclusion_agemin/agemax** - filter by age inclusion criteria
 	- **inclusion_gender** - filter by gender inclusion criteria
-	
+
+	# Results Parameters:
+	- **has_results** - `true`/`false`; a trial counts as having results when any of `results_posted`, results completion date, results link, or results-available = "Yes" is set
+
 	# Examples:
 	- All trials as CSV: `/trials/?format=csv&all_results=true`
 	- Filtered trials: `/trials/?team_id=1&status=Recruiting&format=csv&all_results=true`
+	- Trials with results posted: `/trials/?has_results=true`
 	"""
 	queryset = Trials.objects.all().order_by('-discovery_date')
 	serializer_class = TrialSerializer
@@ -1862,6 +1866,7 @@ class TrialSearchView(generics.ListAPIView):
     - summary: Search only in summary/abstract field
     - search: Search in both title and summary fields
     - status: Filter by recruitment status (e.g., 'Recruiting', 'Completed')
+    - has_results: 'true'/'false' - filter trials by whether results have been posted (results_posted flag, results completion date, results link, or results-available = 'Yes')
     - team_id: Required - Team ID to filter trials by (must be provided)
     - subject_id: Required - Subject ID to filter trials by (must be provided)
     - page: Page number for pagination (default: 1)
