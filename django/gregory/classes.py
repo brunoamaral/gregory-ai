@@ -554,6 +554,11 @@ class ClinicalTrialsGovAPI:
 				'phone': first_contact.get('phone'),
 			}
 		
+		# Extract results availability and dates
+		has_results = bool(study_data.get('hasResults', False))
+		results_url_link = f"https://clinicaltrials.gov/study/{nct_id}?tab=results" if (has_results and nct_id) else None
+		results_date_completed = self._parse_date(status_module.get('resultsFirstPostDateStruct', {}).get('date'))
+
 		# Build extra_fields for ClinicalTrial object
 		extra_fields = {
 			'scientific_title': identification.get('officialTitle'),
@@ -580,6 +585,9 @@ class ClinicalTrialsGovAPI:
 			'contact_tel': contact_info.get('phone'),
 			'source_register': 'ClinicalTrials.gov',
 			'ctg_detailed_description': detailed_description,
+			'results_posted': has_results,
+			'results_url_link': results_url_link,
+			'results_date_completed': results_date_completed,
 		}
 		
 		return ClinicalTrial(
