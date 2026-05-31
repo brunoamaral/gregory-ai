@@ -155,6 +155,13 @@ class Command(BaseCommand):
 				primary_outcome=extras.get('primary_outcome'),
 				secondary_outcome=extras.get('secondary_outcome'),
 				primary_sponsor=extras.get('primary_sponsor'),
+				phase=extras.get('phase'),
+				intervention=extras.get('intervention'),
+				inclusion_agemin=extras.get('inclusion_agemin'),
+				inclusion_agemax=extras.get('inclusion_agemax'),
+				inclusion_gender=extras.get('inclusion_gender'),
+				target_size=extras.get('target_size'),
+				last_refreshed_on=extras.get('last_refreshed_on'),
 			)
 			if trial:
 				trial.sources.add(source)
@@ -222,7 +229,9 @@ class Command(BaseCommand):
 		for who_field in [
 			'scientific_title', 'recruitment_status', 'date_registration',
 			'study_type', 'phase', 'countries', 'inclusion_criteria',
-			'exclusion_criteria', 'intervention', 'secondary_id'
+			'exclusion_criteria', 'intervention', 'secondary_id',
+			'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender',
+			'target_size', 'last_refreshed_on'
 		]:
 			if who_field in extras and getattr(existing_trial, who_field) != extras[who_field]:
 				setattr(existing_trial, who_field, extras[who_field])

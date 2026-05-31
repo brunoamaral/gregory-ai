@@ -673,6 +673,27 @@ class EUTrialParser:
 		countries_decision_date_str = _extract(r'Countries decision date[^>]*>([^<]+)')
 		sponsor = _extract(r'Sponsor[^>]*>([^<]+)')
 		sponsor_type = _extract(r'Sponsor type[^>]*>([^<]+)')
+		phase = _extract(r'Trial phase[^>]*>([^<]+)')
+		gender = _extract(r'Gender of participants[^>]*>([^<]+)')
+		target_size = _extract(r'Planned number of participants[^>]*>([^<]+)')
+		intervention = _extract(r'Trial product[^>]*>([^<]+)')
+
+		# "Age of participants" looks like "18-64 years"; split into min/max.
+		age_min = age_max = None
+		age_raw = _extract(r'Age of participants[^>]*>([^<]+)')
+		if age_raw:
+			age_match = re.search(r'(\d+)\s*-\s*(\d+)', age_raw)
+			if age_match:
+				age_min, age_max = age_match.group(1), age_match.group(2)
+
+		# "Last updated date" is day-first (DD/MM/YYYY).
+		last_refreshed_on = None
+		last_updated_str = _extract(r'Last updated date[^>]*>([^<]+)')
+		if last_updated_str:
+			try:
+				last_refreshed_on = parse(last_updated_str, dayfirst=True).date()
+			except (ValueError, TypeError):
+				pass
 
 		# EU CTIS feed dates are day-first (DD/MM/YYYY); without dayfirst=True,
 		# dateutil misreads e.g. 08/12/2025 (8 Dec) as 12 Aug.
@@ -709,4 +730,11 @@ class EUTrialParser:
 			'overall_decision_date': overall_decision_date,
 			'countries_decision_date': countries_decision_date if countries_decision_date else None,
 			'sponsor_type': sponsor_type,
+			'phase': phase,
+			'intervention': intervention,
+			'inclusion_agemin': age_min,
+			'inclusion_agemax': age_max,
+			'inclusion_gender': gender,
+			'target_size': target_size,
+			'last_refreshed_on': last_refreshed_on,
 		}

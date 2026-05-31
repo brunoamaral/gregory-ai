@@ -67,6 +67,37 @@ class FeedreaderTrialsCommandTest(TestCase):
 		self.assertEqual(data['source_register'], 'EU CTIS')
 		self.assertEqual(data['recruitment_status'], 'Completed')
 
+	def test_parse_summary_real_ctis_item(self):
+		"""Fields drawn from a real euclinicaltrials.eu CTIS feed item."""
+		parser = EUTrialParser()
+		html = (
+			'<b>Trial number</b>: 2025-524316-11-00<br />'
+			'<b>Overall trial status</b>: Authorised, recruitment pending<br />'
+			'<b>Medical conditions</b>: Primary Progressive Multiple Sclerosis (PPMS)<br />'
+			'<b>Trial phase</b>: Therapeutic confirmatory  (Phase III)<br />'
+			'<b>Age of participants</b>: 18-64 years<br />'
+			'<b>Gender of participants</b>: Female, Male<br />'
+			'<b>Planned number of participants</b>: 398<br />'
+			'<b>Sponsor</b>: Zenas Biopharma (USA) LLC<br />'
+			'<b>Sponsor type</b>: Pharmaceutical company<br />'
+			'<b>Trial product</b>: Orelabrutinib, Placebo tablets<br />'
+			'<b>Results posted</b>: No<br />'
+			'<b>Overall decision date</b>: 08/12/2025<br />'
+			'<b>Last updated date</b>: 25/05/2026'
+		)
+		import datetime
+		data = parser.parse_summary(html)
+		self.assertEqual(data['phase'], 'Therapeutic confirmatory  (Phase III)')
+		self.assertEqual(data['inclusion_agemin'], '18')
+		self.assertEqual(data['inclusion_agemax'], '64')
+		self.assertEqual(data['inclusion_gender'], 'Female, Male')
+		self.assertEqual(data['target_size'], '398')
+		self.assertEqual(data['intervention'], 'Orelabrutinib, Placebo tablets')
+		self.assertFalse(data['results_posted'])
+		self.assertEqual(data['last_refreshed_on'], datetime.date(2026, 5, 25))
+		# Day-first parsing: 08/12/2025 is 8 December, not 12 August
+		self.assertEqual(data['overall_decision_date'], datetime.date(2025, 12, 8))
+
 	@patch('gregory.management.commands.feedreader_trials.feedparser.parse')
 	@patch('gregory.management.commands.feedreader_trials.requests.get')
 	@patch('gregory.management.commands.feedreader_trials.Sources')
