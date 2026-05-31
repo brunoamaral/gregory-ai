@@ -587,6 +587,7 @@ class TrialAdminForm(forms.ModelForm):
 			'ethics_review_contact_phone': 'Ethics contact phone',
 			'ethics_review_contact_email': 'Ethics contact email',
 			# Results
+			'results_posted': 'Results posted?',
 			'results_date_completed': 'Results completion date',
 			'results_url_link': 'Results link',
 			'results_yes_no': 'Results available?',
@@ -647,6 +648,7 @@ class TrialAdminForm(forms.ModelForm):
 			'ethics_review_contact_phone': 'Phone number of the ethics committee. Source: WHO ICTRP.',
 			'ethics_review_contact_email': 'Email address of the ethics committee. Source: WHO ICTRP.',
 			# Results
+			'results_posted': 'Whether results have been posted/published for the trial. Sources: ClinicalTrials.gov (from the “has results” flag), EU CTIS (from the “Results posted” field).',
 			'results_date_completed': 'When the trial’s results became available. For WHO ICTRP this is the source “results completed” date; for ClinicalTrials.gov it is the date results were first posted. Sources: WHO ICTRP, ClinicalTrials.gov.',
 			'results_url_link': 'Link to where the trial’s results are published. Source: ClinicalTrials.gov.',
 			'results_yes_no': 'Whether the trial’s results have been published or posted. Source: WHO ICTRP.',
