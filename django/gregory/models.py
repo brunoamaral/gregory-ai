@@ -102,12 +102,13 @@ class Subject(models.Model):
 		help_text='How ML models should agree for an article to be considered relevant'
 	)
 	team = models.ForeignKey(
-			'Team', 
+			'Team',
 			on_delete=models.CASCADE,  # Not sure which would be the best option here
 			null=True,
-			blank=False,  
+			blank=False,
 			related_name='subjects'  # Helps in querying from the Team model, e.g., team.subjects.all()
 	)
+	history = HistoricalRecords()
 
 	def __str__(self):
 		# More readable subject representation
