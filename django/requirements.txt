@@ -76,6 +76,7 @@ ply==3.11
 protobuf==6.33.2
 psutil==5.9.0
 psycopg==3.2.9
+pytest==9.0.3
 psycopg-binary==3.2.9
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
