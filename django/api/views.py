@@ -1071,7 +1071,9 @@ class TrialViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 		``_prefetched_org_contents`` so the serializer can resolve per-org
 		fields without issuing one query per trial.
 		"""
-		qs = super().get_queryset()
+		# Prefetch m2m relations the serializer reads (sources, team_categories)
+		# so list/CSV-export responses don't issue one query per trial.
+		qs = super().get_queryset().prefetch_related('sources', 'team_categories')
 		org = _resolve_per_org_fields_org(self.request)
 		if org is not None:
 			qs = qs.prefetch_related(
@@ -1121,7 +1123,7 @@ class AllTrialViewSet(generics.ListAPIView):
 	List all clinical trials by discovery date
 	"""
 	pagination_class = None
-	queryset = Trials.objects.all().order_by('-discovery_date')
+	queryset = Trials.objects.all().order_by('-discovery_date').prefetch_related('sources', 'team_categories')
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
