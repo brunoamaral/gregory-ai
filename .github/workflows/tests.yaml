@@ -36,6 +36,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Stopgap until the base image is rebuilt from this PR's requirements.txt
+      # (which adds pytest-django and pytest-xdist). Remove once merged.
+      - name: Install test dependencies
+        run: pip install --no-cache-dir "pytest-django>=4.9.0" "pytest-xdist>=3.6.0"
+
       - name: Run pytest
         working-directory: django
         # SECRET_KEY / FERNET_SECRET_KEY are generated per-run so no secrets
