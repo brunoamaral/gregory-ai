@@ -36,10 +36,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pytest-django is new; install it until it lands in the base image.
-      - name: Install pytest-django and pytest-xdist
-        run: pip install --no-cache-dir "pytest-django>=4.9.0" "pytest-xdist>=3.6.0"
-
       - name: Run pytest
         working-directory: django
         # SECRET_KEY / FERNET_SECRET_KEY are generated per-run so no secrets

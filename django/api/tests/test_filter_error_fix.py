@@ -33,7 +33,7 @@ class FilterErrorHandlingTest(TestCase):
 		]
 		
 		for test_value, description in test_cases:
-			with self.subTest(msg=description):
+			with self.subTest(msg=f"{description} (value={repr(test_value)})"):
 				try:
 					# This should NOT raise a TypeError anymore
 					result = filter_instance.filter_last_days(queryset, 'last_days', test_value)
