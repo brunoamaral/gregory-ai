@@ -34,11 +34,12 @@ jobs:
       POSTGRES_USER: postgres
       DB_HOST: postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      # pytest-django is new; install it until it lands in the base image.
-      - name: Install pytest-django
-        run: pip install --no-cache-dir "pytest-django>=4.9.0"
+      # Stopgap until the base image is rebuilt from this PR's requirements.txt
+      # (which adds pytest-django and pytest-xdist). Remove once merged.
+      - name: Install test dependencies
+        run: pip install --no-cache-dir "pytest-django>=4.9.0" "pytest-xdist>=3.6.0"
 
       - name: Run pytest
         working-directory: django
