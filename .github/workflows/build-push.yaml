@@ -14,9 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -31,10 +28,15 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          platforms: linux/amd64,linux/arm64
+          # CI builds amd64 only (production servers are amd64).
+          # For a local arm64 image (Apple Silicon) run:
+          #   docker buildx build --platform linux/arm64 -t gregory-ai:local .
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Registry cache avoids the 10 GB cap of type=gha, which was being
+          # exceeded by the torch/tensorflow wheels and causing full rebuilds.
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
