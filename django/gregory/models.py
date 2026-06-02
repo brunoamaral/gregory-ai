@@ -4,7 +4,8 @@ from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
-from django.db.models import GeneratedField
+from django.db.models import GeneratedField, Q
+from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Upper
 from django.utils.text import slugify
 from django.utils import timezone
@@ -495,12 +496,37 @@ class Trials(models.Model):
 		verbose_name_plural = 'trials'
 		db_table = 'trials'
 		constraints = [
+			# Partial unique constraints per major registry key.
+			# Replacing the old case-insensitive title constraint that caused false
+			# merges when two different trials shared the same title.
+			# See docs/trials-identity-dedup.md – Phase 1 migration.
 			models.UniqueConstraint(
-				Lower('title'),
-				name='unique_title_case_insensitive'
-			)
+				Upper(KeyTextTransform('nct', 'identifiers')),
+				condition=Q(identifiers__has_key='nct'),
+				name='uniq_trial_nct',
+			),
+			models.UniqueConstraint(
+				Upper(KeyTextTransform('euctr', 'identifiers')),
+				condition=Q(identifiers__has_key='euctr'),
+				name='uniq_trial_euctr',
+			),
+			models.UniqueConstraint(
+				Upper(KeyTextTransform('eudract', 'identifiers')),
+				condition=Q(identifiers__has_key='eudract'),
+				name='uniq_trial_eudract',
+			),
+			models.UniqueConstraint(
+				Upper(KeyTextTransform('ctis', 'identifiers')),
+				condition=Q(identifiers__has_key='ctis'),
+				name='uniq_trial_ctis',
+			),
 		]
 		indexes = [
+			# Non-unique index on lower(title) to preserve fast title lookups.
+			models.Index(
+				Lower('title'),
+				name='trials_lower_title_idx',
+			),
 			# GIN indexes for fast text search on uppercase columns
 			GinIndex(
 				fields=['utitle'],
