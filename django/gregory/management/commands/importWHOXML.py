@@ -162,15 +162,10 @@ class Command(BaseCommand):
 			if existing_trial:
 				self.update_existing_trial(existing_trial, trial_data, source, subject)
 			else:
-				# Check for duplicate titles one last time before creating a trial
-				duplicate_trial = Trials.objects.filter(title__iexact=trial_data['title']).exists()
-				if duplicate_trial:
-					self.stdout.write(
-						self.style.WARNING(
-							f"Duplicate trial title found (case-insensitive): {trial_data['title']}. Skipping."
-						)
-					)
-					return None
+				# The old title-duplicate guard that silently skipped creation has been
+				# removed: the conflict guard above already decides these are different
+				# trials, and the per-registry partial unique indexes (migration 0054)
+				# enforce true uniqueness — not the title constraint.
 				self.create_new_trial(trial_data, source, subject)
 		except IntegrityError as e:
 			self.stdout.write(
