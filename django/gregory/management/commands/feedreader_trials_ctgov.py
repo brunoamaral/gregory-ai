@@ -24,6 +24,7 @@ from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import ClinicalTrialsGovAPI, ClinicalTrial
 from gregory.models import Trials, Sources
+from gregory.utils.trial_utils import identifiers_conflict
 import pytz
 
 
@@ -248,12 +249,13 @@ class Command(BaseCommand):
 			if trial:
 				return trial
 
-		# Fallback to title match (case-insensitive)
+		# Fallback to title match (case-insensitive) — only merge when the candidate
+		# does not conflict on a shared registry key (Option B guard).
 		if title:
-			trial = Trials.objects.filter(title__iexact=clinical_trial.title).first()
-			if trial:
-				self.log(f"Found trial by title: {trial.title[:50]}...", level=3)
-				return trial
+			candidate = Trials.objects.filter(title__iexact=clinical_trial.title).first()
+			if candidate and not identifiers_conflict(candidate.identifiers, clinical_trial.identifiers):
+				self.log(f"Found trial by title: {candidate.title[:50]}...", level=3)
+				return candidate
 
 		return None
 

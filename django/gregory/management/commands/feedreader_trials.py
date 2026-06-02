@@ -7,6 +7,7 @@ from django.utils import timezone
 from gregory.classes import ClinicalTrial, EUTrialParser
 from gregory.functions import remove_utm
 from gregory.models import Trials, Sources
+from gregory.utils.trial_utils import identifiers_conflict
 import feedparser
 import pytz
 import requests
@@ -125,11 +126,13 @@ class Command(BaseCommand):
 			if trial:
 				return trial
 
+		# Fallback to title match (case-insensitive) — only merge when the candidate
+		# does not conflict on a shared registry key (Option B guard).
 		if title:
-			trial = Trials.objects.filter(title__iexact=title).first()
-			if trial:
-				self.log(f"Found trial by title: {trial.title}", level=3)
-				return trial
+			candidate = Trials.objects.filter(title__iexact=title).first()
+			if candidate and not identifiers_conflict(candidate.identifiers, clinical_trial.identifiers):
+				self.log(f"Found trial by title: {candidate.title}", level=3)
+				return candidate
 
 	def create_new_trial(self, clinical_trial: ClinicalTrial, source):
 		"""Create a new trial in the database."""
