@@ -143,14 +143,12 @@ class Command(BaseCommand):
 				if existing_trial and identifiers_conflict(existing_trial.identifiers, trial_data.get('identifiers')):
 					existing_trial = None
 			
-			# Fallback to a broader search if no specific key match
-			if not existing_trial:
-				existing_trial = Trials.objects.filter(
-					identifiers__contains=trial_id_value
-				).first()
-				# Apply conflict guard to the broad fallback as well.
-				if existing_trial and identifiers_conflict(existing_trial.identifiers, trial_data.get('identifiers')):
-					existing_trial = None
+			# (No broad value-only fallback here: on a JSONField,
+			# `identifiers__contains=<scalar>` expects a JSON object/array, so with a
+			# scalar id it never matched — it was a no-op. A value-level search across
+			# arbitrary keys would also reintroduce the weak cross-key matches this
+			# change is designed to avoid; reliable matching is the exact key:value
+			# match above plus the guarded title fallback below.)
 		# Step 2: Fallback to matching by title (case-insensitive) — only merge when
 		# the candidate does not conflict on a shared registry key (Option B guard).
 		if not existing_trial and 'title' in trial_data:

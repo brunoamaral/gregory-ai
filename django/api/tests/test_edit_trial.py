@@ -20,6 +20,7 @@ import json
 from datetime import timedelta
 
 from django.test import TestCase, Client
+from django.db import IntegrityError, transaction
 from django.utils.timezone import now
 from organizations.models import Organization
 
@@ -168,23 +169,50 @@ class EditTrialErrorsTest(TestCase):
 		})
 		self.assertEqual(resp.status_code, 404)
 
-	def test_duplicate_nct_returns_409_with_ids(self):
-		"""Two trials with same NCT id → 409 with both ids."""
-		dup = Trials.objects.create(
-			title='Duplicate Trial',
-			link='https://example.com/dup-trial',
-			identifiers={'nct': 'NCT0000002'},
+	def test_duplicate_identifier_returns_409_with_ids(self):
+		"""Two trials sharing a non-unique identifier (euct) → 409 with both ids.
+
+		nct/euctr/eudract/ctis are now protected by partial unique indexes, so a
+		duplicate can only arise on an unconstrained key such as ``euct`` — which
+		``find_trial_by_identifier`` still matches on, keeping the 409 'multiple
+		match' path reachable.
+		"""
+		dup_euct = '2021-000123-45'
+		t1 = Trials.objects.create(
+			title='Duplicate Trial One',
+			link='https://example.com/dup-trial-1',
+			identifiers={'euct': dup_euct},
 		)
-		dup.teams.add(self.team)
+		t1.teams.add(self.team)
+		t2 = Trials.objects.create(
+			title='Duplicate Trial Two',
+			link='https://example.com/dup-trial-2',
+			identifiers={'euct': dup_euct},
+		)
+		t2.teams.add(self.team)
 		resp = _edit(self.client, self.scheme.api_key, {
-			'identifiers': {'nct': 'NCT0000002'},
+			'identifiers': {'euct': dup_euct},
 		})
 		self.assertEqual(resp.status_code, 409)
 		data = resp.json()
 		self.assertIn('trial_ids', data['extra_data'])
-		self.assertIn(self.trial.trial_id, data['extra_data']['trial_ids'])
-		self.assertIn(dup.trial_id, data['extra_data']['trial_ids'])
+		self.assertIn(t1.trial_id, data['extra_data']['trial_ids'])
+		self.assertIn(t2.trial_id, data['extra_data']['trial_ids'])
 		self.assertEqual(TrialOrgContent.objects.count(), 0)
+
+	def test_duplicate_nct_blocked_by_unique_constraint(self):
+		"""NCT is the primary identifier and must stay unique: migration 0054's
+		partial unique index rejects a second trial that reuses self.trial's nct
+		(NCT0000002), so duplicate-NCT rows can never exist in the first place.
+		This is the Postgres-only guarantee that test_trial_identity (SQLite)
+		cannot cover."""
+		with self.assertRaises(IntegrityError):
+			with transaction.atomic():
+				Trials.objects.create(
+					title='Second NCT0000002 Trial',
+					link='https://example.com/second-nct',
+					identifiers={'nct': 'NCT0000002'},
+				)
 
 	def test_cross_org_trial_returns_403(self):
 		"""Trial belongs to other_org only → 403."""

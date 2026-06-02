@@ -67,11 +67,8 @@ class Command(BaseCommand):
 		#    identifiers['nct'].
 		# ------------------------------------------------------------------
 		mismatches = []
-		qs = Trials.objects.exclude(identifiers__has_key='nct').union(
-			Trials.objects.filter(identifiers__has_key='nct')
-		)
-		# We need the full queryset; use filter to narrow to rows that have an
-		# NCT-looking link so we're not scanning all 19 k rows in Python.
+		# Narrow to rows that have an NCT and an NCT-looking link, so we scan only
+		# candidate rows in Python rather than all ~19k trials.
 		nct_rows = Trials.objects.filter(
 			identifiers__has_key='nct',
 			link__icontains='NCT',
