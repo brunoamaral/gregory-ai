@@ -3,6 +3,7 @@ from django.core.management.base import BaseCommand
 from django.db import IntegrityError
 from django.utils import timezone
 from gregory.models import Trials, Sources
+from gregory.utils.trial_utils import identifiers_conflict
 import datetime
 import re
 import xml.etree.ElementTree as ET
@@ -73,10 +74,16 @@ class Command(BaseCommand):
 
 			# Handle other fields
 			elif key == 'identifiers':
-				# Check for existing identifiers and merge with the one in trial_data
+				# Conservative merge: preserve existing keys; only add keys that are
+				# absent or null.  {**current, **value} would overwrite stored IDs on
+				# every re-ingest (the "flip-flop" described in
+				# docs/trials-identity-dedup.md).
 				if isinstance(current_value, dict) and isinstance(value, dict):
-					merged_identifiers = {**current_value, **value}  # Merge dictionaries
-					if merged_identifiers != current_value:  # Check if the merge changed anything
+					merged_identifiers = current_value.copy()
+					for k, v in value.items():
+						if v and (k not in merged_identifiers or merged_identifiers[k] is None):
+							merged_identifiers[k] = v
+					if merged_identifiers != current_value:
 						trial.identifiers = merged_identifiers
 						has_changes = True
 						updated_fields.append(key)
@@ -131,31 +138,32 @@ class Command(BaseCommand):
 				existing_trial = Trials.objects.filter(
 					identifiers__contains={identifier_key: trial_id_value}
 				).first()
+				# Apply conflict guard: a value-level match under a different key should
+				# not merge records that disagree on a shared registry key.
+				if existing_trial and identifiers_conflict(existing_trial.identifiers, trial_data.get('identifiers')):
+					existing_trial = None
 			
-			# Fallback to a broader search if no specific key match
-			if not existing_trial:
-				existing_trial = Trials.objects.filter(
-					identifiers__contains=trial_id_value
-				).first()
-
-		# Step 2: Fallback to matching by title (case-insensitive)
+			# (No broad value-only fallback here: on a JSONField,
+			# `identifiers__contains=<scalar>` expects a JSON object/array, so with a
+			# scalar id it never matched — it was a no-op. A value-level search across
+			# arbitrary keys would also reintroduce the weak cross-key matches this
+			# change is designed to avoid; reliable matching is the exact key:value
+			# match above plus the guarded title fallback below.)
+		# Step 2: Fallback to matching by title (case-insensitive) — only merge when
+		# the candidate does not conflict on a shared registry key (Option B guard).
 		if not existing_trial and 'title' in trial_data:
-			existing_trial = Trials.objects.filter(title__iexact=trial_data['title']).first()
-			# print(f"Existing trial by title: {existing_trial}")
+			candidate = Trials.objects.filter(title__iexact=trial_data['title']).first()
+			if candidate and not identifiers_conflict(candidate.identifiers, trial_data.get('identifiers')):
+				existing_trial = candidate
 		# Step 3: Handle trial creation or update
 		try:
 			if existing_trial:
 				self.update_existing_trial(existing_trial, trial_data, source, subject)
 			else:
-				# Check for duplicate titles one last time before creating a trial
-				duplicate_trial = Trials.objects.filter(title__iexact=trial_data['title']).exists()
-				if duplicate_trial:
-					self.stdout.write(
-						self.style.WARNING(
-							f"Duplicate trial title found (case-insensitive): {trial_data['title']}. Skipping."
-						)
-					)
-					return None
+				# The old title-duplicate guard that silently skipped creation has been
+				# removed: the conflict guard above already decides these are different
+				# trials, and the per-registry partial unique indexes (migration 0054)
+				# enforce true uniqueness — not the title constraint.
 				self.create_new_trial(trial_data, source, subject)
 		except IntegrityError as e:
 			self.stdout.write(
