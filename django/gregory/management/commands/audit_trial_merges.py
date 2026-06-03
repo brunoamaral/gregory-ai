@@ -99,11 +99,11 @@ class Command(BaseCommand):
 						"""
 						SELECT upper(identifiers->>'%s') AS val, count(*) AS cnt
 						FROM trials
-						WHERE identifiers ? '%s'
+						WHERE identifiers ? '%s' AND identifiers->>'%s' IS NOT NULL
 						GROUP BY upper(identifiers->>'%s')
 						HAVING count(*) > 1
 						ORDER BY cnt DESC
-						""" % (key, key, key)  # noqa: S608 – read-only, no user input
+						""" % (key, key, key, key)  # noqa: S608 – read-only, fixed keys
 					)
 					rows = cursor.fetchall()
 				if rows:

@@ -13,12 +13,17 @@ from django.db.models.functions import Upper, Lower
 
 
 def check_registry_duplicates(apps, schema_editor):
-	"""Pre-flight: fail loudly if any duplicate registry IDs exist.
+	"""Pre-flight: fail loudly if any *real* duplicate registry IDs exist.
 
-	The partial unique indexes will fail to create if duplicates are present.
-	Running this check first gives an actionable error message instead of a
-	cryptic DB error, and surfaces the offending values so they can be resolved
-	before the migration is re-run.
+	The partial unique indexes are built on ``upper(identifiers->>'<key>')`` for
+	rows where the key is present. NULL-valued keys are excluded here because
+	PostgreSQL treats NULLs as distinct in a unique index, so multiple rows with a
+	null (or absent) value never collide — only two rows sharing the *same
+	non-null* value would block index creation. Counting NULLs as a "duplicate"
+	group would be a false positive.
+
+	Running this first turns a cryptic DB error into an actionable list naming the
+	exact trial_ids to merge before the migration is re-run.
 	"""
 	from django.db import connection
 
@@ -29,26 +34,29 @@ def check_registry_duplicates(apps, schema_editor):
 		for key in registry_keys:
 			cursor.execute(
 				"""
-				SELECT upper(identifiers->>'%s') AS val, count(*) AS cnt
+				SELECT upper(identifiers->>'%s') AS val,
+				       count(*) AS cnt,
+				       array_agg(trial_id ORDER BY trial_id) AS ids
 				FROM trials
-				WHERE identifiers ? '%s'
+				WHERE identifiers ? '%s' AND identifiers->>'%s' IS NOT NULL
 				GROUP BY upper(identifiers->>'%s')
 				HAVING count(*) > 1
 				ORDER BY cnt DESC
-				""" % (key, key, key)  # noqa: S608 – read-only, no user input
+				""" % (key, key, key, key)  # noqa: S608 – read-only, fixed keys
 			)
 			rows = cursor.fetchall()
 			if rows:
-				duplicates_found[key] = [(r[0], r[1]) for r in rows]
+				duplicates_found[key] = [(r[0], r[1], r[2]) for r in rows]
 
 	if duplicates_found:
 		lines = [
 			'Cannot add partial unique indexes: duplicate registry IDs found.',
-			'Resolve these collisions before re-running the migration:',
+			'Merge these trials before re-running the migration:',
 		]
 		for key, rows in duplicates_found.items():
-			for val, cnt in rows:
-				lines.append(f'  {key} = {val!r}  ({cnt} rows)')
+			for val, cnt, ids in rows:
+				ids_str = ', '.join(str(i) for i in ids)
+				lines.append(f'  {key} = {val!r}  ({cnt} rows: trial_id {ids_str})')
 		raise Exception('\n'.join(lines))
 
 
