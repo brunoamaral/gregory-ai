@@ -409,11 +409,13 @@ class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
 
         ``value`` is the list produced by ``BaseInFilter`` (comma-separated input).
         Values are stripped and upper-cased so the comparison lines up with the
-        ``Upper(identifiers->>'<key>')`` partial expression indexes on the model.
-        Every registry key these filters pass in — nct, eudract, euct, euctr,
-        ctis — is backed by such an index (the unique-constraint indexes plus
-        ``trials_ueuct_idx``), so each branch is index-eligible rather than a
-        seq scan. Blank tokens (e.g. from a trailing comma) are ignored; an
+        non-partial ``Upper(identifiers->>'<key>')`` expression indexes on the
+        model (``trials_u<key>_idx`` for nct/eudract/euct/euctr/ctis), keeping
+        each branch — and the BitmapOr behind the umbrella ``?identifiers=``
+        filter — an index scan rather than a seq scan. (The model's partial
+        *unique* indexes on the same expressions enforce integrity but are NOT
+        used for these lookups: Postgres can't prove their ``identifiers ? 'key'``
+        predicate.) Blank tokens (e.g. from a trailing comma) are ignored; an
         all-blank list is treated as "no filter" and leaves the queryset untouched.
         """
         wanted = {v.strip().upper() for v in (value or []) if v and v.strip()}

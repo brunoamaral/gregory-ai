@@ -538,16 +538,18 @@ class Trials(models.Model):
 				name='trials_usummary_gin_idx',
 				opclasses=['gin_trgm_ops']
 			),
-			# Partial expression index for the EU CT 'euct' key. The canonical
-			# registries (nct/euctr/eudract/ctis) are already indexed via the
-			# unique constraints above, but 'euct' is a separate inbound key with
-			# no unique constraint. Index it so identifier filters matching the
-			# 'euct' branch (api.filters.TrialFilter) don't fall back to a seq scan.
-			models.Index(
-				Upper(KeyTextTransform('euct', 'identifiers')),
-				name='trials_ueuct_idx',
-				condition=Q(identifiers__has_key='euct'),
-			),
+			# Non-partial expression indexes on the registry-identifier keys used by
+			# the /trials/ identifier filters (api.filters.TrialFilter). The model's
+			# partial *unique* constraints above already index these expressions,
+			# but Postgres will NOT use a partial index for `Upper(identifiers->>'key')
+			# = …` (it can't prove the index's `identifiers ? 'key'` predicate), so
+			# dedicated non-partial indexes are required to keep those lookups — and
+			# the BitmapOr behind the umbrella ?identifiers= filter — off a seq scan.
+			models.Index(Upper(KeyTextTransform('nct', 'identifiers')), name='trials_unct_idx'),
+			models.Index(Upper(KeyTextTransform('eudract', 'identifiers')), name='trials_ueudract_idx'),
+			models.Index(Upper(KeyTextTransform('euct', 'identifiers')), name='trials_ueuct_idx'),
+			models.Index(Upper(KeyTextTransform('euctr', 'identifiers')), name='trials_ueuctr_idx'),
+			models.Index(Upper(KeyTextTransform('ctis', 'identifiers')), name='trials_uctis_idx'),
 		]
 
 
