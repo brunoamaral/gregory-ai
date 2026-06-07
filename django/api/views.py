@@ -1025,7 +1025,18 @@ class TrialViewSet(CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModel
 	- **page** - page number for pagination
 	- **page_size** - items per page (max 100)
 	- **all_results** - set to 'true' to bypass pagination and get all results (useful for CSV export)
-	
+
+	# Registry Identifier Parameters:
+	Each accepts one or more comma-separated values and returns trials matching *any* of them
+	(case-insensitive). Combine with other filters (team, subject, status) as usual.
+	- **identifiers** - mixed list matched across all registry keys at once (NCT/EudraCT/EUCT/CTIS),
+	  e.g. `?identifiers=NCT02521311,2020-001234-12`. Acronyms are excluded (not unique) — use `acronym` for those.
+	- **nct** - ClinicalTrials.gov NCT id(s), e.g. `?nct=NCT02521311,NCT06065670`
+	- **eudract** - EudraCT number(s)
+	- **euct** - EU CT / EUCTR number(s) (matches either `euct` or `euctr` keys)
+	- **ctis** - CTIS number(s)
+	- **acronym** - trial acronym(s), e.g. `?acronym=ReCOVER,MODIF-MS`
+
 	# Trial-Specific Parameters:
 	- **internal_number** - filter by WHO internal number
 	- **phase** - filter by trial phase (Phase I, II, III, etc.)
