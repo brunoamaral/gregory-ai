@@ -408,10 +408,13 @@ class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
         (case-insensitively) to any of the supplied values.
 
         ``value`` is the list produced by ``BaseInFilter`` (comma-separated input).
-        Values are stripped and upper-cased to match the persisted
-        ``Upper(identifiers->>'<key>')`` expression indexes declared on the model.
-        Blank tokens (e.g. from a trailing comma) are ignored; an all-blank list
-        is treated as "no filter" and leaves the queryset untouched.
+        Values are stripped and upper-cased so the comparison lines up with the
+        ``Upper(identifiers->>'<key>')`` partial expression indexes on the model.
+        Every registry key these filters pass in — nct, eudract, euct, euctr,
+        ctis — is backed by such an index (the unique-constraint indexes plus
+        ``trials_ueuct_idx``), so each branch is index-eligible rather than a
+        seq scan. Blank tokens (e.g. from a trailing comma) are ignored; an
+        all-blank list is treated as "no filter" and leaves the queryset untouched.
         """
         wanted = {v.strip().upper() for v in (value or []) if v and v.strip()}
         if not wanted:

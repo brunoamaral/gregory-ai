@@ -538,6 +538,16 @@ class Trials(models.Model):
 				name='trials_usummary_gin_idx',
 				opclasses=['gin_trgm_ops']
 			),
+			# Partial expression index for the EU CT 'euct' key. The canonical
+			# registries (nct/euctr/eudract/ctis) are already indexed via the
+			# unique constraints above, but 'euct' is a separate inbound key with
+			# no unique constraint. Index it so identifier filters matching the
+			# 'euct' branch (api.filters.TrialFilter) don't fall back to a seq scan.
+			models.Index(
+				Upper(KeyTextTransform('euct', 'identifiers')),
+				name='trials_ueuct_idx',
+				condition=Q(identifiers__has_key='euct'),
+			),
 		]
 
 
