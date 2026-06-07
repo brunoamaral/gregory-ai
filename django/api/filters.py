@@ -339,7 +339,7 @@ class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
     # identifiers JSON (or acronym) matches *any* of them, case-insensitively.
     # ``identifiers`` is the umbrella param: a mixed list matched across every
     # registry key at once. The typed params below scope to a single registry.
-    identifiers = filters.BaseInFilter(method='filter_identifiers', label='Mixed registry id(s), comma-separated; matches any across NCT/EudraCT/EUCT/CTIS (case-insensitive)')
+    identifiers = filters.BaseInFilter(method='filter_identifiers', label='Mixed registry id(s), comma-separated; matches any across NCT/EudraCT/EUCT/EUCTR/CTIS (case-insensitive)')
     nct = filters.BaseInFilter(method='filter_nct', label='NCT ID(s), comma-separated; matches any (case-insensitive)')
     eudract = filters.BaseInFilter(method='filter_eudract', label='EudraCT number(s), comma-separated; matches any')
     euct = filters.BaseInFilter(method='filter_euct', label='EU CT / EUCTR number(s), comma-separated; matches any')

@@ -539,12 +539,15 @@ class Trials(models.Model):
 				opclasses=['gin_trgm_ops']
 			),
 			# Non-partial expression indexes on the registry-identifier keys used by
-			# the /trials/ identifier filters (api.filters.TrialFilter). The model's
-			# partial *unique* constraints above already index these expressions,
-			# but Postgres will NOT use a partial index for `Upper(identifiers->>'key')
-			# = …` (it can't prove the index's `identifiers ? 'key'` predicate), so
-			# dedicated non-partial indexes are required to keep those lookups — and
-			# the BitmapOr behind the umbrella ?identifiers= filter — off a seq scan.
+			# the /trials/ identifier filters (api.filters.TrialFilter). A dedicated
+			# non-partial index is needed per key for one of two reasons:
+			#  - nct/eudract/euctr/ctis already have a *partial* unique index (the
+			#    constraints above), but Postgres won't use a partial index for
+			#    `Upper(identifiers->>'key') = …` — it can't prove the index's
+			#    `identifiers ? 'key'` predicate;
+			#  - euct has no unique constraint at all, so it had no index to begin with.
+			# Non-partial indexes keep every branch — and the BitmapOr behind the
+			# umbrella ?identifiers= filter — off a seq scan.
 			models.Index(Upper(KeyTextTransform('nct', 'identifiers')), name='trials_unct_idx'),
 			models.Index(Upper(KeyTextTransform('eudract', 'identifiers')), name='trials_ueudract_idx'),
 			models.Index(Upper(KeyTextTransform('euct', 'identifiers')), name='trials_ueuct_idx'),
