@@ -1,5 +1,7 @@
 from django_filters import rest_framework as filters
 from django.db import models
+from django.db.models.fields.json import KeyTextTransform
+from django.db.models.functions import Upper
 from django.utils import timezone
 from django import forms
 from datetime import datetime, timedelta
@@ -331,7 +333,19 @@ class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
     category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact', label='Category Slug')
     category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact', label='Category ID')
     source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact', label='Source ID')
-    
+
+    # Registry identifier filters
+    # Each accepts one or more comma-separated values and returns trials whose
+    # identifiers JSON (or acronym) matches *any* of them, case-insensitively.
+    # ``identifiers`` is the umbrella param: a mixed list matched across every
+    # registry key at once. The typed params below scope to a single registry.
+    identifiers = filters.BaseInFilter(method='filter_identifiers', label='Mixed registry id(s), comma-separated; matches any across NCT/EudraCT/EUCT/EUCTR/CTIS (case-insensitive)')
+    nct = filters.BaseInFilter(method='filter_nct', label='NCT ID(s), comma-separated; matches any (case-insensitive)')
+    eudract = filters.BaseInFilter(method='filter_eudract', label='EudraCT number(s), comma-separated; matches any')
+    euct = filters.BaseInFilter(method='filter_euct', label='EU CT / EUCTR number(s), comma-separated; matches any')
+    ctis = filters.BaseInFilter(method='filter_ctis', label='CTIS number(s), comma-separated; matches any')
+    acronym = filters.BaseInFilter(method='filter_acronym', label='Trial acronym(s), comma-separated; matches any (case-insensitive)')
+
     # Trial-specific filters
     recruitment_status = filters.CharFilter(field_name='recruitment_status', lookup_expr='iexact')
     status = filters.CharFilter(field_name='recruitment_status', lookup_expr='iexact')  # Legacy alias for backward compatibility
@@ -361,6 +375,7 @@ class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
         fields = [
             'trial_id', 'title', 'summary', 'search', 'recruitment_status', 'status',
             'team_id', 'subject_id', 'category_slug', 'category_id', 'source_id',
+            'identifiers', 'nct', 'eudract', 'euct', 'ctis', 'acronym',
             'internal_number', 'phase', 'study_type', 'primary_sponsor', 'source_register',
             'countries', 'condition', 'intervention', 'therapeutic_areas',
             'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender', 'has_results'
@@ -387,6 +402,70 @@ class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
             models.Q(utitle__contains=upper_value) |
             models.Q(usummary__contains=upper_value)
         )
+
+    def _match_identifier(self, queryset, value, keys):
+        """Return trials whose ``identifiers`` JSON has any of ``keys`` equal
+        (case-insensitively) to any of the supplied values.
+
+        ``value`` is the list produced by ``BaseInFilter`` (comma-separated input).
+        Values are stripped and upper-cased so the comparison lines up with the
+        non-partial ``Upper(identifiers->>'<key>')`` expression indexes on the
+        model (``trials_u<key>_idx`` for nct/eudract/euct/euctr/ctis), keeping
+        each branch — and the BitmapOr behind the umbrella ``?identifiers=``
+        filter — an index scan rather than a seq scan. (The model's partial
+        *unique* indexes on the same expressions enforce integrity but are NOT
+        used for these lookups: Postgres can't prove their ``identifiers ? 'key'``
+        predicate.) Blank tokens (e.g. from a trailing comma) are ignored; an
+        all-blank list is treated as "no filter" and leaves the queryset untouched.
+        """
+        wanted = {v.strip().upper() for v in (value or []) if v and v.strip()}
+        if not wanted:
+            return queryset
+        annotations = {}
+        condition = models.Q()
+        for key in keys:
+            alias = f'_id_{key}'
+            annotations[alias] = Upper(KeyTextTransform(key, 'identifiers'))
+            condition |= models.Q(**{f'{alias}__in': wanted})
+        return queryset.annotate(**annotations).filter(condition)
+
+    def filter_identifiers(self, queryset, name, value):
+        """Match a mixed list of registry id(s) against any registry key.
+
+        Pools every comma-separated token and returns trials whose
+        ``identifiers`` JSON has any of nct/eudract/euct/euctr/ctis equal
+        (case-insensitively) to any token. Acronym is intentionally excluded:
+        acronyms are not unique, so acronym matching stays opt-in via the
+        dedicated ``?acronym=`` param.
+        """
+        return self._match_identifier(queryset, value, ['nct', 'eudract', 'euct', 'euctr', 'ctis'])
+
+    def filter_nct(self, queryset, name, value):
+        """Match ClinicalTrials.gov NCT id(s) against ``identifiers['nct']``."""
+        return self._match_identifier(queryset, value, ['nct'])
+
+    def filter_eudract(self, queryset, name, value):
+        """Match EudraCT number(s) against ``identifiers['eudract']``."""
+        return self._match_identifier(queryset, value, ['eudract'])
+
+    def filter_euct(self, queryset, name, value):
+        """Match EU CT number(s) against ``identifiers['euct']`` or ``['euctr']``.
+
+        The two keys are used interchangeably across the ingestion pipeline for
+        the EU Clinical Trials register, so both are checked.
+        """
+        return self._match_identifier(queryset, value, ['euct', 'euctr'])
+
+    def filter_ctis(self, queryset, name, value):
+        """Match CTIS number(s) against ``identifiers['ctis']``."""
+        return self._match_identifier(queryset, value, ['ctis'])
+
+    def filter_acronym(self, queryset, name, value):
+        """Match trial acronym(s) against the ``acronym`` column (case-insensitive)."""
+        wanted = {v.strip().upper() for v in (value or []) if v and v.strip()}
+        if not wanted:
+            return queryset
+        return queryset.annotate(_uacronym=Upper('acronym')).filter(_uacronym__in=wanted)
 
     def filter_has_results(self, queryset, name, value):
         """
