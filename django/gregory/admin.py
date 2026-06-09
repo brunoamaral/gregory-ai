@@ -1287,9 +1287,10 @@ class AuthorsAdmin(admin.ModelAdmin):
 	
 @admin.register(TeamCategory)
 class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
-	list_display = ('category_name', 'team', 'article_count', 'display_subjects')
+	list_display = ('category_name', 'team', 'category_type', 'article_count', 'display_subjects')
 	search_fields = ('category_name', 'team__name', 'subjects__subject_name')
 	list_filter = [
+		'category_type',
 		('team', OrganizationRestrictedFieldListFilter),
 		('subjects', OrganizationRestrictedFieldListFilter),
 	]

@@ -10,6 +10,7 @@ from gregory.models import (
 	ArticleCategoryAssignment,
 	TrialCategoryAssignment,
 	CategoryAssignmentSource,
+	CategoryType,
 )
 from datetime import timedelta
 
@@ -94,7 +95,11 @@ class Command(BaseCommand):
 			cutoff_date = timezone.now() - timedelta(days=days)
 			self.stdout.write(f"Processing articles updated since {cutoff_date}")
 
-		categories = TeamCategory.objects.prefetch_related('subjects').all()
+		# Manual categories are curated entirely by hand and never touched here
+		categories = TeamCategory.objects.filter(category_type=CategoryType.AUTOMATIC).prefetch_related('subjects')
+		manual_categories = TeamCategory.objects.exclude(category_type=CategoryType.AUTOMATIC).count()
+		if manual_categories:
+			self.stdout.write(f"Skipping {manual_categories} manual categories")
 		total_categories = categories.count()
 		total_added = 0
 		total_removed = 0
@@ -218,7 +223,11 @@ class Command(BaseCommand):
 			cutoff_date = timezone.now() - timedelta(days=days)
 			self.stdout.write(f"Processing trials updated since {cutoff_date}")
 
-		categories = TeamCategory.objects.prefetch_related('subjects').all()
+		# Manual categories are curated entirely by hand and never touched here
+		categories = TeamCategory.objects.filter(category_type=CategoryType.AUTOMATIC).prefetch_related('subjects')
+		manual_categories = TeamCategory.objects.exclude(category_type=CategoryType.AUTOMATIC).count()
+		if manual_categories:
+			self.stdout.write(f"Skipping {manual_categories} manual categories")
 		total_categories = categories.count()
 		total_added = 0
 		total_removed = 0

@@ -17,6 +17,7 @@ from gregory.models import (
 	Articles,
 	ArticleCategoryAssignment,
 	CategoryAssignmentSource,
+	CategoryType,
 	Subject,
 	Team,
 	TeamCategory,
@@ -188,6 +189,34 @@ class RebuildCategoriesDiffSyncTest(TestCase):
 			TrialCategoryAssignment.objects.get(trials=matching, teamcategory=self.category).source,
 			CategoryAssignmentSource.AUTOMATIC,
 		)
+
+	def test_manual_category_is_skipped_entirely(self):
+		self.category.category_type = CategoryType.MANUAL
+		self.category.save()
+		matching = self.make_article('Neuroplasticity in adults')
+		# Even an automatic-source assignment is left alone once the category is manual
+		stale = self.make_article('Unrelated study of something else')
+		self.category.articles.add(stale, through_defaults=AUTOMATIC)
+
+		call_command('rebuild_categories', articles_only=True)
+
+		self.assertNotIn(matching, self.category.articles.all())
+		self.assertIn(stale, self.category.articles.all())
+
+	def test_manual_category_trials_are_skipped(self):
+		self.category.category_type = CategoryType.MANUAL
+		self.category.save()
+		matching = self.make_trial('Neuroplasticity rehabilitation trial')
+		curated = self.make_trial('Editor curated trial')
+		self.category.trials.add(curated)
+
+		call_command('rebuild_categories', trials_only=True)
+
+		self.assertNotIn(matching, self.category.trials.all())
+		self.assertIn(curated, self.category.trials.all())
+
+	def test_new_categories_default_to_automatic(self):
+		self.assertEqual(self.category.category_type, CategoryType.AUTOMATIC)
 
 	def test_rerun_is_idempotent(self):
 		matching = self.make_article('Neuroplasticity in adults')
