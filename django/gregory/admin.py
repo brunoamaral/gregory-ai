@@ -538,7 +538,8 @@ class TrialAdminForm(forms.ModelForm):
 			'title': 'Public title',
 			'scientific_title': 'Scientific title',
 			'acronym': 'Study acronym',
-			'link': 'Registry web page',
+			'link': 'Registry web page (canonical)',
+			'links': 'All registry URLs',
 			'identifiers': 'Trial IDs',
 			'internal_number': 'Registry internal number',
 			'secondary_id': 'Other IDs',
@@ -599,7 +600,8 @@ class TrialAdminForm(forms.ModelForm):
 			'title': 'The plain-language title of the trial, intended for the general public. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
 			'scientific_title': 'The technical title of the trial, written using medical terminology. Sources: WHO ICTRP, ClinicalTrials.gov.',
 			'acronym': 'Short nickname or abbreviation for the trial (e.g. “IMPACT-MS”). Source: WHO ICTRP.',
-			'link': 'Link to this trial’s page on its source registry. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
+			'link': ('The canonical registry URL for this trial - the first registry URL discovered, kept for good. Exposed as "link" in the API response and on the frontend. Managed automatically by importers; edit only to correct an incorrect URL. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.'),
+			'links': ('All known registry URLs for this trial, keyed by registry slug (e.g. {"ctgov": "https://clinicaltrials.gov/...", "ctis": "https://euclinicaltrials.eu/..."}). Populated and merged automatically by importers - do not edit manually. Exposed as "links" in the API response.'),
 			'identifiers': 'Registry identifiers for this trial (e.g. NCT, ChiCTR, or EUCTR numbers). Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
 			'internal_number': 'Internal record number assigned by the source registry. Rarely meaningful to patients. Source: WHO ICTRP.',
 			'secondary_id': 'Additional identifiers used by other registries or by the sponsor. Sources: WHO ICTRP, ClinicalTrials.gov.',
@@ -661,7 +663,7 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	form = TrialAdminForm
 	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
 	exclude = ['ml_predictions']
-	readonly_fields = ['last_updated', 'team_categories']
+	readonly_fields = ['last_updated', 'team_categories', 'links']
 	inlines = [TrialOrgContentInline, TrialArticleReferenceInline]
 	search_fields = [
 		'trial_id', 'title', 'summary', 'scientific_title',
@@ -679,7 +681,7 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	]
 	fieldsets = (
 		(None, {
-			'fields': ('title', 'acronym', 'scientific_title', 'link', 'identifiers', 'discovery_date', 'published_date', 'last_updated')
+			'fields': ('title', 'acronym', 'scientific_title', 'link', 'links', 'identifiers', 'discovery_date', 'published_date', 'last_updated')
 		}),
 		('Description', {
 			'fields': ('summary', 'ctg_detailed_description'),

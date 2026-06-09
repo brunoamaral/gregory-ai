@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand
 from django.db import IntegrityError
 from django.utils import timezone
 from gregory.models import Trials, Sources
-from gregory.utils.trial_utils import identifiers_conflict
+from gregory.utils.trial_utils import identifiers_conflict, merge_trial_links, canonical_link
 import datetime
 import re
 import xml.etree.ElementTree as ET
@@ -29,6 +29,10 @@ class Command(BaseCommand):
 			# Strip leading and trailing whitespace and normalize whitespace within
 			return ' '.join(element.text.split()).strip()
 		return None
+
+	def _safe_change_reason(self, reason: str) -> str:
+		"""Truncate change reason to fit within 100 character database limit."""
+		return reason[:100] if len(reason) > 100 else reason
 
 	def robust_parse_date(self, date_str):
 		if not date_str:
@@ -91,6 +95,22 @@ class Command(BaseCommand):
 					trial.identifiers = value
 					has_changes = True
 					updated_fields.append(key)
+			elif key == 'link':
+				# Record the WHO-exported registry URL under its registry key. The
+				# canonical link is the first registry URL stored, chronologically —
+				# it is never replaced, except to upgrade an aggregator (WHO ICTRP)
+				# URL to a registry of record (see docs/trials-multi-source-merge.md).
+				if value not in (None, ''):
+					merged_links = merge_trial_links(trial.links, value)
+					if merged_links != (trial.links or {}):
+						trial.links = merged_links
+						has_changes = True
+						updated_fields.append('links')
+					new_link = canonical_link(trial.links, trial.link)
+					if new_link and trial.link != new_link:
+						trial.link = new_link
+						has_changes = True
+						updated_fields.append('link')
 			# Only overwrite when the incoming value is non-empty, so a missing XML
 			# field never blanks data a previous source populated.
 			elif value not in (None, '') and current_value != value:
@@ -99,9 +119,8 @@ class Command(BaseCommand):
 				updated_fields.append(key)
 
 		if has_changes:
-			# trial._change_reason = f"Updated fields: {', '.join(updated_fields)}"
+			trial._change_reason = self._safe_change_reason(f"Updated fields from {source.name} ({source.source_id}): {', '.join(updated_fields)}")
 			self.stdout.write(f"Saving changes for trial: {trial.trial_id}. Changes: {updated_fields}")
-			# trial._change_reason(f"Updated fields: {', '.join(updated_fields)}")
 			trial.save()
 		if source not in trial.sources.all():
 			trial.sources.add(source)
@@ -114,10 +133,13 @@ class Command(BaseCommand):
 	def create_new_trial(self, trial_data, source, subject):
 		try:
 			trial_data['discovery_date'] = timezone.now()
+			if trial_data.get('link'):
+				trial_data['links'] = merge_trial_links(None, trial_data['link'])
 			trial = Trials.objects.create(**trial_data)
 			trial.sources.add(source)
 			trial.subjects.add(subject)
 			trial.teams.add(source.team)
+			trial._change_reason = self._safe_change_reason(f"Created from Source: {source.name} ({source.source_id})")
 			trial.save()
 			return trial
 		except IntegrityError as e:
