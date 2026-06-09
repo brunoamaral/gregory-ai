@@ -5,6 +5,7 @@ from django.utils import timezone
 from organizations.models import Organization
 
 from gregory.models import Articles, Authors, Sources, Team, Subject, ArticleSubjectRelevance, ArticleOrgContent
+from gregory.utils.trial_utils import merge_trial_links
 
 class Command(BaseCommand):
 	help = 'Fetches articles from the API and imports them into the Django app.'
@@ -62,10 +63,11 @@ class Command(BaseCommand):
 				spe_raw = item.get("summary_plain_english", _missing)
 				discovery_date = parse_datetime(item.get("discovery_date")) if item.get("discovery_date") else timezone.now()
 
-				# Create or update the Article instance using title and link as unique identifiers
+				# Create or update the Article instance using title as the unique identifier.
+				# link is only set on create (never overwritten); incoming URLs are merged
+				# into the links map so every known URL is preserved.
 				article, created = Articles.objects.update_or_create(
 					title=title,
-					link=link,
 					defaults={
 						"doi": doi,
 						"summary": summary,
@@ -74,8 +76,17 @@ class Command(BaseCommand):
 						"container_title": container_title,
 						"access": access,
 						"discovery_date": discovery_date,
-					}
+					},
+					create_defaults={
+						"link": link,
+						"links": merge_trial_links(None, link),
+					},
 				)
+				if not created and link:
+					merged_links = merge_trial_links(article.links, link)
+					if merged_links != (article.links or {}):
+						article.links = merged_links
+						article.save(update_fields=["links"])
 
 				# Upsert per-org editorial content for fields the upstream explicitly provided.
 				# Absent keys and None are skipped; empty strings are normalized to None so

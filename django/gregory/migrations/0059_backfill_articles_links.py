@@ -1,21 +1,19 @@
-# Backfill Trials.links from the existing canonical link.
+# Backfill Articles.links from the existing canonical link.
 #
-# Each trial's current `link` is filed under its registry key (inferred from the
-# URL's domain) so the multi-source link merge introduced alongside this
-# migration starts from accurate per-registry data instead of an empty map.
-# See docs/trials-multi-source-merge.md.
+# Each article's current `link` is filed under a key derived from the URL's
+# domain, so the multi-source link merge introduced alongside this migration
+# starts from accurate per-source data instead of an empty map.
 #
 # NOTE: bulk_update deliberately bypasses django-simple-history. Writing a
-# historical row per trial would duplicate every column of every trial in the
-# history table for a one-time metadata derivation that adds no new
+# historical row per article would duplicate every column of every article in
+# the history table for a one-time metadata derivation that adds no new
 # information (links is computed from the already-recorded link). Importer
 # writes after this migration are fully history-tracked as usual.
 #
-# NOTE: The URL→registry mapping is intentionally frozen inline here rather
-# than imported from gregory.utils.trial_utils. Migrations must be
-# self-contained: importing runtime helpers means future changes to that
-# module (new domain entries, renames) silently alter historical migration
-# behaviour and can break fresh installs or rollbacks.
+# NOTE: The URL→key mapping is intentionally frozen inline here rather than
+# imported from gregory.utils.trial_utils. Migrations must be self-contained:
+# importing runtime helpers means future changes to that module silently alter
+# historical migration behaviour and can break fresh installs or rollbacks.
 
 from urllib.parse import urlparse
 
@@ -37,8 +35,8 @@ _REGISTRY_DOMAINS = {
 BATCH_SIZE = 2000
 
 
-def _registry_from_url(url):
-	"""Return the registry slug for *url*, or its hostname for unknown domains."""
+def _key_from_url(url):
+	"""Return a stable key for *url*: a known registry slug or the hostname."""
 	if not url:
 		return None
 	hostname = (urlparse(url).hostname or '').lower()
@@ -53,20 +51,20 @@ def _registry_from_url(url):
 
 
 def backfill_links(apps, schema_editor):
-	Trials = apps.get_model("gregory", "Trials")
-	queryset = Trials.objects.filter(links__isnull=True).exclude(link="").only("trial_id", "link")
+	Articles = apps.get_model("gregory", "Articles")
+	queryset = Articles.objects.filter(links__isnull=True).exclude(link="").only("article_id", "link")
 	batch = []
-	for trial in queryset.iterator(chunk_size=BATCH_SIZE):
-		key = _registry_from_url(trial.link)
+	for article in queryset.iterator(chunk_size=BATCH_SIZE):
+		key = _key_from_url(article.link)
 		if not key:
 			continue
-		trial.links = {key: trial.link}
-		batch.append(trial)
+		article.links = {key: article.link}
+		batch.append(article)
 		if len(batch) >= BATCH_SIZE:
-			Trials.objects.bulk_update(batch, ["links"], batch_size=BATCH_SIZE)
+			Articles.objects.bulk_update(batch, ["links"], batch_size=BATCH_SIZE)
 			batch = []
 	if batch:
-		Trials.objects.bulk_update(batch, ["links"], batch_size=BATCH_SIZE)
+		Articles.objects.bulk_update(batch, ["links"], batch_size=BATCH_SIZE)
 
 
 def noop(apps, schema_editor):
@@ -78,7 +76,7 @@ def noop(apps, schema_editor):
 class Migration(migrations.Migration):
 
 	dependencies = [
-		("gregory", "0056_historicaltrials_links_trials_links"),
+		("gregory", "0058_historicalarticles_links_articles_links"),
 	]
 
 	operations = [

@@ -254,6 +254,7 @@ def post_article(request):
 				title=new_article['title'],
 				summary=new_article['summary'],
 				link=new_article['link'],
+				links=merge_trial_links(None, new_article['link']),
 				published_date=new_article['published_date'],
 				doi=new_article['doi'],
 				kind=kind,
@@ -352,6 +353,7 @@ def post_article(request):
 				title=new_article['title'],
 				summary=new_article['summary'],
 				link=new_article['link'],
+				links=merge_trial_links(None, new_article['link']),
 				published_date=new_article['published_date'],
 				kind=kind,
 			)

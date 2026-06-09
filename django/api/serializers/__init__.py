@@ -294,7 +294,7 @@ class ArticleSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSe
 		model = Articles
 		depth = 1
 		fields = [
-			'article_id', 'title', 'summary', 'summary_plain_english', 'link', 'published_date', 'sources', 'teams',
+			'article_id', 'title', 'summary', 'summary_plain_english', 'link', 'links', 'published_date', 'sources', 'teams',
 			'subjects', 'publisher', 'container_title', 'authors',
 			'discovery_date', 'article_subject_relevances',
 			'doi', 'access', 'takeaways', 'team_categories', 'ml_predictions', 'clinical_trials',
