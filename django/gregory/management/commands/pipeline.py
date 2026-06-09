@@ -11,25 +11,43 @@ class Command(BaseCommand):
 			default=30,
 			help='Number of days to look back when processing trial references (default: 30)'
 		)
+		parser.add_argument(
+			'--categories-days',
+			type=int,
+			default=30,
+			help=(
+				'Incremental window in days for rebuild_categories (default: 30). '
+				'Categories whose matching configuration changed are fully re-matched regardless.'
+			)
+		)
+		parser.add_argument(
+			'--full-category-rebuild',
+			action='store_true',
+			help='Run rebuild_categories over all content instead of the incremental window'
+		)
 
 	def handle(self, *args, **options):
+		rebuild_kwargs = {}
+		if not options.get('full_category_rebuild'):
+			rebuild_kwargs['days'] = options.get('categories_days', 30)
+
 		# standard commands to run in the pipeline
 		commands_to_run = [
-			'feedreader_articles',  # 1. Feedreader. Get articles
-			'feedreader_trials',		# 2. Feedreader. Get trials
-			'feedreader_trials_ctgov', # 3. ClinicalTrials.gov trials
-			'find_doi',         		# 4. Find missing DOI
-			'update_articles_info', # 5. Find missing data
-			'get_authors',      		# 6. Find missing authors
-			'rebuild_categories',   # 7. Assign categories
-			'get_takeaways',    		# 8. Get takeaways
+			('feedreader_articles', {}),  # 1. Feedreader. Get articles
+			('feedreader_trials', {}),		# 2. Feedreader. Get trials
+			('feedreader_trials_ctgov', {}), # 3. ClinicalTrials.gov trials
+			('find_doi', {}),         		# 4. Find missing DOI
+			('update_articles_info', {}), # 5. Find missing data
+			('get_authors', {}),      		# 6. Find missing authors
+			('rebuild_categories', rebuild_kwargs),   # 7. Assign categories (incremental by default)
+			('get_takeaways', {}),    		# 8. Get takeaways
 		]
 
 		# First run all the standard commands
-		for cmd in commands_to_run:
+		for cmd, kwargs in commands_to_run:
 			try:
 				self.stdout.write(self.style.SUCCESS(f'Running command: {cmd}'))
-				call_command(cmd)
+				call_command(cmd, **kwargs)
 				self.stdout.write(self.style.SUCCESS(f'Finished command: {cmd}'))
 			except Exception as e:
 				self.stderr.write(self.style.ERROR(f'Error running command {cmd}: {str(e)}'))

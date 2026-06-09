@@ -1,3 +1,5 @@
+import hashlib
+import json
 import logging
 import re
 from django.core.management.base import BaseCommand
@@ -50,6 +52,9 @@ class Command(BaseCommand):
 		if not options.get('articles_only'):
 			self.rebuild_cats_trials(days, batch_size, min_score)
 
+		if not self.dry_run and not options.get('articles_only') and not options.get('trials_only'):
+			self.finalize_sync_state(min_score)
+
 		self.stdout.write(self.style.SUCCESS('Successfully rebuilt category associations.'))
 
 	def log_message(self, message, level=1):
@@ -70,6 +75,41 @@ class Command(BaseCommand):
 				return
 			last_pk = getattr(batch[-1], pk_field)
 			yield batch
+
+	def category_config_hash(self, cat, min_score):
+		"""Fingerprint of everything that affects which items match this category."""
+		payload = json.dumps({
+			'terms': sorted(term.lower() for term in cat.category_terms or []),
+			'subjects': sorted(cat.subjects.values_list('id', flat=True)),
+			'min_score': min_score,
+		}, sort_keys=True)
+		return hashlib.sha256(payload.encode()).hexdigest()
+
+	def category_cutoff(self, cat, cutoff_date, config_hash):
+		"""Return the cutoff to use for this category in incremental mode.
+
+		If the matching configuration changed since the last sync (or the
+		category was never synced), the incremental window would miss older
+		items that now match (or no longer match), so fall back to a full
+		re-match for this category only.
+		"""
+		if cutoff_date and cat.match_config_hash != config_hash:
+			self.stdout.write(f"  Matching configuration changed for '{cat.category_name}'; performing a full re-match")
+			return None
+		return cutoff_date
+
+	def finalize_sync_state(self, min_score):
+		"""Record the matching configuration each automatic category was synced with.
+
+		Only called after a complete run (articles and trials): storing the hash
+		after a partial run would make the other side skip the full re-match it
+		still needs.
+		"""
+		now = timezone.now()
+		for cat in TeamCategory.objects.filter(category_type=CategoryType.AUTOMATIC).prefetch_related('subjects'):
+			cat.match_config_hash = self.category_config_hash(cat, min_score)
+			cat.last_synced_at = now
+			cat.save(update_fields=['match_config_hash', 'last_synced_at'])
 
 	def sync_category(self, manager, desired_ids, automatic_ids, manual_ids):
 		"""Diff desired vs current automatic associations and apply only the changes.
@@ -109,6 +149,9 @@ class Command(BaseCommand):
 
 			self.stdout.write(f"[{index}/{total_categories}] Processing category: {cat.category_name}")
 
+			config_hash = self.category_config_hash(cat, min_score)
+			cat_cutoff = self.category_cutoff(cat, cutoff_date, config_hash)
+
 			# Prepare term patterns for more accurate matching
 			term_patterns = [re.compile(r'\b' + re.escape(term.lower()) + r'\b') for term in terms]
 
@@ -127,9 +170,10 @@ class Command(BaseCommand):
 				base_query = Articles.objects.filter(subjects__id=subject.id)
 
 				# Apply date filter if incremental
-				if cutoff_date:
+				if cat_cutoff:
 					base_query = base_query.filter(
-						Q(discovery_date__gte=cutoff_date)
+						Q(discovery_date__gte=cat_cutoff) |
+						Q(last_updated__gte=cat_cutoff)
 					)
 
 				# Initial database filtering (broad match)
@@ -189,8 +233,11 @@ class Command(BaseCommand):
 
 			# Current associations, scoped to the same window as the desired set
 			assignment_qs = ArticleCategoryAssignment.objects.filter(teamcategory=cat)
-			if cutoff_date:
-				assignment_qs = assignment_qs.filter(articles__discovery_date__gte=cutoff_date)
+			if cat_cutoff:
+				assignment_qs = assignment_qs.filter(
+					Q(articles__discovery_date__gte=cat_cutoff) |
+					Q(articles__last_updated__gte=cat_cutoff)
+				)
 			automatic_ids = set(
 				assignment_qs.filter(source=CategoryAssignmentSource.AUTOMATIC).values_list('articles_id', flat=True)
 			)
@@ -237,6 +284,9 @@ class Command(BaseCommand):
 
 			self.stdout.write(f"[{index}/{total_categories}] Processing category: {cat.category_name}")
 
+			config_hash = self.category_config_hash(cat, min_score)
+			cat_cutoff = self.category_cutoff(cat, cutoff_date, config_hash)
+
 			# Prepare term patterns for more accurate matching
 			term_patterns = [re.compile(r'\b' + re.escape(term.lower()) + r'\b') for term in terms]
 
@@ -255,10 +305,10 @@ class Command(BaseCommand):
 				base_query = Trials.objects.filter(subjects__id=subject.id)
 
 				# Apply date filter if incremental
-				if cutoff_date:
+				if cat_cutoff:
 					base_query = base_query.filter(
-						Q(discovery_date__gte=cutoff_date) |
-						Q(last_updated__gte=cutoff_date)
+						Q(discovery_date__gte=cat_cutoff) |
+						Q(last_updated__gte=cat_cutoff)
 					)
 
 				# Initial database filtering (broad match) - trials have more searchable fields
@@ -390,10 +440,10 @@ class Command(BaseCommand):
 
 			# Current associations, scoped to the same window as the desired set
 			assignment_qs = TrialCategoryAssignment.objects.filter(teamcategory=cat)
-			if cutoff_date:
+			if cat_cutoff:
 				assignment_qs = assignment_qs.filter(
-					Q(trials__discovery_date__gte=cutoff_date) |
-					Q(trials__last_updated__gte=cutoff_date)
+					Q(trials__discovery_date__gte=cat_cutoff) |
+					Q(trials__last_updated__gte=cat_cutoff)
 				)
 			automatic_ids = set(
 				assignment_qs.filter(source=CategoryAssignmentSource.AUTOMATIC).values_list('trials_id', flat=True)

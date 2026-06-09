@@ -67,6 +67,23 @@ class TeamCategory(models.Model):
 			'by hand and are never touched by the command.'
 		),
 	)
+	match_config_hash = models.CharField(
+		max_length=64,
+		blank=True,
+		null=True,
+		editable=False,
+		help_text=(
+			'Fingerprint of the matching configuration (terms, subjects, score threshold) at the last '
+			'rebuild_categories sync. When the configuration changes, the next incremental run performs '
+			'a full re-match for this category.'
+		),
+	)
+	last_synced_at = models.DateTimeField(
+		blank=True,
+		null=True,
+		editable=False,
+		help_text='When rebuild_categories last synced this category.',
+	)
 
 	def save(self, *args, **kwargs):
 		if not self.category_slug:
@@ -360,6 +377,7 @@ class Articles(models.Model):
 	sources = models.ManyToManyField(Sources, blank=True)
 	published_date = models.DateTimeField(blank=True, null=True, db_index=True)
 	discovery_date = models.DateTimeField(auto_now_add=True, db_index=True)
+	last_updated = models.DateTimeField(auto_now=True, null=True, db_index=True)
 	authors = models.ManyToManyField(Authors, blank=True)
 	team_categories = models.ManyToManyField('TeamCategory', related_name='articles', blank=True, through='ArticleCategoryAssignment')
 	entities = models.ManyToManyField('Entities')

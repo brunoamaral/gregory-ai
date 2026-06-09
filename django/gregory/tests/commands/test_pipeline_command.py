@@ -70,6 +70,34 @@ class PipelineCommandTest(TestCase):
 
 	@patch('gregory.management.commands.pipeline.call_command')
 	@patch('django.apps.apps.get_model')
+	def test_rebuild_categories_is_incremental_by_default(self, mock_get_model, mock_call):
+		mock_org_class = MagicMock()
+		mock_org_class.objects.all.return_value.order_by.return_value = []
+		mock_get_model.return_value = mock_org_class
+
+		out = StringIO()
+		call_command('pipeline', stdout=out)
+
+		rebuild_calls = [c for c in mock_call.call_args_list if c.args and c.args[0] == 'rebuild_categories']
+		self.assertEqual(len(rebuild_calls), 1)
+		self.assertEqual(rebuild_calls[0].kwargs.get('days'), 30)
+
+	@patch('gregory.management.commands.pipeline.call_command')
+	@patch('django.apps.apps.get_model')
+	def test_full_category_rebuild_flag_disables_window(self, mock_get_model, mock_call):
+		mock_org_class = MagicMock()
+		mock_org_class.objects.all.return_value.order_by.return_value = []
+		mock_get_model.return_value = mock_org_class
+
+		out = StringIO()
+		call_command('pipeline', '--full-category-rebuild', stdout=out)
+
+		rebuild_calls = [c for c in mock_call.call_args_list if c.args and c.args[0] == 'rebuild_categories']
+		self.assertEqual(len(rebuild_calls), 1)
+		self.assertNotIn('days', rebuild_calls[0].kwargs)
+
+	@patch('gregory.management.commands.pipeline.call_command')
+	@patch('django.apps.apps.get_model')
 	def test_command_errors_are_logged_and_execution_continues(self, mock_get_model, mock_call):
 		mock_org_class = MagicMock()
 		mock_org_class.objects.all.return_value.order_by.return_value = []

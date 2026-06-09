@@ -135,11 +135,17 @@ class RebuildCategoriesDiffSyncTest(TestCase):
 		self.assertNotIn(matching, self.category.articles.all())
 		self.assertIn(stale, self.category.articles.all())
 
+	def backdate(self, article, days=30):
+		old = timezone.now() - timedelta(days=days)
+		Articles.objects.filter(pk=article.pk).update(discovery_date=old, last_updated=old)
+
 	def test_days_scopes_changes_to_recent_items(self):
+		# Full run first so the category's matching configuration is recorded;
+		# otherwise the incremental run falls back to a full re-match.
+		call_command('rebuild_categories')
+
 		old_stale = self.make_article('Old article without matching terms')
-		Articles.objects.filter(pk=old_stale.pk).update(
-			discovery_date=timezone.now() - timedelta(days=30)
-		)
+		self.backdate(old_stale)
 		self.category.articles.add(old_stale, through_defaults=AUTOMATIC)
 		recent_matching = self.make_article('Neuroplasticity in adults')
 
@@ -148,6 +154,53 @@ class RebuildCategoriesDiffSyncTest(TestCase):
 		# Items outside the window are left alone; recent matches are added
 		self.assertIn(old_stale, self.category.articles.all())
 		self.assertIn(recent_matching, self.category.articles.all())
+
+	def test_updated_article_is_recategorized_incrementally(self):
+		call_command('rebuild_categories')
+
+		article = self.make_article('Old article without matching terms')
+		self.backdate(article)
+
+		# Editing the article bumps last_updated, pulling it into the window
+		article.title = 'Old article, now about neuroplasticity'
+		article.save()
+
+		call_command('rebuild_categories', articles_only=True, days=7)
+
+		self.assertIn(article, self.category.articles.all())
+
+	def test_config_change_triggers_full_rematch(self):
+		matching = self.make_article('Neuroplasticity in adults')
+		call_command('rebuild_categories')
+		self.assertIn(matching, self.category.articles.all())
+
+		# Both articles end up outside the incremental window
+		self.backdate(matching)
+		new_match = self.make_article('Dopamine signalling in adults')
+		self.backdate(new_match)
+
+		self.category.category_terms = ['dopamine']
+		self.category.save()
+
+		call_command('rebuild_categories', days=7)
+
+		# The changed term list forces a full re-match despite --days
+		self.assertNotIn(matching, self.category.articles.all())
+		self.assertIn(new_match, self.category.articles.all())
+
+	def test_unchanged_config_stays_incremental(self):
+		call_command('rebuild_categories')
+
+		old_matching = self.make_article('Neuroplasticity in adults')
+		self.backdate(old_matching)
+
+		call_command('rebuild_categories', days=7)
+
+		# Outside the window and config unchanged: not picked up until a full run
+		self.assertNotIn(old_matching, self.category.articles.all())
+
+		call_command('rebuild_categories')
+		self.assertIn(old_matching, self.category.articles.all())
 
 	def test_batching_processes_all_matches(self):
 		articles = [
