@@ -92,18 +92,17 @@ class Command(BaseCommand):
 					has_changes = True
 					updated_fields.append(key)
 			elif key == 'link':
-				# Record the WHO-exported registry URL under its registry key and
-				# recompute the canonical link by home-registry priority, instead of
-				# overwriting whatever a previous source stored
-				# (see docs/trials-multi-source-merge.md). Relies on 'identifiers'
-				# being merged first (it precedes 'link' in trial_data).
+				# Record the WHO-exported registry URL under its registry key. The
+				# canonical link is the first registry URL stored, chronologically —
+				# it is never replaced, except to upgrade an aggregator (WHO ICTRP)
+				# URL to a registry of record (see docs/trials-multi-source-merge.md).
 				if value not in (None, ''):
 					merged_links = merge_trial_links(trial.links, value)
 					if merged_links != (trial.links or {}):
 						trial.links = merged_links
 						has_changes = True
 						updated_fields.append('links')
-					new_link = canonical_link(trial.links, trial.identifiers, fallback=trial.link)
+					new_link = canonical_link(trial.links, trial.link)
 					if new_link and trial.link != new_link:
 						trial.link = new_link
 						has_changes = True

@@ -3,10 +3,11 @@ Tests for multi-source trial link handling.
 
 Covers:
   - registry_from_url / merge_trial_links / canonical_link helpers (no DB)
-  - importer integration: a trial cross-registered in ClinicalTrials.gov and
-    EU CTIS ends up with the SAME canonical link regardless of which importer
-    runs first, and every registry URL is preserved in Trials.links
-    (see docs/trials-multi-source-merge.md)
+  - importer integration: for a trial cross-registered in ClinicalTrials.gov
+    and EU CTIS, the FIRST registry URL stored stays the canonical link (the
+    trial team's primary registration choice — registries are not ranked),
+    later importers never replace it, and every registry URL is preserved in
+    Trials.links (see docs/trials-multi-source-merge.md)
 
 Run:
   docker exec gregory python manage.py test gregory.tests.test_trial_links
@@ -81,31 +82,33 @@ class MergeTrialLinksTest(SimpleTestCase):
 
 
 class CanonicalLinkTest(SimpleTestCase):
-	def test_nct_trial_prefers_ctgov(self):
-		links = {'ctis': CTIS_LINK, 'ctgov': CTGOV_LINK, 'ictrp': ICTRP_LINK}
-		self.assertEqual(canonical_link(links, {'nct': 'NCT00000001'}), CTGOV_LINK)
-
-	def test_euct_trial_prefers_ctis(self):
-		links = {'ctis': CTIS_LINK, 'ictrp': ICTRP_LINK}
-		self.assertEqual(canonical_link(links, {'euct': '2024-000001-11-00'}), CTIS_LINK)
-
-	def test_cross_registered_nct_wins_over_ctis(self):
-		"""nct home registry ranks first for a trial that has both keys."""
+	def test_first_registry_link_is_kept(self):
+		"""Registries are not ranked: whichever registry URL was stored first stays
+		canonical, even when other registry URLs arrive later."""
 		links = {'ctis': CTIS_LINK, 'ctgov': CTGOV_LINK}
-		identifiers = {'nct': 'NCT00000001', 'euct': '2024-000001-11-00'}
-		self.assertEqual(canonical_link(links, identifiers), CTGOV_LINK)
+		self.assertEqual(canonical_link(links, CTIS_LINK), CTIS_LINK)
+		self.assertEqual(canonical_link(links, CTGOV_LINK), CTGOV_LINK)
 
-	def test_aggregator_only_when_no_registry_link(self):
-		links = {'ictrp': ICTRP_LINK}
-		self.assertEqual(canonical_link(links, {'nct': 'NCT00000001'}), ICTRP_LINK)
-
-	def test_non_home_registry_beats_aggregator(self):
+	def test_aggregator_link_upgraded_to_registry(self):
+		"""A WHO ICTRP (aggregator) URL is replaced once a registry URL exists —
+		a search portal is not a registry the trial team registered with."""
 		links = {'ictrp': ICTRP_LINK, 'ctis': CTIS_LINK}
-		self.assertEqual(canonical_link(links, {'nct': 'NCT00000001'}), CTIS_LINK)
+		self.assertEqual(canonical_link(links, ICTRP_LINK), CTIS_LINK)
 
-	def test_falls_back_to_current_link(self):
-		self.assertEqual(canonical_link({}, {}, fallback='https://example.com/x'), 'https://example.com/x')
+	def test_aggregator_link_kept_when_no_registry_link(self):
+		links = {'ictrp': ICTRP_LINK}
+		self.assertEqual(canonical_link(links, ICTRP_LINK), ICTRP_LINK)
+
+	def test_empty_current_link_picks_a_registry_link(self):
+		links = {'ctgov': CTGOV_LINK, 'ictrp': ICTRP_LINK}
+		self.assertEqual(canonical_link(links, None), CTGOV_LINK)
+
+	def test_empty_current_link_falls_back_to_aggregator(self):
+		self.assertEqual(canonical_link({'ictrp': ICTRP_LINK}, None), ICTRP_LINK)
+
+	def test_all_empty(self):
 		self.assertIsNone(canonical_link(None, None))
+		self.assertIsNone(canonical_link({}, ''))
 
 
 # ---------------------------------------------------------------------------
@@ -184,27 +187,28 @@ class ImporterOrderIndependenceTest(TestCase):
 		else:
 			cmd.create_new_trial(incoming, self.eu_source)
 
-	def _assert_converged(self):
+	def _assert_merged(self, expected_link):
 		trial = Trials.objects.get(title=TITLE)
 		# Both registry URLs preserved
 		self.assertEqual(trial.links, {'ctgov': CTGOV_LINK, 'ctis': CTIS_LINK})
-		# Canonical link is the nct home registry, regardless of import order
-		self.assertEqual(trial.link, CTGOV_LINK)
+		# Canonical link is whichever registry URL arrived FIRST — the trial
+		# team's primary registration — and later importers must not replace it.
+		self.assertEqual(trial.link, expected_link)
 		# Identifiers merged from both registries
 		self.assertEqual(trial.identifiers.get('nct'), 'NCT00000001')
 		self.assertEqual(trial.identifiers.get('euct'), '2024-000001-11-00')
 
-	def test_ctgov_then_eu(self):
+	def test_ctgov_then_eu_keeps_ctgov_link(self):
 		self._run_ctgov()
 		self._run_eu()
 		self.assertEqual(Trials.objects.filter(title=TITLE).count(), 1)
-		self._assert_converged()
+		self._assert_merged(CTGOV_LINK)
 
-	def test_eu_then_ctgov(self):
+	def test_eu_then_ctgov_keeps_ctis_link(self):
 		self._run_eu()
 		self._run_ctgov()
 		self.assertEqual(Trials.objects.filter(title=TITLE).count(), 1)
-		self._assert_converged()
+		self._assert_merged(CTIS_LINK)
 
 	def test_reimport_is_idempotent(self):
 		"""Re-running both importers must not change the row again (no churn)."""
@@ -225,9 +229,9 @@ class WHOImporterLinkTest(TestCase):
 		self.source = _make_source(self.org, method='rss', name='WHO ICTRP')
 		self.subject = self.source.subject
 
-	def test_who_does_not_overwrite_home_registry_link(self):
-		"""WHO exports the home registry URL (older format); it must not clobber
-		the link already stored by the registry's own importer."""
+	def test_who_does_not_overwrite_registry_link(self):
+		"""WHO exports the registry URL (older format); it must not clobber the
+		link already stored by the registry's own importer."""
 		trial = Trials.objects.create(
 			title=TITLE,
 			link=CTGOV_LINK,
@@ -244,9 +248,10 @@ class WHOImporterLinkTest(TestCase):
 		self.assertEqual(trial.link, CTGOV_LINK)
 		self.assertEqual(trial.links, {'ctgov': CTGOV_LINK})
 
-	def test_who_link_adopted_when_trial_has_no_registry_link(self):
-		"""A WHO URL for a registry we don't have yet is stored and, when it is
-		the trial's home registry, becomes the canonical link."""
+	def test_aggregator_link_upgraded_when_registry_link_arrives(self):
+		"""A trial first discovered via WHO ICTRP carries an aggregator URL; the
+		first real registry URL upgrades it (a search portal is not a registry
+		the trial team registered with)."""
 		trial = Trials.objects.create(
 			title=TITLE,
 			link=ICTRP_LINK,

@@ -100,32 +100,25 @@ def merge_trial_links(existing_links: dict | None, url: str | None) -> dict:
 	return merged
 
 
-def canonical_link(links: dict | None, identifiers: dict | None, fallback: str | None = None) -> str | None:
-	"""Pick the canonical URL for a trial, deterministically.
+def canonical_link(links: dict | None, current_link: str | None) -> str | None:
+	"""Pick the canonical URL for a trial: first registry URL wins, chronologically.
 
-	Priority: the trial's home registry (ClinicalTrials.gov for ``nct`` trials,
-	EU CTIS for ``euct``/``ctis``, EU CTR for ``eudract``/``euctr``), then any
-	other registry of record (alphabetical for stability), then aggregators
-	(WHO ICTRP), then *fallback* (the currently stored link).
+	Registries are deliberately NOT ranked against each other — the registry the
+	trial team registered with first is their primary choice, so the link stored
+	first stays canonical and importers that arrive later must not replace it.
+
+	The one exception is aggregators (WHO ICTRP): a search portal is not a
+	registry a team registers with, so an aggregator URL is upgraded once to a
+	registry-of-record URL when one becomes available. If several registry URLs
+	are already present at that point their arrival order is unknown (JSONB does
+	not preserve key order), so keys are tried alphabetically for stability.
 	"""
 	links = links or {}
-	identifiers = identifiers or {}
-
-	home_keys = []
-	if identifiers.get('nct'):
-		home_keys.append('ctgov')
-	if identifiers.get('euct') or identifiers.get('ctis'):
-		home_keys.append('ctis')
-	if identifiers.get('eudract') or identifiers.get('euctr'):
-		home_keys.append('euctr')
-
-	for key in home_keys:
-		if links.get(key):
-			return links[key]
+	if current_link and registry_from_url(current_link) not in _AGGREGATOR_KEYS:
+		return current_link
 	for key in sorted(links):
 		if key not in _AGGREGATOR_KEYS and links[key]:
 			return links[key]
-	for key in sorted(_AGGREGATOR_KEYS):
-		if links.get(key):
-			return links[key]
-	return fallback
+	if current_link:
+		return current_link
+	return next((links[key] for key in sorted(links) if links[key]), None)

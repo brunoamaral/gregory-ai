@@ -96,8 +96,9 @@ class Command(BaseCommand):
 					if v and (k not in merged or merged[k] is None):
 						merged[k] = v
 
-				# Union registry links the same way (kept trial's entries win), then
-				# recompute the canonical link by home-registry priority.
+				# Union registry links the same way (kept trial's entries win). The
+				# kept trial's canonical link stays — registries are not ranked —
+				# unless it is an aggregator URL that can be upgraded (canonical_link).
 				merged_links = dict(keep.links or {})
 				for k, v in (rem.links or {}).items():
 					if v and not merged_links.get(k):
@@ -115,7 +116,7 @@ class Command(BaseCommand):
 				if merged_links != (keep.links or {}):
 					keep.links = merged_links
 					update_fields.append('links')
-				new_link = canonical_link(keep.links, keep.identifiers, fallback=keep.link)
+				new_link = canonical_link(keep.links, keep.link)
 				if new_link and new_link != keep.link:
 					keep.link = new_link
 					update_fields.append('link')

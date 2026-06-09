@@ -354,15 +354,16 @@ class Command(BaseCommand):
 			has_changes = True
 			updated_fields.append('identifiers')
 
-		# Record this source's URL under its registry key and recompute the
-		# canonical link by home-registry priority, instead of letting whichever
-		# importer ran last overwrite it (see docs/trials-multi-source-merge.md).
+		# Record this source's URL under its registry key. The canonical link is
+		# the first registry URL stored, chronologically — a later importer must
+		# not replace it (see docs/trials-multi-source-merge.md). canonical_link
+		# only changes it to upgrade an aggregator (WHO ICTRP) URL.
 		merged_links = merge_trial_links(existing_trial.links, clinical_trial.link)
 		if merged_links != (existing_trial.links or {}):
 			existing_trial.links = merged_links
 			has_changes = True
 			updated_fields.append('links')
-		new_link = canonical_link(existing_trial.links, existing_trial.identifiers, fallback=existing_trial.link)
+		new_link = canonical_link(existing_trial.links, existing_trial.link)
 		if new_link and existing_trial.link != new_link:
 			existing_trial.link = new_link
 			has_changes = True
