@@ -119,6 +119,32 @@ read time by priority.
    `recruitment_status` always from the home registry but `summary` from whoever has the
    longest text). Option D only if the single-row model becomes a hard constraint.
 
+## Implemented: per-registry links + deterministic canonical `link`
+
+`link` was the worst-affected shared field: every registry has its own legitimate URL,
+so the "never blank" guard never applied and the column flip-flopped between e.g.
+`clinicaltrials.gov/study/NCT…` and `euclinicaltrials.eu/…` depending on which importer
+ran last. This is now fixed (an instance of Option B applied to a single field):
+
+- **`Trials.links`** (JSONField, migration 0056) stores every known URL keyed by registry
+  slug, e.g. `{"ctgov": "…", "ctis": "…", "ictrp": "…"}`. Keys come from
+  `gregory.utils.trial_utils.registry_from_url` (domain → slug; unknown domains fall back
+  to their hostname so registries can never collide). Entries are merged with the same
+  conservative semantics as `identifiers` (`merge_trial_links`): first non-empty value
+  per key wins, never overwritten — so WHO ICTRP exporting an older-format home-registry
+  URL doesn't churn against the registry's own importer.
+- **`Trials.link`** is now the canonical URL, recomputed on every import by
+  `canonical_link(links, identifiers)`: home registry (CT.gov for `nct`, EU CTIS for
+  `euct`/`ctis`, EU CTR for `eudract`/`euctr`) > other registries of record
+  (alphabetical) > aggregators (WHO ICTRP) > currently stored value. The result is
+  order-independent.
+- All four write paths participate: `feedreader_trials_ctgov.py`, `feedreader_trials.py`,
+  `importWHOXML.py`, and the API POST endpoint. Existing rows are backfilled by
+  migration 0057 (current `link` filed under its registry key).
+- `links` is exposed in the API via `TrialSerializer`.
+- Tests: `gregory/tests/test_trial_links.py` (helper truth tables + importer
+  order-independence and idempotency).
+
 ## Open questions before implementing
 
 - **Manual edits**: should an admin edit be permanently sticky, or only until the home

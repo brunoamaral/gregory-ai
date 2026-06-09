@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand
 from django.db import IntegrityError
 from django.utils import timezone
 from gregory.models import Trials, Sources
-from gregory.utils.trial_utils import identifiers_conflict
+from gregory.utils.trial_utils import identifiers_conflict, merge_trial_links, canonical_link
 import datetime
 import re
 import xml.etree.ElementTree as ET
@@ -91,6 +91,23 @@ class Command(BaseCommand):
 					trial.identifiers = value
 					has_changes = True
 					updated_fields.append(key)
+			elif key == 'link':
+				# Record the WHO-exported registry URL under its registry key and
+				# recompute the canonical link by home-registry priority, instead of
+				# overwriting whatever a previous source stored
+				# (see docs/trials-multi-source-merge.md). Relies on 'identifiers'
+				# being merged first (it precedes 'link' in trial_data).
+				if value not in (None, ''):
+					merged_links = merge_trial_links(trial.links, value)
+					if merged_links != (trial.links or {}):
+						trial.links = merged_links
+						has_changes = True
+						updated_fields.append('links')
+					new_link = canonical_link(trial.links, trial.identifiers, fallback=trial.link)
+					if new_link and trial.link != new_link:
+						trial.link = new_link
+						has_changes = True
+						updated_fields.append('link')
 			# Only overwrite when the incoming value is non-empty, so a missing XML
 			# field never blanks data a previous source populated.
 			elif value not in (None, '') and current_value != value:
@@ -114,6 +131,8 @@ class Command(BaseCommand):
 	def create_new_trial(self, trial_data, source, subject):
 		try:
 			trial_data['discovery_date'] = timezone.now()
+			if trial_data.get('link'):
+				trial_data['links'] = merge_trial_links(None, trial_data['link'])
 			trial = Trials.objects.create(**trial_data)
 			trial.sources.add(source)
 			trial.subjects.add(subject)

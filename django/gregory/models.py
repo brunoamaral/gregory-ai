@@ -414,6 +414,11 @@ class Trials(models.Model):
 	)
 	
 	link = models.URLField(blank=False, null=False, max_length=2000)
+	# All known registry URLs for this trial, keyed by registry slug (e.g.
+	# {"ctgov": "https://clinicaltrials.gov/study/NCT…", "ctis": "…"}). ``link``
+	# holds the canonical one, picked by gregory.utils.trial_utils.canonical_link
+	# so the result no longer depends on which importer ran last.
+	links = models.JSONField(blank=True, null=True, help_text='Registry URLs keyed by registry slug; "link" holds the canonical one')
 	published_date = models.DateTimeField(blank=True, null=True, db_index=True)
 	sources = models.ManyToManyField('Sources', blank=True)
 	team_categories = models.ManyToManyField('TeamCategory', related_name='trials')

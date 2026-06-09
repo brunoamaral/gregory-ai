@@ -27,6 +27,7 @@ from django.utils.dateparse import parse_date
 
 from api.serializers.mixins import _resolve_per_org_fields_org
 from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress, find_trial_by_identifier
+from gregory.utils.trial_utils import merge_trial_links
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 		APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError,
@@ -307,6 +308,7 @@ def post_article(request):
 				title=trial_data.title,
 				summary=trial_data.summary,
 				link=trial_data.link,
+				links=merge_trial_links(None, trial_data.link),
 				published_date=trial_data.published_date,
 				identifiers=trial_data.identifiers or {},
 			)
