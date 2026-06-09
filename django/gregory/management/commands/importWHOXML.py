@@ -30,6 +30,10 @@ class Command(BaseCommand):
 			return ' '.join(element.text.split()).strip()
 		return None
 
+	def _safe_change_reason(self, reason: str) -> str:
+		"""Truncate change reason to fit within 100 character database limit."""
+		return reason[:100] if len(reason) > 100 else reason
+
 	def robust_parse_date(self, date_str):
 		if not date_str:
 			return None
@@ -115,9 +119,8 @@ class Command(BaseCommand):
 				updated_fields.append(key)
 
 		if has_changes:
-			# trial._change_reason = f"Updated fields: {', '.join(updated_fields)}"
+			trial._change_reason = self._safe_change_reason(f"Updated fields from {source.name} ({source.source_id}): {', '.join(updated_fields)}")
 			self.stdout.write(f"Saving changes for trial: {trial.trial_id}. Changes: {updated_fields}")
-			# trial._change_reason(f"Updated fields: {', '.join(updated_fields)}")
 			trial.save()
 		if source not in trial.sources.all():
 			trial.sources.add(source)
@@ -136,6 +139,7 @@ class Command(BaseCommand):
 			trial.sources.add(source)
 			trial.subjects.add(subject)
 			trial.teams.add(source.team)
+			trial._change_reason = self._safe_change_reason(f"Created from Source: {source.name} ({source.source_id})")
 			trial.save()
 			return trial
 		except IntegrityError as e:

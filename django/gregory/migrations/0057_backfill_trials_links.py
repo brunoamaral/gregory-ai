@@ -4,6 +4,12 @@
 # URL's domain) so the multi-source link merge introduced alongside this
 # migration starts from accurate per-registry data instead of an empty map.
 # See docs/trials-multi-source-merge.md.
+#
+# NOTE: bulk_update deliberately bypasses django-simple-history. Writing a
+# historical row per trial would duplicate every column of every trial in the
+# history table for a one-time metadata derivation that adds no new
+# information (links is computed from the already-recorded link). Importer
+# writes after this migration are fully history-tracked as usual.
 
 from django.db import migrations
 
