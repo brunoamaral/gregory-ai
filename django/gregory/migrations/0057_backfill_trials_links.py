@@ -10,12 +10,46 @@
 # history table for a one-time metadata derivation that adds no new
 # information (links is computed from the already-recorded link). Importer
 # writes after this migration are fully history-tracked as usual.
+#
+# NOTE: The URL→registry mapping is intentionally frozen inline here rather
+# than imported from gregory.utils.trial_utils. Migrations must be
+# self-contained: importing runtime helpers means future changes to that
+# module (new domain entries, renames) silently alter historical migration
+# behaviour and can break fresh installs or rollbacks.
+
+from urllib.parse import urlparse
 
 from django.db import migrations
 
-from gregory.utils.trial_utils import registry_from_url
+# Frozen snapshot of REGISTRY_DOMAINS from gregory.utils.trial_utils at the
+# time this migration was created (2026-06-09). Do NOT update this dict when
+# the live helper changes — create a new migration instead.
+_REGISTRY_DOMAINS = {
+	'clinicaltrials.gov': 'ctgov',
+	'euclinicaltrials.eu': 'ctis',
+	'clinicaltrialsregister.eu': 'euctr',
+	'trialsearch.who.int': 'ictrp',
+	'isrctn.com': 'isrctn',
+	'drks.de': 'drks',
+	'anzctr.org.au': 'anzctr',
+}
 
 BATCH_SIZE = 2000
+
+
+def _registry_from_url(url):
+	"""Return the registry slug for *url*, or its hostname for unknown domains."""
+	if not url:
+		return None
+	hostname = (urlparse(url).hostname or '').lower()
+	if not hostname:
+		return None
+	if hostname.startswith('www.'):
+		hostname = hostname[4:]
+	for domain, key in _REGISTRY_DOMAINS.items():
+		if hostname == domain or hostname.endswith('.' + domain):
+			return key
+	return hostname
 
 
 def backfill_links(apps, schema_editor):
@@ -23,7 +57,7 @@ def backfill_links(apps, schema_editor):
 	queryset = Trials.objects.filter(links__isnull=True).exclude(link="").only("trial_id", "link")
 	batch = []
 	for trial in queryset.iterator(chunk_size=BATCH_SIZE):
-		key = registry_from_url(trial.link)
+		key = _registry_from_url(trial.link)
 		if not key:
 			continue
 		trial.links = {key: trial.link}
@@ -33,6 +67,24 @@ def backfill_links(apps, schema_editor):
 			batch = []
 	if batch:
 		Trials.objects.bulk_update(batch, ["links"], batch_size=BATCH_SIZE)
+
+
+def noop(apps, schema_editor):
+	# Reverse: leave links populated; the schema migration removes the column on
+	# full rollback anyway.
+	pass
+
+
+class Migration(migrations.Migration):
+
+	dependencies = [
+		("gregory", "0056_historicaltrials_links_trials_links"),
+	]
+
+	operations = [
+		migrations.RunPython(backfill_links, noop),
+	]
+
 
 
 def noop(apps, schema_editor):

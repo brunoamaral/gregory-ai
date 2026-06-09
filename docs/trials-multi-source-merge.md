@@ -123,7 +123,7 @@ read time by priority.
 
 `link` was the worst-affected shared field: every registry has its own legitimate URL,
 so the "never blank" guard never applied and the column flip-flopped between e.g.
-`clinicaltrials.gov/study/NCT…` and `euclinicaltrials.eu/…` depending on which importer
+`https://clinicaltrials.gov/study/NCT…` and `https://euclinicaltrials.eu/…` depending on which importer
 ran last. This is now fixed:
 
 - **`Trials.links`** (JSONField, migration 0056) stores every known URL keyed by registry

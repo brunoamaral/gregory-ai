@@ -163,7 +163,7 @@ def _eu_trial():
 	)
 
 
-class ImporterOrderIndependenceTest(TestCase):
+class ImporterFirstSeenWinsTest(TestCase):
 	def setUp(self):
 		self.org = Organization.objects.create(name='Test Org')
 		self.eu_source = _make_source(self.org, method='rss', name='EU CTIS')
