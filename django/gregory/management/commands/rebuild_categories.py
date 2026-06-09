@@ -3,7 +3,14 @@ import re
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 from django.utils import timezone
-from gregory.models import Articles, Trials, TeamCategory
+from gregory.models import (
+	Articles,
+	Trials,
+	TeamCategory,
+	ArticleCategoryAssignment,
+	TrialCategoryAssignment,
+	CategoryAssignmentSource,
+)
 from datetime import timedelta
 
 # Configure logging
@@ -63,13 +70,17 @@ class Command(BaseCommand):
 			last_pk = getattr(batch[-1], pk_field)
 			yield batch
 
-	def sync_category(self, manager, desired_ids, current_ids):
-		"""Diff desired vs current associations and apply only the changes."""
-		to_add = desired_ids - current_ids
-		to_remove = current_ids - desired_ids
+	def sync_category(self, manager, desired_ids, automatic_ids, manual_ids):
+		"""Diff desired vs current automatic associations and apply only the changes.
+
+		Manual assignments are never touched: they are not removed when stale,
+		and a desired item that is already manually assigned is left manual.
+		"""
+		to_add = desired_ids - automatic_ids - manual_ids
+		to_remove = automatic_ids - desired_ids
 		if not self.dry_run:
 			if to_add:
-				manager.add(*to_add)
+				manager.add(*to_add, through_defaults={'source': CategoryAssignmentSource.AUTOMATIC})
 			if to_remove:
 				manager.remove(*to_remove)
 		return len(to_add), len(to_remove)
@@ -100,7 +111,7 @@ class Command(BaseCommand):
 			desired_ids = set()
 
 			if not terms:
-				self.log_message(f"  Category '{cat.category_name}' has no terms; stale associations will be removed")
+				self.log_message(f"  Category '{cat.category_name}' has no terms; stale automatic associations will be removed")
 
 			for subject in cat.subjects.all() if terms else []:
 				self.log_message(f"  - Processing subject: {subject.subject_name}")
@@ -172,12 +183,19 @@ class Command(BaseCommand):
 				self.stdout.write(f"    Matched {matched_for_subject} articles for subject '{subject.subject_name}'")
 
 			# Current associations, scoped to the same window as the desired set
-			current_qs = cat.articles.all()
+			assignment_qs = ArticleCategoryAssignment.objects.filter(teamcategory=cat)
 			if cutoff_date:
-				current_qs = current_qs.filter(discovery_date__gte=cutoff_date)
-			current_ids = set(current_qs.values_list('article_id', flat=True))
+				assignment_qs = assignment_qs.filter(articles__discovery_date__gte=cutoff_date)
+			automatic_ids = set(
+				assignment_qs.filter(source=CategoryAssignmentSource.AUTOMATIC).values_list('articles_id', flat=True)
+			)
+			manual_ids = set(
+				assignment_qs.exclude(source=CategoryAssignmentSource.AUTOMATIC).values_list('articles_id', flat=True)
+			)
+			if manual_ids:
+				self.log_message(f"  Preserving {len(manual_ids)} manual article assignments")
 
-			added, removed = self.sync_category(cat.articles, desired_ids, current_ids)
+			added, removed = self.sync_category(cat.articles, desired_ids, automatic_ids, manual_ids)
 			total_added += added
 			total_removed += removed
 			self.stdout.write(f"  Category '{cat.category_name}': +{added} added, -{removed} removed articles")
@@ -217,7 +235,7 @@ class Command(BaseCommand):
 			desired_ids = set()
 
 			if not terms:
-				self.log_message(f"  Category '{cat.category_name}' has no terms; stale associations will be removed")
+				self.log_message(f"  Category '{cat.category_name}' has no terms; stale automatic associations will be removed")
 
 			for subject in cat.subjects.all() if terms else []:
 				self.log_message(f"  - Processing subject: {subject.subject_name}")
@@ -362,15 +380,22 @@ class Command(BaseCommand):
 				self.stdout.write(f"    Matched {matched_for_subject} trials for subject '{subject.subject_name}'")
 
 			# Current associations, scoped to the same window as the desired set
-			current_qs = cat.trials.all()
+			assignment_qs = TrialCategoryAssignment.objects.filter(teamcategory=cat)
 			if cutoff_date:
-				current_qs = current_qs.filter(
-					Q(discovery_date__gte=cutoff_date) |
-					Q(last_updated__gte=cutoff_date)
+				assignment_qs = assignment_qs.filter(
+					Q(trials__discovery_date__gte=cutoff_date) |
+					Q(trials__last_updated__gte=cutoff_date)
 				)
-			current_ids = set(current_qs.values_list('trial_id', flat=True))
+			automatic_ids = set(
+				assignment_qs.filter(source=CategoryAssignmentSource.AUTOMATIC).values_list('trials_id', flat=True)
+			)
+			manual_ids = set(
+				assignment_qs.exclude(source=CategoryAssignmentSource.AUTOMATIC).values_list('trials_id', flat=True)
+			)
+			if manual_ids:
+				self.log_message(f"  Preserving {len(manual_ids)} manual trial assignments")
 
-			added, removed = self.sync_category(cat.trials, desired_ids, current_ids)
+			added, removed = self.sync_category(cat.trials, desired_ids, automatic_ids, manual_ids)
 			total_added += added
 			total_removed += removed
 			self.stdout.write(f"  Category '{cat.category_name}': +{added} added, -{removed} removed trials")

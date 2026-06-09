@@ -76,6 +76,55 @@ class TeamCategory(models.Model):
 		verbose_name_plural = 'team categories'
 		db_table = 'team_categories'
 
+class CategoryAssignmentSource(models.TextChoices):
+	MANUAL = 'manual', 'Manual'
+	AUTOMATIC = 'automatic', 'Automatic'
+
+
+class ArticleCategoryAssignment(models.Model):
+	"""Through model for Articles.team_categories.
+
+	Maps onto the table Django originally auto-created for the implicit M2M.
+	`source` records whether the link was made by a person (admin, API, shell —
+	the default) or by the rebuild_categories command, which only adds and
+	removes rows marked automatic and never touches manual assignments.
+	"""
+	articles = models.ForeignKey('Articles', on_delete=models.CASCADE, related_name='category_assignments')
+	teamcategory = models.ForeignKey('TeamCategory', on_delete=models.CASCADE, related_name='article_assignments')
+	source = models.CharField(
+		max_length=10,
+		choices=CategoryAssignmentSource.choices,
+		default=CategoryAssignmentSource.MANUAL,
+	)
+
+	def __str__(self):
+		return f"{self.articles_id} → {self.teamcategory} ({self.source})"
+
+	class Meta:
+		db_table = 'articles_team_categories'
+		unique_together = (('articles', 'teamcategory'),)
+		verbose_name = 'article category assignment'
+
+
+class TrialCategoryAssignment(models.Model):
+	"""Through model for Trials.team_categories. See ArticleCategoryAssignment."""
+	trials = models.ForeignKey('Trials', on_delete=models.CASCADE, related_name='category_assignments')
+	teamcategory = models.ForeignKey('TeamCategory', on_delete=models.CASCADE, related_name='trial_assignments')
+	source = models.CharField(
+		max_length=10,
+		choices=CategoryAssignmentSource.choices,
+		default=CategoryAssignmentSource.MANUAL,
+	)
+
+	def __str__(self):
+		return f"{self.trials_id} → {self.teamcategory} ({self.source})"
+
+	class Meta:
+		db_table = 'trials_team_categories'
+		unique_together = (('trials', 'teamcategory'),)
+		verbose_name = 'trial category assignment'
+
+
 class Entities(models.Model):
 	entity = models.TextField()
 	label = models.TextField()
@@ -297,7 +346,7 @@ class Articles(models.Model):
 	published_date = models.DateTimeField(blank=True, null=True, db_index=True)
 	discovery_date = models.DateTimeField(auto_now_add=True, db_index=True)
 	authors = models.ManyToManyField(Authors, blank=True)
-	team_categories = models.ManyToManyField('TeamCategory', related_name='articles', blank=True)
+	team_categories = models.ManyToManyField('TeamCategory', related_name='articles', blank=True, through='ArticleCategoryAssignment')
 	entities = models.ManyToManyField('Entities')
 	ml_predictions = models.ManyToManyField('MLPredictions', blank=True)
 	noun_phrases = models.JSONField(blank=True, null=True)
@@ -416,7 +465,7 @@ class Trials(models.Model):
 	link = models.URLField(blank=False, null=False, max_length=2000)
 	published_date = models.DateTimeField(blank=True, null=True, db_index=True)
 	sources = models.ManyToManyField('Sources', blank=True)
-	team_categories = models.ManyToManyField('TeamCategory', related_name='trials')
+	team_categories = models.ManyToManyField('TeamCategory', related_name='trials', through='TrialCategoryAssignment')
 	identifiers = models.JSONField(blank=True, null=True)
 	teams = models.ManyToManyField('Team', related_name='trials')
 	subjects = models.ManyToManyField('Subject', related_name='trials')

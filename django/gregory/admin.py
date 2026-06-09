@@ -20,7 +20,8 @@ from .models import (
     Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions,
     ArticleSubjectRelevance, TeamCategory, PredictionRunLog, Team,
     ArticleTrialReference, OrganizationCredentials, OrganizationSite,
-    OrganizationApiSettings, ArticleOrgContent, TrialOrgContent
+    OrganizationApiSettings, ArticleOrgContent, TrialOrgContent,
+    ArticleCategoryAssignment, TrialCategoryAssignment
 )
 from .widgets import MLPredictionsWidget
 from django import forms
@@ -425,6 +426,28 @@ class TrialOrgContentInline(_BaseOrgContentInline):
 	verbose_name_plural = 'Editorial content (per organisation)'
 
 
+class ArticleCategoryAssignmentInline(admin.TabularInline):
+	model = ArticleCategoryAssignment
+	extra = 0
+	autocomplete_fields = ['teamcategory']
+	verbose_name = 'Category assignment'
+	verbose_name_plural = 'Category assignments'
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related('teamcategory', 'teamcategory__team')
+
+
+class TrialCategoryAssignmentInline(admin.TabularInline):
+	model = TrialCategoryAssignment
+	extra = 0
+	autocomplete_fields = ['teamcategory']
+	verbose_name = 'Category assignment'
+	verbose_name_plural = 'Category assignments'
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related('teamcategory', 'teamcategory__team')
+
+
 class ArticleAdminForm(forms.ModelForm):
 	ml_predictions_display = MLPredictionsField(required=False)
 
@@ -454,12 +477,12 @@ class ArticleAdminForm(forms.ModelForm):
 
 class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	form = ArticleAdminForm
-	inlines = [ArticleOrgContentInline, ArticleSubjectRelevanceInline, ArticleTrialReferenceInline]
+	inlines = [ArticleOrgContentInline, ArticleSubjectRelevanceInline, ArticleTrialReferenceInline, ArticleCategoryAssignmentInline]
 	fieldsets = (
 		('Article Information', {
 			'fields': (
 				'title', 'link', 'doi', 'summary', 'teams', 'subjects', 'sources',
-				'published_date', 'discovery_date', 'authors', 'team_categories',
+				'published_date', 'discovery_date', 'authors',
 				'entities', 'kind', 'access',
 				'publisher', 'container_title', 'crossref_check',
 			),
@@ -661,8 +684,8 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	form = TrialAdminForm
 	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
 	exclude = ['ml_predictions']
-	readonly_fields = ['last_updated', 'team_categories']
-	inlines = [TrialOrgContentInline, TrialArticleReferenceInline]
+	readonly_fields = ['last_updated']
+	inlines = [TrialOrgContentInline, TrialArticleReferenceInline, TrialCategoryAssignmentInline]
 	search_fields = [
 		'trial_id', 'title', 'summary', 'scientific_title',
 		'primary_sponsor', 'source_register', 'recruitment_status', 'condition',
@@ -706,7 +729,7 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 			'classes': ('collapse',),
 		}),
 		('Relationships', {
-			'fields': ('sources', 'teams', 'subjects', 'team_categories'),
+			'fields': ('sources', 'teams', 'subjects'),
 		}),
 		('EU Clinical Trials', {
 			'fields': ('therapeutic_areas', 'country_status', 'trial_region', 'overall_decision_date', 'countries_decision_date'),
