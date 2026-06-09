@@ -239,8 +239,8 @@ class Command(BaseCommand):
 				for term in terms:
 					upper_term = term.upper()
 					query |= (
-						Q(utitle__icontains=upper_term) |
-						Q(usummary__icontains=upper_term) |
+						Q(utitle__contains=upper_term) |
+						Q(usummary__contains=upper_term) |
 						Q(intervention__icontains=term) |
 						Q(primary_outcome__icontains=term) |
 						Q(scientific_title__icontains=term) |
