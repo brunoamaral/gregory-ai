@@ -15,7 +15,7 @@ jobs:
       image: amaralbruno/gregory-ai:latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_DB: gregory_test
           POSTGRES_USER: postgres
