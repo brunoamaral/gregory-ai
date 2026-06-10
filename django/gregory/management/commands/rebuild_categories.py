@@ -102,7 +102,9 @@ class Command(BaseCommand):
 		"""Fingerprint of everything that affects which items match this category."""
 		payload = json.dumps({
 			'terms': sorted(term.lower() for term in cat.category_terms or []),
-			'subjects': sorted(cat.subjects.values_list('id', flat=True)),
+			# Iterate the (prefetched) relation instead of values_list, which
+			# would bypass prefetch_related and re-query per category
+			'subjects': sorted(subject.id for subject in cat.subjects.all()),
 			'min_score': min_score,
 		}, sort_keys=True)
 		return hashlib.sha256(payload.encode()).hexdigest()
