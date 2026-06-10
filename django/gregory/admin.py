@@ -444,7 +444,8 @@ class ArticleAdminForm(forms.ModelForm):
 				'Corresponds to "link" in the API response.'
 			),
 			'links': (
-				'All known URLs for this article, keyed by source domain. '
+				'All known URLs for this article, keyed by registry slug (e.g. "ctgov") '
+				'for known registries or by hostname otherwise. '
 				'Managed automatically — do not edit. '
 				'Corresponds to "links" in the API response.'
 			),

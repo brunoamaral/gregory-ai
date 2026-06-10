@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
 			name="links",
 			field=models.JSONField(
 				blank=True,
-				help_text='All known URLs for this article, keyed by source domain. Managed automatically. Corresponds to "links" in the API response.',
+				help_text='All known URLs for this article, keyed by registry slug (e.g. "ctgov") for known registries or by hostname otherwise. Managed automatically. Corresponds to "links" in the API response.',
 				null=True,
 			),
 		),
@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
 			name="links",
 			field=models.JSONField(
 				blank=True,
-				help_text='All known URLs for this article, keyed by source domain. Managed automatically. Corresponds to "links" in the API response.',
+				help_text='All known URLs for this article, keyed by registry slug (e.g. "ctgov") for known registries or by hostname otherwise. Managed automatically. Corresponds to "links" in the API response.',
 				null=True,
 			),
 		),

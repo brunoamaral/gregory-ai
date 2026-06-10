@@ -278,7 +278,7 @@ class Articles(models.Model):
 	article_id = models.AutoField(primary_key=True)
 	title = models.TextField(blank=False, null=False, unique=True)
 	link = models.URLField(blank=False, null=False, max_length=2000, help_text='First URL seen for this article; stable after first import. Corresponds to "link" in the API response.')
-	links = models.JSONField(blank=True, null=True, help_text='All known URLs for this article, keyed by source domain. Managed automatically. Corresponds to "links" in the API response.')
+	links = models.JSONField(blank=True, null=True, help_text='All known URLs for this article, keyed by registry slug (e.g. "ctgov") for known registries or by hostname otherwise. Managed automatically. Corresponds to "links" in the API response.')
 	doi = models.CharField(max_length=280, blank=True, null=True, db_index=True)
 	summary = models.TextField(blank=True, null=True)
 	
