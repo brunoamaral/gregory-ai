@@ -448,6 +448,9 @@ class ClinicalTrialsGovAPI:
 		
 		# Extract title (prefer official, fallback to brief)
 		title = identification.get('officialTitle') or identification.get('briefTitle', '')
+
+		# Extract acronym (Trials.acronym is capped at 200 chars)
+		acronym = (identification.get('acronym') or '').strip()[:200] or None
 		
 		# Build link
 		link = f"https://clinicaltrials.gov/study/{nct_id}" if nct_id else None
@@ -562,6 +565,7 @@ class ClinicalTrialsGovAPI:
 		# Build extra_fields for ClinicalTrial object
 		extra_fields = {
 			'scientific_title': identification.get('officialTitle'),
+			'acronym': acronym,
 			'recruitment_status': recruitment_status,
 			'date_registration': self._parse_date(status_module.get('studyFirstSubmitDate')),
 			'study_type': study_type,
