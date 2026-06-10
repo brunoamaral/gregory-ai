@@ -9,6 +9,7 @@ from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import SciencePaper
+from gregory.utils.link_utils import merge_links
 from sitesettings.models import CustomSetting
 import feedparser
 import gregory.functions as greg
@@ -661,6 +662,7 @@ class Command(BaseCommand):
                 'title': title,
                 'summary': summary,
                 'link': link,
+                'links': merge_links(None, link),
                 'published_date': published_date,
                 'crossref_check': crossref_check
             }
@@ -671,7 +673,7 @@ class Command(BaseCommand):
                     'publisher': publisher,
                     'access': access,
                 })
-            
+
             science_paper = Articles.objects.create(**article_data)
             created = True
             # For new articles with CrossRef data, authors should be processed
@@ -682,13 +684,13 @@ class Command(BaseCommand):
         
         return science_paper, created, crossref_was_updated
 
-    def article_needs_update(self, article: Articles, title: str, summary: str, 
+    def article_needs_update(self, article: Articles, title: str, summary: str,
                             link: str, published_date) -> bool:
         """Check if article needs to be updated."""
         return any([
             article.title != title,
             article.summary != summary,
-            article.link != link,
+            merge_links(article.links, link) != (article.links or {}),
             article.published_date != published_date
         ])
 
@@ -697,7 +699,10 @@ class Command(BaseCommand):
         """Update article fields."""
         article.title = title
         article.summary = summary
-        article.link = link
+        # Never overwrite the first-seen link; merge the incoming URL into links instead
+        merged = merge_links(article.links, link)
+        if merged != (article.links or {}):
+            article.links = merged
         article.published_date = published_date
         article.save()
 
@@ -707,7 +712,10 @@ class Command(BaseCommand):
         """Update all article fields (basic + CrossRef) in a single operation."""
         article.title = title
         article.summary = summary
-        article.link = link
+        # Never overwrite the first-seen link; merge the incoming URL into links instead
+        merged = merge_links(article.links, link)
+        if merged != (article.links or {}):
+            article.links = merged
         article.published_date = published_date
         article.container_title = container_title
         article.publisher = publisher

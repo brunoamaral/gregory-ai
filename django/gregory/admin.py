@@ -434,6 +434,22 @@ class ArticleAdminForm(forms.ModelForm):
 		widgets = {
 			'ml_predictions': MLPredictionsWidget(),
 		}
+		labels = {
+			'link': 'Article URL (canonical)',
+			'links': 'All source URLs',
+		}
+		help_texts = {
+			'link': (
+				'First URL seen for this article; stable after first import. '
+				'Corresponds to "link" in the API response.'
+			),
+			'links': (
+				'All known URLs for this article, keyed by registry slug (e.g. "ctgov") '
+				'for known registries or by hostname otherwise. '
+				'Managed automatically — do not edit. '
+				'Corresponds to "links" in the API response.'
+			),
+		}
 
 	def __init__(self, *args, **kwargs):
 		self.request = kwargs.pop('request', None)
@@ -458,7 +474,7 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	fieldsets = (
 		('Article Information', {
 			'fields': (
-				'title', 'link', 'doi', 'summary', 'teams', 'subjects', 'sources',
+				'title', 'link', 'links', 'doi', 'summary', 'teams', 'subjects', 'sources',
 				'published_date', 'discovery_date', 'authors', 'team_categories',
 				'entities', 'kind', 'access',
 				'publisher', 'container_title', 'crossref_check',
@@ -484,7 +500,7 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		qs = super().get_queryset(request)
 		return qs.prefetch_related('sources')
 	
-	readonly_fields = ['entities', 'discovery_date']
+	readonly_fields = ['entities', 'discovery_date', 'links']
 	search_fields = ['article_id', 'title', 'doi']
 	list_filter = [
 		ArticleOrganizationFilter,

@@ -12,6 +12,7 @@ from django.utils import timezone
 from gregory.models import Articles, Sources, Authors, Subject, Team
 from gregory.classes import SciencePaper
 from gregory.functions import normalize_orcid
+from gregory.utils.link_utils import merge_links
 
 
 class Command(BaseCommand):
@@ -135,11 +136,13 @@ class Command(BaseCommand):
 		
 		# Create the article
 		self.stdout.write("Creating article...")
+		_link = paper.link or f"https://doi.org/{paper.doi}"
 		with transaction.atomic():
 			article = Articles.objects.create(
 				title=paper.title,
 				doi=paper.doi,
-				link=paper.link or f"https://doi.org/{paper.doi}",
+				link=_link,
+				links=merge_links(None, _link),
 				summary=paper.clean_abstract() if paper.abstract else None,
 				published_date=paper.published_date,
 				access=paper.access,

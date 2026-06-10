@@ -26,7 +26,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import IntegrityError, transaction
 
 from gregory.models import Trials
-from gregory.utils.trial_utils import canonical_link, merge_trial_links
+from gregory.utils.link_utils import canonical_link, merge_links
 
 
 class Command(BaseCommand):
@@ -103,7 +103,7 @@ class Command(BaseCommand):
 				for k, v in (rem.links or {}).items():
 					if v and not merged_links.get(k):
 						merged_links[k] = v
-				merged_links = merge_trial_links(merged_links, rem.link)
+				merged_links = merge_links(merged_links, rem.link)
 
 				# 4. Delete the removed trial FIRST so its registry ids are freed, THEN adopt
 				#    the unioned identifiers — otherwise both rows briefly share an id and trip

@@ -7,7 +7,7 @@ from django.utils import timezone
 from gregory.classes import ClinicalTrial, EUTrialParser
 from gregory.functions import remove_utm
 from gregory.models import Trials, Sources
-from gregory.utils.trial_utils import identifiers_conflict, merge_trial_links, canonical_link
+from gregory.utils.link_utils import identifiers_conflict, merge_links, canonical_link
 import feedparser
 import pytz
 import requests
@@ -143,7 +143,7 @@ class Command(BaseCommand):
 				title=clinical_trial.title,
 				summary=clinical_trial.summary,
 				link=clinical_trial.link,
-				links=merge_trial_links(None, clinical_trial.link),
+				links=merge_links(None, clinical_trial.link),
 				published_date=clinical_trial.published_date,
 				identifiers=clinical_trial.identifiers,
 				source_register=extras.get('source_register'),
@@ -217,7 +217,7 @@ class Command(BaseCommand):
 		# the first registry URL stored, chronologically — a later importer must
 		# not replace it (see docs/trials-multi-source-merge.md). canonical_link
 		# only changes it to upgrade an aggregator (WHO ICTRP) URL.
-		merged_links = merge_trial_links(existing_trial.links, clinical_trial.link)
+		merged_links = merge_links(existing_trial.links, clinical_trial.link)
 		if merged_links != (existing_trial.links or {}):
 			existing_trial.links = merged_links
 			has_changes = True

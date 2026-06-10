@@ -83,15 +83,16 @@ def registry_from_url(url: str | None) -> str | None:
 	return hostname
 
 
-def merge_trial_links(existing_links: dict | None, url: str | None) -> dict:
-	"""Return *existing_links* with *url* filed under its registry key.
+def merge_links(existing_links: dict | None, url: str | None) -> dict:
+	"""Return *existing_links* with *url* filed under its registry slug or hostname key.
 
-	Mirrors the conservative ``merge_identifiers`` semantics: a registry's entry
-	is only set when absent or empty, never replaced. Different registries write
-	to different keys, so no source can clobber another source's URL. (WHO ICTRP
-	exports the home registry's web address — e.g. a clinicaltrials.gov URL for an
-	``nct`` trial — which lands under the same key as the registry's own importer;
-	keeping the first non-empty value avoids churn between equivalent URL formats.)
+	Mirrors the conservative ``merge_identifiers`` semantics: an entry is only set
+	when absent or empty, never replaced. Different sources write to different keys,
+	so no source can clobber another source's URL. Used for both Trials and Articles.
+	(WHO ICTRP exports the home registry's web address — e.g. a clinicaltrials.gov
+	URL for an ``nct`` trial — which lands under the same key as the registry's own
+	importer; keeping the first non-empty value avoids churn between equivalent URL
+	formats.)
 	"""
 	merged = dict(existing_links or {})
 	key = registry_from_url(url)
