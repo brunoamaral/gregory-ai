@@ -274,6 +274,7 @@ class Command(BaseCommand):
 				identifiers=clinical_trial.identifiers,
 				# WHO-style fields
 				scientific_title=extras.get('scientific_title'),
+				acronym=extras.get('acronym'),
 				primary_sponsor=extras.get('primary_sponsor'),
 				recruitment_status=extras.get('recruitment_status'),
 				date_registration=extras.get('date_registration'),
@@ -389,6 +390,14 @@ class Command(BaseCommand):
 				setattr(existing_trial, field, new_value)
 				has_changes = True
 				updated_fields.append(field)
+
+		# Acronym is fill-once: a value set by an earlier import (e.g. WHO ICTRP)
+		# is never replaced, mirroring the first-seen-wins rule for links.
+		new_acronym = extras.get('acronym')
+		if new_acronym and not existing_trial.acronym:
+			existing_trial.acronym = new_acronym
+			has_changes = True
+			updated_fields.append('acronym')
 
 		# Save if changes were detected
 		if has_changes:
