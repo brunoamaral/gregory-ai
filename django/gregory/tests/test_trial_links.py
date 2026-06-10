@@ -2,7 +2,7 @@
 Tests for multi-source trial link handling.
 
 Covers:
-  - registry_from_url / merge_trial_links / canonical_link helpers (no DB)
+  - registry_from_url / merge_links / canonical_link helpers (no DB)
   - importer integration: for a trial cross-registered in ClinicalTrials.gov
     and EU CTIS, the FIRST registry URL stored stays the canonical link (the
     trial team's primary registration choice — registries are not ranked),
@@ -26,7 +26,7 @@ from gregory.classes import ClinicalTrial
 from gregory.management.commands.feedreader_trials import Command as EUCommand
 from gregory.management.commands.feedreader_trials_ctgov import Command as CTGovCommand
 from gregory.management.commands.importWHOXML import Command as WHOCommand
-from gregory.utils.trial_utils import registry_from_url, merge_trial_links, canonical_link
+from gregory.utils.trial_utils import registry_from_url, merge_links, canonical_link
 
 
 CTGOV_LINK = 'https://clinicaltrials.gov/study/NCT00000001'
@@ -57,27 +57,27 @@ class RegistryFromUrlTest(SimpleTestCase):
 
 class MergeTrialLinksTest(SimpleTestCase):
 	def test_adds_new_registry_key(self):
-		self.assertEqual(merge_trial_links(None, CTGOV_LINK), {'ctgov': CTGOV_LINK})
+		self.assertEqual(merge_links(None, CTGOV_LINK), {'ctgov': CTGOV_LINK})
 		self.assertEqual(
-			merge_trial_links({'ctgov': CTGOV_LINK}, CTIS_LINK),
+			merge_links({'ctgov': CTGOV_LINK}, CTIS_LINK),
 			{'ctgov': CTGOV_LINK, 'ctis': CTIS_LINK},
 		)
 
 	def test_never_overwrites_existing_entry(self):
 		existing = {'ctgov': CTGOV_LINK}
-		merged = merge_trial_links(existing, 'https://clinicaltrials.gov/ct2/show/NCT00000001')
+		merged = merge_links(existing, 'https://clinicaltrials.gov/ct2/show/NCT00000001')
 		self.assertEqual(merged, existing)
 
 	def test_fills_empty_entry(self):
-		merged = merge_trial_links({'ctgov': None}, CTGOV_LINK)
+		merged = merge_links({'ctgov': None}, CTGOV_LINK)
 		self.assertEqual(merged, {'ctgov': CTGOV_LINK})
 
 	def test_ignores_empty_url(self):
-		self.assertEqual(merge_trial_links({'ctgov': CTGOV_LINK}, None), {'ctgov': CTGOV_LINK})
+		self.assertEqual(merge_links({'ctgov': CTGOV_LINK}, None), {'ctgov': CTGOV_LINK})
 
 	def test_does_not_mutate_input(self):
 		existing = {'ctgov': CTGOV_LINK}
-		merge_trial_links(existing, CTIS_LINK)
+		merge_links(existing, CTIS_LINK)
 		self.assertEqual(existing, {'ctgov': CTGOV_LINK})
 
 

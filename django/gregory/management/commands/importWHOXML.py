@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand
 from django.db import IntegrityError
 from django.utils import timezone
 from gregory.models import Trials, Sources
-from gregory.utils.trial_utils import identifiers_conflict, merge_trial_links, canonical_link
+from gregory.utils.trial_utils import identifiers_conflict, merge_links, canonical_link
 import datetime
 import re
 import xml.etree.ElementTree as ET
@@ -101,7 +101,7 @@ class Command(BaseCommand):
 				# it is never replaced, except to upgrade an aggregator (WHO ICTRP)
 				# URL to a registry of record (see docs/trials-multi-source-merge.md).
 				if value not in (None, ''):
-					merged_links = merge_trial_links(trial.links, value)
+					merged_links = merge_links(trial.links, value)
 					if merged_links != (trial.links or {}):
 						trial.links = merged_links
 						has_changes = True
@@ -134,7 +134,7 @@ class Command(BaseCommand):
 		try:
 			trial_data['discovery_date'] = timezone.now()
 			if trial_data.get('link'):
-				trial_data['links'] = merge_trial_links(None, trial_data['link'])
+				trial_data['links'] = merge_links(None, trial_data['link'])
 			trial = Trials.objects.create(**trial_data)
 			trial.sources.add(source)
 			trial.subjects.add(subject)

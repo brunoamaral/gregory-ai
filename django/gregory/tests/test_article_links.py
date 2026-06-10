@@ -123,7 +123,7 @@ class ImportArticlesFromApiLinkTest(TestCase):
 		}]
 		# Simulate what the command loop does (inline, no HTTP)
 		from django.utils.dateparse import parse_datetime
-		from gregory.utils.trial_utils import merge_trial_links
+		from gregory.utils.trial_utils import merge_links
 		for item in items:
 			title = item.get('title')
 			link_val = item.get('link')
@@ -148,11 +148,11 @@ class ImportArticlesFromApiLinkTest(TestCase):
 				},
 				create_defaults={
 					'link': link_val,
-					'links': merge_trial_links(None, link_val),
+					'links': merge_links(None, link_val),
 				},
 			)
 			if not created and link_val:
-				merged_links = merge_trial_links(article.links, link_val)
+				merged_links = merge_links(article.links, link_val)
 				if merged_links != (article.links or {}):
 					article.links = merged_links
 					article.save(update_fields=['links'])

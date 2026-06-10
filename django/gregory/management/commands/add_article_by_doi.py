@@ -12,7 +12,7 @@ from django.utils import timezone
 from gregory.models import Articles, Sources, Authors, Subject, Team
 from gregory.classes import SciencePaper
 from gregory.functions import normalize_orcid
-from gregory.utils.trial_utils import merge_trial_links
+from gregory.utils.trial_utils import merge_links
 
 
 class Command(BaseCommand):
@@ -142,7 +142,7 @@ class Command(BaseCommand):
 				title=paper.title,
 				doi=paper.doi,
 				link=_link,
-				links=merge_trial_links(None, _link),
+				links=merge_links(None, _link),
 				summary=paper.clean_abstract() if paper.abstract else None,
 				published_date=paper.published_date,
 				access=paper.access,

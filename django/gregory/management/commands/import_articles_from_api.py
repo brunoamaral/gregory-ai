@@ -5,7 +5,7 @@ from django.utils import timezone
 from organizations.models import Organization
 
 from gregory.models import Articles, Authors, Sources, Team, Subject, ArticleSubjectRelevance, ArticleOrgContent
-from gregory.utils.trial_utils import merge_trial_links
+from gregory.utils.trial_utils import merge_links
 
 class Command(BaseCommand):
 	help = 'Fetches articles from the API and imports them into the Django app.'
@@ -79,11 +79,11 @@ class Command(BaseCommand):
 					},
 					create_defaults={
 						"link": link,
-						"links": merge_trial_links(None, link),
+						"links": merge_links(None, link),
 					},
 				)
 				if not created and link:
-					merged_links = merge_trial_links(article.links, link)
+					merged_links = merge_links(article.links, link)
 					if merged_links != (article.links or {}):
 						article.links = merged_links
 						article.save(update_fields=["links"])
