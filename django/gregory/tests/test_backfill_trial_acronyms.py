@@ -60,7 +60,7 @@ class BackfillTrialAcronymsTest(TestCase):
 		trial.refresh_from_db()
 		self.assertEqual(trial.acronym, 'OPERA')
 		self.assertEqual(trial.history.first().history_change_reason, CHANGE_REASON)
-		self.assertIn('Updated 1 trials', out)
+		self.assertIn('Updated 1 trial rows', out)
 
 	def test_skips_trials_with_acronym_or_without_nct(self):
 		self.make_trial('NCT00000001', acronym='KEEP')
@@ -70,7 +70,7 @@ class BackfillTrialAcronymsTest(TestCase):
 		out, _ = self.run_command()
 
 		self.assertEqual(FakeAPI.calls, [])
-		self.assertIn('0 trials with an NCT id and no acronym', out)
+		self.assertIn('0 NCT ids with no acronym', out)
 		self.assertEqual(Trials.objects.get(identifiers__nct='NCT00000001').acronym, 'KEEP')
 
 	def test_registry_without_acronym_leaves_trial_untouched(self):
@@ -81,7 +81,7 @@ class BackfillTrialAcronymsTest(TestCase):
 
 		trial.refresh_from_db()
 		self.assertIsNone(trial.acronym)
-		self.assertIn('No acronym on registry: 1', out)
+		self.assertIn('No acronym on registry: 1 NCT ids', out)
 
 	def test_nct_missing_from_response_is_counted(self):
 		trial = self.make_trial('NCT00000001')
@@ -90,7 +90,7 @@ class BackfillTrialAcronymsTest(TestCase):
 
 		trial.refresh_from_db()
 		self.assertIsNone(trial.acronym)
-		self.assertIn('Not returned by API: 1', out)
+		self.assertIn('Not returned by API: 1 NCT ids', out)
 
 	def test_dry_run_saves_nothing(self):
 		trial = self.make_trial('NCT00000001')
@@ -100,7 +100,7 @@ class BackfillTrialAcronymsTest(TestCase):
 
 		trial.refresh_from_db()
 		self.assertIsNone(trial.acronym)
-		self.assertIn('Would update 1 trials', out)
+		self.assertIn('Would update 1 trial rows', out)
 
 	def test_batches_requests_by_batch_size(self):
 		for i in range(1, 6):
@@ -158,5 +158,5 @@ class BackfillTrialAcronymsTest(TestCase):
 
 		out, _ = self.run_command(limit=2)
 
-		self.assertIn('2 trials with an NCT id and no acronym', out)
-		self.assertIn('Updated 2 trials', out)
+		self.assertIn('2 NCT ids with no acronym', out)
+		self.assertIn('Updated 2 trial rows', out)

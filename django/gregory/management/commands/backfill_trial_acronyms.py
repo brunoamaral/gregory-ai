@@ -74,7 +74,7 @@ class Command(BaseCommand):
 
 		nct_ids = sorted(trials_by_nct)
 		total = len(nct_ids)
-		self.stdout.write(f'{total} trials with an NCT id and no acronym ({invalid} skipped as invalid).')
+		self.stdout.write(f'{total} NCT ids with no acronym ({invalid} skipped as invalid).')
 		if not total:
 			return
 
@@ -113,14 +113,14 @@ class Command(BaseCommand):
 						self.stdout.write(f'{nct}: {acronym}')
 
 			done = min(start + batch_size, total)
-			self.stdout.write(f'Processed {done}/{total} (updated {updated}).')
+			self.stdout.write(f'Processed {done}/{total} NCT ids (updated {updated} trial rows).')
 			if sleep and done < total:
 				time.sleep(sleep)
 
 		prefix = 'Would update' if dry_run else 'Updated'
 		self.stdout.write(self.style.SUCCESS(
-			f'{prefix} {updated} trials. '
-			f'No acronym on registry: {no_acronym}. Not returned by API: {not_in_response}.'))
+			f'{prefix} {updated} trial rows. '
+			f'No acronym on registry: {no_acronym} NCT ids. Not returned by API: {not_in_response} NCT ids.'))
 		if failed_batches:
 			self.stdout.write(self.style.ERROR(
 				f'{len(failed_batches)} batch(es) failed and were skipped — rerun to retry: '
@@ -141,7 +141,7 @@ class Command(BaseCommand):
 				if attempt == 1:
 					self.stderr.write(self.style.WARNING(
 						f'Batch {batch[0]}–{batch[-1]} failed ({exc}); retrying.'))
-					time.sleep(max(sleep, 1) * 4)
+					time.sleep(sleep * 4)
 				else:
 					self.stderr.write(self.style.ERROR(
 						f'Batch {batch[0]}–{batch[-1]} failed twice ({exc}); skipping.'))
