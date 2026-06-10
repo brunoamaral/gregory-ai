@@ -294,7 +294,7 @@ class ArticleSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSe
 		model = Articles
 		depth = 1
 		fields = [
-			'article_id', 'title', 'summary', 'summary_plain_english', 'link', 'published_date', 'sources', 'teams',
+			'article_id', 'title', 'summary', 'summary_plain_english', 'link', 'links', 'published_date', 'sources', 'teams',
 			'subjects', 'publisher', 'container_title', 'authors',
 			'discovery_date', 'article_subject_relevances',
 			'doi', 'access', 'takeaways', 'team_categories', 'ml_predictions', 'clinical_trials',
@@ -366,7 +366,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		model = Trials
 		fields = [
 			'trial_id', 'title', 'summary', 'summary_plain_english', 'ctg_detailed_description',
-			'published_date', 'discovery_date', 'last_updated', 'link', 'sources',
+			'published_date', 'discovery_date', 'last_updated', 'link', 'links', 'sources',
 			'identifiers', 'team_categories', 'export_date', 'internal_number', 'last_refreshed_on',
 			'acronym', 'scientific_title', 'primary_sponsor', 'secondary_sponsor', 'sponsor_type',
 			'prospective_registration', 'date_registration',

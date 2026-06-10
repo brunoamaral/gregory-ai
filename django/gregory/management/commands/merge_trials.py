@@ -26,6 +26,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import IntegrityError, transaction
 
 from gregory.models import Trials
+from gregory.utils.link_utils import canonical_link, merge_links
 
 
 class Command(BaseCommand):
@@ -95,13 +96,32 @@ class Command(BaseCommand):
 					if v and (k not in merged or merged[k] is None):
 						merged[k] = v
 
+				# Union registry links the same way (kept trial's entries win). The
+				# kept trial's canonical link stays — registries are not ranked —
+				# unless it is an aggregator URL that can be upgraded (canonical_link).
+				merged_links = dict(keep.links or {})
+				for k, v in (rem.links or {}).items():
+					if v and not merged_links.get(k):
+						merged_links[k] = v
+				merged_links = merge_links(merged_links, rem.link)
+
 				# 4. Delete the removed trial FIRST so its registry ids are freed, THEN adopt
 				#    the unioned identifiers — otherwise both rows briefly share an id and trip
 				#    the partial unique indexes added in migration 0054.
 				rem.delete()
+				update_fields = []
 				if merged != (keep.identifiers or {}):
 					keep.identifiers = merged
-					keep.save(update_fields=['identifiers'])
+					update_fields.append('identifiers')
+				if merged_links != (keep.links or {}):
+					keep.links = merged_links
+					update_fields.append('links')
+				new_link = canonical_link(keep.links, keep.link)
+				if new_link and new_link != keep.link:
+					keep.link = new_link
+					update_fields.append('link')
+				if update_fields:
+					keep.save(update_fields=update_fields)
 				self.stdout.write(self.style.SUCCESS(f'   merged and deleted trial {rid}.'))
 
 			keep.refresh_from_db()

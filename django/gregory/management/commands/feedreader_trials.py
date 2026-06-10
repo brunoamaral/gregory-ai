@@ -7,7 +7,7 @@ from django.utils import timezone
 from gregory.classes import ClinicalTrial, EUTrialParser
 from gregory.functions import remove_utm
 from gregory.models import Trials, Sources
-from gregory.utils.trial_utils import identifiers_conflict
+from gregory.utils.link_utils import identifiers_conflict, merge_links, canonical_link
 import feedparser
 import pytz
 import requests
@@ -143,6 +143,7 @@ class Command(BaseCommand):
 				title=clinical_trial.title,
 				summary=clinical_trial.summary,
 				link=clinical_trial.link,
+				links=merge_links(None, clinical_trial.link),
 				published_date=clinical_trial.published_date,
 				identifiers=clinical_trial.identifiers,
 				source_register=extras.get('source_register'),
@@ -200,11 +201,6 @@ class Command(BaseCommand):
 			has_changes = True
 			updated_fields.append('summary')
 
-		if clinical_trial.link and existing_trial.link != clinical_trial.link:
-			existing_trial.link = clinical_trial.link
-			has_changes = True
-			updated_fields.append('link')
-
 		if clinical_trial.published_date and existing_trial.published_date != clinical_trial.published_date:
 			existing_trial.published_date = clinical_trial.published_date
 			has_changes = True
@@ -216,6 +212,21 @@ class Command(BaseCommand):
 			existing_trial.identifiers = merged_identifiers
 			has_changes = True
 			updated_fields.append('identifiers')
+
+		# Record this source's URL under its registry key. The canonical link is
+		# the first registry URL stored, chronologically — a later importer must
+		# not replace it (see docs/trials-multi-source-merge.md). canonical_link
+		# only changes it to upgrade an aggregator (WHO ICTRP) URL.
+		merged_links = merge_links(existing_trial.links, clinical_trial.link)
+		if merged_links != (existing_trial.links or {}):
+			existing_trial.links = merged_links
+			has_changes = True
+			updated_fields.append('links')
+		new_link = canonical_link(existing_trial.links, existing_trial.link)
+		if new_link and existing_trial.link != new_link:
+			existing_trial.link = new_link
+			has_changes = True
+			updated_fields.append('link')
 
 		# Update extra fields (if any exist in ClinicalTrial.extra_fields)
 		extras = getattr(clinical_trial, 'extra_fields', {})

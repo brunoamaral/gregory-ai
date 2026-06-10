@@ -119,6 +119,35 @@ read time by priority.
    `recruitment_status` always from the home registry but `summary` from whoever has the
    longest text). Option D only if the single-row model becomes a hard constraint.
 
+## Implemented: per-registry links + stable canonical `link`
+
+`link` was the worst-affected shared field: every registry has its own legitimate URL,
+so the "never blank" guard never applied and the column flip-flopped between e.g.
+`https://clinicaltrials.gov/study/NCT…` and `https://euclinicaltrials.eu/…` depending on which importer
+ran last. This is now fixed:
+
+- **`Trials.links`** (JSONField, migration 0056) stores every known URL keyed by registry
+  slug, e.g. `{"ctgov": "…", "ctis": "…", "ictrp": "…"}`. Keys come from
+  `gregory.utils.trial_utils.registry_from_url` (domain → slug; unknown domains fall back
+  to their hostname so registries can never collide). Entries are merged with the same
+  conservative semantics as `identifiers` (`merge_trial_links`): first non-empty value
+  per key wins, never overwritten — so WHO ICTRP exporting an older-format registry URL
+  doesn't churn against the registry's own importer.
+- **`Trials.link`** is the canonical URL, governed by `canonical_link(links, current_link)`:
+  **the first registry URL stored stays, chronologically.** Registries are deliberately
+  NOT ranked against each other — all importers run on the same schedule, so the registry
+  whose URL arrived first is where the trial team registered first, i.e. their primary
+  choice. A later importer can never replace it. The one exception: a WHO ICTRP
+  (aggregator) URL is upgraded once to a registry-of-record URL when one becomes
+  available, since a search portal is not a registry a team registers with.
+- All four write paths participate: `feedreader_trials_ctgov.py`, `feedreader_trials.py`,
+  `importWHOXML.py`, and the API POST endpoint. Existing rows are backfilled by
+  migration 0057 (current `link` filed under its registry key).
+- `links` is exposed in the API via `TrialSerializer`.
+- Tests: `gregory/tests/test_trial_links.py` (helper truth tables + importer
+  integration: first-stored registry URL is kept in both import orders, re-imports
+  are idempotent, aggregator upgrade).
+
 ## Open questions before implementing
 
 - **Manual edits**: should an admin edit be permanently sticky, or only until the home
