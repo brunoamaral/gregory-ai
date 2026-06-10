@@ -2,7 +2,7 @@ import hashlib
 import json
 import logging
 import re
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 from django.utils import timezone
 from gregory.models import (
@@ -29,6 +29,7 @@ class Command(BaseCommand):
 
 	def add_arguments(self, parser):
 		parser.add_argument('--days', type=int, help='Only process content from the last N days')
+		parser.add_argument('--category', type=int, help='Only process the automatic category with this ID (e.g. to backfill a newly created category)')
 		parser.add_argument('--batch-size', type=int, default=1000, help='Batch size for processing')
 		parser.add_argument('--min-score', type=int, default=3, help='Minimum score to categorize content')
 		parser.add_argument('--articles-only', action='store_true', help='Only rebuild article categories')
@@ -36,12 +37,27 @@ class Command(BaseCommand):
 		parser.add_argument('--dry-run', action='store_true', help='Run without making changes, just report what would happen')
 		parser.add_argument('--verbose', action='store_true', help='Show detailed progress information')
 
+	# Default scope: all automatic categories (overridden by --category)
+	category_id = None
+
 	def handle(self, *args, **options):
 		self.dry_run = options.get('dry_run', False)
 		self.verbose = options.get('verbose', False)
+		self.category_id = options.get('category')
 		days = options.get('days')
 		batch_size = options.get('batch_size')
 		min_score = options.get('min_score')
+
+		if self.category_id is not None:
+			try:
+				target = TeamCategory.objects.get(pk=self.category_id)
+			except TeamCategory.DoesNotExist:
+				raise CommandError(f'TeamCategory {self.category_id} does not exist.')
+			if target.category_type != CategoryType.AUTOMATIC:
+				self.stdout.write(self.style.WARNING(
+					f"Category '{target.category_name}' is manual; nothing to do."
+				))
+				return
 
 		if self.dry_run:
 			self.stdout.write(self.style.WARNING("DRY RUN MODE: No changes will be made to the database"))
@@ -76,6 +92,12 @@ class Command(BaseCommand):
 			last_pk = getattr(batch[-1], pk_field)
 			yield batch
 
+	def target_categories(self):
+		qs = TeamCategory.objects.filter(category_type=CategoryType.AUTOMATIC)
+		if self.category_id is not None:
+			qs = qs.filter(pk=self.category_id)
+		return qs.prefetch_related('subjects')
+
 	def category_config_hash(self, cat, min_score):
 		"""Fingerprint of everything that affects which items match this category."""
 		payload = json.dumps({
@@ -106,7 +128,7 @@ class Command(BaseCommand):
 		still needs.
 		"""
 		now = timezone.now()
-		for cat in TeamCategory.objects.filter(category_type=CategoryType.AUTOMATIC).prefetch_related('subjects'):
+		for cat in self.target_categories():
 			cat.match_config_hash = self.category_config_hash(cat, min_score)
 			cat.last_synced_at = now
 			cat.save(update_fields=['match_config_hash', 'last_synced_at'])
@@ -136,10 +158,11 @@ class Command(BaseCommand):
 			self.stdout.write(f"Processing articles updated since {cutoff_date}")
 
 		# Manual categories are curated entirely by hand and never touched here
-		categories = TeamCategory.objects.filter(category_type=CategoryType.AUTOMATIC).prefetch_related('subjects')
-		manual_categories = TeamCategory.objects.exclude(category_type=CategoryType.AUTOMATIC).count()
-		if manual_categories:
-			self.stdout.write(f"Skipping {manual_categories} manual categories")
+		categories = self.target_categories()
+		if self.category_id is None:
+			manual_categories = TeamCategory.objects.exclude(category_type=CategoryType.AUTOMATIC).count()
+			if manual_categories:
+				self.stdout.write(f"Skipping {manual_categories} manual categories")
 		total_categories = categories.count()
 		total_added = 0
 		total_removed = 0
@@ -271,10 +294,11 @@ class Command(BaseCommand):
 			self.stdout.write(f"Processing trials updated since {cutoff_date}")
 
 		# Manual categories are curated entirely by hand and never touched here
-		categories = TeamCategory.objects.filter(category_type=CategoryType.AUTOMATIC).prefetch_related('subjects')
-		manual_categories = TeamCategory.objects.exclude(category_type=CategoryType.AUTOMATIC).count()
-		if manual_categories:
-			self.stdout.write(f"Skipping {manual_categories} manual categories")
+		categories = self.target_categories()
+		if self.category_id is None:
+			manual_categories = TeamCategory.objects.exclude(category_type=CategoryType.AUTOMATIC).count()
+			if manual_categories:
+				self.stdout.write(f"Skipping {manual_categories} manual categories")
 		total_categories = categories.count()
 		total_added = 0
 		total_removed = 0

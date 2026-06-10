@@ -11,6 +11,9 @@ from django.test import TestCase
 from django.utils import timezone
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+
 from organizations.models import Organization
 
 from gregory.models import (
@@ -271,6 +274,40 @@ class RebuildCategoriesDiffSyncTest(TestCase):
 	def test_new_categories_default_to_automatic(self):
 		self.assertEqual(self.category.category_type, CategoryType.AUTOMATIC)
 
+	def test_category_scope_only_processes_target(self):
+		other_category = TeamCategory.objects.create(
+			team=self.team,
+			category_name='Dopamine',
+			category_terms=['dopamine'],
+		)
+		other_category.subjects.add(self.subject)
+		neuro_article = self.make_article('Neuroplasticity in adults')
+		dopamine_article = self.make_article('Dopamine signalling in adults')
+
+		call_command('rebuild_categories', category=self.category.pk)
+
+		self.assertIn(neuro_article, self.category.articles.all())
+		# The other category is out of scope and stays empty
+		self.assertNotIn(dopamine_article, other_category.articles.all())
+		self.category.refresh_from_db()
+		other_category.refresh_from_db()
+		self.assertIsNotNone(self.category.match_config_hash)
+		self.assertIsNone(other_category.match_config_hash)
+
+	def test_category_scope_manual_category_is_noop(self):
+		self.category.category_type = CategoryType.MANUAL
+		self.category.save()
+		matching = self.make_article('Neuroplasticity in adults')
+
+		call_command('rebuild_categories', category=self.category.pk)
+
+		self.assertNotIn(matching, self.category.articles.all())
+
+	def test_category_scope_unknown_id_raises(self):
+		from django.core.management.base import CommandError
+		with self.assertRaises(CommandError):
+			call_command('rebuild_categories', category=999999)
+
 	def test_rerun_is_idempotent(self):
 		matching = self.make_article('Neuroplasticity in adults')
 
@@ -281,3 +318,56 @@ class RebuildCategoriesDiffSyncTest(TestCase):
 
 		self.assertEqual(ArticleCategoryAssignment.objects.count(), 1)
 		self.assertEqual(self.article_assignment(matching).pk, row_id)
+
+class TeamCategoryAdminBackfillTest(TestCase):
+	"""Creating an automatic category in the admin backfills it immediately."""
+
+	def setUp(self):
+		self.admin_user = get_user_model().objects.create_superuser('admin', 'admin@example.com', 'password')
+		self.client.force_login(self.admin_user)
+		self.org = Organization.objects.create(name='Test Org')
+		self.team = Team.objects.create(organization=self.org, name='Research', slug='research')
+		self.subject = Subject.objects.create(subject_name='Neurology', subject_slug='neurology', team=self.team)
+		self.article = Articles.objects.create(
+			title='Neuroplasticity in adults',
+			link='https://example.com/backfill-article',
+		)
+		self.article.subjects.add(self.subject)
+		self.trial = Trials.objects.create(
+			title='Neuroplasticity rehabilitation trial',
+			link='https://example.com/backfill-trial',
+			discovery_date=timezone.now(),
+		)
+		self.trial.subjects.add(self.subject)
+
+	def create_category_via_admin(self, category_type):
+		return self.client.post(reverse('admin:gregory_teamcategory_add'), {
+			'team': self.team.pk,
+			'subjects': [self.subject.pk],
+			'category_name': 'Neuroplasticity',
+			'category_slug': 'neuroplasticity',
+			'category_description': '',
+			'category_terms': 'neuroplasticity',
+			'category_type': category_type,
+		})
+
+	def test_new_automatic_category_is_backfilled(self):
+		response = self.create_category_via_admin(CategoryType.AUTOMATIC)
+		self.assertEqual(response.status_code, 302)
+
+		category = TeamCategory.objects.get(category_slug='neuroplasticity')
+		self.assertIn(self.article, category.articles.all())
+		self.assertIn(self.trial, category.trials.all())
+		self.assertEqual(
+			ArticleCategoryAssignment.objects.get(articles=self.article, teamcategory=category).source,
+			CategoryAssignmentSource.AUTOMATIC,
+		)
+		self.assertIsNotNone(category.match_config_hash)
+
+	def test_new_manual_category_is_not_backfilled(self):
+		response = self.create_category_via_admin(CategoryType.MANUAL)
+		self.assertEqual(response.status_code, 302)
+
+		category = TeamCategory.objects.get(category_slug='neuroplasticity')
+		self.assertEqual(category.articles.count(), 0)
+		self.assertEqual(category.trials.count(), 0)

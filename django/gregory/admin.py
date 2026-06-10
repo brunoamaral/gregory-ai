@@ -1,5 +1,8 @@
+from io import StringIO
+
 from django.contrib import admin, messages
 from django.apps import apps
+from django.core.management import call_command
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.http import HttpResponse
@@ -21,7 +24,7 @@ from .models import (
     ArticleSubjectRelevance, TeamCategory, PredictionRunLog, Team,
     ArticleTrialReference, OrganizationCredentials, OrganizationSite,
     OrganizationApiSettings, ArticleOrgContent, TrialOrgContent,
-    ArticleCategoryAssignment, TrialCategoryAssignment
+    ArticleCategoryAssignment, TrialCategoryAssignment, CategoryType
 )
 from .widgets import MLPredictionsWidget
 from django import forms
@@ -1296,7 +1299,34 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 	]
 	filter_horizontal = ('subjects',)
 	actions = ['reassign_to_team_action']
-	
+
+	def save_related(self, request, form, formsets, change):
+		"""Backfill a newly created automatic category right away.
+
+		Runs after the subjects M2M is saved, so the matcher sees the full
+		configuration. Edits are not backfilled here: the pipeline detects
+		configuration changes via match_config_hash on its next run.
+		"""
+		super().save_related(request, form, formsets, change)
+		category = form.instance
+		if change or category.category_type != CategoryType.AUTOMATIC:
+			return
+		try:
+			call_command('rebuild_categories', category=category.pk, stdout=StringIO())
+			self.message_user(
+				request,
+				f"Backfilled '{category.category_name}': {category.articles.count()} articles "
+				f"and {category.trials.count()} trials assigned.",
+				messages.SUCCESS,
+			)
+		except Exception as exc:
+			self.message_user(
+				request,
+				f"Could not backfill '{category.category_name}' now ({exc}); "
+				"the pipeline will categorize it on its next run.",
+				messages.WARNING,
+			)
+
 	def get_queryset(self, request):
 		"""Add prefetch_related to avoid multiple DB queries"""
 		return super().get_queryset(request).prefetch_related('subjects', 'articles')
