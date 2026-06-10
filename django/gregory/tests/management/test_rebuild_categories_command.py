@@ -371,3 +371,57 @@ class TeamCategoryAdminBackfillTest(TestCase):
 		category = TeamCategory.objects.get(category_slug='neuroplasticity')
 		self.assertEqual(category.articles.count(), 0)
 		self.assertEqual(category.trials.count(), 0)
+
+	def edit_category_via_admin(self, category, **overrides):
+		data = {
+			'team': self.team.pk,
+			'subjects': [self.subject.pk],
+			'category_name': category.category_name,
+			'category_slug': category.category_slug,
+			'category_description': category.category_description or '',
+			'category_terms': ','.join(category.category_terms or []),
+			# category_terms has a callable default, so the admin renders a
+			# hidden initial input and compares against it to detect changes
+			'initial-category_terms': ','.join(category.category_terms or []),
+			'category_type': category.category_type,
+		}
+		data.update(overrides)
+		return self.client.post(
+			reverse('admin:gregory_teamcategory_change', args=[category.pk]), data
+		)
+
+	def test_editing_terms_triggers_immediate_rematch(self):
+		self.create_category_via_admin(CategoryType.AUTOMATIC)
+		category = TeamCategory.objects.get(category_slug='neuroplasticity')
+		self.assertIn(self.article, category.articles.all())
+
+		dopamine_article = Articles.objects.create(
+			title='Dopamine signalling in adults',
+			link='https://example.com/rematch-article',
+		)
+		dopamine_article.subjects.add(self.subject)
+
+		response = self.edit_category_via_admin(category, category_terms='dopamine')
+		self.assertEqual(response.status_code, 302)
+
+		self.assertIn(dopamine_article, category.articles.all())
+		self.assertNotIn(self.article, category.articles.all())
+
+	def test_editing_unrelated_field_does_not_rematch(self):
+		self.create_category_via_admin(CategoryType.AUTOMATIC)
+		category = TeamCategory.objects.get(category_slug='neuroplasticity')
+
+		with patch('gregory.admin.call_command') as mock_call:
+			response = self.edit_category_via_admin(category, category_description='New description')
+
+		self.assertEqual(response.status_code, 302)
+		mock_call.assert_not_called()
+
+	def test_editing_manual_category_does_not_rematch(self):
+		self.create_category_via_admin(CategoryType.MANUAL)
+		category = TeamCategory.objects.get(category_slug='neuroplasticity')
+
+		response = self.edit_category_via_admin(category, category_terms='dopamine')
+		self.assertEqual(response.status_code, 302)
+
+		self.assertEqual(category.articles.count(), 0)

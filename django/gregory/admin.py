@@ -1318,29 +1318,36 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 	filter_horizontal = ('subjects',)
 	actions = ['reassign_to_team_action']
 
+	# Form fields that affect which articles/trials match the category
+	MATCHING_CONFIG_FIELDS = {'category_terms', 'subjects', 'category_type'}
+
 	def save_related(self, request, form, formsets, change):
-		"""Backfill a newly created automatic category right away.
+		"""Re-match an automatic category as soon as its configuration is saved.
 
 		Runs after the subjects M2M is saved, so the matcher sees the full
-		configuration. Edits are not backfilled here: the pipeline detects
-		configuration changes via match_config_hash on its next run.
+		configuration. New automatic categories are backfilled immediately;
+		edited ones are re-matched only when a field that affects matching
+		changed. Manual categories are never touched.
 		"""
 		super().save_related(request, form, formsets, change)
 		category = form.instance
-		if change or category.category_type != CategoryType.AUTOMATIC:
+		if category.category_type != CategoryType.AUTOMATIC:
 			return
+		if change and not self.MATCHING_CONFIG_FIELDS & set(form.changed_data):
+			return
+		verb = 'Re-matched' if change else 'Backfilled'
 		try:
 			call_command('rebuild_categories', category=category.pk, stdout=StringIO())
 			self.message_user(
 				request,
-				f"Backfilled '{category.category_name}': {category.articles.count()} articles "
+				f"{verb} '{category.category_name}': {category.articles.count()} articles "
 				f"and {category.trials.count()} trials assigned.",
 				messages.SUCCESS,
 			)
 		except Exception as exc:
 			self.message_user(
 				request,
-				f"Could not backfill '{category.category_name}' now ({exc}); "
+				f"Could not re-match '{category.category_name}' now ({exc}); "
 				"the pipeline will categorize it on its next run.",
 				messages.WARNING,
 			)
