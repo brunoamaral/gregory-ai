@@ -45,6 +45,11 @@ class Authors(models.Model):
 			GinIndex(fields=['ufull_name'], opclasses=['gin_trgm_ops'], name='authors_ufull_name_gin_idx'),
 		]
 
+class CategoryType(models.TextChoices):
+	MANUAL = 'manual', 'Manual'
+	AUTOMATIC = 'automatic', 'Automatic'
+
+
 class TeamCategory(models.Model):
 	team = models.ForeignKey('Team', on_delete=models.CASCADE, related_name='team_categories', null=False, blank=False)
 	subjects = models.ManyToManyField('Subject', related_name='team_subjects', blank=False)
@@ -52,6 +57,33 @@ class TeamCategory(models.Model):
 	category_description = models.TextField(blank=True, null=True)
 	category_slug = models.SlugField(blank=True, null=True, unique=True)
 	category_terms = ArrayField(models.CharField(max_length=100), default=list, verbose_name='Terms to include in category (comma separated)', help_text="Add terms separated by commas.")
+	category_type = models.CharField(
+		max_length=10,
+		choices=CategoryType.choices,
+		default=CategoryType.AUTOMATIC,
+		help_text=(
+			'Automatic categories are populated by the rebuild_categories command from the term list '
+			'(manual assignments are still allowed and preserved). Manual categories are curated entirely '
+			'by hand and are never touched by the command.'
+		),
+	)
+	match_config_hash = models.CharField(
+		max_length=64,
+		blank=True,
+		null=True,
+		editable=False,
+		help_text=(
+			'Fingerprint of the matching configuration (terms, subjects, score threshold) at the last '
+			'rebuild_categories sync. When the configuration changes, the next incremental run performs '
+			'a full re-match for this category.'
+		),
+	)
+	last_synced_at = models.DateTimeField(
+		blank=True,
+		null=True,
+		editable=False,
+		help_text='When rebuild_categories last synced this category.',
+	)
 
 	def save(self, *args, **kwargs):
 		if not self.category_slug:
@@ -75,6 +107,55 @@ class TeamCategory(models.Model):
 		]
 		verbose_name_plural = 'team categories'
 		db_table = 'team_categories'
+
+class CategoryAssignmentSource(models.TextChoices):
+	MANUAL = 'manual', 'Manual'
+	AUTOMATIC = 'automatic', 'Automatic'
+
+
+class ArticleCategoryAssignment(models.Model):
+	"""Through model for Articles.team_categories.
+
+	Maps onto the table Django originally auto-created for the implicit M2M.
+	`source` records whether the link was made by a person (admin, API, shell —
+	the default) or by the rebuild_categories command, which only adds and
+	removes rows marked automatic and never touches manual assignments.
+	"""
+	articles = models.ForeignKey('Articles', on_delete=models.CASCADE, related_name='category_assignments')
+	teamcategory = models.ForeignKey('TeamCategory', on_delete=models.CASCADE, related_name='article_assignments')
+	source = models.CharField(
+		max_length=10,
+		choices=CategoryAssignmentSource.choices,
+		default=CategoryAssignmentSource.MANUAL,
+	)
+
+	def __str__(self):
+		return f"{self.articles_id} → {self.teamcategory} ({self.source})"
+
+	class Meta:
+		db_table = 'articles_team_categories'
+		unique_together = (('articles', 'teamcategory'),)
+		verbose_name = 'article category assignment'
+
+
+class TrialCategoryAssignment(models.Model):
+	"""Through model for Trials.team_categories. See ArticleCategoryAssignment."""
+	trials = models.ForeignKey('Trials', on_delete=models.CASCADE, related_name='category_assignments')
+	teamcategory = models.ForeignKey('TeamCategory', on_delete=models.CASCADE, related_name='trial_assignments')
+	source = models.CharField(
+		max_length=10,
+		choices=CategoryAssignmentSource.choices,
+		default=CategoryAssignmentSource.MANUAL,
+	)
+
+	def __str__(self):
+		return f"{self.trials_id} → {self.teamcategory} ({self.source})"
+
+	class Meta:
+		db_table = 'trials_team_categories'
+		unique_together = (('trials', 'teamcategory'),)
+		verbose_name = 'trial category assignment'
+
 
 class Entities(models.Model):
 	entity = models.TextField()
@@ -297,8 +378,9 @@ class Articles(models.Model):
 	sources = models.ManyToManyField(Sources, blank=True)
 	published_date = models.DateTimeField(blank=True, null=True, db_index=True)
 	discovery_date = models.DateTimeField(auto_now_add=True, db_index=True)
+	last_updated = models.DateTimeField(auto_now=True, null=True, db_index=True)
 	authors = models.ManyToManyField(Authors, blank=True)
-	team_categories = models.ManyToManyField('TeamCategory', related_name='articles', blank=True)
+	team_categories = models.ManyToManyField('TeamCategory', related_name='articles', blank=True, through='ArticleCategoryAssignment')
 	entities = models.ManyToManyField('Entities')
 	ml_predictions = models.ManyToManyField('MLPredictions', blank=True)
 	noun_phrases = models.JSONField(blank=True, null=True)
@@ -423,7 +505,7 @@ class Trials(models.Model):
 	links = models.JSONField(blank=True, null=True, help_text='Registry URLs keyed by registry slug; "link" holds the canonical one')
 	published_date = models.DateTimeField(blank=True, null=True, db_index=True)
 	sources = models.ManyToManyField('Sources', blank=True)
-	team_categories = models.ManyToManyField('TeamCategory', related_name='trials')
+	team_categories = models.ManyToManyField('TeamCategory', related_name='trials', through='TrialCategoryAssignment')
 	identifiers = models.JSONField(blank=True, null=True)
 	teams = models.ManyToManyField('Team', related_name='trials')
 	subjects = models.ManyToManyField('Subject', related_name='trials')

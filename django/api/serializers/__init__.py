@@ -36,7 +36,7 @@ class SubjectsSerializer(serializers.ModelSerializer):
 class TeamCategorySerializer(serializers.ModelSerializer):
 	class Meta:
 		model = TeamCategory
-		fields = ['id', 'category_name', 'category_description', 'category_slug', 'category_terms']
+		fields = ['id', 'category_name', 'category_description', 'category_slug', 'category_terms', 'category_type']
 
 class ArticleSubjectRelevanceSerializer(serializers.ModelSerializer):
 	subject = SubjectsSerializer(read_only=True)
