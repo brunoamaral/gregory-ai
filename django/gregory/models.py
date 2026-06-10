@@ -418,7 +418,7 @@ class Trials(models.Model):
 	# All known registry URLs for this trial, keyed by registry slug (e.g.
 	# {"ctgov": "https://clinicaltrials.gov/study/NCT…", "ctis": "…"}). ``link``
 	# holds the canonical one: the first registry URL discovered, kept for good
-	# (see gregory.utils.trial_utils.canonical_link) so importers running later
+	# (see gregory.utils.link_utils.canonical_link) so importers running later
 	# can no longer overwrite it.
 	links = models.JSONField(blank=True, null=True, help_text='Registry URLs keyed by registry slug; "link" holds the canonical one')
 	published_date = models.DateTimeField(blank=True, null=True, db_index=True)

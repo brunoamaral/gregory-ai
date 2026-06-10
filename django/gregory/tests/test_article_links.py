@@ -123,7 +123,7 @@ class ImportArticlesFromApiLinkTest(TestCase):
 		}]
 		# Simulate what the command loop does (inline, no HTTP)
 		from django.utils.dateparse import parse_datetime
-		from gregory.utils.trial_utils import merge_links
+		from gregory.utils.link_utils import merge_links
 		for item in items:
 			title = item.get('title')
 			link_val = item.get('link')

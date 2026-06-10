@@ -12,7 +12,7 @@ from django.utils import timezone
 from gregory.models import Articles, Sources, Authors, Subject, Team
 from gregory.classes import SciencePaper
 from gregory.functions import normalize_orcid
-from gregory.utils.trial_utils import merge_links
+from gregory.utils.link_utils import merge_links
 
 
 class Command(BaseCommand):

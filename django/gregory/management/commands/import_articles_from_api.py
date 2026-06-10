@@ -5,7 +5,7 @@ from django.utils import timezone
 from organizations.models import Organization
 
 from gregory.models import Articles, Authors, Sources, Team, Subject, ArticleSubjectRelevance, ArticleOrgContent
-from gregory.utils.trial_utils import merge_links
+from gregory.utils.link_utils import merge_links
 
 class Command(BaseCommand):
 	help = 'Fetches articles from the API and imports them into the Django app.'

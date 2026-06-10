@@ -26,7 +26,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import IntegrityError, transaction
 
 from gregory.models import Trials
-from gregory.utils.trial_utils import canonical_link, merge_links
+from gregory.utils.link_utils import canonical_link, merge_links
 
 
 class Command(BaseCommand):

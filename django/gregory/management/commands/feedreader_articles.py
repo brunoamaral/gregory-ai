@@ -9,7 +9,7 @@ from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import SciencePaper
-from gregory.utils.trial_utils import merge_links
+from gregory.utils.link_utils import merge_links
 from sitesettings.models import CustomSetting
 import feedparser
 import gregory.functions as greg

@@ -26,7 +26,7 @@ from gregory.classes import ClinicalTrial
 from gregory.management.commands.feedreader_trials import Command as EUCommand
 from gregory.management.commands.feedreader_trials_ctgov import Command as CTGovCommand
 from gregory.management.commands.importWHOXML import Command as WHOCommand
-from gregory.utils.trial_utils import registry_from_url, merge_links, canonical_link
+from gregory.utils.link_utils import registry_from_url, merge_links, canonical_link
 
 
 CTGOV_LINK = 'https://clinicaltrials.gov/study/NCT00000001'

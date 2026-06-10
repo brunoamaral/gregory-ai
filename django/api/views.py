@@ -27,7 +27,7 @@ from django.utils.dateparse import parse_date
 
 from api.serializers.mixins import _resolve_per_org_fields_org
 from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress, find_trial_by_identifier
-from gregory.utils.trial_utils import merge_links
+from gregory.utils.link_utils import merge_links
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 		APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError,
