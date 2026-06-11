@@ -57,12 +57,12 @@ def _run_import(xml_content, source_id):
 		f.write(xml_content)
 		path = f.name
 	try:
-		cmd = WHOCommand()
-		cmd.stdout = open(os.devnull, 'w')
-		cmd.parse_xml(path, source_id)
+		with open(os.devnull, 'w') as devnull:
+			cmd = WHOCommand()
+			cmd.stdout = devnull
+			cmd.parse_xml(path, source_id)
 	finally:
 		os.unlink(path)
-		cmd.stdout.close()
 
 
 class WHOResultsUrlLinkTest(TestCase):

@@ -588,11 +588,13 @@ class ClinicalTrialsGovAPI:
 
 		# results_ipd_plan / results_ipd_description
 		ipd_module = protocol.get('ipdSharingStatementModule', {})
-		results_ipd_plan = (ipd_module.get('ipdSharing') or '')[:10] or None
-		results_ipd_description = ipd_module.get('description') or None
+		results_ipd_plan = ((ipd_module.get('ipdSharing') or '').strip()[:10]) or None
+		_ipd_desc = (ipd_module.get('description') or '').strip()
+		results_ipd_description = _ipd_desc or None
 
 		# secondary_sponsor — collaborators are already collected above
-		secondary_sponsor = '; '.join(collaborators) if collaborators else None
+		_clean_collabs = [c.strip() for c in collaborators if c.strip()]
+		secondary_sponsor = '; '.join(_clean_collabs) if _clean_collabs else None
 
 		# last_refreshed_on
 		last_refreshed_on = self._parse_date(status_module.get('lastUpdatePostDateStruct', {}).get('date'))
@@ -602,7 +604,8 @@ class ClinicalTrialsGovAPI:
 
 		# contact_affiliation — first overall official's affiliation
 		overall_officials = contacts_module.get('overallOfficials', [])
-		contact_affiliation = overall_officials[0].get('affiliation') if overall_officials else None
+		_raw_affiliation = overall_officials[0].get('affiliation', '') if overall_officials else ''
+		contact_affiliation = _raw_affiliation.strip() or None
 
 		# Build extra_fields for ClinicalTrial object
 		extra_fields = {
