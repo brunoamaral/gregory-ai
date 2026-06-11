@@ -183,7 +183,7 @@ class CategorySerializer(serializers.ModelSerializer):
 		
 		# Import here to avoid circular imports
 		from gregory.models import MLPredictions
-		from django.db.models import F, Max
+		from django.db.models import Max, OuterRef, Subquery
 		from django.db.models.functions import TruncMonth
 		
 		# Monthly article counts
@@ -251,17 +251,24 @@ class CategorySerializer(serializers.ModelSerializer):
 		# counted once per month no matter how many models flagged it. This is the
 		# per-month size of the union of the per-model series above, so it can never
 		# exceed monthly_article_counts.
-		latest_prediction_ids = MLPredictions.objects.filter(
-			article__team_categories=obj,
-			algorithm__isnull=False
-		).order_by(
-			'article_id', 'algorithm', '-created_date', F('probability_score').desc(nulls_last=True)
-		).distinct('article_id', 'algorithm').values('id')
+		#
+		# A correlated subquery selects, for each prediction, the maximum created_date
+		# for the same (article, algorithm) pair. Filtering for created_date == that
+		# maximum identifies the latest prediction(s) per pair. This works on any
+		# Django-supported database backend.
+		latest_date_per_pair = MLPredictions.objects.filter(
+			article=OuterRef('article'),
+			algorithm=OuterRef('algorithm'),
+		).values('article', 'algorithm').annotate(
+			latest=Max('created_date')
+		).values('latest')[:1]
 
 		relevant_article_ids = MLPredictions.objects.filter(
-			id__in=latest_prediction_ids,
-			probability_score__gte=ml_threshold
-		).values_list('article_id', flat=True)
+			article__team_categories=obj,
+			algorithm__isnull=False,
+			probability_score__gte=ml_threshold,
+			created_date=Subquery(latest_date_per_pair),
+		).values_list('article_id', flat=True).distinct()
 
 		relevant_articles = obj.articles.filter(
 			article_id__in=relevant_article_ids,
