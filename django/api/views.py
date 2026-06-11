@@ -777,7 +777,9 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	- Total article and trial counts  
 	- Authors count (unique authors in category)
 	- Top authors with their article counts in this category
-	- Monthly counts (when monthly_counts=true)
+	- Monthly counts (when monthly_counts=true), including monthly_relevant_article_counts:
+	  articles whose latest prediction from at least one ML model meets ml_threshold,
+	  counted once per month regardless of how many models flagged them
 	
 	# Additional Actions:
 	- `/categories/{id}/authors/` - Get detailed author statistics for a specific category

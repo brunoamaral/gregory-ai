@@ -183,7 +183,7 @@ class CategorySerializer(serializers.ModelSerializer):
 		
 		# Import here to avoid circular imports
 		from gregory.models import MLPredictions
-		from django.db.models import Max
+		from django.db.models import F, Max
 		from django.db.models.functions import TruncMonth
 		
 		# Monthly article counts
@@ -246,6 +246,32 @@ class CategorySerializer(serializers.ModelSerializer):
 			ml_article_counts = articles_with_ml.values('month').annotate(count=Count('article_id', distinct=True)).order_by('month')
 			ml_counts_by_model[model] = list(ml_article_counts.values('month', 'count'))
 
+		# Deduplicated monthly counts of relevant articles: an article is relevant when
+		# the latest prediction of at least one model clears the threshold, and it is
+		# counted once per month no matter how many models flagged it. This is the
+		# per-month size of the union of the per-model series above, so it can never
+		# exceed monthly_article_counts.
+		latest_prediction_ids = MLPredictions.objects.filter(
+			article__team_categories=obj,
+			algorithm__isnull=False
+		).order_by(
+			'article_id', 'algorithm', '-created_date', F('probability_score').desc(nulls_last=True)
+		).distinct('article_id', 'algorithm').values('id')
+
+		relevant_article_ids = MLPredictions.objects.filter(
+			id__in=latest_prediction_ids,
+			probability_score__gte=ml_threshold
+		).values_list('article_id', flat=True)
+
+		relevant_articles = obj.articles.filter(
+			article_id__in=relevant_article_ids,
+			published_date__isnull=False
+		).annotate(month=TruncMonth('published_date'))
+		relevant_counts = relevant_articles.values('month').annotate(
+			count=Count('article_id', distinct=True)
+		).order_by('month')
+		relevant_counts = list(relevant_counts.values('month', 'count'))
+
 		# Monthly trial counts
 		trials = obj.trials.all()
 		trials = trials.annotate(month=TruncMonth('published_date'))
@@ -257,6 +283,7 @@ class CategorySerializer(serializers.ModelSerializer):
 			'available_models': available_models,
 			'monthly_article_counts': article_counts,
 			'monthly_ml_article_counts_by_model': ml_counts_by_model,
+			'monthly_relevant_article_counts': relevant_counts,
 			'monthly_trial_counts': trial_counts,
 		}
 
