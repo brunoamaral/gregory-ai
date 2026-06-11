@@ -301,6 +301,13 @@ class Command(BaseCommand):
 				results_posted=extras.get('results_posted', False),
 				results_url_link=extras.get('results_url_link'),
 				results_date_completed=extras.get('results_date_completed'),
+				study_design=extras.get('study_design'),
+				results_ipd_plan=extras.get('results_ipd_plan'),
+				results_ipd_description=extras.get('results_ipd_description'),
+				secondary_sponsor=extras.get('secondary_sponsor'),
+				last_refreshed_on=extras.get('last_refreshed_on'),
+				date_enrollement=extras.get('date_enrollement'),
+				contact_affiliation=extras.get('contact_affiliation'),
 			)
 			
 			if trial:
@@ -379,7 +386,10 @@ class Command(BaseCommand):
 			'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender', 'target_size',
 			'contact_firstname', 'contact_lastname', 'contact_email', 'contact_tel',
 			'source_register', 'ctg_detailed_description',
-			'results_posted', 'results_url_link', 'results_date_completed'
+			'results_posted', 'results_url_link', 'results_date_completed',
+			'study_design', 'results_ipd_plan', 'results_ipd_description',
+			'secondary_sponsor', 'last_refreshed_on', 'date_enrollement',
+			'contact_affiliation',
 		]
 
 		for field in extra_field_mapping:

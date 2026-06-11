@@ -544,7 +544,7 @@ class ClinicalTrialsGovAPI:
 		
 		# Extract locations/countries
 		locations = contacts_module.get('locations', [])
-		countries = list(set(loc.get('country', '') for loc in locations if loc.get('country')))
+		countries = sorted(set(loc.get('country', '') for loc in locations if loc.get('country')))
 		
 		# Extract contact information
 		central_contacts = contacts_module.get('centralContacts', [])
@@ -561,6 +561,48 @@ class ClinicalTrialsGovAPI:
 		has_results = bool(study_data.get('hasResults', False))
 		results_url_link = f"https://clinicaltrials.gov/study/{nct_id}?tab=results" if (has_results and nct_id) else None
 		results_date_completed = self._parse_date(status_module.get('resultsFirstPostDateStruct', {}).get('date'))
+
+		# study_design — compose human-readable string from designInfo
+		design_info = design_module.get('designInfo', {})
+		study_design = None
+		if design_info:
+			parts = []
+			if design_info.get('allocation'):
+				parts.append(f"Allocation: {design_info['allocation']}")
+			if design_info.get('interventionModel'):
+				parts.append(f"Intervention model: {design_info['interventionModel']}")
+			masking_info = design_info.get('maskingInfo', {})
+			if masking_info.get('masking'):
+				who_masked = masking_info.get('whoMasked', [])
+				masking_str = masking_info['masking']
+				if who_masked:
+					masking_str += f" ({', '.join(sorted(who_masked))})"
+				parts.append(f"Masking: {masking_str}")
+			if design_info.get('primaryPurpose'):
+				parts.append(f"Primary purpose: {design_info['primaryPurpose']}")
+			if design_info.get('observationalModel'):
+				parts.append(f"Observational model: {design_info['observationalModel']}")
+			if design_info.get('timePerspective'):
+				parts.append(f"Time perspective: {design_info['timePerspective']}")
+			study_design = '. '.join(parts) if parts else None
+
+		# results_ipd_plan / results_ipd_description
+		ipd_module = protocol.get('ipdSharingStatementModule', {})
+		results_ipd_plan = (ipd_module.get('ipdSharing') or '')[:10] or None
+		results_ipd_description = ipd_module.get('description') or None
+
+		# secondary_sponsor — collaborators are already collected above
+		secondary_sponsor = '; '.join(collaborators) if collaborators else None
+
+		# last_refreshed_on
+		last_refreshed_on = self._parse_date(status_module.get('lastUpdatePostDateStruct', {}).get('date'))
+
+		# date_enrollement — same start date already used for published_date
+		date_enrollement = self._parse_date(start_date_struct.get('date'))
+
+		# contact_affiliation — first overall official's affiliation
+		overall_officials = contacts_module.get('overallOfficials', [])
+		contact_affiliation = overall_officials[0].get('affiliation') if overall_officials else None
 
 		# Build extra_fields for ClinicalTrial object
 		extra_fields = {
@@ -592,6 +634,13 @@ class ClinicalTrialsGovAPI:
 			'results_posted': has_results,
 			'results_url_link': results_url_link,
 			'results_date_completed': results_date_completed,
+			'study_design': study_design,
+			'results_ipd_plan': results_ipd_plan,
+			'results_ipd_description': results_ipd_description,
+			'secondary_sponsor': secondary_sponsor,
+			'last_refreshed_on': last_refreshed_on,
+			'date_enrollement': date_enrollement,
+			'contact_affiliation': contact_affiliation,
 		}
 		
 		return ClinicalTrial(
