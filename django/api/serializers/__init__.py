@@ -183,7 +183,7 @@ class CategorySerializer(serializers.ModelSerializer):
 		
 		# Import here to avoid circular imports
 		from gregory.models import MLPredictions
-		from django.db.models import Max
+		from django.db.models import Max, OuterRef, Subquery
 		from django.db.models.functions import TruncMonth
 		
 		# Monthly article counts
@@ -246,6 +246,39 @@ class CategorySerializer(serializers.ModelSerializer):
 			ml_article_counts = articles_with_ml.values('month').annotate(count=Count('article_id', distinct=True)).order_by('month')
 			ml_counts_by_model[model] = list(ml_article_counts.values('month', 'count'))
 
+		# Deduplicated monthly counts of relevant articles: an article is relevant when
+		# the latest prediction of at least one model clears the threshold, and it is
+		# counted once per month no matter how many models flagged it. This is the
+		# per-month size of the union of the per-model series above, so it can never
+		# exceed monthly_article_counts.
+		#
+		# A correlated subquery selects, for each prediction, the maximum created_date
+		# for the same (article, algorithm) pair. Filtering for created_date == that
+		# maximum identifies the latest prediction(s) per pair. This works on any
+		# Django-supported database backend.
+		latest_date_per_pair = MLPredictions.objects.filter(
+			article=OuterRef('article'),
+			algorithm=OuterRef('algorithm'),
+		).values('article', 'algorithm').annotate(
+			latest=Max('created_date')
+		).values('latest')[:1]
+
+		relevant_article_ids = MLPredictions.objects.filter(
+			article__team_categories=obj,
+			algorithm__isnull=False,
+			probability_score__gte=ml_threshold,
+			created_date=Subquery(latest_date_per_pair),
+		).values_list('article_id', flat=True).distinct()
+
+		relevant_articles = obj.articles.filter(
+			article_id__in=relevant_article_ids,
+			published_date__isnull=False
+		).annotate(month=TruncMonth('published_date'))
+		relevant_counts = relevant_articles.values('month').annotate(
+			count=Count('article_id', distinct=True)
+		).order_by('month')
+		relevant_counts = list(relevant_counts.values('month', 'count'))
+
 		# Monthly trial counts
 		trials = obj.trials.all()
 		trials = trials.annotate(month=TruncMonth('published_date'))
@@ -257,6 +290,7 @@ class CategorySerializer(serializers.ModelSerializer):
 			'available_models': available_models,
 			'monthly_article_counts': article_counts,
 			'monthly_ml_article_counts_by_model': ml_counts_by_model,
+			'monthly_relevant_article_counts': relevant_counts,
 			'monthly_trial_counts': trial_counts,
 		}
 
