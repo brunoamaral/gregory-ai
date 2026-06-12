@@ -9,7 +9,7 @@ from django.core.management import call_command
 from django.db import transaction
 from django.utils import timezone
 
-from gregory.models import Articles, Sources, Authors, Subject, Team
+from gregory.models import Articles, Sources, Authors
 from gregory.classes import SciencePaper
 from gregory.functions import normalize_orcid
 from gregory.utils.link_utils import merge_links

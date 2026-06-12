@@ -4,10 +4,9 @@ These functions help prepare the context data needed by the modular email compon
 Enhanced with Phase 5 content organization and rendering pipeline optimization.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from django.utils import timezone
 from templates.emails.components.content_organizer import (
-    EmailContentOrganizer,
     EmailRenderingPipeline,
     get_optimized_email_context,
     get_content_organizer

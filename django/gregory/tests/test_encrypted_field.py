@@ -1,11 +1,9 @@
 from django.test import TestCase
 from django.conf import settings
 from django.db import models
-from django.core.exceptions import ImproperlyConfigured
 from cryptography.fernet import Fernet
-import base64
 
-from gregory.models import Team, get_fernet, EncryptedTextField
+from gregory.models import get_fernet, EncryptedTextField
 
 
 class TemporaryModelWithEncryptedField(models.Model):

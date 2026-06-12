@@ -1,6 +1,5 @@
 from django.test import TestCase
 from django.db.utils import IntegrityError
-from django.utils import timezone
 from organizations.models import Organization
 from gregory.models import Team, Subject, Articles, MLPredictions
 

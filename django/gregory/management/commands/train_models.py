@@ -1,11 +1,8 @@
-import argparse
-from datetime import datetime
-from enum import IntEnum
 import json
 import os
 import traceback
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -17,7 +14,6 @@ from django.utils import timezone
 from gregory.models import Team, Subject, Articles, PredictionRunLog
 from gregory.utils.dataset import collect_articles, build_dataset, train_val_test_split
 from gregory.utils.summariser import summarise_bulk
-from gregory.utils.metrics import evaluate_binary
 from gregory.utils.versioning import make_version_path
 from gregory.utils.verboser import Verboser, VerbosityLevel
 # Import ML utilities - with fallback mechanism
@@ -57,7 +53,7 @@ def _check_ml_imports(stdout=None):
             print(msg)
     
     try:
-        from gregory.ml.bert_wrapper import BertTrainer
+        from gregory.ml.bert_wrapper import BertTrainer  # noqa: F401  # availability probe: the import is the test
         _ml_import_status['BertTrainer'] = True
         _print("✓ Successfully imported BertTrainer")
     except Exception as e:
@@ -65,7 +61,7 @@ def _check_ml_imports(stdout=None):
         _print(f"✗ Failed to import BertTrainer: {e}")
 
     try:
-        from gregory.ml.lgbm_wrapper import LGBMTfidfTrainer
+        from gregory.ml.lgbm_wrapper import LGBMTfidfTrainer  # noqa: F401  # availability probe: the import is the test
         _ml_import_status['LGBMTfidfTrainer'] = True
         _print("✓ Successfully imported LGBMTfidfTrainer")
     except Exception as e:
@@ -73,7 +69,7 @@ def _check_ml_imports(stdout=None):
         _print(f"✗ Failed to import LGBMTfidfTrainer: {e}")
 
     try:
-        from gregory.ml.lstm_wrapper import LSTMTrainer
+        from gregory.ml.lstm_wrapper import LSTMTrainer  # noqa: F401  # availability probe: the import is the test
         _ml_import_status['LSTMTrainer'] = True
         _print("✓ Successfully imported LSTMTrainer")
     except Exception as e:
@@ -81,7 +77,7 @@ def _check_ml_imports(stdout=None):
         _print(f"✗ Failed to import LSTMTrainer: {e}")
 
     try:
-        from gregory.ml import get_trainer
+        from gregory.ml import get_trainer  # noqa: F401  # availability probe: the import is the test
         _ml_import_status['get_trainer'] = True
         _print("✓ Successfully imported get_trainer")
     except Exception as e:

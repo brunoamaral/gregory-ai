@@ -1,7 +1,6 @@
 from django.test import TestCase
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from django.db.utils import IntegrityError
 from organizations.models import Organization
 from gregory.models import Team, Subject, PredictionRunLog
 import datetime

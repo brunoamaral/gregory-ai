@@ -4,7 +4,6 @@ Unit tests for the BertTrainer class.
 This module contains tests for the BertTrainer class functionality, including
 model creation, text encoding, training, evaluation, and saving/loading.
 """
-import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,10 +14,10 @@ import tensorflow as tf
 
 try:
     # Try to use tf-keras for backward compatibility with transformers
-    from tf_keras.layers import Layer
+    from tf_keras.layers import Layer  # noqa: F401
 except ImportError:
     # Fall back to TensorFlow's keras if tf-keras is not available
-    from tensorflow.keras.layers import Layer
+    pass
 
 from gregory.ml.bert_wrapper import BertTrainer
 

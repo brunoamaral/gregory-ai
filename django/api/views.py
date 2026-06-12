@@ -3,12 +3,11 @@ from django.core.cache import cache
 from api.serializers import (
 		ArticleSerializer, TrialSerializer, SourceSerializer, AuthorSerializer,
 		CategorySerializer, CategoryTopAuthorSerializer, TeamSerializer, SubjectsSerializer,
-		ArticlesByCategoryAndTeamSerializer, OrganizationSerializer
+		OrganizationSerializer
 )
 from api.pagination import FlexiblePagination
 from datetime import datetime, timedelta
 from django.db.models import Count, Q, Prefetch
-from django.db.models.functions import Length, TruncMonth
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper, ClinicalTrial
 from gregory.models import Articles, ArticleOrgContent, Trials, TrialOrgContent, Sources, Authors, Team, Subject, TeamCategory
@@ -32,7 +31,7 @@ from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 		APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError,
 		APINoAPIKeyError, ArticleExistsError, ArticleNotFoundError, ArticleNotSavedError,
-		CrossOrgPayloadError, DoiNotFound, DuplicateArticleError, DuplicateTrialError,
+		CrossOrgPayloadError, DuplicateArticleError, DuplicateTrialError,
 		FieldNotFoundError, SourceNotFoundError, TrialNotFoundError
 )
 from api.utils.responses import (
@@ -1777,7 +1776,7 @@ class ArticleSearchView(generics.ListAPIView):
                 )
                 
             return queryset
-        except:
+        except:  # noqa: E722
             return Articles.objects.none()
     
     def filter_queryset(self, queryset):

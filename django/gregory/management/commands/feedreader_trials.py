@@ -2,7 +2,6 @@ from dateutil.parser import parse
 from django.core.management.base import BaseCommand
 from django.db import IntegrityError
 from django.db.models import Q
-from django.db.models.functions import Lower
 from django.utils import timezone
 from gregory.classes import ClinicalTrial, EUTrialParser
 from gregory.functions import remove_utm
@@ -57,7 +56,7 @@ class Command(BaseCommand):
 			if not source.ignore_ssl:
 				feed = feedparser.parse(source.link)
 			else:
-				response = requests.get(source.link, verify=False)
+				response = requests.get(source.link, verify=False, timeout=30)
 				feed = feedparser.parse(response.content)
 			for entry in feed['entries']:
 				try:

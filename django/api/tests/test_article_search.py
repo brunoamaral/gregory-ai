@@ -3,7 +3,6 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 from gregory.models import Articles, Team, Subject, Organization, OrganizationApiSettings
 from django.utils import timezone
-import json
 
 class ArticleSearchViewTests(TestCase):
     """Test cases for the article search endpoint"""

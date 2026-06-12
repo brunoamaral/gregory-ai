@@ -1,7 +1,6 @@
 import unittest
 import io
 import csv
-from django.http import StreamingHttpResponse
 from api.direct_streaming import DirectStreamingCSVRenderer
 
 class DirectStreamingCSVRendererTest(unittest.TestCase):

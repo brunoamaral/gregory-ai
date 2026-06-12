@@ -82,7 +82,7 @@ def disable_gpu():
 	try:
 		import tensorflow as tf
 		tf.config.set_visible_devices([], 'GPU')
-	except Exception:
+	except Exception:  # noqa: S110
 		pass
 
 

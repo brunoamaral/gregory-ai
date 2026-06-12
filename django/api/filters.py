@@ -134,7 +134,7 @@ class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
 
         If filtered_subject_id is provided, only check relevance for that specific subject.
         """
-        from django.db.models import Count, Q, Case, When, IntegerField
+        from django.db.models import Count, Q
 
         # Get all article IDs that meet ML consensus for at least one subject
         ml_relevant_ids = set()

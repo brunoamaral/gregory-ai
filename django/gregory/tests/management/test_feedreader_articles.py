@@ -13,19 +13,11 @@ Tests the following aspects:
 9. Database integrity and relationships
 """
 import os
-import json
-import tempfile
-from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock, Mock, call
-from unittest import skip
+from datetime import timedelta
+from unittest.mock import patch, Mock
 
-import pytest
-import pytz
-from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
-from django.db import IntegrityError
 from django.core.exceptions import MultipleObjectsReturned
 from organizations.models import Organization
 from sitesettings.models import Site, CustomSetting
@@ -99,7 +91,7 @@ class TestFeedFetching(TestCase):
         
         result = self.command.fetch_feed('https://example.com/feed.xml', ignore_ssl=True)
         
-        mock_requests.get.assert_called_once_with('https://example.com/feed.xml', verify=False)
+        mock_requests.get.assert_called_once_with('https://example.com/feed.xml', verify=False, timeout=30)
         mock_feedparser.parse.assert_called_once_with(b'<xml>feed content</xml>')
         self.assertEqual(result, {'entries': []})
 

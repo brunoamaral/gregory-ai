@@ -25,7 +25,6 @@ from django.utils import timezone
 from gregory.classes import ClinicalTrialsGovAPI, ClinicalTrial
 from gregory.models import Trials, Sources
 from gregory.utils.link_utils import identifiers_conflict, merge_links, canonical_link
-import pytz
 
 
 class Command(BaseCommand):

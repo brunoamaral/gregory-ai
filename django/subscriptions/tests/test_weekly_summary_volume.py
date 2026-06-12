@@ -22,7 +22,7 @@ from django.test import TestCase
 from django.utils import timezone
 from datetime import timedelta
 
-from gregory.models import Articles, ArticleSubjectRelevance, Subject, Team
+from gregory.models import Articles, Subject, Team
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers

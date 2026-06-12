@@ -2,8 +2,6 @@ import csv
 import io
 import json
 import logging
-from django.http import StreamingHttpResponse
-from django.utils.text import slugify
 from datetime import datetime
 from rest_framework_csv.renderers import CSVRenderer
 
@@ -220,7 +218,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                 if isinstance(value, (list, dict)):
                     try:
                         processed_item[key] = json.dumps(value)
-                    except:
+                    except:  # noqa: E722
                         processed_item[key] = str(value)
                 else:
                     processed_item[key] = value

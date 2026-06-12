@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from gregory.models import Authors, Articles
+from gregory.models import Authors
 from django.db.models import Q, Count
 import re
 

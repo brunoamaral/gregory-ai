@@ -141,7 +141,7 @@ def load_model(team, subject, algorithm, model_version):
             import joblib
         elif algorithm == 'lstm':
             from gregory.ml.lstm_wrapper import LSTMTrainer
-            import tensorflow as tf
+            import tensorflow as tf  # noqa: F401
             from tensorflow.keras.layers import TextVectorization
         else:
             raise ModelLoadError(f"Unsupported algorithm: {algorithm}")

@@ -25,6 +25,5 @@ MIGRATION_MODULES = {app: None for app in INSTALLED_APPS}
 USE_TZ = False
 
 # Add a test Fernet key for encryption/decryption tests
-import base64
 from cryptography.fernet import Fernet
 FERNET_SECRET_KEY = Fernet.generate_key()

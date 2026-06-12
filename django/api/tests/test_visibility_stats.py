@@ -24,7 +24,7 @@ from organizations.models import Organization, OrganizationUser
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
-from gregory.models import Articles, OrganizationApiSettings, Subject, Team, Trials
+from gregory.models import Articles, OrganizationApiSettings, Subject, Team
 
 User = get_user_model()
 

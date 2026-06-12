@@ -5,7 +5,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gregory.tests.test_settings')
 django.setup()
 
 from io import StringIO
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 from django.core.management import call_command
 from django.test import TestCase
 
@@ -17,7 +17,6 @@ def _make_org_mock(slug, has_creds=True):
 		org.credentials.orcid_client_id = 'test_id'
 		org.credentials.orcid_client_secret = 'test_secret'
 	else:
-		from gregory.models import OrganizationCredentials
 		org.credentials  # access raises DoesNotExist below — configure via side_effect
 	return org
 

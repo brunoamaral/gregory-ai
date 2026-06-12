@@ -5,7 +5,7 @@ from django.db.models.functions import Lower
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.contrib.sites.models import Site
 from django_ckeditor_5.fields import CKEditor5Field
-from gregory.models import Subject, Articles, Trials, Team, TeamCategory
+from gregory.models import Articles, Trials, Team
 from simple_history.models import HistoricalRecords
 
 

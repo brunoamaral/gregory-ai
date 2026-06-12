@@ -10,14 +10,12 @@ them for the same input text. The cache is stored on disk only and is never auto
 saved to the database. Any function that uses generated summaries is responsible for ensuring
 they don't overwrite original article abstracts in the database.
 """
-from typing import Optional, Union, List, Dict
+from typing import Optional, List, Dict
 import concurrent.futures
 import hashlib
 import json
 import math
 import os
-import pathlib
-from datetime import datetime
 
 import torch
 from django.conf import settings

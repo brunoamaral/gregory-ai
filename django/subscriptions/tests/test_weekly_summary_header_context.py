@@ -5,7 +5,7 @@ the template context by the send_weekly_summary management command.
 """
 import os
 from io import StringIO
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gregory.tests.test_settings')
 

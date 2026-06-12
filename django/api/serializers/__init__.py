@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count, Q
 
-from api.serializers.mixins import OrgScopedSerializerMixin, _resolve_per_org_fields_org  # noqa: F401
+from api.serializers.mixins import OrgScopedSerializerMixin, _resolve_per_org_fields_org
 
 def get_custom_settings():
 		try:

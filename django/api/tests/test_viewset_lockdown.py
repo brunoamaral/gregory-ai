@@ -16,7 +16,6 @@ Run with:
 """
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from django.utils.timezone import now
 from organizations.models import Organization
 from rest_framework.test import APIClient
 
@@ -144,7 +143,6 @@ class OtherViewSetsLockdownTest(TestCase):
 		self.client = APIClient()
 		self.org = _make_org('Other Lockdown Org')
 		self.team = _make_team(self.org, 'Other Lockdown Team')
-		from django.utils.text import slugify
 		self.subject = Subject.objects.create(
 			team=self.team,
 			subject_name='Lockdown Subject',

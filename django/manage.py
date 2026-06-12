@@ -3,7 +3,6 @@
 import os
 import sys
 from pathlib import Path
-from gregory.utils.model_utils import DenseTransformer
 
 def main():
     """Run administrative tasks."""

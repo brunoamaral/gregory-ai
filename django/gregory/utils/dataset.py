@@ -5,13 +5,13 @@ This module provides functions to collect article data, build datasets,
 and split data for training, validation, and testing of ML models.
 """
 from datetime import datetime, timedelta
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import pandas as pd
-from django.db.models import Q, QuerySet
+from django.db.models import QuerySet
 from sklearn.model_selection import train_test_split
 
-from gregory.models import Articles, Team, Subject, ArticleSubjectRelevance
+from gregory.models import Articles, Team, Subject
 
 
 def collect_articles(team_slug: str, subject_slug: str, window_days: Optional[int] = None) -> QuerySet:

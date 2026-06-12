@@ -20,6 +20,6 @@ for i in input:
 			discovery_date = discovery_date,
 			source = source,
 		)
-	except:
+	except:  # noqa: E722
 		print('not unique?::', doi, title)
 		pass

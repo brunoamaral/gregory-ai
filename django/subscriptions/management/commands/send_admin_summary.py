@@ -1,8 +1,7 @@
-from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
-from gregory.models import Articles, Trials, MLPredictions
+from gregory.models import MLPredictions
 from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url, get_postmark_credentials, get_site_and_settings
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list, get_articles_for_list

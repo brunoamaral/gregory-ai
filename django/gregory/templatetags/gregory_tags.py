@@ -1,5 +1,4 @@
 from django import template
-from gregory.utils.text_utils import cleanHTML
 from bs4 import BeautifulSoup
 import re
 

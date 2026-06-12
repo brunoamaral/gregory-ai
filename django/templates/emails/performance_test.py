@@ -9,7 +9,6 @@ import sys
 import time
 import django
 from django.db import connection
-from django.test.utils import override_settings
 
 # Add the Django project to the path
 sys.path.append('/Users/brunoamaral/Labs/gregory/django')
@@ -26,9 +25,7 @@ from templates.emails.components.content_organizer import (
     get_optimized_email_context
 )
 from templates.emails.components.context_helpers import (
-    prepare_weekly_summary_context,
-    prepare_admin_summary_context,
-    prepare_trial_notification_context
+    prepare_weekly_summary_context
 )
 
 

@@ -4,7 +4,7 @@ Metrics utilities for machine learning model evaluation.
 This module provides functions to calculate evaluation metrics for binary classification
 models, with standardized naming conventions and formatting.
 """
-from typing import Dict, Union, Optional
+from typing import Dict, Optional
 
 import numpy as np
 from sklearn.metrics import (

@@ -1,11 +1,9 @@
 from django.test import TestCase
 from django.utils import timezone
 from datetime import timedelta
-from django.contrib.sites.models import Site
 from gregory.models import Subject, Articles, Team, TeamCategory
 from organizations.models import Organization
-from sitesettings.models import CustomSetting
-from subscriptions.models import Lists, Subscribers
+from subscriptions.models import Lists
 from subscriptions.management.commands.utils.subscription import get_latest_research_by_category
 from templates.emails.components.content_organizer import EmailContentOrganizer
 

@@ -41,7 +41,7 @@ class Command(BaseCommand):
 		# Loop through pages until there is no 'next' URL
 		while api_url:
 			try:
-				response = requests.get(api_url)
+				response = requests.get(api_url, timeout=30)
 				response.raise_for_status()
 			except Exception as e:
 				raise CommandError("Error fetching data from API: %s" % e)

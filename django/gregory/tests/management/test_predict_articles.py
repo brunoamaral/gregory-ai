@@ -11,18 +11,16 @@ Tests the following aspects:
 import os
 import tempfile
 from datetime import timedelta, datetime
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 
-import pytest
 from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 from organizations.models import Organization
 
 from gregory.management.commands.predict_articles import (
     Command, get_articles, resolve_model_version,
-    ModelLoadError, prepare_text
+    prepare_text
 )
 from gregory.models import Team, Subject, Articles, MLPredictions, PredictionRunLog
 

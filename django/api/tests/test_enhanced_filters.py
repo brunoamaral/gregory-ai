@@ -1,9 +1,8 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
-from gregory.models import Trials, Articles, Authors, Sources, TeamCategory, Team, Subject, Organization, OrganizationApiSettings
+from gregory.models import Trials, Articles, Authors, TeamCategory, Team, Subject, Organization, OrganizationApiSettings
 from django.utils import timezone
-import json
 
 class TrialFilterTests(TestCase):
     """Test cases for enhanced trial filtering"""

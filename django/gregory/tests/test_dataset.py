@@ -7,7 +7,6 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'admin.settings')
 django.setup()
 
 from datetime import datetime, timedelta
-from unittest import mock
 import pandas as pd
 from django.test import TestCase
 

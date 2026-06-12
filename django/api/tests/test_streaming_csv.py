@@ -3,7 +3,6 @@ import io
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
-from api.direct_streaming import DirectStreamingCSVRenderer
 from gregory.models import Articles, Team, TeamCategory, Sources
 from organizations.models import Organization
 from django.contrib.auth.models import User

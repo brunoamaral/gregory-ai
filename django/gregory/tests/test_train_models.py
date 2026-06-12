@@ -6,7 +6,6 @@ including proper integration with the Verboser utility for verbosity control.
 """
 import os
 import json
-import shutil
 from io import StringIO
 from pathlib import Path
 import traceback
@@ -24,19 +23,13 @@ django.setup()
 print(f"Using Django settings module: {os.environ['DJANGO_SETTINGS_MODULE']}")
 
 from unittest import TestCase
-from unittest.mock import patch, MagicMock, PropertyMock, Mock
+from unittest.mock import patch, MagicMock, Mock
 
 from django.test import TestCase, override_settings
-from django.core.management import call_command
-from django.utils import timezone
 from django.conf import settings
-from django.db import connection
-from django.core.management.color import no_style
 
 # Import models safely after django setup
-from gregory.models import Team, Subject, Articles, ArticleSubjectRelevance, PredictionRunLog
 from gregory.utils.verboser import VerbosityLevel
-import pandas as pd
 import tempfile
 
 # Debug flag - set to True to enable detailed debugging

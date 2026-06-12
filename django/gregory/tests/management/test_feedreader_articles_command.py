@@ -39,7 +39,7 @@ class FeedreaderArticlesCommandTest(TestCase):
 		mock_get.return_value.content = b''
 		mock_parse.return_value = {'entries': []}
 		result = cmd.fetch_feed('http://example.com', True)
-		mock_get.assert_called_once_with('http://example.com', verify=False)
+		mock_get.assert_called_once_with('http://example.com', verify=False, timeout=30)
 		mock_parse.assert_called_once_with(b'')
 		self.assertEqual(result, {'entries': []})
 

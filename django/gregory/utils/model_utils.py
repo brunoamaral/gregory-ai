@@ -1,4 +1,3 @@
-from sklearn.base import TransformerMixin
 import numpy as np
 
 # This is an util function to be used in the GaussianNB pipeline

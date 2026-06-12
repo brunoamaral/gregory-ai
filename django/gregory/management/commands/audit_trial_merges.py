@@ -103,7 +103,7 @@ class Command(BaseCommand):
 						GROUP BY upper(identifiers->>'%s')
 						HAVING count(*) > 1
 						ORDER BY cnt DESC
-						""" % (key, key, key, key)  # noqa: S608 – read-only, fixed keys
+						""" % (key, key, key, key)
 					)
 					rows = cursor.fetchall()
 				if rows:

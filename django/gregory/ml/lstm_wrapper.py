@@ -8,10 +8,9 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union, Any, Callable
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import pandas as pd
 
 # Configure GPU memory growth BEFORE other TensorFlow imports
 from gregory.ml.gpu_config import configure_gpu_memory_growth
@@ -27,7 +26,7 @@ from tensorflow.keras.layers import (
     Dropout,
     BatchNormalization
 )
-from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.metrics import Precision, Recall, AUC

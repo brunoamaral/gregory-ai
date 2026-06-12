@@ -4,9 +4,7 @@ This module provides smart sorting, filtering, and content selection algorithms
 for different email types and subscriber preferences.
 """
 
-from datetime import datetime, timedelta
 from django.utils import timezone
-from django.db.models import Q, Prefetch, F, Count, Avg
 from gregory.models import Articles, Trials
 import logging
 
@@ -405,7 +403,7 @@ class EmailRenderingPipeline:
                         'authors',
                         'ml_predictions__subject'
                     )
-                except Exception:
+                except Exception:  # noqa: S110
                     # If prefetch fails (e.g., already sliced), continue with original
                     pass
             
@@ -413,7 +411,7 @@ class EmailRenderingPipeline:
                 # Only apply select_related if it's not already a sliced QuerySet
                 try:
                     trials = trials.select_related()
-                except Exception:
+                except Exception:  # noqa: S110
                     # If select_related fails (e.g., already sliced), continue with original
                     pass
             

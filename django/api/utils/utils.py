@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.db.models import Q
 
 from api.models import APIAccessScheme, APIAccessSchemeLog
-from api.utils.exceptions import APIAccessDeniedError, APIError, APIInvalidAPIKeyError, APIInvalidIPAddressError, APINoAPIKeyError
+from api.utils.exceptions import APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError, APINoAPIKeyError
 
 
 def getAPIKey(request):

@@ -1,7 +1,6 @@
 from django.test import TestCase
 from django.db import connection
 from gregory.models import Articles, Trials
-from django.contrib.auth.models import User
 from organizations.models import Organization
 from gregory.models import Team, Subject
 

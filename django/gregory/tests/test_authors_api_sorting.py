@@ -1,11 +1,8 @@
-import json
 from datetime import datetime, date
 from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework import status
-from django.contrib.auth.models import User
 from gregory.models import Authors, Articles, Team, Subject, OrganizationApiSettings
 from organizations.models import Organization
 from django.db.models import Count, Q
