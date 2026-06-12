@@ -3,12 +3,14 @@ from io import StringIO
 from django.contrib import admin, messages
 from django.apps import apps
 from django.core.management import call_command
+from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.urls import path, reverse
 import csv
+import logging
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
 from .admin_filters import DateRangeFilter, SourceHealthFilter
 from django.db import models  # Add this import for models.Count
@@ -72,9 +74,13 @@ class OrganizationRestrictedFieldListFilter(admin.RelatedFieldListFilter):
 				else:
 					# If no organization field, include it
 					filtered_choices.append((choice_value, choice_label))
-			except:  # noqa: E722, S110
-				pass
-		
+			except (ObjectDoesNotExist, AttributeError, ValueError, TypeError) as e:
+				# Fail closed: if a choice's org can't be resolved, omit it rather
+				# than risk leaking it; logged so a systematic failure stays visible.
+				logging.getLogger(__name__).warning(
+					"OrganizationRestrictedFieldListFilter: skipping choice %r (%s)", choice_value, e
+				)
+
 		return filtered_choices
 
 
@@ -139,11 +145,10 @@ class OrganizationFilterMixin:
 		try:
 			# Check if 'teams' is a M2M field
 			qs.model._meta.get_field('teams')
-			return qs.filter(teams__organization__id__in=user_orgs).distinct()
-		except:  # noqa: E722, S110
-			pass
-		
-		return qs
+		except FieldDoesNotExist:
+			# Model has no 'teams' field; fall through to the unscoped queryset.
+			return qs
+		return qs.filter(teams__organization__id__in=user_orgs).distinct()
 
 
 # @admin.register(PredictionRunLog)
