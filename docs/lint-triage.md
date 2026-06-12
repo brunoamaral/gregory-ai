@@ -73,7 +73,7 @@ empty result or a no-op. Narrow the exception and log the rest.
 
 | Site | Risk | Suggested |
 | --- | --- | --- |
-| [`api/views.py:1780`](../django/api/views.py) | Any exception in search filtering becomes "0 results" — a bug silently looks like an empty search. | Catch the expected query/value errors, `logger.warning(...)` anything else (or let it 500). |
+| ✅ [`api/views.py:1780`](../django/api/views.py) | Any exception in search filtering becomes "0 results" — a bug silently looks like an empty search. | **Done** — narrowed to `(AttributeError, TypeError, ValueError)` + `logger.warning`, rest propagates. `AuthorSearchView` aligned too. |
 | [`gregory/admin.py:76,144`](../django/gregory/admin.py) | Errors in admin org-scoping / choice-filtering are swallowed; could hide an org-visibility bug. | Narrow to the expected lookup error, log the rest. |
 | [`indexers/sage.py:23`](../django/indexers/sage.py) | bare `except:` on `Articles.objects.create()` treats *every* error as a uniqueness collision; `print()` instead of logging. **Also verify this module is still used** — it reads a top-level `input` and looks like a standalone script. | If kept: `except IntegrityError:` + `logger.warning(...)`. If dead: delete. |
 

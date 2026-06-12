@@ -21,6 +21,7 @@ from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 import json
+import logging
 import traceback
 from django.utils.dateparse import parse_date
 
@@ -1776,7 +1777,13 @@ class ArticleSearchView(generics.ListAPIView):
                 )
                 
             return queryset
-        except:  # noqa: E722
+        except (AttributeError, TypeError, ValueError) as e:
+            # Malformed search params (e.g. a non-string title/summary/search
+            # from a JSON POST body): return no matches, but log it so a genuine
+            # bug can't hide as an empty result. Anything unexpected propagates.
+            logging.getLogger(__name__).warning(
+                "ArticleSearchView: ignoring malformed search params (%s)", e
+            )
             return Articles.objects.none()
     
     def filter_queryset(self, queryset):
@@ -2095,11 +2102,13 @@ class AuthorSearchView(generics.ListAPIView):
                 queryset = queryset.filter(full_name__icontains=full_name)
 
             return queryset
-        except Exception as e:
-            # Log the exception for debugging
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error in AuthorSearchView.get_queryset: {str(e)}")
+        except (AttributeError, TypeError, ValueError) as e:
+            # Malformed search params (e.g. a non-string full_name from a JSON
+            # POST body): return no matches, but log it so a genuine bug can't
+            # hide as an empty result. Anything unexpected propagates.
+            logging.getLogger(__name__).warning(
+                "AuthorSearchView: ignoring malformed search params (%s)", e
+            )
             return Authors.objects.none()
 
     def post(self, request, *args, **kwargs):
