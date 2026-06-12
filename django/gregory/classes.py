@@ -133,7 +133,7 @@ class SciencePaper:
 			try:
 				self.published_date = datetime( year=year, month=month, day=day, tzinfo=timezone)
 			except:  # noqa: E722, S110
-					pass
+				pass
 		if self.abstract == None:
 			try:
 				self.abstract = work['abstract']
