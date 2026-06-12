@@ -220,7 +220,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                 if isinstance(value, (list, dict)):
                     try:
                         processed_item[key] = json.dumps(value)
-                    except:
+                    except:  # noqa: E722
                         processed_item[key] = str(value)
                 else:
                     processed_item[key] = value

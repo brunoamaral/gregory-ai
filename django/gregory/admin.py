@@ -73,7 +73,7 @@ class OrganizationRestrictedFieldListFilter(admin.RelatedFieldListFilter):
 				else:
 					# If no organization field, include it
 					filtered_choices.append((choice_value, choice_label))
-			except:
+			except:  # noqa: E722, S110
 				pass
 		
 		return filtered_choices
@@ -141,7 +141,7 @@ class OrganizationFilterMixin:
 			# Check if 'teams' is a M2M field
 			qs.model._meta.get_field('teams')
 			return qs.filter(teams__organization__id__in=user_orgs).distinct()
-		except:
+		except:  # noqa: E722, S110
 			pass
 		
 		return qs

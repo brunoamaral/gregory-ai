@@ -204,7 +204,7 @@ class NatureFeedProcessor(FeedProcessor):
                 # Construct full DOI with Nature prefix
                 if partial_doi:
                     return f"10.1038/{partial_doi}"
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
         
         return None
@@ -331,7 +331,7 @@ class SagePublicationsFeedProcessor(FeedProcessor):
                 doi_match = re.search(r'doi/abs/(10\.1177/[^?&]+)', link)
                 if doi_match:
                     return doi_match.group(1)
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
         
         return None

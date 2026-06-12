@@ -1,0 +1,43 @@
+# Ruff configuration — LINTER ONLY (no formatter).
+#
+# This project uses TABS for indentation as a hard standard, so we deliberately
+# do NOT run `ruff format` and do NOT select the whitespace/indentation rules
+# (W19x / E1xx). Every rule selected below is indentation-agnostic, so it will
+# never produce a tabs-vs-spaces diff.
+#
+# WHY THIS EXISTS
+# ---------------
+# LLM-generated code reliably produces "hollow" error handling: empty catch
+# blocks that swallow failures silently. This gate turns that foible into a hard
+# CI failure so it is caught mechanically instead of in review.
+#
+# v1 scope is deliberately narrow and high-signal — a bare `except:` or a
+# `try/except: pass` is almost never correct — so the gate is mergeable without
+# argument. Existing violations are grandfathered with inline `# noqa` and
+# tracked in docs/lint-triage.md; NEW code must be clean.
+#
+# PHASE 2 (turn on once the worklist in docs/lint-triage.md is cleared):
+#   "BLE001"  blind `except Exception:`            (82 existing — mostly logged)
+#   "F401"    unused-import      — run `ruff check django/ --fix` first
+#   "F811"    redefined-while-unused (possible real duplicate-definition bugs)
+#   "F841"    unused-variable    (computed-then-ignored: a hardcoded-result tell)
+
+target-version = "py311"
+
+extend-exclude = [
+	"**/migrations/**",
+	".venv",
+	"files_repo_PBL_nsbe",
+	"ai_tests",
+]
+
+[lint]
+select = [
+	"E722",   # do not use bare `except:`
+	"S110",   # `try: ... except: pass` — the empty catch block
+	"S112",   # `try: ... except: continue`
+]
+
+[lint.per-file-ignores]
+# Tests legitimately swallow exceptions while probing error paths.
+"**/tests/**" = ["S110", "S112"]

@@ -28,7 +28,7 @@ def stamp_api_access_scheme_on_history(sender, history_instance, **kwargs):
 			return
 		history_instance.api_access_scheme = scheme
 		history_instance.api_access_scheme_label = (scheme.client_name or '')[:200]
-	except Exception:
+	except Exception:  # noqa: S110
 		# Never let a signal failure break a save.
 		pass
 

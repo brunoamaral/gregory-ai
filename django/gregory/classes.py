@@ -79,12 +79,12 @@ class SciencePaper:
 		if self.link == None:
 			try: 
 				self.link = work['link'][0]['URL']
-			except: 
+			except:  # noqa: E722, S110
 				pass
 		if self.title == None:
 			try:
 				self.title = work['title'][0]
-			except:
+			except:  # noqa: E722, S110
 				pass
 		if self.doi != None and self.access == None:
 			if site.admin_email == None:
@@ -120,29 +120,29 @@ class SciencePaper:
 			year,month,day = None,1,1
 			try:
 				year = issued[0]
-			except:
+			except:  # noqa: E722, S110
 				pass
 			try:
 				month=issued[1]
-			except:
+			except:  # noqa: E722, S110
 				pass
 			try:
 				day=issued[2]
-			except:
+			except:  # noqa: E722, S110
 				pass
 			try:
 				self.published_date = datetime( year=year, month=month, day=day, tzinfo=timezone)
-			except:
+			except:  # noqa: E722, S110
 					pass
 		if self.abstract == None:
 			try:
 				self.abstract = work['abstract']
-			except:
+			except:  # noqa: E722, S110
 				pass
 		if self.authors == None:
 			try:
 				self.authors = work['author']
-			except:
+			except:  # noqa: E722, S110
 				pass
 
 	def find_doi(self,title=None):

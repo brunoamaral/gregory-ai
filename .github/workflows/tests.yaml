@@ -44,3 +44,15 @@ jobs:
           export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(50))')"
           export FERNET_SECRET_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
           pytest -p no:cacheprovider
+
+  # Static gate for "hollow" error handling: bare `except:` and `except: pass`
+  # (the empty catch block). Runs on a bare runner — no ML image needed — so it
+  # finishes in seconds, in parallel with the test suite. Config: ruff.toml.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v5
+      - name: Ruff — empty-catch gate (E722/S110/S112)
+        # Version pinned so CI and local `uvx ruff` never drift. Config: ruff.toml.
+        run: uvx ruff@0.15.17 check django/

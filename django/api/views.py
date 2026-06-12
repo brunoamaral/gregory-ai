@@ -1777,7 +1777,7 @@ class ArticleSearchView(generics.ListAPIView):
                 )
                 
             return queryset
-        except:
+        except:  # noqa: E722
             return Articles.objects.none()
     
     def filter_queryset(self, queryset):
