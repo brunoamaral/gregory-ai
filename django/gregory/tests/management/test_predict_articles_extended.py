@@ -17,11 +17,8 @@ Covers scenarios not in test_predict_articles.py:
 13. get_articles returns distinct results (no duplicates)
 14. run_predictions_for correctly unwraps list returns from model.predict
 """
-import os
-import sys
-import tempfile
 from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -30,8 +27,8 @@ from django.utils import timezone
 from organizations.models import Organization
 
 from gregory.management.commands.predict_articles import (
-	Command, get_articles, resolve_model_version, load_model,
-	ModelLoadError, prepare_text, DEFAULT_ALGORITHMS
+	Command, get_articles, load_model,
+	ModelLoadError, prepare_text
 )
 from gregory.models import Team, Subject, Articles, MLPredictions, PredictionRunLog
 

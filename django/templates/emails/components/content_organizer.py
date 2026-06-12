@@ -4,9 +4,7 @@ This module provides smart sorting, filtering, and content selection algorithms
 for different email types and subscriber preferences.
 """
 
-from datetime import datetime, timedelta
 from django.utils import timezone
-from django.db.models import Q, Prefetch, F, Count, Avg
 from gregory.models import Articles, Trials
 import logging
 

@@ -39,7 +39,8 @@ def send_email(to, subject, html, text, site, sender_name="Gregory AI", api_toke
             "Content-Type": "application/json",
             "X-Postmark-Server-Token": postmark_api_token,
         },
-        json=payload
+        json=payload,
+        timeout=30,
     )
 
     return response

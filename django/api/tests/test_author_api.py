@@ -1,12 +1,9 @@
 from django.test import TestCase
-from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
-from django.db.models import Count
 from gregory.models import Authors, Articles, Team, Subject, TeamCategory, Sources, OrganizationApiSettings
 from organizations.models import Organization
 from django_countries.fields import Country
-import json
 
 
 class AuthorAPITest(TestCase):

@@ -1,10 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
-from rest_framework import status
-from gregory.models import TeamCategory, Team, Subject, Articles, Authors
 from unittest.mock import Mock
-import json
 
 
 class CategoryAuthorsTestCase(TestCase):

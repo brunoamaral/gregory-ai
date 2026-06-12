@@ -11,14 +11,14 @@
 # blocks that swallow failures silently. This gate turns that foible into a hard
 # CI failure so it is caught mechanically instead of in review.
 #
-# v1 scope is deliberately narrow and high-signal — a bare `except:` or a
-# `try/except: pass` is almost never correct — so the gate is mergeable without
-# argument. Existing violations are grandfathered with inline `# noqa` and
-# tracked in docs/lint-triage.md; NEW code must be clean.
+# Scope is deliberately high-signal so the gate is mergeable without argument.
+# Pre-existing violations are grandfathered with inline `# noqa` and tracked in
+# docs/lint-triage.md; NEW code must be clean. RUF100 keeps that honest — it
+# flags a `# noqa` the moment its underlying issue is fixed.
 #
 # PHASE 2 (turn on once the worklist in docs/lint-triage.md is cleared):
 #   "BLE001"  blind `except Exception:`            (82 existing — mostly logged)
-#   "F401"    unused-import      — run `ruff check django/ --fix` first
+#   "T201"    print() — use logging instead        (154 existing)
 #   "F811"    redefined-while-unused (possible real duplicate-definition bugs)
 #   "F841"    unused-variable    (computed-then-ignored: a hardcoded-result tell)
 
@@ -36,8 +36,19 @@ select = [
 	"E722",   # do not use bare `except:`
 	"S110",   # `try: ... except: pass` — the empty catch block
 	"S112",   # `try: ... except: continue`
+	"F401",   # unused imports (auto-removed; re-exports ignored in __init__.py)
+	"S113",   # `requests` call without a timeout — can hang the pipeline
+	"RUF100", # unused `# noqa` — keeps the grandfathered worklist self-cleaning
 ]
 
 [lint.per-file-ignores]
 # Tests legitimately swallow exceptions while probing error paths.
 "**/tests/**" = ["S110", "S112"]
+# Imports in package __init__.py files are re-exports, not dead code.
+"**/__init__.py" = ["F401"]
+
+# The formatter is NOT run in CI. This section only ensures that if anyone runs
+# `ruff format` locally, it preserves the project's TAB indentation rather than
+# converting to spaces.
+[format]
+indent-style = "tab"

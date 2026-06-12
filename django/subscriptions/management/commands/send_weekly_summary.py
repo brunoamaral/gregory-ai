@@ -4,12 +4,7 @@ from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
 from subscriptions.management.commands.utils.send_email import send_email
-from subscriptions.management.commands.utils.subscription import (
-	get_articles_for_list,
-	get_trials_for_list,
-	get_latest_research_by_category,
-)
-from gregory.models import Articles, Authors, Trials, MLPredictions
+from gregory.models import Articles, Trials
 from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url, get_postmark_credentials, get_site_and_settings
 from subscriptions.models import (
 	Lists,
@@ -18,7 +13,6 @@ from subscriptions.models import (
 	SentTrialNotification,
 	FailedNotification,
 )
-from django.db.models import Q, Exists, OuterRef
 from django.utils.timezone import now
 from templates.emails.components.content_organizer import get_optimized_email_context
 
@@ -490,7 +484,6 @@ class Command(BaseCommand):
 						self.stdout.write(self.style.ERROR("WARNING: Email contains 'No New Content' message despite having articles!"))
 					
 					# Save the HTML content to a file for inspection
-					import os
 					debug_file = f"/tmp/weekly_summary_debug_{subscriber.subscriber_id}.html"
 					with open(debug_file, 'w', encoding='utf-8') as f:
 						f.write(html_content)

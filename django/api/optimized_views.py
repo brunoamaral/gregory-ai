@@ -20,12 +20,9 @@ FROM (
 These queries are hanging the database due to their complexity.
 """
 
-from django.db import models
-from django.db.models import Count, Q, Prefetch, Exists, OuterRef, Subquery
+from django.db.models import Count, Prefetch, Exists, OuterRef, Subquery
 from django.db.models.functions import TruncMonth
-from rest_framework import viewsets, permissions
-from rest_framework.decorators import action
-from rest_framework.response import Response
+from rest_framework import viewsets
 from gregory.models import TeamCategory, Articles, Trials, Authors, MLPredictions
 from api.serializers import CategorySerializer, CategoryTopAuthorSerializer
 from api.views import CategoryViewSet as OriginalCategoryViewSet

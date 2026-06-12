@@ -1,5 +1,4 @@
 from django.test import TestCase
-from django.test import RequestFactory
 
 from api.filters import ArticleFilter
 from gregory.models import Articles

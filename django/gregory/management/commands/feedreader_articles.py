@@ -1,11 +1,10 @@
 from django.core.management.base import BaseCommand
-from gregory.models import Articles, Trials, Sources, Authors
+from gregory.models import Articles, Sources, Authors
 from gregory.functions import normalize_orcid
 from crossref.restful import Works, Etiquette
 from dateutil.parser import parse
 from dateutil.tz import gettz
 from django.core.exceptions import MultipleObjectsReturned
-from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import SciencePaper
@@ -17,7 +16,6 @@ import os
 import pytz
 import re
 import requests
-from simple_history.utils import update_change_reason
 from abc import ABC, abstractmethod
 
 
@@ -481,7 +479,7 @@ class Command(BaseCommand):
         if not ignore_ssl:
             return feedparser.parse(link)
         else:
-            response = requests.get(link, verify=False)
+            response = requests.get(link, verify=False, timeout=30)
             return feedparser.parse(response.content)
 
     def handle_database_error(self, action, error):

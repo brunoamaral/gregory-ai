@@ -6,12 +6,11 @@ Tests the fix for the search results ordering bug.
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-from datetime import datetime, timedelta
+from datetime import timedelta
 from gregory.models import Articles, Trials, Team, Subject, Sources, OrganizationApiSettings
 from organizations.models import Organization
 from rest_framework.test import APIClient
 from rest_framework import status
-import json
 
 
 class SearchOrderingTestCase(TestCase):

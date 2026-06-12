@@ -8,8 +8,7 @@ import sys
 import json
 import unittest
 import tempfile
-from pathlib import Path
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import Mock, MagicMock
 
 # Set up debug printing
 DEBUG = True

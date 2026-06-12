@@ -6,7 +6,7 @@ using a date-based naming scheme with auto-incrementing suffixes to avoid collis
 """
 from datetime import datetime
 from pathlib import Path
-from typing import Union, Optional
+from typing import Union
 
 
 def make_version_path(base_dir: Union[str, Path], team: str, subject: str, algo: str) -> Path:

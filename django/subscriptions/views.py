@@ -5,7 +5,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.sites.models import Site
 from django.core.exceptions import DisallowedHost
 from django.core.files.uploadedfile import InMemoryUploadedFile
-from django.http import HttpResponseRedirect, HttpResponseBadRequest, JsonResponse
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.utils.timezone import now as tz_now
 from django.views.decorators.csrf import csrf_exempt

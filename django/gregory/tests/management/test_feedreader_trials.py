@@ -121,5 +121,5 @@ class FeedreaderTrialsCommandTest(TestCase):
 		mock_parse.return_value = {'entries': []}
 		mock_get.return_value.content = b''
 		cmd.process_feeds()
-		mock_get.assert_called_once_with('http://example.com', verify=False)
+		mock_get.assert_called_once_with('http://example.com', verify=False, timeout=30)
 		mock_parse.assert_any_call(b'')

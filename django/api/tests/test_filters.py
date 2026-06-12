@@ -1,7 +1,6 @@
 from django.test import TestCase, RequestFactory
 from django.utils import timezone
 from datetime import timedelta, datetime
-from django.contrib.auth.models import User
 from unittest.mock import patch
 
 from api.filters import ArticleFilter

@@ -5,7 +5,6 @@ from django.utils import timezone
 from gregory.models import Trials, Sources
 from gregory.utils.link_utils import identifiers_conflict, merge_links, canonical_link
 import datetime
-import re
 import xml.etree.ElementTree as ET
 import pytz
 class Command(BaseCommand):

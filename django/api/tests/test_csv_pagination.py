@@ -1,12 +1,6 @@
 import unittest
-from django.test import RequestFactory, TestCase
 from django.http import StreamingHttpResponse
-from api.direct_streaming import DirectStreamingCSVRenderer
 from rest_framework.test import APITestCase, APIClient
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.request import Request
 from gregory.models import Articles, Team, Sources
 from organizations.models import Organization
 from django.contrib.auth.models import User

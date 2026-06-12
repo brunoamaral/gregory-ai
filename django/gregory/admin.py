@@ -20,8 +20,7 @@ from organizations.models import Organization, OrganizationUser
 from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 
 from .models import (
-    Articles, Trials, Sources, Entities, Authors, Subject, MLPredictions,
-    ArticleSubjectRelevance, TeamCategory, PredictionRunLog, Team,
+    Articles, Trials, Sources, Entities, Authors, Subject, ArticleSubjectRelevance, TeamCategory, PredictionRunLog, Team,
     ArticleTrialReference, OrganizationCredentials, OrganizationSite,
     OrganizationApiSettings, ArticleOrgContent, TrialOrgContent,
     ArticleCategoryAssignment, TrialCategoryAssignment, CategoryType

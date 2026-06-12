@@ -2,15 +2,6 @@ from crossref.restful import Works, Etiquette
 from sitesettings.models import CustomSetting
 import re
 import os
-from joblib import load
-from .utils.model_utils import DenseTransformer
-from datetime import date
-import pandas as pd
-import html
-from .utils.text_utils import cleanHTML
-from .utils.text_utils import cleanText
-from joblib import load
-from .models import Articles
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 def remove_utm(url):

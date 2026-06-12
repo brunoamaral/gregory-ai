@@ -14,7 +14,7 @@ def getDataByDOI(doi: str, client_email: str):
             'Accept': 'application/json'
         }
         try:
-            response = requests.request("GET", url, headers=headers, data={})
+            response = requests.request("GET", url, headers=headers, data={}, timeout=30)
             
             # Handle 404 responses gracefully
             if response.status_code == 404:

@@ -19,7 +19,7 @@ from django.utils.timezone import now
 from organizations.models import Organization
 
 from api.models import APIAccessScheme
-from gregory.models import Articles, Sources, Team, Subject
+from gregory.models import Sources, Team, Subject
 from gregory.models import OrganizationApiSettings
 
 

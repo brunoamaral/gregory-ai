@@ -1,14 +1,19 @@
-# Lint triage — empty-catch gate (E722 / S110 / S112)
+# Lint triage — Ruff gate worklist
 
 The Ruff gate (see [`ruff.toml`](../ruff.toml) and the `lint` job in
-[`.github/workflows/tests.yaml`](../.github/workflows/tests.yaml)) fails CI on
-**bare `except:`** and **`try/except: pass`** — the "empty catch block" that
-swallows failures silently.
+[`.github/workflows/tests.yaml`](../.github/workflows/tests.yaml)) enforces, on
+every push / PR:
 
-19 pre-existing sites were grandfathered with inline `# noqa` so the gate is
-green on arrival and **new code is enforced immediately**. This file is the
-worklist for retiring those `# noqa`s. When a site is fixed, delete its `# noqa`
-and the gate keeps it clean.
+| Rule | Catches |
+| --- | --- |
+| `E722` / `S110` / `S112` | bare `except:` and `try/except: pass` — the empty catch block |
+| `F401` | unused imports (auto-removed; re-exports in `__init__.py` ignored) |
+| `S113` | `requests` calls without a timeout — can hang the pipeline |
+| `RUF100` | unused `# noqa` — flags a directive the moment its issue is fixed, so this worklist stays honest |
+
+Pre-existing violations are grandfathered with inline `# noqa` so the gate is
+green on arrival and **new code is enforced immediately**. When a site is fixed,
+delete its `# noqa` and `RUF100` keeps it clean.
 
 How to reproduce locally (same version as CI):
 
@@ -16,7 +21,27 @@ How to reproduce locally (same version as CI):
 uvx ruff@0.15.17 check django/
 ```
 
+> **`F401` / `S113` already cleared.** Enabling them removed 230 unused imports
+> and added `timeout=30` to 8 `requests` calls. Seven `# noqa: F401` remain by
+> design — ML **availability-probe** imports, where the import itself is the test
+> (`try: import X` to see whether it succeeds). Removing these silently breaks the
+> check, so they must stay:
+> [`predict_articles.py:144`](../django/gregory/management/commands/predict_articles.py),
+> [`bert_wrapper.py:23`](../django/gregory/ml/bert_wrapper.py),
+> [`tests/test_bert_wrapper.py:17`](../django/gregory/tests/test_bert_wrapper.py),
+> and the four trainer probes in
+> [`train_models.py:_check_ml_imports`](../django/gregory/management/commands/train_models.py).
+>
+> ⚠️ Ruff's F401 autofix **does not** spare these when the guard is
+> `except Exception` (only `except ImportError`). It wrongly stripped the four in
+> `_check_ml_imports`; they were restored with `# noqa`. Re-check this pattern if
+> you ever re-run `--fix`.
+
 ---
+
+## Empty-catch worklist (E722 / S110)
+
+The remaining 19 grandfathered sites, grouped by the action each needs.
 
 ## Group A — Legitimately suppress (keep the `# noqa`, it's correct)
 
@@ -62,6 +87,7 @@ Turn these on in `ruff.toml` once the worklist above is clear. Counts are curren
 | Rule | Count | Notes |
 | --- | --- | --- |
 | `BLE001` blind `except Exception:` | 82 | Mostly *logged* handlers — legitimate. Opinionated; review before enforcing. |
-| `F401` unused-import | 234 | Run `ruff check django/ --fix` once (auto-removes), let the test suite vet it, then enforce. |
+| `T201` `print()` | 154 | Use logging instead — thematically the whole point, but a real migration. Grandfather and burn down. |
 | `F811` redefined-while-unused | 8 | Possible real duplicate-definition bugs — read each before suppressing. |
 | `F841` unused-variable | 9 | "Computed then ignored" — a hardcoded-result tell. |
+| `W605` invalid escape sequence | 1+ | e.g. `ml_train.py` regex strings that should be raw strings. |

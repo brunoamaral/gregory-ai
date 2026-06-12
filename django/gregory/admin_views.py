@@ -1,16 +1,16 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import HttpResponse, JsonResponse
+from django.http import JsonResponse
 from django.core.paginator import Paginator
-from django.utils.html import format_html, mark_safe
-from django.db.models import Q, Case, When, Value, BooleanField, Count
+from django.utils.html import mark_safe
+from django.db.models import Q, Count
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.contrib import messages
 from django.utils.dateparse import parse_date
 from django.utils import timezone
 from .models import Articles, Subject, ArticleSubjectRelevance, MLPredictions, Sources, Trials, Team
 import json
-from datetime import datetime, timedelta, date
+from datetime import timedelta, date
 
 @staff_member_required
 def article_review_status_view(request):

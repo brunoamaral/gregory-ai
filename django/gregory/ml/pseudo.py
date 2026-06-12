@@ -7,10 +7,9 @@ It enables using labeled data to progressively label unlabeled data based on
 confidence thresholds, helping improve classifier performance when labeled 
 data is scarce.
 """
-import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Union, Dict, Any, Tuple, Callable
+from typing import Optional, Union, Dict, Any
 
 import numpy as np
 import pandas as pd
@@ -19,11 +18,7 @@ import pandas as pd
 from gregory.ml.gpu_config import configure_gpu_memory_growth
 configure_gpu_memory_growth()
 
-import tensorflow as tf
-from tensorflow.keras.utils import to_categorical
-from transformers import PreTrainedTokenizer
 
-from gregory.ml.bert_wrapper import BertTrainer
 from gregory.ml.trainer import get_trainer
 
 

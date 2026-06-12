@@ -6,9 +6,6 @@ Verifies that the ufull_name GeneratedField and GIN index are working correctly.
 from django.test import TestCase
 from django.db import connection
 from gregory.models import Authors
-from django.contrib.auth.models import User
-from organizations.models import Organization
-from api.tests.test_author_search import AuthorSearchViewTests
 
 
 class AuthorsUppercaseSearchColumnsTest(TestCase):

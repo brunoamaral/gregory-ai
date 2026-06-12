@@ -1,11 +1,6 @@
 from django.core.management.base import BaseCommand
 from gregory.models import Articles
 import gregory.functions as greg
-from gregory.classes import SciencePaper
-from django.utils import timezone
-from django.db.models import Q
-import requests
-import time
 
 class Command(BaseCommand):
 	help = 'Searches the article DOI by its title'

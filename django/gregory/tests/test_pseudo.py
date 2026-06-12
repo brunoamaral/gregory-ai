@@ -6,16 +6,13 @@ This module tests the pseudo-labeling functionality, with a focus on:
 2. Self-training loop functionality (using mocks)
 3. Stats calculation and filtering functionality
 """
-import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-import numpy as np
 import pandas as pd
 import pytest
-import tensorflow as tf
 
 from gregory.ml.pseudo import (
     generate_pseudo_labels,

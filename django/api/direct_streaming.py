@@ -2,8 +2,6 @@ import csv
 import io
 import json
 import logging
-from django.http import StreamingHttpResponse
-from django.utils.text import slugify
 from datetime import datetime
 from rest_framework_csv.renderers import CSVRenderer
 

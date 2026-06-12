@@ -1,6 +1,6 @@
 from django.test import TestCase
 from django.db.models import Count
-from gregory.models import Authors, Articles, Team, Subject, TeamCategory, Sources
+from gregory.models import Authors, Articles, Team, Subject, Sources
 from api.serializers import AuthorSerializer, ArticleAuthorSerializer
 from organizations.models import Organization
 from django_countries.fields import Country

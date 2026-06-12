@@ -3,11 +3,9 @@ Template testing utilities for email components.
 This file helps validate template rendering and context data preparation.
 """
 
-from django.template import Context, Template
+from django.template import Context
 from django.template.loader import get_template
-from django.test import TestCase
-from django.contrib.sites.models import Site
-from datetime import datetime, timedelta
+from datetime import timedelta
 from django.utils import timezone
 
 

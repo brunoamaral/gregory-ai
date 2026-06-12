@@ -26,7 +26,7 @@ from organizations.models import Organization
 
 from api.models import APIAccessScheme, APIAccessSchemeLog
 from gregory.models import (
-	Trials, TrialOrgContent, Team, Subject, OrganizationApiSettings,
+	Trials, TrialOrgContent, Team, OrganizationApiSettings,
 )
 
 # ---------------------------------------------------------------------------

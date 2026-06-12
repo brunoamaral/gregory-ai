@@ -6,7 +6,6 @@ and return correct results.
 from django.test import TestCase
 from django.test.utils import override_settings
 from django.db import connection
-from django.db.models import Count
 from rest_framework.test import APIClient
 from django.contrib.sites.models import Site
 from gregory.models import TeamCategory, Team, Articles, Trials, Authors, Subject, OrganizationApiSettings

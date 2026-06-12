@@ -17,7 +17,6 @@ from gregory.models import Articles, ArticleTrialReference, Sources, Subject, Te
 from gregory.management.commands.export_trials_xlsx import (
 	IDENTITY_COLS,
 	RELATION_COLS,
-	SCALAR_ORDER,
 	REGISTRY_NAMES,
 	_build_scalar_columns,
 	_sanitise_sheet_name,

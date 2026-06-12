@@ -12,8 +12,6 @@ from sklearn.naive_bayes import GaussianNB, MultinomialNB
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
 import concurrent.futures
-import html
-import json
 import math
 import nltk
 import pandas as pd
@@ -40,7 +38,7 @@ def get_initial_count(url, api_key):
 	"""Fetch the initial page to get the total count of articles."""
 	headers = {'Authorization': api_key}
 	try:
-		response = requests.get(url, headers=headers)
+		response = requests.get(url, headers=headers, timeout=30)
 		response.raise_for_status()  # Ensures HTTPError is raised for bad requests
 		data = response.json()
 		return data['count']
@@ -53,7 +51,7 @@ def fetch_articles_page(url, api_key, page):
 	params = {'page': page}
 	headers = {'Authorization': api_key}
 	try:
-		response = requests.get(url, headers=headers, params=params)
+		response = requests.get(url, headers=headers, params=params, timeout=30)
 		response.raise_for_status()
 		return response.json()['results']
 	except requests.exceptions.RequestException as e:
@@ -107,7 +105,7 @@ class DenseTransformer(TransformerMixin):
 def get_articles(url, api_key):
 	headers = {'Authorization': api_key}
 	try:
-		response = requests.get(url, headers=headers)
+		response = requests.get(url, headers=headers, timeout=30)
 		if response.status_code == 200:
 			return response.json()
 		else:
