@@ -22,7 +22,7 @@
 #   "F811"    redefined-while-unused (possible real duplicate-definition bugs)
 #   "F841"    unused-variable    (computed-then-ignored: a hardcoded-result tell)
 
-target-version = "py311"
+target-version = "py312"
 
 extend-exclude = [
 	"**/migrations/**",
