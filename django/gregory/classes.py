@@ -183,7 +183,15 @@ class SciencePaper:
 				pass
 		if self.retracted == None:
 			try:
-				self.retracted = True if work["updated-by"][0]["type"] == "retraction" else None
+				updates = work.get("updated-by") or []
+				self.retracted = (
+					any(
+						isinstance(update, dict)
+						and update.get("type") == "retraction"
+						for update in updates
+					)
+					or None
+				)
 			except (KeyError, IndexError, TypeError):
 				logging.warning(f"No retraction status found for DOI {self.doi}")
 				pass
