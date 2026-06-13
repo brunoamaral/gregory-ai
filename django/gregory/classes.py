@@ -13,6 +13,7 @@ class SciencePaper:
 		published_date=None,
 		abstract=None,
 		authors=None,
+		retracted=None,
 	):
 		self.doi = doi
 		self.title = title
@@ -23,7 +24,7 @@ class SciencePaper:
 		self.published_date = published_date
 		self.abstract = abstract
 		self.authors = authors
-
+		self.retracted = retracted
 	def __str__(self):
 		return f"{self.doi}, {self.title}"
 
@@ -179,6 +180,12 @@ class SciencePaper:
 				self.authors = work["author"]
 			except (KeyError, IndexError, TypeError):
 				logging.warning(f"No authors found for DOI {self.doi}")
+				pass
+		if self.retracted == None:
+			try:
+				self.retracted = True if work["updated-by"][0]["type"] == "retraction" else None
+			except (KeyError, IndexError, TypeError):
+				logging.warning(f"No retraction status found for DOI {self.doi}")
 				pass
 
 	def find_doi(self, title=None):
