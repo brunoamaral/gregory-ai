@@ -41,6 +41,7 @@ select = [
 	"RUF100", # unused `# noqa` — keeps the grandfathered worklist self-cleaning
 	"T201",   # print() — use logging instead
 	"F811",   # redefined-while-unused (possible real duplicate-definition bugs)
+	"W605",   # invalid escape sequence (e.g., in regexes; can cause silent logic errors)
 ]
 
 [lint.per-file-ignores]
