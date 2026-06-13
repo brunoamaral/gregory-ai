@@ -1,4 +1,5 @@
 class SciencePaper:
+	import logging
 	def __init__(self, doi=None, title=None,link=None,access=None,publisher=None,journal=None,published_date=None,abstract=None,authors=None):
 		self.doi=doi
 		self.title=title
@@ -31,7 +32,7 @@ class SciencePaper:
 		if self.link != None:
 			self.link = remove_utm(self.link)
 		else:
-			print('no url found')
+			logging.warning('no url found')
 
 
 	def refresh(self):
@@ -55,19 +56,19 @@ class SciencePaper:
 				work = works.doi(self.doi)
 			except HTTPError as e:
 				if e.response.status_code == 404:
-					print(f"DOI not found in CrossRef: {self.doi}")
+					logging.warning(f"DOI not found in CrossRef: {self.doi}")
 					return 'DOI not found'
 				else:
-					print(f"CrossRef HTTP error for DOI {self.doi}: {e}")
+					logging.error(f"CrossRef HTTP error for DOI {self.doi}: {e}")
 					return f'CrossRef HTTP error: {e}'
 			except json.JSONDecodeError as e:
-				print(f"Error decoding JSON from CrossRef response for DOI: {self.doi}")
+				logging.error(f"Error decoding JSON from CrossRef response for DOI: {self.doi}")
 				return 'JSON decode error'
 			except RequestException as e:
-				print(f"CrossRef request error for DOI {self.doi}: {e}")
+				logging.error(f"CrossRef request error for DOI {self.doi}: {e}")
 				return f'CrossRef request error: {e}'
 			except Exception as e:
-				print(f"Unexpected error querying CrossRef for DOI {self.doi}: {e}")
+				logging.error(f"Unexpected error querying CrossRef for DOI {self.doi}: {e}")
 				return f'Unexpected error: {e}'
 		else:
 			return 'No DOI provided'
@@ -88,7 +89,7 @@ class SciencePaper:
 				pass
 		if self.doi != None and self.access == None:
 			if site.admin_email == None:
-				print("No site admin email found")
+				logging.warning("No site admin email found")
 			else:
 				try:
 					if unpaywall_utils.checkIfDOIIsOpenAccess(self.doi, site.admin_email):
@@ -96,7 +97,7 @@ class SciencePaper:
 					else:
 						self.access = 'restricted'
 				except Exception as e:
-					print(f"Error checking Unpaywall for DOI {self.doi}: {e}")
+					logging.error(f"Error checking Unpaywall for DOI {self.doi}: {e}")
 					self.access = 'unknown'
 			
 		if self.publisher == None:
@@ -208,7 +209,7 @@ class ClinicalTrial:
 		if self.link != None:
 			self.link = remove_utm(self.link)
 		else:
-			print('no url found')
+			logging.warning('no url found')
 
 
 class ClinicalTrialsGovAPI:
@@ -247,10 +248,10 @@ class ClinicalTrialsGovAPI:
 			response.raise_for_status()
 			return response.json()
 		except requests.exceptions.HTTPError as e:
-			print(f"HTTP Error: {e}")
+			logging.error(f"HTTP Error: {e}")
 			raise
 		except requests.exceptions.RequestException as e:
-			print(f"Request Error: {e}")
+			logging.error(f"Request Error: {e}")
 			raise
 	
 	def get_version(self):

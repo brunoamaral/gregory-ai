@@ -2,6 +2,7 @@
 Template testing utilities for email components.
 This file helps validate template rendering and context data preparation.
 """
+import logging
 
 from django.template import Context
 from django.template.loader import get_template
@@ -176,20 +177,20 @@ class EmailTemplateTestUtils:
 if __name__ == "__main__":
     # Test article card component
     result = EmailTemplateTestUtils.test_component_rendering('article_card')
-    print("Article Card Test:", result['success'])
+    logging.info("Article Card Test: %s", result['success'])
     
     # Test trial card component  
     result = EmailTemplateTestUtils.test_component_rendering('trial_card')
-    print("Trial Card Test:", result['success'])
+    logging.info("Trial Card Test: %s", result['success'])
     
     # Test full weekly summary template
     result = EmailTemplateTestUtils.test_email_template_rendering('weekly_summary_new')
-    print("Weekly Summary Test:", result['success'])
+    logging.info("Weekly Summary Test: %s", result['success'])
     
     # Test admin summary template
     result = EmailTemplateTestUtils.test_email_template_rendering('admin_summary_new', 'admin_summary')
-    print("Admin Summary Test:", result['success'])
+    logging.info("Admin Summary Test: %s", result['success'])
     
     # Test trial notification template
     result = EmailTemplateTestUtils.test_email_template_rendering('trial_notification_new', 'trial_notification')
-    print("Trial Notification Test:", result['success'])
+    logging.info("Trial Notification Test: %s", result['success'])

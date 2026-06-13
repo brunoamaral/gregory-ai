@@ -1,5 +1,6 @@
 from django.test import TestCase, Client
 import json
+import logging
 
 
 class ArticleAPIFilterTest(TestCase):
@@ -30,7 +31,7 @@ class ArticleAPIFilterTest(TestCase):
 					self.assertIn(response.status_code, [200, 400], 
 						f"API returned {response.status_code} for last_days='{invalid_value}'. Expected 200 or 400.")
 					
-					print(f"✓ last_days='{invalid_value}': Status {response.status_code} (OK)")
+					logging.info(f"✓ last_days='{invalid_value}': Status {response.status_code} (OK)")
 					
 				except Exception as e:
 					self.fail(f"✗ API crashed with last_days='{invalid_value}': {e}")
@@ -50,7 +51,7 @@ class ArticleAPIFilterTest(TestCase):
 					if response.content:
 						json.loads(response.content)
 					
-					print(f"✓ last_days='{valid_value}': Status {response.status_code} (OK)")
+					logging.info(f"✓ last_days='{valid_value}': Status {response.status_code} (OK)")
 					
 				except json.JSONDecodeError:
 					self.fail(f"✗ API returned invalid JSON for last_days='{valid_value}'")

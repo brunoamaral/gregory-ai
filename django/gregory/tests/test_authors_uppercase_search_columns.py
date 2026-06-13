@@ -6,6 +6,7 @@ Verifies that the ufull_name GeneratedField and GIN index are working correctly.
 from django.test import TestCase
 from django.db import connection
 from gregory.models import Authors
+import logging
 
 
 class AuthorsUppercaseSearchColumnsTest(TestCase):
@@ -85,7 +86,7 @@ class AuthorsUppercaseSearchColumnsTest(TestCase):
         
         # For small datasets, PostgreSQL might still use sequential scan
         # We just verify the index exists and can be used
-        print(f"Query plan: {explain_text}")
+        logging.info(f"Query plan: {explain_text}")
         
         # The important thing is that the query completes successfully
         # and that the GIN index exists (tested separately)

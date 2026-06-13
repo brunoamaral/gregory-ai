@@ -7,6 +7,7 @@ PubMed BERT model.
 """
 from datetime import datetime
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Any
@@ -407,7 +408,7 @@ class BertTrainer:
             weights_path (Union[str, Path]): Path to saved weights file
         """
         self.model.load_weights(str(weights_path))
-        print(f"Loaded model weights from {weights_path}")
+        logging.info(f"Loaded model weights from {weights_path}")
     
     def perform_pseudo_labeling(
         self,
@@ -449,9 +450,9 @@ class BertTrainer:
         iteration = 0
         while len(remaining_unlabeled) > 0 and iteration < max_iterations:
             iteration += 1
-            print(f"\nPseudo-labeling iteration {iteration}/{max_iterations}")
-            print(f"Current labeled examples: {len(current_labeled_texts)}")
-            print(f"Remaining unlabeled examples: {len(remaining_unlabeled)}")
+            logging.info(f"\nPseudo-labeling iteration {iteration}/{max_iterations}")
+            logging.info(f"Current labeled examples: {len(current_labeled_texts)}")
+            logging.info(f"Remaining unlabeled examples: {len(remaining_unlabeled)}")
             
             # Reset and retrain the model on current labeled data
             self.model = self._create_model()
@@ -486,8 +487,8 @@ class BertTrainer:
             confident_idx = np.where(confidence_scores >= confidence_threshold)[0]
             
             if len(confident_idx) == 0:
-                print(f"No confident predictions above threshold {confidence_threshold} in iteration {iteration}.")
-                print("Stopping pseudo-labeling process.")
+                logging.info(f"No confident predictions above threshold {confidence_threshold} in iteration {iteration}.")
+                logging.info("Stopping pseudo-labeling process.")
                 break
             
             # Add confident examples to the labeled dataset
@@ -500,10 +501,10 @@ class BertTrainer:
             for idx in sorted(confident_idx, reverse=True):
                 remaining_unlabeled.pop(idx)
             
-            print(f"Added {len(confident_idx)} pseudo-labeled examples.")
+            logging.info(f"Added {len(confident_idx)} pseudo-labeled examples.")
         
-        print(f"\nPseudo-labeling complete. Final labeled dataset size: {len(current_labeled_texts)}")
-        print(f"Original size: {len(labeled_texts)}, Added: {len(current_labeled_texts) - len(labeled_texts)}")
+        logging.info(f"\nPseudo-labeling complete. Final labeled dataset size: {len(current_labeled_texts)}")
+        logging.info(f"Original size: {len(labeled_texts)}, Added: {len(current_labeled_texts) - len(labeled_texts)}")
         
         return current_labeled_texts, current_labeled_labels
     
@@ -550,4 +551,4 @@ class BertTrainer:
         with open(output_path, 'w') as f:
             json.dump(metrics_dict, f, indent=2)
         
-        print(f"Metrics saved to {output_path}")
+        logging.info(f"Metrics saved to {output_path}")

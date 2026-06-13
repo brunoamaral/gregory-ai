@@ -4,6 +4,7 @@ Helper script to run Django commands with environment variables loaded.
 This script ensures that environment variables are properly loaded before
 running Django management commands.
 """
+import logging
 import os
 import sys
 from pathlib import Path
@@ -11,7 +12,7 @@ from pathlib import Path
 def load_env_file(file_path):
     """Load environment variables from a .env file"""
     if not Path(file_path).exists():
-        print(f"Warning: .env file not found at {file_path}")
+        logging.warning(f"Warning: .env file not found at {file_path}")
         return False
     
     with open(file_path) as f:
@@ -49,20 +50,20 @@ def main():
     env_loaded = False
     for env_path in env_paths:
         if load_env_file(str(env_path)):
-            print(f"Loaded environment variables from {env_path}")
+            logging.info(f"Loaded environment variables from {env_path}")
             env_loaded = True
     
     if not env_loaded:
-        print("Warning: Could not load any .env files. Using default values.")
+        logging.warning("Could not load any .env files. Using default values.")
     
     # Ensure critical environment variables have default values
     if 'SECRET_KEY' not in os.environ:
         os.environ['SECRET_KEY'] = 'django-insecure-x)v@)fdg7tkqf#l8$4=br!g00w4*4+19sb(p+s=(^a%-*en)tr'
-        print("Using default SECRET_KEY for development.")
+        logging.info("Using default SECRET_KEY for development.")
     
     if 'FERNET_SECRET_KEY' not in os.environ:
         os.environ['FERNET_SECRET_KEY'] = 'pSD0ZVXNIHPUzPcHwf1DBMgHjli3M6dBW011JA3991I='
-        print("Using default FERNET_SECRET_KEY for development.")
+        logging.info("Using default FERNET_SECRET_KEY for development.")
     
     # Set Django settings module
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'admin.settings')

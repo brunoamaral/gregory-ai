@@ -4,8 +4,8 @@ Non-Django test for the train_models functionality.
 This test verifies the core functionality without Django dependencies.
 """
 import os
-import sys
 import json
+import logging
 import unittest
 import tempfile
 from unittest.mock import Mock, MagicMock
@@ -16,7 +16,7 @@ DEBUG = True
 def debug_print(msg):
     """Print debug messages when DEBUG is True."""
     if DEBUG:
-        print(f"DEBUG: {msg}", file=sys.stderr)
+        logging.debug(f"DEBUG: {msg}")
 
 class TrainModelsTest(unittest.TestCase):
     """Test case for the train_models functionality."""
