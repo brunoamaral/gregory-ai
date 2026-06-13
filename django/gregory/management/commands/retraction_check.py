@@ -19,6 +19,7 @@ class Command(BaseCommand):
 	def check_retraction_status(self, doi=None):
 		# Select articles that have a DOI, are science papers, and crossref_retraction_check is in the last 24 months and retracted is False or Null
 		two_years_ago = timezone.now() - timedelta(days=730)
+		thirty_days_ago = timezone.now() - timedelta(days=30)
 		if doi:
 			articles_to_check = Articles.objects.filter(
 				Q(doi=doi)
@@ -31,7 +32,8 @@ class Command(BaseCommand):
 				Q(doi__isnull=False, doi__gt="")
 				& (Q(retracted=False) | Q(retracted__isnull=True))
 				& Q(kind="science paper")
-				& Q(published_date__gte=two_years_ago)
+				& Q(published_date__lte=two_years_ago)
+				& Q(crossref_retraction_check__gt=thirty_days_ago)
 			).distinct()
 			total_articles = articles_to_check.count()
 			self.stdout.write(
