@@ -81,12 +81,14 @@ class SciencePaper:
 		if self.link == None:
 			try: 
 				self.link = work['link'][0]['URL']
-			except:  # noqa: E722, S110
+			except (KeyError, IndexError, TypeError):
+				logging.warning(f"No link found for DOI {self.doi}")
 				pass
 		if self.title == None:
 			try:
 				self.title = work['title'][0]
-			except:  # noqa: E722, S110
+			except (KeyError, IndexError, TypeError):
+				logging.warning(f"No title found for DOI {self.doi}") 
 				pass
 		if self.doi != None and self.access == None:
 			if site.admin_email == None:
@@ -122,29 +124,35 @@ class SciencePaper:
 			year,month,day = None,1,1
 			try:
 				year = issued[0]
-			except:  # noqa: E722, S110
+			except (IndexError, TypeError):  
+				logging.warning(f"No year found in issued date for DOI {self.doi}")
 				pass
 			try:
 				month=issued[1]
-			except:  # noqa: E722, S110
+			except (IndexError, TypeError):  
+				logging.warning(f"No month found in issued date for DOI {self.doi}")
 				pass
 			try:
 				day=issued[2]
-			except:  # noqa: E722, S110
+			except (IndexError, TypeError):  
+				logging.warning(f"No day found in issued date for DOI {self.doi}")
 				pass
 			try:
 				self.published_date = datetime( year=year, month=month, day=day, tzinfo=timezone)
-			except:  # noqa: E722, S110
+			except (TypeError, ValueError):  
+				logging.warning(f"Invalid date found for DOI {self.doi}")
 				pass
 		if self.abstract == None:
 			try:
 				self.abstract = work['abstract']
-			except:  # noqa: E722, S110
+			except (KeyError, IndexError, TypeError):
+				logging.warning(f"No abstract found for DOI {self.doi}")
 				pass
 		if self.authors == None:
 			try:
 				self.authors = work['author']
-			except:  # noqa: E722, S110
+			except (KeyError, IndexError, TypeError):  
+				logging.warning(f"No authors found for DOI {self.doi}")
 				pass
 
 	def find_doi(self,title=None):
