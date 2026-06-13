@@ -1,14 +1,13 @@
-"""
-Updates articles with DOI, access, publisher, journal, publish date, and abstracts with minimal API calls.
-"""
 from django.core.management.base import BaseCommand
 from gregory.models import Articles
 from gregory.classes import SciencePaper
 from django.utils import timezone
 from django.db.models import Q
+import requests
 from datetime import timedelta
+import time
 import re
-from utils.paper_utils import try_refresh_paper
+
 
 class Command(BaseCommand):
 	help = "Updates articles with DOI, access, publisher, journal, publish date, and abstracts with minimal API calls."
@@ -49,7 +48,18 @@ class Command(BaseCommand):
 
 	def try_refresh_paper(self, paper, retries=3, delay=5):
 		"""Attempt to refresh the paper data with retries and a delay."""
-		return try_refresh_paper(self, paper, retries, delay)
+		for attempt in range(retries):
+			try:
+				paper.refresh()
+				return True  # Success
+			except requests.exceptions.RequestException as e:
+				self.stdout.write(f"Attempt {attempt + 1} failed: {e}")
+				if attempt < retries - 1:
+					self.stdout.write(f"Retrying in {delay} seconds...")
+					time.sleep(delay)
+				else:
+					self.stdout.write("Max retries exceeded. Skipping this paper.")
+		return False  # Failed after retries
 
 	def update_article_details(self):
 		# Select articles that need updating but have a DOI
