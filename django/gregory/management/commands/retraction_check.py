@@ -43,9 +43,12 @@ class Command(BaseCommand):
 		for article in articles_to_check:
 			if article.doi:
 				paper = SciencePaper(doi=article.doi)
-				paper.refresh()  # Initial refresh to get the latest data
 				self.stdout.write(f"Checking article '{article.title}' (DOI: {article.doi}) for retraction status...")
+				paper.refresh()  # Initial refresh to get the latest data
 				# Refresh once per article
+				if self.is_crossref_failed(paper.refresh_result):
+					self.log(f"  ⚠️  CrossRef lookup failed for DOI {article.doi}: {paper.refresh_result}", level=2)
+					continue
 			else:
 				self.stdout.write(f"Empty DOI for article_id {article.id}")
 				continue  # Skip articles without a DOI
@@ -67,6 +70,12 @@ class Command(BaseCommand):
 			self.stdout.write(
 				f"No change in retraction status for article '{article.title}' (DOI: {article.doi}). Updated retraction check timestamp."
 			)
+	def is_crossref_failed(self, refresh_result) -> bool:
+		"""Check if CrossRef refresh failed."""
+		return isinstance(refresh_result, str) and any(
+			keyword in refresh_result.lower()
+			for keyword in ["error", "not found", "json decode"]
+		)
 	def handle(self, *args, **options):
 
 		doi = options.get("doi", None)
