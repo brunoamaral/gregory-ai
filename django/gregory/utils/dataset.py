@@ -4,6 +4,7 @@ Dataset utilities for ML models.
 This module provides functions to collect article data, build datasets,
 and split data for training, validation, and testing of ML models.
 """
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
@@ -164,7 +165,7 @@ def train_val_test_split(
         
         # Log the actual class distribution for debugging
         class_distribution = ", ".join([f"{k}: {v}" for k, v in class_counts.items()])
-        print(f"Class distribution in dataset: {class_distribution}")
+        logging.info(f"Class distribution in dataset: {class_distribution}")
         
     except Exception as e:
         # Fallback in case of any error processing class counts
@@ -184,7 +185,7 @@ def train_val_test_split(
     # If any class has fewer than 3 samples, we can't do proper stratified splitting
     # (we need at least 1 for train, 1 for val, 1 for test)
     if min_class_count < 3:
-        print(f"WARNING: Class with only {min_class_count} examples detected. Using non-stratified splitting.")
+        logging.warning(f"Class with only {min_class_count} examples detected. Using non-stratified splitting.")
         
         # Force non-stratified splitting for all small datasets
         rest_df, test_df = train_test_split(
@@ -201,7 +202,7 @@ def train_val_test_split(
         )
         
         # Verify the split worked
-        print(f"Split complete - train: {len(train_df)}, val: {len(val_df)}, test: {len(test_df)}")
+        logging.info(f"Split complete - train: {len(train_df)}, val: {len(val_df)}, test: {len(test_df)}")
         
         return train_df, val_df, test_df
     

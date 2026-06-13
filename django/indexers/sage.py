@@ -1,6 +1,7 @@
 from gregory.models import Articles, Sources
 from datetime import datetime
 import json
+import logging
 
 f = open('/code/indexers/input/sagepub.json')
 input = json.load(f)
@@ -21,5 +22,5 @@ for i in input:
 			source = source,
 		)
 	except:  # noqa: E722
-		print('not unique?::', doi, title)
+		logging.warning('not unique?:: %s %s', doi, title)
 		pass

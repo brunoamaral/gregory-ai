@@ -6,6 +6,7 @@ LSTM-based models for text classification.
 """
 import json
 import time
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
@@ -226,13 +227,13 @@ class LSTMTrainer:
             tf.keras.callbacks.History: Training history object
         """
         # Adapt vectorizer to the training data
-        print("Adapting text vectorizer to training data...")
+        logging.info("Adapting text vectorizer to training data...")
         train_text_ds = tf.data.Dataset.from_tensor_slices(train_texts).batch(batch_size)
         self.vectorizer.adapt(train_text_ds)
         
         # Create model after adaptation
         self.model = self._create_model()
-        print(f"Model created with vocabulary size: {len(self.vectorizer.get_vocabulary())}")
+        logging.info(f"Model created with vocabulary size: {len(self.vectorizer.get_vocabulary())}")
         
         # Prepare early stopping callback
         early_stopping = EarlyStopping(
@@ -254,7 +255,7 @@ class LSTMTrainer:
         start_time = time.time()
         
         # Train the model
-        print(f"Training LSTM model for up to {epochs} epochs...")
+        logging.info(f"Training LSTM model for up to {epochs} epochs...")
         history = self.model.fit(
             X_train,
             y_train,
@@ -269,7 +270,7 @@ class LSTMTrainer:
         self.epochs_trained = len(history.history['loss'])
         self.history = history
         
-        print(f"Training completed in {self.training_time:.2f} seconds ({self.epochs_trained} epochs).")
+        logging.info(f"Training completed in {self.training_time:.2f} seconds ({self.epochs_trained} epochs).")
         
         return history
     
@@ -482,7 +483,7 @@ class LSTMTrainer:
         # Load weights
         self.model.load_weights(str(weights_path))
         
-        print(f"Loaded model and vectorizer from {model_dir}")
+        logging.info(f"Loaded model and vectorizer from {model_dir}")
     
     def export_metrics_json(
         self,
@@ -530,4 +531,4 @@ class LSTMTrainer:
         with open(output_path, 'w') as f:
             json.dump(metrics_dict, f, indent=2)
         
-        print(f"Metrics saved to {output_path}")
+        logging.info(f"Metrics saved to {output_path}")

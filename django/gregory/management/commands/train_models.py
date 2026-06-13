@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -50,7 +51,7 @@ def _check_ml_imports(stdout=None):
         if stdout:
             stdout.write(msg + "\n")
         else:
-            print(msg)
+            logging.info(msg)
     
     try:
         from gregory.ml.bert_wrapper import BertTrainer  # noqa: F401  # availability probe: the import is the test
@@ -200,7 +201,7 @@ class Command(BaseCommand):
         Raises:
             CommandError: If arguments are inconsistent or invalid
         """
-        print(f"{options}")
+        logging.info(f"{options}")
         # Validate team and subject arguments
         if not options["all_teams"] and options["team"] is None:
             raise CommandError("Either --team or --all-teams must be specified")

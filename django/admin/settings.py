@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 from cryptography.fernet import Fernet  # Ensure this import is included
 
@@ -18,12 +19,12 @@ try:
     for env_path in potential_paths:
         if env_path.exists():
             load_dotenv(dotenv_path=env_path)
-            print(f"Loaded environment variables from {env_path}")
+            logging.info(f"Loaded environment variables from {env_path}")
             break
     else:
-        print(f"No .env file found in ${env_path}")
+        logging.warning(f"No .env file found in ${env_path}")
 except ImportError:
-    print("python-dotenv not installed. Environment variables must be set manually.")
+    logging.warning("python-dotenv not installed. Environment variables must be set manually.")
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # Use environment variable if available, otherwise use a default value for development
@@ -31,7 +32,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'DEFAULT SECRET_KEY')
 
 # Print warning if using default key
 if SECRET_KEY == 'DEFAULT SECRET_KEY':
-    print("Using default SECRET_KEY for development. DO NOT use in production!")
+    logging.warning("Using default SECRET_KEY for development. DO NOT use in production!")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # Secure by default: production is safe even if DJANGO_DEBUG is unset.
@@ -43,7 +44,7 @@ FERNET_SECRET_KEY = os.environ.get('FERNET_SECRET_KEY', 'DEFAULT KEY GOES HERE')
 
 # Print warning if using default key
 if FERNET_SECRET_KEY == 'DEFAULT KEY GOES HERE':
-    print("Using default FERNET_SECRET_KEY for development. DO NOT use in production!")
+    logging.warning("Using default FERNET_SECRET_KEY for development. DO NOT use in production!")
 FORMS_URLFIELD_ASSUME_HTTPS = True
 
 # Django admin handles bulk actions on large datasets; raise the POST field limit
@@ -62,8 +63,8 @@ ALLOWED_HOSTS = [
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://brain-regeneration.com',
-    'https://api.brain-regeneration.com',
+	'https://brain-regeneration.com',
+	'https://api.brain-regeneration.com',
 	'https://' + os.environ.get('DOMAIN_NAME', ''),
 	'https://api.' + os.environ.get('DOMAIN_NAME', ''),
 ]

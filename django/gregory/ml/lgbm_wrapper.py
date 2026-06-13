@@ -7,6 +7,7 @@ LightGBM models with TF-IDF vectorization for text classification.
 import json
 import time
 import joblib
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Any
@@ -122,11 +123,11 @@ class LGBMTfidfTrainer:
         start_time = time.time()
         
         # Fit vectorizer on training data
-        print("Fitting TF-IDF vectorizer...")
+        logging.info("Fitting TF-IDF vectorizer...")
         X_train = self.vectorizer.fit_transform(train_texts)
         
         # Transform validation data
-        print("Transforming validation data...")
+        logging.info("Transforming validation data...")
         X_val = self.vectorizer.transform(val_texts)
         
         # Prepare evaluation set for LightGBM
@@ -137,7 +138,7 @@ class LGBMTfidfTrainer:
         self.n_rounds = num_boost_round
         
         # Train the model
-        print(f"Training LightGBM model with {self.n_rounds} boosting rounds...")
+        logging.info(f"Training LightGBM model with {self.n_rounds} boosting rounds...")
         
         # Build callbacks list
         callbacks_list = []
@@ -189,21 +190,21 @@ class LGBMTfidfTrainer:
                     'val_loss': [0],
                 }
         except Exception as e:
-            print(f"Warning: Could not extract training history: {e}")
+            logging.warning(f"Could not extract training history: {e}")
             history = {
                 'iterations': [0],
                 'train_loss': [0],
                 'val_loss': [0],
             }
         
-        print(f"Training completed in {self.training_time:.2f} seconds.")
+        logging.info(f"Training completed in {self.training_time:.2f} seconds.")
         
         # Safely access best_iteration
         best_iter = getattr(self.model, 'best_iteration_', None)
         if best_iter is not None:
-            print(f"Best iteration: {best_iter}")
+            logging.info(f"Best iteration: {best_iter}")
         else:
-            print("Best iteration not available")
+            logging.warning("Best iteration not available")
         
         return history
     
@@ -351,7 +352,7 @@ class LGBMTfidfTrainer:
         self.model = joblib.load(model_path)
         self.vectorizer = joblib.load(vectorizer_path)
         
-        print(f"Loaded model and vectorizer from {model_dir}")
+        logging.info(f"Loaded model and vectorizer from {model_dir}")
     
     def export_metrics_json(
         self, 
@@ -393,4 +394,4 @@ class LGBMTfidfTrainer:
         with open(output_path, 'w') as f:
             json.dump(metrics_dict, f, indent=2)
         
-        print(f"Metrics saved to {output_path}")
+        logging.info(f"Metrics saved to {output_path}")

@@ -4,8 +4,8 @@ Simplified test for the train_models management command.
 This test uses unittest directly without Django test dependencies.
 """
 import os
-import sys
 import json
+import logging
 import unittest
 import tempfile
 
@@ -15,7 +15,7 @@ DEBUG = True
 def debug_print(msg):
     """Print debug messages when DEBUG is True."""
     if DEBUG:
-        print(f"DEBUG: {msg}", file=sys.stderr)
+        logging.debug(f"DEBUG: {msg}")
 
 class SimplifiedTrainModelsTest(unittest.TestCase):
     """A simplified test case that doesn't rely on Django's test framework."""

@@ -34,6 +34,7 @@ from django.db.models.functions import Length
 from gregory.models import Articles, ArticleOrgContent
 from transformers import pipeline
 
+import logging
 
 class Command(BaseCommand):
 	help = (
@@ -81,10 +82,10 @@ class Command(BaseCommand):
 		start = time.time()
 		max_length = Command.get_summary_max_length(abstract)
 		if max_length > min_length:
-			print(f"Summarizing abstract {article_id} with lengths [{min_length}, {max_length}]")
+			logging.info(f"Summarizing abstract {article_id} with lengths [{min_length}, {max_length}]")
 			summary = summarizer(abstract, min_length=min_length, max_length=max_length, truncation=True)
 			end = time.time()
-			print(f" => Elapsed time: {end - start} sec.")
+			logging.info(f" => Elapsed time: {end - start} sec.")
 			return summary[0]['summary_text'] if summary else ""
 		return ""
 
@@ -163,9 +164,7 @@ class Command(BaseCommand):
 			if not orgs:
 				if org_id is None:
 					orphans += 1
-					self.stderr.write(self.style.WARNING(
-						f'Skipping orphan article {article.article_id}: no organisations via teams.'
-					))
+					self.stderr.write(self.style.WARNING(f'Skipping orphan article {article.article_id}: no organisations via teams.'))
 				continue
 
 			missing_orgs = self._orgs_missing_takeaways(article, orgs)

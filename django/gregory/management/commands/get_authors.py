@@ -30,7 +30,7 @@ class Command(BaseCommand):
                     orcid = normalize_orcid(raw_orcid)
 
                     if not given_name or not family_name:
-                        self.stdout.write(f"Missing given name or family name, skipping this author. Article DOI: {article.doi}.")
+                        self.stderr.write(self.style.WARNING(f"Missing given name or family name, skipping this author. Article DOI: {article.doi}."))
                         continue
 
                     # First, attempt to match or create by ORCID
@@ -42,20 +42,20 @@ class Command(BaseCommand):
                                 author_obj.given_name = given_name
                                 author_obj.family_name = family_name
                                 if not given_name or not family_name:
-                                    self.stdout.write(f"Check 2: Missing given name or family name, skipping this author. Article DOI: {article.doi}.")
+                                    self.stderr.write(self.style.WARNING(f"Check 2: Missing given name or family name, skipping this author. Article DOI: {article.doi}."))
                                     continue
                                 author_obj.save()
-                                self.stdout.write(f"Updated author {author_obj.full_name} with ORCID: {orcid}.")
+                                self.stdout.write(self.style.SUCCESS(f"Updated author {author_obj.full_name} with ORCID: {orcid}."))
                     else:
                         # Handle authors without ORCID or when ORCID isn't provided
                         try:
                             author_obj = Authors.objects.get(given_name=given_name, family_name=family_name)
                         except Authors.DoesNotExist:
                             # Create a new author if none found
-                            print(f"Creating author: {given_name} {family_name} with ORCID: {orcid}")
+                            self.stdout.write(self.style.SUCCESS(f"Creating author: {given_name} {family_name} with ORCID: {orcid}"))
                             author_obj = Authors.objects.create(given_name=given_name, family_name=family_name, ORCID=orcid)
                         except Authors.MultipleObjectsReturned:
-                            self.stdout.write(f"Multiple authors found for {given_name} {family_name}, unable to uniquely identify. Skipping.")
+                            self.stderr.write(self.style.WARNING(f"Multiple authors found for {given_name} {family_name}, unable to uniquely identify. Skipping."))
                             continue
 
                     # Add author to article if an author object was successfully created or retrieved
