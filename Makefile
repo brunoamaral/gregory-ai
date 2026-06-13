@@ -24,6 +24,7 @@ BUILDER ?= gregory-multiarch
 help:
 	@echo "Available targets:"
 	@echo "  build              Build the Docker image (tagged :latest and :TAG)"
+	@echo "  check              runs `uvx ruff check django/` to check for errors in the code"
 	@echo "  push               Build and push a multi-arch image to Docker Hub"
 	@echo "  db-pull            Dump the production database and restore it locally"
 	@echo "  db-restore         Restore the most recent backup in $(BACKUP_DIR)/"
@@ -35,6 +36,11 @@ help:
 build:
 	DOCKER_BUILDKIT=1 docker build -t $(IMAGE):$(TAG) -t $(IMAGE):latest -f Dockerfile .
 	@echo "==> Built $(IMAGE):$(TAG) and $(IMAGE):latest"
+
+## Check the Django code for errors using uvx.
+check:
+	@echo "Running code checks with ruff..."
+	@uvx ruff check django/
 
 ## Push a multi-arch image manifest to Docker Hub.
 ## Override platforms if needed: make push PLATFORMS=linux/amd64
