@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-
+logging.basicConfig(level=logging.INFO)
 def main():
     """Run administrative tasks."""
     # Default settings module
