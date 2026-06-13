@@ -4,28 +4,37 @@ from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from organizations.models import Organization
 
-from gregory.models import Articles, Authors, Sources, Team, Subject, ArticleSubjectRelevance, ArticleOrgContent
+from gregory.models import (
+	Articles,
+	Authors,
+	Sources,
+	Team,
+	Subject,
+	ArticleSubjectRelevance,
+	ArticleOrgContent,
+)
 from gregory.utils.link_utils import merge_links
 
+
 class Command(BaseCommand):
-	help = 'Fetches articles from the API and imports them into the Django app.'
+	help = "Fetches articles from the API and imports them into the Django app."
 
 	def add_arguments(self, parser):
 		parser.add_argument(
-			'api_url',
+			"api_url",
 			type=str,
-			help='The API URL to fetch articles from.',
+			help="The API URL to fetch articles from.",
 		)
 		parser.add_argument(
-			'--target-org',
+			"--target-org",
 			type=str,
 			required=True,
-			help='Organization slug or ID that owns the imported takeaways/summaries.',
+			help="Organization slug or ID that owns the imported takeaways/summaries.",
 		)
 
 	def handle(self, *args, **options):
-		api_url = options['api_url']
-		target_org_arg = options['target_org']
+		api_url = options["api_url"]
+		target_org_arg = options["target_org"]
 
 		try:
 			if target_org_arg.isdigit():
@@ -54,14 +63,22 @@ class Command(BaseCommand):
 				link = item.get("link")
 				doi = item.get("doi")
 				summary = item.get("summary")
-				published_date = parse_datetime(item.get("published_date")) if item.get("published_date") else None
+				published_date = (
+					parse_datetime(item.get("published_date"))
+					if item.get("published_date")
+					else None
+				)
 				publisher = item.get("publisher")
 				container_title = item.get("container_title")
 				access = item.get("access")
 				_missing = object()
 				takeaways_raw = item.get("takeaways", _missing)
 				spe_raw = item.get("summary_plain_english", _missing)
-				discovery_date = parse_datetime(item.get("discovery_date")) if item.get("discovery_date") else timezone.now()
+				discovery_date = (
+					parse_datetime(item.get("discovery_date"))
+					if item.get("discovery_date")
+					else timezone.now()
+				)
 
 				# Create or update the Article instance using title as the unique identifier.
 				# link is only set on create (never overwritten); incoming URLs are merged
@@ -114,7 +131,7 @@ class Command(BaseCommand):
 							"family_name": author_data.get("family_name"),
 							"ORCID": author_data.get("ORCID"),
 							"country": author_data.get("country"),
-						}
+						},
 					)
 					article.authors.add(author)
 
@@ -124,7 +141,7 @@ class Command(BaseCommand):
 						name=source_name,
 						defaults={
 							"source_for": "news article",  # adjust if necessary
-						}
+						},
 					)
 					article.sources.add(source)
 
@@ -134,7 +151,7 @@ class Command(BaseCommand):
 						pk=team_data.get("id"),
 						defaults={
 							"name": team_data.get("name"),
-						}
+						},
 					)
 					article.teams.add(team)
 
@@ -146,7 +163,7 @@ class Command(BaseCommand):
 							"subject_name": subject_data.get("subject_name"),
 							"description": subject_data.get("description"),
 							"team_id": subject_data.get("team_id"),
-						}
+						},
 					)
 					article.subjects.add(subject)
 
@@ -160,15 +177,15 @@ class Command(BaseCommand):
 								"subject_name": subj_data.get("subject_name"),
 								"description": subj_data.get("description"),
 								"team_id": subj_data.get("team_id"),
-							}
+							},
 						)
 						is_relevant = relevance.get("is_relevant", False)
-						asr, created_asr = ArticleSubjectRelevance.objects.get_or_create(
-							article=article,
-							subject=subject,
-							defaults={
-								"is_relevant": is_relevant
-							}
+						asr, created_asr = (
+							ArticleSubjectRelevance.objects.get_or_create(
+								article=article,
+								subject=subject,
+								defaults={"is_relevant": is_relevant},
+							)
 						)
 						if not created_asr and asr.is_relevant != is_relevant:
 							asr.is_relevant = is_relevant
@@ -180,4 +197,6 @@ class Command(BaseCommand):
 			# Proceed to the next page if available
 			api_url = data.get("next")
 
-		self.stdout.write(self.style.SUCCESS("Successfully imported %d articles." % imported_count))
+		self.stdout.write(
+			self.style.SUCCESS("Successfully imported %d articles." % imported_count)
+		)

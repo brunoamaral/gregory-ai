@@ -3,6 +3,7 @@ Shared utilities for trial identity / de-duplication logic.
 
 See docs/trials-identity-dedup.md for the full design rationale.
 """
+
 from urllib.parse import urlparse
 
 
@@ -53,18 +54,18 @@ def identifiers_conflict(existing_ids: dict | None, incoming_ids: dict | None) -
 # Unknown domains fall back to their hostname, so two different registries can
 # never collide on a key.
 REGISTRY_DOMAINS = {
-	'clinicaltrials.gov': 'ctgov',
-	'euclinicaltrials.eu': 'ctis',
-	'clinicaltrialsregister.eu': 'euctr',
-	'trialsearch.who.int': 'ictrp',
-	'isrctn.com': 'isrctn',
-	'drks.de': 'drks',
-	'anzctr.org.au': 'anzctr',
+	"clinicaltrials.gov": "ctgov",
+	"euclinicaltrials.eu": "ctis",
+	"clinicaltrialsregister.eu": "euctr",
+	"trialsearch.who.int": "ictrp",
+	"isrctn.com": "isrctn",
+	"drks.de": "drks",
+	"anzctr.org.au": "anzctr",
 }
 
 # WHO ICTRP is an aggregator, not a registry of record — it ranks below any
 # home-registry URL when picking the canonical link.
-_AGGREGATOR_KEYS = {'ictrp'}
+_AGGREGATOR_KEYS = {"ictrp"}
 
 
 def registry_from_url(url: str | None) -> str | None:
@@ -72,13 +73,13 @@ def registry_from_url(url: str | None) -> str | None:
 	the domain is not in REGISTRY_DOMAINS. Returns None for empty/invalid URLs."""
 	if not url:
 		return None
-	hostname = (urlparse(url).hostname or '').lower()
+	hostname = (urlparse(url).hostname or "").lower()
 	if not hostname:
 		return None
-	if hostname.startswith('www.'):
+	if hostname.startswith("www."):
 		hostname = hostname[4:]
 	for domain, key in REGISTRY_DOMAINS.items():
-		if hostname == domain or hostname.endswith('.' + domain):
+		if hostname == domain or hostname.endswith("." + domain):
 			return key
 	return hostname
 

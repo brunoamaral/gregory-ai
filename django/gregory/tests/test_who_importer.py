@@ -7,12 +7,13 @@ both create and update paths.
 Run:
   docker exec gregory python manage.py test gregory.tests.test_who_importer
 """
+
 import os
 import tempfile
 
 import django
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gregory.tests.test_settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gregory.tests.test_settings")
 django.setup()
 
 from django.test import TestCase
@@ -40,24 +41,26 @@ _WHO_XML_TEMPLATE = """\
 
 
 def _who_source():
-	org = Organization.objects.create(name='WHO Test Org')
-	team = Team.objects.create(organization=org, name='WHO Test Team', slug='who-test-team')
-	subject = Subject.objects.create(subject_name='WHO MS', subject_slug='who-ms')
+	org = Organization.objects.create(name="WHO Test Org")
+	team = Team.objects.create(
+		organization=org, name="WHO Test Team", slug="who-test-team"
+	)
+	subject = Subject.objects.create(subject_name="WHO MS", subject_slug="who-ms")
 	return Sources.objects.create(
-		name='WHO ICTRP',
-		source_for='trials',
-		method='xml',
+		name="WHO ICTRP",
+		source_for="trials",
+		method="xml",
 		subject=subject,
 		team=team,
 	)
 
 
 def _run_import(xml_content, source_id):
-	with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False) as f:
+	with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False) as f:
 		f.write(xml_content)
 		path = f.name
 	try:
-		with open(os.devnull, 'w') as devnull:
+		with open(os.devnull, "w") as devnull:
 			cmd = WHOCommand()
 			cmd.stdout = devnull
 			cmd.parse_xml(path, source_id)
@@ -71,43 +74,51 @@ class WHOResultsUrlLinkTest(TestCase):
 
 	def test_create_stores_results_url_link(self):
 		xml = _WHO_XML_TEMPLATE.format(
-			trial_id='ISRCTN12345678',
-			results_url_link='https://www.isrctn.com/ISRCTN12345678#results',
+			trial_id="ISRCTN12345678",
+			results_url_link="https://www.isrctn.com/ISRCTN12345678#results",
 		)
 		_run_import(xml, self.source.source_id)
-		t = Trials.objects.get(identifiers__isrctn='ISRCTN12345678')
-		self.assertEqual(t.results_url_link, 'https://www.isrctn.com/ISRCTN12345678#results')
+		t = Trials.objects.get(identifiers__isrctn="ISRCTN12345678")
+		self.assertEqual(
+			t.results_url_link, "https://www.isrctn.com/ISRCTN12345678#results"
+		)
 
 	def test_update_fills_empty_results_url_link(self):
 		xml_no_url = _WHO_XML_TEMPLATE.format(
-			trial_id='ISRCTN11111111',
-			results_url_link='',
+			trial_id="ISRCTN11111111",
+			results_url_link="",
 		)
 		_run_import(xml_no_url, self.source.source_id)
-		t = Trials.objects.get(identifiers__isrctn='ISRCTN11111111')
+		t = Trials.objects.get(identifiers__isrctn="ISRCTN11111111")
 		self.assertFalse(t.results_url_link)
 
 		xml_with_url = _WHO_XML_TEMPLATE.format(
-			trial_id='ISRCTN11111111',
-			results_url_link='https://www.isrctn.com/ISRCTN11111111#results',
+			trial_id="ISRCTN11111111",
+			results_url_link="https://www.isrctn.com/ISRCTN11111111#results",
 		)
 		_run_import(xml_with_url, self.source.source_id)
 		t.refresh_from_db()
-		self.assertEqual(t.results_url_link, 'https://www.isrctn.com/ISRCTN11111111#results')
+		self.assertEqual(
+			t.results_url_link, "https://www.isrctn.com/ISRCTN11111111#results"
+		)
 
 	def test_update_does_not_blank_results_url_link(self):
 		xml_with_url = _WHO_XML_TEMPLATE.format(
-			trial_id='ISRCTN22222222',
-			results_url_link='https://www.isrctn.com/ISRCTN22222222#results',
+			trial_id="ISRCTN22222222",
+			results_url_link="https://www.isrctn.com/ISRCTN22222222#results",
 		)
 		_run_import(xml_with_url, self.source.source_id)
-		t = Trials.objects.get(identifiers__isrctn='ISRCTN22222222')
-		self.assertEqual(t.results_url_link, 'https://www.isrctn.com/ISRCTN22222222#results')
+		t = Trials.objects.get(identifiers__isrctn="ISRCTN22222222")
+		self.assertEqual(
+			t.results_url_link, "https://www.isrctn.com/ISRCTN22222222#results"
+		)
 
 		xml_no_url = _WHO_XML_TEMPLATE.format(
-			trial_id='ISRCTN22222222',
-			results_url_link='',
+			trial_id="ISRCTN22222222",
+			results_url_link="",
 		)
 		_run_import(xml_no_url, self.source.source_id)
 		t.refresh_from_db()
-		self.assertEqual(t.results_url_link, 'https://www.isrctn.com/ISRCTN22222222#results')
+		self.assertEqual(
+			t.results_url_link, "https://www.isrctn.com/ISRCTN22222222#results"
+		)

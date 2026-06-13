@@ -24,6 +24,7 @@ Bigger / smaller batch, dry run::
     python manage.py get_takeaways --limit 50
     python manage.py get_takeaways --dry-run
 """
+
 from bs4 import BeautifulSoup
 import html
 import time
@@ -36,31 +37,32 @@ from transformers import pipeline
 
 import logging
 
+
 class Command(BaseCommand):
 	help = (
-		'Summarise article abstracts and store the result in ArticleOrgContent '
-		'for every organisation the article belongs to (via teams).'
+		"Summarise article abstracts and store the result in ArticleOrgContent "
+		"for every organisation the article belongs to (via teams)."
 	)
 
 	def add_arguments(self, parser):
 		parser.add_argument(
-			'--org-id',
+			"--org-id",
 			type=int,
-			dest='org_id',
-			help='Restrict generation to a single organisation.',
+			dest="org_id",
+			help="Restrict generation to a single organisation.",
 		)
 		parser.add_argument(
-			'--limit',
+			"--limit",
 			type=int,
 			default=20,
-			dest='limit',
-			help='Maximum number of articles to summarise in this run (default: 20).',
+			dest="limit",
+			help="Maximum number of articles to summarise in this run (default: 20).",
 		)
 		parser.add_argument(
-			'--dry-run',
-			action='store_true',
-			dest='dry_run',
-			help='Report what would be generated without loading the model or writing rows.',
+			"--dry-run",
+			action="store_true",
+			dest="dry_run",
+			help="Report what would be generated without loading the model or writing rows.",
 		)
 
 	# ------------------------------------------------------------------
@@ -69,7 +71,7 @@ class Command(BaseCommand):
 
 	@staticmethod
 	def clean_html(input_text):
-		return BeautifulSoup(input_text, 'html.parser').get_text()
+		return BeautifulSoup(input_text, "html.parser").get_text()
 
 	@staticmethod
 	def get_summary_max_length(text):
@@ -82,18 +84,23 @@ class Command(BaseCommand):
 		start = time.time()
 		max_length = Command.get_summary_max_length(abstract)
 		if max_length > min_length:
-			logging.info(f"Summarizing abstract {article_id} with lengths [{min_length}, {max_length}]")
-			summary = summarizer(abstract, min_length=min_length, max_length=max_length, truncation=True)
+			logging.info(
+				f"Summarizing abstract {article_id} with lengths [{min_length}, {max_length}]"
+			)
+			summary = summarizer(
+				abstract, min_length=min_length, max_length=max_length, truncation=True
+			)
 			end = time.time()
 			logging.info(f" => Elapsed time: {end - start} sec.")
-			return summary[0]['summary_text'] if summary else ""
+			return summary[0]["summary_text"] if summary else ""
 		return ""
 
 	@staticmethod
 	def _orgs_for_article(article, org_id=None):
 		"""Return organisations linked to *article* via its teams, optionally scoped."""
 		from django.apps import apps
-		Organization = apps.get_model('organizations', 'Organization')
+
+		Organization = apps.get_model("organizations", "Organization")
 		qs = Organization.objects.filter(teams__articles=article).distinct()
 		if org_id is not None:
 			qs = qs.filter(pk=org_id)
@@ -103,11 +110,10 @@ class Command(BaseCommand):
 	def _orgs_missing_takeaways(article, orgs):
 		"""Of *orgs*, return the ones whose ArticleOrgContent row is missing or has empty takeaways."""
 		existing = (
-			ArticleOrgContent.objects
-			.filter(article=article, organization__in=orgs)
+			ArticleOrgContent.objects.filter(article=article, organization__in=orgs)
 			.exclude(takeaways__isnull=True)
-			.exclude(takeaways='')
-			.values_list('organization_id', flat=True)
+			.exclude(takeaways="")
+			.values_list("organization_id", flat=True)
 		)
 		filled = set(existing)
 		return [org for org in orgs if org.pk not in filled]
@@ -117,26 +123,25 @@ class Command(BaseCommand):
 	# ------------------------------------------------------------------
 
 	def handle(self, *args, **options):
-		org_id = options.get('org_id')
-		limit = options.get('limit')
+		org_id = options.get("org_id")
+		limit = options.get("limit")
 		if limit is None:
 			limit = 20
-		dry_run = options.get('dry_run')
+		dry_run = options.get("dry_run")
 
 		if limit <= 0:
-			raise CommandError('--limit must be a positive integer.')
+			raise CommandError("--limit must be a positive integer.")
 
 		# Base candidate pool: science papers with an abstract in the usable length range.
 		# We order by newest first so each run prioritises recent ingestion.
 		base_qs = (
-			Articles.objects
-			.annotate(abstract_length=Length('summary'))
+			Articles.objects.annotate(abstract_length=Length("summary"))
 			.filter(
 				abstract_length__gte=25,
 				abstract_length__lte=3000,
-				kind='science paper',
+				kind="science paper",
 			)
-			.order_by('-article_id')
+			.order_by("-article_id")
 		)
 
 		summarizer = None
@@ -154,9 +159,11 @@ class Command(BaseCommand):
 			if processed >= limit:
 				break
 			if scanned >= scan_cap:
-				self.stdout.write(self.style.WARNING(
-					f'Reached scan cap of {scan_cap} articles without filling --limit; stopping.'
-				))
+				self.stdout.write(
+					self.style.WARNING(
+						f"Reached scan cap of {scan_cap} articles without filling --limit; stopping."
+					)
+				)
 				break
 			scanned += 1
 
@@ -164,7 +171,11 @@ class Command(BaseCommand):
 			if not orgs:
 				if org_id is None:
 					orphans += 1
-					self.stderr.write(self.style.WARNING(f'Skipping orphan article {article.article_id}: no organisations via teams.'))
+					self.stderr.write(
+						self.style.WARNING(
+							f"Skipping orphan article {article.article_id}: no organisations via teams."
+						)
+					)
 				continue
 
 			missing_orgs = self._orgs_missing_takeaways(article, orgs)
@@ -172,33 +183,45 @@ class Command(BaseCommand):
 				continue
 
 			try:
-				abstract = self.clean_html(html.unescape(article.summary)).replace('\n', ' ').replace('\r', ' ')
+				abstract = (
+					self.clean_html(html.unescape(article.summary))
+					.replace("\n", " ")
+					.replace("\r", " ")
+				)
 			except Exception as e:
-				self.stderr.write(self.style.WARNING(
-					f'Skipping article {article.article_id}: failed to clean abstract: {e}'
-				))
+				self.stderr.write(
+					self.style.WARNING(
+						f"Skipping article {article.article_id}: failed to clean abstract: {e}"
+					)
+				)
 				continue
 
 			if dry_run:
 				self.stdout.write(
-					f'[DRY RUN] Would summarise article {article.article_id} and fill '
-					f'{len(missing_orgs)} org row(s): {[o.pk for o in missing_orgs]}'
+					f"[DRY RUN] Would summarise article {article.article_id} and fill "
+					f"{len(missing_orgs)} org row(s): {[o.pk for o in missing_orgs]}"
 				)
 				processed += 1
 				continue
 
 			if summarizer is None:
-				self.stdout.write('Loading the model')
-				summarizer = pipeline('summarization', model='philschmid/bart-large-cnn-samsum')
+				self.stdout.write("Loading the model")
+				summarizer = pipeline(
+					"summarization", model="philschmid/bart-large-cnn-samsum"
+				)
 				summarizer.tokenizer.model_max_length = 1024
-				self.stdout.write('Summarizer model ready for use')
+				self.stdout.write("Summarizer model ready for use")
 
 			try:
-				takeaways = self.summarize_abstract(article.article_id, abstract, summarizer)
+				takeaways = self.summarize_abstract(
+					article.article_id, abstract, summarizer
+				)
 			except Exception as e:
-				self.stderr.write(self.style.WARNING(
-					f'Skipping article {article.article_id}: summariser failed: {e}'
-				))
+				self.stderr.write(
+					self.style.WARNING(
+						f"Skipping article {article.article_id}: summariser failed: {e}"
+					)
+				)
 				continue
 
 			if not takeaways:
@@ -208,21 +231,23 @@ class Command(BaseCommand):
 				aoc, created = ArticleOrgContent.objects.get_or_create(
 					article=article,
 					organization=org,
-					defaults={'takeaways': takeaways},
+					defaults={"takeaways": takeaways},
 				)
 				if created:
 					created_rows += 1
 				else:
 					aoc.takeaways = takeaways
-					aoc.save(update_fields=['takeaways', 'updated_at'])
+					aoc.save(update_fields=["takeaways", "updated_at"])
 					updated_rows += 1
 
 			processed += 1
 
 		summary_style = self.style.WARNING if dry_run else self.style.SUCCESS
-		self.stdout.write(summary_style(
-			f'{"[DRY RUN] " if dry_run else ""}'
-			f'Processed {processed} article(s) (scanned {scanned}, orphans skipped {orphans}). '
-			f'Created {created_rows} new ArticleOrgContent row(s), '
-			f'updated {updated_rows} existing row(s).'
-		))
+		self.stdout.write(
+			summary_style(
+				f"{'[DRY RUN] ' if dry_run else ''}"
+				f"Processed {processed} article(s) (scanned {scanned}, orphans skipped {orphans}). "
+				f"Created {created_rows} new ArticleOrgContent row(s), "
+				f"updated {updated_rows} existing row(s)."
+			)
+		)

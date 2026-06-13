@@ -53,6 +53,7 @@ Scripted / CI::
 
     python manage.py prepare_v24_upgrade --backfill --org-id 3 --noinput
 """
+
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 
@@ -62,47 +63,47 @@ from organizations.models import Organization
 
 # (table, [legacy columns]) pairs that migration 0048 removes.
 LEGACY = {
-	'articles': ['takeaways', 'summary_plain_english'],
-	'trials': ['summary_plain_english'],
+	"articles": ["takeaways", "summary_plain_english"],
+	"trials": ["summary_plain_english"],
 }
 # Tables whose write-lock during the 0022 index build is worth sizing up.
-INDEXED_TABLES = ['articles', 'trials', 'articles_team_categories', 'articles_authors']
+INDEXED_TABLES = ["articles", "trials", "articles_team_categories", "articles_authors"]
 
 # Last gregory migration before 0048 drops the legacy columns. Migrating to this
 # creates the per-org tables (0045) while leaving the legacy columns intact.
-PRE_DROP_MIGRATION = '0047'
+PRE_DROP_MIGRATION = "0047"
 
 
 class Command(BaseCommand):
 	help = (
-		'De-risk the v24 upgrade: pre-flight check (default) or back up legacy '
-		'takeaway data into per-org content tables before running migrate.'
+		"De-risk the v24 upgrade: pre-flight check (default) or back up legacy "
+		"takeaway data into per-org content tables before running migrate."
 	)
 
 	def add_arguments(self, parser):
 		parser.add_argument(
-			'--backfill',
-			action='store_true',
-			help='Copy legacy takeaways/summaries into ArticleOrgContent/TrialOrgContent.',
+			"--backfill",
+			action="store_true",
+			help="Copy legacy takeaways/summaries into ArticleOrgContent/TrialOrgContent.",
 		)
 		parser.add_argument(
-			'--org-id',
+			"--org-id",
 			type=int,
-			dest='org_id',
-			help='Target organisation ID for the backfill. Required with --noinput.',
+			dest="org_id",
+			help="Target organisation ID for the backfill. Required with --noinput.",
 		)
 		parser.add_argument(
-			'--dry-run',
-			action='store_true',
-			dest='dry_run',
-			help='Report what the backfill would do without writing.',
+			"--dry-run",
+			action="store_true",
+			dest="dry_run",
+			help="Report what the backfill would do without writing.",
 		)
 		parser.add_argument(
-			'--noinput',
-			'--no-input',
-			action='store_true',
-			dest='no_input',
-			help='Run non-interactively. Requires --org-id.',
+			"--noinput",
+			"--no-input",
+			action="store_true",
+			dest="no_input",
+			help="Run non-interactively. Requires --org-id.",
 		)
 
 	# ------------------------------------------------------------------
@@ -127,18 +128,15 @@ class Command(BaseCommand):
 
 	def _orgcontent_ready(self):
 		"""True once both per-org content tables exist (created by 0045)."""
-		return (
-			self._table_exists(ArticleOrgContent._meta.db_table)
-			and self._table_exists(TrialOrgContent._meta.db_table)
-		)
+		return self._table_exists(
+			ArticleOrgContent._meta.db_table
+		) and self._table_exists(TrialOrgContent._meta.db_table)
 
 	def _rows_with_data(self, table, columns):
 		"""Count rows where any of *columns* is non-null and non-empty."""
 		if not columns:
 			return 0
-		where = ' OR '.join(
-			f"({c} IS NOT NULL AND {c} <> '')" for c in columns
-		)
+		where = " OR ".join(f"({c} IS NOT NULL AND {c} <> '')" for c in columns)
 		with connection.cursor() as cur:
 			cur.execute(f"SELECT count(*) FROM {table} WHERE {where}")
 			return cur.fetchone()[0]
@@ -151,7 +149,7 @@ class Command(BaseCommand):
 				[table, table],
 			)
 			row = cur.fetchone()
-			return row if row else ('n/a', 0)
+			return row if row else ("n/a", 0)
 
 	def _legacy_state(self):
 		"""Return {table: (present_columns, rows_with_data)}."""
@@ -167,7 +165,7 @@ class Command(BaseCommand):
 	# ------------------------------------------------------------------
 
 	def _preflight(self):
-		self.stdout.write(self.style.MIGRATE_HEADING('\nv24 upgrade pre-flight\n'))
+		self.stdout.write(self.style.MIGRATE_HEADING("\nv24 upgrade pre-flight\n"))
 
 		state = self._legacy_state()
 		any_legacy_cols = any(present for present, _ in state.values())
@@ -175,108 +173,128 @@ class Command(BaseCommand):
 		oc_ready = self._orgcontent_ready()
 
 		# --- Critical: legacy takeaway data ---
-		self.stdout.write('Critical — legacy takeaway/summary data (dropped by 0048):')
+		self.stdout.write("Critical — legacy takeaway/summary data (dropped by 0048):")
 		next_step = None
 		if not any_legacy_cols:
-			self.stdout.write(self.style.SUCCESS(
-				'  ✓ Legacy columns already removed. 0048 has run (or DB post-dates it). '
-				'Nothing to back up.'
-			))
+			self.stdout.write(
+				self.style.SUCCESS(
+					"  ✓ Legacy columns already removed. 0048 has run (or DB post-dates it). "
+					"Nothing to back up."
+				)
+			)
 		else:
 			for table, (present, rows) in state.items():
 				if present:
 					self.stdout.write(
-						f'  • {table}: {rows} row(s) still hold data in '
-						f'{", ".join(sorted(present))}'
+						f"  • {table}: {rows} row(s) still hold data in "
+						f"{', '.join(sorted(present))}"
 					)
 			if not pending:
-				self.stdout.write(self.style.SUCCESS(
-					'  ✓ Columns exist but hold no data — safe to migrate.'
-				))
+				self.stdout.write(
+					self.style.SUCCESS(
+						"  ✓ Columns exist but hold no data — safe to migrate."
+					)
+				)
 			elif not oc_ready:
 				# Per-org tables (0045) don't exist yet — cannot back up safely.
-				self.stdout.write(self.style.WARNING(
-					f'  ⚠ {pending} row(s) carry legacy data, but the per-org tables '
-					f'do not exist yet (created by 0045).'
-				))
 				self.stdout.write(
-					f'    Apply schema up to {PRE_DROP_MIGRATION} first, then back up, '
-					f'then finish:'
+					self.style.WARNING(
+						f"  ⚠ {pending} row(s) carry legacy data, but the per-org tables "
+						f"do not exist yet (created by 0045)."
+					)
 				)
-				self.stdout.write(f'      python manage.py migrate gregory {PRE_DROP_MIGRATION}')
-				self.stdout.write('      python manage.py prepare_v24_upgrade --backfill --org-id <id>')
-				next_step = 'split'
+				self.stdout.write(
+					f"    Apply schema up to {PRE_DROP_MIGRATION} first, then back up, "
+					f"then finish:"
+				)
+				self.stdout.write(
+					f"      python manage.py migrate gregory {PRE_DROP_MIGRATION}"
+				)
+				self.stdout.write(
+					"      python manage.py prepare_v24_upgrade --backfill --org-id <id>"
+				)
+				next_step = "split"
 			else:
 				art_oc = ArticleOrgContent.objects.count()
 				trial_oc = TrialOrgContent.objects.count()
 				self.stdout.write(
-					f'  • already migrated: ArticleOrgContent={art_oc}, TrialOrgContent={trial_oc}'
+					f"  • already migrated: ArticleOrgContent={art_oc}, TrialOrgContent={trial_oc}"
 				)
-				self.stdout.write(self.style.WARNING(
-					'  ⚠ Run `--backfill` BEFORE the final migrate, or 0048 will drop them.'
-				))
-				next_step = 'backfill'
+				self.stdout.write(
+					self.style.WARNING(
+						"  ⚠ Run `--backfill` BEFORE the final migrate, or 0048 will drop them."
+					)
+				)
+				next_step = "backfill"
 
 		# --- Moderate: index-build write lock (0022) ---
-		self.stdout.write('\nModerate — 0022 builds indexes with a plain CREATE INDEX')
-		self.stdout.write('(blocks writes on these tables for the build duration):')
+		self.stdout.write("\nModerate — 0022 builds indexes with a plain CREATE INDEX")
+		self.stdout.write("(blocks writes on these tables for the build duration):")
 		for table in INDEXED_TABLES:
 			size, rows = self._table_size(table)
-			self.stdout.write(f'  • {table}: {size} (~{rows:,} rows)')
-		self.stdout.write(self.style.WARNING(
-			'  ⚠ Run migrate inside a maintenance window with writers paused.'
-		))
+			self.stdout.write(f"  • {table}: {size} (~{rows:,} rows)")
+		self.stdout.write(
+			self.style.WARNING(
+				"  ⚠ Run migrate inside a maintenance window with writers paused."
+			)
+		)
 
 		# --- Verdict ---
-		self.stdout.write('')
-		if next_step == 'split':
-			self.stdout.write(self.style.NOTICE(
-				f'Next: python manage.py migrate gregory {PRE_DROP_MIGRATION}  →  '
-				f'--backfill  →  migrate'
-			))
-		elif next_step == 'backfill':
-			self.stdout.write(self.style.NOTICE(
-				'Next: python manage.py prepare_v24_upgrade --backfill --org-id <id>'
-			))
+		self.stdout.write("")
+		if next_step == "split":
+			self.stdout.write(
+				self.style.NOTICE(
+					f"Next: python manage.py migrate gregory {PRE_DROP_MIGRATION}  →  "
+					f"--backfill  →  migrate"
+				)
+			)
+		elif next_step == "backfill":
+			self.stdout.write(
+				self.style.NOTICE(
+					"Next: python manage.py prepare_v24_upgrade --backfill --org-id <id>"
+				)
+			)
 		else:
-			self.stdout.write(self.style.SUCCESS(
-				'Next: pause writers, then python manage.py migrate '
-				'&& python manage.py createcachetable gregory_cache'
-			))
-		self.stdout.write('')
+			self.stdout.write(
+				self.style.SUCCESS(
+					"Next: pause writers, then python manage.py migrate "
+					"&& python manage.py createcachetable gregory_cache"
+				)
+			)
+		self.stdout.write("")
 
 	# ------------------------------------------------------------------
 	# Backfill
 	# ------------------------------------------------------------------
 
 	def _list_orgs(self):
-		self.stdout.write('\nOrganisations:')
-		self.stdout.write(f'  {"ID":>5}  {"Name":<40}')
-		self.stdout.write('  ' + '-' * 48)
-		for org in Organization.objects.order_by('id'):
-			self.stdout.write(f'  {org.id:>5}  {str(org.name):<40}')
-		self.stdout.write('')
+		self.stdout.write("\nOrganisations:")
+		self.stdout.write(f"  {'ID':>5}  {'Name':<40}")
+		self.stdout.write("  " + "-" * 48)
+		for org in Organization.objects.order_by("id"):
+			self.stdout.write(f"  {org.id:>5}  {str(org.name):<40}")
+		self.stdout.write("")
 
 	def _resolve_org(self, org_id, no_input):
 		if org_id is None:
 			if no_input:
-				raise CommandError('--org-id is required with --noinput.')
+				raise CommandError("--org-id is required with --noinput.")
 			self._list_orgs()
 			while True:
-				raw = input('Target organisation ID: ').strip()
+				raw = input("Target organisation ID: ").strip()
 				if raw.isdigit():
 					org_id = int(raw)
 					break
-				self.stderr.write('Please enter a numeric ID.\n')
+				self.stderr.write("Please enter a numeric ID.\n")
 		try:
 			return Organization.objects.get(pk=org_id)
 		except Organization.DoesNotExist:
-			raise CommandError(f'Organisation id={org_id} does not exist.')
+			raise CommandError(f"Organisation id={org_id} does not exist.")
 
 	def _fetch_legacy(self, table, pk, columns):
 		"""Yield (pk_value, {col: value}) for rows with any non-empty legacy column."""
-		where = ' OR '.join(f"({c} IS NOT NULL AND {c} <> '')" for c in columns)
-		cols_sql = ', '.join(columns)
+		where = " OR ".join(f"({c} IS NOT NULL AND {c} <> '')" for c in columns)
+		cols_sql = ", ".join(columns)
 		with connection.cursor() as cur:
 			cur.execute(f"SELECT {pk}, {cols_sql} FROM {table} WHERE {where}")
 			for row in cur.fetchall():
@@ -285,21 +303,23 @@ class Command(BaseCommand):
 	def _backfill(self, org, dry_run):
 		state = self._legacy_state()
 		if not any(present for present, _ in state.values()):
-			self.stdout.write(self.style.SUCCESS(
-				'Legacy columns already removed — nothing to back up.'
-			))
+			self.stdout.write(
+				self.style.SUCCESS(
+					"Legacy columns already removed — nothing to back up."
+				)
+			)
 			return
 
 		if not self._orgcontent_ready():
 			raise CommandError(
-				'Per-org tables (ArticleOrgContent/TrialOrgContent) do not exist yet. '
-				f'Run `python manage.py migrate gregory {PRE_DROP_MIGRATION}` first, '
-				'then re-run this backfill.'
+				"Per-org tables (ArticleOrgContent/TrialOrgContent) do not exist yet. "
+				f"Run `python manage.py migrate gregory {PRE_DROP_MIGRATION}` first, "
+				"then re-run this backfill."
 			)
 
 		plan = [
-			('articles', 'article_id', ArticleOrgContent, 'article_id'),
-			('trials', 'trial_id', TrialOrgContent, 'trial_id'),
+			("articles", "article_id", ArticleOrgContent, "article_id"),
+			("trials", "trial_id", TrialOrgContent, "trial_id"),
 		]
 		created = updated = skipped = 0
 
@@ -313,16 +333,18 @@ class Command(BaseCommand):
 			# Existing per-org rows for this org, keyed by FK, with current field values.
 			existing = {
 				row[fk]: row
-				for row in model.objects
-				.filter(organization=org, **{f'{fk}__in': list(legacy)})
-				.values(fk, *present)
+				for row in model.objects.filter(
+					organization=org, **{f"{fk}__in": list(legacy)}
+				).values(fk, *present)
 			}
 			for obj_id, values in legacy.items():
 				row = existing.get(obj_id)
 				if row is None:
 					if not dry_run:
 						with transaction.atomic():
-							model.objects.create(organization=org, **{fk: obj_id}, **values)
+							model.objects.create(
+								organization=org, **{fk: obj_id}, **values
+							)
 					created += 1
 					continue
 				# Existing row: fill only the fields that are currently empty,
@@ -333,38 +355,48 @@ class Command(BaseCommand):
 					continue
 				if not dry_run:
 					with transaction.atomic():
-						model.objects.filter(organization=org, **{fk: obj_id}).update(**fills)
+						model.objects.filter(organization=org, **{fk: obj_id}).update(
+							**fills
+						)
 				updated += 1
 
-		verb = 'Would create' if dry_run else 'Created'
+		verb = "Would create" if dry_run else "Created"
 		style = self.style.WARNING if dry_run else self.style.SUCCESS
-		self.stdout.write(style(
-			f'{verb} {created} new row(s), filled {updated} existing row(s); '
-			f'skipped {skipped} already-complete row(s).'
-		))
+		self.stdout.write(
+			style(
+				f"{verb} {created} new row(s), filled {updated} existing row(s); "
+				f"skipped {skipped} already-complete row(s)."
+			)
+		)
 		if not dry_run:
-			self.stdout.write(self.style.SUCCESS(
-				'✓ Legacy data preserved. Safe to run the final migrate.'
-			))
+			self.stdout.write(
+				self.style.SUCCESS(
+					"✓ Legacy data preserved. Safe to run the final migrate."
+				)
+			)
 
 	# ------------------------------------------------------------------
 	# Entry point
 	# ------------------------------------------------------------------
 
 	def handle(self, *args, **options):
-		if not options['backfill']:
+		if not options["backfill"]:
 			self._preflight()
 			return
 
-		org = self._resolve_org(options['org_id'], options['no_input'])
+		org = self._resolve_org(options["org_id"], options["no_input"])
 
-		if not options['no_input'] and not options['dry_run']:
-			confirm = input(
-				f'\nBack up legacy takeaways/summaries into per-org content for '
-				f'"{org.name}" (id={org.id})? [y/N] '
-			).strip().lower()
-			if confirm not in ('y', 'yes'):
-				self.stdout.write('Aborted.')
+		if not options["no_input"] and not options["dry_run"]:
+			confirm = (
+				input(
+					f"\nBack up legacy takeaways/summaries into per-org content for "
+					f'"{org.name}" (id={org.id})? [y/N] '
+				)
+				.strip()
+				.lower()
+			)
+			if confirm not in ("y", "yes"):
+				self.stdout.write("Aborted.")
 				return
 
-		self._backfill(org, options['dry_run'])
+		self._backfill(org, options["dry_run"])

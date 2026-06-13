@@ -7,13 +7,15 @@ Tests for volume controls in send_weekly_summary:
 - Migration default for existing lists
 - Base queryset ordered newest-first
 """
+
 import os
 from io import StringIO
 from unittest.mock import patch, MagicMock
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gregory.tests.test_settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gregory.tests.test_settings")
 
 import django
+
 django.setup()
 
 from django.contrib.sites.models import Site
@@ -51,7 +53,7 @@ class TestWeeklySummaryVolume(TestCase):
 			weekly_digest=True,
 			team=self.team,
 			ml_threshold=0.8,
-			article_sort_order='date',
+			article_sort_order="date",
 			article_limit=5,
 			lookback_days=8,
 			list_email_subject="Volume Weekly",
@@ -84,7 +86,8 @@ class TestWeeklySummaryVolume(TestCase):
 		article = Articles.objects.create(
 			title=title,
 			doi=doi or f"10.9999/{title.replace(' ', '-').lower()}",
-			link=link or f"https://example.com/articles/{title.replace(' ', '-').lower()}",
+			link=link
+			or f"https://example.com/articles/{title.replace(' ', '-').lower()}",
 		)
 		article.subjects.add(self.subject)
 		if days_ago:
@@ -97,14 +100,14 @@ class TestWeeklySummaryVolume(TestCase):
 	def _run_and_capture_stdout(self, **kwargs):
 		"""Run the command and return captured stdout text."""
 		_mock_result = MagicMock(status_code=200)
-		_mock_result.json.return_value = {'ErrorCode': 0, 'Message': 'OK'}
+		_mock_result.json.return_value = {"ErrorCode": 0, "Message": "OK"}
 
 		with patch(
-			'subscriptions.management.commands.send_weekly_summary.send_email',
+			"subscriptions.management.commands.send_weekly_summary.send_email",
 			return_value=_mock_result,
 		):
 			out = StringIO()
-			call_command('send_weekly_summary', stdout=out, dry_run=True, **kwargs)
+			call_command("send_weekly_summary", stdout=out, dry_run=True, **kwargs)
 			return out.getvalue()
 
 	# ── Tests ────────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ Covers spec §10.3:
 Run with:
     docker exec gregory python manage.py test api.tests.test_read_serialization
 """
+
 from datetime import timedelta
 
 from django.test import TestCase
@@ -23,7 +24,10 @@ from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
 from gregory.models import (
-	Articles, ArticleOrgContent, Team, Subject,
+	Articles,
+	ArticleOrgContent,
+	Team,
+	Subject,
 	OrganizationApiSettings,
 )
 
@@ -32,34 +36,42 @@ from gregory.models import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_org(name, slug='', public=False):
-	slug = slug or name.lower().replace(' ', '-')
+
+def _make_org(name, slug="", public=False):
+	slug = slug or name.lower().replace(" ", "-")
 	org = Organization.objects.create(name=name, slug=slug)
-	OrganizationApiSettings.objects.filter(organization=org).update(make_api_public=public)
+	OrganizationApiSettings.objects.filter(organization=org).update(
+		make_api_public=public
+	)
 	return org
 
 
 def _make_team(org, name):
-	return Team.objects.create(organization=org, name=name, slug=name.lower().replace(' ', '-'))
+	return Team.objects.create(
+		organization=org, name=name, slug=name.lower().replace(" ", "-")
+	)
 
 
 def _make_subject(team, name):
 	from django.utils.text import slugify
-	return Subject.objects.create(team=team, subject_name=name, subject_slug=slugify(name))
+
+	return Subject.objects.create(
+		team=team, subject_name=name, subject_slug=slugify(name)
+	)
 
 
 def _make_scheme(org, name):
 	return APIAccessScheme.objects.create(
 		client_name=name,
-		client_contacts=f'{name}@example.com',
+		client_contacts=f"{name}@example.com",
 		organization=org,
-		ip_addresses='',
+		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
 	)
 
 
-def _make_article(team, title='Test Article', link='https://example.com/art1'):
+def _make_article(team, title="Test Article", link="https://example.com/art1"):
 	article = Articles.objects.create(title=title, link=link)
 	article.teams.add(team)
 	return article
@@ -68,13 +80,14 @@ def _make_article(team, title='Test Article', link='https://example.com/art1'):
 def _api_get(client, path, api_key=None):
 	headers = {}
 	if api_key:
-		headers['HTTP_AUTHORIZATION'] = api_key
+		headers["HTTP_AUTHORIZATION"] = api_key
 	return client.get(path, **headers)
 
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TakeawaysReadWithApiKeyTest(TestCase):
 	"""
@@ -83,9 +96,9 @@ class TakeawaysReadWithApiKeyTest(TestCase):
 
 	def setUp(self):
 		self.client = APIClient()
-		self.org = _make_org('Read Org A')
-		self.team = _make_team(self.org, 'Read Team A')
-		self.scheme = _make_scheme(self.org, 'read-key-a')
+		self.org = _make_org("Read Org A")
+		self.team = _make_team(self.org, "Read Team A")
+		self.scheme = _make_scheme(self.org, "read-key-a")
 		self.article = _make_article(self.team)
 
 	def test_takeaways_from_org_content_when_key_present(self):
@@ -93,32 +106,38 @@ class TakeawaysReadWithApiKeyTest(TestCase):
 		ArticleOrgContent.objects.create(
 			article=self.article,
 			organization=self.org,
-			takeaways='My org takeaway',
+			takeaways="My org takeaway",
 		)
-		resp = _api_get(self.client, '/articles/', self.scheme.api_key)
+		resp = _api_get(self.client, "/articles/", self.scheme.api_key)
 		self.assertEqual(resp.status_code, 200)
-		results = resp.data['results']
-		article_data = next(a for a in results if a['article_id'] == self.article.article_id)
-		self.assertEqual(article_data['takeaways'], 'My org takeaway')
+		results = resp.data["results"]
+		article_data = next(
+			a for a in results if a["article_id"] == self.article.article_id
+		)
+		self.assertEqual(article_data["takeaways"], "My org takeaway")
 
 	def test_takeaways_null_when_no_org_content(self):
 		"""API key for Org A, no ArticleOrgContent row → takeaways is null."""
-		resp = _api_get(self.client, '/articles/', self.scheme.api_key)
+		resp = _api_get(self.client, "/articles/", self.scheme.api_key)
 		self.assertEqual(resp.status_code, 200)
-		results = resp.data['results']
-		article_data = next(a for a in results if a['article_id'] == self.article.article_id)
-		self.assertIsNone(article_data.get('takeaways'))
+		results = resp.data["results"]
+		article_data = next(
+			a for a in results if a["article_id"] == self.article.article_id
+		)
+		self.assertIsNone(article_data.get("takeaways"))
 
 	def test_detail_endpoint_takeaways(self):
 		"""Detail endpoint also returns org-scoped takeaways."""
 		ArticleOrgContent.objects.create(
 			article=self.article,
 			organization=self.org,
-			takeaways='Detail takeaway',
+			takeaways="Detail takeaway",
 		)
-		resp = _api_get(self.client, f'/articles/{self.article.article_id}/', self.scheme.api_key)
+		resp = _api_get(
+			self.client, f"/articles/{self.article.article_id}/", self.scheme.api_key
+		)
 		self.assertEqual(resp.status_code, 200)
-		self.assertEqual(resp.data['takeaways'], 'Detail takeaway')
+		self.assertEqual(resp.data["takeaways"], "Detail takeaway")
 
 
 class TakeawaysReadAnonymousTest(TestCase):
@@ -126,23 +145,27 @@ class TakeawaysReadAnonymousTest(TestCase):
 
 	def setUp(self):
 		self.client = APIClient()
-		self.org = _make_org('Anon Org', public=True)
-		self.team = _make_team(self.org, 'Anon Team')
-		self.article = _make_article(self.team, title='Anon Article', link='https://example.com/anon')
+		self.org = _make_org("Anon Org", public=True)
+		self.team = _make_team(self.org, "Anon Team")
+		self.article = _make_article(
+			self.team, title="Anon Article", link="https://example.com/anon"
+		)
 		ArticleOrgContent.objects.create(
 			article=self.article,
 			organization=self.org,
-			takeaways='Should not be visible anonymously',
+			takeaways="Should not be visible anonymously",
 		)
 
 	def test_takeaways_absent_for_anonymous(self):
 		"""Anonymous request: takeaways should not appear in the response."""
-		resp = self.client.get('/articles/')
+		resp = self.client.get("/articles/")
 		self.assertEqual(resp.status_code, 200)
-		results = resp.data['results']
-		anon_articles = [a for a in results if a['article_id'] == self.article.article_id]
+		results = resp.data["results"]
+		anon_articles = [
+			a for a in results if a["article_id"] == self.article.article_id
+		]
 		self.assertEqual(len(anon_articles), 1)
-		self.assertNotIn('takeaways', anon_articles[0])
+		self.assertNotIn("takeaways", anon_articles[0])
 
 
 class TakeawaysPublicOrgTeamIdTest(TestCase):
@@ -155,22 +178,26 @@ class TakeawaysPublicOrgTeamIdTest(TestCase):
 
 	def setUp(self):
 		self.client = APIClient()
-		self.org = _make_org('Public Org TK', public=True)
-		self.team = _make_team(self.org, 'Public Team TK')
-		self.article = _make_article(self.team, title='Public TK Article', link='https://example.com/pbtk')
+		self.org = _make_org("Public Org TK", public=True)
+		self.team = _make_team(self.org, "Public Team TK")
+		self.article = _make_article(
+			self.team, title="Public TK Article", link="https://example.com/pbtk"
+		)
 		ArticleOrgContent.objects.create(
 			article=self.article,
 			organization=self.org,
-			takeaways='Public org takeaway',
+			takeaways="Public org takeaway",
 		)
 
 	def test_takeaways_present_for_public_org_via_team_id(self):
-		resp = self.client.get(f'/articles/?team_id={self.team.id}')
+		resp = self.client.get(f"/articles/?team_id={self.team.id}")
 		self.assertEqual(resp.status_code, 200)
-		results = resp.data['results']
-		article_data = next((a for a in results if a['article_id'] == self.article.article_id), None)
+		results = resp.data["results"]
+		article_data = next(
+			(a for a in results if a["article_id"] == self.article.article_id), None
+		)
 		self.assertIsNotNone(article_data)
-		self.assertEqual(article_data.get('takeaways'), 'Public org takeaway')
+		self.assertEqual(article_data.get("takeaways"), "Public org takeaway")
 
 
 class TakeawaysTwoOrgsTest(TestCase):
@@ -181,31 +208,35 @@ class TakeawaysTwoOrgsTest(TestCase):
 
 	def setUp(self):
 		self.client = APIClient()
-		self.org_a = _make_org('Dual Org A')
-		self.org_b = _make_org('Dual Org B', 'dual-org-b')
-		self.team_a = _make_team(self.org_a, 'Dual Team A')
-		self.team_b = _make_team(self.org_b, 'Dual Team B')
-		self.scheme_a = _make_scheme(self.org_a, 'dual-key-a')
-		self.scheme_b = _make_scheme(self.org_b, 'dual-key-b')
+		self.org_a = _make_org("Dual Org A")
+		self.org_b = _make_org("Dual Org B", "dual-org-b")
+		self.team_a = _make_team(self.org_a, "Dual Team A")
+		self.team_b = _make_team(self.org_b, "Dual Team B")
+		self.scheme_a = _make_scheme(self.org_a, "dual-key-a")
+		self.scheme_b = _make_scheme(self.org_b, "dual-key-b")
 		# Article shared across both orgs
 		self.article = Articles.objects.create(
-			title='Shared Article',
-			link='https://example.com/shared',
+			title="Shared Article",
+			link="https://example.com/shared",
 		)
 		self.article.teams.add(self.team_a, self.team_b)
 		ArticleOrgContent.objects.create(
-			article=self.article, organization=self.org_a, takeaways='Org A takeaway'
+			article=self.article, organization=self.org_a, takeaways="Org A takeaway"
 		)
 		ArticleOrgContent.objects.create(
-			article=self.article, organization=self.org_b, takeaways='Org B takeaway'
+			article=self.article, organization=self.org_b, takeaways="Org B takeaway"
 		)
 
 	def test_org_a_sees_own_takeaway(self):
-		resp = _api_get(self.client, f'/articles/{self.article.article_id}/', self.scheme_a.api_key)
+		resp = _api_get(
+			self.client, f"/articles/{self.article.article_id}/", self.scheme_a.api_key
+		)
 		self.assertEqual(resp.status_code, 200)
-		self.assertEqual(resp.data['takeaways'], 'Org A takeaway')
+		self.assertEqual(resp.data["takeaways"], "Org A takeaway")
 
 	def test_org_b_sees_own_takeaway(self):
-		resp = _api_get(self.client, f'/articles/{self.article.article_id}/', self.scheme_b.api_key)
+		resp = _api_get(
+			self.client, f"/articles/{self.article.article_id}/", self.scheme_b.api_key
+		)
 		self.assertEqual(resp.status_code, 200)
-		self.assertEqual(resp.data['takeaways'], 'Org B takeaway')
+		self.assertEqual(resp.data["takeaways"], "Org B takeaway")

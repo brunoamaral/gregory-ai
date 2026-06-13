@@ -8,6 +8,7 @@ queryset (an org-visibility leak) when the team-scoping branch raised.
 Run with:
     docker exec gregory python manage.py test gregory.tests.test_admin_org_filter
 """
+
 from django.contrib import admin
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
@@ -33,25 +34,35 @@ class OrganizationFilterMixinTests(TestCase):
 		self.factory = RequestFactory()
 		self.site = AdminSite()
 
-		self.org_a = Organization.objects.create(name='Org A', slug='org-a-admin')
-		self.org_b = Organization.objects.create(name='Org B', slug='org-b-admin')
-		self.team_a = Team.objects.create(organization=self.org_a, name='Team A', slug='team-a-admin')
-		self.team_b = Team.objects.create(organization=self.org_b, name='Team B', slug='team-b-admin')
+		self.org_a = Organization.objects.create(name="Org A", slug="org-a-admin")
+		self.org_b = Organization.objects.create(name="Org B", slug="org-b-admin")
+		self.team_a = Team.objects.create(
+			organization=self.org_a, name="Team A", slug="team-a-admin"
+		)
+		self.team_b = Team.objects.create(
+			organization=self.org_b, name="Team B", slug="team-b-admin"
+		)
 
-		self.article_a = Articles.objects.create(title='Article A', link='https://example.com/a')
+		self.article_a = Articles.objects.create(
+			title="Article A", link="https://example.com/a"
+		)
 		self.article_a.teams.add(self.team_a)
-		self.article_b = Articles.objects.create(title='Article B', link='https://example.com/b')
+		self.article_b = Articles.objects.create(
+			title="Article B", link="https://example.com/b"
+		)
 		self.article_b.teams.add(self.team_b)
 
 		# Non-superuser belonging only to org A.
-		self.user = User.objects.create_user(username='org-a-user', password='pw')
+		self.user = User.objects.create_user(username="org-a-user", password="pw")
 		OrganizationUser.objects.create(organization=self.org_a, user=self.user)
 
-		self.superuser = User.objects.create_superuser(username='root', email='r@e.com', password='pw')
+		self.superuser = User.objects.create_superuser(
+			username="root", email="r@e.com", password="pw"
+		)
 
 	def _queryset_for(self, admin_cls, model, user):
 		model_admin = admin_cls(model, self.site)
-		request = self.factory.get('/admin/')
+		request = self.factory.get("/admin/")
 		request.user = user
 		return model_admin.get_queryset(request)
 
@@ -70,6 +81,6 @@ class OrganizationFilterMixinTests(TestCase):
 	def test_model_without_teams_falls_through_unscoped(self):
 		# Authors has no organisation/team/teams: the FieldDoesNotExist branch
 		# returns the queryset unchanged (these models aren't org-scoped).
-		author = Authors.objects.create(given_name='Jane', family_name='Doe')
+		author = Authors.objects.create(given_name="Jane", family_name="Doe")
 		qs = self._queryset_for(_AuthorOrgAdmin, Authors, self.user)
 		self.assertIn(author, qs)

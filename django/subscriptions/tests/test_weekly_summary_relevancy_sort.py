@@ -3,13 +3,15 @@ Tests verifying that the 'relevancy' sort order (the default) preserves
 existing send_weekly_summary behaviour after the article_sort_order field
 was introduced.
 """
+
 import os
 from io import StringIO
 from unittest.mock import patch, MagicMock
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gregory.tests.test_settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gregory.tests.test_settings")
 
 import django
+
 django.setup()
 
 from django.contrib.sites.models import Site
@@ -18,7 +20,13 @@ from django.test import TestCase
 from django.utils import timezone
 from datetime import timedelta
 
-from gregory.models import Articles, ArticleSubjectRelevance, MLPredictions, Subject, Team
+from gregory.models import (
+	Articles,
+	ArticleSubjectRelevance,
+	MLPredictions,
+	Subject,
+	Team,
+)
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers
@@ -89,8 +97,8 @@ class TestWeeklySummaryRelevancySort(TestCase):
 		MLPredictions.objects.create(
 			article=article,
 			subject=self.subject,
-			algorithm='pubmed_bert',
-			model_version='v1',
+			algorithm="pubmed_bert",
+			model_version="v1",
 			probability_score=0.95,
 			predicted_relevant=True,
 		)
@@ -100,8 +108,8 @@ class TestWeeklySummaryRelevancySort(TestCase):
 		MLPredictions.objects.create(
 			article=article,
 			subject=self.subject,
-			algorithm='pubmed_bert',
-			model_version='v1',
+			algorithm="pubmed_bert",
+			model_version="v1",
 			probability_score=0.2,
 			predicted_relevant=False,
 		)
@@ -113,13 +121,13 @@ class TestWeeklySummaryRelevancySort(TestCase):
 
 	def _run_dry_run(self):
 		out = StringIO()
-		call_command('send_weekly_summary', stdout=out, dry_run=True)
+		call_command("send_weekly_summary", stdout=out, dry_run=True)
 		return out.getvalue()
 
 	def _run_and_capture_context(self):
 		captured = {}
 		real_get_template = __import__(
-			'django.template.loader', fromlist=['get_template']
+			"django.template.loader", fromlist=["get_template"]
 		).get_template
 
 		def fake_get_template(template_name, using=None):
@@ -135,17 +143,20 @@ class TestWeeklySummaryRelevancySort(TestCase):
 			return tmpl
 
 		_mock_result = MagicMock(status_code=200)
-		_mock_result.json.return_value = {'ErrorCode': 0, 'Message': 'OK'}
+		_mock_result.json.return_value = {"ErrorCode": 0, "Message": "OK"}
 
-		with patch(
-			'subscriptions.management.commands.send_weekly_summary.send_email',
-			return_value=_mock_result,
-		), patch(
-			'subscriptions.management.commands.send_weekly_summary.get_template',
-			side_effect=fake_get_template,
+		with (
+			patch(
+				"subscriptions.management.commands.send_weekly_summary.send_email",
+				return_value=_mock_result,
+			),
+			patch(
+				"subscriptions.management.commands.send_weekly_summary.get_template",
+				side_effect=fake_get_template,
+			),
 		):
 			out = StringIO()
-			call_command('send_weekly_summary', stdout=out)
+			call_command("send_weekly_summary", stdout=out)
 
 		return captured
 
@@ -158,7 +169,7 @@ class TestWeeklySummaryRelevancySort(TestCase):
 			weekly_digest=True,
 			team=self.team,
 		)
-		self.assertEqual(fresh_list.article_sort_order, 'relevancy')
+		self.assertEqual(fresh_list.article_sort_order, "relevancy")
 
 	def test_relevancy_mode_priority_ranking_unchanged(self):
 		"""
@@ -183,20 +194,28 @@ class TestWeeklySummaryRelevancySort(TestCase):
 
 		ctx = self._run_and_capture_context()
 
-		all_rendered = list(ctx.get('articles', [])) + list(ctx.get('additional_articles', []))
+		all_rendered = list(ctx.get("articles", [])) + list(
+			ctx.get("additional_articles", [])
+		)
 		rendered_pks = [a.pk for a in all_rendered]
 
 		self.assertEqual(len(rendered_pks), 2)
-		self.assertIn(high.pk, rendered_pks, "manually relevant article should be included")
+		self.assertIn(
+			high.pk, rendered_pks, "manually relevant article should be included"
+		)
 		self.assertIn(medium.pk, rendered_pks, "high-ML article should be included")
-		self.assertNotIn(low_priority.pk, rendered_pks, "low-ML article should be excluded by limit")
+		self.assertNotIn(
+			low_priority.pk, rendered_pks, "low-ML article should be excluded by limit"
+		)
 
 	def test_relevancy_mode_filters_low_ml_scores(self):
 		"""
 		In relevancy mode, an article below the ML threshold and not manually
 		marked relevant is excluded from the digest.
 		"""
-		low_article = self._make_article("Low ML Article", days_ago=1, doi="10.7777/low-ml")
+		low_article = self._make_article(
+			"Low ML Article", days_ago=1, doi="10.7777/low-ml"
+		)
 		self._add_low_ml_score(low_article)
 
 		# Subject.ml_consensus_type defaults to 'any', so even one model must pass threshold.

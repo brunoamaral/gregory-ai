@@ -11,13 +11,15 @@ In date mode:
 - The content organizer returns a flat list (featured_articles empty,
   regular_articles populated).
 """
+
 import os
 from io import StringIO
 from unittest.mock import patch, MagicMock
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gregory.tests.test_settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gregory.tests.test_settings")
 
 import django
+
 django.setup()
 
 from django.contrib.sites.models import Site
@@ -26,7 +28,13 @@ from django.test import TestCase
 from django.utils import timezone
 from datetime import timedelta
 
-from gregory.models import Articles, ArticleSubjectRelevance, MLPredictions, Subject, Team
+from gregory.models import (
+	Articles,
+	ArticleSubjectRelevance,
+	MLPredictions,
+	Subject,
+	Team,
+)
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers
@@ -61,7 +69,7 @@ class TestWeeklySummaryDateSort(TestCase):
 			weekly_digest=True,
 			team=self.team,
 			ml_threshold=0.8,
-			article_sort_order='date',
+			article_sort_order="date",
 			list_email_subject="Date Sort Weekly",
 		)
 		self.digest_list.subjects.add(self.subject, self.subject_b)
@@ -106,7 +114,7 @@ class TestWeeklySummaryDateSort(TestCase):
 		"""Run the command, intercept the template context, return it."""
 		captured = {}
 		real_get_template = __import__(
-			'django.template.loader', fromlist=['get_template']
+			"django.template.loader", fromlist=["get_template"]
 		).get_template
 
 		def fake_get_template(template_name, using=None):
@@ -122,23 +130,26 @@ class TestWeeklySummaryDateSort(TestCase):
 			return tmpl
 
 		_mock_result = MagicMock(status_code=200)
-		_mock_result.json.return_value = {'ErrorCode': 0, 'Message': 'OK'}
+		_mock_result.json.return_value = {"ErrorCode": 0, "Message": "OK"}
 
-		with patch(
-			'subscriptions.management.commands.send_weekly_summary.send_email',
-			return_value=_mock_result,
-		), patch(
-			'subscriptions.management.commands.send_weekly_summary.get_template',
-			side_effect=fake_get_template,
+		with (
+			patch(
+				"subscriptions.management.commands.send_weekly_summary.send_email",
+				return_value=_mock_result,
+			),
+			patch(
+				"subscriptions.management.commands.send_weekly_summary.get_template",
+				side_effect=fake_get_template,
+			),
 		):
 			out = StringIO()
-			call_command('send_weekly_summary', stdout=out)
+			call_command("send_weekly_summary", stdout=out)
 
 		return captured
 
 	def _run_dry_run(self):
 		out = StringIO()
-		call_command('send_weekly_summary', stdout=out, dry_run=True)
+		call_command("send_weekly_summary", stdout=out, dry_run=True)
 		return out.getvalue()
 
 	# ── Tests ────────────────────────────────────────────────────────────────
@@ -151,8 +162,8 @@ class TestWeeklySummaryDateSort(TestCase):
 		MLPredictions.objects.create(
 			article=article,
 			subject=self.subject,
-			algorithm='pubmed_bert',
-			model_version='v1',
+			algorithm="pubmed_bert",
+			model_version="v1",
 			probability_score=0.1,
 			predicted_relevant=False,
 		)
@@ -172,7 +183,7 @@ class TestWeeklySummaryDateSort(TestCase):
 		ctx = self._run_and_capture_context()
 
 		# In date mode all articles land in additional_articles (regular_articles bucket)
-		additional = ctx.get('additional_articles', [])
+		additional = ctx.get("additional_articles", [])
 		self.assertEqual(len(additional), 3)
 		self.assertEqual(additional[0].pk, newest.pk)
 		self.assertEqual(additional[1].pk, middle.pk)
@@ -188,8 +199,8 @@ class TestWeeklySummaryDateSort(TestCase):
 
 		ctx = self._run_and_capture_context()
 
-		additional = ctx.get('additional_articles', [])
-		total = len(ctx.get('articles', [])) + len(additional)
+		additional = ctx.get("additional_articles", [])
+		total = len(ctx.get("articles", [])) + len(additional)
 		self.assertEqual(total, 2)
 
 	def test_date_mode_excludes_articles_irrelevant_for_all_subjects(self):
@@ -209,7 +220,9 @@ class TestWeeklySummaryDateSort(TestCase):
 
 	def test_date_mode_includes_articles_partially_relevant(self):
 		"""Articles irrelevant for one list subject but relevant for another are included."""
-		article = self._make_article("Partial Article", days_ago=2, doi="10.9999/partial")
+		article = self._make_article(
+			"Partial Article", days_ago=2, doi="10.9999/partial"
+		)
 		article.subjects.add(self.subject_b)
 
 		# Tag irrelevant for subject, but RELEVANT for subject_b
@@ -232,10 +245,14 @@ class TestWeeklySummaryDateSort(TestCase):
 
 		ctx = self._run_and_capture_context()
 
-		featured = ctx.get('articles', [])
-		additional = ctx.get('additional_articles', [])
-		self.assertEqual(len(featured), 0, "featured_articles should be empty in date mode")
-		self.assertGreater(len(additional), 0, "additional_articles should have articles in date mode")
+		featured = ctx.get("articles", [])
+		additional = ctx.get("additional_articles", [])
+		self.assertEqual(
+			len(featured), 0, "featured_articles should be empty in date mode"
+		)
+		self.assertGreater(
+			len(additional), 0, "additional_articles should have articles in date mode"
+		)
 
 
 class TestEmailContentOrganizerDateMode(TestCase):
@@ -279,41 +296,41 @@ class TestEmailContentOrganizerDateMode(TestCase):
 
 	def test_date_mode_returns_empty_featured_and_populated_regular(self):
 		"""_organize_weekly_articles returns featured=[] and regular=articles in date mode."""
-		list_obj = self._make_list('date')
+		list_obj = self._make_list("date")
 		a1 = self._make_article("Old", days_ago=3)
 		a2 = self._make_article("New", days_ago=1)
 
-		organizer = EmailContentOrganizer(email_type='weekly_summary')
+		organizer = EmailContentOrganizer(email_type="weekly_summary")
 		result = organizer.organize_articles([a1, a2], list_obj=list_obj)
 
-		self.assertEqual(result['featured_articles'], [])
-		self.assertEqual(result['high_confidence_count'], 0)
-		self.assertEqual(len(result['regular_articles']), 2)
+		self.assertEqual(result["featured_articles"], [])
+		self.assertEqual(result["high_confidence_count"], 0)
+		self.assertEqual(len(result["regular_articles"]), 2)
 
 	def test_date_mode_regular_articles_ordered_newest_first(self):
 		"""regular_articles are sorted newest-first in date mode."""
-		list_obj = self._make_list('date')
+		list_obj = self._make_list("date")
 		old = self._make_article("Old Article", days_ago=5)
 		new = self._make_article("New Article", days_ago=1)
 
-		organizer = EmailContentOrganizer(email_type='weekly_summary')
+		organizer = EmailContentOrganizer(email_type="weekly_summary")
 		result = organizer.organize_articles([old, new], list_obj=list_obj)
 
-		regular = result['regular_articles']
+		regular = result["regular_articles"]
 		self.assertEqual(regular[0].pk, new.pk)
 		self.assertEqual(regular[1].pk, old.pk)
 
 	def test_relevancy_mode_uses_featured_regular_split(self):
 		"""Relevancy mode still splits articles into featured/regular buckets."""
-		list_obj = self._make_list('relevancy')
+		list_obj = self._make_list("relevancy")
 		article = self._make_article("Any Article", days_ago=1)
 		# Mark as manually relevant so it lands in featured
 		ArticleSubjectRelevance.objects.create(
 			article=article, subject=self.subject, is_relevant=True
 		)
 
-		organizer = EmailContentOrganizer(email_type='weekly_summary')
+		organizer = EmailContentOrganizer(email_type="weekly_summary")
 		result = organizer.organize_articles([article], list_obj=list_obj)
 
 		# featured_articles should be non-empty for a manually-relevant article
-		self.assertGreater(len(result['featured_articles']), 0)
+		self.assertGreater(len(result["featured_articles"]), 0)

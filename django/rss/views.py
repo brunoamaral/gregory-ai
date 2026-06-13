@@ -5,13 +5,14 @@ from gregory.models import Articles, Authors, Trials, Subject
 from gregory.functions import normalize_orcid
 from gregory.visibility import visible_org_ids as _visible_org_ids
 
+
 def get_website_domain():
 	current_site = Site.objects.get_current()
 	# Always return a domain, never an email
 	return current_site.domain
 
-class ArticlesByAuthorFeed(Feed):
 
+class ArticlesByAuthorFeed(Feed):
 	def get_object(self, request, orcid):
 		# Resolve strictly by normalized ORCID only
 		normalized = normalize_orcid(orcid)
@@ -48,7 +49,7 @@ class ArticlesByAuthorFeed(Feed):
 				teams__organization_id__in=obj._visible_org_ids,
 			)
 			.distinct()
-			.order_by('-published_date')[:50]
+			.order_by("-published_date")[:50]
 		)
 
 	def item_title(self, item):
@@ -87,6 +88,7 @@ class TrialsBySubjectFeed(Feed):
 		# 404 if subject belongs to an org that isn't visible
 		if subject.team_id is not None:
 			from gregory.models import Team as _Team
+
 			try:
 				team = _Team.objects.get(id=subject.team_id)
 				if team.organization_id not in subject._visible_org_ids:
@@ -113,7 +115,7 @@ class TrialsBySubjectFeed(Feed):
 				teams__organization_id__in=obj._visible_org_ids,
 			)
 			.distinct()
-			.order_by('-discovery_date')[:50]
+			.order_by("-discovery_date")[:50]
 		)
 
 	def item_title(self, item):
@@ -122,62 +124,65 @@ class TrialsBySubjectFeed(Feed):
 	def item_description(self, item):
 		"""Build a rich description from available trial metadata."""
 		parts = []
-		
+
 		# Primary summary
 		if item.summary:
 			parts.append(f"<p>{item.summary}</p>")
 
-		
 		# Trial metadata section
 		metadata = []
-		
+
 		if item.recruitment_status:
 			metadata.append(f"<strong>Status:</strong> {item.recruitment_status}")
-		
+
 		if item.phase:
 			metadata.append(f"<strong>Phase:</strong> {item.phase}")
-		
+
 		if item.study_type:
 			metadata.append(f"<strong>Study Type:</strong> {item.study_type}")
-		
+
 		if item.primary_sponsor:
 			metadata.append(f"<strong>Sponsor:</strong> {item.primary_sponsor}")
-		
+
 		if item.countries:
 			metadata.append(f"<strong>Countries:</strong> {item.countries}")
-		
+
 		if item.condition:
 			metadata.append(f"<strong>Condition:</strong> {item.condition}")
-		
+
 		if item.intervention:
 			metadata.append(f"<strong>Intervention:</strong> {item.intervention}")
-		
+
 		# Eligibility criteria
 		eligibility = []
 		if item.inclusion_gender:
 			eligibility.append(f"Gender: {item.inclusion_gender}")
 		if item.inclusion_agemin and item.inclusion_agemax:
-			eligibility.append(f"Age: {item.inclusion_agemin} - {item.inclusion_agemax}")
+			eligibility.append(
+				f"Age: {item.inclusion_agemin} - {item.inclusion_agemax}"
+			)
 		elif item.inclusion_agemin:
 			eligibility.append(f"Min Age: {item.inclusion_agemin}")
 		elif item.inclusion_agemax:
 			eligibility.append(f"Max Age: {item.inclusion_agemax}")
-		
+
 		if eligibility:
 			metadata.append(f"<strong>Eligibility:</strong> {', '.join(eligibility)}")
-		
+
 		if item.target_size:
 			metadata.append(f"<strong>Target Size:</strong> {item.target_size}")
-		
+
 		if item.date_registration:
-			metadata.append(f"<strong>Registration Date:</strong> {item.date_registration.strftime('%Y-%m-%d')}")
-		
+			metadata.append(
+				f"<strong>Registration Date:</strong> {item.date_registration.strftime('%Y-%m-%d')}"
+			)
+
 		if item.source_register:
 			metadata.append(f"<strong>Registry:</strong> {item.source_register}")
-		
+
 		if metadata:
 			parts.append("<p>" + " | ".join(metadata) + "</p>")
-		
+
 		return "".join(parts) if parts else item.title
 
 	def item_link(self, item):

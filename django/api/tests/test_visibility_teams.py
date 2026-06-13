@@ -11,6 +11,7 @@ Covers:
 Run with:
     docker exec gregory python manage.py test api.tests.test_visibility_teams
 """
+
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -29,23 +30,26 @@ User = get_user_model()
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_org(name, slug, public=False):
 	org = Organization.objects.create(name=name, slug=slug)
-	OrganizationApiSettings.objects.filter(organization=org).update(make_api_public=public)
+	OrganizationApiSettings.objects.filter(organization=org).update(
+		make_api_public=public
+	)
 	return org
 
 
 def _make_team(org, name):
-	slug = name.lower().replace(' ', '-')
+	slug = name.lower().replace(" ", "-")
 	return Team.objects.create(organization=org, name=name, slug=slug)
 
 
 def _make_api_scheme(org, name):
 	return APIAccessScheme.objects.create(
 		client_name=name,
-		client_contacts=f'{name}@example.com',
+		client_contacts=f"{name}@example.com",
 		organization=org,
-		ip_addresses='',
+		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
 	)
@@ -55,15 +59,16 @@ def _make_api_scheme(org, name):
 # Base setUp
 # ---------------------------------------------------------------------------
 
+
 class TeamVisibilityBase(TestCase):
 	def setUp(self):
-		self.my_org = _make_org('My Org', 'my-org-team', public=False)
-		self.pub_org = _make_org('Public Org', 'pub-org-team', public=True)
-		self.priv_org = _make_org('Private Org', 'priv-org-team', public=False)
+		self.my_org = _make_org("My Org", "my-org-team", public=False)
+		self.pub_org = _make_org("Public Org", "pub-org-team", public=True)
+		self.priv_org = _make_org("Private Org", "priv-org-team", public=False)
 
-		self.my_team = _make_team(self.my_org, 'My Team Teams')
-		self.pub_team = _make_team(self.pub_org, 'Pub Team Teams')
-		self.priv_team = _make_team(self.priv_org, 'Priv Team Teams')
+		self.my_team = _make_team(self.my_org, "My Team Teams")
+		self.pub_team = _make_team(self.pub_org, "Pub Team Teams")
+		self.priv_team = _make_team(self.priv_org, "Priv Team Teams")
 
 		self.client = APIClient()
 
@@ -72,29 +77,30 @@ class TeamVisibilityBase(TestCase):
 # Anonymous caller
 # ---------------------------------------------------------------------------
 
+
 class AnonymousTeamVisibilityTest(TeamVisibilityBase):
 	def test_list_does_not_require_auth(self):
 		"""TeamsViewSet is now IsAuthenticatedOrReadOnly — anonymous read is allowed."""
-		resp = self.client.get('/teams/')
+		resp = self.client.get("/teams/")
 		self.assertEqual(resp.status_code, 200)
 
 	def test_list_includes_public_team(self):
-		resp = self.client.get('/teams/')
-		ids = [t['id'] for t in resp.data['results']]
+		resp = self.client.get("/teams/")
+		ids = [t["id"] for t in resp.data["results"]]
 		self.assertIn(self.pub_team.id, ids)
 
 	def test_list_excludes_private_teams(self):
-		resp = self.client.get('/teams/')
-		ids = [t['id'] for t in resp.data['results']]
+		resp = self.client.get("/teams/")
+		ids = [t["id"] for t in resp.data["results"]]
 		self.assertNotIn(self.my_team.id, ids)
 		self.assertNotIn(self.priv_team.id, ids)
 
 	def test_detail_hidden_returns_404(self):
-		resp = self.client.get(f'/teams/{self.my_team.id}/')
+		resp = self.client.get(f"/teams/{self.my_team.id}/")
 		self.assertEqual(resp.status_code, 404)
 
 	def test_detail_public_returns_200(self):
-		resp = self.client.get(f'/teams/{self.pub_team.id}/')
+		resp = self.client.get(f"/teams/{self.pub_team.id}/")
 		self.assertEqual(resp.status_code, 200)
 
 
@@ -102,41 +108,42 @@ class AnonymousTeamVisibilityTest(TeamVisibilityBase):
 # Authenticated user (member of my_org)
 # ---------------------------------------------------------------------------
 
+
 class AuthenticatedUserTeamVisibilityTest(TeamVisibilityBase):
 	def setUp(self):
 		super().setUp()
-		self.user = User.objects.create_user(username='team-member', password='pw')
+		self.user = User.objects.create_user(username="team-member", password="pw")
 		OrganizationUser.objects.create(organization=self.my_org, user=self.user)
 		self.client.force_login(self.user)
 
 	def test_list_shows_own_team(self):
-		resp = self.client.get('/teams/')
-		ids = [t['id'] for t in resp.data['results']]
+		resp = self.client.get("/teams/")
+		ids = [t["id"] for t in resp.data["results"]]
 		self.assertIn(self.my_team.id, ids)
 
 	def test_list_excludes_unrelated_private_team(self):
-		resp = self.client.get('/teams/')
-		ids = [t['id'] for t in resp.data['results']]
+		resp = self.client.get("/teams/")
+		ids = [t["id"] for t in resp.data["results"]]
 		self.assertNotIn(self.priv_team.id, ids)
 
 	def test_list_excludes_public_team_without_flag(self):
-		resp = self.client.get('/teams/')
-		ids = [t['id'] for t in resp.data['results']]
+		resp = self.client.get("/teams/")
+		ids = [t["id"] for t in resp.data["results"]]
 		self.assertNotIn(self.pub_team.id, ids)
 
 	def test_include_public_adds_public_teams(self):
-		resp = self.client.get('/teams/?include_public=true')
-		ids = [t['id'] for t in resp.data['results']]
+		resp = self.client.get("/teams/?include_public=true")
+		ids = [t["id"] for t in resp.data["results"]]
 		self.assertIn(self.my_team.id, ids)
 		self.assertIn(self.pub_team.id, ids)
 		self.assertNotIn(self.priv_team.id, ids)
 
 	def test_detail_hidden_returns_404(self):
-		resp = self.client.get(f'/teams/{self.priv_team.id}/')
+		resp = self.client.get(f"/teams/{self.priv_team.id}/")
 		self.assertEqual(resp.status_code, 404)
 
 	def test_detail_own_returns_200(self):
-		resp = self.client.get(f'/teams/{self.my_team.id}/')
+		resp = self.client.get(f"/teams/{self.my_team.id}/")
 		self.assertEqual(resp.status_code, 200)
 
 
@@ -144,40 +151,41 @@ class AuthenticatedUserTeamVisibilityTest(TeamVisibilityBase):
 # API key caller (bound to my_org)
 # ---------------------------------------------------------------------------
 
+
 class APIKeyTeamVisibilityTest(TeamVisibilityBase):
 	def setUp(self):
 		super().setUp()
-		self.scheme = _make_api_scheme(self.my_org, 'team-key')
+		self.scheme = _make_api_scheme(self.my_org, "team-key")
 		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
 
 	def test_list_shows_own_team(self):
-		resp = self.client.get('/teams/')
-		ids = [t['id'] for t in resp.data['results']]
+		resp = self.client.get("/teams/")
+		ids = [t["id"] for t in resp.data["results"]]
 		self.assertIn(self.my_team.id, ids)
 
 	def test_list_excludes_other_private_team(self):
-		resp = self.client.get('/teams/')
-		ids = [t['id'] for t in resp.data['results']]
+		resp = self.client.get("/teams/")
+		ids = [t["id"] for t in resp.data["results"]]
 		self.assertNotIn(self.priv_team.id, ids)
 
 	def test_list_excludes_public_team_without_flag(self):
-		resp = self.client.get('/teams/')
-		ids = [t['id'] for t in resp.data['results']]
+		resp = self.client.get("/teams/")
+		ids = [t["id"] for t in resp.data["results"]]
 		self.assertNotIn(self.pub_team.id, ids)
 
 	def test_include_public_adds_public_teams(self):
-		resp = self.client.get('/teams/?include_public=true')
-		ids = [t['id'] for t in resp.data['results']]
+		resp = self.client.get("/teams/?include_public=true")
+		ids = [t["id"] for t in resp.data["results"]]
 		self.assertIn(self.my_team.id, ids)
 		self.assertIn(self.pub_team.id, ids)
 		self.assertNotIn(self.priv_team.id, ids)
 
 	def test_detail_hidden_returns_404(self):
-		resp = self.client.get(f'/teams/{self.priv_team.id}/')
+		resp = self.client.get(f"/teams/{self.priv_team.id}/")
 		self.assertEqual(resp.status_code, 404)
 
 	def test_detail_own_returns_200(self):
-		resp = self.client.get(f'/teams/{self.my_team.id}/')
+		resp = self.client.get(f"/teams/{self.my_team.id}/")
 		self.assertEqual(resp.status_code, 200)
 
 

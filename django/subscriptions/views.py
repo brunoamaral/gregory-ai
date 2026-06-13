@@ -15,7 +15,12 @@ from urllib.parse import urlparse
 
 from sitesettings.models import CustomSetting
 from subscriptions.forms import SubscribersForm
-from subscriptions.models import Subscribers, Lists, ListSubscription, SubscriberSiteProfile
+from subscriptions.models import (
+	Subscribers,
+	Lists,
+	ListSubscription,
+	SubscriberSiteProfile,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +33,12 @@ def _site_allowed_domains(site):
 	domain so that requests from the canonical site host are always accepted,
 	even when no allowed_domains are configured.
 	"""
-	configured = ''
+	configured = ""
 	if site is not None:
-		custom = CustomSetting.objects.filter(site=site).order_by('pk').first()
+		custom = CustomSetting.objects.filter(site=site).order_by("pk").first()
 		if custom and custom.allowed_domains:
 			configured = custom.allowed_domains
-	own = (site.domain or '').strip() if site is not None else ''
+	own = (site.domain or "").strip() if site is not None else ""
 	if own and configured:
 		return f"{own},{configured}"
 	return own or configured
@@ -48,13 +53,15 @@ def _get_redirect_base(request, site):
 	subdomain-aware matching. If no match is found the site's own domain is
 	used as a safe fallback.
 	"""
-	origin = request.META.get('HTTP_ORIGIN') or request.META.get('HTTP_REFERER', '')
+	origin = request.META.get("HTTP_ORIGIN") or request.META.get("HTTP_REFERER", "")
 	if origin:
 		parsed = urlparse(origin)
 		origin_hostname = parsed.hostname  # IPv6-safe, no port
-		if origin_hostname and _origin_matches_allowed(origin_hostname, _site_allowed_domains(site)):
+		if origin_hostname and _origin_matches_allowed(
+			origin_hostname, _site_allowed_domains(site)
+		):
 			return f"{parsed.scheme}://{parsed.netloc}"
-	scheme = 'https' if request.is_secure() else 'http'
+	scheme = "https" if request.is_secure() else "http"
 	return f"{scheme}://{site.domain}"
 
 
@@ -66,13 +73,13 @@ def _get_client_ip(request):
 	2. X-Forwarded-For  — first entry when behind a trusted reverse proxy.
 	3. REMOTE_ADDR      — direct connection fallback.
 	"""
-	cf_ip = request.META.get('HTTP_CF_CONNECTING_IP')
+	cf_ip = request.META.get("HTTP_CF_CONNECTING_IP")
 	if cf_ip:
 		return cf_ip.strip()
-	x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+	x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
 	if x_forwarded_for:
-		return x_forwarded_for.split(',')[0].strip()
-	return request.META.get('REMOTE_ADDR')
+		return x_forwarded_for.split(",")[0].strip()
+	return request.META.get("REMOTE_ADDR")
 
 
 def _find_site_by_domain(hostname):
@@ -84,7 +91,7 @@ def _find_site_by_domain(hostname):
 	normalised safely via urlparse before the lookup.
 	Returns the matching Site or None.
 	"""
-	host = urlparse(f'//{hostname}').hostname or ''
+	host = urlparse(f"//{hostname}").hostname or ""
 	host = host.lower()
 	if not host:
 		return None
@@ -92,9 +99,9 @@ def _find_site_by_domain(hostname):
 		return Site.objects.get(domain=host)
 	except Site.DoesNotExist:
 		pass
-	parts = host.split('.')
+	parts = host.split(".")
 	if len(parts) >= 3:
-		parent = '.'.join(parts[1:])
+		parent = ".".join(parts[1:])
 		try:
 			return Site.objects.get(domain=parent)
 		except Site.DoesNotExist:
@@ -110,14 +117,16 @@ def _origin_matches_allowed(origin_host, allowed_domains_str):
 	origin_host may be a bare hostname or a netloc containing a port; port
 	and IPv6 brackets are normalised via urlparse before comparison.
 	"""
-	host = urlparse(f'//{origin_host}').hostname or ''
+	host = urlparse(f"//{origin_host}").hostname or ""
 	host = host.lower()
-	allowed = {d.strip().lower() for d in (allowed_domains_str or '').split(',') if d.strip()}
+	allowed = {
+		d.strip().lower() for d in (allowed_domains_str or "").split(",") if d.strip()
+	}
 	if host in allowed:
 		return True
-	parts = host.split('.')
+	parts = host.split(".")
 	if len(parts) >= 3:
-		parent = '.'.join(parts[1:])
+		parent = ".".join(parts[1:])
 		if parent in allowed:
 			return True
 	return False
@@ -141,7 +150,7 @@ def _resolve_site_from_request(request):
 
 	Subdomain-aware: 'www.example.com' resolves to the 'example.com' Site.
 	"""
-	origin = request.META.get('HTTP_ORIGIN') or request.META.get('HTTP_REFERER', '')
+	origin = request.META.get("HTTP_ORIGIN") or request.META.get("HTTP_REFERER", "")
 	if origin:
 		parsed = urlparse(origin)
 		hostname = parsed.hostname  # IPv6-safe, no port
@@ -164,7 +173,7 @@ def _resolve_site_from_request(request):
 def subscribe_view(request):
 	# ``request.POST`` may contain multiple ``list`` values when the user
 	# checks more than one subscription option.
-	list_ids = request.POST.getlist('list')
+	list_ids = request.POST.getlist("list")
 	subscription_lists = list(Lists.objects.filter(pk__in=list_ids)) if list_ids else []
 
 	# Derive the target site from the submitted lists so that origin validation
@@ -197,20 +206,22 @@ def subscribe_view(request):
 				"Check that the form is posting correct list IDs.",
 				missing_ids,
 			)
-			return HttpResponseRedirect(f'{redirect_base}/error/')
+			return HttpResponseRedirect(f"{redirect_base}/error/")
 	else:
 		# No list selected at all — nothing to subscribe to.
 		logger.error(
 			"subscribe_view: no list IDs submitted. "
 			"The form must include at least one 'list' field value.",
 		)
-		return HttpResponseRedirect(f'{redirect_base}/error/')
+		return HttpResponseRedirect(f"{redirect_base}/error/")
 
 	# Origin validation: reject requests unless the origin matches the
 	# target site's CustomSetting.allowed_domains (or the site's own domain).
 	# If no Origin/Referer header is present (e.g. server-side or API usage)
 	# the request is allowed through with a warning.
-	origin_header = request.META.get('HTTP_ORIGIN') or request.META.get('HTTP_REFERER', '')
+	origin_header = request.META.get("HTTP_ORIGIN") or request.META.get(
+		"HTTP_REFERER", ""
+	)
 	if origin_header:
 		parsed_origin = urlparse(origin_header)
 		origin_host = parsed_origin.hostname  # IPv6-safe, no port
@@ -219,11 +230,11 @@ def subscribe_view(request):
 				"subscribe_view: request from unauthorized origin '%s' rejected.",
 				origin_host,
 			)
-			accept_header = request.META.get('HTTP_ACCEPT', '')
-			is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
-			if is_ajax or 'application/json' in accept_header:
-				return JsonResponse({'error': 'Origin not permitted.'}, status=403)
-			return HttpResponseRedirect(f'{redirect_base}/error/')
+			accept_header = request.META.get("HTTP_ACCEPT", "")
+			is_ajax = request.META.get("HTTP_X_REQUESTED_WITH") == "XMLHttpRequest"
+			if is_ajax or "application/json" in accept_header:
+				return JsonResponse({"error": "Origin not permitted."}, status=403)
+			return HttpResponseRedirect(f"{redirect_base}/error/")
 	else:
 		logger.warning(
 			"subscribe_view: no Origin or Referer header present; "
@@ -233,18 +244,18 @@ def subscribe_view(request):
 	subscriber_form = SubscribersForm(request.POST)
 
 	if subscriber_form.is_valid():
-		first_name = subscriber_form.cleaned_data['first_name']
-		last_name = subscriber_form.cleaned_data['last_name']
-		email = subscriber_form.cleaned_data['email']
-		profile = subscriber_form.cleaned_data.get('profile', '')
+		first_name = subscriber_form.cleaned_data["first_name"]
+		last_name = subscriber_form.cleaned_data["last_name"]
+		email = subscriber_form.cleaned_data["email"]
+		profile = subscriber_form.cleaned_data.get("profile", "")
 
 		try:
 			subscriber, created = Subscribers.objects.get_or_create(
 				email=email,
 				defaults={
-					'first_name': first_name,
-					'last_name': last_name,
-				}
+					"first_name": first_name,
+					"last_name": last_name,
+				},
 			)
 			if not created:
 				subscriber.first_name = first_name
@@ -261,10 +272,10 @@ def subscribe_view(request):
 					subscriber=subscriber,
 					list=lst,
 					defaults={
-						'consent_ip': client_ip,
-						'consent_source_site': source_site,
-						'consent_method': 'web_form',
-						'is_active': True,
+						"consent_ip": client_ip,
+						"consent_source_site": source_site,
+						"consent_method": "web_form",
+						"is_active": True,
 					},
 				)
 				if not ls_created and not ls.is_active:
@@ -273,32 +284,41 @@ def subscribe_view(request):
 					ls.unsubscribed_at = None
 					ls.consent_ip = client_ip
 					ls.consent_source_site = source_site
-					ls.consent_method = 'web_form'
-					ls.save(update_fields=['is_active', 'unsubscribed_at', 'consent_ip', 'consent_source_site', 'consent_method'])
+					ls.consent_method = "web_form"
+					ls.save(
+						update_fields=[
+							"is_active",
+							"unsubscribed_at",
+							"consent_ip",
+							"consent_source_site",
+							"consent_method",
+						]
+					)
 
 			# Create or update the per-site profile
 			if profile and source_site:
 				SubscriberSiteProfile.objects.update_or_create(
 					subscriber=subscriber,
 					site=source_site,
-					defaults={'profile': profile},
+					defaults={"profile": profile},
 				)
 
-			return HttpResponseRedirect(f'{redirect_base}/thank-you/')
+			return HttpResponseRedirect(f"{redirect_base}/thank-you/")
 
 		except Exception as e:
 			logger.error(f"Subscription error: {e}")
-			return HttpResponseRedirect(f'{redirect_base}/error/')
+			return HttpResponseRedirect(f"{redirect_base}/error/")
 
 	else:
 		logger.error("Form is invalid.")
 		logger.error(subscriber_form.errors)
-		return HttpResponseRedirect(f'{redirect_base}/error/')
+		return HttpResponseRedirect(f"{redirect_base}/error/")
 
 
 # ---------------------------------------------------------------------------
 # Unsubscribe views
 # ---------------------------------------------------------------------------
+
 
 def _unsubscribe_confirm(request, token, scope, extra_id=None):
 	"""
@@ -309,59 +329,63 @@ def _unsubscribe_confirm(request, token, scope, extra_id=None):
 	"""
 	subscriber = get_object_or_404(Subscribers, unsubscribe_token=token)
 
-	if request.method == 'POST':
-		if scope == 'list':
+	if request.method == "POST":
+		if scope == "list":
 			ListSubscription.objects.filter(
 				subscriber=subscriber,
 				list_id=extra_id,
 				is_active=True,
 			).update(is_active=False, unsubscribed_at=tz_now())
-		elif scope == 'site':
+		elif scope == "site":
 			ListSubscription.objects.filter(
 				subscriber=subscriber,
 				list__team__site_id=extra_id,
 				is_active=True,
 			).update(is_active=False, unsubscribed_at=tz_now())
-		elif scope == 'all':
+		elif scope == "all":
 			subscriber.active = False
-			subscriber.save(update_fields=['active'])
+			subscriber.save(update_fields=["active"])
 			ListSubscription.objects.filter(
 				subscriber=subscriber,
 				is_active=True,
 			).update(is_active=False, unsubscribed_at=tz_now())
 
-		return render(request, 'subscriptions/unsubscribe_done.html', {
-			'subscriber': subscriber,
-			'scope': scope,
-		})
+		return render(
+			request,
+			"subscriptions/unsubscribe_done.html",
+			{
+				"subscriber": subscriber,
+				"scope": scope,
+			},
+		)
 
 	# GET: show confirmation page
 	context = {
-		'subscriber': subscriber,
-		'scope': scope,
-		'extra_id': extra_id,
-		'token': token,
+		"subscriber": subscriber,
+		"scope": scope,
+		"extra_id": extra_id,
+		"token": token,
 	}
-	if scope == 'list':
-		context['list_obj'] = get_object_or_404(Lists, pk=extra_id)
-	elif scope == 'site':
-		context['site_obj'] = get_object_or_404(Site, pk=extra_id)
-	return render(request, 'subscriptions/unsubscribe_confirm.html', context)
+	if scope == "list":
+		context["list_obj"] = get_object_or_404(Lists, pk=extra_id)
+	elif scope == "site":
+		context["site_obj"] = get_object_or_404(Site, pk=extra_id)
+	return render(request, "subscriptions/unsubscribe_confirm.html", context)
 
 
 def unsubscribe_list(request, token, list_id):
 	"""Unsubscribe from a single list."""
-	return _unsubscribe_confirm(request, token, scope='list', extra_id=list_id)
+	return _unsubscribe_confirm(request, token, scope="list", extra_id=list_id)
 
 
 def unsubscribe_site(request, token, site_id):
 	"""Unsubscribe from all lists belonging to a specific site's teams."""
-	return _unsubscribe_confirm(request, token, scope='site', extra_id=site_id)
+	return _unsubscribe_confirm(request, token, scope="site", extra_id=site_id)
 
 
 def unsubscribe_all(request, token):
 	"""Global opt-out — marks subscriber as inactive and deactivates all list subscriptions."""
-	return _unsubscribe_confirm(request, token, scope='all')
+	return _unsubscribe_confirm(request, token, scope="all")
 
 
 # ---------------------------------------------------------------------------
@@ -375,19 +399,21 @@ _UPLOAD_MAX_WIDTH = 1200
 # Per-format save quality settings (used only when a resize or EXIF-orient
 # correction is needed; images already ≤ _UPLOAD_MAX_WIDTH pass through
 # byte-for-byte unchanged).
-_JPEG_QUALITY = 88        # above the ringing threshold on screenshots/text
-_WEBP_QUALITY = 90        # WebP scale ≠ JPEG scale; ~90 gives visual parity
-_PNG_COMPRESS_LEVEL = 9   # PNG is lossless — max zlib effort is safe
+_JPEG_QUALITY = 88  # above the ringing threshold on screenshots/text
+_WEBP_QUALITY = 90  # WebP scale ≠ JPEG scale; ~90 gives visual parity
+_PNG_COMPRESS_LEVEL = 9  # PNG is lossless — max zlib effort is safe
 
 # User-controlled content_type is the first gate; Pillow-detected format is
 # the authoritative second gate (see comment in the view).
-_UPLOAD_ALLOWED_TYPES = frozenset({'image/jpeg', 'image/png', 'image/gif', 'image/webp'})
-_UPLOAD_ALLOWED_FORMATS = frozenset({'JPEG', 'PNG', 'GIF', 'WEBP'})
+_UPLOAD_ALLOWED_TYPES = frozenset(
+	{"image/jpeg", "image/png", "image/gif", "image/webp"}
+)
+_UPLOAD_ALLOWED_FORMATS = frozenset({"JPEG", "PNG", "GIF", "WEBP"})
 _FORMAT_TO_CONTENT_TYPE = {
-	'JPEG': 'image/jpeg',
-	'PNG':  'image/png',
-	'GIF':  'image/gif',
-	'WEBP': 'image/webp',
+	"JPEG": "image/jpeg",
+	"PNG": "image/png",
+	"GIF": "image/gif",
+	"WEBP": "image/webp",
 }
 
 
@@ -418,21 +444,25 @@ def ckeditor_upload(request):
 	``{"url": "..."}`` on success, ``{"error": {"message": "..."}}`` on
 	failure (HTTP 400).
 	"""
-	upload = request.FILES.get('upload')
+	upload = request.FILES.get("upload")
 	if not upload:
-		return JsonResponse({'error': {'message': 'No file provided.'}}, status=400)
+		return JsonResponse({"error": {"message": "No file provided."}}, status=400)
 
 	# ---- size check -------------------------------------------------------
 	if upload.size > _UPLOAD_MAX_SIZE:
 		return JsonResponse(
-			{'error': {'message': 'File too large. Maximum allowed size is 2 MB.'}},
+			{"error": {"message": "File too large. Maximum allowed size is 2 MB."}},
 			status=400,
 		)
 
 	# ---- MIME type check --------------------------------------------------
 	if upload.content_type not in _UPLOAD_ALLOWED_TYPES:
 		return JsonResponse(
-			{'error': {'message': 'File type not allowed. Please upload a JPEG, PNG, GIF, or WebP image.'}},
+			{
+				"error": {
+					"message": "File type not allowed. Please upload a JPEG, PNG, GIF, or WebP image."
+				}
+			},
 			status=400,
 		)
 
@@ -442,7 +472,7 @@ def ckeditor_upload(request):
 		Image.open(upload).verify()
 	except Exception:
 		return JsonResponse(
-			{'error': {'message': 'The file does not appear to be a valid image.'}},
+			{"error": {"message": "The file does not appear to be a valid image."}},
 			status=400,
 		)
 
@@ -453,7 +483,7 @@ def ckeditor_upload(request):
 		image.load()
 	except Exception:
 		return JsonResponse(
-			{'error': {'message': 'Could not decode image data.'}},
+			{"error": {"message": "Could not decode image data."}},
 			status=400,
 		)
 
@@ -464,7 +494,11 @@ def ckeditor_upload(request):
 	canonical_fmt = image.format  # e.g. 'JPEG', 'PNG', 'GIF', 'WEBP'
 	if canonical_fmt not in _UPLOAD_ALLOWED_FORMATS:
 		return JsonResponse(
-			{'error': {'message': 'File type not allowed. Please upload a JPEG, PNG, GIF, or WebP image.'}},
+			{
+				"error": {
+					"message": "File type not allowed. Please upload a JPEG, PNG, GIF, or WebP image."
+				}
+			},
 			status=400,
 		)
 	canonical_content_type = _FORMAT_TO_CONTENT_TYPE[canonical_fmt]
@@ -496,7 +530,7 @@ def ckeditor_upload(request):
 			raw = upload.read()
 			upload = InMemoryUploadedFile(
 				file=io.BytesIO(raw),
-				field_name='upload',
+				field_name="upload",
 				name=upload.name,
 				content_type=canonical_content_type,
 				size=len(raw),
@@ -507,33 +541,33 @@ def ckeditor_upload(request):
 			image.thumbnail((_UPLOAD_MAX_WIDTH, 10_000), Image.LANCZOS)
 
 		# Build per-format save kwargs with quality-preserving settings.
-		save_kwargs = {'format': canonical_fmt}
+		save_kwargs = {"format": canonical_fmt}
 
 		# Preserve ICC colour profile so colours don't shift.
-		icc = image.info.get('icc_profile')
+		icc = image.info.get("icc_profile")
 		if icc:
-			save_kwargs['icc_profile'] = icc
+			save_kwargs["icc_profile"] = icc
 
-		if canonical_fmt == 'JPEG':
+		if canonical_fmt == "JPEG":
 			save_kwargs.update(
 				quality=_JPEG_QUALITY,
 				optimize=True,
 				progressive=True,
 				subsampling=2,  # 4:2:0 — Pillow default; keeps files small
 			)
-		elif canonical_fmt == 'WEBP':
+		elif canonical_fmt == "WEBP":
 			save_kwargs.update(
 				quality=_WEBP_QUALITY,
 				method=6,  # slower encoder pass, better compression ratio
 			)
-		elif canonical_fmt == 'PNG':
+		elif canonical_fmt == "PNG":
 			save_kwargs.update(
 				optimize=True,
 				compress_level=_PNG_COMPRESS_LEVEL,
 			)
-		elif canonical_fmt == 'GIF':
+		elif canonical_fmt == "GIF":
 			# Animated GIFs are flattened to the first frame on resize.
-			save_kwargs['save_all'] = False
+			save_kwargs["save_all"] = False
 
 		buf = io.BytesIO()
 		image.save(buf, **save_kwargs)
@@ -546,14 +580,18 @@ def ckeditor_upload(request):
 			# processing rejection would be confusing UX.  Log so operators
 			# can monitor and adjust _JPEG_QUALITY / _UPLOAD_MAX_SIZE if needed.
 			logger.warning(
-				'ckeditor_upload: re-encoded %s (%s) grew from %d to %d bytes '
-				'(exceeds _UPLOAD_MAX_SIZE=%d); storing anyway.',
-				upload.name, canonical_fmt, upload.size, encoded_size, _UPLOAD_MAX_SIZE,
+				"ckeditor_upload: re-encoded %s (%s) grew from %d to %d bytes "
+				"(exceeds _UPLOAD_MAX_SIZE=%d); storing anyway.",
+				upload.name,
+				canonical_fmt,
+				upload.size,
+				encoded_size,
+				_UPLOAD_MAX_SIZE,
 			)
 		buf.seek(0)
 		upload = InMemoryUploadedFile(
 			file=buf,
-			field_name='upload',
+			field_name="upload",
 			name=upload.name,
 			content_type=canonical_content_type,
 			size=encoded_size,
@@ -563,6 +601,7 @@ def ckeditor_upload(request):
 	# ---- delegate to django_ckeditor_5 storage ----------------------------
 	from django_ckeditor_5.views import handle_uploaded_file
 	from urllib.parse import urlparse as _urlparse
+
 	url = handle_uploaded_file(upload)
 	# Defensive: if the storage backend ever returns an absolute URL (e.g. S3),
 	# collapse it to the relative /media/... path so CKEditor always inserts
@@ -570,4 +609,4 @@ def ckeditor_upload(request):
 	_parsed = _urlparse(url)
 	if _parsed.scheme or _parsed.netloc:
 		url = _parsed.path
-	return JsonResponse({'url': url})
+	return JsonResponse({"url": url})

@@ -1,371 +1,417 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
-from gregory.models import Trials, Articles, Authors, TeamCategory, Team, Subject, Organization, OrganizationApiSettings
+from gregory.models import (
+	Trials,
+	Articles,
+	Authors,
+	TeamCategory,
+	Team,
+	Subject,
+	Organization,
+	OrganizationApiSettings,
+)
 from django.utils import timezone
 
+
 class TrialFilterTests(TestCase):
-    """Test cases for enhanced trial filtering"""
-    
-    def setUp(self):
-        # Create test organization, team and subject
-        self.organization = Organization.objects.create(name="Test Organization", slug="trial-filter-org")
-        OrganizationApiSettings.objects.filter(organization=self.organization).update(make_api_public=True)
-        self.team = Team.objects.create(name="Test Team", slug="trial-filter-team", organization=self.organization)
-        self.subject = Subject.objects.create(
-            subject_name="Test Subject",
-            subject_slug="test-subject",
-            team=self.team
-        )
+	"""Test cases for enhanced trial filtering"""
 
-        # Create test trials with various fields
-        self.trial1 = Trials.objects.create(
-            title="COVID-19 Vaccine Trial",
-            summary="Testing efficacy of mRNA vaccines for coronavirus.",
-            link="https://example.com/trial1",
-            published_date=timezone.now(),
-            recruitment_status="Recruiting",
-            internal_number="INT-2024-001",
-            phase="Phase III",
-            study_type="Interventional",
-            primary_sponsor="Big Pharma Inc",
-            source_register="ClinicalTrials.gov",
-            countries="United States, Canada",
-            condition="COVID-19",
-            intervention="mRNA Vaccine",
-            therapeutic_areas="Infectious Diseases",
-            inclusion_agemin="18",
-            inclusion_agemax="65",
-            inclusion_gender="All"
-        )
-        self.trial1.teams.add(self.team)
-        self.trial1.subjects.add(self.subject)
-        
-        self.trial2 = Trials.objects.create(
-            title="Multiple Sclerosis Treatment Trial",
-            summary="New MS medication phase 2 study.",
-            link="https://example.com/trial2",
-            published_date=timezone.now(),
-            recruitment_status="Active, not recruiting",
-            internal_number="INT-2024-002",
-            phase="Phase II",
-            study_type="Observational",
-            primary_sponsor="University Medical Center",
-            source_register="EudraCT",
-            countries="Germany, France",
-            condition="Multiple Sclerosis",
-            intervention="Novel Drug",
-            therapeutic_areas="Neurology",
-            inclusion_agemin="21",
-            inclusion_agemax="60",
-            inclusion_gender="Female"
-        )
-        self.trial2.teams.add(self.team)
-        self.trial2.subjects.add(self.subject)
-        
-        self.client = APIClient()
-    
-    def test_trial_id_filter(self):
-        """Test filtering trials by trial_id"""
-        response = self.client.get(f'/trials/?trial_id={self.trial1.trial_id}')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-    
-    def test_internal_number_filter(self):
-        """Test filtering trials by internal_number"""
-        response = self.client.get('/trials/?internal_number=INT-2024-001')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-    
-    def test_phase_filter(self):
-        """Test filtering trials by phase"""
-        response = self.client.get('/trials/?phase=Phase III')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-    
-    def test_study_type_filter(self):
-        """Test filtering trials by study_type"""
-        response = self.client.get('/trials/?study_type=Interventional')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-    
-    def test_primary_sponsor_filter(self):
-        """Test filtering trials by primary_sponsor"""
-        response = self.client.get('/trials/?primary_sponsor=Big Pharma')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-    
-    def test_source_register_filter(self):
-        """Test filtering trials by source_register"""
-        response = self.client.get('/trials/?source_register=ClinicalTrials.gov')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-    
-    def test_countries_filter(self):
-        """Test filtering trials by countries"""
-        response = self.client.get('/trials/?countries=United States')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-    
-    def test_condition_filter(self):
-        """Test filtering trials by condition"""
-        response = self.client.get('/trials/?condition=COVID-19')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-    
-    def test_intervention_filter(self):
-        """Test filtering trials by intervention"""
-        response = self.client.get('/trials/?intervention=mRNA')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-    
-    def test_therapeutic_areas_filter(self):
-        """Test filtering trials by therapeutic_areas"""
-        response = self.client.get('/trials/?therapeutic_areas=Infectious')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-    
-    def test_inclusion_age_filters(self):
-        """Test filtering trials by inclusion age criteria"""
-        response = self.client.get('/trials/?inclusion_agemin=18')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-        
-        response = self.client.get('/trials/?inclusion_agemax=65')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-    
-    def test_inclusion_gender_filter(self):
-        """Test filtering trials by inclusion_gender"""
-        response = self.client.get('/trials/?inclusion_gender=Female')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial2.trial_id)
-    
-    def test_recruitment_status_vs_status(self):
-        """Test both recruitment_status and status filters work"""
-        # Test new recruitment_status filter
-        response = self.client.get('/trials/?recruitment_status=Recruiting')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-        
-        # Test legacy status filter for backward compatibility
-        response = self.client.get('/trials/?status=Recruiting')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
-    
-    def test_combined_filters(self):
-        """Test combining multiple filters"""
-        response = self.client.get('/trials/?phase=Phase III&condition=COVID-19&countries=United States')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['trial_id'], self.trial1.trial_id)
+	def setUp(self):
+		# Create test organization, team and subject
+		self.organization = Organization.objects.create(
+			name="Test Organization", slug="trial-filter-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=self.organization).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			name="Test Team", slug="trial-filter-team", organization=self.organization
+		)
+		self.subject = Subject.objects.create(
+			subject_name="Test Subject", subject_slug="test-subject", team=self.team
+		)
 
-        # Test combination that should return no results
-        response = self.client.get('/trials/?phase=Phase III&condition=Multiple Sclerosis')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 0)
+		# Create test trials with various fields
+		self.trial1 = Trials.objects.create(
+			title="COVID-19 Vaccine Trial",
+			summary="Testing efficacy of mRNA vaccines for coronavirus.",
+			link="https://example.com/trial1",
+			published_date=timezone.now(),
+			recruitment_status="Recruiting",
+			internal_number="INT-2024-001",
+			phase="Phase III",
+			study_type="Interventional",
+			primary_sponsor="Big Pharma Inc",
+			source_register="ClinicalTrials.gov",
+			countries="United States, Canada",
+			condition="COVID-19",
+			intervention="mRNA Vaccine",
+			therapeutic_areas="Infectious Diseases",
+			inclusion_agemin="18",
+			inclusion_agemax="65",
+			inclusion_gender="All",
+		)
+		self.trial1.teams.add(self.team)
+		self.trial1.subjects.add(self.subject)
 
-    def test_has_results_filter(self):
-        """Test filtering trials by whether results have been posted.
+		self.trial2 = Trials.objects.create(
+			title="Multiple Sclerosis Treatment Trial",
+			summary="New MS medication phase 2 study.",
+			link="https://example.com/trial2",
+			published_date=timezone.now(),
+			recruitment_status="Active, not recruiting",
+			internal_number="INT-2024-002",
+			phase="Phase II",
+			study_type="Observational",
+			primary_sponsor="University Medical Center",
+			source_register="EudraCT",
+			countries="Germany, France",
+			condition="Multiple Sclerosis",
+			intervention="Novel Drug",
+			therapeutic_areas="Neurology",
+			inclusion_agemin="21",
+			inclusion_agemax="60",
+			inclusion_gender="Female",
+		)
+		self.trial2.teams.add(self.team)
+		self.trial2.subjects.add(self.subject)
 
-        Exercised at the FilterSet/queryset level: the /trials/ HTTP endpoint is
-        org-scoped by OrgVisibilityMixin, which returns nothing for anonymous test
-        requests, so we apply TrialFilter directly.
-        """
-        from api.filters import TrialFilter
+		self.client = APIClient()
 
-        # A trial with results via each of the three qualifying fields
-        trial_date = Trials.objects.create(
-            title="Trial with results completion date",
-            link="https://example.com/res-date",
-            results_date_completed=timezone.now().date(),
-        )
-        trial_link = Trials.objects.create(
-            title="Trial with results link",
-            link="https://example.com/res-link",
-            results_url_link="https://example.com/results",
-        )
-        trial_yesno = Trials.objects.create(
-            title="Trial with results available (lowercase)",
-            link="https://example.com/res-yesno",
-            results_yes_no="yes",  # lowercase must still match
-        )
-        trial_posted = Trials.objects.create(
-            title="Trial with results_posted flag",
-            link="https://example.com/res-posted",
-            results_posted=True,
-        )
-        # A trial whose results fields are empty strings should NOT count
-        trial_empty = Trials.objects.create(
-            title="Trial with empty results fields",
-            link="https://example.com/res-empty",
-            results_url_link="",
-            results_yes_no="",
-        )
-        # "No"/"no" in results_yes_no must NOT count
-        trial_no = Trials.objects.create(
-            title="Trial with results available = No",
-            link="https://example.com/res-no",
-            results_yes_no="No",
-        )
+	def test_trial_id_filter(self):
+		"""Test filtering trials by trial_id"""
+		response = self.client.get(f"/trials/?trial_id={self.trial1.trial_id}")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
 
-        with_results = {
-            trial_date.trial_id, trial_link.trial_id,
-            trial_yesno.trial_id, trial_posted.trial_id,
-        }
-        without_results = {
-            self.trial1.trial_id, self.trial2.trial_id,
-            trial_empty.trial_id, trial_no.trial_id,
-        }
+	def test_internal_number_filter(self):
+		"""Test filtering trials by internal_number"""
+		response = self.client.get("/trials/?internal_number=INT-2024-001")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
 
-        # has_results=true returns only trials with results
-        f_true = TrialFilter({'has_results': 'true'}, queryset=Trials.objects.all())
-        self.assertEqual(set(f_true.qs.values_list('trial_id', flat=True)), with_results)
+	def test_phase_filter(self):
+		"""Test filtering trials by phase"""
+		response = self.client.get("/trials/?phase=Phase III")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
 
-        # has_results=false returns only trials without results
-        f_false = TrialFilter({'has_results': 'false'}, queryset=Trials.objects.all())
-        self.assertEqual(set(f_false.qs.values_list('trial_id', flat=True)), without_results)
+	def test_study_type_filter(self):
+		"""Test filtering trials by study_type"""
+		response = self.client.get("/trials/?study_type=Interventional")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
+
+	def test_primary_sponsor_filter(self):
+		"""Test filtering trials by primary_sponsor"""
+		response = self.client.get("/trials/?primary_sponsor=Big Pharma")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
+
+	def test_source_register_filter(self):
+		"""Test filtering trials by source_register"""
+		response = self.client.get("/trials/?source_register=ClinicalTrials.gov")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
+
+	def test_countries_filter(self):
+		"""Test filtering trials by countries"""
+		response = self.client.get("/trials/?countries=United States")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
+
+	def test_condition_filter(self):
+		"""Test filtering trials by condition"""
+		response = self.client.get("/trials/?condition=COVID-19")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
+
+	def test_intervention_filter(self):
+		"""Test filtering trials by intervention"""
+		response = self.client.get("/trials/?intervention=mRNA")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
+
+	def test_therapeutic_areas_filter(self):
+		"""Test filtering trials by therapeutic_areas"""
+		response = self.client.get("/trials/?therapeutic_areas=Infectious")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
+
+	def test_inclusion_age_filters(self):
+		"""Test filtering trials by inclusion age criteria"""
+		response = self.client.get("/trials/?inclusion_agemin=18")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
+
+		response = self.client.get("/trials/?inclusion_agemax=65")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
+
+	def test_inclusion_gender_filter(self):
+		"""Test filtering trials by inclusion_gender"""
+		response = self.client.get("/trials/?inclusion_gender=Female")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial2.trial_id)
+
+	def test_recruitment_status_vs_status(self):
+		"""Test both recruitment_status and status filters work"""
+		# Test new recruitment_status filter
+		response = self.client.get("/trials/?recruitment_status=Recruiting")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
+
+		# Test legacy status filter for backward compatibility
+		response = self.client.get("/trials/?status=Recruiting")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
+
+	def test_combined_filters(self):
+		"""Test combining multiple filters"""
+		response = self.client.get(
+			"/trials/?phase=Phase III&condition=COVID-19&countries=United States"
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
+
+		# Test combination that should return no results
+		response = self.client.get(
+			"/trials/?phase=Phase III&condition=Multiple Sclerosis"
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 0)
+
+	def test_has_results_filter(self):
+		"""Test filtering trials by whether results have been posted.
+
+		Exercised at the FilterSet/queryset level: the /trials/ HTTP endpoint is
+		org-scoped by OrgVisibilityMixin, which returns nothing for anonymous test
+		requests, so we apply TrialFilter directly.
+		"""
+		from api.filters import TrialFilter
+
+		# A trial with results via each of the three qualifying fields
+		trial_date = Trials.objects.create(
+			title="Trial with results completion date",
+			link="https://example.com/res-date",
+			results_date_completed=timezone.now().date(),
+		)
+		trial_link = Trials.objects.create(
+			title="Trial with results link",
+			link="https://example.com/res-link",
+			results_url_link="https://example.com/results",
+		)
+		trial_yesno = Trials.objects.create(
+			title="Trial with results available (lowercase)",
+			link="https://example.com/res-yesno",
+			results_yes_no="yes",  # lowercase must still match
+		)
+		trial_posted = Trials.objects.create(
+			title="Trial with results_posted flag",
+			link="https://example.com/res-posted",
+			results_posted=True,
+		)
+		# A trial whose results fields are empty strings should NOT count
+		trial_empty = Trials.objects.create(
+			title="Trial with empty results fields",
+			link="https://example.com/res-empty",
+			results_url_link="",
+			results_yes_no="",
+		)
+		# "No"/"no" in results_yes_no must NOT count
+		trial_no = Trials.objects.create(
+			title="Trial with results available = No",
+			link="https://example.com/res-no",
+			results_yes_no="No",
+		)
+
+		with_results = {
+			trial_date.trial_id,
+			trial_link.trial_id,
+			trial_yesno.trial_id,
+			trial_posted.trial_id,
+		}
+		without_results = {
+			self.trial1.trial_id,
+			self.trial2.trial_id,
+			trial_empty.trial_id,
+			trial_no.trial_id,
+		}
+
+		# has_results=true returns only trials with results
+		f_true = TrialFilter({"has_results": "true"}, queryset=Trials.objects.all())
+		self.assertEqual(
+			set(f_true.qs.values_list("trial_id", flat=True)), with_results
+		)
+
+		# has_results=false returns only trials without results
+		f_false = TrialFilter({"has_results": "false"}, queryset=Trials.objects.all())
+		self.assertEqual(
+			set(f_false.qs.values_list("trial_id", flat=True)), without_results
+		)
 
 
 class AuthorFilterTests(TestCase):
-    """Test cases for enhanced author filtering"""
-    
-    def setUp(self):
-        # Clear any existing authors to avoid interference
-        Authors.objects.all().delete()
+	"""Test cases for enhanced author filtering"""
 
-        # Public org so anonymous API calls can see the data
-        self.org = Organization.objects.create(name="Author Filter Org", slug="author-filter-org")
-        OrganizationApiSettings.objects.filter(organization=self.org).update(make_api_public=True)
-        self.team = Team.objects.create(name="Author Filter Team", slug="author-filter-team", organization=self.org)
+	def setUp(self):
+		# Clear any existing authors to avoid interference
+		Authors.objects.all().delete()
 
-        # Create test authors
-        self.author1 = Authors.objects.create(
-            family_name="Smith",
-            given_name="John",
-            full_name="John Smith",
-            ORCID="0000-0000-0000-0001",
-            country="US"
-        )
-        self.author2 = Authors.objects.create(
-            family_name="Doe",
-            given_name="Jane",
-            full_name="Jane Doe",
-            ORCID="0000-0000-0000-0002",
-            country="GB"
-        )
+		# Public org so anonymous API calls can see the data
+		self.org = Organization.objects.create(
+			name="Author Filter Org", slug="author-filter-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=self.org).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			name="Author Filter Team", slug="author-filter-team", organization=self.org
+		)
 
-        # Link each author through an article in the public team so visibility filter passes
-        for author in [self.author1, self.author2]:
-            a = Articles.objects.create(
-                title=f"Article for {author.full_name}",
-                link=f"https://example.com/{author.ORCID}",
-            )
-            a.teams.add(self.team)
-            a.authors.add(author)
+		# Create test authors
+		self.author1 = Authors.objects.create(
+			family_name="Smith",
+			given_name="John",
+			full_name="John Smith",
+			ORCID="0000-0000-0000-0001",
+			country="US",
+		)
+		self.author2 = Authors.objects.create(
+			family_name="Doe",
+			given_name="Jane",
+			full_name="Jane Doe",
+			ORCID="0000-0000-0000-0002",
+			country="GB",
+		)
 
-        self.client = APIClient()
-    
-    def test_orcid_filter(self):
-        """Test filtering authors by ORCID"""
-        response = self.client.get('/authors/?orcid=0000-0000-0000-0001')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['author_id'], self.author1.author_id)
-    
-    def test_orcid_partial_filter(self):
-        """Test filtering authors by partial ORCID"""
-        response = self.client.get('/authors/?orcid=0001')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['author_id'], self.author1.author_id)
-    
-    def test_country_filter(self):
-        """Test filtering authors by country"""
-        response = self.client.get('/authors/?country=US')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['author_id'], self.author1.author_id)
-    
-    def test_combined_author_filters(self):
-        """Test combining author filters"""
-        response = self.client.get('/authors/?country=US&orcid=0000-0000-0000-0001')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['author_id'], self.author1.author_id)
+		# Link each author through an article in the public team so visibility filter passes
+		for author in [self.author1, self.author2]:
+			a = Articles.objects.create(
+				title=f"Article for {author.full_name}",
+				link=f"https://example.com/{author.ORCID}",
+			)
+			a.teams.add(self.team)
+			a.authors.add(author)
+
+		self.client = APIClient()
+
+	def test_orcid_filter(self):
+		"""Test filtering authors by ORCID"""
+		response = self.client.get("/authors/?orcid=0000-0000-0000-0001")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(
+			response.data["results"][0]["author_id"], self.author1.author_id
+		)
+
+	def test_orcid_partial_filter(self):
+		"""Test filtering authors by partial ORCID"""
+		response = self.client.get("/authors/?orcid=0001")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(
+			response.data["results"][0]["author_id"], self.author1.author_id
+		)
+
+	def test_country_filter(self):
+		"""Test filtering authors by country"""
+		response = self.client.get("/authors/?country=US")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(
+			response.data["results"][0]["author_id"], self.author1.author_id
+		)
+
+	def test_combined_author_filters(self):
+		"""Test combining author filters"""
+		response = self.client.get("/authors/?country=US&orcid=0000-0000-0000-0001")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(
+			response.data["results"][0]["author_id"], self.author1.author_id
+		)
 
 
 class SourceFilterTests(TestCase):
-    """Test cases for enhanced source filtering"""
+	"""Test cases for enhanced source filtering"""
 
-    def setUp(self):
-        # Create test data
-        self.organization = Organization.objects.create(name="Test Organization", slug="src-filter-org")
-        self.team = Team.objects.create(name="Test Team", slug="src-filter-team", organization=self.organization)
-        self.subject = Subject.objects.create(
-            subject_name="Test Subject",
-            subject_slug="test-subject",
-            team=self.team
-        )
-        
-        # Note: We need to check the actual Sources model structure
-        # This is a placeholder test structure
-        self.client = APIClient()
-    
-    def test_source_id_filter(self):
-        """Test filtering sources by source_id"""
-        # This test would need actual Sources objects created
-        # Based on the model structure found in the codebase
-        pass
-    
-    def test_source_for_filter(self):
-        """Test filtering sources by source_for field"""
-        # Test filtering by source_for='articles' or 'trials'
-        pass
+	def setUp(self):
+		# Create test data
+		self.organization = Organization.objects.create(
+			name="Test Organization", slug="src-filter-org"
+		)
+		self.team = Team.objects.create(
+			name="Test Team", slug="src-filter-team", organization=self.organization
+		)
+		self.subject = Subject.objects.create(
+			subject_name="Test Subject", subject_slug="test-subject", team=self.team
+		)
+
+		# Note: We need to check the actual Sources model structure
+		# This is a placeholder test structure
+		self.client = APIClient()
+
+	def test_source_id_filter(self):
+		"""Test filtering sources by source_id"""
+		# This test would need actual Sources objects created
+		# Based on the model structure found in the codebase
+		pass
+
+	def test_source_for_filter(self):
+		"""Test filtering sources by source_for field"""
+		# Test filtering by source_for='articles' or 'trials'
+		pass
 
 
 class CategoryFilterTests(TestCase):
-    """Test cases for enhanced category filtering"""
-    
-    def setUp(self):
-        # Create test data
-        self.organization = Organization.objects.create(name="Test Organization", slug="cat-filter-org")
-        OrganizationApiSettings.objects.filter(organization=self.organization).update(make_api_public=True)
-        self.team = Team.objects.create(name="Test Team", slug="cat-filter-team", organization=self.organization)
-        self.subject = Subject.objects.create(
-            subject_name="Test Subject",
-            subject_slug="test-subject",
-            team=self.team
-        )
+	"""Test cases for enhanced category filtering"""
 
-        self.category = TeamCategory.objects.create(
-            team=self.team,
-            category_name="Test Category",
-            category_slug="test-category",
-            category_terms=["test", "category", "example"]
-        )
-        self.category.subjects.add(self.subject)
+	def setUp(self):
+		# Create test data
+		self.organization = Organization.objects.create(
+			name="Test Organization", slug="cat-filter-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=self.organization).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			name="Test Team", slug="cat-filter-team", organization=self.organization
+		)
+		self.subject = Subject.objects.create(
+			subject_name="Test Subject", subject_slug="test-subject", team=self.team
+		)
 
-        self.client = APIClient()
-    
-    def test_category_terms_filter(self):
-        """Test filtering categories by category_terms"""
-        response = self.client.get('/categories/?category_terms=test')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Should find the category that contains "test" in its terms
-        self.assertGreaterEqual(len(response.data['results']), 1)
+		self.category = TeamCategory.objects.create(
+			team=self.team,
+			category_name="Test Category",
+			category_slug="test-category",
+			category_terms=["test", "category", "example"],
+		)
+		self.category.subjects.add(self.subject)
+
+		self.client = APIClient()
+
+	def test_category_terms_filter(self):
+		"""Test filtering categories by category_terms"""
+		response = self.client.get("/categories/?category_terms=test")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		# Should find the category that contains "test" in its terms
+		self.assertGreaterEqual(len(response.data["results"]), 1)

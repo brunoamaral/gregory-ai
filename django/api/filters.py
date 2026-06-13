@@ -15,6 +15,7 @@ class SubjectANDFilterMixin:
 	Uses a single join (subjects__id__in) plus a Count annotation instead of
 	chaining one .filter() per ID, so the SQL stays to a single extra join.
 	"""
+
 	def filter_subjects_all(self, queryset, name, value):
 		if not value:
 			return queryset
@@ -28,11 +29,10 @@ class SubjectANDFilterMixin:
 			return queryset.none()
 		unique_ids = set(ids)
 		return (
-			queryset
-			.filter(subjects__id__in=unique_ids)
+			queryset.filter(subjects__id__in=unique_ids)
 			.annotate(
 				matched_subjects_count=models.Count(
-					'subjects',
+					"subjects",
 					filter=models.Q(subjects__id__in=unique_ids),
 					distinct=True,
 				)
@@ -43,511 +43,699 @@ class SubjectANDFilterMixin:
 
 
 class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
-    """
-    Filter class for Articles, allowing searching by title, summary,
-    and combined search across both fields, plus filtering by author,
-    category, journal, team, subject, and special article types.
-    """
-    title = filters.CharFilter(method='filter_title', label='Title')
-    summary = filters.CharFilter(method='filter_summary', label='Summary')
-    search = filters.CharFilter(method='filter_search', label='Search')
-    author_id = filters.NumberFilter(field_name='authors__author_id', lookup_expr='exact', label='Author ID')
-    doi = filters.CharFilter(field_name='doi', lookup_expr='iexact', label='DOI')
-    category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact', label='Category Slug')
-    category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact', label='Category ID')
-    journal_slug = filters.CharFilter(method='filter_journal', label='Journal')
-    team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact', label='Team ID')
-    subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact', label='Subject ID')
-    subjects = filters.BaseInFilter(method='filter_subjects_all', label='All subject IDs (comma-separated, AND match)')
-    source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact', label='Source ID')
-    
-    # New parameters for special article types
-    relevant = filters.BooleanFilter(method='filter_relevant', label='Relevant')
-    ml_threshold = filters.NumberFilter(method='filter_ml_threshold', label='ML Threshold (0.0-1.0)', 
-                                       widget=forms.NumberInput(attrs={'step': '0.01', 'min': '0.0', 'max': '1.0'}))
-    open_access = filters.BooleanFilter(method='filter_open_access', label='Open Access')
-    last_days = filters.NumberFilter(method='filter_last_days', label='Last Days')
-    week = filters.NumberFilter(method='filter_week', label='Week')
-    year = filters.NumberFilter(method='filter_year', label='Year')
-    has_clinical_trials = filters.BooleanFilter(method='filter_has_clinical_trials', label='Has Clinical Trials')
-    
-    class Meta:
-        model = Articles
-        fields = [
-            'title', 'summary', 'search', 'author_id', 'doi', 'category_slug', 'category_id', 
-            'journal_slug', 'team_id', 'subject_id', 'source_id', 'relevant', 'ml_threshold',
-            'open_access', 'last_days', 'week', 'year', 'has_clinical_trials'
-        ]
-    
-    def filter_title(self, queryset, name, value):
-        """
-        Search in title field using uppercase column for performance
-        """
-        return queryset.filter(utitle__contains=value.upper())
-    
-    def filter_summary(self, queryset, name, value):
-        """
-        Search in summary field using uppercase column for performance
-        """
-        return queryset.filter(usummary__contains=value.upper())
-    
-    def filter_search(self, queryset, name, value):
-        """
-        Search in both title and summary fields using uppercase columns for performance
-        """
-        upper_value = value.upper()
-        return queryset.filter(
-            models.Q(utitle__contains=upper_value) | 
-            models.Q(usummary__contains=upper_value)
-        )
-    
-    def filter_journal(self, queryset, name, value):
-        """
-        Filter by journal using case-insensitive regex matching.
-        Handles URL-encoded journal names.
-        """
-        from urllib.parse import unquote
-        journal_name = unquote(value)
-        return queryset.filter(container_title__iregex=f'^{journal_name}$')
-    
-    def _parse_ml_threshold(self, default=0.8):
-        """
-        Helper method to safely parse ml_threshold parameter from request.
-        Returns default value if parameter is missing, empty, or invalid.
-        """
-        try:
-            threshold_param = self.request.GET.get('ml_threshold', str(default))
-            if threshold_param == '' or threshold_param is None:
-                return default
-            else:
-                threshold = float(threshold_param)
-                if not 0.0 <= threshold <= 1.0:
-                    return default  # Use default if invalid range
-                return threshold
-        except (ValueError, TypeError):
-            return default  # Use default if conversion fails
+	"""
+	Filter class for Articles, allowing searching by title, summary,
+	and combined search across both fields, plus filtering by author,
+	category, journal, team, subject, and special article types.
+	"""
 
-    def _get_ml_relevant_articles_query(self, threshold=0.8, filtered_subject_id=None):
-        """
-        Build a database-level query to find ML-relevant articles based on consensus logic.
-        This avoids the N+1 query problem by using efficient Django ORM queries.
+	title = filters.CharFilter(method="filter_title", label="Title")
+	summary = filters.CharFilter(method="filter_summary", label="Summary")
+	search = filters.CharFilter(method="filter_search", label="Search")
+	author_id = filters.NumberFilter(
+		field_name="authors__author_id", lookup_expr="exact", label="Author ID"
+	)
+	doi = filters.CharFilter(field_name="doi", lookup_expr="iexact", label="DOI")
+	category_slug = filters.CharFilter(
+		field_name="team_categories__category_slug",
+		lookup_expr="exact",
+		label="Category Slug",
+	)
+	category_id = filters.NumberFilter(
+		field_name="team_categories__id", lookup_expr="exact", label="Category ID"
+	)
+	journal_slug = filters.CharFilter(method="filter_journal", label="Journal")
+	team_id = filters.NumberFilter(
+		field_name="teams__id", lookup_expr="exact", label="Team ID"
+	)
+	subject_id = filters.NumberFilter(
+		field_name="subjects__id", lookup_expr="exact", label="Subject ID"
+	)
+	subjects = filters.BaseInFilter(
+		method="filter_subjects_all",
+		label="All subject IDs (comma-separated, AND match)",
+	)
+	source_id = filters.NumberFilter(
+		field_name="sources__source_id", lookup_expr="exact", label="Source ID"
+	)
 
-        If filtered_subject_id is provided, only check relevance for that specific subject.
-        """
-        from django.db.models import Count, Q
+	# New parameters for special article types
+	relevant = filters.BooleanFilter(method="filter_relevant", label="Relevant")
+	ml_threshold = filters.NumberFilter(
+		method="filter_ml_threshold",
+		label="ML Threshold (0.0-1.0)",
+		widget=forms.NumberInput(attrs={"step": "0.01", "min": "0.0", "max": "1.0"}),
+	)
+	open_access = filters.BooleanFilter(
+		method="filter_open_access", label="Open Access"
+	)
+	last_days = filters.NumberFilter(method="filter_last_days", label="Last Days")
+	week = filters.NumberFilter(method="filter_week", label="Week")
+	year = filters.NumberFilter(method="filter_year", label="Year")
+	has_clinical_trials = filters.BooleanFilter(
+		method="filter_has_clinical_trials", label="Has Clinical Trials"
+	)
 
-        # Get all article IDs that meet ML consensus for at least one subject
-        ml_relevant_ids = set()
+	class Meta:
+		model = Articles
+		fields = [
+			"title",
+			"summary",
+			"search",
+			"author_id",
+			"doi",
+			"category_slug",
+			"category_id",
+			"journal_slug",
+			"team_id",
+			"subject_id",
+			"source_id",
+			"relevant",
+			"ml_threshold",
+			"open_access",
+			"last_days",
+			"week",
+			"year",
+			"has_clinical_trials",
+		]
 
-        # Get subjects with auto_predict enabled, optionally filtered by subject_id
-        auto_predict_subjects = Subject.objects.filter(auto_predict=True)
-        if filtered_subject_id is not None:
-            auto_predict_subjects = auto_predict_subjects.filter(id=filtered_subject_id)
-        auto_predict_subjects = auto_predict_subjects.values('id', 'ml_consensus_type')
+	def filter_title(self, queryset, name, value):
+		"""
+		Search in title field using uppercase column for performance
+		"""
+		return queryset.filter(utitle__contains=value.upper())
 
-        for subject_data in auto_predict_subjects:
-            subject_id = subject_data['id']
-            consensus_type = subject_data['ml_consensus_type']
-            
-            # Determine minimum algorithm count based on consensus type
-            min_algorithms = {
-                'any': 1,
-                'majority': 2,
-                'all': 3
-            }.get(consensus_type, 1)  # Default to 'any' if unknown
-            
-            # Find articles that meet consensus for this subject
-            articles_for_subject = Articles.objects.filter(
-                subjects__id=subject_id,
-                ml_predictions_detail__subject_id=subject_id,
-                ml_predictions_detail__predicted_relevant=True,
-                ml_predictions_detail__probability_score__gte=threshold
-            ).annotate(
-                algorithm_count=Count('ml_predictions_detail__algorithm', distinct=True)
-            ).filter(
-                algorithm_count__gte=min_algorithms
-            ).values_list('article_id', flat=True)
-            
-            ml_relevant_ids.update(articles_for_subject)
-        
-        return Q(article_id__in=list(ml_relevant_ids))
+	def filter_summary(self, queryset, name, value):
+		"""
+		Search in summary field using uppercase column for performance
+		"""
+		return queryset.filter(usummary__contains=value.upper())
 
-    def filter_relevant(self, queryset, name, value):
-        """
-        Filter for relevant articles (ML predictions with consensus or manual selection)
-        Uses ml_threshold parameter if provided, otherwise defaults to 0.8
+	def filter_search(self, queryset, name, value):
+		"""
+		Search in both title and summary fields using uppercase columns for performance
+		"""
+		upper_value = value.upper()
+		return queryset.filter(
+			models.Q(utitle__contains=upper_value)
+			| models.Q(usummary__contains=upper_value)
+		)
 
-        When subject_id is provided, only checks relevance for that specific subject.
-        """
-        # Get subject_id from request to scope relevance checks
-        filtered_subject_id = self.request.GET.get('subject_id')
-        if filtered_subject_id:
-            try:
-                filtered_subject_id = int(filtered_subject_id)
-            except (ValueError, TypeError):
-                filtered_subject_id = None
+	def filter_journal(self, queryset, name, value):
+		"""
+		Filter by journal using case-insensitive regex matching.
+		Handles URL-encoded journal names.
+		"""
+		from urllib.parse import unquote
 
-        if value:
-            # Get ML threshold from request parameters, default to 0.8
-            threshold = self._parse_ml_threshold(0.8)
+		journal_name = unquote(value)
+		return queryset.filter(container_title__iregex=f"^{journal_name}$")
 
-            # Get articles that are either:
-            # 1. Manually marked as relevant (scoped to subject if provided)
-            if filtered_subject_id:
-                manually_relevant = models.Q(
-                    article_subject_relevances__is_relevant=True,
-                    article_subject_relevances__subject_id=filtered_subject_id
-                )
-            else:
-                manually_relevant = models.Q(article_subject_relevances__is_relevant=True)
+	def _parse_ml_threshold(self, default=0.8):
+		"""
+		Helper method to safely parse ml_threshold parameter from request.
+		Returns default value if parameter is missing, empty, or invalid.
+		"""
+		try:
+			threshold_param = self.request.GET.get("ml_threshold", str(default))
+			if threshold_param == "" or threshold_param is None:
+				return default
+			else:
+				threshold = float(threshold_param)
+				if not 0.0 <= threshold <= 1.0:
+					return default  # Use default if invalid range
+				return threshold
+		except (ValueError, TypeError):
+			return default  # Use default if conversion fails
 
-            # 2. ML-relevant based on subject-specific consensus settings and threshold
-            ml_relevant_q = self._get_ml_relevant_articles_query(threshold, filtered_subject_id)
+	def _get_ml_relevant_articles_query(self, threshold=0.8, filtered_subject_id=None):
+		"""
+		Build a database-level query to find ML-relevant articles based on consensus logic.
+		This avoids the N+1 query problem by using efficient Django ORM queries.
 
-            return queryset.filter(manually_relevant | ml_relevant_q).distinct()
-        else:
-            # Exclude articles that are either manually relevant or ML-relevant
-            threshold = self._parse_ml_threshold(0.8)
-            if filtered_subject_id:
-                manually_relevant = models.Q(
-                    article_subject_relevances__is_relevant=True,
-                    article_subject_relevances__subject_id=filtered_subject_id
-                )
-            else:
-                manually_relevant = models.Q(article_subject_relevances__is_relevant=True)
-            ml_relevant_q = self._get_ml_relevant_articles_query(threshold, filtered_subject_id)
+		If filtered_subject_id is provided, only check relevance for that specific subject.
+		"""
+		from django.db.models import Count, Q
 
-            return queryset.exclude(manually_relevant | ml_relevant_q).distinct()
-    
-    def filter_ml_threshold(self, queryset, name, value):
-        """
-        Filter for articles with ML predictions above the specified threshold.
-        Works independently or in combination with the relevant filter.
-        """
-        try:
-            threshold = float(value)
-            if not 0.0 <= threshold <= 1.0:
-                # Invalid threshold, return empty queryset
-                return queryset.none()
+		# Get all article IDs that meet ML consensus for at least one subject
+		ml_relevant_ids = set()
 
-            # Scope to subject_id if provided
-            filtered_subject_id = self.request.GET.get('subject_id')
-            if filtered_subject_id:
-                try:
-                    filtered_subject_id = int(filtered_subject_id)
-                except (ValueError, TypeError):
-                    filtered_subject_id = None
+		# Get subjects with auto_predict enabled, optionally filtered by subject_id
+		auto_predict_subjects = Subject.objects.filter(auto_predict=True)
+		if filtered_subject_id is not None:
+			auto_predict_subjects = auto_predict_subjects.filter(id=filtered_subject_id)
+		auto_predict_subjects = auto_predict_subjects.values("id", "ml_consensus_type")
 
-            # Use efficient database-level query instead of Python loop
-            ml_relevant_q = self._get_ml_relevant_articles_query(threshold, filtered_subject_id)
-            return queryset.filter(ml_relevant_q)
+		for subject_data in auto_predict_subjects:
+			subject_id = subject_data["id"]
+			consensus_type = subject_data["ml_consensus_type"]
 
-        except (ValueError, TypeError):
-            # Invalid threshold format, return empty queryset
-            return queryset.none()
-    
-    def filter_open_access(self, queryset, name, value):
-        """
-        Filter for open access articles
-        """
-        if value:
-            return queryset.filter(access='open')
-        else:
-            return queryset.exclude(access='open')
-    
-    def filter_last_days(self, queryset, name, value):
-        """
-        Filter for articles from the last X days
-        """
-        if not value:
-            return queryset
-            
-        try:
-            # Convert to float first, then int (handles '10.5' -> 10)
-            days = int(float(value))
-            if days <= 0:
-                return queryset
-            
-            days_ago = timezone.now() - timedelta(days=days)
-            return queryset.filter(discovery_date__gte=days_ago)
-        except (ValueError, TypeError, OverflowError):
-            # Return unfiltered queryset if value is invalid
-            return queryset
-    
-    def filter_week(self, queryset, name, value):
-        """
-        Filter for articles from a specific week (requires year parameter)
-        """
-        year = self.request.GET.get('year')
-        if value and year:
-            try:
-                week_num = int(value)
-                year_num = int(year)
-                
-                # Calculate first and last day of the week
-                first_day_of_week = datetime.strptime(f'{year_num}-W{week_num - 1}-1', "%Y-W%W-%w")
-                last_day_of_week = first_day_of_week + timedelta(days=6.9)
-                
-                return queryset.filter(
-                    discovery_date__gte=first_day_of_week.replace(tzinfo=timezone.get_current_timezone()),
-                    discovery_date__lte=last_day_of_week.replace(tzinfo=timezone.get_current_timezone())
-                )
-            except (ValueError, TypeError):
-                pass
-        return queryset
-    
-    def filter_year(self, queryset, name, value):
-        """
-        Filter for articles from a specific year (used with week parameter)
-        This filter doesn't modify the queryset directly - it's used by filter_week
-        """
-        return queryset
+			# Determine minimum algorithm count based on consensus type
+			min_algorithms = {"any": 1, "majority": 2, "all": 3}.get(
+				consensus_type, 1
+			)  # Default to 'any' if unknown
 
-    def filter_has_clinical_trials(self, queryset, name, value):
-        """
-        Filter articles by whether they are linked to at least one clinical trial.
-        When value is None (parameter absent or empty), all articles are returned.
-        """
-        if value is None:
-            return queryset
-        if value:
-            return queryset.filter(trial_references__isnull=False).distinct()
-        return queryset.filter(trial_references__isnull=True)
+			# Find articles that meet consensus for this subject
+			articles_for_subject = (
+				Articles.objects.filter(
+					subjects__id=subject_id,
+					ml_predictions_detail__subject_id=subject_id,
+					ml_predictions_detail__predicted_relevant=True,
+					ml_predictions_detail__probability_score__gte=threshold,
+				)
+				.annotate(
+					algorithm_count=Count(
+						"ml_predictions_detail__algorithm", distinct=True
+					)
+				)
+				.filter(algorithm_count__gte=min_algorithms)
+				.values_list("article_id", flat=True)
+			)
+
+			ml_relevant_ids.update(articles_for_subject)
+
+		return Q(article_id__in=list(ml_relevant_ids))
+
+	def filter_relevant(self, queryset, name, value):
+		"""
+		Filter for relevant articles (ML predictions with consensus or manual selection)
+		Uses ml_threshold parameter if provided, otherwise defaults to 0.8
+
+		When subject_id is provided, only checks relevance for that specific subject.
+		"""
+		# Get subject_id from request to scope relevance checks
+		filtered_subject_id = self.request.GET.get("subject_id")
+		if filtered_subject_id:
+			try:
+				filtered_subject_id = int(filtered_subject_id)
+			except (ValueError, TypeError):
+				filtered_subject_id = None
+
+		if value:
+			# Get ML threshold from request parameters, default to 0.8
+			threshold = self._parse_ml_threshold(0.8)
+
+			# Get articles that are either:
+			# 1. Manually marked as relevant (scoped to subject if provided)
+			if filtered_subject_id:
+				manually_relevant = models.Q(
+					article_subject_relevances__is_relevant=True,
+					article_subject_relevances__subject_id=filtered_subject_id,
+				)
+			else:
+				manually_relevant = models.Q(
+					article_subject_relevances__is_relevant=True
+				)
+
+			# 2. ML-relevant based on subject-specific consensus settings and threshold
+			ml_relevant_q = self._get_ml_relevant_articles_query(
+				threshold, filtered_subject_id
+			)
+
+			return queryset.filter(manually_relevant | ml_relevant_q).distinct()
+		else:
+			# Exclude articles that are either manually relevant or ML-relevant
+			threshold = self._parse_ml_threshold(0.8)
+			if filtered_subject_id:
+				manually_relevant = models.Q(
+					article_subject_relevances__is_relevant=True,
+					article_subject_relevances__subject_id=filtered_subject_id,
+				)
+			else:
+				manually_relevant = models.Q(
+					article_subject_relevances__is_relevant=True
+				)
+			ml_relevant_q = self._get_ml_relevant_articles_query(
+				threshold, filtered_subject_id
+			)
+
+			return queryset.exclude(manually_relevant | ml_relevant_q).distinct()
+
+	def filter_ml_threshold(self, queryset, name, value):
+		"""
+		Filter for articles with ML predictions above the specified threshold.
+		Works independently or in combination with the relevant filter.
+		"""
+		try:
+			threshold = float(value)
+			if not 0.0 <= threshold <= 1.0:
+				# Invalid threshold, return empty queryset
+				return queryset.none()
+
+			# Scope to subject_id if provided
+			filtered_subject_id = self.request.GET.get("subject_id")
+			if filtered_subject_id:
+				try:
+					filtered_subject_id = int(filtered_subject_id)
+				except (ValueError, TypeError):
+					filtered_subject_id = None
+
+			# Use efficient database-level query instead of Python loop
+			ml_relevant_q = self._get_ml_relevant_articles_query(
+				threshold, filtered_subject_id
+			)
+			return queryset.filter(ml_relevant_q)
+
+		except (ValueError, TypeError):
+			# Invalid threshold format, return empty queryset
+			return queryset.none()
+
+	def filter_open_access(self, queryset, name, value):
+		"""
+		Filter for open access articles
+		"""
+		if value:
+			return queryset.filter(access="open")
+		else:
+			return queryset.exclude(access="open")
+
+	def filter_last_days(self, queryset, name, value):
+		"""
+		Filter for articles from the last X days
+		"""
+		if not value:
+			return queryset
+
+		try:
+			# Convert to float first, then int (handles '10.5' -> 10)
+			days = int(float(value))
+			if days <= 0:
+				return queryset
+
+			days_ago = timezone.now() - timedelta(days=days)
+			return queryset.filter(discovery_date__gte=days_ago)
+		except (ValueError, TypeError, OverflowError):
+			# Return unfiltered queryset if value is invalid
+			return queryset
+
+	def filter_week(self, queryset, name, value):
+		"""
+		Filter for articles from a specific week (requires year parameter)
+		"""
+		year = self.request.GET.get("year")
+		if value and year:
+			try:
+				week_num = int(value)
+				year_num = int(year)
+
+				# Calculate first and last day of the week
+				first_day_of_week = datetime.strptime(
+					f"{year_num}-W{week_num - 1}-1", "%Y-W%W-%w"
+				)
+				last_day_of_week = first_day_of_week + timedelta(days=6.9)
+
+				return queryset.filter(
+					discovery_date__gte=first_day_of_week.replace(
+						tzinfo=timezone.get_current_timezone()
+					),
+					discovery_date__lte=last_day_of_week.replace(
+						tzinfo=timezone.get_current_timezone()
+					),
+				)
+			except (ValueError, TypeError):
+				pass
+		return queryset
+
+	def filter_year(self, queryset, name, value):
+		"""
+		Filter for articles from a specific year (used with week parameter)
+		This filter doesn't modify the queryset directly - it's used by filter_week
+		"""
+		return queryset
+
+	def filter_has_clinical_trials(self, queryset, name, value):
+		"""
+		Filter articles by whether they are linked to at least one clinical trial.
+		When value is None (parameter absent or empty), all articles are returned.
+		"""
+		if value is None:
+			return queryset
+		if value:
+			return queryset.filter(trial_references__isnull=False).distinct()
+		return queryset.filter(trial_references__isnull=True)
+
 
 class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
-    """
-    Filter class for Trials, allowing searching by title, summary,
-    and combined search across both fields, plus filtering by recruitment status,
-    team, and subject.
-    """
-    # Core search filters
-    title = filters.CharFilter(method='filter_title', label='Title')
-    summary = filters.CharFilter(method='filter_summary', label='Summary')
-    search = filters.CharFilter(method='filter_search', label='Search')
-    
-    # ID and relationship filters
-    trial_id = filters.NumberFilter(field_name='trial_id', lookup_expr='exact', label='Trial ID')
-    team_id = filters.NumberFilter(field_name='teams__id', lookup_expr='exact', label='Team ID')
-    subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact', label='Subject ID')
-    subjects = filters.BaseInFilter(method='filter_subjects_all', label='All subject IDs (comma-separated, AND match)')
-    category_slug = filters.CharFilter(field_name='team_categories__category_slug', lookup_expr='exact', label='Category Slug')
-    category_id = filters.NumberFilter(field_name='team_categories__id', lookup_expr='exact', label='Category ID')
-    source_id = filters.NumberFilter(field_name='sources__source_id', lookup_expr='exact', label='Source ID')
+	"""
+	Filter class for Trials, allowing searching by title, summary,
+	and combined search across both fields, plus filtering by recruitment status,
+	team, and subject.
+	"""
 
-    # Registry identifier filters
-    # Each accepts one or more comma-separated values and returns trials whose
-    # identifiers JSON (or acronym) matches *any* of them, case-insensitively.
-    # ``identifiers`` is the umbrella param: a mixed list matched across every
-    # registry key at once. The typed params below scope to a single registry.
-    identifiers = filters.BaseInFilter(method='filter_identifiers', label='Mixed registry id(s), comma-separated; matches any across NCT/EudraCT/EUCT/EUCTR/CTIS (case-insensitive)')
-    nct = filters.BaseInFilter(method='filter_nct', label='NCT ID(s), comma-separated; matches any (case-insensitive)')
-    eudract = filters.BaseInFilter(method='filter_eudract', label='EudraCT number(s), comma-separated; matches any')
-    euct = filters.BaseInFilter(method='filter_euct', label='EU CT / EUCTR number(s), comma-separated; matches any')
-    ctis = filters.BaseInFilter(method='filter_ctis', label='CTIS number(s), comma-separated; matches any')
-    acronym = filters.BaseInFilter(method='filter_acronym', label='Trial acronym(s), comma-separated; matches any (case-insensitive)')
+	# Core search filters
+	title = filters.CharFilter(method="filter_title", label="Title")
+	summary = filters.CharFilter(method="filter_summary", label="Summary")
+	search = filters.CharFilter(method="filter_search", label="Search")
 
-    # Trial-specific filters
-    recruitment_status = filters.CharFilter(field_name='recruitment_status', lookup_expr='iexact')
-    status = filters.CharFilter(field_name='recruitment_status', lookup_expr='iexact')  # Legacy alias for backward compatibility
-    internal_number = filters.CharFilter(field_name='internal_number', lookup_expr='icontains')
-    phase = filters.CharFilter(field_name='phase', lookup_expr='icontains')
-    study_type = filters.CharFilter(field_name='study_type', lookup_expr='icontains')
-    primary_sponsor = filters.CharFilter(field_name='primary_sponsor', lookup_expr='icontains')
-    source_register = filters.CharFilter(field_name='source_register', lookup_expr='icontains')
-    countries = filters.CharFilter(field_name='countries', lookup_expr='icontains')
-    
-    # Medical/research filters
-    condition = filters.CharFilter(field_name='condition', lookup_expr='icontains')
-    intervention = filters.CharFilter(field_name='intervention', lookup_expr='icontains')
-    therapeutic_areas = filters.CharFilter(field_name='therapeutic_areas', lookup_expr='icontains')
-    inclusion_agemin = filters.CharFilter(field_name='inclusion_agemin', lookup_expr='exact')
-    inclusion_agemax = filters.CharFilter(field_name='inclusion_agemax', lookup_expr='exact')
-    inclusion_gender = filters.CharFilter(field_name='inclusion_gender', lookup_expr='icontains')
+	# ID and relationship filters
+	trial_id = filters.NumberFilter(
+		field_name="trial_id", lookup_expr="exact", label="Trial ID"
+	)
+	team_id = filters.NumberFilter(
+		field_name="teams__id", lookup_expr="exact", label="Team ID"
+	)
+	subject_id = filters.NumberFilter(
+		field_name="subjects__id", lookup_expr="exact", label="Subject ID"
+	)
+	subjects = filters.BaseInFilter(
+		method="filter_subjects_all",
+		label="All subject IDs (comma-separated, AND match)",
+	)
+	category_slug = filters.CharFilter(
+		field_name="team_categories__category_slug",
+		lookup_expr="exact",
+		label="Category Slug",
+	)
+	category_id = filters.NumberFilter(
+		field_name="team_categories__id", lookup_expr="exact", label="Category ID"
+	)
+	source_id = filters.NumberFilter(
+		field_name="sources__source_id", lookup_expr="exact", label="Source ID"
+	)
 
-    # Results filters
-    has_results = filters.BooleanFilter(
-        method='filter_has_results',
-        label='Has results posted (results_posted flag, results completion date, results link, or results available = Yes)'
-    )
+	# Registry identifier filters
+	# Each accepts one or more comma-separated values and returns trials whose
+	# identifiers JSON (or acronym) matches *any* of them, case-insensitively.
+	# ``identifiers`` is the umbrella param: a mixed list matched across every
+	# registry key at once. The typed params below scope to a single registry.
+	identifiers = filters.BaseInFilter(
+		method="filter_identifiers",
+		label="Mixed registry id(s), comma-separated; matches any across NCT/EudraCT/EUCT/EUCTR/CTIS (case-insensitive)",
+	)
+	nct = filters.BaseInFilter(
+		method="filter_nct",
+		label="NCT ID(s), comma-separated; matches any (case-insensitive)",
+	)
+	eudract = filters.BaseInFilter(
+		method="filter_eudract", label="EudraCT number(s), comma-separated; matches any"
+	)
+	euct = filters.BaseInFilter(
+		method="filter_euct",
+		label="EU CT / EUCTR number(s), comma-separated; matches any",
+	)
+	ctis = filters.BaseInFilter(
+		method="filter_ctis", label="CTIS number(s), comma-separated; matches any"
+	)
+	acronym = filters.BaseInFilter(
+		method="filter_acronym",
+		label="Trial acronym(s), comma-separated; matches any (case-insensitive)",
+	)
 
-    class Meta:
-        model = Trials
-        fields = [
-            'trial_id', 'title', 'summary', 'search', 'recruitment_status', 'status',
-            'team_id', 'subject_id', 'category_slug', 'category_id', 'source_id',
-            'identifiers', 'nct', 'eudract', 'euct', 'ctis', 'acronym',
-            'internal_number', 'phase', 'study_type', 'primary_sponsor', 'source_register',
-            'countries', 'condition', 'intervention', 'therapeutic_areas',
-            'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender', 'has_results'
-        ]
-    
-    def filter_title(self, queryset, name, value):
-        """
-        Search in title field using uppercase column for performance
-        """
-        return queryset.filter(utitle__contains=value.upper())
-    
-    def filter_summary(self, queryset, name, value):
-        """
-        Search in summary field using uppercase column for performance
-        """
-        return queryset.filter(usummary__contains=value.upper())
-    
-    def filter_search(self, queryset, name, value):
-        """
-        Search in both title and summary fields using uppercase columns for performance
-        """
-        upper_value = value.upper()
-        return queryset.filter(
-            models.Q(utitle__contains=upper_value) |
-            models.Q(usummary__contains=upper_value)
-        )
+	# Trial-specific filters
+	recruitment_status = filters.CharFilter(
+		field_name="recruitment_status", lookup_expr="iexact"
+	)
+	status = filters.CharFilter(
+		field_name="recruitment_status", lookup_expr="iexact"
+	)  # Legacy alias for backward compatibility
+	internal_number = filters.CharFilter(
+		field_name="internal_number", lookup_expr="icontains"
+	)
+	phase = filters.CharFilter(field_name="phase", lookup_expr="icontains")
+	study_type = filters.CharFilter(field_name="study_type", lookup_expr="icontains")
+	primary_sponsor = filters.CharFilter(
+		field_name="primary_sponsor", lookup_expr="icontains"
+	)
+	source_register = filters.CharFilter(
+		field_name="source_register", lookup_expr="icontains"
+	)
+	countries = filters.CharFilter(field_name="countries", lookup_expr="icontains")
 
-    def _match_identifier(self, queryset, value, keys):
-        """Return trials whose ``identifiers`` JSON has any of ``keys`` equal
-        (case-insensitively) to any of the supplied values.
+	# Medical/research filters
+	condition = filters.CharFilter(field_name="condition", lookup_expr="icontains")
+	intervention = filters.CharFilter(
+		field_name="intervention", lookup_expr="icontains"
+	)
+	therapeutic_areas = filters.CharFilter(
+		field_name="therapeutic_areas", lookup_expr="icontains"
+	)
+	inclusion_agemin = filters.CharFilter(
+		field_name="inclusion_agemin", lookup_expr="exact"
+	)
+	inclusion_agemax = filters.CharFilter(
+		field_name="inclusion_agemax", lookup_expr="exact"
+	)
+	inclusion_gender = filters.CharFilter(
+		field_name="inclusion_gender", lookup_expr="icontains"
+	)
 
-        ``value`` is the list produced by ``BaseInFilter`` (comma-separated input).
-        Values are stripped and upper-cased so the comparison lines up with the
-        non-partial ``Upper(identifiers->>'<key>')`` expression indexes on the
-        model (``trials_u<key>_idx`` for nct/eudract/euct/euctr/ctis), keeping
-        each branch — and the BitmapOr behind the umbrella ``?identifiers=``
-        filter — an index scan rather than a seq scan. (The model's partial
-        *unique* indexes on the same expressions enforce integrity but are NOT
-        used for these lookups: Postgres can't prove their ``identifiers ? 'key'``
-        predicate.) Blank tokens (e.g. from a trailing comma) are ignored; an
-        all-blank list is treated as "no filter" and leaves the queryset untouched.
-        """
-        wanted = {v.strip().upper() for v in (value or []) if v and v.strip()}
-        if not wanted:
-            return queryset
-        annotations = {}
-        condition = models.Q()
-        for key in keys:
-            alias = f'_id_{key}'
-            annotations[alias] = Upper(KeyTextTransform(key, 'identifiers'))
-            condition |= models.Q(**{f'{alias}__in': wanted})
-        return queryset.annotate(**annotations).filter(condition)
+	# Results filters
+	has_results = filters.BooleanFilter(
+		method="filter_has_results",
+		label="Has results posted (results_posted flag, results completion date, results link, or results available = Yes)",
+	)
 
-    def filter_identifiers(self, queryset, name, value):
-        """Match a mixed list of registry id(s) against any registry key.
+	class Meta:
+		model = Trials
+		fields = [
+			"trial_id",
+			"title",
+			"summary",
+			"search",
+			"recruitment_status",
+			"status",
+			"team_id",
+			"subject_id",
+			"category_slug",
+			"category_id",
+			"source_id",
+			"identifiers",
+			"nct",
+			"eudract",
+			"euct",
+			"ctis",
+			"acronym",
+			"internal_number",
+			"phase",
+			"study_type",
+			"primary_sponsor",
+			"source_register",
+			"countries",
+			"condition",
+			"intervention",
+			"therapeutic_areas",
+			"inclusion_agemin",
+			"inclusion_agemax",
+			"inclusion_gender",
+			"has_results",
+		]
 
-        Pools every comma-separated token and returns trials whose
-        ``identifiers`` JSON has any of nct/eudract/euct/euctr/ctis equal
-        (case-insensitively) to any token. Acronym is intentionally excluded:
-        acronyms are not unique, so acronym matching stays opt-in via the
-        dedicated ``?acronym=`` param.
-        """
-        return self._match_identifier(queryset, value, ['nct', 'eudract', 'euct', 'euctr', 'ctis'])
+	def filter_title(self, queryset, name, value):
+		"""
+		Search in title field using uppercase column for performance
+		"""
+		return queryset.filter(utitle__contains=value.upper())
 
-    def filter_nct(self, queryset, name, value):
-        """Match ClinicalTrials.gov NCT id(s) against ``identifiers['nct']``."""
-        return self._match_identifier(queryset, value, ['nct'])
+	def filter_summary(self, queryset, name, value):
+		"""
+		Search in summary field using uppercase column for performance
+		"""
+		return queryset.filter(usummary__contains=value.upper())
 
-    def filter_eudract(self, queryset, name, value):
-        """Match EudraCT number(s) against ``identifiers['eudract']``."""
-        return self._match_identifier(queryset, value, ['eudract'])
+	def filter_search(self, queryset, name, value):
+		"""
+		Search in both title and summary fields using uppercase columns for performance
+		"""
+		upper_value = value.upper()
+		return queryset.filter(
+			models.Q(utitle__contains=upper_value)
+			| models.Q(usummary__contains=upper_value)
+		)
 
-    def filter_euct(self, queryset, name, value):
-        """Match EU CT number(s) against ``identifiers['euct']`` or ``['euctr']``.
+	def _match_identifier(self, queryset, value, keys):
+		"""Return trials whose ``identifiers`` JSON has any of ``keys`` equal
+		(case-insensitively) to any of the supplied values.
 
-        The two keys are used interchangeably across the ingestion pipeline for
-        the EU Clinical Trials register, so both are checked.
-        """
-        return self._match_identifier(queryset, value, ['euct', 'euctr'])
+		``value`` is the list produced by ``BaseInFilter`` (comma-separated input).
+		Values are stripped and upper-cased so the comparison lines up with the
+		non-partial ``Upper(identifiers->>'<key>')`` expression indexes on the
+		model (``trials_u<key>_idx`` for nct/eudract/euct/euctr/ctis), keeping
+		each branch — and the BitmapOr behind the umbrella ``?identifiers=``
+		filter — an index scan rather than a seq scan. (The model's partial
+		*unique* indexes on the same expressions enforce integrity but are NOT
+		used for these lookups: Postgres can't prove their ``identifiers ? 'key'``
+		predicate.) Blank tokens (e.g. from a trailing comma) are ignored; an
+		all-blank list is treated as "no filter" and leaves the queryset untouched.
+		"""
+		wanted = {v.strip().upper() for v in (value or []) if v and v.strip()}
+		if not wanted:
+			return queryset
+		annotations = {}
+		condition = models.Q()
+		for key in keys:
+			alias = f"_id_{key}"
+			annotations[alias] = Upper(KeyTextTransform(key, "identifiers"))
+			condition |= models.Q(**{f"{alias}__in": wanted})
+		return queryset.annotate(**annotations).filter(condition)
 
-    def filter_ctis(self, queryset, name, value):
-        """Match CTIS number(s) against ``identifiers['ctis']``."""
-        return self._match_identifier(queryset, value, ['ctis'])
+	def filter_identifiers(self, queryset, name, value):
+		"""Match a mixed list of registry id(s) against any registry key.
 
-    def filter_acronym(self, queryset, name, value):
-        """Match trial acronym(s) against the ``acronym`` column (case-insensitive)."""
-        wanted = {v.strip().upper() for v in (value or []) if v and v.strip()}
-        if not wanted:
-            return queryset
-        return queryset.annotate(_uacronym=Upper('acronym')).filter(_uacronym__in=wanted)
+		Pools every comma-separated token and returns trials whose
+		``identifiers`` JSON has any of nct/eudract/euct/euctr/ctis equal
+		(case-insensitively) to any token. Acronym is intentionally excluded:
+		acronyms are not unique, so acronym matching stays opt-in via the
+		dedicated ``?acronym=`` param.
+		"""
+		return self._match_identifier(
+			queryset, value, ["nct", "eudract", "euct", "euctr", "ctis"]
+		)
 
-    def filter_has_results(self, queryset, name, value):
-        """
-        Filter trials by whether results have been posted.
+	def filter_nct(self, queryset, name, value):
+		"""Match ClinicalTrials.gov NCT id(s) against ``identifiers['nct']``."""
+		return self._match_identifier(queryset, value, ["nct"])
 
-        A trial is considered to have results when any of the following holds:
-        - results_posted is True;
-        - results completion date is set;
-        - results link is set (not null and not an empty string);
-        - "results available" is "Yes" (case-insensitive).
+	def filter_eudract(self, queryset, name, value):
+		"""Match EudraCT number(s) against ``identifiers['eudract']``."""
+		return self._match_identifier(queryset, value, ["eudract"])
 
-        ?has_results=true  -> only trials with results
-        ?has_results=false -> only trials without results
-        """
-        has_results_q = (
-            models.Q(results_posted=True) |
-            models.Q(results_date_completed__isnull=False) |
-            (models.Q(results_url_link__isnull=False) & ~models.Q(results_url_link='')) |
-            models.Q(results_yes_no__iexact='yes')
-        )
-        if value:
-            return queryset.filter(has_results_q)
-        return queryset.exclude(has_results_q)
+	def filter_euct(self, queryset, name, value):
+		"""Match EU CT number(s) against ``identifiers['euct']`` or ``['euctr']``.
+
+		The two keys are used interchangeably across the ingestion pipeline for
+		the EU Clinical Trials register, so both are checked.
+		"""
+		return self._match_identifier(queryset, value, ["euct", "euctr"])
+
+	def filter_ctis(self, queryset, name, value):
+		"""Match CTIS number(s) against ``identifiers['ctis']``."""
+		return self._match_identifier(queryset, value, ["ctis"])
+
+	def filter_acronym(self, queryset, name, value):
+		"""Match trial acronym(s) against the ``acronym`` column (case-insensitive)."""
+		wanted = {v.strip().upper() for v in (value or []) if v and v.strip()}
+		if not wanted:
+			return queryset
+		return queryset.annotate(_uacronym=Upper("acronym")).filter(
+			_uacronym__in=wanted
+		)
+
+	def filter_has_results(self, queryset, name, value):
+		"""
+		Filter trials by whether results have been posted.
+
+		A trial is considered to have results when any of the following holds:
+		- results_posted is True;
+		- results completion date is set;
+		- results link is set (not null and not an empty string);
+		- "results available" is "Yes" (case-insensitive).
+
+		?has_results=true  -> only trials with results
+		?has_results=false -> only trials without results
+		"""
+		has_results_q = (
+			models.Q(results_posted=True)
+			| models.Q(results_date_completed__isnull=False)
+			| (
+				models.Q(results_url_link__isnull=False)
+				& ~models.Q(results_url_link="")
+			)
+			| models.Q(results_yes_no__iexact="yes")
+		)
+		if value:
+			return queryset.filter(has_results_q)
+		return queryset.exclude(has_results_q)
+
 
 class AuthorFilter(filters.FilterSet):
-    """Filter class for Authors, allowing searching by full name, given name, family name and filtering by author ID."""
+	"""Filter class for Authors, allowing searching by full name, given name, family name and filtering by author ID."""
 
-    full_name = filters.CharFilter(method='filter_full_name', label='Full Name')
-    given_name = filters.CharFilter(field_name='given_name', lookup_expr='icontains', label='Given Name')
-    family_name = filters.CharFilter(field_name='family_name', lookup_expr='icontains', label='Family Name')
-    author_id = filters.NumberFilter(field_name='author_id', lookup_expr='exact', label='Author ID')
-    orcid = filters.CharFilter(field_name='ORCID', lookup_expr='icontains', label='ORCID')
-    country = filters.CharFilter(field_name='country', lookup_expr='exact', label='Country')
+	full_name = filters.CharFilter(method="filter_full_name", label="Full Name")
+	given_name = filters.CharFilter(
+		field_name="given_name", lookup_expr="icontains", label="Given Name"
+	)
+	family_name = filters.CharFilter(
+		field_name="family_name", lookup_expr="icontains", label="Family Name"
+	)
+	author_id = filters.NumberFilter(
+		field_name="author_id", lookup_expr="exact", label="Author ID"
+	)
+	orcid = filters.CharFilter(
+		field_name="ORCID", lookup_expr="icontains", label="ORCID"
+	)
+	country = filters.CharFilter(
+		field_name="country", lookup_expr="exact", label="Country"
+	)
 
-    class Meta:
-        model = Authors
-        fields = ['full_name', 'given_name', 'family_name', 'author_id', 'orcid', 'country']
+	class Meta:
+		model = Authors
+		fields = [
+			"full_name",
+			"given_name",
+			"family_name",
+			"author_id",
+			"orcid",
+			"country",
+		]
 
-    def filter_full_name(self, queryset, name, value):
-        """Search in the full_name database field using optimized uppercase column"""
-        # Use uppercase search for better performance with GIN index
-        upper_value = value.upper()
-        return queryset.filter(ufull_name__contains=upper_value)
+	def filter_full_name(self, queryset, name, value):
+		"""Search in the full_name database field using optimized uppercase column"""
+		# Use uppercase search for better performance with GIN index
+		upper_value = value.upper()
+		return queryset.filter(ufull_name__contains=upper_value)
+
 
 class SourceFilter(filters.FilterSet):
-    """
-    Filter class for Sources, allowing filtering by team and subject.
-    """
-    source_id = filters.NumberFilter(field_name='source_id', lookup_expr='exact', label='Source ID')
-    team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact', label='Team ID')
-    subject_id = filters.NumberFilter(field_name='subject__id', lookup_expr='exact', label='Subject ID')
-    active = filters.BooleanFilter(field_name='active', label='Active')
-    source_for = filters.CharFilter(field_name='source_for', lookup_expr='exact', label='Source For')
-    link = filters.CharFilter(field_name='link', lookup_expr='icontains', label='Link')
-    
-    class Meta:
-        model = Sources
-        fields = ['source_id', 'team_id', 'subject_id', 'active', 'source_for', 'link']
+	"""
+	Filter class for Sources, allowing filtering by team and subject.
+	"""
+
+	source_id = filters.NumberFilter(
+		field_name="source_id", lookup_expr="exact", label="Source ID"
+	)
+	team_id = filters.NumberFilter(
+		field_name="team__id", lookup_expr="exact", label="Team ID"
+	)
+	subject_id = filters.NumberFilter(
+		field_name="subject__id", lookup_expr="exact", label="Subject ID"
+	)
+	active = filters.BooleanFilter(field_name="active", label="Active")
+	source_for = filters.CharFilter(
+		field_name="source_for", lookup_expr="exact", label="Source For"
+	)
+	link = filters.CharFilter(field_name="link", lookup_expr="icontains", label="Link")
+
+	class Meta:
+		model = Sources
+		fields = ["source_id", "team_id", "subject_id", "active", "source_for", "link"]
+
 
 class SubjectFilter(filters.FilterSet):
-    """
-    Filter class for Subject, allowing filtering by team.
-    """
-    team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact', label='Team ID')
-    
-    class Meta:
-        model = Subject
-        fields = ['team_id']
+	"""
+	Filter class for Subject, allowing filtering by team.
+	"""
+
+	team_id = filters.NumberFilter(
+		field_name="team__id", lookup_expr="exact", label="Team ID"
+	)
+
+	class Meta:
+		model = Subject
+		fields = ["team_id"]
+
 
 class CategoryFilter(filters.FilterSet):
-    """
-    Filter class for TeamCategory, allowing filtering by team and subject.
-    """
-    category_id = filters.NumberFilter(field_name='id', lookup_expr='exact', label='Category ID')
-    team_id = filters.NumberFilter(field_name='team__id', lookup_expr='exact', label='Team ID')
-    subject_id = filters.NumberFilter(field_name='subjects__id', lookup_expr='exact', label='Subject ID')
-    category_terms = filters.CharFilter(method='filter_category_terms', label='Category Terms')
-    
-    class Meta:
-        model = TeamCategory
-        fields = ['category_id', 'team_id', 'subject_id', 'category_terms']
-    
-    def filter_category_terms(self, queryset, name, value):
-        """Filter by category terms using array overlap"""
-        return queryset.filter(category_terms__icontains=value)
+	"""
+	Filter class for TeamCategory, allowing filtering by team and subject.
+	"""
+
+	category_id = filters.NumberFilter(
+		field_name="id", lookup_expr="exact", label="Category ID"
+	)
+	team_id = filters.NumberFilter(
+		field_name="team__id", lookup_expr="exact", label="Team ID"
+	)
+	subject_id = filters.NumberFilter(
+		field_name="subjects__id", lookup_expr="exact", label="Subject ID"
+	)
+	category_terms = filters.CharFilter(
+		method="filter_category_terms", label="Category Terms"
+	)
+
+	class Meta:
+		model = TeamCategory
+		fields = ["category_id", "team_id", "subject_id", "category_terms"]
+
+	def filter_category_terms(self, queryset, name, value):
+		"""Filter by category terms using array overlap"""
+		return queryset.filter(category_terms__icontains=value)

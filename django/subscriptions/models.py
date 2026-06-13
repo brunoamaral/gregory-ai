@@ -13,27 +13,27 @@ class Lists(models.Model):
 	list_id = models.AutoField(primary_key=True)
 	list_name = models.CharField(max_length=150, null=False, blank=False)
 	list_description = models.CharField(max_length=150, null=True, blank=True)
-	list_email_subject = models.CharField(max_length=150,null=True,blank=True)
-	subjects = models.ManyToManyField('gregory.Subject', blank=True)
+	list_email_subject = models.CharField(max_length=150, null=True, blank=True)
+	subjects = models.ManyToManyField("gregory.Subject", blank=True)
 	# Set purposes of the list
-	admin_summary = models.BooleanField(default=False) 
-	weekly_digest = models.BooleanField(default=False) 
-	clinical_trials_notifications = models.BooleanField(default=False) 
+	admin_summary = models.BooleanField(default=False)
+	weekly_digest = models.BooleanField(default=False)
+	clinical_trials_notifications = models.BooleanField(default=False)
 	# Article limit for weekly digest emails
 	article_limit = models.PositiveIntegerField(
 		default=15,
 		null=True,
 		blank=True,
 		help_text="Maximum number of articles to include in weekly digest emails (default: 15)",
-		verbose_name="Article Limit for Weekly Digest Emails"
+		verbose_name="Article Limit for Weekly Digest Emails",
 	)
-	
+
 	# ML threshold for relevance filtering
 	ml_threshold = models.FloatField(
 		default=0.8,
 		validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
 		help_text="ML prediction confidence threshold (0.0-1.0). Only articles with ML predictions above this threshold will be considered relevant.",
-		verbose_name="ML Threshold for Relevance"
+		verbose_name="ML Threshold for Relevance",
 	)
 	# Lookback window for weekly digest emails
 	lookback_days = models.PositiveIntegerField(
@@ -47,13 +47,13 @@ class Lists(models.Model):
 	)
 	# Article sort order for weekly digest emails
 	ARTICLE_SORT_CHOICES = [
-		('relevancy', 'Relevancy (manual + ML consensus, ranked)'),
-		('date', 'Date (all subject-matched articles, newest first)'),
+		("relevancy", "Relevancy (manual + ML consensus, ranked)"),
+		("date", "Date (all subject-matched articles, newest first)"),
 	]
 	article_sort_order = models.CharField(
 		max_length=20,
 		choices=ARTICLE_SORT_CHOICES,
-		default='relevancy',
+		default="relevancy",
 		help_text=(
 			"How articles are selected and ordered in weekly digest emails. "
 			"'relevancy' applies ML/manual filtering and priority ranking. "
@@ -63,19 +63,19 @@ class Lists(models.Model):
 	)
 	# Latest research categories
 	latest_research_categories = models.ManyToManyField(
-		'gregory.TeamCategory', 
-		blank=True, 
-		related_name="latest_research_lists", 
+		"gregory.TeamCategory",
+		blank=True,
+		related_name="latest_research_lists",
 		verbose_name="Latest Research Categories",
-		help_text="Select team categories to include in the 'Latest Research' section of weekly digest emails."
+		help_text="Select team categories to include in the 'Latest Research' section of weekly digest emails.",
 	)
 	team = models.ForeignKey(
-		Team, 
-		on_delete=models.CASCADE, 
+		Team,
+		on_delete=models.CASCADE,
 		related_name="lists",
 		null=False,
 		blank=False,
-		help_text="The team this list belongs to."
+		help_text="The team this list belongs to.",
 	)
 	site = models.ForeignKey(
 		Site,
@@ -83,34 +83,33 @@ class Lists(models.Model):
 		related_name="lists",
 		null=False,
 		blank=True,
-		help_text="The site this list sends emails from. Determines footer branding, links, and unsubscribe URLs. Auto-populated from the organisation default site if not set."
+		help_text="The site this list sends emails from. Determines footer branding, links, and unsubscribe URLs. Auto-populated from the organisation default site if not set.",
 	)
 	# Email header customization
 	header_title = models.CharField(
 		max_length=200,
 		null=True,
 		blank=True,
-		help_text="Optional override for the email header title (defaults to \"Gregory AI\")."
+		help_text='Optional override for the email header title (defaults to "Gregory AI").',
 	)
 	header_tagline = models.CharField(
 		max_length=300,
 		null=True,
 		blank=True,
-		help_text="Optional tagline to display in the email header."
+		help_text="Optional tagline to display in the email header.",
 	)
 	show_header_tagline = models.BooleanField(
-		default=True,
-		help_text="Show the tagline in the email header."
+		default=True, help_text="Show the tagline in the email header."
 	)
 
 	def save(self, *args, **kwargs):
 		if not self.site_id:
 			from gregory.models import OrganizationSite
+
 			org_site = (
-				OrganizationSite.objects
-				.filter(organization=self.team.organization)
-				.order_by('-is_default', 'id')
-				.select_related('site')
+				OrganizationSite.objects.filter(organization=self.team.organization)
+				.order_by("-is_default", "id")
+				.select_related("site")
 				.first()
 			)
 			if org_site:
@@ -121,7 +120,7 @@ class Lists(models.Model):
 
 	class Meta:
 		managed = True
-		verbose_name_plural = 'lists'
+		verbose_name_plural = "lists"
 
 	def __str__(self):
 		return f"{self.list_name} (Team: {self.team.name})"
@@ -154,21 +153,22 @@ class Subscribers(models.Model):
 		editable=False,
 		help_text="Unique token used in unsubscribe links. Never expose this outside of email context.",
 	)
-	subscriptions = models.ManyToManyField(Lists, through='ListSubscription', blank=True)
+	subscriptions = models.ManyToManyField(
+		Lists, through="ListSubscription", blank=True
+	)
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
 	history = HistoricalRecords()
 
 	class Meta:
 		managed = True
-		verbose_name_plural = 'subscribers'
-		db_table = 'subscribers'
-		constraints = [
-			UniqueConstraint(Lower('email'), name='unique_lower_email')
-		]
+		verbose_name_plural = "subscribers"
+		db_table = "subscribers"
+		constraints = [UniqueConstraint(Lower("email"), name="unique_lower_email")]
 
 	def __str__(self):
 		return f"{self.first_name} {self.last_name} ({self.email})"
+
 	def save(self, *args, **kwargs):
 		self.email = self.email.lower()
 		super(Subscribers, self).save(*args, **kwargs)
@@ -181,11 +181,12 @@ class SentArticleNotification(models.Model):
 	sent_at = models.DateTimeField(auto_now_add=True)
 
 	class Meta:
-		unique_together = ('article', 'list', 'subscriber')
-		verbose_name_plural = 'sent article notifications'
+		unique_together = ("article", "list", "subscriber")
+		verbose_name_plural = "sent article notifications"
 
 	def __str__(self):
 		return f"Article {self.article_id} sent to {self.list_id}, subscriber {self.subscriber_id}"
+
 
 class SentTrialNotification(models.Model):
 	trial = models.ForeignKey(Trials, on_delete=models.CASCADE)
@@ -194,37 +195,42 @@ class SentTrialNotification(models.Model):
 	sent_at = models.DateTimeField(auto_now_add=True)
 
 	class Meta:
-		unique_together = ('trial', 'list', 'subscriber')
-		verbose_name_plural = 'sent trial notifications'
+		unique_together = ("trial", "list", "subscriber")
+		verbose_name_plural = "sent trial notifications"
 
 	def __str__(self):
 		return f"Trial {self.trial_id} sent to {self.list_id}, subscriber {self.subscriber_id}"
 
+
 class FailedNotification(models.Model):
-    subscriber = models.ForeignKey(Subscribers, on_delete=models.CASCADE)
-    list = models.ForeignKey(Lists, on_delete=models.CASCADE)
-    reason = models.TextField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+	subscriber = models.ForeignKey(Subscribers, on_delete=models.CASCADE)
+	list = models.ForeignKey(Lists, on_delete=models.CASCADE)
+	reason = models.TextField(null=True, blank=True)
+	created_at = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
-        verbose_name_plural = "Failed Notifications"
+	class Meta:
+		verbose_name_plural = "Failed Notifications"
 
-    def __str__(self):
-        return f"Failed notification to {self.subscriber.email} for list {self.list.list_name}"
+	def __str__(self):
+		return f"Failed notification to {self.subscriber.email} for list {self.list.list_name}"
 
 
 class ListSubscription(models.Model):
 	"""Through-model for the Subscribers ↔ Lists M2M, storing consent and per-list opt-out."""
 
 	CONSENT_METHOD_CHOICES = [
-		('web_form', 'Web Form'),
-		('admin', 'Admin'),
-		('api', 'API'),
-		('import', 'Import'),
+		("web_form", "Web Form"),
+		("admin", "Admin"),
+		("api", "API"),
+		("import", "Import"),
 	]
 
-	subscriber = models.ForeignKey(Subscribers, on_delete=models.CASCADE, related_name='list_subscriptions')
-	list = models.ForeignKey(Lists, on_delete=models.CASCADE, related_name='list_subscriptions')
+	subscriber = models.ForeignKey(
+		Subscribers, on_delete=models.CASCADE, related_name="list_subscriptions"
+	)
+	list = models.ForeignKey(
+		Lists, on_delete=models.CASCADE, related_name="list_subscriptions"
+	)
 	subscribed_at = models.DateTimeField(auto_now_add=True)
 	# GDPR consent fields
 	consent_ip = models.GenericIPAddressField(
@@ -237,13 +243,13 @@ class ListSubscription(models.Model):
 		on_delete=models.SET_NULL,
 		null=True,
 		blank=True,
-		related_name='list_subscriptions',
+		related_name="list_subscriptions",
 		help_text="The site the subscription form was submitted from.",
 	)
 	consent_method = models.CharField(
 		max_length=20,
 		choices=CONSENT_METHOD_CHOICES,
-		default='web_form',
+		default="web_form",
 		help_text="How this subscription was obtained.",
 	)
 	# Per-list unsubscribe
@@ -259,12 +265,12 @@ class ListSubscription(models.Model):
 	history = HistoricalRecords()
 
 	class Meta:
-		unique_together = ('subscriber', 'list')
-		verbose_name = 'List Subscription'
-		verbose_name_plural = 'List Subscriptions'
+		unique_together = ("subscriber", "list")
+		verbose_name = "List Subscription"
+		verbose_name_plural = "List Subscriptions"
 
 	def __str__(self):
-		status = 'active' if self.is_active else 'unsubscribed'
+		status = "active" if self.is_active else "unsubscribed"
 		return f"{self.subscriber.email} → {self.list.list_name} ({status})"
 
 
@@ -272,38 +278,38 @@ class SubscriberSiteProfile(models.Model):
 	"""Per-site profile for a subscriber."""
 
 	PROFILEOPTIONS = [
-		('patient', 'Patient'),
-		('caregiver', 'Caregiver'),
-		('doctor', 'Doctor'),
-		('nurse', 'Nurse'),
-		('clinical centre', 'Clinical Centre'),
-		('researcher', 'Researcher'),
-		('other', 'Other'),
+		("patient", "Patient"),
+		("caregiver", "Caregiver"),
+		("doctor", "Doctor"),
+		("nurse", "Nurse"),
+		("clinical centre", "Clinical Centre"),
+		("researcher", "Researcher"),
+		("other", "Other"),
 	]
 
 	subscriber = models.ForeignKey(
 		Subscribers,
 		on_delete=models.CASCADE,
-		related_name='site_profiles',
+		related_name="site_profiles",
 	)
 	site = models.ForeignKey(
 		Site,
 		on_delete=models.CASCADE,
-		related_name='subscriber_profiles',
+		related_name="subscriber_profiles",
 	)
 	profile = models.CharField(
 		choices=PROFILEOPTIONS,
 		max_length=50,
-		default='',
+		default="",
 		help_text="The subscriber's role on this specific site.",
 	)
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
 
 	class Meta:
-		unique_together = ('subscriber', 'site')
-		verbose_name = 'Subscriber Site Profile'
-		verbose_name_plural = 'Subscriber Site Profiles'
+		unique_together = ("subscriber", "site")
+		verbose_name = "Subscriber Site Profile"
+		verbose_name_plural = "Subscriber Site Profiles"
 
 	def __str__(self):
 		return f"{self.subscriber.email} @ {self.site.domain} ({self.profile})"
@@ -311,10 +317,10 @@ class SubscriberSiteProfile(models.Model):
 
 class Announcement(models.Model):
 	STATUS_CHOICES = [
-		('draft', 'Draft'),
-		('sending', 'Sending'),
-		('sent', 'Sent'),
-		('failed', 'Failed'),
+		("draft", "Draft"),
+		("sending", "Sending"),
+		("sent", "Sent"),
+		("failed", "Failed"),
 	]
 
 	subject = models.CharField(
@@ -324,14 +330,14 @@ class Announcement(models.Model):
 	header_title = models.CharField(
 		max_length=200,
 		blank=True,
-		default='',
+		default="",
 		help_text="Replaces the Gregory AI title in the email header. Leave blank to use the default site title.",
 		verbose_name="Header Title",
 	)
 	header_tagline = models.CharField(
 		max_length=200,
 		blank=True,
-		default='',
+		default="",
 		help_text="Optional subtitle/tagline shown below the site name in the email header. Leave blank for default.",
 		verbose_name="Header Tagline",
 	)
@@ -343,47 +349,47 @@ class Announcement(models.Model):
 	preheader_text = models.CharField(
 		max_length=200,
 		blank=True,
-		default='',
+		default="",
 		help_text="Short preview text shown in email clients before the email is opened. Leave blank for a default message.",
 		verbose_name="Preheader Text",
 	)
 	body = CKEditor5Field(
-		config_name='default',
+		config_name="default",
 		help_text="The content of the announcement email.",
 	)
 	organization = models.ForeignKey(
-		'organizations.Organization',
+		"organizations.Organization",
 		on_delete=models.PROTECT,
-		related_name='announcements',
+		related_name="announcements",
 		help_text="The organization that owns this announcement. "
-		          "Determines who can see and edit it.",
+		"Determines who can see and edit it.",
 	)
 	lists = models.ManyToManyField(
 		Lists,
-		related_name='announcements',
+		related_name="announcements",
 		help_text="Select one or more lists to send this announcement to.",
 	)
 	created_by = models.ForeignKey(
-		'auth.User',
+		"auth.User",
 		on_delete=models.SET_NULL,
 		null=True,
 		blank=True,
-		related_name='announcements',
+		related_name="announcements",
 	)
 	created_at = models.DateTimeField(auto_now_add=True)
 	status = models.CharField(
 		max_length=10,
 		choices=STATUS_CHOICES,
-		default='draft',
+		default="draft",
 	)
 	sent_at = models.DateTimeField(null=True, blank=True)
 	recipients_count = models.PositiveIntegerField(default=0)
 	failures_count = models.PositiveIntegerField(default=0)
 
 	class Meta:
-		ordering = ['-created_at']
-		verbose_name = 'Announcement'
-		verbose_name_plural = 'Announcements'
+		ordering = ["-created_at"]
+		verbose_name = "Announcement"
+		verbose_name_plural = "Announcements"
 
 	def __str__(self):
 		return f"{self.subject} ({self.get_status_display()})"
@@ -393,27 +399,27 @@ class AnnouncementRecipient(models.Model):
 	announcement = models.ForeignKey(
 		Announcement,
 		on_delete=models.CASCADE,
-		related_name='recipients',
+		related_name="recipients",
 	)
 	subscriber = models.ForeignKey(
 		Subscribers,
 		on_delete=models.CASCADE,
-		related_name='announcement_recipients',
+		related_name="announcement_recipients",
 	)
 	list = models.ForeignKey(
 		Lists,
 		on_delete=models.CASCADE,
-		related_name='announcement_recipients',
+		related_name="announcement_recipients",
 	)
 	sent_at = models.DateTimeField(auto_now_add=True)
 	success = models.BooleanField(default=True)
-	error_message = models.TextField(blank=True, default='')
+	error_message = models.TextField(blank=True, default="")
 
 	class Meta:
-		unique_together = ('announcement', 'subscriber')
-		verbose_name = 'Announcement Recipient'
-		verbose_name_plural = 'Announcement Recipients'
+		unique_together = ("announcement", "subscriber")
+		verbose_name = "Announcement Recipient"
+		verbose_name_plural = "Announcement Recipients"
 
 	def __str__(self):
-		status = 'OK' if self.success else 'FAILED'
+		status = "OK" if self.success else "FAILED"
 		return f"{self.subscriber.email} [{status}]"

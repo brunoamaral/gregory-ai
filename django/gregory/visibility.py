@@ -25,10 +25,11 @@ from __future__ import annotations
 def _public_org_ids() -> set[int]:
 	"""Return the set of org IDs whose make_api_public flag is True."""
 	from gregory.models import OrganizationApiSettings
+
 	return set(
-		OrganizationApiSettings.objects
-		.filter(make_api_public=True)
-		.values_list('organization_id', flat=True)
+		OrganizationApiSettings.objects.filter(make_api_public=True).values_list(
+			"organization_id", flat=True
+		)
 	)
 
 
@@ -45,7 +46,7 @@ def _resolve_api_scheme(request):
 	"""
 	# Fast-path: skip entirely when no Authorization header is present.
 	# This avoids any exception overhead for ordinary anonymous/session requests.
-	api_key = request.headers.get('Authorization', '').strip()
+	api_key = request.headers.get("Authorization", "").strip()
 	if not api_key:
 		return None
 
@@ -53,6 +54,7 @@ def _resolve_api_scheme(request):
 		from api.models import APIAccessScheme
 		from api.utils.utils import getIPAddress
 		from django.utils.timezone import now as tz_now
+
 		ip_addr = getIPAddress(request)
 		current_time = tz_now()
 		scheme = APIAccessScheme.objects.filter(
@@ -64,7 +66,7 @@ def _resolve_api_scheme(request):
 			return None
 		# Enforce IP allowlist only when the scheme has one configured
 		if scheme.ip_addresses:
-			allowed = [i.strip() for i in scheme.ip_addresses.split(',')]
+			allowed = [i.strip() for i in scheme.ip_addresses.split(",")]
 			if ip_addr not in allowed:
 				return None
 		return scheme
@@ -72,7 +74,8 @@ def _resolve_api_scheme(request):
 		# Unexpected DB or import errors should not silently grant/deny access.
 		# Log and re-raise so they surface in Sentry / server logs.
 		import logging
-		logging.getLogger(__name__).exception('Unexpected error in _resolve_api_scheme')
+
+		logging.getLogger(__name__).exception("Unexpected error in _resolve_api_scheme")
 		raise
 
 
@@ -84,7 +87,7 @@ def visible_org_ids(request) -> set[int]:
 	occasions should cache it on the request (the middleware does this via
 	``request.visible_org_ids``).
 	"""
-	include_public = request.GET.get('include_public', '').lower() == 'true'
+	include_public = request.GET.get("include_public", "").lower() == "true"
 
 	owned_ids: set[int] = set()
 	is_identified = False  # True when caller has a non-anonymous identity
@@ -96,10 +99,11 @@ def visible_org_ids(request) -> set[int]:
 		is_identified = True
 
 	# --- 2. Try authenticated-user identity (only if no API key found) ---
-	elif getattr(request, 'user', None) is not None and request.user.is_authenticated:
+	elif getattr(request, "user", None) is not None and request.user.is_authenticated:
 		user_org_ids = set(
-			request.user.organizations_organizationuser
-			.values_list('organization_id', flat=True)
+			request.user.organizations_organizationuser.values_list(
+				"organization_id", flat=True
+			)
 		)
 		owned_ids |= user_org_ids
 		is_identified = True

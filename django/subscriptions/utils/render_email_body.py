@@ -33,41 +33,70 @@ logger = logging.getLogger(__name__)
 # ``background-color`` of the header table in
 # ``templates/emails/components/header.html``.  If the header colour ever
 # changes, update this constant to match.
-BUTTON_BRAND_HEX = '#1e3a8a'
+BUTTON_BRAND_HEX = "#1e3a8a"
 
 # ---------------------------------------------------------------------------
 # Bleach allowlists
 # ---------------------------------------------------------------------------
 
 ALLOWED_TAGS = [
-	'p', 'strong', 'em', 'u', 's', 'ul', 'ol', 'li',
-	'a', 'h2', 'h3', 'h4', 'blockquote', 'br', 'hr',
+	"p",
+	"strong",
+	"em",
+	"u",
+	"s",
+	"ul",
+	"ol",
+	"li",
+	"a",
+	"h2",
+	"h3",
+	"h4",
+	"blockquote",
+	"br",
+	"hr",
 	# added for images and server-rendered button tables
-	'img', 'table', 'tbody', 'tr', 'td', 'span',
+	"img",
+	"table",
+	"tbody",
+	"tr",
+	"td",
+	"span",
 ]
 
 ALLOWED_ATTRS = {
-	'a':     ['href', 'target', 'rel', 'class', 'style'],
-	'img':   ['src', 'alt', 'width', 'height', 'style'],
-	'table': ['role', 'cellpadding', 'cellspacing', 'border', 'style', 'align'],
-	'td':    ['align', 'valign', 'style'],
-	'tr':    ['style'],
-	'tbody': [],
-	'span':  ['style'],
+	"a": ["href", "target", "rel", "class", "style"],
+	"img": ["src", "alt", "width", "height", "style"],
+	"table": ["role", "cellpadding", "cellspacing", "border", "style", "align"],
+	"td": ["align", "valign", "style"],
+	"tr": ["style"],
+	"tbody": [],
+	"span": ["style"],
 }
 
 ALLOWED_STYLES = [
 	# img + layout
-	'max-width', 'width', 'height', 'display', 'margin',
-	'border-radius',
+	"max-width",
+	"width",
+	"height",
+	"display",
+	"margin",
+	"border-radius",
 	# button
-	'background-color', 'color', 'padding', 'text-align',
-	'font-family', 'font-size', 'font-weight', 'line-height',
-	'text-decoration',
-	'border', 'border-collapse',
+	"background-color",
+	"color",
+	"padding",
+	"text-align",
+	"font-family",
+	"font-size",
+	"font-weight",
+	"line-height",
+	"text-decoration",
+	"border",
+	"border-collapse",
 ]
 
-ALLOWED_PROTOCOLS = ['http', 'https', 'mailto']
+ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -98,20 +127,20 @@ def sanitize_announcement_html(html: str) -> str:
 		strip=True,
 	)
 
-	soup = BeautifulSoup(clean, 'html.parser')
+	soup = BeautifulSoup(clean, "html.parser")
 
 	# Strip class on <a> unless it is exactly 'btn-cta'
-	for tag in soup.find_all('a'):
-		cls = tag.get('class')
+	for tag in soup.find_all("a"):
+		cls = tag.get("class")
 		if cls is not None:
-			cls_str = ' '.join(cls) if isinstance(cls, list) else str(cls)
-			if cls_str.strip() != 'btn-cta':
-				del tag['class']
+			cls_str = " ".join(cls) if isinstance(cls, list) else str(cls)
+			if cls_str.strip() != "btn-cta":
+				del tag["class"]
 
 	# Remove <img> whose src is not https:// or /media/
-	for img in soup.find_all('img'):
-		src = img.get('src', '')
-		if not (src.startswith('https://') or src.startswith('/media/')):
+	for img in soup.find_all("img"):
+		src = img.get("src", "")
+		if not (src.startswith("https://") or src.startswith("/media/")):
 			img.decompose()
 
 	return str(soup)
@@ -138,14 +167,14 @@ def render_announcement_html(
 	*html* must be the output of ``sanitize_announcement_html``; this
 	function does not re-sanitize.
 	"""
-	soup = BeautifulSoup(html, 'html.parser')
+	soup = BeautifulSoup(html, "html.parser")
 
 	# 1. Wrap btn-cta anchors in bulletproof tables
-	for a_tag in list(soup.find_all('a', class_='btn-cta')):
-		href = a_tag.get('href', '')
+	for a_tag in list(soup.find_all("a", class_="btn-cta")):
+		href = a_tag.get("href", "")
 		label = a_tag.get_text()
-		table_soup = BeautifulSoup(_build_button_table(href, label), 'html.parser')
-		table_tag = table_soup.find('table')
+		table_soup = BeautifulSoup(_build_button_table(href, label), "html.parser")
+		table_tag = table_soup.find("table")
 		a_tag.replace_with(table_tag)
 
 	# 2. Rewrite /media/... src attributes to absolute URLs
@@ -156,36 +185,38 @@ def render_announcement_html(
 
 	base: str | None = None
 	if clean_api:
-		base = f'https://{clean_api}'
+		base = f"https://{clean_api}"
 	elif clean_site:
-		base = f'https://{clean_site}'
+		base = f"https://{clean_site}"
 	else:
 		logger.warning(
-			'render_announcement_html: neither api_domain nor site_domain is '
-			'set; /media/ image src attributes will remain relative and will '
-			'appear broken in email clients.'
+			"render_announcement_html: neither api_domain nor site_domain is "
+			"set; /media/ image src attributes will remain relative and will "
+			"appear broken in email clients."
 		)
 
 	if base:
-		for img in soup.find_all('img'):
-			src = img.get('src', '')
-			if src.startswith('/media/'):
-				img['src'] = base + src
+		for img in soup.find_all("img"):
+			src = img.get("src", "")
+			if src.startswith("/media/"):
+				img["src"] = base + src
 
 	# Warn when an absolute https:// <img> points at a different host than expected.
 	# The send path will have already blocked this case via validate_announcement_send_config;
 	# the log line here creates a trail for anything that slips through a future code path.
 	if base:
 		api_host = _strip_scheme(api_domain) or _strip_scheme(site_domain)
-		for img in soup.find_all('img'):
-			src = img.get('src', '')
-			if src.startswith('https://'):
+		for img in soup.find_all("img"):
+			src = img.get("src", "")
+			if src.startswith("https://"):
 				host = urlparse(src).netloc
 				if api_host and host and host != api_host:
 					logger.warning(
-						'render_announcement_html: <img src=%r> points at %s, '
-						'expected %s; leaving as-is.',
-						src, host, api_host,
+						"render_announcement_html: <img src=%r> points at %s, "
+						"expected %s; leaving as-is.",
+						src,
+						host,
+						api_host,
 					)
 
 	return str(soup)
@@ -201,22 +232,22 @@ def render_announcement_text(html: str) -> str:
 
 	*html* must be the output of ``sanitize_announcement_html``.
 	"""
-	soup = BeautifulSoup(html, 'html.parser')
+	soup = BeautifulSoup(html, "html.parser")
 
 	# Replace btn-cta links with "Label: URL" text
-	for a_tag in list(soup.find_all('a', class_='btn-cta')):
-		href = a_tag.get('href', '')
+	for a_tag in list(soup.find_all("a", class_="btn-cta")):
+		href = a_tag.get("href", "")
 		label = a_tag.get_text()
-		a_tag.replace_with(NavigableString(f'\n\n{label}: {href}\n\n'))
+		a_tag.replace_with(NavigableString(f"\n\n{label}: {href}\n\n"))
 
 	# Replace images with [Image: alt]
-	for img in list(soup.find_all('img')):
-		alt = img.get('alt', '').strip() or 'image'
-		img.replace_with(NavigableString(f'[Image: {alt}]'))
+	for img in list(soup.find_all("img")):
+		alt = img.get("alt", "").strip() or "image"
+		img.replace_with(NavigableString(f"[Image: {alt}]"))
 
-	text = soup.get_text('\n')
+	text = soup.get_text("\n")
 	# Collapse runs of 3 or more newlines to 2
-	text = re.sub(r'\n{3,}', '\n\n', text)
+	text = re.sub(r"\n{3,}", "\n\n", text)
 	return text.strip()
 
 
@@ -242,18 +273,18 @@ def strip_scheme(domain: str | None) -> str:
 	``https://api.example.com/path/media/...``.
 	"""
 	if not domain:
-		return ''
+		return ""
 	raw = domain.strip()
 	if not raw:
-		return ''
+		return ""
 	# Prepend '//' only when no scheme is already present so that urlparse
 	# places the authority in netloc rather than path.
-	if not raw.startswith(('http://', 'https://')):
-		raw = '//' + raw
+	if not raw.startswith(("http://", "https://")):
+		raw = "//" + raw
 	parsed = urlparse(raw)
 	# netloc may include a port (e.g. 'host:8080'); return it as-is so
 	# callers that need to keep the port (for non-standard deployments) can.
-	return parsed.netloc.rstrip('/')
+	return parsed.netloc.rstrip("/")
 
 
 # Private alias kept for internal callers — use strip_scheme in new code.
@@ -267,16 +298,16 @@ def _build_button_table(href: str, label: str) -> str:
 	return (
 		f'<table role="presentation" cellpadding="0" cellspacing="0" border="0"'
 		f' align="center" style="margin: 24px auto;">'
-		f'<tbody><tr>'
+		f"<tbody><tr>"
 		f'<td align="center" style="border-radius: 6px;'
 		f' background-color: {BUTTON_BRAND_HEX};">'
 		f'<a href="{safe_href}" target="_blank" rel="noopener"'
 		f' style="display: inline-block; padding: 12px 24px;'
-		f' font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif;'
-		f' font-size: 16px; font-weight: 600; line-height: 1;'
-		f' color: #ffffff; text-decoration: none;'
+		f" font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
+		f" font-size: 16px; font-weight: 600; line-height: 1;"
+		f" color: #ffffff; text-decoration: none;"
 		f' border-radius: 6px;">{safe_label}</a>'
-		f'</td>'
-		f'</tr></tbody>'
-		f'</table>'
+		f"</td>"
+		f"</tr></tbody>"
+		f"</table>"
 	)

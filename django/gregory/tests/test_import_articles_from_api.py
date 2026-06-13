@@ -1,9 +1,10 @@
 import os
 from unittest.mock import patch, MagicMock
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gregory.tests.test_settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gregory.tests.test_settings")
 
 import django
+
 django.setup()
 
 from django.test import TestCase
@@ -48,7 +49,12 @@ class ImportArticlesFromApiTest(TestCase):
 	def test_import_populates_article_org_content(self, mock_get):
 		mock_get.return_value = _make_response([ARTICLE])
 
-		call_command("import_articles_from_api", "https://api.example.com/articles/", "--target-org", "test-org")
+		call_command(
+			"import_articles_from_api",
+			"https://api.example.com/articles/",
+			"--target-org",
+			"test-org",
+		)
 
 		article = Articles.objects.get(title="Test Article")
 		content = ArticleOrgContent.objects.get(article=article, organization=self.org)
@@ -58,22 +64,43 @@ class ImportArticlesFromApiTest(TestCase):
 	@patch("gregory.management.commands.import_articles_from_api.requests.get")
 	def test_reimport_updates_existing_org_content(self, mock_get):
 		mock_get.return_value = _make_response([ARTICLE])
-		call_command("import_articles_from_api", "https://api.example.com/articles/", "--target-org", "test-org")
+		call_command(
+			"import_articles_from_api",
+			"https://api.example.com/articles/",
+			"--target-org",
+			"test-org",
+		)
 
-		updated = {**ARTICLE, "takeaways": "Updated takeaway.", "summary_plain_english": "Updated summary."}
+		updated = {
+			**ARTICLE,
+			"takeaways": "Updated takeaway.",
+			"summary_plain_english": "Updated summary.",
+		}
 		mock_get.return_value = _make_response([updated])
-		call_command("import_articles_from_api", "https://api.example.com/articles/", "--target-org", "test-org")
+		call_command(
+			"import_articles_from_api",
+			"https://api.example.com/articles/",
+			"--target-org",
+			"test-org",
+		)
 
 		article = Articles.objects.get(title="Test Article")
 		content = ArticleOrgContent.objects.get(article=article, organization=self.org)
 		self.assertEqual(content.takeaways, "Updated takeaway.")
 		self.assertEqual(content.summary_plain_english, "Updated summary.")
-		self.assertEqual(ArticleOrgContent.objects.filter(article=article, organization=self.org).count(), 1)
+		self.assertEqual(
+			ArticleOrgContent.objects.filter(
+				article=article, organization=self.org
+			).count(),
+			1,
+		)
 
 	@patch("gregory.management.commands.import_articles_from_api.requests.get")
 	def test_none_takeaways_leaves_existing_row_untouched(self, mock_get):
 		"""Absent / null fields must not overwrite existing ArticleOrgContent values."""
-		article = Articles.objects.create(title="Test Article", link="https://example.com/article/1")
+		article = Articles.objects.create(
+			title="Test Article", link="https://example.com/article/1"
+		)
 		ArticleOrgContent.objects.create(
 			article=article,
 			organization=self.org,
@@ -83,7 +110,12 @@ class ImportArticlesFromApiTest(TestCase):
 
 		null_fields = {**ARTICLE, "takeaways": None, "summary_plain_english": None}
 		mock_get.return_value = _make_response([null_fields])
-		call_command("import_articles_from_api", "https://api.example.com/articles/", "--target-org", "test-org")
+		call_command(
+			"import_articles_from_api",
+			"https://api.example.com/articles/",
+			"--target-org",
+			"test-org",
+		)
 
 		content = ArticleOrgContent.objects.get(article=article, organization=self.org)
 		self.assertEqual(content.takeaways, "Original takeaway.")
@@ -92,7 +124,9 @@ class ImportArticlesFromApiTest(TestCase):
 	@patch("gregory.management.commands.import_articles_from_api.requests.get")
 	def test_empty_string_takeaways_clears_existing_row(self, mock_get):
 		"""Upstream sending '' should normalize to None and clear the stored value."""
-		article = Articles.objects.create(title="Test Article", link="https://example.com/article/1")
+		article = Articles.objects.create(
+			title="Test Article", link="https://example.com/article/1"
+		)
 		ArticleOrgContent.objects.create(
 			article=article,
 			organization=self.org,
@@ -102,7 +136,12 @@ class ImportArticlesFromApiTest(TestCase):
 
 		empty_strings = {**ARTICLE, "takeaways": "", "summary_plain_english": ""}
 		mock_get.return_value = _make_response([empty_strings])
-		call_command("import_articles_from_api", "https://api.example.com/articles/", "--target-org", "test-org")
+		call_command(
+			"import_articles_from_api",
+			"https://api.example.com/articles/",
+			"--target-org",
+			"test-org",
+		)
 
 		content = ArticleOrgContent.objects.get(article=article, organization=self.org)
 		self.assertIsNone(content.takeaways)
@@ -110,10 +149,17 @@ class ImportArticlesFromApiTest(TestCase):
 
 	def test_missing_target_org_raises_command_error(self):
 		with self.assertRaises((CommandError, SystemExit)):
-			call_command("import_articles_from_api", "https://api.example.com/articles/")
+			call_command(
+				"import_articles_from_api", "https://api.example.com/articles/"
+			)
 
 	@patch("gregory.management.commands.import_articles_from_api.requests.get")
 	def test_unknown_org_raises_command_error(self, mock_get):
 		mock_get.return_value = _make_response([ARTICLE])
 		with self.assertRaises(CommandError):
-			call_command("import_articles_from_api", "https://api.example.com/articles/", "--target-org", "nonexistent-org")
+			call_command(
+				"import_articles_from_api",
+				"https://api.example.com/articles/",
+				"--target-org",
+				"nonexistent-org",
+			)

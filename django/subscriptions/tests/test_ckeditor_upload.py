@@ -49,10 +49,11 @@ User = get_user_model()
 # Image-building helpers
 # ---------------------------------------------------------------------------
 
-def _make_jpeg(width=100, height=100, color='red') -> bytes:
+
+def _make_jpeg(width=100, height=100, color="red") -> bytes:
 	"""Return JPEG bytes for a solid-colour image with NO EXIF data."""
 	buf = io.BytesIO()
-	Image.new('RGB', (width, height), color).save(buf, 'JPEG')
+	Image.new("RGB", (width, height), color).save(buf, "JPEG")
 	return buf.getvalue()
 
 
@@ -60,41 +61,42 @@ def _make_jpeg_with_exif_orientation(
 	orientation: int = 6,
 	width: int = 100,
 	height: int = 200,
-	color: str = 'red',
+	color: str = "red",
 ) -> bytes:
 	"""
 	Return JPEG bytes for a solid-colour image carrying the given EXIF
 	Orientation tag value (default 6 = 90° rotation stored).
 	"""
-	img = Image.new('RGB', (width, height), color)
+	img = Image.new("RGB", (width, height), color)
 	exif = img.getexif()
 	exif[0x0112] = orientation  # tag 274 = Orientation
 	buf = io.BytesIO()
-	img.save(buf, 'JPEG', exif=exif.tobytes())
+	img.save(buf, "JPEG", exif=exif.tobytes())
 	return buf.getvalue()
 
 
-def _make_png(width=100, height=100, color='blue') -> bytes:
+def _make_png(width=100, height=100, color="blue") -> bytes:
 	buf = io.BytesIO()
-	Image.new('RGB', (width, height), color).save(buf, 'PNG')
+	Image.new("RGB", (width, height), color).save(buf, "PNG")
 	return buf.getvalue()
 
 
-def _make_webp(width=100, height=100, color='green') -> bytes:
+def _make_webp(width=100, height=100, color="green") -> bytes:
 	buf = io.BytesIO()
-	Image.new('RGB', (width, height), color).save(buf, 'WEBP')
+	Image.new("RGB", (width, height), color).save(buf, "WEBP")
 	return buf.getvalue()
 
 
-def _make_tiff(width=100, height=100, color='yellow') -> bytes:
+def _make_tiff(width=100, height=100, color="yellow") -> bytes:
 	buf = io.BytesIO()
-	Image.new('RGB', (width, height), color).save(buf, 'TIFF')
+	Image.new("RGB", (width, height), color).save(buf, "TIFF")
 	return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class CKEditorUploadViewTests(TestCase):
 	"""
@@ -111,12 +113,12 @@ class CKEditorUploadViewTests(TestCase):
 		# No usable password — tests inject the user via RequestFactory
 		# (request.user = self.staff_user) and never call authenticate().
 		self.staff_user = User.objects.create_user(
-			username='ck_upload_staff',
+			username="ck_upload_staff",
 			is_staff=True,
 			is_active=True,
 		)
 		self.staff_user.set_unusable_password()
-		self.staff_user.save(update_fields=['password'])
+		self.staff_user.save(update_fields=["password"])
 
 	# ------------------------------------------------------------------
 	# Internal helper
@@ -138,22 +140,22 @@ class CKEditorUploadViewTests(TestCase):
 		captured: dict = {}
 
 		def capturing_handle(file_obj):
-			captured['file'] = file_obj
-			return '/media/uploads/test.jpg'
+			captured["file"] = file_obj
+			return "/media/uploads/test.jpg"
 
-		request = self.factory.post('/', data={'upload': upload_file})
+		request = self.factory.post("/", data={"upload": upload_file})
 		request.user = self.staff_user
 
 		if patch_handle:
 			with mock.patch(
-				'django_ckeditor_5.views.handle_uploaded_file',
+				"django_ckeditor_5.views.handle_uploaded_file",
 				side_effect=capturing_handle,
 			):
 				response = ckeditor_upload(request)
 		else:
 			response = ckeditor_upload(request)
 
-		return response, captured.get('file')
+		return response, captured.get("file")
 
 	# ------------------------------------------------------------------
 	# 1. Spoofed MIME type — Pillow-detected format wins
@@ -166,17 +168,17 @@ class CKEditorUploadViewTests(TestCase):
 		not the client-supplied ``'image/jpeg'``.
 		"""
 		png_data = _make_png(100, 100)
-		upload = SimpleUploadedFile('image.jpg', png_data, content_type='image/jpeg')
+		upload = SimpleUploadedFile("image.jpg", png_data, content_type="image/jpeg")
 
 		response, stored_file = self._post(upload)
 
 		self.assertEqual(response.status_code, 200)
-		self.assertIsNotNone(stored_file, 'handle_uploaded_file was not called')
+		self.assertIsNotNone(stored_file, "handle_uploaded_file was not called")
 		self.assertEqual(
 			stored_file.content_type,
-			'image/png',
-			'Stored file must carry the Pillow-detected canonical content-type, '
-			'not the client-supplied spoofed value.',
+			"image/png",
+			"Stored file must carry the Pillow-detected canonical content-type, "
+			"not the client-supplied spoofed value.",
 		)
 
 	# ------------------------------------------------------------------
@@ -189,8 +191,10 @@ class CKEditorUploadViewTests(TestCase):
 		re-encode path; the bytes delivered to the storage backend must differ
 		from the original uploaded bytes.
 		"""
-		jpeg_data = _make_jpeg_with_exif_orientation(orientation=6, width=100, height=200)
-		upload = SimpleUploadedFile('rotated.jpg', jpeg_data, content_type='image/jpeg')
+		jpeg_data = _make_jpeg_with_exif_orientation(
+			orientation=6, width=100, height=200
+		)
+		upload = SimpleUploadedFile("rotated.jpg", jpeg_data, content_type="image/jpeg")
 
 		response, stored_file = self._post(upload)
 
@@ -201,7 +205,7 @@ class CKEditorUploadViewTests(TestCase):
 		self.assertNotEqual(
 			stored_bytes,
 			jpeg_data,
-			'Re-encode path must produce different bytes than the original upload.',
+			"Re-encode path must produce different bytes than the original upload.",
 		)
 
 	def test_exif_orientation_6_stored_image_has_orientation_1(self):
@@ -211,8 +215,10 @@ class CKEditorUploadViewTests(TestCase):
 		mail clients will display the image upright without further rotation.
 		"""
 		# 100 px wide × 200 px tall portrait stored with orientation 6.
-		jpeg_data = _make_jpeg_with_exif_orientation(orientation=6, width=100, height=200)
-		upload = SimpleUploadedFile('rotated.jpg', jpeg_data, content_type='image/jpeg')
+		jpeg_data = _make_jpeg_with_exif_orientation(
+			orientation=6, width=100, height=200
+		)
+		upload = SimpleUploadedFile("rotated.jpg", jpeg_data, content_type="image/jpeg")
 
 		response, stored_file = self._post(upload)
 
@@ -226,7 +232,7 @@ class CKEditorUploadViewTests(TestCase):
 		self.assertEqual(
 			orientation,
 			1,
-			f'Expected stored Orientation=1 (baked in), got {orientation}.',
+			f"Expected stored Orientation=1 (baked in), got {orientation}.",
 		)
 
 		# Bonus: dimensions must be swapped because the 90° rotation was applied
@@ -245,8 +251,8 @@ class CKEditorUploadViewTests(TestCase):
 		unchanged (zero quality loss from re-encoding).
 		"""
 		# Use a width well within the 1 200 px ceiling; solid colour has no EXIF.
-		jpeg_data = _make_jpeg(width=200, height=200, color='blue')
-		upload = SimpleUploadedFile('small.jpg', jpeg_data, content_type='image/jpeg')
+		jpeg_data = _make_jpeg(width=200, height=200, color="blue")
+		upload = SimpleUploadedFile("small.jpg", jpeg_data, content_type="image/jpeg")
 
 		response, stored_file = self._post(upload)
 
@@ -257,7 +263,7 @@ class CKEditorUploadViewTests(TestCase):
 		self.assertEqual(
 			stored_bytes,
 			jpeg_data,
-			'Pass-through path must forward the exact original bytes unchanged.',
+			"Pass-through path must forward the exact original bytes unchanged.",
 		)
 
 	# ------------------------------------------------------------------
@@ -276,7 +282,9 @@ class CKEditorUploadViewTests(TestCase):
 		``Image.Image.save`` to write more bytes than the patched ceiling,
 		ensuring the post-encode warning branch is taken deterministically.
 		"""
-		jpeg_data = _make_jpeg_with_exif_orientation(orientation=6, width=100, height=100)
+		jpeg_data = _make_jpeg_with_exif_orientation(
+			orientation=6, width=100, height=100
+		)
 		upload_size = len(jpeg_data)
 
 		# patched_max must be:
@@ -287,25 +295,31 @@ class CKEditorUploadViewTests(TestCase):
 
 		def oversized_save(self_img, fp, **kwargs):
 			"""Write more bytes than patched_max to trigger the warning branch."""
-			fp.write(b'\xff' * (patched_max + 1))
+			fp.write(b"\xff" * (patched_max + 1))
 
-		upload = SimpleUploadedFile('orient.jpg', jpeg_data, content_type='image/jpeg')
+		upload = SimpleUploadedFile("orient.jpg", jpeg_data, content_type="image/jpeg")
 
-		with mock.patch('subscriptions.views._UPLOAD_MAX_SIZE', patched_max), \
-		     mock.patch.object(Image.Image, 'save', oversized_save), \
-		     mock.patch(
-		         'django_ckeditor_5.views.handle_uploaded_file',
-		         return_value='/media/uploads/t.jpg',
-		     ), \
-		     self.assertLogs('subscriptions.views', level='WARNING') as log_ctx:
-			request = self.factory.post('/', data={'upload': upload})
+		with (
+			mock.patch("subscriptions.views._UPLOAD_MAX_SIZE", patched_max),
+			mock.patch.object(Image.Image, "save", oversized_save),
+			mock.patch(
+				"django_ckeditor_5.views.handle_uploaded_file",
+				return_value="/media/uploads/t.jpg",
+			),
+			self.assertLogs("subscriptions.views", level="WARNING") as log_ctx,
+		):
+			request = self.factory.post("/", data={"upload": upload})
 			request.user = self.staff_user
 			response = ckeditor_upload(request)
 
-		self.assertEqual(response.status_code, 200, 'Upload must succeed even when re-encoded size warning fires.')
-		warning_lines = [m for m in log_ctx.output if 'WARNING' in m]
+		self.assertEqual(
+			response.status_code,
+			200,
+			"Upload must succeed even when re-encoded size warning fires.",
+		)
+		warning_lines = [m for m in log_ctx.output if "WARNING" in m]
 		self.assertTrue(
-			any('re-encoded' in m for m in warning_lines),
+			any("re-encoded" in m for m in warning_lines),
 			f'Expected a "re-encoded" warning log entry; got: {log_ctx.output}',
 		)
 
@@ -325,16 +339,18 @@ class CKEditorUploadViewTests(TestCase):
 			saved_kwargs.update(kwargs)
 			# Write one sentinel byte so encoded_size > 0 and the view can
 			# construct the InMemoryUploadedFile without errors.
-			fp.write(b'\x00')
+			fp.write(b"\x00")
 
-		request = self.factory.post('/', data={'upload': upload_file})
+		request = self.factory.post("/", data={"upload": upload_file})
 		request.user = self.staff_user
 
-		with mock.patch.object(Image.Image, 'save', capturing_save), \
-		     mock.patch(
-		         'django_ckeditor_5.views.handle_uploaded_file',
-		         return_value='/media/uploads/t.jpg',
-		     ):
+		with (
+			mock.patch.object(Image.Image, "save", capturing_save),
+			mock.patch(
+				"django_ckeditor_5.views.handle_uploaded_file",
+				return_value="/media/uploads/t.jpg",
+			),
+		):
 			response = ckeditor_upload(request)
 
 		self.assertEqual(response.status_code, 200)
@@ -343,8 +359,8 @@ class CKEditorUploadViewTests(TestCase):
 				saved_kwargs.get(kwarg_name),
 				expected_value,
 				f'PIL Image.save kwarg "{kwarg_name}": '
-				f'expected {expected_value!r}, got {saved_kwargs.get(kwarg_name)!r}. '
-				f'Full captured kwargs: {saved_kwargs}',
+				f"expected {expected_value!r}, got {saved_kwargs.get(kwarg_name)!r}. "
+				f"Full captured kwargs: {saved_kwargs}",
 			)
 
 	def test_jpeg_saved_with_correct_quality_kwargs(self):
@@ -353,22 +369,30 @@ class CKEditorUploadViewTests(TestCase):
 		""".format(q=_JPEG_QUALITY)
 		# EXIF orientation triggers the re-encode path without needing
 		# an excessively wide image.
-		jpeg_data = _make_jpeg_with_exif_orientation(orientation=6, width=100, height=100)
-		upload = SimpleUploadedFile('test.jpg', jpeg_data, content_type='image/jpeg')
-		self._assert_save_kwargs(upload, {
-			'quality': _JPEG_QUALITY,    # 88
-			'progressive': True,
-			'optimize': True,
-		})
+		jpeg_data = _make_jpeg_with_exif_orientation(
+			orientation=6, width=100, height=100
+		)
+		upload = SimpleUploadedFile("test.jpg", jpeg_data, content_type="image/jpeg")
+		self._assert_save_kwargs(
+			upload,
+			{
+				"quality": _JPEG_QUALITY,  # 88
+				"progressive": True,
+				"optimize": True,
+			},
+		)
 
 	def test_webp_saved_with_correct_quality_kwargs(self):
 		"""WebP re-encode must use quality={q}.""".format(q=_WEBP_QUALITY)
 		# Use a width > _UPLOAD_MAX_WIDTH so the resize path is taken.
 		webp_data = _make_webp(width=_UPLOAD_MAX_WIDTH + 100, height=100)
-		upload = SimpleUploadedFile('test.webp', webp_data, content_type='image/webp')
-		self._assert_save_kwargs(upload, {
-			'quality': _WEBP_QUALITY,   # 90
-		})
+		upload = SimpleUploadedFile("test.webp", webp_data, content_type="image/webp")
+		self._assert_save_kwargs(
+			upload,
+			{
+				"quality": _WEBP_QUALITY,  # 90
+			},
+		)
 
 	def test_png_saved_with_correct_compress_kwargs(self):
 		"""PNG re-encode must use optimize=True, compress_level={c}.""".format(
@@ -376,11 +400,14 @@ class CKEditorUploadViewTests(TestCase):
 		)
 		# Use a width > _UPLOAD_MAX_WIDTH so the resize path is taken.
 		png_data = _make_png(width=_UPLOAD_MAX_WIDTH + 100, height=100)
-		upload = SimpleUploadedFile('test.png', png_data, content_type='image/png')
-		self._assert_save_kwargs(upload, {
-			'optimize': True,
-			'compress_level': _PNG_COMPRESS_LEVEL,  # 9
-		})
+		upload = SimpleUploadedFile("test.png", png_data, content_type="image/png")
+		self._assert_save_kwargs(
+			upload,
+			{
+				"optimize": True,
+				"compress_level": _PNG_COMPRESS_LEVEL,  # 9
+			},
+		)
 
 	# ------------------------------------------------------------------
 	# 6. File too large (> 2 MB)
@@ -391,17 +418,20 @@ class CKEditorUploadViewTests(TestCase):
 		An upload whose size exceeds ``_UPLOAD_MAX_SIZE`` (2 MB) must be
 		rejected immediately with HTTP 400 before any PIL processing occurs.
 		"""
-		oversize_data = b'x' * (_UPLOAD_MAX_SIZE + 1)
-		upload = SimpleUploadedFile('big.jpg', oversize_data, content_type='image/jpeg')
+		oversize_data = b"x" * (_UPLOAD_MAX_SIZE + 1)
+		upload = SimpleUploadedFile("big.jpg", oversize_data, content_type="image/jpeg")
 
 		response, stored_file = self._post(upload)
 
 		self.assertEqual(response.status_code, 400)
-		self.assertIsNone(stored_file, 'handle_uploaded_file must not be called for oversized uploads.')
+		self.assertIsNone(
+			stored_file,
+			"handle_uploaded_file must not be called for oversized uploads.",
+		)
 		# RequestFactory returns raw Django response objects; parse JSON manually.
 		payload = json.loads(response.content)
-		self.assertIn('error', payload)
-		self.assertIn('message', payload['error'])
+		self.assertIn("error", payload)
+		self.assertIn("message", payload["error"])
 
 	# ------------------------------------------------------------------
 	# 7. Disallowed format (TIFF) with spoofed MIME
@@ -414,16 +444,16 @@ class CKEditorUploadViewTests(TestCase):
 		which is not in ``_UPLOAD_ALLOWED_FORMATS``.
 		"""
 		tiff_data = _make_tiff(100, 100)
-		upload = SimpleUploadedFile('sneaky.jpg', tiff_data, content_type='image/jpeg')
+		upload = SimpleUploadedFile("sneaky.jpg", tiff_data, content_type="image/jpeg")
 
 		response, stored_file = self._post(upload)
 
 		self.assertEqual(response.status_code, 400)
 		self.assertIsNone(
 			stored_file,
-			'handle_uploaded_file must not be called for disallowed formats.',
+			"handle_uploaded_file must not be called for disallowed formats.",
 		)
 		# RequestFactory returns raw Django response objects; parse JSON manually.
 		payload = json.loads(response.content)
-		self.assertIn('error', payload)
-		self.assertIn('message', payload['error'])
+		self.assertIn("error", payload)
+		self.assertIn("message", payload["error"])

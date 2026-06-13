@@ -8,6 +8,7 @@ Usage:
         [--conflict skip|rename|merge] \\
         [--dry-run]
 """
+
 from django.core.management.base import BaseCommand, CommandError
 
 from gregory.models import Team
@@ -23,21 +24,21 @@ class Command(BaseCommand):
 
 	def add_arguments(self, parser):
 		parser.add_argument(
-			'--from-team',
+			"--from-team",
 			required=True,
-			metavar='SLUG',
-			help='Slug of the team to reassign objects FROM (may be inactive).',
+			metavar="SLUG",
+			help="Slug of the team to reassign objects FROM (may be inactive).",
 		)
 		parser.add_argument(
-			'--to-team',
+			"--to-team",
 			required=True,
-			metavar='SLUG',
-			help='Slug of the target team to reassign objects TO (must be active).',
+			metavar="SLUG",
+			help="Slug of the target team to reassign objects TO (must be active).",
 		)
 		parser.add_argument(
-			'--conflict',
-			choices=['skip', 'rename', 'merge'],
-			default='skip',
+			"--conflict",
+			choices=["skip", "rename", "merge"],
+			default="skip",
 			help=(
 				"How to handle subject slug collisions. "
 				"skip: leave conflicting subjects on the old team. "
@@ -47,17 +48,17 @@ class Command(BaseCommand):
 			),
 		)
 		parser.add_argument(
-			'--dry-run',
-			action='store_true',
+			"--dry-run",
+			action="store_true",
 			default=False,
-			help='Preview what would change without making any modifications.',
+			help="Preview what would change without making any modifications.",
 		)
 
 	def handle(self, *args, **options):
-		from_slug = options['from_team']
-		to_slug = options['to_team']
-		conflict = options['conflict']
-		dry_run = options['dry_run']
+		from_slug = options["from_team"]
+		to_slug = options["to_team"]
+		conflict = options["conflict"]
+		dry_run = options["dry_run"]
 
 		# Fetch teams — use all_objects so inactive teams can be the source.
 		try:
@@ -71,7 +72,9 @@ class Command(BaseCommand):
 			raise CommandError(f"No team found with slug '{to_slug}'.")
 
 		if dry_run:
-			self.stdout.write(self.style.WARNING("DRY RUN — no changes will be made.\n"))
+			self.stdout.write(
+				self.style.WARNING("DRY RUN — no changes will be made.\n")
+			)
 
 		self.stdout.write(
 			f"Reassigning from '{from_team}' → '{to_team}' "
@@ -93,6 +96,8 @@ class Command(BaseCommand):
 		if report.errors:
 			self.stdout.write(self.style.ERROR("Completed with errors — see above."))
 		elif dry_run:
-			self.stdout.write(self.style.WARNING("Dry run complete. Run without --dry-run to apply."))
+			self.stdout.write(
+				self.style.WARNING("Dry run complete. Run without --dry-run to apply.")
+			)
 		else:
 			self.stdout.write(self.style.SUCCESS("Reassignment complete."))

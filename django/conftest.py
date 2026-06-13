@@ -9,6 +9,7 @@ table, so any test exercising the cache fails with
 Create the cache table once, right after the test database is set up, so the
 real DatabaseCache backend behaves exactly as it does in production.
 """
+
 import pytest
 from django.core.management import call_command
 

@@ -1,28 +1,44 @@
 import logging
 
+
 class SciencePaper:
-	def __init__(self, doi=None, title=None,link=None,access=None,publisher=None,journal=None,published_date=None,abstract=None,authors=None):
-		self.doi=doi
-		self.title=title
-		self.link=link
-		self.access=access
-		self.publisher=publisher
-		self.journal=journal
-		self.published_date=published_date
-		self.abstract=abstract
-		self.authors=authors
+	def __init__(
+		self,
+		doi=None,
+		title=None,
+		link=None,
+		access=None,
+		publisher=None,
+		journal=None,
+		published_date=None,
+		abstract=None,
+		authors=None,
+	):
+		self.doi = doi
+		self.title = title
+		self.link = link
+		self.access = access
+		self.publisher = publisher
+		self.journal = journal
+		self.published_date = published_date
+		self.abstract = abstract
+		self.authors = authors
+
 	def __str__(self):
 		return f"{self.doi}, {self.title}"
+
 	def __repr__(self):
-		return f"{self.doi}, \"{self.title}\""
-	def clean_abstract(self=None,abstract=None):
+		return f'{self.doi}, "{self.title}"'
+
+	def clean_abstract(self=None, abstract=None):
 		from bs4 import BeautifulSoup
 		import html
+
 		if abstract == None and self.abstract != None:
 			abstract = self.abstract
 		if abstract != None:
 			abstract = html.unescape(abstract)
-			soup = BeautifulSoup(abstract,'html.parser')
+			soup = BeautifulSoup(abstract, "html.parser")
 			for tag in soup():
 				for attribute in ["class", "id", "name", "style"]:
 					del tag[attribute]
@@ -30,11 +46,11 @@ class SciencePaper:
 
 	def clean_url(self=None):
 		from gregory.functions import remove_utm
+
 		if self.link != None:
 			self.link = remove_utm(self.link)
 		else:
-			logging.warning('no url found')
-
+			logging.warning("no url found")
 
 	def refresh(self):
 		from gregory.unpaywall import unpaywall_utils
@@ -44,143 +60,154 @@ class SciencePaper:
 		from datetime import datetime
 		from requests.exceptions import HTTPError, RequestException
 		import json
-		timezone = pytz.timezone('UTC')
+
+		timezone = pytz.timezone("UTC")
 		from sitesettings.models import CustomSetting
-		site = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
-		client_website = 'https://' + site.site.domain + '/'
-		my_etiquette = Etiquette(site.title, 'v8', client_website, site.admin_email)
+
+		site = CustomSetting.objects.get(site__domain=os.environ.get("DOMAIN_NAME"))
+		client_website = "https://" + site.site.domain + "/"
+		my_etiquette = Etiquette(site.title, "v8", client_website, site.admin_email)
 		works = Works(etiquette=my_etiquette)
 		work = None
-		
+
 		if self.doi != None:
 			try:
 				work = works.doi(self.doi)
 			except HTTPError as e:
 				if e.response.status_code == 404:
 					logging.warning(f"DOI not found in CrossRef: {self.doi}")
-					return 'DOI not found'
+					return "DOI not found"
 				else:
 					logging.error(f"CrossRef HTTP error for DOI {self.doi}: {e}")
-					return f'CrossRef HTTP error: {e}'
+					return f"CrossRef HTTP error: {e}"
 			except json.JSONDecodeError as e:
-				logging.error(f"Error decoding JSON from CrossRef response for DOI: {self.doi}")
-				return 'JSON decode error'
+				logging.error(
+					f"Error decoding JSON from CrossRef response for DOI: {self.doi}"
+				)
+				return "JSON decode error"
 			except RequestException as e:
 				logging.error(f"CrossRef request error for DOI {self.doi}: {e}")
-				return f'CrossRef request error: {e}'
+				return f"CrossRef request error: {e}"
 			except Exception as e:
-				logging.error(f"Unexpected error querying CrossRef for DOI {self.doi}: {e}")
-				return f'Unexpected error: {e}'
+				logging.error(
+					f"Unexpected error querying CrossRef for DOI {self.doi}: {e}"
+				)
+				return f"Unexpected error: {e}"
 		else:
-			return 'No DOI provided'
-			
+			return "No DOI provided"
+
 		# Only proceed if we successfully got work data
 		if work is None:
-			return 'No data retrieved from CrossRef'
-			
+			return "No data retrieved from CrossRef"
+
 		if self.link == None:
-			try: 
-				self.link = work['link'][0]['URL']
+			try:
+				self.link = work["link"][0]["URL"]
 			except (KeyError, IndexError, TypeError):
 				logging.warning(f"No link found for DOI {self.doi}")
 				pass
 		if self.title == None:
 			try:
-				self.title = work['title'][0]
+				self.title = work["title"][0]
 			except (KeyError, IndexError, TypeError):
-				logging.warning(f"No title found for DOI {self.doi}") 
+				logging.warning(f"No title found for DOI {self.doi}")
 				pass
 		if self.doi != None and self.access == None:
 			if site.admin_email == None:
 				logging.warning("No site admin email found")
 			else:
 				try:
-					if unpaywall_utils.checkIfDOIIsOpenAccess(self.doi, site.admin_email):
-						self.access = 'open'
+					if unpaywall_utils.checkIfDOIIsOpenAccess(
+						self.doi, site.admin_email
+					):
+						self.access = "open"
 					else:
-						self.access = 'restricted'
+						self.access = "restricted"
 				except Exception as e:
 					logging.error(f"Error checking Unpaywall for DOI {self.doi}: {e}")
-					self.access = 'unknown'
-			
+					self.access = "unknown"
+
 		if self.publisher == None:
-			if work != None and 'publisher' in work:
-				if isinstance(work['publisher'],list):
-					self.publisher = work['publisher'][0]
+			if work != None and "publisher" in work:
+				if isinstance(work["publisher"], list):
+					self.publisher = work["publisher"][0]
 				else:
-					self.publisher = work['publisher']
+					self.publisher = work["publisher"]
 		if self.journal == None:
-			if work != None and 'container-title' in work:
-				if isinstance(work['container-title'], list):
-					if len(work['container-title']) > 0:
-						self.journal = work['container-title'][0]
+			if work != None and "container-title" in work:
+				if isinstance(work["container-title"], list):
+					if len(work["container-title"]) > 0:
+						self.journal = work["container-title"][0]
 					else:
-						self.journal = ''
+						self.journal = ""
 				else:
-					self.journal = work['container-title']
+					self.journal = work["container-title"]
 		if self.published_date == None:
-			if work != None and 'issued' in work:
-				issued = work['issued']['date-parts'][0]
-			year,month,day = None,1,1
+			if work != None and "issued" in work:
+				issued = work["issued"]["date-parts"][0]
+			year, month, day = None, 1, 1
 			try:
 				year = issued[0]
-			except (IndexError, TypeError):  
+			except (IndexError, TypeError):
 				logging.warning(f"No year found in issued date for DOI {self.doi}")
 				pass
 			try:
-				month=issued[1]
-			except (IndexError, TypeError):  
+				month = issued[1]
+			except (IndexError, TypeError):
 				logging.warning(f"No month found in issued date for DOI {self.doi}")
 				pass
 			try:
-				day=issued[2]
-			except (IndexError, TypeError):  
+				day = issued[2]
+			except (IndexError, TypeError):
 				logging.warning(f"No day found in issued date for DOI {self.doi}")
 				pass
 			try:
-				self.published_date = datetime( year=year, month=month, day=day, tzinfo=timezone)
-			except (TypeError, ValueError):  
+				self.published_date = datetime(
+					year=year, month=month, day=day, tzinfo=timezone
+				)
+			except (TypeError, ValueError):
 				logging.warning(f"Invalid date found for DOI {self.doi}")
 				pass
 		if self.abstract == None:
 			try:
-				self.abstract = work['abstract']
+				self.abstract = work["abstract"]
 			except (KeyError, IndexError, TypeError):
 				logging.warning(f"No abstract found for DOI {self.doi}")
 				pass
 		if self.authors == None:
 			try:
-				self.authors = work['author']
-			except (KeyError, IndexError, TypeError):  
+				self.authors = work["author"]
+			except (KeyError, IndexError, TypeError):
 				logging.warning(f"No authors found for DOI {self.doi}")
 				pass
 
-	def find_doi(self,title=None):
+	def find_doi(self, title=None):
 		if title == None:
-			return 'Missing required title field'
+			return "Missing required title field"
 		import re
 		import os
 		from sitesettings.models import CustomSetting
 		from crossref.restful import Works, Etiquette
+
 		self.doi = None
 		self.title = title
-		site = CustomSetting.objects.get(site__domain=os.environ.get('DOMAIN_NAME'))
-		client_website = 'https://' + site.site.domain + '/'
-		my_etiquette = Etiquette(site.title, 'v8', client_website, site.admin_email)
+		site = CustomSetting.objects.get(site__domain=os.environ.get("DOMAIN_NAME"))
+		client_website = "https://" + site.site.domain + "/"
+		my_etiquette = Etiquette(site.title, "v8", client_website, site.admin_email)
 		works = Works(etiquette=my_etiquette)
 		work = None
 		if title != None:
 			i = 0
-			work = works.query(bibliographic=title).sort('relevance')
+			work = works.query(bibliographic=title).sort("relevance")
 			for w in work:
-				if 'title' in w:
-					crossref_title = ''
-					article_title = re.sub(r'[^A-Za-z0-9 ]+', '', title)
-					article_title = re.sub(r' ','',article_title ).lower()
-					crossref_title = re.sub(r'[^A-Za-z0-9 ]+', '', w['title'][0])
-					crossref_title = re.sub(r' ','',crossref_title).lower()
+				if "title" in w:
+					crossref_title = ""
+					article_title = re.sub(r"[^A-Za-z0-9 ]+", "", title)
+					article_title = re.sub(r" ", "", article_title).lower()
+					crossref_title = re.sub(r"[^A-Za-z0-9 ]+", "", w["title"][0])
+					crossref_title = re.sub(r" ", "", crossref_title).lower()
 					if crossref_title == article_title:
-						self.doi = w['DOI']
+						self.doi = w["DOI"]
 						return self.doi
 					i += 1
 					if i == 5:
@@ -188,26 +215,37 @@ class SciencePaper:
 
 
 class ClinicalTrial:
-	def __init__(self, title=None, summary=None, link=None, published_date=None, identifiers=None, extra_fields=None):
+	def __init__(
+		self,
+		title=None,
+		summary=None,
+		link=None,
+		published_date=None,
+		identifiers=None,
+		extra_fields=None,
+	):
 		self.title = title
 		self.summary = summary
 		self.link = link
 		self.published_date = published_date
 		self.identifiers = identifiers
 		self.extra_fields = extra_fields or {}
+
 	def __str__(self):
 		return f"{self.title}, {self.identifiers}"
-	def __repr__(self):
-		return f"{self.title}, \"{self.identifiers}\""
 
-	def clean_summary(self=None,summary=None):
+	def __repr__(self):
+		return f'{self.title}, "{self.identifiers}"'
+
+	def clean_summary(self=None, summary=None):
 		from bs4 import BeautifulSoup
 		import html
+
 		if summary == None and self.summary != None:
 			summary = self.summary
 		if summary != None:
 			summary = html.unescape(summary)
-			soup = BeautifulSoup(summary,'html.parser')
+			soup = BeautifulSoup(summary, "html.parser")
 			for tag in soup():
 				for attribute in ["class", "id", "name", "style"]:
 					del tag[attribute]
@@ -215,42 +253,45 @@ class ClinicalTrial:
 
 	def clean_url(self=None):
 		from gregory.functions import remove_utm
+
 		if self.link != None:
 			self.link = remove_utm(self.link)
 		else:
-			logging.warning('no url found')
+			logging.warning("no url found")
 
 
 class ClinicalTrialsGovAPI:
 	"""
 	Client for ClinicalTrials.gov REST API v2.
-	
+
 	API Documentation: https://clinicaltrials.gov/data-api/api
-	
+
 	Usage:
 		api = ClinicalTrialsGovAPI()
-		
+
 		# Search by condition
 		studies = api.search(query_cond='multiple sclerosis', page_size=10)
-		
+
 		# Search by general terms
 		studies = api.search(query_term='rituximab', page_size=20)
-		
+
 		# Get a single study by NCT ID
 		study = api.get_study('NCT01234567')
 	"""
-	
+
 	BASE_URL = "https://clinicaltrials.gov/api/v2"
-	
+
 	def __init__(self):
 		import requests
+
 		self.session = requests.Session()
 		# Set a reasonable timeout
 		self.timeout = 30
-	
+
 	def _make_request(self, endpoint, params=None):
 		"""Make a request to the ClinicalTrials.gov API."""
 		import requests
+
 		url = f"{self.BASE_URL}/{endpoint}"
 		try:
 			response = self.session.get(url, params=params, timeout=self.timeout)
@@ -262,27 +303,27 @@ class ClinicalTrialsGovAPI:
 		except requests.exceptions.RequestException as e:
 			logging.error(f"Request Error: {e}")
 			raise
-	
+
 	def get_version(self):
 		"""Get the API version and data timestamp."""
 		return self._make_request("version")
-	
+
 	def get_study(self, nct_id: str, fields: list = None):
 		"""
 		Get a single study by NCT ID.
-		
+
 		Args:
 			nct_id: The NCT identifier (e.g., 'NCT01234567')
 			fields: Optional list of fields to return. If None, returns all fields.
-		
+
 		Returns:
 			dict: Study data
 		"""
 		params = {}
 		if fields:
-			params['fields'] = '|'.join(fields)
+			params["fields"] = "|".join(fields)
 		return self._make_request(f"studies/{nct_id}", params)
-	
+
 	def search(
 		self,
 		query_term: str = None,
@@ -305,11 +346,11 @@ class ClinicalTrialsGovAPI:
 		sort: list = None,
 		count_total: bool = True,
 		page_size: int = 10,
-		page_token: str = None
+		page_token: str = None,
 	):
 		"""
 		Search for studies using the ClinicalTrials.gov API.
-		
+
 		Search Parameters (query.*):
 			query_term: Basic search across weighted fields (query.term)
 			query_cond: Condition or disease search (query.cond)
@@ -320,13 +361,13 @@ class ClinicalTrialsGovAPI:
 			query_lead: Lead sponsor search (query.lead)
 			query_id: Study ID search (query.id)
 			query_patient: Patient-friendly search (query.patient)
-		
+
 		Filter Parameters (filter.*):
 			filter_overall_status: List of recruitment statuses
 			filter_geo: Geographic filter (e.g., "distance(39.0035707,-77.1013313,50mi)")
 			filter_ids: List of NCT IDs to filter by
 			filter_advanced: Advanced filter expression
-		
+
 		Other Parameters:
 			aggFilters: Aggregation filters
 			geo_dist: Geographic distance for location-based search
@@ -336,351 +377,380 @@ class ClinicalTrialsGovAPI:
 			count_total: Whether to include total count
 			page_size: Number of results per page (max 1000)
 			page_token: Token for pagination
-		
+
 		Returns:
 			dict: Search results with 'studies' list and pagination info
 		"""
 		params = {}
-		
+
 		# Query parameters
 		if query_term:
-			params['query.term'] = query_term
+			params["query.term"] = query_term
 		if query_cond:
-			params['query.cond'] = query_cond
+			params["query.cond"] = query_cond
 		if query_intr:
-			params['query.intr'] = query_intr
+			params["query.intr"] = query_intr
 		if query_titles:
-			params['query.titles'] = query_titles
+			params["query.titles"] = query_titles
 		if query_outc:
-			params['query.outc'] = query_outc
+			params["query.outc"] = query_outc
 		if query_spons:
-			params['query.spons'] = query_spons
+			params["query.spons"] = query_spons
 		if query_lead:
-			params['query.lead'] = query_lead
+			params["query.lead"] = query_lead
 		if query_id:
-			params['query.id'] = query_id
+			params["query.id"] = query_id
 		if query_patient:
-			params['query.patient'] = query_patient
-		
+			params["query.patient"] = query_patient
+
 		# Filter parameters
 		if filter_overall_status:
-			params['filter.overallStatus'] = '|'.join(filter_overall_status)
+			params["filter.overallStatus"] = "|".join(filter_overall_status)
 		if filter_geo:
-			params['filter.geo'] = filter_geo
+			params["filter.geo"] = filter_geo
 		if filter_ids:
-			params['filter.ids'] = '|'.join(filter_ids)
+			params["filter.ids"] = "|".join(filter_ids)
 		if filter_advanced:
-			params['filter.advanced'] = filter_advanced
-		
+			params["filter.advanced"] = filter_advanced
+
 		# Other parameters
 		if aggFilters:
-			params['aggFilters'] = aggFilters
+			params["aggFilters"] = aggFilters
 		if geo_dist:
-			params['geoDecay'] = geo_dist
+			params["geoDecay"] = geo_dist
 		if post_filter:
 			import json
-			params['postFilter'] = json.dumps(post_filter)
+
+			params["postFilter"] = json.dumps(post_filter)
 		if fields:
-			params['fields'] = '|'.join(fields)
+			params["fields"] = "|".join(fields)
 		if sort:
-			params['sort'] = ','.join(sort)
+			params["sort"] = ",".join(sort)
 		if count_total:
-			params['countTotal'] = 'true'
-		
-		params['pageSize'] = min(page_size, 1000)  # API max is 1000
-		
+			params["countTotal"] = "true"
+
+		params["pageSize"] = min(page_size, 1000)  # API max is 1000
+
 		if page_token:
-			params['pageToken'] = page_token
-		
+			params["pageToken"] = page_token
+
 		return self._make_request("studies", params)
-	
-	def search_all(
-		self,
-		max_results: int = None,
-		**search_kwargs
-	):
+
+	def search_all(self, max_results: int = None, **search_kwargs):
 		"""
 		Search and iterate through all pages of results.
-		
+
 		Args:
 			max_results: Maximum number of results to return (None for all)
 			**search_kwargs: All parameters accepted by search()
-		
+
 		Yields:
 			dict: Individual study records
 		"""
 		count = 0
 		page_token = None
-		
+
 		while True:
 			results = self.search(page_token=page_token, **search_kwargs)
-			
-			studies = results.get('studies', [])
+
+			studies = results.get("studies", [])
 			if not studies:
 				break
-			
+
 			for study in studies:
 				yield study
 				count += 1
 				if max_results and count >= max_results:
 					return
-			
-			page_token = results.get('nextPageToken')
+
+			page_token = results.get("nextPageToken")
 			if not page_token:
 				break
-	
-	def parse_study_to_clinical_trial(self, study_data: dict) -> 'ClinicalTrial':
+
+	def parse_study_to_clinical_trial(self, study_data: dict) -> "ClinicalTrial":
 		"""
 		Convert a ClinicalTrials.gov API study response to a ClinicalTrial object.
-		
+
 		Args:
 			study_data: Raw study data from the API
-		
+
 		Returns:
 			ClinicalTrial: Parsed trial object
 		"""
 		from datetime import datetime
 		import pytz
-		
-		protocol = study_data.get('protocolSection', {})
-		identification = protocol.get('identificationModule', {})
-		status_module = protocol.get('statusModule', {})
-		description = protocol.get('descriptionModule', {})
-		design_module = protocol.get('designModule', {})
-		conditions_module = protocol.get('conditionsModule', {})
-		eligibility_module = protocol.get('eligibilityModule', {})
-		outcomes_module = protocol.get('outcomesModule', {})
-		contacts_module = protocol.get('contactsLocationsModule', {})
-		sponsor_module = protocol.get('sponsorCollaboratorsModule', {})
-		
+
+		protocol = study_data.get("protocolSection", {})
+		identification = protocol.get("identificationModule", {})
+		status_module = protocol.get("statusModule", {})
+		description = protocol.get("descriptionModule", {})
+		design_module = protocol.get("designModule", {})
+		conditions_module = protocol.get("conditionsModule", {})
+		eligibility_module = protocol.get("eligibilityModule", {})
+		outcomes_module = protocol.get("outcomesModule", {})
+		contacts_module = protocol.get("contactsLocationsModule", {})
+		sponsor_module = protocol.get("sponsorCollaboratorsModule", {})
+
 		# Extract NCT ID
-		nct_id = identification.get('nctId')
-		
+		nct_id = identification.get("nctId")
+
 		# Extract title (prefer official, fallback to brief)
-		title = identification.get('officialTitle') or identification.get('briefTitle', '')
+		title = identification.get("officialTitle") or identification.get(
+			"briefTitle", ""
+		)
 
 		# Extract acronym (Trials.acronym is capped at 200 chars)
-		acronym = (identification.get('acronym') or '').strip()[:200] or None
-		
+		acronym = (identification.get("acronym") or "").strip()[:200] or None
+
 		# Build link
 		link = f"https://clinicaltrials.gov/study/{nct_id}" if nct_id else None
-		
+
 		# Extract summary/brief summary
-		summary = description.get('briefSummary', '')
-		detailed_description = description.get('detailedDescription', '')
-		
+		summary = description.get("briefSummary", "")
+		detailed_description = description.get("detailedDescription", "")
+
 		# Parse dates
 		published_date = None
-		start_date_struct = status_module.get('startDateStruct', {})
-		if start_date_struct.get('date'):
+		start_date_struct = status_module.get("startDateStruct", {})
+		if start_date_struct.get("date"):
 			try:
-				date_str = start_date_struct['date']
+				date_str = start_date_struct["date"]
 				# Handle partial dates (YYYY or YYYY-MM or YYYY-MM-DD)
 				if len(date_str) == 4:
 					published_date = datetime(int(date_str), 1, 1, tzinfo=pytz.UTC)
 				elif len(date_str) == 7:
-					parts = date_str.split('-')
-					published_date = datetime(int(parts[0]), int(parts[1]), 1, tzinfo=pytz.UTC)
+					parts = date_str.split("-")
+					published_date = datetime(
+						int(parts[0]), int(parts[1]), 1, tzinfo=pytz.UTC
+					)
 				else:
-					published_date = datetime.strptime(date_str, '%Y-%m-%d').replace(tzinfo=pytz.UTC)
+					published_date = datetime.strptime(date_str, "%Y-%m-%d").replace(
+						tzinfo=pytz.UTC
+					)
 			except (ValueError, TypeError):
 				pass
-		
+
 		# Build identifiers
 		identifiers = {
-			'nct': nct_id,
-			'org_study_id': identification.get('orgStudyIdInfo', {}).get('id'),
+			"nct": nct_id,
+			"org_study_id": identification.get("orgStudyIdInfo", {}).get("id"),
 		}
-		
+
 		# Extract secondary IDs
 		secondary_ids = []
-		for sec_id_info in identification.get('secondaryIdInfos', []):
-			if sec_id_info.get('id'):
-				secondary_ids.append(sec_id_info['id'])
-		
+		for sec_id_info in identification.get("secondaryIdInfos", []):
+			if sec_id_info.get("id"):
+				secondary_ids.append(sec_id_info["id"])
+
 		# Extract conditions
-		conditions = conditions_module.get('conditions', [])
-		
+		conditions = conditions_module.get("conditions", [])
+
 		# Extract phase
-		phases = design_module.get('phases', [])
-		phase = ', '.join(phases) if phases else None
-		
+		phases = design_module.get("phases", [])
+		phase = ", ".join(phases) if phases else None
+
 		# Extract study type
-		study_type = design_module.get('studyType')
-		
+		study_type = design_module.get("studyType")
+
 		# Extract recruitment status
-		recruitment_status = status_module.get('overallStatus')
-		
+		recruitment_status = status_module.get("overallStatus")
+
 		# Extract eligibility criteria
-		eligibility_criteria = eligibility_module.get('eligibilityCriteria', '')
-		min_age = eligibility_module.get('minimumAge')
-		max_age = eligibility_module.get('maximumAge')
-		gender = eligibility_module.get('sex')
-		
+		eligibility_criteria = eligibility_module.get("eligibilityCriteria", "")
+		min_age = eligibility_module.get("minimumAge")
+		max_age = eligibility_module.get("maximumAge")
+		gender = eligibility_module.get("sex")
+
 		# Extract primary outcome measures
 		primary_outcomes = []
-		for outcome in outcomes_module.get('primaryOutcomes', []):
-			measure = outcome.get('measure', '')
-			description_text = outcome.get('description', '')
-			time_frame = outcome.get('timeFrame', '')
+		for outcome in outcomes_module.get("primaryOutcomes", []):
+			measure = outcome.get("measure", "")
+			description_text = outcome.get("description", "")
+			time_frame = outcome.get("timeFrame", "")
 			primary_outcomes.append(f"{measure}: {description_text} ({time_frame})")
-		
+
 		# Extract secondary outcome measures
 		secondary_outcomes = []
-		for outcome in outcomes_module.get('secondaryOutcomes', []):
-			measure = outcome.get('measure', '')
-			description_text = outcome.get('description', '')
-			time_frame = outcome.get('timeFrame', '')
+		for outcome in outcomes_module.get("secondaryOutcomes", []):
+			measure = outcome.get("measure", "")
+			description_text = outcome.get("description", "")
+			time_frame = outcome.get("timeFrame", "")
 			secondary_outcomes.append(f"{measure}: {description_text} ({time_frame})")
-		
+
 		# Extract sponsor information
-		lead_sponsor = sponsor_module.get('leadSponsor', {})
-		primary_sponsor = lead_sponsor.get('name')
-		
+		lead_sponsor = sponsor_module.get("leadSponsor", {})
+		primary_sponsor = lead_sponsor.get("name")
+
 		# Extract collaborators
 		collaborators = []
-		for collab in sponsor_module.get('collaborators', []):
-			if collab.get('name'):
-				collaborators.append(collab['name'])
-		
+		for collab in sponsor_module.get("collaborators", []):
+			if collab.get("name"):
+				collaborators.append(collab["name"])
+
 		# Extract intervention information
-		arms_module = protocol.get('armsInterventionsModule', {})
+		arms_module = protocol.get("armsInterventionsModule", {})
 		interventions = []
-		for intervention in arms_module.get('interventions', []):
-			int_type = intervention.get('type', '')
-			int_name = intervention.get('name', '')
-			int_desc = intervention.get('description', '')
+		for intervention in arms_module.get("interventions", []):
+			int_type = intervention.get("type", "")
+			int_name = intervention.get("name", "")
+			int_desc = intervention.get("description", "")
 			interventions.append(f"{int_type}: {int_name} - {int_desc}")
-		
+
 		# Extract locations/countries
-		locations = contacts_module.get('locations', [])
-		countries = sorted(set(loc.get('country', '') for loc in locations if loc.get('country')))
-		
+		locations = contacts_module.get("locations", [])
+		countries = sorted(
+			set(loc.get("country", "") for loc in locations if loc.get("country"))
+		)
+
 		# Extract contact information
-		central_contacts = contacts_module.get('centralContacts', [])
+		central_contacts = contacts_module.get("centralContacts", [])
 		contact_info = {}
 		if central_contacts:
 			first_contact = central_contacts[0]
 			contact_info = {
-				'name': first_contact.get('name'),
-				'email': first_contact.get('email'),
-				'phone': first_contact.get('phone'),
+				"name": first_contact.get("name"),
+				"email": first_contact.get("email"),
+				"phone": first_contact.get("phone"),
 			}
-		
+
 		# Extract results availability and dates
-		has_results = bool(study_data.get('hasResults', False))
-		results_url_link = f"https://clinicaltrials.gov/study/{nct_id}?tab=results" if (has_results and nct_id) else None
-		results_date_completed = self._parse_date(status_module.get('resultsFirstPostDateStruct', {}).get('date'))
+		has_results = bool(study_data.get("hasResults", False))
+		results_url_link = (
+			f"https://clinicaltrials.gov/study/{nct_id}?tab=results"
+			if (has_results and nct_id)
+			else None
+		)
+		results_date_completed = self._parse_date(
+			status_module.get("resultsFirstPostDateStruct", {}).get("date")
+		)
 
 		# study_design — compose human-readable string from designInfo
-		design_info = design_module.get('designInfo', {})
+		design_info = design_module.get("designInfo", {})
 		study_design = None
 		if design_info:
 			parts = []
-			if design_info.get('allocation'):
+			if design_info.get("allocation"):
 				parts.append(f"Allocation: {design_info['allocation']}")
-			if design_info.get('interventionModel'):
+			if design_info.get("interventionModel"):
 				parts.append(f"Intervention model: {design_info['interventionModel']}")
-			masking_info = design_info.get('maskingInfo', {})
-			if masking_info.get('masking'):
-				who_masked = masking_info.get('whoMasked', [])
-				masking_str = masking_info['masking']
+			masking_info = design_info.get("maskingInfo", {})
+			if masking_info.get("masking"):
+				who_masked = masking_info.get("whoMasked", [])
+				masking_str = masking_info["masking"]
 				if who_masked:
 					masking_str += f" ({', '.join(sorted(who_masked))})"
 				parts.append(f"Masking: {masking_str}")
-			if design_info.get('primaryPurpose'):
+			if design_info.get("primaryPurpose"):
 				parts.append(f"Primary purpose: {design_info['primaryPurpose']}")
-			if design_info.get('observationalModel'):
-				parts.append(f"Observational model: {design_info['observationalModel']}")
-			if design_info.get('timePerspective'):
+			if design_info.get("observationalModel"):
+				parts.append(
+					f"Observational model: {design_info['observationalModel']}"
+				)
+			if design_info.get("timePerspective"):
 				parts.append(f"Time perspective: {design_info['timePerspective']}")
-			study_design = '. '.join(parts) if parts else None
+			study_design = ". ".join(parts) if parts else None
 
 		# results_ipd_plan / results_ipd_description
-		ipd_module = protocol.get('ipdSharingStatementModule', {})
-		results_ipd_plan = ((ipd_module.get('ipdSharing') or '').strip()[:10]) or None
-		_ipd_desc = (ipd_module.get('description') or '').strip()
+		ipd_module = protocol.get("ipdSharingStatementModule", {})
+		results_ipd_plan = ((ipd_module.get("ipdSharing") or "").strip()[:10]) or None
+		_ipd_desc = (ipd_module.get("description") or "").strip()
 		results_ipd_description = _ipd_desc or None
 
 		# secondary_sponsor — collaborators are already collected above
 		_clean_collabs = [c.strip() for c in collaborators if c.strip()]
-		secondary_sponsor = '; '.join(_clean_collabs) if _clean_collabs else None
+		secondary_sponsor = "; ".join(_clean_collabs) if _clean_collabs else None
 
 		# last_refreshed_on
-		last_refreshed_on = self._parse_date(status_module.get('lastUpdatePostDateStruct', {}).get('date'))
+		last_refreshed_on = self._parse_date(
+			status_module.get("lastUpdatePostDateStruct", {}).get("date")
+		)
 
 		# date_enrollement — same start date already used for published_date
-		date_enrollement = self._parse_date(start_date_struct.get('date'))
+		date_enrollement = self._parse_date(start_date_struct.get("date"))
 
 		# contact_affiliation — first overall official's affiliation
-		overall_officials = contacts_module.get('overallOfficials', [])
-		_raw_affiliation = overall_officials[0].get('affiliation', '') if overall_officials else ''
+		overall_officials = contacts_module.get("overallOfficials", [])
+		_raw_affiliation = (
+			overall_officials[0].get("affiliation", "") if overall_officials else ""
+		)
 		contact_affiliation = _raw_affiliation.strip() or None
 
 		# Build extra_fields for ClinicalTrial object
 		extra_fields = {
-			'scientific_title': identification.get('officialTitle'),
-			'acronym': acronym,
-			'recruitment_status': recruitment_status,
-			'date_registration': self._parse_date(status_module.get('studyFirstSubmitDate')),
-			'study_type': study_type,
-			'phase': phase,
-			'countries': ', '.join(countries) if countries else None,
-			'inclusion_criteria': eligibility_criteria,
-			'exclusion_criteria': None,  # API combines inclusion/exclusion in eligibilityCriteria
-			'intervention': '\n'.join(interventions) if interventions else None,
-			'secondary_id': ', '.join(secondary_ids) if secondary_ids else None,
-			'condition': ', '.join(conditions) if conditions else None,
-			'primary_outcome': '\n'.join(primary_outcomes) if primary_outcomes else None,
-			'secondary_outcome': '\n'.join(secondary_outcomes) if secondary_outcomes else None,
-			'primary_sponsor': primary_sponsor,
-			'inclusion_agemin': min_age,
-			'inclusion_agemax': max_age,
-			'inclusion_gender': gender,
-			'target_size': str(design_module.get('enrollmentInfo', {}).get('count', '')) or None,
-			'contact_firstname': contact_info.get('name', '').split()[0] if contact_info.get('name') else None,
-			'contact_lastname': ' '.join(contact_info.get('name', '').split()[1:]) if contact_info.get('name') else None,
-			'contact_email': contact_info.get('email'),
-			'contact_tel': contact_info.get('phone'),
-			'source_register': 'ClinicalTrials.gov',
-			'ctg_detailed_description': detailed_description,
-			'results_posted': has_results,
-			'results_url_link': results_url_link,
-			'results_date_completed': results_date_completed,
-			'study_design': study_design,
-			'results_ipd_plan': results_ipd_plan,
-			'results_ipd_description': results_ipd_description,
-			'secondary_sponsor': secondary_sponsor,
-			'last_refreshed_on': last_refreshed_on,
-			'date_enrollement': date_enrollement,
-			'contact_affiliation': contact_affiliation,
+			"scientific_title": identification.get("officialTitle"),
+			"acronym": acronym,
+			"recruitment_status": recruitment_status,
+			"date_registration": self._parse_date(
+				status_module.get("studyFirstSubmitDate")
+			),
+			"study_type": study_type,
+			"phase": phase,
+			"countries": ", ".join(countries) if countries else None,
+			"inclusion_criteria": eligibility_criteria,
+			"exclusion_criteria": None,  # API combines inclusion/exclusion in eligibilityCriteria
+			"intervention": "\n".join(interventions) if interventions else None,
+			"secondary_id": ", ".join(secondary_ids) if secondary_ids else None,
+			"condition": ", ".join(conditions) if conditions else None,
+			"primary_outcome": "\n".join(primary_outcomes)
+			if primary_outcomes
+			else None,
+			"secondary_outcome": "\n".join(secondary_outcomes)
+			if secondary_outcomes
+			else None,
+			"primary_sponsor": primary_sponsor,
+			"inclusion_agemin": min_age,
+			"inclusion_agemax": max_age,
+			"inclusion_gender": gender,
+			"target_size": str(design_module.get("enrollmentInfo", {}).get("count", ""))
+			or None,
+			"contact_firstname": contact_info.get("name", "").split()[0]
+			if contact_info.get("name")
+			else None,
+			"contact_lastname": " ".join(contact_info.get("name", "").split()[1:])
+			if contact_info.get("name")
+			else None,
+			"contact_email": contact_info.get("email"),
+			"contact_tel": contact_info.get("phone"),
+			"source_register": "ClinicalTrials.gov",
+			"ctg_detailed_description": detailed_description,
+			"results_posted": has_results,
+			"results_url_link": results_url_link,
+			"results_date_completed": results_date_completed,
+			"study_design": study_design,
+			"results_ipd_plan": results_ipd_plan,
+			"results_ipd_description": results_ipd_description,
+			"secondary_sponsor": secondary_sponsor,
+			"last_refreshed_on": last_refreshed_on,
+			"date_enrollement": date_enrollement,
+			"contact_affiliation": contact_affiliation,
 		}
-		
+
 		return ClinicalTrial(
 			title=title,
 			summary=summary,
 			link=link,
 			published_date=published_date,
 			identifiers=identifiers,
-			extra_fields=extra_fields
+			extra_fields=extra_fields,
 		)
-	
+
 	def _parse_date(self, date_str: str):
 		"""Parse a date string from the API into a date object."""
 		from datetime import datetime
+
 		if not date_str:
 			return None
 		try:
 			# Handle YYYY-MM-DD format
-			return datetime.strptime(date_str, '%Y-%m-%d').date()
+			return datetime.strptime(date_str, "%Y-%m-%d").date()
 		except ValueError:
 			try:
 				# Handle YYYY-MM format
-				return datetime.strptime(date_str, '%Y-%m').date()
+				return datetime.strptime(date_str, "%Y-%m").date()
 			except ValueError:
 				try:
 					# Handle YYYY format
-					return datetime.strptime(date_str, '%Y').date()
+					return datetime.strptime(date_str, "%Y").date()
 				except ValueError:
 					return None
 
@@ -692,7 +762,7 @@ class EUTrialParser:
 	handles ClinicalTrials.gov data.
 	"""
 
-	SOURCE_REGISTER = 'EU CTIS'
+	SOURCE_REGISTER = "EU CTIS"
 
 	def extract_identifiers(self, link: str, guid: str) -> dict:
 		"""Extract registry identifiers from an RSS entry's link and guid.
@@ -701,9 +771,14 @@ class EUTrialParser:
 		when the entry points at ClinicalTrials.gov.
 		"""
 		import re
-		eudract = re.search(r'(?:eudract_number%3A|EUDRACT=)(\d{4}-\d{6}-\d{2}-\d{2})', link, re.IGNORECASE)
-		euct = re.search(r'(?:EUCT=)(\d{4}-\d{6}-\d{2}-\d{2})', link, re.IGNORECASE)
-		nct = guid if 'clinicaltrials.gov' in link else None
+
+		eudract = re.search(
+			r"(?:eudract_number%3A|EUDRACT=)(\d{4}-\d{6}-\d{2}-\d{2})",
+			link,
+			re.IGNORECASE,
+		)
+		euct = re.search(r"(?:EUCT=)(\d{4}-\d{6}-\d{2}-\d{2})", link, re.IGNORECASE)
+		nct = guid if "clinicaltrials.gov" in link else None
 		return {
 			"eudract": eudract.group(1) if eudract else None,
 			"nct": nct,
@@ -724,40 +799,42 @@ class EUTrialParser:
 			if not match:
 				return None
 			# Strip any leading colon/whitespace left over from the label
-			return match.group(1).lstrip(': ').strip()
+			return match.group(1).lstrip(": ").strip()
 
-		therapeutic_areas = _extract(r'Therapeutic Areas[^>]*>([^<]+)')
-		country_status = _extract(r'Status in each country[^>]*>([^<]+)')
-		trial_region = _extract(r'Trial region[^>]*>([^<]+)')
+		therapeutic_areas = _extract(r"Therapeutic Areas[^>]*>([^<]+)")
+		country_status = _extract(r"Status in each country[^>]*>([^<]+)")
+		trial_region = _extract(r"Trial region[^>]*>([^<]+)")
 		# Only commit to a boolean when the feed explicitly states it. If the line is
 		# absent, leave results_posted as None so the non-destructive update guard skips
 		# it and doesn't blank a value set by another source (e.g. ClinicalTrials.gov).
-		results_posted_str = _extract(r'Results posted[^>]*>([^<]+)')
-		results_posted = (results_posted_str.lower() == 'yes') if results_posted_str else None
-		medical_conditions = _extract(r'Medical conditions[^>]*>([^<]+)')
-		overall_status = _extract(r'Overall trial status[^>]*>([^<]+)')
-		primary_end_point = _extract(r'Primary end point[^>]*>([^<]+)')
-		secondary_end_point = _extract(r'Secondary end point[^>]*>([^<]+)')
-		overall_decision_date_str = _extract(r'Overall decision date[^>]*>([^<]+)')
-		countries_decision_date_str = _extract(r'Countries decision date[^>]*>([^<]+)')
-		sponsor = _extract(r'Sponsor[^>]*>([^<]+)')
-		sponsor_type = _extract(r'Sponsor type[^>]*>([^<]+)')
-		phase = _extract(r'Trial phase[^>]*>([^<]+)')
-		gender = _extract(r'Gender of participants[^>]*>([^<]+)')
-		target_size = _extract(r'Planned number of participants[^>]*>([^<]+)')
-		intervention = _extract(r'Trial product[^>]*>([^<]+)')
+		results_posted_str = _extract(r"Results posted[^>]*>([^<]+)")
+		results_posted = (
+			(results_posted_str.lower() == "yes") if results_posted_str else None
+		)
+		medical_conditions = _extract(r"Medical conditions[^>]*>([^<]+)")
+		overall_status = _extract(r"Overall trial status[^>]*>([^<]+)")
+		primary_end_point = _extract(r"Primary end point[^>]*>([^<]+)")
+		secondary_end_point = _extract(r"Secondary end point[^>]*>([^<]+)")
+		overall_decision_date_str = _extract(r"Overall decision date[^>]*>([^<]+)")
+		countries_decision_date_str = _extract(r"Countries decision date[^>]*>([^<]+)")
+		sponsor = _extract(r"Sponsor[^>]*>([^<]+)")
+		sponsor_type = _extract(r"Sponsor type[^>]*>([^<]+)")
+		phase = _extract(r"Trial phase[^>]*>([^<]+)")
+		gender = _extract(r"Gender of participants[^>]*>([^<]+)")
+		target_size = _extract(r"Planned number of participants[^>]*>([^<]+)")
+		intervention = _extract(r"Trial product[^>]*>([^<]+)")
 
 		# "Age of participants" looks like "18-64 years"; split into min/max.
 		age_min = age_max = None
-		age_raw = _extract(r'Age of participants[^>]*>([^<]+)')
+		age_raw = _extract(r"Age of participants[^>]*>([^<]+)")
 		if age_raw:
-			age_match = re.search(r'(\d+)\s*-\s*(\d+)', age_raw)
+			age_match = re.search(r"(\d+)\s*-\s*(\d+)", age_raw)
 			if age_match:
 				age_min, age_max = age_match.group(1), age_match.group(2)
 
 		# "Last updated date" is day-first (DD/MM/YYYY).
 		last_refreshed_on = None
-		last_updated_str = _extract(r'Last updated date[^>]*>([^<]+)')
+		last_updated_str = _extract(r"Last updated date[^>]*>([^<]+)")
 		if last_updated_str:
 			try:
 				last_refreshed_on = parse(last_updated_str, dayfirst=True).date()
@@ -769,41 +846,47 @@ class EUTrialParser:
 		overall_decision_date = None
 		if overall_decision_date_str:
 			try:
-				overall_decision_date = parse(overall_decision_date_str, dayfirst=True).date()
+				overall_decision_date = parse(
+					overall_decision_date_str, dayfirst=True
+				).date()
 			except (ValueError, TypeError):
 				pass
 
 		countries_decision_date = {}
 		if countries_decision_date_str:
-			for chunk in re.split(r'[;,]', countries_decision_date_str):
-				chunk_parts = chunk.strip().split(':')
+			for chunk in re.split(r"[;,]", countries_decision_date_str):
+				chunk_parts = chunk.strip().split(":")
 				if len(chunk_parts) == 2:
 					country_code = chunk_parts[0].strip()
 					date_val = chunk_parts[1].strip()
 					try:
-						countries_decision_date[country_code] = str(parse(date_val, dayfirst=True).date())
+						countries_decision_date[country_code] = str(
+							parse(date_val, dayfirst=True).date()
+						)
 					except (ValueError, TypeError):
 						countries_decision_date[country_code] = date_val
 
 		return {
-			'source_register': self.SOURCE_REGISTER,
-			'condition': medical_conditions,
-			'recruitment_status': overall_status,
-			'primary_sponsor': sponsor,
-			'primary_outcome': primary_end_point,
-			'secondary_outcome': secondary_end_point,
-			'therapeutic_areas': therapeutic_areas,
-			'country_status': country_status,
-			'trial_region': trial_region,
-			'results_posted': results_posted,
-			'overall_decision_date': overall_decision_date,
-			'countries_decision_date': countries_decision_date if countries_decision_date else None,
-			'sponsor_type': sponsor_type,
-			'phase': phase,
-			'intervention': intervention,
-			'inclusion_agemin': age_min,
-			'inclusion_agemax': age_max,
-			'inclusion_gender': gender,
-			'target_size': target_size,
-			'last_refreshed_on': last_refreshed_on,
+			"source_register": self.SOURCE_REGISTER,
+			"condition": medical_conditions,
+			"recruitment_status": overall_status,
+			"primary_sponsor": sponsor,
+			"primary_outcome": primary_end_point,
+			"secondary_outcome": secondary_end_point,
+			"therapeutic_areas": therapeutic_areas,
+			"country_status": country_status,
+			"trial_region": trial_region,
+			"results_posted": results_posted,
+			"overall_decision_date": overall_decision_date,
+			"countries_decision_date": countries_decision_date
+			if countries_decision_date
+			else None,
+			"sponsor_type": sponsor_type,
+			"phase": phase,
+			"intervention": intervention,
+			"inclusion_agemin": age_min,
+			"inclusion_agemax": age_max,
+			"inclusion_gender": gender,
+			"target_size": target_size,
+			"last_refreshed_on": last_refreshed_on,
 		}

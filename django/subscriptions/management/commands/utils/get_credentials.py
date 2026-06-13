@@ -6,7 +6,7 @@ from django.contrib.sites.models import Site
 from gregory.models import OrganizationCredentials, OrganizationSite
 from sitesettings.models import CustomSetting
 
-_SCHEME_RE = re.compile(r'^https?://', re.IGNORECASE)
+_SCHEME_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 
 def build_unsubscribe_base_url(site, customsettings=None):
@@ -17,17 +17,17 @@ def build_unsubscribe_base_url(site, customsettings=None):
 	Strips any scheme prefix an admin may have pasted into api_domain (e.g.
 	"https://api.example.com" → "api.example.com") to prevent double-scheme URLs.
 	"""
-	raw = ''
+	raw = ""
 	if customsettings and customsettings.api_domain:
 		raw = customsettings.api_domain.strip()
 	if not raw:
-		raw = (site.domain.strip() if site and site.domain else '')
+		raw = site.domain.strip() if site and site.domain else ""
 
-	domain = _SCHEME_RE.sub('', raw).rstrip('/')
+	domain = _SCHEME_RE.sub("", raw).rstrip("/")
 	if not domain:
-		return ''
+		return ""
 
-	scheme = 'http' if domain in ('localhost', '127.0.0.1') else 'https'
+	scheme = "http" if domain in ("localhost", "127.0.0.1") else "https"
 	return f"{scheme}://{domain}"
 
 
@@ -69,8 +69,13 @@ def get_postmark_credentials(custom_settings=None, organization=None):
 	"""
 	# Try site-level credentials
 	if custom_settings is not None:
-		if getattr(custom_settings, 'postmark_api_token', None) and getattr(custom_settings, 'postmark_api_url', None):
-			return (custom_settings.postmark_api_token, custom_settings.postmark_api_url)
+		if getattr(custom_settings, "postmark_api_token", None) and getattr(
+			custom_settings, "postmark_api_url", None
+		):
+			return (
+				custom_settings.postmark_api_token,
+				custom_settings.postmark_api_url,
+			)
 
 	# Try organization-level credentials
 	if organization is not None:
@@ -83,8 +88,8 @@ def get_postmark_credentials(custom_settings=None, organization=None):
 
 	# Fall back to Django settings
 	return (
-		getattr(settings, 'EMAIL_POSTMARK_API_KEY', None),
-		getattr(settings, 'EMAIL_POSTMARK_API_URL', None),
+		getattr(settings, "EMAIL_POSTMARK_API_KEY", None),
+		getattr(settings, "EMAIL_POSTMARK_API_URL", None),
 	)
 
 
@@ -106,10 +111,9 @@ def get_site_and_settings(team, list_obj=None):
 		site = list_obj.site
 	else:
 		org_site = (
-			OrganizationSite.objects
-			.filter(organization=team.organization)
-			.order_by('-is_default', 'id')
-			.select_related('site')
+			OrganizationSite.objects.filter(organization=team.organization)
+			.order_by("-is_default", "id")
+			.select_related("site")
 			.first()
 		)
 		if org_site:

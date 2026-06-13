@@ -24,7 +24,7 @@ from gregory.models import Trials
 
 
 # Pattern to extract an NCT ID from a ClinicalTrials.gov URL
-_NCT_FROM_LINK_RE = re.compile(r'/(NCT\d{8})', re.IGNORECASE)
+_NCT_FROM_LINK_RE = re.compile(r"/(NCT\d{8})", re.IGNORECASE)
 
 
 def _nct_from_link(link: str | None) -> str | None:
@@ -37,28 +37,28 @@ def _nct_from_link(link: str | None) -> str | None:
 
 class Command(BaseCommand):
 	help = (
-		'Read-only audit: list Trials rows with suspected link/NCT mismatches '
-		'and (optionally) per-registry-key duplicate values.'
+		"Read-only audit: list Trials rows with suspected link/NCT mismatches "
+		"and (optionally) per-registry-key duplicate values."
 	)
 
 	def add_arguments(self, parser):
 		parser.add_argument(
-			'--check-dupes',
-			action='store_true',
+			"--check-dupes",
+			action="store_true",
 			default=False,
-			help='Also scan for rows that would collide under the new partial unique indexes.',
+			help="Also scan for rows that would collide under the new partial unique indexes.",
 		)
 		parser.add_argument(
-			'--json',
-			dest='output_json',
-			action='store_true',
+			"--json",
+			dest="output_json",
+			action="store_true",
 			default=False,
-			help='Emit results as a JSON object instead of human-readable text.',
+			help="Emit results as a JSON object instead of human-readable text.",
 		)
 
 	def handle(self, *args, **options):
-		check_dupes = options['check_dupes']
-		output_json = options['output_json']
+		check_dupes = options["check_dupes"]
+		output_json = options["output_json"]
 
 		report = {}
 
@@ -70,29 +70,31 @@ class Command(BaseCommand):
 		# Narrow to rows that have an NCT and an NCT-looking link, so we scan only
 		# candidate rows in Python rather than all ~19k trials.
 		nct_rows = Trials.objects.filter(
-			identifiers__has_key='nct',
-			link__icontains='NCT',
-		).values('trial_id', 'link', 'identifiers')
+			identifiers__has_key="nct",
+			link__icontains="NCT",
+		).values("trial_id", "link", "identifiers")
 
 		for row in nct_rows:
-			stored_nct = (row['identifiers'].get('nct') or '').strip().upper()
-			link_nct = _nct_from_link(row['link'])
+			stored_nct = (row["identifiers"].get("nct") or "").strip().upper()
+			link_nct = _nct_from_link(row["link"])
 			if link_nct and stored_nct and link_nct != stored_nct:
-				mismatches.append({
-					'trial_id': row['trial_id'],
-					'identifiers_nct': stored_nct,
-					'link_nct': link_nct,
-					'link': row['link'],
-				})
+				mismatches.append(
+					{
+						"trial_id": row["trial_id"],
+						"identifiers_nct": stored_nct,
+						"link_nct": link_nct,
+						"link": row["link"],
+					}
+				)
 
-		report['link_nct_mismatches'] = mismatches
+		report["link_nct_mismatches"] = mismatches
 
 		# ------------------------------------------------------------------
 		# 2. Per-registry duplicate scan (pre-flight for the migration).
 		# ------------------------------------------------------------------
 		dupes_report = {}
 		if check_dupes:
-			registry_keys = ['nct', 'euctr', 'eudract', 'ctis']
+			registry_keys = ["nct", "euctr", "eudract", "ctis"]
 			for key in registry_keys:
 				with connection.cursor() as cursor:
 					cursor.execute(
@@ -103,12 +105,13 @@ class Command(BaseCommand):
 						GROUP BY upper(identifiers->>'%s')
 						HAVING count(*) > 1
 						ORDER BY cnt DESC
-						""" % (key, key, key, key)
+						"""
+						% (key, key, key, key)
 					)
 					rows = cursor.fetchall()
 				if rows:
-					dupes_report[key] = [{'value': r[0], 'count': r[1]} for r in rows]
-			report['duplicate_registry_ids'] = dupes_report
+					dupes_report[key] = [{"value": r[0], "count": r[1]} for r in rows]
+			report["duplicate_registry_ids"] = dupes_report
 
 		# ------------------------------------------------------------------
 		# Output
@@ -118,10 +121,12 @@ class Command(BaseCommand):
 			return
 
 		# Human-readable
-		self.stdout.write(self.style.MIGRATE_HEADING('\n=== Link / NCT mismatch ==='))
+		self.stdout.write(self.style.MIGRATE_HEADING("\n=== Link / NCT mismatch ==="))
 		if mismatches:
 			self.stdout.write(
-				self.style.WARNING(f'{len(mismatches)} row(s) where link NCT ≠ identifiers[\'nct\']:')
+				self.style.WARNING(
+					f"{len(mismatches)} row(s) where link NCT ≠ identifiers['nct']:"
+				)
 			)
 			for m in mismatches:
 				self.stdout.write(
@@ -131,18 +136,20 @@ class Command(BaseCommand):
 					f"link={m['link']}"
 				)
 		else:
-			self.stdout.write(self.style.SUCCESS('No link/NCT mismatches found.'))
+			self.stdout.write(self.style.SUCCESS("No link/NCT mismatches found."))
 
 		if check_dupes:
-			self.stdout.write(self.style.MIGRATE_HEADING('\n=== Duplicate registry IDs ==='))
+			self.stdout.write(
+				self.style.MIGRATE_HEADING("\n=== Duplicate registry IDs ===")
+			)
 			if dupes_report:
 				for key, entries in dupes_report.items():
-					self.stdout.write(self.style.WARNING(f'{key}:'))
+					self.stdout.write(self.style.WARNING(f"{key}:"))
 					for e in entries:
 						self.stdout.write(f"  {e['value']}  ({e['count']} rows)")
 			else:
 				self.stdout.write(
 					self.style.SUCCESS(
-						'No duplicate registry IDs found — safe to apply the partial unique indexes.'
+						"No duplicate registry IDs found — safe to apply the partial unique indexes."
 					)
 				)

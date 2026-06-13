@@ -1,6 +1,7 @@
 """
 Tests for the duplicate_announcements admin bulk action on AnnouncementAdmin.
 """
+
 from django.contrib.auth.models import User, Permission
 from django.contrib.messages import get_messages
 from django.test import TestCase, Client
@@ -15,15 +16,19 @@ from subscriptions.models import (
 	Subscribers,
 )
 
-CHANGELIST_URL = reverse('admin:subscriptions_announcement_changelist')
+CHANGELIST_URL = reverse("admin:subscriptions_announcement_changelist")
 
 
 def _post_action(client, pks):
 	"""POST the duplicate action to the changelist for the given PKs."""
-	return client.post(CHANGELIST_URL, {
-		'action': 'duplicate_announcements',
-		'_selected_action': [str(pk) for pk in pks],
-	}, follow=False)
+	return client.post(
+		CHANGELIST_URL,
+		{
+			"action": "duplicate_announcements",
+			"_selected_action": [str(pk) for pk in pks],
+		},
+		follow=False,
+	)
 
 
 class _BaseTest(TestCase):
@@ -31,22 +36,24 @@ class _BaseTest(TestCase):
 
 	def setUp(self):
 		self.superuser = User.objects.create_superuser(
-			username='super', password='pass', email='super@example.com'
+			username="super", password="pass", email="super@example.com"
 		)
-		self.org = Organization.objects.create(name='Test Org')
-		self.team = Team.objects.create(organization=self.org, name='Team A', slug='team-a')
-		self.lst = Lists.objects.create(list_name='Weekly', team=self.team)
+		self.org = Organization.objects.create(name="Test Org")
+		self.team = Team.objects.create(
+			organization=self.org, name="Team A", slug="team-a"
+		)
+		self.lst = Lists.objects.create(list_name="Weekly", team=self.team)
 		self.client = Client()
 		self.client.force_login(self.superuser)
 
-	def _make_source(self, status='sent', **kwargs):
+	def _make_source(self, status="sent", **kwargs):
 		defaults = dict(
-			subject='Original Subject',
-			header_title='Original Title',
-			header_tagline='Original Tagline',
+			subject="Original Subject",
+			header_title="Original Title",
+			header_tagline="Original Tagline",
 			show_header_tagline=True,
-			preheader_text='Original preheader',
-			body='<p>Original body</p>',
+			preheader_text="Original preheader",
+			body="<p>Original body</p>",
 			status=status,
 			organization=self.org,
 		)
@@ -61,33 +68,33 @@ class TestDuplicateCopiesContentFields(_BaseTest):
 
 	def test_duplicate_copies_content_fields(self):
 		source = self._make_source(
-			subject='Special Subject',
-			header_title='Header Title',
-			header_tagline='Header Tagline',
+			subject="Special Subject",
+			header_title="Header Title",
+			header_tagline="Header Tagline",
 			show_header_tagline=False,
-			preheader_text='Preheader text here',
-			body='<p>Rich <strong>HTML</strong> body</p>',
+			preheader_text="Preheader text here",
+			body="<p>Rich <strong>HTML</strong> body</p>",
 		)
 		_post_action(self.client, [source.pk])
 
 		copy = Announcement.objects.exclude(pk=source.pk).get()
-		self.assertEqual(copy.subject, 'Special Subject')
-		self.assertEqual(copy.header_title, 'Header Title')
-		self.assertEqual(copy.header_tagline, 'Header Tagline')
+		self.assertEqual(copy.subject, "Special Subject")
+		self.assertEqual(copy.header_title, "Header Title")
+		self.assertEqual(copy.header_tagline, "Header Tagline")
 		self.assertEqual(copy.show_header_tagline, False)
-		self.assertEqual(copy.preheader_text, 'Preheader text here')
-		self.assertEqual(copy.body, '<p>Rich <strong>HTML</strong> body</p>')
+		self.assertEqual(copy.preheader_text, "Preheader text here")
+		self.assertEqual(copy.body, "<p>Rich <strong>HTML</strong> body</p>")
 
 
 class TestDuplicateResetsSendState(_BaseTest):
 	"""The copy has clean send-state fields."""
 
 	def test_duplicate_resets_send_state(self):
-		source = self._make_source(status='sent')
+		source = self._make_source(status="sent")
 		_post_action(self.client, [source.pk])
 
 		copy = Announcement.objects.exclude(pk=source.pk).get()
-		self.assertEqual(copy.status, 'draft')
+		self.assertEqual(copy.status, "draft")
 		self.assertIsNone(copy.sent_at)
 		self.assertEqual(copy.recipients_count, 0)
 		self.assertEqual(copy.failures_count, 0)
@@ -97,11 +104,11 @@ class TestDuplicateSetsCreatedByToActor(_BaseTest):
 	"""created_by on the copy is the user who ran the action, not the source author."""
 
 	def test_duplicate_sets_created_by_to_actor(self):
-		user_a = User.objects.create_user(username='user_a', password='pass')
+		user_a = User.objects.create_user(username="user_a", password="pass")
 		source = self._make_source(created_by=user_a)
 
 		user_b = User.objects.create_superuser(
-			username='user_b', password='pass', email='b@example.com'
+			username="user_b", password="pass", email="b@example.com"
 		)
 		self.client.force_login(user_b)
 		_post_action(self.client, [source.pk])
@@ -114,7 +121,7 @@ class TestDuplicateHasNoLists(_BaseTest):
 	"""The copy's lists M2M is empty."""
 
 	def test_duplicate_has_no_lists(self):
-		lst2 = Lists.objects.create(list_name='Another List', team=self.team)
+		lst2 = Lists.objects.create(list_name="Another List", team=self.team)
 		source = self._make_source()
 		source.lists.add(lst2)  # source now has 2 lists
 
@@ -129,9 +136,9 @@ class TestDuplicateDoesNotCopyRecipients(_BaseTest):
 
 	def test_duplicate_does_not_copy_recipients(self):
 		sub = Subscribers.objects.create(
-			first_name='Alice', last_name='Smith', email='alice@example.com'
+			first_name="Alice", last_name="Smith", email="alice@example.com"
 		)
-		source = self._make_source(status='sent')
+		source = self._make_source(status="sent")
 		recipient = AnnouncementRecipient.objects.create(
 			announcement=source,
 			subscriber=sub,
@@ -153,7 +160,7 @@ class TestDuplicateSkipsSendingStatus(_BaseTest):
 	"""Sources with status='sending' are skipped and a warning is shown."""
 
 	def test_duplicate_skips_sending_status(self):
-		source = self._make_source(status='sending', subject='In-Flight Send')
+		source = self._make_source(status="sending", subject="In-Flight Send")
 		response = _post_action(self.client, [source.pk])
 
 		# No new announcement created
@@ -161,7 +168,7 @@ class TestDuplicateSkipsSendingStatus(_BaseTest):
 
 		msgs = [str(m) for m in get_messages(response.wsgi_request)]
 		self.assertTrue(
-			any('currently sending' in m for m in msgs),
+			any("currently sending" in m for m in msgs),
 			f"Expected 'currently sending' warning, got: {msgs}",
 		)
 
@@ -171,26 +178,33 @@ class TestDuplicateOrgScopeEnforcement(TestCase):
 
 	def setUp(self):
 		# Org A — owns the source announcement
-		org_a = Organization.objects.create(name='Org A')
-		team_a = Team.objects.create(organization=org_a, name='Team A', slug='team-a-dup')
-		self.lst_a = Lists.objects.create(list_name='List A', team=team_a)
+		org_a = Organization.objects.create(name="Org A")
+		team_a = Team.objects.create(
+			organization=org_a, name="Team A", slug="team-a-dup"
+		)
+		self.lst_a = Lists.objects.create(list_name="List A", team=team_a)
 
 		# Org B — the acting user belongs only to this org
-		self.org_b = Organization.objects.create(name='Org B')
-		team_b = Team.objects.create(organization=self.org_b, name='Team B', slug='team-b-dup')
-		self.lst_b = Lists.objects.create(list_name='List B', team=team_b)
+		self.org_b = Organization.objects.create(name="Org B")
+		team_b = Team.objects.create(
+			organization=self.org_b, name="Team B", slug="team-b-dup"
+		)
+		self.lst_b = Lists.objects.create(list_name="List B", team=team_b)
 
 		# Non-superuser staff who belongs only to org B
 		self.user_b = User.objects.create_user(
-			username='user_b_auth', password='pass', email='user_b_auth@example.com',
+			username="user_b_auth",
+			password="pass",
+			email="user_b_auth@example.com",
 			is_staff=True,
 		)
 		self.user_b.user_permissions.add(
-			Permission.objects.get(codename='add_announcement'),
-			Permission.objects.get(codename='change_announcement'),
-			Permission.objects.get(codename='view_announcement'),
+			Permission.objects.get(codename="add_announcement"),
+			Permission.objects.get(codename="change_announcement"),
+			Permission.objects.get(codename="view_announcement"),
 		)
 		from organizations.models import OrganizationUser
+
 		OrganizationUser.objects.create(organization=self.org_b, user=self.user_b)
 
 		self.client = Client()
@@ -200,7 +214,9 @@ class TestDuplicateOrgScopeEnforcement(TestCase):
 		"""Submitting the PK of a source the user cannot see is silently ignored
 		by Django's bulk-action machinery — no copy is created."""
 		source_a = Announcement.objects.create(
-			subject='Org A Only', body='<p>content</p>', status='sent',
+			subject="Org A Only",
+			body="<p>content</p>",
+			status="sent",
 			organization=self.lst_a.team.organization,
 		)
 		source_a.lists.add(self.lst_a)  # only org A — invisible to user_b
@@ -213,7 +229,9 @@ class TestDuplicateOrgScopeEnforcement(TestCase):
 		"""A non-superuser can duplicate an announcement whose list belongs to
 		their organisation — the copy is created without a permission warning."""
 		source_b = Announcement.objects.create(
-			subject='Org B Source', body='<p>body</p>', status='sent',
+			subject="Org B Source",
+			body="<p>body</p>",
+			status="sent",
 			organization=self.org_b,
 		)
 		source_b.lists.add(self.lst_b)  # org B list — visible to user_b
@@ -224,7 +242,7 @@ class TestDuplicateOrgScopeEnforcement(TestCase):
 		self.assertEqual(Announcement.objects.count(), count_before + 1)
 		msgs = [str(m) for m in get_messages(response.wsgi_request)]
 		self.assertFalse(
-			any('permission' in m.lower() for m in msgs),
+			any("permission" in m.lower() for m in msgs),
 			f"Unexpected permission warning: {msgs}",
 		)
 
@@ -234,24 +252,31 @@ class TestDuplicateVisibilityForNonSuperuser(TestCase):
 	This tests the resolution of the 'Known consequence' from the duplicate spec."""
 
 	def setUp(self):
-		self.org = Organization.objects.create(name='Vis Org')
-		team = Team.objects.create(organization=self.org, name='Vis Team', slug='vis-team')
-		self.lst = Lists.objects.create(list_name='Vis List', team=team)
+		self.org = Organization.objects.create(name="Vis Org")
+		team = Team.objects.create(
+			organization=self.org, name="Vis Team", slug="vis-team"
+		)
+		self.lst = Lists.objects.create(list_name="Vis List", team=team)
 
 		self.staff_user = User.objects.create_user(
-			username='staff_vis', password='pass', email='staff_vis@example.com',
+			username="staff_vis",
+			password="pass",
+			email="staff_vis@example.com",
 			is_staff=True,
 		)
 		self.staff_user.user_permissions.add(
-			Permission.objects.get(codename='add_announcement'),
-			Permission.objects.get(codename='change_announcement'),
-			Permission.objects.get(codename='view_announcement'),
+			Permission.objects.get(codename="add_announcement"),
+			Permission.objects.get(codename="change_announcement"),
+			Permission.objects.get(codename="view_announcement"),
 		)
 		from organizations.models import OrganizationUser
+
 		OrganizationUser.objects.create(organization=self.org, user=self.staff_user)
 
 		self.source = Announcement.objects.create(
-			subject='Vis Source', body='<p>body</p>', status='sent',
+			subject="Vis Source",
+			body="<p>body</p>",
+			status="sent",
 			organization=self.org,
 		)
 		self.source.lists.add(self.lst)
@@ -267,15 +292,19 @@ class TestDuplicateVisibilityForNonSuperuser(TestCase):
 
 		copy = Announcement.objects.exclude(pk=self.source.pk).get()
 		self.assertEqual(copy.lists.count(), 0, "copy should have no lists")
-		self.assertEqual(copy.organization, self.org, "copy should inherit org from source")
+		self.assertEqual(
+			copy.organization, self.org, "copy should inherit org from source"
+		)
 
 		response = self.client.get(CHANGELIST_URL)
 		self.assertEqual(response.status_code, 200)
-		result_pks = set(
-			response.context['cl'].queryset.values_list('pk', flat=True)
+		result_pks = set(response.context["cl"].queryset.values_list("pk", flat=True))
+		self.assertIn(
+			self.source.pk, result_pks, "original source should still be visible"
 		)
-		self.assertIn(self.source.pk, result_pks, "original source should still be visible")
-		self.assertIn(copy.pk, result_pks, "list-less copy should now appear for org-scoped user")
+		self.assertIn(
+			copy.pk, result_pks, "list-less copy should now appear for org-scoped user"
+		)
 
 
 class TestDuplicateSingleRedirectsToChangePage(_BaseTest):
@@ -286,7 +315,9 @@ class TestDuplicateSingleRedirectsToChangePage(_BaseTest):
 		response = _post_action(self.client, [source.pk])
 
 		copy = Announcement.objects.exclude(pk=source.pk).get()
-		expected_url = reverse('admin:subscriptions_announcement_change', args=[copy.pk])
+		expected_url = reverse(
+			"admin:subscriptions_announcement_change", args=[copy.pk]
+		)
 		self.assertRedirects(response, expected_url, fetch_redirect_response=False)
 
 
@@ -294,9 +325,11 @@ class TestDuplicateMultipleStaysOnChangelist(_BaseTest):
 	"""Selecting two sources stays on the changelist with a success message."""
 
 	def test_duplicate_multiple_stays_on_changelist(self):
-		source1 = self._make_source(subject='Source 1')
+		source1 = self._make_source(subject="Source 1")
 		source2 = Announcement.objects.create(
-			subject='Source 2', body='<p>body 2</p>', status='sent',
+			subject="Source 2",
+			body="<p>body 2</p>",
+			status="sent",
 			organization=self.org,
 		)
 		source2.lists.add(self.lst)
@@ -305,11 +338,11 @@ class TestDuplicateMultipleStaysOnChangelist(_BaseTest):
 
 		# Should redirect back to changelist (302 with changelist as location)
 		self.assertEqual(response.status_code, 302)
-		self.assertIn('announcement', response['Location'])
+		self.assertIn("announcement", response["Location"])
 
 		msgs = [str(m) for m in get_messages(response.wsgi_request)]
 		self.assertTrue(
-			any('Duplicated 2 announcements as drafts' in m for m in msgs),
+			any("Duplicated 2 announcements as drafts" in m for m in msgs),
 			f"Expected success message, got: {msgs}",
 		)
 		self.assertEqual(Announcement.objects.count(), 4)  # 2 sources + 2 copies
@@ -320,11 +353,11 @@ class TestDuplicateDoesNotModifySource(_BaseTest):
 
 	def test_duplicate_does_not_modify_source(self):
 		sub = Subscribers.objects.create(
-			first_name='Bob', last_name='Jones', email='bob@example.com'
+			first_name="Bob", last_name="Jones", email="bob@example.com"
 		)
 		source = self._make_source(
-			subject='Immutable Source',
-			status='sent',
+			subject="Immutable Source",
+			status="sent",
 		)
 		AnnouncementRecipient.objects.create(
 			announcement=source,
@@ -334,20 +367,20 @@ class TestDuplicateDoesNotModifySource(_BaseTest):
 		)
 
 		# Snapshot before action
-		lists_before = list(source.lists.values_list('pk', flat=True))
+		lists_before = list(source.lists.values_list("pk", flat=True))
 		recipients_count_before = source.recipients.count()
 
 		_post_action(self.client, [source.pk])
 
 		# Reload from DB
 		source.refresh_from_db()
-		self.assertEqual(source.subject, 'Immutable Source')
-		self.assertEqual(source.status, 'sent')
+		self.assertEqual(source.subject, "Immutable Source")
+		self.assertEqual(source.status, "sent")
 		self.assertIsNone(source.sent_at)  # was None in _make_source
 		self.assertEqual(source.recipients_count, 0)  # field default, unchanged
 		self.assertEqual(source.failures_count, 0)
 		self.assertEqual(
-			list(source.lists.values_list('pk', flat=True)),
+			list(source.lists.values_list("pk", flat=True)),
 			lists_before,
 		)
 		self.assertEqual(source.recipients.count(), recipients_count_before)
@@ -357,24 +390,28 @@ class TestDuplicateWithoutAddPermissionIsBlocked(TestCase):
 	"""A user without add_announcement permission cannot run the action."""
 
 	def setUp(self):
-		org = Organization.objects.create(name='Perm Org')
-		team = Team.objects.create(organization=org, name='Perm Team', slug='perm-team')
-		self.lst = Lists.objects.create(list_name='Perm List', team=team)
+		org = Organization.objects.create(name="Perm Org")
+		team = Team.objects.create(organization=org, name="Perm Team", slug="perm-team")
+		self.lst = Lists.objects.create(list_name="Perm List", team=team)
 
 		self.source = Announcement.objects.create(
-			subject='Locked Source', body='<p>body</p>', status='sent',
+			subject="Locked Source",
+			body="<p>body</p>",
+			status="sent",
 			organization=org,
 		)
 		self.source.lists.add(self.lst)
 
 		# User with view+change but NOT add permission
 		self.user = User.objects.create_user(
-			username='no_add', password='pass', email='no_add@example.com',
+			username="no_add",
+			password="pass",
+			email="no_add@example.com",
 			is_staff=True,
 		)
 		self.user.user_permissions.add(
-			Permission.objects.get(codename='view_announcement'),
-			Permission.objects.get(codename='change_announcement'),
+			Permission.objects.get(codename="view_announcement"),
+			Permission.objects.get(codename="change_announcement"),
 		)
 		self.client = Client()
 		self.client.force_login(self.user)

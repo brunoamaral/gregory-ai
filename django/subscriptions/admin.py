@@ -13,10 +13,20 @@ from django.contrib import messages
 from datetime import timedelta
 from django import forms
 from django.forms import BaseInlineFormSet
-from .models import Subscribers, Lists, FailedNotification, ListSubscription, SubscriberSiteProfile, Announcement, AnnouncementRecipient
+from .models import (
+	Subscribers,
+	Lists,
+	FailedNotification,
+	ListSubscription,
+	SubscriberSiteProfile,
+	Announcement,
+	AnnouncementRecipient,
+)
 from .forms import ListsAdminForm, AnnouncementAdminForm
 from gregory.models import Team
-from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url
+from subscriptions.management.commands.utils.get_credentials import (
+	build_unsubscribe_base_url,
+)
 from subscriptions.utils.render_email_body import (
 	sanitize_announcement_html,
 	render_announcement_html,
@@ -28,20 +38,35 @@ from subscriptions.utils.render_email_body import (
 class SubscriberSiteProfileInline(admin.TabularInline):
 	model = SubscriberSiteProfile
 	extra = 0
-	fields = ['site', 'profile', 'created_at', 'updated_at']
-	readonly_fields = ['created_at', 'updated_at']
-	verbose_name = 'Site Profile'
-	verbose_name_plural = 'Site Profiles'
+	fields = ["site", "profile", "created_at", "updated_at"]
+	readonly_fields = ["created_at", "updated_at"]
+	verbose_name = "Site Profile"
+	verbose_name_plural = "Site Profiles"
 
 
 class ListSubscriptionInline(admin.TabularInline):
 	"""Shows which lists this subscriber belongs to, with consent metadata."""
+
 	model = ListSubscription
 	extra = 0
-	fields = ['list', 'is_active', 'consent_method', 'consent_source_site', 'consent_ip', 'subscribed_at', 'unsubscribed_at']
-	readonly_fields = ['consent_ip', 'consent_source_site', 'consent_method', 'subscribed_at', 'unsubscribed_at']
-	verbose_name = 'List Subscription'
-	verbose_name_plural = 'List Subscriptions'
+	fields = [
+		"list",
+		"is_active",
+		"consent_method",
+		"consent_source_site",
+		"consent_ip",
+		"subscribed_at",
+		"unsubscribed_at",
+	]
+	readonly_fields = [
+		"consent_ip",
+		"consent_source_site",
+		"consent_method",
+		"subscribed_at",
+		"unsubscribed_at",
+	]
+	verbose_name = "List Subscription"
+	verbose_name_plural = "List Subscriptions"
 
 
 class FailedNotificationFormSet(BaseInlineFormSet):
@@ -52,21 +77,23 @@ class FailedNotificationFormSet(BaseInlineFormSet):
 	error that would occur if the slice were applied in the inline's own
 	get_queryset().
 	"""
+
 	def get_queryset(self):
-		return super().get_queryset().order_by('-created_at')[:5]
+		return super().get_queryset().order_by("-created_at")[:5]
 
 
 class FailedNotificationInline(admin.TabularInline):
 	"""Shows the last 5 failed notifications for this subscriber (read-only)."""
+
 	model = FailedNotification
 	formset = FailedNotificationFormSet
 	extra = 0
 	max_num = 0
 	can_delete = False
-	fields = ['list', 'reason', 'created_at']
-	readonly_fields = ['list', 'reason', 'created_at']
-	verbose_name = 'Failed Notification'
-	verbose_name_plural = 'Last 5 Failed Notifications'
+	fields = ["list", "reason", "created_at"]
+	readonly_fields = ["list", "reason", "created_at"]
+	verbose_name = "Failed Notification"
+	verbose_name_plural = "Last 5 Failed Notifications"
 
 	def has_add_permission(self, request, obj=None):
 		return False
@@ -74,17 +101,19 @@ class FailedNotificationInline(admin.TabularInline):
 
 class SubscriptionListFilter(admin.SimpleListFilter):
 	"""Filter subscribers by the list they are subscribed to."""
-	title = 'list'
-	parameter_name = 'list'
+
+	title = "list"
+	parameter_name = "list"
 
 	def lookups(self, request, model_admin):
 		from gregory.admin import get_user_organizations
+
 		user_orgs = get_user_organizations(request.user)
 		if user_orgs is not None:
 			qs = Lists.objects.filter(team__organization__id__in=user_orgs)
 		else:
 			qs = Lists.objects.all()
-		return qs.values_list('list_id', 'list_name').order_by('list_name')
+		return qs.values_list("list_id", "list_name").order_by("list_name")
 
 	def queryset(self, request, queryset):
 		if self.value():
@@ -107,26 +136,42 @@ class SubscriberAdmin(admin.ModelAdmin):
 	still filter on this flag.) See the Subscribers.active help text and the
 	make_active/make_inactive actions.
 	"""
-	list_display = ['first_name', 'last_name', 'email', 'active', 'list_names', 'number_of_subscriptions', 'created_at']
-	list_filter = ['active', SubscriptionListFilter, 'created_at']
-	search_fields = ['first_name', 'last_name', 'email']
-	actions = ['make_active', 'make_inactive', 'export_csv', 'add_to_list']
-	readonly_fields = ['created_at', 'updated_at', 'unsubscribe_token']
-	inlines = [SubscriberSiteProfileInline, ListSubscriptionInline, FailedNotificationInline]
+
+	list_display = [
+		"first_name",
+		"last_name",
+		"email",
+		"active",
+		"list_names",
+		"number_of_subscriptions",
+		"created_at",
+	]
+	list_filter = ["active", SubscriptionListFilter, "created_at"]
+	search_fields = ["first_name", "last_name", "email"]
+	actions = ["make_active", "make_inactive", "export_csv", "add_to_list"]
+	readonly_fields = ["created_at", "updated_at", "unsubscribe_token"]
+	inlines = [
+		SubscriberSiteProfileInline,
+		ListSubscriptionInline,
+		FailedNotificationInline,
+	]
 
 	def get_queryset(self, request):
 		from gregory.admin import get_user_organizations
+
 		qs = super().get_queryset(request)
 		qs = qs.annotate(
 			active_subscription_count=Count(
-				'list_subscriptions',
+				"list_subscriptions",
 				filter=Q(list_subscriptions__is_active=True),
 				distinct=True,
 			)
-		).prefetch_related('list_subscriptions__list')
+		).prefetch_related("list_subscriptions__list")
 		user_orgs = get_user_organizations(request.user)
 		if user_orgs is not None:
-			qs = qs.filter(list_subscriptions__list__team__organization__id__in=user_orgs).distinct()
+			qs = qs.filter(
+				list_subscriptions__list__team__organization__id__in=user_orgs
+			).distinct()
 		return qs
 
 	def _get_scoped_org_ids(self, request):
@@ -136,9 +181,10 @@ class SubscriberAdmin(admin.ModelAdmin):
 		- Non-superusers: always restricted to their own orgs; ?org= param is ignored.
 		"""
 		from gregory.admin import get_user_organizations
+
 		user_orgs = get_user_organizations(request.user)
 		if request.user.is_superuser:
-			org_param = request.GET.get('org')
+			org_param = request.GET.get("org")
 			if org_param:
 				try:
 					return [int(org_param)]
@@ -150,38 +196,81 @@ class SubscriberAdmin(admin.ModelAdmin):
 	def get_urls(self):
 		urls = super().get_urls()
 		custom_urls = [
-			path('analytics/', self.admin_site.admin_view(self.analytics_view), name='subscriptions_subscribers_analytics'),
-			path('analytics/data/', self.admin_site.admin_view(self.analytics_data), name='subscriptions_subscribers_analytics_data'),
-			path('analytics/list-distribution/', self.admin_site.admin_view(self.analytics_list_distribution), name='subscriptions_subscribers_analytics_list_distribution'),
-			path('analytics/profile-distribution/', self.admin_site.admin_view(self.analytics_profile_distribution), name='subscriptions_subscribers_analytics_profile_distribution'),
-			path('analytics/recent-subscribers/', self.admin_site.admin_view(self.analytics_recent_subscribers), name='subscriptions_subscribers_analytics_recent_subscribers'),
-			path('analytics/recent-unsubscriptions/', self.admin_site.admin_view(self.analytics_recent_unsubscriptions), name='subscriptions_subscribers_analytics_recent_unsubscriptions'),
-			path('analytics/list-activity/', self.admin_site.admin_view(self.analytics_list_activity), name='subscriptions_subscribers_analytics_list_activity'),
-			path('analytics/organisations/', self.admin_site.admin_view(self.analytics_organisations), name='subscriptions_subscribers_analytics_organisations'),
-			path('analytics/teams/', self.admin_site.admin_view(self.analytics_teams), name='subscriptions_subscribers_analytics_teams'),
-			path('analytics/available-lists/', self.admin_site.admin_view(self.analytics_available_lists), name='subscriptions_subscribers_analytics_available_lists'),
+			path(
+				"analytics/",
+				self.admin_site.admin_view(self.analytics_view),
+				name="subscriptions_subscribers_analytics",
+			),
+			path(
+				"analytics/data/",
+				self.admin_site.admin_view(self.analytics_data),
+				name="subscriptions_subscribers_analytics_data",
+			),
+			path(
+				"analytics/list-distribution/",
+				self.admin_site.admin_view(self.analytics_list_distribution),
+				name="subscriptions_subscribers_analytics_list_distribution",
+			),
+			path(
+				"analytics/profile-distribution/",
+				self.admin_site.admin_view(self.analytics_profile_distribution),
+				name="subscriptions_subscribers_analytics_profile_distribution",
+			),
+			path(
+				"analytics/recent-subscribers/",
+				self.admin_site.admin_view(self.analytics_recent_subscribers),
+				name="subscriptions_subscribers_analytics_recent_subscribers",
+			),
+			path(
+				"analytics/recent-unsubscriptions/",
+				self.admin_site.admin_view(self.analytics_recent_unsubscriptions),
+				name="subscriptions_subscribers_analytics_recent_unsubscriptions",
+			),
+			path(
+				"analytics/list-activity/",
+				self.admin_site.admin_view(self.analytics_list_activity),
+				name="subscriptions_subscribers_analytics_list_activity",
+			),
+			path(
+				"analytics/organisations/",
+				self.admin_site.admin_view(self.analytics_organisations),
+				name="subscriptions_subscribers_analytics_organisations",
+			),
+			path(
+				"analytics/teams/",
+				self.admin_site.admin_view(self.analytics_teams),
+				name="subscriptions_subscribers_analytics_teams",
+			),
+			path(
+				"analytics/available-lists/",
+				self.admin_site.admin_view(self.analytics_available_lists),
+				name="subscriptions_subscribers_analytics_available_lists",
+			),
 		]
 		return custom_urls + urls
 
 	def analytics_view(self, request):
 		context = {
-			'title': 'Subscriber Analytics',
-			'opts': self.model._meta,
-			'has_view_permission': self.has_view_permission(request),
-			'is_superuser': request.user.is_superuser,
+			"title": "Subscriber Analytics",
+			"opts": self.model._meta,
+			"has_view_permission": self.has_view_permission(request),
+			"is_superuser": request.user.is_superuser,
 		}
-		return render(request, 'admin/subscriptions/subscribers/analytics.html', context)
+		return render(
+			request, "admin/subscriptions/subscribers/analytics.html", context
+		)
 
 	def analytics_organisations(self, request):
 		"""Return organisations the current user may filter by."""
 		from organizations.models import Organization
 		from gregory.admin import get_user_organizations
+
 		user_orgs = get_user_organizations(request.user)
 		qs = Organization.objects.all()
 		if user_orgs is not None:
 			qs = qs.filter(id__in=user_orgs)
-		orgs = [{'id': o.id, 'name': o.name} for o in qs.order_by('name')]
-		return JsonResponse({'organisations': orgs})
+		orgs = [{"id": o.id, "name": o.name} for o in qs.order_by("name")]
+		return JsonResponse({"organisations": orgs})
 
 	def analytics_teams(self, request):
 		"""Return teams scoped to the effective org."""
@@ -189,13 +278,13 @@ class SubscriberAdmin(admin.ModelAdmin):
 		qs = Team.objects.filter(is_active=True)
 		if org_ids is not None:
 			qs = qs.filter(organization__id__in=org_ids)
-		teams = [{'id': t.id, 'name': t.name} for t in qs.order_by('name')]
-		return JsonResponse({'teams': teams})
+		teams = [{"id": t.id, "name": t.name} for t in qs.order_by("name")]
+		return JsonResponse({"teams": teams})
 
 	def analytics_available_lists(self, request):
 		"""Return lists scoped to the effective org (and optionally a team)."""
 		org_ids = self._get_scoped_org_ids(request)
-		team_param = request.GET.get('team')
+		team_param = request.GET.get("team")
 		qs = Lists.objects.all()
 		if org_ids is not None:
 			qs = qs.filter(team__organization__id__in=org_ids)
@@ -204,41 +293,44 @@ class SubscriberAdmin(admin.ModelAdmin):
 				qs = qs.filter(team_id=int(team_param))
 			except (ValueError, TypeError):
 				pass
-		lists = [{'id': l.list_id, 'name': l.list_name} for l in qs.order_by('list_name')]
-		return JsonResponse({'lists': lists})
+		lists = [
+			{"id": l.list_id, "name": l.list_name} for l in qs.order_by("list_name")
+		]
+		return JsonResponse({"lists": lists})
 
 	def analytics_data(self, request):
 		from datetime import date as date_type
+
 		# Determine range and granularity from query param
-		range_param = request.GET.get('range', '30d')
+		range_param = request.GET.get("range", "30d")
 		RANGES = {
-			'7d':   (7,   TruncDate,  '%Y-%m-%d'),
-			'30d':  (30,  TruncDate,  '%Y-%m-%d'),
-			'90d':  (90,  TruncWeek,  '%Y-%m-%d'),
-			'365d': (365, TruncMonth, '%Y-%m'),
+			"7d": (7, TruncDate, "%Y-%m-%d"),
+			"30d": (30, TruncDate, "%Y-%m-%d"),
+			"90d": (90, TruncWeek, "%Y-%m-%d"),
+			"365d": (365, TruncMonth, "%Y-%m"),
 		}
-		if range_param == 'custom':
-			start_str = request.GET.get('start', '')
-			end_str   = request.GET.get('end', '')
+		if range_param == "custom":
+			start_str = request.GET.get("start", "")
+			end_str = request.GET.get("end", "")
 			try:
 				start_date = date_type.fromisoformat(start_str)
-				end_date   = date_type.fromisoformat(end_str)
+				end_date = date_type.fromisoformat(end_str)
 			except (ValueError, TypeError):
-				return JsonResponse({'error': 'Invalid custom date range'}, status=400)
+				return JsonResponse({"error": "Invalid custom date range"}, status=400)
 			if end_date < start_date:
 				start_date, end_date = end_date, start_date
 			span = (end_date - start_date).days
 			if span <= 60:
-				trunc_fn, date_fmt = TruncDate, '%Y-%m-%d'
+				trunc_fn, date_fmt = TruncDate, "%Y-%m-%d"
 			elif span <= 180:
-				trunc_fn, date_fmt = TruncWeek, '%Y-%m-%d'
+				trunc_fn, date_fmt = TruncWeek, "%Y-%m-%d"
 			else:
-				trunc_fn, date_fmt = TruncMonth, '%Y-%m'
+				trunc_fn, date_fmt = TruncMonth, "%Y-%m"
 		else:
 			if range_param not in RANGES:
-				range_param = '30d'
+				range_param = "30d"
 			days, trunc_fn, date_fmt = RANGES[range_param]
-			end_date   = timezone.now().date()
+			end_date = timezone.now().date()
 			start_date = end_date - timedelta(days=days - 1)
 
 		# Build full period sequence for zero-filling
@@ -251,6 +343,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 		elif trunc_fn is TruncWeek:
 			# ISO week starts on Monday
 			from datetime import date
+
 			period_range = []
 			d = start_date - timedelta(days=start_date.weekday())
 			while d <= end_date:
@@ -258,6 +351,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 				d += timedelta(weeks=1)
 		else:  # TruncMonth
 			from datetime import date
+
 			period_range = []
 			d = start_date.replace(day=1)
 			while d <= end_date:
@@ -270,20 +364,19 @@ class SubscriberAdmin(admin.ModelAdmin):
 
 		def _build_series(qs, date_field):
 			counts = (
-				qs
-				.annotate(period=trunc_fn(date_field))
-				.values('period')
-				.annotate(count=Count('pk', distinct=True))
-				.order_by('period')
+				qs.annotate(period=trunc_fn(date_field))
+				.values("period")
+				.annotate(count=Count("pk", distinct=True))
+				.order_by("period")
 			)
 			lookup = {}
 			for item in counts:
-				period = item['period']
+				period = item["period"]
 				if not period:
 					continue
-				if hasattr(period, 'date'):
+				if hasattr(period, "date"):
 					period = period.date()
-				lookup[period] = item['count']
+				lookup[period] = item["count"]
 			return [lookup.get(p, 0) for p in period_range]
 
 		# Apply org scoping
@@ -298,7 +391,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 			new_subscribers_qs = new_subscribers_qs.filter(
 				list_subscriptions__list__team__organization__id__in=org_ids
 			).distinct()
-		new_subscribers_data = _build_series(new_subscribers_qs, 'created_at')
+		new_subscribers_data = _build_series(new_subscribers_qs, "created_at")
 
 		# New subscriptions (list joins)
 		new_subs_qs = ListSubscription.objects.filter(
@@ -306,10 +399,8 @@ class SubscriberAdmin(admin.ModelAdmin):
 			subscribed_at__date__lte=end_date,
 		)
 		if org_ids is not None:
-			new_subs_qs = new_subs_qs.filter(
-				list__team__organization__id__in=org_ids
-			)
-		new_subscriptions_data = _build_series(new_subs_qs, 'subscribed_at')
+			new_subs_qs = new_subs_qs.filter(list__team__organization__id__in=org_ids)
+		new_subscriptions_data = _build_series(new_subs_qs, "subscribed_at")
 
 		# Unsubscriptions
 		unsubs_qs = ListSubscription.objects.filter(
@@ -317,10 +408,8 @@ class SubscriberAdmin(admin.ModelAdmin):
 			unsubscribed_at__date__lte=end_date,
 		)
 		if org_ids is not None:
-			unsubs_qs = unsubs_qs.filter(
-				list__team__organization__id__in=org_ids
-			)
-		unsubscriptions_data = _build_series(unsubs_qs, 'unsubscribed_at')
+			unsubs_qs = unsubs_qs.filter(list__team__organization__id__in=org_ids)
+		unsubscriptions_data = _build_series(unsubs_qs, "unsubscribed_at")
 
 		# Became inactive: subscribers who transitioned to an inactive state during the period.
 		# Two cases:
@@ -336,12 +425,12 @@ class SubscriberAdmin(admin.ModelAdmin):
 			Subscribers.objects.filter(active=True)
 			.annotate(
 				active_subs_count=Count(
-					'list_subscriptions',
+					"list_subscriptions",
 					filter=Q(list_subscriptions__is_active=True),
 					distinct=True,
 				),
 				unsub_in_period=Count(
-					'list_subscriptions',
+					"list_subscriptions",
 					filter=Q(
 						list_subscriptions__is_active=False,
 						list_subscriptions__unsubscribed_at__date__gte=start_date,
@@ -356,28 +445,28 @@ class SubscriberAdmin(admin.ModelAdmin):
 			lost_subs_qs = lost_subs_qs.filter(
 				list_subscriptions__list__team__organization__id__in=org_ids
 			).distinct()
-		lost_subs_ids = set(lost_subs_qs.values_list('subscriber_id', flat=True).distinct())
+		lost_subs_ids = set(
+			lost_subs_qs.values_list("subscriber_id", flat=True).distinct()
+		)
 
 		# Case 2 — account explicitly deactivated during the period
 		in_period_inactive_ids = set(
-			HistoricalSubscribers.objects
-			.filter(
+			HistoricalSubscribers.objects.filter(
 				history_date__date__gte=start_date,
 				history_date__date__lte=end_date,
 				active=False,
 			)
-			.values_list('subscriber_id', flat=True)
+			.values_list("subscriber_id", flat=True)
 			.distinct()
 		)
 		# Exclude subscribers that were already inactive before the period
 		already_inactive_ids = set(
-			HistoricalSubscribers.objects
-			.filter(
+			HistoricalSubscribers.objects.filter(
 				subscriber_id__in=in_period_inactive_ids,
 				history_date__date__lt=start_date,
 				active=False,
 			)
-			.values_list('subscriber_id', flat=True)
+			.values_list("subscriber_id", flat=True)
 			.distinct()
 		)
 		newly_deactivated_ids = in_period_inactive_ids - already_inactive_ids
@@ -407,7 +496,9 @@ class SubscriberAdmin(admin.ModelAdmin):
 		as_of_dates = []
 		for i, p in enumerate(period_range):
 			if i + 1 < len(period_range):
-				as_of_dates.append(min(period_range[i + 1] - timedelta(days=1), end_date))
+				as_of_dates.append(
+					min(period_range[i + 1] - timedelta(days=1), end_date)
+				)
 			else:
 				as_of_dates.append(end_date)
 
@@ -415,7 +506,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 		if org_ids is not None:
 			sub_rows = sub_rows.filter(list__team__organization__id__in=org_ids)
 		sub_rows = sub_rows.values_list(
-			'subscriber_id', 'subscribed_at', 'unsubscribed_at', 'is_active'
+			"subscriber_id", "subscribed_at", "unsubscribed_at", "is_active"
 		)
 
 		# Build each subscriber's active intervals as (start_date, end_date_or_None).
@@ -445,19 +536,21 @@ class SubscriberAdmin(admin.ModelAdmin):
 						break
 			active_subscribers_series.append(count)
 
-		return JsonResponse({
-			'labels': labels,
-			'new_subscribers': new_subscribers_data,
-			'new_subscriptions': new_subscriptions_data,
-			'unsubscriptions': unsubscriptions_data,
-			'active_subscribers': active_subscribers_series,
-			'totals': {
-				'new_subscribers': sum(new_subscribers_data),
-				'new_subscriptions': sum(new_subscriptions_data),
-				'unsubscriptions': sum(unsubscriptions_data),
-				'became_inactive': became_inactive_count,
-			},
-		})
+		return JsonResponse(
+			{
+				"labels": labels,
+				"new_subscribers": new_subscribers_data,
+				"new_subscriptions": new_subscriptions_data,
+				"unsubscriptions": unsubscriptions_data,
+				"active_subscribers": active_subscribers_series,
+				"totals": {
+					"new_subscribers": sum(new_subscribers_data),
+					"new_subscriptions": sum(new_subscriptions_data),
+					"unsubscriptions": sum(unsubscriptions_data),
+					"became_inactive": became_inactive_count,
+				},
+			}
+		)
 
 	def analytics_list_distribution(self, request):
 		"""Return current snapshot: total active subscribers/subscriptions + per-list breakdown.
@@ -475,7 +568,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 		org_ids = self._get_scoped_org_ids(request)
 
 		# Optional team filter for the per-list pie chart
-		team_param = request.GET.get('team')
+		team_param = request.GET.get("team")
 		try:
 			team_id = int(team_param) if team_param else None
 		except (ValueError, TypeError):
@@ -488,7 +581,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 			base_qs = base_qs.filter(list__team__organization__id__in=org_ids)
 
 		# Distinct people with at least one active subscription
-		total_active_subscribers = base_qs.values('subscriber').distinct().count()
+		total_active_subscribers = base_qs.values("subscriber").distinct().count()
 
 		# Total active subscription rows — this is the pie chart's 100%
 		total_active_subscriptions = base_qs.count()
@@ -498,7 +591,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 		# avoid ambiguous ORM negation on reverse FK.
 		inactive_sub_qs = Subscribers.objects.annotate(
 			active_subs_count=Count(
-				'list_subscriptions',
+				"list_subscriptions",
 				filter=Q(list_subscriptions__is_active=True),
 				distinct=True,
 			)
@@ -512,7 +605,9 @@ class SubscriberAdmin(admin.ModelAdmin):
 		# Inactive subscriptions: is_active=False (opt-outs)
 		inactive_ls_qs = ListSubscription.objects.filter(is_active=False)
 		if org_ids is not None:
-			inactive_ls_qs = inactive_ls_qs.filter(list__team__organization__id__in=org_ids)
+			inactive_ls_qs = inactive_ls_qs.filter(
+				list__team__organization__id__in=org_ids
+			)
 		total_inactive_subscriptions = inactive_ls_qs.count()
 
 		# Per-list breakdown — apply optional team filter only to the pie chart data.
@@ -524,40 +619,46 @@ class SubscriberAdmin(admin.ModelAdmin):
 		# collisions across teams. Count rows directly — ListSubscription is unique
 		# per (subscriber, list) so distinct=True would be redundant overhead.
 		list_counts = (
-			list_base_qs
-			.values('list__list_id', 'list__list_name')
-			.annotate(count=Count('pk'))
-			.order_by('-count')
+			list_base_qs.values("list__list_id", "list__list_name")
+			.annotate(count=Count("pk"))
+			.order_by("-count")
 		)
 
 		# Use the filtered total for percentage denominator so they sum to 100%
 		filtered_total = list_base_qs.count()
 		lists_data = []
 		for item in list_counts:
-			count = item['count']
-			percentage = round(count / filtered_total * 100, 1) if filtered_total else 0.0
-			lists_data.append({
-				'id': item['list__list_id'],
-				'name': item['list__list_name'],
-				'count': count,
-				'percentage': percentage,
-			})
+			count = item["count"]
+			percentage = (
+				round(count / filtered_total * 100, 1) if filtered_total else 0.0
+			)
+			lists_data.append(
+				{
+					"id": item["list__list_id"],
+					"name": item["list__list_name"],
+					"count": count,
+					"percentage": percentage,
+				}
+			)
 
-		return JsonResponse({
-			'total_active_subscribers': total_active_subscribers,
-			'total_active_subscriptions': total_active_subscriptions,
-			'total_inactive_subscribers': total_inactive_subscribers,
-			'total_inactive_subscriptions': total_inactive_subscriptions,
-			'lists': lists_data,
-		})
+		return JsonResponse(
+			{
+				"total_active_subscribers": total_active_subscribers,
+				"total_active_subscriptions": total_active_subscriptions,
+				"total_inactive_subscribers": total_inactive_subscribers,
+				"total_inactive_subscriptions": total_inactive_subscriptions,
+				"lists": lists_data,
+			}
+		)
 
 	def analytics_profile_distribution(self, request):
 		"""Return a breakdown of active subscribers by their site profile."""
 		from subscriptions.models import SubscriberSiteProfile
+
 		org_ids = self._get_scoped_org_ids(request)
 
 		# Optional list filter: ?lists=1&lists=2 or ?lists[]=1&lists[]=2
-		list_params = request.GET.getlist('lists') or request.GET.getlist('lists[]')
+		list_params = request.GET.getlist("lists") or request.GET.getlist("lists[]")
 		try:
 			list_ids = [int(x) for x in list_params if x]
 		except (ValueError, TypeError):
@@ -575,53 +676,59 @@ class SubscriberAdmin(admin.ModelAdmin):
 			).distinct()
 
 		profile_counts = (
-			qs
-			.values('profile')
-			.annotate(count=Count('subscriber', distinct=True))
-			.order_by('-count')
+			qs.values("profile")
+			.annotate(count=Count("subscriber", distinct=True))
+			.order_by("-count")
 		)
 
 		profile_labels = dict(SubscriberSiteProfile.PROFILEOPTIONS)
-		total = sum(item['count'] for item in profile_counts)
+		total = sum(item["count"] for item in profile_counts)
 
 		profiles_data = []
 		for item in profile_counts:
-			count = item['count']
+			count = item["count"]
 			percentage = round(count / total * 100, 1) if total else 0.0
-			profiles_data.append({
-				'profile': item['profile'],
-				'label': profile_labels.get(item['profile'], item['profile']),
-				'count': count,
-				'percentage': percentage,
-			})
+			profiles_data.append(
+				{
+					"profile": item["profile"],
+					"label": profile_labels.get(item["profile"], item["profile"]),
+					"count": count,
+					"percentage": percentage,
+				}
+			)
 
-		return JsonResponse({
-			'profiles': profiles_data,
-			'total': total,
-		})
+		return JsonResponse(
+			{
+				"profiles": profiles_data,
+				"total": total,
+			}
+		)
 
 	def analytics_recent_subscribers(self, request):
 		"""Return the 20 most recently created active subscribers with their profile and active lists."""
 		from subscriptions.models import SubscriberSiteProfile
 		from datetime import date as date_type
+
 		profile_labels = dict(SubscriberSiteProfile.PROFILEOPTIONS)
 		org_ids = self._get_scoped_org_ids(request)
 
-		qs = Subscribers.objects.filter(active=True).order_by('-created_at')
-		start_str = request.GET.get('start')
-		end_str   = request.GET.get('end')
+		qs = Subscribers.objects.filter(active=True).order_by("-created_at")
+		start_str = request.GET.get("start")
+		end_str = request.GET.get("end")
 		if start_str and end_str:
 			try:
 				start_date = date_type.fromisoformat(start_str)
-				end_date   = date_type.fromisoformat(end_str)
-				qs = qs.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)
+				end_date = date_type.fromisoformat(end_str)
+				qs = qs.filter(
+					created_at__date__gte=start_date, created_at__date__lte=end_date
+				)
 			except (ValueError, TypeError):
 				pass
 		if org_ids is not None:
 			qs = qs.filter(
 				list_subscriptions__list__team__organization__id__in=org_ids
 			).distinct()
-		qs = qs.prefetch_related('site_profiles', 'list_subscriptions__list')[:20]
+		qs = qs.prefetch_related("site_profiles", "list_subscriptions__list")[:20]
 
 		result = []
 		for sub in qs:
@@ -634,36 +741,40 @@ class SubscriberAdmin(admin.ModelAdmin):
 				for ls in sub.list_subscriptions.all()
 				if ls.is_active and ls.list_id
 			]
-			result.append({
-				'name': f"{sub.first_name} {sub.last_name or ''}".strip() or sub.email,
-				'profiles': profiles,
-				'lists': active_lists,
-				'subscribed_at': sub.created_at.strftime('%Y-%m-%d'),
-			})
+			result.append(
+				{
+					"name": f"{sub.first_name} {sub.last_name or ''}".strip()
+					or sub.email,
+					"profiles": profiles,
+					"lists": active_lists,
+					"subscribed_at": sub.created_at.strftime("%Y-%m-%d"),
+				}
+			)
 
-		return JsonResponse({'subscribers': result})
+		return JsonResponse({"subscribers": result})
 
 	def analytics_list_activity(self, request):
 		"""Return per-list counts of new subscriptions and unsubscriptions for the active date range."""
 		from datetime import date as date_type
+
 		org_ids = self._get_scoped_org_ids(request)
 
 		# Resolve date range (mirrors analytics_data logic)
-		range_param = request.GET.get('range', '30d')
-		RANGES = {'7d': 7, '30d': 30, '90d': 90, '365d': 365}
-		if range_param == 'custom':
-			start_str = request.GET.get('start', '')
-			end_str   = request.GET.get('end', '')
+		range_param = request.GET.get("range", "30d")
+		RANGES = {"7d": 7, "30d": 30, "90d": 90, "365d": 365}
+		if range_param == "custom":
+			start_str = request.GET.get("start", "")
+			end_str = request.GET.get("end", "")
 			try:
 				start_date = date_type.fromisoformat(start_str)
-				end_date   = date_type.fromisoformat(end_str)
+				end_date = date_type.fromisoformat(end_str)
 			except (ValueError, TypeError):
-				return JsonResponse({'error': 'Invalid custom date range'}, status=400)
+				return JsonResponse({"error": "Invalid custom date range"}, status=400)
 			if end_date < start_date:
 				start_date, end_date = end_date, start_date
 		else:
 			days = RANGES.get(range_param, 30)
-			end_date   = timezone.now().date()
+			end_date = timezone.now().date()
 			start_date = end_date - timedelta(days=days - 1)
 
 		# New subscriptions per list
@@ -674,13 +785,17 @@ class SubscriberAdmin(admin.ModelAdmin):
 		if org_ids is not None:
 			new_qs = new_qs.filter(list__team__organization__id__in=org_ids)
 
-		new_counts = (
-			new_qs
-			.values('list__list_id', 'list__list_name')
-			.annotate(count=Count('pk'))
+		new_counts = new_qs.values("list__list_id", "list__list_name").annotate(
+			count=Count("pk")
 		)
-		new_lookup = {item['list__list_id']: {'name': item['list__list_name'], 'new': item['count'], 'unsubs': 0}
-		              for item in new_counts}
+		new_lookup = {
+			item["list__list_id"]: {
+				"name": item["list__list_name"],
+				"new": item["count"],
+				"unsubs": 0,
+			}
+			for item in new_counts
+		}
 
 		# Unsubscriptions per list
 		unsub_qs = ListSubscription.objects.filter(
@@ -691,51 +806,68 @@ class SubscriberAdmin(admin.ModelAdmin):
 		if org_ids is not None:
 			unsub_qs = unsub_qs.filter(list__team__organization__id__in=org_ids)
 
-		unsub_counts = (
-			unsub_qs
-			.values('list__list_id', 'list__list_name')
-			.annotate(count=Count('pk'))
+		unsub_counts = unsub_qs.values("list__list_id", "list__list_name").annotate(
+			count=Count("pk")
 		)
 		for item in unsub_counts:
-			lid = item['list__list_id']
+			lid = item["list__list_id"]
 			if lid in new_lookup:
-				new_lookup[lid]['unsubs'] = item['count']
+				new_lookup[lid]["unsubs"] = item["count"]
 			else:
-				new_lookup[lid] = {'name': item['list__list_name'], 'new': 0, 'unsubs': item['count']}
+				new_lookup[lid] = {
+					"name": item["list__list_name"],
+					"new": 0,
+					"unsubs": item["count"],
+				}
 
-		rows = sorted(new_lookup.values(), key=lambda r: -(r['new'] + r['unsubs']))
-		return JsonResponse({'lists': rows, 'start': start_date.isoformat(), 'end': end_date.isoformat()})
+		rows = sorted(new_lookup.values(), key=lambda r: -(r["new"] + r["unsubs"]))
+		return JsonResponse(
+			{
+				"lists": rows,
+				"start": start_date.isoformat(),
+				"end": end_date.isoformat(),
+			}
+		)
 
 	def analytics_recent_unsubscriptions(self, request):
 		"""Return the 20 most recent list opt-outs with subscriber profile and remaining lists."""
 		from subscriptions.models import SubscriberSiteProfile
 		from datetime import date as date_type
+
 		profile_labels = dict(SubscriberSiteProfile.PROFILEOPTIONS)
 		org_ids = self._get_scoped_org_ids(request)
 
-		qs = ListSubscription.objects.filter(
-			is_active=False,
-			unsubscribed_at__isnull=False,
-		).select_related('subscriber', 'list').order_by('-unsubscribed_at')
+		qs = (
+			ListSubscription.objects.filter(
+				is_active=False,
+				unsubscribed_at__isnull=False,
+			)
+			.select_related("subscriber", "list")
+			.order_by("-unsubscribed_at")
+		)
 		if org_ids is not None:
 			qs = qs.filter(list__team__organization__id__in=org_ids)
-		start_str = request.GET.get('start')
-		end_str   = request.GET.get('end')
+		start_str = request.GET.get("start")
+		end_str = request.GET.get("end")
 		if start_str and end_str:
 			try:
 				start_date = date_type.fromisoformat(start_str)
-				end_date   = date_type.fromisoformat(end_str)
-				qs = qs.filter(unsubscribed_at__date__gte=start_date, unsubscribed_at__date__lte=end_date)
+				end_date = date_type.fromisoformat(end_str)
+				qs = qs.filter(
+					unsubscribed_at__date__gte=start_date,
+					unsubscribed_at__date__lte=end_date,
+				)
 			except (ValueError, TypeError):
 				pass
 		qs = qs[:100]
 
 		# Group by subscriber + date so multiple same-day opt-outs appear as one row
 		from collections import OrderedDict
+
 		grouped = OrderedDict()
 		for ls in qs:
 			sub = ls.subscriber
-			date_str = ls.unsubscribed_at.strftime('%Y-%m-%d')
+			date_str = ls.unsubscribed_at.strftime("%Y-%m-%d")
 			key = (sub.subscriber_id, date_str)
 			if key not in grouped:
 				profiles = [
@@ -744,24 +876,29 @@ class SubscriberAdmin(admin.ModelAdmin):
 				]
 				kept_lists = [
 					active_ls.list.list_name
-					for active_ls in sub.list_subscriptions.filter(is_active=True).select_related('list')
+					for active_ls in sub.list_subscriptions.filter(
+						is_active=True
+					).select_related("list")
 				]
 				grouped[key] = {
-					'name': f"{sub.first_name} {sub.last_name or ''}".strip() or sub.email,
-					'profiles': profiles,
-					'removed_lists': [ls.list.list_name],
-					'kept_lists': kept_lists,
-					'unsubscribed_at': date_str,
+					"name": f"{sub.first_name} {sub.last_name or ''}".strip()
+					or sub.email,
+					"profiles": profiles,
+					"removed_lists": [ls.list.list_name],
+					"kept_lists": kept_lists,
+					"unsubscribed_at": date_str,
 				}
 			else:
-				grouped[key]['removed_lists'].append(ls.list.list_name)
+				grouped[key]["removed_lists"].append(ls.list.list_name)
 
 		result = list(grouped.values())[:20]
-		return JsonResponse({'unsubscriptions': result})
+		return JsonResponse({"unsubscriptions": result})
 
 	def changelist_view(self, request, extra_context=None):
 		extra_context = extra_context or {}
-		extra_context['analytics_url'] = reverse('admin:subscriptions_subscribers_analytics')
+		extra_context["analytics_url"] = reverse(
+			"admin:subscriptions_subscribers_analytics"
+		)
 		return super().changelist_view(request, extra_context)
 
 	def list_names(self, obj):
@@ -770,13 +907,15 @@ class SubscriberAdmin(admin.ModelAdmin):
 			for ls in obj.list_subscriptions.all()
 			if ls.is_active and ls.list_id
 		]
-		return ', '.join(names) if names else '—'
-	list_names.short_description = 'Lists'
+		return ", ".join(names) if names else "—"
+
+	list_names.short_description = "Lists"
 
 	def number_of_subscriptions(self, obj):
 		return obj.active_subscription_count
-	number_of_subscriptions.short_description = 'Subscriptions'
-	number_of_subscriptions.admin_order_field = 'active_subscription_count'
+
+	number_of_subscriptions.short_description = "Subscriptions"
+	number_of_subscriptions.admin_order_field = "active_subscription_count"
 
 	# The `active` flag is a GLOBAL email switch (see Subscribers.active help text):
 	# active=False suppresses all email for the subscriber regardless of their list
@@ -795,19 +934,24 @@ class SubscriberAdmin(admin.ModelAdmin):
 			f"They will receive emails only for lists they are still actively subscribed to; "
 			f"individual list subscriptions were not changed.",
 		)
+
 	make_active.short_description = "Enable all emails (mark as active)"
 
 	def make_inactive(self, request, queryset):
 		now = timezone.now()
 		# Materialise the selected IDs: get_queryset() is annotated/distinct, which makes
 		# it unreliable as an `__in` subquery.
-		subscriber_ids = list(queryset.values_list('pk', flat=True))
+		subscriber_ids = list(queryset.values_list("pk", flat=True))
 		with transaction.atomic():
-			updated_count = Subscribers.objects.filter(pk__in=subscriber_ids).update(active=False)
+			updated_count = Subscribers.objects.filter(pk__in=subscriber_ids).update(
+				active=False
+			)
 			# Opt the selected subscribers out of every list they are still on, mirroring
 			# the global "unsubscribe from everything" flow. Preserve any existing
 			# unsubscribed_at; only stamp the rows that lack one.
-			stale_subs = ListSubscription.objects.filter(subscriber_id__in=subscriber_ids, is_active=True)
+			stale_subs = ListSubscription.objects.filter(
+				subscriber_id__in=subscriber_ids, is_active=True
+			)
 			stale_subs.filter(unsubscribed_at__isnull=True).update(unsubscribed_at=now)
 			unsubscribed = stale_subs.update(is_active=False)
 		self.message_user(
@@ -816,36 +960,42 @@ class SubscriberAdmin(admin.ModelAdmin):
 			f"list. Also opted them out of {unsubscribed} active list subscription(s) so their list "
 			f"state matches this global opt-out.",
 		)
+
 	make_inactive.short_description = "Disable all emails (mark as inactive)"
 
 	@admin.action(description="Export selected subscribers as CSV")
 	def export_csv(self, request, queryset):
-		response = HttpResponse(content_type='text/csv')
-		response['Content-Disposition'] = 'attachment; filename="subscribers.csv"'
+		response = HttpResponse(content_type="text/csv")
+		response["Content-Disposition"] = 'attachment; filename="subscribers.csv"'
 		writer = csv.writer(response)
+
 		def _csv_safe(value):
 			"""Prevent CSV injection by prefixing dangerous leading characters."""
 			s = str(value)
-			if s and s[0] in ('=', '+', '-', '@', '\t', '\r'):
+			if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
 				s = "'" + s
 			return s
 
-		writer.writerow(['email', 'first_name', 'last_name', 'active', 'lists', 'created_at'])
-		qs = queryset.prefetch_related('list_subscriptions__list')
+		writer.writerow(
+			["email", "first_name", "last_name", "active", "lists", "created_at"]
+		)
+		qs = queryset.prefetch_related("list_subscriptions__list")
 		for sub in qs:
-			active_lists = ', '.join(
+			active_lists = ", ".join(
 				ls.list.list_name
 				for ls in sub.list_subscriptions.all()
 				if ls.is_active and ls.list_id
 			)
-			writer.writerow([
-				_csv_safe(sub.email),
-				_csv_safe(sub.first_name),
-				_csv_safe(sub.last_name or ''),
-				sub.active,
-				_csv_safe(active_lists),
-				sub.created_at.strftime('%Y-%m-%d %H:%M'),
-			])
+			writer.writerow(
+				[
+					_csv_safe(sub.email),
+					_csv_safe(sub.first_name),
+					_csv_safe(sub.last_name or ""),
+					sub.active,
+					_csv_safe(active_lists),
+					sub.created_at.strftime("%Y-%m-%d %H:%M"),
+				]
+			)
 		return response
 
 	@admin.action(description="Add selected subscribers to a list…")
@@ -855,8 +1005,8 @@ class SubscriberAdmin(admin.ModelAdmin):
 		class AddToListForm(forms.Form):
 			target_list = forms.ModelChoiceField(
 				queryset=Lists.objects.none(),
-				label='Target list',
-				help_text='Selected subscribers will be added to this list.',
+				label="Target list",
+				help_text="Selected subscribers will be added to this list.",
 			)
 
 		user_orgs = get_user_organizations(request.user)
@@ -865,36 +1015,38 @@ class SubscriberAdmin(admin.ModelAdmin):
 		else:
 			available_lists = Lists.objects.all()
 
-		if 'apply' not in request.POST:
+		if "apply" not in request.POST:
 			form = AddToListForm()
-			form.fields['target_list'].queryset = available_lists
+			form.fields["target_list"].queryset = available_lists
 			# Store PKs in session to avoid hitting DATA_UPLOAD_MAX_NUMBER_FIELDS
 			# when large numbers of subscribers are selected.
-			pks = list(queryset.values_list('pk', flat=True))
-			request.session['add_to_list_pks'] = pks
+			pks = list(queryset.values_list("pk", flat=True))
+			request.session["add_to_list_pks"] = pks
 			return render(
 				request,
-				'admin/subscriptions/subscribers/add_to_list_intermediate.html',
+				"admin/subscriptions/subscribers/add_to_list_intermediate.html",
 				{
-					'title': 'Add subscribers to list',
-					'objects': queryset,
-					'form': form,
-					'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
-					'use_session': True,
+					"title": "Add subscribers to list",
+					"objects": queryset,
+					"form": form,
+					"action_checkbox_name": admin.helpers.ACTION_CHECKBOX_NAME,
+					"use_session": True,
 				},
 			)
 
 		form = AddToListForm(request.POST)
-		form.fields['target_list'].queryset = available_lists
+		form.fields["target_list"].queryset = available_lists
 		if not form.is_valid():
-			self.message_user(request, 'Invalid form — please try again.', level=messages.ERROR)
+			self.message_user(
+				request, "Invalid form — please try again.", level=messages.ERROR
+			)
 			return
 
-		target_list = form.cleaned_data['target_list']
+		target_list = form.cleaned_data["target_list"]
 
 		# Resolve the queryset: prefer session-stored PKs (avoids large POST bodies)
 		# but fall back to POST-submitted _selected_action values for compatibility.
-		session_pks = request.session.pop('add_to_list_pks', None)
+		session_pks = request.session.pop("add_to_list_pks", None)
 		if session_pks is not None:
 			queryset = self.model.objects.filter(pk__in=session_pks)
 
@@ -904,8 +1056,8 @@ class SubscriberAdmin(admin.ModelAdmin):
 				subscriber=sub,
 				list=target_list,
 				defaults={
-					'consent_method': 'admin',
-					'is_active': True,
+					"consent_method": "admin",
+					"is_active": True,
 				},
 			)
 			if created:
@@ -920,92 +1072,167 @@ class SubscriberAdmin(admin.ModelAdmin):
 			f"{added} subscriber(s) added to '{target_list}' ({queryset.count() - added} already subscribed).",
 		)
 
+
 admin.site.register(Subscribers, SubscriberAdmin)
 
 
 class ListSubscriberInline(admin.TabularInline):
 	"""Shows subscribers for a given list, with consent metadata."""
+
 	model = ListSubscription
 	extra = 0
 	can_delete = True
-	verbose_name = 'Subscriber'
-	verbose_name_plural = 'Subscribers'
-	fields = ['subscriber_link', 'subscriber_email', 'is_active', 'consent_method', 'subscribed_at']
-	readonly_fields = ['subscriber_link', 'subscriber_email', 'consent_method', 'subscribed_at']
+	verbose_name = "Subscriber"
+	verbose_name_plural = "Subscribers"
+	fields = [
+		"subscriber_link",
+		"subscriber_email",
+		"is_active",
+		"consent_method",
+		"subscribed_at",
+	]
+	readonly_fields = [
+		"subscriber_link",
+		"subscriber_email",
+		"consent_method",
+		"subscribed_at",
+	]
 
 	def subscriber_email(self, obj):
 		if obj.subscriber_id:
 			return obj.subscriber.email
-		return ''
-	subscriber_email.short_description = 'Email'
+		return ""
+
+	subscriber_email.short_description = "Email"
 
 	def subscriber_link(self, obj):
 		if obj.subscriber_id:
-			url = reverse('admin:subscriptions_subscribers_change', args=[obj.subscriber_id])
-			return format_html('<a href="{}" target="_blank">{} {}</a>', url, obj.subscriber.first_name, obj.subscriber.last_name)
-		return ''
-	subscriber_link.short_description = 'Subscriber'
+			url = reverse(
+				"admin:subscriptions_subscribers_change", args=[obj.subscriber_id]
+			)
+			return format_html(
+				'<a href="{}" target="_blank">{} {}</a>',
+				url,
+				obj.subscriber.first_name,
+				obj.subscriber.last_name,
+			)
+		return ""
+
+	subscriber_link.short_description = "Subscriber"
 
 
 class ListsAdmin(admin.ModelAdmin):
 	form = ListsAdminForm
-	list_display = ['list_name', 'organisation_name', 'team', 'list_description', 'admin_summary','weekly_digest','clinical_trials_notifications', 'has_latest_research', 'subscriber_count']
+	list_display = [
+		"list_name",
+		"organisation_name",
+		"team",
+		"list_description",
+		"admin_summary",
+		"weekly_digest",
+		"clinical_trials_notifications",
+		"has_latest_research",
+		"subscriber_count",
+	]
 	inlines = [ListSubscriberInline]
-	filter_horizontal = ['subjects', 'latest_research_categories']
-	actions = ['reassign_to_team_action']
+	filter_horizontal = ["subjects", "latest_research_categories"]
+	actions = ["reassign_to_team_action"]
 
 	class Media:
-		js = ('subscriptions/admin/list_sort_toggle.js',)
+		js = ("subscriptions/admin/list_sort_toggle.js",)
 
 	fieldsets = [
-		(None, {'fields': ['list_name', 'list_description', 'list_email_subject', 'team', 'site']}),
-		('Email Header', {
-			'fields': ['header_title', 'header_tagline', 'show_header_tagline'],
-			'description': 'Optionally override the email header title, set a tagline, and control its visibility.',
-		}),
-		('Email Types', {'fields': ['admin_summary', 'weekly_digest', 'clinical_trials_notifications']}),
-		('Content Settings', {
-			'fields': ['article_sort_order', 'lookback_days', 'article_limit', 'ml_threshold'],
-			'description': 'Configure content limits and ML prediction thresholds for weekly digest emails. '
-						'The ML threshold determines the minimum confidence level required for ML predictions to be considered relevant. '
-						'When sort order is set to "Date", the ML threshold is not used for article selection.'
-		}),
-		('Main Content', {
-			'fields': ['subjects'],
-			'description': 'Select subjects for which relevant articles and trials will be included in the main content of emails.'
-		}),
-		('Latest Research Section', {
-			'fields': ['latest_research_categories'],
-			'description': 'Select team categories to include in the "Latest Research" section of weekly digest emails. '
-						'This section will display the latest articles for each selected category.'
-		}),
+		(
+			None,
+			{
+				"fields": [
+					"list_name",
+					"list_description",
+					"list_email_subject",
+					"team",
+					"site",
+				]
+			},
+		),
+		(
+			"Email Header",
+			{
+				"fields": ["header_title", "header_tagline", "show_header_tagline"],
+				"description": "Optionally override the email header title, set a tagline, and control its visibility.",
+			},
+		),
+		(
+			"Email Types",
+			{
+				"fields": [
+					"admin_summary",
+					"weekly_digest",
+					"clinical_trials_notifications",
+				]
+			},
+		),
+		(
+			"Content Settings",
+			{
+				"fields": [
+					"article_sort_order",
+					"lookback_days",
+					"article_limit",
+					"ml_threshold",
+				],
+				"description": "Configure content limits and ML prediction thresholds for weekly digest emails. "
+				"The ML threshold determines the minimum confidence level required for ML predictions to be considered relevant. "
+				'When sort order is set to "Date", the ML threshold is not used for article selection.',
+			},
+		),
+		(
+			"Main Content",
+			{
+				"fields": ["subjects"],
+				"description": "Select subjects for which relevant articles and trials will be included in the main content of emails.",
+			},
+		),
+		(
+			"Latest Research Section",
+			{
+				"fields": ["latest_research_categories"],
+				"description": 'Select team categories to include in the "Latest Research" section of weekly digest emails. '
+				"This section will display the latest articles for each selected category.",
+			},
+		),
 	]
-	
+
 	def has_latest_research(self, obj):
 		return obj.latest_research_categories.exists()
+
 	has_latest_research.boolean = True
-	has_latest_research.short_description = 'Latest Research'
+	has_latest_research.short_description = "Latest Research"
 
 	def subscriber_count(self, obj):
 		return obj.list_subscriptions.filter(is_active=True).count()
-	subscriber_count.short_description = 'Subscribers'
-	subscriber_count.admin_order_field = 'active_subscriber_count'
+
+	subscriber_count.short_description = "Subscribers"
+	subscriber_count.admin_order_field = "active_subscriber_count"
 
 	def get_queryset(self, request):
 		from django.db.models import Count, Q
+
 		qs = super().get_queryset(request)
-		return qs.annotate(active_subscriber_count=Count(
-			'list_subscriptions',
-			filter=Q(list_subscriptions__is_active=True),
-			distinct=True,
-		))
+		return qs.annotate(
+			active_subscriber_count=Count(
+				"list_subscriptions",
+				filter=Q(list_subscriptions__is_active=True),
+				distinct=True,
+			)
+		)
 
 	def organisation_name(self, obj):
 		if obj.team and obj.team.organization:
 			return obj.team.organization.name
-		return ''
-	organisation_name.short_description = 'Organisation'
-	organisation_name.admin_order_field = 'team__organization__name'
+		return ""
+
+	organisation_name.short_description = "Organisation"
+	organisation_name.admin_order_field = "team__organization__name"
 
 	@admin.action(description="Reassign selected lists to another team…")
 	def reassign_to_team_action(self, request, queryset):
@@ -1027,7 +1254,7 @@ class ListsAdmin(admin.ModelAdmin):
 
 		# Safety: all selected lists must belong to the same organisation.
 		org_ids = list(
-			queryset.values_list('team__organization_id', flat=True).distinct()
+			queryset.values_list("team__organization_id", flat=True).distinct()
 		)
 		if len(org_ids) != 1:
 			self.message_user(
@@ -1040,27 +1267,29 @@ class ListsAdmin(admin.ModelAdmin):
 
 		target_qs = Team.objects.filter(organization_id=org_ids[0])
 
-		if 'apply' not in request.POST:
+		if "apply" not in request.POST:
 			form = ReassignListsForm()
-			form.fields['target_team'].queryset = target_qs
+			form.fields["target_team"].queryset = target_qs
 			return render(
 				request,
-				'admin/gregory/reassign_to_team_intermediate.html',
+				"admin/gregory/reassign_to_team_intermediate.html",
 				{
-					'title': 'Reassign lists to team',
-					'objects': queryset,
-					'form': form,
-					'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
-					'model_name': 'lists',
+					"title": "Reassign lists to team",
+					"objects": queryset,
+					"form": form,
+					"action_checkbox_name": admin.helpers.ACTION_CHECKBOX_NAME,
+					"model_name": "lists",
 				},
 			)
 
 		form = ReassignListsForm(request.POST)
-		form.fields['target_team'].queryset = target_qs
+		form.fields["target_team"].queryset = target_qs
 		if not form.is_valid():
-			self.message_user(request, "Invalid form — please try again.", level=messages.ERROR)
+			self.message_user(
+				request, "Invalid form — please try again.", level=messages.ERROR
+			)
 			return
-		to_team = form.cleaned_data['target_team']
+		to_team = form.cleaned_data["target_team"]
 		# Final guard: target team must belong to the same organisation.
 		if to_team.organization_id != org_ids[0]:
 			self.message_user(
@@ -1073,35 +1302,60 @@ class ListsAdmin(admin.ModelAdmin):
 		queryset.update(team=to_team)
 		self.message_user(request, f"{count} list(s) reassigned to '{to_team}'.")
 
+
 class FailedNotificationAdmin(admin.ModelAdmin):
-	list_display = ['subscriber','reason','list','created_at']
-	list_filter = ['list']
-	search_fields = ['subscriber__email', 'subscriber__first_name', 'subscriber__last_name', 'reason']
-	readonly_fields = ['subscriber','reason','list','created_at']
-admin.site.register(FailedNotification,FailedNotificationAdmin)
+	list_display = ["subscriber", "reason", "list", "created_at"]
+	list_filter = ["list"]
+	search_fields = [
+		"subscriber__email",
+		"subscriber__first_name",
+		"subscriber__last_name",
+		"reason",
+	]
+	readonly_fields = ["subscriber", "reason", "list", "created_at"]
+
+
+admin.site.register(FailedNotification, FailedNotificationAdmin)
 admin.site.register(Lists, ListsAdmin)
 
 
 @admin.register(SubscriberSiteProfile)
 class SubscriberSiteProfileAdmin(admin.ModelAdmin):
-	list_display = ['subscriber', 'site', 'profile', 'created_at']
-	list_filter = ['site', 'profile']
-	search_fields = ['subscriber__email', 'subscriber__first_name', 'subscriber__last_name']
-	readonly_fields = ['created_at', 'updated_at']
+	list_display = ["subscriber", "site", "profile", "created_at"]
+	list_filter = ["site", "profile"]
+	search_fields = [
+		"subscriber__email",
+		"subscriber__first_name",
+		"subscriber__last_name",
+	]
+	readonly_fields = ["created_at", "updated_at"]
 
 
 @admin.register(ListSubscription)
 class ListSubscriptionAdmin(admin.ModelAdmin):
-	list_display = ['subscriber', 'list', 'is_active', 'consent_method', 'subscribed_at', 'unsubscribed_at']
-	list_filter = ['is_active', 'consent_method', 'subscribed_at']
-	search_fields = ['subscriber__email', 'list__list_name']
-	readonly_fields = ['subscribed_at', 'consent_ip', 'consent_source_site', 'consent_method', 'unsubscribed_at']
+	list_display = [
+		"subscriber",
+		"list",
+		"is_active",
+		"consent_method",
+		"subscribed_at",
+		"unsubscribed_at",
+	]
+	list_filter = ["is_active", "consent_method", "subscribed_at"]
+	search_fields = ["subscriber__email", "list__list_name"]
+	readonly_fields = [
+		"subscribed_at",
+		"consent_ip",
+		"consent_source_site",
+		"consent_method",
+		"unsubscribed_at",
+	]
 
 
 class AnnouncementRecipientInline(admin.TabularInline):
 	model = AnnouncementRecipient
 	extra = 0
-	readonly_fields = ['subscriber', 'list', 'sent_at', 'success', 'error_message']
+	readonly_fields = ["subscriber", "list", "sent_at", "success", "error_message"]
 	can_delete = False
 
 	def has_add_permission(self, request, obj=None):
@@ -1111,56 +1365,90 @@ class AnnouncementRecipientInline(admin.TabularInline):
 @admin.register(Announcement)
 class AnnouncementAdmin(admin.ModelAdmin):
 	form = AnnouncementAdminForm
-	list_display = ['subject', 'status_badge', 'created_by', 'created_at', 'sent_at', 'recipients_count', 'failures_count']
-	list_filter = ['status', 'created_at']
-	search_fields = ['subject']
-	readonly_fields = ['status', 'sent_at', 'recipients_count', 'failures_count', 'created_by', 'created_at']
+	list_display = [
+		"subject",
+		"status_badge",
+		"created_by",
+		"created_at",
+		"sent_at",
+		"recipients_count",
+		"failures_count",
+	]
+	list_filter = ["status", "created_at"]
+	search_fields = ["subject"]
+	readonly_fields = [
+		"status",
+		"sent_at",
+		"recipients_count",
+		"failures_count",
+		"created_by",
+		"created_at",
+	]
 	inlines = [AnnouncementRecipientInline]
-	actions = ['duplicate_announcements']
+	actions = ["duplicate_announcements"]
 
 	class Media:
 		# Loaded as a plain <script> tag AFTER the CKEditor bundle (widget
 		# media loads first via form media, admin class media appends after).
 		# Uses window.ckeditorRegisterCallback — no CKEditor plugin
 		# infrastructure needed.
-		js = ('subscriptions/ckeditor/button_plugin.js',)
+		js = ("subscriptions/ckeditor/button_plugin.js",)
 
 	fieldsets = [
-		(None, {'fields': ['subject']}),
-		('Email Header', {
-			'fields': ['header_title', 'header_tagline', 'show_header_tagline', 'preheader_text'],
-			'description': 'Optionally override the title (defaults to "Gregory AI"), override or hide the tagline shown in the email header, and set the email preheader text.',
-		}),
-		('Body', {'fields': ['body']}),
-		('Destination', {'fields': ['organization', 'lists']}),
-
-		('Send Status', {
-			'fields': ['status', 'created_by', 'created_at', 'sent_at', 'recipients_count', 'failures_count'],
-			'classes': ['collapse'],
-		}),
+		(None, {"fields": ["subject"]}),
+		(
+			"Email Header",
+			{
+				"fields": [
+					"header_title",
+					"header_tagline",
+					"show_header_tagline",
+					"preheader_text",
+				],
+				"description": 'Optionally override the title (defaults to "Gregory AI"), override or hide the tagline shown in the email header, and set the email preheader text.',
+			},
+		),
+		("Body", {"fields": ["body"]}),
+		("Destination", {"fields": ["organization", "lists"]}),
+		(
+			"Send Status",
+			{
+				"fields": [
+					"status",
+					"created_by",
+					"created_at",
+					"sent_at",
+					"recipients_count",
+					"failures_count",
+				],
+				"classes": ["collapse"],
+			},
+		),
 	]
 
 	def status_badge(self, obj):
 		colors = {
-			'draft': '#6b7280',
-			'sending': '#f59e0b',
-			'sent': '#10b981',
-			'failed': '#ef4444',
+			"draft": "#6b7280",
+			"sending": "#f59e0b",
+			"sent": "#10b981",
+			"failed": "#ef4444",
 		}
-		color = colors.get(obj.status, '#6b7280')
+		color = colors.get(obj.status, "#6b7280")
 		return format_html(
 			'<span style="background-color: {}; color: white; padding: 3px 10px; border-radius: 10px; font-size: 11px;">{}</span>',
-			color, obj.get_status_display()
+			color,
+			obj.get_status_display(),
 		)
-	status_badge.short_description = 'Status'
-	status_badge.admin_order_field = 'status'
+
+	status_badge.short_description = "Status"
+	status_badge.admin_order_field = "status"
 
 	def get_form(self, request, obj=None, **kwargs):
 		form_class = super().get_form(request, obj, **kwargs)
 
 		class FormWithRequest(form_class):
 			def __init__(self, *args, **form_kwargs):
-				form_kwargs['request'] = request
+				form_kwargs["request"] = request
 				super().__init__(*args, **form_kwargs)
 
 		return FormWithRequest
@@ -1170,6 +1458,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if request.user.is_superuser:
 			return qs
 		from gregory.admin import get_user_organizations
+
 		user_orgs = get_user_organizations(request.user)
 		if user_orgs is not None:
 			return qs.filter(organization_id__in=user_orgs)
@@ -1177,11 +1466,17 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 	def get_readonly_fields(self, request, obj=None):
 		readonly = list(super().get_readonly_fields(request, obj))
-		if obj and obj.status == 'sent':
-			readonly.extend([
-				'subject', 'header_title', 'header_tagline',
-				'body', 'lists', 'organization',
-			])
+		if obj and obj.status == "sent":
+			readonly.extend(
+				[
+					"subject",
+					"header_title",
+					"header_tagline",
+					"body",
+					"lists",
+					"organization",
+				]
+			)
 		return readonly
 
 	def save_model(self, request, obj, form, change):
@@ -1190,13 +1485,14 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			if obj.organization_id is None:
 				# Defence in depth — the form should always set this.
 				from organizations.models import Organization
-				user_orgs = (
-					request.user.organizations_organizationuser
-					.order_by('pk').first()
-				)
+
+				user_orgs = request.user.organizations_organizationuser.order_by(
+					"pk"
+				).first()
 				obj.organization = (
-					user_orgs.organization if user_orgs
-					else Organization.objects.order_by('pk').first()
+					user_orgs.organization
+					if user_orgs
+					else Organization.objects.order_by("pk").first()
 				)
 		super().save_model(request, obj, form, change)
 
@@ -1215,7 +1511,8 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		# Materialize org IDs once as a set to avoid re-evaluating the queryset
 		# on every per-source permission check inside the loop.
 		user_org_ids = (
-			None if request.user.is_superuser
+			None
+			if request.user.is_superuser
 			else set(get_user_organizations(request.user))
 		)
 
@@ -1230,7 +1527,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					skipped_perm += 1
 					continue
 
-			if source.status == 'sending':
+			if source.status == "sending":
 				skipped_sending.append(source.subject)
 				continue
 
@@ -1243,7 +1540,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 				body=source.body,
 				created_by=request.user,
 				organization=source.organization,
-				status='draft',
+				status="draft",
 			)
 			# Defensive: ensure no recipients_count/failures_count/sent_at
 			# carry over (defaults already handle this; keep explicit for
@@ -1254,7 +1551,8 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if skipped_sending:
 			self.message_user(
 				request,
-				"Skipped %d announcement(s) currently sending: %s" % (
+				"Skipped %d announcement(s) currently sending: %s"
+				% (
 					len(skipped_sending),
 					", ".join(skipped_sending),
 				),
@@ -1264,7 +1562,8 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if skipped_perm:
 			self.message_user(
 				request,
-				"Skipped %d announcement(s) you don't have permission to duplicate." % skipped_perm,
+				"Skipped %d announcement(s) you don't have permission to duplicate."
+				% skipped_perm,
 				level=messages.WARNING,
 			)
 
@@ -1283,7 +1582,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 				level=messages.SUCCESS,
 			)
 			return redirect(
-				reverse('admin:subscriptions_announcement_change', args=[created[0].pk])
+				reverse("admin:subscriptions_announcement_change", args=[created[0].pk])
 			)
 
 		self.message_user(
@@ -1297,19 +1596,19 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		urls = super().get_urls()
 		custom_urls = [
 			path(
-				'<int:announcement_id>/preview/',
+				"<int:announcement_id>/preview/",
 				self.admin_site.admin_view(self.preview_view),
-				name='subscriptions_announcement_preview',
+				name="subscriptions_announcement_preview",
 			),
 			path(
-				'<int:announcement_id>/send-test/',
+				"<int:announcement_id>/send-test/",
 				self.admin_site.admin_view(self.send_test_view),
-				name='subscriptions_announcement_send_test',
+				name="subscriptions_announcement_send_test",
 			),
 			path(
-				'<int:announcement_id>/send/',
+				"<int:announcement_id>/send/",
 				self.admin_site.admin_view(self.send_view),
-				name='subscriptions_announcement_send',
+				name="subscriptions_announcement_send",
 			),
 		]
 		return custom_urls + urls
@@ -1319,6 +1618,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		announcement = get_object_or_404(Announcement, pk=announcement_id)
 		if not request.user.is_superuser:
 			from gregory.admin import get_user_organizations
+
 			user_orgs = get_user_organizations(request.user)
 			if user_orgs is not None:
 				# Evaluate the queryset once into a set for O(1) membership check.
@@ -1326,41 +1626,70 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					return None
 		return announcement
 
-	def _render_announcement_email(self, announcement, subscriber=None, site=None, list_id=None, custom_settings=None):
+	def _render_announcement_email(
+		self,
+		announcement,
+		subscriber=None,
+		site=None,
+		list_id=None,
+		custom_settings=None,
+	):
 		"""Render announcement as HTML email using the base template."""
-		api_domain = (getattr(custom_settings, 'api_domain', '') or '') if custom_settings else ''
-		site_domain = (getattr(site, 'domain', '') or '') if site else ''
+		api_domain = (
+			(getattr(custom_settings, "api_domain", "") or "")
+			if custom_settings
+			else ""
+		)
+		site_domain = (getattr(site, "domain", "") or "") if site else ""
 		sanitized = sanitize_announcement_html(announcement.body)
 		rendered_body = render_announcement_html(sanitized, api_domain, site_domain)
 		context = {
-			'announcement_subject': announcement.subject,
-			'announcement_body': rendered_body,
-			'email_type': 'announcement',
-			'show_date': True,
-			'current_date': timezone.now(),
-			'header_title': announcement.header_title,
-			'header_tagline': announcement.header_tagline,
-			'show_header_tagline': announcement.show_header_tagline,
-			'preheader_text': announcement.preheader_text,
-			'title': getattr(custom_settings, 'title', 'Gregory AI') if custom_settings else 'Gregory AI',
-			'website_url': getattr(custom_settings, 'website_url', '') if custom_settings else '',
-			'support_url': getattr(custom_settings, 'support_url', '') if custom_settings else '',
-			'about_url': getattr(custom_settings, 'about_url', '') if custom_settings else '',
-			'contact_url': getattr(custom_settings, 'contact_url', '') if custom_settings else '',
-			'bluesky_url': getattr(custom_settings, 'bluesky_url', '') if custom_settings else '',
-			'github_url': getattr(custom_settings, 'github_url', '') if custom_settings else '',
-			'mastodon_url': getattr(custom_settings, 'mastodon_url', '') if custom_settings else '',
-			'privacy_policy_url': '',
-			'terms_url': '',
+			"announcement_subject": announcement.subject,
+			"announcement_body": rendered_body,
+			"email_type": "announcement",
+			"show_date": True,
+			"current_date": timezone.now(),
+			"header_title": announcement.header_title,
+			"header_tagline": announcement.header_tagline,
+			"show_header_tagline": announcement.show_header_tagline,
+			"preheader_text": announcement.preheader_text,
+			"title": getattr(custom_settings, "title", "Gregory AI")
+			if custom_settings
+			else "Gregory AI",
+			"website_url": getattr(custom_settings, "website_url", "")
+			if custom_settings
+			else "",
+			"support_url": getattr(custom_settings, "support_url", "")
+			if custom_settings
+			else "",
+			"about_url": getattr(custom_settings, "about_url", "")
+			if custom_settings
+			else "",
+			"contact_url": getattr(custom_settings, "contact_url", "")
+			if custom_settings
+			else "",
+			"bluesky_url": getattr(custom_settings, "bluesky_url", "")
+			if custom_settings
+			else "",
+			"github_url": getattr(custom_settings, "github_url", "")
+			if custom_settings
+			else "",
+			"mastodon_url": getattr(custom_settings, "mastodon_url", "")
+			if custom_settings
+			else "",
+			"privacy_policy_url": "",
+			"terms_url": "",
 		}
 		if subscriber:
-			context['subscriber'] = subscriber
+			context["subscriber"] = subscriber
 		if site:
-			context['unsubscribe_base_url'] = build_unsubscribe_base_url(site, custom_settings)
-			context['site'] = site
+			context["unsubscribe_base_url"] = build_unsubscribe_base_url(
+				site, custom_settings
+			)
+			context["site"] = site
 		if list_id:
-			context['list_id'] = list_id
-		html = render_to_string('emails/announcement.html', context)
+			context["list_id"] = list_id
+		html = render_to_string("emails/announcement.html", context)
 		return html
 
 	def _render_announcement_text(self, announcement, subscriber=None):
@@ -1369,26 +1698,32 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if subscriber and subscriber.first_name:
 			lines.append(f"Hello {subscriber.first_name},\n")
 		lines.append(_render_text_body(sanitize_announcement_html(announcement.body)))
-		return '\n'.join(lines)
+		return "\n".join(lines)
 
 	def preview_view(self, request, announcement_id):
 		announcement = self._get_announcement_or_404(request, announcement_id)
 		if announcement is None:
 			from django.http import HttpResponseForbidden
+
 			return HttpResponseForbidden("Access denied.")
 
-		from subscriptions.management.commands.utils.get_credentials import get_site_and_settings
+		from subscriptions.management.commands.utils.get_credentials import (
+			get_site_and_settings,
+		)
 		from types import SimpleNamespace
 
 		# Resolve branding from the first selected list so the footer matches
 		# what recipients actually see.
 		site, custom_settings = None, None
-		first_list = announcement.lists.select_related('team', 'site').first()
+		first_list = announcement.lists.select_related("team", "site").first()
 		if first_list:
 			from django.contrib.sites.models import Site
 			from sitesettings.models import CustomSetting
+
 			try:
-				site, custom_settings = get_site_and_settings(first_list.team, list_obj=first_list)
+				site, custom_settings = get_site_and_settings(
+					first_list.team, list_obj=first_list
+				)
 			except CustomSetting.DoesNotExist:
 				# No CustomSetting for the resolved site — fall back to the global
 				# current site so branding is still populated.
@@ -1411,31 +1746,47 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			custom_settings=custom_settings,
 		)
 		response = HttpResponse(html)
-		response['X-Frame-Options'] = 'SAMEORIGIN'
+		response["X-Frame-Options"] = "SAMEORIGIN"
 		return response
 
 	def send_test_view(self, request, announcement_id):
 		announcement = self._get_announcement_or_404(request, announcement_id)
 		if announcement is None:
 			from django.http import HttpResponseForbidden
+
 			return HttpResponseForbidden("Access denied.")
 
-		if request.method == 'POST':
+		if request.method == "POST":
 			from subscriptions.management.commands.utils.send_email import send_email
-			from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
+			from subscriptions.management.commands.utils.get_credentials import (
+				get_postmark_credentials,
+				get_site_and_settings,
+			)
 			from sitesettings.models import CustomSetting
 			from django.contrib.sites.models import Site
-			from subscriptions.utils.announcement_send_validation import validate_announcement_send_config
+			from subscriptions.utils.announcement_send_validation import (
+				validate_announcement_send_config,
+			)
 			from django.conf import settings as dj_settings
 
 			# Use the first list's team for credentials
-			first_list = announcement.lists.select_related('team', 'site').first()
+			first_list = announcement.lists.select_related("team", "site").first()
 			if not first_list:
-				messages.error(request, "No lists selected. Please select at least one list before sending a test.")
-				return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
+				messages.error(
+					request,
+					"No lists selected. Please select at least one list before sending a test.",
+				)
+				return redirect(
+					reverse(
+						"admin:subscriptions_announcement_change",
+						args=[announcement.pk],
+					)
+				)
 
 			try:
-				site, custom_settings = get_site_and_settings(first_list.team, list_obj=first_list)
+				site, custom_settings = get_site_and_settings(
+					first_list.team, list_obj=first_list
+				)
 			except CustomSetting.DoesNotExist:
 				# Resolve site without CustomSetting so we can still report it.
 				site = first_list.site or Site.objects.get_current()
@@ -1446,26 +1797,33 @@ class AnnouncementAdmin(admin.ModelAdmin):
 				announcement,
 				site,
 				custom_settings,
-				probe_media=getattr(dj_settings, 'ANNOUNCEMENT_PROBE_MEDIA', False),
+				probe_media=getattr(dj_settings, "ANNOUNCEMENT_PROBE_MEDIA", False),
 			)
 			if errors:
 				for msg in errors:
 					messages.error(request, msg)
 				return redirect(
-					reverse('admin:subscriptions_announcement_change', args=[announcement.pk])
+					reverse(
+						"admin:subscriptions_announcement_change",
+						args=[announcement.pk],
+					)
 				)
 
 			api_token, api_url = get_postmark_credentials(
-				custom_settings=custom_settings, organization=first_list.team.organization
+				custom_settings=custom_settings,
+				organization=first_list.team.organization,
 			)
 
-			html = self._render_announcement_email(announcement, site=site, custom_settings=custom_settings)
+			html = self._render_announcement_email(
+				announcement, site=site, custom_settings=custom_settings
+			)
 			text = self._render_announcement_text(announcement)
 
 			sender_name = (
 				(custom_settings.sender_name or custom_settings.title)
-				if custom_settings else None
-			) or 'Gregory AI'
+				if custom_settings
+				else None
+			) or "Gregory AI"
 			try:
 				response = send_email(
 					to=request.user.email,
@@ -1478,22 +1836,32 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					api_url=api_url,
 				)
 				if response.status_code == 200:
-					messages.success(request, f"Test email sent to {request.user.email}.")
+					messages.success(
+						request, f"Test email sent to {request.user.email}."
+					)
 				else:
-					messages.error(request, f"Failed to send test email: {response.text}")
+					messages.error(
+						request, f"Failed to send test email: {response.text}"
+					)
 			except Exception as e:
 				messages.error(request, f"Error sending test email: {e}")
 
-			return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
+			return redirect(
+				reverse(
+					"admin:subscriptions_announcement_change", args=[announcement.pk]
+				)
+			)
 
 		# GET — show confirmation form
-		from subscriptions.management.commands.utils.get_credentials import get_site_and_settings
+		from subscriptions.management.commands.utils.get_credentials import (
+			get_site_and_settings,
+		)
 		from sitesettings.models import CustomSetting
 		from django.contrib.sites.models import Site
 		from bs4 import BeautifulSoup as _BeautifulSoup
 
 		preview_info = None
-		first_list = announcement.lists.select_related('team', 'site').first()
+		first_list = announcement.lists.select_related("team", "site").first()
 		if first_list:
 			try:
 				_site, _cs = get_site_and_settings(first_list.team, list_obj=first_list)
@@ -1502,73 +1870,95 @@ class AnnouncementAdmin(admin.ModelAdmin):
 				_cs = None
 			# Normalise api_domain: strip any scheme/path so we never build
 			# double-scheme preview URLs like https://https://api.example.com/...
-			_api_domain_raw = (getattr(_cs, 'api_domain', '') or '').strip()
+			_api_domain_raw = (getattr(_cs, "api_domain", "") or "").strip()
 			_api_domain = strip_scheme(_api_domain_raw)  # bare host[:port] or ''
-			_sender_prefix = (getattr(_cs, 'sender_email_prefix', '') or 'gregory').strip()
-			_sender_addr = f"{_sender_prefix}@{_site.domain}" if _site else ''
+			_sender_prefix = (
+				getattr(_cs, "sender_email_prefix", "") or "gregory"
+			).strip()
+			_sender_addr = f"{_sender_prefix}@{_site.domain}" if _site else ""
 			# Compute rewritten src for every /media/ image in the body.
-			_soup = _BeautifulSoup(announcement.body or '', 'html.parser')
+			_soup = _BeautifulSoup(announcement.body or "", "html.parser")
 			image_rewrites = []
-			for _img in _soup.find_all('img'):
-				_src = _img.get('src', '')
-				if _src.startswith('/media/') and _api_domain:
+			for _img in _soup.find_all("img"):
+				_src = _img.get("src", "")
+				if _src.startswith("/media/") and _api_domain:
 					image_rewrites.append((_src, f"https://{_api_domain}{_src}"))
 				else:
 					image_rewrites.append((_src, _src))
 			preview_info = {
-				'site_domain': _site.domain if _site else '',
-				'api_domain': _api_domain,
-				'sender_addr': _sender_addr,
-				'sender_name': (getattr(_cs, 'sender_name', '') or getattr(_cs, 'title', '') or 'Gregory AI'),
-				'image_rewrites': image_rewrites,
-				'list_name': first_list.list_name,
+				"site_domain": _site.domain if _site else "",
+				"api_domain": _api_domain,
+				"sender_addr": _sender_addr,
+				"sender_name": (
+					getattr(_cs, "sender_name", "")
+					or getattr(_cs, "title", "")
+					or "Gregory AI"
+				),
+				"image_rewrites": image_rewrites,
+				"list_name": first_list.list_name,
 			}
 
 		context = {
 			**self.admin_site.each_context(request),
-			'announcement': announcement,
-			'user_email': request.user.email,
-			'title': f'Send Test: {announcement.subject}',
-			'opts': self.model._meta,
-			'preview_info': preview_info,
+			"announcement": announcement,
+			"user_email": request.user.email,
+			"title": f"Send Test: {announcement.subject}",
+			"opts": self.model._meta,
+			"preview_info": preview_info,
 		}
-		return render(request, 'admin/subscriptions/announcement/send_test.html', context)
+		return render(
+			request, "admin/subscriptions/announcement/send_test.html", context
+		)
 
 	def send_view(self, request, announcement_id):
 		announcement = self._get_announcement_or_404(request, announcement_id)
 		if announcement is None:
 			from django.http import HttpResponseForbidden
+
 			return HttpResponseForbidden("Access denied.")
 
-		if announcement.status in ('sent', 'sending'):
+		if announcement.status in ("sent", "sending"):
 			messages.warning(request, "This announcement has already been sent.")
-			return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
+			return redirect(
+				reverse(
+					"admin:subscriptions_announcement_change", args=[announcement.pk]
+				)
+			)
 
-		target_lists = announcement.lists.select_related('team__organization').all()
+		target_lists = announcement.lists.select_related("team__organization").all()
 
 		# Build subscriber info per list for display and sending
 		list_info = []
 		all_subscribers = {}  # email -> (subscriber, list) — deduplicate by email
 		for lst in target_lists:
-			active_subs = list(Subscribers.objects.filter(
-				list_subscriptions__list=lst,
-				list_subscriptions__is_active=True,
-				active=True,
-			).distinct())
-			list_info.append({
-				'list': lst,
-				'subscriber_count': len(active_subs),
-			})
+			active_subs = list(
+				Subscribers.objects.filter(
+					list_subscriptions__list=lst,
+					list_subscriptions__is_active=True,
+					active=True,
+				).distinct()
+			)
+			list_info.append(
+				{
+					"list": lst,
+					"subscriber_count": len(active_subs),
+				}
+			)
 			for sub in active_subs:
 				if sub.email not in all_subscribers:
 					all_subscribers[sub.email] = (sub, lst)
 
-		if request.method == 'POST':
+		if request.method == "POST":
 			from subscriptions.management.commands.utils.send_email import send_email
-			from subscriptions.management.commands.utils.get_credentials import get_postmark_credentials, get_site_and_settings
+			from subscriptions.management.commands.utils.get_credentials import (
+				get_postmark_credentials,
+				get_site_and_settings,
+			)
 			from sitesettings.models import CustomSetting
 			from django.contrib.sites.models import Site
-			from subscriptions.utils.announcement_send_validation import validate_announcement_send_config
+			from subscriptions.utils.announcement_send_validation import (
+				validate_announcement_send_config,
+			)
 			from django.conf import settings as dj_settings
 
 			success_count = 0
@@ -1590,14 +1980,17 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					_site = _lst.site or Site.objects.get_current()
 					_cs = None
 				errs = validate_announcement_send_config(
-					announcement, _site, _cs,
-					probe_media=getattr(dj_settings, 'ANNOUNCEMENT_PROBE_MEDIA', False),
+					announcement,
+					_site,
+					_cs,
+					probe_media=getattr(dj_settings, "ANNOUNCEMENT_PROBE_MEDIA", False),
 				)
 				if errs:
 					list_errors[pk] = errs
 					continue
 				_api_token, _api_url = get_postmark_credentials(
-					custom_settings=_cs, organization=_lst.team.organization,
+					custom_settings=_cs,
+					organization=_lst.team.organization,
 				)
 				list_credentials[pk] = (_api_token, _api_url, _site, _cs)
 
@@ -1610,32 +2003,46 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					for msg in errs:
 						messages.error(request, f"{list_name}: {msg}")
 				return redirect(
-					reverse('admin:subscriptions_announcement_change', args=[announcement.pk])
+					reverse(
+						"admin:subscriptions_announcement_change",
+						args=[announcement.pk],
+					)
 				)
 
 			# All lists validated — safe to flip status.
-			announcement.status = 'sending'
-			announcement.save(update_fields=['status'])
+			announcement.status = "sending"
+			announcement.save(update_fields=["status"])
 
 			# Group subscribers by the list (for credentials resolution)
 			# Use the list from which we first encountered them
 			for email, (subscriber, lst) in all_subscribers.items():
-				api_token, api_url, site, custom_settings = list_credentials.get(lst.list_id, (None, None, None, None))
+				api_token, api_url, site, custom_settings = list_credentials.get(
+					lst.list_id, (None, None, None, None)
+				)
 
-				html = self._render_announcement_email(announcement, subscriber=subscriber, site=site, list_id=lst.list_id, custom_settings=custom_settings)
-				text = self._render_announcement_text(announcement, subscriber=subscriber)
+				html = self._render_announcement_email(
+					announcement,
+					subscriber=subscriber,
+					site=site,
+					list_id=lst.list_id,
+					custom_settings=custom_settings,
+				)
+				text = self._render_announcement_text(
+					announcement, subscriber=subscriber
+				)
 
-				error_msg = ''
+				error_msg = ""
 				success = False
 				try:
 					# Strip any [TEST] prefix from subject for live sends
 					live_subject = announcement.subject
-					if live_subject.startswith('[TEST] '):
+					if live_subject.startswith("[TEST] "):
 						live_subject = live_subject[7:]
 					_sender_name = (
 						(custom_settings.sender_name or custom_settings.title)
-						if custom_settings else None
-					) or 'Gregory AI'
+						if custom_settings
+						else None
+					) or "Gregory AI"
 					response = send_email(
 						to=subscriber.email,
 						subject=live_subject,
@@ -1660,43 +2067,60 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					announcement=announcement,
 					subscriber=subscriber,
 					defaults={
-						'list': lst,
-						'success': success,
-						'error_message': error_msg,
+						"list": lst,
+						"success": success,
+						"error_message": error_msg,
 					},
 				)
 
-			announcement.status = 'sent' if failure_count == 0 else 'failed'
+			announcement.status = "sent" if failure_count == 0 else "failed"
 			announcement.sent_at = timezone.now()
 			announcement.recipients_count = success_count
 			announcement.failures_count = failure_count
-			announcement.save(update_fields=['status', 'sent_at', 'recipients_count', 'failures_count'])
+			announcement.save(
+				update_fields=[
+					"status",
+					"sent_at",
+					"recipients_count",
+					"failures_count",
+				]
+			)
 
 			if failure_count == 0:
-				messages.success(request, f"Announcement sent to {success_count} subscriber(s).")
+				messages.success(
+					request, f"Announcement sent to {success_count} subscriber(s)."
+				)
 			else:
 				messages.warning(
 					request,
-					f"Announcement sent to {success_count} subscriber(s) with {failure_count} failure(s)."
+					f"Announcement sent to {success_count} subscriber(s) with {failure_count} failure(s).",
 				)
-			return redirect(reverse('admin:subscriptions_announcement_change', args=[announcement.pk]))
+			return redirect(
+				reverse(
+					"admin:subscriptions_announcement_change", args=[announcement.pk]
+				)
+			)
 
 		# GET — show confirmation page
 		context = {
 			**self.admin_site.each_context(request),
-			'announcement': announcement,
-			'list_info': list_info,
-			'total_subscribers': len(all_subscribers),
-			'title': f'Confirm Send: {announcement.subject}',
-			'opts': self.model._meta,
+			"announcement": announcement,
+			"list_info": list_info,
+			"total_subscribers": len(all_subscribers),
+			"title": f"Confirm Send: {announcement.subject}",
+			"opts": self.model._meta,
 		}
-		return render(request, 'admin/subscriptions/announcement/send_confirm.html', context)
+		return render(
+			request, "admin/subscriptions/announcement/send_confirm.html", context
+		)
 
-	def change_view(self, request, object_id, form_url='', extra_context=None):
+	def change_view(self, request, object_id, form_url="", extra_context=None):
 		extra_context = extra_context or {}
 		try:
 			announcement = Announcement.objects.get(pk=object_id)
-			extra_context['show_send_buttons'] = announcement.status == 'draft'
+			extra_context["show_send_buttons"] = announcement.status == "draft"
 		except Announcement.DoesNotExist:
 			pass
-		return super().change_view(request, object_id, form_url, extra_context=extra_context)
+		return super().change_view(
+			request, object_id, form_url, extra_context=extra_context
+		)

@@ -22,10 +22,25 @@ from organizations.models import Organization, OrganizationUser
 from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 
 from .models import (
-    Articles, Trials, Sources, Entities, Authors, Subject, ArticleSubjectRelevance, TeamCategory, PredictionRunLog, Team,
-    ArticleTrialReference, OrganizationCredentials, OrganizationSite,
-    OrganizationApiSettings, ArticleOrgContent, TrialOrgContent,
-    ArticleCategoryAssignment, TrialCategoryAssignment, CategoryType
+	Articles,
+	Trials,
+	Sources,
+	Entities,
+	Authors,
+	Subject,
+	ArticleSubjectRelevance,
+	TeamCategory,
+	PredictionRunLog,
+	Team,
+	ArticleTrialReference,
+	OrganizationCredentials,
+	OrganizationSite,
+	OrganizationApiSettings,
+	ArticleOrgContent,
+	TrialOrgContent,
+	ArticleCategoryAssignment,
+	TrialCategoryAssignment,
+	CategoryType,
 )
 from .widgets import MLPredictionsWidget
 from .fields import MLPredictionsField
@@ -35,21 +50,23 @@ def get_user_organizations(user):
 	"""Get the list of organization IDs for a user."""
 	if user.is_superuser:
 		return None  # None means all organizations
-	return user.organizations_organizationuser.values_list('organization__id', flat=True)
+	return user.organizations_organizationuser.values_list(
+		"organization__id", flat=True
+	)
 
 
 class OrganizationRestrictedFieldListFilter(admin.RelatedFieldListFilter):
 	"""Custom filter that restricts related field choices to user's organization."""
-	
+
 	def field_choices(self, field, request, model_admin):
 		"""Override to filter choices based on user's organization."""
 		choices = super().field_choices(field, request, model_admin)
-		
+
 		if request.user.is_superuser:
 			return choices
-		
+
 		user_orgs = get_user_organizations(request.user)
-		
+
 		# Filter the choices based on organization
 		filtered_choices = []
 		for choice_value, choice_label in choices:
@@ -57,16 +74,16 @@ class OrganizationRestrictedFieldListFilter(admin.RelatedFieldListFilter):
 				# Include the empty choice
 				filtered_choices.append((choice_value, choice_label))
 				continue
-			
+
 			try:
 				# Get the object for this choice
 				obj = field.related_model.objects.get(pk=choice_value)
-				
+
 				# Check if it belongs to user's organization
-				if hasattr(obj, 'organization'):
+				if hasattr(obj, "organization"):
 					if obj.organization_id in user_orgs:
 						filtered_choices.append((choice_value, choice_label))
-				elif hasattr(obj, 'team'):
+				elif hasattr(obj, "team"):
 					if obj.team.organization_id in user_orgs:
 						filtered_choices.append((choice_value, choice_label))
 				else:
@@ -76,7 +93,9 @@ class OrganizationRestrictedFieldListFilter(admin.RelatedFieldListFilter):
 				# Fail closed: if a choice's org can't be resolved, omit it rather
 				# than risk leaking it; logged so a systematic failure stays visible.
 				logging.getLogger(__name__).warning(
-					"OrganizationRestrictedFieldListFilter: skipping choice %r (%s)", choice_value, e
+					"OrganizationRestrictedFieldListFilter: skipping choice %r (%s)",
+					choice_value,
+					e,
 				)
 
 		return filtered_choices
@@ -84,15 +103,16 @@ class OrganizationRestrictedFieldListFilter(admin.RelatedFieldListFilter):
 
 class BaseOrganizationFilter(admin.SimpleListFilter):
 	"""Base filter that lists organisations scoped to the current user's access."""
-	title = 'organisation'
-	parameter_name = 'organisation'
+
+	title = "organisation"
+	parameter_name = "organisation"
 
 	def lookups(self, request, model_admin):
 		if request.user.is_superuser:
-			orgs = Organization.objects.all().order_by('name')
+			orgs = Organization.objects.all().order_by("name")
 		else:
 			user_org_ids = get_user_organizations(request.user)
-			orgs = Organization.objects.filter(id__in=user_org_ids).order_by('name')
+			orgs = Organization.objects.filter(id__in=user_org_ids).order_by("name")
 		return [(org.pk, org.name) for org in orgs]
 
 
@@ -119,30 +139,30 @@ class OrganizationFilterMixin:
 	Mixin to restrict admin queryset visibility based on user's organization.
 	Superusers see everything; staff users only see objects from their organization.
 	"""
-	
+
 	def get_queryset(self, request):
 		"""Filter queryset by organization for non-superusers."""
 		qs = super().get_queryset(request)
-		
+
 		# Superusers see everything
 		if request.user.is_superuser:
 			return qs
-		
+
 		# Staff users only see objects from their organization
 		user_orgs = get_user_organizations(request.user)
-		
+
 		# Try to filter by organization directly
-		if hasattr(qs.model, 'organization'):
+		if hasattr(qs.model, "organization"):
 			return qs.filter(organization__id__in=user_orgs)
-		
+
 		# If the model has a team relationship, filter by team's organization
-		if hasattr(qs.model, 'team'):
+		if hasattr(qs.model, "team"):
 			return qs.filter(team__organization__id__in=user_orgs)
-		
+
 		# If the model has multiple teams (M2M), filter by any team's organization
 		try:
 			# Check if 'teams' is a M2M field
-			qs.model._meta.get_field('teams')
+			qs.model._meta.get_field("teams")
 		except FieldDoesNotExist:
 			# Model has no 'teams' field; fall through to the unscoped queryset.
 			return qs
@@ -150,62 +170,75 @@ class OrganizationFilterMixin:
 
 
 class ArticleTrialReferenceInline(admin.TabularInline):
-    model = ArticleTrialReference
-    extra = 0
-    readonly_fields = ['trial', 'identifier_type', 'identifier_value', 'discovered_date']
-    can_delete = False
-    verbose_name_plural = "Referenced Trials"
-    verbose_name = "Trial Reference"
-    classes = ['collapse']
+	model = ArticleTrialReference
+	extra = 0
+	readonly_fields = [
+		"trial",
+		"identifier_type",
+		"identifier_value",
+		"discovered_date",
+	]
+	can_delete = False
+	verbose_name_plural = "Referenced Trials"
+	verbose_name = "Trial Reference"
+	classes = ["collapse"]
 
-    def has_add_permission(self, request, obj=None):
-        return False  # Prevent manual adding, should be done by the detect_trial_references command
+	def has_add_permission(self, request, obj=None):
+		return False  # Prevent manual adding, should be done by the detect_trial_references command
+
 
 class TrialArticleReferenceInline(admin.TabularInline):
-    model = ArticleTrialReference
-    extra = 0
-    readonly_fields = ['article', 'identifier_type', 'identifier_value', 'discovered_date']
-    can_delete = False
-    verbose_name_plural = "Referencing Articles"
-    verbose_name = "Article Reference"
-    classes = ['collapse']
-    
-    def has_add_permission(self, request, obj=None):
-        return False  # Prevent manual adding, should be done by the detect_trial_references command
+	model = ArticleTrialReference
+	extra = 0
+	readonly_fields = [
+		"article",
+		"identifier_type",
+		"identifier_value",
+		"discovered_date",
+	]
+	can_delete = False
+	verbose_name_plural = "Referencing Articles"
+	verbose_name = "Article Reference"
+	classes = ["collapse"]
+
+	def has_add_permission(self, request, obj=None):
+		return False  # Prevent manual adding, should be done by the detect_trial_references command
+
 
 class RelevanceRadioWidget(forms.RadioSelect):
 	"""Custom radio widget with horizontal layout and emojis"""
-	
+
 	def render(self, name, value, attrs=None, renderer=None):
 		from django.utils.safestring import mark_safe
-		
+
 		if attrs is None:
 			attrs = {}
-		
+
 		choices_html = []
 		for choice_value, choice_label in self.choices:
 			# Handle None, True, False comparison properly
 			if choice_value is None and value is None:
-				checked = 'checked'
+				checked = "checked"
 			elif choice_value == value:
-				checked = 'checked'
+				checked = "checked"
 			elif str(choice_value) == str(value):
-				checked = 'checked'
+				checked = "checked"
 			else:
-				checked = ''
-			
+				checked = ""
+
 			choice_id = f"{attrs.get('id', name)}_{choice_value or 'none'}"
-			
+
 			choice_html = f'''
 				<label style="margin-right: 15px; white-space: nowrap; cursor: pointer;">
-					<input type="radio" id="{choice_id}" name="{name}" value="{choice_value if choice_value is not None else ''}" {checked} style="margin-right: 5px;">
+					<input type="radio" id="{choice_id}" name="{name}" value="{choice_value if choice_value is not None else ""}" {checked} style="margin-right: 5px;">
 					{choice_label}
 				</label>
 			'''
 			choices_html.append(choice_html)
-		
+
 		final_html = f'<div style="display: flex; align-items: center; gap: 10px;">{"".join(choices_html)}</div>'
 		return mark_safe(final_html)
+
 
 class SubjectDisplayWidget(forms.Widget):
 	"""Shows subject name as bold text (with hidden pk) for existing rows."""
@@ -215,7 +248,7 @@ class SubjectDisplayWidget(forms.Widget):
 			try:
 				subject = Subject.objects.get(pk=value)
 				return mark_safe(
-					f'<strong>{subject}</strong>'
+					f"<strong>{subject}</strong>"
 					f'<input type="hidden" name="{name}" value="{value}">'
 				)
 			except Subject.DoesNotExist:
@@ -225,38 +258,39 @@ class SubjectDisplayWidget(forms.Widget):
 
 class ArticleSubjectRelevanceForm(forms.ModelForm):
 	RELEVANCE_CHOICES = [
-		(None, '⚪ Not Reviewed'),
-		(True, '✅ Relevant'),
-		(False, '❌ Not Relevant'),
+		(None, "⚪ Not Reviewed"),
+		(True, "✅ Relevant"),
+		(False, "❌ Not Relevant"),
 	]
-	
+
 	is_relevant = forms.ChoiceField(
 		choices=RELEVANCE_CHOICES,
 		widget=RelevanceRadioWidget,
 		required=False,
 		initial=None,
-		label='Relevance'
+		label="Relevance",
 	)
-	
+
 	class Meta:
 		model = ArticleSubjectRelevance
-		fields = ['subject', 'is_relevant']
+		fields = ["subject", "is_relevant"]
 		widgets = {
-			'subject': SubjectDisplayWidget(),
+			"subject": SubjectDisplayWidget(),
 		}
-	
+
 	def clean_is_relevant(self):
 		"""Convert string choice to boolean/None value"""
-		value = self.cleaned_data.get('is_relevant')
+		value = self.cleaned_data.get("is_relevant")
 		# Convert string representations to actual values
-		if value == 'True' or value is True:
+		if value == "True" or value is True:
 			return True
-		elif value == 'False' or value is False:
+		elif value == "False" or value is False:
 			return False
-		elif value == 'None' or value == '' or value is None:
+		elif value == "None" or value == "" or value is None:
 			return None
 		else:
 			return None  # Default to "Not Reviewed"
+
 
 class ArticleSubjectRelevanceFormSet(forms.BaseInlineFormSet):
 	"""Custom formset that shows the subject dropdown only on new (unsaved) rows."""
@@ -265,11 +299,13 @@ class ArticleSubjectRelevanceFormSet(forms.BaseInlineFormSet):
 		super().add_fields(form, index)
 		if not form.instance.pk:
 			# New row: show a subject select dropdown
-			form.fields['subject'].widget = forms.Select()
-			form.fields['subject'].queryset = Subject.objects.all().order_by('subject_name')
+			form.fields["subject"].widget = forms.Select()
+			form.fields["subject"].queryset = Subject.objects.all().order_by(
+				"subject_name"
+			)
 		else:
 			# Existing row: show subject name as text with embedded hidden pk
-			form.fields['subject'].widget = SubjectDisplayWidget()
+			form.fields["subject"].widget = SubjectDisplayWidget()
 
 
 class ArticleSubjectRelevanceInline(admin.TabularInline):
@@ -277,7 +313,7 @@ class ArticleSubjectRelevanceInline(admin.TabularInline):
 	form = ArticleSubjectRelevanceForm
 	formset = ArticleSubjectRelevanceFormSet
 	can_delete = True
-	fields = ['subject', 'is_relevant']
+	fields = ["subject", "is_relevant"]
 
 	def get_extra(self, request, obj=None, **kwargs):
 		"""Superusers get one extra empty form to add new subject relevances"""
@@ -291,31 +327,33 @@ class ArticleSubjectRelevanceInline(admin.TabularInline):
 		"""
 		if obj and obj.pk:  # If editing existing article
 			if request.user.is_superuser:
-				team_subjects = Subject.objects.filter(
-					team__in=obj.teams.all()
-				).distinct().order_by('subject_name')
+				team_subjects = (
+					Subject.objects.filter(team__in=obj.teams.all())
+					.distinct()
+					.order_by("subject_name")
+				)
 			else:
-				team_subjects = Subject.objects.filter(
-					team__in=obj.teams.all(),
-					auto_predict=True
-				).distinct().order_by('subject_name')
+				team_subjects = (
+					Subject.objects.filter(team__in=obj.teams.all(), auto_predict=True)
+					.distinct()
+					.order_by("subject_name")
+				)
 
 			# Create ArticleSubjectRelevance instances for any missing subjects
 			for subject in team_subjects:
 				ArticleSubjectRelevance.objects.get_or_create(
-					article=obj,
-					subject=subject,
-					defaults={'is_relevant': None}
+					article=obj, subject=subject, defaults={"is_relevant": None}
 				)
 
 		return super().get_formset(request, obj, **kwargs)
 
 	def get_queryset(self, request):
 		"""Superusers see all subjects; other users see only auto_predict subjects"""
-		qs = super().get_queryset(request).select_related('subject')
+		qs = super().get_queryset(request).select_related("subject")
 		if not request.user.is_superuser:
 			qs = qs.filter(subject__auto_predict=True)
-		return qs.order_by('subject__subject_name')
+		return qs.order_by("subject__subject_name")
+
 
 class _BaseOrgContentInline(admin.StackedInline):
 	"""Shared inline behaviour for ArticleOrgContent / TrialOrgContent.
@@ -327,12 +365,13 @@ class _BaseOrgContentInline(admin.StackedInline):
 	- Empty extra rows (both textareas blank) are skipped at save time, so
 	  opening an article without typing anything does not pollute the table.
 	"""
+
 	extra = 0
-	fields = ('organization', 'takeaways', 'summary_plain_english', 'updated_at')
-	readonly_fields = ('updated_at',)
+	fields = ("organization", "takeaways", "summary_plain_english", "updated_at")
+	readonly_fields = ("updated_at",)
 
 	def get_queryset(self, request):
-		qs = super().get_queryset(request).select_related('organization')
+		qs = super().get_queryset(request).select_related("organization")
 		if request.user.is_superuser:
 			return qs
 		user_orgs = get_user_organizations(request.user)
@@ -351,8 +390,9 @@ class _BaseOrgContentInline(admin.StackedInline):
 		if not user_orgs:
 			return []
 		existing = set(
-			obj.org_contents.filter(organization_id__in=user_orgs)
-			.values_list('organization_id', flat=True)
+			obj.org_contents.filter(organization_id__in=user_orgs).values_list(
+				"organization_id", flat=True
+			)
 		)
 		return [oid for oid in user_orgs if oid not in existing]
 
@@ -375,26 +415,28 @@ class _BaseOrgContentInline(admin.StackedInline):
 		is_superuser = request.user.is_superuser
 
 		if is_superuser:
-			allowed_org_qs = Organization.objects.all().order_by('name')
+			allowed_org_qs = Organization.objects.all().order_by("name")
 			extra_org_ids = []
 		else:
 			user_org_ids = list(get_user_organizations(request.user) or [])
-			allowed_org_qs = Organization.objects.filter(id__in=user_org_ids).order_by('name')
+			allowed_org_qs = Organization.objects.filter(id__in=user_org_ids).order_by(
+				"name"
+			)
 			extra_org_ids = self._missing_org_ids(request, obj)
 
 		class ScopedOrgContentFormSet(formset_class):
 			def _construct_form(self, i, **form_kwargs):
 				form = super()._construct_form(i, **form_kwargs)
-				form.fields['organization'].queryset = allowed_org_qs
+				form.fields["organization"].queryset = allowed_org_qs
 				if form.instance.pk:
 					# Existing row: lock the org so content can't be reassigned.
-					form.fields['organization'].disabled = True
+					form.fields["organization"].disabled = True
 				elif not is_superuser:
 					# Extra row for staff: pre-fill and lock to their next missing org.
 					extra_index = i - self.initial_form_count()
 					if 0 <= extra_index < len(extra_org_ids):
-						form.fields['organization'].initial = extra_org_ids[extra_index]
-						form.fields['organization'].disabled = True
+						form.fields["organization"].initial = extra_org_ids[extra_index]
+						form.fields["organization"].disabled = True
 				return form
 
 		return ScopedOrgContentFormSet
@@ -402,36 +444,44 @@ class _BaseOrgContentInline(admin.StackedInline):
 
 class ArticleOrgContentInline(_BaseOrgContentInline):
 	model = ArticleOrgContent
-	verbose_name = 'Editorial content (per organisation)'
-	verbose_name_plural = 'Editorial content (per organisation)'
+	verbose_name = "Editorial content (per organisation)"
+	verbose_name_plural = "Editorial content (per organisation)"
 
 
 class TrialOrgContentInline(_BaseOrgContentInline):
 	model = TrialOrgContent
-	verbose_name = 'Editorial content (per organisation)'
-	verbose_name_plural = 'Editorial content (per organisation)'
+	verbose_name = "Editorial content (per organisation)"
+	verbose_name_plural = "Editorial content (per organisation)"
 
 
 class ArticleCategoryAssignmentInline(admin.TabularInline):
 	model = ArticleCategoryAssignment
 	extra = 0
-	autocomplete_fields = ['teamcategory']
-	verbose_name = 'Category assignment'
-	verbose_name_plural = 'Category assignments'
+	autocomplete_fields = ["teamcategory"]
+	verbose_name = "Category assignment"
+	verbose_name_plural = "Category assignments"
 
 	def get_queryset(self, request):
-		return super().get_queryset(request).select_related('teamcategory', 'teamcategory__team')
+		return (
+			super()
+			.get_queryset(request)
+			.select_related("teamcategory", "teamcategory__team")
+		)
 
 
 class TrialCategoryAssignmentInline(admin.TabularInline):
 	model = TrialCategoryAssignment
 	extra = 0
-	autocomplete_fields = ['teamcategory']
-	verbose_name = 'Category assignment'
-	verbose_name_plural = 'Category assignments'
+	autocomplete_fields = ["teamcategory"]
+	verbose_name = "Category assignment"
+	verbose_name_plural = "Category assignments"
 
 	def get_queryset(self, request):
-		return super().get_queryset(request).select_related('teamcategory', 'teamcategory__team')
+		return (
+			super()
+			.get_queryset(request)
+			.select_related("teamcategory", "teamcategory__team")
+		)
 
 
 class ArticleAdminForm(forms.ModelForm):
@@ -439,314 +489,492 @@ class ArticleAdminForm(forms.ModelForm):
 
 	class Meta:
 		model = Articles
-		fields = '__all__'
+		fields = "__all__"
 		widgets = {
-			'ml_predictions': MLPredictionsWidget(),
+			"ml_predictions": MLPredictionsWidget(),
 		}
 		labels = {
-			'link': 'Article URL (canonical)',
-			'links': 'All source URLs',
+			"link": "Article URL (canonical)",
+			"links": "All source URLs",
 		}
 		help_texts = {
-			'link': (
-				'First URL seen for this article; stable after first import. '
+			"link": (
+				"First URL seen for this article; stable after first import. "
 				'Corresponds to "link" in the API response.'
 			),
-			'links': (
+			"links": (
 				'All known URLs for this article, keyed by registry slug (e.g. "ctgov") '
-				'for known registries or by hostname otherwise. '
-				'Managed automatically — do not edit. '
+				"for known registries or by hostname otherwise. "
+				"Managed automatically — do not edit. "
 				'Corresponds to "links" in the API response.'
 			),
 		}
 
 	def __init__(self, *args, **kwargs):
-		self.request = kwargs.pop('request', None)
+		self.request = kwargs.pop("request", None)
 		super().__init__(*args, **kwargs)
-		
+
 		if self.instance and self.instance.pk:
-			self.fields['ml_predictions_display'].initial = self.instance.ml_predictions_detail.all()
-		
+			self.fields[
+				"ml_predictions_display"
+			].initial = self.instance.ml_predictions_detail.all()
+
 		# Filter team and subject choices based on user's organization
 		if self.request:
 			if self.request.user.is_superuser:
-				self.fields['teams'].queryset = Team.objects.all()
-				self.fields['subjects'].queryset = Subject.objects.all()
+				self.fields["teams"].queryset = Team.objects.all()
+				self.fields["subjects"].queryset = Subject.objects.all()
 			else:
 				user_orgs = get_user_organizations(self.request.user)
-				self.fields['teams'].queryset = Team.objects.filter(organization__id__in=user_orgs)
-				self.fields['subjects'].queryset = Subject.objects.filter(team__organization__id__in=user_orgs)
+				self.fields["teams"].queryset = Team.objects.filter(
+					organization__id__in=user_orgs
+				)
+				self.fields["subjects"].queryset = Subject.objects.filter(
+					team__organization__id__in=user_orgs
+				)
+
 
 class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	form = ArticleAdminForm
-	inlines = [ArticleOrgContentInline, ArticleSubjectRelevanceInline, ArticleTrialReferenceInline, ArticleCategoryAssignmentInline]
+	inlines = [
+		ArticleOrgContentInline,
+		ArticleSubjectRelevanceInline,
+		ArticleTrialReferenceInline,
+		ArticleCategoryAssignmentInline,
+	]
 	fieldsets = (
-		('Article Information', {
-			'fields': (
-				'title', 'link', 'links', 'doi', 'summary', 'teams', 'subjects', 'sources',
-				'published_date', 'discovery_date', 'authors',
-				'entities', 'kind', 'access',
-				'publisher', 'container_title', 'crossref_check',
-			),
-			'description': 'This section contains general information about the article'
-		}),
-		('Machine Learning Relevancy Predictions per Subject', {
-			'fields': ('ml_predictions_display',),
-			'description': 'Grouping machine learning prediction indicators',
-			'classes': ('ml-predictions-section',),
-		}),
+		(
+			"Article Information",
+			{
+				"fields": (
+					"title",
+					"link",
+					"links",
+					"doi",
+					"summary",
+					"teams",
+					"subjects",
+					"sources",
+					"published_date",
+					"discovery_date",
+					"authors",
+					"entities",
+					"kind",
+					"access",
+					"publisher",
+					"container_title",
+					"crossref_check",
+				),
+				"description": "This section contains general information about the article",
+			},
+		),
+		(
+			"Machine Learning Relevancy Predictions per Subject",
+			{
+				"fields": ("ml_predictions_display",),
+				"description": "Grouping machine learning prediction indicators",
+				"classes": ("ml-predictions-section",),
+			},
+		),
 	)
-	list_display = ['article_id', 'title', 'discovery_date', 'display_sources']
-	ordering = ['-discovery_date']
-	
-	@admin.display(description='Sources')
+	list_display = ["article_id", "title", "discovery_date", "display_sources"]
+	ordering = ["-discovery_date"]
+
+	@admin.display(description="Sources")
 	def display_sources(self, obj):
 		"""Display sources as comma-separated list."""
-		return ', '.join([source.name for source in obj.sources.all()])
-	
+		return ", ".join([source.name for source in obj.sources.all()])
+
 	def get_queryset(self, request):
 		"""Optimize queryset with prefetch for sources."""
 		qs = super().get_queryset(request)
-		return qs.prefetch_related('sources')
-	
-	readonly_fields = ['entities', 'discovery_date', 'links']
-	search_fields = ['article_id', 'title', 'doi']
+		return qs.prefetch_related("sources")
+
+	readonly_fields = ["entities", "discovery_date", "links"]
+	search_fields = ["article_id", "title", "doi"]
 	list_filter = [
 		ArticleOrganizationFilter,
-		('teams', OrganizationRestrictedFieldListFilter),
-		('subjects', OrganizationRestrictedFieldListFilter),
-		('sources', OrganizationRestrictedFieldListFilter),
+		("teams", OrganizationRestrictedFieldListFilter),
+		("subjects", OrganizationRestrictedFieldListFilter),
+		("sources", OrganizationRestrictedFieldListFilter),
 	]
 	raw_id_fields = ("authors",)
-	
+
 	def get_form(self, request, obj=None, **kwargs):
 		"""Pass the request to the form so it can filter field choices."""
 		form_class = super().get_form(request, obj, **kwargs)
-		
+
 		class FormWithRequest(form_class):
 			def __init__(self, *args, **form_kwargs):
-				form_kwargs['request'] = request
+				form_kwargs["request"] = request
 				super().__init__(*args, **form_kwargs)
-		
+
 		return FormWithRequest
-	
+
 	def get_urls(self):
 		from django.urls import path
-		from .admin_views import article_review_status_view, update_article_relevance_ajax
-		
+		from .admin_views import (
+			article_review_status_view,
+			update_article_relevance_ajax,
+		)
+
 		urls = super().get_urls()
 		custom_urls = [
-			path('review-status/', self.admin_site.admin_view(article_review_status_view), name='article_review_status'),
-			path('update-article-relevance/', self.admin_site.admin_view(update_article_relevance_ajax), name='update_article_relevance'),
+			path(
+				"review-status/",
+				self.admin_site.admin_view(article_review_status_view),
+				name="article_review_status",
+			),
+			path(
+				"update-article-relevance/",
+				self.admin_site.admin_view(update_article_relevance_ajax),
+				name="update_article_relevance",
+			),
 		]
 		return custom_urls + urls
-	
+
 	def changelist_view(self, request, extra_context=None):
 		"""Override changelist view to add a button to access review status page"""
 		extra_context = extra_context or {}
-		extra_context['review_status_url'] = reverse('admin:article_review_status')
+		extra_context["review_status_url"] = reverse("admin:article_review_status")
 		return super().changelist_view(request, extra_context=extra_context)
-	
+
 	class Media:
 		css = {
-			'all': ['admin/css/ml_predictions.css'],
+			"all": ["admin/css/ml_predictions.css"],
 		}
+
 
 class TrialAdminForm(forms.ModelForm):
 	"""Adds plain-language labels and help text for fields that use clinical-trial jargon."""
 
 	class Meta:
 		model = Trials
-		fields = '__all__'
+		fields = "__all__"
 		labels = {
 			# Titles & identity
-			'title': 'Public title',
-			'scientific_title': 'Scientific title',
-			'acronym': 'Study acronym',
-			'link': 'Registry web page (canonical)',
-			'links': 'All registry URLs',
-			'identifiers': 'Trial IDs',
-			'internal_number': 'Registry internal number',
-			'secondary_id': 'Other IDs',
+			"title": "Public title",
+			"scientific_title": "Scientific title",
+			"acronym": "Study acronym",
+			"link": "Registry web page (canonical)",
+			"links": "All registry URLs",
+			"identifiers": "Trial IDs",
+			"internal_number": "Registry internal number",
+			"secondary_id": "Other IDs",
 			# Dates & registry metadata
-			'published_date': 'Headline date',
-			'date_registration': 'Registration date',
-			'date_enrollement': 'Enrolment start date',
-			'last_refreshed_on': 'Registry last updated on',
-			'export_date': 'Exported from registry on',
-			'source_register': 'Source registry',
-			'other_records': 'Listed in other registries?',
-			'prospective_registration': 'Registered before it started?',
+			"published_date": "Headline date",
+			"date_registration": "Registration date",
+			"date_enrollement": "Enrolment start date",
+			"last_refreshed_on": "Registry last updated on",
+			"export_date": "Exported from registry on",
+			"source_register": "Source registry",
+			"other_records": "Listed in other registries?",
+			"prospective_registration": "Registered before it started?",
 			# Study details
-			'study_type': 'Study type',
-			'study_design': 'Study design',
-			'phase': 'Trial phase',
-			'recruitment_status': 'Recruitment status',
-			'target_size': 'Target enrolment',
-			'countries': 'Countries',
+			"study_type": "Study type",
+			"study_design": "Study design",
+			"phase": "Trial phase",
+			"recruitment_status": "Recruitment status",
+			"target_size": "Target enrolment",
+			"countries": "Countries",
 			# Conditions & interventions
-			'condition': 'Health condition',
-			'intervention': 'Intervention',
-			'primary_outcome': 'Primary outcome',
-			'secondary_outcome': 'Secondary outcomes',
+			"condition": "Health condition",
+			"intervention": "Intervention",
+			"primary_outcome": "Primary outcome",
+			"secondary_outcome": "Secondary outcomes",
 			# Eligibility
-			'inclusion_criteria': 'Who can take part (inclusion)',
-			'exclusion_criteria': 'Who cannot take part (exclusion)',
-			'inclusion_agemin': 'Minimum age',
-			'inclusion_agemax': 'Maximum age',
-			'inclusion_gender': 'Eligible sex / gender',
+			"inclusion_criteria": "Who can take part (inclusion)",
+			"exclusion_criteria": "Who cannot take part (exclusion)",
+			"inclusion_agemin": "Minimum age",
+			"inclusion_agemax": "Maximum age",
+			"inclusion_gender": "Eligible sex / gender",
 			# Sponsors & contacts
-			'primary_sponsor': 'Main sponsor',
-			'secondary_sponsor': 'Co-sponsors',
-			'source_support': 'Funding source',
-			'contact_firstname': 'Contact first name',
-			'contact_lastname': 'Contact last name',
-			'contact_address': 'Contact address',
-			'contact_email': 'Contact email',
-			'contact_tel': 'Contact phone',
-			'contact_affiliation': 'Contact organisation',
+			"primary_sponsor": "Main sponsor",
+			"secondary_sponsor": "Co-sponsors",
+			"source_support": "Funding source",
+			"contact_firstname": "Contact first name",
+			"contact_lastname": "Contact last name",
+			"contact_address": "Contact address",
+			"contact_email": "Contact email",
+			"contact_tel": "Contact phone",
+			"contact_affiliation": "Contact organisation",
 			# Ethics review
-			'ethics_review_status': 'Ethics approval status',
-			'ethics_review_approval_date': 'Ethics approval date',
-			'ethics_review_contact_name': 'Ethics committee contact',
-			'ethics_review_contact_address': 'Ethics contact address',
-			'ethics_review_contact_phone': 'Ethics contact phone',
-			'ethics_review_contact_email': 'Ethics contact email',
+			"ethics_review_status": "Ethics approval status",
+			"ethics_review_approval_date": "Ethics approval date",
+			"ethics_review_contact_name": "Ethics committee contact",
+			"ethics_review_contact_address": "Ethics contact address",
+			"ethics_review_contact_phone": "Ethics contact phone",
+			"ethics_review_contact_email": "Ethics contact email",
 			# Results
-			'results_posted': 'Results posted?',
-			'results_date_completed': 'Results completion date',
-			'results_url_link': 'Results link',
-			'results_yes_no': 'Results available?',
-			'results_ipd_plan': 'Plans to share participant data?',
-			'results_ipd_description': 'Data-sharing details',
+			"results_posted": "Results posted?",
+			"results_date_completed": "Results completion date",
+			"results_url_link": "Results link",
+			"results_yes_no": "Results available?",
+			"results_ipd_plan": "Plans to share participant data?",
+			"results_ipd_description": "Data-sharing details",
 		}
 		help_texts = {
 			# Titles & identity
-			'title': 'The plain-language title of the trial, intended for the general public. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
-			'scientific_title': 'The technical title of the trial, written using medical terminology. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'acronym': 'Short nickname or abbreviation for the trial (e.g. “IMPACT-MS”). Source: WHO ICTRP.',
-			'link': ('The canonical registry URL for this trial - the first registry URL discovered, kept for good. Exposed as "link" in the API response and on the frontend. Managed automatically by importers; edit only to correct an incorrect URL. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.'),
-			'links': ('All known registry URLs for this trial, keyed by registry slug (e.g. {"ctgov": "https://clinicaltrials.gov/...", "ctis": "https://euclinicaltrials.eu/..."}). Populated and merged automatically by importers - do not edit manually. Exposed as "links" in the API response.'),
-			'identifiers': 'Registry identifiers for this trial (e.g. NCT, ChiCTR, or EUCTR numbers). Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
-			'internal_number': 'Internal record number assigned by the source registry. Rarely meaningful to patients. Source: WHO ICTRP.',
-			'secondary_id': 'Additional identifiers used by other registries or by the sponsor. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			"title": "The plain-language title of the trial, intended for the general public. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
+			"scientific_title": "The technical title of the trial, written using medical terminology. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"acronym": "Short nickname or abbreviation for the trial (e.g. “IMPACT-MS”). Source: WHO ICTRP.",
+			"link": (
+				'The canonical registry URL for this trial - the first registry URL discovered, kept for good. Exposed as "link" in the API response and on the frontend. Managed automatically by importers; edit only to correct an incorrect URL. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.'
+			),
+			"links": (
+				'All known registry URLs for this trial, keyed by registry slug (e.g. {"ctgov": "https://clinicaltrials.gov/...", "ctis": "https://euclinicaltrials.eu/..."}). Populated and merged automatically by importers - do not edit manually. Exposed as "links" in the API response.'
+			),
+			"identifiers": "Registry identifiers for this trial (e.g. NCT, ChiCTR, or EUCTR numbers). Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
+			"internal_number": "Internal record number assigned by the source registry. Rarely meaningful to patients. Source: WHO ICTRP.",
+			"secondary_id": "Additional identifiers used by other registries or by the sponsor. Sources: WHO ICTRP, ClinicalTrials.gov.",
 			# Dates & registry metadata
-			'published_date': 'The trial’s headline date — its exact meaning depends on the source: WHO ICTRP uses the “Date of registration”, ClinicalTrials.gov uses the study start date, and EU CTIS feeds use the date the trial was listed in the feed. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
-			'date_registration': 'The date the trial was registered with its registry, where the source provides one: from the WHO ICTRP “Date of registration” (mirrored into the headline date above) or the ClinicalTrials.gov “first submitted” date. Not available for EU CTIS trials. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'date_enrollement': 'Date the first participant was (or is expected to be) enrolled. Source: WHO ICTRP.',
-			'last_refreshed_on': 'Date the source registry last updated this record. Source: WHO ICTRP.',
-			'export_date': 'Date this record was exported from the WHO ICTRP database. Source: WHO ICTRP.',
-			'source_register': 'The registry this record came from (e.g. ClinicalTrials.gov, ChiCTR, EU-CTR). Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'other_records': 'Whether the same trial is also registered in other registries. Source: WHO ICTRP.',
-			'prospective_registration': '“Yes” means the trial was listed in a public registry before it enrolled any participants — the recommended practice. “No” means it was registered afterwards. Source: WHO ICTRP.',
+			"published_date": "The trial’s headline date — its exact meaning depends on the source: WHO ICTRP uses the “Date of registration”, ClinicalTrials.gov uses the study start date, and EU CTIS feeds use the date the trial was listed in the feed. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
+			"date_registration": "The date the trial was registered with its registry, where the source provides one: from the WHO ICTRP “Date of registration” (mirrored into the headline date above) or the ClinicalTrials.gov “first submitted” date. Not available for EU CTIS trials. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"date_enrollement": "Date the first participant was (or is expected to be) enrolled. Source: WHO ICTRP.",
+			"last_refreshed_on": "Date the source registry last updated this record. Source: WHO ICTRP.",
+			"export_date": "Date this record was exported from the WHO ICTRP database. Source: WHO ICTRP.",
+			"source_register": "The registry this record came from (e.g. ClinicalTrials.gov, ChiCTR, EU-CTR). Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"other_records": "Whether the same trial is also registered in other registries. Source: WHO ICTRP.",
+			"prospective_registration": "“Yes” means the trial was listed in a public registry before it enrolled any participants — the recommended practice. “No” means it was registered afterwards. Source: WHO ICTRP.",
 			# Study details
-			'study_type': 'The kind of study — for example interventional (testing a treatment) or observational (only observing). Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'study_design': 'How the study is structured — for example randomised, controlled, or single-group. Source: WHO ICTRP.',
-			'phase': 'The stage of testing (Phase 1–4). Early phases check safety in small groups; later phases test effectiveness in larger groups. “N/A” means not applicable. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'recruitment_status': 'Whether the trial is recruiting participants, not yet recruiting, completed, etc. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'target_size': 'The number of participants the trial aims to enrol. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'countries': 'Countries where the trial takes place. Sources: WHO ICTRP, ClinicalTrials.gov.',
+			"study_type": "The kind of study — for example interventional (testing a treatment) or observational (only observing). Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"study_design": "How the study is structured — for example randomised, controlled, or single-group. Source: WHO ICTRP.",
+			"phase": "The stage of testing (Phase 1–4). Early phases check safety in small groups; later phases test effectiveness in larger groups. “N/A” means not applicable. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"recruitment_status": "Whether the trial is recruiting participants, not yet recruiting, completed, etc. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"target_size": "The number of participants the trial aims to enrol. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"countries": "Countries where the trial takes place. Sources: WHO ICTRP, ClinicalTrials.gov.",
 			# Conditions & interventions
-			'condition': 'The disease or health condition being studied. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
-			'intervention': 'The treatment, drug, device, or procedure being tested or compared. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'primary_outcome': 'The main result the trial is designed to measure. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
-			'secondary_outcome': 'Additional results the trial measures beyond the main one. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
+			"condition": "The disease or health condition being studied. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
+			"intervention": "The treatment, drug, device, or procedure being tested or compared. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"primary_outcome": "The main result the trial is designed to measure. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
+			"secondary_outcome": "Additional results the trial measures beyond the main one. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			# Eligibility
-			'inclusion_criteria': 'Requirements a person must meet to take part in the trial. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'exclusion_criteria': 'Conditions that prevent a person from taking part in the trial. Source: WHO ICTRP (ClinicalTrials.gov combines this into the inclusion criteria).',
-			'inclusion_agemin': 'Youngest age eligible to participate. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'inclusion_agemax': 'Oldest age eligible to participate. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'inclusion_gender': 'Which sexes / genders can take part (e.g. both, female, male). Sources: WHO ICTRP, ClinicalTrials.gov.',
+			"inclusion_criteria": "Requirements a person must meet to take part in the trial. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"exclusion_criteria": "Conditions that prevent a person from taking part in the trial. Source: WHO ICTRP (ClinicalTrials.gov combines this into the inclusion criteria).",
+			"inclusion_agemin": "Youngest age eligible to participate. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"inclusion_agemax": "Oldest age eligible to participate. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"inclusion_gender": "Which sexes / genders can take part (e.g. both, female, male). Sources: WHO ICTRP, ClinicalTrials.gov.",
 			# Sponsors & contacts
-			'primary_sponsor': 'The lead organisation responsible for the trial. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.',
-			'secondary_sponsor': 'Additional organisations funding or running the trial, besides the main sponsor. May list several, separated by semicolons. Source: WHO ICTRP.',
-			'source_support': 'Organisations providing funding or material support for the trial. Source: WHO ICTRP.',
-			'contact_firstname': 'First name of the public contact person for the trial. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'contact_lastname': 'Last name of the public contact person for the trial. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'contact_address': 'Postal address of the trial’s contact person. Source: WHO ICTRP.',
-			'contact_email': 'Email address for enquiries about the trial. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'contact_tel': 'Phone number for enquiries about the trial. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'contact_affiliation': 'The organisation the contact person belongs to. Source: WHO ICTRP.',
+			"primary_sponsor": "The lead organisation responsible for the trial. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
+			"secondary_sponsor": "Additional organisations funding or running the trial, besides the main sponsor. May list several, separated by semicolons. Source: WHO ICTRP.",
+			"source_support": "Organisations providing funding or material support for the trial. Source: WHO ICTRP.",
+			"contact_firstname": "First name of the public contact person for the trial. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"contact_lastname": "Last name of the public contact person for the trial. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"contact_address": "Postal address of the trial’s contact person. Source: WHO ICTRP.",
+			"contact_email": "Email address for enquiries about the trial. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"contact_tel": "Phone number for enquiries about the trial. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"contact_affiliation": "The organisation the contact person belongs to. Source: WHO ICTRP.",
 			# Ethics review
-			'ethics_review_status': 'Whether the trial has been approved by an ethics committee / institutional review board. Source: WHO ICTRP.',
-			'ethics_review_approval_date': 'Date the ethics committee approved the trial. Source: WHO ICTRP.',
-			'ethics_review_contact_name': 'Name (or email) of the ethics committee contact. Source: WHO ICTRP.',
-			'ethics_review_contact_address': 'Postal address of the ethics committee. Source: WHO ICTRP.',
-			'ethics_review_contact_phone': 'Phone number of the ethics committee. Source: WHO ICTRP.',
-			'ethics_review_contact_email': 'Email address of the ethics committee. Source: WHO ICTRP.',
+			"ethics_review_status": "Whether the trial has been approved by an ethics committee / institutional review board. Source: WHO ICTRP.",
+			"ethics_review_approval_date": "Date the ethics committee approved the trial. Source: WHO ICTRP.",
+			"ethics_review_contact_name": "Name (or email) of the ethics committee contact. Source: WHO ICTRP.",
+			"ethics_review_contact_address": "Postal address of the ethics committee. Source: WHO ICTRP.",
+			"ethics_review_contact_phone": "Phone number of the ethics committee. Source: WHO ICTRP.",
+			"ethics_review_contact_email": "Email address of the ethics committee. Source: WHO ICTRP.",
 			# Results
-			'results_posted': 'Whether results have been posted/published for the trial. Sources: ClinicalTrials.gov (from the “has results” flag), EU CTIS (from the “Results posted” field).',
-			'results_date_completed': 'When the trial’s results became available. For WHO ICTRP this is the source “results completed” date; for ClinicalTrials.gov it is the date results were first posted. Sources: WHO ICTRP, ClinicalTrials.gov.',
-			'results_url_link': 'Link to where the trial’s results are published. Source: ClinicalTrials.gov.',
-			'results_yes_no': 'Whether the trial’s results have been published or posted. Source: WHO ICTRP.',
-			'results_ipd_plan': 'Whether the researchers plan to share de-identified data about each participant (IPD) with other researchers. Source: WHO ICTRP.',
-			'results_ipd_description': 'Free-text explanation of how and when the individual participant data will be shared. Source: WHO ICTRP.',
+			"results_posted": "Whether results have been posted/published for the trial. Sources: ClinicalTrials.gov (from the “has results” flag), EU CTIS (from the “Results posted” field).",
+			"results_date_completed": "When the trial’s results became available. For WHO ICTRP this is the source “results completed” date; for ClinicalTrials.gov it is the date results were first posted. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"results_url_link": "Link to where the trial’s results are published. Source: ClinicalTrials.gov.",
+			"results_yes_no": "Whether the trial’s results have been published or posted. Source: WHO ICTRP.",
+			"results_ipd_plan": "Whether the researchers plan to share de-identified data about each participant (IPD) with other researchers. Source: WHO ICTRP.",
+			"results_ipd_description": "Free-text explanation of how and when the individual participant data will be shared. Source: WHO ICTRP.",
 		}
 
 
 class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	form = TrialAdminForm
-	list_display = ['trial_id', 'title', 'display_identifiers', 'discovery_date', 'last_updated']
-	exclude = ['ml_predictions']
-	readonly_fields = ['last_updated', 'links']
-	inlines = [TrialOrgContentInline, TrialArticleReferenceInline, TrialCategoryAssignmentInline]
+	list_display = [
+		"trial_id",
+		"title",
+		"display_identifiers",
+		"discovery_date",
+		"last_updated",
+	]
+	exclude = ["ml_predictions"]
+	readonly_fields = ["last_updated", "links"]
+	inlines = [
+		TrialOrgContentInline,
+		TrialArticleReferenceInline,
+		TrialCategoryAssignmentInline,
+	]
 	search_fields = [
-		'trial_id', 'title', 'summary', 'scientific_title',
-		'primary_sponsor', 'source_register', 'recruitment_status', 'condition',
-		'intervention', 'primary_outcome', 'secondary_outcome', 'inclusion_criteria',
-		'exclusion_criteria', 'study_type', 'study_design', 'phase', 'countries',
-		'contact_firstname', 'contact_lastname', 'contact_affiliation',
-		'therapeutic_areas', 'sponsor_type', 'internal_number', 'secondary_id',
-		'identifiers', 'ctg_detailed_description'
+		"trial_id",
+		"title",
+		"summary",
+		"scientific_title",
+		"primary_sponsor",
+		"source_register",
+		"recruitment_status",
+		"condition",
+		"intervention",
+		"primary_outcome",
+		"secondary_outcome",
+		"inclusion_criteria",
+		"exclusion_criteria",
+		"study_type",
+		"study_design",
+		"phase",
+		"countries",
+		"contact_firstname",
+		"contact_lastname",
+		"contact_affiliation",
+		"therapeutic_areas",
+		"sponsor_type",
+		"internal_number",
+		"secondary_id",
+		"identifiers",
+		"ctg_detailed_description",
 	]
 	list_filter = [
-		('teams', OrganizationRestrictedFieldListFilter),
-		('subjects', OrganizationRestrictedFieldListFilter),
-		('sources', OrganizationRestrictedFieldListFilter),
+		("teams", OrganizationRestrictedFieldListFilter),
+		("subjects", OrganizationRestrictedFieldListFilter),
+		("sources", OrganizationRestrictedFieldListFilter),
 	]
 	fieldsets = (
-		(None, {
-			'fields': ('title', 'acronym', 'scientific_title', 'link', 'links', 'identifiers', 'discovery_date', 'published_date', 'last_updated')
-		}),
-		('Description', {
-			'fields': ('summary', 'ctg_detailed_description'),
-			'classes': ('collapse',),
-		}),
-		('Study Details', {
-			'fields': ('study_type', 'study_design', 'phase', 'recruitment_status', 'target_size', 'date_enrollement', 'date_registration', 'prospective_registration'),
-			'classes': ('collapse',),
-		}),
-		('Conditions & Interventions', {
-			'fields': ('condition', 'intervention', 'primary_outcome', 'secondary_outcome'),
-			'classes': ('collapse',),
-		}),
-		('Eligibility', {
-			'fields': ('inclusion_criteria', 'exclusion_criteria', 'inclusion_agemin', 'inclusion_agemax', 'inclusion_gender'),
-			'classes': ('collapse',),
-		}),
-		('Sponsors & Contacts', {
-			'fields': ('primary_sponsor', 'secondary_sponsor', 'source_support', 'sponsor_type', 'contact_firstname', 'contact_lastname', 'contact_address', 'contact_email', 'contact_tel', 'contact_affiliation'),
-			'classes': ('collapse',),
-		}),
-		('Location & Registry', {
-			'fields': ('countries', 'source_register', 'secondary_id', 'internal_number', 'other_records', 'last_refreshed_on', 'export_date'),
-			'classes': ('collapse',),
-		}),
-		('Relationships', {
-			'fields': ('sources', 'teams', 'subjects'),
-		}),
-		('EU Clinical Trials', {
-			'fields': ('therapeutic_areas', 'country_status', 'trial_region', 'overall_decision_date', 'countries_decision_date'),
-			'classes': ('collapse',),
-		}),
-		('Ethics Review', {
-			'fields': ('ethics_review_status', 'ethics_review_approval_date', 'ethics_review_contact_name', 'ethics_review_contact_address', 'ethics_review_contact_phone', 'ethics_review_contact_email'),
-			'classes': ('collapse',),
-		}),
-		('Results', {
-			'fields': ('results_posted', 'results_date_completed', 'results_url_link', 'results_yes_no', 'results_ipd_plan', 'results_ipd_description'),
-			'classes': ('collapse',),
-		}),
+		(
+			None,
+			{
+				"fields": (
+					"title",
+					"acronym",
+					"scientific_title",
+					"link",
+					"links",
+					"identifiers",
+					"discovery_date",
+					"published_date",
+					"last_updated",
+				)
+			},
+		),
+		(
+			"Description",
+			{
+				"fields": ("summary", "ctg_detailed_description"),
+				"classes": ("collapse",),
+			},
+		),
+		(
+			"Study Details",
+			{
+				"fields": (
+					"study_type",
+					"study_design",
+					"phase",
+					"recruitment_status",
+					"target_size",
+					"date_enrollement",
+					"date_registration",
+					"prospective_registration",
+				),
+				"classes": ("collapse",),
+			},
+		),
+		(
+			"Conditions & Interventions",
+			{
+				"fields": (
+					"condition",
+					"intervention",
+					"primary_outcome",
+					"secondary_outcome",
+				),
+				"classes": ("collapse",),
+			},
+		),
+		(
+			"Eligibility",
+			{
+				"fields": (
+					"inclusion_criteria",
+					"exclusion_criteria",
+					"inclusion_agemin",
+					"inclusion_agemax",
+					"inclusion_gender",
+				),
+				"classes": ("collapse",),
+			},
+		),
+		(
+			"Sponsors & Contacts",
+			{
+				"fields": (
+					"primary_sponsor",
+					"secondary_sponsor",
+					"source_support",
+					"sponsor_type",
+					"contact_firstname",
+					"contact_lastname",
+					"contact_address",
+					"contact_email",
+					"contact_tel",
+					"contact_affiliation",
+				),
+				"classes": ("collapse",),
+			},
+		),
+		(
+			"Location & Registry",
+			{
+				"fields": (
+					"countries",
+					"source_register",
+					"secondary_id",
+					"internal_number",
+					"other_records",
+					"last_refreshed_on",
+					"export_date",
+				),
+				"classes": ("collapse",),
+			},
+		),
+		(
+			"Relationships",
+			{
+				"fields": ("sources", "teams", "subjects"),
+			},
+		),
+		(
+			"EU Clinical Trials",
+			{
+				"fields": (
+					"therapeutic_areas",
+					"country_status",
+					"trial_region",
+					"overall_decision_date",
+					"countries_decision_date",
+				),
+				"classes": ("collapse",),
+			},
+		),
+		(
+			"Ethics Review",
+			{
+				"fields": (
+					"ethics_review_status",
+					"ethics_review_approval_date",
+					"ethics_review_contact_name",
+					"ethics_review_contact_address",
+					"ethics_review_contact_phone",
+					"ethics_review_contact_email",
+				),
+				"classes": ("collapse",),
+			},
+		),
+		(
+			"Results",
+			{
+				"fields": (
+					"results_posted",
+					"results_date_completed",
+					"results_url_link",
+					"results_yes_no",
+					"results_ipd_plan",
+					"results_ipd_description",
+				),
+				"classes": ("collapse",),
+			},
+		),
 	)
 
 	def display_identifiers(self, obj):
@@ -756,6 +984,8 @@ class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		return "No Identifiers"
 
 	display_identifiers.short_description = "Identifiers"
+
+
 class SourceInline(admin.StackedInline):
 	model = Sources
 	extra = 1
@@ -763,28 +993,33 @@ class SourceInline(admin.StackedInline):
 
 class SourceAdminForm(forms.ModelForm):
 	"""Custom form for Source admin with organization-based field access"""
-	
+
 	class Meta:
 		model = Sources
-		fields = '__all__'
-	
+		fields = "__all__"
+
 	def __init__(self, *args, **kwargs):
-		self.request = kwargs.pop('request', None)
+		self.request = kwargs.pop("request", None)
 		super().__init__(*args, **kwargs)
-		
+
 		# Filter team and subject choices based on user's organization
 		if self.request:
 			if self.request.user.is_superuser:
-				self.fields['team'].queryset = Team.objects.all()
-				self.fields['subject'].queryset = Subject.objects.all()
+				self.fields["team"].queryset = Team.objects.all()
+				self.fields["subject"].queryset = Subject.objects.all()
 			else:
 				user_orgs = get_user_organizations(self.request.user)
-				self.fields['team'].queryset = Team.objects.filter(organization__id__in=user_orgs)
-				self.fields['subject'].queryset = Subject.objects.filter(team__organization__id__in=user_orgs)
+				self.fields["team"].queryset = Team.objects.filter(
+					organization__id__in=user_orgs
+				)
+				self.fields["subject"].queryset = Subject.objects.filter(
+					team__organization__id__in=user_orgs
+				)
 
 
 class ReassignToTeamForm(forms.Form):
 	"""Simple form for granular per-object 'reassign to team' actions."""
+
 	target_team = forms.ModelChoiceField(
 		queryset=Team.objects.none(),
 		label="Target team",
@@ -800,15 +1035,15 @@ class ReassignToTeamMixin:
 	"""
 
 	def _get_reassign_template(self):
-		return 'admin/gregory/reassign_to_team_intermediate.html'
+		return "admin/gregory/reassign_to_team_intermediate.html"
 
 	@admin.action(description="Reassign selected to another team…")
 	def reassign_to_team_action(self, request, queryset):
 		# Safety: all selected objects must belong to the same organisation.
-		team_ids = queryset.values_list('team_id', flat=True).distinct()
+		team_ids = queryset.values_list("team_id", flat=True).distinct()
 		org_ids = list(
 			Team.all_objects.filter(pk__in=team_ids)
-			.values_list('organization_id', flat=True)
+			.values_list("organization_id", flat=True)
 			.distinct()
 		)
 		if len(org_ids) != 1:
@@ -822,29 +1057,31 @@ class ReassignToTeamMixin:
 
 		target_qs = Team.objects.filter(organization_id=org_ids[0])
 
-		if 'apply' not in request.POST:
+		if "apply" not in request.POST:
 			form = ReassignToTeamForm()
-			form.fields['target_team'].queryset = target_qs
+			form.fields["target_team"].queryset = target_qs
 			return render(
 				request,
 				self._get_reassign_template(),
 				{
-					'title': 'Reassign to team',
-					'objects': queryset,
-					'form': form,
-					'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
-					'model_name': queryset.model._meta.verbose_name_plural,
+					"title": "Reassign to team",
+					"objects": queryset,
+					"form": form,
+					"action_checkbox_name": admin.helpers.ACTION_CHECKBOX_NAME,
+					"model_name": queryset.model._meta.verbose_name_plural,
 				},
 			)
 
 		form = ReassignToTeamForm(request.POST)
-		form.fields['target_team'].queryset = target_qs
+		form.fields["target_team"].queryset = target_qs
 
 		if not form.is_valid():
-			self.message_user(request, "Invalid form — please try again.", level=messages.ERROR)
+			self.message_user(
+				request, "Invalid form — please try again.", level=messages.ERROR
+			)
 			return
 
-		to_team = form.cleaned_data['target_team']
+		to_team = form.cleaned_data["target_team"]
 		# Final guard: target team must belong to the same organisation.
 		if to_team.organization_id != org_ids[0]:
 			self.message_user(
@@ -861,48 +1098,74 @@ class ReassignToTeamMixin:
 
 class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
 	form = SourceAdminForm
-	list_display = ['name', 'active', 'source_for', 'subject', 'last_article_date', 'article_count', 'health_status_indicator']
-	list_filter = [
-		'active', 'source_for', 'method', SourceHealthFilter,
-		SourceOrganizationFilter,
-		('team', OrganizationRestrictedFieldListFilter),
-		('subject', OrganizationRestrictedFieldListFilter),
+	list_display = [
+		"name",
+		"active",
+		"source_for",
+		"subject",
+		"last_article_date",
+		"article_count",
+		"health_status_indicator",
 	]
-	search_fields = ['name', 'link', 'description', 'keyword_filter']
-	actions = ['activate_sources', 'deactivate_sources', 'reassign_to_team_action']
+	list_filter = [
+		"active",
+		"source_for",
+		"method",
+		SourceHealthFilter,
+		SourceOrganizationFilter,
+		("team", OrganizationRestrictedFieldListFilter),
+		("subject", OrganizationRestrictedFieldListFilter),
+	]
+	search_fields = ["name", "link", "description", "keyword_filter"]
+	actions = ["activate_sources", "deactivate_sources", "reassign_to_team_action"]
 	fieldsets = (
-		('Basic Information', {
-			'fields': ('name', 'source_for', 'method', 'active', 'link', 'ignore_ssl', 'description')
-		}),
-		('Organization', {
-			'fields': ('team', 'subject')
-		}),
-		('Filtering (bioRxiv and medRxiv)', {
-			'fields': ('keyword_filter',),
-			'classes': ('keyword-filter-settings',),
-			'description': 'For bioRxiv and medRxiv sources, specify keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson).'
-		}),
-		('ClinicalTrials.gov API Settings', {
-			'fields': ('ctgov_search_condition',),
-			'classes': ('ctgov-settings',),
-			'description': 'Settings for ClinicalTrials.gov API sources. Enter the condition/disease to search for clinical trials.'
-		}),
+		(
+			"Basic Information",
+			{
+				"fields": (
+					"name",
+					"source_for",
+					"method",
+					"active",
+					"link",
+					"ignore_ssl",
+					"description",
+				)
+			},
+		),
+		("Organization", {"fields": ("team", "subject")}),
+		(
+			"Filtering (bioRxiv and medRxiv)",
+			{
+				"fields": ("keyword_filter",),
+				"classes": ("keyword-filter-settings",),
+				"description": 'For bioRxiv and medRxiv sources, specify keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson).',
+			},
+		),
+		(
+			"ClinicalTrials.gov API Settings",
+			{
+				"fields": ("ctgov_search_condition",),
+				"classes": ("ctgov-settings",),
+				"description": "Settings for ClinicalTrials.gov API sources. Enter the condition/disease to search for clinical trials.",
+			},
+		),
 	)
-	
+
 	class Media:
-		js = ('admin/js/source_for_toggle.js',)
-	
+		js = ("admin/js/source_for_toggle.js",)
+
 	def get_form(self, request, obj=None, **kwargs):
 		"""Pass the request to the form so it can filter field choices."""
 		form_class = super().get_form(request, obj, **kwargs)
-		
+
 		class FormWithRequest(form_class):
 			def __init__(self, *args, **form_kwargs):
-				form_kwargs['request'] = request
+				form_kwargs["request"] = request
 				super().__init__(*args, **form_kwargs)
-		
+
 		return FormWithRequest
-	
+
 	def save_model(self, request, obj, form, change):
 		"""Warn admin if source has no team assigned."""
 		super().save_model(request, obj, form, change)
@@ -910,12 +1173,12 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 			messages.warning(
 				request,
 				f"Source '{obj.name}' has no team assigned. "
-				f"Feedreaders will skip team association for content from this source."
+				f"Feedreaders will skip team association for content from this source.",
 			)
-	
+
 	def last_article_date(self, obj):
 		"""Display the date of the latest article or trial from this source."""
-		if obj.source_for == 'trials':
+		if obj.source_for == "trials":
 			latest_date = obj.get_latest_trial_date()
 			if latest_date:
 				days_since = (timezone.now() - latest_date).days
@@ -927,79 +1190,117 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 				days_since = (timezone.now() - latest_date).days
 				return f"{latest_date.strftime('%Y-%m-%d')} ({days_since} days ago)"
 			return "No articles"
-	last_article_date.short_description = 'Last Content'
-	last_article_date.short_description = 'Last Article'
-	
+
+	last_article_date.short_description = "Last Content"
+	last_article_date.short_description = "Last Article"
+
 	def article_count(self, obj):
 		"""Display the count of articles or trials from this source."""
-		if obj.source_for == 'trials':
+		if obj.source_for == "trials":
 			return obj.get_trial_count()
 		else:
 			return obj.get_article_count()
-	article_count.short_description = 'Content Count'
-	
+
+	article_count.short_description = "Content Count"
+
 	def health_status_indicator(self, obj):
 		"""Display a visual indicator of the source's health status."""
 		status = obj.get_health_status()
-		
+
 		if status == "healthy":
-			return format_html('<span style="color: green; font-size: 14px;">{}</span>', '●')
+			return format_html(
+				'<span style="color: green; font-size: 14px;">{}</span>', "●"
+			)
 		elif status == "warning":
-			return format_html('<span style="color: orange; font-size: 14px;">{}</span>', '●')
+			return format_html(
+				'<span style="color: orange; font-size: 14px;">{}</span>', "●"
+			)
 		elif status == "error":
-			return format_html('<span style="color: red; font-size: 14px;">{}</span>', '●')
+			return format_html(
+				'<span style="color: red; font-size: 14px;">{}</span>', "●"
+			)
 		elif status == "inactive":
-			return format_html('<span style="color: gray; font-size: 14px;">{}</span>', '●')
+			return format_html(
+				'<span style="color: gray; font-size: 14px;">{}</span>', "●"
+			)
 		else:  # no_content
-			return format_html('<span style="color: blue; font-size: 14px;">{}</span>', '●')
-	health_status_indicator.short_description = 'Status'
-	
+			return format_html(
+				'<span style="color: blue; font-size: 14px;">{}</span>', "●"
+			)
+
+	health_status_indicator.short_description = "Status"
+
 	def activate_sources(self, request, queryset):
 		"""Admin action to activate selected sources."""
 		updated_count = queryset.update(active=True)
-		self.message_user(
-			request,
-			f'Successfully activated {updated_count} source(s).'
-		)
+		self.message_user(request, f"Successfully activated {updated_count} source(s).")
+
 	activate_sources.short_description = "Activate selected sources"
-	
+
 	def deactivate_sources(self, request, queryset):
 		"""Admin action to deactivate selected sources."""
 		updated_count = queryset.update(active=False)
 		self.message_user(
-			request,
-			f'Successfully deactivated {updated_count} source(s).'
+			request, f"Successfully deactivated {updated_count} source(s)."
 		)
+
 	deactivate_sources.short_description = "Deactivate selected sources"
 
 	def get_urls(self):
 		from django.urls import path
-		from .admin_views import source_detail_view, source_activity_json, sources_overview_view
+		from .admin_views import (
+			source_detail_view,
+			source_activity_json,
+			sources_overview_view,
+		)
+
 		urls = super().get_urls()
 		custom_urls = [
-			path('overview/', self.admin_site.admin_view(sources_overview_view), name='sources_overview'),
-			path('<int:source_id>/detail/', self.admin_site.admin_view(source_detail_view), name='sources_detail'),
-			path('<int:source_id>/detail/activity.json/', self.admin_site.admin_view(source_activity_json), name='sources_activity_json'),
+			path(
+				"overview/",
+				self.admin_site.admin_view(sources_overview_view),
+				name="sources_overview",
+			),
+			path(
+				"<int:source_id>/detail/",
+				self.admin_site.admin_view(source_detail_view),
+				name="sources_detail",
+			),
+			path(
+				"<int:source_id>/detail/activity.json/",
+				self.admin_site.admin_view(source_activity_json),
+				name="sources_activity_json",
+			),
 		]
 		return custom_urls + urls
 
 	def changelist_view(self, request, extra_context=None):
 		extra_context = extra_context or {}
-		extra_context['sources_overview_url'] = reverse('admin:sources_overview')
+		extra_context["sources_overview_url"] = reverse("admin:sources_overview")
 		return super().changelist_view(request, extra_context=extra_context)
+
 
 class SourcesInline(admin.StackedInline):
 	"""Inline admin for managing sources within a subject"""
+
 	model = Sources
 	extra = 1  # Show 1 empty form by default for adding new sources
-	fields = ['name', 'link', 'source_for', 'method', 'active', 'keyword_filter', 'description']
+	fields = [
+		"name",
+		"link",
+		"source_for",
+		"method",
+		"active",
+		"keyword_filter",
+		"description",
+	]
 	verbose_name = "New Source"
 	verbose_name_plural = "Add New Source"
-	
+
 	def get_queryset(self, request):
 		"""Return empty queryset to hide existing sources from inline forms"""
 		return super().get_queryset(request).none()
-	
+
 	def save_formset(self, request, form, formset, change):
 		"""Automatically set subject and team when saving sources"""
 		instances = formset.save(commit=False)
@@ -1013,78 +1314,93 @@ class SourcesInline(admin.StackedInline):
 
 class SubjectAdminForm(forms.ModelForm):
 	"""Custom form for Subject admin with organization-based team access"""
-	
+
 	class Meta:
 		model = Subject
-		fields = '__all__'
-	
+		fields = "__all__"
+
 	def __init__(self, *args, **kwargs):
 		# Get the request from kwargs if passed
-		self.request = kwargs.pop('request', None)
+		self.request = kwargs.pop("request", None)
 		super().__init__(*args, **kwargs)
-		
+
 		# Filter teams based on user's organization
 		if self.request:
 			if self.request.user.is_superuser:
-				self.fields['team'].queryset = Team.objects.all()
+				self.fields["team"].queryset = Team.objects.all()
 			else:
 				user_orgs = get_user_organizations(self.request.user)
-				self.fields['team'].queryset = Team.objects.filter(organization__id__in=user_orgs)
+				self.fields["team"].queryset = Team.objects.filter(
+					organization__id__in=user_orgs
+				)
+
 
 @admin.register(Subject)
 class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
-	list_display = ['formatted_subject_name', 'description', 'article_count', 'trial_count', 'view_sources', 'team']  # Updated list display
-	readonly_fields = ['linked_sources']  # Display in the edit form
-	list_filter = [('team', OrganizationRestrictedFieldListFilter)]  # Add the team filter
+	list_display = [
+		"formatted_subject_name",
+		"description",
+		"article_count",
+		"trial_count",
+		"view_sources",
+		"team",
+	]  # Updated list display
+	readonly_fields = ["linked_sources"]  # Display in the edit form
+	list_filter = [
+		("team", OrganizationRestrictedFieldListFilter)
+	]  # Add the team filter
 	form = SubjectAdminForm
 	inlines = [SourcesInline]  # Add the inline for managing sources
-	actions = ['reassign_to_team_action']
-	
+	actions = ["reassign_to_team_action"]
+
 	def get_queryset(self, request):
 		qs = super().get_queryset(request)
 		article_subq = (
-			Articles.objects.filter(subjects=OuterRef('pk'))
-			.values('subjects')
-			.annotate(c=models.Count('pk'))
-			.values('c')
+			Articles.objects.filter(subjects=OuterRef("pk"))
+			.values("subjects")
+			.annotate(c=models.Count("pk"))
+			.values("c")
 		)
 		trial_subq = (
-			Trials.objects.filter(subjects=OuterRef('pk'))
-			.values('subjects')
-			.annotate(c=models.Count('pk'))
-			.values('c')
+			Trials.objects.filter(subjects=OuterRef("pk"))
+			.values("subjects")
+			.annotate(c=models.Count("pk"))
+			.values("c")
 		)
-		return qs.prefetch_related('sources_set').annotate(
+		return qs.prefetch_related("sources_set").annotate(
 			article_count=Subquery(article_subq),
 			trial_count=Subquery(trial_subq),
 		)
 
 	def article_count(self, obj):
 		return obj.article_count
-	article_count.short_description = 'Articles'
-	article_count.admin_order_field = 'article_count'
+
+	article_count.short_description = "Articles"
+	article_count.admin_order_field = "article_count"
 
 	def trial_count(self, obj):
 		return obj.trial_count
-	trial_count.short_description = 'Trials'
-	trial_count.admin_order_field = 'trial_count'
+
+	trial_count.short_description = "Trials"
+	trial_count.admin_order_field = "trial_count"
 
 	def formatted_subject_name(self, obj):
 		"""Display subject name with emphasis"""
-		return format_html('<strong>{}</strong>', obj.subject_name)
-	formatted_subject_name.short_description = 'Subject'
-	formatted_subject_name.admin_order_field = 'subject_name'
+		return format_html("<strong>{}</strong>", obj.subject_name)
+
+	formatted_subject_name.short_description = "Subject"
+	formatted_subject_name.admin_order_field = "subject_name"
 
 	def get_form(self, request, obj=None, **kwargs):
 		"""Pass the request to the form so it can check user permissions"""
 		form_class = super().get_form(request, obj, **kwargs)
-		
+
 		# Create a wrapper that passes the request to the form
 		class FormWithRequest(form_class):
-				def __init__(self, *args, **form_kwargs):
-						form_kwargs['request'] = request
-						super().__init__(*args, **form_kwargs)
-		
+			def __init__(self, *args, **form_kwargs):
+				form_kwargs["request"] = request
+				super().__init__(*args, **form_kwargs)
+
 		return FormWithRequest
 
 	def view_sources(self, obj):
@@ -1094,12 +1410,12 @@ class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmi
 			links = [
 				format_html(
 					'<a href="{}">{}</a>',
-					reverse('admin:gregory_sources_change', args=[source.source_id]),
-					source.name
+					reverse("admin:gregory_sources_change", args=[source.source_id]),
+					source.name,
 				)
 				for source in sources
 			]
-			return mark_safe('<br>'.join(links))
+			return mark_safe("<br>".join(links))
 		return "No sources"
 
 	view_sources.short_description = "Linked Sources"
@@ -1111,41 +1427,42 @@ class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmi
 			links = [
 				format_html(
 					'<a href="{}">{}</a>',
-					reverse('admin:gregory_sources_change', args=[source.source_id]),
-					source.name
+					reverse("admin:gregory_sources_change", args=[source.source_id]),
+					source.name,
 				)
 				for source in sources
 			]
-			return mark_safe('<br>'.join(links))
+			return mark_safe("<br>".join(links))
 		return "No sources"
 
 	linked_sources.short_description = "Linked Sources"
 
 	def delete_view(self, request, object_id, extra_context=None):
 		from django.contrib.admin.utils import unquote
+
 		obj = self.get_object(request, unquote(object_id))
 
 		if obj:
-			can_view_sources = request.user.has_perm('gregory.view_sources')
-			can_delete_sources = request.user.has_perm('gregory.delete_sources')
+			can_view_sources = request.user.has_perm("gregory.view_sources")
+			can_delete_sources = request.user.has_perm("gregory.delete_sources")
 
 			orphaned_sources = Sources.objects.filter(subject=obj)
 
-			if orphaned_sources.exists() and request.method == 'POST':
-				if request.POST.get('delete_orphaned_sources') == 'yes':
+			if orphaned_sources.exists() and request.method == "POST":
+				if request.POST.get("delete_orphaned_sources") == "yes":
 					if can_delete_sources:
 						orphaned_sources.delete()
 					else:
 						self.message_user(
 							request,
-							'You do not have permission to delete sources. The subject was deleted but the sources were kept.',
+							"You do not have permission to delete sources. The subject was deleted but the sources were kept.",
 							level=messages.WARNING,
 						)
 
 			extra_context = extra_context or {}
 			if orphaned_sources.exists() and can_view_sources:
-				extra_context['orphaned_sources'] = orphaned_sources
-				extra_context['can_delete_sources'] = can_delete_sources
+				extra_context["orphaned_sources"] = orphaned_sources
+				extra_context["can_delete_sources"] = can_delete_sources
 
 		return super().delete_view(request, object_id, extra_context=extra_context)
 
@@ -1158,19 +1475,42 @@ class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmi
 			subject_analytics_teams,
 			subject_analytics_subjects,
 		)
+
 		urls = super().get_urls()
 		custom_urls = [
-			path('analytics/', self.admin_site.admin_view(subject_analytics_view), name='gregory_subject_analytics'),
-			path('analytics/data/', self.admin_site.admin_view(subject_analytics_data), name='gregory_subject_analytics_data'),
-			path('analytics/orgs/', self.admin_site.admin_view(subject_analytics_orgs), name='gregory_subject_analytics_orgs'),
-			path('analytics/teams/', self.admin_site.admin_view(subject_analytics_teams), name='gregory_subject_analytics_teams'),
-			path('analytics/subjects/', self.admin_site.admin_view(subject_analytics_subjects), name='gregory_subject_analytics_subjects'),
+			path(
+				"analytics/",
+				self.admin_site.admin_view(subject_analytics_view),
+				name="gregory_subject_analytics",
+			),
+			path(
+				"analytics/data/",
+				self.admin_site.admin_view(subject_analytics_data),
+				name="gregory_subject_analytics_data",
+			),
+			path(
+				"analytics/orgs/",
+				self.admin_site.admin_view(subject_analytics_orgs),
+				name="gregory_subject_analytics_orgs",
+			),
+			path(
+				"analytics/teams/",
+				self.admin_site.admin_view(subject_analytics_teams),
+				name="gregory_subject_analytics_teams",
+			),
+			path(
+				"analytics/subjects/",
+				self.admin_site.admin_view(subject_analytics_subjects),
+				name="gregory_subject_analytics_subjects",
+			),
 		]
 		return custom_urls + urls
 
 	def changelist_view(self, request, extra_context=None):
 		extra_context = extra_context or {}
-		extra_context['subject_analytics_url'] = reverse('admin:gregory_subject_analytics')
+		extra_context["subject_analytics_url"] = reverse(
+			"admin:gregory_subject_analytics"
+		)
 		return super().changelist_view(request, extra_context=extra_context)
 
 
@@ -1180,129 +1520,170 @@ class AuthorArticlesInline(admin.TabularInline):
 	verbose_name_plural = "Author's Articles"
 	extra = 0
 	can_delete = False
-	fields = ['article_info', 'article_summary', 'article_doi_link', 'admin_link']
-	readonly_fields = ['article_info', 'article_summary', 'article_doi_link', 'admin_link']
-	ordering = ['-articles__published_date']  # Order by most recent articles first
-	
+	fields = ["article_info", "article_summary", "article_doi_link", "admin_link"]
+	readonly_fields = [
+		"article_info",
+		"article_summary",
+		"article_doi_link",
+		"admin_link",
+	]
+	ordering = ["-articles__published_date"]  # Order by most recent articles first
+
 	def article_info(self, obj):
 		try:
 			article = obj.articles
 			title = article.title
 			published_date = article.published_date
 			if published_date:
-				return format_html('{}<br/><span style="color: #666; font-size: 0.8em;">Published: {}</span>', 
-						title, published_date.strftime('%Y-%m-%d'))
+				return format_html(
+					'{}<br/><span style="color: #666; font-size: 0.8em;">Published: {}</span>',
+					title,
+					published_date.strftime("%Y-%m-%d"),
+				)
 			return title
 		except Exception as e:
 			return f"Error accessing article: {str(e)}"
-	article_info.short_description = 'Title'
-	
+
+	article_info.short_description = "Title"
+
 	def article_summary(self, obj):
 		try:
 			article = obj.articles
 			summary = article.summary
 			if summary:
-				return summary[:200] + '...' if len(summary) > 200 else summary
-			return '-'
+				return summary[:200] + "..." if len(summary) > 200 else summary
+			return "-"
 		except Exception as e:
 			return f"Error accessing article summary: {str(e)}"
-	article_summary.short_description = 'Summary'
-	
+
+	article_summary.short_description = "Summary"
+
 	def article_doi_link(self, obj):
 		try:
 			article = obj.articles
 			if article.doi:
 				doi_link = f"https://doi.org/{article.doi}"
-				return format_html('<a href="{}" target="_blank">{}</a>', doi_link, article.doi)
+				return format_html(
+					'<a href="{}" target="_blank">{}</a>', doi_link, article.doi
+				)
 			elif article.link:
-				return format_html('<a href="{}" target="_blank">Link to article</a>', article.link)
-			return '-'
+				return format_html(
+					'<a href="{}" target="_blank">Link to article</a>', article.link
+				)
+			return "-"
 		except Exception as e:
 			return f"Error accessing article link: {str(e)}"
-	article_doi_link.short_description = 'External Link'
-	
+
+	article_doi_link.short_description = "External Link"
+
 	def admin_link(self, obj):
 		try:
 			article = obj.articles
-			url = reverse('admin:gregory_articles_change', args=[article.pk])
+			url = reverse("admin:gregory_articles_change", args=[article.pk])
 			return format_html('<a href="{}" target="_blank">View Article</a>', url)
 		except Exception as e:
 			return f"Error generating admin link: {str(e)}"
-	admin_link.short_description = 'Admin Link'
-	
+
+	admin_link.short_description = "Admin Link"
+
 	def has_add_permission(self, request, obj=None):
 		return False
 
+
 class ArticleCountFilter(admin.SimpleListFilter):
-	title = 'Number of Articles'
-	parameter_name = 'article_count'
+	title = "Number of Articles"
+	parameter_name = "article_count"
 
 	def lookups(self, request, model_admin):
 		return (
-			('0', 'No articles'),
-			('1-5', '1 to 5 articles'),
-			('6-10', '6 to 10 articles'),
-			('11+', 'More than 10 articles'),
+			("0", "No articles"),
+			("1-5", "1 to 5 articles"),
+			("6-10", "6 to 10 articles"),
+			("11+", "More than 10 articles"),
 		)
 
 	def queryset(self, request, queryset):
-		if self.value() == '0':
+		if self.value() == "0":
 			# Authors with no articles
-			return queryset.annotate(count=models.Count('articles_set')).filter(count=0)
-		elif self.value() == '1-5':
+			return queryset.annotate(count=models.Count("articles_set")).filter(count=0)
+		elif self.value() == "1-5":
 			# Authors with 1-5 articles
-			return queryset.annotate(count=models.Count('articles_set')).filter(count__gte=1, count__lte=5)
-		elif self.value() == '6-10':
+			return queryset.annotate(count=models.Count("articles_set")).filter(
+				count__gte=1, count__lte=5
+			)
+		elif self.value() == "6-10":
 			# Authors with 6-10 articles
-			return queryset.annotate(count=models.Count('articles_set')).filter(count__gte=6, count__lte=10)
-		elif self.value() == '11+':
+			return queryset.annotate(count=models.Count("articles_set")).filter(
+				count__gte=6, count__lte=10
+			)
+		elif self.value() == "11+":
 			# Authors with more than 10 articles
-			return queryset.annotate(count=models.Count('articles_set')).filter(count__gt=10)
+			return queryset.annotate(count=models.Count("articles_set")).filter(
+				count__gt=10
+			)
 		return queryset
 
+
 class AuthorsAdmin(admin.ModelAdmin):
-	search_fields = ['family_name', 'given_name', 'ORCID']
-	list_display = ['given_name', 'family_name', 'display_orcid', 'country', 'article_count']
-	list_filter = ['country', ArticleCountFilter]
+	search_fields = ["family_name", "given_name", "ORCID"]
+	list_display = [
+		"given_name",
+		"family_name",
+		"display_orcid",
+		"country",
+		"article_count",
+	]
+	list_filter = ["country", ArticleCountFilter]
 	inlines = [AuthorArticlesInline]
-	
+
 	def display_orcid(self, obj):
 		if obj.ORCID:
 			orcid_url = f"https://orcid.org/{obj.ORCID}"
-			return format_html('<a href="{}" target="_blank">{}</a>', orcid_url, obj.ORCID)
+			return format_html(
+				'<a href="{}" target="_blank">{}</a>', orcid_url, obj.ORCID
+			)
 		return "-"
-	display_orcid.short_description = 'ORCID'
-	display_orcid.admin_order_field = 'ORCID'
-	
+
+	display_orcid.short_description = "ORCID"
+	display_orcid.admin_order_field = "ORCID"
+
 	def article_count(self, obj):
 		return obj.articles_count
-	article_count.short_description = 'Number of Articles'
-	article_count.admin_order_field = 'articles_count'
-	
+
+	article_count.short_description = "Number of Articles"
+	article_count.admin_order_field = "articles_count"
+
 	def get_queryset(self, request):
 		queryset = super().get_queryset(request)
-		queryset = queryset.annotate(articles_count=models.Count('articles'))
+		queryset = queryset.annotate(articles_count=models.Count("articles"))
 		return queryset
-	
+
 	def get_inline_instances(self, request, obj=None):
 		if not obj:  # If we're adding a new object, don't display inlines
 			return []
 		return super().get_inline_instances(request, obj)
-	
+
+
 @admin.register(TeamCategory)
 class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
-	list_display = ('category_name', 'team', 'category_type', 'article_count', 'display_subjects')
-	search_fields = ('category_name', 'team__name', 'subjects__subject_name')
+	list_display = (
+		"category_name",
+		"team",
+		"category_type",
+		"article_count",
+		"display_subjects",
+	)
+	search_fields = ("category_name", "team__name", "subjects__subject_name")
 	list_filter = [
-		'category_type',
-		('team', OrganizationRestrictedFieldListFilter),
-		('subjects', OrganizationRestrictedFieldListFilter),
+		"category_type",
+		("team", OrganizationRestrictedFieldListFilter),
+		("subjects", OrganizationRestrictedFieldListFilter),
 	]
-	filter_horizontal = ('subjects',)
-	actions = ['reassign_to_team_action']
+	filter_horizontal = ("subjects",)
+	actions = ["reassign_to_team_action"]
 
 	# Form fields that affect which articles/trials match the category
-	MATCHING_CONFIG_FIELDS = {'category_terms', 'subjects', 'category_type'}
+	MATCHING_CONFIG_FIELDS = {"category_terms", "subjects", "category_type"}
 
 	def save_related(self, request, form, formsets, change):
 		"""Re-match an automatic category as soon as its configuration is saved.
@@ -1318,9 +1699,9 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 			return
 		if change and not self.MATCHING_CONFIG_FIELDS & set(form.changed_data):
 			return
-		verb = 'Re-matched' if change else 'Backfilled'
+		verb = "Re-matched" if change else "Backfilled"
 		try:
-			call_command('rebuild_categories', category=category.pk, stdout=StringIO())
+			call_command("rebuild_categories", category=category.pk, stdout=StringIO())
 			self.message_user(
 				request,
 				f"{verb} '{category.category_name}': {category.articles.count()} articles "
@@ -1337,13 +1718,14 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 
 	def get_queryset(self, request):
 		"""Add prefetch_related to avoid multiple DB queries"""
-		return super().get_queryset(request).prefetch_related('subjects', 'articles')
-	
+		return super().get_queryset(request).prefetch_related("subjects", "articles")
+
 	def article_count(self, obj):
 		"""Display number of articles in this category"""
 		return obj.articles.count()
+
 	article_count.short_description = "Articles"
-	
+
 	def display_subjects(self, obj):
 		"""Display subjects as a comma-separated list"""
 		subjects = list(obj.subjects.all())
@@ -1353,17 +1735,24 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 			return ", ".join(str(subject) for subject in subjects)
 		else:
 			return f"{', '.join(str(subject) for subject in subjects[:3])} (+{len(subjects) - 3})"
+
 	display_subjects.short_description = "Subjects"
+
 
 class TeamSubjectInline(admin.TabularInline):
 	model = Subject
 	extra = 0
-	fields = ('subject_name', 'subject_slug', 'auto_predict', 'ml_consensus_type')
-	readonly_fields = ('subject_name', 'subject_slug', 'auto_predict', 'ml_consensus_type')
+	fields = ("subject_name", "subject_slug", "auto_predict", "ml_consensus_type")
+	readonly_fields = (
+		"subject_name",
+		"subject_slug",
+		"auto_predict",
+		"ml_consensus_type",
+	)
 	show_change_link = True
-	verbose_name = 'Subject'
-	verbose_name_plural = 'Subjects'
-	classes = ('collapse',)
+	verbose_name = "Subject"
+	verbose_name_plural = "Subjects"
+	classes = ("collapse",)
 	can_delete = False
 
 	def has_add_permission(self, request, obj=None):
@@ -1372,31 +1761,39 @@ class TeamSubjectInline(admin.TabularInline):
 
 class OrganizationSiteInline(admin.TabularInline):
 	"""Inline to manage sites associated with an organization."""
+
 	model = OrganizationSite
 	extra = 1
-	fields = ('site', 'is_default')
-	verbose_name = 'Site'
-	verbose_name_plural = 'Sites'
+	fields = ("site", "is_default")
+	verbose_name = "Site"
+	verbose_name_plural = "Sites"
 
 
 class OrganizationCredentialsInline(admin.StackedInline):
 	"""Inline to manage Postmark/ORCID credentials for an organization."""
+
 	model = OrganizationCredentials
 	extra = 0
 	max_num = 1
-	fields = ('postmark_api_token', 'postmark_api_url', 'orcid_client_id', 'orcid_client_secret')
-	verbose_name = 'Credentials'
-	verbose_name_plural = 'Credentials'
+	fields = (
+		"postmark_api_token",
+		"postmark_api_url",
+		"orcid_client_id",
+		"orcid_client_secret",
+	)
+	verbose_name = "Credentials"
+	verbose_name_plural = "Credentials"
 
 
 class OrganizationApiSettingsInline(admin.StackedInline):
 	"""Inline to manage API visibility settings for an organization."""
+
 	model = OrganizationApiSettings
 	extra = 0
 	max_num = 1
-	fields = ('make_api_public',)
-	verbose_name = 'API settings'
-	verbose_name_plural = 'API settings'
+	fields = ("make_api_public",)
+	verbose_name = "API settings"
+	verbose_name_plural = "API settings"
 	can_delete = False
 
 	def has_add_permission(self, request, obj=None):
@@ -1405,13 +1802,14 @@ class OrganizationApiSettingsInline(admin.StackedInline):
 
 class OrganizationTeamInline(admin.TabularInline):
 	"""Inline to display teams belonging to an organization."""
+
 	model = Team
 	extra = 0
-	fields = ('name', 'slug')
-	readonly_fields = ('name', 'slug')
+	fields = ("name", "slug")
+	readonly_fields = ("name", "slug")
 	show_change_link = True
-	verbose_name = 'Team'
-	verbose_name_plural = 'Teams'
+	verbose_name = "Team"
+	verbose_name_plural = "Teams"
 	can_delete = False
 
 	def has_add_permission(self, request, obj=None):
@@ -1424,13 +1822,14 @@ admin.site.unregister(Organization)
 @admin.register(Organization)
 class OrganizationAdmin(BaseOrganizationAdmin):
 	"""Custom Organization admin that shows associated teams."""
-	list_display = ['name', 'slug', 'teams_count']
-	readonly_fields = ('lists_display',)
+
+	list_display = ["name", "slug", "teams_count"]
+	readonly_fields = ("lists_display",)
 
 	def get_fieldsets(self, request, obj=None):
 		fieldsets = list(super().get_fieldsets(request, obj))
 		if obj is not None:
-			fieldsets.append(('Lists', {'fields': ('lists_display',)}))
+			fieldsets.append(("Lists", {"fields": ("lists_display",)}))
 		return fieldsets
 
 	def get_inline_instances(self, request, obj=None):
@@ -1444,39 +1843,47 @@ class OrganizationAdmin(BaseOrganizationAdmin):
 
 	def teams_count(self, obj):
 		return obj.teams.count()
-	teams_count.short_description = 'Teams'
+
+	teams_count.short_description = "Teams"
 
 	def lists_display(self, obj):
 		from subscriptions.models import Lists
+
 		lists = list(
 			Lists.objects.filter(team__organization=obj)
-			.select_related('team')
-			.order_by('team__name', 'list_name')
+			.select_related("team")
+			.order_by("team__name", "list_name")
 		)
 		if not lists:
-			return '-'
+			return "-"
 		from django.utils.html import format_html_join
+
 		items = format_html_join(
-			'',
+			"",
 			'<li><a href="{}">{}</a> <span style="color:#666;font-size:0.9em">({})</span></li>',
 			(
-				(reverse('admin:subscriptions_lists_change', args=[lst.pk]), lst.list_name, lst.team.name)
+				(
+					reverse("admin:subscriptions_lists_change", args=[lst.pk]),
+					lst.list_name,
+					lst.team.name,
+				)
 				for lst in lists
 			),
 		)
 		return format_html('<ul style="margin:0;padding-left:1.2em">{}</ul>', items)
-	lists_display.short_description = 'Lists'
+
+	lists_display.short_description = "Lists"
 
 
 class TeamSourceInline(admin.TabularInline):
 	model = Sources
 	extra = 0
-	fields = ('name', 'source_for', 'method', 'subject', 'active')
-	readonly_fields = ('name', 'source_for', 'method', 'subject', 'active')
+	fields = ("name", "source_for", "method", "subject", "active")
+	readonly_fields = ("name", "source_for", "method", "subject", "active")
 	show_change_link = True
-	verbose_name = 'Source'
-	verbose_name_plural = 'Sources'
-	classes = ('collapse',)
+	verbose_name = "Source"
+	verbose_name_plural = "Sources"
+	classes = ("collapse",)
 	can_delete = False
 
 	def has_add_permission(self, request, obj=None):
@@ -1486,12 +1893,12 @@ class TeamSourceInline(admin.TabularInline):
 class TeamCategoryInline(admin.TabularInline):
 	model = TeamCategory
 	extra = 0
-	fields = ('category_name', 'category_slug', 'category_description')
-	readonly_fields = ('category_name', 'category_slug', 'category_description')
+	fields = ("category_name", "category_slug", "category_description")
+	readonly_fields = ("category_name", "category_slug", "category_description")
 	show_change_link = True
-	verbose_name = 'Category'
-	verbose_name_plural = 'Categories'
-	classes = ('collapse',)
+	verbose_name = "Category"
+	verbose_name_plural = "Categories"
+	classes = ("collapse",)
 	can_delete = False
 
 	def has_add_permission(self, request, obj=None):
@@ -1500,64 +1907,73 @@ class TeamCategoryInline(admin.TabularInline):
 
 class TeamAdminForm(forms.ModelForm):
 	"""Custom form for Team admin that allows creating organization and team together"""
+
 	team_name = forms.CharField(
-		max_length=200, 
+		max_length=200,
 		required=False,
-		help_text="Enter team name, or select an existing organization below."
+		help_text="Enter team name, or select an existing organization below.",
 	)
-	
+
 	class Meta:
 		model = Team
-		fields = ['organization', 'slug']  # Exclude 'name' since we use 'team_name' instead
-	
+		fields = [
+			"organization",
+			"slug",
+		]  # Exclude 'name' since we use 'team_name' instead
+
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		
+
 		# If editing an existing team, populate the team_name field with the actual team name
 		if self.instance and self.instance.pk:
-			self.fields['team_name'].initial = self.instance.name
+			self.fields["team_name"].initial = self.instance.name
 			# For existing teams, team_name updates the actual team name
-			self.fields['team_name'].help_text = "Team name within the organization."
-		
+			self.fields["team_name"].help_text = "Team name within the organization."
+
 		# Make organization field optional for new teams
 		if not self.instance.pk:
-			self.fields['organization'].required = False
-			self.fields['organization'].help_text = "Select an existing organization, or leave blank to create a new one with the team name above."
-	
+			self.fields["organization"].required = False
+			self.fields[
+				"organization"
+			].help_text = "Select an existing organization, or leave blank to create a new one with the team name above."
+
 	def clean(self):
 		cleaned_data = super().clean()
-		team_name = cleaned_data.get('team_name')
-		organization = cleaned_data.get('organization')
-		
+		team_name = cleaned_data.get("team_name")
+		organization = cleaned_data.get("organization")
+
 		# For new teams, require either team_name or organization
 		if not self.instance.pk:
 			if not team_name and not organization:
-				raise forms.ValidationError("Please provide either a team name or select an existing organization.")
+				raise forms.ValidationError(
+					"Please provide either a team name or select an existing organization."
+				)
 		else:
 			# For existing teams, always require a team name
 			if not team_name:
 				raise forms.ValidationError("Team name is required.")
-		
+
 		# Check for unique team name within organization
 		if team_name and organization:
 			existing_team = Team.objects.filter(
-				organization=organization, 
-				name=team_name
+				organization=organization, name=team_name
 			).exclude(pk=self.instance.pk if self.instance.pk else None)
-			
+
 			if existing_team.exists():
-				raise forms.ValidationError(f"A team named '{team_name}' already exists in organization '{organization.name}'.")
-		
+				raise forms.ValidationError(
+					f"A team named '{team_name}' already exists in organization '{organization.name}'."
+				)
+
 		return cleaned_data
-	
+
 	def save(self, commit=True):
 		from django.utils.text import slugify
 		from organizations.models import Organization
 		from gregory.models import OrganizationSite
 
-		team_name = self.cleaned_data.get('team_name')
-		organization = self.cleaned_data.get('organization')
-		
+		team_name = self.cleaned_data.get("team_name")
+		organization = self.cleaned_data.get("organization")
+
 		# For new teams, create organization if team_name is provided and no organization selected
 		if not self.instance.pk:
 			if organization:
@@ -1566,13 +1982,15 @@ class TeamAdminForm(forms.ModelForm):
 				self.instance.name = team_name or organization.name
 				# Auto-generate slug if not provided
 				if not self.instance.slug:
-					self.instance.slug = slugify(f"{organization.name}-{team_name or 'team'}")
+					self.instance.slug = slugify(
+						f"{organization.name}-{team_name or 'team'}"
+					)
 			elif team_name:
 				# If only team_name is provided, create new organization
 				organization = Organization.objects.create(name=team_name.strip())
 				self.instance.organization = organization
 				self.instance.name = team_name.strip()
-				
+
 				# Auto-generate slug if not provided
 				if not self.instance.slug:
 					self.instance.slug = slugify(team_name)
@@ -1583,34 +2001,45 @@ class TeamAdminForm(forms.ModelForm):
 
 		# Default site to the organisation's default site when not explicitly set
 		if not self.instance.site_id and self.instance.organization_id:
-			default_org_site = OrganizationSite.objects.filter(
-				organization_id=self.instance.organization_id,
-				is_default=True,
-			).select_related('site').first()
+			default_org_site = (
+				OrganizationSite.objects.filter(
+					organization_id=self.instance.organization_id,
+					is_default=True,
+				)
+				.select_related("site")
+				.first()
+			)
 			if default_org_site:
 				self.instance.site = default_org_site.site
 
 		return super().save(commit)
 
+
 class TeamMembersInline(admin.TabularInline):
 	model = Team.members.through
 	extra = 1
-	verbose_name = 'Member'
-	verbose_name_plural = 'Members'
-	classes = ('collapse',)
-	autocomplete_fields = ['user']
+	verbose_name = "Member"
+	verbose_name_plural = "Members"
+	classes = ("collapse",)
+	autocomplete_fields = ["user"]
 
 
 class TeamListsInline(admin.TabularInline):
 	"""Inline to display lists belonging to a team."""
-	model = apps.get_model('subscriptions', 'Lists')
+
+	model = apps.get_model("subscriptions", "Lists")
 	extra = 0
-	fields = ('list_name', 'list_description', 'weekly_digest', 'admin_summary')
-	readonly_fields = ('list_name', 'list_description', 'weekly_digest', 'admin_summary')
+	fields = ("list_name", "list_description", "weekly_digest", "admin_summary")
+	readonly_fields = (
+		"list_name",
+		"list_description",
+		"weekly_digest",
+		"admin_summary",
+	)
 	show_change_link = True
-	verbose_name = 'List'
-	verbose_name_plural = 'Lists'
-	classes = ('collapse',)
+	verbose_name = "List"
+	verbose_name_plural = "Lists"
+	classes = ("collapse",)
 	can_delete = False
 
 	def has_add_permission(self, request, obj=None):
@@ -1619,12 +2048,15 @@ class TeamListsInline(admin.TabularInline):
 
 def _ensure_user_in_organization(user, organization):
 	"""Add user to organization if not already a member."""
-	if not OrganizationUser.objects.filter(user=user, organization=organization).exists():
+	if not OrganizationUser.objects.filter(
+		user=user, organization=organization
+	).exists():
 		OrganizationUser.objects.create(user=user, organization=organization)
 
 
 class ReassignTeamForm(forms.Form):
 	"""Intermediate form for the 'Reassign to team' admin action."""
+
 	target_team = forms.ModelChoiceField(
 		queryset=Team.objects.none(),  # filled dynamically
 		label="Target team",
@@ -1632,11 +2064,11 @@ class ReassignTeamForm(forms.Form):
 	)
 	conflict = forms.ChoiceField(
 		choices=[
-			('skip',   'Skip — leave conflicting subjects on the old team'),
-			('rename', 'Rename — append a suffix to conflicting subject slugs'),
-			('merge',  'Merge — fold conflicting subjects into the existing one'),
+			("skip", "Skip — leave conflicting subjects on the old team"),
+			("rename", "Rename — append a suffix to conflicting subject slugs"),
+			("merge", "Merge — fold conflicting subjects into the existing one"),
 		],
-		initial='skip',
+		initial="skip",
 		label="Subject slug conflict handling",
 	)
 
@@ -1644,23 +2076,41 @@ class ReassignTeamForm(forms.Form):
 @admin.register(Team)
 class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	form = TeamAdminForm
-	inlines = [TeamMembersInline, TeamSubjectInline, TeamCategoryInline, TeamSourceInline, TeamListsInline]
-	list_display = ['id', 'formatted_team_name', 'organization_link', 'slug', 'subjects_count', 'sources_count', 'active_badge']
-	list_display_links = ['id', 'formatted_team_name']
-	list_filter = ['organization', 'is_active']
-	search_fields = ['name', 'organization__name', 'slug']
-	actions = ['soft_delete_teams', 'reassign_to_team', 'hard_delete_empty_inactive_teams']
+	inlines = [
+		TeamMembersInline,
+		TeamSubjectInline,
+		TeamCategoryInline,
+		TeamSourceInline,
+		TeamListsInline,
+	]
+	list_display = [
+		"id",
+		"formatted_team_name",
+		"organization_link",
+		"slug",
+		"subjects_count",
+		"sources_count",
+		"active_badge",
+	]
+	list_display_links = ["id", "formatted_team_name"]
+	list_filter = ["organization", "is_active"]
+	search_fields = ["name", "organization__name", "slug"]
+	actions = [
+		"soft_delete_teams",
+		"reassign_to_team",
+		"hard_delete_empty_inactive_teams",
+	]
 
 	fieldsets = (
-		(None, {
-			'fields': ('team_name', 'organization', 'slug', 'is_active')
-		}),
+		(None, {"fields": ("team_name", "organization", "slug", "is_active")}),
 	)
-	readonly_fields = ('organization_link',)
+	readonly_fields = ("organization_link",)
 
 	def get_queryset(self, request):
 		# Show all teams (active and inactive) in the admin.
-		qs = Team.all_objects.select_related('organization').prefetch_related('subjects', 'sources', 'members')
+		qs = Team.all_objects.select_related("organization").prefetch_related(
+			"subjects", "sources", "members"
+		)
 		# Apply organisation-based filtering from OrganizationFilterMixin if needed.
 		if not request.user.is_superuser:
 			user_orgs = get_user_organizations(request.user)
@@ -1674,37 +2124,48 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 
 	def organization_link(self, obj):
 		if obj.organization_id:
-			url = reverse('admin:organizations_organization_change', args=[obj.organization_id])
+			url = reverse(
+				"admin:organizations_organization_change", args=[obj.organization_id]
+			)
 			return format_html('<a href="{}">{}</a>', url, obj.organization.name)
-		return '-'
-	organization_link.short_description = 'Organisation'
-	organization_link.admin_order_field = 'organization__name'
+		return "-"
+
+	organization_link.short_description = "Organisation"
+	organization_link.admin_order_field = "organization__name"
 
 	def formatted_team_name(self, obj):
 		if obj.is_active:
-			return format_html('<strong>{}</strong>', obj.name)
+			return format_html("<strong>{}</strong>", obj.name)
 		return format_html(
 			'<strong style="color:#999;text-decoration:line-through;">{}</strong> '
 			'<span style="color:#c0392b;font-size:0.85em;">[inactive]</span>',
 			obj.name,
 		)
-	formatted_team_name.short_description = 'Team Name'
-	formatted_team_name.admin_order_field = 'name'
+
+	formatted_team_name.short_description = "Team Name"
+	formatted_team_name.admin_order_field = "name"
 
 	def active_badge(self, obj):
 		if obj.is_active:
-			return format_html('<span style="color:green;font-weight:bold;">{}</span>', '✓ Active')
-		return format_html('<span style="color:#c0392b;font-weight:bold;">{}</span>', '✗ Inactive')
-	active_badge.short_description = 'Status'
-	active_badge.admin_order_field = 'is_active'
+			return format_html(
+				'<span style="color:green;font-weight:bold;">{}</span>', "✓ Active"
+			)
+		return format_html(
+			'<span style="color:#c0392b;font-weight:bold;">{}</span>', "✗ Inactive"
+		)
+
+	active_badge.short_description = "Status"
+	active_badge.admin_order_field = "is_active"
 
 	def subjects_count(self, obj):
 		return obj.subjects.count()
-	subjects_count.short_description = 'Subjects'
+
+	subjects_count.short_description = "Subjects"
 
 	def sources_count(self, obj):
 		return obj.sources.count()
-	sources_count.short_description = 'Sources'
+
+	sources_count.short_description = "Sources"
 
 	# ------------------------------------------------------------------ #
 	# Soft-delete: override delete_model and delete_queryset               #
@@ -1737,45 +2198,49 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		from gregory.services.team_reassignment import reassign_team
 
 		# Step 1 — show the intermediate form.
-		if 'apply' not in request.POST:
+		if "apply" not in request.POST:
 			# Build queryset of valid target teams: active, not in the selection,
 			# but sharing the same organisation as the selected teams.
-			org_ids = queryset.values_list('organization_id', flat=True).distinct()
+			org_ids = queryset.values_list("organization_id", flat=True).distinct()
 			target_qs = Team.objects.filter(organization_id__in=org_ids).exclude(
-				pk__in=queryset.values_list('pk', flat=True)
+				pk__in=queryset.values_list("pk", flat=True)
 			)
 			form = ReassignTeamForm()
-			form.fields['target_team'].queryset = target_qs
+			form.fields["target_team"].queryset = target_qs
 			return render(
 				request,
-				'admin/gregory/team/reassign_intermediate.html',
+				"admin/gregory/team/reassign_intermediate.html",
 				{
-					'title': 'Reassign team objects',
-					'teams': queryset,
-					'form': form,
-					'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
+					"title": "Reassign team objects",
+					"teams": queryset,
+					"form": form,
+					"action_checkbox_name": admin.helpers.ACTION_CHECKBOX_NAME,
 				},
 			)
 
 		# Step 2 — process the form.
-		org_ids = queryset.values_list('organization_id', flat=True).distinct()
+		org_ids = queryset.values_list("organization_id", flat=True).distinct()
 		target_qs = Team.objects.filter(organization_id__in=org_ids).exclude(
-			pk__in=queryset.values_list('pk', flat=True)
+			pk__in=queryset.values_list("pk", flat=True)
 		)
 		form = ReassignTeamForm(request.POST)
-		form.fields['target_team'].queryset = target_qs
+		form.fields["target_team"].queryset = target_qs
 
 		if not form.is_valid():
-			self.message_user(request, "Invalid form — please try again.", level=messages.ERROR)
+			self.message_user(
+				request, "Invalid form — please try again.", level=messages.ERROR
+			)
 			return
 
-		to_team = form.cleaned_data['target_team']
-		conflict = form.cleaned_data['conflict']
+		to_team = form.cleaned_data["target_team"]
+		conflict = form.cleaned_data["conflict"]
 
 		errors = []
 		for from_team in queryset:
 			try:
-				report = reassign_team(from_team=from_team, to_team=to_team, conflict=conflict)
+				report = reassign_team(
+					from_team=from_team, to_team=to_team, conflict=conflict
+				)
 				self.message_user(
 					request,
 					f"Reassigned '{from_team.name}' → '{to_team.name}': "
@@ -1786,7 +2251,9 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 				errors.append(str(exc))
 
 		if errors:
-			self.message_user(request, "Errors: " + "; ".join(errors), level=messages.ERROR)
+			self.message_user(
+				request, "Errors: " + "; ".join(errors), level=messages.ERROR
+			)
 
 	@admin.action(description="Hard-delete selected inactive teams (only if empty)")
 	def hard_delete_empty_inactive_teams(self, request, queryset):
@@ -1804,7 +2271,9 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 				or team.prediction_run_logs.exists()
 			)
 			if has_objects:
-				skipped.append(f"'{team.name}' still has related objects — reassign first")
+				skipped.append(
+					f"'{team.name}' still has related objects — reassign first"
+				)
 				continue
 			team.hard_delete()
 			deleted += 1
@@ -1812,7 +2281,9 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		if deleted:
 			self.message_user(request, f"{deleted} team(s) permanently deleted.")
 		if skipped:
-			self.message_user(request, "Skipped: " + "; ".join(skipped), level=messages.WARNING)
+			self.message_user(
+				request, "Skipped: " + "; ".join(skipped), level=messages.WARNING
+			)
 
 	# ------------------------------------------------------------------ #
 	# URLs for custom views                                                #
@@ -1820,12 +2291,13 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 
 	def get_urls(self):
 		from django.urls import path as url_path
+
 		urls = super().get_urls()
 		custom = [
 			url_path(
-				'<int:team_id>/reassign/',
+				"<int:team_id>/reassign/",
 				self.admin_site.admin_view(self.reassign_view),
-				name='gregory_team_reassign',
+				name="gregory_team_reassign",
 			),
 		]
 		return custom + urls
@@ -1838,32 +2310,36 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		org_id = from_team.organization_id
 		target_qs = Team.objects.filter(organization_id=org_id).exclude(pk=team_id)
 
-		if request.method == 'POST':
+		if request.method == "POST":
 			form = ReassignTeamForm(request.POST)
-			form.fields['target_team'].queryset = target_qs
+			form.fields["target_team"].queryset = target_qs
 			if form.is_valid():
-				to_team = form.cleaned_data['target_team']
-				conflict = form.cleaned_data['conflict']
+				to_team = form.cleaned_data["target_team"]
+				conflict = form.cleaned_data["conflict"]
 				try:
-					report = reassign_team(from_team=from_team, to_team=to_team, conflict=conflict)
-					self.message_user(request, f"Reassignment complete.\n{report.summary()}")
+					report = reassign_team(
+						from_team=from_team, to_team=to_team, conflict=conflict
+					)
+					self.message_user(
+						request, f"Reassignment complete.\n{report.summary()}"
+					)
 				except ValueError as exc:
 					self.message_user(request, str(exc), level=messages.ERROR)
 				return self._response_post_save(request, from_team)
 		else:
 			form = ReassignTeamForm()
-			form.fields['target_team'].queryset = target_qs
+			form.fields["target_team"].queryset = target_qs
 
 		return render(
 			request,
-			'admin/gregory/team/reassign_intermediate.html',
+			"admin/gregory/team/reassign_intermediate.html",
 			{
-				'title': f'Reassign objects from "{from_team}"',
-				'teams': [from_team],
-				'form': form,
-				'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
-				'original': from_team,
-				'opts': self.model._meta,
+				"title": f'Reassign objects from "{from_team}"',
+				"teams": [from_team],
+				"form": form,
+				"action_checkbox_name": admin.helpers.ACTION_CHECKBOX_NAME,
+				"original": from_team,
+				"opts": self.model._meta,
 			},
 		)
 
@@ -1875,172 +2351,256 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 			for user in team.members.all():
 				_ensure_user_in_organization(user, team.organization)
 
+
 @admin.register(PredictionRunLog)
 class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
-	list_display = ['id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 'run_started', 'run_finished', 'status_label', 'triggered_by']
-	list_filter = [DateRangeFilter, 'team', 'subject', 'run_type', 'algorithm', 'success', 'model_version']
-	search_fields = ['team__organization__name', 'subject__subject_name', 'model_version', 'triggered_by', 'algorithm']
-	readonly_fields = ['run_started']  # Auto-populated field
-	date_hierarchy = 'run_started'
-	actions = ['mark_as_failed', 'mark_as_successful', 'export_as_csv']
-	
+	list_display = [
+		"id",
+		"team",
+		"subject",
+		"run_type",
+		"algorithm",
+		"model_version",
+		"run_started",
+		"run_finished",
+		"status_label",
+		"triggered_by",
+	]
+	list_filter = [
+		DateRangeFilter,
+		"team",
+		"subject",
+		"run_type",
+		"algorithm",
+		"success",
+		"model_version",
+	]
+	search_fields = [
+		"team__organization__name",
+		"subject__subject_name",
+		"model_version",
+		"triggered_by",
+		"algorithm",
+	]
+	readonly_fields = ["run_started"]  # Auto-populated field
+	date_hierarchy = "run_started"
+	actions = ["mark_as_failed", "mark_as_successful", "export_as_csv"]
+
 	fieldsets = (
-		('Run Information', {
-			'fields': ('team', 'subject', 'run_type', 'algorithm', 'model_version', 'triggered_by'),
-		}),
-		('Status', {
-			'fields': ('run_started', 'run_finished', 'success', 'error_message'),
-		}),
+		(
+			"Run Information",
+			{
+				"fields": (
+					"team",
+					"subject",
+					"run_type",
+					"algorithm",
+					"model_version",
+					"triggered_by",
+				),
+			},
+		),
+		(
+			"Status",
+			{
+				"fields": ("run_started", "run_finished", "success", "error_message"),
+			},
+		),
 	)
-	
+
 	def status_label(self, obj):
 		if obj.success is True:
-			return format_html('<span style="color: green; font-weight: bold;">Success</span>')
+			return format_html(
+				'<span style="color: green; font-weight: bold;">Success</span>'
+			)
 		elif obj.success is False:
-			return format_html('<span style="color: red; font-weight: bold;">Failed</span>')
+			return format_html(
+				'<span style="color: red; font-weight: bold;">Failed</span>'
+			)
 		else:
-			return format_html('<span style="color: orange; font-weight: bold;">Running</span>')
+			return format_html(
+				'<span style="color: orange; font-weight: bold;">Running</span>'
+			)
+
 	status_label.short_description = "Status"
-	
+
 	def get_queryset(self, request):
 		# Order by most recent runs first
-		return super().get_queryset(request).order_by('-run_started')
-	
+		return super().get_queryset(request).order_by("-run_started")
+
 	def has_change_permission(self, request, obj=None):
 		# Logs should generally not be modified after creation
 		# But admins might need to update status or error messages
 		return True
-	
+
 	def has_delete_permission(self, request, obj=None):
 		# Allow deletion for admins
 		return True
-	
+
 	def mark_as_failed(self, request, queryset):
 		"""Mark selected unfinished runs as failed"""
 		from django.utils import timezone
-		
+
 		# Only update runs that are still in progress (success is None)
 		updated = queryset.filter(success__isnull=True).update(
 			success=False,
 			run_finished=timezone.now(),
-			error_message="Manually marked as failed by admin."
+			error_message="Manually marked as failed by admin.",
 		)
-		
+
 		if updated == 0:
 			self.message_user(request, "No unfinished runs were selected.")
 		else:
-			self.message_user(request, f"Successfully marked {updated} run(s) as failed.")
+			self.message_user(
+				request, f"Successfully marked {updated} run(s) as failed."
+			)
+
 	mark_as_failed.short_description = "Mark selected unfinished runs as failed"
-	
+
 	def mark_as_successful(self, request, queryset):
 		"""Mark selected unfinished runs as successful"""
 		from django.utils import timezone
-		
+
 		# Only update runs that are still in progress (success is None)
 		updated = queryset.filter(success__isnull=True).update(
-			success=True,
-			run_finished=timezone.now()
+			success=True, run_finished=timezone.now()
 		)
-		
+
 		if updated == 0:
 			self.message_user(request, "No unfinished runs were selected.")
 		else:
-			self.message_user(request, f"Successfully marked {updated} run(s) as successful.")
+			self.message_user(
+				request, f"Successfully marked {updated} run(s) as successful."
+			)
+
 	mark_as_successful.short_description = "Mark selected unfinished runs as successful"
-	
+
 	def export_as_csv(self, request, queryset):
 		"""Export selected logs to CSV file"""
 		meta = self.model._meta
 		field_names = [
-			'id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 
-			'run_started', 'run_finished', 'success', 'triggered_by', 'error_message'
+			"id",
+			"team",
+			"subject",
+			"run_type",
+			"algorithm",
+			"model_version",
+			"run_started",
+			"run_finished",
+			"success",
+			"triggered_by",
+			"error_message",
 		]
-		
-		response = HttpResponse(content_type='text/csv')
-		response['Content-Disposition'] = f'attachment; filename={meta.verbose_name_plural}.csv'
-		
+
+		response = HttpResponse(content_type="text/csv")
+		response["Content-Disposition"] = (
+			f"attachment; filename={meta.verbose_name_plural}.csv"
+		)
+
 		writer = csv.writer(response)
 		writer.writerow([field for field in field_names])
-		
+
 		for obj in queryset:
 			row = []
 			for field in field_names:
-				if field == 'team':
+				if field == "team":
 					value = str(getattr(obj, field))
-				elif field == 'subject':
+				elif field == "subject":
 					value = str(getattr(obj, field))
-				elif field == 'run_type':
+				elif field == "run_type":
 					value = obj.get_run_type_display()
 				else:
 					value = getattr(obj, field)
 				row.append(value)
 			writer.writerow(row)
-		
+
 		return response
+
 	export_as_csv.short_description = "Export selected logs to CSV"
-	
+
 	def changelist_view(self, request, extra_context=None):
 		# Add dashboard statistics to the context
 		extra_context = extra_context or {}
-		
+
 		# Training runs statistics
-		extra_context['training_success_count'] = PredictionRunLog.objects.filter(run_type='train', success=True).count()
-		extra_context['training_failed_count'] = PredictionRunLog.objects.filter(run_type='train', success=False).count()
-		extra_context['training_running_count'] = PredictionRunLog.objects.filter(run_type='train', success__isnull=True).count()
-		
+		extra_context["training_success_count"] = PredictionRunLog.objects.filter(
+			run_type="train", success=True
+		).count()
+		extra_context["training_failed_count"] = PredictionRunLog.objects.filter(
+			run_type="train", success=False
+		).count()
+		extra_context["training_running_count"] = PredictionRunLog.objects.filter(
+			run_type="train", success__isnull=True
+		).count()
+
 		# Prediction runs statistics
-		extra_context['prediction_success_count'] = PredictionRunLog.objects.filter(run_type='predict', success=True).count()
-		extra_context['prediction_failed_count'] = PredictionRunLog.objects.filter(run_type='predict', success=False).count()
-		extra_context['prediction_running_count'] = PredictionRunLog.objects.filter(run_type='predict', success__isnull=True).count()
-		
+		extra_context["prediction_success_count"] = PredictionRunLog.objects.filter(
+			run_type="predict", success=True
+		).count()
+		extra_context["prediction_failed_count"] = PredictionRunLog.objects.filter(
+			run_type="predict", success=False
+		).count()
+		extra_context["prediction_running_count"] = PredictionRunLog.objects.filter(
+			run_type="predict", success__isnull=True
+		).count()
+
 		# Recent runs (last 10)
-		extra_context['recent_runs'] = PredictionRunLog.objects.all().order_by('-run_started')[:10]
-		
+		extra_context["recent_runs"] = PredictionRunLog.objects.all().order_by(
+			"-run_started"
+		)[:10]
+
 		return super().changelist_view(request, extra_context=extra_context)
-	
+
 	def get_urls(self):
 		urls = super().get_urls()
 		custom_urls = [
 			path(
-				'ml-coverage/',
+				"ml-coverage/",
 				self.admin_site.admin_view(self.ml_coverage_view),
-				name='predictionrunlog_ml_coverage',
+				name="predictionrunlog_ml_coverage",
 			),
 		]
 		return custom_urls + urls
-	
+
 	def ml_coverage_view(self, request):
 		"""View to show ML coverage across teams and subjects"""
 		# Get all teams
-		teams = Team.objects.prefetch_related('subjects').all()
-		
+		teams = Team.objects.prefetch_related("subjects").all()
+
 		# Create dictionaries to store the latest runs per subject
 		training_data = {}
 		prediction_data = {}
-		
+
 		# Get all subjects
 		all_subjects = Subject.objects.all()
-		
+
 		# For each subject, get its latest training and prediction runs
 		for subject in all_subjects:
-			latest_training = PredictionRunLog.get_latest_run(subject.team, subject, run_type='train')
-			latest_prediction = PredictionRunLog.get_latest_run(subject.team, subject, run_type='predict')
-			
+			latest_training = PredictionRunLog.get_latest_run(
+				subject.team, subject, run_type="train"
+			)
+			latest_prediction = PredictionRunLog.get_latest_run(
+				subject.team, subject, run_type="predict"
+			)
+
 			if latest_training:
 				training_data[subject.id] = latest_training
-			
+
 			if latest_prediction:
 				prediction_data[subject.id] = latest_prediction
-		
+
 		context = {
-			'title': 'ML Coverage Report',
-			'teams': teams,
-			'training_data': training_data,
-			'prediction_data': prediction_data,
+			"title": "ML Coverage Report",
+			"teams": teams,
+			"training_data": training_data,
+			"prediction_data": prediction_data,
 		}
-		
+
 		# Render the template
-		return render(request, 'admin/gregory/predictionrunlog/ml_coverage.html', context)
+		return render(
+			request, "admin/gregory/predictionrunlog/ml_coverage.html", context
+		)
+
 
 admin.site.register(Articles, ArticleAdmin)
 admin.site.register(Authors, AuthorsAdmin)
@@ -2056,9 +2616,10 @@ class _BaseOrgContentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	so users can browse audit history and so superusers can clean up rows
 	across organisations.
 	"""
-	list_filter = ('organization',)
-	readonly_fields = ('created_at', 'updated_at')
-	search_fields = ('takeaways', 'summary_plain_english')
+
+	list_filter = ("organization",)
+	readonly_fields = ("created_at", "updated_at")
+	search_fields = ("takeaways", "summary_plain_english")
 
 	def get_form(self, request, obj=None, **kwargs):
 		form_class = super().get_form(request, obj, **kwargs)
@@ -2070,21 +2631,24 @@ class _BaseOrgContentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		class ScopedOrgForm(form_class):
 			def __init__(self, *args, **form_kwargs):
 				super().__init__(*args, **form_kwargs)
-				if 'organization' in self.fields:
-					self.fields['organization'].queryset = (
-						Organization.objects.filter(id__in=user_org_ids).order_by('name')
-					)
+				if "organization" in self.fields:
+					self.fields["organization"].queryset = Organization.objects.filter(
+						id__in=user_org_ids
+					).order_by("name")
 					if self.instance and self.instance.pk:
-						self.fields['organization'].disabled = True
+						self.fields["organization"].disabled = True
 
 		return ScopedOrgForm
 
 
 @admin.register(ArticleOrgContent)
 class ArticleOrgContentAdmin(_BaseOrgContentAdmin):
-	list_display = ('article', 'organization', 'updated_at')
-	raw_id_fields = ('article',)
-	search_fields = _BaseOrgContentAdmin.search_fields + ('article__title', 'article__doi')
+	list_display = ("article", "organization", "updated_at")
+	raw_id_fields = ("article",)
+	search_fields = _BaseOrgContentAdmin.search_fields + (
+		"article__title",
+		"article__doi",
+	)
 
 	def has_module_perms(self, request):
 		return False
@@ -2092,19 +2656,20 @@ class ArticleOrgContentAdmin(_BaseOrgContentAdmin):
 
 @admin.register(TrialOrgContent)
 class TrialOrgContentAdmin(_BaseOrgContentAdmin):
-	list_display = ('trial', 'organization', 'updated_at')
-	raw_id_fields = ('trial',)
-	search_fields = _BaseOrgContentAdmin.search_fields + ('trial__title',)
+	list_display = ("trial", "organization", "updated_at")
+	raw_id_fields = ("trial",)
+	search_fields = _BaseOrgContentAdmin.search_fields + ("trial__title",)
 
 
 # --- Custom UserAdmin with Team membership inline ---
 
+
 class UserTeamInline(admin.TabularInline):
 	model = Team.members.through
 	extra = 1
-	verbose_name = 'Team membership'
-	verbose_name_plural = 'Team memberships'
-	autocomplete_fields = ['team']
+	verbose_name = "Team membership"
+	verbose_name_plural = "Team memberships"
+	autocomplete_fields = ["team"]
 
 
 class CustomUserAdmin(BaseUserAdmin):

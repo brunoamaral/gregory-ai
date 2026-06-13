@@ -1,21 +1,44 @@
 from django.conf import settings
 from django.core.cache import cache
 from api.serializers import (
-		ArticleSerializer, TrialSerializer, SourceSerializer, AuthorSerializer,
-		CategorySerializer, CategoryTopAuthorSerializer, TeamSerializer, SubjectsSerializer,
-		OrganizationSerializer
+	ArticleSerializer,
+	TrialSerializer,
+	SourceSerializer,
+	AuthorSerializer,
+	CategorySerializer,
+	CategoryTopAuthorSerializer,
+	TeamSerializer,
+	SubjectsSerializer,
+	OrganizationSerializer,
 )
 from api.pagination import FlexiblePagination
 from datetime import datetime, timedelta
 from django.db.models import Count, Q, Prefetch
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper, ClinicalTrial
-from gregory.models import Articles, ArticleOrgContent, Trials, TrialOrgContent, Sources, Authors, Team, Subject, TeamCategory
+from gregory.models import (
+	Articles,
+	ArticleOrgContent,
+	Trials,
+	TrialOrgContent,
+	Sources,
+	Authors,
+	Team,
+	Subject,
+	TeamCategory,
+)
 from organizations.models import Organization
 from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
 from django_filters import rest_framework as django_filters
-from api.filters import ArticleFilter, TrialFilter, AuthorFilter, SourceFilter, CategoryFilter, SubjectFilter
+from api.filters import (
+	ArticleFilter,
+	TrialFilter,
+	AuthorFilter,
+	SourceFilter,
+	CategoryFilter,
+	SubjectFilter,
+)
 from rest_framework.response import Response
 from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
@@ -26,20 +49,48 @@ import traceback
 from django.utils.dateparse import parse_date
 
 from api.serializers.mixins import _resolve_per_org_fields_org
-from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress, find_trial_by_identifier
+from api.utils.utils import (
+	checkValidAccess,
+	getAPIKey,
+	getIPAddress,
+	find_trial_by_identifier,
+)
 from gregory.utils.link_utils import merge_links
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
-		APIAccessDeniedError, APIInvalidAPIKeyError, APIInvalidIPAddressError,
-		APINoAPIKeyError, ArticleExistsError, ArticleNotFoundError, ArticleNotSavedError,
-		CrossOrgPayloadError, DuplicateArticleError, DuplicateTrialError,
-		FieldNotFoundError, SourceNotFoundError, TrialNotFoundError
+	APIAccessDeniedError,
+	APIInvalidAPIKeyError,
+	APIInvalidIPAddressError,
+	APINoAPIKeyError,
+	ArticleExistsError,
+	ArticleNotFoundError,
+	ArticleNotSavedError,
+	CrossOrgPayloadError,
+	DuplicateArticleError,
+	DuplicateTrialError,
+	FieldNotFoundError,
+	SourceNotFoundError,
+	TrialNotFoundError,
 )
 from api.utils.responses import (
-		ACCESS_DENIED, ARTICLE_NOT_FOUND, ARTICLE_NOT_SAVED, ARTICLE_EXISTS, CROSS_ORG_PAYLOAD,
-		DUPLICATE_ARTICLE, DUPLICATE_TRIAL, FIELD_NOT_FOUND, INVALID_API_KEY, INVALID_IP_ADDRESS,
-		NO_API_KEY, SOURCE_NOT_FOUND, TRIAL_NOT_FOUND, UNEXPECTED, returnData, returnError
+	ACCESS_DENIED,
+	ARTICLE_NOT_FOUND,
+	ARTICLE_NOT_SAVED,
+	ARTICLE_EXISTS,
+	CROSS_ORG_PAYLOAD,
+	DUPLICATE_ARTICLE,
+	DUPLICATE_TRIAL,
+	FIELD_NOT_FOUND,
+	INVALID_API_KEY,
+	INVALID_IP_ADDRESS,
+	NO_API_KEY,
+	SOURCE_NOT_FOUND,
+	TRIAL_NOT_FOUND,
+	UNEXPECTED,
+	returnData,
+	returnError,
 )
+
 
 class CSVStreamingMixin:
 	"""
@@ -53,21 +104,28 @@ class CSVStreamingMixin:
 
 	def finalize_response(self, request, response, *args, **kwargs):
 		response = super().finalize_response(request, response, *args, **kwargs)
-		if request.query_params.get('format', '').lower() == 'csv':
+		if request.query_params.get("format", "").lower() == "csv":
 			response.render()
-			csv_bytes = response.content if isinstance(response.content, bytes) else response.content.encode('utf-8')
+			csv_bytes = (
+				response.content
+				if isinstance(response.content, bytes)
+				else response.content.encode("utf-8")
+			)
 
 			def csv_stream():
 				yield csv_bytes
 
 			from api.direct_streaming import DirectStreamingCSVRenderer
-			filename = DirectStreamingCSVRenderer().get_filename({'request': request})
+
+			filename = DirectStreamingCSVRenderer().get_filename({"request": request})
 			streaming_response = StreamingHttpResponse(
 				streaming_content=csv_stream(),
-				content_type='text/csv; charset=utf-8',
+				content_type="text/csv; charset=utf-8",
 			)
-			streaming_response['Content-Disposition'] = f'attachment; filename="{filename}"'
-			streaming_response['Content-Type'] = 'text/csv; charset=utf-8'
+			streaming_response["Content-Disposition"] = (
+				f'attachment; filename="{filename}"'
+			)
+			streaming_response["Content-Type"] = "text/csv; charset=utf-8"
 			return streaming_response
 		return response
 
@@ -89,38 +147,45 @@ class OrgVisibilityMixin:
 	  - Subject/Source/Category:  _org_filter_path = 'team__organization_id'
 	"""
 
-	_org_filter_path = 'teams__organization_id'
+	_org_filter_path = "teams__organization_id"
 	# Set to False for viewsets that reach orgs via a simple FK (not M2M) to
 	# avoid unnecessary DISTINCT overhead on those queries.
 	_org_filter_distinct = True
 
 	def get_queryset(self):
 		qs = super().get_queryset()
-		if not hasattr(self.request, 'visible_org_ids'):
+		if not hasattr(self.request, "visible_org_ids"):
 			return qs
-		qs = qs.filter(**{f'{self._org_filter_path}__in': self.request.visible_org_ids})
+		qs = qs.filter(**{f"{self._org_filter_path}__in": self.request.visible_org_ids})
 		return qs.distinct() if self._org_filter_distinct else qs
 
 
-def add_deprecation_headers(response, deprecated_endpoint, replacement_endpoint, message=None):
+def add_deprecation_headers(
+	response, deprecated_endpoint, replacement_endpoint, message=None
+):
 	"""
 	Utility function to add deprecation headers to API responses.
 	This helps prepare clients for the transition to new endpoints.
 	"""
 	if message is None:
-		message = f'This endpoint is deprecated. Use {replacement_endpoint} instead.'
-	
-	response['X-Deprecation-Warning'] = message
-	response['X-Migration-Guide'] = replacement_endpoint
-	response['X-Deprecated-Endpoint'] = deprecated_endpoint
+		message = f"This endpoint is deprecated. Use {replacement_endpoint} instead."
+
+	response["X-Deprecation-Warning"] = message
+	response["X-Migration-Guide"] = replacement_endpoint
+	response["X-Deprecated-Endpoint"] = deprecated_endpoint
 	return response
-def getDateRangeFromWeek(p_year,p_week):
-	firstdayofweek = datetime.strptime(f'{p_year}-W{int(p_week )- 1}-1', "%Y-W%W-%w")
+
+
+def getDateRangeFromWeek(p_year, p_week):
+	firstdayofweek = datetime.strptime(f"{p_year}-W{int(p_week) - 1}-1", "%Y-W%W-%w")
 	lastdayofweek = firstdayofweek + timedelta(days=6.9)
-	return (firstdayofweek,lastdayofweek)
+	return (firstdayofweek, lastdayofweek)
+
 
 # Util function that creates an instance of the access log model
-def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_message, post_data):
+def generateAccessSchemeLog(
+	call_type, ip_addr, access_scheme, http_code, error_message, post_data
+):
 	log = APIAccessSchemeLog()
 	log.call_type = call_type
 	log.ip_addr = ip_addr
@@ -136,11 +201,13 @@ def generateAccessSchemeLog(call_type, ip_addr, access_scheme, http_code, error_
 	log.payload_received = post_data
 	log.save()
 
+
 ###
 # API Post
 ###
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 def post_article(request):
 	"""
 	Allows authenticated clients to add new articles or trials to the database.
@@ -161,79 +228,87 @@ def post_article(request):
 
 		# PR 7: keys without an org cannot post
 		if access_scheme.organization is None:
-			raise APIAccessDeniedError('API keys without an associated organisation cannot post articles.')
+			raise APIAccessDeniedError(
+				"API keys without an associated organisation cannot post articles."
+			)
 
 		# --- Field presence checks -------------------------------------------
-		if 'kind' not in post_data or post_data['kind'] is None:
-			raise FieldNotFoundError('field `kind` was not found in the payload')
-		if 'source_id' not in post_data or post_data['source_id'] is None:
-			raise FieldNotFoundError('source_id field not found in payload')
-		if 'title' not in post_data and 'doi' not in post_data:
-			raise FieldNotFoundError('field `doi` and `title` not in the payload. You need at least one.')
+		if "kind" not in post_data or post_data["kind"] is None:
+			raise FieldNotFoundError("field `kind` was not found in the payload")
+		if "source_id" not in post_data or post_data["source_id"] is None:
+			raise FieldNotFoundError("source_id field not found in payload")
+		if "title" not in post_data and "doi" not in post_data:
+			raise FieldNotFoundError(
+				"field `doi` and `title` not in the payload. You need at least one."
+			)
 
 		# --- Source validation (existence, org, kind match) ------------------
 		try:
-			source = Sources.objects.get(pk=post_data['source_id'])
+			source = Sources.objects.get(pk=post_data["source_id"])
 		except Sources.DoesNotExist:
-			raise SourceNotFoundError(f'source_id {post_data["source_id"]} was not found in the database')
+			raise SourceNotFoundError(
+				f"source_id {post_data['source_id']} was not found in the database"
+			)
 		if source.team is None:
-			raise SourceNotFoundError(f'source_id {source.pk} has no team assigned')
+			raise SourceNotFoundError(f"source_id {source.pk} has no team assigned")
 		if source.team.organization_id != access_scheme.organization_id:
 			raise CrossOrgPayloadError(
-				f'source_id {source.pk} belongs to a different organisation than your API key.'
+				f"source_id {source.pk} belongs to a different organisation than your API key."
 			)
-		if post_data['kind'] != source.source_for:
+		if post_data["kind"] != source.source_for:
 			raise FieldNotFoundError(
-				f'payload kind \'{post_data["kind"]}\' does not match source kind \'{source.source_for}\''
+				f"payload kind '{post_data['kind']}' does not match source kind '{source.source_for}'"
 			)
 
 		# Helper: coerce empty strings to None
 		def _val(key):
 			v = post_data.get(key)
-			return None if v == '' else v
+			return None if v == "" else v
 
-		kind = post_data['kind']
+		kind = post_data["kind"]
 
 		# =================================================================
 		# Branch: science paper
 		# =================================================================
-		if kind == 'science paper':
+		if kind == "science paper":
 			new_article = {
-				'title': _val('title'),
-				'link': _val('link'),
-				'doi': _val('doi'),
-				'access': _val('access'),
-				'summary': _val('summary'),
-				'published_date': _val('published_date'),
-				'kind': kind,
-				'publisher': _val('publisher'),
-				'container_title': _val('container_title'),
+				"title": _val("title"),
+				"link": _val("link"),
+				"doi": _val("doi"),
+				"access": _val("access"),
+				"summary": _val("summary"),
+				"published_date": _val("published_date"),
+				"kind": kind,
+				"publisher": _val("publisher"),
+				"container_title": _val("container_title"),
 			}
-			science_paper = SciencePaper(doi=new_article['doi'], title=new_article['title'])
+			science_paper = SciencePaper(
+				doi=new_article["doi"], title=new_article["title"]
+			)
 			if science_paper.doi is None:
 				science_paper.doi = science_paper.find_doi(title=science_paper.title)
 			if science_paper.doi is not None:
 				science_paper.refresh()
-			if new_article['doi'] is None:
-				new_article['doi'] = science_paper.doi
-			if new_article['title'] is None:
-				new_article['title'] = science_paper.title
-			if new_article['link'] is None:
-				new_article['link'] = science_paper.link
-			if new_article['summary'] is None:
-				new_article['summary'] = science_paper.clean_abstract()
-			if new_article['published_date'] is None:
-				new_article['published_date'] = science_paper.published_date
-			if new_article['access'] is None:
-				new_article['access'] = science_paper.access
-			if new_article['publisher'] is None:
-				new_article['publisher'] = science_paper.publisher
-			if new_article['container_title'] is None:
-				new_article['container_title'] = science_paper.journal
+			if new_article["doi"] is None:
+				new_article["doi"] = science_paper.doi
+			if new_article["title"] is None:
+				new_article["title"] = science_paper.title
+			if new_article["link"] is None:
+				new_article["link"] = science_paper.link
+			if new_article["summary"] is None:
+				new_article["summary"] = science_paper.clean_abstract()
+			if new_article["published_date"] is None:
+				new_article["published_date"] = science_paper.published_date
+			if new_article["access"] is None:
+				new_article["access"] = science_paper.access
+			if new_article["publisher"] is None:
+				new_article["publisher"] = science_paper.publisher
+			if new_article["container_title"] is None:
+				new_article["container_title"] = science_paper.journal
 
 			# Dedup by DOI
-			if new_article['doi'] is not None:
-				existing = Articles.objects.filter(doi=new_article['doi'])
+			if new_article["doi"] is not None:
+				existing = Articles.objects.filter(doi=new_article["doi"])
 				if existing.exists():
 					for article in existing:
 						article.sources.add(source)
@@ -241,58 +316,69 @@ def post_article(request):
 						if source.subject:
 							article.subjects.add(source.subject)
 					raise ArticleExistsError(
-						'There is already an article with the specified DOI. '
-						'If the source, team, or subject were different, the article was updated.'
+						"There is already an article with the specified DOI. "
+						"If the source, team, or subject were different, the article was updated."
 					)
 			# Dedup by title
-			if new_article['title'] is not None:
-				if Articles.objects.filter(title=new_article['title']).exists():
-					raise ArticleExistsError('There is already an article with the specified Title')
+			if new_article["title"] is not None:
+				if Articles.objects.filter(title=new_article["title"]).exists():
+					raise ArticleExistsError(
+						"There is already an article with the specified Title"
+					)
 
 			save_article = Articles.objects.create(
 				discovery_date=datetime.now(),
-				title=new_article['title'],
-				summary=new_article['summary'],
-				link=new_article['link'],
-				links=merge_links(None, new_article['link']),
-				published_date=new_article['published_date'],
-				doi=new_article['doi'],
+				title=new_article["title"],
+				summary=new_article["summary"],
+				link=new_article["link"],
+				links=merge_links(None, new_article["link"]),
+				published_date=new_article["published_date"],
+				doi=new_article["doi"],
 				kind=kind,
-				publisher=new_article['publisher'],
-				container_title=new_article['container_title'],
+				publisher=new_article["publisher"],
+				container_title=new_article["container_title"],
 			)
 			save_article.sources.add(source)
 			save_article.teams.add(source.team)
 			if source.subject:
 				save_article.subjects.add(source.subject)
 			if save_article.pk is None:
-				raise ArticleNotSavedError('Could not create the article')
+				raise ArticleNotSavedError("Could not create the article")
 
-			log_data = {'article_id': save_article.pk}
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, 'Article created', log_data)
-			return returnData({
-				'name': 'Gregory | API', 'version': '0.1b',
-				'data_received': post_data,
-				'data_processed_from_doi': new_article,
-				'article_id': save_article.article_id,
-			})
+			log_data = {"article_id": save_article.pk}
+			generateAccessSchemeLog(
+				call_type, ip_addr, access_scheme, 201, "Article created", log_data
+			)
+			return returnData(
+				{
+					"name": "Gregory | API",
+					"version": "0.1b",
+					"data_received": post_data,
+					"data_processed_from_doi": new_article,
+					"article_id": save_article.article_id,
+				}
+			)
 
 		# =================================================================
 		# Branch: trials
 		# =================================================================
-		elif kind == 'trials':
+		elif kind == "trials":
 			trial_data = ClinicalTrial(
-				title=_val('title'),
-				summary=_val('summary'),
-				link=_val('link'),
-				published_date=_val('published_date'),
-				identifiers=post_data.get('identifiers') or {},
+				title=_val("title"),
+				summary=_val("summary"),
+				link=_val("link"),
+				published_date=_val("published_date"),
+				identifiers=post_data.get("identifiers") or {},
 			)
 
 			# Dedup: identifiers first (via helper), then title (mirrors feedreader_trials logic)
-			existing_trial = find_trial_by_identifier(trial_data.identifiers or {}).first()
+			existing_trial = find_trial_by_identifier(
+				trial_data.identifiers or {}
+			).first()
 			if existing_trial is None and trial_data.title:
-				existing_trial = Trials.objects.filter(title__iexact=trial_data.title).first()
+				existing_trial = Trials.objects.filter(
+					title__iexact=trial_data.title
+				).first()
 
 			if existing_trial:
 				existing_trial.sources.add(source)
@@ -300,8 +386,8 @@ def post_article(request):
 				if source.subject:
 					existing_trial.subjects.add(source.subject)
 				raise ArticleExistsError(
-					'There is already a trial matching the provided identifiers or title. '
-					'If the source, team, or subject were different, the trial was updated.'
+					"There is already a trial matching the provided identifiers or title. "
+					"If the source, team, or subject were different, the trial was updated."
 				)
 
 			save_trial = Trials.objects.create(
@@ -318,43 +404,52 @@ def post_article(request):
 			if source.subject:
 				save_trial.subjects.add(source.subject)
 			if save_trial.pk is None:
-				raise ArticleNotSavedError('Could not create the trial')
+				raise ArticleNotSavedError("Could not create the trial")
 
-			log_data = {'trial_id': save_trial.pk}
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, 'Trial created', log_data)
-			return returnData({
-				'name': 'Gregory | API', 'version': '0.1b',
-				'data_received': post_data,
-				'trial_id': save_trial.trial_id,
-			})
+			log_data = {"trial_id": save_trial.pk}
+			generateAccessSchemeLog(
+				call_type, ip_addr, access_scheme, 201, "Trial created", log_data
+			)
+			return returnData(
+				{
+					"name": "Gregory | API",
+					"version": "0.1b",
+					"data_received": post_data,
+					"trial_id": save_trial.trial_id,
+				}
+			)
 
 		# =================================================================
 		# Branch: news article
 		# =================================================================
-		elif kind == 'news article':
+		elif kind == "news article":
 			new_article = {
-				'title': _val('title'),
-				'link': _val('link'),
-				'summary': _val('summary'),
-				'published_date': _val('published_date'),
-				'kind': kind,
+				"title": _val("title"),
+				"link": _val("link"),
+				"summary": _val("summary"),
+				"published_date": _val("published_date"),
+				"kind": kind,
 			}
 			# Dedup by title
-			if new_article['title'] is not None:
-				if Articles.objects.filter(title=new_article['title']).exists():
-					raise ArticleExistsError('There is already an article with the specified Title')
+			if new_article["title"] is not None:
+				if Articles.objects.filter(title=new_article["title"]).exists():
+					raise ArticleExistsError(
+						"There is already an article with the specified Title"
+					)
 			# Dedup by link
-			if new_article['link'] is not None:
-				if Articles.objects.filter(link=new_article['link']).exists():
-					raise ArticleExistsError('There is already an article with the specified link')
+			if new_article["link"] is not None:
+				if Articles.objects.filter(link=new_article["link"]).exists():
+					raise ArticleExistsError(
+						"There is already an article with the specified link"
+					)
 
 			save_article = Articles.objects.create(
 				discovery_date=datetime.now(),
-				title=new_article['title'],
-				summary=new_article['summary'],
-				link=new_article['link'],
-				links=merge_links(None, new_article['link']),
-				published_date=new_article['published_date'],
+				title=new_article["title"],
+				summary=new_article["summary"],
+				link=new_article["link"],
+				links=merge_links(None, new_article["link"]),
+				published_date=new_article["published_date"],
 				kind=kind,
 			)
 			save_article.sources.add(source)
@@ -362,52 +457,79 @@ def post_article(request):
 			if source.subject:
 				save_article.subjects.add(source.subject)
 			if save_article.pk is None:
-				raise ArticleNotSavedError('Could not create the news article')
+				raise ArticleNotSavedError("Could not create the news article")
 
-			log_data = {'article_id': save_article.pk}
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 201, 'News article created', log_data)
-			return returnData({
-				'name': 'Gregory | API', 'version': '0.1b',
-				'data_received': post_data,
-				'article_id': save_article.article_id,
-			})
+			log_data = {"article_id": save_article.pk}
+			generateAccessSchemeLog(
+				call_type, ip_addr, access_scheme, 201, "News article created", log_data
+			)
+			return returnData(
+				{
+					"name": "Gregory | API",
+					"version": "0.1b",
+					"data_received": post_data,
+					"article_id": save_article.article_id,
+				}
+			)
 
 		else:
-			raise FieldNotFoundError(f'Unsupported kind \'{kind}\'')
+			raise FieldNotFoundError(f"Unsupported kind '{kind}'")
 
 	except APINoAPIKeyError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 401, str(exception), str(post_data)
+		)
 		return returnError(NO_API_KEY, str(exception), 401)
 	except APIInvalidAPIKeyError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 401, str(exception), str(post_data)
+		)
 		return returnError(INVALID_API_KEY, str(exception), 401)
 	except APIInvalidIPAddressError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 401, str(exception), str(post_data)
+		)
 		return returnError(INVALID_IP_ADDRESS, str(exception), 401)
 	except APIAccessDeniedError as exception:
 		if access_scheme is not None:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+			generateAccessSchemeLog(
+				call_type, ip_addr, access_scheme, 403, str(exception), str(post_data)
+			)
 		else:
-			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception), str(post_data))
+			generateAccessSchemeLog(
+				call_type, ip_addr, None, 403, str(exception), str(post_data)
+			)
 		return returnError(ACCESS_DENIED, str(exception), 403)
 	except SourceNotFoundError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 404, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 404, str(exception), str(post_data)
+		)
 		return returnError(SOURCE_NOT_FOUND, str(exception), 404)
 	except FieldNotFoundError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 400, str(exception), str(post_data)
+		)
 		return returnError(FIELD_NOT_FOUND, str(exception), 400)
 	except CrossOrgPayloadError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 400, str(exception), str(post_data)
+		)
 		return returnError(CROSS_ORG_PAYLOAD, str(exception), 400)
 	except ArticleExistsError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 200, str(exception), str(post_data)
+		)
 		return returnError(ARTICLE_EXISTS, str(exception), 200)
 	except ArticleNotSavedError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 500, str(exception), str(post_data)
+		)
 		return returnError(ARTICLE_NOT_SAVED, str(exception), 500)
 	except Exception as exception:
 		logging.error(traceback.format_exc())
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 500, str(exception), str(post_data)
+		)
 		return returnError(UNEXPECTED, str(exception), 500)
 
 
@@ -415,7 +537,8 @@ def post_article(request):
 # API Edit Article
 ###
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 def edit_article(request):
 	"""
 	Edit editorial and metadata fields on an existing article.
@@ -440,26 +563,30 @@ def edit_article(request):
 		access_scheme = checkValidAccess(api_key, ip_addr)
 
 		if access_scheme.organization is None:
-			raise APIAccessDeniedError('API keys without an associated organisation cannot edit articles.')
+			raise APIAccessDeniedError(
+				"API keys without an associated organisation cannot edit articles."
+			)
 
-		doi = post_data.get('doi')
+		doi = post_data.get("doi")
 		if not doi:
-			raise FieldNotFoundError('field `doi` is required')
+			raise FieldNotFoundError("field `doi` is required")
 
 		matching = Articles.objects.filter(doi=doi)
 		count = matching.count()
 		if count == 0:
-			raise ArticleNotFoundError(f'No article found with DOI {doi}')
+			raise ArticleNotFoundError(f"No article found with DOI {doi}")
 		if count > 1:
 			raise DuplicateArticleError(
-				ids=list(matching.values_list('article_id', flat=True)),
-				message=f'{count} articles match DOI {doi}. Resolve duplicates before editing.',
+				ids=list(matching.values_list("article_id", flat=True)),
+				message=f"{count} articles match DOI {doi}. Resolve duplicates before editing.",
 			)
 		article = matching.first()
 
 		# Cross-org check: at least one of the article's teams must belong to the key's org
 		if not article.teams.filter(organization=access_scheme.organization).exists():
-			raise CrossOrgPayloadError('this article is not visible to your organisation.')
+			raise CrossOrgPayloadError(
+				"this article is not visible to your organisation."
+			)
 
 		updated_fields = []
 
@@ -467,37 +594,39 @@ def edit_article(request):
 		VALID_ACCESS = [v for v, _ in Articles.ACCESS_OPTIONS]
 		VALID_KINDS = [v for v, _ in Articles.KINDS]
 
-		if 'access' in post_data:
-			val = post_data['access']
+		if "access" in post_data:
+			val = post_data["access"]
 			if val not in VALID_ACCESS:
-				raise FieldNotFoundError(f'`access` must be one of {VALID_ACCESS}')
+				raise FieldNotFoundError(f"`access` must be one of {VALID_ACCESS}")
 			article.access = val
-			updated_fields.append('access')
+			updated_fields.append("access")
 
-		if 'retracted' in post_data:
-			val = post_data['retracted']
+		if "retracted" in post_data:
+			val = post_data["retracted"]
 			if not isinstance(val, bool):
-				raise FieldNotFoundError('`retracted` must be a boolean')
+				raise FieldNotFoundError("`retracted` must be a boolean")
 			article.retracted = val
-			updated_fields.append('retracted')
+			updated_fields.append("retracted")
 
-		if 'kind' in post_data:
-			val = post_data['kind']
+		if "kind" in post_data:
+			val = post_data["kind"]
 			if val not in VALID_KINDS:
-				raise FieldNotFoundError(f'`kind` must be one of {VALID_KINDS}')
+				raise FieldNotFoundError(f"`kind` must be one of {VALID_KINDS}")
 			article.kind = val
-			updated_fields.append('kind')
+			updated_fields.append("kind")
 
-		article_fields_changed = [f for f in updated_fields if f in ('access', 'retracted', 'kind')]
+		article_fields_changed = [
+			f for f in updated_fields if f in ("access", "retracted", "kind")
+		]
 		if article_fields_changed:
 			article.save(update_fields=article_fields_changed)
 
 		# --- Per-org fields -----------------------------------------------
 		org_fields = {}
-		for field in ('takeaways', 'summary_plain_english'):
+		for field in ("takeaways", "summary_plain_english"):
 			if field in post_data:
 				val = post_data[field]
-				org_fields[field] = None if val == '' else val
+				org_fields[field] = None if val == "" else val
 
 		if org_fields:
 			org_content, _ = ArticleOrgContent.objects.get_or_create(
@@ -509,44 +638,77 @@ def edit_article(request):
 				updated_fields.append(field)
 			org_content.save()
 
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, 'Article edited', {'article_id': article.article_id})
-		return returnData({
-			'article_id': article.article_id,
-			'doi': article.doi,
-			'organization_id': access_scheme.organization_id,
-			'updated_fields': updated_fields,
-		})
+		generateAccessSchemeLog(
+			call_type,
+			ip_addr,
+			access_scheme,
+			200,
+			"Article edited",
+			{"article_id": article.article_id},
+		)
+		return returnData(
+			{
+				"article_id": article.article_id,
+				"doi": article.doi,
+				"organization_id": access_scheme.organization_id,
+				"updated_fields": updated_fields,
+			}
+		)
 
 	except APINoAPIKeyError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 401, str(exception), str(post_data)
+		)
 		return returnError(NO_API_KEY, str(exception), 401)
 	except APIInvalidAPIKeyError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 401, str(exception), str(post_data)
+		)
 		return returnError(INVALID_API_KEY, str(exception), 401)
 	except APIInvalidIPAddressError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 401, str(exception), str(post_data)
+		)
 		return returnError(INVALID_IP_ADDRESS, str(exception), 401)
 	except APIAccessDeniedError as exception:
 		if access_scheme is not None:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+			generateAccessSchemeLog(
+				call_type, ip_addr, access_scheme, 403, str(exception), str(post_data)
+			)
 		else:
-			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception), str(post_data))
+			generateAccessSchemeLog(
+				call_type, ip_addr, None, 403, str(exception), str(post_data)
+			)
 		return returnError(ACCESS_DENIED, str(exception), 403)
 	except ArticleNotFoundError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 404, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 404, str(exception), str(post_data)
+		)
 		return returnError(ARTICLE_NOT_FOUND, str(exception), 404)
 	except DuplicateArticleError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 409, str(exception), str(post_data))
-		return returnError(DUPLICATE_ARTICLE, {'message': str(exception), 'article_ids': exception.ids}, 409)
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 409, str(exception), str(post_data)
+		)
+		return returnError(
+			DUPLICATE_ARTICLE,
+			{"message": str(exception), "article_ids": exception.ids},
+			409,
+		)
 	except FieldNotFoundError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 400, str(exception), str(post_data)
+		)
 		return returnError(FIELD_NOT_FOUND, str(exception), 400)
 	except CrossOrgPayloadError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 403, str(exception), str(post_data)
+		)
 		return returnError(CROSS_ORG_PAYLOAD, str(exception), 403)
 	except Exception as exception:
 		logging.error(traceback.format_exc())
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 500, str(exception), str(post_data)
+		)
 		return returnError(UNEXPECTED, str(exception), 500)
 
 
@@ -554,7 +716,8 @@ def edit_article(request):
 # API Edit Trial
 ###
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 def edit_trial(request):
 	"""
 	Edit per-organisation editorial fields on an existing trial.
@@ -575,9 +738,11 @@ def edit_trial(request):
 		access_scheme = checkValidAccess(api_key, ip_addr)
 
 		if access_scheme.organization is None:
-			raise APIAccessDeniedError('API keys without an associated organisation cannot edit trials.')
+			raise APIAccessDeniedError(
+				"API keys without an associated organisation cannot edit trials."
+			)
 
-		identifiers = post_data.get('identifiers')
+		identifiers = post_data.get("identifiers")
 		if not identifiers:
 			raise FieldNotFoundError(
 				'field `identifiers` is required (e.g. {"nct": "NCT..."} or {"euct": "..."})'
@@ -586,26 +751,30 @@ def edit_trial(request):
 		matching = find_trial_by_identifier(identifiers)
 		count = matching.count()
 		if count == 0:
-			raise TrialNotFoundError('No trial found matching the provided identifiers.')
+			raise TrialNotFoundError(
+				"No trial found matching the provided identifiers."
+			)
 		if count > 1:
 			raise DuplicateTrialError(
-				ids=list(matching.values_list('trial_id', flat=True)),
-				message=f'{count} trials match the provided identifiers. Resolve duplicates before editing.',
+				ids=list(matching.values_list("trial_id", flat=True)),
+				message=f"{count} trials match the provided identifiers. Resolve duplicates before editing.",
 			)
 		trial = matching.first()
 
 		# Cross-org check
 		if not trial.teams.filter(organization=access_scheme.organization).exists():
-			raise CrossOrgPayloadError('this trial is not visible to your organisation.')
+			raise CrossOrgPayloadError(
+				"this trial is not visible to your organisation."
+			)
 
 		updated_fields = []
 
 		# --- Per-org fields -----------------------------------------------
 		org_fields = {}
-		for field in ('takeaways', 'summary_plain_english'):
+		for field in ("takeaways", "summary_plain_english"):
 			if field in post_data:
 				val = post_data[field]
-				org_fields[field] = None if val == '' else val
+				org_fields[field] = None if val == "" else val
 
 		if org_fields:
 			org_content, _ = TrialOrgContent.objects.get_or_create(
@@ -617,56 +786,91 @@ def edit_trial(request):
 				updated_fields.append(field)
 			org_content.save()
 
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 200, 'Trial edited', {'trial_id': trial.trial_id})
-		return returnData({
-			'trial_id': trial.trial_id,
-			'organization_id': access_scheme.organization_id,
-			'updated_fields': updated_fields,
-		})
+		generateAccessSchemeLog(
+			call_type,
+			ip_addr,
+			access_scheme,
+			200,
+			"Trial edited",
+			{"trial_id": trial.trial_id},
+		)
+		return returnData(
+			{
+				"trial_id": trial.trial_id,
+				"organization_id": access_scheme.organization_id,
+				"updated_fields": updated_fields,
+			}
+		)
 
 	except APINoAPIKeyError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 401, str(exception), str(post_data)
+		)
 		return returnError(NO_API_KEY, str(exception), 401)
 	except APIInvalidAPIKeyError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 401, str(exception), str(post_data)
+		)
 		return returnError(INVALID_API_KEY, str(exception), 401)
 	except APIInvalidIPAddressError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 401, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 401, str(exception), str(post_data)
+		)
 		return returnError(INVALID_IP_ADDRESS, str(exception), 401)
 	except APIAccessDeniedError as exception:
 		if access_scheme is not None:
-			generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+			generateAccessSchemeLog(
+				call_type, ip_addr, access_scheme, 403, str(exception), str(post_data)
+			)
 		else:
-			generateAccessSchemeLog(call_type, ip_addr, None, 403, str(exception), str(post_data))
+			generateAccessSchemeLog(
+				call_type, ip_addr, None, 403, str(exception), str(post_data)
+			)
 		return returnError(ACCESS_DENIED, str(exception), 403)
 	except TrialNotFoundError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 404, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 404, str(exception), str(post_data)
+		)
 		return returnError(TRIAL_NOT_FOUND, str(exception), 404)
 	except DuplicateTrialError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 409, str(exception), str(post_data))
-		return returnError(DUPLICATE_TRIAL, {'message': str(exception), 'trial_ids': exception.ids}, 409)
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 409, str(exception), str(post_data)
+		)
+		return returnError(
+			DUPLICATE_TRIAL,
+			{"message": str(exception), "trial_ids": exception.ids},
+			409,
+		)
 	except FieldNotFoundError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 400, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 400, str(exception), str(post_data)
+		)
 		return returnError(FIELD_NOT_FOUND, str(exception), 400)
 	except CrossOrgPayloadError as exception:
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 403, str(exception), str(post_data)
+		)
 		return returnError(CROSS_ORG_PAYLOAD, str(exception), 403)
 	except Exception as exception:
 		logging.error(traceback.format_exc())
-		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
+		generateAccessSchemeLog(
+			call_type, ip_addr, access_scheme, 500, str(exception), str(post_data)
+		)
 		return returnError(UNEXPECTED, str(exception), 500)
 
 
 ###
 # ARTICLES
-### 
-class ArticleViewSet(CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
+###
+class ArticleViewSet(
+	CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet
+):
 	"""
 	List all articles in the database with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
-	
+
 	# Query Parameters:
-	- **team_id** - filter by team ID 
+	- **team_id** - filter by team ID
 	- **doi** - filter by exact DOI (case-insensitive)
 	- **subject_id** - filter by subject ID (used with team_id)
 	- **subjects** - comma-separated list of subject IDs with AND semantics — returns only articles tagged with *all* listed subjects (e.g., `?subjects=1,2`)
@@ -688,7 +892,7 @@ class ArticleViewSet(CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyMod
 	- **last_days** - filter for articles from last N days (number)
 	- **week** - filter for specific week number (requires year parameter)
 	- **year** - year for week filtering (used with week parameter)
-	
+
 	# Examples:
 	- By DOI: `/articles/?doi=10.1016/j.procs.2023.01.401`
 	- Team articles: `/articles/?team_id=1`
@@ -705,15 +909,20 @@ class ArticleViewSet(CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyMod
 	- CSV export all results: `/articles/?format=csv&all_results=true`
 	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&relevant=true&ml_threshold=0.8&ordering=-published_date`
 	"""
-	queryset = Articles.objects.all().order_by('-discovery_date')
+
+	queryset = Articles.objects.all().order_by("-discovery_date")
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	pagination_class = FlexiblePagination
-	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filter_backends = [
+		django_filters.DjangoFilterBackend,
+		filters.SearchFilter,
+		filters.OrderingFilter,
+	]
 	filterset_class = ArticleFilter
-	search_fields = ['title', 'summary']
-	ordering_fields = ['discovery_date', 'published_date', 'title', 'article_id']
-	ordering = ['-discovery_date']
+	search_fields = ["title", "summary"]
+	ordering_fields = ["discovery_date", "published_date", "title", "article_id"]
+	ordering = ["-discovery_date"]
 
 	def get_queryset(self):
 		"""Prefetch the caller-org's ArticleOrgContent to avoid N+1 on list responses.
@@ -728,40 +937,41 @@ class ArticleViewSet(CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyMod
 		if org is not None:
 			qs = qs.prefetch_related(
 				Prefetch(
-					'org_contents',
+					"org_contents",
 					queryset=ArticleOrgContent.objects.filter(organization=org),
-					to_attr='_prefetched_org_contents',
+					to_attr="_prefetched_org_contents",
 				)
 			)
 		return qs
-
 
 
 class ArticlesByKeyword(generics.ListAPIView):
 	"""
 	List articles by keyword
 	"""
+
 	serializer_class = ArticleSerializer
 	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [filters.SearchFilter]
-	search_fields = ['title','summary']
-	
+	search_fields = ["title", "summary"]
+
 	def get_queryset(self):
-		return Articles.objects.all().order_by('-discovery_date')
+		return Articles.objects.all().order_by("-discovery_date")
 
 
 ###
 # CATEGORIES
 ###
 
+
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	List all categories in the database with optional filters for team and subject.
 	Now includes author statistics for each category.
-	
+
 	# Query Parameters:
 	- **team_id** - filter by team ID
-	- **subject_id** - filter by subject ID  
+	- **subject_id** - filter by subject ID
 	- **category_id** - filter by specific category ID
 	- **get_categories** - comma-separated list of category IDs (e.g., 1,2,3)
 	- **include_authors** - Include top authors data (default: true)
@@ -771,19 +981,19 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	- **timeframe** - 'year', 'month', 'week' (relative to current date)
 	- **monthly_counts** - Include monthly article/trial counts with ML predictions (default: false)
 	- **ml_threshold** - ML prediction probability threshold when monthly_counts=true (0.0-1.0, default: 0.5)
-	
+
 	# Response includes:
 	- Category basic information
-	- Total article and trial counts  
+	- Total article and trial counts
 	- Authors count (unique authors in category)
 	- Top authors with their article counts in this category
 	- Monthly counts (when monthly_counts=true), including monthly_relevant_article_counts:
 	  articles whose latest prediction from at least one ML model meets ml_threshold,
 	  counted once per month regardless of how many models flagged them
-	
+
 	# Additional Actions:
 	- `/categories/{id}/authors/` - Get detailed author statistics for a specific category
-	
+
 	# Examples:
 	- Basic: `GET /categories/?team_id=1`
 	- With subject: `GET /categories/?team_id=1&subject_id=2`
@@ -794,18 +1004,28 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	- Single category with monthly counts: `GET /categories/?category_id=6&monthly_counts=true`
 	- Multiple categories by ID: `GET /categories/?get_categories=1,2,3`
 	"""
+
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filter_backends = [
+		django_filters.DjangoFilterBackend,
+		filters.SearchFilter,
+		filters.OrderingFilter,
+	]
 	filterset_class = CategoryFilter
-	search_fields = ['category_name', 'category_description']
-	ordering_fields = ['category_name', 'id', 'article_count_annotated', 'authors_count_annotated']
-	ordering = ['category_name']
-	
+	search_fields = ["category_name", "category_description"]
+	ordering_fields = [
+		"category_name",
+		"id",
+		"article_count_annotated",
+		"authors_count_annotated",
+	]
+	ordering = ["category_name"]
+
 	def get_queryset(self):
 		"""
 		Optimized queryset that avoids complex COUNT annotations which cause hanging queries.
-		
+
 		Instead of using expensive Count() annotations with multiple JOINs, we:
 		1. Use simple filtering and prefetch_related for efficiency
 		2. Calculate counts in the serializer using prefetched data when possible
@@ -814,210 +1034,241 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 		queryset = TeamCategory.objects.all()
 
 		# --- Org visibility: only categories whose team's org is visible ---
-		if hasattr(self.request, 'visible_org_ids'):
-			queryset = queryset.filter(team__organization_id__in=self.request.visible_org_ids)
-		
+		if hasattr(self.request, "visible_org_ids"):
+			queryset = queryset.filter(
+				team__organization_id__in=self.request.visible_org_ids
+			)
+
 		# Apply filters without expensive annotations
-		team_id = self.request.query_params.get('team_id')
-		subject_id = self.request.query_params.get('subject_id')
-		category_id = self.request.query_params.get('category_id')
-		get_categories = self.request.query_params.get('get_categories')
-		
+		team_id = self.request.query_params.get("team_id")
+		subject_id = self.request.query_params.get("subject_id")
+		category_id = self.request.query_params.get("category_id")
+		get_categories = self.request.query_params.get("get_categories")
+
 		if team_id:
 			queryset = queryset.filter(team_id=team_id)
-		
+
 		if subject_id:
 			queryset = queryset.filter(subjects__id=subject_id)
-			
+
 		if category_id:
 			queryset = queryset.filter(id=category_id)
 
 		# Support fetching multiple categories by ID: get_categories=1,2,3
 		if get_categories:
 			ids = []
-			for part in get_categories.split(','):
+			for part in get_categories.split(","):
 				try:
 					ids.append(int(part.strip()))
 				except (ValueError, TypeError):
 					continue
 			if len(ids) > 0:
 				queryset = queryset.filter(id__in=ids)
-		
+
 		# Use efficient prefetching instead of annotations
 		# This avoids the complex GROUP BY queries that are hanging the database
-		queryset = queryset.select_related('team').prefetch_related(
-			'subjects',
+		queryset = queryset.select_related("team").prefetch_related(
+			"subjects",
 			# Only prefetch essential fields to reduce memory usage
 			Prefetch(
-				'articles',
+				"articles",
 				queryset=Articles.objects.select_related().only(
-					'article_id', 'title', 'published_date', 'discovery_date'
-				)
+					"article_id", "title", "published_date", "discovery_date"
+				),
 			),
 			Prefetch(
-				'trials', 
+				"trials",
 				queryset=Trials.objects.select_related().only(
-					'trial_id', 'title', 'published_date', 'discovery_date'
-				)
-			)
+					"trial_id", "title", "published_date", "discovery_date"
+				),
+			),
 		)
-		
+
 		return queryset.distinct()
-	
+
 	def get_serializer_context(self):
 		"""Add author parameters to serializer context"""
 		context = super().get_serializer_context()
-		
+
 		# Get query parameters for author data
-		include_authors = self.request.query_params.get('include_authors', 'true').lower() == 'true'
+		include_authors = (
+			self.request.query_params.get("include_authors", "true").lower() == "true"
+		)
 		try:
-			max_authors = min(int(self.request.query_params.get('max_authors', 10)), 50)
+			max_authors = min(int(self.request.query_params.get("max_authors", 10)), 50)
 		except (ValueError, TypeError):
 			max_authors = 10
-		
+
 		# Get monthly counts parameter
-		monthly_counts = self.request.query_params.get('monthly_counts', 'false').lower() == 'true'
-		ml_threshold = self.request.query_params.get('ml_threshold', 0.5)
+		monthly_counts = (
+			self.request.query_params.get("monthly_counts", "false").lower() == "true"
+		)
+		ml_threshold = self.request.query_params.get("ml_threshold", 0.5)
 		try:
 			ml_threshold = float(ml_threshold)
 		except (ValueError, TypeError):
 			ml_threshold = 0.5
-		
+
 		date_filters = self._build_date_filters(
-			self.request.query_params.get('date_from'),
-			self.request.query_params.get('date_to'),
-			self.request.query_params.get('timeframe')
+			self.request.query_params.get("date_from"),
+			self.request.query_params.get("date_to"),
+			self.request.query_params.get("timeframe"),
 		)
-		
-		context['author_params'] = {
-			'include_authors': include_authors,
-			'max_authors': max_authors,
-			'date_filters': date_filters
+
+		context["author_params"] = {
+			"include_authors": include_authors,
+			"max_authors": max_authors,
+			"date_filters": date_filters,
 		}
-		
-		context['monthly_counts_params'] = {
-			'include_monthly_counts': monthly_counts,
-			'ml_threshold': ml_threshold
+
+		context["monthly_counts_params"] = {
+			"include_monthly_counts": monthly_counts,
+			"ml_threshold": ml_threshold,
 		}
-		
+
 		return context
-	
+
 	def _build_date_filters(self, date_from, date_to, timeframe):
 		"""Build date filters for articles"""
 		date_filters = {}
-		
+
 		if timeframe:
 			now = datetime.now()
-			if timeframe == 'year':
-				date_from = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-			elif timeframe == 'month':
-				date_from = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-			elif timeframe == 'week':
+			if timeframe == "year":
+				date_from = now.replace(
+					month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+				)
+			elif timeframe == "month":
+				date_from = now.replace(
+					day=1, hour=0, minute=0, second=0, microsecond=0
+				)
+			elif timeframe == "week":
 				# Get Monday of current week
 				days_since_monday = now.weekday()
 				date_from = now - timedelta(days=days_since_monday)
 				date_from = date_from.replace(hour=0, minute=0, second=0, microsecond=0)
-		
+
 		if date_from:
 			try:
 				if isinstance(date_from, str):
-					date_from = parse_date(date_from) or datetime.strptime(date_from, '%Y-%m-%d').date()
-				date_filters['articles__published_date__gte'] = date_from
+					date_from = (
+						parse_date(date_from)
+						or datetime.strptime(date_from, "%Y-%m-%d").date()
+					)
+				date_filters["articles__published_date__gte"] = date_from
 			except (ValueError, TypeError):
 				pass
-		
+
 		if date_to:
 			try:
 				if isinstance(date_to, str):
-					date_to = parse_date(date_to) or datetime.strptime(date_to, '%Y-%m-%d').date()
-				date_filters['articles__published_date__lte'] = date_to
+					date_to = (
+						parse_date(date_to)
+						or datetime.strptime(date_to, "%Y-%m-%d").date()
+					)
+				date_filters["articles__published_date__lte"] = date_to
 			except (ValueError, TypeError):
 				pass
-		
+
 		return date_filters
-	
-	
-	@action(detail=True, methods=['get'])
+
+	@action(detail=True, methods=["get"])
 	def authors(self, request, pk=None):
 		"""
 		Get detailed author statistics for a specific category.
-		
+
 		# Query Parameters:
 		- **min_articles** - Minimum articles per author (default: 1)
 		- **sort_by** - 'articles_count', 'author_name' (default: 'articles_count')
 		- **order** - 'asc', 'desc' (default: 'desc')
 		- Date filtering parameters (same as main endpoint)
-		
+
 		**URL:** `/categories/{id}/authors/`
 		"""
 		category = self.get_object()
-		
+
 		# Get query parameters
 		try:
-			min_articles = int(request.query_params.get('min_articles', 1))
+			min_articles = int(request.query_params.get("min_articles", 1))
 		except (ValueError, TypeError):
 			min_articles = 1
-		sort_by = request.query_params.get('sort_by', 'articles_count')
-		order = request.query_params.get('order', 'desc')
-		date_from = request.query_params.get('date_from')
-		date_to = request.query_params.get('date_to')
-		timeframe = request.query_params.get('timeframe')
-		
+		sort_by = request.query_params.get("sort_by", "articles_count")
+		order = request.query_params.get("order", "desc")
+		date_from = request.query_params.get("date_from")
+		date_to = request.query_params.get("date_to")
+		timeframe = request.query_params.get("timeframe")
+
 		# Build date filters
 		date_filters = self._build_date_filters(date_from, date_to, timeframe)
-		
+
 		# Build filter for articles in this category
 		article_filter = Q(team_categories=category)
 		if date_filters:
 			# Adjust the date filter keys for the Articles model
 			articles_date_filters = {}
 			for key, value in date_filters.items():
-				if key.startswith('articles__'):
-					articles_date_filters[key.replace('articles__', '')] = value
+				if key.startswith("articles__"):
+					articles_date_filters[key.replace("articles__", "")] = value
 			article_filter &= Q(**articles_date_filters)
-		
+
 		# Get authors with article counts in this category
-		authors_queryset = Authors.objects.filter(
-			articles__team_categories=category
-		).annotate(
-			category_articles_count=Count(
-				'articles', 
-				filter=Q(articles__team_categories=category) & 
-				       Q(**{f'articles__{k}': v for k, v in date_filters.items() if k.startswith('articles__')}),
-				distinct=True
+		authors_queryset = (
+			Authors.objects.filter(articles__team_categories=category)
+			.annotate(
+				category_articles_count=Count(
+					"articles",
+					filter=Q(articles__team_categories=category)
+					& Q(
+						**{
+							f"articles__{k}": v
+							for k, v in date_filters.items()
+							if k.startswith("articles__")
+						}
+					),
+					distinct=True,
+				)
 			)
-		).filter(
-			category_articles_count__gte=min_articles
+			.filter(category_articles_count__gte=min_articles)
 		)
-		
+
 		# Apply sorting
-		if sort_by == 'articles_count':
-			order_prefix = '-' if order == 'desc' else ''
-			authors_queryset = authors_queryset.order_by(f'{order_prefix}category_articles_count', 'author_id')
-		elif sort_by == 'author_name':
-			order_prefix = '-' if order == 'desc' else ''
-			authors_queryset = authors_queryset.order_by(f'{order_prefix}full_name', 'author_id')
+		if sort_by == "articles_count":
+			order_prefix = "-" if order == "desc" else ""
+			authors_queryset = authors_queryset.order_by(
+				f"{order_prefix}category_articles_count", "author_id"
+			)
+		elif sort_by == "author_name":
+			order_prefix = "-" if order == "desc" else ""
+			authors_queryset = authors_queryset.order_by(
+				f"{order_prefix}full_name", "author_id"
+			)
 		else:
-			authors_queryset = authors_queryset.order_by('-category_articles_count', 'author_id')
-		
+			authors_queryset = authors_queryset.order_by(
+				"-category_articles_count", "author_id"
+			)
+
 		# Paginate results
 		page = self.paginate_queryset(authors_queryset)
 		if page is not None:
 			serializer = CategoryTopAuthorSerializer(page, many=True)
 			return self.get_paginated_response(serializer.data)
-		
+
 		serializer = CategoryTopAuthorSerializer(authors_queryset, many=True)
 		return Response(serializer.data)
 
+
 ###
 # TRIALS
-### 
+###
 
-class TrialViewSet(CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
+
+class TrialViewSet(
+	CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet
+):
 	"""
 	List all clinical trials by discovery date with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
-	
+
 	# Core Query Parameters:
 	- **trial_id** - filter by specific trial ID
 	- **team_id** - filter by team ID
@@ -1050,7 +1301,7 @@ class TrialViewSet(CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModel
 	- **primary_sponsor** - filter by sponsor organization
 	- **source_register** - filter by source registry
 	- **countries** - filter by trial countries
-	
+
 	# Medical/Research Parameters:
 	- **condition** - filter by medical condition
 	- **intervention** - filter by intervention type
@@ -1066,11 +1317,16 @@ class TrialViewSet(CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModel
 	- Filtered trials: `/trials/?team_id=1&status=Recruiting&format=csv&all_results=true`
 	- Trials with results posted: `/trials/?has_results=true`
 	"""
-	queryset = Trials.objects.all().order_by('-discovery_date')
+
+	queryset = Trials.objects.all().order_by("-discovery_date")
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	pagination_class = FlexiblePagination
-	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filter_backends = [
+		django_filters.DjangoFilterBackend,
+		filters.SearchFilter,
+		filters.OrderingFilter,
+	]
 	filterset_class = TrialFilter
 
 	def get_queryset(self):
@@ -1083,20 +1339,33 @@ class TrialViewSet(CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModel
 		"""
 		# Prefetch m2m/reverse-FK relations the serializer reads (sources, team_categories,
 		# article_references) so list/CSV-export responses don't issue one query per trial.
-		qs = super().get_queryset().prefetch_related('sources', 'team_categories', 'article_references__article')
+		qs = (
+			super()
+			.get_queryset()
+			.prefetch_related(
+				"sources", "team_categories", "article_references__article"
+			)
+		)
 		org = _resolve_per_org_fields_org(self.request)
 		if org is not None:
 			qs = qs.prefetch_related(
 				Prefetch(
-					'org_contents',
+					"org_contents",
 					queryset=TrialOrgContent.objects.filter(organization=org),
-					to_attr='_prefetched_org_contents',
+					to_attr="_prefetched_org_contents",
 				)
 			)
 		return qs
-	search_fields = ['title', 'summary']
-	ordering_fields = ['discovery_date', 'published_date', 'title', 'trial_id', 'last_updated']
-	ordering = ['-discovery_date']
+
+	search_fields = ["title", "summary"]
+	ordering_fields = [
+		"discovery_date",
+		"published_date",
+		"title",
+		"trial_id",
+		"last_updated",
+	]
+	ordering = ["-discovery_date"]
 
 	def list(self, request, *args, **kwargs):
 		response = super().list(request, *args, **kwargs)
@@ -1105,26 +1374,32 @@ class TrialViewSet(CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModel
 			filtered_qs = self.filter_queryset(self.get_queryset())
 			# Single aggregation query — clear ordering to prevent GROUP BY pollution
 			status_counts = {
-				item['recruitment_status']: item['count']
-				for item in filtered_qs.order_by().values('recruitment_status').annotate(count=Count('trial_id'))
+				item["recruitment_status"]: item["count"]
+				for item in filtered_qs.order_by()
+				.values("recruitment_status")
+				.annotate(count=Count("trial_id"))
 			}
+
 			def _sum(*keys):
 				return sum(status_counts.get(k, 0) for k in keys)
-			response.data['stats'] = {
-				'total': sum(status_counts.values()),
-				'no_status': status_counts.get(None, 0),
-				'recruiting': _sum('Recruiting', 'RECRUITING'),
-				'active_not_recruiting': _sum('ACTIVE_NOT_RECRUITING', 'Not recruiting', 'Not Recruiting'),
-				'not_yet_recruiting': _sum('NOT_YET_RECRUITING'),
-				'completed': _sum('COMPLETED'),
-				'enrolling_by_invitation': _sum('ENROLLING_BY_INVITATION'),
-				'terminated': _sum('TERMINATED'),
-				'suspended': _sum('SUSPENDED'),
-				'withdrawn': _sum('WITHDRAWN'),
-				'available': _sum('AVAILABLE'),
-				'not_available': _sum('Not Available'),
-				'withheld': _sum('WITHHELD'),
-				'authorised': _sum('Authorised'),
+
+			response.data["stats"] = {
+				"total": sum(status_counts.values()),
+				"no_status": status_counts.get(None, 0),
+				"recruiting": _sum("Recruiting", "RECRUITING"),
+				"active_not_recruiting": _sum(
+					"ACTIVE_NOT_RECRUITING", "Not recruiting", "Not Recruiting"
+				),
+				"not_yet_recruiting": _sum("NOT_YET_RECRUITING"),
+				"completed": _sum("COMPLETED"),
+				"enrolling_by_invitation": _sum("ENROLLING_BY_INVITATION"),
+				"terminated": _sum("TERMINATED"),
+				"suspended": _sum("SUSPENDED"),
+				"withdrawn": _sum("WITHDRAWN"),
+				"available": _sum("AVAILABLE"),
+				"not_available": _sum("Not Available"),
+				"withheld": _sum("WITHHELD"),
+				"authorised": _sum("Authorised"),
 			}
 		return response
 
@@ -1133,45 +1408,58 @@ class AllTrialViewSet(generics.ListAPIView):
 	"""
 	List all clinical trials by discovery date
 	"""
+
 	pagination_class = None
-	queryset = Trials.objects.all().order_by('-discovery_date').prefetch_related('sources', 'team_categories', 'article_references__article')
+	queryset = (
+		Trials.objects.all()
+		.order_by("-discovery_date")
+		.prefetch_related("sources", "team_categories", "article_references__article")
+	)
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
 ###
 # SOURCES
-### 
+###
+
 
 class SourceViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all sources of data with optional filters for team and subject.
-	
+
 	# Query Parameters:
 	- **team_id** - filter by team ID
 	- **subject_id** - filter by subject ID
 	"""
-	_org_filter_path = 'team__organization_id'
+
+	_org_filter_path = "team__organization_id"
 	_org_filter_distinct = False
-	queryset = Sources.objects.all().order_by('name')
+	queryset = Sources.objects.all().order_by("name")
 	serializer_class = SourceSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filter_backends = [
+		django_filters.DjangoFilterBackend,
+		filters.SearchFilter,
+		filters.OrderingFilter,
+	]
 	filterset_class = SourceFilter
-	search_fields = ['name', 'description']
-	ordering_fields = ['name', 'source_id']
-	ordering = ['name']
+	search_fields = ["name", "description"]
+	ordering_fields = ["name", "source_id"]
+	ordering = ["name"]
+
 
 ###
 # AUTHORS
-### 
+###
+
 
 class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	Enhanced Authors API with sorting and filtering capabilities.
-	
+
 	# Query Parameters:
-	
+
 	- **author_id** - filter by specific author ID
 	- **full_name** - search by author's full name (case-insensitive)
 	- **given_name** - search by author's given name (case-insensitive)
@@ -1187,9 +1475,9 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	- **date_from** - filter articles from this date (YYYY-MM-DD)
 	- **date_to** - filter articles to this date (YYYY-MM-DD)
 	- **timeframe** - 'year', 'month', 'week' (relative to current date)
-	
+
 	# Examples:
-	
+
 	- Get specific author: `?author_id=380002`
 	- Search by name: `?full_name=John%20Smith`
 	- Search by given name: `?given_name=John`
@@ -1204,38 +1492,41 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	- Category with timeframe: `?team_id=1&category_slug=natalizumab&timeframe=year&sort_by=article_count`
 	- Date range: `?date_from=2024-06-01&date_to=2024-12-31&team_id=1&subject_id=1&sort_by=article_count`
 	"""
+
 	serializer_class = AuthorSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter]
 	filterset_class = AuthorFilter
-	search_fields = ['full_name', 'ORCID']
-	ordering_fields = ['author_id', 'full_name', 'country', 'article_count']
-	ordering = ['author_id']
-	
+	search_fields = ["full_name", "ORCID"]
+	ordering_fields = ["author_id", "full_name", "country", "article_count"]
+	ordering = ["author_id"]
+
 	def get_queryset(self):
 		queryset = Authors.objects.all()
 
 		# --- Org visibility: only authors with at least one article in a visible org ---
-		if hasattr(self.request, 'visible_org_ids'):
+		if hasattr(self.request, "visible_org_ids"):
 			queryset = queryset.filter(
 				articles__teams__organization_id__in=self.request.visible_org_ids
 			).distinct()
-		
+
 		# Get query parameters
-		author_id = self.request.query_params.get('author_id')
-		full_name = self.request.query_params.get('full_name')
-		orcid = self.request.query_params.get('orcid')
-		country = self.request.query_params.get('country')
-		sort_by = self.request.query_params.get('sort_by', 'author_id')
-		order = self.request.query_params.get('order', 'desc' if sort_by == 'article_count' else 'asc')
-		team_id = self.request.query_params.get('team_id')
-		subject_id = self.request.query_params.get('subject_id')
-		category_slug = self.request.query_params.get('category_slug')
-		category_id = self.request.query_params.get('category_id')
-		date_from = self.request.query_params.get('date_from')
-		date_to = self.request.query_params.get('date_to')
-		timeframe = self.request.query_params.get('timeframe')
-		
+		author_id = self.request.query_params.get("author_id")
+		full_name = self.request.query_params.get("full_name")
+		orcid = self.request.query_params.get("orcid")
+		country = self.request.query_params.get("country")
+		sort_by = self.request.query_params.get("sort_by", "author_id")
+		order = self.request.query_params.get(
+			"order", "desc" if sort_by == "article_count" else "asc"
+		)
+		team_id = self.request.query_params.get("team_id")
+		subject_id = self.request.query_params.get("subject_id")
+		category_slug = self.request.query_params.get("category_slug")
+		category_id = self.request.query_params.get("category_id")
+		date_from = self.request.query_params.get("date_from")
+		date_to = self.request.query_params.get("date_to")
+		timeframe = self.request.query_params.get("timeframe")
+
 		# Apply simple filters first
 		if author_id:
 			try:
@@ -1243,182 +1534,202 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 				queryset = queryset.filter(author_id=author_id)
 			except ValueError:
 				pass
-		
+
 		if full_name:
 			# Use uppercase search for better performance with GIN index
 			upper_value = full_name.upper()
 			queryset = queryset.filter(ufull_name__contains=upper_value)
-		
+
 		if orcid:
 			# Filter by ORCID (case-insensitive contains search)
 			queryset = queryset.filter(ORCID__contains=orcid)
-		
+
 		if country:
 			# Filter by country (exact match)
 			queryset = queryset.filter(country=country)
-		
+
 		# Build date filter for articles
 		date_filters = {}
-		
+
 		if timeframe:
 			now = datetime.now()
-			if timeframe == 'year':
-				date_from = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-			elif timeframe == 'month':
-				date_from = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-			elif timeframe == 'week':
+			if timeframe == "year":
+				date_from = now.replace(
+					month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+				)
+			elif timeframe == "month":
+				date_from = now.replace(
+					day=1, hour=0, minute=0, second=0, microsecond=0
+				)
+			elif timeframe == "week":
 				# Get Monday of current week
 				days_since_monday = now.weekday()
 				date_from = now - timedelta(days=days_since_monday)
 				date_from = date_from.replace(hour=0, minute=0, second=0, microsecond=0)
-		
+
 		if date_from:
 			try:
 				if isinstance(date_from, str):
-					date_from = parse_date(date_from) or datetime.strptime(date_from, '%Y-%m-%d').date()
-				date_filters['articles__published_date__gte'] = date_from
+					date_from = (
+						parse_date(date_from)
+						or datetime.strptime(date_from, "%Y-%m-%d").date()
+					)
+				date_filters["articles__published_date__gte"] = date_from
 			except (ValueError, TypeError):
 				pass
-		
+
 		if date_to:
 			try:
 				if isinstance(date_to, str):
-					date_to = parse_date(date_to) or datetime.strptime(date_to, '%Y-%m-%d').date()
-				date_filters['articles__published_date__lte'] = date_to
+					date_to = (
+						parse_date(date_to)
+						or datetime.strptime(date_to, "%Y-%m-%d").date()
+					)
+				date_filters["articles__published_date__lte"] = date_to
 			except (ValueError, TypeError):
 				pass
-		
+
 		# Apply team/subject/category filters using single-phase approach
-		count_filters = {}   # Used for Count annotation on Authors queryset
-		
+		count_filters = {}  # Used for Count annotation on Authors queryset
+
 		# Validate that team_id is provided when using subject_id or category filters
 		if (subject_id or category_slug or category_id) and not team_id:
 			# Return empty queryset if team_id is missing for subject/category filtering
 			return Authors.objects.none()
-		
+
 		if team_id:
 			try:
 				team_id = int(team_id)
-				count_filters['articles__teams__id'] = team_id
+				count_filters["articles__teams__id"] = team_id
 			except ValueError:
 				pass
-		
+
 		if subject_id:
 			try:
 				subject_id = int(subject_id)
-				count_filters['articles__subjects__id'] = subject_id
+				count_filters["articles__subjects__id"] = subject_id
 			except ValueError:
 				pass
-		
+
 		if category_slug:
-			count_filters['articles__team_categories__category_slug'] = category_slug
-		
+			count_filters["articles__team_categories__category_slug"] = category_slug
+
 		if category_id:
 			try:
 				category_id = int(category_id)
-				count_filters['articles__team_categories__id'] = category_id
+				count_filters["articles__team_categories__id"] = category_id
 			except ValueError:
 				pass
-		
+
 		# Add date filters to count filters
 		count_filters.update(date_filters)
 
 		# Build an org-visibility filter for the Count annotation so that
 		# article_count always reflects only visible articles (fixes sorting/
 		# filtering by article_count leaking hidden-org data).
-		has_org_scope = hasattr(self.request, 'visible_org_ids')
-		org_q = Q(articles__teams__organization_id__in=self.request.visible_org_ids) if has_org_scope else Q()
+		has_org_scope = hasattr(self.request, "visible_org_ids")
+		org_q = (
+			Q(articles__teams__organization_id__in=self.request.visible_org_ids)
+			if has_org_scope
+			else Q()
+		)
 
 		# Add article count annotation for sorting
-		if sort_by == 'article_count':
+		if sort_by == "article_count":
 			if count_filters:
-				combined_q = Q(**count_filters) & org_q if has_org_scope else Q(**count_filters)
+				combined_q = (
+					Q(**count_filters) & org_q if has_org_scope else Q(**count_filters)
+				)
 				queryset = queryset.annotate(
-					article_count=Count('articles', filter=combined_q, distinct=True)
+					article_count=Count("articles", filter=combined_q, distinct=True)
 				).filter(article_count__gt=0)
 			elif has_org_scope:
 				queryset = queryset.annotate(
-					article_count=Count('articles', filter=org_q, distinct=True)
+					article_count=Count("articles", filter=org_q, distinct=True)
 				)
 			else:
 				queryset = queryset.annotate(
-					article_count=Count('articles', distinct=True)
+					article_count=Count("articles", distinct=True)
 				)
 		elif count_filters:
 			# Even if not sorting by article_count, we still need to filter authors
 			# to only those who have articles matching the criteria
-			combined_q = Q(**count_filters) & org_q if has_org_scope else Q(**count_filters)
+			combined_q = (
+				Q(**count_filters) & org_q if has_org_scope else Q(**count_filters)
+			)
 			queryset = queryset.annotate(
-				article_count=Count('articles', filter=combined_q, distinct=True)
+				article_count=Count("articles", filter=combined_q, distinct=True)
 			).filter(article_count__gt=0)
-		
+
 		# Apply sorting
-		if sort_by == 'article_count':
-			order_prefix = '-' if order == 'desc' else ''
-			queryset = queryset.order_by(f'{order_prefix}article_count', 'author_id')
+		if sort_by == "article_count":
+			order_prefix = "-" if order == "desc" else ""
+			queryset = queryset.order_by(f"{order_prefix}article_count", "author_id")
 		else:
 			# Default sorting by author_id or other fields
-			order_prefix = '-' if order == 'desc' else ''
-			queryset = queryset.order_by(f'{order_prefix}{sort_by}')
-		
+			order_prefix = "-" if order == "desc" else ""
+			queryset = queryset.order_by(f"{order_prefix}{sort_by}")
+
 		return queryset.distinct()
-	
-	@action(detail=False, methods=['get'])
+
+	@action(detail=False, methods=["get"])
 	def by_team_subject(self, request):
 		"""
 		Get authors filtered by team and subject with article counts
-		
+
 		Parameters:
 		- team_id (required): Team ID
 		- subject_id (required): Subject ID
 		- Additional filters from main queryset apply
 		"""
-		team_id = request.query_params.get('team_id')
-		subject_id = request.query_params.get('subject_id')
-		
+		team_id = request.query_params.get("team_id")
+		subject_id = request.query_params.get("subject_id")
+
 		if not team_id or not subject_id:
 			return Response(
-				{"error": "Both team_id and subject_id are required"}, 
-				status=status.HTTP_400_BAD_REQUEST
+				{"error": "Both team_id and subject_id are required"},
+				status=status.HTTP_400_BAD_REQUEST,
 			)
-		
+
 		queryset = self.filter_queryset(self.get_queryset())
 		page = self.paginate_queryset(queryset)
-		
+
 		if page is not None:
 			serializer = self.get_serializer(page, many=True)
 			return self.get_paginated_response(serializer.data)
-		
+
 		serializer = self.get_serializer(queryset, many=True)
 		return Response(serializer.data)
-	
-	@action(detail=False, methods=['get'])
+
+	@action(detail=False, methods=["get"])
 	def by_team_category(self, request):
 		"""
 		Get authors filtered by team category with article counts
-		
+
 		Parameters:
 		- team_id (required): Team ID
 		- category_slug OR category_id (required): Team category slug or ID
 		- Additional filters from main queryset apply
 		"""
-		team_id = request.query_params.get('team_id')
-		category_slug = request.query_params.get('category_slug')
-		category_id = request.query_params.get('category_id')
-		
+		team_id = request.query_params.get("team_id")
+		category_slug = request.query_params.get("category_slug")
+		category_id = request.query_params.get("category_id")
+
 		if not team_id or (not category_slug and not category_id):
 			return Response(
-				{"error": "team_id and either category_slug or category_id are required"}, 
-				status=status.HTTP_400_BAD_REQUEST
+				{
+					"error": "team_id and either category_slug or category_id are required"
+				},
+				status=status.HTTP_400_BAD_REQUEST,
 			)
-		
+
 		queryset = self.filter_queryset(self.get_queryset())
 		page = self.paginate_queryset(queryset)
-		
+
 		if page is not None:
 			serializer = self.get_serializer(page, many=True)
 			return self.get_paginated_response(serializer.data)
-		
+
 		serializer = self.get_serializer(queryset, many=True)
 		return Response(serializer.data)
 
@@ -1430,8 +1741,10 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 # But that token is not saved in the database and associated with the user.
 # is that a problem?
 
+
 class LoginView(TokenObtainPairView):
 	permission_classes = (permissions.AllowAny,)
+
 
 class ProtectedEndpointView(APIView):
 	permission_classes = [permissions.IsAuthenticated]
@@ -1439,23 +1752,28 @@ class ProtectedEndpointView(APIView):
 	def get(self, request):
 		return Response({"message": "You have accessed the protected endpoint!"})
 
+
 ###
 # TEAMS
 ###
+
 
 class TeamsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all teams
 	"""
-	_org_filter_path = 'organization_id'
+
+	_org_filter_path = "organization_id"
 	_org_filter_distinct = False
-	queryset = Team.objects.all().order_by('id')
+	queryset = Team.objects.all().order_by("id")
 	serializer_class = TeamSerializer
-	permission_classes  = [permissions.IsAuthenticatedOrReadOnly]
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
 
 ###
 # ORGANISATIONS
 ###
+
 
 class OrganizationsViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
@@ -1468,58 +1786,67 @@ class OrganizationsViewSet(viewsets.ReadOnlyModelViewSet):
 	Detail endpoint (``/organizations/<id>/``) returns 404 rather than 403
 	when the organisation is not visible (hide-existence rule).
 	"""
+
 	serializer_class = OrganizationSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
-		qs = Organization.objects.all().order_by('id')
-		if not hasattr(self.request, 'visible_org_ids'):
+		qs = Organization.objects.all().order_by("id")
+		if not hasattr(self.request, "visible_org_ids"):
 			return qs
 		return qs.filter(id__in=self.request.visible_org_ids)
+
 
 ###
 # SUBJECTS
 ###
 
+
 class SubjectsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	✅ **PREFERRED ENDPOINT**: This is the main subjects endpoint that supports filtering options.
-	
+
 	List all subjects in the database with optional team filtering.
-	
+
 	# Query Parameters:
 	- **team_id** - filter by team ID (replaces /teams/{id}/subjects/)
 	- **search** - search in subject name and description
 	- **ordering** - order by 'id', 'subject_name', 'team' (add '-' for reverse)
-	
+
 	# Examples:
 	- Filter by team: `/subjects/?team_id=1`
 	- Search subjects: `/subjects/?search=multiple`
 	- Team filter with search: `/subjects/?team_id=1&search=sclerosis`
 	- Order by name: `/subjects/?ordering=subject_name`
 	"""
-	_org_filter_path = 'team__organization_id'
+
+	_org_filter_path = "team__organization_id"
 	_org_filter_distinct = False
-	queryset = Subject.objects.all().order_by('id')
+	queryset = Subject.objects.all().order_by("id")
 	serializer_class = SubjectsSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filter_backends = [
+		django_filters.DjangoFilterBackend,
+		filters.SearchFilter,
+		filters.OrderingFilter,
+	]
 	filterset_class = SubjectFilter
-	search_fields = ['subject_name', 'description']
-	ordering_fields = ['id', 'subject_name', 'team']
-	ordering = ['id']
+	search_fields = ["subject_name", "description"]
+	ordering_fields = ["id", "subject_name", "team"]
+	ordering = ["id"]
+
 
 class ArticlesByTeam(viewsets.ModelViewSet):
 	"""
 	⚠️ DEPRECATED: This endpoint will be removed in a future version.
 	Please use /articles/?team_id={team_id} instead.
-	
+
 	List all articles for a specific team by ID.
-	
+
 	Migration Path:
 	- Old: GET /teams/1/articles/?search=keyword
 	- New: GET /articles/?team_id=1&search=keyword
-	
+
 	Now supports enhanced filtering while maintaining backward compatibility.
 	You can use all the same filters as the main /articles/ endpoint:
 	- ?author_id=X - Filter by author ID
@@ -1530,40 +1857,50 @@ class ArticlesByTeam(viewsets.ModelViewSet):
 	- ?search=keyword - Search in title and summary
 	- ?ordering=field - Order results
 	"""
+
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filter_backends = [
+		django_filters.DjangoFilterBackend,
+		filters.SearchFilter,
+		filters.OrderingFilter,
+	]
 	filterset_class = ArticleFilter
-	search_fields = ['title', 'summary']
-	ordering_fields = ['discovery_date', 'published_date', 'title', 'article_id']
-	ordering = ['-discovery_date']
+	search_fields = ["title", "summary"]
+	ordering_fields = ["discovery_date", "published_date", "title", "article_id"]
+	ordering = ["-discovery_date"]
 
 	def get_queryset(self):
-		team_id = self.kwargs.get('team_id')
-		if hasattr(self.request, 'visible_org_ids'):
-			if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+		team_id = self.kwargs.get("team_id")
+		if hasattr(self.request, "visible_org_ids"):
+			if not Team.objects.filter(
+				id=team_id, organization_id__in=self.request.visible_org_ids
+			).exists():
 				raise Http404
-		return Articles.objects.filter(teams__id=team_id).order_by('-discovery_date')
-	
+		return Articles.objects.filter(teams__id=team_id).order_by("-discovery_date")
+
 	def list(self, request, *args, **kwargs):
 		"""Override list to add deprecation warning header"""
 		response = super().list(request, *args, **kwargs)
-		team_id = self.kwargs.get('team_id')
-		deprecated_endpoint = f'/teams/{team_id}/articles/'
-		replacement_endpoint = f'/articles/?team_id={team_id}'
-		return add_deprecation_headers(response, deprecated_endpoint, replacement_endpoint)
+		team_id = self.kwargs.get("team_id")
+		deprecated_endpoint = f"/teams/{team_id}/articles/"
+		replacement_endpoint = f"/articles/?team_id={team_id}"
+		return add_deprecation_headers(
+			response, deprecated_endpoint, replacement_endpoint
+		)
+
 
 class ArticlesBySubject(viewsets.ModelViewSet):
 	"""
 	⚠️ DEPRECATED: This endpoint will be removed in a future version.
 	Please use /articles/?team_id={team_id}&subject_id={subject_id} instead.
-	
+
 	List all articles for a specific team and subject combination.
-	
+
 	Migration Path:
 	- Old: GET /teams/1/articles/subject/4/?search=keyword
 	- New: GET /articles/?team_id=1&subject_id=4&search=keyword
-	
+
 	Now supports enhanced filtering while maintaining backward compatibility.
 	You can use all the same filters as the main /articles/ endpoint:
 	- ?author_id=X - Filter by author ID
@@ -1574,606 +1911,696 @@ class ArticlesBySubject(viewsets.ModelViewSet):
 	- ?search=keyword - Search in title and summary
 	- ?ordering=field - Order results
 	"""
+
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filter_backends = [
+		django_filters.DjangoFilterBackend,
+		filters.SearchFilter,
+		filters.OrderingFilter,
+	]
 	filterset_class = ArticleFilter
-	search_fields = ['title', 'summary']
-	ordering_fields = ['discovery_date', 'published_date', 'title', 'article_id']
-	ordering = ['-discovery_date']
+	search_fields = ["title", "summary"]
+	ordering_fields = ["discovery_date", "published_date", "title", "article_id"]
+	ordering = ["-discovery_date"]
 
 	def get_queryset(self):
-		team_id = self.kwargs.get('team_id')
-		subject_id = self.kwargs.get('subject_id')
-		if hasattr(self.request, 'visible_org_ids'):
-			if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+		team_id = self.kwargs.get("team_id")
+		subject_id = self.kwargs.get("subject_id")
+		if hasattr(self.request, "visible_org_ids"):
+			if not Team.objects.filter(
+				id=team_id, organization_id__in=self.request.visible_org_ids
+			).exists():
 				raise Http404
-		return Articles.objects.filter(subjects__id=subject_id, teams=team_id).order_by('-discovery_date')
-	
+		return Articles.objects.filter(subjects__id=subject_id, teams=team_id).order_by(
+			"-discovery_date"
+		)
+
 	def list(self, request, *args, **kwargs):
 		"""Override list to add deprecation warning header"""
 		response = super().list(request, *args, **kwargs)
-		team_id = self.kwargs.get('team_id')
-		subject_id = self.kwargs.get('subject_id')
-		deprecated_endpoint = f'/teams/{team_id}/articles/subject/{subject_id}/'
-		replacement_endpoint = f'/articles/?team_id={team_id}&subject_id={subject_id}'
-		return add_deprecation_headers(response, deprecated_endpoint, replacement_endpoint)
+		team_id = self.kwargs.get("team_id")
+		subject_id = self.kwargs.get("subject_id")
+		deprecated_endpoint = f"/teams/{team_id}/articles/subject/{subject_id}/"
+		replacement_endpoint = f"/articles/?team_id={team_id}&subject_id={subject_id}"
+		return add_deprecation_headers(
+			response, deprecated_endpoint, replacement_endpoint
+		)
+
 
 class SubjectsByTeam(viewsets.ModelViewSet):
 	"""
 	⚠️ DEPRECATED: This endpoint will be removed in a future version.
 	Please use /subjects/?team_id={team_id} instead.
-	
+
 	List all research subjects for a specific team by ID.
-	
+
 	Migration Path:
 	- Old: GET /teams/1/subjects/?search=keyword
 	- New: GET /subjects/?team_id=1&search=keyword
-	
+
 	Now supports enhanced filtering while maintaining backward compatibility.
 	You can use all the same filters as the main /subjects/ endpoint:
 	- ?search=keyword - Search in subject name and description
 	- ?ordering=field - Order results
 	"""
+
 	serializer_class = SubjectsSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+	filter_backends = [
+		django_filters.DjangoFilterBackend,
+		filters.SearchFilter,
+		filters.OrderingFilter,
+	]
 	filterset_class = SubjectFilter
-	search_fields = ['subject_name', 'description']
-	ordering_fields = ['id', 'subject_name']
-	ordering = ['id']
+	search_fields = ["subject_name", "description"]
+	ordering_fields = ["id", "subject_name"]
+	ordering = ["id"]
 
 	def get_queryset(self):
-		team_id = self.kwargs.get('team_id')
-		if hasattr(self.request, 'visible_org_ids'):
-			if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+		team_id = self.kwargs.get("team_id")
+		if hasattr(self.request, "visible_org_ids"):
+			if not Team.objects.filter(
+				id=team_id, organization_id__in=self.request.visible_org_ids
+			).exists():
 				raise Http404
-		return Subject.objects.filter(team__id=team_id).order_by('-id')
-	
+		return Subject.objects.filter(team__id=team_id).order_by("-id")
+
 	def list(self, request, *args, **kwargs):
 		"""Override list to add deprecation warning header"""
 		response = super().list(request, *args, **kwargs)
-		team_id = self.kwargs.get('team_id')
-		deprecated_endpoint = f'/teams/{team_id}/subjects/'
-		replacement_endpoint = f'/subjects/?team_id={team_id}'
-		return add_deprecation_headers(response, deprecated_endpoint, replacement_endpoint)
+		team_id = self.kwargs.get("team_id")
+		deprecated_endpoint = f"/teams/{team_id}/subjects/"
+		replacement_endpoint = f"/subjects/?team_id={team_id}"
+		return add_deprecation_headers(
+			response, deprecated_endpoint, replacement_endpoint
+		)
+
 
 class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 	"""
 	List all categories for a specific team and subject combination
 	"""
+
 	serializer_class = CategorySerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 	def get_queryset(self):
-		team_id = self.kwargs.get('team_id')
-		subject_id = self.kwargs.get('subject_id')
-		if hasattr(self.request, 'visible_org_ids'):
-			if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
+		team_id = self.kwargs.get("team_id")
+		subject_id = self.kwargs.get("subject_id")
+		if hasattr(self.request, "visible_org_ids"):
+			if not Team.objects.filter(
+				id=team_id, organization_id__in=self.request.visible_org_ids
+			).exists():
 				raise Http404
-		return TeamCategory.objects.filter(
-			team__id=team_id,
-			subjects__id=subject_id
-		).annotate(
-			article_count_annotated=Count('articles', distinct=True),
-			trials_count_annotated=Count('trials', distinct=True)
-		).order_by('-id')
+		return (
+			TeamCategory.objects.filter(team__id=team_id, subjects__id=subject_id)
+			.annotate(
+				article_count_annotated=Count("articles", distinct=True),
+				trials_count_annotated=Count("trials", distinct=True),
+			)
+			.order_by("-id")
+		)
+
 
 class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
-		"""
-		⚠️ DEPRECATED: This endpoint will be removed in a future version.
-		Please use /articles/?team_id={team_id}&category_slug={category_slug} instead.
-		
-		List all articles for a specific category and team.
-		
-		Migration Path:
-		- Old: GET /teams/1/articles/category/natalizumab/
-		- New: GET /articles/?team_id=1&category_slug=natalizumab
-		"""
-		serializer_class = ArticleSerializer
-		permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	"""
+	⚠️ DEPRECATED: This endpoint will be removed in a future version.
+	Please use /articles/?team_id={team_id}&category_slug={category_slug} instead.
 
-		def get_queryset(self):
-				team_id = self.kwargs.get('team_id')
-				category_slug = self.kwargs.get('category_slug')
-				if hasattr(self.request, 'visible_org_ids'):
-						if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
-								raise Http404
-				team_category = get_object_or_404(TeamCategory, team__id=team_id, category_slug=category_slug)
-				return Articles.objects.filter(team_categories=team_category).prefetch_related(
-						'team_categories', 'sources', 'authors', 'teams', 'subjects', 'ml_predictions'
-				).order_by('-discovery_date')
-		
-		def list(self, request, *args, **kwargs):
-			"""Override list to add deprecation warning header"""
-			response = super().list(request, *args, **kwargs)
-			team_id = self.kwargs.get('team_id')
-			category_slug = self.kwargs.get('category_slug')
-			deprecated_endpoint = f'/teams/{team_id}/articles/category/{category_slug}/'
-			replacement_endpoint = f'/articles/?team_id={team_id}&category_slug={category_slug}'
-			return add_deprecation_headers(response, deprecated_endpoint, replacement_endpoint)
+	List all articles for a specific category and team.
+
+	Migration Path:
+	- Old: GET /teams/1/articles/category/natalizumab/
+	- New: GET /articles/?team_id=1&category_slug=natalizumab
+	"""
+
+	serializer_class = ArticleSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		team_id = self.kwargs.get("team_id")
+		category_slug = self.kwargs.get("category_slug")
+		if hasattr(self.request, "visible_org_ids"):
+			if not Team.objects.filter(
+				id=team_id, organization_id__in=self.request.visible_org_ids
+			).exists():
+				raise Http404
+		team_category = get_object_or_404(
+			TeamCategory, team__id=team_id, category_slug=category_slug
+		)
+		return (
+			Articles.objects.filter(team_categories=team_category)
+			.prefetch_related(
+				"team_categories",
+				"sources",
+				"authors",
+				"teams",
+				"subjects",
+				"ml_predictions",
+			)
+			.order_by("-discovery_date")
+		)
+
+	def list(self, request, *args, **kwargs):
+		"""Override list to add deprecation warning header"""
+		response = super().list(request, *args, **kwargs)
+		team_id = self.kwargs.get("team_id")
+		category_slug = self.kwargs.get("category_slug")
+		deprecated_endpoint = f"/teams/{team_id}/articles/category/{category_slug}/"
+		replacement_endpoint = (
+			f"/articles/?team_id={team_id}&category_slug={category_slug}"
+		)
+		return add_deprecation_headers(
+			response, deprecated_endpoint, replacement_endpoint
+		)
+
 
 class ArticleSearchView(generics.ListAPIView):
-    """
-    Advanced search for articles by title and abstract (summary).
-    
-    This endpoint accepts both GET and POST requests with team_id and subject_id parameters, 
-    along with optional search parameters.
-    
-    Parameters (can be sent as query params for GET or in request body for POST):
-    - title: Search only in title field
-    - summary: Search only in summary/abstract field
-    - search: Search in both title and summary fields
-    - team_id: Required - Team ID to filter articles by (must be provided)
-    - subject_id: Required - Subject ID to filter articles by (must be provided)
-    - page: Page number for pagination (default: 1)
-    - page_size: Number of results per page (default: 10, max: 100)
-    - all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
-    - ordering: Order results by field (e.g., -discovery_date, -published_date, title, article_id)
-    
-    Results are ordered by discovery date (newest first) by default.
-    
-    To download all search results as CSV, add format=csv and all_results=true to the query parameters.
-    Example: /articles/search/?team_id=1&subject_id=1&search=covid&format=csv&all_results=true
-    """
-    serializer_class = ArticleSerializer
-    permission_classes = [permissions.AllowAny]  # Allow access to anyone since we require team_id and subject_id
-    filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend, filters.OrderingFilter]
-    filterset_class = ArticleFilter
-    search_fields = ['title', 'summary']
-    ordering_fields = ['discovery_date', 'published_date', 'title', 'article_id']
-    ordering = ['-discovery_date']  # Default ordering by newest first
-    pagination_class = FlexiblePagination
-    http_method_names = ['get', 'post']  # Support both GET and POST
-    
-    def get_queryset(self):
-        # This method handles both GET and POST requests
-        if self.request.method == 'GET':
-            params = self.request.query_params
-        else:
-            params = self.request.data
-            
-        # Extract required parameters
-        team_id = params.get('team_id')
-        subject_id = params.get('subject_id')
-        
-        # Validate required parameters
-        if not team_id or not subject_id:
-            return Articles.objects.none()
+	"""
+	Advanced search for articles by title and abstract (summary).
 
-        # Cast to int early — non-numeric values get a 404 rather than a 500.
-        try:
-            team_id = int(team_id)
-            subject_id = int(subject_id)
-        except (TypeError, ValueError):
-            raise Http404
+	This endpoint accepts both GET and POST requests with team_id and subject_id parameters,
+	along with optional search parameters.
 
-        # Visibility check: hidden teams return 404 (before the broad except block)
-        if hasattr(self.request, 'visible_org_ids'):
-            if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
-                raise Http404
+	Parameters (can be sent as query params for GET or in request body for POST):
+	- title: Search only in title field
+	- summary: Search only in summary/abstract field
+	- search: Search in both title and summary fields
+	- team_id: Required - Team ID to filter articles by (must be provided)
+	- subject_id: Required - Subject ID to filter articles by (must be provided)
+	- page: Page number for pagination (default: 1)
+	- page_size: Number of results per page (default: 10, max: 100)
+	- all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
+	- ordering: Order results by field (e.g., -discovery_date, -published_date, title, article_id)
 
-        try:
-            # Start with articles filtered by team and subject
-            # Remove distinct constraint to allow proper ordering
-            queryset = Articles.objects.filter(
-                teams__id=team_id, 
-                subjects__id=subject_id
-            ).distinct()
-            
-            # Apply additional filters
-            title = params.get('title')
-            summary = params.get('summary')
-            search = params.get('search')
-            
-            if title:
-                queryset = queryset.filter(utitle__contains=title.upper())
-            if summary:
-                queryset = queryset.filter(usummary__contains=summary.upper())
-            if search:
-                upper_search = search.upper()
-                queryset = queryset.filter(
-                    Q(utitle__contains=upper_search) | Q(usummary__contains=upper_search)
-                )
-                
-            return queryset
-        except (AttributeError, TypeError, ValueError) as e:
-            # Malformed search params (e.g. a non-string title/summary/search
-            # from a JSON POST body): return no matches, but log it so a genuine
-            # bug can't hide as an empty result. Anything unexpected propagates.
-            logging.getLogger(__name__).warning(
-                "ArticleSearchView: ignoring malformed search params (%s)", e
-            )
-            return Articles.objects.none()
-    
-    def filter_queryset(self, queryset):
-        """
-        Filter the queryset and handle ordering from both GET and POST requests.
-        """
-        # First apply standard filters
-        queryset = super().filter_queryset(queryset)
-        
-        # Handle ordering for POST requests manually (OrderingFilter only checks query_params by default)
-        if self.request.method == 'POST':
-            ordering = self.request.data.get('ordering')
-            if ordering:
-                # Validate that ordering field is in allowed fields
-                if ordering.lstrip('-') in [f.replace('-', '') for f in self.ordering_fields]:
-                    queryset = queryset.order_by(ordering)
-        
-        return queryset
-    
-    def post(self, request, *args, **kwargs):
-        # For POST requests, validate required parameters
-        team_id = request.data.get('team_id')
-        subject_id = request.data.get('subject_id')
-        
-        if not team_id or not subject_id:
-            return Response(
-                {"error": "Missing required parameters: team_id, subject_id"}, 
-                status=400
-            )
+	Results are ordered by discovery date (newest first) by default.
 
-        try:
-            team_id = int(team_id)
-            subject_id = int(subject_id)
-        except (TypeError, ValueError):
-            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+	To download all search results as CSV, add format=csv and all_results=true to the query parameters.
+	Example: /articles/search/?team_id=1&subject_id=1&search=covid&format=csv&all_results=true
+	"""
 
-        try:
-            # Check if team and subject exist
-            Team.objects.get(id=team_id)
-            Subject.objects.get(id=subject_id, team_id=team_id)
-        except Team.DoesNotExist:
-            return Response(
-                {"error": f"Team with ID {team_id} not found"}, 
-                status=404
-            )
-        except Subject.DoesNotExist:
-            return Response(
-                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
-                status=404
-            )
-            
-        # Delegate to the list method which uses get_queryset
-        return self.list(request, *args, **kwargs)
-        
-    def get(self, request, *args, **kwargs):
-        # Validate required parameters for GET requests
-        team_id = request.query_params.get('team_id')
-        subject_id = request.query_params.get('subject_id')
-        
-        if not team_id or not subject_id:
-            return Response(
-                {"error": "Missing required parameters: team_id, subject_id"}, 
-                status=400
-            )
+	serializer_class = ArticleSerializer
+	permission_classes = [
+		permissions.AllowAny
+	]  # Allow access to anyone since we require team_id and subject_id
+	filter_backends = [
+		filters.SearchFilter,
+		django_filters.DjangoFilterBackend,
+		filters.OrderingFilter,
+	]
+	filterset_class = ArticleFilter
+	search_fields = ["title", "summary"]
+	ordering_fields = ["discovery_date", "published_date", "title", "article_id"]
+	ordering = ["-discovery_date"]  # Default ordering by newest first
+	pagination_class = FlexiblePagination
+	http_method_names = ["get", "post"]  # Support both GET and POST
 
-        try:
-            team_id = int(team_id)
-            subject_id = int(subject_id)
-        except (TypeError, ValueError):
-            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+	def get_queryset(self):
+		# This method handles both GET and POST requests
+		if self.request.method == "GET":
+			params = self.request.query_params
+		else:
+			params = self.request.data
 
-        try:
-            # Check if team and subject exist
-            Team.objects.get(id=team_id)
-            Subject.objects.get(id=subject_id, team_id=team_id)
-        except Team.DoesNotExist:
-            return Response(
-                {"error": f"Team with ID {team_id} not found"}, 
-                status=404
-            )
-        except Subject.DoesNotExist:
-            return Response(
-                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
-                status=404
-            )
-            
-        # Delegate to the list method
-        return self.list(request, *args, **kwargs)
+		# Extract required parameters
+		team_id = params.get("team_id")
+		subject_id = params.get("subject_id")
+
+		# Validate required parameters
+		if not team_id or not subject_id:
+			return Articles.objects.none()
+
+		# Cast to int early — non-numeric values get a 404 rather than a 500.
+		try:
+			team_id = int(team_id)
+			subject_id = int(subject_id)
+		except (TypeError, ValueError):
+			raise Http404
+
+		# Visibility check: hidden teams return 404 (before the broad except block)
+		if hasattr(self.request, "visible_org_ids"):
+			if not Team.objects.filter(
+				id=team_id, organization_id__in=self.request.visible_org_ids
+			).exists():
+				raise Http404
+
+		try:
+			# Start with articles filtered by team and subject
+			# Remove distinct constraint to allow proper ordering
+			queryset = Articles.objects.filter(
+				teams__id=team_id, subjects__id=subject_id
+			).distinct()
+
+			# Apply additional filters
+			title = params.get("title")
+			summary = params.get("summary")
+			search = params.get("search")
+
+			if title:
+				queryset = queryset.filter(utitle__contains=title.upper())
+			if summary:
+				queryset = queryset.filter(usummary__contains=summary.upper())
+			if search:
+				upper_search = search.upper()
+				queryset = queryset.filter(
+					Q(utitle__contains=upper_search)
+					| Q(usummary__contains=upper_search)
+				)
+
+			return queryset
+		except (AttributeError, TypeError, ValueError) as e:
+			# Malformed search params (e.g. a non-string title/summary/search
+			# from a JSON POST body): return no matches, but log it so a genuine
+			# bug can't hide as an empty result. Anything unexpected propagates.
+			logging.getLogger(__name__).warning(
+				"ArticleSearchView: ignoring malformed search params (%s)", e
+			)
+			return Articles.objects.none()
+
+	def filter_queryset(self, queryset):
+		"""
+		Filter the queryset and handle ordering from both GET and POST requests.
+		"""
+		# First apply standard filters
+		queryset = super().filter_queryset(queryset)
+
+		# Handle ordering for POST requests manually (OrderingFilter only checks query_params by default)
+		if self.request.method == "POST":
+			ordering = self.request.data.get("ordering")
+			if ordering:
+				# Validate that ordering field is in allowed fields
+				if ordering.lstrip("-") in [
+					f.replace("-", "") for f in self.ordering_fields
+				]:
+					queryset = queryset.order_by(ordering)
+
+		return queryset
+
+	def post(self, request, *args, **kwargs):
+		# For POST requests, validate required parameters
+		team_id = request.data.get("team_id")
+		subject_id = request.data.get("subject_id")
+
+		if not team_id or not subject_id:
+			return Response(
+				{"error": "Missing required parameters: team_id, subject_id"},
+				status=400,
+			)
+
+		try:
+			team_id = int(team_id)
+			subject_id = int(subject_id)
+		except (TypeError, ValueError):
+			return Response(
+				{"error": "team_id and subject_id must be integers"}, status=400
+			)
+
+		try:
+			# Check if team and subject exist
+			Team.objects.get(id=team_id)
+			Subject.objects.get(id=subject_id, team_id=team_id)
+		except Team.DoesNotExist:
+			return Response({"error": f"Team with ID {team_id} not found"}, status=404)
+		except Subject.DoesNotExist:
+			return Response(
+				{
+					"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"
+				},
+				status=404,
+			)
+
+		# Delegate to the list method which uses get_queryset
+		return self.list(request, *args, **kwargs)
+
+	def get(self, request, *args, **kwargs):
+		# Validate required parameters for GET requests
+		team_id = request.query_params.get("team_id")
+		subject_id = request.query_params.get("subject_id")
+
+		if not team_id or not subject_id:
+			return Response(
+				{"error": "Missing required parameters: team_id, subject_id"},
+				status=400,
+			)
+
+		try:
+			team_id = int(team_id)
+			subject_id = int(subject_id)
+		except (TypeError, ValueError):
+			return Response(
+				{"error": "team_id and subject_id must be integers"}, status=400
+			)
+
+		try:
+			# Check if team and subject exist
+			Team.objects.get(id=team_id)
+			Subject.objects.get(id=subject_id, team_id=team_id)
+		except Team.DoesNotExist:
+			return Response({"error": f"Team with ID {team_id} not found"}, status=404)
+		except Subject.DoesNotExist:
+			return Response(
+				{
+					"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"
+				},
+				status=404,
+			)
+
+		# Delegate to the list method
+		return self.list(request, *args, **kwargs)
+
 
 class TrialSearchView(generics.ListAPIView):
-    """
-    Advanced search for clinical trials by title, summary, and recruitment status.
-    
-    This endpoint accepts both GET and POST requests with team_id and subject_id parameters, 
-    along with optional search parameters.
-    
-    Parameters (can be sent as query params for GET or in request body for POST):
-    - title: Search only in title field
-    - summary: Search only in summary/abstract field
-    - search: Search in both title and summary fields
-    - status: Filter by recruitment status (e.g., 'Recruiting', 'Completed')
-    - has_results: 'true'/'false' - filter trials by whether results have been posted (results_posted flag, results completion date, results link, or results-available = 'Yes')
-    - team_id: Required - Team ID to filter trials by (must be provided)
-    - subject_id: Required - Subject ID to filter trials by (must be provided)
-    - page: Page number for pagination (default: 1)
-    - page_size: Number of results per page (default: 10, max: 100)
-    - all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
-    - ordering: Order results by field (e.g., -discovery_date, -published_date, title, trial_id, -last_updated)
-    
-    Results are ordered by discovery date (newest first) by default.
-	
-    To download all search results as CSV, add format=csv and all_results=true to the query parameters.
-    Example: /trials/search/?team_id=1&subject_id=1&search=covid&format=csv&all_results=true
-    """
-    serializer_class = TrialSerializer
-    permission_classes = [permissions.AllowAny]  # Allow access to anyone since we require team_id and subject_id
-    filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend, filters.OrderingFilter]
-    filterset_class = TrialFilter
-    search_fields = ['title', 'summary']
-    ordering_fields = ['discovery_date', 'published_date', 'title', 'trial_id', 'last_updated']
-    ordering = ['-discovery_date']  # Default ordering by newest first
-    pagination_class = FlexiblePagination
-    http_method_names = ['get', 'post']  # Support both GET and POST
-    
-    def get_queryset(self):
-        # This method handles both GET and POST requests
-        if self.request.method == 'GET':
-            params = self.request.query_params
-        else:
-            params = self.request.data
-            
-        # Extract required parameters
-        team_id = params.get('team_id')
-        subject_id = params.get('subject_id')
-        
-        # Validate required parameters
-        if not team_id or not subject_id:
-            return Trials.objects.none()
+	"""
+	Advanced search for clinical trials by title, summary, and recruitment status.
 
-        # Cast to int early — non-numeric values get a 404 rather than a 500.
-        try:
-            team_id = int(team_id)
-            subject_id = int(subject_id)
-        except (TypeError, ValueError):
-            raise Http404
+	This endpoint accepts both GET and POST requests with team_id and subject_id parameters,
+	along with optional search parameters.
 
-        # Visibility check: hidden teams return 404 (before the broad except block)
-        if hasattr(self.request, 'visible_org_ids'):
-            if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
-                raise Http404
+	Parameters (can be sent as query params for GET or in request body for POST):
+	- title: Search only in title field
+	- summary: Search only in summary/abstract field
+	- search: Search in both title and summary fields
+	- status: Filter by recruitment status (e.g., 'Recruiting', 'Completed')
+	- has_results: 'true'/'false' - filter trials by whether results have been posted (results_posted flag, results completion date, results link, or results-available = 'Yes')
+	- team_id: Required - Team ID to filter trials by (must be provided)
+	- subject_id: Required - Subject ID to filter trials by (must be provided)
+	- page: Page number for pagination (default: 1)
+	- page_size: Number of results per page (default: 10, max: 100)
+	- all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
+	- ordering: Order results by field (e.g., -discovery_date, -published_date, title, trial_id, -last_updated)
 
-        try:
-            # Check if team and subject exist
-            team = Team.objects.get(id=team_id)
-            subject = Subject.objects.get(id=subject_id, team=team)
-        except (Team.DoesNotExist, Subject.DoesNotExist):
-            return Trials.objects.none()
-        
-        # Start with trials filtered by team and subject
-        # Remove distinct constraint to allow proper ordering
-        queryset = Trials.objects.filter(teams=team, subjects=subject).distinct()
-        
-        # Apply additional filters
-        title = params.get('title')
-        summary = params.get('summary')
-        search = params.get('search')
-        status = params.get('status')
-        
-        if title:
-            queryset = queryset.filter(utitle__contains=title.upper())
-        if summary:
-            queryset = queryset.filter(usummary__contains=summary.upper())
-        if search:
-            upper_search = search.upper()
-            queryset = queryset.filter(
-                Q(utitle__contains=upper_search) | Q(usummary__contains=upper_search)
-            )
-        if status:
-            queryset = queryset.filter(recruitment_status=status)
-            
-        return queryset
-    
-    def filter_queryset(self, queryset):
-        """
-        Filter the queryset and handle ordering from both GET and POST requests.
-        """
-        # First apply standard filters
-        queryset = super().filter_queryset(queryset)
-        
-        # Handle ordering for POST requests manually (OrderingFilter only checks query_params by default)
-        if self.request.method == 'POST':
-            ordering = self.request.data.get('ordering')
-            if ordering:
-                # Validate that ordering field is in allowed fields
-                if ordering.lstrip('-') in [f.replace('-', '') for f in self.ordering_fields]:
-                    queryset = queryset.order_by(ordering)
-        
-        return queryset
-    
-    def post(self, request, *args, **kwargs):
-        # For POST requests, validate required parameters
-        team_id = request.data.get('team_id')
-        subject_id = request.data.get('subject_id')
-        
-        if not team_id or not subject_id:
-            return Response(
-                {"error": "Missing required parameters: team_id, subject_id"}, 
-                status=400
-            )
+	Results are ordered by discovery date (newest first) by default.
 
-        try:
-            team_id = int(team_id)
-            subject_id = int(subject_id)
-        except (TypeError, ValueError):
-            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+	To download all search results as CSV, add format=csv and all_results=true to the query parameters.
+	Example: /trials/search/?team_id=1&subject_id=1&search=covid&format=csv&all_results=true
+	"""
 
-        try:
-            # Check if team and subject exist
-            Team.objects.get(id=team_id)
-            Subject.objects.get(id=subject_id, team_id=team_id)
-        except Team.DoesNotExist:
-            return Response(
-                {"error": f"Team with ID {team_id} not found"}, 
-                status=404
-            )
-        except Subject.DoesNotExist:
-            return Response(
-                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
-                status=404
-            )
-            
-        # Delegate to the list method which uses get_queryset
-        return self.list(request, *args, **kwargs)
-        
-    def get(self, request, *args, **kwargs):
-        # Validate required parameters for GET requests
-        team_id = request.query_params.get('team_id')
-        subject_id = request.query_params.get('subject_id')
-        
-        if not team_id or not subject_id:
-            return Response(
-                {"error": "Missing required parameters: team_id, subject_id"}, 
-                status=400
-            )
+	serializer_class = TrialSerializer
+	permission_classes = [
+		permissions.AllowAny
+	]  # Allow access to anyone since we require team_id and subject_id
+	filter_backends = [
+		filters.SearchFilter,
+		django_filters.DjangoFilterBackend,
+		filters.OrderingFilter,
+	]
+	filterset_class = TrialFilter
+	search_fields = ["title", "summary"]
+	ordering_fields = [
+		"discovery_date",
+		"published_date",
+		"title",
+		"trial_id",
+		"last_updated",
+	]
+	ordering = ["-discovery_date"]  # Default ordering by newest first
+	pagination_class = FlexiblePagination
+	http_method_names = ["get", "post"]  # Support both GET and POST
 
-        try:
-            team_id = int(team_id)
-            subject_id = int(subject_id)
-        except (TypeError, ValueError):
-            return Response({"error": "team_id and subject_id must be integers"}, status=400)
+	def get_queryset(self):
+		# This method handles both GET and POST requests
+		if self.request.method == "GET":
+			params = self.request.query_params
+		else:
+			params = self.request.data
 
-        try:
-            # Check if team and subject exist
-            Team.objects.get(id=team_id)
-            Subject.objects.get(id=subject_id, team_id=team_id)
-        except Team.DoesNotExist:
-            return Response(
-                {"error": f"Team with ID {team_id} not found"}, 
-                status=404
-            )
-        except Subject.DoesNotExist:
-            return Response(
-                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
-                status=404
-            )
-            
-        # Delegate to the list method
-        return self.list(request, *args, **kwargs)
+		# Extract required parameters
+		team_id = params.get("team_id")
+		subject_id = params.get("subject_id")
+
+		# Validate required parameters
+		if not team_id or not subject_id:
+			return Trials.objects.none()
+
+		# Cast to int early — non-numeric values get a 404 rather than a 500.
+		try:
+			team_id = int(team_id)
+			subject_id = int(subject_id)
+		except (TypeError, ValueError):
+			raise Http404
+
+		# Visibility check: hidden teams return 404 (before the broad except block)
+		if hasattr(self.request, "visible_org_ids"):
+			if not Team.objects.filter(
+				id=team_id, organization_id__in=self.request.visible_org_ids
+			).exists():
+				raise Http404
+
+		try:
+			# Check if team and subject exist
+			team = Team.objects.get(id=team_id)
+			subject = Subject.objects.get(id=subject_id, team=team)
+		except (Team.DoesNotExist, Subject.DoesNotExist):
+			return Trials.objects.none()
+
+		# Start with trials filtered by team and subject
+		# Remove distinct constraint to allow proper ordering
+		queryset = Trials.objects.filter(teams=team, subjects=subject).distinct()
+
+		# Apply additional filters
+		title = params.get("title")
+		summary = params.get("summary")
+		search = params.get("search")
+		status = params.get("status")
+
+		if title:
+			queryset = queryset.filter(utitle__contains=title.upper())
+		if summary:
+			queryset = queryset.filter(usummary__contains=summary.upper())
+		if search:
+			upper_search = search.upper()
+			queryset = queryset.filter(
+				Q(utitle__contains=upper_search) | Q(usummary__contains=upper_search)
+			)
+		if status:
+			queryset = queryset.filter(recruitment_status=status)
+
+		return queryset
+
+	def filter_queryset(self, queryset):
+		"""
+		Filter the queryset and handle ordering from both GET and POST requests.
+		"""
+		# First apply standard filters
+		queryset = super().filter_queryset(queryset)
+
+		# Handle ordering for POST requests manually (OrderingFilter only checks query_params by default)
+		if self.request.method == "POST":
+			ordering = self.request.data.get("ordering")
+			if ordering:
+				# Validate that ordering field is in allowed fields
+				if ordering.lstrip("-") in [
+					f.replace("-", "") for f in self.ordering_fields
+				]:
+					queryset = queryset.order_by(ordering)
+
+		return queryset
+
+	def post(self, request, *args, **kwargs):
+		# For POST requests, validate required parameters
+		team_id = request.data.get("team_id")
+		subject_id = request.data.get("subject_id")
+
+		if not team_id or not subject_id:
+			return Response(
+				{"error": "Missing required parameters: team_id, subject_id"},
+				status=400,
+			)
+
+		try:
+			team_id = int(team_id)
+			subject_id = int(subject_id)
+		except (TypeError, ValueError):
+			return Response(
+				{"error": "team_id and subject_id must be integers"}, status=400
+			)
+
+		try:
+			# Check if team and subject exist
+			Team.objects.get(id=team_id)
+			Subject.objects.get(id=subject_id, team_id=team_id)
+		except Team.DoesNotExist:
+			return Response({"error": f"Team with ID {team_id} not found"}, status=404)
+		except Subject.DoesNotExist:
+			return Response(
+				{
+					"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"
+				},
+				status=404,
+			)
+
+		# Delegate to the list method which uses get_queryset
+		return self.list(request, *args, **kwargs)
+
+	def get(self, request, *args, **kwargs):
+		# Validate required parameters for GET requests
+		team_id = request.query_params.get("team_id")
+		subject_id = request.query_params.get("subject_id")
+
+		if not team_id or not subject_id:
+			return Response(
+				{"error": "Missing required parameters: team_id, subject_id"},
+				status=400,
+			)
+
+		try:
+			team_id = int(team_id)
+			subject_id = int(subject_id)
+		except (TypeError, ValueError):
+			return Response(
+				{"error": "team_id and subject_id must be integers"}, status=400
+			)
+
+		try:
+			# Check if team and subject exist
+			Team.objects.get(id=team_id)
+			Subject.objects.get(id=subject_id, team_id=team_id)
+		except Team.DoesNotExist:
+			return Response({"error": f"Team with ID {team_id} not found"}, status=404)
+		except Subject.DoesNotExist:
+			return Response(
+				{
+					"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"
+				},
+				status=404,
+			)
+
+		# Delegate to the list method
+		return self.list(request, *args, **kwargs)
+
 
 class AuthorSearchView(generics.ListAPIView):
-    """
-    Advanced search for authors by full name.
+	"""
+	Advanced search for authors by full name.
 
-    Supports both GET and POST requests with required team_id and subject_id
-    parameters. Filtering by full_name is case-insensitive and allows partial
-    matches. Pagination and CSV export options mirror the article search
-    endpoint.
-    """
-    serializer_class = AuthorSerializer
-    permission_classes = [permissions.AllowAny]
-    filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
-    filterset_class = AuthorFilter
-    search_fields = ['full_name']
-    pagination_class = FlexiblePagination
-    http_method_names = ['get', 'post']
+	Supports both GET and POST requests with required team_id and subject_id
+	parameters. Filtering by full_name is case-insensitive and allows partial
+	matches. Pagination and CSV export options mirror the article search
+	endpoint.
+	"""
 
-    def _check_team_visibility(self, team_id):
-        """Raise Http404 if team_id is not in the caller's visible orgs."""
-        if hasattr(self.request, 'visible_org_ids'):
-            if not Team.objects.filter(id=team_id, organization_id__in=self.request.visible_org_ids).exists():
-                raise Http404
+	serializer_class = AuthorSerializer
+	permission_classes = [permissions.AllowAny]
+	filter_backends = [filters.SearchFilter, django_filters.DjangoFilterBackend]
+	filterset_class = AuthorFilter
+	search_fields = ["full_name"]
+	pagination_class = FlexiblePagination
+	http_method_names = ["get", "post"]
 
-    def get_queryset(self):
-        params = self.request.query_params if self.request.method == 'GET' else self.request.data
+	def _check_team_visibility(self, team_id):
+		"""Raise Http404 if team_id is not in the caller's visible orgs."""
+		if hasattr(self.request, "visible_org_ids"):
+			if not Team.objects.filter(
+				id=team_id, organization_id__in=self.request.visible_org_ids
+			).exists():
+				raise Http404
 
-        team_id = params.get('team_id')
-        subject_id = params.get('subject_id')
+	def get_queryset(self):
+		params = (
+			self.request.query_params
+			if self.request.method == "GET"
+			else self.request.data
+		)
 
-        if not team_id or not subject_id:
-            return Authors.objects.none()
+		team_id = params.get("team_id")
+		subject_id = params.get("subject_id")
 
-        try:
-            author_ids = Articles.objects.filter(
-                teams__id=team_id,
-                subjects__id=subject_id
-            ).values_list('authors', flat=True).distinct()
+		if not team_id or not subject_id:
+			return Authors.objects.none()
 
-            queryset = Authors.objects.filter(author_id__in=author_ids).order_by('author_id')
+		try:
+			author_ids = (
+				Articles.objects.filter(teams__id=team_id, subjects__id=subject_id)
+				.values_list("authors", flat=True)
+				.distinct()
+			)
 
-            full_name = params.get('full_name')
-            if full_name:
-                # URL decode the full_name parameter to handle %20 spaces and other encoded characters
-                from urllib.parse import unquote
-                full_name = unquote(full_name)
-                # Use the new full_name database field for more efficient searching
-                queryset = queryset.filter(full_name__icontains=full_name)
+			queryset = Authors.objects.filter(author_id__in=author_ids).order_by(
+				"author_id"
+			)
 
-            return queryset
-        except (AttributeError, TypeError, ValueError) as e:
-            # Malformed search params (e.g. a non-string full_name from a JSON
-            # POST body): return no matches, but log it so a genuine bug can't
-            # hide as an empty result. Anything unexpected propagates.
-            logging.getLogger(__name__).warning(
-                "AuthorSearchView: ignoring malformed search params (%s)", e
-            )
-            return Authors.objects.none()
+			full_name = params.get("full_name")
+			if full_name:
+				# URL decode the full_name parameter to handle %20 spaces and other encoded characters
+				from urllib.parse import unquote
 
-    def post(self, request, *args, **kwargs):
-        # For POST requests, validate required parameters
-        team_id = request.data.get('team_id')
-        subject_id = request.data.get('subject_id')
-        
-        if not team_id or not subject_id:
-            return Response(
-                {"error": "Missing required parameters: team_id, subject_id"}, 
-                status=400
-            )
-            
-        try:
-            # Check if team and subject exist
-            Team.objects.get(id=team_id)
-            Subject.objects.get(id=subject_id, team_id=team_id)
-        except Team.DoesNotExist:
-            return Response(
-                {"error": f"Team with ID {team_id} not found"}, 
-                status=404
-            )
-        except Subject.DoesNotExist:
-            return Response(
-                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
-                status=404
-            )
+				full_name = unquote(full_name)
+				# Use the new full_name database field for more efficient searching
+				queryset = queryset.filter(full_name__icontains=full_name)
 
-        self._check_team_visibility(team_id)
-        return self.list(request, *args, **kwargs)
-        
-    def get(self, request, *args, **kwargs):
-        # Validate required parameters for GET requests
-        team_id = request.query_params.get('team_id')
-        subject_id = request.query_params.get('subject_id')
-        
-        if not team_id or not subject_id:
-            return Response(
-                {"error": "Missing required parameters: team_id, subject_id"}, 
-                status=400
-            )
-            
-        try:
-            # Check if team and subject exist
-            Team.objects.get(id=team_id)
-            Subject.objects.get(id=subject_id, team_id=team_id)
-        except Team.DoesNotExist:
-            return Response(
-                {"error": f"Team with ID {team_id} not found"}, 
-                status=404
-            )
-        except Subject.DoesNotExist:
-            return Response(
-                {"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"}, 
-                status=404
-            )
+			return queryset
+		except (AttributeError, TypeError, ValueError) as e:
+			# Malformed search params (e.g. a non-string full_name from a JSON
+			# POST body): return no matches, but log it so a genuine bug can't
+			# hide as an empty result. Anything unexpected propagates.
+			logging.getLogger(__name__).warning(
+				"AuthorSearchView: ignoring malformed search params (%s)", e
+			)
+			return Authors.objects.none()
 
-        self._check_team_visibility(team_id)
-        # Delegate to the list method
-        return self.list(request, *args, **kwargs)
+	def post(self, request, *args, **kwargs):
+		# For POST requests, validate required parameters
+		team_id = request.data.get("team_id")
+		subject_id = request.data.get("subject_id")
+
+		if not team_id or not subject_id:
+			return Response(
+				{"error": "Missing required parameters: team_id, subject_id"},
+				status=400,
+			)
+
+		try:
+			# Check if team and subject exist
+			Team.objects.get(id=team_id)
+			Subject.objects.get(id=subject_id, team_id=team_id)
+		except Team.DoesNotExist:
+			return Response({"error": f"Team with ID {team_id} not found"}, status=404)
+		except Subject.DoesNotExist:
+			return Response(
+				{
+					"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"
+				},
+				status=404,
+			)
+
+		self._check_team_visibility(team_id)
+		return self.list(request, *args, **kwargs)
+
+	def get(self, request, *args, **kwargs):
+		# Validate required parameters for GET requests
+		team_id = request.query_params.get("team_id")
+		subject_id = request.query_params.get("subject_id")
+
+		if not team_id or not subject_id:
+			return Response(
+				{"error": "Missing required parameters: team_id, subject_id"},
+				status=400,
+			)
+
+		try:
+			# Check if team and subject exist
+			Team.objects.get(id=team_id)
+			Subject.objects.get(id=subject_id, team_id=team_id)
+		except Team.DoesNotExist:
+			return Response({"error": f"Team with ID {team_id} not found"}, status=404)
+		except Subject.DoesNotExist:
+			return Response(
+				{
+					"error": f"Subject with ID {subject_id} not found or does not belong to team {team_id}"
+				},
+				status=404,
+			)
+
+		self._check_team_visibility(team_id)
+		# Delegate to the list method
+		return self.list(request, *args, **kwargs)
 
 
 ###
 # STATS
 ###
+
 
 class StatsView(APIView):
 	"""
@@ -2197,35 +2624,42 @@ class StatsView(APIView):
 	Results are short-lived cached (STATS_CACHE_TTL seconds, default 600) using
 	Django's database cache so all gunicorn workers share the same value.
 	"""
+
 	permission_classes = [permissions.AllowAny]
 
 	def get(self, request):
 		from urllib.parse import urlparse
 		from subscriptions.models import Subscribers
 
-		visible_org_ids = getattr(request, 'visible_org_ids', None)
+		visible_org_ids = getattr(request, "visible_org_ids", None)
 
 		# --- Parse ?team= -----------------------------------------------
-		team_param = request.query_params.get('team', None)
+		team_param = request.query_params.get("team", None)
 		team_ids = None
 		if team_param:
 			try:
-				team_ids = [int(t.strip()) for t in team_param.split(',') if t.strip()]
+				team_ids = [int(t.strip()) for t in team_param.split(",") if t.strip()]
 			except ValueError:
 				return Response(
-					{'error': 'Invalid team parameter. Expected integer or comma-separated integers.'},
+					{
+						"error": "Invalid team parameter. Expected integer or comma-separated integers."
+					},
 					status=status.HTTP_400_BAD_REQUEST,
 				)
 
 		# --- Parse ?organization= (alias ?org=) -------------------------
-		org_param = request.query_params.get('organization') or request.query_params.get('org')
+		org_param = request.query_params.get(
+			"organization"
+		) or request.query_params.get("org")
 		org_ids = None
 		if org_param:
 			try:
-				org_ids = [int(o.strip()) for o in org_param.split(',') if o.strip()]
+				org_ids = [int(o.strip()) for o in org_param.split(",") if o.strip()]
 			except ValueError:
 				return Response(
-					{'error': 'Invalid organization parameter. Expected integer or comma-separated integers.'},
+					{
+						"error": "Invalid organization parameter. Expected integer or comma-separated integers."
+					},
 					status=status.HTTP_400_BAD_REQUEST,
 				)
 
@@ -2235,7 +2669,9 @@ class StatsView(APIView):
 				raise Http404
 
 		if team_ids and visible_org_ids is not None:
-			visible = Team.objects.filter(id__in=team_ids, organization_id__in=visible_org_ids)
+			visible = Team.objects.filter(
+				id__in=team_ids, organization_id__in=visible_org_ids
+			)
 			if visible.count() != len(set(team_ids)):
 				raise Http404
 
@@ -2258,14 +2694,15 @@ class StatsView(APIView):
 				teams_qs = teams_qs.filter(organization_id__in=effective_org_ids)
 			if team_ids:
 				teams_qs = teams_qs.filter(id__in=team_ids)
-			team_id_list = list(teams_qs.values_list('id', flat=True))
+			team_id_list = list(teams_qs.values_list("id", flat=True))
 		else:
 			team_id_list = None
 
 		# --- Cache lookup -----------------------------------------------
-		cache_key = 'stats:' + (
-			'all' if team_id_list is None
-			else ','.join(str(i) for i in sorted(team_id_list))
+		cache_key = "stats:" + (
+			"all"
+			if team_id_list is None
+			else ",".join(str(i) for i in sorted(team_id_list))
 		)
 		cached = cache.get(cache_key)
 		if cached is not None:
@@ -2273,11 +2710,13 @@ class StatsView(APIView):
 
 		# --- Counts (single join per queryset) --------------------------
 		if fully_unscoped:
-			articles_count    = Articles.objects.count()
-			trials_count      = Trials.objects.count()
-			authors_count     = Authors.objects.count()
-			subscribers_count = Subscribers.objects.filter(active=True).distinct().count()
-			sources_qs        = Sources.objects.all()
+			articles_count = Articles.objects.count()
+			trials_count = Trials.objects.count()
+			authors_count = Authors.objects.count()
+			subscribers_count = (
+				Subscribers.objects.filter(active=True).distinct().count()
+			)
+			sources_qs = Sources.objects.all()
 		else:
 			articles_count = (
 				Articles.objects.filter(teams__in=team_id_list).distinct().count()
@@ -2286,14 +2725,14 @@ class StatsView(APIView):
 				Trials.objects.filter(teams__in=team_id_list).distinct().count()
 			)
 			authors_count = (
-				Authors.objects
-				.filter(articles__teams__in=team_id_list)
+				Authors.objects.filter(articles__teams__in=team_id_list)
 				.distinct()
 				.count()
 			)
 			subscribers_count = (
-				Subscribers.objects
-				.filter(active=True, subscriptions__team__in=team_id_list)
+				Subscribers.objects.filter(
+					active=True, subscriptions__team__in=team_id_list
+				)
 				.distinct()
 				.count()
 			)
@@ -2309,34 +2748,34 @@ class StatsView(APIView):
 			except Exception:
 				return None
 
-		source_data = list(sources_qs.values('link', 'source_for'))
+		source_data = list(sources_qs.values("link", "source_for"))
 
 		all_domains = set()
 		type_domains = {}
 		domain_feed_count = {}
 		for s in source_data:
-			d = extract_domain(s['link'])
+			d = extract_domain(s["link"])
 			if d:
 				all_domains.add(d)
-				type_domains.setdefault(s['source_for'], set()).add(d)
+				type_domains.setdefault(s["source_for"], set()).add(d)
 				domain_feed_count[d] = domain_feed_count.get(d, 0) + 1
 
 		sources_by_type = {k: len(v) for k, v in type_domains.items()}
 		sources_by_domain = sorted(
-			[{'domain': d, 'count': c} for d, c in domain_feed_count.items()],
-			key=lambda x: x['count'],
+			[{"domain": d, "count": c} for d, c in domain_feed_count.items()],
+			key=lambda x: x["count"],
 			reverse=True,
 		)
 
 		payload = {
-			'articles': articles_count,
-			'trials': trials_count,
-			'subscribers': subscribers_count,
-			'authors': authors_count,
-			'sources': {
-				'total': len(all_domains),
-				'by_type': sources_by_type,
-				'by_domain': sources_by_domain,
+			"articles": articles_count,
+			"trials": trials_count,
+			"subscribers": subscribers_count,
+			"authors": authors_count,
+			"sources": {
+				"total": len(all_domains),
+				"by_type": sources_by_type,
+				"by_domain": sources_by_domain,
 			},
 		}
 		cache.set(cache_key, payload, settings.STATS_CACHE_TTL)

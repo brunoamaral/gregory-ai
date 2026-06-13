@@ -26,5 +26,6 @@ class VisibleOrgMiddleware:
 
 	def __call__(self, request):
 		from gregory.visibility import visible_org_ids
+
 		request.visible_org_ids = SimpleLazyObject(lambda: visible_org_ids(request))
 		return self.get_response(request)

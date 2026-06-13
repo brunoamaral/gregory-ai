@@ -3,13 +3,15 @@ Tests verifying that list-level email header customization fields
 (header_title, header_tagline, show_header_tagline) are injected into
 the template context by the send_weekly_summary management command.
 """
+
 import os
 from io import StringIO
 from unittest.mock import patch
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gregory.tests.test_settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gregory.tests.test_settings")
 
 import django
+
 django.setup()
 
 from django.contrib.sites.models import Site
@@ -91,7 +93,7 @@ class TestWeeklySummaryHeaderContextInjection(TestCase):
 		captured = {}
 
 		real_get_template = __import__(
-			'django.template.loader', fromlist=['get_template']
+			"django.template.loader", fromlist=["get_template"]
 		).get_template
 
 		def fake_get_template(template_name, using=None):
@@ -106,15 +108,18 @@ class TestWeeklySummaryHeaderContextInjection(TestCase):
 			tmpl.render = capturing_render
 			return tmpl
 
-		with patch(
-			'subscriptions.management.commands.send_weekly_summary.send_email',
-			return_value={'status': 'ok'},
-		), patch(
-			'subscriptions.management.commands.send_weekly_summary.get_template',
-			side_effect=fake_get_template,
+		with (
+			patch(
+				"subscriptions.management.commands.send_weekly_summary.send_email",
+				return_value={"status": "ok"},
+			),
+			patch(
+				"subscriptions.management.commands.send_weekly_summary.get_template",
+				side_effect=fake_get_template,
+			),
 		):
 			out = StringIO()
-			call_command('send_weekly_summary', stdout=out, all_articles=True)
+			call_command("send_weekly_summary", stdout=out, all_articles=True)
 
 		return captured
 
@@ -127,7 +132,7 @@ class TestWeeklySummaryHeaderContextInjection(TestCase):
 
 		ctx = self._run_and_capture_context()
 
-		self.assertEqual(ctx.get('header_title'), "MS Research Weekly")
+		self.assertEqual(ctx.get("header_title"), "MS Research Weekly")
 
 	def test_header_tagline_injected(self):
 		"""header_tagline set on the list appears in the template context."""
@@ -136,7 +141,7 @@ class TestWeeklySummaryHeaderContextInjection(TestCase):
 
 		ctx = self._run_and_capture_context()
 
-		self.assertEqual(ctx.get('header_tagline'), "Your weekly briefing")
+		self.assertEqual(ctx.get("header_tagline"), "Your weekly briefing")
 
 	def test_show_header_tagline_true(self):
 		"""show_header_tagline=True is passed through to the context."""
@@ -145,7 +150,7 @@ class TestWeeklySummaryHeaderContextInjection(TestCase):
 
 		ctx = self._run_and_capture_context()
 
-		self.assertTrue(ctx.get('show_header_tagline'))
+		self.assertTrue(ctx.get("show_header_tagline"))
 
 	def test_show_header_tagline_false(self):
 		"""show_header_tagline=False is passed through to the context."""
@@ -154,7 +159,7 @@ class TestWeeklySummaryHeaderContextInjection(TestCase):
 
 		ctx = self._run_and_capture_context()
 
-		self.assertFalse(ctx.get('show_header_tagline'))
+		self.assertFalse(ctx.get("show_header_tagline"))
 
 	def test_empty_header_title_becomes_empty_string(self):
 		"""When header_title is None, the context receives an empty string (not None)."""
@@ -163,7 +168,7 @@ class TestWeeklySummaryHeaderContextInjection(TestCase):
 
 		ctx = self._run_and_capture_context()
 
-		self.assertEqual(ctx.get('header_title'), '')
+		self.assertEqual(ctx.get("header_title"), "")
 
 	def test_empty_header_tagline_becomes_empty_string(self):
 		"""When header_tagline is None, the context receives an empty string (not None)."""
@@ -172,4 +177,4 @@ class TestWeeklySummaryHeaderContextInjection(TestCase):
 
 		ctx = self._run_and_capture_context()
 
-		self.assertEqual(ctx.get('header_tagline'), '')
+		self.assertEqual(ctx.get("header_tagline"), "")

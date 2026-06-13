@@ -20,12 +20,13 @@ Scenarios:
 5. site.domain == 'localhost'                  → http:// scheme
 6. site.domain == '127.0.0.1'                 → http:// scheme
 """
+
 import os
 import django
 from datetime import timedelta
 from unittest.mock import patch, MagicMock
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gregory.tests.test_settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gregory.tests.test_settings")
 django.setup()
 
 from django.contrib.sites.models import Site
@@ -36,7 +37,9 @@ from django.utils.timezone import now
 from gregory.models import Subject, Articles, Team
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
-from subscriptions.management.commands.utils.get_credentials import build_unsubscribe_base_url
+from subscriptions.management.commands.utils.get_credentials import (
+	build_unsubscribe_base_url,
+)
 from subscriptions.models import Lists, Subscribers, ListSubscription
 
 
@@ -49,6 +52,7 @@ def _ok_response():
 
 
 # ── Unit tests for the helper ─────────────────────────────────────────────────
+
 
 class TestBuildUnsubscribeBaseUrl(TestCase):
 	"""Unit tests for build_unsubscribe_base_url()."""
@@ -65,66 +69,75 @@ class TestBuildUnsubscribeBaseUrl(TestCase):
 
 	def test_api_domain_preferred_over_site_domain(self):
 		self.assertEqual(
-			build_unsubscribe_base_url(self._site('site.example.com'), self._cs('api.example.com')),
-			'https://api.example.com',
+			build_unsubscribe_base_url(
+				self._site("site.example.com"), self._cs("api.example.com")
+			),
+			"https://api.example.com",
 		)
 
 	def test_fallback_to_site_domain_when_api_domain_empty(self):
 		self.assertEqual(
-			build_unsubscribe_base_url(self._site('site.example.com'), self._cs('')),
-			'https://site.example.com',
+			build_unsubscribe_base_url(self._site("site.example.com"), self._cs("")),
+			"https://site.example.com",
 		)
 
 	def test_fallback_to_site_domain_when_api_domain_whitespace_only(self):
 		self.assertEqual(
-			build_unsubscribe_base_url(self._site('site.example.com'), self._cs('   ')),
-			'https://site.example.com',
+			build_unsubscribe_base_url(self._site("site.example.com"), self._cs("   ")),
+			"https://site.example.com",
 		)
 
 	def test_whitespace_stripped_from_api_domain(self):
 		self.assertEqual(
-			build_unsubscribe_base_url(self._site('site.example.com'), self._cs('  api.example.com  ')),
-			'https://api.example.com',
+			build_unsubscribe_base_url(
+				self._site("site.example.com"), self._cs("  api.example.com  ")
+			),
+			"https://api.example.com",
 		)
 
 	def test_https_scheme_prefix_stripped_from_api_domain(self):
 		self.assertEqual(
-			build_unsubscribe_base_url(self._site('site.example.com'), self._cs('https://api.example.com')),
-			'https://api.example.com',
+			build_unsubscribe_base_url(
+				self._site("site.example.com"), self._cs("https://api.example.com")
+			),
+			"https://api.example.com",
 		)
 
 	def test_http_scheme_prefix_stripped_from_api_domain(self):
 		self.assertEqual(
-			build_unsubscribe_base_url(self._site('site.example.com'), self._cs('http://api.example.com')),
-			'https://api.example.com',
+			build_unsubscribe_base_url(
+				self._site("site.example.com"), self._cs("http://api.example.com")
+			),
+			"https://api.example.com",
 		)
 
 	def test_http_scheme_for_localhost(self):
 		self.assertEqual(
-			build_unsubscribe_base_url(self._site('localhost'), None),
-			'http://localhost',
+			build_unsubscribe_base_url(self._site("localhost"), None),
+			"http://localhost",
 		)
 
 	def test_http_scheme_for_loopback_ip(self):
 		self.assertEqual(
-			build_unsubscribe_base_url(self._site('127.0.0.1'), None),
-			'http://127.0.0.1',
+			build_unsubscribe_base_url(self._site("127.0.0.1"), None),
+			"http://127.0.0.1",
 		)
 
 	def test_no_customsettings(self):
 		self.assertEqual(
-			build_unsubscribe_base_url(self._site('site.example.com'), None),
-			'https://site.example.com',
+			build_unsubscribe_base_url(self._site("site.example.com"), None),
+			"https://site.example.com",
 		)
 
 	def test_empty_site_domain_returns_empty(self):
 		self.assertEqual(
-			build_unsubscribe_base_url(self._site(''), self._cs('')),
-			'',
+			build_unsubscribe_base_url(self._site(""), self._cs("")),
+			"",
 		)
 
 
 # ── Integration tests via send_weekly_summary ─────────────────────────────────
+
 
 class TestUnsubscribeBaseUrl(TestCase):
 	"""Ensure send_weekly_summary injects the correct unsubscribe_base_url."""
@@ -261,7 +274,9 @@ class TestUnsubscribeBaseUrl(TestCase):
 		return_value=("test-token", "https://api.postmarkapp.com/email"),
 	)
 	@patch("subscriptions.management.commands.send_weekly_summary.send_email")
-	def test_whitespace_only_api_domain_falls_back_to_site_domain(self, mock_send_email, _mock_creds):
+	def test_whitespace_only_api_domain_falls_back_to_site_domain(
+		self, mock_send_email, _mock_creds
+	):
 		"""Whitespace-only api_domain is treated as unset; site.domain is used."""
 		self.custom_settings.api_domain = "   "
 		self.custom_settings.save()

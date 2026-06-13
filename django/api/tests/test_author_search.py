@@ -1,7 +1,14 @@
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
-from gregory.models import Authors, Articles, Team, Subject, Organization, OrganizationApiSettings
+from gregory.models import (
+	Authors,
+	Articles,
+	Team,
+	Subject,
+	Organization,
+	OrganizationApiSettings,
+)
 from django.utils import timezone
 
 
@@ -9,13 +16,17 @@ class AuthorSearchViewTests(TestCase):
 	"""Test cases for the author search endpoint"""
 
 	def setUp(self):
-		self.organization = Organization.objects.create(name="Test Organization", slug="auth-search-org")
-		OrganizationApiSettings.objects.filter(organization=self.organization).update(make_api_public=True)
-		self.team = Team.objects.create(name="Test Team", slug="auth-search-team", organization=self.organization)
+		self.organization = Organization.objects.create(
+			name="Test Organization", slug="auth-search-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=self.organization).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			name="Test Team", slug="auth-search-team", organization=self.organization
+		)
 		self.subject = Subject.objects.create(
-			subject_name="Test Subject",
-			subject_slug="test-subject",
-			team=self.team
+			subject_name="Test Subject", subject_slug="test-subject", team=self.team
 		)
 
 		self.author1 = Authors.objects.create(given_name="Jane", family_name="Doe")
@@ -25,7 +36,7 @@ class AuthorSearchViewTests(TestCase):
 			title="Test Article",
 			summary="Sample",
 			link="http://example.com",
-			published_date=timezone.now()
+			published_date=timezone.now(),
 		)
 		article.authors.add(self.author1, self.author2)
 		article.teams.add(self.team)
@@ -34,26 +45,28 @@ class AuthorSearchViewTests(TestCase):
 		self.client = APIClient()
 
 	def test_missing_required_parameters(self):
-		url = reverse('author-search')
+		url = reverse("author-search")
 
-		response = self.client.post(url, {}, format='json')
+		response = self.client.post(url, {}, format="json")
 		self.assertEqual(response.status_code, 400)
 
-		response = self.client.post(url, {'team_id': self.team.id}, format='json')
+		response = self.client.post(url, {"team_id": self.team.id}, format="json")
 		self.assertEqual(response.status_code, 400)
 
-		response = self.client.post(url, {'subject_id': self.subject.id}, format='json')
+		response = self.client.post(url, {"subject_id": self.subject.id}, format="json")
 		self.assertEqual(response.status_code, 400)
 
 	def test_search_by_full_name(self):
-		url = reverse('author-search')
+		url = reverse("author-search")
 		data = {
-			'team_id': self.team.id,
-			'subject_id': self.subject.id,
-			'full_name': 'jane'
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"full_name": "jane",
 		}
-		response = self.client.post(url, data, format='json')
+		response = self.client.post(url, data, format="json")
 
 		self.assertEqual(response.status_code, 200)
-		self.assertEqual(len(response.data['results']), 1)
-		self.assertEqual(response.data['results'][0]['author_id'], self.author1.author_id)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(
+			response.data["results"][0]["author_id"], self.author1.author_id
+		)

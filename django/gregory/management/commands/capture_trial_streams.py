@@ -87,8 +87,12 @@ class _CaptureMixin:
 
 	def _capture(self, clinical_trial, source):
 		self.capture_fh.write(
-			json.dumps(_serialize(clinical_trial, source, self.capture_feed),
-					   ensure_ascii=False, default=str) + "\n"
+			json.dumps(
+				_serialize(clinical_trial, source, self.capture_feed),
+				ensure_ascii=False,
+				default=str,
+			)
+			+ "\n"
 		)
 		self.captured += 1
 		return None
@@ -115,12 +119,26 @@ class Command(BaseCommand):
 	help = "Capture the raw inbound trial stream (CTgov API + EU RSS) to a JSONL file without writing to the DB."
 
 	def add_arguments(self, parser):
-		parser.add_argument("--feed", choices=["ctgov", "eu", "both"], default="both",
-							help="Which live stream(s) to capture (default: both).")
-		parser.add_argument("--output", help="Output JSONL path (default: a timestamped file under %s)." % DEFAULT_DIR)
-		parser.add_argument("--max-results", type=int, default=1000,
-							help="Max results per CTgov source (default: 1000).")
-		parser.add_argument("--source-id", type=int, help="Restrict CTgov capture to one source id.")
+		parser.add_argument(
+			"--feed",
+			choices=["ctgov", "eu", "both"],
+			default="both",
+			help="Which live stream(s) to capture (default: both).",
+		)
+		parser.add_argument(
+			"--output",
+			help="Output JSONL path (default: a timestamped file under %s)."
+			% DEFAULT_DIR,
+		)
+		parser.add_argument(
+			"--max-results",
+			type=int,
+			default=1000,
+			help="Max results per CTgov source (default: 1000).",
+		)
+		parser.add_argument(
+			"--source-id", type=int, help="Restrict CTgov capture to one source id."
+		)
 
 	def handle(self, *args, **options):
 		verbosity = options.get("verbosity", 1)
@@ -141,8 +159,12 @@ class Command(BaseCommand):
 				cmd = _CtgovCapture()
 				cmd.capture_fh, cmd.captured = fh, 0
 				try:
-					cmd.handle(verbosity=verbosity, max_results=options["max_results"],
-							   source_id=options.get("source_id"), debug=False)
+					cmd.handle(
+						verbosity=verbosity,
+						max_results=options["max_results"],
+						source_id=options.get("source_id"),
+						debug=False,
+					)
 				except Exception as e:  # keep the EU capture alive if CTgov fails
 					errors.append(f"ctgov: {e}")
 					self.stderr.write(self.style.ERROR(f"CTgov capture error: {e}"))

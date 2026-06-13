@@ -3,6 +3,7 @@ Service logic for reassigning all objects from one team to another.
 
 Used by both the admin action and the ``reassign_team_objects`` management command.
 """
+
 import logging
 import shutil
 from dataclasses import dataclass, field
@@ -14,12 +15,13 @@ from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
-ConflictMode = Literal['skip', 'rename', 'merge']
+ConflictMode = Literal["skip", "rename", "merge"]
 
 
 @dataclass
 class ReassignmentReport:
 	"""Collects what happened (or would happen) during a reassignment."""
+
 	subjects_moved: List[str] = field(default_factory=list)
 	subjects_skipped: List[str] = field(default_factory=list)
 	subjects_renamed: List[str] = field(default_factory=list)
@@ -56,7 +58,9 @@ class ReassignmentReport:
 		return "\n".join(lines)
 
 
-def _move_model_dir(from_slug: str, to_slug: str, report: ReassignmentReport, dry_run: bool) -> None:
+def _move_model_dir(
+	from_slug: str, to_slug: str, report: ReassignmentReport, dry_run: bool
+) -> None:
 	"""
 	Move the on-disk model directory from models/<from_slug>/ to models/<to_slug>/.
 
@@ -99,10 +103,14 @@ def _move_model_dir(from_slug: str, to_slug: str, report: ReassignmentReport, dr
 							report.model_dirs_failed.append(
 								f"Version dir already exists, skipped: {dst_version}"
 							)
-							logger.warning("Version dir already exists, skipping: %s", dst_version)
+							logger.warning(
+								"Version dir already exists, skipping: %s", dst_version
+							)
 						else:
 							shutil.move(str(version_dir), str(dst_version))
-							report.model_dirs_moved.append(f"{version_dir} → {dst_version}")
+							report.model_dirs_moved.append(
+								f"{version_dir} → {dst_version}"
+							)
 			else:
 				shutil.move(str(subject_dir), str(dst_subject))
 				report.model_dirs_moved.append(f"{subject_dir} → {dst_subject}")
@@ -118,7 +126,9 @@ def _move_model_dir(from_slug: str, to_slug: str, report: ReassignmentReport, dr
 		logger.error(msg)
 
 
-def _merge_subjects(source_subject, target_subject, dry_run: bool, report: ReassignmentReport) -> None:
+def _merge_subjects(
+	source_subject, target_subject, dry_run: bool, report: ReassignmentReport
+) -> None:
 	"""
 	Merge source_subject into target_subject.
 
@@ -131,7 +141,12 @@ def _merge_subjects(source_subject, target_subject, dry_run: bool, report: Reass
 
 	Then deletes source_subject.
 	"""
-	from gregory.models import Sources, MLPredictions, ArticleSubjectRelevance, PredictionRunLog
+	from gregory.models import (
+		Sources,
+		MLPredictions,
+		ArticleSubjectRelevance,
+		PredictionRunLog,
+	)
 
 	if dry_run:
 		return
@@ -142,16 +157,16 @@ def _merge_subjects(source_subject, target_subject, dry_run: bool, report: Reass
 	# MLPredictions — skip duplicates (unique_article_subject_prediction constraint)
 	target_prediction_keys = set(
 		MLPredictions.objects.filter(subject=target_subject).values_list(
-			'article_id',
-			'model_version',
-			'algorithm',
+			"article_id",
+			"model_version",
+			"algorithm",
 		)
 	)
 	prediction_ids_to_update = []
 	prediction_ids_to_delete = []
 	for pred_id, article_id, model_version, algorithm in MLPredictions.objects.filter(
 		subject=source_subject
-	).values_list('pk', 'article_id', 'model_version', 'algorithm'):
+	).values_list("pk", "article_id", "model_version", "algorithm"):
 		key = (article_id, model_version, algorithm)
 		if key in target_prediction_keys:
 			prediction_ids_to_delete.append(pred_id)
@@ -160,19 +175,25 @@ def _merge_subjects(source_subject, target_subject, dry_run: bool, report: Reass
 			target_prediction_keys.add(key)
 
 	if prediction_ids_to_update:
-		MLPredictions.objects.filter(pk__in=prediction_ids_to_update).update(subject=target_subject)
+		MLPredictions.objects.filter(pk__in=prediction_ids_to_update).update(
+			subject=target_subject
+		)
 	if prediction_ids_to_delete:
 		MLPredictions.objects.filter(pk__in=prediction_ids_to_delete).delete()
 
 	# ArticleSubjectRelevance — skip duplicates
 	target_asr_article_ids = set(
-		ArticleSubjectRelevance.objects.filter(subject=target_subject).values_list('article_id', flat=True)
+		ArticleSubjectRelevance.objects.filter(subject=target_subject).values_list(
+			"article_id", flat=True
+		)
 	)
 	asr_ids_to_update = []
 	asr_ids_to_delete = []
-	for asr_id, article_id in ArticleSubjectRelevance.objects.filter(subject=source_subject).values_list(
-		'pk',
-		'article_id',
+	for asr_id, article_id in ArticleSubjectRelevance.objects.filter(
+		subject=source_subject
+	).values_list(
+		"pk",
+		"article_id",
 	):
 		if article_id in target_asr_article_ids:
 			asr_ids_to_delete.append(asr_id)
@@ -181,11 +202,15 @@ def _merge_subjects(source_subject, target_subject, dry_run: bool, report: Reass
 			target_asr_article_ids.add(article_id)
 
 	if asr_ids_to_update:
-		ArticleSubjectRelevance.objects.filter(pk__in=asr_ids_to_update).update(subject=target_subject)
+		ArticleSubjectRelevance.objects.filter(pk__in=asr_ids_to_update).update(
+			subject=target_subject
+		)
 	if asr_ids_to_delete:
 		ArticleSubjectRelevance.objects.filter(pk__in=asr_ids_to_delete).delete()
 	# PredictionRunLog
-	PredictionRunLog.objects.filter(subject=source_subject).update(subject=target_subject)
+	PredictionRunLog.objects.filter(subject=source_subject).update(
+		subject=target_subject
+	)
 
 	# M2M: Articles
 	for article in source_subject.articles.all():
@@ -207,19 +232,22 @@ def _merge_subjects(source_subject, target_subject, dry_run: bool, report: Reass
 
 	# M2M: Lists subjects
 	from subscriptions.models import Lists
+
 	for lst in Lists.objects.filter(subjects=source_subject):
 		if not lst.subjects.filter(pk=target_subject.pk).exists():
 			lst.subjects.add(target_subject)
 		lst.subjects.remove(source_subject)
 
 	# Now it's safe to delete the source subject
-	source_subject.hard_delete() if hasattr(source_subject, 'hard_delete') else source_subject.delete()
+	source_subject.hard_delete() if hasattr(
+		source_subject, "hard_delete"
+	) else source_subject.delete()
 
 
 def reassign_team(
 	from_team,
 	to_team,
-	conflict: ConflictMode = 'skip',
+	conflict: ConflictMode = "skip",
 	dry_run: bool = False,
 ) -> ReassignmentReport:
 	"""
@@ -255,23 +283,26 @@ def reassign_team(
 		# 1. Subjects                                                          #
 		# ------------------------------------------------------------------ #
 		existing_slugs = set(
-			Subject.objects.filter(team=to_team).values_list('subject_slug', flat=True)
+			Subject.objects.filter(team=to_team).values_list("subject_slug", flat=True)
 		)
 
 		for subject in Subject.objects.filter(team=from_team):
 			if subject.subject_slug not in existing_slugs:
 				if not dry_run:
 					subject.team = to_team
-					subject.save(update_fields=['team'])
+					subject.save(update_fields=["team"])
 				report.subjects_moved.append(subject.subject_slug)
 				existing_slugs.add(subject.subject_slug)
 			else:
 				# Conflict!
-				if conflict == 'skip':
+				if conflict == "skip":
 					report.subjects_skipped.append(subject.subject_slug)
-					logger.info("Skipping subject '%s' — slug already exists in target team.", subject.subject_slug)
+					logger.info(
+						"Skipping subject '%s' — slug already exists in target team.",
+						subject.subject_slug,
+					)
 
-				elif conflict == 'rename':
+				elif conflict == "rename":
 					original_slug = subject.subject_slug
 					new_slug = f"{original_slug}-from-{from_team.slug}"
 					# Ensure the new slug is also unique
@@ -284,13 +315,17 @@ def reassign_team(
 					if not dry_run:
 						subject.subject_slug = new_slug
 						subject.team = to_team
-						subject.save(update_fields=['subject_slug', 'team'])
+						subject.save(update_fields=["subject_slug", "team"])
 					report.subjects_renamed.append(f"{original_slug} → {new_slug}")
 					existing_slugs.add(new_slug)
 
-				elif conflict == 'merge':
-					target_subject = Subject.objects.get(team=to_team, subject_slug=subject.subject_slug)
-					_merge_subjects(subject, target_subject, dry_run=dry_run, report=report)
+				elif conflict == "merge":
+					target_subject = Subject.objects.get(
+						team=to_team, subject_slug=subject.subject_slug
+					)
+					_merge_subjects(
+						subject, target_subject, dry_run=dry_run, report=report
+					)
 					report.subjects_merged.append(subject.subject_slug)
 
 		# ------------------------------------------------------------------ #
@@ -313,6 +348,7 @@ def reassign_team(
 		# 4. Lists (newsletter lists)                                          #
 		# ------------------------------------------------------------------ #
 		from subscriptions.models import Lists
+
 		lists_qs = Lists.objects.filter(team=from_team)
 		report.lists_moved = lists_qs.count()
 		if not dry_run:
@@ -330,6 +366,7 @@ def reassign_team(
 		# 6. Articles M2M                                                      #
 		# ------------------------------------------------------------------ #
 		from gregory.models import Articles
+
 		articles = Articles.objects.filter(teams=from_team)
 		report.articles_relinked = articles.count()
 		if not dry_run:
@@ -342,6 +379,7 @@ def reassign_team(
 		# 7. Trials M2M                                                        #
 		# ------------------------------------------------------------------ #
 		from gregory.models import Trials
+
 		trials = Trials.objects.filter(teams=from_team)
 		report.trials_relinked = trials.count()
 		if not dry_run:
