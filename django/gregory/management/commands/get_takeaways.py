@@ -164,7 +164,7 @@ class Command(BaseCommand):
 			if not orgs:
 				if org_id is None:
 					orphans += 1
-					logging.warning(f'Skipping orphan article {article.article_id}: no organisations via teams.')
+					self.stderr.write(self.style.WARNING(f'Skipping orphan article {article.article_id}: no organisations via teams.'))
 				continue
 
 			missing_orgs = self._orgs_missing_takeaways(article, orgs)
