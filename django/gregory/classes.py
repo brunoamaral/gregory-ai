@@ -1,5 +1,6 @@
+import logging
+
 class SciencePaper:
-	import logging
 	def __init__(self, doi=None, title=None,link=None,access=None,publisher=None,journal=None,published_date=None,abstract=None,authors=None):
 		self.doi=doi
 		self.title=title
