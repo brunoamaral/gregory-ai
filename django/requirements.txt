@@ -18,7 +18,7 @@ crossrefapi==1.6.0
 cryptography==41.0.7
 decorator==5.1.1
 defusedxml==0.7.1
-Django==6.0.4
+Django==6.0.6
 django-ckeditor-5==0.2.15
 django-countries==7.6.1
 django-extensions==4.1
