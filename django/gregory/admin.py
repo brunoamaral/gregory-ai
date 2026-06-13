@@ -563,6 +563,7 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 					"access",
 					"publisher",
 					"container_title",
+					"retracted",
 					"crossref_check",
 				),
 				"description": "This section contains general information about the article",
