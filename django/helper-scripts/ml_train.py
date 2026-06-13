@@ -12,6 +12,7 @@ from sklearn.naive_bayes import GaussianNB, MultinomialNB
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
 import concurrent.futures
+import logging
 import math
 import nltk
 import pandas as pd
@@ -43,7 +44,7 @@ def get_initial_count(url, api_key):
 		data = response.json()
 		return data['count']
 	except requests.exceptions.RequestException as e:
-		print(f"Failed to fetch initial count: {e}")
+		logging.error(f"Failed to fetch initial count: {e}")
 		return None
 
 def fetch_articles_page(url, api_key, page):
@@ -55,7 +56,7 @@ def fetch_articles_page(url, api_key, page):
 		response.raise_for_status()
 		return response.json()['results']
 	except requests.exceptions.RequestException as e:
-		print(f"Failed to fetch page {page}: {e}")
+		logging.error(f"Failed to fetch page {page}: {e}")
 		return []
 
 # Util function to clean text
@@ -109,28 +110,28 @@ def get_articles(url, api_key):
 		if response.status_code == 200:
 			return response.json()
 		else:
-			print(f"Error: Received response code {response.status_code}")
+			logging.error(f"Error: Received response code {response.status_code}")
 			return None
 	except requests.exceptions.RequestException as e:
-		print(f"An error occurred: {e}")
+		logging.error(f"An error occurred: {e}")
 		return None
 
 source_data_csv = f"source.csv"
 if args.load_from_csv == True: # load data from csv file into a pandas dataframe 
-	print("Loading data from source.csv")
+	logging.info("Loading data from source.csv")
 	articles_df = pd.read_csv(source_data_csv)
 	
 else: 
-	print("Loading data from API...")
+	logging.info("Loading data from API...")
 	articles_per_page = 10
 	total_articles = get_initial_count(get_api_url, api_key)
 	fetch_url = get_api_url
 	articles = []
 	if not total_articles:
-		print("Failed to get the total count of articles.") 
+		logging.error("Failed to get the total count of articles.") 
 	else:
 		total_pages = math.ceil(total_articles / articles_per_page)
-		print(f"Total articles: {total_articles}, Total pages: {total_pages}")
+		logging.info(f"Total articles: {total_articles}, Total pages: {total_pages}")
 		# Concurrently fetch all pages with progress bar
 		with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
 			futures = {executor.submit(fetch_articles_page, get_api_url, api_key, page): page for page in range(1, total_pages + 1)}
@@ -215,18 +216,18 @@ pipelines[LSVC] = Pipeline([
 
 for model, pipeline in pipelines.items():
 	# Train phase
-	print("Training the " + model + " model...")
+	logging.info("Training the " + model + " model...")
 	pipeline.fit(X_train, Y_train)
 	
 	# Testing accuracy
 	prediction = pipeline.predict(X_test)
 	accuracy = accuracy_score(Y_test, prediction)
-	print(" => Accuracy for the " + model + " model: {:2.1f}%".format(accuracy * 100))
+	logging.info(" => Accuracy for the " + model + " model: {:2.1f}%".format(accuracy * 100))
 
 
 for model, pipeline in pipelines.items():
 	# Before saving, let's train the model with the entire dataset first
-	print("Training the " + model + " model with the entire dataset...")
+	logging.info("Training the " + model + " model with the entire dataset...")
 	pipeline.fit(input, output)
 	# Save the pipeline for later use (`compress` argument is to save as one single file with the entire pipeline)
 	dump(pipeline, './model_' + model + '.joblib', compress=1)

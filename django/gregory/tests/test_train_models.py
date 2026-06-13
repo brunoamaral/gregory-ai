@@ -8,8 +8,8 @@ import os
 import json
 from io import StringIO
 from pathlib import Path
+import logging
 import traceback
-import sys
 
 # Make sure we're using test settings if not already set
 if 'DJANGO_SETTINGS_MODULE' not in os.environ or 'test_settings' not in os.environ['DJANGO_SETTINGS_MODULE']:
@@ -20,7 +20,7 @@ import django
 django.setup()
 
 # Print settings information for debugging
-print(f"Using Django settings module: {os.environ['DJANGO_SETTINGS_MODULE']}")
+logging.info(f"Using Django settings module: {os.environ['DJANGO_SETTINGS_MODULE']}")
 
 from unittest import TestCase
 from unittest.mock import patch, MagicMock, Mock
@@ -38,7 +38,7 @@ DEBUG = True
 def debug_print(msg):
     """Print debug messages when DEBUG is True."""
     if DEBUG:
-        print(f"DEBUG: {msg}", file=sys.stderr)
+        logging.debug(f"DEBUG: {msg}")
 
 # Add explicit test runner at the end of the file
 if __name__ == '__main__':

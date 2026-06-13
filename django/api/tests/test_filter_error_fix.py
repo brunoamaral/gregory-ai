@@ -2,7 +2,7 @@ from django.test import TestCase
 
 from api.filters import ArticleFilter
 from gregory.models import Articles
-
+import logging
 
 class FilterErrorHandlingTest(TestCase):
 	"""Test that our filter_last_days fix handles invalid input types correctly."""
@@ -38,20 +38,20 @@ class FilterErrorHandlingTest(TestCase):
 					result = filter_instance.filter_last_days(queryset, 'last_days', test_value)
 					# Should return a queryset (either filtered or original)
 					self.assertIsNotNone(result)
-					print(f"✓ {description}: Handled successfully")
+					logging.info(f"✓ {description}: Handled successfully")
 				except TypeError as e:
 					self.fail(f"✗ {description}: Still raises TypeError: {e}")
 				except Exception as e:
 					# Other exceptions are acceptable, we just want to avoid TypeError
-					print(f"⚠ {description}: Raised {type(e).__name__}: {e}")
+					logging.warning(f"⚠ {description}: Raised {type(e).__name__}: {e}")
 		
-		print("All type error tests passed - filter no longer crashes on invalid input")
+		logging.info("All type error tests passed - filter no longer crashes on invalid input")
 		
 		# Test that valid integer strings still work
 		try:
 			result = filter_instance.filter_last_days(queryset, 'last_days', '7')
 			self.assertIsNotNone(result)
-			print("✓ Valid string integer '7': Handled successfully")
+			logging.info("✓ Valid string integer '7': Handled successfully")
 		except Exception as e:
 			self.fail(f"✗ Valid string integer failed: {e}")
 		
@@ -59,6 +59,6 @@ class FilterErrorHandlingTest(TestCase):
 		try:
 			result = filter_instance.filter_last_days(queryset, 'last_days', 7)
 			self.assertIsNotNone(result)
-			print("✓ Valid integer 7: Handled successfully")
+			logging.info("✓ Valid integer 7: Handled successfully")
 		except Exception as e:
 			self.fail(f"✗ Valid integer failed: {e}")

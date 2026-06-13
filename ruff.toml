@@ -39,6 +39,7 @@ select = [
 	"F401",   # unused imports (auto-removed; re-exports ignored in __init__.py)
 	"S113",   # `requests` call without a timeout — can hang the pipeline
 	"RUF100", # unused `# noqa` — keeps the grandfathered worklist self-cleaning
+	"T201",   # print() — use logging instead
 ]
 
 [lint.per-file-ignores]

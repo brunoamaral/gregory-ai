@@ -7,6 +7,7 @@ It enables using labeled data to progressively label unlabeled data based on
 confidence thresholds, helping improve classifier performance when labeled 
 data is scarce.
 """
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union, Dict, Any
@@ -87,9 +88,9 @@ def generate_pseudo_labels(
     
     if len(class_counts) < 2 or min_class_count < 1:
         if verbose:
-            print(f"WARNING: Training data has insufficient examples in the minority class ({min_class_count})")
-            print(f"Class distribution: {class_counts.to_dict()}")
-            print("Skipping pseudo-labeling as it requires at least 2 examples of each class")
+            logging.warning(f"Training data has insufficient examples in the minority class ({min_class_count})")
+            logging.warning(f"Class distribution: {class_counts.to_dict()}")
+            logging.warning("Skipping pseudo-labeling as it requires at least 2 examples of each class")
         # Mark the data as not pseudo-labeled
         train_df['pseudo_labelled'] = False
         train_df['pseudo_confidence'] = None
@@ -109,8 +110,8 @@ def generate_pseudo_labels(
         model_params.setdefault('sequence_length', 100)
     
     if verbose:
-        print(f"Starting pseudo-labeling with {len(train_df)} labelled and {len(unlabelled_df)} unlabelled examples")
-        print(f"Using algorithm: {algorithm}, confidence threshold: {confidence}, max iterations: {max_iter}")
+        logging.info(f"Starting pseudo-labeling with {len(train_df)} labelled and {len(unlabelled_df)} unlabelled examples")
+        logging.info(f"Using algorithm: {algorithm}, confidence threshold: {confidence}, max iterations: {max_iter}")
     
     iteration = 0
     remaining_unlabelled = unlabelled_df.copy()
@@ -121,9 +122,9 @@ def generate_pseudo_labels(
     while len(remaining_unlabelled) > 0 and iteration < max_iter:
         iteration += 1
         if verbose:
-            print(f"\nIteration {iteration}/{max_iter}")
-            print(f"Training set size: {len(train_df)}")
-            print(f"Remaining unlabelled examples: {len(remaining_unlabelled)}")
+            logging.info(f"\nIteration {iteration}/{max_iter}")
+            logging.info(f"Training set size: {len(train_df)}")
+            logging.info(f"Remaining unlabelled examples: {len(remaining_unlabelled)}")
         
         # Initialize a new trainer for each iteration using the factory function
         trainer = get_trainer(algorithm, **model_params)
@@ -169,8 +170,8 @@ def generate_pseudo_labels(
         
         if not confident_indices:
             if verbose:
-                print(f"No confident predictions above threshold {confidence} in iteration {iteration}.")
-                print("Stopping pseudo-labeling process.")
+                logging.info(f"No confident predictions above threshold {confidence} in iteration {iteration}.")
+                logging.info("Stopping pseudo-labeling process.")
             break
         
         # Extract confident examples
@@ -188,12 +189,12 @@ def generate_pseudo_labels(
         remaining_unlabelled = remaining_unlabelled.iloc[remaining_indices].reset_index(drop=True)
         
         if verbose:
-            print(f"Added {len(confident_indices)} pseudo-labelled examples with confidence >= {confidence}")
+            logging.info(f"Added {len(confident_indices)} pseudo-labelled examples with confidence >= {confidence}")
     
     if verbose:
-        print(f"\nPseudo-labeling complete after {iteration} iterations")
-        print(f"Final training set: {len(train_df)} examples "
-              f"({len(train_df[train_df['pseudo_labelled']])} pseudo-labelled)")
+        logging.info(f"\nPseudo-labeling complete after {iteration} iterations")
+        logging.info(f"Final training set: {len(train_df)} examples "
+                     f"({len(train_df[train_df['pseudo_labelled']])} pseudo-labelled)")
     
     # Add metadata columns to help track the original and pseudo-labelled data
     train_df['pseudo_confidence'] = train_df.apply(
@@ -318,7 +319,7 @@ def save_pseudo_csv(
     df.to_csv(filepath, index=False)
     
     if verbose:
-        print(f"Saved pseudo-labels to {filepath}")
+        logging.info(f"Saved pseudo-labels to {filepath}")
     
     return filepath
 

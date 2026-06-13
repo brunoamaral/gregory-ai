@@ -14,6 +14,7 @@ from typing import Optional, List, Dict
 import concurrent.futures
 import hashlib
 import json
+import logging
 import math
 import os
 
@@ -248,9 +249,9 @@ def _load_cache():
         if os.path.exists(cache_file):
             with open(cache_file, 'r') as f:
                 _SUMMARY_CACHE = json.load(f)
-            print(f"Loaded {len(_SUMMARY_CACHE)} cached summaries.")
+            logging.info(f"Loaded {len(_SUMMARY_CACHE)} cached summaries.")
     except Exception as e:
-        print(f"Error loading summary cache: {e}")
+        logging.error(f"Error loading summary cache: {e}")
         _SUMMARY_CACHE = {}
 
 def _save_cache():
@@ -261,7 +262,7 @@ def _save_cache():
         with open(cache_file, 'w') as f:
             json.dump(_SUMMARY_CACHE, f)
     except Exception as e:
-        print(f"Error saving summary cache: {e}")
+        logging.error(f"Error saving summary cache: {e}")
 
 
 # Load the cache when the module is imported
@@ -355,7 +356,7 @@ def validate_summary_usage(text: str, summary: str, usage_type: str = 'training'
     if usage_type == 'training':
         # For training, we should be using 'generated_summary' column, not 'summary'
         if not is_cached:
-            print(f"Warning: Generated a new summary for training that wasn't in the cache. " +
+            logging.warning(f"Generated a new summary for training that wasn't in the cache. " +
                   "This is inefficient but not harmful.")
         return True
     elif usage_type == 'prediction':
@@ -363,7 +364,7 @@ def validate_summary_usage(text: str, summary: str, usage_type: str = 'training'
         return True
     else:
         # For any other use case, issue a warning
-        print(f"Warning: Using summary in an unrecognized context: {usage_type}")
+        logging.warning(f"Using summary in an unrecognized context: {usage_type}")
         return True
 
 
@@ -384,8 +385,8 @@ if __name__ == "__main__":
     vel illum qui dolorem eum fugiat quo voluptas nulla pariatur?
     """
     
-    print("Original text length:", len(lorem_ipsum.split()))
+    logging.info("Original text length: %d", len(lorem_ipsum.split()))
     summary = summarise(lorem_ipsum)
-    print("\nSummary:")
-    print(summary)
-    print("\nSummary length:", len(summary.split()))
+    logging.info("\nSummary:")
+    logging.info(summary)
+    logging.info("\nSummary length: %d", len(summary.split()))

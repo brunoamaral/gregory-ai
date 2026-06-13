@@ -1,6 +1,7 @@
 
 import requests
 import json
+import logging
 
 BASE_URL = "https://api.unpaywall.org"
 VERSION = "/v2/"
@@ -19,20 +20,21 @@ def getDataByDOI(doi: str, client_email: str):
             # Handle 404 responses gracefully
             if response.status_code == 404:
                 # DOI not found in Unpaywall - this is a normal condition for many DOIs
+                logging.info(f"DOI not found in Unpaywall: {doi}")
                 return {}
                 
             # Add error handling for empty responses
             if not response.text.strip():
-                print(f"Empty response received for DOI: {doi}")
+                logging.warning(f"Empty response received for DOI: {doi}")
                 return {}
                 
             try:
                 return json.loads(response.text)
             except json.JSONDecodeError:
-                print(f"Error decoding JSON from response for DOI: {doi}. Response: {response.text[:250]}")
+                logging.error(f"Error decoding JSON from response for DOI: {doi}. Response: {response.text[:250]}")
                 return {}
         except requests.exceptions.RequestException as e:
-            print(f"Request error when accessing Unpaywall for DOI: {doi}. Error: {e}")
+            logging.error(f"Request error when accessing Unpaywall for DOI: {doi}. Error: {e}")
             return {}
     else:
         raise Exception(f"DOI and Client Email cannot be empty! {doi}, {client_email}")

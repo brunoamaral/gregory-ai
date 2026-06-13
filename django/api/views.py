@@ -406,7 +406,7 @@ def post_article(request):
 		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
 		return returnError(ARTICLE_NOT_SAVED, str(exception), 500)
 	except Exception as exception:
-		print(traceback.format_exc())
+		logging.error(traceback.format_exc())
 		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
 		return returnError(UNEXPECTED, str(exception), 500)
 
@@ -545,7 +545,7 @@ def edit_article(request):
 		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
 		return returnError(CROSS_ORG_PAYLOAD, str(exception), 403)
 	except Exception as exception:
-		print(traceback.format_exc())
+		logging.error(traceback.format_exc())
 		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
 		return returnError(UNEXPECTED, str(exception), 500)
 
@@ -652,7 +652,7 @@ def edit_trial(request):
 		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 403, str(exception), str(post_data))
 		return returnError(CROSS_ORG_PAYLOAD, str(exception), 403)
 	except Exception as exception:
-		print(traceback.format_exc())
+		logging.error(traceback.format_exc())
 		generateAccessSchemeLog(call_type, ip_addr, access_scheme, 500, str(exception), str(post_data))
 		return returnError(UNEXPECTED, str(exception), 500)
 
