@@ -22,7 +22,6 @@ django.setup()
 # Print settings information for debugging
 logging.info(f"Using Django settings module: {os.environ['DJANGO_SETTINGS_MODULE']}")
 
-from unittest import TestCase
 from unittest.mock import patch, MagicMock, Mock
 
 from django.test import TestCase, override_settings

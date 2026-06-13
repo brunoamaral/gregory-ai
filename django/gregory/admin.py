@@ -28,9 +28,7 @@ from .models import (
     ArticleCategoryAssignment, TrialCategoryAssignment, CategoryType
 )
 from .widgets import MLPredictionsWidget
-from django import forms
 from .fields import MLPredictionsField
-from django.utils.html import format_html
 
 
 def get_user_organizations(user):
@@ -149,25 +147,6 @@ class OrganizationFilterMixin:
 			# Model has no 'teams' field; fall through to the unscoped queryset.
 			return qs
 		return qs.filter(teams__organization__id__in=user_orgs).distinct()
-
-
-# @admin.register(PredictionRunLog)
-class PredictionRunLogAdmin(admin.ModelAdmin):
-		list_display = ['id', 'team', 'subject', 'run_type', 'algorithm', 'model_version', 'run_started', 'run_finished', 'status_label', 'triggered_by']
-		list_filter = [DateRangeFilter, 'team', 'subject', 'run_type', 'algorithm', 'success', 'model_version']
-		search_fields = ['team__organization__name', 'subject__subject_name', 'model_version', 'triggered_by', 'algorithm']
-		readonly_fields = ['run_started']  # Auto-populated field
-		date_hierarchy = 'run_started'
-		actions = ['mark_as_failed', 'mark_as_successful', 'export_as_csv']
-		
-		fieldsets = (
-				('Run Information', {
-						'fields': ('team', 'subject', 'run_type', 'algorithm', 'model_version', 'triggered_by'),
-				}),
-				('Status', {
-						'fields': ('run_started', 'run_finished', 'success', 'error_message'),
-				}),
-		)
 
 
 class ArticleTrialReferenceInline(admin.TabularInline):

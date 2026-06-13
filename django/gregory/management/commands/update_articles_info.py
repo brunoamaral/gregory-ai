@@ -5,7 +5,6 @@ from django.utils import timezone
 from django.db.models import Q
 import requests
 from datetime import timedelta
-from django.utils import timezone
 import time
 import re
 
