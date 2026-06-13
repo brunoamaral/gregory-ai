@@ -218,7 +218,8 @@ class DirectStreamingCSVRenderer(CSVRenderer):
                 if isinstance(value, (list, dict)):
                     try:
                         processed_item[key] = json.dumps(value)
-                    except:  # noqa: E722
+                    except (TypeError, ValueError):
+                        logger.error(f"CSV Export: Failed to serialize key '{key}' with value '{value}' to JSON. Storing as string.")
                         processed_item[key] = str(value)
                 else:
                     processed_item[key] = value

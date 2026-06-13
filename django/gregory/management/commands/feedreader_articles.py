@@ -1,3 +1,4 @@
+import logging
 from django.core.management.base import BaseCommand
 from gregory.models import Articles, Sources, Authors
 from gregory.functions import normalize_orcid
@@ -202,7 +203,8 @@ class NatureFeedProcessor(FeedProcessor):
                 # Construct full DOI with Nature prefix
                 if partial_doi:
                     return f"10.1038/{partial_doi}"
-            except Exception:  # noqa: S110
+            except (IndexError, ValueError) as e:
+                logging.debug(f"Failed to extract DOI from Nature link '{link}': {e}")
                 pass
         
         return None
@@ -329,8 +331,8 @@ class SagePublicationsFeedProcessor(FeedProcessor):
                 doi_match = re.search(r'doi/abs/(10\.1177/[^?&]+)', link)
                 if doi_match:
                     return doi_match.group(1)
-            except Exception:  # noqa: S110
-                pass
+            except (IndexError, ValueError) as e:
+                logging.debug(f"Failed to extract DOI from Nature link '{link}': {e}")
         
         return None
 

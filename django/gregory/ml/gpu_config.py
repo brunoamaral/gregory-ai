@@ -9,6 +9,7 @@ on different platforms:
 
 Prevents common issues like bus errors and memory allocation failures.
 """
+import logging
 import os
 import sys
 import warnings
@@ -82,7 +83,8 @@ def disable_gpu():
 	try:
 		import tensorflow as tf
 		tf.config.set_visible_devices([], 'GPU')
-	except Exception:  # noqa: S110
+	except Exception:
+		logging.warning("Could not enable GPU in TensorFlow. Ensure this is called before any TensorFlow operations.")
 		pass
 
 
