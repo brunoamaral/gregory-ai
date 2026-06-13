@@ -9,6 +9,8 @@ import os
 import sys
 from pathlib import Path
 
+logging.basicConfig(level=logging.INFO)
+
 def load_env_file(file_path):
     """Load environment variables from a .env file"""
     if not Path(file_path).exists():
