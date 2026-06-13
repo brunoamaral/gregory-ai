@@ -79,7 +79,7 @@ empty result or a no-op. Narrow the exception and log the rest.
 
 ---
 
-## Phase 2 (not yet enforced)
+## Phase 2
 
 Turn these on in `ruff.toml` once the worklist above is clear. Counts are current
 (`uvx ruff check django/ --statistics` for the live numbers):
@@ -87,7 +87,7 @@ Turn these on in `ruff.toml` once the worklist above is clear. Counts are curren
 | Rule | Count | Notes |
 | --- | --- | --- |
 | `BLE001` blind `except Exception:` | 82 | Mostly *logged* handlers — legitimate. Opinionated; review before enforcing. |
-| `T201` `print()` | 154 | Use logging instead — thematically the whole point, but a real migration. Grandfather and burn down. |
-| `F811` redefined-while-unused | 8 | Possible real duplicate-definition bugs — read each before suppressing. |
-| `F841` unused-variable | 9 | "Computed then ignored" — a hardcoded-result tell. |
-| `W605` invalid escape sequence | 1+ | e.g. `ml_train.py` regex strings that should be raw strings. |
+| `T201` `print()` | 154 | **Done** Use logging instead — thematically the whole point, but a real migration. Grandfather and burn down. |
+| `F811` redefined-while-unused | 8 |  **Done** Possible real duplicate-definition bugs — read each before suppressing. |
+| `F841` unused-variable | 9 |  **Done** "Computed then ignored" — a hardcoded-result tell. |
+| `W605` invalid escape sequence | 1+ |  **Done** e.g. `ml_train.py` regex strings that should be raw strings. |

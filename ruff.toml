@@ -42,6 +42,7 @@ select = [
 	"T201",   # print() — use logging instead
 	"F811",   # redefined-while-unused (possible real duplicate-definition bugs)
 	"W605",   # invalid escape sequence (e.g., in regexes; can cause silent logic errors)
+	#"BLE001", # blind `except Exception:` — catches more than intended
 ]
 
 [lint.per-file-ignores]
