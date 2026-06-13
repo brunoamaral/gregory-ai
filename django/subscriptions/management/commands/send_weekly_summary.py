@@ -13,7 +13,6 @@ from subscriptions.models import (
 	SentTrialNotification,
 	FailedNotification,
 )
-from django.utils.timezone import now
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 class Command(BaseCommand):
