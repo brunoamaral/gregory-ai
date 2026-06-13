@@ -28,9 +28,7 @@ from .models import (
     ArticleCategoryAssignment, TrialCategoryAssignment, CategoryType
 )
 from .widgets import MLPredictionsWidget
-from django import forms
 from .fields import MLPredictionsField
-from django.utils.html import format_html
 
 
 def get_user_organizations(user):
