@@ -460,7 +460,7 @@ class Articles(models.Model):
 	)
 	crossref_check = models.DateTimeField(blank=True, null=True)
 	history = HistoricalRecords(
-		excluded_fields=["crossref_check", "utitle", "usummary"],
+		excluded_fields=["crossref_check", "crossref_retraction_check", "utitle", "usummary"],
 		bases=[ApiKeyHistoryMixin],
 		m2m_fields=["sources", "subjects", "teams"],
 	)
