@@ -33,7 +33,7 @@ class Command(BaseCommand):
 				& (Q(retracted=False) | Q(retracted__isnull=True))
 				& Q(kind="science paper")
 				& Q(published_date__lte=two_years_ago)
-				& Q(crossref_retraction_check__gt=thirty_days_ago)
+				& Q(crossref_retraction_check__gt=thirty_days_ago) | Q(crossref_retraction_check__isnull=True)
 			).distinct()
 			total_articles = articles_to_check.count()
 			self.stdout.write(
