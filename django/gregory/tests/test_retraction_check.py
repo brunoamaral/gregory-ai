@@ -231,6 +231,34 @@ class ArticleSelectionFilterTest(TestCase):
 		paper = self._run()
 		self.assertEqual(paper.refresh.call_count, 2)
 
+	def test_article_with_null_published_date_is_excluded(self):
+		# NULL <= two_years_ago evaluates to NULL (falsy) in SQL,
+		# so undated articles are silently skipped.
+		_make_article(doi="10.3000/nodatearticle", published_date=None)
+		# Override the default published_date by updating directly
+		Articles.objects.filter(doi="10.3000/nodatearticle").update(published_date=None)
+		paper = self._run()
+		paper.refresh.assert_not_called()
+
+	def test_stdout_reports_article_count_before_processing(self):
+		_make_article(doi="10.3000/count-a", crossref_retraction_check=None)
+		_make_article(doi="10.3000/count-b", crossref_retraction_check=None)
+		self._run()
+		self.assertIn("Found 2 articles to update", self.cmd.stdout.getvalue())
+
+	def test_crossref_failure_writes_warning_to_stdout(self):
+		_make_article(doi="10.3000/warn-doi", crossref_retraction_check=None)
+		mock_paper = MagicMock()
+		mock_paper.refresh.return_value = "CrossRef HTTP error: 503"
+		with patch(
+			"gregory.management.commands.retraction_check.SciencePaper",
+			return_value=mock_paper,
+		):
+			self.cmd.check_retraction_status()
+		out = self.cmd.stdout.getvalue()
+		self.assertIn("CrossRef lookup failed", out)
+		self.assertIn("10.3000/warn-doi", out)
+
 
 class CheckRetractionStatusWithDOITest(TestCase):
 	"""Tests for check_retraction_status when a specific DOI is supplied."""
