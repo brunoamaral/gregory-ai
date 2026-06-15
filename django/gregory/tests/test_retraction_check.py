@@ -157,7 +157,7 @@ class ArticleSelectionFilterTest(TestCase):
 	  - kind == "science paper"
 	  - retracted == False
 	  - published_date <= 2 years ago
-	  - crossref_retraction_check is NULL  OR  > 30 days ago (i.e. checked recently)
+	  - crossref_retraction_check is NULL  OR  within the last 30 days (crossref_retraction_check__gt=thirty_days_ago)
 
 	Note: the crossref_retraction_check condition uses __gt (checked within 30 days
 	OR never). Articles checked more than 30 days ago are excluded by this query.
