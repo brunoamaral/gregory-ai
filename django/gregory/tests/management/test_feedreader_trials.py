@@ -23,6 +23,7 @@ class FeedreaderTrialsCommandTest(TestCase):
 
 	def test_safe_change_reason_truncates_long_reason(self):
 		from gregory.utils.registry_utils import safe_change_reason
+
 		long_reason = "a" * 120
 		self.assertEqual(len(safe_change_reason(long_reason)), 100)
 		self.assertEqual(safe_change_reason("short"), "short")

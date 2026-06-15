@@ -6,7 +6,13 @@ from django.utils import timezone
 from gregory.classes import ClinicalTrial, EUTrialParser
 from gregory.functions import remove_utm
 from gregory.models import Trials, Sources
-from gregory.utils.registry_utils import identifiers_conflict, merge_links, canonical_link, merge_identifiers, safe_change_reason
+from gregory.utils.registry_utils import (
+	identifiers_conflict,
+	merge_links,
+	canonical_link,
+	merge_identifiers,
+	safe_change_reason,
+)
 import feedparser
 import pytz
 import requests

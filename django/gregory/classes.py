@@ -25,6 +25,7 @@ class SciencePaper:
 		self.abstract = abstract
 		self.authors = authors
 		self.retracted = retracted
+
 	def __str__(self):
 		return f"{self.doi}, {self.title}"
 
@@ -186,8 +187,7 @@ class SciencePaper:
 				updates = work.get("updated-by") or []
 				self.retracted = (
 					any(
-						isinstance(update, dict)
-						and update.get("type") == "retraction"
+						isinstance(update, dict) and update.get("type") == "retraction"
 						for update in updates
 					)
 					or None

@@ -24,7 +24,13 @@ from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import ClinicalTrialsGovAPI, ClinicalTrial
 from gregory.models import Trials, Sources
-from gregory.utils.registry_utils import identifiers_conflict, merge_links, canonical_link, merge_identifiers, safe_change_reason
+from gregory.utils.registry_utils import (
+	identifiers_conflict,
+	merge_links,
+	canonical_link,
+	merge_identifiers,
+	safe_change_reason,
+)
 
 
 class Command(BaseCommand):
