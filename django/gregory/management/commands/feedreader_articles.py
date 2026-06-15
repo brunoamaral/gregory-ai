@@ -1,5 +1,5 @@
 import logging
-from django.core.management.base import BaseCommand
+from gregory.management.base import GregoryBaseCommand
 from gregory.models import Articles, Sources, Authors
 from gregory.functions import normalize_orcid
 from crossref.restful import Works, Etiquette
@@ -439,7 +439,7 @@ class BaseSearchFeedProcessor(FeedProcessor):
 		return None
 
 
-class Command(BaseCommand):
+class Command(GregoryBaseCommand):
 	help = "Fetches and updates articles and trials from RSS feeds."
 
 	def __init__(self, *args, **kwargs):
@@ -455,28 +455,10 @@ class Command(BaseCommand):
 			BaseSearchFeedProcessor(self),
 			DefaultFeedProcessor(self),  # Always last as fallback
 		]
-		self.verbosity = 1  # Default verbosity level
 
 	def handle(self, *args, **options):
-		self.verbosity = options.get("verbosity", 1)
 		self.setup()
 		self.update_articles_from_feeds()
-
-	def log(self, message, level=2, style_func=None):
-		"""
-		Log a message if the verbosity level is high enough.
-
-		Levels:
-		0 = Silent
-		1 = Only main processing steps (feeds, sources)
-		2 = Detailed information (default for most messages)
-		3 = Debug information
-		"""
-		if self.verbosity >= level:
-			if style_func:
-				self.stdout.write(style_func(message))
-			else:
-				self.stdout.write(message)
 
 	def setup(self):
 		self.SITE = CustomSetting.objects.get(

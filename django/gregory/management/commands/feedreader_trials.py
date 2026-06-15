@@ -1,5 +1,5 @@
 from dateutil.parser import parse
-from django.core.management.base import BaseCommand
+from gregory.management.base import GregoryBaseCommand
 from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
@@ -18,32 +18,14 @@ import pytz
 import requests
 
 
-class Command(BaseCommand):
+class Command(GregoryBaseCommand):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		self.verbosity = 1  # Default verbosity level
 		self.eu_parser = EUTrialParser()
 
 	def handle(self, *args, **options):
-		self.verbosity = options.get("verbosity", 1)
 		self.setup()
 		self.process_feeds()
-
-	def log(self, message, level=2, style_func=None):
-		"""
-		Log a message if the verbosity level is high enough.
-
-		Levels:
-		0 = Silent
-		1 = Only main processing steps (feeds, sources)
-		2 = Detailed information (default for most messages)
-		3 = Debug information
-		"""
-		if self.verbosity >= level:
-			if style_func:
-				self.stdout.write(style_func(message))
-			else:
-				self.stdout.write(message)
 
 	def setup(self):
 		self.tzinfos = {

@@ -18,7 +18,7 @@ Usage:
 	python manage.py feedreader_trials_ctgov --verbosity=2
 """
 
-from django.core.management.base import BaseCommand
+from gregory.management.base import GregoryBaseCommand
 from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
@@ -33,12 +33,8 @@ from gregory.utils.registry_utils import (
 )
 
 
-class Command(BaseCommand):
+class Command(GregoryBaseCommand):
 	help = "Fetch clinical trials from ClinicalTrials.gov API sources"
-
-	def __init__(self, *args, **kwargs):
-		super().__init__(*args, **kwargs)
-		self.verbosity = 1
 
 	def add_arguments(self, parser):
 		parser.add_argument(
@@ -57,7 +53,6 @@ class Command(BaseCommand):
 		)
 
 	def handle(self, *args, **options):
-		self.verbosity = options.get("verbosity", 1)
 		max_results = options.get("max_results", 100)
 		source_id = options.get("source_id")
 		self.debug = options.get("debug", False)
@@ -80,22 +75,6 @@ class Command(BaseCommand):
 			return
 
 		self.process_sources(max_results=max_results, source_id=source_id)
-
-	def log(self, message, level=2, style_func=None):
-		"""
-		Log a message if the verbosity level is high enough.
-
-		Levels:
-		0 = Silent
-		1 = Only main processing steps (sources, summary)
-		2 = Detailed information (default for most messages)
-		3 = Debug information
-		"""
-		if self.verbosity >= level:
-			if style_func:
-				self.stdout.write(style_func(message))
-			else:
-				self.stdout.write(message)
 
 	def _print_trial_debug(self, clinical_trial):
 		"""Print detailed debug information for a clinical trial."""
