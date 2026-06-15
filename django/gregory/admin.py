@@ -2412,17 +2412,16 @@ class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 
 	def status_label(self, obj):
 		if obj.success is True:
-			return format_html(
-				'<span style="color: green; font-weight: bold;">Success</span>'
-			)
+			color, label = "green", "Success"
 		elif obj.success is False:
-			return format_html(
-				'<span style="color: red; font-weight: bold;">Failed</span>'
-			)
+			color, label = "red", "Failed"
 		else:
-			return format_html(
-				'<span style="color: orange; font-weight: bold;">Running</span>'
-			)
+			color, label = "orange", "Running"
+		return format_html(
+			'<span style="color: {}; font-weight: bold;">{}</span>',
+			color,
+			label,
+		)
 
 	status_label.short_description = "Status"
 
