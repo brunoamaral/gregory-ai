@@ -44,10 +44,10 @@ class Command(BaseCommand):
 			if article.doi:
 				paper = SciencePaper(doi=article.doi)
 				self.stdout.write(f"Checking article '{article.title}' (DOI: {article.doi}) for retraction status...")
-				paper.refresh()  # Initial refresh to get the latest data
+				refresh_result = paper.refresh()  # Initial refresh to get the latest data
 				# Refresh once per article
-				if self.is_crossref_failed(paper.refresh_result):
-					self.log(f"  ⚠️  CrossRef lookup failed for DOI {article.doi}: {paper.refresh_result}", level=2)
+				if self.is_crossref_failed(refresh_result):
+					self.stdout.write(f"  ⚠️  CrossRef lookup failed for DOI {article.doi}: {refresh_result}")
 					continue
 			else:
 				self.stdout.write(f"Empty DOI for article_id {article.id}")
