@@ -124,3 +124,19 @@ def canonical_link(links: dict | None, current_link: str | None) -> str | None:
 	if current_link:
 		return current_link
 	return next((links[key] for key in sorted(links) if links[key]), None)
+
+
+def merge_identifiers(
+	existing_identifiers: dict | None, new_identifiers: dict | None
+) -> dict:
+	"""Merge two trial identifier dicts, preserving existing non-empty values."""
+	merged = existing_identifiers.copy() if existing_identifiers else {}
+	for key, value in (new_identifiers or {}).items():
+		if value and (key not in merged or merged[key] is None):
+			merged[key] = value
+	return merged
+
+
+def safe_change_reason(reason: str) -> str:
+	"""Truncate a django-simple-history change reason to the 100-character DB limit."""
+	return reason[:100] if len(reason) > 100 else reason
