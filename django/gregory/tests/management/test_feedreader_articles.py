@@ -502,6 +502,7 @@ class TestCrossRefDataUpdates(TransactionTestCase):
 
 		# Make sure the class constructor returns our mock instance
 		mock_science_paper_class.return_value = mock_science_paper
+		mock_science_paper_class.is_crossref_failed.return_value = False
 
 		# Mock abstract cleaning - patch the class method directly
 		with patch(
@@ -588,6 +589,7 @@ class TestCrossRefDataUpdates(TransactionTestCase):
 		]
 		mock_science_paper.refresh.return_value = True
 		mock_science_paper_class.return_value = mock_science_paper
+		mock_science_paper_class.is_crossref_failed.return_value = False
 
 		# Mock abstract cleaning
 		with patch(
