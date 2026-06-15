@@ -9,7 +9,7 @@ from django.core.exceptions import MultipleObjectsReturned
 from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import SciencePaper
-from gregory.utils.link_utils import merge_links
+from gregory.utils.registry_utils import merge_links
 from sitesettings.models import CustomSetting
 import feedparser
 import gregory.functions as greg
@@ -603,7 +603,7 @@ class Command(BaseCommand):
 		# Process authors if:
 		# 1. CrossRef data is available AND
 		# 2. (Article was created OR CrossRef data was updated for existing article)
-		if self.is_crossref_successful(refresh_result) and (
+		if not SciencePaper.is_crossref_failed(refresh_result) and (
 			created or crossref_was_updated
 		):
 			self.log(
@@ -645,7 +645,7 @@ class Command(BaseCommand):
 		doi: str,
 	) -> dict:
 		"""Get article data based on CrossRef lookup results."""
-		if self.is_crossref_failed(refresh_result):
+		if SciencePaper.is_crossref_failed(refresh_result):
 			self.log(
 				f"  ⚠️  CrossRef lookup failed for DOI {doi}: {refresh_result}", level=2
 			)
@@ -682,17 +682,6 @@ class Command(BaseCommand):
 				"access": crossref_paper.access,
 				"crossref_check": timezone.now(),
 			}
-
-	def is_crossref_failed(self, refresh_result) -> bool:
-		"""Check if CrossRef refresh failed."""
-		return isinstance(refresh_result, str) and any(
-			keyword in refresh_result.lower()
-			for keyword in ["error", "not found", "json decode"]
-		)
-
-	def is_crossref_successful(self, refresh_result) -> bool:
-		"""Check if CrossRef refresh was successful."""
-		return not self.is_crossref_failed(refresh_result)
 
 	def create_or_update_article(
 		self,

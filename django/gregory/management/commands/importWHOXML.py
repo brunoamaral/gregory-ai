@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand
 from django.db import IntegrityError
 from django.utils import timezone
 from gregory.models import Trials, Sources
-from gregory.utils.link_utils import identifiers_conflict, merge_links, canonical_link
+from gregory.utils.registry_utils import identifiers_conflict, merge_links, canonical_link
 import datetime
 import xml.etree.ElementTree as ET
 import pytz

@@ -228,6 +228,14 @@ class SciencePaper:
 					if i == 5:
 						return None
 
+	@staticmethod
+	def is_crossref_failed(refresh_result) -> bool:
+		"""Return True if a CrossRef refresh() call returned an error string."""
+		return isinstance(refresh_result, str) and any(
+			keyword in refresh_result.lower()
+			for keyword in ["error", "not found", "json decode"]
+		)
+
 
 class ClinicalTrial:
 	def __init__(

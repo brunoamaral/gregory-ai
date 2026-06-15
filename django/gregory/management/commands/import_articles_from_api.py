@@ -13,7 +13,7 @@ from gregory.models import (
 	ArticleSubjectRelevance,
 	ArticleOrgContent,
 )
-from gregory.utils.link_utils import merge_links
+from gregory.utils.registry_utils import merge_links
 
 
 class Command(BaseCommand):

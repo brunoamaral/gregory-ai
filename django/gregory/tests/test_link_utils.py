@@ -1,10 +1,10 @@
 """
-Unit tests for gregory.utils.link_utils — identifiers_conflict truth table.
+Unit tests for gregory.utils.registry_utils — identifiers_conflict truth table.
 
 These tests have no database dependency.
 
 Run:
-  docker exec gregory python manage.py test gregory.tests.test_link_utils
+  docker exec gregory python manage.py test gregory.tests.test_registry_utils
 """
 
 import os
@@ -14,7 +14,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gregory.tests.test_settings")
 django.setup()
 
 from django.test import SimpleTestCase
-from gregory.utils.link_utils import _norm, identifiers_conflict
+from gregory.utils.registry_utils import _norm, identifiers_conflict
 
 
 class NormTest(SimpleTestCase):
