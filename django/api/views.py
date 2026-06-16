@@ -55,7 +55,7 @@ from api.utils.utils import (
 	getIPAddress,
 	find_trial_by_identifier,
 )
-from gregory.utils.link_utils import merge_links
+from gregory.utils.registry_utils import merge_links
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 	APIAccessDeniedError,

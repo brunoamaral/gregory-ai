@@ -18,21 +18,23 @@ Usage:
 	python manage.py feedreader_trials_ctgov --verbosity=2
 """
 
-from django.core.management.base import BaseCommand
+from gregory.management.base import GregoryBaseCommand
 from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import ClinicalTrialsGovAPI, ClinicalTrial
 from gregory.models import Trials, Sources
-from gregory.utils.link_utils import identifiers_conflict, merge_links, canonical_link
+from gregory.utils.registry_utils import (
+	identifiers_conflict,
+	merge_links,
+	canonical_link,
+	merge_identifiers,
+	safe_change_reason,
+)
 
 
-class Command(BaseCommand):
+class Command(GregoryBaseCommand):
 	help = "Fetch clinical trials from ClinicalTrials.gov API sources"
-
-	def __init__(self, *args, **kwargs):
-		super().__init__(*args, **kwargs)
-		self.verbosity = 1
 
 	def add_arguments(self, parser):
 		parser.add_argument(
@@ -51,7 +53,6 @@ class Command(BaseCommand):
 		)
 
 	def handle(self, *args, **options):
-		self.verbosity = options.get("verbosity", 1)
 		max_results = options.get("max_results", 100)
 		source_id = options.get("source_id")
 		self.debug = options.get("debug", False)
@@ -74,26 +75,6 @@ class Command(BaseCommand):
 			return
 
 		self.process_sources(max_results=max_results, source_id=source_id)
-
-	def log(self, message, level=2, style_func=None):
-		"""
-		Log a message if the verbosity level is high enough.
-
-		Levels:
-		0 = Silent
-		1 = Only main processing steps (sources, summary)
-		2 = Detailed information (default for most messages)
-		3 = Debug information
-		"""
-		if self.verbosity >= level:
-			if style_func:
-				self.stdout.write(style_func(message))
-			else:
-				self.stdout.write(message)
-
-	def _safe_change_reason(self, reason: str) -> str:
-		"""Truncate change reason to fit within 100 character database limit."""
-		return reason[:100] if len(reason) > 100 else reason
 
 	def _print_trial_debug(self, clinical_trial):
 		"""Print detailed debug information for a clinical trial."""
@@ -364,7 +345,7 @@ class Command(BaseCommand):
 
 			if trial:
 				trial.sources.add(source)
-				trial._change_reason = self._safe_change_reason(
+				trial._change_reason = safe_change_reason(
 					f"Created from ClinicalTrials.gov API Source: {source.name}"
 				)
 				trial.save()
@@ -378,7 +359,7 @@ class Command(BaseCommand):
 					)
 				if source.subject:
 					trial.subjects.add(source.subject)
-				trial._change_reason = self._safe_change_reason(
+				trial._change_reason = safe_change_reason(
 					f"Added relationships Team: {source.team} Subject: {source.subject}"
 				)
 				trial.save()
@@ -431,7 +412,7 @@ class Command(BaseCommand):
 			updated_fields.append("published_date")
 
 		# Update identifiers (merge)
-		merged_identifiers = self.merge_identifiers(
+		merged_identifiers = merge_identifiers(
 			existing_trial.identifiers, clinical_trial.identifiers
 		)
 		if merged_identifiers != existing_trial.identifiers:
@@ -512,7 +493,7 @@ class Command(BaseCommand):
 
 		# Save if changes were detected
 		if has_changes:
-			existing_trial._change_reason = self._safe_change_reason(
+			existing_trial._change_reason = safe_change_reason(
 				f"Updated from {source.name}: {', '.join(updated_fields[:3])}"
 			)
 			existing_trial.save()
@@ -520,31 +501,21 @@ class Command(BaseCommand):
 		# Handle relationships
 		if source.subject and source.subject not in existing_trial.subjects.all():
 			existing_trial.subjects.add(source.subject)
-			existing_trial._change_reason = self._safe_change_reason(
+			existing_trial._change_reason = safe_change_reason(
 				f"Added subject: {source.subject}"
 			)
 			existing_trial.save()
 
 		if source not in existing_trial.sources.all():
 			existing_trial.sources.add(source)
-			existing_trial._change_reason = self._safe_change_reason(
+			existing_trial._change_reason = safe_change_reason(
 				f"Added source: {source.name}"
 			)
 			existing_trial.save()
 
 		if source.team and source.team not in existing_trial.teams.all():
 			existing_trial.teams.add(source.team)
-			existing_trial._change_reason = self._safe_change_reason(
+			existing_trial._change_reason = safe_change_reason(
 				f"Added team: {source.team}"
 			)
 			existing_trial.save()
-
-	def merge_identifiers(
-		self, existing_identifiers: dict, new_identifiers: dict
-	) -> dict:
-		"""Merge existing and new identifiers, preserving existing values."""
-		merged = existing_identifiers.copy() if existing_identifiers else {}
-		for key, value in (new_identifiers or {}).items():
-			if value and (key not in merged or merged[key] is None):
-				merged[key] = value
-		return merged

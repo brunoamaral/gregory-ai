@@ -1,5 +1,5 @@
 import logging
-from django.core.management.base import BaseCommand
+from gregory.management.base import GregoryBaseCommand
 from gregory.models import Articles, Sources, Authors
 from gregory.functions import normalize_orcid
 from crossref.restful import Works, Etiquette
@@ -9,7 +9,7 @@ from django.core.exceptions import MultipleObjectsReturned
 from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import SciencePaper
-from gregory.utils.link_utils import merge_links
+from gregory.utils.registry_utils import merge_links
 from sitesettings.models import CustomSetting
 import feedparser
 import gregory.functions as greg
@@ -439,7 +439,7 @@ class BaseSearchFeedProcessor(FeedProcessor):
 		return None
 
 
-class Command(BaseCommand):
+class Command(GregoryBaseCommand):
 	help = "Fetches and updates articles and trials from RSS feeds."
 
 	def __init__(self, *args, **kwargs):
@@ -455,28 +455,10 @@ class Command(BaseCommand):
 			BaseSearchFeedProcessor(self),
 			DefaultFeedProcessor(self),  # Always last as fallback
 		]
-		self.verbosity = 1  # Default verbosity level
 
 	def handle(self, *args, **options):
-		self.verbosity = options.get("verbosity", 1)
 		self.setup()
 		self.update_articles_from_feeds()
-
-	def log(self, message, level=2, style_func=None):
-		"""
-		Log a message if the verbosity level is high enough.
-
-		Levels:
-		0 = Silent
-		1 = Only main processing steps (feeds, sources)
-		2 = Detailed information (default for most messages)
-		3 = Debug information
-		"""
-		if self.verbosity >= level:
-			if style_func:
-				self.stdout.write(style_func(message))
-			else:
-				self.stdout.write(message)
 
 	def setup(self):
 		self.SITE = CustomSetting.objects.get(
@@ -603,7 +585,7 @@ class Command(BaseCommand):
 		# Process authors if:
 		# 1. CrossRef data is available AND
 		# 2. (Article was created OR CrossRef data was updated for existing article)
-		if self.is_crossref_successful(refresh_result) and (
+		if not SciencePaper.is_crossref_failed(refresh_result) and (
 			created or crossref_was_updated
 		):
 			self.log(
@@ -645,7 +627,7 @@ class Command(BaseCommand):
 		doi: str,
 	) -> dict:
 		"""Get article data based on CrossRef lookup results."""
-		if self.is_crossref_failed(refresh_result):
+		if SciencePaper.is_crossref_failed(refresh_result):
 			self.log(
 				f"  ⚠️  CrossRef lookup failed for DOI {doi}: {refresh_result}", level=2
 			)
@@ -682,17 +664,6 @@ class Command(BaseCommand):
 				"access": crossref_paper.access,
 				"crossref_check": timezone.now(),
 			}
-
-	def is_crossref_failed(self, refresh_result) -> bool:
-		"""Check if CrossRef refresh failed."""
-		return isinstance(refresh_result, str) and any(
-			keyword in refresh_result.lower()
-			for keyword in ["error", "not found", "json decode"]
-		)
-
-	def is_crossref_successful(self, refresh_result) -> bool:
-		"""Check if CrossRef refresh was successful."""
-		return not self.is_crossref_failed(refresh_result)
 
 	def create_or_update_article(
 		self,

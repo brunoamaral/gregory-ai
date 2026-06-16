@@ -1,53 +1,37 @@
 from dateutil.parser import parse
-from django.core.management.base import BaseCommand
+from gregory.management.base import GregoryBaseCommand
 from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import ClinicalTrial, EUTrialParser
 from gregory.functions import remove_utm
 from gregory.models import Trials, Sources
-from gregory.utils.link_utils import identifiers_conflict, merge_links, canonical_link
+from gregory.utils.registry_utils import (
+	identifiers_conflict,
+	merge_links,
+	canonical_link,
+	merge_identifiers,
+	safe_change_reason,
+)
 import feedparser
 import pytz
 import requests
 
 
-class Command(BaseCommand):
+class Command(GregoryBaseCommand):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		self.verbosity = 1  # Default verbosity level
 		self.eu_parser = EUTrialParser()
 
 	def handle(self, *args, **options):
-		self.verbosity = options.get("verbosity", 1)
 		self.setup()
 		self.process_feeds()
-
-	def log(self, message, level=2, style_func=None):
-		"""
-		Log a message if the verbosity level is high enough.
-
-		Levels:
-		0 = Silent
-		1 = Only main processing steps (feeds, sources)
-		2 = Detailed information (default for most messages)
-		3 = Debug information
-		"""
-		if self.verbosity >= level:
-			if style_func:
-				self.stdout.write(style_func(message))
-			else:
-				self.stdout.write(message)
 
 	def setup(self):
 		self.tzinfos = {
 			"EDT": pytz.timezone("America/New_York"),
 			"EST": pytz.timezone("America/New_York"),
 		}
-
-	def _safe_change_reason(self, reason: str) -> str:
-		"""Truncate change reason to fit within 100 character database limit."""
-		return reason[:100] if len(reason) > 100 else reason
 
 	def process_feeds(self):
 		"""Fetch and process RSS feeds for clinical trials."""
@@ -196,7 +180,7 @@ class Command(BaseCommand):
 			)
 			if trial:
 				trial.sources.add(source)
-				trial._change_reason = self._safe_change_reason(
+				trial._change_reason = safe_change_reason(
 					f"Created from Source: {source.name} ({source.source_id})"
 				)
 				trial.save()
@@ -210,7 +194,7 @@ class Command(BaseCommand):
 					)
 				if source.subject:
 					trial.subjects.add(source.subject)
-				trial._change_reason = self._safe_change_reason(
+				trial._change_reason = safe_change_reason(
 					f"Added relationships Team: {source.team}  Subject:{source.subject}"
 				)
 				trial.save()
@@ -249,7 +233,7 @@ class Command(BaseCommand):
 			updated_fields.append("published_date")
 
 		# Update identifiers
-		merged_identifiers = self.merge_identifiers(
+		merged_identifiers = merge_identifiers(
 			existing_trial.identifiers, clinical_trial.identifiers
 		)
 		if merged_identifiers != existing_trial.identifiers:
@@ -327,7 +311,7 @@ class Command(BaseCommand):
 
 		# Save only if changes were detected
 		if has_changes:
-			existing_trial._change_reason = self._safe_change_reason(
+			existing_trial._change_reason = safe_change_reason(
 				f"Updated fields from {source.name} ({source.source_id}): {', '.join(updated_fields)}"
 			)
 			existing_trial.save()
@@ -335,31 +319,21 @@ class Command(BaseCommand):
 		# Handle source, team, and subjects additions (relationships)
 		if source.subject and source.subject not in existing_trial.subjects.all():
 			existing_trial.subjects.add(source.subject)
-			existing_trial._change_reason = self._safe_change_reason(
+			existing_trial._change_reason = safe_change_reason(
 				f"Added subject: {source.subject}"
 			)
 			existing_trial.save()
 
 		if source not in existing_trial.sources.all():
 			existing_trial.sources.add(source)
-			existing_trial._change_reason = self._safe_change_reason(
+			existing_trial._change_reason = safe_change_reason(
 				f"Added new source: {source.name} ({source.source_id})"
 			)
 			existing_trial.save()
 
 		if source.team and source.team not in existing_trial.teams.all():
 			existing_trial.teams.add(source.team)
-			existing_trial._change_reason = self._safe_change_reason(
+			existing_trial._change_reason = safe_change_reason(
 				f"Added team: {source.team}"
 			)
 			existing_trial.save()
-
-	def merge_identifiers(
-		self, existing_identifiers: dict, new_identifiers: dict
-	) -> dict:
-		"""Merge existing and new identifiers."""
-		merged = existing_identifiers.copy() if existing_identifiers else {}
-		for key, value in new_identifiers.items():
-			if value and (key not in merged or merged[key] is None):
-				merged[key] = value
-		return merged

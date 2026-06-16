@@ -22,10 +22,11 @@ class FeedreaderTrialsCommandTest(TestCase):
 		mock_process.assert_called_once()
 
 	def test_safe_change_reason_truncates_long_reason(self):
-		cmd = Command()
+		from gregory.utils.registry_utils import safe_change_reason
+
 		long_reason = "a" * 120
-		self.assertEqual(len(cmd._safe_change_reason(long_reason)), 100)
-		self.assertEqual(cmd._safe_change_reason("short"), "short")
+		self.assertEqual(len(safe_change_reason(long_reason)), 100)
+		self.assertEqual(safe_change_reason("short"), "short")
 
 	def test_parse_date_returns_utc_datetime(self):
 		cmd = Command()

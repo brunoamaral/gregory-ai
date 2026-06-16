@@ -460,7 +460,12 @@ class Articles(models.Model):
 	)
 	crossref_check = models.DateTimeField(blank=True, null=True)
 	history = HistoricalRecords(
-		excluded_fields=["crossref_check", "crossref_retraction_check", "utitle", "usummary"],
+		excluded_fields=[
+			"crossref_check",
+			"crossref_retraction_check",
+			"utitle",
+			"usummary",
+		],
 		bases=[ApiKeyHistoryMixin],
 		m2m_fields=["sources", "subjects", "teams"],
 	)
@@ -471,13 +476,16 @@ class Articles(models.Model):
 		"Team", related_name="articles"
 	)  # Allows an article to belong to one or more teams
 	retracted = models.BooleanField(
-		default=False, 
-		db_index=True, 
-		help_text="Whether the article has been retracted. Used for filtering and display purposes."
-		)
-	crossref_retraction_check = models.DateTimeField(
-		blank=True, null=True, help_text="Timestamp of the last CrossRef retraction check."
+		default=False,
+		db_index=True,
+		help_text="Whether the article has been retracted. Used for filtering and display purposes.",
 	)
+	crossref_retraction_check = models.DateTimeField(
+		blank=True,
+		null=True,
+		help_text="Timestamp of the last CrossRef retraction check.",
+	)
+
 	def is_ml_relevant_for_subject(self, subject, threshold=0.8):
 		"""
 		Check if this article is ML-relevant for a specific subject based on the subject's consensus type
@@ -575,7 +583,7 @@ class Trials(models.Model):
 	# All known registry URLs for this trial, keyed by registry slug (e.g.
 	# {"ctgov": "https://clinicaltrials.gov/study/NCT…", "ctis": "…"}). ``link``
 	# holds the canonical one: the first registry URL discovered, kept for good
-	# (see gregory.utils.link_utils.canonical_link) so importers running later
+	# (see gregory.utils.registry_utils.canonical_link) so importers running later
 	# can no longer overwrite it.
 	links = models.JSONField(
 		blank=True,

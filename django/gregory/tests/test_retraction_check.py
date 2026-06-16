@@ -14,6 +14,7 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
+from gregory.classes import SciencePaper
 from gregory.management.commands.retraction_check import Command
 from gregory.models import Articles
 
@@ -48,36 +49,33 @@ def _make_article(
 
 
 class IsCrossrefFailedTest(TestCase):
-	"""Unit tests for Command.is_crossref_failed."""
-
-	def setUp(self):
-		self.cmd = Command()
+	"""Unit tests for SciencePaper.is_crossref_failed."""
 
 	def test_error_keyword_returns_true(self):
-		self.assertTrue(self.cmd.is_crossref_failed("CrossRef HTTP error: 500"))
+		self.assertTrue(SciencePaper.is_crossref_failed("CrossRef HTTP error: 500"))
 
 	def test_not_found_keyword_returns_true(self):
-		self.assertTrue(self.cmd.is_crossref_failed("DOI not found"))
+		self.assertTrue(SciencePaper.is_crossref_failed("DOI not found"))
 
 	def test_json_decode_keyword_returns_true(self):
-		self.assertTrue(self.cmd.is_crossref_failed("JSON decode error"))
+		self.assertTrue(SciencePaper.is_crossref_failed("JSON decode error"))
 
 	def test_matching_is_case_insensitive(self):
-		self.assertTrue(self.cmd.is_crossref_failed("ERROR: something bad"))
-		self.assertTrue(self.cmd.is_crossref_failed("Not Found in registry"))
-		self.assertTrue(self.cmd.is_crossref_failed("Json Decode issue"))
+		self.assertTrue(SciencePaper.is_crossref_failed("ERROR: something bad"))
+		self.assertTrue(SciencePaper.is_crossref_failed("Not Found in registry"))
+		self.assertTrue(SciencePaper.is_crossref_failed("Json Decode issue"))
 
 	def test_returns_false_for_none(self):
-		self.assertFalse(self.cmd.is_crossref_failed(None))
+		self.assertFalse(SciencePaper.is_crossref_failed(None))
 
 	def test_returns_false_for_non_string_types(self):
-		self.assertFalse(self.cmd.is_crossref_failed(404))
-		self.assertFalse(self.cmd.is_crossref_failed({"status": "error"}))
-		self.assertFalse(self.cmd.is_crossref_failed(["error"]))
+		self.assertFalse(SciencePaper.is_crossref_failed(404))
+		self.assertFalse(SciencePaper.is_crossref_failed({"status": "error"}))
+		self.assertFalse(SciencePaper.is_crossref_failed(["error"]))
 
 	def test_returns_false_for_unrelated_string(self):
-		self.assertFalse(self.cmd.is_crossref_failed("ok"))
-		self.assertFalse(self.cmd.is_crossref_failed(""))
+		self.assertFalse(SciencePaper.is_crossref_failed("ok"))
+		self.assertFalse(SciencePaper.is_crossref_failed(""))
 
 
 class CompareRetractionTest(TestCase):
@@ -174,7 +172,8 @@ class ArticleSelectionFilterTest(TestCase):
 		with patch(
 			"gregory.management.commands.retraction_check.SciencePaper",
 			return_value=mock_paper,
-		):
+		) as MockSP:
+			MockSP.is_crossref_failed.side_effect = SciencePaper.is_crossref_failed
 			self.cmd.check_retraction_status()
 		return mock_paper
 
@@ -253,7 +252,8 @@ class ArticleSelectionFilterTest(TestCase):
 		with patch(
 			"gregory.management.commands.retraction_check.SciencePaper",
 			return_value=mock_paper,
-		):
+		) as MockSP:
+			MockSP.is_crossref_failed.side_effect = SciencePaper.is_crossref_failed
 			self.cmd.check_retraction_status()
 		out = self.cmd.stdout.getvalue()
 		self.assertIn("CrossRef lookup failed", out)
@@ -275,6 +275,7 @@ class CheckRetractionStatusWithDOITest(TestCase):
 			"gregory.management.commands.retraction_check.SciencePaper",
 			return_value=mock_paper,
 		) as MockSP:
+			MockSP.is_crossref_failed.side_effect = SciencePaper.is_crossref_failed
 			self.cmd.check_retraction_status(doi=doi)
 		return mock_paper, MockSP
 
@@ -339,6 +340,7 @@ class HandleCommandTest(TestCase):
 			mock_paper.refresh.return_value = mock_crossref_result
 			mock_paper.retracted = mock_retracted
 			MockSP.return_value = mock_paper
+			MockSP.is_crossref_failed.side_effect = SciencePaper.is_crossref_failed
 			call_command("retraction_check", stdout=out, **kwargs)
 		return out.getvalue(), MockSP
 

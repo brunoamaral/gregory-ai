@@ -25,6 +25,7 @@ class SciencePaper:
 		self.abstract = abstract
 		self.authors = authors
 		self.retracted = retracted
+
 	def __str__(self):
 		return f"{self.doi}, {self.title}"
 
@@ -186,8 +187,7 @@ class SciencePaper:
 				updates = work.get("updated-by") or []
 				self.retracted = (
 					any(
-						isinstance(update, dict)
-						and update.get("type") == "retraction"
+						isinstance(update, dict) and update.get("type") == "retraction"
 						for update in updates
 					)
 					or None
@@ -227,6 +227,14 @@ class SciencePaper:
 					i += 1
 					if i == 5:
 						return None
+
+	@staticmethod
+	def is_crossref_failed(refresh_result) -> bool:
+		"""Return True if a CrossRef refresh() call returned an error string."""
+		return isinstance(refresh_result, str) and any(
+			keyword in refresh_result.lower()
+			for keyword in ["error", "not found", "json decode"]
+		)
 
 
 class ClinicalTrial:
