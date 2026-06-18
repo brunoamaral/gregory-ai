@@ -1,5 +1,31 @@
 from django.conf import settings
 from django.core.cache import cache
+from django.db.models import F
+from rest_framework.filters import OrderingFilter as _BaseOrderingFilter
+
+
+class NullsLastOrderingFilter(_BaseOrderingFilter):
+	"""OrderingFilter that forces NULLS LAST for fields listed in nulls_last_fields."""
+
+	nulls_last_fields = frozenset({"ml_score"})
+
+	def filter_queryset(self, request, queryset, view):
+		ordering = self.get_ordering(request, queryset, view)
+		if not ordering:
+			return queryset
+		processed = []
+		for term in ordering:
+			field = term.lstrip("-")
+			if field in self.nulls_last_fields:
+				expr = (
+					F(field).desc(nulls_last=True)
+					if term.startswith("-")
+					else F(field).asc(nulls_last=True)
+				)
+				processed.append(expr)
+			else:
+				processed.append(term)
+		return queryset.order_by(*processed)
 from api.serializers import (
 	ArticleSerializer,
 	TrialSerializer,
@@ -880,7 +906,7 @@ class ArticleViewSet(
 	- **journal_slug** - filter by journal (convert spaces to dashes)
 	- **source_id** - filter by source ID
 	- **search** - search in title and summary
-	- **ordering** - order results by field (e.g., -published_date, title)
+	- **ordering** - sort field, prefix with `-` for descending. Allowed values: `discovery_date`, `published_date`, `title`, `article_id`, `ml_score`. Articles without a score always appear last when ordering by `ml_score`.
 	- **page** - page number for pagination
 	- **page_size** - items per page (max 100)
 	- **all_results** - set to 'true' to bypass pagination and get all results (useful for CSV export)
@@ -899,6 +925,10 @@ class ArticleViewSet(
 	- **published_date_after** - articles published on or after this date (YYYY-MM-DD, inclusive)
 	- **published_date_before** - articles published on or before this date (YYYY-MM-DD, inclusive — the full day is included)
 
+	# Response Fields:
+	Each article includes a **ml_score** field: the average ML probability score across the most recent
+	prediction per (algorithm, subject) pair. `null` when no predictions exist yet.
+
 	# Examples:
 	- By DOI: `/articles/?doi=10.1016/j.procs.2023.01.401`
 	- Team articles: `/articles/?team_id=1`
@@ -916,7 +946,9 @@ class ArticleViewSet(
 	- Published since a date: `/articles/?published_date_after=2024-01-01`
 	- Date range + subject + CSV: `/articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&published_date_before=2023-12-31&format=csv&all_results=true`
 	- CSV export all results: `/articles/?format=csv&all_results=true`
-	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&relevant=true&ml_threshold=0.8&ordering=-published_date`
+	- Sort by AI relevance: `/articles/?ordering=-ml_score`
+	- Relevant + AI relevance sort: `/articles/?relevant=true&ordering=-ml_score`
+	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&relevant=true&ml_threshold=0.8&ordering=-ml_score`
 	"""
 
 	queryset = Articles.objects.all().order_by("-discovery_date")
@@ -926,11 +958,11 @@ class ArticleViewSet(
 	filter_backends = [
 		django_filters.DjangoFilterBackend,
 		filters.SearchFilter,
-		filters.OrderingFilter,
+		NullsLastOrderingFilter,
 	]
 	filterset_class = ArticleFilter
 	search_fields = ["title", "summary"]
-	ordering_fields = ["discovery_date", "published_date", "title", "article_id"]
+	ordering_fields = ["discovery_date", "published_date", "title", "article_id", "ml_score"]
 	ordering = ["-discovery_date"]
 
 	def get_queryset(self):

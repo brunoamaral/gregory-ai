@@ -59,3 +59,31 @@ def create_organization_api_settings(sender, instance, created, **kwargs):
 		from gregory.models import OrganizationApiSettings
 
 		OrganizationApiSettings.objects.get_or_create(organization=instance)
+
+
+@receiver(post_save, sender="gregory.MLPredictions")
+def update_article_ml_score(sender, instance, **kwargs):
+	"""Recompute ml_score on the parent article after a prediction is saved.
+
+	Takes the most recent prediction per (algorithm, subject) pair, then stores
+	their average probability on the article for fast API ordering.
+	Uses .update() to avoid bumping Articles.last_updated.
+	"""
+	if instance.article_id is None:
+		return
+	from gregory.models import Articles, MLPredictions
+
+	# distinct(fields) + aggregate() is not supported by Django ORM, so
+	# materialise the scores for the latest prediction per (algorithm, subject)
+	# pair and average in Python. The list is tiny (≤ algorithms × subjects).
+	scores = list(
+		MLPredictions.objects.filter(
+			article_id=instance.article_id,
+			probability_score__isnull=False,
+		)
+		.order_by("algorithm", "subject_id", "-created_date")
+		.distinct("algorithm", "subject_id")
+		.values_list("probability_score", flat=True)
+	)
+	score = sum(scores) / len(scores) if scores else None
+	Articles.objects.filter(article_id=instance.article_id).update(ml_score=score)
