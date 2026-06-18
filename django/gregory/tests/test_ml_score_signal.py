@@ -156,6 +156,45 @@ class MlScoreSignalTestCase(TestCase):
 		self._refresh()
 		self.assertIsNone(self.article.ml_score)
 
+	def test_delete_prediction_recomputes_score(self):
+		"""Deleting a prediction triggers recompute, not a stale value."""
+		pred = MLPredictions.objects.create(
+			article=self.article,
+			subject=self.subject_a,
+			algorithm="pubmed_bert",
+			model_version="v1",
+			probability_score=0.8,
+		)
+		self._refresh()
+		self.assertAlmostEqual(self.article.ml_score, 0.8, places=5)
+
+		pred.delete()
+		self._refresh()
+		self.assertIsNone(self.article.ml_score)
+
+	def test_delete_one_of_two_predictions_recomputes(self):
+		"""Deleting one algorithm's prediction averages the remaining one."""
+		pred_bert = MLPredictions.objects.create(
+			article=self.article,
+			subject=self.subject_a,
+			algorithm="pubmed_bert",
+			model_version="v1",
+			probability_score=0.6,
+		)
+		MLPredictions.objects.create(
+			article=self.article,
+			subject=self.subject_a,
+			algorithm="lgbm_tfidf",
+			model_version="v1",
+			probability_score=0.8,
+		)
+		self._refresh()
+		self.assertAlmostEqual(self.article.ml_score, 0.7, places=5)
+
+		pred_bert.delete()
+		self._refresh()
+		self.assertAlmostEqual(self.article.ml_score, 0.8, places=5)
+
 
 class BackfillMlScoresCommandTestCase(TestCase):
 	"""backfill_ml_scores management command."""
