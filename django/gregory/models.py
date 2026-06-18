@@ -465,6 +465,7 @@ class Articles(models.Model):
 			"crossref_retraction_check",
 			"utitle",
 			"usummary",
+			"ml_score",
 		],
 		bases=[ApiKeyHistoryMixin],
 		m2m_fields=["sources", "subjects", "teams"],
@@ -484,6 +485,13 @@ class Articles(models.Model):
 		blank=True,
 		null=True,
 		help_text="Timestamp of the last CrossRef retraction check.",
+	)
+	ml_score = models.FloatField(
+		null=True,
+		blank=True,
+		default=None,
+		db_index=True,
+		help_text="Average ML probability score across the latest prediction per (algorithm, subject) pair. Updated automatically when predictions are saved.",
 	)
 
 	def is_ml_relevant_for_subject(self, subject, threshold=0.8):

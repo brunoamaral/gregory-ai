@@ -2,7 +2,7 @@ from simple_history.signals import (
 	post_create_historical_record,
 	pre_create_historical_record,
 )
-from django.db.models.signals import post_save
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from organizations.models import Organization
 
@@ -59,3 +59,40 @@ def create_organization_api_settings(sender, instance, created, **kwargs):
 		from gregory.models import OrganizationApiSettings
 
 		OrganizationApiSettings.objects.get_or_create(organization=instance)
+
+
+def _recompute_article_ml_score(article_id):
+	"""Recompute and persist ml_score for the given article.
+
+	Averages the most recent probability_score per (algorithm, subject) pair.
+	Uses .update() to avoid bumping Articles.last_updated.
+	distinct(fields) + aggregate() is unsupported by the Django ORM, so scores
+	are materialised and averaged in Python — the list is tiny (≤ algorithms × subjects).
+	"""
+	from gregory.models import Articles, MLPredictions
+
+	scores = list(
+		MLPredictions.objects.filter(
+			article_id=article_id,
+			probability_score__isnull=False,
+		)
+		.order_by("algorithm", "subject_id", "-created_date")
+		.distinct("algorithm", "subject_id")
+		.values_list("probability_score", flat=True)
+	)
+	score = sum(scores) / len(scores) if scores else None
+	Articles.objects.filter(article_id=article_id).update(ml_score=score)
+
+
+@receiver(post_save, sender="gregory.MLPredictions")
+def update_article_ml_score_on_save(sender, instance, **kwargs):
+	"""Recompute ml_score when a prediction is created or updated."""
+	if instance.article_id is not None:
+		_recompute_article_ml_score(instance.article_id)
+
+
+@receiver(post_delete, sender="gregory.MLPredictions")
+def update_article_ml_score_on_delete(sender, instance, **kwargs):
+	"""Recompute ml_score when a prediction is deleted."""
+	if instance.article_id is not None:
+		_recompute_article_ml_score(instance.article_id)

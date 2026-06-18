@@ -455,9 +455,10 @@ class ArticleSerializer(
 			"takeaways",
 			"team_categories",
 			"ml_predictions",
+			"ml_score",
 			"clinical_trials",
 		]
-		read_only_fields = ("discovery_date", "ml_predictions", "clinical_trials")
+		read_only_fields = ("discovery_date", "ml_predictions", "ml_score", "clinical_trials")
 
 	def get_clinical_trials(self, obj):
 		"""Get trials referenced in the article"""
