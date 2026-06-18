@@ -116,6 +116,8 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `last_days` | integer | Articles from the last N days |
 | `week` | integer 1–52 | Filter by week number (requires `year`) |
 | `year` | integer | Year for week filtering |
+| `published_date_after` | date (YYYY-MM-DD) | Articles published on or after this date (inclusive). Returns 400 for invalid dates. |
+| `published_date_before` | date (YYYY-MM-DD) | Articles published on or before this date (inclusive — the full day is included). Returns 400 for invalid dates. |
 | `ordering` | string | Order results (e.g., `-published_date`, `title`) |
 | `page` | integer | Page number |
 | `page_size` | integer | Items per page (max 100) |
@@ -131,6 +133,8 @@ GET /articles/?relevant=true&last_days=15
 GET /articles/?team_id=1&search=stem+cells
 GET /articles/?format=csv&all_results=true
 GET /articles/?has_clinical_trials=true
+GET /articles/?published_date_after=2023-01-01&published_date_before=2023-12-31
+GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv&all_results=true
 ```
 
 ---
@@ -139,7 +143,7 @@ GET /articles/?has_clinical_trials=true
 
 | Model | Endpoint | Parameters | Notes |
 |:------|:---------|:-----------|:------|
-| Articles | `GET /articles/` | `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `unsent`, `last_days`, `week`, `year`, `has_clinical_trials`, pagination | |
+| Articles | `GET /articles/` | `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `unsent`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
 | Articles | `POST /articles/post/` | `title`, `link`, `doi`, `summary`, `source_id`, `kind` | Create article — see [response codes below](#post-articlespost-response-codes) |
 | Articles | `GET /articles/{id}/` | `id` (path) | |
 | Articles | `GET /articles/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `format`, `all_results` | See [article-search-api.md](article-search-api.md) |
@@ -241,6 +245,8 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | `therapeutic_areas` | Filter by therapeutic areas |
 | `inclusion_agemin` / `inclusion_agemax` | Filter by age range |
 | `inclusion_gender` | Filter by gender inclusion |
+| `date_registration_after` | date (YYYY-MM-DD) | Trials registered on or after this date (inclusive). Returns 400 for invalid dates. |
+| `date_registration_before` | date (YYYY-MM-DD) | Trials registered on or before this date (inclusive). Returns 400 for invalid dates. |
 
 ---
 

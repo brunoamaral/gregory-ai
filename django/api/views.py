@@ -893,6 +893,12 @@ class ArticleViewSet(
 	- **week** - filter for specific week number (requires year parameter)
 	- **year** - year for week filtering (used with week parameter)
 
+	# Date Range Parameters:
+	Filter by publication date. Both parameters are optional and can be used independently or together.
+	Invalid or non-ISO-8601 dates return **400 Bad Request**.
+	- **published_date_after** - articles published on or after this date (YYYY-MM-DD, inclusive)
+	- **published_date_before** - articles published on or before this date (YYYY-MM-DD, inclusive — the full day is included)
+
 	# Examples:
 	- By DOI: `/articles/?doi=10.1016/j.procs.2023.01.401`
 	- Team articles: `/articles/?team_id=1`
@@ -906,6 +912,9 @@ class ArticleViewSet(
 	- Relevant from last 15 days: `/articles/?relevant=true&last_days=15`
 	- Relevant from specific week: `/articles/?relevant=true&week=52&year=2024`
 	- Open access articles: `/articles/?open_access=true`
+	- Published in 2023: `/articles/?published_date_after=2023-01-01&published_date_before=2023-12-31`
+	- Published since a date: `/articles/?published_date_after=2024-01-01`
+	- Date range + subject + CSV: `/articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&published_date_before=2023-12-31&format=csv&all_results=true`
 	- CSV export all results: `/articles/?format=csv&all_results=true`
 	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&relevant=true&ml_threshold=0.8&ordering=-published_date`
 	"""
@@ -1312,10 +1321,20 @@ class TrialViewSet(
 	# Results Parameters:
 	- **has_results** - `true`/`false`; a trial counts as having results when any of `results_posted`, results completion date, results link, or results-available = "Yes" is set
 
+	# Date Range Parameters:
+	Filter by trial registration date (the date the trial was first registered with its registry).
+	Both parameters are optional and can be used independently or together.
+	Invalid or non-ISO-8601 dates return **400 Bad Request**.
+	- **date_registration_after** - trials registered on or after this date (YYYY-MM-DD, inclusive)
+	- **date_registration_before** - trials registered on or before this date (YYYY-MM-DD, inclusive)
+
 	# Examples:
 	- All trials as CSV: `/trials/?format=csv&all_results=true`
 	- Filtered trials: `/trials/?team_id=1&status=Recruiting&format=csv&all_results=true`
 	- Trials with results posted: `/trials/?has_results=true`
+	- Trials registered in 2019–2022: `/trials/?date_registration_after=2019-01-01&date_registration_before=2022-12-31`
+	- Phase III trials registered since 2020: `/trials/?phase=PHASE3&date_registration_after=2020-01-01`
+	- Date range + subject + CSV: `/trials/?team_id=1&subjects=1&date_registration_after=2019-01-01&date_registration_before=2022-12-31&format=csv&all_results=true`
 	"""
 
 	queryset = Trials.objects.all().order_by("-discovery_date")
