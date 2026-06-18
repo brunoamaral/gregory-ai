@@ -95,6 +95,18 @@ class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
 	has_clinical_trials = filters.BooleanFilter(
 		method="filter_has_clinical_trials", label="Has Clinical Trials"
 	)
+	published_date_after = filters.DateFilter(
+		field_name="published_date",
+		lookup_expr="date__gte",
+		input_formats=["%Y-%m-%d"],
+		label="Published date on or after (YYYY-MM-DD)",
+	)
+	published_date_before = filters.DateFilter(
+		field_name="published_date",
+		lookup_expr="date__lte",
+		input_formats=["%Y-%m-%d"],
+		label="Published date on or before (YYYY-MM-DD)",
+	)
 
 	class Meta:
 		model = Articles
@@ -117,6 +129,8 @@ class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
 			"week",
 			"year",
 			"has_clinical_trials",
+			"published_date_after",
+			"published_date_before",
 		]
 
 	def filter_title(self, queryset, name, value):
@@ -485,6 +499,20 @@ class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
 		label="Has results posted (results_posted flag, results completion date, results link, or results available = Yes)",
 	)
 
+	# Date-range filters
+	date_registration_after = filters.DateFilter(
+		field_name="date_registration",
+		lookup_expr="gte",
+		input_formats=["%Y-%m-%d"],
+		label="Date registered on or after (YYYY-MM-DD)",
+	)
+	date_registration_before = filters.DateFilter(
+		field_name="date_registration",
+		lookup_expr="lte",
+		input_formats=["%Y-%m-%d"],
+		label="Date registered on or before (YYYY-MM-DD)",
+	)
+
 	class Meta:
 		model = Trials
 		fields = [
@@ -518,6 +546,8 @@ class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
 			"inclusion_agemax",
 			"inclusion_gender",
 			"has_results",
+			"date_registration_after",
+			"date_registration_before",
 		]
 
 	def filter_title(self, queryset, name, value):
