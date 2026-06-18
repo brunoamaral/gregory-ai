@@ -29,9 +29,13 @@ class TrialDateRangeFilterTests(TestCase):
 			team=self.team,
 		)
 
+		self._link_n = 0
+
 		def make_trial(title, reg_date):
+			self._link_n += 1
 			t = Trials.objects.create(
 				title=title,
+				link=f"https://example.com/trial-{self._link_n}",
 				date_registration=reg_date,
 			)
 			t.teams.add(self.team)
@@ -44,7 +48,9 @@ class TrialDateRangeFilterTests(TestCase):
 		self.t_2022_end = make_trial("Trial 2022-12-31", date(2022, 12, 31))
 		self.t_2023 = make_trial("Trial 2023-03-10", date(2023, 3, 10))
 		# Trial with NULL date_registration
-		self.t_null = Trials.objects.create(title="Trial no date")
+		self.t_null = Trials.objects.create(
+			title="Trial no date", link="https://example.com/trial-null"
+		)
 		self.t_null.teams.add(self.team)
 
 	def _filter(self, params):

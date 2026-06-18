@@ -96,14 +96,12 @@ class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
 		method="filter_has_clinical_trials", label="Has Clinical Trials"
 	)
 	published_date_after = filters.DateFilter(
-		field_name="published_date",
-		lookup_expr="date__gte",
+		method="filter_published_date_after",
 		input_formats=["%Y-%m-%d"],
 		label="Published date on or after (YYYY-MM-DD)",
 	)
 	published_date_before = filters.DateFilter(
-		field_name="published_date",
-		lookup_expr="date__lte",
+		method="filter_published_date_before",
 		input_formats=["%Y-%m-%d"],
 		label="Published date on or before (YYYY-MM-DD)",
 	)
@@ -387,6 +385,18 @@ class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
 		if value:
 			return queryset.filter(trial_references__isnull=False).distinct()
 		return queryset.filter(trial_references__isnull=True)
+
+	def filter_published_date_after(self, queryset, name, value):
+		# Use datetime boundary so the btree index on published_date is usable.
+		start = timezone.make_aware(datetime(value.year, value.month, value.day))
+		return queryset.filter(published_date__gte=start)
+
+	def filter_published_date_before(self, queryset, name, value):
+		# Strict less-than start of next day keeps whole-day inclusive semantics
+		# while allowing the btree index on published_date to be used.
+		next_day = value + timedelta(days=1)
+		end = timezone.make_aware(datetime(next_day.year, next_day.month, next_day.day))
+		return queryset.filter(published_date__lt=end)
 
 
 class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
