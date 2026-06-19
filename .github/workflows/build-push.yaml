@@ -57,4 +57,9 @@ jobs:
           script: |
             cd /home/gregory/gregory-ai
             docker compose pull gregory
+            # Wait for any running management command to finish before restarting
+            while docker exec gregory pgrep -f "manage\.py" > /dev/null 2>&1; do
+              echo "Management command running, waiting 30s..."
+              sleep 30
+            done
             docker compose up -d gregory
