@@ -44,6 +44,7 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - FERNET_SECRET_KEY=${FERNET_SECRET_KEY}
       - DJANGO_DEBUG=${DJANGO_DEBUG}
+      - EXTRA_ALLOWED_HOSTS=${EXTRA_ALLOWED_HOSTS}
     networks:
       - gregory_network
     depends_on:
