@@ -1,7 +1,6 @@
 import os
 import logging
 from pathlib import Path
-from cryptography.fernet import Fernet  # Ensure this import is included
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -44,8 +43,10 @@ SITE_ID = 1
 _fernet_raw = os.environ.get('FERNET_SECRET_KEY', '')
 if not _fernet_raw:
     if DEBUG:
-        _fernet_raw = Fernet.generate_key().decode()
-        logging.warning("Temporary FERNET_SECRET_KEY generated for development. DO NOT use in production!")
+        # Fixed dev-only fallback so encrypted DB values survive container restarts.
+        # Set FERNET_SECRET_KEY in .env to use your own stable key.
+        _fernet_raw = '8I2ah-vetkLU8hlRFKNLfepm3uoMNT6i5RCxNmLMwAU='
+        logging.warning("Using dev-only FERNET_SECRET_KEY fallback. Set FERNET_SECRET_KEY in .env for a stable value.")
     else:
         raise ValueError("FERNET_SECRET_KEY environment variable must be set in production.")
 FERNET_SECRET_KEY = _fernet_raw
@@ -62,11 +63,11 @@ _extra_hosts = [h.strip() for h in os.environ.get('EXTRA_ALLOWED_HOSTS', '').spl
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'gregory'] + _extra_hosts
 if _domain:
-    ALLOWED_HOSTS += [_domain, f'api.{_domain}']
+	ALLOWED_HOSTS += [_domain, f'api.{_domain}']
 
 CSRF_TRUSTED_ORIGINS = [f'https://{h}' for h in _extra_hosts if not h.startswith('http')]
 if _domain:
-    CSRF_TRUSTED_ORIGINS += [f'https://{_domain}', f'https://api.{_domain}']
+	CSRF_TRUSTED_ORIGINS += [f'https://{_domain}', f'https://api.{_domain}']
 
 # Application definition
 INSTALLED_APPS = [

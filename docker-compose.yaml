@@ -19,7 +19,7 @@ services:
     restart: always
     image: amaralbruno/gregory-ai:latest
     build: .
-    command: sh -c 'if [ "$$DJANGO_DEBUG" = "True" ]; then python manage.py runserver 0.0.0.0:8000; else gunicorn --workers 4 --threads 2 --log-level debug -b 0.0.0.0:8000 admin.wsgi; fi'
+    command: sh -c 'if echo "$$DJANGO_DEBUG" | grep -qiE "^(true|1|yes)$$"; then python manage.py runserver 0.0.0.0:8000; else gunicorn --workers 4 --threads 2 --log-level debug -b 0.0.0.0:8000 admin.wsgi; fi'
     volumes:
       - ./django/media:/code/media                  # user uploads (persist)
       - ./django/models:/code/models                # trained ML models (persist)
