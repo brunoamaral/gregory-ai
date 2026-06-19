@@ -40,3 +40,21 @@ jobs:
           # exceeded by the torch/tensorflow wheels and causing full rebuilds.
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+
+  deploy:
+    needs: build-push
+    # Guard: only run on the canonical repo so forks that fetch upstream
+    # don't try to deploy to House with secrets they don't have.
+    if: github.repository == 'brunoamaral/gregory-ai'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to House
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HOUSE_HOST }}
+          username: gregory
+          key: ${{ secrets.HOUSE_SSH_KEY }}
+          script: |
+            cd /home/gregory/gregory-ai
+            docker compose pull gregory
+            docker compose up -d gregory
