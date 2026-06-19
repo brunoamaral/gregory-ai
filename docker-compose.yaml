@@ -8,7 +8,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_DB=${POSTGRES_DB}
     ports:
-      - 5432:5432
+      - 127.0.0.1:5432:5432
     volumes:
       - ./postgres-data:/var/lib/postgresql/data
     networks:
@@ -19,9 +19,12 @@ services:
     restart: always
     image: amaralbruno/gregory-ai:latest
     build: .
-    command: sh -c 'if [ "$$DJANGO_DEBUG" = "True" ]; then python manage.py runserver 0.0.0.0:8000; else gunicorn --workers 4 --threads 2 --log-level debug -b 0.0.0.0:8000 admin.wsgi; fi'
+    command: sh -c 'if echo "$$DJANGO_DEBUG" | grep -qiE "^(true|1|yes)$$"; then python manage.py runserver 0.0.0.0:8000; else gunicorn --workers 4 --threads 2 --log-level debug -b 0.0.0.0:8000 admin.wsgi; fi'
     volumes:
-      - ./django:/code
+      - ./django/media:/code/media                  # user uploads (persist)
+      - ./django/models:/code/models                # trained ML models (persist)
+      - ./django/summary_cache:/code/summary_cache  # LLM summary cache (persist)
+      - ./django/static:/code/static                # collectstatic output (host nginx reads it)
     ports:
       - "8000:8000"
     environment:
@@ -41,6 +44,7 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - FERNET_SECRET_KEY=${FERNET_SECRET_KEY}
       - DJANGO_DEBUG=${DJANGO_DEBUG}
+      - EXTRA_ALLOWED_HOSTS=${EXTRA_ALLOWED_HOSTS}
     networks:
       - gregory_network
     depends_on:

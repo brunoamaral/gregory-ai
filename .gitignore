@@ -35,6 +35,7 @@ django/static
 # Docker
 docker-data/
 docker-python/
+docker-compose.override.yaml
 
 # PostgreSQL
 postgres-data/
@@ -71,7 +72,6 @@ data/trials.json
 
 # Gregory
 postgres-data
-django/admin/settings.py
 django/models/
 *.code-workspace
 ai_tests/

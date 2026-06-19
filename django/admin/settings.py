@@ -1,7 +1,8 @@
 import os
+import hashlib
+import base64
 import logging
 from pathlib import Path
-from cryptography.fernet import Fernet  # Ensure this import is included
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,48 +27,51 @@ try:
 except ImportError:
     logging.warning("python-dotenv not installed. Environment variables must be set manually.")
 
-# SECURITY WARNING: keep the secret key used in production secret!
-# Use environment variable if available, otherwise use a default value for development
-SECRET_KEY = os.environ.get('SECRET_KEY', 'DEFAULT SECRET_KEY')
-
-# Print warning if using default key
-if SECRET_KEY == 'DEFAULT SECRET_KEY':
-    logging.warning("Using default SECRET_KEY for development. DO NOT use in production!")
-
 # SECURITY WARNING: don't run with debug turned on in production!
 # Secure by default: production is safe even if DJANGO_DEBUG is unset.
 # For local development, set DJANGO_DEBUG=True in your .env file.
 DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('true', '1', 'yes')
-SITE_ID = 1
-# FERNET SECRET KEY
-FERNET_SECRET_KEY = os.environ.get('FERNET_SECRET_KEY', 'DEFAULT KEY GOES HERE')
 
-# Print warning if using default key
-if FERNET_SECRET_KEY == 'DEFAULT KEY GOES HERE':
-    logging.warning("Using default FERNET_SECRET_KEY for development. DO NOT use in production!")
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.environ.get('SECRET_KEY', 'DEFAULT SECRET_KEY')
+if SECRET_KEY == 'DEFAULT SECRET_KEY':
+    if not DEBUG:
+        raise ValueError("SECRET_KEY environment variable must be set in production.")
+    logging.warning("Using default SECRET_KEY for development. DO NOT use in production!")
+
+SITE_ID = 1
+
+# FERNET SECRET KEY — used to encrypt sensitive database fields.
+_fernet_raw = os.environ.get('FERNET_SECRET_KEY', '')
+if not _fernet_raw:
+    if DEBUG:
+        # Derive a stable dev key from a fixed, non-secret seed so encrypted DB
+        # values survive container restarts. Not a secret — never use in production.
+        _fernet_raw = base64.urlsafe_b64encode(
+            hashlib.sha256(b'gregory-dev-only-fernet-key').digest()
+        ).decode()
+        logging.warning("Using dev-only FERNET_SECRET_KEY fallback. Set FERNET_SECRET_KEY in .env for a stable value.")
+    else:
+        raise ValueError("FERNET_SECRET_KEY environment variable must be set in production.")
+FERNET_SECRET_KEY = _fernet_raw
 FORMS_URLFIELD_ASSUME_HTTPS = True
 
 # Django admin handles bulk actions on large datasets; raise the POST field limit
 # accordingly. The default of 1000 is too low when selecting hundreds of subscribers.
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 
-ALLOWED_HOSTS = [
-    '142.93.160.186',
-	'0.0.0.0',
-	'localhost',
-	'127.0.0.1',
-	'gregory',
-    'brain-regeneration.com',
-    'api.brain-regeneration.com',
-	'api.' + os.environ.get('DOMAIN_NAME', ''),
-]
+_domain = os.environ.get('DOMAIN_NAME', '')
+# Comma-separated list of extra hostnames/IPs for ALLOWED_HOSTS (e.g. a server IP,
+# a legacy domain, or a staging hostname). Set via EXTRA_ALLOWED_HOSTS in .env.
+_extra_hosts = [h.strip() for h in os.environ.get('EXTRA_ALLOWED_HOSTS', '').split(',') if h.strip()]
 
-CSRF_TRUSTED_ORIGINS = [
-	'https://brain-regeneration.com',
-	'https://api.brain-regeneration.com',
-	'https://' + os.environ.get('DOMAIN_NAME', ''),
-	'https://api.' + os.environ.get('DOMAIN_NAME', ''),
-]
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'gregory'] + _extra_hosts
+if _domain:
+	ALLOWED_HOSTS += [_domain, f'api.{_domain}']
+
+CSRF_TRUSTED_ORIGINS = [f'https://{h}' for h in _extra_hosts if not h.startswith('http')]
+if _domain:
+	CSRF_TRUSTED_ORIGINS += [f'https://{_domain}', f'https://api.{_domain}']
 
 # Application definition
 INSTALLED_APPS = [
@@ -248,7 +252,7 @@ EMAIL_HOST = os.environ.get('EMAIL_HOST')
 EMAIL_PORT = os.environ.get('EMAIL_PORT')
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 'yes')
 EMAIL_DOMAIN = os.environ.get('EMAIL_DOMAIN')
 
 EMAIL_POSTMARK_API_KEY = os.environ.get('EMAIL_POSTMARK_API_KEY')
@@ -269,9 +273,3 @@ LOGGING = {
 	},
 }
 
-if not FERNET_SECRET_KEY:
-		if DEBUG:  # Only generate a key in development
-				FERNET_SECRET_KEY = Fernet.generate_key().decode()
-				print("Temporary FERNET_SECRET_KEY generated for development.")
-		else:
-				raise ValueError("FERNET_SECRET_KEY is required in production.")
