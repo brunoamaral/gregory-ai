@@ -1,7 +1,11 @@
 name: Build & Push Docker Image
 
 on:
-  push:
+  # Trigger only after the Tests workflow completes on main, so the image is
+  # never built or deployed when pytest or lint has failed.
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -10,6 +14,9 @@ env:
 
 jobs:
   build-push:
+    # Skip if tests failed (workflow_run conclusion is not 'success').
+    # workflow_dispatch always proceeds so manual releases still work.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -35,7 +42,7 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE }}:latest
-            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:${{ github.event.workflow_run.head_sha || github.sha }}
           # Registry cache avoids the 10 GB cap of type=gha, which was being
           # exceeded by the torch/tensorflow wheels and causing full rebuilds.
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
