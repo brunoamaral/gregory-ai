@@ -1,8 +1,9 @@
 # utils/subscription.py
 
 from datetime import timedelta
+from django.db.models import Exists, OuterRef
 from django.utils.timezone import now
-from gregory.models import Articles, Trials
+from gregory.models import Articles, ArticleSubjectRelevance, Subject, Trials
 
 
 def get_trials_for_list(lst):
@@ -13,10 +14,36 @@ def get_trials_for_list(lst):
 
 
 def get_articles_for_list(lst):
-	"""Returns articles discovered in the last 30 days for the given list."""
-	return Articles.objects.filter(
-		subjects__in=lst.subjects.all(), discovery_date__gte=now() - timedelta(days=30)
-	).distinct()
+	"""Returns articles discovered in the last 30 days for the given list
+	that are missing at least one human review across the list's subjects."""
+	list_subjects = lst.subjects.all()
+
+	# Sub-subquery: has this (article, subject) pair been reviewed?
+	has_review = Exists(
+		ArticleSubjectRelevance.objects.filter(
+			article_id=OuterRef(OuterRef('pk')),
+			subject_id=OuterRef('pk'),
+			is_relevant__isnull=False,
+		)
+	)
+
+	# True when at least one list-subject the article belongs to has no review
+	has_unreviewed_subject = Exists(
+		Subject.objects.filter(
+			pk__in=list_subjects,
+			articles__pk=OuterRef('pk'),
+		).alias(reviewed=has_review).filter(reviewed=False)
+	)
+
+	return (
+		Articles.objects.filter(
+			subjects__in=list_subjects,
+			discovery_date__gte=now() - timedelta(days=30),
+		)
+		.alias(has_unreviewed=has_unreviewed_subject)
+		.filter(has_unreviewed=True)
+		.distinct()
+	)
 
 
 def get_latest_research_by_category(lst, days=30):
