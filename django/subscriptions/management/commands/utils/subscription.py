@@ -19,18 +19,20 @@ def get_articles_for_list(lst):
 	list_subjects = lst.subjects.all()
 
 	# Sub-subquery: has this (article, subject) pair been reviewed?
-	has_review = ArticleSubjectRelevance.objects.filter(
-		article_id=OuterRef(OuterRef('pk')),
-		subject_id=OuterRef('pk'),
-		is_relevant__isnull=False,
+	has_review = Exists(
+		ArticleSubjectRelevance.objects.filter(
+			article_id=OuterRef(OuterRef('pk')),
+			subject_id=OuterRef('pk'),
+			is_relevant__isnull=False,
+		)
 	)
 
-	# Subquery: does this article have at least one list-subject with no review?
+	# True when at least one list-subject the article belongs to has no review
 	has_unreviewed_subject = Exists(
 		Subject.objects.filter(
 			pk__in=list_subjects,
 			articles__pk=OuterRef('pk'),
-		).exclude(Exists(has_review))
+		).alias(reviewed=has_review).filter(reviewed=False)
 	)
 
 	return (
@@ -38,7 +40,8 @@ def get_articles_for_list(lst):
 			subjects__in=list_subjects,
 			discovery_date__gte=now() - timedelta(days=30),
 		)
-		.filter(has_unreviewed_subject)
+		.alias(has_unreviewed=has_unreviewed_subject)
+		.filter(has_unreviewed=True)
 		.distinct()
 	)
 
