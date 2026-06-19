@@ -53,20 +53,47 @@ with changes that address the issue.
 ### Installing Gregory
 
 #### 1. Clone and Install
-1. Clone the repository:
+
+1. Clone the repository and configure your environment:
 	```bash
 	git clone <repository_url>
 	cd <repository_directory>
-	docker compose up -d
-	docker exec gregory python manage.py makemigrations
-	docker exec gregory python manage.py migrate
+	cp example.env .env   # fill in your values before continuing
 	```
-#### 2. Setup DNS for `api.domain.etc`
+
+2. Pull the image and start:
+	```bash
+	docker compose pull
+	docker compose up -d
+	```
+
+	The container entrypoint automatically runs `migrate` and `collectstatic` on startup, waiting for Postgres to be ready before proceeding.
+
+3. Create the cache table (one-time, required for the `/stats/` endpoint):
+	```bash
+	docker exec gregory python manage.py createcachetable gregory_cache
+	```
+
+4. Create a superuser:
+	```bash
+	docker exec gregory python manage.py createsuperuser
+	```
+#### 2. Deploying updates
+
+Once the server is set up, deploying a new version requires no `git pull` or manual commands:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+`migrate` and `collectstatic` run automatically on startup.
+
+#### 3. Setup DNS for `api.domain.etc`
 
 1. Log in to your DNS provider.
 2. Add a new A record for `api.domain.etc` pointing to your server's IP address.
 
-#### 3. Configure Postmark (optional)
+#### 4. Configure Postmark (optional)
 
 GregoryAI uses [Postmark](https://postmarkapp.com/) for transactional emails
 (newsletters, admin digests, clinical trial notifications).
@@ -79,7 +106,7 @@ also set global fallback values via environment variables — see step 5.1.
 2. Copy your Server API Token.
 3. Set the token either per-team in Django admin or in your `.env` file.
 
-#### 4. Get ORCID API Keys and Add to `.env`
+#### 5. Get ORCID API Keys and Add to `.env`
 1. Log in to your ORCID account.
 2. Navigate to `Developer Tools` and create an API client.
 3. Copy the client ID and client secret.
@@ -89,9 +116,12 @@ also set global fallback values via environment variables — see step 5.1.
 	ORCID_CLIENT_SECRET=your_orcid_client_secret
 	```
 
-##### 4.1 Make sure your .env file is complete
+##### 5.1 Make sure your .env file is complete
 ```bash
 DOMAIN_NAME=DOMAIN.COM
+# Optional: comma-separated extra hostnames/IPs added to ALLOWED_HOSTS.
+# Include your server's IP and any additional domains pointing at this instance.
+EXTRA_ALLOWED_HOSTS=203.0.113.1,otherdomain.com
 
 # --- PostgreSQL ---
 POSTGRES_DB=
@@ -99,10 +129,8 @@ POSTGRES_PASSWORD=
 POSTGRES_USER=
 
 # --- Django ---
-SECRET_KEY='' # Generate a unique key — https://docs.djangoproject.com/en/4.0/ref/settings/#secret-key
-GREGORY_DIR=
-
-# Encryption key for sensitive DB fields.
+# Generate with: python -c "import secrets; print(secrets.token_urlsafe(50))"
+SECRET_KEY=''
 # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 FERNET_SECRET_KEY=
 
@@ -113,7 +141,7 @@ EMAIL_HOST=
 EMAIL_HOST_PASSWORD=
 EMAIL_HOST_USER=
 EMAIL_PORT=587
-EMAIL_USE_TLS='True'
+EMAIL_USE_TLS=True
 
 # Postmark (fallback; per-team config in Django admin is preferred)
 EMAIL_POSTMARK_API_KEY=
@@ -124,9 +152,9 @@ ORCID_CLIENT_ID=
 ORCID_CLIENT_SECRET=
 ```
 
-#### 5. Configure Server
+#### 6. Configure Server
 
-##### 5.1. Nginx
+##### 6.1. Nginx
 1. Install Nginx:
 	```bash
 	sudo apt-get update
@@ -143,7 +171,7 @@ ORCID_CLIENT_SECRET=
 	sudo systemctl restart nginx
 	```
 
-##### 5.2. Certbot
+##### 6.2. Certbot
 1. Install Certbot:
 	```bash
 	sudo apt-get install certbot python3-certbot-nginx
@@ -153,32 +181,32 @@ ORCID_CLIENT_SECRET=
 	sudo certbot --nginx -d domain.etc -d www.domain.etc
 	```
 
-##### 5.3. Firewall
+##### 6.3. Firewall
 1. Allow necessary ports:
 	```bash
 	sudo ufw allow 'Nginx Full'
 	sudo ufw enable
 	```
 
-#### 6. Configure Gregory
+#### 7. Configure Gregory
 
-##### 6.1. Create a Site
+##### 7.1. Create a Site
 1. Log in to the Gregory dashboard.
 2. Navigate to `Sites` and click `Create Site`.
 
-##### 6.2. Create a Team
+##### 7.2. Create a Team
 1. Navigate to `Teams` and click `Create Team`.
 
-##### 6.3. Add a User to the Team
+##### 7.3. Add a User to the Team
 1. Navigate to `Teams`, select the team, and click `Add User`.
 2. Enter the user's email and assign a role.
 
-##### 6.4. Add a Source, such as PubMed
+##### 7.4. Add a Source, such as PubMed
 
 1. Navigate to `Sources` and click `Add Source`.
 2. Select `RSS` method and provide the necessary configuration.
 
-#### 7. Add cron jobs to run the pipeline and send emails
+#### 8. Add cron jobs to run the pipeline and send emails
 
 ```cron
 # Every 2 days at 8:00
@@ -422,13 +450,15 @@ python manage.py train_models --team research --all-articles --pseudo-label
 
 ## Running for local development
 
-Edit the env.example file to fit your configuration and rename to .env
+```bash
+cp example.env .env              # fill in your values
+cp docker-compose.override.yaml.example docker-compose.override.yaml
+```
+
+The override file mounts `./django:/code` so code changes are reflected immediately without rebuilding the image. Set `DJANGO_DEBUG=True` in `.env` and the entrypoint will start `runserver` instead of gunicorn.
 
 ```bash
 docker compose up -d
-python3 -m venv env
-source env/bin/activate
-pip install -r requirements.txt
 ```
 
 ## Thank you to
