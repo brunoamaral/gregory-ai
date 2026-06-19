@@ -1,0 +1,4 @@
+services:
+  gregory:
+    volumes:
+      - ./django:/code   # dev only: live code from the working tree
