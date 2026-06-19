@@ -1,4 +1,6 @@
 import os
+import hashlib
+import base64
 import logging
 from pathlib import Path
 
@@ -43,9 +45,11 @@ SITE_ID = 1
 _fernet_raw = os.environ.get('FERNET_SECRET_KEY', '')
 if not _fernet_raw:
     if DEBUG:
-        # Fixed dev-only fallback so encrypted DB values survive container restarts.
-        # Set FERNET_SECRET_KEY in .env to use your own stable key.
-        _fernet_raw = '8I2ah-vetkLU8hlRFKNLfepm3uoMNT6i5RCxNmLMwAU='
+        # Derive a stable dev key from a fixed, non-secret seed so encrypted DB
+        # values survive container restarts. Not a secret — never use in production.
+        _fernet_raw = base64.urlsafe_b64encode(
+            hashlib.sha256(b'gregory-dev-only-fernet-key').digest()
+        ).decode()
         logging.warning("Using dev-only FERNET_SECRET_KEY fallback. Set FERNET_SECRET_KEY in .env for a stable value.")
     else:
         raise ValueError("FERNET_SECRET_KEY environment variable must be set in production.")
