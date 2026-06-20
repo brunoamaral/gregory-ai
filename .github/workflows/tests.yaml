@@ -36,6 +36,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install/update Python dependencies
+        working-directory: django
+        run: pip install --quiet -r requirements.txt
+
       - name: Run pytest
         working-directory: django
         # SECRET_KEY / FERNET_SECRET_KEY are generated per-run so no secrets
