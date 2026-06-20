@@ -900,6 +900,7 @@ class ArticleViewSet(
 	- **doi** - filter by exact DOI (case-insensitive)
 	- **subject_id** - filter by subject ID (used with team_id)
 	- **subjects** - comma-separated list of subject IDs with AND semantics — returns only articles tagged with *all* listed subjects (e.g., `?subjects=1,2`)
+	- **subjects_any** - comma-separated list of subject IDs with OR semantics — returns articles tagged with *any* of the listed subjects (e.g., `?subjects_any=1,2`)
 	- **author_id** - filter by author ID
 	- **category_slug** - filter by category slug
 	- **category_id** - filter by category ID
@@ -934,6 +935,7 @@ class ArticleViewSet(
 	- Team articles: `/articles/?team_id=1`
 	- Team + subject: `/articles/?team_id=1&subject_id=4`
 	- Multi-subject AND: `/articles/?subjects=1,2`
+	- Multi-subject OR: `/articles/?subjects_any=1,2`
 	- With search: `/articles/?team_id=1&search=stem+cells`
 	- Category by slug: `/articles/?team_id=1&category_slug=natalizumab`
 	- Category by ID: `/articles/?team_id=1&category_id=5`
@@ -1315,6 +1317,7 @@ class TrialViewSet(
 	- **team_id** - filter by team ID
 	- **subject_id** - filter by subject ID
 	- **subjects** - comma-separated list of subject IDs with AND semantics — returns only trials tagged with *all* listed subjects (e.g., `?subjects=1,2`)
+	- **subjects_any** - comma-separated list of subject IDs with OR semantics — returns trials tagged with *any* of the listed subjects (e.g., `?subjects_any=1,2`)
 	- **category_slug** - filter by category slug
 	- **category_id** - filter by category ID
 	- **source_id** - filter by source ID
@@ -1362,6 +1365,7 @@ class TrialViewSet(
 
 	# Examples:
 	- All trials as CSV: `/trials/?format=csv&all_results=true`
+	- Multi-subject OR: `/trials/?subjects_any=1,2`
 	- Filtered trials: `/trials/?team_id=1&status=Recruiting&format=csv&all_results=true`
 	- Trials with results posted: `/trials/?has_results=true`
 	- Trials registered in 2019–2022: `/trials/?date_registration_after=2019-01-01&date_registration_before=2022-12-31`

@@ -217,6 +217,117 @@ class ArticleMultiSubjectFilterTests(TestCase):
 		self.assertEqual(len(ids), len(set(ids)))
 
 
+class ArticleSubjectAnyFilterTests(TestCase):
+	"""Tests for the ?subjects_any= OR-filter on /articles/"""
+
+	def setUp(self):
+		self.client = APIClient()
+
+		self.org = Organization.objects.create(name="Any Org", slug="any-filter-org")
+		OrganizationApiSettings.objects.filter(organization=self.org).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			name="Any Team", slug="any-team-ms", organization=self.org
+		)
+
+		self.subject_a = Subject.objects.create(
+			subject_name="Any Subject A",
+			subject_slug="any-subject-a",
+			team=self.team,
+		)
+		self.subject_b = Subject.objects.create(
+			subject_name="Any Subject B",
+			subject_slug="any-subject-b",
+			team=self.team,
+		)
+		self.subject_c = Subject.objects.create(
+			subject_name="Any Subject C",
+			subject_slug="any-subject-c",
+			team=self.team,
+		)
+
+		# article_a  → subject A only
+		self.article_a = Articles.objects.create(
+			title="Any Article A",
+			link="https://example.com/any-a",
+		)
+		self.article_a.subjects.add(self.subject_a)
+		self.article_a.teams.add(self.team)
+
+		# article_b  → subject B only
+		self.article_b = Articles.objects.create(
+			title="Any Article B",
+			link="https://example.com/any-b",
+		)
+		self.article_b.subjects.add(self.subject_b)
+		self.article_b.teams.add(self.team)
+
+		# article_c  → subject C only
+		self.article_c = Articles.objects.create(
+			title="Any Article C",
+			link="https://example.com/any-c",
+		)
+		self.article_c.subjects.add(self.subject_c)
+		self.article_c.teams.add(self.team)
+
+		# article_ab → subjects A + B
+		self.article_ab = Articles.objects.create(
+			title="Any Article AB",
+			link="https://example.com/any-ab",
+		)
+		self.article_ab.subjects.add(self.subject_a, self.subject_b)
+		self.article_ab.teams.add(self.team)
+
+	def test_or_match_returns_articles_in_either_subject(self):
+		"""?subjects_any=A,B returns all articles tagged with A or B."""
+		url = f"/articles/?subjects_any={self.subject_a.id},{self.subject_b.id}"
+		response = self.client.get(url)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = {r["article_id"] for r in response.data["results"]}
+		self.assertIn(self.article_a.article_id, ids)
+		self.assertIn(self.article_b.article_id, ids)
+		self.assertIn(self.article_ab.article_id, ids)
+		self.assertNotIn(self.article_c.article_id, ids)
+
+	def test_single_subject_or_same_as_subject_id(self):
+		"""?subjects_any=A returns same set as ?subject_id=A."""
+		url_any = f"/articles/?subjects_any={self.subject_a.id}"
+		url_id = f"/articles/?subject_id={self.subject_a.id}"
+		r1 = self.client.get(url_any)
+		r2 = self.client.get(url_id)
+		self.assertEqual(r1.status_code, status.HTTP_200_OK)
+		self.assertEqual(r2.status_code, status.HTTP_200_OK)
+		ids1 = {r["article_id"] for r in r1.data["results"]}
+		ids2 = {r["article_id"] for r in r2.data["results"]}
+		self.assertEqual(ids1, ids2)
+
+	def test_or_broader_than_and(self):
+		"""OR result is a superset of AND result for the same subjects."""
+		url_or = f"/articles/?subjects_any={self.subject_a.id},{self.subject_b.id}"
+		url_and = f"/articles/?subjects={self.subject_a.id},{self.subject_b.id}"
+		r_or = self.client.get(url_or)
+		r_and = self.client.get(url_and)
+		ids_or = {r["article_id"] for r in r_or.data["results"]}
+		ids_and = {r["article_id"] for r in r_and.data["results"]}
+		self.assertTrue(ids_and.issubset(ids_or))
+		self.assertGreater(len(ids_or), len(ids_and))
+
+	def test_invalid_values_ignored(self):
+		"""Non-numeric values are silently dropped; all-invalid → empty."""
+		response = self.client.get("/articles/?subjects_any=foo,bar")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["count"], 0)
+
+	def test_no_duplicate_articles(self):
+		"""Articles tagged with multiple matched subjects appear only once."""
+		url = f"/articles/?subjects_any={self.subject_a.id},{self.subject_b.id}"
+		response = self.client.get(url)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = [r["article_id"] for r in response.data["results"]]
+		self.assertEqual(len(ids), len(set(ids)))
+
+
 class TrialMultiSubjectFilterTests(TestCase):
 	"""Tests for the ?subjects= AND-filter on /trials/"""
 
@@ -307,3 +418,101 @@ class TrialMultiSubjectFilterTests(TestCase):
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		ids = [r["trial_id"] for r in response.data["results"]]
 		self.assertEqual(len(ids), len(set(ids)))
+
+
+class TrialSubjectAnyFilterTests(TestCase):
+	"""Tests for the ?subjects_any= OR-filter on /trials/"""
+
+	def setUp(self):
+		self.client = APIClient()
+
+		self.org = Organization.objects.create(name="Trial Any Org", slug="any-trial-org")
+		OrganizationApiSettings.objects.filter(organization=self.org).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			name="Trial Any Team", slug="trial-any-team", organization=self.org
+		)
+
+		self.subject_a = Subject.objects.create(
+			subject_name="Trial Any Subject A",
+			subject_slug="trial-any-subject-a",
+			team=self.team,
+		)
+		self.subject_b = Subject.objects.create(
+			subject_name="Trial Any Subject B",
+			subject_slug="trial-any-subject-b",
+			team=self.team,
+		)
+		self.subject_c = Subject.objects.create(
+			subject_name="Trial Any Subject C",
+			subject_slug="trial-any-subject-c",
+			team=self.team,
+		)
+
+		self.trial_a = Trials.objects.create(
+			title="Trial Any A",
+			link="https://example.com/trial-any-a",
+			published_date=timezone.now(),
+		)
+		self.trial_a.subjects.add(self.subject_a)
+		self.trial_a.teams.add(self.team)
+
+		self.trial_b = Trials.objects.create(
+			title="Trial Any B",
+			link="https://example.com/trial-any-b",
+			published_date=timezone.now(),
+		)
+		self.trial_b.subjects.add(self.subject_b)
+		self.trial_b.teams.add(self.team)
+
+		self.trial_c = Trials.objects.create(
+			title="Trial Any C",
+			link="https://example.com/trial-any-c",
+			published_date=timezone.now(),
+		)
+		self.trial_c.subjects.add(self.subject_c)
+		self.trial_c.teams.add(self.team)
+
+		self.trial_ab = Trials.objects.create(
+			title="Trial Any AB",
+			link="https://example.com/trial-any-ab",
+			published_date=timezone.now(),
+		)
+		self.trial_ab.subjects.add(self.subject_a, self.subject_b)
+		self.trial_ab.teams.add(self.team)
+
+	def test_or_match_returns_trials_in_either_subject(self):
+		"""?subjects_any=A,B returns all trials tagged with A or B."""
+		url = f"/trials/?subjects_any={self.subject_a.id},{self.subject_b.id}"
+		response = self.client.get(url)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = {r["trial_id"] for r in response.data["results"]}
+		self.assertIn(self.trial_a.trial_id, ids)
+		self.assertIn(self.trial_b.trial_id, ids)
+		self.assertIn(self.trial_ab.trial_id, ids)
+		self.assertNotIn(self.trial_c.trial_id, ids)
+
+	def test_single_subject_or_same_as_subject_id(self):
+		"""?subjects_any=A returns same set as ?subject_id=A for trials."""
+		url_any = f"/trials/?subjects_any={self.subject_a.id}"
+		url_id = f"/trials/?subject_id={self.subject_a.id}"
+		r1 = self.client.get(url_any)
+		r2 = self.client.get(url_id)
+		ids1 = {r["trial_id"] for r in r1.data["results"]}
+		ids2 = {r["trial_id"] for r in r2.data["results"]}
+		self.assertEqual(ids1, ids2)
+
+	def test_no_duplicate_trials(self):
+		"""Trials tagged with multiple matched subjects appear only once."""
+		url = f"/trials/?subjects_any={self.subject_a.id},{self.subject_b.id}"
+		response = self.client.get(url)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = [r["trial_id"] for r in response.data["results"]]
+		self.assertEqual(len(ids), len(set(ids)))
+
+	def test_invalid_values_ignored(self):
+		"""Non-numeric values are silently dropped; all-invalid → empty."""
+		response = self.client.get("/trials/?subjects_any=foo,bar")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["count"], 0)

@@ -10,11 +10,24 @@ from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Sub
 
 class SubjectANDFilterMixin:
 	"""
-	Mixin that provides an AND-semantics subject filter.
-	Returns only objects linked to *every* subject ID in the comma-separated list.
-	Uses a single join (subjects__id__in) plus a Count annotation instead of
-	chaining one .filter() per ID, so the SQL stays to a single extra join.
+	Mixin that provides subject filters with AND and OR semantics.
+
+	``subjects``     — AND: returns only objects tagged with *every* listed ID.
+	``subjects_any`` — OR:  returns objects tagged with *any* of the listed IDs.
 	"""
+
+	def filter_subjects_any(self, queryset, name, value):
+		if not value:
+			return queryset
+		ids = set()
+		for raw in value:
+			try:
+				ids.add(int(raw))
+			except (TypeError, ValueError):
+				continue
+		if not ids:
+			return queryset.none()
+		return queryset.filter(subjects__id__in=ids).distinct()
 
 	def filter_subjects_all(self, queryset, name, value):
 		if not value:
@@ -74,6 +87,10 @@ class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
 	subjects = filters.BaseInFilter(
 		method="filter_subjects_all",
 		label="All subject IDs (comma-separated, AND match)",
+	)
+	subjects_any = filters.BaseInFilter(
+		method="filter_subjects_any",
+		label="Any subject IDs (comma-separated, OR match)",
 	)
 	source_id = filters.NumberFilter(
 		field_name="sources__source_id", lookup_expr="exact", label="Source ID"
@@ -424,6 +441,10 @@ class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
 	subjects = filters.BaseInFilter(
 		method="filter_subjects_all",
 		label="All subject IDs (comma-separated, AND match)",
+	)
+	subjects_any = filters.BaseInFilter(
+		method="filter_subjects_any",
+		label="Any subject IDs (comma-separated, OR match)",
 	)
 	category_slug = filters.CharFilter(
 		field_name="team_categories__category_slug",
