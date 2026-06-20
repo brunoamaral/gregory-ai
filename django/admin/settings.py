@@ -73,8 +73,19 @@ CSRF_TRUSTED_ORIGINS = [f'https://{h}' for h in _extra_hosts if not h.startswith
 if _domain:
 	CSRF_TRUSTED_ORIGINS += [f'https://{_domain}', f'https://api.{_domain}']
 
+# CORS — in debug mode allow all origins (local dev convenience).
+# In production, only explicitly listed origins are accepted.
+if DEBUG:
+	CORS_ALLOW_ALL_ORIGINS = True
+else:
+	_cors_origins = [o.strip() for o in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()]
+	if _domain:
+		_cors_origins += [f'https://{_domain}', f'https://www.{_domain}']
+	CORS_ALLOWED_ORIGINS = _cors_origins
+
 # Application definition
 INSTALLED_APPS = [
+	'corsheaders',
 	'gregory.apps.GregoryConfig',
 	'subscriptions.apps.SubscriptionsConfig',
 	'rest_framework',
@@ -99,6 +110,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
 	'django.middleware.security.SecurityMiddleware',
+	'corsheaders.middleware.CorsMiddleware',
 	'django.contrib.sessions.middleware.SessionMiddleware',
 	'django.middleware.common.CommonMiddleware',
 	'django.middleware.csrf.CsrfViewMiddleware',
