@@ -1,80 +1,11 @@
-import shlex
-
 from django_filters import rest_framework as filters
 from django.db import models
-from django.db.models import Q
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Upper
 from django.utils import timezone
 from django import forms
 from datetime import datetime, timedelta
 from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject
-
-
-def build_boolean_search_q(value, fields):
-	"""
-	Parse a boolean search query string and return a Django Q object.
-
-	Supported syntax:
-	  OR  — explicit disjunction:  "artemisinin OR artesunate"
-	  AND — implicit (space):       "stem cells" matches both words
-	  -   — negation prefix:        "stem cells -cancer"
-	  ""  — quoted phrase:          '"myelin repair"' matches exact phrase
-
-	``fields`` is a list of model field names searched with __contains.
-	All comparisons are upper-cased to align with the utitle/usummary columns.
-	"""
-	try:
-		tokens = shlex.split(value)
-	except ValueError:
-		tokens = value.split()
-
-	if not tokens:
-		return Q()
-
-	positive_tokens, negative_terms = [], []
-	for token in tokens:
-		if token.startswith('-') and len(token) > 1:
-			negative_terms.append(token[1:].upper())
-		else:
-			positive_tokens.append(token)
-
-	def field_q(term):
-		upper = term.upper()
-		q = Q()
-		for field in fields:
-			q |= Q(**{f"{field}__contains": upper})
-		return q
-
-	# Split positive tokens by OR keyword; AND the terms within each group.
-	or_groups, current = [], []
-	for token in positive_tokens:
-		if token.upper() == 'OR':
-			if current:
-				or_groups.append(current)
-				current = []
-		else:
-			current.append(token)
-	if current:
-		or_groups.append(current)
-
-	if or_groups:
-		group_qs = []
-		for group in or_groups:
-			gq = Q()
-			for term in group:
-				gq &= field_q(term)
-			group_qs.append(gq)
-		combined_q = group_qs[0]
-		for gq in group_qs[1:]:
-			combined_q |= gq
-	else:
-		combined_q = Q()
-
-	for neg_term in negative_terms:
-		combined_q &= ~field_q(neg_term)
-
-	return combined_q
 
 
 class SubjectFilterMixin:
@@ -231,9 +162,16 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 
 	def filter_search(self, queryset, name, value):
 		"""
-		Search in both title and summary using boolean syntax (OR, AND, negation, phrases).
+		Boolean search across title and summary using GIN-indexed uppercase columns.
+
+		Bare terms are AND-ed; uppercase OR/NOT and "quoted phrases" are supported.
+		Single-term queries behave identically to before (substring match).
 		"""
-		return queryset.filter(build_boolean_search_q(value, ['utitle', 'usummary']))
+		from api.utils.search import build_search_q
+		q = build_search_q(value)
+		if q is None:
+			return queryset
+		return queryset.filter(q)
 
 	def filter_journal(self, queryset, name, value):
 		"""
@@ -660,9 +598,16 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 
 	def filter_search(self, queryset, name, value):
 		"""
-		Search in both title and summary using boolean syntax (OR, AND, negation, phrases).
+		Boolean search across title and summary using GIN-indexed uppercase columns.
+
+		Bare terms are AND-ed; uppercase OR/NOT and "quoted phrases" are supported.
+		Single-term queries behave identically to before (substring match).
 		"""
-		return queryset.filter(build_boolean_search_q(value, ['utitle', 'usummary']))
+		from api.utils.search import build_search_q
+		q = build_search_q(value)
+		if q is None:
+			return queryset
+		return queryset.filter(q)
 
 	def _match_identifier(self, queryset, value, keys):
 		"""Return trials whose ``identifiers`` JSON has any of ``keys`` equal

@@ -64,8 +64,8 @@ from api.filters import (
 	SourceFilter,
 	CategoryFilter,
 	SubjectFilter,
-	build_boolean_search_q,
 )
+from api.utils.search import build_search_q
 from rest_framework.response import Response
 from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
@@ -2218,9 +2218,9 @@ class ArticleSearchView(generics.ListAPIView):
 			if summary:
 				queryset = queryset.filter(usummary__contains=summary.upper())
 			if search:
-				queryset = queryset.filter(
-					build_boolean_search_q(search, ['utitle', 'usummary'])
-				)
+				q = build_search_q(search)
+				if q is not None:
+					queryset = queryset.filter(q)
 
 			return queryset
 		except (AttributeError, TypeError, ValueError) as e:
@@ -2423,9 +2423,9 @@ class TrialSearchView(generics.ListAPIView):
 		if summary:
 			queryset = queryset.filter(usummary__contains=summary.upper())
 		if search:
-			queryset = queryset.filter(
-				build_boolean_search_q(search, ['utitle', 'usummary'])
-			)
+			q = build_search_q(search)
+			if q is not None:
+				queryset = queryset.filter(q)
 		if status:
 			queryset = queryset.filter(recruitment_status=status)
 
