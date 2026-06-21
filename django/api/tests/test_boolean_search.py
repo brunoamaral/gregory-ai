@@ -337,7 +337,8 @@ class ArticleViewSetBooleanSearchE2ETests(TestCase):
 	def test_or_query_returns_union_not_empty(self):
 		"""The exact failure mode: OR across non-co-occurring terms must union."""
 		response = self.client.get(
-			f"/articles/?team_id={self.team.id}&search=myelin OR parkinson"
+			"/articles/",
+			{"team_id": self.team.id, "search": "myelin OR parkinson"},
 		)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		ids = self._ids(response)
@@ -347,8 +348,8 @@ class ArticleViewSetBooleanSearchE2ETests(TestCase):
 
 	def test_multi_term_or_returns_union(self):
 		response = self.client.get(
-			f"/articles/?team_id={self.team.id}"
-			"&search=myelin OR parkinson OR cancer"
+			"/articles/",
+			{"team_id": self.team.id, "search": "myelin OR parkinson OR cancer"},
 		)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(len(response.data["results"]), 3)
@@ -356,7 +357,8 @@ class ArticleViewSetBooleanSearchE2ETests(TestCase):
 	def test_bare_terms_still_and(self):
 		"""AND semantics for space-separated terms are preserved after the fix."""
 		response = self.client.get(
-			f"/articles/?team_id={self.team.id}&search=myelin parkinson"
+			"/articles/",
+			{"team_id": self.team.id, "search": "myelin parkinson"},
 		)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(self._ids(response), set())
@@ -395,7 +397,8 @@ class TrialViewSetBooleanSearchE2ETests(TestCase):
 
 	def test_or_query_returns_union_not_empty(self):
 		response = self.client.get(
-			f"/trials/?team_id={self.team.id}&search=myelin OR parkinson"
+			"/trials/",
+			{"team_id": self.team.id, "search": "myelin OR parkinson"},
 		)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		ids = {r["trial_id"] for r in response.data["results"]}
