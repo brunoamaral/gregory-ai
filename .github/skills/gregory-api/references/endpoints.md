@@ -19,6 +19,7 @@ List all articles with comprehensive filtering. Default ordering: `-discovery_da
 | `team_id` | int | Filter by team ID |
 | `subject_id` | int | Filter by subject ID |
 | `subjects` | string | Comma-separated subject IDs with AND semantics — returns only articles tagged with *all* listed subjects (e.g., `1,2`) |
+| `subjects_any` | string | Comma-separated subject IDs with OR semantics — returns articles tagged with *any* of the listed subjects (e.g., `1,2`) |
 | `author_id` | int | Filter by author ID |
 | `doi` | string | Filter by exact DOI (case-insensitive) |
 | `category_slug` | string | Filter by category slug |
@@ -161,6 +162,7 @@ List all clinical trials. Default ordering: `-discovery_date`.
 | `team_id` | int | Filter by team ID |
 | `subject_id` | int | Filter by subject ID |
 | `subjects` | string | Comma-separated subject IDs with AND semantics — returns only trials tagged with *all* listed subjects (e.g., `1,2`) |
+| `subjects_any` | string | Comma-separated subject IDs with OR semantics — returns trials tagged with *any* of the listed subjects (e.g., `1,2`) |
 | `category_slug` | string | Filter by category slug |
 | `category_id` | int | Filter by category ID |
 | `source_id` | int | Filter by source ID |

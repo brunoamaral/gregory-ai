@@ -499,6 +499,8 @@ class TrialSubjectAnyFilterTests(TestCase):
 		url_id = f"/trials/?subject_id={self.subject_a.id}"
 		r1 = self.client.get(url_any)
 		r2 = self.client.get(url_id)
+		self.assertEqual(r1.status_code, status.HTTP_200_OK)
+		self.assertEqual(r2.status_code, status.HTTP_200_OK)
 		ids1 = {r["trial_id"] for r in r1.data["results"]}
 		ids2 = {r["trial_id"] for r in r2.data["results"]}
 		self.assertEqual(ids1, ids2)
