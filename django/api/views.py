@@ -2418,14 +2418,21 @@ class TrialSearchView(generics.ListAPIView):
 		search = params.get("search")
 		status = params.get("status")
 
-		if title:
-			queryset = queryset.filter(utitle__contains=title.upper())
-		if summary:
-			queryset = queryset.filter(usummary__contains=summary.upper())
-		if search:
-			q = build_search_q(search)
-			if q is not None:
-				queryset = queryset.filter(q)
+		try:
+			if title:
+				queryset = queryset.filter(utitle__contains=title.upper())
+			if summary:
+				queryset = queryset.filter(usummary__contains=summary.upper())
+			if search:
+				q = build_search_q(search)
+				if q is not None:
+					queryset = queryset.filter(q)
+		except (AttributeError, TypeError, ValueError) as e:
+			logging.getLogger(__name__).warning(
+				"TrialSearchView: ignoring malformed search params (%s)", e
+			)
+			return Trials.objects.none()
+
 		if status:
 			queryset = queryset.filter(recruitment_status=status)
 
