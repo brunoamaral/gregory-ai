@@ -65,6 +65,7 @@ from api.filters import (
 	CategoryFilter,
 	SubjectFilter,
 )
+from api.utils.search import build_search_q
 from rest_framework.response import Response
 from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
@@ -2217,11 +2218,9 @@ class ArticleSearchView(generics.ListAPIView):
 			if summary:
 				queryset = queryset.filter(usummary__contains=summary.upper())
 			if search:
-				upper_search = search.upper()
-				queryset = queryset.filter(
-					Q(utitle__contains=upper_search)
-					| Q(usummary__contains=upper_search)
-				)
+				q = build_search_q(search)
+				if q is not None:
+					queryset = queryset.filter(q)
 
 			return queryset
 		except (AttributeError, TypeError, ValueError) as e:
@@ -2419,15 +2418,21 @@ class TrialSearchView(generics.ListAPIView):
 		search = params.get("search")
 		status = params.get("status")
 
-		if title:
-			queryset = queryset.filter(utitle__contains=title.upper())
-		if summary:
-			queryset = queryset.filter(usummary__contains=summary.upper())
-		if search:
-			upper_search = search.upper()
-			queryset = queryset.filter(
-				Q(utitle__contains=upper_search) | Q(usummary__contains=upper_search)
+		try:
+			if title:
+				queryset = queryset.filter(utitle__contains=title.upper())
+			if summary:
+				queryset = queryset.filter(usummary__contains=summary.upper())
+			if search:
+				q = build_search_q(search)
+				if q is not None:
+					queryset = queryset.filter(q)
+		except (AttributeError, TypeError, ValueError) as e:
+			logging.getLogger(__name__).warning(
+				"TrialSearchView: ignoring malformed search params (%s)", e
 			)
+			return Trials.objects.none()
+
 		if status:
 			queryset = queryset.filter(recruitment_status=status)
 

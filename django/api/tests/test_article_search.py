@@ -123,6 +123,65 @@ class ArticleSearchViewTests(TestCase):
 		self.assertIn(self.article1.title, article_titles)
 		self.assertIn(self.article3.title, article_titles)
 
+	def test_boolean_or_search(self):
+		"""Boolean OR returns articles matching either term"""
+		url = reverse("article-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"search": "coronavirus OR sclerosis",
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		titles = [a["title"] for a in response.data["results"]]
+		self.assertIn(self.article1.title, titles)
+		self.assertIn(self.article2.title, titles)
+		self.assertNotIn(self.article3.title, titles)
+
+	def test_boolean_and_search(self):
+		"""Space-separated terms use AND semantics"""
+		url = reverse("article-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"search": "COVID cancer",
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		titles = [a["title"] for a in response.data["results"]]
+		# article3 has both "COVID" (in summary) and "cancer" (in title)
+		self.assertIn(self.article3.title, titles)
+		# article1 has COVID but not cancer
+		self.assertNotIn(self.article1.title, titles)
+
+	def test_boolean_negation(self):
+		"""Terms prefixed with - exclude matching articles"""
+		url = reverse("article-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"search": "COVID -cancer",
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		titles = [a["title"] for a in response.data["results"]]
+		self.assertIn(self.article1.title, titles)
+		self.assertNotIn(self.article3.title, titles)
+
+	def test_boolean_quoted_phrase(self):
+		"""Quoted phrases match the exact phrase"""
+		url = reverse("article-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"search": '"Multiple Sclerosis"',
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		titles = [a["title"] for a in response.data["results"]]
+		self.assertIn(self.article2.title, titles)
+		self.assertNotIn(self.article1.title, titles)
+
 	def test_invalid_team_id(self):
 		"""Test with invalid team ID"""
 		url = reverse("article-search")
