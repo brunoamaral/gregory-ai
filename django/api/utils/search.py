@@ -129,8 +129,12 @@ def build_search_q(raw):
 	(parentheses) for grouping.
 
 	Uses utitle/usummary GIN-indexed columns; each term is uppercased to
-	match. Falls back to whole-string phrase match on any parse error so
-	malformed input never raises a 500.
+	match. The parser is best-effort for malformed input (stray operators,
+	extra tokens, deep nesting) and returns a partial or fallback Q rather
+	than raising. The except clause fires only when the overall parse result
+	is None (all tokens discarded) or an unexpected exception occurs, and in
+	both cases falls back to a whole-string phrase match so this function
+	never causes a 500.
 
 	Returns None for blank input (caller should skip filtering).
 	"""

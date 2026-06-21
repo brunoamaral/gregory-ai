@@ -61,58 +61,65 @@ class TokenizeTests(TestCase):
 
 
 class BuildSearchQTests(TestCase):
+	"""Unit tests for the boolean parser.
+
+	Assertions use Q structural equality (connector / negated / children) or
+	direct Q == Q comparison rather than str(Q), which is not part of Django's
+	stable API.
+	"""
+
+	# Helpers that build the expected leaf Q for a single term.
+	def _q(self, term):
+		upper = term.upper()
+		return Q(utitle__contains=upper) | Q(usummary__contains=upper)
+
 	def test_empty_string_returns_none(self):
 		self.assertIsNone(build_search_q(""))
 		self.assertIsNone(build_search_q("   "))
 		self.assertIsNone(build_search_q(None))
 
-	def test_single_term_produces_q(self):
+	def test_single_term_produces_correct_q(self):
 		q = build_search_q("myelin")
-		self.assertIsInstance(q, Q)
-		# Should filter on utitle and usummary
-		self.assertIn("utitle__contains", str(q))
-		self.assertIn("usummary__contains", str(q))
+		self.assertEqual(q, self._q("myelin"))
 
 	def test_single_term_is_uppercased(self):
 		q = build_search_q("myelin")
-		self.assertIn("MYELIN", str(q))
+		self.assertEqual(q.connector, "OR")
+		self.assertIn(("utitle__contains", "MYELIN"), q.children)
+		self.assertIn(("usummary__contains", "MYELIN"), q.children)
 
 	def test_two_bare_terms_are_anded(self):
-		q_both = build_search_q("myelin repair")
-		q_a = build_search_q("myelin")
-		q_b = build_search_q("repair")
-		# AND means the combined Q is stricter than either alone
-		self.assertEqual(str(q_both), str(q_a & q_b))
+		q = build_search_q("myelin repair")
+		expected = self._q("myelin") & self._q("repair")
+		self.assertEqual(q, expected)
 
 	def test_or_operator(self):
 		q = build_search_q("myelin OR parkinson")
-		q_a = build_search_q("myelin")
-		q_b = build_search_q("parkinson")
-		self.assertEqual(str(q), str(q_a | q_b))
+		expected = self._q("myelin") | self._q("parkinson")
+		self.assertEqual(q, expected)
 
 	def test_not_operator(self):
 		q = build_search_q("myelin NOT cancer")
-		self.assertIn("NOT", str(q))
+		expected = self._q("myelin") & ~self._q("cancer")
+		self.assertEqual(q, expected)
 
 	def test_dash_negation(self):
-		q_dash = build_search_q("myelin -cancer")
-		q_not = build_search_q("myelin NOT cancer")
-		self.assertEqual(str(q_dash), str(q_not))
+		self.assertEqual(build_search_q("myelin -cancer"), build_search_q("myelin NOT cancer"))
 
-	def test_quoted_phrase_different_from_bare(self):
-		q_phrase = build_search_q('"myelin repair"')
-		q_and = build_search_q("myelin repair")
-		# Phrase match on "MYELIN REPAIR" vs AND of individual terms
-		self.assertNotEqual(str(q_phrase), str(q_and))
-		self.assertIn("MYELIN REPAIR", str(q_phrase))
+	def test_quoted_phrase_contiguous_match(self):
+		q = build_search_q('"myelin repair"')
+		expected = Q(utitle__contains="MYELIN REPAIR") | Q(usummary__contains="MYELIN REPAIR")
+		self.assertEqual(q, expected)
+
+	def test_quoted_phrase_differs_from_bare_and(self):
+		self.assertNotEqual(build_search_q('"myelin repair"'), build_search_q("myelin repair"))
 
 	def test_grouping(self):
 		q = build_search_q("(myelin OR repair) -tumor")
-		self.assertIsInstance(q, Q)
-		self.assertIn("NOT", str(q))
+		expected = (self._q("myelin") | self._q("repair")) & ~self._q("tumor")
+		self.assertEqual(q, expected)
 
 	def test_malformed_deep_parens_does_not_raise(self):
-		# Should not raise even with pathological input
 		q = build_search_q("((((((((((((((((((((")
 		self.assertIsInstance(q, Q)
 
@@ -126,8 +133,6 @@ class BuildSearchQTests(TestCase):
 
 	def test_all_operators_junk(self):
 		q = build_search_q("OR OR NOT AND")
-		# Falls back to phrase match or returns something; must not raise
-		# (may be None if parse returns nothing — but fallback ensures Q)
 		self.assertIsInstance(q, Q)
 
 
