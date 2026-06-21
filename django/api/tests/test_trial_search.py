@@ -149,6 +149,64 @@ class TrialSearchViewTests(TestCase):
 		self.assertEqual(len(response.data["results"]), 1)
 		self.assertEqual(response.data["results"][0]["title"], self.trial3.title)
 
+	def test_boolean_or_search(self):
+		"""Boolean OR returns trials matching either term"""
+		url = reverse("trial-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"search": "coronavirus OR sclerosis",
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		titles = [t["title"] for t in response.data["results"]]
+		self.assertIn(self.trial1.title, titles)
+		self.assertIn(self.trial2.title, titles)
+		self.assertNotIn(self.trial3.title, titles)
+
+	def test_boolean_and_search(self):
+		"""Space-separated terms use AND semantics"""
+		url = reverse("trial-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"search": "COVID cancer",
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		titles = [t["title"] for t in response.data["results"]]
+		# trial3 has both COVID (in summary) and cancer (in title)
+		self.assertIn(self.trial3.title, titles)
+		self.assertNotIn(self.trial1.title, titles)
+
+	def test_boolean_negation(self):
+		"""Terms prefixed with - exclude matching trials"""
+		url = reverse("trial-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"search": "COVID -cancer",
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		titles = [t["title"] for t in response.data["results"]]
+		self.assertIn(self.trial1.title, titles)
+		self.assertNotIn(self.trial3.title, titles)
+
+	def test_boolean_quoted_phrase(self):
+		"""Quoted phrases match the exact phrase"""
+		url = reverse("trial-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"search": '"Multiple Sclerosis"',
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		titles = [t["title"] for t in response.data["results"]]
+		self.assertIn(self.trial2.title, titles)
+		self.assertNotIn(self.trial1.title, titles)
+
 	def test_invalid_team_id(self):
 		"""Test with invalid team ID"""
 		url = reverse("trial-search")
