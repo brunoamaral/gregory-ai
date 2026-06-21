@@ -958,13 +958,16 @@ class ArticleViewSet(
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	pagination_class = FlexiblePagination
+	# NOTE: `search` is handled solely by ArticleFilter.filter_search (boolean
+	# parser). DRF's SearchFilter is intentionally absent — it also binds to
+	# ?search= and would AND its naive token match on top of the parsed Q,
+	# turning a query like `a OR b` into a literal "must contain OR" and
+	# wiping the results. See api/utils/search.build_search_q.
 	filter_backends = [
 		django_filters.DjangoFilterBackend,
-		filters.SearchFilter,
 		NullsLastOrderingFilter,
 	]
 	filterset_class = ArticleFilter
-	search_fields = ["title", "summary"]
 	ordering_fields = ["discovery_date", "published_date", "title", "article_id", "ml_score"]
 	ordering = ["-discovery_date"]
 
@@ -1378,9 +1381,10 @@ class TrialViewSet(
 	serializer_class = TrialSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	pagination_class = FlexiblePagination
+	# `search` is handled solely by TrialFilter.filter_search (boolean parser);
+	# DRF's SearchFilter is omitted to avoid double-filtering ?search=. See ArticleViewSet.
 	filter_backends = [
 		django_filters.DjangoFilterBackend,
-		filters.SearchFilter,
 		filters.OrderingFilter,
 	]
 	filterset_class = TrialFilter
@@ -1413,7 +1417,6 @@ class TrialViewSet(
 			)
 		return qs
 
-	search_fields = ["title", "summary"]
 	ordering_fields = [
 		"discovery_date",
 		"published_date",
@@ -1916,13 +1919,13 @@ class ArticlesByTeam(viewsets.ModelViewSet):
 
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	# `search` is handled solely by ArticleFilter.filter_search; DRF's
+	# SearchFilter is omitted to avoid double-filtering ?search=. See ArticleViewSet.
 	filter_backends = [
 		django_filters.DjangoFilterBackend,
-		filters.SearchFilter,
 		filters.OrderingFilter,
 	]
 	filterset_class = ArticleFilter
-	search_fields = ["title", "summary"]
 	ordering_fields = ["discovery_date", "published_date", "title", "article_id"]
 	ordering = ["-discovery_date"]
 
@@ -1970,13 +1973,13 @@ class ArticlesBySubject(viewsets.ModelViewSet):
 
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	# `search` is handled solely by ArticleFilter.filter_search; DRF's
+	# SearchFilter is omitted to avoid double-filtering ?search=. See ArticleViewSet.
 	filter_backends = [
 		django_filters.DjangoFilterBackend,
-		filters.SearchFilter,
 		filters.OrderingFilter,
 	]
 	filterset_class = ArticleFilter
-	search_fields = ["title", "summary"]
 	ordering_fields = ["discovery_date", "published_date", "title", "article_id"]
 	ordering = ["-discovery_date"]
 
@@ -2160,13 +2163,14 @@ class ArticleSearchView(generics.ListAPIView):
 	permission_classes = [
 		permissions.AllowAny
 	]  # Allow access to anyone since we require team_id and subject_id
+	# `search` is parsed by build_search_q in get_queryset (and by ArticleFilter
+	# for GET query params). DRF's SearchFilter is omitted so it can't AND a
+	# naive token match on top and break boolean queries. See ArticleViewSet.
 	filter_backends = [
-		filters.SearchFilter,
 		django_filters.DjangoFilterBackend,
 		filters.OrderingFilter,
 	]
 	filterset_class = ArticleFilter
-	search_fields = ["title", "summary"]
 	ordering_fields = ["discovery_date", "published_date", "title", "article_id"]
 	ordering = ["-discovery_date"]  # Default ordering by newest first
 	pagination_class = FlexiblePagination
@@ -2354,13 +2358,14 @@ class TrialSearchView(generics.ListAPIView):
 	permission_classes = [
 		permissions.AllowAny
 	]  # Allow access to anyone since we require team_id and subject_id
+	# `search` is parsed by build_search_q in get_queryset (and by TrialFilter
+	# for GET query params). DRF's SearchFilter is omitted so it can't AND a
+	# naive token match on top and break boolean queries. See ArticleViewSet.
 	filter_backends = [
-		filters.SearchFilter,
 		django_filters.DjangoFilterBackend,
 		filters.OrderingFilter,
 	]
 	filterset_class = TrialFilter
-	search_fields = ["title", "summary"]
 	ordering_fields = [
 		"discovery_date",
 		"published_date",
