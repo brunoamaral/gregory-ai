@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject
 
 
-class SubjectANDFilterMixin:
+class SubjectFilterMixin:
 	"""
 	Mixin that provides subject filters with AND and OR semantics.
 
@@ -55,7 +55,7 @@ class SubjectANDFilterMixin:
 		)
 
 
-class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
+class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 	"""
 	Filter class for Articles, allowing searching by title, summary,
 	and combined search across both fields, plus filtering by author,
@@ -416,7 +416,7 @@ class ArticleFilter(SubjectANDFilterMixin, filters.FilterSet):
 		return queryset.filter(published_date__lt=end)
 
 
-class TrialFilter(SubjectANDFilterMixin, filters.FilterSet):
+class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	"""
 	Filter class for Trials, allowing searching by title, summary,
 	and combined search across both fields, plus filtering by recruitment status,
