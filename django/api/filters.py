@@ -162,13 +162,16 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 
 	def filter_search(self, queryset, name, value):
 		"""
-		Search in both title and summary fields using uppercase columns for performance
+		Boolean search across title and summary using GIN-indexed uppercase columns.
+
+		Bare terms are AND-ed; uppercase OR/NOT and "quoted phrases" are supported.
+		Single-term queries behave identically to before (substring match).
 		"""
-		upper_value = value.upper()
-		return queryset.filter(
-			models.Q(utitle__contains=upper_value)
-			| models.Q(usummary__contains=upper_value)
-		)
+		from api.utils.search import build_search_q
+		q = build_search_q(value)
+		if q is None:
+			return queryset
+		return queryset.filter(q)
 
 	def filter_journal(self, queryset, name, value):
 		"""
@@ -595,13 +598,16 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 
 	def filter_search(self, queryset, name, value):
 		"""
-		Search in both title and summary fields using uppercase columns for performance
+		Boolean search across title and summary using GIN-indexed uppercase columns.
+
+		Bare terms are AND-ed; uppercase OR/NOT and "quoted phrases" are supported.
+		Single-term queries behave identically to before (substring match).
 		"""
-		upper_value = value.upper()
-		return queryset.filter(
-			models.Q(utitle__contains=upper_value)
-			| models.Q(usummary__contains=upper_value)
-		)
+		from api.utils.search import build_search_q
+		q = build_search_q(value)
+		if q is None:
+			return queryset
+		return queryset.filter(q)
 
 	def _match_identifier(self, queryset, value, keys):
 		"""Return trials whose ``identifiers`` JSON has any of ``keys`` equal
