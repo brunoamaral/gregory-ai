@@ -95,7 +95,6 @@ Optional variables: EMAIL_*, ORCID_*
 		"EMAIL_PORT": 587,
 		"EMAIL_USE_TLS": "true",
 		"FERNET_SECRET_KEY": os.getenv("FERNET_SECRET_KEY") or fernet_key,
-		"GREGORY_DIR": os.getenv("GREGORY_DIR"),
 		"POSTGRES_DB": os.getenv("POSTGRES_DB"),
 		"POSTGRES_PASSWORD": os.getenv("POSTGRES_PASSWORD"),
 		"POSTGRES_USER": os.getenv("POSTGRES_USER"),
