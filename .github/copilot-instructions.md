@@ -142,9 +142,9 @@ Backend auto-fetches missing metadata via `SciencePaper` class (queries CrossRef
 ## Critical Patterns
 
 **Category Assignment** (`rebuild_categories`):
-- Scans `TeamCategory.category_terms` (array of keywords)
-- Searches in `Articles.utitle` (uppercase generated field with GIN index for fast ILIKE)
-- M2M link via `article.team_categories.add(category)`
+- Scans `TeamCategory.category_terms` (array of keywords); only `category_type=automatic` categories are matched
+- Per category, `match_scope` selects the fields searched/scored: `title` (title only) or `title_summary` (title + summary, plus the extra trial fields). `match_weights` sets the per-field points and `match_min_score` the threshold — a fixed +2 bonus per unique matched term is always added
+- Whole-word term matches are scored against `Articles.utitle`/`usummary` (uppercase generated fields with GIN indexes); items reaching `match_min_score` are linked via the automatic-source `ArticleCategoryAssignment`/`TrialCategoryAssignment` through model (manual assignments are preserved)
 
 **Newsletter Filtering** (`send_weekly_summary`):
 - Excludes articles where `relevant=False` for ALL subjects in the list
@@ -162,7 +162,7 @@ Backend auto-fetches missing metadata via `SciencePaper` class (queries CrossRef
 1. **Import errors in ML code**: ML dependencies optional - wrap imports in try/except, check `ML_AVAILABLE` flag
 2. **API 401s**: Ensure `Authorization` header has raw key (no prefix). Check `APIAccessScheme` has valid `begin_date`/`end_date`
 3. **Missing authors**: Run `get_authors` after `update_articles_info` - author extraction depends on CrossRef data
-4. **Category not assigning**: Check `utitle` field populated, verify `category_terms` contains exact match (case-insensitive ILIKE)
+4. **Category not assigning**: Check `utitle`/`usummary` populated and `category_terms` has a whole-word match; confirm the score reaches `match_min_score` and that `match_scope` includes the field where the term appears (a `title`-only category ignores summary/intervention/outcome matches)
 5. **Newsletter not sending**: Verify `Lists.send_weekly_digest=True`, check `ml_prediction_threshold`, ensure articles not in `SentArticleNotification`
 
 ## Key Files Reference

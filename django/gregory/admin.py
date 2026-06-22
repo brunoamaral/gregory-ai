@@ -41,6 +41,7 @@ from .models import (
 	ArticleCategoryAssignment,
 	TrialCategoryAssignment,
 	CategoryType,
+	default_match_weights,
 )
 from .widgets import MLPredictionsWidget
 from .fields import MLPredictionsField
@@ -1666,26 +1667,165 @@ class AuthorsAdmin(admin.ModelAdmin):
 		return super().get_inline_instances(request, obj)
 
 
+# Maps each stored weight (content type → field) to the admin form field that
+# edits it. Keeps the JSON ``match_weights`` column out of the form in favour of
+# friendly per-field integer inputs.
+TEAMCATEGORY_WEIGHT_FIELDS = {
+	"article": {
+		"title": "weight_article_title",
+		"summary": "weight_article_summary",
+	},
+	"trial": {
+		"title": "weight_trial_title",
+		"summary": "weight_trial_summary",
+		"scientific_title": "weight_trial_scientific_title",
+		"intervention": "weight_trial_intervention",
+		"primary_outcome": "weight_trial_primary_outcome",
+		"secondary_outcome": "weight_trial_secondary_outcome",
+		"therapeutic_areas": "weight_trial_therapeutic_areas",
+	},
+}
+
+
+class TeamCategoryAdminForm(forms.ModelForm):
+	"""Edits TeamCategory matching settings, exposing the per-field weights stored
+	in the ``match_weights`` JSON column as friendly integer inputs."""
+
+	weight_article_title = forms.IntegerField(min_value=0, label="Title")
+	weight_article_summary = forms.IntegerField(min_value=0, label="Summary")
+	weight_trial_title = forms.IntegerField(min_value=0, label="Title")
+	weight_trial_summary = forms.IntegerField(min_value=0, label="Summary")
+	weight_trial_scientific_title = forms.IntegerField(
+		min_value=0, label="Scientific title"
+	)
+	weight_trial_intervention = forms.IntegerField(min_value=0, label="Intervention")
+	weight_trial_primary_outcome = forms.IntegerField(
+		min_value=0, label="Primary outcome"
+	)
+	weight_trial_secondary_outcome = forms.IntegerField(
+		min_value=0, label="Secondary outcome"
+	)
+	weight_trial_therapeutic_areas = forms.IntegerField(
+		min_value=0, label="Therapeutic areas"
+	)
+
+	class Meta:
+		model = TeamCategory
+		exclude = ["match_weights"]
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		if self.instance and self.instance.pk:
+			weights = {
+				content_type: self.instance.get_match_weights(content_type)
+				for content_type in TEAMCATEGORY_WEIGHT_FIELDS
+			}
+		else:
+			weights = default_match_weights()
+		for content_type, fmap in TEAMCATEGORY_WEIGHT_FIELDS.items():
+			ct_weights = weights.get(content_type, {})
+			for field_key, form_field in fmap.items():
+				self.fields[form_field].initial = ct_weights.get(field_key, 0)
+
+	def save(self, commit=True):
+		instance = super().save(commit=False)
+		instance.match_weights = {
+			content_type: {
+				field_key: self.cleaned_data[form_field]
+				for field_key, form_field in fmap.items()
+			}
+			for content_type, fmap in TEAMCATEGORY_WEIGHT_FIELDS.items()
+		}
+		if commit:
+			instance.save()
+			self.save_m2m()
+		return instance
+
+
 @admin.register(TeamCategory)
 class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
+	form = TeamCategoryAdminForm
 	list_display = (
 		"category_name",
 		"team",
 		"category_type",
+		"display_match_scope",
 		"article_count",
 		"display_subjects",
 	)
 	search_fields = ("category_name", "team__name", "subjects__subject_name")
 	list_filter = [
 		"category_type",
+		"match_scope",
 		("team", OrganizationRestrictedFieldListFilter),
 		("subjects", OrganizationRestrictedFieldListFilter),
 	]
 	filter_horizontal = ("subjects",)
 	actions = ["reassign_to_team_action"]
+	fieldsets = (
+		(
+			None,
+			{
+				"fields": (
+					"team",
+					"category_name",
+					"category_slug",
+					"category_description",
+					"subjects",
+					"category_type",
+				)
+			},
+		),
+		(
+			"Matching",
+			{
+				"fields": ("category_terms", "match_scope", "match_min_score"),
+				"description": (
+					"Automatic categories match content whose in-scope fields contain these "
+					"terms and whose score reaches the minimum. A fixed bonus of 2 points per "
+					"unique matched term is added on top of the field weights below. In "
+					"'Title only' scope every field except the title is ignored."
+				),
+			},
+		),
+		(
+			"Article score weights",
+			{"fields": ("weight_article_title", "weight_article_summary")},
+		),
+		(
+			"Trial score weights",
+			{
+				"classes": ("collapse",),
+				"fields": (
+					"weight_trial_title",
+					"weight_trial_summary",
+					"weight_trial_scientific_title",
+					"weight_trial_intervention",
+					"weight_trial_primary_outcome",
+					"weight_trial_secondary_outcome",
+					"weight_trial_therapeutic_areas",
+				),
+			},
+		),
+	)
 
 	# Form fields that affect which articles/trials match the category
-	MATCHING_CONFIG_FIELDS = {"category_terms", "subjects", "category_type"}
+	MATCHING_CONFIG_FIELDS = {
+		"category_terms",
+		"subjects",
+		"category_type",
+		"match_scope",
+		"match_min_score",
+		"weight_article_title",
+		"weight_article_summary",
+		"weight_trial_title",
+		"weight_trial_summary",
+		"weight_trial_scientific_title",
+		"weight_trial_intervention",
+		"weight_trial_primary_outcome",
+		"weight_trial_secondary_outcome",
+		"weight_trial_therapeutic_areas",
+	}
 
 	def save_related(self, request, form, formsets, change):
 		"""Re-match an automatic category as soon as its configuration is saved.
@@ -1727,6 +1867,11 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 		return obj.articles.count()
 
 	article_count.short_description = "Articles"
+
+	@admin.display(description="Match scope", ordering="match_scope")
+	def display_match_scope(self, obj):
+		"""Human-readable label for the category's match scope."""
+		return obj.get_match_scope_display()
 
 	def display_subjects(self, obj):
 		"""Display subjects as a comma-separated list"""

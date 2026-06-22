@@ -60,6 +60,42 @@ class CategoryType(models.TextChoices):
 	AUTOMATIC = "automatic", "Automatic"
 
 
+class CategoryMatchScope(models.TextChoices):
+	TITLE = "title", "Title only"
+	TITLE_SUMMARY = "title_summary", "Title and summary"
+
+
+# Default per-field score weights used when matching content to a category.
+# These reproduce the historical hard-coded scoring so existing categories keep
+# behaving exactly as before until someone edits them. A fixed bonus of 2 points
+# per unique matched term is added on top of these (see rebuild_categories).
+DEFAULT_ARTICLE_MATCH_WEIGHTS = {
+	"title": 3,
+	"summary": 1,
+}
+DEFAULT_TRIAL_MATCH_WEIGHTS = {
+	"title": 3,
+	"summary": 2,
+	"scientific_title": 2,
+	"intervention": 2,
+	"primary_outcome": 1,
+	"secondary_outcome": 1,
+	"therapeutic_areas": 1,
+}
+MATCH_WEIGHT_DEFAULTS = {
+	"article": DEFAULT_ARTICLE_MATCH_WEIGHTS,
+	"trial": DEFAULT_TRIAL_MATCH_WEIGHTS,
+}
+
+
+def default_match_weights():
+	"""Default for TeamCategory.match_weights (a fresh copy each time)."""
+	return {
+		content_type: dict(weights)
+		for content_type, weights in MATCH_WEIGHT_DEFAULTS.items()
+	}
+
+
 class TeamCategory(models.Model):
 	team = models.ForeignKey(
 		"Team",
@@ -90,6 +126,31 @@ class TeamCategory(models.Model):
 			"by hand and are never touched by the command."
 		),
 	)
+	match_scope = models.CharField(
+		max_length=20,
+		choices=CategoryMatchScope.choices,
+		default=CategoryMatchScope.TITLE_SUMMARY,
+		help_text=(
+			"Which fields are searched and scored when matching content to this category. "
+			"'Title only' scores just the title; 'Title and summary' also scores the summary "
+			"(and, for trials, the scientific title, intervention, outcomes and therapeutic areas)."
+		),
+	)
+	match_min_score = models.PositiveSmallIntegerField(
+		default=3,
+		help_text=(
+			"Minimum score an article or trial must reach to be assigned to this category."
+		),
+	)
+	match_weights = models.JSONField(
+		default=default_match_weights,
+		blank=True,
+		help_text=(
+			"Per-field score weights keyed by content type ('article', 'trial'). Higher "
+			"weights make a matched field count for more. A fixed bonus of 2 points per "
+			"unique matched term is always added."
+		),
+	)
 	match_config_hash = models.CharField(
 		max_length=64,
 		blank=True,
@@ -112,6 +173,37 @@ class TeamCategory(models.Model):
 		if not self.category_slug:
 			self.category_slug = slugify(self.category_name)
 		super().save(*args, **kwargs)
+
+	def get_match_weights(self, content_type):
+		"""Return the per-field weights for 'article' or 'trial'.
+
+		Falls back to the historical defaults for any field missing from the
+		stored configuration and ignores unknown fields, so a partial or legacy
+		``match_weights`` value can never break matching.
+		"""
+		defaults = MATCH_WEIGHT_DEFAULTS.get(content_type, {})
+		stored = {}
+		if isinstance(self.match_weights, dict):
+			candidate = self.match_weights.get(content_type)
+			if isinstance(candidate, dict):
+				stored = candidate
+		weights = {}
+		for field, default in defaults.items():
+			try:
+				weights[field] = int(stored.get(field, default))
+			except (TypeError, ValueError):
+				weights[field] = default
+		return weights
+
+	def get_scored_fields(self, content_type):
+		"""Return {field: weight} actually used for scoring, honouring match_scope.
+
+		In 'title only' scope every field except the title is dropped.
+		"""
+		weights = self.get_match_weights(content_type)
+		if self.match_scope == CategoryMatchScope.TITLE:
+			return {"title": weights.get("title", 0)}
+		return weights
 
 	def __str__(self):
 		return f"{self.team.name} - {self.category_name}"

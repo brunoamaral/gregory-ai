@@ -20,6 +20,7 @@ from gregory.models import (
 	Articles,
 	ArticleCategoryAssignment,
 	CategoryAssignmentSource,
+	CategoryMatchScope,
 	CategoryType,
 	Subject,
 	Team,
@@ -342,6 +343,162 @@ class RebuildCategoriesDiffSyncTest(TestCase):
 		self.assertEqual(self.article_assignment(matching).pk, row_id)
 
 
+class MatchScopeAndScoringTest(TestCase):
+	"""Per-category match scope, score threshold, and field weights."""
+
+	def setUp(self):
+		self.org = Organization.objects.create(name="Test Org")
+		self.team = Team.objects.create(
+			organization=self.org, name="Research", slug="research"
+		)
+		self.subject = Subject.objects.create(
+			subject_name="Neurology", subject_slug="neurology", team=self.team
+		)
+		self.category = TeamCategory.objects.create(
+			team=self.team,
+			category_name="Neuroplasticity",
+			category_terms=["neuroplasticity"],
+		)
+		self.category.subjects.add(self.subject)
+
+	def make_article(self, title, summary=""):
+		article = Articles.objects.create(
+			title=title,
+			summary=summary,
+			link=f"https://example.com/{abs(hash(title))}",
+		)
+		article.subjects.add(self.subject)
+		return article
+
+	def make_trial(self, title, summary="", **fields):
+		trial = Trials.objects.create(
+			title=title,
+			summary=summary,
+			link=f"https://example.com/trial/{abs(hash(title))}",
+			discovery_date=timezone.now(),
+			**fields,
+		)
+		trial.subjects.add(self.subject)
+		return trial
+
+	def backdate(self, model, obj, days=30):
+		old = timezone.now() - timedelta(days=days)
+		model.objects.filter(pk=obj.pk).update(discovery_date=old, last_updated=old)
+
+	# --- match scope ---------------------------------------------------------
+
+	def test_default_scope_scores_summary(self):
+		# title+summary is the default: a summary-only mention still qualifies
+		summary_only = self.make_article("Unrelated topic", "A study of neuroplasticity")
+
+		call_command("rebuild_categories", articles_only=True)
+
+		self.assertIn(summary_only, self.category.articles.all())
+
+	def test_title_only_scope_ignores_summary(self):
+		self.category.match_scope = CategoryMatchScope.TITLE
+		self.category.save()
+		title_match = self.make_article("Neuroplasticity in adults")
+		summary_only = self.make_article("Unrelated topic", "About neuroplasticity")
+
+		call_command("rebuild_categories", articles_only=True)
+
+		self.assertIn(title_match, self.category.articles.all())
+		self.assertNotIn(summary_only, self.category.articles.all())
+
+	# --- per-category threshold ---------------------------------------------
+
+	def test_higher_min_score_excludes_single_title_match(self):
+		# title (3) + bonus (2) = 5; raise the bar above that
+		self.category.match_min_score = 6
+		self.category.save()
+		single = self.make_article("Neuroplasticity in adults")
+		# title (3) + summary (1) + bonus (2) = 6 clears the bar
+		both = self.make_article("Neuroplasticity in adults", "more neuroplasticity")
+
+		call_command("rebuild_categories", articles_only=True)
+
+		self.assertNotIn(single, self.category.articles.all())
+		self.assertIn(both, self.category.articles.all())
+
+	# --- per-field weights ---------------------------------------------------
+
+	def test_zero_weight_disables_field(self):
+		self.category.match_weights = {
+			"article": {"title": 3, "summary": 0},
+			"trial": {},
+		}
+		self.category.save()
+		title_match = self.make_article("Neuroplasticity in adults")
+		summary_only = self.make_article("Unrelated topic", "About neuroplasticity")
+
+		call_command("rebuild_categories", articles_only=True)
+
+		self.assertIn(title_match, self.category.articles.all())
+		self.assertNotIn(summary_only, self.category.articles.all())
+
+	# --- trials --------------------------------------------------------------
+
+	def test_trial_default_scope_uses_extra_fields(self):
+		self.category.category_terms = ["dopamine"]
+		self.category.save()
+		# intervention (2) + bonus (2) = 4 >= 3 under the default title+summary scope
+		via_intervention = self.make_trial(
+			"Unrelated trial", intervention="dopamine agonist"
+		)
+
+		call_command("rebuild_categories", trials_only=True)
+
+		self.assertIn(via_intervention, self.category.trials.all())
+
+	def test_trial_title_only_ignores_extra_fields(self):
+		self.category.category_terms = ["dopamine"]
+		self.category.match_scope = CategoryMatchScope.TITLE
+		self.category.save()
+		title_match = self.make_trial("Dopamine rehabilitation trial")
+		via_intervention = self.make_trial(
+			"Unrelated trial", intervention="dopamine agonist"
+		)
+
+		call_command("rebuild_categories", trials_only=True)
+
+		self.assertIn(title_match, self.category.trials.all())
+		self.assertNotIn(via_intervention, self.category.trials.all())
+
+	# --- config-change re-match ---------------------------------------------
+
+	def test_changing_scope_triggers_full_rematch(self):
+		summary_only = self.make_article("Unrelated topic", "About neuroplasticity")
+		call_command("rebuild_categories")
+		self.assertIn(summary_only, self.category.articles.all())
+
+		# Push it outside the incremental window, then narrow the scope
+		self.backdate(Articles, summary_only)
+		self.category.match_scope = CategoryMatchScope.TITLE
+		self.category.save()
+
+		call_command("rebuild_categories", days=7)
+
+		# The scope change forces a full re-match despite --days
+		self.assertNotIn(summary_only, self.category.articles.all())
+
+	def test_changing_weight_triggers_full_rematch(self):
+		summary_only = self.make_article("Unrelated topic", "About neuroplasticity")
+		call_command("rebuild_categories")
+		self.assertIn(summary_only, self.category.articles.all())
+
+		self.backdate(Articles, summary_only)
+		self.category.match_weights = {
+			"article": {"title": 3, "summary": 0},
+			"trial": {},
+		}
+		self.category.save()
+
+		call_command("rebuild_categories", days=7)
+
+		self.assertNotIn(summary_only, self.category.articles.all())
+
+
 class TeamCategoryAdminBackfillTest(TestCase):
 	"""Creating an automatic category in the admin backfills it immediately."""
 
@@ -369,19 +526,35 @@ class TeamCategoryAdminBackfillTest(TestCase):
 		)
 		self.trial.subjects.add(self.subject)
 
-	def create_category_via_admin(self, category_type):
-		return self.client.post(
-			reverse("admin:gregory_teamcategory_add"),
-			{
-				"team": self.team.pk,
-				"subjects": [self.subject.pk],
-				"category_name": "Neuroplasticity",
-				"category_slug": "neuroplasticity",
-				"category_description": "",
-				"category_terms": "neuroplasticity",
-				"category_type": category_type,
-			},
-		)
+	# Default values for the matching-settings form fields, mirroring the model
+	# defaults so a posted form reproduces today's behaviour unless overridden.
+	DEFAULT_MATCH_FIELDS = {
+		"match_scope": "title_summary",
+		"match_min_score": 3,
+		"weight_article_title": 3,
+		"weight_article_summary": 1,
+		"weight_trial_title": 3,
+		"weight_trial_summary": 2,
+		"weight_trial_scientific_title": 2,
+		"weight_trial_intervention": 2,
+		"weight_trial_primary_outcome": 1,
+		"weight_trial_secondary_outcome": 1,
+		"weight_trial_therapeutic_areas": 1,
+	}
+
+	def create_category_via_admin(self, category_type, **overrides):
+		data = {
+			"team": self.team.pk,
+			"subjects": [self.subject.pk],
+			"category_name": "Neuroplasticity",
+			"category_slug": "neuroplasticity",
+			"category_description": "",
+			"category_terms": "neuroplasticity",
+			"category_type": category_type,
+			**self.DEFAULT_MATCH_FIELDS,
+		}
+		data.update(overrides)
+		return self.client.post(reverse("admin:gregory_teamcategory_add"), data)
 
 	def test_new_automatic_category_is_backfilled(self):
 		response = self.create_category_via_admin(CategoryType.AUTOMATIC)
@@ -407,6 +580,8 @@ class TeamCategoryAdminBackfillTest(TestCase):
 		self.assertEqual(category.trials.count(), 0)
 
 	def edit_category_via_admin(self, category, **overrides):
+		article_weights = category.get_match_weights("article")
+		trial_weights = category.get_match_weights("trial")
 		data = {
 			"team": self.team.pk,
 			"subjects": [self.subject.pk],
@@ -418,11 +593,57 @@ class TeamCategoryAdminBackfillTest(TestCase):
 			# hidden initial input and compares against it to detect changes
 			"initial-category_terms": ",".join(category.category_terms or []),
 			"category_type": category.category_type,
+			"match_scope": category.match_scope,
+			"match_min_score": category.match_min_score,
+			"weight_article_title": article_weights["title"],
+			"weight_article_summary": article_weights["summary"],
+			"weight_trial_title": trial_weights["title"],
+			"weight_trial_summary": trial_weights["summary"],
+			"weight_trial_scientific_title": trial_weights["scientific_title"],
+			"weight_trial_intervention": trial_weights["intervention"],
+			"weight_trial_primary_outcome": trial_weights["primary_outcome"],
+			"weight_trial_secondary_outcome": trial_weights["secondary_outcome"],
+			"weight_trial_therapeutic_areas": trial_weights["therapeutic_areas"],
 		}
 		data.update(overrides)
 		return self.client.post(
 			reverse("admin:gregory_teamcategory_change", args=[category.pk]), data
 		)
+
+	def test_admin_saves_custom_match_settings(self):
+		response = self.create_category_via_admin(
+			CategoryType.AUTOMATIC,
+			match_scope="title",
+			match_min_score=5,
+			weight_article_summary=4,
+		)
+		self.assertEqual(response.status_code, 302)
+
+		category = TeamCategory.objects.get(category_slug="neuroplasticity")
+		self.assertEqual(category.match_scope, "title")
+		self.assertEqual(category.match_min_score, 5)
+		self.assertEqual(category.match_weights["article"]["summary"], 4)
+		self.assertEqual(category.match_weights["article"]["title"], 3)
+
+	def test_changing_scope_via_admin_rematches(self):
+		summary_only = Articles.objects.create(
+			title="Unrelated topic",
+			summary="A study of neuroplasticity",
+			link="https://example.com/admin-summary-only",
+		)
+		summary_only.subjects.add(self.subject)
+
+		self.create_category_via_admin(CategoryType.AUTOMATIC)
+		category = TeamCategory.objects.get(category_slug="neuroplasticity")
+		# default title+summary scope matched the summary-only article on backfill
+		self.assertIn(summary_only, category.articles.all())
+
+		response = self.edit_category_via_admin(category, match_scope="title")
+		self.assertEqual(response.status_code, 302)
+
+		category.refresh_from_db()
+		self.assertEqual(category.match_scope, "title")
+		self.assertNotIn(summary_only, category.articles.all())
 
 	def test_editing_terms_triggers_immediate_rematch(self):
 		self.create_category_via_admin(CategoryType.AUTOMATIC)
