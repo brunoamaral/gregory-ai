@@ -898,7 +898,7 @@ class ArticleViewSet(
 
 	# Query Parameters:
 	- **team_id** - filter by team ID
-	- **doi** - filter by exact DOI (case-insensitive)
+	- **doi** - filter by DOI, case-insensitive; accepts a single value or a comma-separated list (e.g. `?doi=10.1/a,10.2/b`)
 	- **subject_id** - filter by subject ID (used with team_id)
 	- **subjects** - comma-separated list of subject IDs with AND semantics — returns only articles tagged with *all* listed subjects (e.g., `?subjects=1,2`)
 	- **subjects_any** - comma-separated list of subject IDs with OR semantics — returns articles tagged with *any* of the listed subjects (e.g., `?subjects_any=1,2`)
@@ -932,7 +932,8 @@ class ArticleViewSet(
 	prediction per (algorithm, subject) pair. `null` when no predictions exist yet.
 
 	# Examples:
-	- By DOI: `/articles/?doi=10.1016/j.procs.2023.01.401`
+	- By DOI (single): `/articles/?doi=10.1016/j.procs.2023.01.401`
+	- By DOI (multiple): `/articles/?doi=10.1016/j.procs.2023.01.401,10.1016/j.other.2024.02.001`
 	- Team articles: `/articles/?team_id=1`
 	- Team + subject: `/articles/?team_id=1&subject_id=4`
 	- Multi-subject AND: `/articles/?subjects=1,2`
