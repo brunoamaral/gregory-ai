@@ -68,7 +68,7 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 	author_id = filters.NumberFilter(
 		field_name="authors__author_id", lookup_expr="exact", label="Author ID"
 	)
-	doi = filters.CharFilter(field_name="doi", lookup_expr="iexact", label="DOI")
+	doi = filters.CharFilter(method="filter_doi", label="DOI")
 	category_slug = filters.CharFilter(
 		field_name="team_categories__category_slug",
 		lookup_expr="exact",
@@ -147,6 +147,16 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"published_date_after",
 			"published_date_before",
 		]
+
+	def filter_doi(self, queryset, name, value):
+		"""
+		Filter by one or more DOIs (case-insensitive).
+		Accepts a single DOI or a comma-separated list, e.g. ?doi=10.1/a or ?doi=10.1/a,10.2/b
+		"""
+		dois = [d.strip().upper() for d in value.split(",") if d.strip()]
+		if not dois:
+			return queryset
+		return queryset.annotate(_doi_upper=Upper("doi")).filter(_doi_upper__in=dois)
 
 	def filter_title(self, queryset, name, value):
 		"""
