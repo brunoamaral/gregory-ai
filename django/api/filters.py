@@ -153,9 +153,11 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		Filter by one or more DOIs (case-insensitive).
 		Accepts a single DOI or a comma-separated list, e.g. ?doi=10.1/a or ?doi=10.1/a,10.2/b
 		"""
-		dois = [d.strip().upper() for d in value.split(",") if d.strip()]
+		dois = list({d.strip().upper() for d in value.split(",") if d.strip()})
 		if not dois:
 			return queryset
+		if len(dois) == 1:
+			return queryset.filter(doi__iexact=dois[0])
 		return queryset.annotate(_doi_upper=Upper("doi")).filter(_doi_upper__in=dois)
 
 	def filter_title(self, queryset, name, value):
