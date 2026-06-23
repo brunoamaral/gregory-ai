@@ -414,7 +414,7 @@ class MatchScopeAndScoringTest(TestCase):
 		self.category.save()
 		single = self.make_article("Neuroplasticity in adults")
 		# title (3) + summary (1) + bonus (2) = 6 clears the bar
-		both = self.make_article("Neuroplasticity in adults", "more neuroplasticity")
+		both = self.make_article("Neuroplasticity research in adults", "more neuroplasticity")
 
 		call_command("rebuild_categories", articles_only=True)
 
