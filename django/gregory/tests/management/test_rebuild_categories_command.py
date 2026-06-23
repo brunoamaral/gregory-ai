@@ -410,7 +410,7 @@ class MatchScopeAndScoringTest(TestCase):
 
 	def test_higher_min_score_excludes_single_title_match(self):
 		# title (3) + bonus (2) = 5; raise the bar above that
-		self.category.match_min_score = 6
+		self.category.match_min_score_articles = 6
 		self.category.save()
 		single = self.make_article("Neuroplasticity in adults")
 		# title (3) + summary (1) + bonus (2) = 6 clears the bar
@@ -530,7 +530,8 @@ class TeamCategoryAdminBackfillTest(TestCase):
 	# defaults so a posted form reproduces today's behaviour unless overridden.
 	DEFAULT_MATCH_FIELDS = {
 		"match_scope": "title_summary",
-		"match_min_score": 3,
+		"match_min_score_articles": 3,
+		"match_min_score_trials": 3,
 		"weight_article_title": 3,
 		"weight_article_summary": 1,
 		"weight_trial_title": 3,
@@ -594,7 +595,8 @@ class TeamCategoryAdminBackfillTest(TestCase):
 			"initial-category_terms": ",".join(category.category_terms or []),
 			"category_type": category.category_type,
 			"match_scope": category.match_scope,
-			"match_min_score": category.match_min_score,
+			"match_min_score_articles": category.match_min_score_articles,
+			"match_min_score_trials": category.match_min_score_trials,
 			"weight_article_title": article_weights["title"],
 			"weight_article_summary": article_weights["summary"],
 			"weight_trial_title": trial_weights["title"],
@@ -614,14 +616,16 @@ class TeamCategoryAdminBackfillTest(TestCase):
 		response = self.create_category_via_admin(
 			CategoryType.AUTOMATIC,
 			match_scope="title",
-			match_min_score=5,
+			match_min_score_articles=5,
+			match_min_score_trials=7,
 			weight_article_summary=4,
 		)
 		self.assertEqual(response.status_code, 302)
 
 		category = TeamCategory.objects.get(category_slug="neuroplasticity")
 		self.assertEqual(category.match_scope, "title")
-		self.assertEqual(category.match_min_score, 5)
+		self.assertEqual(category.match_min_score_articles, 5)
+		self.assertEqual(category.match_min_score_trials, 7)
 		self.assertEqual(category.match_weights["article"]["summary"], 4)
 		self.assertEqual(category.match_weights["article"]["title"], 3)
 

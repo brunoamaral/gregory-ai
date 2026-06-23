@@ -1779,12 +1779,19 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 		(
 			"Matching",
 			{
-				"fields": ("category_terms", "match_scope", "match_min_score"),
+				"fields": (
+					"category_terms",
+					"match_scope",
+					"match_min_score_articles",
+					"match_min_score_trials",
+				),
 				"description": (
 					"Automatic categories match content whose in-scope fields contain these "
 					"terms and whose score reaches the minimum. A fixed bonus of 2 points per "
 					"unique matched term is added on top of the field weights below. In "
-					"'Title only' scope every field except the title is ignored."
+					"'Title only' scope every field except the title is ignored. "
+					"Articles are scored on up to 2 fields; trials on up to 7, so separate "
+					"thresholds let you tune both independently."
 				),
 			},
 		),
@@ -1815,7 +1822,8 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 		"subjects",
 		"category_type",
 		"match_scope",
-		"match_min_score",
+		"match_min_score_articles",
+		"match_min_score_trials",
 		"weight_article_title",
 		"weight_article_summary",
 		"weight_trial_title",

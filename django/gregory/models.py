@@ -136,10 +136,19 @@ class TeamCategory(models.Model):
 			"(and, for trials, the scientific title, intervention, outcomes and therapeutic areas)."
 		),
 	)
-	match_min_score = models.PositiveSmallIntegerField(
+	match_min_score_articles = models.PositiveSmallIntegerField(
 		default=3,
 		help_text=(
-			"Minimum score an article or trial must reach to be assigned to this category."
+			"Minimum score an article must reach to be assigned to this category. "
+			"Articles are scored on up to 2 fields (title, summary)."
+		),
+	)
+	match_min_score_trials = models.PositiveSmallIntegerField(
+		default=3,
+		help_text=(
+			"Minimum score a trial must reach to be assigned to this category. "
+			"Trials are scored on up to 7 fields (title, summary, scientific title, "
+			"intervention, primary outcome, secondary outcome, therapeutic areas)."
 		),
 	)
 	match_weights = models.JSONField(

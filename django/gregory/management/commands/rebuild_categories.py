@@ -180,7 +180,8 @@ class Command(BaseCommand):
 				# Iterate the (prefetched) relation instead of values_list, which
 				# would bypass prefetch_related and re-query per category
 				"subjects": sorted(subject.id for subject in cat.subjects.all()),
-				"min_score": cat.match_min_score,
+				"min_score_articles": cat.match_min_score_articles,
+				"min_score_trials": cat.match_min_score_trials,
 				"scope": cat.match_scope,
 				"weights": {
 					"article": self.active_weights(cat, "article"),
@@ -298,7 +299,7 @@ class Command(BaseCommand):
 			cat_cutoff = self.category_cutoff(cat, cutoff_date, config_hash)
 
 			weights = self.active_weights(cat, "article")
-			min_score = cat.match_min_score
+			min_score = cat.match_min_score_articles
 
 			# Prepare term patterns for more accurate matching
 			term_patterns = [
@@ -460,7 +461,7 @@ class Command(BaseCommand):
 			cat_cutoff = self.category_cutoff(cat, cutoff_date, config_hash)
 
 			weights = self.active_weights(cat, "trial")
-			min_score = cat.match_min_score
+			min_score = cat.match_min_score_trials
 
 			# Prepare term patterns for more accurate matching
 			term_patterns = [
