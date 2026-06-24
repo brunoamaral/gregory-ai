@@ -75,6 +75,7 @@ class Command(BaseCommand):
 				| Q(published_date__isnull=True)
 				| Q(summary__isnull=True)
 				| Q(summary="not available")
+				| Q(pdf_link__isnull=True)
 			)
 			& Q(kind="science paper")
 			& Q(discovery_date__gte=three_months_ago)
@@ -133,6 +134,11 @@ class Command(BaseCommand):
 			article.access = paper.access
 			update_fields.append("access")
 			updated_info.append("access information")
+
+		if article.pdf_link is None and hasattr(paper, "pdf_link") and paper.pdf_link:
+			article.pdf_link = paper.pdf_link
+			update_fields.append("pdf_link")
+			updated_info.append("pdf link")
 
 		if article.publisher is None and hasattr(paper, "publisher"):
 			article.publisher = paper.publisher

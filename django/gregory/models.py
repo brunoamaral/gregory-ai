@@ -560,6 +560,7 @@ class Articles(models.Model):
 		max_length=150, blank=True, null=True, default=None
 	)
 	crossref_check = models.DateTimeField(blank=True, null=True)
+	pdf_link = models.URLField(max_length=2000, blank=True, null=True)
 	history = HistoricalRecords(
 		excluded_fields=[
 			"crossref_check",

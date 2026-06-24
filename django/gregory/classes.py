@@ -14,6 +14,7 @@ class SciencePaper:
 		abstract=None,
 		authors=None,
 		retracted=None,
+		pdf_link=None,
 	):
 		self.doi = doi
 		self.title = title
@@ -25,6 +26,7 @@ class SciencePaper:
 		self.abstract = abstract
 		self.authors = authors
 		self.retracted = retracted
+		self.pdf_link = pdf_link
 
 	def __str__(self):
 		return f"{self.doi}, {self.title}"
@@ -114,20 +116,24 @@ class SciencePaper:
 			except (KeyError, IndexError, TypeError):
 				logging.warning(f"No title found for DOI {self.doi}")
 				pass
-		if self.doi != None and self.access == None:
+		if self.doi != None and (self.access == None or self.pdf_link == None):
 			if site.admin_email == None:
 				logging.warning("No site admin email found")
 			else:
 				try:
-					if unpaywall_utils.checkIfDOIIsOpenAccess(
-						self.doi, site.admin_email
-					):
-						self.access = "open"
-					else:
-						self.access = "restricted"
+					unpaywall_data = unpaywall_utils.getDataByDOI(self.doi, site.admin_email)
+					if unpaywall_data:
+						if self.access == None:
+							self.access = "open" if unpaywall_data.get("is_oa") else "restricted"
+						if self.pdf_link == None:
+							oa_loc = unpaywall_data.get("best_oa_location") or {}
+							self.pdf_link = oa_loc.get("url_for_pdf") or oa_loc.get("url")
+					elif self.access == None:
+						self.access = "unknown"
 				except Exception as e:
 					logging.error(f"Error checking Unpaywall for DOI {self.doi}: {e}")
-					self.access = "unknown"
+					if self.access == None:
+						self.access = "unknown"
 
 		if self.publisher == None:
 			if work != None and "publisher" in work:
