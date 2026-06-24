@@ -562,6 +562,7 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 					"entities",
 					"kind",
 					"access",
+					"pdf_link",
 					"publisher",
 					"container_title",
 					"crossref_check",
