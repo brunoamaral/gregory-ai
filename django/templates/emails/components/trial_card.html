@@ -35,13 +35,19 @@ Usage:
         
         {% if trial.recruitment_status %}
         <p class="trial-card-meta" style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
-            <strong>Status:</strong> 
+            <strong>Status:</strong>
             <span style="{% if trial.recruitment_status == 'Recruiting' %}color: #059669; font-weight: 600;{% elif trial.recruitment_status == 'Completed' %}color: #6b7280;{% elif trial.recruitment_status == 'Active, not recruiting' %}color: #d97706; font-weight: 600;{% else %}color: #6b7280;{% endif %}">
                 {{ trial.recruitment_status }}
             </span>
         </p>
         {% endif %}
-        
+
+        {% if trial.countries %}
+        <p class="trial-card-meta" style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
+            <strong>Countries:</strong> {{ trial.countries }}
+        </p>
+        {% endif %}
+
         {% if trial.start_date %}
         <p class="trial-card-meta" style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
             <strong>Start Date:</strong> {{ trial.start_date|date:"M d, Y" }}
