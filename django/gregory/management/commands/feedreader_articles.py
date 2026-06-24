@@ -580,6 +580,7 @@ class Command(GregoryBaseCommand):
 			publisher=article_data["publisher"],
 			access=article_data["access"],
 			crossref_check=article_data["crossref_check"],
+			pdf_link=article_data["pdf_link"],
 		)
 
 		# Process authors if:
@@ -638,6 +639,7 @@ class Command(GregoryBaseCommand):
 				"publisher": None,
 				"access": None,
 				"crossref_check": None,
+				"pdf_link": None,
 			}
 		else:
 			# CrossRef data available, use it with fallbacks
@@ -663,6 +665,7 @@ class Command(GregoryBaseCommand):
 				"publisher": crossref_paper.publisher,
 				"access": crossref_paper.access,
 				"crossref_check": timezone.now(),
+				"pdf_link": crossref_paper.pdf_link,
 			}
 
 	def create_or_update_article(
@@ -677,6 +680,7 @@ class Command(GregoryBaseCommand):
 		publisher=None,
 		access=None,
 		crossref_check=None,
+		pdf_link=None,
 	) -> tuple[Articles, bool, bool]:
 		"""Create a new article or update existing one. Returns (article, created, crossref_updated)."""
 		# Check if an article with the same DOI or title exists
@@ -698,7 +702,7 @@ class Command(GregoryBaseCommand):
 				science_paper, title, summary, link, published_date
 			)
 			crossref_fields_changed = self.crossref_needs_update(
-				science_paper, container_title, publisher, access, crossref_check
+				science_paper, container_title, publisher, access, crossref_check, pdf_link
 			)
 
 			# Update fields if anything has changed
@@ -713,6 +717,7 @@ class Command(GregoryBaseCommand):
 					publisher,
 					access,
 					crossref_check,
+					pdf_link,
 				)
 				crossref_was_updated = crossref_fields_changed
 		else:
@@ -732,6 +737,7 @@ class Command(GregoryBaseCommand):
 						"container_title": container_title,
 						"publisher": publisher,
 						"access": access,
+						"pdf_link": pdf_link,
 					}
 				)
 
@@ -782,6 +788,7 @@ class Command(GregoryBaseCommand):
 		publisher: str,
 		access: str,
 		crossref_check,
+		pdf_link=None,
 	):
 		"""Update all article fields (basic + CrossRef) in a single operation."""
 		article.title = title
@@ -795,6 +802,8 @@ class Command(GregoryBaseCommand):
 		article.publisher = publisher
 		article.access = access
 		article.crossref_check = crossref_check
+		if pdf_link:
+			article.pdf_link = pdf_link
 		article.save()
 		self.log(f" Updated article data: {article.title}", level=2)
 
@@ -805,6 +814,7 @@ class Command(GregoryBaseCommand):
 		publisher: str,
 		access: str,
 		crossref_check,
+		pdf_link=None,
 	) -> bool:
 		"""Check if CrossRef data needs to be updated."""
 		# If we have new CrossRef data and the article doesn't have it
@@ -817,6 +827,7 @@ class Command(GregoryBaseCommand):
 				article.container_title != container_title,
 				article.publisher != publisher,
 				article.access != access,
+				pdf_link and article.pdf_link != pdf_link,
 			]
 		):
 			return True

@@ -308,6 +308,7 @@ def post_article(request):
 				"kind": kind,
 				"publisher": _val("publisher"),
 				"container_title": _val("container_title"),
+				"pdf_link": _val("pdf_link"),
 			}
 			science_paper = SciencePaper(
 				doi=new_article["doi"], title=new_article["title"]
@@ -332,6 +333,8 @@ def post_article(request):
 				new_article["publisher"] = science_paper.publisher
 			if new_article["container_title"] is None:
 				new_article["container_title"] = science_paper.journal
+			if new_article["pdf_link"] is None:
+				new_article["pdf_link"] = science_paper.pdf_link
 
 			# Dedup by DOI
 			if new_article["doi"] is not None:
@@ -364,6 +367,7 @@ def post_article(request):
 				kind=kind,
 				publisher=new_article["publisher"],
 				container_title=new_article["container_title"],
+				pdf_link=new_article["pdf_link"],
 			)
 			save_article.sources.add(source)
 			save_article.teams.add(source.team)

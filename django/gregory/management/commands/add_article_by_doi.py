@@ -134,6 +134,7 @@ class Command(BaseCommand):
 			self.stdout.write(f"  Publisher: {paper.publisher}")
 			self.stdout.write(f"  Published: {paper.published_date}")
 			self.stdout.write(f"  Access: {paper.access}")
+			self.stdout.write(f"  PDF link: {paper.pdf_link or 'N/A'}")
 			self.stdout.write(
 				f"  Abstract: {paper.abstract[:200] if paper.abstract else 'N/A'}..."
 			)
@@ -155,6 +156,7 @@ class Command(BaseCommand):
 				container_title=paper.journal,
 				kind="science paper",
 				crossref_check=timezone.now(),
+				pdf_link=paper.pdf_link,
 			)
 
 			# Add source association

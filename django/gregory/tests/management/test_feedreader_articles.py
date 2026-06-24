@@ -231,6 +231,7 @@ class TestCrossRefIntegration(TestCase):
 		mock_science_paper.journal = "Test Journal"
 		mock_science_paper.publisher = "Test Publisher"
 		mock_science_paper.access = "open"
+		mock_science_paper.pdf_link = None
 		mock_science_paper.refresh.return_value = True  # Success
 
 		mock_clean.return_value = "Cleaned CrossRef abstract"
@@ -491,6 +492,7 @@ class TestCrossRefDataUpdates(TransactionTestCase):
 		mock_science_paper.journal = "Nature"
 		mock_science_paper.publisher = "Springer Nature"
 		mock_science_paper.access = "open"
+		mock_science_paper.pdf_link = None
 		mock_science_paper.authors = [
 			{
 				"given": "John",
@@ -574,6 +576,7 @@ class TestCrossRefDataUpdates(TransactionTestCase):
 		mock_science_paper.journal = "Nature"
 		mock_science_paper.publisher = "Springer Nature"
 		mock_science_paper.access = "open"
+		mock_science_paper.pdf_link = None
 		# CrossRef data contains author information
 		mock_science_paper.authors = [
 			{
@@ -1058,6 +1061,7 @@ class TestFeedreaderArticlesIntegration(TransactionTestCase):
 		mock_science_paper.journal = "Test Journal"
 		mock_science_paper.publisher = "Test Publisher"
 		mock_science_paper.access = "open"
+		mock_science_paper.pdf_link = None
 		mock_science_paper.authors = [
 			{
 				"given": "John",
