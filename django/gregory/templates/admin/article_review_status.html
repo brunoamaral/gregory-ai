@@ -441,6 +441,38 @@
       padding: 6px 12px;
     }
 
+    /* ── Per-article summary toggle ── */
+    .summary-toggle {
+      /* reset button defaults */
+      appearance: none;
+      background: none;
+      border: none;
+      padding: 0;
+      margin-top: 5px;
+      /* link-like look */
+      display: inline-block;
+      font-size: 12px;
+      font-family: inherit;
+      color: #3b82f6;
+      cursor: pointer;
+      user-select: none;
+      text-decoration: none;
+    }
+
+    .summary-toggle:hover { text-decoration: underline; }
+
+    .article-summary {
+      display: none;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #f1f5f9;
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.55;
+    }
+
+    .article-summary.visible { display: block; }
+
     /* ── Empty state ── */
     .empty-state {
       background: #fff;
@@ -647,6 +679,13 @@
                 <a class="article-title" href="{{ item.article.link }}" target="_blank" rel="noopener noreferrer">
                   {{ item.article.title }}<span class="ext-icon">&#8599;</span>
                 </a>
+                {% if item.article.summary %}
+                <button type="button" class="summary-toggle"
+                        aria-expanded="false"
+                        aria-controls="summary-{{ item.article.article_id }}"
+                        onclick="toggleSummary(this)">&#9654; Show summary</button>
+                <div id="summary-{{ item.article.article_id }}" class="article-summary">{{ item.article.summary }}</div>
+                {% endif %}
               </td>
               <td>
                 <span class="date-text">{{ item.article.discovery_date|date:"M d, Y" }}</span>
@@ -758,6 +797,13 @@
     const el = document.getElementById('date-inputs');
     if (!el) return;
     el.classList.toggle('hidden', value !== 'custom');
+  }
+
+  function toggleSummary(btn) {
+    const summary = document.getElementById(btn.getAttribute('aria-controls'));
+    const open = summary.classList.toggle('visible');
+    btn.setAttribute('aria-expanded', open);
+    btn.textContent = open ? '▼ Hide summary' : '► Show summary';
   }
 
   function sortBy(field) {
