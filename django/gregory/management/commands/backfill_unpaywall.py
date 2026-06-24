@@ -110,6 +110,10 @@ class Command(BaseCommand):
 				no_data += 1
 				if verbosity >= 2:
 					self.stdout.write(f"  [{i}/{total}] No Unpaywall data: {article.doi}")
+				# Mark access as "unknown" so this article isn't re-queried on future runs
+				if run_access and article.access is None and not dry_run:
+					article.access = "unknown"
+					article.save(update_fields=["access"])
 				if sleep:
 					time.sleep(sleep)
 				continue

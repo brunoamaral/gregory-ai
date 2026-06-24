@@ -1,59 +1,33 @@
-import requests
-import json
 import logging
+import os
 
-BASE_URL = "https://api.unpaywall.org"
-VERSION = "/v2/"
-EMAIL_QUERY_ARG = "email"
+from unpywall import Unpywall
 
 
 def getDataByDOI(doi: str, client_email: str):
+	"""Return the full Unpaywall record for a DOI, or {} if not found / on error."""
 
-	if doi and client_email:
-		url = BASE_URL + VERSION + doi + "?" + EMAIL_QUERY_ARG + "=" + client_email
-		headers = {"Accept": "application/json"}
-		try:
-			response = requests.request(
-				"GET", url, headers=headers, data={}, timeout=30
-			)
+	if not doi or not client_email:
+		raise ValueError(
+			f"DOI and client_email cannot be empty: {doi!r}, {client_email!r}"
+		)
 
-			# Handle 404 responses gracefully
-			if response.status_code == 404:
-				# DOI not found in Unpaywall - this is a normal condition for many DOIs
-				logging.info(f"DOI not found in Unpaywall: {doi}")
-				return {}
-
-			# Add error handling for empty responses
-			if not response.text.strip():
-				logging.warning(f"Empty response received for DOI: {doi}")
-				return {}
-
-			try:
-				return json.loads(response.text)
-			except json.JSONDecodeError:
-				logging.error(
-					f"Error decoding JSON from response for DOI: {doi}. Response: {response.text[:250]}"
-				)
-				return {}
-		except requests.exceptions.RequestException as e:
-			logging.error(
-				f"Request error when accessing Unpaywall for DOI: {doi}. Error: {e}"
-			)
-			return {}
-	else:
-		raise Exception(f"DOI and Client Email cannot be empty! {doi}, {client_email}")
+	os.environ["UNPAYWALL_EMAIL"] = client_email
+	try:
+		data = Unpywall.get_json(doi, errors="ignore")
+		return data if data is not None else {}
+	except Exception as e:
+		logging.error(f"Unpaywall error for DOI {doi}: {e}")
+		return {}
 
 
-def checkIfDOIIsOpenAccess(doi: str, client_email: str):
+def checkIfDOIIsOpenAccess(doi: str, client_email: str) -> bool:
 	data = getDataByDOI(doi, client_email)
-	if data and "is_oa" in data:
-		return data["is_oa"]
-	return False
+	return bool(data.get("is_oa")) if data else False
 
 
 def getOpenAccessURLForDOI(doi: str, client_email: str):
 	data = getDataByDOI(doi, client_email)
-	if data and "best_oa_location" in data:
-		if "url" in data["best_oa_location"]:
-			return data["best_oa_location"]["url"]
+	if data and data.get("best_oa_location"):
+		return data["best_oa_location"].get("url")
 	return None
