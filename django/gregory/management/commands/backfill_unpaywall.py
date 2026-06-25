@@ -6,13 +6,14 @@ Three modes (mutually exclusive):
   --all         Run both in a single pass (one Unpaywall call per article).
 """
 
+import csv
 import os
 import time
+from datetime import timedelta
 
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 from django.utils import timezone
-from datetime import timedelta
 
 from gregory.models import Articles
 from gregory.unpaywall import unpaywall_utils
@@ -61,6 +62,12 @@ class Command(BaseCommand):
 			type=int,
 			help="Stop after processing this many articles (useful for smoke-testing).",
 		)
+		parser.add_argument(
+			"--csv",
+			metavar="PATH",
+			dest="csv_path",
+			help="Write a per-article result report to this CSV file.",
+		)
 
 	def handle(self, *args, **options):
 		dry_run = options["dry_run"]
@@ -68,6 +75,7 @@ class Command(BaseCommand):
 		sleep = max(options["sleep"], 0)
 		limit = options.get("limit")
 		verbosity = options.get("verbosity", 1)
+		csv_path = options.get("csv_path")
 
 		run_access = options["access"] or options["all"]
 		run_pdf = options["pdf_links"] or options["all"]
@@ -93,15 +101,23 @@ class Command(BaseCommand):
 		if not total:
 			return
 
-		updated_access = updated_pdf = no_data = errors = 0
+		updated_articles = updated_access = updated_pdf = no_data = errors = 0
+		csv_rows = [] if csv_path else None
 
 		for i, article in enumerate(qs, 1):
+			access_before = article.access
+			pdf_link_before = article.pdf_link
+
 			try:
 				data = unpaywall_utils.getDataByDOI(article.doi, admin_email)
 			except Exception as exc:
 				if verbosity >= 2:
 					self.stderr.write(f"  Error fetching DOI {article.doi}: {exc}")
 				errors += 1
+				if csv_rows is not None:
+					csv_rows.append(self._csv_row(
+						article, "error", [], access_before, pdf_link_before,
+					))
 				if sleep:
 					time.sleep(sleep)
 				continue
@@ -110,10 +126,13 @@ class Command(BaseCommand):
 				no_data += 1
 				if verbosity >= 2:
 					self.stdout.write(f"  [{i}/{total}] No Unpaywall data: {article.doi}")
-				# Mark access as "unknown" so this article isn't re-queried on future runs
 				if run_access and article.access is None and not dry_run:
 					article.access = "unknown"
 					article.save(update_fields=["access"])
+				if csv_rows is not None:
+					csv_rows.append(self._csv_row(
+						article, "no_data", [], access_before, pdf_link_before,
+					))
 				if sleep:
 					time.sleep(sleep)
 				continue
@@ -146,6 +165,13 @@ class Command(BaseCommand):
 
 			if changed_fields:
 				article.save(update_fields=changed_fields)
+				updated_articles += 1
+
+			if csv_rows is not None:
+				status = "updated" if changed_fields else "no_change"
+				csv_rows.append(self._csv_row(
+					article, status, changed_fields, access_before, pdf_link_before,
+				))
 
 			if verbosity >= 1 and i % 100 == 0:
 				self.stdout.write(f"  Progress: {i}/{total}")
@@ -153,18 +179,14 @@ class Command(BaseCommand):
 			if sleep and i < total:
 				time.sleep(sleep)
 
-		prefix = "Would update" if dry_run else "Updated"
-		parts = []
-		if run_access:
-			parts.append(f"access on {updated_access} articles")
-		if run_pdf:
-			parts.append(f"pdf_link on {updated_pdf} articles")
-		self.stdout.write(
-			self.style.SUCCESS(
-				f"{prefix}: {', '.join(parts)}. "
-				f"No Unpaywall data: {no_data}. Errors: {errors}."
-			)
+		self._print_summary(
+			dry_run, run_access, run_pdf, total,
+			updated_articles, updated_access, updated_pdf, no_data, errors,
 		)
+
+		if csv_path and csv_rows:
+			self._write_csv(csv_path, csv_rows)
+			self.stdout.write(f"Report written to {csv_path}")
 
 	# ------------------------------------------------------------------
 	# Helpers
@@ -192,3 +214,46 @@ class Command(BaseCommand):
 		if run_access:
 			return "Access (all time)"
 		return f"PDF links (last {days} days)"
+
+	def _print_summary(
+		self, dry_run, run_access, run_pdf, total,
+		updated_articles, updated_access, updated_pdf, no_data, errors,
+	):
+		prefix = "[dry run] " if dry_run else ""
+		w = len(str(total))  # column width for right-aligning counts
+		lines = [
+			f"{prefix}Backfill complete. {total} articles queried.",
+			f"  {'Updated articles:':<22} {updated_articles:{w}}",
+		]
+		if run_access:
+			lines.append(f"  {'  access:':<22} {updated_access:{w}}")
+		if run_pdf:
+			lines.append(f"  {'  pdf_link:':<22} {updated_pdf:{w}}")
+		lines.append(f"  {'No Unpaywall data:':<22} {no_data:{w}}")
+		lines.append(f"  {'Errors:':<22} {errors:{w}}")
+		self.stdout.write(self.style.SUCCESS("\n".join(lines)))
+
+	@staticmethod
+	def _csv_row(article, status, changed_fields, access_before, pdf_link_before):
+		return {
+			"article_id": article.article_id,
+			"doi": article.doi,
+			"title": article.title,
+			"status": status,
+			"fields_updated": ",".join(changed_fields),
+			"access_before": access_before or "",
+			"access_after": article.access or "",
+			"pdf_link_before": pdf_link_before or "",
+			"pdf_link_after": article.pdf_link or "",
+		}
+
+	@staticmethod
+	def _write_csv(path, rows):
+		fieldnames = [
+			"article_id", "doi", "title", "status", "fields_updated",
+			"access_before", "access_after", "pdf_link_before", "pdf_link_after",
+		]
+		with open(path, "w", newline="", encoding="utf-8") as fh:
+			writer = csv.DictWriter(fh, fieldnames=fieldnames)
+			writer.writeheader()
+			writer.writerows(rows)
