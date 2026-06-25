@@ -1,5 +1,8 @@
+import csv
 import os
+import tempfile
 from datetime import timedelta
+from io import StringIO
 from unittest.mock import patch
 
 import django
@@ -221,3 +224,86 @@ class BackfillUnpaywallCommandTest(TestCase):
 		call_command("backfill_unpaywall", pdf_links=True, days=30, dry_run=True, sleep=0, verbosity=0)
 		self.needs_pdf.refresh_from_db()
 		self.assertIsNone(self.needs_pdf.pdf_link)
+
+	# ------------------------------------------------------------------
+	# Summary output
+	# ------------------------------------------------------------------
+
+	@patch.dict(os.environ, {"DOMAIN_NAME": "test.example.com"})
+	@patch(PATCH_GET_DATA)
+	def test_dry_run_summary_counts_would_update(self, mock_get):
+		mock_get.return_value = UNPAYWALL_OPEN
+		out = StringIO()
+		call_command(
+			"backfill_unpaywall", access=True, dry_run=True, sleep=0, verbosity=0,
+			stdout=out,
+		)
+		output = out.getvalue()
+		self.assertIn("[dry run]", output)
+		self.assertIn("Updated articles:", output)
+		# needs_access is the one article that would be updated
+		self.assertIn("1", output)
+
+	@patch.dict(os.environ, {"DOMAIN_NAME": "test.example.com"})
+	@patch(PATCH_GET_DATA)
+	def test_summary_no_data_counted_separately(self, mock_get):
+		mock_get.return_value = {}
+		out = StringIO()
+		call_command("backfill_unpaywall", access=True, sleep=0, verbosity=0, stdout=out)
+		output = out.getvalue()
+		self.assertIn("No Unpaywall data:", output)
+		self.assertIn("Updated articles:", output)
+
+	# ------------------------------------------------------------------
+	# CSV report
+	# ------------------------------------------------------------------
+
+	@patch.dict(os.environ, {"DOMAIN_NAME": "test.example.com"})
+	@patch(PATCH_GET_DATA)
+	def test_csv_report_has_expected_headers_and_rows(self, mock_get):
+		mock_get.return_value = UNPAYWALL_OPEN
+		with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w") as tf:
+			csv_path = tf.name
+		try:
+			call_command(
+				"backfill_unpaywall", access=True, sleep=0, verbosity=0,
+				csv_path=csv_path,
+			)
+			with open(csv_path, newline="", encoding="utf-8") as f:
+				reader = csv.DictReader(f)
+				fieldnames = reader.fieldnames
+				rows = list(reader)
+			expected_fields = {
+				"article_id", "doi", "title", "status",
+				"fields_updated", "access_before", "access_after",
+				"pdf_link_before", "pdf_link_after",
+			}
+			self.assertEqual(set(fieldnames), expected_fields)
+			article_ids = {r["article_id"] for r in rows}
+			self.assertIn(str(self.needs_access.article_id), article_ids)
+			updated = next(r for r in rows if r["article_id"] == str(self.needs_access.article_id))
+			self.assertEqual(updated["status"], "updated")
+			self.assertEqual(updated["access_after"], "open")
+		finally:
+			os.unlink(csv_path)
+
+	@patch.dict(os.environ, {"DOMAIN_NAME": "test.example.com"})
+	@patch(PATCH_GET_DATA)
+	def test_csv_dry_run_shows_would_update_status(self, mock_get):
+		mock_get.return_value = UNPAYWALL_OPEN
+		with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w") as tf:
+			csv_path = tf.name
+		try:
+			call_command(
+				"backfill_unpaywall", access=True, dry_run=True, sleep=0, verbosity=0,
+				csv_path=csv_path,
+			)
+			with open(csv_path, newline="", encoding="utf-8") as f:
+				rows = list(csv.DictReader(f))
+			updated = next(r for r in rows if r["article_id"] == str(self.needs_access.article_id))
+			self.assertEqual(updated["status"], "would_update")
+			# DB must not have changed
+			self.needs_access.refresh_from_db()
+			self.assertIsNone(self.needs_access.access)
+		finally:
+			os.unlink(csv_path)
