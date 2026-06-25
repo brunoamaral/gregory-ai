@@ -6,17 +6,24 @@ Three modes (mutually exclusive):
   --all         Run both in a single pass (one Unpaywall call per article).
 """
 
+import csv
 import os
 import time
+from contextlib import contextmanager
+from datetime import timedelta
 
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 from django.utils import timezone
-from datetime import timedelta
 
 from gregory.models import Articles
 from gregory.unpaywall import unpaywall_utils
 from sitesettings.models import CustomSetting
+
+_CSV_FIELDS = [
+	"article_id", "doi", "title", "status", "fields_updated",
+	"access_before", "access_after", "pdf_link_before", "pdf_link_after",
+]
 
 
 class Command(BaseCommand):
@@ -61,6 +68,12 @@ class Command(BaseCommand):
 			type=int,
 			help="Stop after processing this many articles (useful for smoke-testing).",
 		)
+		parser.add_argument(
+			"--csv",
+			metavar="PATH",
+			dest="csv_path",
+			help="Stream a per-article result report to this CSV file.",
+		)
 
 	def handle(self, *args, **options):
 		dry_run = options["dry_run"]
@@ -68,6 +81,7 @@ class Command(BaseCommand):
 		sleep = max(options["sleep"], 0)
 		limit = options.get("limit")
 		verbosity = options.get("verbosity", 1)
+		csv_path = options.get("csv_path")
 
 		run_access = options["access"] or options["all"]
 		run_pdf = options["pdf_links"] or options["all"]
@@ -93,82 +107,101 @@ class Command(BaseCommand):
 		if not total:
 			return
 
-		updated_access = updated_pdf = no_data = errors = 0
+		updated_articles = updated_access = updated_pdf = no_data = 0
 
-		for i, article in enumerate(qs, 1):
-			try:
+		with self._open_csv(csv_path) as csv_writer:
+			for i, article in enumerate(qs, 1):
+				access_before = article.access
+				pdf_link_before = article.pdf_link
+
+				# getDataByDOI returns {} for both "not in Unpaywall" and internal
+				# API errors; no distinction is possible with errors="ignore".
 				data = unpaywall_utils.getDataByDOI(article.doi, admin_email)
-			except Exception as exc:
-				if verbosity >= 2:
-					self.stderr.write(f"  Error fetching DOI {article.doi}: {exc}")
-				errors += 1
-				if sleep:
-					time.sleep(sleep)
-				continue
 
-			if not data:
-				no_data += 1
-				if verbosity >= 2:
-					self.stdout.write(f"  [{i}/{total}] No Unpaywall data: {article.doi}")
-				# Mark access as "unknown" so this article isn't re-queried on future runs
-				if run_access and article.access is None and not dry_run:
-					article.access = "unknown"
-					article.save(update_fields=["access"])
-				if sleep:
-					time.sleep(sleep)
-				continue
+				if not data:
+					no_data += 1
+					if verbosity >= 2:
+						self.stdout.write(f"  [{i}/{total}] No Unpaywall data: {article.doi}")
+					if run_access and article.access is None and not dry_run:
+						article.access = "unknown"
+						article.save(update_fields=["access"])
+					if csv_writer:
+						csv_writer.writerow(self._csv_row(
+							article, "no_data", [], access_before, pdf_link_before,
+						))
+					if sleep:
+						time.sleep(sleep)
+					continue
 
-			changed_fields = []
+				# Determine what would change for this article.
+				access_new = None
+				pdf_new = None
 
-			if run_access and article.access is None:
-				new_access = "open" if data.get("is_oa") else "restricted"
-				if not dry_run:
-					article.access = new_access
-					changed_fields.append("access")
-				updated_access += 1
-				if verbosity >= 2:
-					self.stdout.write(
-						f"  [{i}/{total}] access={new_access!r}  {article.doi}"
-					)
-
-			if run_pdf and article.pdf_link is None:
-				oa_loc = data.get("best_oa_location") or {}
-				pdf_url = oa_loc.get("url_for_pdf") or oa_loc.get("url")
-				if pdf_url:
-					if not dry_run:
-						article.pdf_link = pdf_url
-						changed_fields.append("pdf_link")
-					updated_pdf += 1
+				if run_access and article.access is None:
+					access_new = "open" if data.get("is_oa") else "restricted"
+					updated_access += 1
 					if verbosity >= 2:
 						self.stdout.write(
-							f"  [{i}/{total}] pdf_link set  {article.doi}"
+							f"  [{i}/{total}] access={access_new!r}  {article.doi}"
 						)
 
-			if changed_fields:
-				article.save(update_fields=changed_fields)
+				if run_pdf and article.pdf_link is None:
+					oa_loc = data.get("best_oa_location") or {}
+					candidate = oa_loc.get("url_for_pdf") or oa_loc.get("url")
+					if candidate:
+						pdf_new = candidate
+						updated_pdf += 1
+						if verbosity >= 2:
+							self.stdout.write(
+								f"  [{i}/{total}] pdf_link set  {article.doi}"
+							)
 
-			if verbosity >= 1 and i % 100 == 0:
-				self.stdout.write(f"  Progress: {i}/{total}")
+				will_change = [f for f, v in [("access", access_new), ("pdf_link", pdf_new)] if v]
+				if will_change:
+					updated_articles += 1
 
-			if sleep and i < total:
-				time.sleep(sleep)
+				# Apply changes only when not a dry run.
+				if not dry_run and will_change:
+					if access_new is not None:
+						article.access = access_new
+					if pdf_new is not None:
+						article.pdf_link = pdf_new
+					article.save(update_fields=will_change)
 
-		prefix = "Would update" if dry_run else "Updated"
-		parts = []
-		if run_access:
-			parts.append(f"access on {updated_access} articles")
-		if run_pdf:
-			parts.append(f"pdf_link on {updated_pdf} articles")
-		self.stdout.write(
-			self.style.SUCCESS(
-				f"{prefix}: {', '.join(parts)}. "
-				f"No Unpaywall data: {no_data}. Errors: {errors}."
-			)
+				if csv_writer:
+					status = ("would_update" if dry_run else "updated") if will_change else "no_change"
+					csv_writer.writerow(self._csv_row(
+						article, status, will_change, access_before, pdf_link_before,
+					))
+
+				if verbosity >= 1 and i % 100 == 0:
+					self.stdout.write(f"  Progress: {i}/{total}")
+
+				if sleep and i < total:
+					time.sleep(sleep)
+
+		self._print_summary(
+			dry_run, run_access, run_pdf, total,
+			updated_articles, updated_access, updated_pdf, no_data,
 		)
+		if csv_path:
+			self.stdout.write(f"Report written to {csv_path}")
 
 	# ------------------------------------------------------------------
 	# Helpers
 	# ------------------------------------------------------------------
+
+	@staticmethod
+	@contextmanager
+	def _open_csv(path):
+		"""Context manager that yields a DictWriter streaming to path, or None."""
+		if not path:
+			yield None
+			return
+		with open(path, "w", newline="", encoding="utf-8") as fh:
+			writer = csv.DictWriter(fh, fieldnames=_CSV_FIELDS)
+			writer.writeheader()
+			yield writer
 
 	def _build_queryset(self, run_access, run_pdf, days):
 		base = (
@@ -192,3 +225,34 @@ class Command(BaseCommand):
 		if run_access:
 			return "Access (all time)"
 		return f"PDF links (last {days} days)"
+
+	def _print_summary(
+		self, dry_run, run_access, run_pdf, total,
+		updated_articles, updated_access, updated_pdf, no_data,
+	):
+		prefix = "[dry run] " if dry_run else ""
+		w = len(str(total))
+		lines = [
+			f"{prefix}Backfill complete. {total} articles queried.",
+			f"  {'Updated articles:':<22} {updated_articles:{w}}",
+		]
+		if run_access:
+			lines.append(f"  {'  access:':<22} {updated_access:{w}}")
+		if run_pdf:
+			lines.append(f"  {'  pdf_link:':<22} {updated_pdf:{w}}")
+		lines.append(f"  {'No Unpaywall data:':<22} {no_data:{w}}")
+		self.stdout.write(self.style.SUCCESS("\n".join(lines)))
+
+	@staticmethod
+	def _csv_row(article, status, will_change, access_before, pdf_link_before):
+		return {
+			"article_id": article.article_id,
+			"doi": article.doi,
+			"title": article.title,
+			"status": status,
+			"fields_updated": ",".join(will_change),
+			"access_before": access_before or "",
+			"access_after": article.access or "",
+			"pdf_link_before": pdf_link_before or "",
+			"pdf_link_after": article.pdf_link or "",
+		}

@@ -1,5 +1,6 @@
 import logging
 import os
+import warnings
 
 from unpywall import Unpywall
 
@@ -14,7 +15,9 @@ def getDataByDOI(doi: str, client_email: str):
 
 	os.environ["UNPAYWALL_EMAIL"] = client_email
 	try:
-		data = Unpywall.get_json(doi, errors="ignore")
+		with warnings.catch_warnings():
+			warnings.simplefilter("ignore", UserWarning)
+			data = Unpywall.get_json(doi, errors="ignore")
 		return data if data is not None else {}
 	except Exception as e:
 		logging.error(f"Unpaywall error for DOI {doi}: {e}")
