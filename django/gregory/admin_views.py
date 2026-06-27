@@ -8,6 +8,8 @@ from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.contrib import messages
 from django.utils.dateparse import parse_date
 from django.utils import timezone
+from django import forms
+from django.urls import reverse
 from .models import (
 	Articles,
 	Subject,
@@ -967,4 +969,91 @@ def subject_analytics_data(request):
 				"trials": sum(trials_data),
 			},
 		}
+	)
+
+
+class AddByDoiForm(forms.Form):
+	doi = forms.CharField(
+		label="DOI",
+		max_length=500,
+		help_text=(
+			"Paste the DOI of the article to import, e.g. "
+			"<code>10.1234/example</code> or the full URL "
+			"<code>https://doi.org/10.1234/example</code>."
+		),
+	)
+	source = forms.ModelChoiceField(
+		queryset=Sources.objects.none(),
+		label="Source",
+		help_text="Select the source to associate the article with.",
+	)
+
+	def __init__(self, *args, user=None, **kwargs):
+		super().__init__(*args, **kwargs)
+		qs = Sources.objects.filter(source_for="science paper").select_related(
+			"team", "subject"
+		)
+		if user and not user.is_superuser:
+			user_org_ids = user.organizations_organizationuser.values_list(
+				"organization__id", flat=True
+			)
+			qs = qs.filter(team__organization__id__in=user_org_ids)
+		self.fields["source"].queryset = qs.order_by("name")
+		self.fields["source"].label_from_instance = self._source_label
+
+	@staticmethod
+	def _source_label(source):
+		parts = [source.name or str(source.source_id)]
+		if source.team:
+			parts.append(f"Team: {source.team.name}")
+		if source.subject:
+			parts.append(f"Subject: {source.subject.subject_name}")
+		return " — ".join(parts)
+
+
+@staff_member_required
+def add_article_by_doi_view(request):
+	"""Admin view: import a single article by DOI."""
+	if not request.user.has_perm("gregory.add_articles"):
+		messages.error(request, "You do not have permission to add articles.")
+		return redirect("admin:gregory_articles_changelist")
+
+	form = AddByDoiForm(user=request.user)
+
+	if request.method == "POST":
+		form = AddByDoiForm(request.POST, user=request.user)
+		if form.is_valid():
+			from gregory.services.doi_import import ImportStatus, create_article_from_doi
+
+			doi = form.cleaned_data["doi"]
+			source = form.cleaned_data["source"]
+
+			result = create_article_from_doi(doi, source)
+
+			if result.status == ImportStatus.CREATED:
+				messages.success(request, result.message)
+				if result.authors_added:
+					messages.info(request, f"{result.authors_added} author(s) attached.")
+				return redirect(
+					reverse(
+						"admin:gregory_articles_change",
+						args=[result.article.pk],
+					)
+				)
+			elif result.status in (ImportStatus.EXISTS_BY_DOI, ImportStatus.EXISTS_BY_TITLE):
+				messages.warning(request, result.message)
+				if result.article:
+					return redirect(
+						reverse(
+							"admin:gregory_articles_change",
+							args=[result.article.pk],
+						)
+					)
+			else:
+				messages.error(request, result.message)
+
+	return render(
+		request,
+		"admin/gregory/articles/add_by_doi.html",
+		{"form": form, "title": "Add Article by DOI"},
 	)
