@@ -620,6 +620,7 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		from .admin_views import (
 			article_review_status_view,
 			update_article_relevance_ajax,
+			add_article_by_doi_view,
 		)
 
 		urls = super().get_urls()
@@ -634,13 +635,19 @@ class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 				self.admin_site.admin_view(update_article_relevance_ajax),
 				name="update_article_relevance",
 			),
+			path(
+				"add-by-doi/",
+				self.admin_site.admin_view(add_article_by_doi_view),
+				name="article_add_by_doi",
+			),
 		]
 		return custom_urls + urls
 
 	def changelist_view(self, request, extra_context=None):
-		"""Override changelist view to add a button to access review status page"""
+		"""Override changelist view to add buttons above the article list"""
 		extra_context = extra_context or {}
 		extra_context["review_status_url"] = reverse("admin:article_review_status")
+		extra_context["add_by_doi_url"] = reverse("admin:article_add_by_doi")
 		return super().changelist_view(request, extra_context=extra_context)
 
 	class Media:
