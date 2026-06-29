@@ -203,15 +203,20 @@ class OrgScopedSerializerMixin:
 			]
 
 		# --- ml_predictions: filter directly on already-serialised data ---
-		# Each item in ret['ml_predictions'] already has a 'subject' key (the FK
-		# integer) from MLPredictionsSerializer.  Filtering here avoids hitting
-		# instance.ml_predictions_detail.all() a second time, which would cause
-		# an extra per-object query when the relation is not prefetched.
+		# Each item in ret['ml_predictions'] has a 'subject' key that is either a
+		# nested dict {id, subject_name, description} (from MLPredictionsSerializer)
+		# or a bare integer FK (from legacy/test serializers).  Filtering here avoids
+		# hitting instance.ml_predictions_detail.all() a second time, which would
+		# cause an extra per-object query when the relation is not prefetched.
 		if "ml_predictions" in ret:
 			vs = _request_visible_subject_ids(request, visible)
+
 			def _subject_id(p):
 				s = p.get("subject")
-				return s.get("id") if isinstance(s, dict) else s
+				if isinstance(s, dict):
+					return s.get("id")
+				return s if isinstance(s, int) else None
+
 			ret["ml_predictions"] = [
 				p for p in ret["ml_predictions"] if _subject_id(p) in vs
 			]
