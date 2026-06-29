@@ -1,3 +1,6 @@
+# Local debug scripts
+debug_*.py
+
 # Python-specific
 __pycache__/
 *.py[cod]
