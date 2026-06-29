@@ -52,6 +52,7 @@ from gregory.models import (
 	Team,
 	Subject,
 	TeamCategory,
+	MLPredictions,
 )
 from organizations.models import Organization
 from rest_framework import permissions, viewsets, generics, filters, status
@@ -959,7 +960,12 @@ class ArticleViewSet(
 	- Complex filter: `/articles/?team_id=1&subject_id=4&author_id=123&search=regeneration&relevant=true&ml_threshold=0.8&ordering=-ml_score`
 	"""
 
-	queryset = Articles.objects.all().order_by("-discovery_date")
+	queryset = Articles.objects.all().prefetch_related(
+		Prefetch(
+			"ml_predictions_detail",
+			queryset=MLPredictions.objects.select_related("subject"),
+		)
+	).order_by("-discovery_date")
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 	pagination_class = FlexiblePagination
@@ -2121,7 +2127,10 @@ class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
 				"authors",
 				"teams",
 				"subjects",
-				"ml_predictions",
+				Prefetch(
+					"ml_predictions_detail",
+					queryset=MLPredictions.objects.select_related("subject"),
+				),
 			)
 			.order_by("-discovery_date")
 		)

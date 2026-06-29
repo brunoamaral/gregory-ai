@@ -209,8 +209,11 @@ class OrgScopedSerializerMixin:
 		# an extra per-object query when the relation is not prefetched.
 		if "ml_predictions" in ret:
 			vs = _request_visible_subject_ids(request, visible)
+			def _subject_id(p):
+				s = p.get("subject")
+				return s.get("id") if isinstance(s, dict) else s
 			ret["ml_predictions"] = [
-				p for p in ret["ml_predictions"] if p.get("subject") in vs
+				p for p in ret["ml_predictions"] if _subject_id(p) in vs
 			]
 
 		return ret
