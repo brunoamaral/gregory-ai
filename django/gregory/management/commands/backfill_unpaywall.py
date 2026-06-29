@@ -74,6 +74,13 @@ class Command(BaseCommand):
 			dest="csv_path",
 			help="Stream a per-article result report to this CSV file.",
 		)
+		parser.add_argument(
+			"--log-file",
+			default="backfill_unpaywall.log",
+			metavar="PATH",
+			help="File that records processed article_ids so resumed runs skip them "
+			     "(default: backfill_unpaywall.log). Pass an empty string to disable.",
+		)
 
 	def handle(self, *args, **options):
 		dry_run = options["dry_run"]
@@ -82,6 +89,7 @@ class Command(BaseCommand):
 		limit = options.get("limit")
 		verbosity = options.get("verbosity", 1)
 		csv_path = options.get("csv_path")
+		log_path = options.get("log_file") or ""
 
 		run_access = options["access"] or options["all"]
 		run_pdf = options["pdf_links"] or options["all"]
@@ -97,6 +105,12 @@ class Command(BaseCommand):
 			self.stderr.write(self.style.ERROR("No admin email in site settings — required by Unpaywall."))
 			return
 
+		seen_ids = self._load_log(log_path)
+		if seen_ids:
+			self.stdout.write(
+				f"Log loaded: {len(seen_ids)} already-processed article_ids will be skipped."
+			)
+
 		qs = self._build_queryset(run_access, run_pdf, days)
 		if limit:
 			qs = qs[:limit]
@@ -111,6 +125,8 @@ class Command(BaseCommand):
 
 		with self._open_csv(csv_path) as csv_writer:
 			for i, article in enumerate(qs, 1):
+				if article.article_id in seen_ids:
+					continue
 				access_before = article.access
 				pdf_link_before = article.pdf_link
 
@@ -129,6 +145,8 @@ class Command(BaseCommand):
 						csv_writer.writerow(self._csv_row(
 							article, "no_data", [], access_before, pdf_link_before,
 						))
+					if not dry_run:
+						self._append_log(log_path, article.article_id)
 					if sleep:
 						time.sleep(sleep)
 					continue
@@ -173,6 +191,9 @@ class Command(BaseCommand):
 					csv_writer.writerow(self._csv_row(
 						article, status, will_change, access_before, pdf_link_before,
 					))
+
+				if not dry_run:
+					self._append_log(log_path, article.article_id)
 
 				if verbosity >= 1 and i % 100 == 0:
 					self.stdout.write(f"  Progress: {i}/{total}")
@@ -256,3 +277,22 @@ class Command(BaseCommand):
 			"pdf_link_before": pdf_link_before or "",
 			"pdf_link_after": article.pdf_link or "",
 		}
+
+	@staticmethod
+	def _load_log(path):
+		if not path or not os.path.exists(path):
+			return set()
+		ids = set()
+		with open(path) as fh:
+			for line in fh:
+				line = line.strip()
+				if line.isdigit():
+					ids.add(int(line))
+		return ids
+
+	@staticmethod
+	def _append_log(path, article_id):
+		if not path:
+			return
+		with open(path, "a") as fh:
+			fh.write(f"{article_id}\n")

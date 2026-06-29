@@ -307,3 +307,62 @@ class BackfillUnpaywallCommandTest(TestCase):
 			self.assertIsNone(self.needs_access.access)
 		finally:
 			os.unlink(csv_path)
+
+	# ------------------------------------------------------------------
+	# --log-file
+	# ------------------------------------------------------------------
+
+	@patch.dict(os.environ, {"DOMAIN_NAME": "test.example.com"})
+	@patch(PATCH_GET_DATA)
+	def test_log_file_records_processed_ids(self, mock_get):
+		mock_get.return_value = UNPAYWALL_OPEN
+		with tempfile.NamedTemporaryFile(suffix=".log", delete=False, mode="w") as tf:
+			log_path = tf.name
+		try:
+			call_command(
+				"backfill_unpaywall", access=True, sleep=0, verbosity=0,
+				log_file=log_path,
+			)
+			with open(log_path) as f:
+				logged_ids = {int(line.strip()) for line in f if line.strip().isdigit()}
+			self.assertIn(self.needs_access.article_id, logged_ids)
+		finally:
+			os.unlink(log_path)
+
+	@patch.dict(os.environ, {"DOMAIN_NAME": "test.example.com"})
+	@patch(PATCH_GET_DATA)
+	def test_log_file_skips_already_processed(self, mock_get):
+		mock_get.return_value = UNPAYWALL_OPEN
+		with tempfile.NamedTemporaryFile(suffix=".log", delete=False, mode="w") as tf:
+			log_path = tf.name
+			tf.write(f"{self.needs_access.article_id}\n")
+		try:
+			call_command(
+				"backfill_unpaywall", access=True, sleep=0, verbosity=0,
+				log_file=log_path,
+			)
+			# Article was pre-logged, so Unpaywall should never be called for its DOI.
+			called_dois = [call.args[0] for call in mock_get.call_args_list]
+			self.assertNotIn(self.needs_access.doi, called_dois)
+			# DB must remain untouched.
+			self.needs_access.refresh_from_db()
+			self.assertIsNone(self.needs_access.access)
+		finally:
+			os.unlink(log_path)
+
+	@patch.dict(os.environ, {"DOMAIN_NAME": "test.example.com"})
+	@patch(PATCH_GET_DATA)
+	def test_dry_run_does_not_write_log(self, mock_get):
+		mock_get.return_value = UNPAYWALL_OPEN
+		with tempfile.NamedTemporaryFile(suffix=".log", delete=False, mode="w") as tf:
+			log_path = tf.name
+		try:
+			call_command(
+				"backfill_unpaywall", access=True, dry_run=True, sleep=0, verbosity=0,
+				log_file=log_path,
+			)
+			with open(log_path) as f:
+				content = f.read().strip()
+			self.assertEqual(content, "", "dry-run must not write any IDs to the log file")
+		finally:
+			os.unlink(log_path)
