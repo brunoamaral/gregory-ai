@@ -107,11 +107,11 @@ class Command(BaseCommand):
 
 		seen_ids = self._load_log(log_path)
 		if seen_ids:
-			self.stdout.write(f"Skipping {len(seen_ids)} already-processed article_ids from {log_path}.")
+			self.stdout.write(
+				f"Log loaded: {len(seen_ids)} already-processed article_ids will be skipped."
+			)
 
 		qs = self._build_queryset(run_access, run_pdf, days)
-		if seen_ids:
-			qs = qs.exclude(article_id__in=seen_ids)
 		if limit:
 			qs = qs[:limit]
 
@@ -125,6 +125,8 @@ class Command(BaseCommand):
 
 		with self._open_csv(csv_path) as csv_writer:
 			for i, article in enumerate(qs, 1):
+				if article.article_id in seen_ids:
+					continue
 				access_before = article.access
 				pdf_link_before = article.pdf_link
 
