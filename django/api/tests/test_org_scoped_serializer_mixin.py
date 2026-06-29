@@ -92,6 +92,40 @@ class _MLPredictionsSerializer(serializers.ModelSerializer):
 		fields = ["id", "subject", "algorithm", "probability_score"]
 
 
+class _NestedSubjectSerializer(serializers.ModelSerializer):
+	class Meta:
+		model = Subject
+		fields = ["id", "subject_name", "description"]
+
+
+class _MLPredictionsNestedSerializer(serializers.ModelSerializer):
+	subject = _NestedSubjectSerializer(read_only=True)
+
+	class Meta:
+		model = MLPredictions
+		fields = ["id", "subject", "algorithm", "probability_score"]
+
+
+class _TestArticleNestedSubjectSerializer(OrgScopedSerializerMixin, serializers.ModelSerializer):
+	teams = _TeamSerializer(many=True, read_only=True)
+	subjects = _SubjectSerializer(many=True, read_only=True)
+	team_categories = _TeamCategorySerializer(many=True, read_only=True)
+	ml_predictions = _MLPredictionsNestedSerializer(
+		many=True, read_only=True, source="ml_predictions_detail"
+	)
+
+	class Meta:
+		model = Articles
+		fields = [
+			"article_id",
+			"title",
+			"teams",
+			"subjects",
+			"team_categories",
+			"ml_predictions",
+		]
+
+
 class _TestArticleSerializer(OrgScopedSerializerMixin, serializers.ModelSerializer):
 	teams = _TeamSerializer(many=True, read_only=True)
 	subjects = _SubjectSerializer(many=True, read_only=True)
@@ -215,3 +249,51 @@ class OrgScopedSerializerMixinMLPredictionsTest(TestCase):
 		pred_ids = [p["id"] for p in data["ml_predictions"]]
 		self.assertIn(self.pred_a.id, pred_ids)
 		self.assertNotIn(self.pred_b.id, pred_ids)
+
+
+class OrgScopedSerializerMixinMLPredictionsNestedSubjectTest(TestCase):
+	"""Verify visibility filtering works when subject is a nested dict (new shape)."""
+
+	def setUp(self):
+		self.org_a = _make_org("Org A", "org-a-nested", public=False)
+		self.org_b = _make_org("Org B", "org-b-nested", public=False)
+		self.team_a = _make_team(self.org_a, "Team A Nested")
+		self.team_b = _make_team(self.org_b, "Team B Nested")
+		self.subject_a = _make_subject(self.team_a, "Subj Nested A")
+		self.subject_b = _make_subject(self.team_b, "Subj Nested B")
+
+		self.article = _make_article(title="Nested Article", link="https://example.com/nested")
+
+		self.pred_a = MLPredictions.objects.create(
+			article=self.article,
+			subject=self.subject_a,
+			algorithm="lgbm_tfidf",
+			probability_score=0.9,
+			predicted_relevant=True,
+			model_version="v1",
+		)
+		self.pred_b = MLPredictions.objects.create(
+			article=self.article,
+			subject=self.subject_b,
+			algorithm="lgbm_tfidf",
+			probability_score=0.8,
+			predicted_relevant=True,
+			model_version="v1",
+		)
+
+	def test_hidden_ml_predictions_stripped_nested_subject(self):
+		req = _request_with_visible({self.org_a.id})
+		data = _TestArticleNestedSubjectSerializer(self.article, context={"request": req}).data
+		pred_ids = [p["id"] for p in data["ml_predictions"]]
+		self.assertIn(self.pred_a.id, pred_ids)
+		self.assertNotIn(self.pred_b.id, pred_ids)
+
+	def test_nested_subject_shape(self):
+		req = _request_with_visible({self.org_a.id})
+		data = _TestArticleNestedSubjectSerializer(self.article, context={"request": req}).data
+		self.assertEqual(len(data["ml_predictions"]), 1)
+		subject = data["ml_predictions"][0]["subject"]
+		self.assertIsInstance(subject, dict)
+		self.assertEqual(subject["id"], self.subject_a.id)
+		self.assertIn("subject_name", subject)
+		self.assertIn("description", subject)
