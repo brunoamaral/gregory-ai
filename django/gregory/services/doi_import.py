@@ -115,7 +115,7 @@ def create_article_from_doi(
 	existing = Articles.objects.filter(doi=doi).first()
 	if existing:
 		# Ensure source association is present
-		if source not in existing.sources.all():
+		if not existing.sources.filter(pk=source.pk).exists():
 			existing.sources.add(source)
 			if source.team:
 				existing.teams.add(source.team)

@@ -217,10 +217,6 @@ class AddByDoiAdminViewTests(TestCase):
 			email="staff@example.com",
 			is_staff=True,
 		)
-		self.staff_user.user_permissions.add(
-			*User.objects.none().model._meta.app_label
-			and []  # placeholder; permissions added below
-		)
 		# Grant add_articles permission
 		from django.contrib.contenttypes.models import ContentType
 		from django.contrib.auth.models import Permission
