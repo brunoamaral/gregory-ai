@@ -9,18 +9,14 @@
     <strong>{{ objects.count }} {{ model_name }}</strong>:
 </p>
 
-<ul>
-{% for obj in objects %}
-    <li>{{ obj }}</li>
-{% endfor %}
-</ul>
-
 <form method="post">
     {% csrf_token %}
 
+    <ul>
     {% for obj in objects %}
-        <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk }}">
+        <li>{{ obj }}<input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk }}"></li>
     {% endfor %}
+    </ul>
     <input type="hidden" name="action" value="{{ action }}">
     <input type="hidden" name="apply" value="1">
 

@@ -13,7 +13,7 @@ import csv
 import logging
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
 from .admin_filters import DateRangeFilter, SourceHealthFilter
-from django.db import models  # Add this import for models.Count
+from django.db import models, transaction  # Add this import for models.Count
 from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 from django import forms
@@ -549,29 +549,34 @@ class SourceBulkActionMixin:
 		source = form.cleaned_data["source"]
 		model_plural = queryset.model._meta.verbose_name_plural
 
-		# Add/remove from the forward (obj.sources) side, one object at a time.
-		# django-simple-history tracks `sources` via m2m_fields on Articles/Trials'
-		# HistoricalRecords; the m2m_changed signal it relies on carries whichever
-		# instance initiated the change, so adding via the Sources reverse accessor
-		# (source.articles_set.add(...)) fires the signal with a Sources instance,
-		# which has no `.history` manager and breaks history recording.
-		if action_name == "add_source_action":
-			already_linked = queryset.filter(sources=source).count()
-			for obj in queryset:
-				obj.sources.add(source)
-			newly_linked = queryset.count() - already_linked
-			self.message_user(
-				request,
-				f"Added '{source}' to {newly_linked} {model_plural} "
-				f"({already_linked} already had it).",
-			)
-		else:
-			linked = queryset.filter(sources=source).count()
-			for obj in queryset:
-				obj.sources.remove(source)
-			self.message_user(
-				request, f"Removed '{source}' from {linked} {model_plural}."
-			)
+		# Add/remove from the forward (obj.sources) side, one object at a time,
+		# inside a single transaction so a mid-loop failure (e.g. a signal or DB
+		# error) can't leave a partially applied change across the selection.
+		# `.only("pk").iterator()` avoids materializing every selected object in
+		# memory at once. django-simple-history tracks `sources` via m2m_fields
+		# on Articles/Trials' HistoricalRecords; the m2m_changed signal it relies
+		# on carries whichever instance initiated the change, so adding via the
+		# Sources reverse accessor (source.articles_set.add(...)) fires the
+		# signal with a Sources instance, which has no `.history` manager and
+		# breaks history recording.
+		with transaction.atomic():
+			if action_name == "add_source_action":
+				already_linked = queryset.filter(sources=source).count()
+				for obj in queryset.only("pk").iterator():
+					obj.sources.add(source)
+				newly_linked = queryset.count() - already_linked
+				self.message_user(
+					request,
+					f"Added '{source}' to {newly_linked} {model_plural} "
+					f"({already_linked} already had it).",
+				)
+			else:
+				linked = queryset.filter(sources=source).count()
+				for obj in queryset.only("pk").iterator():
+					obj.sources.remove(source)
+				self.message_user(
+					request, f"Removed '{source}' from {linked} {model_plural}."
+				)
 
 	@admin.action(description="Add source to selected…")
 	def add_source_action(self, request, queryset):
