@@ -98,10 +98,8 @@ class Command(BaseCommand):
 
 		# Build a canonical-identifier -> [trial_id, ...] index once, instead of
 		# re-scanning every trial's identifiers for every article.
-		trials_by_id = {}
 		identifier_index = defaultdict(list)
 		for trial in trials:
-			trials_by_id[trial.trial_id] = trial
 			for canonical_id in extract_identifiers_from_trial_identifiers(
 				trial.identifiers
 			):
@@ -135,7 +133,7 @@ class Command(BaseCommand):
 					else:
 						ArticleTrialReference.objects.get_or_create(
 							article=article,
-							trial=trials_by_id[trial_id],
+							trial_id=trial_id,
 							identifier_type=id_type,
 							identifier_value=id_value,
 						)

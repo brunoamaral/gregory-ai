@@ -36,6 +36,11 @@ class NctExtractionTest(SimpleTestCase):
 	def test_no_false_positive_on_longer_token(self):
 		self.assertEqual(extract_identifiers("XNCT04578639X"), set())
 
+	def test_no_false_positive_on_trailing_alphanumeric_suffix(self):
+		"""A trailing letter right after the 8 digits must not be treated as
+		a word boundary — otherwise NCT04578639X would match as NCT04578639."""
+		self.assertEqual(extract_identifiers("NCT04578639X"), set())
+
 
 class EudractCtisExtractionTest(SimpleTestCase):
 	def test_extracts_bare_eudract(self):
