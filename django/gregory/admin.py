@@ -485,6 +485,107 @@ class TrialCategoryAssignmentInline(admin.TabularInline):
 		)
 
 
+class SourceActionForm(forms.Form):
+	"""Form for the 'Add source to selected' / 'Remove source from selected' actions."""
+
+	source = forms.ModelChoiceField(
+		queryset=Sources.objects.none(),
+		label="Source",
+	)
+
+
+class SourceBulkActionMixin:
+	"""
+	Admin mixin that adds 'Add source to selected…' and 'Remove source from
+	selected…' bulk actions for models with a `sources` ManyToManyField
+	(Articles, Trials).
+
+	Subclasses must set `source_for_values` to the list of Sources.source_for
+	values that are valid for their model (e.g. ["trials"]), and their model
+	must have a `sources` M2M field to Sources with the default reverse
+	accessor (`<model_name>_set`).
+	"""
+
+	source_for_values = []
+
+	def _get_source_queryset(self, request):
+		qs = Sources.objects.filter(source_for__in=self.source_for_values).order_by(
+			"name"
+		)
+		if request.user.is_superuser:
+			return qs
+		user_orgs = get_user_organizations(request.user)
+		return qs.filter(team__organization__id__in=user_orgs)
+
+	def _source_bulk_action(self, request, queryset, *, action_name, verb):
+		source_qs = self._get_source_queryset(request)
+
+		if "apply" not in request.POST:
+			form = SourceActionForm()
+			form.fields["source"].queryset = source_qs
+			return render(
+				request,
+				"admin/gregory/source_bulk_action_intermediate.html",
+				{
+					"title": f"{verb} source",
+					"objects": queryset,
+					"form": form,
+					"action_checkbox_name": admin.helpers.ACTION_CHECKBOX_NAME,
+					"model_name": queryset.model._meta.verbose_name_plural,
+					"action": action_name,
+					"verb": verb,
+				},
+			)
+
+		form = SourceActionForm(request.POST)
+		form.fields["source"].queryset = source_qs
+
+		if not form.is_valid():
+			self.message_user(
+				request, "Invalid form — please try again.", level=messages.ERROR
+			)
+			return
+
+		source = form.cleaned_data["source"]
+		model_plural = queryset.model._meta.verbose_name_plural
+
+		# Add/remove from the forward (obj.sources) side, one object at a time.
+		# django-simple-history tracks `sources` via m2m_fields on Articles/Trials'
+		# HistoricalRecords; the m2m_changed signal it relies on carries whichever
+		# instance initiated the change, so adding via the Sources reverse accessor
+		# (source.articles_set.add(...)) fires the signal with a Sources instance,
+		# which has no `.history` manager and breaks history recording.
+		if action_name == "add_source_action":
+			already_linked = queryset.filter(sources=source).count()
+			for obj in queryset:
+				obj.sources.add(source)
+			newly_linked = queryset.count() - already_linked
+			self.message_user(
+				request,
+				f"Added '{source}' to {newly_linked} {model_plural} "
+				f"({already_linked} already had it).",
+			)
+		else:
+			linked = queryset.filter(sources=source).count()
+			for obj in queryset:
+				obj.sources.remove(source)
+			self.message_user(
+				request, f"Removed '{source}' from {linked} {model_plural}."
+			)
+
+	@admin.action(description="Add source to selected…")
+	def add_source_action(self, request, queryset):
+		return self._source_bulk_action(
+			request, queryset, action_name="add_source_action", verb="Add"
+		)
+
+	@admin.action(description="Remove source from selected…")
+	def remove_source_action(self, request, queryset):
+		return self._source_bulk_action(
+			request, queryset, action_name="remove_source_action", verb="Remove"
+		)
+
+
 class ArticleAdminForm(forms.ModelForm):
 	ml_predictions_display = MLPredictionsField(required=False)
 
@@ -535,8 +636,10 @@ class ArticleAdminForm(forms.ModelForm):
 				)
 
 
-class ArticleAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
+class ArticleAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAdmin):
 	form = ArticleAdminForm
+	source_for_values = ["science paper", "news article"]
+	actions = ["add_source_action", "remove_source_action"]
 	inlines = [
 		ArticleOrgContentInline,
 		ArticleSubjectRelevanceInline,
@@ -792,8 +895,10 @@ class TrialAdminForm(forms.ModelForm):
 		}
 
 
-class TrialAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
+class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAdmin):
 	form = TrialAdminForm
+	source_for_values = ["trials"]
+	actions = ["add_source_action", "remove_source_action"]
 	list_display = [
 		"trial_id",
 		"title",
