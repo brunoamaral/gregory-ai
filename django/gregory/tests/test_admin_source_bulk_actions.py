@@ -124,8 +124,8 @@ class SourceBulkActionMixinTests(TestCase):
 
 	def test_add_source_action_rejects_source_invalid_for_model(self):
 		# trial_source_a is source_for='trials', not valid for Articles, so it's
-		# excluded from the form's queryset and validation should fail silently
-		# (no crash, no link created).
+		# excluded from the form's queryset and validation should fail (no crash,
+		# no link created).
 		request = self._request(
 			self.superuser, post_data={"apply": "1", "source": self.trial_source_a.pk}
 		)
