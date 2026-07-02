@@ -129,7 +129,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 	@patch(PATCH_GET_DATA)
 	def test_access_mode_sets_open(self, mock_get):
 		mock_get.return_value = UNPAYWALL_OPEN
-		call_command("backfill_unpaywall", access=True, sleep=0, verbosity=0)
+		call_command("backfill_unpaywall", access=True, sleep=0, verbosity=0, log_file="")
 		self.needs_access.refresh_from_db()
 		self.assertEqual(self.needs_access.access, "open")
 
@@ -137,7 +137,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 	@patch(PATCH_GET_DATA)
 	def test_access_mode_sets_restricted(self, mock_get):
 		mock_get.return_value = UNPAYWALL_CLOSED
-		call_command("backfill_unpaywall", access=True, sleep=0, verbosity=0)
+		call_command("backfill_unpaywall", access=True, sleep=0, verbosity=0, log_file="")
 		self.needs_access.refresh_from_db()
 		self.assertEqual(self.needs_access.access, "restricted")
 
@@ -145,7 +145,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 	@patch(PATCH_GET_DATA)
 	def test_no_data_sets_access_unknown(self, mock_get):
 		mock_get.return_value = {}  # Unpaywall 404 / no entry
-		call_command("backfill_unpaywall", access=True, sleep=0, verbosity=0)
+		call_command("backfill_unpaywall", access=True, sleep=0, verbosity=0, log_file="")
 		self.needs_access.refresh_from_db()
 		self.assertEqual(self.needs_access.access, "unknown")
 
@@ -153,7 +153,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 	@patch(PATCH_GET_DATA)
 	def test_access_mode_skips_already_set(self, mock_get):
 		mock_get.return_value = UNPAYWALL_OPEN
-		call_command("backfill_unpaywall", access=True, sleep=0, verbosity=0)
+		call_command("backfill_unpaywall", access=True, sleep=0, verbosity=0, log_file="")
 		self.has_access.refresh_from_db()
 		# Existing value must not be overwritten
 		self.assertEqual(self.has_access.access, "open")
@@ -167,7 +167,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 	@patch(PATCH_GET_DATA)
 	def test_pdf_links_mode_sets_pdf_link(self, mock_get):
 		mock_get.return_value = UNPAYWALL_OPEN
-		call_command("backfill_unpaywall", pdf_links=True, days=30, sleep=0, verbosity=0)
+		call_command("backfill_unpaywall", pdf_links=True, days=30, sleep=0, verbosity=0, log_file="")
 		self.needs_pdf.refresh_from_db()
 		self.assertEqual(self.needs_pdf.pdf_link, "https://example.com/open.pdf")
 
@@ -175,7 +175,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 	@patch(PATCH_GET_DATA)
 	def test_pdf_links_mode_ignores_old_articles(self, mock_get):
 		mock_get.return_value = UNPAYWALL_OPEN
-		call_command("backfill_unpaywall", pdf_links=True, days=30, sleep=0, verbosity=0)
+		call_command("backfill_unpaywall", pdf_links=True, days=30, sleep=0, verbosity=0, log_file="")
 		self.old_article.refresh_from_db()
 		self.assertIsNone(self.old_article.pdf_link)
 		mock_get.assert_called()  # called for recent articles, but not for old_article DOI
@@ -190,7 +190,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 	@patch(PATCH_GET_DATA)
 	def test_all_mode_sets_both_fields_in_one_pass(self, mock_get):
 		mock_get.return_value = UNPAYWALL_OPEN
-		call_command("backfill_unpaywall", **{"all": True, "days": 30, "sleep": 0, "verbosity": 0})
+		call_command("backfill_unpaywall", **{"all": True, "days": 30, "sleep": 0, "verbosity": 0, "log_file": ""})
 		self.needs_access.refresh_from_db()
 		self.assertEqual(self.needs_access.access, "open")
 		self.assertEqual(self.needs_access.pdf_link, "https://example.com/open.pdf")
@@ -205,7 +205,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 	@patch(PATCH_GET_DATA)
 	def test_dry_run_does_not_write_access(self, mock_get):
 		mock_get.return_value = UNPAYWALL_OPEN
-		call_command("backfill_unpaywall", access=True, dry_run=True, sleep=0, verbosity=0)
+		call_command("backfill_unpaywall", access=True, dry_run=True, sleep=0, verbosity=0, log_file="")
 		self.needs_access.refresh_from_db()
 		self.assertIsNone(self.needs_access.access)
 
@@ -213,7 +213,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 	@patch(PATCH_GET_DATA)
 	def test_dry_run_no_data_does_not_write_unknown(self, mock_get):
 		mock_get.return_value = {}
-		call_command("backfill_unpaywall", access=True, dry_run=True, sleep=0, verbosity=0)
+		call_command("backfill_unpaywall", access=True, dry_run=True, sleep=0, verbosity=0, log_file="")
 		self.needs_access.refresh_from_db()
 		self.assertIsNone(self.needs_access.access)
 
@@ -221,7 +221,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 	@patch(PATCH_GET_DATA)
 	def test_dry_run_does_not_write_pdf_link(self, mock_get):
 		mock_get.return_value = UNPAYWALL_OPEN
-		call_command("backfill_unpaywall", pdf_links=True, days=30, dry_run=True, sleep=0, verbosity=0)
+		call_command("backfill_unpaywall", pdf_links=True, days=30, dry_run=True, sleep=0, verbosity=0, log_file="")
 		self.needs_pdf.refresh_from_db()
 		self.assertIsNone(self.needs_pdf.pdf_link)
 
@@ -236,7 +236,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 		out = StringIO()
 		call_command(
 			"backfill_unpaywall", access=True, dry_run=True, sleep=0, verbosity=0,
-			stdout=out,
+			stdout=out, log_file="",
 		)
 		output = out.getvalue()
 		self.assertIn("[dry run]", output)
@@ -249,7 +249,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 	def test_summary_no_data_counted_separately(self, mock_get):
 		mock_get.return_value = {}
 		out = StringIO()
-		call_command("backfill_unpaywall", access=True, sleep=0, verbosity=0, stdout=out)
+		call_command("backfill_unpaywall", access=True, sleep=0, verbosity=0, stdout=out, log_file="")
 		output = out.getvalue()
 		self.assertIn("No Unpaywall data:", output)
 		self.assertIn("Updated articles:", output)
@@ -267,7 +267,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 		try:
 			call_command(
 				"backfill_unpaywall", access=True, sleep=0, verbosity=0,
-				csv_path=csv_path,
+				csv_path=csv_path, log_file="",
 			)
 			with open(csv_path, newline="", encoding="utf-8") as f:
 				reader = csv.DictReader(f)
@@ -296,7 +296,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 		try:
 			call_command(
 				"backfill_unpaywall", access=True, dry_run=True, sleep=0, verbosity=0,
-				csv_path=csv_path,
+				csv_path=csv_path, log_file="",
 			)
 			with open(csv_path, newline="", encoding="utf-8") as f:
 				rows = list(csv.DictReader(f))
