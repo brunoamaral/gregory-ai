@@ -1,8 +1,12 @@
-import re
+from collections import defaultdict
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from datetime import timedelta
 from gregory.models import Articles, Trials, ArticleTrialReference
+from gregory.utils.trial_identifiers import (
+	extract_identifiers,
+	extract_identifiers_from_trial_identifiers,
+)
 
 
 class Command(BaseCommand):
@@ -92,51 +96,47 @@ class Command(BaseCommand):
 			f"Found {articles.count()} articles and {trials.count()} trials to process"
 		)
 
+		# Build a canonical-identifier -> [trial_id, ...] index once, instead of
+		# re-scanning every trial's identifiers for every article.
+		identifier_index = defaultdict(list)
+		for trial in trials:
+			for canonical_id in extract_identifiers_from_trial_identifiers(
+				trial.identifiers
+			):
+				identifier_index[canonical_id].append(trial.trial_id)
+
 		# Track statistics
 		total_references = 0
 		total_articles_with_refs = set()
 		total_trials_with_refs = set()
 
-		# Process articles and trials
+		# Process each article once: extract its identifiers and look them up.
 		for article in articles:
 			if not article.summary:
 				continue
 
+			text = f"{article.title or ''} {article.summary}"
 			article_refs_count = 0
 
-			for trial in trials:
-				if not trial.identifiers:
-					continue
+			for canonical_id in extract_identifiers(text):
+				id_type, id_value = canonical_id
+				for trial_id in identifier_index.get(canonical_id, []):
+					total_references += 1
+					article_refs_count += 1
+					total_articles_with_refs.add(article.article_id)
+					total_trials_with_refs.add(trial_id)
 
-				# Check each identifier in the trial
-				for id_type, id_value in trial.identifiers.items():
-					if not id_value:
-						continue
-
-					# Skip empty or null values
-					id_value = str(id_value).strip()
-					if not id_value:
-						continue
-
-					id_pattern = re.escape(id_value)
-					if re.search(id_pattern, article.summary, re.IGNORECASE):
-						total_references += 1
-						article_refs_count += 1
-						total_articles_with_refs.add(article.article_id)
-						total_trials_with_refs.add(trial.trial_id)
-
-						if options["dry_run"]:
-							self.stdout.write(
-								f"Would create: Article {article.article_id} -> Trial {trial.trial_id} via {id_type}={id_value} (dry run)"
-							)
-						else:
-							# Create the reference object if it doesn't exist
-							ArticleTrialReference.objects.get_or_create(
-								article=article,
-								trial=trial,
-								identifier_type=id_type,
-								identifier_value=id_value,
-							)
+					if options["dry_run"]:
+						self.stdout.write(
+							f"Would create: Article {article.article_id} -> Trial {trial_id} via {id_type}={id_value} (dry run)"
+						)
+					else:
+						ArticleTrialReference.objects.get_or_create(
+							article=article,
+							trial_id=trial_id,
+							identifier_type=id_type,
+							identifier_value=id_value,
+						)
 
 			# Print progress for articles with references
 			if article_refs_count > 0:
