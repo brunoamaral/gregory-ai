@@ -560,9 +560,10 @@ class SourceBulkActionMixin:
 		# signal with a Sources instance, which has no `.history` manager and
 		# breaks history recording.
 		with transaction.atomic():
+			pk_queryset = queryset.prefetch_related(None).only("pk")
 			if action_name == "add_source_action":
 				already_linked = queryset.filter(sources=source).count()
-				for obj in queryset.only("pk").iterator():
+				for obj in pk_queryset.iterator():
 					obj.sources.add(source)
 				newly_linked = queryset.count() - already_linked
 				self.message_user(
@@ -572,7 +573,7 @@ class SourceBulkActionMixin:
 				)
 			else:
 				linked = queryset.filter(sources=source).count()
-				for obj in queryset.only("pk").iterator():
+				for obj in pk_queryset.iterator():
 					obj.sources.remove(source)
 				self.message_user(
 					request, f"Removed '{source}' from {linked} {model_plural}."
