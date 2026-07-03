@@ -688,6 +688,7 @@ class AuthorSerializer(serializers.ModelSerializer):
 			"full_name",
 			"ORCID",
 			"country",
+			"biography",
 			"articles_count",
 			"articles_list",
 		]
