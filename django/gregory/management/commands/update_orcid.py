@@ -3,16 +3,16 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from gregory.models import Authors
 from gregory.functions import normalize_orcid
+from gregory.services.orcid_sync import apply_orcid_record_to_author
 from subscriptions.management.commands.utils.get_credentials import (
 	get_orcid_credentials,
 )
 import orcid
-from simple_history.utils import update_change_reason
 import requests
 
 
 class Command(BaseCommand):
-	help = "Updates authors' country information and ORCID check timestamp from the ORCID public API based on specific criteria."
+	help = "Updates authors' country and biography information and ORCID check timestamp from the ORCID public API based on specific criteria."
 
 	def add_arguments(self, parser):
 		parser.add_argument(
@@ -57,15 +57,15 @@ class Command(BaseCommand):
 			)
 			return  # Stop execution if token retrieval fails
 
-		three_months_ago = timezone.now() - timezone.timedelta(days=90)
+		thirty_days_ago = timezone.now() - timezone.timedelta(days=30)
 		authors = (
 			Authors.objects.annotate(num_articles=Count("articles", distinct=True))
 			.filter(
-				Q(orcid_check__lte=three_months_ago) | Q(orcid_check__isnull=True),
+				Q(orcid_check__lte=thirty_days_ago) | Q(orcid_check__isnull=True),
 				ORCID__isnull=False,
-				country__isnull=True,
 				articles__teams__organization=org,
 			)
+			.filter(Q(country__isnull=True) | Q(biography__isnull=True))
 			.distinct()
 			.order_by("-num_articles")[:1000]
 		)
@@ -73,12 +73,11 @@ class Command(BaseCommand):
 		success_count = 0
 		error_count = 0
 		no_address_count = 0
+		no_biography_count = 0
 
 		verbosity = kwargs.get("verbosity", 1)
 		for author in authors:
 			try:
-				initial_country = author.country
-
 				# Clean up ORCID ID to ensure proper format
 				author_orcid_number = normalize_orcid(author.ORCID)
 				if verbosity >= 2:
@@ -88,28 +87,23 @@ class Command(BaseCommand):
 				record = orcid_api.read_record_public(
 					author_orcid_number, "record", token
 				)
-				addresses = (
-					record.get("person", {}).get("addresses", {}).get("address", [])
-				)
-				orcid_check = timezone.now()
-				author.orcid_check = orcid_check
+				result = apply_orcid_record_to_author(author, record)
 
-				if addresses:
-					country_code = addresses[0].get("country", {}).get("value")
-					author.country = country_code
-					change_reason = "Updated country from ORCID API."
+				if result.has_address:
 					success_count += 1
 				else:
 					if verbosity >= 2:
 						self.stdout.write(
 							f"[{org_slug}] No address found for author with ORCID: {author_orcid_number}"
 						)
-					change_reason = "Attempted to update country from ORCID API but no address found."
 					no_address_count += 1
 
-				author.save()
-				if initial_country != author.country:
-					update_change_reason(author, change_reason)
+				if not result.has_biography:
+					if verbosity >= 2:
+						self.stdout.write(
+							f"[{org_slug}] No biography found for author with ORCID: {author_orcid_number}"
+						)
+					no_biography_count += 1
 
 			except requests.exceptions.HTTPError as e:
 				if (
@@ -133,7 +127,7 @@ class Command(BaseCommand):
 					self.stderr.write(
 						self.style.WARNING(
 							f"[{org_slug}] Skipping ORCID {author_orcid_number}: record is {reason}. "
-							f"Suppressing for 90 days."
+							f"Suppressing for 30 days."
 						)
 					)
 					author.orcid_check = timezone.now()
@@ -161,4 +155,7 @@ class Command(BaseCommand):
 		self.stdout.write(f"[{org_slug}] Total authors processed: {len(authors)}")
 		self.stdout.write(f"[{org_slug}] Successful updates: {success_count}")
 		self.stdout.write(f"[{org_slug}] Authors with no address: {no_address_count}")
+		self.stdout.write(
+			f"[{org_slug}] Authors with no biography: {no_biography_count}"
+		)
 		self.stdout.write(f"[{org_slug}] Failed updates: {error_count}")

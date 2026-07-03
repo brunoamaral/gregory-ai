@@ -7,7 +7,7 @@ from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.http import HttpResponse
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.urls import path, reverse
 import csv
 import logging
@@ -1756,6 +1756,7 @@ class AuthorsAdmin(admin.ModelAdmin):
 	]
 	list_filter = ["country", ArticleCountFilter]
 	inlines = [AuthorArticlesInline]
+	readonly_fields = ["biography", "recheck_orcid_button"]
 
 	def display_orcid(self, obj):
 		if obj.ORCID:
@@ -1774,6 +1775,18 @@ class AuthorsAdmin(admin.ModelAdmin):
 	article_count.short_description = "Number of Articles"
 	article_count.admin_order_field = "articles_count"
 
+	def recheck_orcid_button(self, obj):
+		if not obj.pk:
+			return "-"
+		if not obj.ORCID:
+			return "Author has no ORCID iD."
+		url = reverse("admin:gregory_authors_recheck_orcid", args=[obj.pk])
+		return format_html(
+			'<a class="button" href="{}">Recheck ORCID now</a>', url
+		)
+
+	recheck_orcid_button.short_description = "Refresh from ORCID"
+
 	def get_queryset(self, request):
 		queryset = super().get_queryset(request)
 		queryset = queryset.annotate(articles_count=models.Count("articles"))
@@ -1783,6 +1796,85 @@ class AuthorsAdmin(admin.ModelAdmin):
 		if not obj:  # If we're adding a new object, don't display inlines
 			return []
 		return super().get_inline_instances(request, obj)
+
+	def get_urls(self):
+		custom = [
+			path(
+				"<int:author_id>/recheck-orcid/",
+				self.admin_site.admin_view(self.recheck_orcid_view),
+				name="gregory_authors_recheck_orcid",
+			),
+		]
+		return custom + super().get_urls()
+
+	def recheck_orcid_view(self, request, author_id):
+		"""Refresh country/biography for a single author from the ORCID public API."""
+		import orcid
+		import requests
+		from gregory.functions import normalize_orcid
+		from gregory.services.orcid_sync import apply_orcid_record_to_author
+		from subscriptions.management.commands.utils.get_credentials import (
+			get_orcid_credentials,
+		)
+
+		author = self.get_object(request, author_id)
+		change_url = reverse("admin:gregory_authors_change", args=[author_id])
+		if author is None:
+			self.message_user(request, "Author not found.", level=messages.ERROR)
+			return redirect("admin:gregory_authors_changelist")
+
+		if not author.ORCID:
+			self.message_user(
+				request, "This author has no ORCID iD.", level=messages.ERROR
+			)
+			return redirect(change_url)
+
+		org = (
+			Organization.objects.filter(teams__articles__authors=author)
+			.distinct()
+			.first()
+		)
+		if org is None:
+			self.message_user(
+				request,
+				"Could not determine an organisation for this author (no articles assigned to a team).",
+				level=messages.ERROR,
+			)
+			return redirect(change_url)
+
+		orcid_key, orcid_secret = get_orcid_credentials(organization=org)
+		if not orcid_key or not orcid_secret:
+			self.message_user(
+				request,
+				f"ORCID credentials are not configured for organisation '{org}'.",
+				level=messages.ERROR,
+			)
+			return redirect(change_url)
+
+		try:
+			orcid_api = orcid.PublicAPI(orcid_key, orcid_secret, sandbox=False)
+			token = orcid_api.get_search_token_from_orcid()
+			author_orcid_number = normalize_orcid(author.ORCID)
+			record = orcid_api.read_record_public(author_orcid_number, "record", token)
+		except requests.exceptions.HTTPError as e:
+			self.message_user(
+				request,
+				f"Failed to refresh data from ORCID: {e}",
+				level=messages.ERROR,
+			)
+			return redirect(change_url)
+
+		result = apply_orcid_record_to_author(
+			author, record, change_reason_suffix="(manual recheck)"
+		)
+		if result.changed_fields:
+			self.message_user(
+				request, f"Refreshed {' and '.join(result.changed_fields)} from ORCID."
+			)
+		else:
+			self.message_user(request, "No new data found on ORCID.")
+
+		return redirect(change_url)
 
 
 # Maps each stored weight (content type → field) to the admin form field that
