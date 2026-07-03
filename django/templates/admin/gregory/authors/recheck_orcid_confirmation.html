@@ -1,0 +1,20 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<p>
+	This will call the ORCID public API for <strong>{{ author }}</strong>
+	(ORCID: {{ author.ORCID }}) and refresh their <strong>country</strong> and
+	<strong>biography</strong> fields from the data ORCID returns.
+</p>
+
+<form method="post">
+	{% csrf_token %}
+	<div class="submit-row">
+		<input type="submit" value="Recheck ORCID now" class="default">
+		<a href="{% url 'admin:gregory_authors_change' author.pk %}" class="button cancel-link">Cancel</a>
+	</div>
+</form>
+{% endblock %}

@@ -3,7 +3,7 @@ from io import StringIO
 from django.contrib import admin, messages
 from django.apps import apps
 from django.core.management import call_command
-from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
+from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist, PermissionDenied
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.http import HttpResponse
@@ -1808,7 +1808,32 @@ class AuthorsAdmin(admin.ModelAdmin):
 		return custom + super().get_urls()
 
 	def recheck_orcid_view(self, request, author_id):
-		"""Refresh country/biography for a single author from the ORCID public API."""
+		"""Refresh country/biography for a single author from the ORCID public API.
+
+		GET renders a confirmation page; the actual API call and save only
+		happen on POST, since this is a state-changing action.
+		"""
+		author = self.get_object(request, author_id)
+		if author is None:
+			self.message_user(request, "Author not found.", level=messages.ERROR)
+			return redirect("admin:gregory_authors_changelist")
+
+		if not self.has_change_permission(request, author):
+			raise PermissionDenied
+
+		change_url = reverse("admin:gregory_authors_change", args=[author_id])
+
+		if request.method != "POST":
+			return render(
+				request,
+				"admin/gregory/authors/recheck_orcid_confirmation.html",
+				{
+					"title": f"Recheck ORCID for {author}",
+					"author": author,
+					"opts": self.model._meta,
+				},
+			)
+
 		import orcid
 		import requests
 		from gregory.functions import normalize_orcid
@@ -1817,15 +1842,18 @@ class AuthorsAdmin(admin.ModelAdmin):
 			get_orcid_credentials,
 		)
 
-		author = self.get_object(request, author_id)
-		change_url = reverse("admin:gregory_authors_change", args=[author_id])
-		if author is None:
-			self.message_user(request, "Author not found.", level=messages.ERROR)
-			return redirect("admin:gregory_authors_changelist")
-
 		if not author.ORCID:
 			self.message_user(
 				request, "This author has no ORCID iD.", level=messages.ERROR
+			)
+			return redirect(change_url)
+
+		author_orcid_number = normalize_orcid(author.ORCID)
+		if not author_orcid_number:
+			self.message_user(
+				request,
+				"This author has an invalid ORCID iD value.",
+				level=messages.ERROR,
 			)
 			return redirect(change_url)
 
@@ -1854,15 +1882,8 @@ class AuthorsAdmin(admin.ModelAdmin):
 		try:
 			orcid_api = orcid.PublicAPI(orcid_key, orcid_secret, sandbox=False)
 			token = orcid_api.get_search_token_from_orcid()
-			author_orcid_number = normalize_orcid(author.ORCID)
-			if not author_orcid_number:
-				self.message_user(
-					request,
-					"This author has an invalid ORCID iD value.",
-					level=messages.ERROR,
-				)
-				return redirect(change_url)
 			record = orcid_api.read_record_public(author_orcid_number, "record", token)
+		except requests.exceptions.HTTPError as e:
 			self.message_user(
 				request,
 				f"Failed to refresh data from ORCID: {e}",
