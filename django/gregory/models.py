@@ -28,6 +28,7 @@ class Authors(models.Model):
 	)
 	ORCID = models.CharField(blank=True, null=True, max_length=150, unique=True)
 	country = CountryField(blank=True, null=True)  # New field
+	biography = models.TextField(blank=True, null=True)
 	orcid_check = models.DateTimeField(blank=True, null=True)
 	# Optimized uppercase column for fast text search
 	ufull_name = GeneratedField(
