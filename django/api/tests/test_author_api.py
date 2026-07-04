@@ -262,6 +262,7 @@ class AuthorAPITest(TestCase):
 				"ORCID",
 				"country",
 				"articles_count",
+				"relevant_articles_count",
 				"articles_list",
 			]
 
@@ -435,3 +436,59 @@ class AuthorAPITest(TestCase):
 			or "category_slug" in str(response.data["error"]).lower(),
 			"Error message should mention required parameters",
 		)
+
+
+class AuthorRelevantArticlesCountTest(TestCase):
+	"""relevant_articles_count on list/detail payloads."""
+
+	def setUp(self):
+		self.organization = Organization.objects.create(name="Relevant Count Org")
+		OrganizationApiSettings.objects.filter(organization=self.organization).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			organization=self.organization, name="Relevant Count Team", slug="relevant-count-team"
+		)
+		self.subject = Subject.objects.create(
+			subject_name="Relevant Count Subject",
+			subject_slug="relevant-count-subject",
+			team=self.team,
+		)
+
+		self.author = Authors.objects.create(given_name="Alice", family_name="Relevant")
+
+		self.relevant_article = Articles.objects.create(
+			title="Relevant article",
+			link="http://example.com/relevant-count-1",
+		)
+		self.relevant_article.authors.add(self.author)
+		self.relevant_article.teams.add(self.team)
+		self.relevant_article.subjects.add(self.subject)
+		Articles.objects.filter(pk=self.relevant_article.pk).update(relevant=True)
+
+		self.not_relevant_article = Articles.objects.create(
+			title="Not relevant article",
+			link="http://example.com/relevant-count-2",
+		)
+		self.not_relevant_article.authors.add(self.author)
+		self.not_relevant_article.teams.add(self.team)
+		self.not_relevant_article.subjects.add(self.subject)
+
+		self.client = APIClient()
+
+	def test_relevant_articles_count_le_articles_count_in_list(self):
+		response = self.client.get("/authors/")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		by_id = {r["author_id"]: r for r in response.data["results"]}
+		author_data = by_id[self.author.author_id]
+		self.assertEqual(author_data["articles_count"], 2)
+		self.assertEqual(author_data["relevant_articles_count"], 1)
+		self.assertLessEqual(
+			author_data["relevant_articles_count"], author_data["articles_count"]
+		)
+
+	def test_relevant_articles_count_in_detail(self):
+		response = self.client.get(f"/authors/{self.author.author_id}/")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["articles_count"], 2)
+		self.assertEqual(response.data["relevant_articles_count"], 1)
