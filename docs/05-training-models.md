@@ -167,6 +167,69 @@ docker stats gregory
 
 3. **Model Persistence**: Models are saved to `./django/models/` which is mounted as a volume, so they persist after container restart.
 
+## Off-Box Training (Export → Train → Ship)
+
+When the production host is too small to train a model (BERT fine-tuning needs
+well over 4GB of RAM), train on another machine and ship the artifacts back.
+Prediction only reads the version directory under `models/`, so production never
+needs to run training at all.
+
+### 1. Export the dataset on production
+
+`export_training_data` writes the exact rows `train_models` would train on
+(same cleaned text, same per-subject labels) to CSV:
+
+```bash
+# On the production host
+docker exec gregory python manage.py export_training_data \
+  --team team-gregory --subject multiple-sclerosis --all-articles
+
+# Copy it out of the container and fetch it to the training machine
+docker cp gregory:/code/datasets/team-gregory_multiple-sclerosis_YYYYMMDD.csv .
+```
+
+Omitting `--subject` exports every subject in the team that has `auto_predict`
+enabled, one CSV per subject. Use `--output-dir` to write somewhere else.
+
+### 2. Train from the file on the training machine
+
+`--dataset-file` makes `train_models` skip the database article collection and
+train from the CSV instead. The team and subject must exist in the local
+database (they are used for the artifact path and the training run log), but no
+articles are needed locally:
+
+```bash
+cd django
+python manage.py train_models \
+  --team team-gregory --subject multiple-sclerosis \
+  --algo pubmed_bert \
+  --dataset-file /path/to/team-gregory_multiple-sclerosis_YYYYMMDD.csv
+```
+
+On Apple Silicon, add `--cpu` if GPU training causes bus errors.
+
+`--dataset-file` cannot be combined with `--all-articles`, `--lookback-days`,
+or `--pseudo-label` (pseudo-labeling queries the database for unlabeled
+articles).
+
+### 3. Ship the version directory to production
+
+Training writes `django/models/{team}/{subject}/{algorithm}/{version}/`. Copy
+that directory into the mounted models volume on the production host:
+
+```bash
+rsync -av django/models/team-gregory/multiple-sclerosis/pubmed_bert/20260704/ \
+  user@server:/path/to/gregory/django/models/team-gregory/multiple-sclerosis/pubmed_bert/20260704/
+```
+
+`predict_articles` resolves the newest version by date at every run, so the new
+model is picked up automatically — no restart needed. Verify with:
+
+```bash
+docker exec gregory python manage.py predict_articles \
+  --team team-gregory --subject multiple-sclerosis --algo pubmed_bert --dry-run
+```
+
 ## Model Output
 
 Trained models are saved to:
