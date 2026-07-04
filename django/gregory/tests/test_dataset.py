@@ -34,11 +34,19 @@ class DatasetTestCase(TestCase):
 			subject_name="Test Subject", subject_slug="test-subject", team=self.team
 		)
 
+		# Summary long enough to survive cleanText's MIN_WORD_COUNT filter
+		self.summary = (
+			"This study evaluates treatment outcomes in multiple sclerosis patients "
+			"using magnetic resonance imaging biomarkers alongside clinical disability "
+			"scores collected during a twenty four month follow up period."
+		)
+
 		# Create sample articles
 		self.articles = []
 		for i in range(5):
 			article = Articles.objects.create(
 				title=f"Test Article {i}",
+				summary=self.summary,
 				link=f"https://example.com/{i}",
 				discovery_date=datetime.now() - timedelta(days=i),
 			)
@@ -90,7 +98,7 @@ class DatasetTestCase(TestCase):
 	def test_build_dataset_creates_dataframe(self):
 		"""Test that build_dataset returns a DataFrame with the right structure."""
 		articles = collect_articles("test-team", "test-subject")
-		df = build_dataset(articles)
+		df = build_dataset(articles, self.subject)
 
 		# Check DataFrame structure
 		self.assertIsInstance(df, pd.DataFrame)
@@ -106,6 +114,96 @@ class DatasetTestCase(TestCase):
 		self.assertEqual(
 			relevant_count, 3
 		)  # 3 articles should be relevant (indices 0, 2, 4)
+
+	def test_build_dataset_cleans_text(self):
+		"""Text is cleaned like prediction time: HTML stripped, lowercased."""
+		article = Articles.objects.create(
+			title="An <b>HTML</b> Title About Sclerosis",
+			summary=f"<p>{self.summary}</p>",
+			link="https://example.com/html",
+		)
+		article.teams.add(self.team)
+		article.subjects.add(self.subject)
+		ArticleSubjectRelevance.objects.create(
+			article=article, subject=self.subject, is_relevant=True
+		)
+
+		df = build_dataset(
+			Articles.objects.filter(article_id=article.article_id), self.subject
+		)
+
+		self.assertEqual(len(df), 1)
+		text = df["text"].iloc[0]
+		self.assertNotIn("<", text)
+		self.assertNotIn(">", text)
+		self.assertEqual(text, text.lower())
+		self.assertIn("sclerosis", text)
+
+	def test_build_dataset_drops_short_texts(self):
+		"""Articles under MIN_WORD_COUNT words after cleaning are dropped."""
+		article = Articles.objects.create(
+			title="Too short", summary="", link="https://example.com/short"
+		)
+		article.teams.add(self.team)
+		article.subjects.add(self.subject)
+		ArticleSubjectRelevance.objects.create(
+			article=article, subject=self.subject, is_relevant=True
+		)
+
+		df = build_dataset(
+			Articles.objects.filter(article_id=article.article_id), self.subject
+		)
+
+		self.assertEqual(len(df), 0)
+
+	def test_build_dataset_uses_label_for_given_subject(self):
+		"""A multi-subject article must use the trained subject's label."""
+		other_subject = Subject.objects.create(
+			subject_name="Other Subject", subject_slug="other-subject", team=self.team
+		)
+		article = Articles.objects.create(
+			title="Multi subject article",
+			summary=self.summary,
+			link="https://example.com/multi",
+		)
+		article.teams.add(self.team)
+		article.subjects.add(self.subject, other_subject)
+		ArticleSubjectRelevance.objects.create(
+			article=article, subject=self.subject, is_relevant=True
+		)
+		ArticleSubjectRelevance.objects.create(
+			article=article, subject=other_subject, is_relevant=False
+		)
+
+		qs = Articles.objects.filter(article_id=article.article_id)
+
+		df_subject = build_dataset(qs, self.subject)
+		self.assertEqual(df_subject["relevant"].iloc[0], 1)
+
+		df_other = build_dataset(qs, other_subject)
+		self.assertEqual(df_other["relevant"].iloc[0], 0)
+
+	def test_build_dataset_excludes_articles_labeled_for_other_subject_only(self):
+		"""An article whose only label belongs to another subject is excluded."""
+		other_subject = Subject.objects.create(
+			subject_name="Other Subject", subject_slug="other-subject", team=self.team
+		)
+		article = Articles.objects.create(
+			title="Labeled elsewhere",
+			summary=self.summary,
+			link="https://example.com/elsewhere",
+		)
+		article.teams.add(self.team)
+		article.subjects.add(self.subject, other_subject)
+		ArticleSubjectRelevance.objects.create(
+			article=article, subject=other_subject, is_relevant=True
+		)
+
+		df = build_dataset(
+			Articles.objects.filter(article_id=article.article_id), self.subject
+		)
+
+		self.assertEqual(len(df), 0)
 
 	def test_train_val_test_split_correct_sizes(self):
 		"""Test that train_val_test_split returns the expected proportions."""
@@ -253,7 +351,7 @@ class DatasetTestCase(TestCase):
 		all_articles = Articles.objects.filter(teams=self.team, subjects=self.subject)
 
 		# Build dataset - should handle None gracefully
-		df = build_dataset(all_articles)
+		df = build_dataset(all_articles, self.subject)
 
 		# The unreviewed article should be excluded from the dataset
 		self.assertEqual(len(df), 5)  # Only the 5 reviewed articles

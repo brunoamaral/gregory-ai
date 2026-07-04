@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from gregory.models import Team, Subject, Articles, PredictionRunLog
 from gregory.utils.dataset import collect_articles, build_dataset, train_val_test_split
-from gregory.utils.summariser import summarise_bulk
+from gregory.utils.text_utils import cleanHTML, cleanText, MIN_WORD_COUNT
 from gregory.utils.versioning import make_version_path
 from gregory.utils.verboser import Verboser, VerbosityLevel
 
@@ -361,10 +361,6 @@ class Command(BaseCommand):
 
 		Raises:
 		    ValueError: If dataset preparation or training fails
-
-		Note:
-		    Generated summaries are stored as 'generated_summary' in the training DataFrame
-		    and are never saved back to the database. They are only used for training purposes.
 		"""
 		results = {
 			"team": team_slug,
@@ -414,6 +410,7 @@ class Command(BaseCommand):
 
 		# Collect articles query
 		articles_qs = collect_articles(team_slug, subject_slug, window_days)
+		subject = Subject.objects.get(subject_slug=subject_slug, team__slug=team_slug)
 
 		# Add detailed logging about article counts
 		total_articles = Articles.objects.filter(
@@ -438,7 +435,7 @@ class Command(BaseCommand):
 			f"Building dataset with {labeled_articles} labeled articles",
 			VerbosityLevel.PROGRESS,
 		)
-		dataset_df = build_dataset(articles_qs)
+		dataset_df = build_dataset(articles_qs, subject)
 
 		if len(dataset_df) == 0:
 			raise ValueError(
@@ -479,36 +476,6 @@ class Command(BaseCommand):
 			f"Built dataset with {len(dataset_df)} labeled articles",
 			VerbosityLevel.PROGRESS,
 		)
-
-		# Step 2: Generate summaries for all texts
-		self.log_message("Generating text summaries...", VerbosityLevel.PROGRESS)
-
-		# We already have the text combined from build_dataset, but we need to
-		# extract titles if we need to separately summarize
-		if "title" not in dataset_df.columns:
-			# If we only have the combined text, we'll work with that directly
-			titles = dataset_df["text"].tolist()
-		else:
-			titles = dataset_df["title"].tolist()
-
-		# Generate summaries for all texts
-		summaries = summarise_bulk(titles, batch_size=4, usage_type="training")
-
-		# Update the dataset with generated summaries - use 'generated_summary' instead of 'summary'
-		# to avoid overwriting original article abstracts
-		dataset_df["generated_summary"] = summaries
-
-		# Create final text column combining title and generated summary
-		dataset_df["text"] = dataset_df.apply(
-			lambda row: (
-				f"{row['title']} {row['generated_summary']}".strip()
-				if "title" in dataset_df.columns
-				else f"{row['text']} {row['generated_summary']}".strip()
-			),
-			axis=1,
-		)
-
-		self.log_message("Text summarization complete", VerbosityLevel.PROGRESS)
 
 		# Double-check the class distribution before splitting
 		class_counts = dataset_df["relevant"].value_counts()
@@ -564,20 +531,30 @@ class Command(BaseCommand):
 				"Collecting unlabeled articles...", VerbosityLevel.PROGRESS
 			)
 
-			# Get articles from the same team but without relevance labels for this subject
+			# Get articles from the same team but without relevance labels for this subject.
+			# NULL is_relevant means "Not Reviewed", which is still unlabeled and should
+			# remain eligible for pseudo-labeling. Only exclude articles that already have
+			# a reviewed (non-NULL) relevance entry for this subject.
 			unlabeled_articles = Articles.objects.filter(teams__slug=team_slug).exclude(
-				article_subject_relevances__subject__slug=subject_slug
+				article_subject_relevances__subject=subject,
+				article_subject_relevances__is_relevant__isnull=False,
 			)[:100]  # Limit to 100 for efficiency in this example
 
-			# Convert to DataFrame with the same structure
+			# Convert to DataFrame with the same structure and text cleaning as build_dataset
 			unlabeled_data = []
 			for article in unlabeled_articles:
+				text = cleanText(
+					cleanHTML(f"{article.title} {article.summary or ''}"),
+					min_words=MIN_WORD_COUNT,
+				)
+				if not text:
+					continue
 				unlabeled_data.append(
 					{
 						"article_id": article.article_id,
 						"title": article.title,
 						"summary": article.summary or "",
-						"text": f"{article.title} {article.summary or ''}".strip(),
+						"text": text,
 					}
 				)
 
@@ -588,20 +565,6 @@ class Command(BaseCommand):
 				)
 			else:
 				unlabelled_df = pd.DataFrame(unlabeled_data)
-
-				# Generate summaries for unlabeled data if needed
-				if len(unlabeled_data) > 0:
-					unlabeled_titles = unlabelled_df["title"].tolist()
-					unlabeled_summaries = summarise_bulk(
-						unlabeled_titles, batch_size=4, usage_type="training"
-					)
-					unlabelled_df["generated_summary"] = unlabeled_summaries
-					unlabelled_df["text"] = unlabelled_df.apply(
-						lambda row: (
-							f"{row['title']} {row['generated_summary']}".strip()
-						),
-						axis=1,
-					)
 
 				# Generate pseudo-labels
 				self.log_message(
@@ -617,20 +580,20 @@ class Command(BaseCommand):
 					algorithm=algorithm,
 				)
 
-			# Save pseudo-labels to CSV
-			pseudo_dir = (
-				Path(BASE_MODEL_DIR) / team_slug / subject_slug / "pseudo_labels"
-			)
-			pseudo_file = save_pseudo_csv(
-				enhanced_train_df, pseudo_dir, prefix=algorithm
-			)
+				# Save pseudo-labels to CSV
+				pseudo_dir = (
+					Path(BASE_MODEL_DIR) / team_slug / subject_slug / "pseudo_labels"
+				)
+				pseudo_file = save_pseudo_csv(
+					enhanced_train_df, pseudo_dir, prefix=algorithm
+				)
 
-			self.log_message(
-				f"Saved pseudo-labels to {pseudo_file}", VerbosityLevel.PROGRESS
-			)
+				self.log_message(
+					f"Saved pseudo-labels to {pseudo_file}", VerbosityLevel.PROGRESS
+				)
 
-			# Use the enhanced training set
-			train_df = enhanced_train_df
+				# Use the enhanced training set
+				train_df = enhanced_train_df
 
 		# Step 5: Train the model
 		self.log_message(f"Initializing {algorithm} trainer", VerbosityLevel.PROGRESS)

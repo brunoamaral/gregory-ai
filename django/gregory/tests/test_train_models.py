@@ -179,65 +179,57 @@ class TrainModelsCommandTest(TestCase):
 				)
 
 				# Create mocks for the main dependencies
-				with patch(
-					"gregory.utils.summariser.summarise_bulk"
-				) as mock_summarise_bulk:
-					with patch("gregory.ml.get_trainer") as mock_get_trainer:
-						# Set up mocks
-						mock_summarise_bulk.return_value = [
-							"Summarized text" for _ in range(10)
-						]
+				with patch("gregory.ml.get_trainer") as mock_get_trainer:
+					# Create mock trainers for each algorithm
+					mock_trainers = {}
+					for algo in ["pubmed_bert", "lgbm_tfidf", "lstm"]:
+						mock_trainers[algo] = self.mock_trainer_factory(algo)
 
-						# Create mock trainers for each algorithm
-						mock_trainers = {}
-						for algo in ["pubmed_bert", "lgbm_tfidf", "lstm"]:
-							mock_trainers[algo] = self.mock_trainer_factory(algo)
+					# Set up get_trainer to return appropriate mock based on algo
+					mock_get_trainer.side_effect = lambda algo, **kwargs: (
+						mock_trainers[algo]
+					)
 
-						# Set up get_trainer to return appropriate mock based on algo
-						mock_get_trainer.side_effect = lambda algo, **kwargs: (
-							mock_trainers[algo]
+					# Create version directory paths
+					for algo in ["pubmed_bert", "lgbm_tfidf", "lstm"]:
+						version_path = os.path.join(
+							self.test_models_dir,
+							"test-team",
+							"test-subject",
+							algo,
+							"20250518",
 						)
+						os.makedirs(version_path, exist_ok=True)
 
-						# Create version directory paths
-						for algo in ["pubmed_bert", "lgbm_tfidf", "lstm"]:
-							version_path = os.path.join(
-								self.test_models_dir,
-								"test-team",
-								"test-subject",
-								algo,
-								"20250518",
-							)
-							os.makedirs(version_path, exist_ok=True)
+					# Execute the test - simulate running the command
+					self._run_command_test(mock_command)
 
-						# Execute the test - simulate running the command
-						self._run_command_test(mock_command)
+					# Verify artifacts were created
+					for algo in ["pubmed_bert", "lgbm_tfidf", "lstm"]:
+						version = "20250518"
+						model_path = os.path.join(
+							self.test_models_dir,
+							"test-team",
+							"test-subject",
+							algo,
+							version,
+						)
+						# Check that model directory exists
+						self.assertTrue(os.path.exists(model_path))
+						# Check for the model file
+						model_file = os.path.join(model_path, f"{algo}_model.bin")
+						self.assertTrue(os.path.exists(model_file))
+						# Check for metrics.json with both val_ and test_ keys
+						metrics_path = os.path.join(model_path, "metrics.json")
+						self.assertTrue(os.path.exists(metrics_path))
 
-						# Verify artifacts were created
-						for algo in ["pubmed_bert", "lgbm_tfidf", "lstm"]:
-							version = "20250518"
-							model_path = os.path.join(
-								self.test_models_dir,
-								"test-team",
-								"test-subject",
-								algo,
-								version,
-							)
-							# Check that model directory exists
-							self.assertTrue(os.path.exists(model_path))
-							# Check for the model file
-							model_file = os.path.join(model_path, f"{algo}_model.bin")
-							self.assertTrue(os.path.exists(model_file))
-							# Check for metrics.json with both val_ and test_ keys
-							metrics_path = os.path.join(model_path, "metrics.json")
-							self.assertTrue(os.path.exists(metrics_path))
+						with open(metrics_path, "r") as f:
+							metrics = json.load(f)
 
-							with open(metrics_path, "r") as f:
-								metrics = json.load(f)
-
-							self.assertIn("val_accuracy", metrics)
-							self.assertIn("test_accuracy", metrics)
-							self.assertIn("val_f1", metrics)
-							self.assertIn("test_f1", metrics)
+						self.assertIn("val_accuracy", metrics)
+						self.assertIn("test_accuracy", metrics)
+						self.assertIn("val_f1", metrics)
+						self.assertIn("test_f1", metrics)
 		except Exception as e:
 			debug_print(f"Exception occurred: {e}")
 			debug_print(traceback.format_exc())
