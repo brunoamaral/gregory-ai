@@ -25,6 +25,7 @@ from gregory.management.commands.predict_articles import (
 	resolve_model_version,
 	prepare_text,
 )
+from gregory.utils.text_utils import MIN_WORD_COUNT
 from gregory.models import Team, Subject, Articles, MLPredictions, PredictionRunLog
 
 
@@ -302,6 +303,34 @@ class TestResolveModelVersion(TestCase):
 	def test_resolve_model_version_latest(self):
 		self.assertEqual(resolve_model_version(self.base_path), "v2.0")
 
+	def test_resolve_model_version_date_suffix(self):
+		"""A suffixed same-day retrain outranks the unsuffixed version."""
+		with tempfile.TemporaryDirectory() as base:
+			for version in ["20250518", "20250518_2"]:
+				os.makedirs(os.path.join(base, version))
+			self.assertEqual(resolve_model_version(base), "20250518_2")
+
+	def test_resolve_model_version_numeric_suffix_order(self):
+		"""Suffixes compare numerically: _10 outranks _2."""
+		with tempfile.TemporaryDirectory() as base:
+			for version in ["20250518_2", "20250518_10"]:
+				os.makedirs(os.path.join(base, version))
+			self.assertEqual(resolve_model_version(base), "20250518_10")
+
+	def test_resolve_model_version_newer_date_wins(self):
+		"""A newer date outranks any suffix of an older date."""
+		with tempfile.TemporaryDirectory() as base:
+			for version in ["20250517_5", "20250518"]:
+				os.makedirs(os.path.join(base, version))
+			self.assertEqual(resolve_model_version(base), "20250518")
+
+	def test_resolve_model_version_date_beats_legacy_names(self):
+		"""Date-style versions outrank legacy free-form version names."""
+		with tempfile.TemporaryDirectory() as base:
+			for version in ["v1.0", "20250518"]:
+				os.makedirs(os.path.join(base, version))
+			self.assertEqual(resolve_model_version(base), "20250518")
+
 	def test_resolve_model_version_explicit(self):
 		self.assertEqual(resolve_model_version(self.base_path, "v1.0"), "v1.0")
 
@@ -397,7 +426,9 @@ class TestPrepareText(TestCase):
 		article.summary = "Test Summary"
 		result = prepare_text(article)
 		mock_clean_html.assert_called_once_with("Test Title Test Summary")
-		mock_clean_text.assert_called_once_with("cleaned HTML")
+		mock_clean_text.assert_called_once_with(
+			"cleaned HTML", min_words=MIN_WORD_COUNT
+		)
 		self.assertEqual(result, "cleaned text")
 
 	@patch("gregory.management.commands.predict_articles.cleanHTML")
@@ -410,8 +441,17 @@ class TestPrepareText(TestCase):
 		article.summary = ""
 		result = prepare_text(article)
 		mock_clean_html.assert_called_once_with("Test Title")
-		mock_clean_text.assert_called_once_with("cleaned HTML")
+		mock_clean_text.assert_called_once_with(
+			"cleaned HTML", min_words=MIN_WORD_COUNT
+		)
 		self.assertEqual(result, "cleaned text")
+
+	def test_prepare_text_returns_none_for_short_text(self):
+		"""Texts under MIN_WORD_COUNT words after cleaning are rejected."""
+		article = MagicMock()
+		article.title = "Short title"
+		article.summary = ""
+		self.assertIsNone(prepare_text(article))
 
 
 @patch("gregory.management.commands.predict_articles.get_articles")
@@ -457,18 +497,23 @@ class TestRunPredictionsFor(TestCase):
 		mock_get_articles.return_value = [self.article1, self.article2]
 		mock_resolve_version.return_value = "v1.0"
 		mock_model = MagicMock()
-		mock_model.predict.side_effect = [(1, 0.9), (0, 0.3)]
+		mock_model.predict.return_value = ([1, 0], [0.9, 0.3])
 		mock_load_model.return_value = mock_model
 		mock_prepare_text.side_effect = ["prepared text 1", "prepared text 2"]
 		initial = MLPredictions.objects.count()
 		stats = self.command.run_predictions_for(
 			self.subject, "pubmed_bert", "v1.0", 90, 0.8, dry_run=False, verbose=1
 		)
+		# Both articles are predicted in a single batched call
+		mock_model.predict.assert_called_once_with(
+			["prepared text 1", "prepared text 2"], threshold=0.8
+		)
 		self.assertEqual(PredictionRunLog.objects.count(), 1)
 		self.assertEqual(MLPredictions.objects.count(), initial + 2)
 		self.assertEqual(stats["processed"], 2)
 		self.assertEqual(stats["skipped"], 0)
 		self.assertEqual(stats["failures"], 0)
+		self.assertEqual(stats["new_predictions"], 2)
 
 	def test_run_predictions_dry_run(
 		self,
@@ -480,7 +525,7 @@ class TestRunPredictionsFor(TestCase):
 		mock_get_articles.return_value = [self.article1, self.article2]
 		mock_resolve_version.return_value = "v1.0"
 		mock_model = MagicMock()
-		mock_model.predict.side_effect = [(1, 0.9), (0, 0.3)]
+		mock_model.predict.return_value = ([1, 0], [0.9, 0.3])
 		mock_load_model.return_value = mock_model
 		mock_prepare_text.side_effect = ["prepared text 1", "prepared text 2"]
 		preds_before = MLPredictions.objects.count()
@@ -493,6 +538,81 @@ class TestRunPredictionsFor(TestCase):
 		self.assertEqual(stats["processed"], 2)
 		self.assertEqual(stats["skipped"], 0)
 		self.assertEqual(stats["failures"], 0)
+
+	def test_run_predictions_chunks_by_batch_size(
+		self,
+		mock_prepare_text,
+		mock_load_model,
+		mock_resolve_version,
+		mock_get_articles,
+	):
+		"""With PREDICT_BATCH_SIZE=2 and 5 articles, predict runs in 3 chunks."""
+		articles = [self.article1, self.article2]
+		for i in range(3, 6):
+			article = Articles.objects.create(
+				title=f"Article {i}",
+				link=f"http://example.com/{i}",
+				summary=f"Test summary {i}",
+			)
+			article.subjects.add(self.subject)
+			articles.append(article)
+
+		mock_get_articles.return_value = articles
+		mock_resolve_version.return_value = "v1.0"
+		mock_model = MagicMock()
+		mock_model.predict.side_effect = lambda texts, threshold: (
+			[1] * len(texts),
+			[0.9] * len(texts),
+		)
+		mock_load_model.return_value = mock_model
+		mock_prepare_text.side_effect = [f"prepared text {i}" for i in range(1, 6)]
+
+		with patch(
+			"gregory.management.commands.predict_articles.PREDICT_BATCH_SIZE", 2
+		):
+			stats = self.command.run_predictions_for(
+				self.subject, "pubmed_bert", "v1.0", 90, 0.8, dry_run=False, verbose=1
+			)
+
+		self.assertEqual(mock_model.predict.call_count, 3)
+		batch_sizes = [
+			len(call.args[0]) for call in mock_model.predict.call_args_list
+		]
+		self.assertEqual(batch_sizes, [2, 2, 1])
+		self.assertEqual(stats["processed"], 5)
+		self.assertEqual(stats["failures"], 0)
+
+	def test_new_predictions_excludes_conflicting_rows(
+		self,
+		mock_prepare_text,
+		mock_load_model,
+		mock_resolve_version,
+		mock_get_articles,
+	):
+		"""new_predictions counts only rows actually inserted, not conflicts."""
+		# Pre-existing prediction for article1 with the same unique key
+		MLPredictions.objects.create(
+			subject=self.subject,
+			article=self.article1,
+			algorithm="pubmed_bert",
+			model_version="v1.0",
+			probability_score=0.5,
+			predicted_relevant=False,
+		)
+
+		mock_get_articles.return_value = [self.article1, self.article2]
+		mock_resolve_version.return_value = "v1.0"
+		mock_model = MagicMock()
+		mock_model.predict.return_value = ([1, 0], [0.9, 0.3])
+		mock_load_model.return_value = mock_model
+		mock_prepare_text.side_effect = ["prepared text 1", "prepared text 2"]
+
+		stats = self.command.run_predictions_for(
+			self.subject, "pubmed_bert", "v1.0", 90, 0.8, dry_run=False, verbose=1
+		)
+
+		self.assertEqual(stats["processed"], 2)
+		self.assertEqual(stats["new_predictions"], 1)
 
 
 class TestSummaryTableFormatting(TestCase):

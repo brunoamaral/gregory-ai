@@ -6,8 +6,8 @@ stores the results in MLPredictions, and logs each (subject × algorithm) run in
 """
 
 import os
+import re
 import sys
-import json
 import traceback
 from datetime import timedelta
 from pathlib import Path
@@ -18,7 +18,7 @@ from django.db.models import Q, Exists, OuterRef
 from django.utils import timezone
 
 from gregory.models import Team, Articles, MLPredictions, PredictionRunLog
-from gregory.utils.text_utils import cleanHTML, cleanText
+from gregory.utils.text_utils import cleanHTML, cleanText, MIN_WORD_COUNT
 
 # Base path for models
 BASE_MODEL_DIR = os.path.join(settings.BASE_DIR, "models")
@@ -28,6 +28,26 @@ DEFAULT_LOOKBACK_DAYS = 90
 DEFAULT_THRESHOLD = 0.8
 DEFAULT_ALGORITHMS = ["pubmed_bert", "lgbm_tfidf", "lstm"]
 DEFAULT_VERBOSITY = 1
+
+# Articles per model.predict() call; bounds memory usage on small hosts
+PREDICT_BATCH_SIZE = 32
+
+# Model versions are named YYYYMMDD by make_version_path, with _2, _3, ... on collision
+VERSION_NAME_RE = re.compile(r"^(\d{8})(?:_(\d+))?$")
+
+
+def _version_sort_key(name):
+	"""
+	Sort key for model version directory names.
+
+	Date-style versions (YYYYMMDD, optionally suffixed _n) sort by date then
+	numeric suffix, so 20250518_10 ranks above 20250518_2. Any other name
+	sorts below date-style versions, lexicographically among themselves.
+	"""
+	match = VERSION_NAME_RE.match(name)
+	if match:
+		return (1, int(match.group(1)), int(match.group(2) or 1), name)
+	return (0, 0, 0, name)
 
 
 class ModelLoadError(Exception):
@@ -117,8 +137,8 @@ def resolve_model_version(base_path, explicit_version=None):
 				f"Requested model version '{explicit_version}' not found in '{base_path}'"
 			)
 
-	# Otherwise, return the lexicographically largest (most recent) version
-	return sorted(versions)[-1]
+	# Otherwise, return the most recent version (date-aware natural sort)
+	return max(versions, key=_version_sort_key)
 
 
 def load_model(team, subject, algorithm, model_version):
@@ -140,20 +160,17 @@ def load_model(team, subject, algorithm, model_version):
 	# Import the necessary modules
 	try:
 		if algorithm == "pubmed_bert":
-			from gregory.ml.bert_wrapper import BertTrainer
+			from gregory.ml.bert_wrapper import BertTrainer as trainer_class
 		elif algorithm == "lgbm_tfidf":
-			from gregory.ml.lgbm_wrapper import LGBMTfidfTrainer
-			import joblib
+			from gregory.ml.lgbm_wrapper import LGBMTfidfTrainer as trainer_class
 		elif algorithm == "lstm":
-			from gregory.ml.lstm_wrapper import LSTMTrainer
-			import tensorflow as tf  # noqa: F401
-			from tensorflow.keras.layers import TextVectorization
+			from gregory.ml.lstm_wrapper import LSTMTrainer as trainer_class
 		else:
 			raise ModelLoadError(f"Unsupported algorithm: {algorithm}")
 	except ImportError as e:
 		raise ModelLoadError(
 			f"Failed to import required modules for {algorithm}: {str(e)}"
-		)
+		) from e
 
 	# Construct the path to the model directory
 	model_dir = os.path.join(
@@ -163,86 +180,14 @@ def load_model(team, subject, algorithm, model_version):
 	if not os.path.exists(model_dir):
 		raise ModelLoadError(f"Model directory not found: {model_dir}")
 
+	# Each trainer's load() reads the artifacts its save() wrote, so loading
+	# stays in sync with training (file names, saved vectorizer config, etc.)
 	try:
-		# Load the appropriate model based on algorithm
-		if algorithm == "pubmed_bert":
-			# For BERT, load weights and tokenizer
-			model_path = os.path.join(model_dir, "bert_weights.h5")
-			if not os.path.exists(model_path):
-				raise ModelLoadError(f"BERT weights not found at {model_path}")
-
-			# Initialize and load the model
-			model = BertTrainer()
-			model.load_weights(model_path)
-			return model
-
-		elif algorithm == "lgbm_tfidf":
-			# For LGBM, load vectorizer and classifier
-			vectorizer_path = os.path.join(model_dir, "tfidf_vectorizer.joblib")
-			# Try both possible classifier filenames
-			model_path = os.path.join(
-				model_dir, "lgbm_classifier.joblib"
-			)  # Updated filename
-			if not os.path.exists(model_path):
-				# Fall back to alternate filename if first one doesn't exist
-				model_path = os.path.join(model_dir, "classifier.joblib")
-				if not os.path.exists(model_path):
-					raise ModelLoadError(
-						f"LGBM classifier not found at either:\n- {os.path.join(model_dir, 'lgbm_classifier.joblib')}\n- {os.path.join(model_dir, 'classifier.joblib')}"
-					)
-
-			if not os.path.exists(vectorizer_path):
-				raise ModelLoadError(
-					f"TF-IDF vectorizer not found at {vectorizer_path}"
-				)
-
-			# Load the model
-			model = LGBMTfidfTrainer()
-			model.vectorizer = joblib.load(vectorizer_path)
-			model.model = joblib.load(model_path)
-			return model
-
-		elif algorithm == "lstm":
-			# For LSTM, load model and tokenizer (Keras 3.x requires .weights.h5 suffix)
-			model_path = os.path.join(model_dir, "lstm.weights.h5")
-			tokenizer_path = os.path.join(model_dir, "tokenizer.json")
-
-			if not os.path.exists(model_path):
-				raise ModelLoadError(f"LSTM weights not found at {model_path}")
-			if not os.path.exists(tokenizer_path):
-				raise ModelLoadError(f"LSTM tokenizer not found at {tokenizer_path}")
-
-			# Load the model
-			model = LSTMTrainer()
-
-			# Load the vectorizer config from JSON file first
-			with open(tokenizer_path, "r") as f:
-				config = json.load(f)
-
-			# Create new vectorizer with our standard settings
-			model.vectorizer = TextVectorization(
-				max_tokens=model.max_tokens,
-				output_sequence_length=model.sequence_length,
-				standardize=model._custom_standardization,
-			)
-
-			# Set the vocabulary
-			model.vectorizer.set_vocabulary(config["vocabulary"])
-
-			# AFTER setting the vocabulary, create the model
-			# This ensures the embedding layer has the right input_dim
-			model.model = model._create_model()
-
-			# Build the model with the correct input shape before loading weights
-			# Keras 3.x requires the model to be built before load_weights()
-			model.model.build(input_shape=(None, model.sequence_length))
-
-			# Then load the weights
-			model.model.load_weights(model_path)
-
-			return model
+		model = trainer_class()
+		model.load(model_dir)
+		return model
 	except Exception as e:
-		raise ModelLoadError(f"Failed to load {algorithm} model: {str(e)}")
+		raise ModelLoadError(f"Failed to load {algorithm} model: {str(e)}") from e
 
 
 def prepare_text(article):
@@ -253,7 +198,8 @@ def prepare_text(article):
 	    article (Articles): The article to prepare text for
 
 	Returns:
-	    str: The prepared text
+	    str: The prepared text, or None if empty or under MIN_WORD_COUNT words
+	         after cleaning (matching training-time preparation)
 	"""
 	if article.summary:
 		text = f"{article.title} {article.summary}"
@@ -261,7 +207,7 @@ def prepare_text(article):
 		text = article.title
 
 	# Clean the text
-	return cleanText(cleanHTML(text))
+	return cleanText(cleanHTML(text), min_words=MIN_WORD_COUNT)
 
 
 class Command(BaseCommand):
@@ -355,6 +301,10 @@ class Command(BaseCommand):
 
 		Returns:
 		    dict: Statistics about the run
+
+		Note:
+		    Articles are predicted in batches of PREDICT_BATCH_SIZE; if a batch
+		    raises, every article in that batch is counted as a failure.
 		"""
 		stats = {"processed": 0, "skipped": 0, "failures": 0, "new_predictions": 0}
 
@@ -454,67 +404,51 @@ class Command(BaseCommand):
 
 				return stats
 
-			# Process each article
+			# Prepare texts, skipping articles that clean to nothing
+			pairs = []
 			for article in articles:
+				text = prepare_text(article)
+				if not text:
+					stats["skipped"] += 1
+					if verbose >= 3:
+						self.stdout.write(
+							f"    Skipped article {article.article_id}: No text after cleaning"
+						)
+					continue
+				pairs.append((article, text))
+
+			# Predict in batches; if a batch fails, all its articles count as failures
+			for start in range(0, len(pairs), PREDICT_BATCH_SIZE):
+				batch = pairs[start : start + PREDICT_BATCH_SIZE]
+
 				try:
-					# Prepare text
-					text = prepare_text(article)
-
-					if not text:
-						stats["skipped"] += 1
-						if verbose >= 3:
-							self.stdout.write(
-								f"    Skipped article {article.article_id}: No text after cleaning"
-							)
-						continue
-
-					# Use the appropriate prediction method based on algorithm
-					if algorithm == "pubmed_bert" or algorithm == "lstm":
-						binary_prediction, probability = model.predict(
-							[text], threshold=prob_threshold
-						)
-						# Handle both list return and single value return (for tests)
-						if (
-							isinstance(binary_prediction, list)
-							and len(binary_prediction) > 0
-						):
-							binary_prediction = binary_prediction[
-								0
-							]  # Extract single value from list
-						if isinstance(probability, list) and len(probability) > 0:
-							probability = probability[
-								0
-							]  # Extract single value from list
-					elif algorithm == "lgbm_tfidf":
-						binary_prediction, probability = model.predict(
-							[text], threshold=prob_threshold
-						)
-						# Handle both list return and single value return (for tests)
-						if (
-							isinstance(binary_prediction, list)
-							and len(binary_prediction) > 0
-						):
-							binary_prediction = binary_prediction[
-								0
-							]  # Extract single value from list
-						if isinstance(probability, list) and len(probability) > 0:
-							probability = probability[
-								0
-							]  # Extract single value from list
-					else:
-						raise ValueError(f"Unsupported algorithm: {algorithm}")
-
-					# Create MLPredictions instance
-					prediction = MLPredictions(
-						subject=subject,
-						article=article,
-						model_version=resolved_version,  # Always use the resolved model version
-						algorithm=algorithm,
-						probability_score=probability,
-						predicted_relevant=(binary_prediction == 1),
+					binary_predictions, probabilities = model.predict(
+						[text for _, text in batch], threshold=prob_threshold
 					)
+				except Exception as e:
+					stats["failures"] += len(batch)
+					failed_articles.extend(article.article_id for article, _ in batch)
+					if verbose >= 2:
+						self.stderr.write(
+							self.style.ERROR(
+								f"    Failed to predict batch of {len(batch)} articles: {str(e)}"
+							)
+						)
+					continue
 
-					prediction_instances.append(prediction)
+				for (article, _), binary_prediction, probability in zip(
+					batch, binary_predictions, probabilities
+				):
+					prediction_instances.append(
+						MLPredictions(
+							subject=subject,
+							article=article,
+							model_version=resolved_version,  # Always use the resolved model version
+							algorithm=algorithm,
+							probability_score=probability,
+							predicted_relevant=(binary_prediction == 1),
+						)
+					)
 					stats["processed"] += 1
 
 					if verbose >= 3:
@@ -525,24 +459,21 @@ class Command(BaseCommand):
 							f"    Article {article.article_id}: {relevance} ({probability:.4f})"
 						)
 
-				except Exception as e:
-					stats["failures"] += 1
-					failed_articles.append(article.article_id)
-					if verbose >= 2:
-						self.stderr.write(
-							self.style.ERROR(
-								f"    Failed to process article {article.article_id}: {str(e)}"
-							)
-						)
-
-			# Bulk create MLPredictions (ignore conflicts in case of duplicates)
+			# Bulk create MLPredictions, counting actual new rows: with
+			# ignore_conflicts=True, bulk_create's return value includes rows
+			# that were skipped as duplicates. Only count conflicts among the
+			# articles in this batch, rather than scanning the whole table.
 			if prediction_instances and not dry_run:
-				created = len(
-					MLPredictions.objects.bulk_create(
-						prediction_instances, ignore_conflicts=True
-					)
+				conflicts = MLPredictions.objects.filter(
+					subject=subject,
+					algorithm=algorithm,
+					model_version=resolved_version,
+					article_id__in=[p.article_id for p in prediction_instances],
+				).count()
+				MLPredictions.objects.bulk_create(
+					prediction_instances, ignore_conflicts=True
 				)
-				stats["new_predictions"] = created
+				stats["new_predictions"] = len(prediction_instances) - conflicts
 			elif prediction_instances:
 				# For dry run, we just count would-be creations
 				stats["new_predictions"] = len(prediction_instances)
@@ -786,5 +717,6 @@ class Command(BaseCommand):
 				self.style.WARNING("\nDRY RUN: No database changes were made")
 			)
 
-		# Always exit with code 0 as per spec
+		# Always exit with code 0 as per spec. Cron cannot detect failures from
+		# the exit code; check PredictionRunLog.success instead.
 		sys.exit(0)

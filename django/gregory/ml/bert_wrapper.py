@@ -413,6 +413,21 @@ class BertTrainer:
 		self.model.load_weights(str(weights_path))
 		logging.info(f"Loaded model weights from {weights_path}")
 
+	def load(self, model_dir: Union[str, Path]) -> None:
+		"""
+		Load model artifacts saved by save() from a directory.
+
+		Args:
+		    model_dir (Union[str, Path]): Directory containing bert_weights.h5
+
+		Raises:
+		    FileNotFoundError: If the weights file doesn't exist
+		"""
+		weights_path = Path(model_dir) / "bert_weights.h5"
+		if not weights_path.exists():
+			raise FileNotFoundError(f"BERT weights not found at {weights_path}")
+		self.load_weights(weights_path)
+
 	def perform_pseudo_labeling(
 		self,
 		labeled_texts: List[str],
