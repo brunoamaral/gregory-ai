@@ -7,7 +7,6 @@ trained in place. Feed the resulting file back into training with
 `train_models --dataset-file`.
 """
 
-import os
 from datetime import datetime
 from pathlib import Path
 
@@ -82,8 +81,10 @@ class Command(BaseCommand):
 			None if options["all_articles"] else options.get("lookback_days") or 90
 		)
 
-		output_dir = Path(
-			options.get("output_dir") or os.path.join(settings.BASE_DIR, "datasets")
+		output_dir = (
+			Path(options["output_dir"])
+			if options.get("output_dir")
+			else Path(settings.BASE_DIR) / "datasets"
 		)
 		output_dir.mkdir(parents=True, exist_ok=True)
 

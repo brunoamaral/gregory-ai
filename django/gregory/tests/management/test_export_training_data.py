@@ -6,7 +6,7 @@ the two halves of the off-box training workflow.
 import os
 import django
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "admin.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gregory.tests.test_settings")
 django.setup()
 
 import tempfile
@@ -233,6 +233,8 @@ class TrainModelsDatasetFileTest(TestCase):
 		mock_trainer.save.assert_called_once()
 
 	def test_missing_columns_fails_run(self):
+		"""A dataset file missing required columns must fail fast during
+		argument validation, before any training run is attempted."""
 		dataset_path = self.write_dataset(columns=("article_id", "text"))
 
 		mock_trainer = MagicMock()
@@ -242,6 +244,7 @@ class TrainModelsDatasetFileTest(TestCase):
 				return_value=mock_trainer,
 			),
 			patch("django.conf.settings.BASE_DIR", self.temp_dir.name),
+			self.assertRaises(CommandError),
 		):
 			self.call_train(dataset_path)
 
@@ -271,6 +274,14 @@ class TrainModelsDatasetFileTest(TestCase):
 	def test_missing_dataset_file_raises(self):
 		with self.assertRaises(CommandError):
 			self.call_train(str(Path(self.temp_dir.name) / "does-not-exist.csv"))
+
+	def test_unreadable_dataset_file_raises(self):
+		"""An empty/corrupt CSV must fail argument validation, not silently
+		train on zero rows."""
+		bad_path = Path(self.temp_dir.name) / "empty.csv"
+		bad_path.write_text("")
+		with self.assertRaises(CommandError):
+			self.call_train(str(bad_path))
 
 
 if __name__ == "__main__":

@@ -258,6 +258,17 @@ class Command(BaseCommand):
 				raise CommandError(
 					f"Dataset file not found: {options['dataset_file']}"
 				)
+			try:
+				dataset_columns = set(pd.read_csv(options["dataset_file"], nrows=0).columns)
+			except Exception as e:
+				raise CommandError(
+					f"Dataset file could not be read: {e}"
+				)
+			missing_cols = {"text", "relevant"} - dataset_columns
+			if missing_cols:
+				raise CommandError(
+					f"Dataset file is missing required column(s): {', '.join(sorted(missing_cols))}"
+				)
 
 		# Validate algorithms
 		valid_algos = {"pubmed_bert", "lgbm_tfidf", "lstm"}
