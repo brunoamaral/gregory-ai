@@ -174,6 +174,32 @@ well over 4GB of RAM), train on another machine and ship the artifacts back.
 Prediction only reads the version directory under `models/`, so production never
 needs to run training at all.
 
+### Quick path: Makefile
+
+The repo Makefile wraps the whole cycle. From the repo root on the training
+machine (local containers running, team/subject present in the local DB —
+`make db-pull` if missing):
+
+```bash
+make ml-export   # runs export_training_data on production, scp's the CSV here
+make ml-train    # trains from the newest exported CSV in the local container
+make ml-ship     # rsyncs the new version dir to production + dry-run verify
+```
+
+Defaults are `ML_TEAM=team-gregory ML_SUBJECT=multiple-sclerosis
+ML_ALGO=pubmed_bert`; override per run, e.g. `make ml-train ML_ALGO=lstm` or
+pin a version with `make ml-ship ML_VERSION=20260704`. Production access uses
+the same `PROD_HOST`/`PROD_SSH_USER` variables as `db-pull`, plus
+`PROD_APP_DIR` (default `gregory-ai`, relative to the SSH user's home).
+
+These targets rely on `docker-compose.yaml` mounting `./django/datasets` and
+`./django/models` into the container on **both** machines, so exports and
+model artifacts are plain host directories reachable by `scp`/`rsync`. After
+updating the compose file on production, recreate the container once
+(`docker compose up -d gregory`) to add the datasets mount.
+
+The manual steps below are what the targets do under the hood.
+
 ### 1. Export the dataset on production
 
 `export_training_data` writes the exact rows `train_models` would train on
