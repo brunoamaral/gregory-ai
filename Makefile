@@ -19,7 +19,7 @@ TAG   ?= $(shell git rev-parse --short HEAD)
 PLATFORMS ?= linux/amd64,linux/arm64
 BUILDER ?= gregory-multiarch
 
-.PHONY: help build push db-pull db-restore db-upgrade db-upgrade-finish
+.PHONY: help build push db-pull db-restore db-upgrade db-upgrade-finish ml-export ml-train ml-ship
 
 help:
 	@echo "Available targets:"
@@ -30,6 +30,12 @@ help:
 	@echo "  db-restore         Restore the most recent backup in $(BACKUP_DIR)/"
 	@echo "  db-upgrade         Step 1 of major-version upgrade: dump current DB, stop db, move data dir aside"
 	@echo "  db-upgrade-finish  Step 2: recreate db container from new image, restore dump, migrate"
+	@echo "  ml-export          Export training data on production and copy the CSV here"
+	@echo "  ml-train           Train ML_ALGO locally from the newest exported dataset"
+	@echo "  ml-ship            Copy the newest trained model version to production and verify"
+	@echo ""
+	@echo "Off-box ML training (defaults: ML_TEAM=$(ML_TEAM) ML_SUBJECT=$(ML_SUBJECT) ML_ALGO=$(ML_ALGO)):"
+	@echo "  make ml-export && make ml-train && make ml-ship"
 
 ## Build the Gregory Docker image.
 ## Override image name or tag: make build IMAGE=myrepo/myimage TAG=v1.0
@@ -148,3 +154,60 @@ db-upgrade-finish: | $(BACKUP_DIR)
 
 $(BACKUP_DIR):
 	mkdir -p $(BACKUP_DIR)
+
+## Off-box ML training: export the dataset on production, train here, ship the
+## artifacts back. Prediction on production picks up the new version dir
+## automatically (resolve_model_version), no restart needed.
+##
+## Requirements:
+##   - ml-export: the production compose file mounts ./django/datasets:/code/datasets
+##   - ml-train: local containers running (docker compose up -d) and the team/subject
+##     present in the local DB (make db-pull if missing)
+##   - ml-ship: rsync on both ends
+##
+## Override scope per run, e.g.:
+##   make ml-export ml-train ml-ship ML_ALGO=lstm
+##   make ml-train ML_TEAM=other-team ML_SUBJECT=other-subject ML_ALGO=lgbm_tfidf
+ML_TEAM      ?= team-gregory
+ML_SUBJECT   ?= multiple-sclerosis
+ML_ALGO      ?= pubmed_bert
+ML_VERSION   ?=
+PROD_APP_DIR ?= gregory-ai
+DATASETS_DIR := django/datasets
+ML_MODEL_PATH = $(ML_TEAM)/$(ML_SUBJECT)/$(ML_ALGO)
+
+ml-export:
+	@echo "==> Exporting training data for $(ML_TEAM)/$(ML_SUBJECT) on $(PROD_HOST) ..."
+	ssh $(PROD_SSH_USER)@$(PROD_HOST) \
+		"docker exec gregory python manage.py export_training_data --team $(ML_TEAM) --subject $(ML_SUBJECT) --all-articles"
+	@mkdir -p $(DATASETS_DIR)
+	scp "$(PROD_SSH_USER)@$(PROD_HOST):$(PROD_APP_DIR)/django/datasets/$(ML_TEAM)_$(ML_SUBJECT)_*.csv" $(DATASETS_DIR)/
+	@echo "==> Dataset copied to $(DATASETS_DIR)/ — next: make ml-train"
+
+ml-train:
+	$(eval DATASET := $(shell ls -t $(DATASETS_DIR)/$(ML_TEAM)_$(ML_SUBJECT)_*.csv 2>/dev/null | head -1))
+	@if [ -z "$(DATASET)" ]; then \
+		echo "ERROR: no dataset for $(ML_TEAM)/$(ML_SUBJECT) in $(DATASETS_DIR)/. Run: make ml-export"; \
+		exit 1; \
+	fi
+	@echo "==> Training $(ML_ALGO) for $(ML_TEAM)/$(ML_SUBJECT) from $(DATASET) ..."
+	docker exec gregory python manage.py train_models \
+		--team $(ML_TEAM) --subject $(ML_SUBJECT) --algo $(ML_ALGO) \
+		--dataset-file /code/datasets/$(notdir $(DATASET)) --verbose 3
+	@echo "==> Artifacts in django/models/$(ML_MODEL_PATH)/ — next: make ml-ship"
+
+## Ships the newest version dir by default; pin one with ML_VERSION=YYYYMMDD[_n]
+ml-ship:
+	$(eval ML_VERSION := $(or $(ML_VERSION),$(shell ls -t django/models/$(ML_MODEL_PATH)/ 2>/dev/null | head -1)))
+	@if [ -z "$(ML_VERSION)" ]; then \
+		echo "ERROR: no trained versions in django/models/$(ML_MODEL_PATH)/. Run: make ml-train"; \
+		exit 1; \
+	fi
+	@echo "==> Shipping $(ML_MODEL_PATH)/$(ML_VERSION) to $(PROD_HOST) ..."
+	ssh $(PROD_SSH_USER)@$(PROD_HOST) "mkdir -p $(PROD_APP_DIR)/django/models/$(ML_MODEL_PATH)/$(ML_VERSION)"
+	rsync -av django/models/$(ML_MODEL_PATH)/$(ML_VERSION)/ \
+		$(PROD_SSH_USER)@$(PROD_HOST):$(PROD_APP_DIR)/django/models/$(ML_MODEL_PATH)/$(ML_VERSION)/
+	@echo "==> Verifying with a dry-run prediction on $(PROD_HOST) ..."
+	ssh $(PROD_SSH_USER)@$(PROD_HOST) \
+		"docker exec gregory python manage.py predict_articles --team $(ML_TEAM) --subject $(ML_SUBJECT) --algo $(ML_ALGO) --model-version $(ML_VERSION) --dry-run --verbose 1"
+	@echo "==> Done. $(ML_ALGO) $(ML_VERSION) is live for $(ML_TEAM)/$(ML_SUBJECT)."

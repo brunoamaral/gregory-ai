@@ -76,6 +76,7 @@ data/trials.json
 # Gregory
 postgres-data
 django/models/
+django/datasets/
 *.code-workspace
 ai_tests/
 .venv-tf/

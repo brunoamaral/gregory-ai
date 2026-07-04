@@ -166,6 +166,15 @@ class Command(BaseCommand):
 		)
 
 		parser.add_argument(
+			"--dataset-file",
+			type=str,
+			help=(
+				"Train from a CSV produced by export_training_data instead of the "
+				"database (requires --team and --subject)"
+			),
+		)
+
+		parser.add_argument(
 			"--prob-threshold",
 			type=float,
 			default=0.8,
@@ -229,6 +238,37 @@ class Command(BaseCommand):
 			raise CommandError(
 				"--all-articles and --lookback-days are mutually exclusive"
 			)
+
+		# Validate dataset file arguments
+		if options.get("dataset_file"):
+			if not (options["team"] and options["subject"]):
+				raise CommandError(
+					"--dataset-file requires both --team and --subject"
+				)
+			if options["all_articles"] or options["lookback_days"]:
+				raise CommandError(
+					"--dataset-file is mutually exclusive with --all-articles and --lookback-days"
+				)
+			if options["pseudo_label"]:
+				raise CommandError(
+					"--pseudo-label queries the database for unlabeled articles and "
+					"cannot be combined with --dataset-file"
+				)
+			if not os.path.isfile(options["dataset_file"]):
+				raise CommandError(
+					f"Dataset file not found: {options['dataset_file']}"
+				)
+			try:
+				dataset_columns = set(pd.read_csv(options["dataset_file"], nrows=0).columns)
+			except Exception as e:
+				raise CommandError(
+					f"Dataset file could not be read: {e}"
+				)
+			missing_cols = {"text", "relevant"} - dataset_columns
+			if missing_cols:
+				raise CommandError(
+					f"Dataset file is missing required column(s): {', '.join(sorted(missing_cols))}"
+				)
 
 		# Validate algorithms
 		valid_algos = {"pubmed_bert", "lgbm_tfidf", "lstm"}
@@ -399,43 +439,71 @@ class Command(BaseCommand):
 		)
 
 		# Step 1: Collect and prepare data
-		window_days = (
-			None if options["all_articles"] else options.get("lookback_days", 90)
-		)
-
-		self.log_message(
-			f"Collecting articles for {team_slug}/{subject_slug}",
-			VerbosityLevel.PROGRESS,
-		)
-
-		# Collect articles query
-		articles_qs = collect_articles(team_slug, subject_slug, window_days)
 		subject = Subject.objects.get(subject_slug=subject_slug, team__slug=team_slug)
 
-		# Add detailed logging about article counts
-		total_articles = Articles.objects.filter(
-			teams__slug=team_slug, subjects__subject_slug=subject_slug
-		).count()
-		labeled_articles = articles_qs.count()
-
-		if options["all_articles"]:
+		dataset_file = options.get("dataset_file")
+		if dataset_file:
+			# Off-box training path: load a CSV produced by export_training_data
+			# instead of querying the database
 			self.log_message(
-				f"Found {labeled_articles} labeled articles out of {total_articles} total articles (using all-articles flag)",
+				f"Loading dataset from {dataset_file}", VerbosityLevel.PROGRESS
+			)
+			dataset_df = pd.read_csv(dataset_file)
+
+			missing_cols = {"text", "relevant"} - set(dataset_df.columns)
+			if missing_cols:
+				raise ValueError(
+					f"Dataset file is missing required column(s): {', '.join(sorted(missing_cols))}"
+				)
+
+			dataset_df = dataset_df.dropna(subset=["text", "relevant"])
+			if not dataset_df["relevant"].isin([0, 1]).all():
+				raise ValueError(
+					"Dataset file column 'relevant' must contain only 0/1 labels"
+				)
+			dataset_df["relevant"] = dataset_df["relevant"].astype(int)
+
+			self.log_message(
+				f"Loaded {len(dataset_df)} labeled articles from {dataset_file}",
 				VerbosityLevel.PROGRESS,
 			)
 		else:
-			window_msg = f"last {window_days} days" if window_days else "all time"
+			window_days = (
+				None if options["all_articles"] else options.get("lookback_days", 90)
+			)
+
 			self.log_message(
-				f"Found {labeled_articles} labeled articles out of {total_articles} total articles ({window_msg})",
+				f"Collecting articles for {team_slug}/{subject_slug}",
 				VerbosityLevel.PROGRESS,
 			)
 
-		# Build dataset with collected articles
-		self.log_message(
-			f"Building dataset with {labeled_articles} labeled articles",
-			VerbosityLevel.PROGRESS,
-		)
-		dataset_df = build_dataset(articles_qs, subject)
+			# Collect articles query
+			articles_qs = collect_articles(team_slug, subject_slug, window_days)
+
+			# Add detailed logging about article counts
+			total_articles = Articles.objects.filter(
+				teams__slug=team_slug, subjects__subject_slug=subject_slug
+			).count()
+			labeled_articles = articles_qs.count()
+
+			if options["all_articles"]:
+				self.log_message(
+					f"Found {labeled_articles} labeled articles out of {total_articles} total articles (using all-articles flag)",
+					VerbosityLevel.PROGRESS,
+				)
+			else:
+				window_msg = f"last {window_days} days" if window_days else "all time"
+				self.log_message(
+					f"Found {labeled_articles} labeled articles out of {total_articles} total articles ({window_msg})",
+					VerbosityLevel.PROGRESS,
+				)
+
+			# Build dataset with collected articles
+			self.log_message(
+				f"Building dataset with {labeled_articles} labeled articles",
+				VerbosityLevel.PROGRESS,
+			)
+			dataset_df = build_dataset(articles_qs, subject)
 
 		if len(dataset_df) == 0:
 			raise ValueError(
@@ -819,7 +887,12 @@ class Command(BaseCommand):
 			)
 
 			window_days = options.get("lookback_days", 90)  # Default is 90 days
-			if options["all_articles"]:
+			if options.get("dataset_file"):
+				self.log_message(
+					f"Using dataset file: {options['dataset_file']}",
+					VerbosityLevel.PROGRESS,
+				)
+			elif options["all_articles"]:
 				self.log_message(
 					"Using all articles (no time window)", VerbosityLevel.PROGRESS
 				)

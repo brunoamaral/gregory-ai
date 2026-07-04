@@ -21,7 +21,8 @@ services:
     build: .
     volumes:
       - ./django/media:/code/media                  # user uploads (persist)
-      - ./django/models:/code/models                # trained ML models (persist)
+      - ./django/models:/code/models                # trained ML models (persist, ml-ship rsyncs into it)
+      - ./django/datasets:/code/datasets            # training data exports (ml-export reads them over SSH)
       - ./django/summary_cache:/code/summary_cache  # LLM summary cache (persist)
       - ./django/static:/code/static                # collectstatic output (host nginx reads it)
     ports:
