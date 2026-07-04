@@ -531,9 +531,13 @@ class Command(BaseCommand):
 				"Collecting unlabeled articles...", VerbosityLevel.PROGRESS
 			)
 
-			# Get articles from the same team but without relevance labels for this subject
+			# Get articles from the same team but without relevance labels for this subject.
+			# NULL is_relevant means "Not Reviewed", which is still unlabeled and should
+			# remain eligible for pseudo-labeling. Only exclude articles that already have
+			# a reviewed (non-NULL) relevance entry for this subject.
 			unlabeled_articles = Articles.objects.filter(teams__slug=team_slug).exclude(
-				article_subject_relevances__subject=subject
+				article_subject_relevances__subject=subject,
+				article_subject_relevances__is_relevant__isnull=False,
 			)[:100]  # Limit to 100 for efficiency in this example
 
 			# Convert to DataFrame with the same structure and text cleaning as build_dataset
