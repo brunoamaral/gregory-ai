@@ -212,7 +212,7 @@ class TestGeneratePseudoLabels:
 		mock_get_trainer.assert_called_with(
 			"pubmed_bert",
 			**{
-				"max_len": 400,
+				"max_len": 128,
 				"learning_rate": 2e-5,
 				"dense_units": 48,
 				"freeze_weights": True,

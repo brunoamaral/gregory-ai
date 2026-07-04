@@ -78,7 +78,7 @@ class BertTrainer:
 
 	def __init__(
 		self,
-		max_len: int = 400,
+		max_len: int = 128,
 		bert_model_name: str = "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext",
 		learning_rate: float = 2e-5,
 		dense_units: int = 48,
@@ -89,7 +89,9 @@ class BertTrainer:
 		Initialize a new BertTrainer.
 
 		Args:
-		    max_len (int, optional): Maximum sequence length. Defaults to 400.
+		    max_len (int, optional): Maximum sequence length. Defaults to 128,
+		        matching the reference implementation; longer values multiply
+		        activation memory during training.
 		    bert_model_name (str, optional): HuggingFace model identifier.
 		        Defaults to 'microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext'.
 		    learning_rate (float, optional): Learning rate. Defaults to 2e-5.
@@ -417,15 +419,87 @@ class BertTrainer:
 		"""
 		Load model artifacts saved by save() from a directory.
 
+		If the directory contains a metrics.json written by save(), the
+		architecture parameters recorded there (max_len, dense_units) take
+		precedence over this instance's values, so artifacts trained with a
+		different configuration (e.g. older max_len=400 models) keep
+		predicting with the settings they were trained on.
+
 		Args:
 		    model_dir (Union[str, Path]): Directory containing bert_weights.h5
 
 		Raises:
 		    FileNotFoundError: If the weights file doesn't exist
 		"""
-		weights_path = Path(model_dir) / "bert_weights.h5"
+		model_dir = Path(model_dir)
+		weights_path = model_dir / "bert_weights.h5"
 		if not weights_path.exists():
 			raise FileNotFoundError(f"BERT weights not found at {weights_path}")
+
+		metrics_path = model_dir / "metrics.json"
+		if metrics_path.exists():
+			try:
+				with open(metrics_path) as f:
+					saved = json.load(f)
+				if not isinstance(saved, dict):
+					logging.warning(
+						"Ignoring invalid metrics file %s: expected JSON object, got %s",
+						metrics_path,
+						type(saved).__name__,
+					)
+					saved = {}
+			except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+				logging.warning(
+					"Failed to parse metrics file %s; loading weights with current architecture. Error: %s",
+					metrics_path,
+					exc,
+				)
+				saved = {}
+
+			def _coerce_positive_int(value: Any, field_name: str) -> Optional[int]:
+				if value is None:
+					return None
+				if isinstance(value, bool):
+					logging.warning(
+						"Ignoring invalid %s in %s: boolean values are not supported",
+						field_name,
+						metrics_path,
+					)
+					return None
+				try:
+					int_value = int(value)
+				except (TypeError, ValueError):
+					logging.warning(
+						"Ignoring invalid %s in %s: %r",
+						field_name,
+						metrics_path,
+						value,
+					)
+					return None
+				if int_value <= 0:
+					logging.warning(
+						"Ignoring invalid %s in %s: expected positive integer, got %r",
+						field_name,
+						metrics_path,
+						value,
+					)
+					return None
+				return int_value
+
+			rebuild = False
+			saved_max_len = _coerce_positive_int(saved.get("max_len"), "max_len")
+			if saved_max_len is not None and saved_max_len != self.max_len:
+				self.max_len = saved_max_len
+				rebuild = True
+			saved_dense_units = _coerce_positive_int(
+				saved.get("dense_units"), "dense_units"
+			)
+			if saved_dense_units is not None and saved_dense_units != self.dense_units:
+				self.dense_units = saved_dense_units
+				rebuild = True
+			if rebuild:
+				self.model = self._create_model()
+
 		self.load_weights(weights_path)
 
 	def perform_pseudo_labeling(

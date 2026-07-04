@@ -5,6 +5,7 @@ This module contains tests for the BertTrainer class functionality, including
 model creation, text encoding, training, evaluation, and saving/loading.
 """
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -269,6 +270,93 @@ class TestBertTrainer(unittest.TestCase):
 			with patch.object(self.trainer, "load_weights") as mock_load:
 				self.trainer.load(temp_dir)
 				mock_load.assert_called_once_with(weights_path)
+
+	def test_load_restores_architecture_from_metrics(self):
+		"""load() rebuilds the model with the max_len/dense_units the artifact was trained with."""
+		with tempfile.TemporaryDirectory() as temp_dir:
+			(Path(temp_dir) / "bert_weights.h5").touch()
+			with open(Path(temp_dir) / "metrics.json", "w") as f:
+				json.dump({"max_len": 400, "dense_units": 48}, f)
+
+			with (
+				patch.object(self.trainer, "load_weights") as mock_load,
+				patch.object(self.trainer, "_create_model") as mock_create,
+			):
+				rebuilt_model = MagicMock()
+				mock_create.return_value = rebuilt_model
+				self.trainer.load(temp_dir)
+
+				self.assertEqual(self.trainer.max_len, 400)
+				self.assertEqual(self.trainer.dense_units, 48)
+				self.assertEqual(self.trainer.model, rebuilt_model)
+				mock_create.assert_called_once()
+				mock_load.assert_called_once()
+
+	def test_load_keeps_architecture_when_metrics_match(self):
+		"""load() does not rebuild the model when the saved config matches this instance."""
+		with tempfile.TemporaryDirectory() as temp_dir:
+			(Path(temp_dir) / "bert_weights.h5").touch()
+			# Matches the setUp trainer (max_len=10, dense_units=16)
+			with open(Path(temp_dir) / "metrics.json", "w") as f:
+				json.dump({"max_len": 10, "dense_units": 16}, f)
+
+			original_model = self.trainer.model
+			with (
+				patch.object(self.trainer, "load_weights") as mock_load,
+				patch.object(self.trainer, "_create_model") as mock_create,
+			):
+				self.trainer.load(temp_dir)
+
+				self.assertEqual(self.trainer.max_len, 10)
+				self.assertEqual(self.trainer.model, original_model)
+				mock_create.assert_not_called()
+				mock_load.assert_called_once()
+
+	def test_load_ignores_corrupted_metrics_json(self):
+		"""load() should still load weights when metrics.json is unreadable."""
+		with tempfile.TemporaryDirectory() as temp_dir:
+			(Path(temp_dir) / "bert_weights.h5").touch()
+			with open(Path(temp_dir) / "metrics.json", "w") as f:
+				f.write("{invalid_json")
+
+			original_max_len = self.trainer.max_len
+			original_dense_units = self.trainer.dense_units
+			original_model = self.trainer.model
+
+			with (
+				patch.object(self.trainer, "load_weights") as mock_load,
+				patch.object(self.trainer, "_create_model") as mock_create,
+			):
+				self.trainer.load(temp_dir)
+
+				self.assertEqual(self.trainer.max_len, original_max_len)
+				self.assertEqual(self.trainer.dense_units, original_dense_units)
+				self.assertEqual(self.trainer.model, original_model)
+				mock_create.assert_not_called()
+				mock_load.assert_called_once()
+
+	def test_load_ignores_invalid_metrics_values(self):
+		"""load() ignores non-positive/non-numeric metrics values and keeps defaults."""
+		with tempfile.TemporaryDirectory() as temp_dir:
+			(Path(temp_dir) / "bert_weights.h5").touch()
+			with open(Path(temp_dir) / "metrics.json", "w") as f:
+				json.dump({"max_len": 0, "dense_units": "abc"}, f)
+
+			original_max_len = self.trainer.max_len
+			original_dense_units = self.trainer.dense_units
+			original_model = self.trainer.model
+
+			with (
+				patch.object(self.trainer, "load_weights") as mock_load,
+				patch.object(self.trainer, "_create_model") as mock_create,
+			):
+				self.trainer.load(temp_dir)
+
+				self.assertEqual(self.trainer.max_len, original_max_len)
+				self.assertEqual(self.trainer.dense_units, original_dense_units)
+				self.assertEqual(self.trainer.model, original_model)
+				mock_create.assert_not_called()
+				mock_load.assert_called_once()
 
 	def test_perform_pseudo_labeling(self):
 		"""Test pseudo-labeling functionality."""
