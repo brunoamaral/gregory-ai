@@ -15,9 +15,11 @@ Covers scenarios not in test_predict_articles.py:
 11. Prediction stores correct predicted_relevant and probability_score
 12. load_model with unsupported algorithm
 13. get_articles returns distinct results (no duplicates)
-14. run_predictions_for correctly unwraps list returns from model.predict
+14. run_predictions_for handles single-article batches from model.predict
 """
 
+import os
+import tempfile
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 
@@ -35,6 +37,7 @@ from gregory.management.commands.predict_articles import (
 	prepare_text,
 )
 from gregory.models import Team, Subject, Articles, MLPredictions, PredictionRunLog
+from gregory.utils.text_utils import MIN_WORD_COUNT
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +163,7 @@ class TestRunPredictionsEdgeCases(PredictArticlesTestMixin, TestCase):
 	def test_model_predict_exception_counted_as_failure(
 		self, mock_prepare, mock_load, mock_resolve, mock_get
 	):
-		"""If model.predict raises, the article is counted as a failure, not as skipped."""
+		"""If model.predict raises, every article in the batch is counted as a failure."""
 		mock_resolve.return_value = "v1"
 		mock_get.return_value = [self.article1]
 		mock_prepare.return_value = "some cleaned text"
@@ -219,7 +222,7 @@ class TestRunPredictionsEdgeCases(PredictArticlesTestMixin, TestCase):
 		mock_prepare.side_effect = ["text one", "text two"]
 		mock_model = MagicMock()
 		# First article relevant (prob 0.92), second not (prob 0.15)
-		mock_model.predict.side_effect = [([1], [0.92]), ([0], [0.15])]
+		mock_model.predict.return_value = ([1, 0], [0.92, 0.15])
 		mock_load.return_value = mock_model
 
 		self.command.run_predictions_for(
@@ -240,11 +243,11 @@ class TestRunPredictionsEdgeCases(PredictArticlesTestMixin, TestCase):
 		self.assertFalse(pred2.predicted_relevant)
 		self.assertAlmostEqual(pred2.probability_score, 0.15, places=2)
 
-	# ---- unwraps list returns from model.predict ----
+	# ---- single-article batch from model.predict ----
 	def test_unwraps_single_element_list_predictions(
 		self, mock_prepare, mock_load, mock_resolve, mock_get
 	):
-		"""model.predict may return ([1], [0.9]); the command must unwrap the inner lists."""
+		"""A single-article batch returning ([1], [0.95]) is stored correctly."""
 		mock_resolve.return_value = "v1"
 		mock_get.return_value = [self.article1]
 		mock_prepare.return_value = "text"
@@ -284,7 +287,7 @@ class TestPrepareTextNoneSummary(TestCase):
 		result = prepare_text(article)
 		# summary is None → falsy → only title used
 		mock_clean_html.assert_called_once_with("Test Title")
-		mock_clean_text.assert_called_once_with("cleaned html")
+		mock_clean_text.assert_called_once_with("cleaned html", min_words=MIN_WORD_COUNT)
 		self.assertEqual(result, "cleaned text")
 
 
@@ -350,6 +353,76 @@ class TestLoadModelUnsupported(TestCase):
 
 
 # ===========================================================================
+# 12b. load_model delegates to the wrappers' own load() methods
+# ===========================================================================
+class TestLoadModelDelegation(TestCase):
+	TRAINER_CLASSES = {
+		"pubmed_bert": "gregory.ml.bert_wrapper.BertTrainer",
+		"lgbm_tfidf": "gregory.ml.lgbm_wrapper.LGBMTfidfTrainer",
+		"lstm": "gregory.ml.lstm_wrapper.LSTMTrainer",
+	}
+
+	def setUp(self):
+		self.team = MagicMock()
+		self.team.slug = "test-team"
+		self.subject = MagicMock()
+		self.subject.subject_slug = "test-subject"
+
+	def _model_dir(self, base, algorithm, version="v1"):
+		model_dir = os.path.join(
+			base, self.team.slug, self.subject.subject_slug, algorithm, version
+		)
+		os.makedirs(model_dir)
+		return model_dir
+
+	def test_load_model_calls_wrapper_load(self):
+		"""Each algorithm's trainer is instantiated and load(model_dir) called."""
+		for algorithm, trainer_path in self.TRAINER_CLASSES.items():
+			with self.subTest(algorithm=algorithm):
+				with tempfile.TemporaryDirectory() as base:
+					model_dir = self._model_dir(base, algorithm)
+					with (
+						patch(
+							"gregory.management.commands.predict_articles.BASE_MODEL_DIR",
+							base,
+						),
+						patch(trainer_path) as mock_trainer_class,
+					):
+						instance = mock_trainer_class.return_value
+						model = load_model(self.team, self.subject, algorithm, "v1")
+						instance.load.assert_called_once_with(model_dir)
+						self.assertIs(model, instance)
+
+	def test_wrapper_file_not_found_becomes_model_load_error(self):
+		"""FileNotFoundError from the wrapper surfaces as ModelLoadError."""
+		with tempfile.TemporaryDirectory() as base:
+			self._model_dir(base, "lgbm_tfidf")
+			with (
+				patch(
+					"gregory.management.commands.predict_articles.BASE_MODEL_DIR",
+					base,
+				),
+				patch("gregory.ml.lgbm_wrapper.LGBMTfidfTrainer") as mock_trainer_class,
+			):
+				mock_trainer_class.return_value.load.side_effect = FileNotFoundError(
+					"lgbm_classifier.joblib not found"
+				)
+				with self.assertRaises(ModelLoadError) as ctx:
+					load_model(self.team, self.subject, "lgbm_tfidf", "v1")
+				self.assertIn("Failed to load lgbm_tfidf model", str(ctx.exception))
+
+	def test_missing_model_dir_raises_model_load_error(self):
+		"""A model directory that doesn't exist raises ModelLoadError."""
+		with tempfile.TemporaryDirectory() as base:
+			with patch(
+				"gregory.management.commands.predict_articles.BASE_MODEL_DIR", base
+			):
+				with self.assertRaises(ModelLoadError) as ctx:
+					load_model(self.team, self.subject, "lgbm_tfidf", "v1")
+				self.assertIn("Model directory not found", str(ctx.exception))
+
+
+# ===========================================================================
 # 13. get_articles returns distinct results
 # ===========================================================================
 class TestGetArticlesDistinct(PredictArticlesTestMixin, TestCase):
@@ -392,7 +465,7 @@ class TestPredictionRunLogModelVersion(PredictArticlesTestMixin, TestCase):
 		mock_get.return_value = [self.article1]
 		mock_prepare.return_value = "text"
 		mock_model = MagicMock()
-		mock_model.predict.return_value = (1, 0.9)
+		mock_model.predict.return_value = ([1], [0.9])
 		mock_load.return_value = mock_model
 
 		self.command.run_predictions_for(
@@ -415,7 +488,7 @@ class TestPredictionRunLogModelVersion(PredictArticlesTestMixin, TestCase):
 		mock_get.return_value = [self.article1]
 		mock_prepare.return_value = "text"
 		mock_model = MagicMock()
-		mock_model.predict.return_value = (0, 0.2)
+		mock_model.predict.return_value = ([0], [0.2])
 		mock_load.return_value = mock_model
 
 		self.command.run_predictions_for(

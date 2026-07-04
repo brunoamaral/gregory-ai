@@ -256,6 +256,20 @@ class TestBertTrainer(unittest.TestCase):
 			# Verify results
 			mock_load.assert_called_once_with("fake_path.h5")
 
+	def test_load(self):
+		"""Test loading model artifacts from a directory."""
+		with tempfile.TemporaryDirectory() as temp_dir:
+			# Missing weights file raises FileNotFoundError
+			with self.assertRaises(FileNotFoundError):
+				self.trainer.load(temp_dir)
+
+			# With the weights file present, load_weights gets its path
+			weights_path = Path(temp_dir) / "bert_weights.h5"
+			weights_path.touch()
+			with patch.object(self.trainer, "load_weights") as mock_load:
+				self.trainer.load(temp_dir)
+				mock_load.assert_called_once_with(weights_path)
+
 	def test_perform_pseudo_labeling(self):
 		"""Test pseudo-labeling functionality."""
 		# Mock methods
