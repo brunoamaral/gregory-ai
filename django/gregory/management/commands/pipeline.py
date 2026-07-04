@@ -104,6 +104,21 @@ class Command(BaseCommand):
 				self.style.ERROR(f"Error running predict_articles: {str(e)}")
 			)
 
+		# Refresh the denormalized relevant flag (predict_articles bulk_creates
+		# MLPredictions, which fires no signals, so a full pass is required here)
+		try:
+			self.stdout.write(
+				self.style.SUCCESS("Running refresh_article_relevance")
+			)
+			call_command("refresh_article_relevance")
+			self.stdout.write(
+				self.style.SUCCESS("Finished running refresh_article_relevance")
+			)
+		except Exception as e:
+			self.stderr.write(
+				self.style.ERROR(f"Error running refresh_article_relevance: {str(e)}")
+			)
+
 		# Run detect_trial_references with recent articles only
 		try:
 			days = options.get("recent_days", 30)

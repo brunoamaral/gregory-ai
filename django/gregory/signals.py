@@ -89,6 +89,9 @@ def update_article_ml_score_on_save(sender, instance, **kwargs):
 	"""Recompute ml_score when a prediction is created or updated."""
 	if instance.article_id is not None:
 		_recompute_article_ml_score(instance.article_id)
+		from gregory.relevance import recompute_article_relevance
+
+		recompute_article_relevance(article_ids=[instance.article_id])
 
 
 @receiver(post_delete, sender="gregory.MLPredictions")
@@ -96,3 +99,15 @@ def update_article_ml_score_on_delete(sender, instance, **kwargs):
 	"""Recompute ml_score when a prediction is deleted."""
 	if instance.article_id is not None:
 		_recompute_article_ml_score(instance.article_id)
+		from gregory.relevance import recompute_article_relevance
+
+		recompute_article_relevance(article_ids=[instance.article_id])
+
+
+@receiver(post_save, sender="gregory.ArticleSubjectRelevance")
+@receiver(post_delete, sender="gregory.ArticleSubjectRelevance")
+def update_article_relevance_flag(sender, instance, **kwargs):
+	"""Recompute the denormalized relevant flag when manual relevance changes."""
+	from gregory.relevance import recompute_article_relevance
+
+	recompute_article_relevance(article_ids=[instance.article_id])
