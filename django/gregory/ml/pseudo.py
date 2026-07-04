@@ -105,7 +105,7 @@ def generate_pseudo_labels(
 	# Set default parameters based on algorithm
 	model_params = model_params or {}
 	if algorithm == "pubmed_bert":
-		model_params.setdefault("max_len", 400)
+		model_params.setdefault("max_len", 128)
 		model_params.setdefault("learning_rate", 2e-5)
 		model_params.setdefault("dense_units", 48)
 		model_params.setdefault(
