@@ -160,12 +160,15 @@ class RecomputeArticleRelevanceTestCase(TestCase):
 		)
 		self._predict(article, self.subject_majority, "pubmed_bert", 0.9)
 		self._predict(article, self.subject_majority, "lgbm_tfidf", 0.9)
-		recompute_article_relevance()
+		# Signals already synced the flag as each relevance source was added;
+		# force it back out of sync so recompute has to act, and assert it
+		# touches exactly this one row rather than being a no-op check.
+		Articles.objects.filter(pk=article.pk).update(relevant=False)
+
+		changed = recompute_article_relevance()
+		self.assertEqual(changed, 1)
 		article.refresh_from_db()
 		self.assertTrue(article.relevant)
-		# Distinctness at the author-count level is exercised in the API tests;
-		# here we only need the single boolean flag to be true, not doubled.
-		self.assertIn(article.relevant, (True, False))
 
 	def test_idempotent_second_call_changes_nothing(self):
 		article = self._make_article("Idempotence check", "https://example.com/r11")
@@ -215,7 +218,7 @@ class ArticleRelevanceSignalTestCase(TestCase):
 
 	def setUp(self):
 		org = Organization.objects.create(name="Signal Relevance Org")
-		self.team = Team.objects.create(organization=org, slug="signal-relevance-team")
+		self.team = Team.objects.create(organization=org, name="Signal Relevance Team", slug="signal-relevance-team")
 		self.subject = Subject.objects.create(
 			subject_name="Signal Subject",
 			subject_slug="signal-subject",
