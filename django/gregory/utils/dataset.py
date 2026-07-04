@@ -14,6 +14,7 @@ from django.db.models import QuerySet
 from sklearn.model_selection import train_test_split
 
 from gregory.models import Articles, Team, Subject
+from gregory.utils.text_utils import cleanHTML, cleanText, MIN_WORD_COUNT
 
 
 def collect_articles(
@@ -58,44 +59,53 @@ def collect_articles(
 	return queryset.select_related().prefetch_related("article_subject_relevances")
 
 
-def build_dataset(queryset: QuerySet) -> pd.DataFrame:
+def build_dataset(queryset: QuerySet, subject: Subject) -> pd.DataFrame:
 	"""
 	Build a dataset from a queryset of articles, merging title and summary and
-	including relevance labels.
+	including relevance labels for the given subject.
 
 	Args:
 	    queryset (QuerySet): The queryset of Articles objects
+	    subject (Subject): The subject whose relevance labels should be used
 
 	Returns:
 	    pd.DataFrame: DataFrame with columns:
 	        - article_id: The article's primary key
-	        - text: Combined title and summary
-	        - relevant: Boolean indicating relevance
+	        - text: cleanText(cleanHTML(title + summary)), matching prediction-time
+	          preparation; articles under MIN_WORD_COUNT words are dropped
+	        - relevant: 0/1 relevance label for the given subject
 
 	Note:
-	    Articles without relevance labels will be dropped.
+	    Articles without a manually reviewed relevance label for the subject
+	    will be dropped.
 	"""
 	data = []
 
 	for article in queryset:
-		# Get the relevance information for this article
-		relevance_entries = article.article_subject_relevances.all()
-
-		if not relevance_entries.exists():
-			continue  # Skip articles without relevance information
-
-		# Use the first relevance entry (there should be one per subject)
-		relevance = relevance_entries.first()
+		# Use the relevance entry for the subject being trained; an article tagged
+		# with several subjects may carry a different label for each of them
+		relevance = next(
+			(
+				r
+				for r in article.article_subject_relevances.all()
+				if r.subject_id == subject.id
+			),
+			None,
+		)
 
 		# Skip articles where relevance has not been manually reviewed (is_relevant is None)
-		if relevance.is_relevant is None:
+		if relevance is None or relevance.is_relevant is None:
 			continue
 
-		# Combine title and summary
-		text = article.title
+		# Combine title and summary, cleaned the same way predict_articles prepares text
+		raw_text = article.title
 		if article.summary:
 			# Using the original article summary (abstract) here, not a generated one
-			text += " " + article.summary
+			raw_text += " " + article.summary
+
+		text = cleanText(cleanHTML(raw_text), min_words=MIN_WORD_COUNT)
+		if not text:
+			continue
 
 		data.append(
 			{
