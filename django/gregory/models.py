@@ -569,6 +569,7 @@ class Articles(models.Model):
 			"utitle",
 			"usummary",
 			"ml_score",
+			"relevant",
 		],
 		bases=[ApiKeyHistoryMixin],
 		m2m_fields=["sources", "subjects", "teams"],
@@ -595,6 +596,12 @@ class Articles(models.Model):
 		default=None,
 		db_index=True,
 		help_text="Average ML probability score across the latest prediction per (algorithm, subject) pair. Updated automatically when predictions are saved.",
+	)
+	relevant = models.BooleanField(
+		default=False, db_index=True,
+		help_text="Denormalized: manually relevant for any subject, or ML consensus "
+				  "at the 0.8 threshold for any auto_predict subject. Maintained by "
+				  "signals + refresh_article_relevance.",
 	)
 
 	def is_ml_relevant_for_subject(self, subject, threshold=0.8):
