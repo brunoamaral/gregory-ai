@@ -676,6 +676,7 @@ class SourceSerializer(serializers.HyperlinkedModelSerializer):
 
 class AuthorSerializer(serializers.ModelSerializer):
 	articles_count = serializers.SerializerMethodField()
+	relevant_articles_count = serializers.SerializerMethodField()
 	country = serializers.SerializerMethodField()
 	articles_list = serializers.SerializerMethodField()
 
@@ -690,6 +691,7 @@ class AuthorSerializer(serializers.ModelSerializer):
 			"country",
 			"biography",
 			"articles_count",
+			"relevant_articles_count",
 			"articles_list",
 		]
 
@@ -711,6 +713,16 @@ class AuthorSerializer(serializers.ModelSerializer):
 			return obj.article_count
 		return obj.articles_set.count()
 
+	def get_relevant_articles_count(self, obj):
+		annotated = getattr(obj, "relevant_articles_count", None)
+		if annotated is not None:
+			return annotated
+		qs = obj.articles_set.filter(relevant=True)
+		request = self.context.get("request")
+		if request is not None and hasattr(request, "visible_org_ids"):
+			qs = qs.filter(teams__organization_id__in=request.visible_org_ids)
+		return qs.distinct().count()
+
 	def get_country(self, obj):
 		# Return the country code or name
 		return obj.country.code if obj.country else None
@@ -729,6 +741,22 @@ class AuthorSerializer(serializers.ModelSerializer):
 			base_url = f"https://api.{domain}/articles/?author_id="
 
 		return base_url + str(obj.author_id)
+
+
+class CoauthorSerializer(serializers.ModelSerializer):
+	country = serializers.SerializerMethodField()
+	shared_articles = serializers.IntegerField(read_only=True)
+	articles_count = serializers.IntegerField(read_only=True)
+	relevant_articles_count = serializers.IntegerField(read_only=True)
+
+	class Meta:
+		model = Authors
+		fields = ["author_id", "given_name", "family_name", "full_name",
+				  "ORCID", "country", "shared_articles", "articles_count",
+				  "relevant_articles_count"]
+
+	def get_country(self, obj):
+		return obj.country.code if obj.country else None
 
 
 # Simple Trial serializer for use in Article references

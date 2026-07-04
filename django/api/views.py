@@ -31,6 +31,7 @@ from api.serializers import (
 	TrialSerializer,
 	SourceSerializer,
 	AuthorSerializer,
+	CoauthorSerializer,
 	CategorySerializer,
 	CategoryTopAuthorSerializer,
 	TeamSerializer,
@@ -39,7 +40,8 @@ from api.serializers import (
 )
 from api.pagination import FlexiblePagination
 from datetime import datetime, timedelta
-from django.db.models import Count, Q, Prefetch
+from django.db.models import Count, Q, Prefetch, OuterRef, Subquery, Value, IntegerField
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper, ClinicalTrial
 from gregory.models import (
@@ -1524,6 +1526,28 @@ class SourceViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 ###
 
 
+def author_articles_count_subquery(visible_org_ids=None, relevant_only=False):
+	"""Correlated count of an author's articles, immune to outer-query joins.
+
+	A plain ``Count("articles", ...)`` annotation is corrupted whenever the
+	outer queryset already filters across the ``articles__`` join (Django
+	computes the aggregate over the same constrained join). A subquery avoids
+	that trap entirely.
+	"""
+	articles = Articles.objects.filter(authors__author_id=OuterRef("author_id"))
+	if relevant_only:
+		articles = articles.filter(relevant=True)
+	if visible_org_ids is not None:
+		articles = articles.filter(teams__organization_id__in=visible_org_ids)
+	counts = (
+		articles.order_by()
+		.values("authors__author_id")
+		.annotate(n=Count("article_id", distinct=True))
+		.values("n")[:1]
+	)
+	return Coalesce(Subquery(counts, output_field=IntegerField()), Value(0))
+
+
 class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	Enhanced Authors API with sorting and filtering capabilities.
@@ -1740,6 +1764,12 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 			order_prefix = "-" if order == "desc" else ""
 			queryset = queryset.order_by(f"{order_prefix}{sort_by}")
 
+		queryset = queryset.annotate(
+			relevant_articles_count=author_articles_count_subquery(
+				getattr(self.request, "visible_org_ids", None), relevant_only=True,
+			)
+		)
+
 		return queryset.distinct()
 
 	@action(detail=False, methods=["get"])
@@ -1801,6 +1831,41 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 			return self.get_paginated_response(serializer.data)
 
 		serializer = self.get_serializer(queryset, many=True)
+		return Response(serializer.data)
+
+	@action(detail=True, methods=["get"])
+	def coauthors(self, request, pk=None):
+		"""Co-authors ordered by number of shared articles (desc)."""
+		author = self.get_object()
+		visible_org_ids = getattr(request, "visible_org_ids", None)
+
+		shared = Articles.objects.filter(authors__author_id=author.author_id)
+		if visible_org_ids is not None:
+			shared = shared.filter(teams__organization_id__in=visible_org_ids)
+		shared_ids = shared.values("article_id").distinct()
+
+		coauthors_qs = (
+			Authors.objects
+			.filter(articles__article_id__in=shared_ids)
+			.exclude(author_id=author.author_id)
+			.annotate(
+				shared_articles=Count(
+					"articles", filter=Q(articles__article_id__in=shared_ids), distinct=True,
+				),
+				articles_count=author_articles_count_subquery(visible_org_ids),
+				relevant_articles_count=author_articles_count_subquery(
+					visible_org_ids, relevant_only=True,
+				),
+			)
+			.order_by("-shared_articles", "author_id")
+		)
+		page = self.paginate_queryset(coauthors_qs)
+		serializer = CoauthorSerializer(
+			page if page is not None else coauthors_qs, many=True,
+			context=self.get_serializer_context(),
+		)
+		if page is not None:
+			return self.get_paginated_response(serializer.data)
 		return Response(serializer.data)
 
 
@@ -2607,6 +2672,12 @@ class AuthorSearchView(generics.ListAPIView):
 				full_name = unquote(full_name)
 				# Use the new full_name database field for more efficient searching
 				queryset = queryset.filter(full_name__icontains=full_name)
+
+			queryset = queryset.annotate(
+				relevant_articles_count=author_articles_count_subquery(
+					getattr(self.request, "visible_org_ids", None), relevant_only=True,
+				)
+			)
 
 			return queryset
 		except (AttributeError, TypeError, ValueError) as e:
