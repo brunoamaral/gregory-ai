@@ -18,7 +18,7 @@ class RecomputeArticleRelevanceTestCase(TestCase):
 
 	def setUp(self):
 		org = Organization.objects.create(name="Relevance Test Org")
-		self.team = Team.objects.create(organization=org, slug="relevance-team")
+		self.team = Team.objects.create(organization=org, name="Relevance Team", slug="relevance-team")
 		self.subject_any = Subject.objects.create(
 			subject_name="Any Subject",
 			subject_slug="any-subject",
