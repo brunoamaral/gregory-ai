@@ -170,7 +170,7 @@ def load_model(team, subject, algorithm, model_version):
 	except ImportError as e:
 		raise ModelLoadError(
 			f"Failed to import required modules for {algorithm}: {str(e)}"
-		)
+		) from e
 
 	# Construct the path to the model directory
 	model_dir = os.path.join(
@@ -187,7 +187,7 @@ def load_model(team, subject, algorithm, model_version):
 		model.load(model_dir)
 		return model
 	except Exception as e:
-		raise ModelLoadError(f"Failed to load {algorithm} model: {str(e)}")
+		raise ModelLoadError(f"Failed to load {algorithm} model: {str(e)}") from e
 
 
 def prepare_text(article):
@@ -461,18 +461,19 @@ class Command(BaseCommand):
 
 			# Bulk create MLPredictions, counting actual new rows: with
 			# ignore_conflicts=True, bulk_create's return value includes rows
-			# that were skipped as duplicates
+			# that were skipped as duplicates. Only count conflicts among the
+			# articles in this batch, rather than scanning the whole table.
 			if prediction_instances and not dry_run:
-				existing = MLPredictions.objects.filter(
+				conflicts = MLPredictions.objects.filter(
 					subject=subject,
 					algorithm=algorithm,
 					model_version=resolved_version,
-				)
-				before = existing.count()
+					article_id__in=[p.article_id for p in prediction_instances],
+				).count()
 				MLPredictions.objects.bulk_create(
 					prediction_instances, ignore_conflicts=True
 				)
-				stats["new_predictions"] = existing.count() - before
+				stats["new_predictions"] = len(prediction_instances) - conflicts
 			elif prediction_instances:
 				# For dry run, we just count would-be creations
 				stats["new_predictions"] = len(prediction_instances)
