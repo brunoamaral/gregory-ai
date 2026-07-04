@@ -438,15 +438,63 @@ class BertTrainer:
 
 		metrics_path = model_dir / "metrics.json"
 		if metrics_path.exists():
-			with open(metrics_path) as f:
-				saved = json.load(f)
+			try:
+				with open(metrics_path) as f:
+					saved = json.load(f)
+				if not isinstance(saved, dict):
+					logging.warning(
+						"Ignoring invalid metrics file %s: expected JSON object, got %s",
+						metrics_path,
+						type(saved).__name__,
+					)
+					saved = {}
+			except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+				logging.warning(
+					"Failed to parse metrics file %s; loading weights with current architecture. Error: %s",
+					metrics_path,
+					exc,
+				)
+				saved = {}
+
+			def _coerce_positive_int(value: Any, field_name: str) -> Optional[int]:
+				if value is None:
+					return None
+				if isinstance(value, bool):
+					logging.warning(
+						"Ignoring invalid %s in %s: boolean values are not supported",
+						field_name,
+						metrics_path,
+					)
+					return None
+				try:
+					int_value = int(value)
+				except (TypeError, ValueError):
+					logging.warning(
+						"Ignoring invalid %s in %s: %r",
+						field_name,
+						metrics_path,
+						value,
+					)
+					return None
+				if int_value <= 0:
+					logging.warning(
+						"Ignoring invalid %s in %s: expected positive integer, got %r",
+						field_name,
+						metrics_path,
+						value,
+					)
+					return None
+				return int_value
+
 			rebuild = False
-			saved_max_len = saved.get("max_len")
-			if saved_max_len and saved_max_len != self.max_len:
+			saved_max_len = _coerce_positive_int(saved.get("max_len"), "max_len")
+			if saved_max_len is not None and saved_max_len != self.max_len:
 				self.max_len = saved_max_len
 				rebuild = True
-			saved_dense_units = saved.get("dense_units")
-			if saved_dense_units and saved_dense_units != self.dense_units:
+			saved_dense_units = _coerce_positive_int(
+				saved.get("dense_units"), "dense_units"
+			)
+			if saved_dense_units is not None and saved_dense_units != self.dense_units:
 				self.dense_units = saved_dense_units
 				rebuild = True
 			if rebuild:
