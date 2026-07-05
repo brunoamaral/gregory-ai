@@ -26,6 +26,36 @@ class FeedProcessor(ABC):
 	def __init__(self, command_instance):
 		self.command = command_instance
 
+	# Inline tags whose markup carries meaning and should be preserved in titles
+	SEMANTIC_TITLE_TAGS = {"sub", "sup", "i", "b", "em", "strong"}
+
+	@staticmethod
+	def clean_title(title: str) -> str:
+		"""Normalize a feed title before storage.
+
+		Publisher feeds (notably PubMed/Wiley) embed inline markup and
+		pretty-printed newlines/indentation inside <title>. We unescape HTML
+		entities, keep semantically meaningful inline tags (sub, sup, i, b,
+		em, strong) but strip presentational/JATS tags (e.g. <scp>, <jats:*>)
+		while preserving their text, drop tag attributes, and collapse runs of
+		whitespace to single spaces.
+		"""
+		if not title:
+			return title
+		from bs4 import BeautifulSoup
+		import html
+
+		title = html.unescape(title)
+		soup = BeautifulSoup(title, "html.parser")
+		for tag in soup.find_all(True):
+			if tag.name in FeedProcessor.SEMANTIC_TITLE_TAGS:
+				tag.attrs = {}
+			else:
+				tag.unwrap()
+		# formatter=None keeps entities unescaped (e.g. bare &) so the stored
+		# title matches the human-readable form; str(soup) would re-encode & -> &amp;.
+		return " ".join(soup.decode(formatter=None).split())
+
 	@abstractmethod
 	def can_process(self, source_link: str) -> bool:
 		"""Check if this processor can handle the given source link."""
@@ -62,7 +92,7 @@ class FeedProcessor(ABC):
 		)
 
 		return {
-			"title": entry["title"],
+			"title": self.clean_title(entry["title"]),
 			"link": greg.remove_utm(entry["link"]),
 			"published_date": published_date,
 		}
