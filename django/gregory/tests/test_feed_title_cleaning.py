@@ -81,3 +81,14 @@ class FeedTitleCleaningTest(TestCase):
 			"<scp>ABC</scp> <sub>x</sub> <sup>2</sup> <i>gene</i>"
 		)
 		self.assertEqual(result, "ABC <sub>x</sub> <sup>2</sup> <i>gene</i>")
+
+	def test_keyword_filter_matches_across_markup_and_whitespace(self):
+		"""Keyword phrases match even when the raw feed title has inline tags
+		or pretty-printed newlines (regression for title-based filtering)."""
+		source = MagicMock()
+		source.keyword_filter = "facial nerve"
+		entry = {
+			"title": "Facial <scp>Nerve</scp>\n                    Injury Study",
+			"summary": "",
+		}
+		self.assertTrue(self.processor.should_include_article(entry, source))

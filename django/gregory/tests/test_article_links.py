@@ -101,6 +101,30 @@ class FeedreaderFirstSeenWinsTest(TestCase):
 		self.assertEqual(article.link, link)
 		self.assertEqual(article.links, links)
 
+	def test_no_doi_matches_existing_by_link_when_title_changes(self):
+		"""A no-DOI row stored with a dirty title is still matched by its link
+		when a later run presents a cleaned (different) title, so no duplicate
+		is created."""
+		a1, created1, _ = self.cmd.create_or_update_article(
+			doi=None,
+			title="Dirty <scp>Title</scp>",
+			summary="",
+			link="https://example.com/dedupe-x",
+			published_date=None,
+			source=self.source1,
+		)
+		self.assertTrue(created1)
+		a2, created2, _ = self.cmd.create_or_update_article(
+			doi=None,
+			title="Clean Title",
+			summary="",
+			link="https://example.com/dedupe-x",
+			published_date=None,
+			source=self.source1,
+		)
+		self.assertFalse(created2)
+		self.assertEqual(a1.pk, a2.pk)
+
 
 class ImportArticlesFromApiLinkTest(TestCase):
 	"""import_articles_from_api: update path never clobbers article.link."""

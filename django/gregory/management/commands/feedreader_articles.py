@@ -18,6 +18,7 @@ import pytz
 import re
 import requests
 from abc import ABC, abstractmethod
+from typing import Optional
 
 
 class FeedProcessor(ABC):
@@ -30,7 +31,7 @@ class FeedProcessor(ABC):
 	SEMANTIC_TITLE_TAGS = {"sub", "sup", "i", "b", "em", "strong"}
 
 	@staticmethod
-	def clean_title(title: str) -> str:
+	def clean_title(title: Optional[str]) -> Optional[str]:
 		"""Normalize a feed title before storage.
 
 		Publisher feeds (notably PubMed/Wiley) embed inline markup and
@@ -103,7 +104,11 @@ class FeedProcessor(ABC):
 			return True  # No filter, include all articles
 
 		# Get text content to search
-		title = entry.get("title", "").lower()
+		# Strip inline markup and collapse whitespace before matching so tag
+		# wrappers (e.g. <scp>...) and pretty-printed newlines in feed titles
+		# don't split keywords and cause false negatives.
+		raw_title = entry.get("title", "") or ""
+		title = " ".join(re.sub(r"<[^>]+>", " ", raw_title).split()).lower()
 		summary = self.extract_summary(entry).lower()
 		search_text = f"{title} {summary}"
 
@@ -719,7 +724,14 @@ class Command(GregoryBaseCommand):
 				Q(doi=doi) | Q(title=title)
 			).first()
 		else:
-			existing_article = Articles.objects.filter(title=title).first()
+			# No DOI: match on the cleaned title, but fall back to the stable
+			# feed link. Title cleaning can make an incoming title differ from a
+			# row ingested before cleaning existed, so a title-only lookup could
+			# miss it and create a duplicate.
+			lookup = Q(title=title)
+			if link:
+				lookup |= Q(link=link)
+			existing_article = Articles.objects.filter(lookup).first()
 
 		crossref_was_updated = False
 
