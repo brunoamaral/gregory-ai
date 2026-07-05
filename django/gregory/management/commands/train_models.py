@@ -811,6 +811,12 @@ class Command(BaseCommand):
 						VerbosityLevel.WARNINGS,
 					)
 					merged = {}
+				if not isinstance(merged, dict):
+					self.log_warning(
+						f"Existing metrics.json holds {type(merged).__name__}, not an object; overwriting",
+						VerbosityLevel.WARNINGS,
+					)
+					merged = {}
 			merged.update(new_metrics)
 			return merged
 
