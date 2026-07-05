@@ -22,7 +22,6 @@ from datetime import timedelta
 
 from gregory.management.base import GregoryBaseCommand
 from django.db import IntegrityError
-from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import ClinicalTrialsGovAPI, ClinicalTrial
 from gregory.models import Trials, Sources
@@ -309,6 +308,28 @@ class Command(GregoryBaseCommand):
 
 		return params
 
+	# Real registry keys whose shared value corroborates an org_study_id match.
+	# Cross-registry identifiers legitimately coexist on one trial (nct + euct
+	# + eudract + …); corroboration means the SAME key holds the SAME value.
+	CORROBORATING_REGISTRY_KEYS = ("nct", "euct", "eudract", "ctis")
+
+	def _corroborates(self, candidate, clinical_trial: ClinicalTrial) -> bool:
+		"""Second signal required before an org_study_id match may merge."""
+		candidate_ids = candidate.identifiers or {}
+		incoming_ids = clinical_trial.identifiers or {}
+		for key in self.CORROBORATING_REGISTRY_KEYS:
+			a = candidate_ids.get(key)
+			b = incoming_ids.get(key)
+			if a and b and str(a).strip().lower() == str(b).strip().lower():
+				return True
+		if (
+			clinical_trial.title
+			and candidate.title
+			and candidate.title.strip().lower() == clinical_trial.title.strip().lower()
+		):
+			return True
+		return False
+
 	def find_existing_trial(self, clinical_trial: ClinicalTrial):
 		"""Find an existing trial by NCT ID, title, or link."""
 		identifiers = clinical_trial.identifiers
@@ -326,15 +347,22 @@ class Command(GregoryBaseCommand):
 			if trial:
 				return trial
 
-		# Try org study ID
-		if identifiers.get("org_study_id"):
-			# Check if org_study_id appears in identifiers JSON
-			trial = Trials.objects.filter(
-				Q(identifiers__org_study_id=identifiers["org_study_id"])
-				| Q(secondary_id__icontains=identifiers["org_study_id"])
-			).first()
-			if trial:
-				return trial
+		# Org study IDs are sponsor protocol codes, not registry identifiers —
+		# they are not globally unique (two sponsors can both use "001"). An
+		# exact match alone must not merge: require the no-conflict guard PLUS
+		# one corroborating signal (a shared registry-key value or an exact
+		# title match). Without corroboration we create a duplicate, which
+		# merge_trials can recover later — a wrong merge silently loses a trial.
+		org_study_id = identifiers.get("org_study_id")
+		if org_study_id:
+			candidates = Trials.objects.filter(
+				identifiers__org_study_id=org_study_id
+			)
+			for candidate in candidates:
+				if identifiers_conflict(candidate.identifiers, identifiers):
+					continue
+				if self._corroborates(candidate, clinical_trial):
+					return candidate
 
 		# Try by link (ClinicalTrials.gov URL)
 		if clinical_trial.link:
