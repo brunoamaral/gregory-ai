@@ -465,8 +465,27 @@ class LSTMTrainer:
 		with open(vectorizer_path, "r") as f:
 			vectorizer_data = json.load(f)
 
-		# Create vectorizer with the loaded configuration
-		self.vectorizer = TextVectorization.from_config(vectorizer_data["config"])
+		# Restore the custom standardize callable. save() serializes the
+		# callable as the string "custom_standardization" for JSON
+		# compatibility. TextVectorization.from_config() only special-cases
+		# `standardize` when it is a string keyword (e.g. "lower"); for any
+		# other value it tries to deserialize it as a serialized Keras
+		# object via keras.saving.deserialize_keras_object(), which raises
+		# on a bare callable. So when we detect our sentinel string, swap
+		# in the real callable and construct the layer directly instead of
+		# going through from_config() - mirroring what from_config() does
+		# internally for every other field (split/ngrams normalization),
+		# just without routing standardize through deserialization.
+		config = vectorizer_data["config"]
+		if config.get("standardize") == "custom_standardization":
+			config = dict(config)
+			config["standardize"] = self._custom_standardization
+			if isinstance(config.get("ngrams"), list):
+				config["ngrams"] = tuple(config["ngrams"])
+			self.vectorizer = TextVectorization(**config)
+		else:
+			# Create vectorizer with the loaded configuration
+			self.vectorizer = TextVectorization.from_config(config)
 
 		# Set vocabulary
 		vocabulary = vectorizer_data["vocabulary"]

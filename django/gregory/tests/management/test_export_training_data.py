@@ -9,6 +9,7 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gregory.tests.test_settings")
 django.setup()
 
+import json
 import tempfile
 from io import StringIO
 from pathlib import Path
@@ -274,6 +275,91 @@ class TrainModelsDatasetFileTest(TestCase):
 	def test_missing_dataset_file_raises(self):
 		with self.assertRaises(CommandError):
 			self.call_train(str(Path(self.temp_dir.name) / "does-not-exist.csv"))
+
+	def test_metrics_json_merges_trainer_architecture_keys(self):
+		"""train_models must not clobber the metrics.json written by
+		trainer.save(). BertTrainer.save() writes architecture keys like
+		max_len/dense_units that BertTrainer.load() later restores (#734);
+		the final metrics.json must keep those keys alongside the fresh
+		val_/test_ metrics computed here, rather than overwriting the file."""
+		dataset_path = self.write_dataset()
+
+		def fake_save(model_dir):
+			model_dir = Path(model_dir)
+			model_dir.mkdir(parents=True, exist_ok=True)
+			metrics_path = model_dir / "metrics.json"
+			with open(metrics_path, "w") as f:
+				json.dump({"max_len": 128, "dense_units": 48}, f)
+			return {"weights_path": str(model_dir / "weights"), "metrics_info": {}}
+
+		mock_trainer = MagicMock()
+		mock_trainer.evaluate.return_value = {"accuracy": 0.9, "f1": 0.8}
+		mock_trainer.save.side_effect = fake_save
+
+		with (
+			patch(
+				"gregory.management.commands.train_models.get_trainer",
+				return_value=mock_trainer,
+			),
+			patch(
+				"gregory.management.commands.train_models.collect_articles"
+			),
+			patch("django.conf.settings.BASE_DIR", self.temp_dir.name),
+		):
+			self.call_train(dataset_path)
+
+		mock_trainer.save.assert_called_once()
+		model_dir = Path(mock_trainer.save.call_args.args[0])
+		metrics_path = model_dir / "metrics.json"
+
+		with open(metrics_path) as f:
+			metrics = json.load(f)
+
+		# Architecture keys written by trainer.save() must survive.
+		self.assertEqual(metrics["max_len"], 128)
+		self.assertEqual(metrics["dense_units"], 48)
+		# The freshly computed val_/test_ metrics must also be present.
+		self.assertIn("val_accuracy", metrics)
+		self.assertIn("test_accuracy", metrics)
+		self.assertIn("val_f1", metrics)
+		self.assertIn("test_f1", metrics)
+
+	def test_metrics_json_with_non_dict_content_is_overwritten(self):
+		"""If metrics.json holds valid JSON that is not an object (e.g. a list
+		from a partial write or manual edit), the merge must fall back to
+		overwriting instead of raising AttributeError."""
+		dataset_path = self.write_dataset()
+
+		def fake_save(model_dir):
+			model_dir = Path(model_dir)
+			model_dir.mkdir(parents=True, exist_ok=True)
+			with open(model_dir / "metrics.json", "w") as f:
+				json.dump(["not", "a", "dict"], f)
+			return {"weights_path": str(model_dir / "weights"), "metrics_info": {}}
+
+		mock_trainer = MagicMock()
+		mock_trainer.evaluate.return_value = {"accuracy": 0.9, "f1": 0.8}
+		mock_trainer.save.side_effect = fake_save
+
+		with (
+			patch(
+				"gregory.management.commands.train_models.get_trainer",
+				return_value=mock_trainer,
+			),
+			patch(
+				"gregory.management.commands.train_models.collect_articles"
+			),
+			patch("django.conf.settings.BASE_DIR", self.temp_dir.name),
+		):
+			self.call_train(dataset_path)
+
+		model_dir = Path(mock_trainer.save.call_args.args[0])
+		with open(model_dir / "metrics.json") as f:
+			metrics = json.load(f)
+
+		self.assertIsInstance(metrics, dict)
+		self.assertIn("val_accuracy", metrics)
+		self.assertIn("test_f1", metrics)
 
 	def test_unreadable_dataset_file_raises(self):
 		"""An empty/corrupt CSV must fail argument validation, not silently
