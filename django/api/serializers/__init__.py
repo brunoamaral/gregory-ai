@@ -705,8 +705,8 @@ class AuthorSerializer(serializers.ModelSerializer):
 		qs = obj.articles_set.all()
 		request = self.context.get("request")
 		if request is not None and hasattr(request, "visible_org_ids"):
-			qs = qs.filter(teams__organization_id__in=request.visible_org_ids)
-		return qs.distinct().count()
+			return qs.filter(teams__organization_id__in=request.visible_org_ids).distinct().count()
+		return qs.count()
 
 	def get_relevant_articles_count(self, obj):
 		annotated = getattr(obj, "relevant_articles_count", None)
