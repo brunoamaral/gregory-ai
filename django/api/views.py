@@ -1754,6 +1754,14 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 			queryset = queryset.annotate(
 				article_count=Count("articles", filter=combined_q, distinct=True)
 			).filter(article_count__gt=0)
+		else:
+			# No sort/filter needs an article_count annotation, but the serializer
+			# still needs one to avoid a per-row COUNT query for every author.
+			queryset = queryset.annotate(
+				article_count=author_articles_count_subquery(
+					getattr(self.request, "visible_org_ids", None), relevant_only=False
+				)
+			)
 
 		# Apply sorting
 		if sort_by == "article_count":
@@ -2674,6 +2682,9 @@ class AuthorSearchView(generics.ListAPIView):
 				queryset = queryset.filter(full_name__icontains=full_name)
 
 			queryset = queryset.annotate(
+				article_count=author_articles_count_subquery(
+					getattr(self.request, "visible_org_ids", None), relevant_only=False
+				),
 				relevant_articles_count=author_articles_count_subquery(
 					getattr(self.request, "visible_org_ids", None), relevant_only=True,
 				)

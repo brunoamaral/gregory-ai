@@ -227,15 +227,12 @@ class AuthorCoauthorsQueryCountTest(TestCase):
 			self.assertEqual(serializer.get_relevant_articles_count(author), 3)
 
 	def test_author_list_query_budget_is_pinned(self):
-		"""Pins the current query count for /authors/ under org-visibility scope
-		so a real regression is caught. Most of this budget is pre-existing,
-		unrelated to relevant_articles_count: get_articles_count recomputes per
-		author whenever visible_org_ids is present (always, per
-		VisibleOrgMiddleware), and get_articles_list looks up the Site per
-		author. relevant_articles_count itself adds zero extra queries per
-		author because it trusts the get_queryset annotation."""
-		total_authors = len(self.coauthors) + 1  # + self.target
-		with self.assertNumQueries(4 + total_authors * 2):
+		"""Pins the query count for /authors/ under org-visibility scope so a
+		real regression is caught. article_count and relevant_articles_count
+		are both computed via get_queryset annotations, and get_site() uses
+		Django's cached Site.objects.get_current(), so the query count must
+		stay flat regardless of how many authors are returned."""
+		with self.assertNumQueries(4):
 			response = self.client.get("/authors/")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertGreater(len(response.data["results"]), 0)

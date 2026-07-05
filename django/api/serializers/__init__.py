@@ -32,7 +32,7 @@ def get_custom_settings():
 
 def get_site():
 	try:
-		return Site.objects.get(pk=settings.SITE_ID)
+		return Site.objects.get_current()
 	except ObjectDoesNotExist:
 		return None
 
@@ -696,22 +696,17 @@ class AuthorSerializer(serializers.ModelSerializer):
 		]
 
 	def get_articles_count(self, obj):
+		# The queryset always annotates a (correctly org-scoped) article_count,
+		# so prefer it and avoid a per-row COUNT query. Only fall back to a
+		# live query if a caller passes in an un-annotated instance directly.
+		annotated = getattr(obj, "article_count", None)
+		if annotated is not None:
+			return annotated
+		qs = obj.articles_set.all()
 		request = self.context.get("request")
-		# When org-visibility is active, always compute the scoped count so the
-		# value is correct even if an un-scoped article_count was annotated by
-		# an earlier queryset stage (e.g. a cached queryset without visibility).
 		if request is not None and hasattr(request, "visible_org_ids"):
-			return (
-				obj.articles_set.filter(
-					teams__organization_id__in=request.visible_org_ids
-				)
-				.distinct()
-				.count()
-			)
-		# No visibility active — use the pre-annotated count for efficiency.
-		if hasattr(obj, "article_count"):
-			return obj.article_count
-		return obj.articles_set.count()
+			return qs.filter(teams__organization_id__in=request.visible_org_ids).distinct().count()
+		return qs.count()
 
 	def get_relevant_articles_count(self, obj):
 		annotated = getattr(obj, "relevant_articles_count", None)
