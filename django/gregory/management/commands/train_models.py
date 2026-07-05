@@ -794,9 +794,30 @@ class Command(BaseCommand):
 				VerbosityLevel.WARNINGS,
 			)
 
+		# trainer.save() may have already written metrics.json with
+		# architecture keys (e.g. max_len, dense_units for BERT) that
+		# load() relies on to restore the model's configuration. Merge
+		# rather than overwrite so those keys survive; the freshly
+		# computed val_/test_ metrics win on any key collisions.
+		def merge_with_existing_metrics(new_metrics):
+			merged = {}
+			if metrics_path.exists():
+				try:
+					with open(metrics_path, "r") as f:
+						merged = json.load(f)
+				except (json.JSONDecodeError, OSError) as e:
+					self.log_warning(
+						f"Could not read existing metrics.json to merge: {str(e)}",
+						VerbosityLevel.WARNINGS,
+					)
+					merged = {}
+			merged.update(new_metrics)
+			return merged
+
 		try:
+			merged_metrics = merge_with_existing_metrics(formatted_metrics)
 			with open(metrics_path, "w") as f:
-				json.dump(formatted_metrics, f, indent=2)
+				json.dump(merged_metrics, f, indent=2)
 		except TypeError as e:
 			# If JSON serialization fails, try to identify the problematic key
 			self.log_error(
@@ -817,9 +838,10 @@ class Command(BaseCommand):
 						VerbosityLevel.WARNINGS,
 					)
 
-			# Save the safe metrics
+			# Save the safe metrics, merged with any pre-existing metrics.json
+			merged_safe_metrics = merge_with_existing_metrics(safe_metrics)
 			with open(metrics_path, "w") as f:
-				json.dump(safe_metrics, f, indent=2)
+				json.dump(merged_safe_metrics, f, indent=2)
 
 		self.log_success(
 			f"Model training complete for {team_slug}/{subject_slug}/{algorithm}",
