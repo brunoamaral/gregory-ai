@@ -534,7 +534,18 @@ class Command(GregoryBaseCommand):
 		)
 		for source in sources:
 			self.log(f"# Processing articles from {source}", level=1)
-			feed = self.fetch_feed(source.link, source.ignore_ssl)
+			# One broken source (timeout, DNS, SSL) must not abort the whole run
+			# and silently skip every source after it in the loop.
+			try:
+				feed = self.fetch_feed(source.link, source.ignore_ssl)
+			except Exception as e:
+				self.log(
+					f"Failed to fetch feed for source '{source.name}' ({source.link}): {e}. "
+					"Skipping this source.",
+					level=1,
+					style_func=self.style.ERROR,
+				)
+				continue
 			processor = self.get_feed_processor(source.link)
 
 			for entry in feed["entries"]:

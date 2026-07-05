@@ -18,6 +18,8 @@ Usage:
 	python manage.py feedreader_trials_ctgov --verbosity=2
 """
 
+from datetime import timedelta
+
 from gregory.management.base import GregoryBaseCommand
 from django.db import IntegrityError
 from django.db.models import Q
@@ -132,15 +134,38 @@ class Command(GregoryBaseCommand):
 			created_count = 0
 			updated_count = 0
 			error_count = 0
+			fetched_count = 0
+			fetch_failed = False
+			# Anchor candidate: taken BEFORE paging starts, so trials updated while
+			# we page are re-covered by the next run's window.
+			fetch_started = timezone.now()
 
 			try:
 				# Build search parameters from source configuration
 				search_kwargs = self._build_search_params(source)
+				if "filter_advanced" in search_kwargs:
+					self.log(
+						f"  Incremental window: {search_kwargs['filter_advanced']} "
+						f"(anchor {source.last_successful_fetch_at:%Y-%m-%d %H:%M} UTC minus 2-day overlap)",
+						level=1,
+					)
+				else:
+					self.log(
+						"  No previous successful fetch recorded; fetching without a date filter "
+						"(backfill mode). For large conditions run a manual backfill with "
+						"--source-id and a high --max-results.",
+						level=1,
+						style_func=self.style.WARNING,
+					)
 
 				# Fetch studies from the API
 				for study_data in self.api.search_all(
 					max_results=max_results, **search_kwargs
 				):
+					fetched_count += 1
+					# Pre-bind so the except handlers below can reference it even
+					# when parse_study_to_clinical_trial itself raises.
+					clinical_trial = None
 					try:
 						# Convert API response to ClinicalTrial object
 						clinical_trial = self.api.parse_study_to_clinical_trial(
@@ -196,11 +221,41 @@ class Command(GregoryBaseCommand):
 						error_count += 1
 
 			except Exception as e:
+				fetch_failed = True
 				self.log(
 					f"Error fetching from source {source.name}: {e}",
 					level=1,
 					style_func=self.style.ERROR,
 				)
+
+			# Advance the incremental anchor only after a fully successful run:
+			# every page consumed, no request failure, no item errors, cap not hit.
+			# Anything less means this window may hold trials we did not store, so
+			# the next run must re-cover it.
+			if fetch_failed:
+				self.log(
+					f"  Not advancing incremental anchor for {source.name}: fetch did not complete.",
+					level=1,
+					style_func=self.style.WARNING,
+				)
+			elif max_results and fetched_count >= max_results:
+				self.log(
+					f"  Result cap of {max_results} hit for {source.name}; not advancing the "
+					"incremental anchor so the next run re-covers this window. Consider a "
+					"manual run with --source-id and a higher --max-results.",
+					level=1,
+					style_func=self.style.WARNING,
+				)
+			elif error_count:
+				self.log(
+					f"  {error_count} trial(s) failed to process for {source.name}; not advancing "
+					"the incremental anchor.",
+					level=1,
+					style_func=self.style.WARNING,
+				)
+			else:
+				source.last_successful_fetch_at = fetch_started
+				source.save(update_fields=["last_successful_fetch_at"])
 
 			self.log(
 				f"Finished processing source: {source.name} - Created: {created_count}, Updated: {updated_count}, Errors: {error_count}",
@@ -238,10 +293,19 @@ class Command(GregoryBaseCommand):
 				general_terms = source.description[5:].strip()  # Remove "TERM:" prefix
 				params["query_term"] = general_terms
 
+		# Incremental window: only ask CTGov for studies updated since the last
+		# fully successful fetch (minus a 2-day overlap for clock skew and CTGov
+		# indexing lag). Without an anchor we fetch unfiltered (backfill mode).
+		if source.last_successful_fetch_at:
+			window_start = (source.last_successful_fetch_at - timedelta(days=2)).strftime(
+				"%Y-%m-%d"
+			)
+			params["filter_advanced"] = (
+				f"AREA[LastUpdatePostDate]RANGE[{window_start},MAX]"
+			)
+
 		# Note: We don't specify fields to get the full study data
 		# The API returns all fields by default
-
-		return params
 
 		return params
 

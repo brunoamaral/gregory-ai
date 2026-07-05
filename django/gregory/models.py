@@ -402,6 +402,15 @@ class Sources(models.Model):
 		blank=False,
 		related_name="sources",  # Helps in querying from the Team model, e.g., team.sources.all()
 	)
+	last_successful_fetch_at = models.DateTimeField(
+		blank=True,
+		null=True,
+		help_text=(
+			"Start time of the last fetch that completed fully (every page consumed, "
+			"no errors, result cap not hit). Anchors the incremental ClinicalTrials.gov "
+			"window; a failed or capped run must not advance it."
+		),
+	)
 
 	def get_latest_article_date(self):
 		"""
