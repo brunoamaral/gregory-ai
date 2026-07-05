@@ -6,7 +6,6 @@ from crossref.restful import Works, Etiquette
 from dateutil.parser import parse
 from dateutil.tz import gettz
 from django.core.exceptions import MultipleObjectsReturned
-from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import SciencePaper
 from gregory.utils.registry_utils import merge_links
@@ -83,14 +82,19 @@ class FeedProcessor(ABC):
 			or entry.get("prism_publicationdate")
 		)
 
-		if not date_string:
-			raise ValueError(
-				f"No valid date field found in feed entry: {entry.get('title', 'Unknown')}"
+		# A missing date must not cost us the article: ingest with
+		# published_date=None and let update_articles_info fill the real date
+		# from CrossRef downstream.
+		published_date = None
+		if date_string:
+			published_date = parse(
+				date_string, tzinfos=self.command.tzinfos
+			).astimezone(pytz.utc)
+		else:
+			logging.warning(
+				f"No date field in feed entry '{entry.get('title', 'Unknown')}'; "
+				"ingesting without a published date."
 			)
-
-		published_date = parse(date_string, tzinfos=self.command.tzinfos).astimezone(
-			pytz.utc
-		)
 
 		return {
 			"title": self.clean_title(entry["title"]),
@@ -714,6 +718,42 @@ class Command(GregoryBaseCommand):
 				"pdf_link": crossref_paper.pdf_link,
 			}
 
+	def find_existing_article(self, doi: str, title: str, link: str):
+		"""Locate the article this feed entry refers to, DOI-first.
+
+		Lookup order:
+		1. DOI — the only globally unique key we have.
+		2. Link — an article's first-seen URL is stable; this also catches rows
+		   ingested before title cleaning existed (PR #739).
+		3. Cleaned title — but ONLY when the incoming entry has no DOI or the
+		   candidate has no DOI. When both sides carry different non-null DOIs
+		   they are different papers (errata, corrections, preprint vs
+		   published all collide on title) and a new article must be created
+		   instead of absorbing the entry into the wrong row.
+		"""
+		if doi:
+			article = Articles.objects.filter(doi=doi).first()
+			if article:
+				return article
+
+		if link:
+			article = Articles.objects.filter(link=link).first()
+			if article:
+				return article
+
+		article = Articles.objects.filter(title=title).first()
+		if article:
+			if doi and article.doi and article.doi != doi:
+				self.log(
+					f"  Title matches article {article.article_id} but DOIs differ "
+					f"({article.doi} vs {doi}); creating a new article.",
+					level=2,
+				)
+				return None
+			return article
+
+		return None
+
 	def create_or_update_article(
 		self,
 		doi: str,
@@ -729,26 +769,23 @@ class Command(GregoryBaseCommand):
 		pdf_link=None,
 	) -> tuple[Articles, bool, bool]:
 		"""Create a new article or update existing one. Returns (article, created, crossref_updated)."""
-		# Check if an article with the same DOI or title exists
-		if doi:
-			existing_article = Articles.objects.filter(
-				Q(doi=doi) | Q(title=title)
-			).first()
-		else:
-			# No DOI: match on the cleaned title, but fall back to the stable
-			# feed link. Title cleaning can make an incoming title differ from a
-			# row ingested before cleaning existed, so a title-only lookup could
-			# miss it and create a duplicate.
-			lookup = Q(title=title)
-			if link:
-				lookup |= Q(link=link)
-			existing_article = Articles.objects.filter(lookup).first()
+		existing_article = self.find_existing_article(doi, title, link)
 
 		crossref_was_updated = False
 
 		if existing_article:
 			science_paper = existing_article
 			created = False
+
+			# An article first seen via a DOI-less feed gains its DOI here; the
+			# find_existing_article guard already ruled out conflicting DOIs.
+			if doi and not science_paper.doi:
+				science_paper.doi = doi
+				science_paper.save(update_fields=["doi"])
+				self.log(
+					f"  Added DOI {doi} to existing article: {science_paper.title}",
+					level=2,
+				)
 
 			# Check what needs to be updated
 			basic_fields_changed = self.article_needs_update(
@@ -813,7 +850,9 @@ class Command(GregoryBaseCommand):
 				article.title != title,
 				article.summary != summary,
 				merge_links(article.links, link) != (article.links or {}),
-				article.published_date != published_date,
+				# A date-less feed entry must never blank an existing date
+				published_date is not None
+				and article.published_date != published_date,
 			]
 		)
 
@@ -827,7 +866,8 @@ class Command(GregoryBaseCommand):
 		merged = merge_links(article.links, link)
 		if merged != (article.links or {}):
 			article.links = merged
-		article.published_date = published_date
+		if published_date is not None:
+			article.published_date = published_date
 		article.save()
 
 	def update_all_article_fields(
@@ -850,7 +890,8 @@ class Command(GregoryBaseCommand):
 		merged = merge_links(article.links, link)
 		if merged != (article.links or {}):
 			article.links = merged
-		article.published_date = published_date
+		if published_date is not None:
+			article.published_date = published_date
 		article.container_title = container_title
 		article.publisher = publisher
 		article.access = access

@@ -524,7 +524,10 @@ class Articles(models.Model):
 		("restricted", "Restricted"),
 	]
 	article_id = models.AutoField(primary_key=True)
-	title = models.TextField(blank=False, null=False, unique=True)
+	# Deliberately NOT unique: distinct papers can share a title (errata,
+	# corrections, preprint vs published). Dedup is enforced in the feedreader
+	# by DOI-first lookup; unique_article_title_link still guards exact dupes.
+	title = models.TextField(blank=False, null=False)
 	link = models.URLField(
 		blank=False,
 		null=False,
