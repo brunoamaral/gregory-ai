@@ -238,6 +238,41 @@ On Apple Silicon, add `--cpu` if GPU training causes bus errors.
 or `--pseudo-label` (pseudo-labeling queries the database for unlabeled
 articles).
 
+#### ⚠️ The training environment's TensorFlow MUST match the serving image
+
+BERT and LSTM weights are saved as `.h5` files, and **h5 weights do not
+round-trip reliably across TensorFlow versions**. A model trained with
+TF 2.18 loads *without any error* in a TF 2.20 container but produces
+systematically deflated probabilities (observed: a model with 0.91 validation
+recall scored **zero** articles above the 0.8 threshold in production). Always
+train with the same TensorFlow version the gregory image serves with (check
+with `docker exec gregory python -c "import tensorflow; print(tensorflow.__version__)"`).
+
+The safest option is training inside the gregory container itself (`make
+ml-train` does this), but BERT fine-tuning needs roughly 8 GB — on Docker
+Desktop, raise the VM memory above its default or the run gets OOM-killed
+(exit 137). A native virtual environment works too if you pin TensorFlow to
+the image's version; it additionally needs `tf-keras`, `torch` (transformers
+uses it to convert the BiomedBERT checkpoint, which is published as PyTorch
+weights), and on macOS `brew install libomp` for LightGBM. Note that
+`tensorflow-metal` (GPU) generally lags behind and may not support the
+image's TF version — CPU training at max_len=128 runs at roughly 10 min/epoch
+on an M-series Mac, ~80 minutes for a full run with early stopping.
+
+After shipping, spot-check the model *in the serving environment* before
+trusting it: score a few known-relevant articles on production and confirm
+they land near the probabilities seen during evaluation.
+
+#### Transfer tip
+
+If `make ml-ship`'s rsync hangs from macOS, plain `scp` works:
+
+```bash
+ssh user@server "mkdir -p /path/to/gregory/django/models/<team>/<subject>/<algo>/<version>"
+scp django/models/<team>/<subject>/<algo>/<version>/* \
+  user@server:/path/to/gregory/django/models/<team>/<subject>/<algo>/<version>/
+```
+
 ### 3. Ship the version directory to production
 
 Training writes `django/models/{team}/{subject}/{algorithm}/{version}/`. Copy
