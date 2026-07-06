@@ -47,7 +47,10 @@ class Command(BaseCommand):
 				"rebuild_categories",
 				rebuild_kwargs,
 			),  # 7. Assign categories (incremental by default)
-			("get_takeaways", {}),  # 8. Get takeaways
+			(
+				"get_takeaways",
+				{"limit": 50},
+			),  # 8. Get takeaways (50 > ~30 new articles/run, so the queue drains)
 		]
 
 		# First run all the standard commands

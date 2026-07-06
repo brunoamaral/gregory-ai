@@ -9,6 +9,12 @@ regardless of organisation), and the resulting text is fanned out to every
 organisation the article belongs to via teams that does not already have a
 non-empty ``takeaways`` row.
 
+Articles are processed oldest-first (``order_by("article_id")``) so a backlog
+is worked down from the front instead of always favouring recent ingestion.
+The candidate queryset is filtered up front to articles that still need work
+(at least one linked organisation missing a non-empty ``takeaways`` row), so
+already-filled articles are never fetched and never consume ``--limit``.
+
 Usage
 -----
 Default (pipeline cron)::
@@ -30,6 +36,7 @@ import html
 import time
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Exists, OuterRef, Q
 from django.db.models.functions import Length
 
 from gregory.models import Articles, ArticleOrgContent
@@ -118,6 +125,33 @@ class Command(BaseCommand):
 		filled = set(existing)
 		return [org for org in orgs if org.pk not in filled]
 
+	@staticmethod
+	def _needs_work_qs(qs, org_id=None):
+		"""Restrict *qs* to articles that still need at least one takeaway.
+
+		An article needs work when at least one organisation linked to it via
+		teams (optionally scoped to *org_id*) has no ``ArticleOrgContent`` row,
+		or has one with a NULL/empty ``takeaways``. Implemented as a single
+		``Exists`` subquery so it composes cleanly with ``.iterator()``.
+		"""
+		from django.apps import apps
+
+		Organization = apps.get_model("organizations", "Organization")
+
+		outer_article = OuterRef("pk")
+		orgs_for_article = Organization.objects.filter(teams__articles=outer_article)
+		if org_id is not None:
+			orgs_for_article = orgs_for_article.filter(pk=org_id)
+
+		already_filled = (
+			Q(article_contents__article=outer_article)
+			& Q(article_contents__takeaways__isnull=False)
+			& ~Q(article_contents__takeaways="")
+		)
+		orgs_missing = orgs_for_article.exclude(already_filled)
+
+		return qs.filter(Exists(orgs_missing))
+
 	# ------------------------------------------------------------------
 	# Entry point
 	# ------------------------------------------------------------------
@@ -133,7 +167,8 @@ class Command(BaseCommand):
 			raise CommandError("--limit must be a positive integer.")
 
 		# Base candidate pool: science papers with an abstract in the usable length range.
-		# We order by newest first so each run prioritises recent ingestion.
+		# We order oldest-first so a run works down a backlog instead of always
+		# favouring the most recently ingested articles.
 		base_qs = (
 			Articles.objects.annotate(abstract_length=Length("summary"))
 			.filter(
@@ -141,8 +176,12 @@ class Command(BaseCommand):
 				abstract_length__lte=3000,
 				kind="science paper",
 			)
-			.order_by("-article_id")
+			.order_by("article_id")
 		)
+
+		# Filter up front to articles that actually still need work, so
+		# already-filled articles are never fetched and never consume --limit.
+		base_qs = self._needs_work_qs(base_qs, org_id=org_id)
 
 		summarizer = None
 		processed = 0
@@ -151,24 +190,16 @@ class Command(BaseCommand):
 		scanned = 0
 		orphans = 0
 
-		# Over-scan factor lets us skip articles whose org content is already
-		# filled without aborting the run prematurely.
-		scan_cap = max(limit * 10, 200)
-
 		for article in base_qs.iterator(chunk_size=100):
 			if processed >= limit:
-				break
-			if scanned >= scan_cap:
-				self.stdout.write(
-					self.style.WARNING(
-						f"Reached scan cap of {scan_cap} articles without filling --limit; stopping."
-					)
-				)
 				break
 			scanned += 1
 
 			orgs = self._orgs_for_article(article, org_id=org_id)
 			if not orgs:
+				# Should be rare now that the queryset filters for pending work:
+				# it can only happen if the article's teams/orgs changed between
+				# the query running and this row being processed.
 				if org_id is None:
 					orphans += 1
 					self.stderr.write(
@@ -178,6 +209,9 @@ class Command(BaseCommand):
 					)
 				continue
 
+			# Cheap per-article re-check: the queryset annotation and this write
+			# are not atomic, so re-derive the exact set of orgs still missing a
+			# takeaway rather than trusting the upfront filter blindly.
 			missing_orgs = self._orgs_missing_takeaways(article, orgs)
 			if not missing_orgs:
 				continue
@@ -246,7 +280,7 @@ class Command(BaseCommand):
 		self.stdout.write(
 			summary_style(
 				f"{'[DRY RUN] ' if dry_run else ''}"
-				f"Processed {processed} article(s) (scanned {scanned}, orphans skipped {orphans}). "
+				f"Processed {processed} article(s) (examined {scanned} candidate(s), orphans skipped {orphans}). "
 				f"Created {created_rows} new ArticleOrgContent row(s), "
 				f"updated {updated_rows} existing row(s)."
 			)
