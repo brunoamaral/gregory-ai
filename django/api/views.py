@@ -1754,14 +1754,12 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 			queryset = queryset.annotate(
 				article_count=Count("articles", filter=combined_q, distinct=True)
 			).filter(article_count__gt=0)
-		else:
-			# No sort/filter needs an article_count annotation, but the serializer
-			# still needs one to avoid a per-row COUNT query for every author.
-			queryset = queryset.annotate(
-				article_count=author_articles_count_subquery(
-					getattr(self.request, "visible_org_ids", None), relevant_only=False
-				)
-			)
+		# NOTE: article_count/relevant_articles_count for the default (no
+		# sort_by=article_count, no count_filters) case are deliberately NOT
+		# annotated here. Annotating them on the full queryset forces
+		# Postgres to evaluate a correlated subquery per author just to
+		# compute pagination's COUNT(*) over the whole table. They're
+		# attached to the paginated page only, in list() below.
 
 		# Apply sorting
 		if sort_by == "article_count":
@@ -1772,13 +1770,40 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 			order_prefix = "-" if order == "desc" else ""
 			queryset = queryset.order_by(f"{order_prefix}{sort_by}")
 
-		queryset = queryset.annotate(
-			relevant_articles_count=author_articles_count_subquery(
-				getattr(self.request, "visible_org_ids", None), relevant_only=True,
-			)
-		)
-
 		return queryset.distinct()
+
+	def list(self, request, *args, **kwargs):
+		queryset = self.filter_queryset(self.get_queryset())
+		page = self.paginate_queryset(queryset)
+		target = page if page is not None else list(queryset)
+
+		if target:
+			visible_org_ids = getattr(request, "visible_org_ids", None)
+			author_ids = [obj.author_id for obj in target]
+			counts_by_id = {
+				row["author_id"]: row
+				for row in Authors.objects.filter(author_id__in=author_ids)
+				.annotate(
+					_article_count=author_articles_count_subquery(
+						visible_org_ids, relevant_only=False
+					),
+					_relevant_articles_count=author_articles_count_subquery(
+						visible_org_ids, relevant_only=True
+					),
+				)
+				.values("author_id", "_article_count", "_relevant_articles_count")
+			}
+			for obj in target:
+				row = counts_by_id.get(obj.author_id, {})
+				if not hasattr(obj, "article_count"):
+					obj.article_count = row.get("_article_count", 0)
+				obj.relevant_articles_count = row.get("_relevant_articles_count", 0)
+
+		if page is not None:
+			serializer = self.get_serializer(page, many=True)
+			return self.get_paginated_response(serializer.data)
+		serializer = self.get_serializer(target, many=True)
+		return Response(serializer.data)
 
 	@action(detail=False, methods=["get"])
 	def by_team_subject(self, request):

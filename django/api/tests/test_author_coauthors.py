@@ -229,10 +229,14 @@ class AuthorCoauthorsQueryCountTest(TestCase):
 	def test_author_list_query_budget_is_pinned(self):
 		"""Pins the query count for /authors/ under org-visibility scope so a
 		real regression is caught. article_count and relevant_articles_count
-		are both computed via get_queryset annotations, and get_site() uses
-		Django's cached Site.objects.get_current(), so the query count must
-		stay flat regardless of how many authors are returned."""
-		with self.assertNumQueries(4):
+		are computed for the paginated page only (one extra bounded query),
+		not annotated onto the full queryset used for pagination's COUNT(*) —
+		annotating them there would force Postgres to evaluate a correlated
+		subquery per author just to paginate, which is what caused runaway
+		CPU on production. get_site() uses Django's cached
+		Site.objects.get_current(), so the query count must stay flat
+		regardless of how many authors are returned."""
+		with self.assertNumQueries(5):
 			response = self.client.get("/authors/")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertGreater(len(response.data["results"]), 0)
