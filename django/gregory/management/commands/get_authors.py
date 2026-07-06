@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 from crossref.restful import Works, Etiquette
 from dotenv import load_dotenv
 import os
@@ -24,8 +25,8 @@ class Command(BaseCommand):
 		# articles inside its own selection window forever.
 		articles = Articles.objects.filter(
 			due_filter("authors_next_check"),
+			~Q(doi__isnull=True) & ~Q(doi=""),
 			authors__isnull=True,
-			doi__isnull=False,
 		)
 		for article in articles:
 			try:

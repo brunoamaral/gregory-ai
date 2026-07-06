@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 from gregory.models import Articles
 from gregory.utils.enrichment import clear_marker, due_filter, record_fruitless_attempt
 import gregory.functions as greg
@@ -15,8 +16,7 @@ class Command(BaseCommand):
 		articles = Articles.objects.filter(
 			due_filter("doi_lookup_next_check"),
 			kind="science paper",
-			doi__isnull=True,
-		)
+		).filter(Q(doi__isnull=True) | Q(doi=""))
 		for article in articles:
 			self.stdout.write(f"Processing article '{article.title}'.")
 			try:
