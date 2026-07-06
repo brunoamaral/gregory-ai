@@ -1780,22 +1780,33 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 		if target:
 			visible_org_ids = getattr(request, "visible_org_ids", None)
 			author_ids = [obj.author_id for obj in target]
+
+			# article_count is already annotated on the page (via a cheap
+			# Count()) whenever sort_by=article_count or count_filters were
+			# applied in get_queryset(). Only fetch it here when it's
+			# actually missing, so we don't pay for a correlated subquery
+			# the serializer would just discard.
+			needs_article_count = not hasattr(target[0], "article_count")
+
+			annotations = {
+				"_relevant_articles_count": author_articles_count_subquery(
+					visible_org_ids, relevant_only=True
+				),
+			}
+			if needs_article_count:
+				annotations["_article_count"] = author_articles_count_subquery(
+					visible_org_ids, relevant_only=False
+				)
+
 			counts_by_id = {
 				row["author_id"]: row
 				for row in Authors.objects.filter(author_id__in=author_ids)
-				.annotate(
-					_article_count=author_articles_count_subquery(
-						visible_org_ids, relevant_only=False
-					),
-					_relevant_articles_count=author_articles_count_subquery(
-						visible_org_ids, relevant_only=True
-					),
-				)
-				.values("author_id", "_article_count", "_relevant_articles_count")
+				.annotate(**annotations)
+				.values("author_id", *annotations.keys())
 			}
 			for obj in target:
 				row = counts_by_id.get(obj.author_id, {})
-				if not hasattr(obj, "article_count"):
+				if needs_article_count:
 					obj.article_count = row.get("_article_count", 0)
 				obj.relevant_articles_count = row.get("_relevant_articles_count", 0)
 
