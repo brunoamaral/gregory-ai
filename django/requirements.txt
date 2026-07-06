@@ -129,3 +129,4 @@ tzdata==2023.3
 unpywall==0.2.3
 urllib3==1.26.16
 wrapt==1.14.1
+hf-xet==1.5.1
