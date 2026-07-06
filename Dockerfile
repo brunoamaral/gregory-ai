@@ -56,4 +56,4 @@ RUN chmod +x /entrypoint.sh
 EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["gunicorn", "--workers", "4", "--threads", "2", "--log-level", "debug", "-b", "0.0.0.0:8000", "admin.wsgi"]
+CMD ["gunicorn", "--workers", "4", "--threads", "2", "--timeout", "300", "--log-level", "debug", "-b", "0.0.0.0:8000", "admin.wsgi"]

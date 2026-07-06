@@ -470,7 +470,7 @@ class ArticleSerializer(
 
 	def get_clinical_trials(self, obj):
 		"""Get trials referenced in the article"""
-		references = ArticleTrialReference.objects.filter(article=obj)
+		references = obj.trial_references.all()
 		trials = [ref.trial for ref in references]
 		return TrialReferenceSerializer(trials, many=True).data
 

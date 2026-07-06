@@ -38,7 +38,7 @@ from api.serializers import (
 	SubjectsSerializer,
 	OrganizationSerializer,
 )
-from api.pagination import FlexiblePagination
+from api.pagination import FlexiblePagination, request_bypasses_pagination
 from datetime import datetime, timedelta
 from django.db.models import Count, Q, Prefetch, OuterRef, Subquery, Value, IntegerField
 from django.db.models.functions import Coalesce
@@ -47,6 +47,8 @@ from gregory.classes import SciencePaper, ClinicalTrial
 from gregory.models import (
 	Articles,
 	ArticleOrgContent,
+	ArticleSubjectRelevance,
+	ArticleTrialReference,
 	Trials,
 	TrialOrgContent,
 	Sources,
@@ -59,6 +61,7 @@ from gregory.models import (
 from organizations.models import Organization
 from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
+from rest_framework.throttling import ScopedRateThrottle
 from django_filters import rest_framework as django_filters
 from api.filters import (
 	ArticleFilter,
@@ -158,6 +161,20 @@ class CSVStreamingMixin:
 			streaming_response["Content-Type"] = "text/csv; charset=utf-8"
 			return streaming_response
 		return response
+
+
+class BulkExportThrottleMixin:
+	"""
+	Applies a scoped throttle only when the request bypasses pagination
+	(``all_results=true``); normal paginated list requests are unaffected.
+	"""
+
+	throttle_scope = "bulk_export"
+
+	def get_throttles(self):
+		if request_bypasses_pagination(self.request):
+			return [ScopedRateThrottle()]
+		return super().get_throttles()
 
 
 class OrgVisibilityMixin:
@@ -897,7 +914,7 @@ def edit_trial(request):
 # ARTICLES
 ###
 class ArticleViewSet(
-	CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet
+	BulkExportThrottleMixin, CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet
 ):
 	"""
 	List all articles in the database with comprehensive filtering options.
@@ -966,7 +983,20 @@ class ArticleViewSet(
 		Prefetch(
 			"ml_predictions_detail",
 			queryset=MLPredictions.objects.select_related("subject"),
-		)
+		),
+		"authors",
+		Prefetch("teams", queryset=Team.objects.prefetch_related("members")),
+		Prefetch("subjects", queryset=Subject.objects.select_related("team")),
+		"sources",
+		"team_categories",
+		Prefetch(
+			"article_subject_relevances",
+			queryset=ArticleSubjectRelevance.objects.select_related("subject__team"),
+		),
+		Prefetch(
+			"trial_references",
+			queryset=ArticleTrialReference.objects.select_related("trial"),
+		),
 	).order_by("-discovery_date")
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -1323,7 +1353,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class TrialViewSet(
-	CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet
+	BulkExportThrottleMixin, CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet
 ):
 	"""
 	List all clinical trials by discovery date with comprehensive filtering options.
@@ -2258,7 +2288,7 @@ class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
 		)
 
 
-class ArticleSearchView(generics.ListAPIView):
+class ArticleSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 	"""
 	Advanced search for articles by title and abstract (summary).
 
@@ -2348,6 +2378,27 @@ class ArticleSearchView(generics.ListAPIView):
 				q = build_search_q(search)
 				if q is not None:
 					queryset = queryset.filter(q)
+
+			# Prefetch related objects to avoid N+1 queries
+			queryset = queryset.prefetch_related(
+				Prefetch(
+					"ml_predictions_detail",
+					queryset=MLPredictions.objects.select_related("subject"),
+				),
+				"authors",
+				Prefetch("teams", queryset=Team.objects.prefetch_related("members")),
+				Prefetch("subjects", queryset=Subject.objects.select_related("team")),
+				"sources",
+				"team_categories",
+				Prefetch(
+					"article_subject_relevances",
+					queryset=ArticleSubjectRelevance.objects.select_related("subject__team"),
+				),
+				Prefetch(
+					"trial_references",
+					queryset=ArticleTrialReference.objects.select_related("trial"),
+				),
+			)
 
 			return queryset
 		except (AttributeError, TypeError, ValueError) as e:
@@ -2451,7 +2502,7 @@ class ArticleSearchView(generics.ListAPIView):
 		return self.list(request, *args, **kwargs)
 
 
-class TrialSearchView(generics.ListAPIView):
+class TrialSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 	"""
 	Advanced search for clinical trials by title, summary, and recruitment status.
 
@@ -2563,6 +2614,11 @@ class TrialSearchView(generics.ListAPIView):
 
 		if status:
 			queryset = queryset.filter(recruitment_status=status)
+
+		# Prefetch related objects to avoid N+1 queries
+		queryset = queryset.prefetch_related(
+			"sources", "team_categories", "article_references__article"
+		)
 
 		return queryset
 
