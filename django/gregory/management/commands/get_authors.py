@@ -1,12 +1,12 @@
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 from crossref.restful import Works, Etiquette
 from dotenv import load_dotenv
 import os
-from django.utils import timezone
 from gregory.models import Articles, Authors
 from gregory.functions import normalize_orcid
+from gregory.utils.enrichment import clear_marker, due_filter, record_fruitless_attempt
 from sitesettings.models import CustomSetting
-from django.db.models import Q
 
 
 class Command(BaseCommand):
@@ -19,17 +19,30 @@ class Command(BaseCommand):
 		my_etiquette = Etiquette(SITE.title, "v8", CLIENT_WEBSITE, SITE.admin_email)
 		works = Works(etiquette=my_etiquette)
 
+		# Articles without authors whose backoff marker is unset or due. The old
+		# crossref_check window is gone: this command used to refresh
+		# crossref_check on every article it touched, which kept zero-author
+		# articles inside its own selection window forever.
 		articles = Articles.objects.filter(
-			Q(
-				authors__isnull=True,
-				doi__isnull=False,
-				crossref_check__lte=timezone.now(),
-				crossref_check__gt=timezone.now() - timezone.timedelta(days=30),
-			)
-			| Q(authors__isnull=True, doi__isnull=False, crossref_check__isnull=True)
+			due_filter("authors_next_check"),
+			~Q(doi__isnull=True) & ~Q(doi=""),
+			authors__isnull=True,
 		)
 		for article in articles:
-			w = works.doi(article.doi)
+			try:
+				w = works.doi(article.doi)
+			except Exception as e:
+				# Network/API failure: not a completed attempt; the marker must
+				# not advance — the next run retries immediately.
+				self.stderr.write(
+					self.style.WARNING(
+						f"CrossRef lookup failed for DOI {article.doi}: {e}. "
+						"Will retry next run."
+					)
+				)
+				continue
+
+			authors_added = False
 			if w and "author" in w and w["author"]:
 				for author_data in w["author"]:
 					# Ensure we have the necessary information
@@ -63,13 +76,6 @@ class Command(BaseCommand):
 							):
 								author_obj.given_name = given_name
 								author_obj.family_name = family_name
-								if not given_name or not family_name:
-									self.stderr.write(
-										self.style.WARNING(
-											f"Check 2: Missing given name or family name, skipping this author. Article DOI: {article.doi}."
-										)
-									)
-									continue
 								author_obj.save()
 								self.stdout.write(
 									self.style.SUCCESS(
@@ -105,9 +111,17 @@ class Command(BaseCommand):
 					# Add author to article if an author object was successfully created or retrieved
 					if author_obj:
 						article.authors.add(author_obj)
+						authors_added = True
 
-			article.crossref_check = timezone.now()
-			article.save()
+			# NOTE: this command must never write crossref_check — that
+			# timestamp records CrossRef *metadata* freshness and is owned by
+			# the feedreader / update_articles_info.
+			if authors_added:
+				clear_marker(article, "authors")
+			else:
+				# CrossRef responded but the record has no usable authors:
+				# back off before asking again.
+				record_fruitless_attempt(article, "authors")
 
 		self.stdout.write(
 			self.style.SUCCESS("Successfully updated authors from CrossRef.")

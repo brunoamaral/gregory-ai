@@ -1,5 +1,6 @@
 from django.contrib.syndication.views import Feed
 from django.contrib.sites.models import Site
+from django.db.models import F
 from django.http import Http404
 from gregory.models import Articles, Authors, Trials, Subject
 from gregory.functions import normalize_orcid
@@ -49,7 +50,9 @@ class ArticlesByAuthorFeed(Feed):
 				teams__organization_id__in=obj._visible_org_ids,
 			)
 			.distinct()
-			.order_by("-published_date")[:50]
+			# nulls_last: articles ingested without a date (filled later from
+			# CrossRef) must not pin to the top of the feed
+			.order_by(F("published_date").desc(nulls_last=True))[:50]
 		)
 
 	def item_title(self, item):

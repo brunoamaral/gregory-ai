@@ -168,6 +168,13 @@ class Command(BaseCommand):
 				except Exception as e:  # keep the EU capture alive if CTgov fails
 					errors.append(f"ctgov: {e}")
 					self.stderr.write(self.style.ERROR(f"CTgov capture error: {e}"))
+				# The feedreaders isolate per-source fetch failures instead of
+				# raising; surface them here so the capture still exits non-zero.
+				for fetch_error in getattr(cmd, "fetch_errors", []):
+					errors.append(f"ctgov: {fetch_error}")
+					self.stderr.write(
+						self.style.ERROR(f"CTgov capture error: {fetch_error}")
+					)
 				counts["ctgov_api"] = cmd.captured
 
 			if feed in ("eu", "both"):
@@ -178,6 +185,11 @@ class Command(BaseCommand):
 				except Exception as e:
 					errors.append(f"eu: {e}")
 					self.stderr.write(self.style.ERROR(f"EU capture error: {e}"))
+				for fetch_error in getattr(cmd, "fetch_errors", []):
+					errors.append(f"eu: {fetch_error}")
+					self.stderr.write(
+						self.style.ERROR(f"EU capture error: {fetch_error}")
+					)
 				counts["eu_rss"] = cmd.captured
 
 		total = sum(counts.values())

@@ -36,7 +36,10 @@ class Command(BaseCommand):
 		commands_to_run = [
 			("feedreader_articles", {}),  # 1. Feedreader. Get articles
 			("feedreader_trials", {}),  # 2. Feedreader. Get trials
-			("feedreader_trials_ctgov", {}),  # 3. ClinicalTrials.gov trials
+			(
+				"feedreader_trials_ctgov",
+				{"max_results": 2000},
+			),  # 3. ClinicalTrials.gov trials (incremental window; cap is a safety ceiling)
 			("find_doi", {}),  # 4. Find missing DOI
 			("update_articles_info", {}),  # 5. Find missing data
 			("get_authors", {}),  # 6. Find missing authors
@@ -44,7 +47,10 @@ class Command(BaseCommand):
 				"rebuild_categories",
 				rebuild_kwargs,
 			),  # 7. Assign categories (incremental by default)
-			("get_takeaways", {}),  # 8. Get takeaways
+			(
+				"get_takeaways",
+				{"limit": 50},
+			),  # 8. Get takeaways (50 > ~30 new articles/run, so the queue drains)
 		]
 
 		# First run all the standard commands

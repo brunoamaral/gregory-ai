@@ -183,7 +183,7 @@ class GetTakeawaysFanOutTest(TestCase):
 
 
 class GetTakeawaysOrphanTest(TestCase):
-	"""Articles with no linked organisation should be skipped with a warning."""
+	"""Articles with no linked organisation are excluded by the upfront filter."""
 
 	def setUp(self):
 		self.article = Articles.objects.create(
@@ -194,7 +194,7 @@ class GetTakeawaysOrphanTest(TestCase):
 		)
 
 	@patch("gregory.management.commands.get_takeaways.pipeline")
-	def test_orphan_is_skipped_with_warning(self, mock_pipeline):
+	def test_orphan_is_excluded_upfront_and_never_processed(self, mock_pipeline):
 		summarizer = MagicMock(return_value=[{"summary_text": "X"}])
 		summarizer.tokenizer = MagicMock()
 		mock_pipeline.return_value = summarizer
@@ -203,9 +203,127 @@ class GetTakeawaysOrphanTest(TestCase):
 		call_command("get_takeaways", stdout=StringIO(), stderr=err)
 
 		self.assertEqual(ArticleOrgContent.objects.count(), 0)
-		# Model is never loaded because no work was found.
+		# Model is never loaded because no work was found: the upfront
+		# queryset filter excludes the orphan entirely (it has zero orgs
+		# linked via teams, so there's nothing it could fill), so it's never
+		# scanned and no "orphan" warning is emitted for it. The warning path
+		# in the command itself is retained only as a defensive guard for the
+		# rare race between the queryset annotation and the per-article write.
 		mock_pipeline.assert_not_called()
-		self.assertIn("orphan", err.getvalue().lower())
+		self.assertNotIn("orphan", err.getvalue().lower())
+
+
+class GetTakeawaysOrderingTest(TestCase):
+	"""Oldest eligible articles must be processed first when --limit caps the run."""
+
+	def setUp(self):
+		self.org = _make_org("Ordering Org")
+		self.team = _make_team(self.org, "Ordering Team")
+		# Created in order, so `older` gets the lower article_id.
+		self.older = _make_article(
+			[self.team], "Older article", "https://example.com/older", _LONG_ABSTRACT
+		)
+		self.newer = _make_article(
+			[self.team], "Newer article", "https://example.com/newer", _LONG_ABSTRACT
+		)
+
+	@patch("gregory.management.commands.get_takeaways.pipeline")
+	def test_oldest_article_processed_first(self, mock_pipeline):
+		summarizer = MagicMock(return_value=[{"summary_text": "GENERATED"}])
+		summarizer.tokenizer = MagicMock()
+		mock_pipeline.return_value = summarizer
+
+		call_command("get_takeaways", limit=1, stdout=StringIO())
+
+		# Only the older article should have been summarised.
+		self.assertEqual(ArticleOrgContent.objects.count(), 1)
+		row = ArticleOrgContent.objects.get()
+		self.assertEqual(row.article_id, self.older.article_id)
+		self.assertFalse(
+			ArticleOrgContent.objects.filter(article=self.newer).exists()
+		)
+
+
+class GetTakeawaysUpfrontFilterTest(TestCase):
+	"""Already-filled articles must not be fetched or consume --limit."""
+
+	def setUp(self):
+		self.org = _make_org("Upfront Org")
+		self.team = _make_team(self.org, "Upfront Team")
+		# Older article, already fully filled for its only org.
+		self.filled = _make_article(
+			[self.team], "Already filled", "https://example.com/filled", _LONG_ABSTRACT
+		)
+		# Newer article, still eligible.
+		self.pending = _make_article(
+			[self.team], "Still pending", "https://example.com/pending", _LONG_ABSTRACT
+		)
+		ArticleOrgContent.objects.create(
+			article=self.filled, organization=self.org, takeaways="Pre-existing"
+		)
+
+	@patch("gregory.management.commands.get_takeaways.pipeline")
+	def test_filled_article_excluded_does_not_consume_limit(self, mock_pipeline):
+		summarizer = MagicMock(return_value=[{"summary_text": "GENERATED"}])
+		summarizer.tokenizer = MagicMock()
+		mock_pipeline.return_value = summarizer
+
+		call_command("get_takeaways", limit=1, stdout=StringIO())
+
+		# The already-filled (older) article is untouched...
+		row_filled = ArticleOrgContent.objects.get(
+			article=self.filled, organization=self.org
+		)
+		self.assertEqual(row_filled.takeaways, "Pre-existing")
+
+		# ...and the newer, eligible article behind it still gets processed
+		# even though --limit=1, because the filled article never consumed
+		# the budget in the first place.
+		row_pending = ArticleOrgContent.objects.get(
+			article=self.pending, organization=self.org
+		)
+		self.assertEqual(row_pending.takeaways, "GENERATED")
+
+
+class GetTakeawaysPartialFillTest(TestCase):
+	"""An article linked to two orgs, one already filled, only fills the empty one."""
+
+	def setUp(self):
+		self.org_filled = _make_org("Partial Filled Org", "partial-filled-org")
+		self.org_empty = _make_org("Partial Empty Org", "partial-empty-org")
+		self.team_filled = _make_team(self.org_filled, "Partial Filled Team")
+		self.team_empty = _make_team(self.org_empty, "Partial Empty Team")
+		self.article = _make_article(
+			[self.team_filled, self.team_empty],
+			"Partial fill article",
+			"https://example.com/partial",
+			_LONG_ABSTRACT,
+		)
+		ArticleOrgContent.objects.create(
+			article=self.article,
+			organization=self.org_filled,
+			takeaways="Already have this",
+		)
+
+	@patch("gregory.management.commands.get_takeaways.pipeline")
+	def test_only_empty_org_row_is_written(self, mock_pipeline):
+		summarizer = MagicMock(return_value=[{"summary_text": "GENERATED"}])
+		summarizer.tokenizer = MagicMock()
+		mock_pipeline.return_value = summarizer
+
+		call_command("get_takeaways", stdout=StringIO())
+
+		self.assertEqual(ArticleOrgContent.objects.count(), 2)
+		row_filled = ArticleOrgContent.objects.get(
+			article=self.article, organization=self.org_filled
+		)
+		row_empty = ArticleOrgContent.objects.get(
+			article=self.article, organization=self.org_empty
+		)
+		self.assertEqual(row_filled.takeaways, "Already have this")
+		self.assertEqual(row_empty.takeaways, "GENERATED")
+		# One summariser call still covers both orgs.
+		self.assertEqual(summarizer.call_count, 1)
 
 
 class GetTakeawaysDryRunTest(TestCase):

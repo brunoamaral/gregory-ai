@@ -402,6 +402,15 @@ class Sources(models.Model):
 		blank=False,
 		related_name="sources",  # Helps in querying from the Team model, e.g., team.sources.all()
 	)
+	last_successful_fetch_at = models.DateTimeField(
+		blank=True,
+		null=True,
+		help_text=(
+			"Start time of the last fetch that completed fully (every page consumed, "
+			"no errors, result cap not hit). Anchors the incremental ClinicalTrials.gov "
+			"window; a failed or capped run must not advance it."
+		),
+	)
 
 	def get_latest_article_date(self):
 		"""
@@ -515,7 +524,10 @@ class Articles(models.Model):
 		("restricted", "Restricted"),
 	]
 	article_id = models.AutoField(primary_key=True)
-	title = models.TextField(blank=False, null=False, unique=True)
+	# Deliberately NOT unique: distinct papers can share a title (errata,
+	# corrections, preprint vs published). Dedup is enforced in the feedreader
+	# by DOI-first lookup; unique_article_title_link still guards exact dupes.
+	title = models.TextField(blank=False, null=False)
 	link = models.URLField(
 		blank=False,
 		null=False,
@@ -552,6 +564,17 @@ class Articles(models.Model):
 	entities = models.ManyToManyField("Entities")
 	ml_predictions = models.ManyToManyField("MLPredictions", blank=True)
 	noun_phrases = models.JSONField(blank=True, null=True)
+	# Enrichment backoff markers: each pipeline enrichment task re-checks an
+	# article only when its *_next_check is due (NULL = never attempted). A
+	# fruitless COMPLETED attempt (API responded, nothing gained) pushes
+	# next_check out by min(2^attempts, 30) days; a network failure advances
+	# nothing; success clears the marker. See gregory/utils/enrichment.py.
+	doi_lookup_next_check = models.DateTimeField(blank=True, null=True)
+	doi_lookup_attempts = models.PositiveSmallIntegerField(default=0)
+	authors_next_check = models.DateTimeField(blank=True, null=True)
+	authors_attempts = models.PositiveSmallIntegerField(default=0)
+	details_next_check = models.DateTimeField(blank=True, null=True)
+	details_attempts = models.PositiveSmallIntegerField(default=0)
 	kind = models.CharField(choices=KINDS, max_length=50, default="science paper")
 	access = models.CharField(
 		choices=ACCESS_OPTIONS, max_length=50, default=None, null=True

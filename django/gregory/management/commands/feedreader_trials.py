@@ -34,15 +34,34 @@ class Command(GregoryBaseCommand):
 		}
 
 	def process_feeds(self):
-		"""Fetch and process RSS feeds for clinical trials."""
+		"""Fetch and process RSS feeds for clinical trials.
+
+		Per-source failures are isolated (one broken feed must not skip the
+		sources after it) and recorded in ``self.fetch_errors`` so callers
+		that need a hard failure signal (e.g. capture_trial_streams) can
+		inspect them after the run.
+		"""
+		self.fetch_errors = []
 		sources = Sources.objects.filter(method="rss", source_for="trials", active=True)
 		for source in sources:
 			self.log(f"Processing RSS feed: {source.name}", level=1)
-			if not source.ignore_ssl:
-				feed = feedparser.parse(source.link)
-			else:
-				response = requests.get(source.link, verify=False, timeout=30)
-				feed = feedparser.parse(response.content)
+			# One broken source (timeout, DNS, SSL) must not abort the whole run
+			# and silently skip every source after it in the loop.
+			try:
+				if not source.ignore_ssl:
+					feed = feedparser.parse(source.link)
+				else:
+					response = requests.get(source.link, verify=False, timeout=30)
+					feed = feedparser.parse(response.content)
+			except Exception as e:
+				self.fetch_errors.append(f"{source.name}: {e}")
+				self.log(
+					f"Failed to fetch feed for source '{source.name}' ({source.link}): {e}. "
+					"Skipping this source.",
+					level=1,
+					style_func=self.style.ERROR,
+				)
+				continue
 			for entry in feed["entries"]:
 				try:
 					# Extract trial details
@@ -91,13 +110,15 @@ class Command(GregoryBaseCommand):
 
 				except IntegrityError as e:
 					self.log(
-						f"IntegrityError for trial '{entry.get('title')}' at link {link}: {e}",
+						f"IntegrityError for trial '{entry.get('title')}' at link "
+						f"{entry.get('link', '<no link>')}: {e}",
 						level=3,
 						style_func=self.style.ERROR,
 					)
 				except Exception as e:
 					self.log(
-						f"Error processing trial '{entry.get('title')}' at link {link}: {e}",
+						f"Error processing trial '{entry.get('title')}' at link "
+						f"{entry.get('link', '<no link>')}: {e}",
 						level=3,
 						style_func=self.style.ERROR,
 					)

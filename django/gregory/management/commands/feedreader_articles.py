@@ -6,7 +6,6 @@ from crossref.restful import Works, Etiquette
 from dateutil.parser import parse
 from dateutil.tz import gettz
 from django.core.exceptions import MultipleObjectsReturned
-from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import SciencePaper
 from gregory.utils.registry_utils import merge_links
@@ -83,14 +82,19 @@ class FeedProcessor(ABC):
 			or entry.get("prism_publicationdate")
 		)
 
-		if not date_string:
-			raise ValueError(
-				f"No valid date field found in feed entry: {entry.get('title', 'Unknown')}"
+		# A missing date must not cost us the article: ingest with
+		# published_date=None and let update_articles_info fill the real date
+		# from CrossRef downstream.
+		published_date = None
+		if date_string:
+			published_date = parse(
+				date_string, tzinfos=self.command.tzinfos
+			).astimezone(pytz.utc)
+		else:
+			logging.warning(
+				f"No date field in feed entry '{entry.get('title', 'Unknown')}'; "
+				"ingesting without a published date."
 			)
-
-		published_date = parse(date_string, tzinfos=self.command.tzinfos).astimezone(
-			pytz.utc
-		)
 
 		return {
 			"title": self.clean_title(entry["title"]),
@@ -529,27 +533,52 @@ class Command(GregoryBaseCommand):
 		return self.feed_processors[-1]
 
 	def update_articles_from_feeds(self):
+		# Per-source failures are isolated but recorded here so callers that
+		# need a hard failure signal can inspect them after the run.
+		self.fetch_errors = []
 		sources = Sources.objects.filter(
 			method="rss", source_for="science paper", active=True
 		)
 		for source in sources:
 			self.log(f"# Processing articles from {source}", level=1)
-			feed = self.fetch_feed(source.link, source.ignore_ssl)
+			# One broken source (timeout, DNS, SSL) must not abort the whole run
+			# and silently skip every source after it in the loop.
+			try:
+				feed = self.fetch_feed(source.link, source.ignore_ssl)
+			except Exception as e:
+				self.fetch_errors.append(f"{source.name}: {e}")
+				self.log(
+					f"Failed to fetch feed for source '{source.name}' ({source.link}): {e}. "
+					"Skipping this source.",
+					level=1,
+					style_func=self.style.ERROR,
+				)
+				continue
 			processor = self.get_feed_processor(source.link)
 
 			for entry in feed["entries"]:
 				try:
 					# Check if the article should be included based on keyword filtering
+					prefetched = None
 					if hasattr(
 						processor, "should_include_article"
 					) and not processor.should_include_article(entry, source):
-						self.log(
-							f"  ➡️  Excluded by keyword filter: {entry.get('title', 'Unknown')}",
-							level=2,
+						# Sparse feeds (e.g. Nature) ship empty summaries, so
+						# the filter above only saw the title; give the entry a
+						# second chance against its CrossRef abstract.
+						included, prefetched = self.deferred_keyword_check(
+							entry, source, processor
 						)
-						continue
+						if not included:
+							self.log(
+								f"  ➡️  Excluded by keyword filter: {entry.get('title', 'Unknown')}",
+								level=2,
+							)
+							continue
 
-					self.process_feed_entry(entry, source, processor)
+					self.process_feed_entry(
+						entry, source, processor, prefetched=prefetched
+					)
 				except Exception as e:
 					self.log(
 						f"Error processing entry '{entry.get('title', 'Unknown')}': {str(e)}",
@@ -557,8 +586,57 @@ class Command(GregoryBaseCommand):
 					)
 					continue
 
-	def process_feed_entry(
+	def deferred_keyword_check(
 		self, entry: dict, source: Sources, processor: FeedProcessor
+	) -> tuple[bool, object]:
+		"""Re-run the keyword decision against the CrossRef abstract.
+
+		Only applies when the feed summary is empty (the initial filter had
+		nothing but the title to search) and the entry carries a DOI. Returns
+		(included, prefetched) — `prefetched` is the (SciencePaper,
+		refresh_result) pair, handed downstream so the entry is not charged a
+		second CrossRef call. When CrossRef fails or has no abstract the
+		original exclusion stands (known bounded waste: excluded entries are
+		re-checked while they remain in the feed window — see
+		CROSSREF-REJECTION-CACHE-NOTE.md at the repo root).
+		"""
+		if not source.keyword_filter:
+			return False, None
+		if (processor.extract_summary(entry) or "").strip():
+			# The filter already saw a real summary; the exclusion is final.
+			return False, None
+		doi = processor.extract_doi(entry)
+		if not doi:
+			return False, None
+
+		crossref_paper = SciencePaper(doi=doi)
+		refresh_result = crossref_paper.refresh()
+		if SciencePaper.is_crossref_failed(refresh_result):
+			return False, None
+		abstract = (crossref_paper.abstract or "").strip()
+		if not abstract:
+			return False, None
+
+		abstract = SciencePaper.clean_abstract(abstract=abstract) or ""
+		raw_title = entry.get("title", "") or ""
+		title = " ".join(re.sub(r"<[^>]+>", " ", raw_title).split())
+		search_text = f"{title} {abstract}".lower()
+		for keyword in processor._parse_keyword_filter(source.keyword_filter):
+			if keyword.lower() in search_text:
+				self.log(
+					f"  Keyword matched via CrossRef abstract for DOI {doi}: "
+					f"{entry.get('title', 'Unknown')}",
+					level=2,
+				)
+				return True, (crossref_paper, refresh_result)
+		return False, None
+
+	def process_feed_entry(
+		self,
+		entry: dict,
+		source: Sources,
+		processor: FeedProcessor,
+		prefetched=None,
 	):
 		"""Process a single feed entry."""
 		# Extract basic fields common to all feed types
@@ -578,7 +656,13 @@ class Command(GregoryBaseCommand):
 
 		if doi:
 			self.process_article_with_doi(
-				doi, title, feed_summary, link, published_date, source
+				doi,
+				title,
+				feed_summary,
+				link,
+				published_date,
+				source,
+				prefetched=prefetched,
 			)
 		else:
 			self.process_article_without_doi(
@@ -593,10 +677,31 @@ class Command(GregoryBaseCommand):
 		link: str,
 		published_date,
 		source: Sources,
+		prefetched=None,
 	):
-		"""Process an article that has a DOI."""
-		crossref_paper = SciencePaper(doi=doi)
-		refresh_result = crossref_paper.refresh()
+		"""Process an article that has a DOI.
+
+		The existence check runs BEFORE any CrossRef call: most entries in
+		every feed are already ingested, and refreshing them cost a CrossRef +
+		Unpaywall round-trip per entry per run for nothing. An existing
+		article that already has CrossRef data on file only gets its
+		feed-level facts merged; the full CrossRef path runs for new articles
+		and for existing ones never checked against CrossRef.
+		"""
+		existing = self.find_existing_article(doi, title, link)
+		if existing is not None and existing.crossref_check:
+			self.merge_feed_entry_into_article(
+				existing, doi, feed_summary, link, published_date, source
+			)
+			return
+
+		# `prefetched` carries the CrossRef result already fetched by the
+		# deferred keyword check, so the entry does not pay for a second call.
+		if prefetched is not None:
+			crossref_paper, refresh_result = prefetched
+		else:
+			crossref_paper = SciencePaper(doi=doi)
+			refresh_result = crossref_paper.refresh()
 
 		# Determine article data based on CrossRef success/failure
 		article_data = self.get_article_data_with_crossref(
@@ -629,6 +734,37 @@ class Command(GregoryBaseCommand):
 				level=2,
 			)
 			self.process_authors(crossref_paper, science_paper)
+
+	def merge_feed_entry_into_article(
+		self, article: Articles, doi: str, feed_summary: str, link: str, published_date, source: Sources
+	):
+		"""Merge feed-level facts into an article whose CrossRef data is on file.
+
+		CrossRef-derived fields (title, summary, journal, publisher, access)
+		are authoritative and left alone; the feed only contributes its URL,
+		a summary/date when none exists yet, and the source relationships.
+		"""
+		changed_fields = []
+		if doi and not article.doi:
+			article.doi = doi
+			changed_fields.append("doi")
+		merged = merge_links(article.links, link)
+		if merged != (article.links or {}):
+			article.links = merged
+			changed_fields.append("links")
+		if feed_summary and not article.summary:
+			article.summary = feed_summary
+			changed_fields.append("summary")
+		if published_date is not None and article.published_date is None:
+			article.published_date = published_date
+			changed_fields.append("published_date")
+		if changed_fields:
+			article.save(update_fields=changed_fields)
+			self.log(
+				f" Merged feed data into existing article ({', '.join(changed_fields)}): {article.title}",
+				level=2,
+			)
+		self.add_article_relationships(article, source)
 
 	def process_article_without_doi(
 		self, title: str, feed_summary: str, link: str, published_date, source: Sources
@@ -703,6 +839,42 @@ class Command(GregoryBaseCommand):
 				"pdf_link": crossref_paper.pdf_link,
 			}
 
+	def find_existing_article(self, doi: str, title: str, link: str):
+		"""Locate the article this feed entry refers to, DOI-first.
+
+		Lookup order:
+		1. DOI — the only globally unique key we have.
+		2. Link — an article's first-seen URL is stable; this also catches rows
+		   ingested before title cleaning existed (PR #739).
+		3. Cleaned title — but ONLY when the incoming entry has no DOI or the
+		   candidate has no DOI. When both sides carry different non-null DOIs
+		   they are different papers (errata, corrections, preprint vs
+		   published all collide on title) and a new article must be created
+		   instead of absorbing the entry into the wrong row.
+		"""
+		if doi:
+			article = Articles.objects.filter(doi=doi).first()
+			if article:
+				return article
+
+		if link:
+			article = Articles.objects.filter(link=link).first()
+			if article:
+				return article
+
+		article = Articles.objects.filter(title=title).first()
+		if article:
+			if doi and article.doi and article.doi != doi:
+				self.log(
+					f"  Title matches article {article.article_id} but DOIs differ "
+					f"({article.doi} vs {doi}); creating a new article.",
+					level=2,
+				)
+				return None
+			return article
+
+		return None
+
 	def create_or_update_article(
 		self,
 		doi: str,
@@ -718,26 +890,23 @@ class Command(GregoryBaseCommand):
 		pdf_link=None,
 	) -> tuple[Articles, bool, bool]:
 		"""Create a new article or update existing one. Returns (article, created, crossref_updated)."""
-		# Check if an article with the same DOI or title exists
-		if doi:
-			existing_article = Articles.objects.filter(
-				Q(doi=doi) | Q(title=title)
-			).first()
-		else:
-			# No DOI: match on the cleaned title, but fall back to the stable
-			# feed link. Title cleaning can make an incoming title differ from a
-			# row ingested before cleaning existed, so a title-only lookup could
-			# miss it and create a duplicate.
-			lookup = Q(title=title)
-			if link:
-				lookup |= Q(link=link)
-			existing_article = Articles.objects.filter(lookup).first()
+		existing_article = self.find_existing_article(doi, title, link)
 
 		crossref_was_updated = False
 
 		if existing_article:
 			science_paper = existing_article
 			created = False
+
+			# An article first seen via a DOI-less feed gains its DOI here; the
+			# find_existing_article guard already ruled out conflicting DOIs.
+			if doi and not science_paper.doi:
+				science_paper.doi = doi
+				science_paper.save(update_fields=["doi"])
+				self.log(
+					f"  Added DOI {doi} to existing article: {science_paper.title}",
+					level=2,
+				)
 
 			# Check what needs to be updated
 			basic_fields_changed = self.article_needs_update(
@@ -802,7 +971,9 @@ class Command(GregoryBaseCommand):
 				article.title != title,
 				article.summary != summary,
 				merge_links(article.links, link) != (article.links or {}),
-				article.published_date != published_date,
+				# A date-less feed entry must never blank an existing date
+				published_date is not None
+				and article.published_date != published_date,
 			]
 		)
 
@@ -816,7 +987,8 @@ class Command(GregoryBaseCommand):
 		merged = merge_links(article.links, link)
 		if merged != (article.links or {}):
 			article.links = merged
-		article.published_date = published_date
+		if published_date is not None:
+			article.published_date = published_date
 		article.save()
 
 	def update_all_article_fields(
@@ -839,13 +1011,18 @@ class Command(GregoryBaseCommand):
 		merged = merge_links(article.links, link)
 		if merged != (article.links or {}):
 			article.links = merged
-		article.published_date = published_date
-		article.container_title = container_title
-		article.publisher = publisher
-		article.access = access
-		article.crossref_check = crossref_check
-		if pdf_link:
-			article.pdf_link = pdf_link
+		if published_date is not None:
+			article.published_date = published_date
+		# Only touch CrossRef-derived fields when this update actually carries
+		# CrossRef data; a feed-only update (crossref_check=None) must never
+		# blank container_title/publisher/access gathered by an earlier run.
+		if crossref_check is not None:
+			article.container_title = container_title
+			article.publisher = publisher
+			article.access = access
+			article.crossref_check = crossref_check
+			if pdf_link:
+				article.pdf_link = pdf_link
 		article.save()
 		self.log(f" Updated article data: {article.title}", level=2)
 
