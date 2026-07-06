@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 from gregory.models import Articles
 from gregory.classes import SciencePaper
+from gregory.utils.enrichment import clear_marker, due_filter, record_fruitless_attempt
 from django.utils import timezone
 from django.db.models import Q
 import requests
@@ -65,9 +66,15 @@ class Command(BaseCommand):
 		# Select articles that need updating but have a DOI
 		three_months_ago = timezone.now() - timedelta(days=90)
 
+		# Backoff: only re-check articles whose details marker is unset or due,
+		# so rows that will never gain the missing fields stop costing a
+		# CrossRef + Unpaywall round-trip twice a day.
+		details_due = due_filter("details_next_check")
+
 		# First, get articles with missing or 'not available' summaries
 		articles_missing_data = Articles.objects.filter(
-			Q(doi__isnull=False, doi__gt="")
+			details_due
+			& Q(doi__isnull=False, doi__gt="")
 			& (
 				Q(crossref_check__isnull=True)
 				| Q(access__isnull=True)
@@ -83,7 +90,8 @@ class Command(BaseCommand):
 
 		# Also get articles with potentially truncated summaries (ending with ..., [...], etc.)
 		articles_with_summaries = Articles.objects.filter(
-			Q(doi__isnull=False, doi__gt="")
+			details_due
+			& Q(doi__isnull=False, doi__gt="")
 			& Q(summary__isnull=False)
 			& ~Q(summary="")
 			& ~Q(summary="not available")
@@ -112,45 +120,57 @@ class Command(BaseCommand):
 				paper = SciencePaper(doi=article.doi)
 				# Refresh once per article
 				if not self.try_refresh_paper(paper):
-					# Handle the failure (e.g., skip this article, log the issue)
+					# Network failure: not a completed attempt, so the backoff
+					# marker must not advance — the next run retries immediately.
 					self.stdout.write(
 						f"Skipping article '{article.title}' due to connection issues."
 					)
 					continue  # Use continue instead of return to proceed with the next article
 			else:
 				self.stdout.write(f"Empty DOI for article_id {article.id}")
+				continue
 
 			# Update fields from the refreshed paper object
-			self.update_article_from_paper(article, paper)
+			updated = self.update_article_from_paper(article, paper)
+			if updated:
+				clear_marker(article, "details")
+			else:
+				# CrossRef/Unpaywall responded but nothing new was gained:
+				# back off before re-checking this article.
+				record_fruitless_attempt(article, "details")
 
-	def update_article_from_paper(self, article, paper):
+	def update_article_from_paper(self, article, paper) -> bool:
+		"""Apply refreshed CrossRef/Unpaywall data; returns True if anything changed."""
 		update_fields = []
 		updated_info = []  # To keep track of what information is updated
 
 		# Fetch the most recent history record for comparison later
 		last_history = article.history.first()
 
-		if article.access is None and hasattr(paper, "access"):
+		# Only count fields where the refresh produced an actual value: assigning
+		# None over None used to mark the article "updated", write a history row,
+		# and re-select it on every run even though nothing was gained.
+		if article.access is None and getattr(paper, "access", None) is not None:
 			article.access = paper.access
 			update_fields.append("access")
 			updated_info.append("access information")
 
-		if article.pdf_link is None and hasattr(paper, "pdf_link") and paper.pdf_link:
+		if article.pdf_link is None and getattr(paper, "pdf_link", None):
 			article.pdf_link = paper.pdf_link
 			update_fields.append("pdf_link")
 			updated_info.append("pdf link")
 
-		if article.publisher is None and hasattr(paper, "publisher"):
+		if article.publisher is None and getattr(paper, "publisher", None):
 			article.publisher = paper.publisher
 			update_fields.append("publisher")
 			updated_info.append("publisher")
 
-		if article.container_title is None and hasattr(paper, "journal"):
+		if article.container_title is None and getattr(paper, "journal", None):
 			article.container_title = paper.journal
 			update_fields.append("container_title")
 			updated_info.append("journal")
 
-		if article.published_date is None and hasattr(paper, "published_date"):
+		if article.published_date is None and getattr(paper, "published_date", None):
 			article.published_date = paper.published_date
 			update_fields.append("published_date")
 			updated_info.append("published date")
@@ -205,3 +225,5 @@ class Command(BaseCommand):
 			self.stdout.write(
 				f"Updated article '{article.title}' with {', '.join(updated_info)}."
 			)
+
+		return bool(update_fields)

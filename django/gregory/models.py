@@ -564,6 +564,17 @@ class Articles(models.Model):
 	entities = models.ManyToManyField("Entities")
 	ml_predictions = models.ManyToManyField("MLPredictions", blank=True)
 	noun_phrases = models.JSONField(blank=True, null=True)
+	# Enrichment backoff markers: each pipeline enrichment task re-checks an
+	# article only when its *_next_check is due (NULL = never attempted). A
+	# fruitless COMPLETED attempt (API responded, nothing gained) pushes
+	# next_check out by min(2^attempts, 30) days; a network failure advances
+	# nothing; success clears the marker. See gregory/utils/enrichment.py.
+	doi_lookup_next_check = models.DateTimeField(blank=True, null=True)
+	doi_lookup_attempts = models.PositiveSmallIntegerField(default=0)
+	authors_next_check = models.DateTimeField(blank=True, null=True)
+	authors_attempts = models.PositiveSmallIntegerField(default=0)
+	details_next_check = models.DateTimeField(blank=True, null=True)
+	details_attempts = models.PositiveSmallIntegerField(default=0)
 	kind = models.CharField(choices=KINDS, max_length=50, default="science paper")
 	access = models.CharField(
 		choices=ACCESS_OPTIONS, max_length=50, default=None, null=True
