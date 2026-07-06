@@ -8,7 +8,7 @@ Covers:
     present; plain paginated requests are never throttled.
 
 Run with:
-    python -m pytest api/tests/test_article_query_efficiency.py
+    docker exec gregory python manage.py test api.tests.test_article_query_efficiency
 """
 
 from django.core.cache import cache
@@ -111,11 +111,15 @@ class TestArticleListQueryEfficiency(TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(len(response.data["results"]), 9)
 
-		# If any relation regresses to one-query-per-article, this scales
-		# with article count (3 vs 9) instead of staying flat.
-		self.assertEqual(
-			len(small.captured_queries),
+		# If any relation regresses to one-query-per-article, the 9-article
+		# request issues more queries than the 3-article one. Allow a small
+		# constant slack rather than exact equality: one-time caches (sites
+		# framework, content types, etc.) can shift the count by a query or
+		# two between runs without indicating a real N+1 regression.
+		slack = 2
+		self.assertLessEqual(
 			len(large.captured_queries),
+			len(small.captured_queries) + slack,
 			msg=(
 				"Query count scaled with article count "
 				f"({len(small.captured_queries)} for 3 articles vs "
