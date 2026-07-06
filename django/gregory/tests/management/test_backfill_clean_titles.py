@@ -57,8 +57,9 @@ class BackfillCleanTitlesCommandTest(TestCase):
 		article.refresh_from_db()
 		self.assertEqual(article.title, dirty)
 
-	def test_title_collision_is_skipped(self):
-		"""When two rows clean to the same unique title, the collision is skipped."""
+	def test_shared_cleaned_title_is_allowed(self):
+		"""Distinct articles may share a title now that the single-column unique
+		is gone (dedup is DOI/link-based); cleaning proceeds for both rows."""
 		clean = Articles.objects.create(
 			title="Shared Title", link="https://example.com/e1"
 		)
@@ -70,7 +71,20 @@ class BackfillCleanTitlesCommandTest(TestCase):
 		)
 		clean.refresh_from_db()
 		dirty.refresh_from_db()
-		# The pre-existing clean row is untouched and the colliding row is left
-		# as-is rather than raising an IntegrityError.
 		self.assertEqual(clean.title, "Shared Title")
+		self.assertEqual(dirty.title, "Shared Title")
+
+	def test_title_link_collision_is_skipped(self):
+		"""Two rows with the SAME link whose titles clean to the same string
+		would violate unique_article_title_link; that row is skipped."""
+		Articles.objects.create(
+			title="Shared Title", link="https://example.com/same"
+		)
+		dirty = Articles.objects.create(
+			title="Shared <scp>Title</scp>", link="https://example.com/same"
+		)
+		call_command(
+			"backfill_clean_titles", stdout=StringIO(), stderr=StringIO()
+		)
+		dirty.refresh_from_db()
 		self.assertEqual(dirty.title, "Shared <scp>Title</scp>")

@@ -34,7 +34,14 @@ class Command(GregoryBaseCommand):
 		}
 
 	def process_feeds(self):
-		"""Fetch and process RSS feeds for clinical trials."""
+		"""Fetch and process RSS feeds for clinical trials.
+
+		Per-source failures are isolated (one broken feed must not skip the
+		sources after it) and recorded in ``self.fetch_errors`` so callers
+		that need a hard failure signal (e.g. capture_trial_streams) can
+		inspect them after the run.
+		"""
+		self.fetch_errors = []
 		sources = Sources.objects.filter(method="rss", source_for="trials", active=True)
 		for source in sources:
 			self.log(f"Processing RSS feed: {source.name}", level=1)
@@ -47,6 +54,7 @@ class Command(GregoryBaseCommand):
 					response = requests.get(source.link, verify=False, timeout=30)
 					feed = feedparser.parse(response.content)
 			except Exception as e:
+				self.fetch_errors.append(f"{source.name}: {e}")
 				self.log(
 					f"Failed to fetch feed for source '{source.name}' ({source.link}): {e}. "
 					"Skipping this source.",

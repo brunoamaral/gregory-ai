@@ -50,6 +50,9 @@ class ArticlesFeedIsolationTests(TestCase):
 			# Must not raise; the second source must still be fetched.
 			cmd.update_articles_from_feeds()
 		self.assertEqual(mock_fetch.call_count, 2)
+		# The failure is recorded for callers that need a hard signal
+		self.assertEqual(len(cmd.fetch_errors), 1)
+		self.assertIn("Broken feed", cmd.fetch_errors[0])
 
 
 class TrialsFeedIsolationTests(TestCase):
@@ -78,3 +81,5 @@ class TrialsFeedIsolationTests(TestCase):
 		) as mock_parse:
 			cmd.process_feeds()
 		self.assertEqual(mock_parse.call_count, 2)
+		self.assertEqual(len(cmd.fetch_errors), 1)
+		self.assertIn("Broken trials feed", cmd.fetch_errors[0])

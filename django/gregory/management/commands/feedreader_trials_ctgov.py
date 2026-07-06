@@ -110,7 +110,13 @@ class Command(GregoryBaseCommand):
 		self.stdout.write("")  # Empty line for separation
 
 	def process_sources(self, max_results=100, source_id=None):
-		"""Fetch and process trials from ClinicalTrials.gov API sources."""
+		"""Fetch and process trials from ClinicalTrials.gov API sources.
+
+		Per-source fetch failures are isolated and recorded in
+		``self.fetch_errors`` so callers that need a hard failure signal
+		(e.g. capture_trial_streams) can inspect them after the run.
+		"""
+		self.fetch_errors = []
 		sources = Sources.objects.filter(
 			method="ctgov_api", source_for="trials", active=True
 		)
@@ -221,6 +227,7 @@ class Command(GregoryBaseCommand):
 
 			except Exception as e:
 				fetch_failed = True
+				self.fetch_errors.append(f"{source.name}: {e}")
 				self.log(
 					f"Error fetching from source {source.name}: {e}",
 					level=1,

@@ -7,9 +7,11 @@ incoming title through FeedProcessor.clean_title; this command applies the
 exact same cleaning to rows already in the database.
 
 Idempotent and resumable: rerunning only touches rows whose stored title
-still differs from its cleaned form. Articles.title is unique, so if two
-rows clean to the same string the collision is reported and skipped rather
-than raising an IntegrityError. Cleaning is done per row via save() so
+still differs from its cleaned form. Titles are no longer globally unique
+(dedup is DOI/link-based), but unique_article_title_link still applies: if
+cleaning would make a row collide on (title, link) the collision is
+reported and skipped rather than raising an IntegrityError. Cleaning is
+done per row via save() so
 django-simple-history records the change and the generated utitle column is
 recomputed.
 """

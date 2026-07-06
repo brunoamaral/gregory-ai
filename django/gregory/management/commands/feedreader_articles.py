@@ -533,6 +533,9 @@ class Command(GregoryBaseCommand):
 		return self.feed_processors[-1]
 
 	def update_articles_from_feeds(self):
+		# Per-source failures are isolated but recorded here so callers that
+		# need a hard failure signal can inspect them after the run.
+		self.fetch_errors = []
 		sources = Sources.objects.filter(
 			method="rss", source_for="science paper", active=True
 		)
@@ -543,6 +546,7 @@ class Command(GregoryBaseCommand):
 			try:
 				feed = self.fetch_feed(source.link, source.ignore_ssl)
 			except Exception as e:
+				self.fetch_errors.append(f"{source.name}: {e}")
 				self.log(
 					f"Failed to fetch feed for source '{source.name}' ({source.link}): {e}. "
 					"Skipping this source.",
