@@ -89,3 +89,4 @@ django/*.xlsx
 django/debug_*.py
 django/backfill_unpaywall.log
 django/unpaywall_cache
+docker-compose.override.yml
