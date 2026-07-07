@@ -3,6 +3,19 @@ from rest_framework.response import Response
 from django.utils.functional import cached_property
 
 
+def request_bypasses_pagination(request):
+	"""
+	True when the request asks to bypass pagination via all_results=true/1/yes,
+	checked in both query params (GET) and request data (POST).
+	"""
+	all_results = request.query_params.get("all_results", "").lower()
+
+	if all_results == "" and request.method == "POST":
+		all_results = str(request.data.get("all_results", "")).lower()
+
+	return all_results in ("true", "1", "yes")
+
+
 class FlexiblePagination(PageNumberPagination):
 	"""
 	A flexible pagination class that can handle pagination parameters
@@ -19,14 +32,7 @@ class FlexiblePagination(PageNumberPagination):
 		"""
 		Check if pagination should be bypassed based on request parameters.
 		"""
-		# Get value from query params
-		all_results = self.request.query_params.get("all_results", "").lower()
-
-		# If not in query params and it's a POST request, check in request data
-		if all_results == "" and self.request.method == "POST":
-			all_results = str(self.request.data.get("all_results", "")).lower()
-
-		return all_results in ("true", "1", "yes")
+		return request_bypasses_pagination(self.request)
 
 	def paginate_queryset(self, queryset, request, view=None):
 		"""
