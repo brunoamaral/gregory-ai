@@ -8,10 +8,14 @@ Three modes (mutually exclusive):
 
 import csv
 import os
+import random
+import signal
 import time
+import traceback
 from contextlib import contextmanager
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 from django.utils import timezone
@@ -76,10 +80,12 @@ class Command(BaseCommand):
 		)
 		parser.add_argument(
 			"--log-file",
-			default="backfill_unpaywall.log",
+			default=os.path.join(str(settings.BASE_DIR), "backfill_unpaywall.log"),
 			metavar="PATH",
 			help="File that records processed article_ids so resumed runs skip them "
-			     "(default: backfill_unpaywall.log). Pass an empty string to disable.",
+			     "(default: <project>/backfill_unpaywall.log, an absolute path so it "
+			     "doesn't depend on the CWD the command was launched from). Pass an "
+			     "empty string to disable.",
 		)
 
 	def handle(self, *args, **options):
@@ -112,101 +118,169 @@ class Command(BaseCommand):
 			)
 
 		qs = self._build_queryset(run_access, run_pdf, days)
+		# Fetch ids and shuffle before slicing/iterating: processing in a fixed
+		# article_id order means every run (and every resume after a crash)
+		# hammers the same DOIs first. If a particular publisher/range is slow,
+		# rate-limiting, or otherwise problematic, that same range stalls the
+		# run every single time. Randomizing spreads risk evenly across the
+		# whole batch instead of always parking progress at the same spot.
+		article_ids = list(qs.values_list("article_id", flat=True))
+		random.shuffle(article_ids)
 		if limit:
-			qs = qs[:limit]
+			article_ids = article_ids[:limit]
 
-		total = qs.count()
+		total = len(article_ids)
 		mode_label = self._mode_label(run_access, run_pdf, days)
 		self.stdout.write(f"{mode_label}: {total} articles to process.")
 		if not total:
 			return
 
-		updated_articles = updated_access = updated_pdf = no_data = 0
+		articles_by_id = Articles.objects.in_bulk(article_ids)
+
+		updated_articles = updated_access = updated_pdf = no_data = errors = 0
+		self._interrupted = False
+		self._install_signal_handlers()
 
 		with self._open_csv(csv_path) as csv_writer:
-			for i, article in enumerate(qs, 1):
-				if article.article_id in seen_ids:
+			for i, article_id in enumerate(article_ids, 1):
+				if self._interrupted:
+					self.stdout.write(self.style.WARNING(
+						f"Interrupted after {i - 1}/{total}. "
+						f"Progress is saved in the log file; re-run the same command to resume."
+					))
+					break
+
+				if article_id in seen_ids:
 					continue
-				access_before = article.access
-				pdf_link_before = article.pdf_link
+				article = articles_by_id.get(article_id)
+				if article is None:
+					continue
 
-				# getDataByDOI returns {} for both "not in Unpaywall" and internal
-				# API errors; no distinction is possible with errors="ignore".
-				data = unpaywall_utils.getDataByDOI(article.doi, admin_email)
-
-				if not data:
-					no_data += 1
-					if verbosity >= 2:
-						self.stdout.write(f"  [{i}/{total}] No Unpaywall data: {article.doi}")
-					if run_access and article.access is None and not dry_run:
-						article.access = "unknown"
-						article.save(update_fields=["access"])
+				try:
+					counts = self._process_article(
+						article, i, total, run_access, run_pdf, dry_run,
+						admin_email, verbosity, csv_writer, log_path,
+					)
+					updated_articles += counts["updated_article"]
+					updated_access += counts["updated_access"]
+					updated_pdf += counts["updated_pdf"]
+					no_data += counts["no_data"]
+				except Exception as exc:
+					errors += 1
+					self.stderr.write(self.style.ERROR(
+						f"  [{i}/{total}] Unexpected error on article_id={article_id} "
+						f"doi={article.doi}: {exc}"
+					))
+					self.stderr.write(traceback.format_exc())
 					if csv_writer:
 						csv_writer.writerow(self._csv_row(
-							article, "no_data", [], access_before, pdf_link_before,
+							article, "error", [str(exc)], article.access, article.pdf_link,
 						))
-					if not dry_run:
-						self._append_log(log_path, article.article_id)
-					if sleep:
+					# Do not append to the log: leave this article for the next
+					# run to retry, since we don't know whether it was a
+					# transient failure (network blip, DB hiccup, etc).
+				finally:
+					if verbosity >= 1 and i % 100 == 0:
+						self.stdout.write(f"  Progress: {i}/{total}")
+					if sleep and i < total:
 						time.sleep(sleep)
-					continue
-
-				# Determine what would change for this article.
-				access_new = None
-				pdf_new = None
-
-				if run_access and article.access is None:
-					access_new = "open" if data.get("is_oa") else "restricted"
-					updated_access += 1
-					if verbosity >= 2:
-						self.stdout.write(
-							f"  [{i}/{total}] access={access_new!r}  {article.doi}"
-						)
-
-				if run_pdf and article.pdf_link is None:
-					oa_loc = data.get("best_oa_location") or {}
-					candidate = oa_loc.get("url_for_pdf") or oa_loc.get("url")
-					if candidate:
-						pdf_new = candidate
-						updated_pdf += 1
-						if verbosity >= 2:
-							self.stdout.write(
-								f"  [{i}/{total}] pdf_link set  {article.doi}"
-							)
-
-				will_change = [f for f, v in [("access", access_new), ("pdf_link", pdf_new)] if v]
-				if will_change:
-					updated_articles += 1
-
-				# Apply changes only when not a dry run.
-				if not dry_run and will_change:
-					if access_new is not None:
-						article.access = access_new
-					if pdf_new is not None:
-						article.pdf_link = pdf_new
-					article.save(update_fields=will_change)
-
-				if csv_writer:
-					status = ("would_update" if dry_run else "updated") if will_change else "no_change"
-					csv_writer.writerow(self._csv_row(
-						article, status, will_change, access_before, pdf_link_before,
-					))
-
-				if not dry_run:
-					self._append_log(log_path, article.article_id)
-
-				if verbosity >= 1 and i % 100 == 0:
-					self.stdout.write(f"  Progress: {i}/{total}")
-
-				if sleep and i < total:
-					time.sleep(sleep)
 
 		self._print_summary(
 			dry_run, run_access, run_pdf, total,
-			updated_articles, updated_access, updated_pdf, no_data,
+			updated_articles, updated_access, updated_pdf, no_data, errors,
 		)
 		if csv_path:
 			self.stdout.write(f"Report written to {csv_path}")
+
+	def _install_signal_handlers(self):
+		"""Catch SIGINT/SIGTERM (and SIGHUP where available) so a stopped run
+		logs why it stopped instead of dying silently mid-progress-bar."""
+
+		def _handle(signum, frame):
+			self._interrupted = True
+
+		for sig_name in ("SIGINT", "SIGTERM", "SIGHUP"):
+			sig = getattr(signal, sig_name, None)
+			if sig is not None:
+				signal.signal(sig, _handle)
+
+	def _process_article(
+		self, article, i, total, run_access, run_pdf, dry_run,
+		admin_email, verbosity, csv_writer, log_path,
+	):
+		"""Process a single article. Returns a dict of counter increments.
+
+		Raises on unexpected errors (DB/IO failures); Unpaywall lookup errors
+		are already swallowed by getDataByDOI and surface as `data == {}`.
+		"""
+		access_before = article.access
+		pdf_link_before = article.pdf_link
+		counts = {"updated_article": 0, "updated_access": 0, "updated_pdf": 0, "no_data": 0}
+
+		# getDataByDOI returns {} for both "not in Unpaywall" and internal
+		# API errors; no distinction is possible with errors="ignore".
+		data = unpaywall_utils.getDataByDOI(article.doi, admin_email)
+
+		if not data:
+			counts["no_data"] = 1
+			if verbosity >= 2:
+				self.stdout.write(f"  [{i}/{total}] No Unpaywall data: {article.doi}")
+			if run_access and article.access is None and not dry_run:
+				article.access = "unknown"
+				article.save(update_fields=["access"])
+			if csv_writer:
+				csv_writer.writerow(self._csv_row(
+					article, "no_data", [], access_before, pdf_link_before,
+				))
+			if not dry_run:
+				self._append_log(log_path, article.article_id)
+			return counts
+
+		# Determine what would change for this article.
+		access_new = None
+		pdf_new = None
+
+		if run_access and article.access is None:
+			access_new = "open" if data.get("is_oa") else "restricted"
+			counts["updated_access"] = 1
+			if verbosity >= 2:
+				self.stdout.write(
+					f"  [{i}/{total}] access={access_new!r}  {article.doi}"
+				)
+
+		if run_pdf and article.pdf_link is None:
+			oa_loc = data.get("best_oa_location") or {}
+			candidate = oa_loc.get("url_for_pdf") or oa_loc.get("url")
+			if candidate:
+				pdf_new = candidate
+				counts["updated_pdf"] = 1
+				if verbosity >= 2:
+					self.stdout.write(
+						f"  [{i}/{total}] pdf_link set  {article.doi}"
+					)
+
+		will_change = [f for f, v in [("access", access_new), ("pdf_link", pdf_new)] if v]
+		if will_change:
+			counts["updated_article"] = 1
+
+		# Apply changes only when not a dry run.
+		if not dry_run and will_change:
+			if access_new is not None:
+				article.access = access_new
+			if pdf_new is not None:
+				article.pdf_link = pdf_new
+			article.save(update_fields=will_change)
+
+		if csv_writer:
+			status = ("would_update" if dry_run else "updated") if will_change else "no_change"
+			csv_writer.writerow(self._csv_row(
+				article, status, will_change, access_before, pdf_link_before,
+			))
+
+		if not dry_run:
+			self._append_log(log_path, article.article_id)
+
+		return counts
 
 	# ------------------------------------------------------------------
 	# Helpers
@@ -249,7 +323,7 @@ class Command(BaseCommand):
 
 	def _print_summary(
 		self, dry_run, run_access, run_pdf, total,
-		updated_articles, updated_access, updated_pdf, no_data,
+		updated_articles, updated_access, updated_pdf, no_data, errors=0,
 	):
 		prefix = "[dry run] " if dry_run else ""
 		w = len(str(total))
@@ -262,7 +336,10 @@ class Command(BaseCommand):
 		if run_pdf:
 			lines.append(f"  {'  pdf_link:':<22} {updated_pdf:{w}}")
 		lines.append(f"  {'No Unpaywall data:':<22} {no_data:{w}}")
-		self.stdout.write(self.style.SUCCESS("\n".join(lines)))
+		if errors:
+			lines.append(f"  {'Errors (will retry):':<22} {errors:{w}}")
+		style = self.style.WARNING if errors else self.style.SUCCESS
+		self.stdout.write(style("\n".join(lines)))
 
 	@staticmethod
 	def _csv_row(article, status, will_change, access_before, pdf_link_before):
