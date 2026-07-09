@@ -26,12 +26,17 @@ from sitesettings.models import CustomSetting
 
 _CSV_FIELDS = [
 	"article_id", "doi", "title", "status", "fields_updated",
-	"access_before", "access_after", "pdf_link_before", "pdf_link_after",
+	"access_before", "access_after", "pdf_link_before", "pdf_link_after", "notes",
 ]
 
 
 class Command(BaseCommand):
 	help = "Backfill access and/or pdf_link on science papers using the Unpaywall API."
+
+	# Resolve Article rows in fixed-size chunks rather than loading the whole
+	# matching set into memory at once (a plain --access run can span the
+	# entire articles table).
+	_ARTICLE_FETCH_CHUNK_SIZE = 500
 
 	def add_arguments(self, parser):
 		mode = parser.add_mutually_exclusive_group(required=True)
@@ -135,14 +140,12 @@ class Command(BaseCommand):
 		if not total:
 			return
 
-		articles_by_id = Articles.objects.in_bulk(article_ids)
-
 		updated_articles = updated_access = updated_pdf = no_data = errors = 0
 		self._interrupted = False
 		self._install_signal_handlers()
 
 		with self._open_csv(csv_path) as csv_writer:
-			for i, article_id in enumerate(article_ids, 1):
+			for i, article_id, article in self._iter_articles(article_ids):
 				if self._interrupted:
 					self.stdout.write(self.style.WARNING(
 						f"Interrupted after {i - 1}/{total}. "
@@ -152,14 +155,21 @@ class Command(BaseCommand):
 
 				if article_id in seen_ids:
 					continue
-				article = articles_by_id.get(article_id)
 				if article is None:
 					continue
+
+				# Captured before processing so the CSV report reflects the
+				# article's real prior state even if an unexpected error
+				# happens after in-memory fields were tentatively assigned
+				# but before (or instead of) a successful save.
+				access_before = article.access
+				pdf_link_before = article.pdf_link
 
 				try:
 					counts = self._process_article(
 						article, i, total, run_access, run_pdf, dry_run,
 						admin_email, verbosity, csv_writer, log_path,
+						access_before, pdf_link_before,
 					)
 					updated_articles += counts["updated_article"]
 					updated_access += counts["updated_access"]
@@ -173,8 +183,13 @@ class Command(BaseCommand):
 					))
 					self.stderr.write(traceback.format_exc())
 					if csv_writer:
+						# fields_updated stays empty: nothing was actually
+						# persisted for this article. The error itself goes
+						# in the dedicated `notes` column instead of
+						# overloading fields_updated with non-field data.
 						csv_writer.writerow(self._csv_row(
-							article, "error", [str(exc)], article.access, article.pdf_link,
+							article, "error", [], access_before, pdf_link_before,
+							notes=str(exc),
 						))
 					# Do not append to the log: leave this article for the next
 					# run to retry, since we don't know whether it was a
@@ -193,8 +208,10 @@ class Command(BaseCommand):
 			self.stdout.write(f"Report written to {csv_path}")
 
 	def _install_signal_handlers(self):
-		"""Catch SIGINT/SIGTERM (and SIGHUP where available) so a stopped run
-		logs why it stopped instead of dying silently mid-progress-bar."""
+		"""Catch SIGINT/SIGTERM (and SIGHUP where available) and set
+		`self._interrupted` so the main loop notices on its next iteration
+		and prints an interruption message, instead of the process dying
+		silently mid-run."""
 
 		def _handle(signum, frame):
 			self._interrupted = True
@@ -204,17 +221,27 @@ class Command(BaseCommand):
 			if sig is not None:
 				signal.signal(sig, _handle)
 
+	def _iter_articles(self, article_ids):
+		"""Yield (index, article_id, article) for each id in article_ids,
+		resolving Article rows in fixed-size chunks via in_bulk instead of
+		loading every matching row into memory up front."""
+		total = len(article_ids)
+		for start in range(0, total, self._ARTICLE_FETCH_CHUNK_SIZE):
+			chunk_ids = article_ids[start:start + self._ARTICLE_FETCH_CHUNK_SIZE]
+			articles_by_id = Articles.objects.in_bulk(chunk_ids)
+			for offset, article_id in enumerate(chunk_ids):
+				yield start + offset + 1, article_id, articles_by_id.get(article_id)
+
 	def _process_article(
 		self, article, i, total, run_access, run_pdf, dry_run,
 		admin_email, verbosity, csv_writer, log_path,
+		access_before, pdf_link_before,
 	):
 		"""Process a single article. Returns a dict of counter increments.
 
 		Raises on unexpected errors (DB/IO failures); Unpaywall lookup errors
 		are already swallowed by getDataByDOI and surface as `data == {}`.
 		"""
-		access_before = article.access
-		pdf_link_before = article.pdf_link
 		counts = {"updated_article": 0, "updated_access": 0, "updated_pdf": 0, "no_data": 0}
 
 		# getDataByDOI returns {} for both "not in Unpaywall" and internal
@@ -342,7 +369,7 @@ class Command(BaseCommand):
 		self.stdout.write(style("\n".join(lines)))
 
 	@staticmethod
-	def _csv_row(article, status, will_change, access_before, pdf_link_before):
+	def _csv_row(article, status, will_change, access_before, pdf_link_before, notes=""):
 		return {
 			"article_id": article.article_id,
 			"doi": article.doi,
@@ -353,6 +380,7 @@ class Command(BaseCommand):
 			"access_after": article.access or "",
 			"pdf_link_before": pdf_link_before or "",
 			"pdf_link_after": article.pdf_link or "",
+			"notes": notes,
 		}
 
 	@staticmethod
