@@ -38,7 +38,8 @@ curl -s "https://api.brain-regeneration.com/articles/?search=microglia&page_size
 
 ## The one search rule you must know
 
-The `search=` parameter (on `/articles/` and `/trials/`) runs a **boolean search over title + abstract**:
+The `search=` parameter (on `/articles/` and `/trials/`) runs a **boolean search over title + summary**
+(article abstracts for `/articles/`, trial summaries for `/trials/`):
 
 - Space-separated terms are **AND**-ed: `search=stem cells regeneration`
 - `OR` (uppercase) for alternatives: `search=alzheimer OR parkinson`
@@ -105,7 +106,7 @@ curl -s "$BASE/trials/?subject_id=14&status=Recruiting&format=json"
 curl -s "$BASE/trials/?nct=NCT04305002&format=json"
 
 # 6. Find an author by name, see their article count
-curl -s "$BASE/authors/?full_name=smith&ordering=-article_count&format=json"
+curl -s "$BASE/authors/?full_name=smith&sort_by=article_count&order=desc&format=json"
 
 # 7. Alzheimer's articles published in 2024, as CSV
 curl -s "$BASE/articles/?subject_id=13&published_date_after=2024-01-01&published_date_before=2024-12-31&format=csv&all_results=true"
