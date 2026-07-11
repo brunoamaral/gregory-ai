@@ -183,17 +183,30 @@ class Command(BaseCommand):
 					))
 					self.stderr.write(traceback.format_exc())
 					if csv_writer:
-						# Reset any in-memory-only assignments (e.g. access/pdf_link
-						# set but not saved before the failure) so the "after" columns
-						# reflect actual DB state, not a change that was never persisted.
-						article.access = access_before
-						article.pdf_link = pdf_link_before
-						# fields_updated stays empty: nothing was actually
-						# persisted for this article. The error itself goes
-						# in the dedicated `notes` column instead of
-						# overloading fields_updated with non-field data.
+						# Refresh from the DB (best effort) so the "after" columns
+						# reflect actual persisted state rather than an in-memory
+						# value: the failure may have happened before any save (in
+						# which case nothing changed) or after a successful save
+						# (e.g. in the CSV/log-append step), in which case the
+						# change is real and should be reported as such.
+						try:
+							article.refresh_from_db(fields=["access", "pdf_link"])
+						except Exception as refresh_exc:
+							self.stderr.write(self.style.WARNING(
+								f"  Could not refresh article_id={article_id} from DB "
+								f"for error reporting: {refresh_exc}"
+							))
+						fields_changed = [
+							f for f, before, after in [
+								("access", access_before, article.access),
+								("pdf_link", pdf_link_before, article.pdf_link),
+							]
+							if before != after
+						]
+						# The error itself goes in the dedicated `notes` column
+						# instead of overloading fields_updated with non-field data.
 						csv_writer.writerow(self._csv_row(
-							article, "error", [], access_before, pdf_link_before,
+							article, "error", fields_changed, access_before, pdf_link_before,
 							notes=str(exc),
 						))
 					# Do not append to the log: leave this article for the next
