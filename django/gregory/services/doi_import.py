@@ -111,8 +111,8 @@ def create_article_from_doi(
 	"""
 	doi = normalize_doi(doi)
 
-	# Dedup by DOI
-	existing = Articles.objects.filter(doi=doi).first()
+	# Dedup by DOI (case-insensitive, matching the unique_article_doi constraint)
+	existing = Articles.objects.filter(doi__iexact=doi).first()
 	if existing:
 		# Ensure source association is present
 		if not existing.sources.filter(pk=source.pk).exists():

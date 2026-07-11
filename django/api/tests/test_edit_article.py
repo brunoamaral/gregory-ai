@@ -19,8 +19,10 @@ Run with:
 """
 
 import json
+from contextlib import contextmanager
 from datetime import timedelta
 
+from django.db import connection
 from django.test import TestCase, Client
 from django.utils.timezone import now
 from organizations.models import Organization
@@ -103,6 +105,17 @@ def _edit(client, api_key, payload):
 		content_type="application/json",
 		**headers,
 	)
+
+
+@contextmanager
+def without_doi_constraint():
+	"""Drop the unique_article_doi index so a legacy duplicate-DOI state (the
+	kind the edit API's 409 handling defends against) can be constructed in a
+	test fixture. DDL inside the test's own transaction, so TestCase's rollback
+	restores the index afterwards."""
+	with connection.cursor() as cursor:
+		cursor.execute("DROP INDEX IF EXISTS unique_article_doi")
+	yield
 
 
 # ---------------------------------------------------------------------------
@@ -312,10 +325,13 @@ class EditArticleErrorsTest(TestCase):
 		self.assertEqual(resp.status_code, 404)
 
 	def test_duplicate_doi_returns_409_with_ids(self):
-		# Create a second article with the same DOI
-		duplicate = Articles.objects.create(
-			title="Duplicate", link="https://example.com/dup2", doi="10.3333/errors"
-		)
+		# Simulate a legacy duplicate-DOI row (unique_article_doi normally
+		# prevents this at write time; this test covers the API's defense for
+		# duplicates that predate the constraint or slip in outside the ORM).
+		with without_doi_constraint():
+			duplicate = Articles.objects.create(
+				title="Duplicate", link="https://example.com/dup2", doi="10.3333/errors"
+			)
 		duplicate.teams.add(self.team)
 		resp = _edit(self.client, self.scheme.api_key, {"doi": "10.3333/errors"})
 		self.assertEqual(resp.status_code, 409)

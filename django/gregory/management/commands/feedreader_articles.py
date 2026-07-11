@@ -6,8 +6,10 @@ from crossref.restful import Works, Etiquette
 from dateutil.parser import parse
 from dateutil.tz import gettz
 from django.core.exceptions import MultipleObjectsReturned
+from django.db import transaction
 from django.utils import timezone
 from gregory.classes import SciencePaper
+from gregory.services.article_merge import assign_doi_or_merge
 from gregory.utils.registry_utils import merge_links
 from sitesettings.models import CustomSetting
 import feedparser
@@ -744,10 +746,15 @@ class Command(GregoryBaseCommand):
 		are authoritative and left alone; the feed only contributes its URL,
 		a summary/date when none exists yet, and the source relationships.
 		"""
-		changed_fields = []
+		# The DOI-first lookup in find_existing_article matches case-sensitively,
+		# so a case-only variant of an existing DOI can reach here on a row found
+		# by link/title. Route the assignment through the collision guard so it
+		# merges rather than tripping the case-insensitive uniqueness constraint.
 		if doi and not article.doi:
-			article.doi = doi
-			changed_fields.append("doi")
+			with transaction.atomic():
+				article, _merged = assign_doi_or_merge(article, doi)
+
+		changed_fields = []
 		merged = merge_links(article.links, link)
 		if merged != (article.links or {}):
 			article.links = merged
@@ -843,7 +850,9 @@ class Command(GregoryBaseCommand):
 		"""Locate the article this feed entry refers to, DOI-first.
 
 		Lookup order:
-		1. DOI — the only globally unique key we have.
+		1. DOI — the only globally unique key we have. Matched case-insensitively
+		   to line up with the unique_article_doi constraint, so a case-only DOI
+		   variant resolves to the existing row instead of creating a collision.
 		2. Link — an article's first-seen URL is stable; this also catches rows
 		   ingested before title cleaning existed (PR #739).
 		3. Cleaned title — but ONLY when the incoming entry has no DOI or the
@@ -853,7 +862,7 @@ class Command(GregoryBaseCommand):
 		   instead of absorbing the entry into the wrong row.
 		"""
 		if doi:
-			article = Articles.objects.filter(doi=doi).first()
+			article = Articles.objects.filter(doi__iexact=doi).first()
 			if article:
 				return article
 
@@ -864,7 +873,7 @@ class Command(GregoryBaseCommand):
 
 		article = Articles.objects.filter(title=title).first()
 		if article:
-			if doi and article.doi and article.doi != doi:
+			if doi and article.doi and article.doi.lower() != doi.lower():
 				self.log(
 					f"  Title matches article {article.article_id} but DOIs differ "
 					f"({article.doi} vs {doi}); creating a new article.",
