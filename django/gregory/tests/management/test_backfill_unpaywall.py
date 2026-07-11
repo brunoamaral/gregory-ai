@@ -276,7 +276,7 @@ class BackfillUnpaywallCommandTest(TestCase):
 			expected_fields = {
 				"article_id", "doi", "title", "status",
 				"fields_updated", "access_before", "access_after",
-				"pdf_link_before", "pdf_link_after",
+				"pdf_link_before", "pdf_link_after", "notes",
 			}
 			self.assertEqual(set(fieldnames), expected_fields)
 			article_ids = {r["article_id"] for r in rows}
