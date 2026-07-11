@@ -92,6 +92,18 @@ class ArticleDedupTests(TestCase):
 		self.assertFalse(created2)
 		self.assertEqual(a1.pk, a2.pk)
 
+	def test_case_variant_doi_matches_existing_article(self):
+		# DOIs are case-insensitive; a feed re-delivering the same paper with a
+		# differently-cased DOI must resolve to the existing row, not a new one
+		# (which would trip the unique_article_doi constraint).
+		a1, created1, _ = self.ingest(doi="10.1000/AbC", link="https://ex.org/a")
+		a2, created2, _ = self.ingest(doi="10.1000/abc", link="https://ex.org/b")
+
+		self.assertTrue(created1)
+		self.assertFalse(created2)
+		self.assertEqual(a1.pk, a2.pk)
+		self.assertEqual(Articles.objects.count(), 1)
+
 	def test_existing_doi_is_never_overwritten_by_title_match(self):
 		a1, _, _ = self.ingest(doi="10.1000/aaa", link="https://ex.org/a")
 		a2, created2, _ = self.ingest(doi="10.1000/bbb", link="https://ex.org/b")

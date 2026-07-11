@@ -685,7 +685,17 @@ class Articles(models.Model):
 		constraints = [
 			models.UniqueConstraint(
 				fields=["title", "link"], name="unique_article_title_link"
-			)
+			),
+			# One article per DOI (case-insensitive). NULL/empty DOIs are exempt so
+			# rows awaiting a find_doi lookup coexist. This is the backstop that
+			# survives any code path (management commands, one-off scripts, future
+			# indexers) that forgets the application-level guard. Unlike `title`,
+			# which is deliberately non-unique, a DOI identifies exactly one paper.
+			models.UniqueConstraint(
+				Lower("doi"),
+				condition=Q(doi__isnull=False) & ~Q(doi=""),
+				name="unique_article_doi",
+			),
 		]
 		indexes = [
 			# GIN indexes for fast text search on uppercase columns
