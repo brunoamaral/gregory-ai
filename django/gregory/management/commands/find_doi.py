@@ -43,7 +43,12 @@ class Command(BaseCommand):
 				# rather than create a collision. assign_doi_or_merge returns the
 				# survivor (which may differ from `article` if it was the loser).
 				with transaction.atomic():
-					survivor, merged = assign_doi_or_merge(article, doi)
+					# save=False so the DOI and the cleared backoff marker are
+					# persisted in a single save (one history row) on the common
+					# no-collision path.
+					survivor, merged = assign_doi_or_merge(
+						article, doi, save=False
+					)
 					clear_marker(survivor, "doi_lookup", save=False)
 					survivor.save()
 				if merged:

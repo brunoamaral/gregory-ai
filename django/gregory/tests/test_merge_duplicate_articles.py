@@ -24,11 +24,16 @@ from django.utils import timezone
 from organizations.models import Organization
 
 from gregory.models import (
+	ArticleCategoryAssignment,
+	ArticleOrgContent,
 	Articles,
 	ArticleSubjectRelevance,
+	CategoryAssignmentSource,
+	MLPredictions,
 	Sources,
 	Subject,
 	Team,
+	TeamCategory,
 )
 from gregory.services.article_merge import (
 	assign_doi_or_merge,
@@ -39,8 +44,8 @@ from gregory.services.article_merge import (
 
 class MergeFixtureMixin:
 	def build_common(self):
-		org = Organization.objects.create(name="Org")
-		self.team = Team.objects.create(organization=org, slug="merge-team")
+		self.org = Organization.objects.create(name="Org")
+		self.team = Team.objects.create(organization=self.org, slug="merge-team")
 		self.subject = Subject.objects.create(
 			subject_name="Subject", subject_slug="subject", team=self.team
 		)
@@ -139,6 +144,86 @@ class MergeArticlesServiceTests(MergeFixtureMixin, TestCase):
 			article=newer, subject=self.subject, is_relevant=False
 		)
 		self.assertEqual(pick_survivor([newer, older]).pk, newer.pk)
+
+	def test_pick_survivor_uses_real_ml_prediction_relation(self):
+		# Predictions live on the ml_predictions_detail reverse FK, not the
+		# vestigial ml_predictions M2M. An older row without a prediction must
+		# lose to a newer row that has one.
+		older, newer = self.make_dup_pair(
+			"10.1/ml", links=("https://ex.org/older", "https://ex.org/newer")
+		)
+		Articles.objects.filter(pk=newer.pk).update(
+			discovery_date=timezone.now() + timezone.timedelta(days=30)
+		)
+		newer.refresh_from_db()
+		MLPredictions.objects.create(
+			article=newer, subject=self.subject,
+			algorithm="pubmed_bert", model_version="v1", probability_score=0.9,
+		)
+		self.assertEqual(pick_survivor([older, newer]).pk, newer.pk)
+
+	def test_team_category_provenance_survives_merge(self):
+		# Regression: the automatic/manual `source` on ArticleCategoryAssignment
+		# must be preserved. A bare M2M .add() would fabricate a manual row.
+		keep, loser = self.make_dup_pair(
+			"10.1/cat", links=("https://ex.org/keep", "https://ex.org/loser")
+		)
+		category = TeamCategory.objects.create(
+			team=self.team, category_name="Cat", category_slug="cat"
+		)
+		ArticleCategoryAssignment.objects.create(
+			articles=loser,
+			teamcategory=category,
+			source=CategoryAssignmentSource.AUTOMATIC,
+		)
+
+		with transaction.atomic():
+			merge_articles(keep, [loser])
+
+		assignment = ArticleCategoryAssignment.objects.get(
+			articles=keep, teamcategory=category
+		)
+		self.assertEqual(assignment.source, CategoryAssignmentSource.AUTOMATIC)
+
+	def test_org_content_adopted_into_empty_survivor_slot(self):
+		keep, loser = self.make_dup_pair(
+			"10.1/org", links=("https://ex.org/keep", "https://ex.org/loser")
+		)
+		# Survivor has an empty editorial row; loser's is filled.
+		ArticleOrgContent.objects.create(
+			article=keep, organization=self.org, takeaways="", summary_plain_english=""
+		)
+		ArticleOrgContent.objects.create(
+			article=loser, organization=self.org,
+			takeaways="Key finding", summary_plain_english="Plain summary",
+		)
+
+		with transaction.atomic():
+			merge_articles(keep, [loser])
+
+		content = ArticleOrgContent.objects.get(
+			article=keep, organization=self.org
+		)
+		self.assertEqual(content.takeaways, "Key finding")
+		self.assertEqual(content.summary_plain_english, "Plain summary")
+		self.assertEqual(ArticleOrgContent.objects.count(), 1)
+
+	def test_three_way_merge(self):
+		with self.without_doi_constraint():
+			a = self.make_article(doi="10.1/three", link="https://ex.org/a")
+			b = self.make_article(doi="10.1/three", link="https://ex.org/b")
+			c = self.make_article(doi="10.1/three", link="https://ex.org/c")
+		b.sources.add(self.source_a)
+		c.sources.add(self.source_b)
+
+		with transaction.atomic():
+			survivor = merge_articles(a, [b, c])
+
+		self.assertEqual(Articles.objects.filter(doi__iexact="10.1/three").count(), 1)
+		self.assertSetEqual(
+			set(survivor.sources.values_list("pk", flat=True)),
+			{self.source_a.pk, self.source_b.pk},
+		)
 
 
 class AssignDoiOrMergeTests(MergeFixtureMixin, TestCase):

@@ -31,7 +31,7 @@ import logging
 
 from django.db import IntegrityError, transaction
 
-from gregory.models import Articles, ArticleSubjectRelevance
+from gregory.models import Articles, ArticleOrgContent, ArticleSubjectRelevance
 from gregory.relevance import recompute_article_relevance
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,9 @@ def pick_survivor(articles):
 		has_manual = a.article_subject_relevances.filter(
 			is_relevant__isnull=False
 		).exists()
-		has_ml = a.ml_predictions.exists()
+		# ml_predictions_detail is the reverse FK the pipeline actually writes;
+		# the ml_predictions M2M is vestigial and never populated.
+		has_ml = a.ml_predictions_detail.exists()
 		# discovery_date is auto_now_add so it is always set, but guard anyway.
 		discovered = a.discovery_date
 		return (
@@ -101,6 +103,42 @@ def _merge_subject_relevances(keep, rem, stdout=None):
 			rem_rel.delete()
 
 
+def _merge_org_contents(keep, rem, stdout=None):
+	"""Union ArticleOrgContent rows, preserving editorial text.
+
+	Org content (takeaways, plain-english summary) is hand-written curation, so —
+	as with relevance decisions — a filled row on the removed article fills an
+	empty slot on the survivor rather than being dropped by the generic
+	repoint-on-collision. The survivor's own content otherwise wins.
+	"""
+	keep_by_org = {c.organization_id: c for c in keep.org_contents.all()}
+	for rem_content in rem.org_contents.all():
+		existing = keep_by_org.get(rem_content.organization_id)
+		if existing is None:
+			rem_content.article = keep
+			rem_content.save(update_fields=["article"])
+			keep_by_org[rem_content.organization_id] = rem_content
+			continue
+		survivor_empty = not (
+			existing.takeaways or existing.summary_plain_english
+		)
+		loser_has = bool(
+			rem_content.takeaways or rem_content.summary_plain_english
+		)
+		if survivor_empty and loser_has:
+			existing.takeaways = rem_content.takeaways
+			existing.summary_plain_english = rem_content.summary_plain_english
+			existing.save(
+				update_fields=["takeaways", "summary_plain_english"]
+			)
+			_log(
+				stdout,
+				f"   adopted editorial content for org "
+				f"{rem_content.organization_id} from article {rem.article_id}",
+			)
+		rem_content.delete()
+
+
 def merge_articles(keep, remove, *, stdout=None, recompute=True):
 	"""Merge every article in ``remove`` into ``keep`` and delete them.
 
@@ -111,19 +149,26 @@ def merge_articles(keep, remove, *, stdout=None, recompute=True):
 	if not remove:
 		return keep
 
-	# M2M fields declared on Articles (sources, subjects, teams, authors,
-	# entities, ml_predictions). team_categories is a through M2M handled below
-	# via its reverse FK so the `source` (manual/automatic) column is preserved.
+	# Plain M2M fields declared on Articles (sources, subjects, teams, authors,
+	# entities, ml_predictions). Custom-`through` M2Ms — team_categories — are
+	# EXCLUDED here and handled via their reverse FK instead: a bare .add() would
+	# fabricate a through row with `source` defaulted to "manual", clobbering the
+	# real manual/automatic provenance. A truthy `through._meta.auto_created`
+	# (the owning model) marks an implicit through table; explicit through is False.
 	m2m_fields = [
 		f.name
 		for f in Articles._meta.get_fields()
-		if f.many_to_many and not f.auto_created
+		if f.many_to_many
+		and not f.auto_created
+		and f.remote_field.through._meta.auto_created
 	]
-	# Reverse FKs, minus the relevance relation we handle explicitly above.
+	# Reverse FKs, minus the relations we merge explicitly above with
+	# curation-preserving logic.
+	explicit = (ArticleSubjectRelevance, ArticleOrgContent)
 	reverse_fks = [
 		f
 		for f in Articles._meta.get_fields()
-		if f.one_to_many and f.related_model is not ArticleSubjectRelevance
+		if f.one_to_many and f.related_model not in explicit
 	]
 
 	for rem in remove:
@@ -135,8 +180,9 @@ def merge_articles(keep, remove, *, stdout=None, recompute=True):
 			if related:
 				getattr(keep, fname).add(*related)
 
-		# 2. Manual relevance decisions (curation-preserving union).
+		# 2. Curation-preserving unions (manual relevance, editorial org content).
 		_merge_subject_relevances(keep, rem, stdout=stdout)
+		_merge_org_contents(keep, rem, stdout=stdout)
 
 		# 3. Every other reverse-FK child → repoint to the survivor; drop only on
 		#    a unique collision. A per-child savepoint lets us recover from the
@@ -175,7 +221,7 @@ def merge_articles(keep, remove, *, stdout=None, recompute=True):
 	return keep
 
 
-def assign_doi_or_merge(article, doi, *, stdout=None):
+def assign_doi_or_merge(article, doi, *, stdout=None, save=True):
 	"""Assign ``doi`` to ``article`` unless another article already holds it.
 
 	This is the guard that closes the gap in the DOI-writing paths: instead of
@@ -186,6 +232,11 @@ def assign_doi_or_merge(article, doi, *, stdout=None):
 	resolved by merging. The caller should use the returned survivor afterwards,
 	as ``article`` may have been deleted.
 
+	``save=False`` lets a caller that is about to write other fields (e.g.
+	find_doi clearing its backoff marker) set the DOI in memory and persist
+	everything in a single save on the no-collision path. The merge path always
+	persists, since it deletes rows.
+
 	Wrap in ``transaction.atomic()``.
 	"""
 	others = list(
@@ -193,7 +244,8 @@ def assign_doi_or_merge(article, doi, *, stdout=None):
 	)
 	if not others:
 		article.doi = doi
-		article.save(update_fields=["doi"])
+		if save:
+			article.save(update_fields=["doi"])
 		return article, False
 
 	logger.warning(
