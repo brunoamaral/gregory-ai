@@ -61,7 +61,7 @@ Includes: `trial_id`, `title`, `scientific_title`, `summary`, `ctg_detailed_desc
 `study_design`, `condition`, `intervention`, `primary_outcome`, `secondary_outcome`,
 `inclusion_criteria`, `exclusion_criteria`, `inclusion_agemin`/`agemax`/`gender`, `target_size`,
 `primary_sponsor`, `secondary_sponsor`, `sponsor_type`, `source_register`, `countries`,
-`date_registration`, `date_enrollement`, `therapeutic_areas`, `results_posted`, `results_url_link`,
+`date_registration`, `date_enrollement` (sic — misspelled in the schema; not a docs typo), `therapeutic_areas`, `results_posted`, `results_url_link`,
 `results_yes_no`, `link`, `links`, `sources`, `team_categories`, `articles` (linked articles),
 and contact/ethics fields.
 

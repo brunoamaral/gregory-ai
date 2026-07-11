@@ -183,6 +183,11 @@ class Command(BaseCommand):
 					))
 					self.stderr.write(traceback.format_exc())
 					if csv_writer:
+						# Reset any in-memory-only assignments (e.g. access/pdf_link
+						# set but not saved before the failure) so the "after" columns
+						# reflect actual DB state, not a change that was never persisted.
+						article.access = access_before
+						article.pdf_link = pdf_link_before
 						# fields_updated stays empty: nothing was actually
 						# persisted for this article. The error itself goes
 						# in the dedicated `notes` column instead of

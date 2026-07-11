@@ -17,7 +17,9 @@ Single author: `GET /authors/{author_id}/`.
 
 ## Ordering & pagination
 
-- `ordering` — `author_id`, `full_name`, `country`, `article_count` (prefix `-`).
+- `sort_by` — `author_id` (default), `full_name`, `country`, `article_count`.
+- `order` — `asc` or `desc` (default: `desc` for `article_count`, `asc` otherwise).
+  Note: unlike `/articles/` and `/trials/`, this endpoint does **not** use DRF's `ordering=` param.
 - `page`, `page_size` (≤100), `all_results=true`, `format=json|csv`.
 
 ## Response fields
@@ -38,7 +40,7 @@ Two ways:
 BASE="https://api.brain-regeneration.com"
 
 # Find authors by surname, most-published first
-curl -s "$BASE/authors/?family_name=smith&ordering=-article_count&format=json"
+curl -s "$BASE/authors/?family_name=smith&sort_by=article_count&order=desc&format=json"
 
 # Look up by ORCID
 curl -s "$BASE/authors/?orcid=0000-0002-1825-0097&format=json"
