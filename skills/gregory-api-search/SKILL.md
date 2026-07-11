@@ -38,8 +38,8 @@ curl -s "https://api.brain-regeneration.com/articles/?search=microglia&page_size
 
 ## The one search rule you must know
 
-The `search=` parameter (on `/articles/` and `/trials/`) runs a **boolean search over title + abstract**
-(articles) or **title + summary** (trials):
+The `search=` parameter (on `/articles/` and `/trials/`) runs a **boolean search over title + summary**
+(article abstracts for `/articles/`, trial summaries for `/trials/`):
 
 - Space-separated terms are **AND**-ed: `search=stem cells regeneration`
 - `OR` (uppercase) for alternatives: `search=alzheimer OR parkinson`
