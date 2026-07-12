@@ -8,6 +8,9 @@ Mirrors the /trials/stats/ suite for articles (both are built on
     runs the stats aggregation
   - /articles/stats/ totals: total, by_access (NULL access folded into
     "unknown"), relevant, retracted, missing_doi
+  - the relevant count uses the list's ?relevant=true semantics (live
+    manual+ML logic, subject-scoped when subject_id is present) — NOT the
+    denormalized any-subject Articles.relevant flag
   - filters (e.g. team_id) scope the stats like the equivalent list request
   - by_subject breakdown, including that hidden-org subjects on visible
     articles never leak into it
@@ -32,7 +35,14 @@ from organizations.models import Organization
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
-from gregory.models import Articles, OrganizationApiSettings, Subject, Team
+from gregory.models import (
+	Articles,
+	ArticleSubjectRelevance,
+	MLPredictions,
+	OrganizationApiSettings,
+	Subject,
+	Team,
+)
 
 
 def _make_org_team(name, slug, public=True):
@@ -105,7 +115,9 @@ class ArticleStatsBase(TestCase):
 		)
 		self.subject = _make_subject(self.team, "A-Stats Subject", "a-stats-subject")
 
-		# a1: open access, relevant, has DOI
+		# a1: open access, relevant (manually reviewed for the subject), has
+		# DOI. The stats `relevant` count uses the live per-subject logic —
+		# the denormalized flag alone is not enough to count as relevant.
 		self.a1 = _make_article(
 			"A1",
 			"https://article.example.com/1",
@@ -114,6 +126,9 @@ class ArticleStatsBase(TestCase):
 			access="open",
 			doi="10.1000/stats-a1",
 			relevant=True,
+		)
+		ArticleSubjectRelevance.objects.create(
+			article=self.a1, subject=self.subject, is_relevant=True
 		)
 		# a2: restricted, retracted, has DOI
 		self.a2 = _make_article(
@@ -299,13 +314,20 @@ class ArticleStatsCachingTest(ArticleStatsBase):
 		priv_org, priv_team = _make_org_team(
 			"A-Private Stats Org", "a-private-stats-org", public=False
 		)
-		_make_article(
+		priv_subject = _make_subject(
+			priv_team, "A-Private Subject", "a-private-subject"
+		)
+		priv_article = _make_article(
 			"Private A",
 			"https://article.example.com/priv",
 			[priv_team],
+			[priv_subject],
 			access="open",
 			doi="10.1000/stats-priv",
 			relevant=True,
+		)
+		ArticleSubjectRelevance.objects.create(
+			article=priv_article, subject=priv_subject, is_relevant=True
 		)
 		scheme = _make_api_scheme(priv_org, "a-stats-key")
 
@@ -328,6 +350,110 @@ class ArticleStatsCachingTest(ArticleStatsBase):
 		# not pick up the keyed caller's entry.
 		anon_again = anon.get("/articles/stats/")
 		self.assertEqual(anon_again.data["total"], 4)
+
+
+class ArticleStatsSubjectScopedRelevantTest(TestCase):
+	"""The `relevant` count must be subject-strict when subject_id is given.
+
+	An article tagged with subjects N and M but only relevant for M must not
+	land in N's relevant bucket — the stats must mean the same thing as
+	`/articles/?relevant=true&subject_id=N`, not "relevant for any subject"
+	(the denormalized Articles.relevant flag).
+	"""
+
+	def setUp(self):
+		cache.clear()
+		self.org, self.team = _make_org_team(
+			"A-Scoped Org", "a-scoped-stats-org"
+		)
+		self.subject_n = _make_subject(self.team, "Subject N", "a-scoped-subject-n")
+		self.subject_m = _make_subject(self.team, "Subject M", "a-scoped-subject-m")
+
+		# In both subjects, manually relevant ONLY for M.
+		self.article = _make_article(
+			"Scoped A1",
+			"https://article.example.com/scoped-1",
+			[self.team],
+			[self.subject_n, self.subject_m],
+			access="open",
+			doi="10.1000/stats-scoped-1",
+		)
+		ArticleSubjectRelevance.objects.create(
+			article=self.article, subject=self.subject_m, is_relevant=True
+		)
+
+		self.client = APIClient()
+
+	def _stats(self, **params):
+		resp = self.client.get("/articles/stats/", params)
+		self.assertEqual(resp.status_code, 200)
+		return resp.data
+
+	def _list_relevant_count(self, **params):
+		resp = self.client.get("/articles/", {"relevant": "true", **params})
+		self.assertEqual(resp.status_code, 200)
+		return resp.data["count"]
+
+	def test_relevant_is_scoped_to_subject_param(self):
+		stats_n = self._stats(subject_id=self.subject_n.id)
+		# The article IS in subject N (total counts it) but is not relevant
+		# FOR subject N.
+		self.assertEqual(stats_n["total"], 1)
+		self.assertEqual(stats_n["relevant"], 0)
+
+		stats_m = self._stats(subject_id=self.subject_m.id)
+		self.assertEqual(stats_m["total"], 1)
+		self.assertEqual(stats_m["relevant"], 1)
+
+	def test_unscoped_relevant_counts_any_subject_once(self):
+		stats = self._stats()
+		self.assertEqual(stats["total"], 1)
+		self.assertEqual(stats["relevant"], 1)
+
+	def test_stats_relevant_matches_list_relevant_count(self):
+		"""The contract: stats counts == what the equivalent list returns."""
+		for params in (
+			{},
+			{"subject_id": self.subject_n.id},
+			{"subject_id": self.subject_m.id},
+		):
+			self.assertEqual(
+				self._stats(**params)["relevant"],
+				self._list_relevant_count(**params),
+				f"stats/list relevant mismatch for params {params}",
+			)
+
+	def test_ml_consensus_relevant_is_subject_scoped(self):
+		"""ML-driven relevance is also per subject: a consensus prediction
+		for subject N must not make the article relevant for subject M."""
+		self.subject_n.auto_predict = True
+		self.subject_n.save()
+		ml_article = _make_article(
+			"Scoped ML A2",
+			"https://article.example.com/scoped-2",
+			[self.team],
+			[self.subject_n, self.subject_m],
+			access="open",
+			doi="10.1000/stats-scoped-2",
+		)
+		MLPredictions.objects.create(
+			article=ml_article,
+			subject=self.subject_n,
+			algorithm="pubmed_bert",
+			model_version="test_v1",
+			probability_score=0.95,
+			predicted_relevant=True,
+		)
+
+		stats_n = self._stats(subject_id=self.subject_n.id)
+		self.assertEqual(stats_n["relevant"], 1)  # ml_article via consensus
+
+		stats_m = self._stats(subject_id=self.subject_m.id)
+		# Only the manually-relevant article; the ML prediction belongs to N.
+		self.assertEqual(stats_m["relevant"], 1)
+		self.assertEqual(
+			stats_m["relevant"], self._list_relevant_count(subject_id=self.subject_m.id)
+		)
 
 
 class ArticleStatsRoutingTest(ArticleStatsBase):
