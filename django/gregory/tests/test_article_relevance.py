@@ -1,6 +1,9 @@
 """Tests for the denormalized Articles.relevant flag: recompute logic and signals."""
 
+from datetime import timedelta
+
 from django.test import TestCase
+from django.utils import timezone
 from organizations.models import Organization
 
 from gregory.models import (
@@ -298,3 +301,146 @@ class ArticleRelevanceSignalTestCase(TestCase):
 		prediction.delete()
 		self._refresh()
 		self.assertFalse(self.article.relevant)
+
+
+class RecomputeArticleRelevanceLatestPredictionTestCase(TestCase):
+	"""Regression tests: only the latest prediction per (article, subject, algorithm)
+	counts toward ML consensus.
+
+	Every model retrain writes a new MLPredictions row (unique per
+	article/subject/model_version/algorithm). Before this fix,
+	recompute_article_relevance counted ANY historical prediction meeting the
+	threshold, so an article stayed relevant forever once a since-retired
+	model_version had scored it high."""
+
+	def setUp(self):
+		org = Organization.objects.create(name="Latest Prediction Relevance Org")
+		self.team = Team.objects.create(
+			organization=org, name="Latest Prediction Team", slug="latest-prediction-team"
+		)
+		self.subject_any = Subject.objects.create(
+			subject_name="Latest Any Subject",
+			subject_slug="latest-any-subject",
+			team=self.team,
+			auto_predict=True,
+			ml_consensus_type="any",
+		)
+		self.subject_majority = Subject.objects.create(
+			subject_name="Latest Majority Subject",
+			subject_slug="latest-majority-subject",
+			team=self.team,
+			auto_predict=True,
+			ml_consensus_type="majority",
+		)
+		self.subject_all = Subject.objects.create(
+			subject_name="Latest All Subject",
+			subject_slug="latest-all-subject",
+			team=self.team,
+			auto_predict=True,
+			ml_consensus_type="all",
+		)
+
+	def _make_article(self, title, link):
+		return Articles.objects.create(title=title, link=link)
+
+	def _predict(self, article, subject, algorithm, score, model_version, days_ago=0):
+		"""Create a prediction, optionally backdated (created_date is auto_now_add,
+		so backdating must bypass save() via a queryset .update())."""
+		pred = MLPredictions.objects.create(
+			article=article,
+			subject=subject,
+			algorithm=algorithm,
+			model_version=model_version,
+			probability_score=score,
+			predicted_relevant=score >= 0.5,
+		)
+		if days_ago:
+			MLPredictions.objects.filter(pk=pred.pk).update(
+				created_date=timezone.now() - timedelta(days=days_ago)
+			)
+		return pred
+
+	def test_superseded_high_score_clears_flag(self):
+		"""Old model_version scored 0.9; the retrained latest scored 0.3.
+		Only the latest counts, so the flag must be False after recompute."""
+		article = self._make_article("Superseded high", "https://example.com/lp1")
+		article.subjects.add(self.subject_any)
+		self._predict(article, self.subject_any, "pubmed_bert", 0.9, "v1", days_ago=10)
+		self._predict(article, self.subject_any, "pubmed_bert", 0.3, "v2")
+
+		recompute_article_relevance()
+		article.refresh_from_db()
+		self.assertFalse(
+			article.relevant,
+			"A stale superseded prediction must not keep the article relevant",
+		)
+
+	def test_superseded_low_score_sets_flag(self):
+		"""Reverse: old model_version scored low, the retrained latest scored high."""
+		article = self._make_article("Superseded low", "https://example.com/lp2")
+		article.subjects.add(self.subject_any)
+		self._predict(article, self.subject_any, "pubmed_bert", 0.3, "v1", days_ago=10)
+		self._predict(article, self.subject_any, "pubmed_bert", 0.9, "v2")
+
+		recompute_article_relevance()
+		article.refresh_from_db()
+		self.assertTrue(article.relevant)
+
+	def test_majority_consensus_on_latest_predictions_only(self):
+		"""Majority (>=2 algorithms): two algorithms' old predictions passed, but
+		one algorithm's latest dropped below threshold -> only 1 qualifies -> False.
+		Raising a third algorithm's latest above threshold restores majority -> True."""
+		article = self._make_article("Majority latest", "https://example.com/lp3")
+		article.subjects.add(self.subject_majority)
+
+		# pubmed_bert: latest still passes.
+		self._predict(article, self.subject_majority, "pubmed_bert", 0.9, "v1", days_ago=10)
+		self._predict(article, self.subject_majority, "pubmed_bert", 0.85, "v2")
+		# lgbm_tfidf: old passed, retrained latest dropped below threshold.
+		self._predict(article, self.subject_majority, "lgbm_tfidf", 0.9, "v1", days_ago=10)
+		self._predict(article, self.subject_majority, "lgbm_tfidf", 0.2, "v2")
+
+		recompute_article_relevance()
+		article.refresh_from_db()
+		self.assertFalse(
+			article.relevant,
+			"One qualifying latest prediction must not satisfy majority consensus",
+		)
+
+		self._predict(article, self.subject_majority, "lstm", 0.9, "v1")
+		recompute_article_relevance()
+		article.refresh_from_db()
+		self.assertTrue(article.relevant)
+
+	def test_all_consensus_on_latest_predictions_only(self):
+		"""Unanimous (>=3 algorithms): all three passed historically, but one
+		algorithm's latest dropped below threshold -> False."""
+		article = self._make_article("All latest", "https://example.com/lp4")
+		article.subjects.add(self.subject_all)
+
+		self._predict(article, self.subject_all, "pubmed_bert", 0.9, "v1", days_ago=10)
+		self._predict(article, self.subject_all, "lgbm_tfidf", 0.9, "v1", days_ago=10)
+		self._predict(article, self.subject_all, "lstm", 0.9, "v1", days_ago=10)
+		# lstm retrained and dropped below threshold.
+		self._predict(article, self.subject_all, "lstm", 0.4, "v2")
+
+		recompute_article_relevance()
+		article.refresh_from_db()
+		self.assertFalse(
+			article.relevant,
+			"A stale unanimous consensus must not survive one algorithm's latest drop",
+		)
+
+	def test_manual_relevance_wins_despite_stale_predictions(self):
+		"""Manual ArticleSubjectRelevance keeps the flag True regardless of ML state."""
+		article = self._make_article("Manual wins", "https://example.com/lp5")
+		article.subjects.add(self.subject_any)
+		self._predict(article, self.subject_any, "pubmed_bert", 0.9, "v1", days_ago=10)
+		self._predict(article, self.subject_any, "pubmed_bert", 0.1, "v2")
+		ArticleSubjectRelevance.objects.create(
+			article=article, subject=self.subject_any, is_relevant=True
+		)
+
+		recompute_article_relevance()
+		article.refresh_from_db()
+		self.assertTrue(article.relevant)

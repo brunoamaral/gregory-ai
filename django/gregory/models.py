@@ -4,7 +4,7 @@ from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
-from django.db.models import GeneratedField, Q
+from django.db.models import GeneratedField, Max, OuterRef, Q, Subquery
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Upper
 from django.utils.text import slugify
@@ -632,6 +632,12 @@ class Articles(models.Model):
 		Check if this article is ML-relevant for a specific subject based on the subject's consensus type
 		and probability threshold.
 
+		Only the latest prediction per algorithm for this (article, subject) pair counts —
+		a retired model_version's stale score must not keep an article "relevant" forever
+		after a retrain. Ties on created_date are all considered: the algorithm qualifies
+		if any tied latest row does, matching api.filters._get_ml_relevant_articles_query
+		and gregory.relevance.recompute_article_relevance.
+
 		Args:
 			subject: Subject instance to check relevance for
 			threshold: Minimum probability score required (default: 0.8)
@@ -639,17 +645,34 @@ class Articles(models.Model):
 		Returns:
 			bool: True if article meets the ML consensus criteria for the subject
 		"""
-		# Get all ML predictions for this article and subject that meet the threshold
-		predictions = self.ml_predictions_detail.filter(
-			subject=subject, predicted_relevant=True, probability_score__gte=threshold
-		).values_list("algorithm", flat=True)
+		# Latest created_date per algorithm for this article+subject pair. Filtering
+		# on created_date equal to that maximum keeps every tied latest row, unlike
+		# DISTINCT ON, which would pick one tied row arbitrarily.
+		latest_date_per_algorithm = (
+			MLPredictions.objects.filter(
+				article=self,
+				subject=subject,
+				algorithm=OuterRef("algorithm"),
+			)
+			.values("algorithm")
+			.annotate(latest=Max("created_date"))
+			.values("latest")[:1]
+		)
 
-		if not predictions.exists():
-			return False
-
-		# Count unique algorithms that predicted relevant with sufficient confidence
-		relevant_algorithms = set(predictions)
+		# Count unique algorithms whose *latest* prediction predicted relevant with
+		# sufficient confidence.
+		relevant_algorithms = set(
+			self.ml_predictions_detail.filter(
+				subject=subject,
+				predicted_relevant=True,
+				probability_score__gte=threshold,
+				created_date=Subquery(latest_date_per_algorithm),
+			).values_list("algorithm", flat=True)
+		)
 		total_predictions = len(relevant_algorithms)
+
+		if total_predictions == 0:
+			return False
 
 		# Apply consensus logic based on subject's ml_consensus_type
 		if subject.ml_consensus_type == "any":
