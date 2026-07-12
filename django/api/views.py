@@ -84,6 +84,7 @@ from rest_framework.response import Response
 from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
+import hashlib
 import json
 import logging
 import traceback
@@ -222,6 +223,104 @@ class OrgVisibilityMixin:
 			)
 			return qs.filter(Exists(subq))
 		return qs.filter(**{f"{self._org_filter_path}__in": self.request.visible_org_ids})
+
+
+class CachedStatsActionMixin:
+	"""
+	Shared machinery for filter-scoped, cached ``GET /<resource>/stats/`` actions.
+
+	Subclasses set ``stats_cache_prefix`` (a per-endpoint string such as
+	``"trials_stats"``) and implement ``build_stats_payload(filtered_qs)``
+	returning a JSON-serialisable dict. The action itself then only calls
+	``self._stats_response(request)``, which:
+
+	  1. builds a tenant-safe cache key and returns the cached payload when
+	     present;
+	  2. otherwise runs ``self.filter_queryset(self.get_queryset())`` — so
+	     every filterset parameter AND OrgVisibilityMixin's tenant scoping
+	     apply to the stats exactly as they do to the list — builds the
+	     payload, and caches it for ``settings.STATS_CACHE_TTL`` seconds in
+	     the shared database cache.
+
+	SECURITY: the cache key incorporates (a) the caller's sorted visible
+	org ids, (b) the sorted normalised query string, and (c) the per-endpoint
+	prefix, hashed with sha256 to bound key length for the DB cache. All
+	three are load-bearing — dropping the org ids or the query string would
+	serve one tenant's cached numbers to another caller.
+	"""
+
+	#: Per-endpoint cache-key prefix; must be unique across stats actions.
+	stats_cache_prefix = None
+
+	#: Query params that never change a stats payload — excluded from the
+	#: cache key so paginated list navigation can't fragment the cache.
+	_stats_key_ignored_params = frozenset({"page", "page_size", "all_results"})
+
+	def _stats_cache_key(self, request):
+		visible_org_ids = getattr(request, "visible_org_ids", None)
+		orgs = (
+			None if visible_org_ids is None else sorted(visible_org_ids)
+		)
+		# JSON of sorted (key, value) pairs is an unambiguous encoding: naive
+		# "k=v&k=v" concatenation lets a param value containing '&' or '=' (easy
+		# via ?search=) collide two different filter sets into one cache key.
+		params = sorted(
+			(key, value)
+			for key in request.query_params.keys()
+			if key not in self._stats_key_ignored_params
+			for value in request.query_params.getlist(key)
+		)
+		digest = hashlib.sha256(
+			json.dumps({"orgs": orgs, "params": params}).encode()
+		).hexdigest()
+		return f"{self.stats_cache_prefix}:{digest}"
+
+	def _stats_response(self, request):
+		cache_key = self._stats_cache_key(request)
+		cached = cache.get(cache_key)
+		if cached is not None:
+			return Response(cached)
+
+		filtered_qs = self.filter_queryset(self.get_queryset())
+		payload = self.build_stats_payload(filtered_qs)
+		cache.set(cache_key, payload, settings.STATS_CACHE_TTL)
+		return Response(payload)
+
+	def _by_subject_counts(self, filtered_qs):
+		"""``[{"subject_id", "subject_name", "count"}]`` over *filtered_qs*.
+
+		Aggregates off the ``<model>.subjects`` M2M through-table (plain FK
+		joins — immune to the row-duplication ambiguity of stacking filters
+		on a multi-valued relation) with a distinct count per parent row.
+
+		SECURITY: an article/trial visible to the caller can be tagged with
+		a subject belonging to a NON-visible org. The list serializers strip
+		such subjects (OrgScopedSerializerMixin); the stats must not leak
+		them either, so when ``request.visible_org_ids`` exists only subjects
+		whose team's organisation is visible are included.
+		"""
+		model = filtered_qs.model
+		through = model.subjects.through
+		source_field = model._meta.model_name  # e.g. "articles" / "trials"
+		qs = through.objects.filter(
+			**{f"{source_field}__in": filtered_qs.order_by().values("pk")}
+		)
+		visible_org_ids = getattr(self.request, "visible_org_ids", None)
+		if visible_org_ids is not None:
+			qs = qs.filter(subject__team__organization_id__in=visible_org_ids)
+		rows = (
+			qs.values("subject_id", "subject__subject_name")
+			.annotate(count=Count(f"{source_field}_id", distinct=True))
+			.order_by("-count", "subject_id")
+		)
+		return [
+			{
+				"subject_id": row["subject_id"],
+				"subject_name": row["subject__subject_name"],
+				"count": row["count"],
+			}
+			for row in rows
+		]
 
 
 def getDateRangeFromWeek(p_year, p_week):
@@ -915,7 +1014,11 @@ def edit_trial(request):
 # ARTICLES
 ###
 class ArticleViewSet(
-	BulkExportThrottleMixin, CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet
+	BulkExportThrottleMixin,
+	CSVStreamingMixin,
+	OrgVisibilityMixin,
+	CachedStatsActionMixin,
+	viewsets.ReadOnlyModelViewSet,
 ):
 	"""
 	List all articles in the database with comprehensive filtering options.
@@ -951,6 +1054,16 @@ class ArticleViewSet(
 	Invalid or non-ISO-8601 dates return **400 Bad Request**.
 	- **published_date_after** - articles published on or after this date (YYYY-MM-DD, inclusive)
 	- **published_date_before** - articles published on or before this date (YYYY-MM-DD, inclusive — the full day is included)
+
+	# Stats Endpoint:
+	`GET /articles/stats/` returns aggregate counts over the filtered queryset: `total`
+	(distinct articles), `by_access` (`{open, restricted, unknown}` — articles without an
+	access value are folded into `unknown`), `relevant`, `retracted`, `missing_doi`, and a
+	`by_subject` breakdown (`[{subject_id, subject_name, count}]`, distinct per article,
+	restricted to subjects visible to the caller). It accepts the same query parameters as
+	the list endpoint, so e.g. `/articles/stats/?team_id=1&relevant=true` scopes the counts
+	exactly like the equivalent list request. Results are cached server-side for
+	STATS_CACHE_TTL seconds (default 600).
 
 	# Response Fields:
 	Each article includes a **ml_score** field: the average ML probability score across the most recent
@@ -1034,6 +1147,72 @@ class ArticleViewSet(
 				)
 			)
 		return qs
+
+	stats_cache_prefix = "articles_stats"
+
+	@action(detail=False, methods=["get"], url_path="stats")
+	def stats(self, request):
+		"""Aggregate counts over the filtered queryset.
+
+		Accepts the same query parameters as the list endpoint (team_id,
+		subject_id, relevant, search, …) and the same org-visibility
+		scoping, so the counts always match what the equivalent list
+		request would return. Cached server-side; see
+		``CachedStatsActionMixin``.
+		"""
+		return self._stats_response(request)
+
+	def build_stats_payload(self, filtered_qs):
+		# The list queryset carries heavy prefetches for the serializer;
+		# aggregate queries (.values()/.aggregate()) never execute
+		# prefetch_related, so none of that cost is paid here. Clear
+		# ordering to prevent GROUP BY pollution; distinct counts guard
+		# against join row-duplication (e.g. an article in two teams).
+		qs = filtered_qs.order_by()
+
+		access_counts = {
+			row["access"]: row["count"]
+			for row in qs.values("access").annotate(
+				count=Count("article_id", distinct=True)
+			)
+		}
+		# Fold NULL (never checked) and any non-canonical value into
+		# "unknown" — consumers shouldn't see the internal NULL/'unknown'
+		# split.
+		by_access = {
+			"open": access_counts.get("open", 0),
+			"restricted": access_counts.get("restricted", 0),
+			"unknown": sum(
+				count
+				for key, count in access_counts.items()
+				if key not in ("open", "restricted")
+			),
+		}
+
+		flags = qs.aggregate(
+			relevant=Count(
+				"article_id", distinct=True, filter=Q(relevant=True)
+			),
+			retracted=Count(
+				"article_id", distinct=True, filter=Q(retracted=True)
+			),
+			missing_doi=Count(
+				"article_id",
+				distinct=True,
+				filter=Q(doi__isnull=True) | Q(doi=""),
+			),
+		)
+
+		return {
+			# access groups are disjoint per article, so their distinct
+			# counts sum to the distinct total without a separate query.
+			"total": sum(access_counts.values()),
+			"by_access": by_access,
+			"relevant": flags["relevant"],
+			"retracted": flags["retracted"],
+			"missing_doi": flags["missing_doi"],
+			"by_subject": self._by_subject_counts(filtered_qs),
+		}
 
 
 ###
@@ -1340,7 +1519,11 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class TrialViewSet(
-	BulkExportThrottleMixin, CSVStreamingMixin, OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet
+	BulkExportThrottleMixin,
+	CSVStreamingMixin,
+	OrgVisibilityMixin,
+	CachedStatsActionMixin,
+	viewsets.ReadOnlyModelViewSet,
 ):
 	"""
 	List all clinical trials by discovery date with comprehensive filtering options.
@@ -1360,6 +1543,17 @@ class TrialViewSet(
 	- **page** - page number for pagination
 	- **page_size** - items per page (max 100)
 	- **all_results** - set to 'true' to bypass pagination and get all results (useful for CSV export)
+
+	# Stats Endpoint:
+	`GET /trials/stats/` returns recruitment-status totals (total, recruiting, completed, …)
+	plus a `by_subject` breakdown (`[{subject_id, subject_name, count}]`, distinct per trial,
+	restricted to subjects visible to the caller) computed over the filtered queryset. It
+	accepts the same query parameters as the list endpoint, so e.g.
+	`/trials/stats/?team_id=1&status=Recruiting` scopes the totals exactly like the
+	equivalent list request. Results are cached server-side for STATS_CACHE_TTL seconds
+	(default 600). **Breaking change:** the `stats` block that used to be embedded in
+	every paginated list response has moved here — list responses no longer include it, and
+	clients that relied on `response.data["stats"]` must call `/trials/stats/` instead.
 
 	# Registry Identifier Parameters:
 	Each accepts one or more comma-separated values and returns trials matching *any* of them
@@ -1456,41 +1650,52 @@ class TrialViewSet(
 	]
 	ordering = ["-discovery_date"]
 
-	def list(self, request, *args, **kwargs):
-		response = super().list(request, *args, **kwargs)
-		# Only inject stats into JSON responses (not CSV)
-		if isinstance(response.data, dict):
-			filtered_qs = self.filter_queryset(self.get_queryset())
-			# Single aggregation query — clear ordering to prevent GROUP BY pollution
-			status_counts = {
-				item["recruitment_status"]: item["count"]
-				for item in filtered_qs.order_by()
-				.values("recruitment_status")
-				.annotate(count=Count("trial_id"))
-			}
+	stats_cache_prefix = "trials_stats"
 
-			def _sum(*keys):
-				return sum(status_counts.get(k, 0) for k in keys)
+	@action(detail=False, methods=["get"], url_path="stats")
+	def stats(self, request):
+		"""Recruitment-status totals over the filtered queryset.
 
-			response.data["stats"] = {
-				"total": sum(status_counts.values()),
-				"no_status": status_counts.get(None, 0),
-				"recruiting": _sum("Recruiting", "RECRUITING"),
-				"active_not_recruiting": _sum(
-					"ACTIVE_NOT_RECRUITING", "Not recruiting", "Not Recruiting"
-				),
-				"not_yet_recruiting": _sum("NOT_YET_RECRUITING"),
-				"completed": _sum("COMPLETED"),
-				"enrolling_by_invitation": _sum("ENROLLING_BY_INVITATION"),
-				"terminated": _sum("TERMINATED"),
-				"suspended": _sum("SUSPENDED"),
-				"withdrawn": _sum("WITHDRAWN"),
-				"available": _sum("AVAILABLE"),
-				"not_available": _sum("Not Available"),
-				"withheld": _sum("WITHHELD"),
-				"authorised": _sum("Authorised"),
-			}
-		return response
+		Accepts the same query parameters as the list endpoint (team_id,
+		subject_id, status, search, registry identifiers, …) and the same
+		org-visibility scoping, so the totals always match what the
+		equivalent list request would return. Cached server-side; see
+		``CachedStatsActionMixin``.
+		"""
+		return self._stats_response(request)
+
+	def build_stats_payload(self, filtered_qs):
+		# Single aggregation query — clear ordering to prevent GROUP BY pollution.
+		# distinct=True guards against double-counting a trial visible under two teams.
+		status_counts = {
+			item["recruitment_status"]: item["count"]
+			for item in filtered_qs.order_by()
+			.values("recruitment_status")
+			.annotate(count=Count("trial_id", distinct=True))
+		}
+
+		def _sum(*keys):
+			return sum(status_counts.get(k, 0) for k in keys)
+
+		return {
+			"total": sum(status_counts.values()),
+			"no_status": status_counts.get(None, 0),
+			"recruiting": _sum("Recruiting", "RECRUITING"),
+			"active_not_recruiting": _sum(
+				"ACTIVE_NOT_RECRUITING", "Not recruiting", "Not Recruiting"
+			),
+			"not_yet_recruiting": _sum("NOT_YET_RECRUITING"),
+			"completed": _sum("COMPLETED"),
+			"enrolling_by_invitation": _sum("ENROLLING_BY_INVITATION"),
+			"terminated": _sum("TERMINATED"),
+			"suspended": _sum("SUSPENDED"),
+			"withdrawn": _sum("WITHDRAWN"),
+			"available": _sum("AVAILABLE"),
+			"not_available": _sum("Not Available"),
+			"withheld": _sum("WITHHELD"),
+			"authorised": _sum("Authorised"),
+			"by_subject": self._by_subject_counts(filtered_qs),
+		}
 
 
 ###

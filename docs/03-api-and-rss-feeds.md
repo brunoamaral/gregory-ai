@@ -146,6 +146,7 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Articles | `GET /articles/` | `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `unsent`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
 | Articles | `POST /articles/post/` | `title`, `link`, `doi`, `summary`, `source_id`, `kind` | Create article — see [response codes below](#post-articlespost-response-codes) |
 | Articles | `GET /articles/{id}/` | `id` (path) | |
+| Articles | `GET /articles/stats/` | Same filters as `GET /articles/` | Aggregate counts over the filtered set: `total`, `by_access` (NULL folded into `unknown`), `relevant`, `retracted`, `missing_doi`, `by_subject`. Cached for `STATS_CACHE_TTL` seconds |
 | Articles | `GET /articles/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `format`, `all_results` | See [article-search-api.md](article-search-api.md) |
 | Articles | `POST /articles/search/` | Same fields in request body | |
 | Authors | `GET /authors/` | `author_id`, `full_name`, `orcid`, `country`, `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe` | See [authors-api.md](authors-api.md) |
@@ -166,6 +167,7 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Teams | `GET /teams/{id}/subjects/{subject_id}/categories/` | `id`, `subject_id` (path) | |
 | Trials | `GET /trials/` | `team_id`, `subject_id`, `category_id`, `source_id`, `status`, `search`, `ordering`, trial-specific filters, pagination | See parameter details below |
 | Trials | `GET /trials/{id}/` | `id` (path) | |
+| Trials | `GET /trials/stats/` | Same filters as `GET /trials/` | Recruitment-status totals plus `by_subject` over the filtered set. Replaces the `stats` block formerly embedded in `GET /trials/` list responses (breaking change). Cached for `STATS_CACHE_TTL` seconds |
 | Trials | `GET /trials/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `status`, `format`, `all_results` | See [trial-search-api.md](trial-search-api.md) |
 | Trials | `POST /trials/search/` | Same fields in request body | |
 | Email templates | `GET /emails/` | None | Template preview dashboard |
