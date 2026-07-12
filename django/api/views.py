@@ -2392,11 +2392,14 @@ class ArticleSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 				raise Http404
 
 		try:
-			# Start with articles filtered by team and subject
-			# Remove distinct constraint to allow proper ordering
-			queryset = Articles.objects.filter(
-				teams__id=team_id, subjects__id=subject_id
-			).distinct()
+			# Filter via a correlated Exists() subquery instead of joining the
+			# teams/subjects M2M tables and calling .distinct() on the outer
+			# queryset — DISTINCT-ing every serialized column defeats DRF's
+			# paginator COUNT(*) at scale. See OrgVisibilityMixin.get_queryset.
+			match_subq = Articles.objects.filter(
+				pk=OuterRef("pk"), teams__id=team_id, subjects__id=subject_id
+			)
+			queryset = Articles.objects.filter(Exists(match_subq))
 
 			# Apply additional filters
 			title = params.get("title")
@@ -2432,6 +2435,19 @@ class ArticleSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 					queryset=ArticleTrialReference.objects.select_related("trial"),
 				),
 			)
+
+			# Prefetch the caller-org's ArticleOrgContent so the serializer's
+			# per-org fields don't issue one query per article. Mirrors
+			# ArticleViewSet.get_queryset.
+			org = _resolve_per_org_fields_org(self.request)
+			if org is not None:
+				queryset = queryset.prefetch_related(
+					Prefetch(
+						"org_contents",
+						queryset=ArticleOrgContent.objects.filter(organization=org),
+						to_attr="_prefetched_org_contents",
+					)
+				)
 
 			return queryset
 		except (AttributeError, TypeError, ValueError) as e:
@@ -2620,9 +2636,12 @@ class TrialSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 		except (Team.DoesNotExist, Subject.DoesNotExist):
 			return Trials.objects.none()
 
-		# Start with trials filtered by team and subject
-		# Remove distinct constraint to allow proper ordering
-		queryset = Trials.objects.filter(teams=team, subjects=subject).distinct()
+		# Filter via a correlated Exists() subquery instead of joining the
+		# teams/subjects M2M tables and calling .distinct() on the outer
+		# queryset — DISTINCT-ing every serialized column defeats DRF's
+		# paginator COUNT(*) at scale. See OrgVisibilityMixin.get_queryset.
+		match_subq = Trials.objects.filter(pk=OuterRef("pk"), teams=team, subjects=subject)
+		queryset = Trials.objects.filter(Exists(match_subq))
 
 		# Apply additional filters
 		title = params.get("title")
@@ -2652,6 +2671,19 @@ class TrialSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 		queryset = queryset.prefetch_related(
 			"sources", "team_categories", "article_references__article"
 		)
+
+		# Prefetch the caller-org's TrialOrgContent so the serializer's
+		# per-org fields don't issue one query per trial. Mirrors
+		# TrialViewSet.get_queryset.
+		org = _resolve_per_org_fields_org(self.request)
+		if org is not None:
+			queryset = queryset.prefetch_related(
+				Prefetch(
+					"org_contents",
+					queryset=TrialOrgContent.objects.filter(organization=org),
+					to_attr="_prefetched_org_contents",
+				)
+			)
 
 		return queryset
 
