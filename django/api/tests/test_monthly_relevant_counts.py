@@ -223,3 +223,269 @@ class MonthlyRelevantCountsTest(TestCase):
 			sorted(counts["available_models"]),
 			["lgbm_tfidf", "lstm", "pubmed_bert"],
 		)
+
+
+class MonthlyCountsPerModelLatestPredictionTest(TestCase):
+	"""
+	Regression coverage for the perf/monthly-counts-rewrite N+1 fix in
+	CategorySerializer.get_monthly_counts.
+
+	The per-model series in monthly_ml_article_counts_by_model must reflect
+	only the LATEST prediction for a given (article, algorithm) pair: an
+	article whose latest prediction for that algorithm dropped below
+	threshold must not be counted even if an older prediction cleared it, and
+	an article whose latest prediction rose above threshold must be counted
+	even if an older one didn't.
+	"""
+
+	def setUp(self):
+		self.client = APIClient()
+
+		org = Organization.objects.create(
+			name="Latest Pred Org", slug="latest-pred-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=org).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			organization=org, name="Latest Pred Team", slug="latest-pred-team"
+		)
+		self.subject = Subject.objects.create(
+			team=self.team,
+			subject_name="Latest Pred Subj",
+			subject_slug="latest-pred-subj",
+		)
+		self.category = TeamCategory.objects.create(
+			team=self.team,
+			category_name="Latest Pred Category",
+			category_slug="latest-pred-category",
+		)
+		self.category.subjects.add(self.subject)
+
+		# Superseded DOWN: an old lstm prediction cleared the threshold, but the
+		# newest lstm prediction for the same article dropped below it. Must NOT
+		# appear in the lstm series.
+		self.article_down = self._article("Superseded down", APRIL)
+		old_high = self._predict(self.article_down, "lstm", 0.9, model_version="v1")
+		MLPredictions.objects.filter(pk=old_high.pk).update(
+			created_date=now() - timedelta(days=10)
+		)
+		self._predict(self.article_down, "lstm", 0.1, model_version="v2")
+
+		# Superseded UP: an old lstm prediction was below threshold, but the
+		# newest lstm prediction for the same article cleared it. Must appear in
+		# the lstm series.
+		self.article_up = self._article("Superseded up", APRIL.replace(day=20))
+		old_low = self._predict(self.article_up, "lstm", 0.1, model_version="v1")
+		MLPredictions.objects.filter(pk=old_low.pk).update(
+			created_date=now() - timedelta(days=10)
+		)
+		self._predict(self.article_up, "lstm", 0.9, model_version="v2")
+
+	def _article(self, title, published_date):
+		article = Articles.objects.create(
+			title=title,
+			link=f"https://example.com/{title.lower().replace(' ', '-')}",
+			published_date=published_date,
+		)
+		article.team_categories.add(self.category)
+		return article
+
+	def _predict(self, article, algorithm, score, model_version="v1"):
+		return MLPredictions.objects.create(
+			article=article,
+			subject=self.subject,
+			algorithm=algorithm,
+			model_version=model_version,
+			probability_score=score,
+			predicted_relevant=score >= 0.5,
+		)
+
+	def _get_monthly_counts(self, **params):
+		query = {
+			"team_id": self.team.id,
+			"category_id": self.category.id,
+			"monthly_counts": "true",
+			"include_authors": "false",
+		}
+		query.update(params)
+		resp = self.client.get("/categories/", query)
+		self.assertEqual(resp.status_code, 200)
+		results = resp.json()["results"]
+		self.assertEqual(len(results), 1)
+		return results[0]["monthly_counts"]
+
+	@staticmethod
+	def _by_month(series):
+		return {entry["month"]: entry["count"] for entry in series}
+
+	def test_only_the_currently_qualifying_article_is_counted(self):
+		counts = self._get_monthly_counts()
+		lstm = self._by_month(counts["monthly_ml_article_counts_by_model"]["lstm"])
+		april_total = sum(v for k, v in lstm.items() if k and k.startswith("2025-04"))
+		# Two articles exist in April; only "Superseded up" currently qualifies
+		# for lstm (latest prediction 0.9 >= 0.5). "Superseded down" does not
+		# (latest prediction 0.1 < 0.5), even though its older prediction was 0.9.
+		self.assertEqual(april_total, 1)
+
+		totals = self._by_month(counts["monthly_article_counts"])
+		april_articles_total = sum(
+			v for k, v in totals.items() if k and k.startswith("2025-04")
+		)
+		self.assertEqual(april_articles_total, 2)
+
+
+class MonthlyCountsAvailableModelsTest(TestCase):
+	"""
+	available_models must reflect every algorithm present among the category's
+	predictions, independent of whether that algorithm's latest score clears
+	ml_threshold -- available_models is not threshold-filtered.
+	"""
+
+	def setUp(self):
+		self.client = APIClient()
+
+		org = Organization.objects.create(
+			name="Avail Models Org", slug="avail-models-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=org).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			organization=org, name="Avail Models Team", slug="avail-models-team"
+		)
+		self.subject = Subject.objects.create(
+			team=self.team,
+			subject_name="Avail Models Subj",
+			subject_slug="avail-models-subj",
+		)
+		self.category = TeamCategory.objects.create(
+			team=self.team,
+			category_name="Avail Models Category",
+			category_slug="avail-models-category",
+		)
+		self.category.subjects.add(self.subject)
+
+		article = Articles.objects.create(
+			title="Below threshold algo",
+			link="https://example.com/below-threshold-algo",
+			published_date=APRIL,
+		)
+		article.team_categories.add(self.category)
+		MLPredictions.objects.create(
+			article=article,
+			subject=self.subject,
+			algorithm="lgbm_tfidf",
+			model_version="v1",
+			probability_score=0.1,
+			predicted_relevant=False,
+		)
+
+	def _get_monthly_counts(self, **params):
+		query = {
+			"team_id": self.team.id,
+			"category_id": self.category.id,
+			"monthly_counts": "true",
+			"include_authors": "false",
+		}
+		query.update(params)
+		resp = self.client.get("/categories/", query)
+		self.assertEqual(resp.status_code, 200)
+		results = resp.json()["results"]
+		self.assertEqual(len(results), 1)
+		return results[0]["monthly_counts"]
+
+	def test_available_models_includes_below_threshold_algorithm(self):
+		counts = self._get_monthly_counts()
+		self.assertIn("lgbm_tfidf", counts["available_models"])
+		# But its per-model series has no qualifying months: available_models is
+		# not threshold-filtered even though the per-model series is.
+		self.assertEqual(counts["monthly_ml_article_counts_by_model"]["lgbm_tfidf"], [])
+
+
+class MonthlyCountsQueryBudgetTest(TestCase):
+	"""
+	Query-count regression guard for CategorySerializer.get_monthly_counts.
+
+	Before the perf/monthly-counts-rewrite fix, this method issued one query
+	per (article, algorithm) pair in two separate Python loops -- tens of
+	thousands of queries for a real category (measured: ~22s / 9000+ queries
+	for a 7,364-article category against the dev DB). After the fix the method
+	issues a small, roughly-constant number of queries independent of article
+	count.
+	"""
+
+	def setUp(self):
+		self.client = APIClient()
+
+		org = Organization.objects.create(name="Budget Org", slug="budget-org")
+		OrganizationApiSettings.objects.filter(organization=org).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			organization=org, name="Budget Team", slug="budget-team"
+		)
+		self.subject = Subject.objects.create(
+			team=self.team, subject_name="Budget Subj", subject_slug="budget-subj"
+		)
+		self.category = TeamCategory.objects.create(
+			team=self.team,
+			category_name="Budget Category",
+			category_slug="budget-category",
+		)
+		self.category.subjects.add(self.subject)
+
+		algorithms = ["lstm", "pubmed_bert", "lgbm_tfidf"]
+		for i in range(30):
+			article = Articles.objects.create(
+				title=f"Budget article {i}",
+				link=f"https://example.com/budget-{i}",
+				published_date=APRIL.replace(day=1) + timedelta(days=i % 27),
+			)
+			article.team_categories.add(self.category)
+			for algo in algorithms:
+				MLPredictions.objects.create(
+					article=article,
+					subject=self.subject,
+					algorithm=algo,
+					model_version="v1",
+					probability_score=0.9,
+					predicted_relevant=True,
+				)
+
+	def test_query_budget_stays_small_regardless_of_article_count(self):
+		"""
+		Query budget for a monthly_counts=true request against this fixture (30
+		articles x 3 algorithms), empirically measured at 15 queries: roughly 7
+		from get_monthly_counts itself (1 monthly_article_counts + 1
+		available_models + 3 -- one aggregate query per model in
+		ml_counts_by_model -- + 1 relevant_counts + 1 trial_counts) plus the
+		remainder from the surrounding view/pagination/auth machinery (org
+		visibility check, category queryset, authors_count, top_authors, etc.).
+		Under the old N+1 implementation this fixture would have issued 30 + 90 =
+		120+ extra per-pair `.first()` queries on top of that. Assert a bound
+		with a little slack (empirical value + a few queries) so a regression
+		toward per-article or per-pair querying can't creep back in silently.
+		"""
+		from django.db import connection
+		from django.test.utils import CaptureQueriesContext
+
+		with CaptureQueriesContext(connection) as ctx:
+			resp = self.client.get(
+				"/categories/",
+				{
+					"team_id": self.team.id,
+					"category_id": self.category.id,
+					"monthly_counts": "true",
+					"include_authors": "false",
+				},
+			)
+		self.assertEqual(resp.status_code, 200)
+		self.assertLessEqual(
+			len(ctx.captured_queries),
+			18,
+			msg=(
+				"monthly_counts=true request exceeded the query budget: "
+				f"{len(ctx.captured_queries)} queries"
+			),
+		)
