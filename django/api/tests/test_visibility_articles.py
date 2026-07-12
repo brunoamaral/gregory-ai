@@ -9,7 +9,6 @@ Covers the four caller archetypes × the test matrix from the PR plan:
   - Article spanning caller's org + a private org (listing + association stripping)
   - Detail endpoint: all-hidden teams → 404
   - ArticleSearchView: team_id of hidden team → 404
-  - Legacy endpoints: /teams/<id>/articles/ honours visibility
 
 Run with:
     docker exec gregory python manage.py test api.tests.test_visibility_articles
@@ -195,14 +194,6 @@ class AnonymousArticleVisibilityTest(ArticleVisibilityBase):
 				"subject_id": self.pub_subj.id,
 			},
 		)
-		self.assertEqual(resp.status_code, 200)
-
-	def test_legacy_team_endpoint_hidden_team_returns_404(self):
-		resp = self.client.get(f"/teams/{self.my_team.id}/articles/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_legacy_team_endpoint_public_team_returns_200(self):
-		resp = self.client.get(f"/teams/{self.pub_team.id}/articles/")
 		self.assertEqual(resp.status_code, 200)
 
 

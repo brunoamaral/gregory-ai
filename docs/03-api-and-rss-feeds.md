@@ -318,12 +318,12 @@ This endpoint requires an `APIAccessScheme` API key (sent as the raw value in th
 
 ---
 
-## Deprecated team-based endpoints
+## Removed team-based endpoints
 
-The following URL patterns still function but are deprecated. Migrate to the parameter-based equivalents shown:
+The following URL patterns have been removed (they now return `404 Not Found`). Use the parameter-based equivalents shown instead:
 
-| Deprecated | Preferred equivalent |
-|:-----------|:--------------------|
+| Removed | Replacement |
+|:--------|:------------|
 | `GET /teams/{id}/articles/` | `GET /articles/?team_id={id}` |
 | `GET /teams/{id}/articles/subject/{subject_id}/` | `GET /articles/?team_id={id}&subject_id={subject_id}` |
 | `GET /teams/{id}/articles/category/{category_slug}/` | `GET /articles/?team_id={id}&category_slug={slug}` |
@@ -331,6 +331,8 @@ The following URL patterns still function but are deprecated. Migrate to the par
 | `GET /teams/{id}/subjects/` | `GET /subjects/?team_id={id}` |
 
 The parameter-based approach supports combining any set of filters in a single request.
+
+Note: `GET /teams/{id}/subjects/{subject_id}/categories/` is unaffected and continues to work.
 
 ---
 

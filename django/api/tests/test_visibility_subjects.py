@@ -4,7 +4,6 @@ Tests for subject visibility enforcement (PR 5).
 Covers:
   - SubjectsViewSet list/detail: only subjects whose team.organization is visible
   - Detail endpoint 404s when subject belongs to a hidden org
-  - SubjectsByTeam: parent team hidden → 404 on the parent path
   - Four caller archetypes × the standard test matrix
 
 Run with:
@@ -110,14 +109,6 @@ class AnonymousSubjectVisibilityTest(SubjectVisibilityBase):
 		resp = self.client.get(f"/subjects/{self.subj_pub.id}/")
 		self.assertEqual(resp.status_code, 200)
 
-	def test_subjects_by_team_hidden_team_returns_404(self):
-		resp = self.client.get(f"/teams/{self.my_team.id}/subjects/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_subjects_by_team_public_team_returns_200(self):
-		resp = self.client.get(f"/teams/{self.pub_team.id}/subjects/")
-		self.assertEqual(resp.status_code, 200)
-
 
 # ---------------------------------------------------------------------------
 # Authenticated user (member of my_org)
@@ -161,14 +152,6 @@ class AuthenticatedUserSubjectVisibilityTest(SubjectVisibilityBase):
 		resp = self.client.get(f"/subjects/{self.subj_mine.id}/")
 		self.assertEqual(resp.status_code, 200)
 
-	def test_subjects_by_team_own_team_returns_200(self):
-		resp = self.client.get(f"/teams/{self.my_team.id}/subjects/")
-		self.assertEqual(resp.status_code, 200)
-
-	def test_subjects_by_team_hidden_team_returns_404(self):
-		resp = self.client.get(f"/teams/{self.priv_team.id}/subjects/")
-		self.assertEqual(resp.status_code, 404)
-
 
 # ---------------------------------------------------------------------------
 # API key caller (bound to my_org)
@@ -209,14 +192,6 @@ class APIKeySubjectVisibilityTest(SubjectVisibilityBase):
 
 	def test_detail_own_returns_200(self):
 		resp = self.client.get(f"/subjects/{self.subj_mine.id}/")
-		self.assertEqual(resp.status_code, 200)
-
-	def test_subjects_by_team_hidden_team_returns_404(self):
-		resp = self.client.get(f"/teams/{self.pub_team.id}/subjects/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_subjects_by_team_own_team_returns_200(self):
-		resp = self.client.get(f"/teams/{self.my_team.id}/subjects/")
 		self.assertEqual(resp.status_code, 200)
 
 

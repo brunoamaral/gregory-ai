@@ -270,61 +270,52 @@ class CategorySerializer(serializers.ModelSerializer):
 		)
 		article_counts = list(article_counts.values("month", "count"))
 
-		# Get available ML models for this category by getting distinct algorithms from latest predictions
-		# Get the latest prediction date for each article-algorithm combination
-		latest_predictions_subquery = (
+		# Get available ML models for this category. The distinct algorithms among the
+		# latest predictions equal the distinct algorithms among ALL predictions for
+		# these articles, because every existing (article, algorithm) pair has a
+		# latest row by definition — so no per-pair "latest" lookup is needed here.
+		# Ordered explicitly so the response (and the per-model dict below) is
+		# deterministic — a bare DISTINCT has undefined order.
+		available_models = list(
 			MLPredictions.objects.filter(
 				article__team_categories=obj, algorithm__isnull=False
 			)
-			.values("article_id", "algorithm")
-			.annotate(latest_date=Max("created_date"))
-		)
-
-		# Get the actual latest predictions
-		latest_prediction_ids = []
-		for pred_info in latest_predictions_subquery:
-			latest_pred = MLPredictions.objects.filter(
-				article_id=pred_info["article_id"],
-				algorithm=pred_info["algorithm"],
-				created_date=pred_info["latest_date"],
-			).first()
-			if latest_pred:
-				latest_prediction_ids.append(latest_pred.id)
-
-		# Get available models from these latest predictions
-		available_models = (
-			MLPredictions.objects.filter(id__in=latest_prediction_ids)
 			.values_list("algorithm", flat=True)
 			.distinct()
+			.order_by("algorithm")
 		)
-		available_models = list(available_models)
 
-		# Monthly articles with ML predictions above threshold for each model (latest predictions only)
+		# Monthly articles with ML predictions above threshold for each model (latest
+		# predictions only). Same set-based approach as the relevant_article_ids block
+		# below: a correlated subquery finds the latest created_date per (article,
+		# algorithm) pair, and an article qualifies for this model's series if any row
+		# tied at that latest date meets the threshold — matching the old per-article
+		# `.first()`-with-threshold lookup's tie behavior exactly, without the N+1.
 		ml_counts_by_model = {}
 		for model in available_models:
-			# Get latest prediction IDs for this specific model
-			latest_model_predictions_subquery = (
+			latest_date_per_pair = (
 				MLPredictions.objects.filter(
-					article__team_categories=obj, algorithm=model
+					article=OuterRef("article"),
+					algorithm=OuterRef("algorithm"),
 				)
-				.values("article_id")
-				.annotate(latest_date=Max("created_date"))
+				.values("article", "algorithm")
+				.annotate(latest=Max("created_date"))
+				.values("latest")[:1]
 			)
-
-			latest_model_prediction_ids = []
-			for pred_info in latest_model_predictions_subquery:
-				latest_pred = MLPredictions.objects.filter(
-					article_id=pred_info["article_id"],
+			qualifying_article_ids = (
+				MLPredictions.objects.filter(
+					article__team_categories=obj,
 					algorithm=model,
-					created_date=pred_info["latest_date"],
 					probability_score__gte=ml_threshold,
-				).first()
-				if latest_pred:
-					latest_model_prediction_ids.append(pred_info["article_id"])
+					created_date=Subquery(latest_date_per_pair),
+				)
+				.values_list("article_id", flat=True)
+				.distinct()
+			)
 
 			# Get articles with latest predictions above threshold for this model
 			articles_with_ml = obj.articles.filter(
-				article_id__in=latest_model_prediction_ids
+				article_id__in=qualifying_article_ids
 			)
 			articles_with_ml = articles_with_ml.annotate(
 				month=TruncMonth("published_date")
@@ -609,7 +600,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		"""Get articles that reference this trial.
 
 		Uses the prefetched ``article_references`` cache when available (populated
-		by TrialViewSet/AllTrialViewSet via prefetch_related('article_references__article'))
+		by TrialViewSet via prefetch_related('article_references__article'))
 		to avoid one query per trial on list responses.
 		"""
 		references = obj.article_references.all()
@@ -766,16 +757,6 @@ class ArticleReferenceSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = Articles
 		fields = ["article_id", "title", "summary", "link"]
-
-
-class ArticlesByCategoryAndTeamSerializer(serializers.ModelSerializer):
-	articles = ArticleSerializer(many=True, read_only=True)
-	team = TeamSerializer(read_only=True)
-	category = TeamCategorySerializer(read_only=True, source="self")
-
-	class Meta:
-		model = TeamCategory
-		fields = ["id", "team", "category", "articles"]
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
