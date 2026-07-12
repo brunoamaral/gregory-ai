@@ -8,8 +8,11 @@ def backfill_access_null_to_unknown(apps, schema_editor):
 	# determined) -- the stats endpoints already fold NULL into "unknown" at
 	# read time. Backfill for consistency at rest; write-time code has been
 	# updated separately so new rows stop drifting back to NULL.
+	db_alias = schema_editor.connection.alias
 	Articles = apps.get_model("gregory", "Articles")
-	Articles.objects.filter(access__isnull=True).update(access="unknown")
+	Articles.objects.using(db_alias).filter(access__isnull=True).update(
+		access="unknown"
+	)
 
 
 def noop_reverse(apps, schema_editor):

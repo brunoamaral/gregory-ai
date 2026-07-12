@@ -8,8 +8,10 @@ Run with:
 """
 
 import importlib
+from unittest.mock import Mock
 
 from django.apps import apps as global_apps
+from django.db import connection
 from django.test import TestCase
 
 from gregory.models import Articles
@@ -40,7 +42,11 @@ class AccessNullBackfillTests(TestCase):
 			access="open",
 		)
 
-		backfill_access_null_to_unknown(global_apps, None)
+		# Migration RunPython functions receive a real SchemaEditor whose
+		# .connection.alias picks the DB the migration is running against;
+		# a bare Mock() with that attribute set is enough here.
+		fake_schema_editor = Mock(connection=connection)
+		backfill_access_null_to_unknown(global_apps, fake_schema_editor)
 
 		null_access_article.refresh_from_db()
 		unknown_access_article.refresh_from_db()
