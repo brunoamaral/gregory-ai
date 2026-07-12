@@ -540,6 +540,11 @@ def post_article(request):
 					published_date=new_article["published_date"],
 					doi=new_article["doi"],
 					kind=kind,
+					# NULL and "unknown" are the same semantic state; normalise
+					# here so nothing writes NULL and drifts back out of sync
+					# with the "unknown" spelling other code already folds
+					# NULL into at read time.
+					access=new_article["access"] or "unknown",
 					publisher=new_article["publisher"],
 					container_title=new_article["container_title"],
 					pdf_link=new_article["pdf_link"],
@@ -675,6 +680,8 @@ def post_article(request):
 
 			# discovery_date is auto_now_add on Articles, so it is always set
 			# server-side and any value passed here would be ignored anyway.
+			# News articles have no CrossRef lookup, so access is always
+			# "unknown" rather than NULL -- see the science-paper branch above.
 			save_article = Articles.objects.create(
 				title=new_article["title"],
 				summary=new_article["summary"],
@@ -682,6 +689,7 @@ def post_article(request):
 				links=merge_links(None, new_article["link"]),
 				published_date=new_article["published_date"],
 				kind=kind,
+				access="unknown",
 			)
 			save_article.sources.add(source)
 			save_article.teams.add(source.team)
