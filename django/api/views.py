@@ -1391,6 +1391,11 @@ class TrialViewSet(
 	- **page** - page number for pagination
 	- **page_size** - items per page (max 100)
 	- **all_results** - set to 'true' to bypass pagination and get all results (useful for CSV export)
+	- **include_stats** - set to 'true'/'1'/'yes' (case-insensitive) to include a `stats` block in the
+	  response with recruitment-status totals over the filtered queryset. Off by default — computing
+	  stats runs an extra aggregation query, so opt in only when you need them. **Note:** stats used to
+	  be included in every list response; clients that relied on `response.data["stats"]` must now pass
+	  `include_stats=true` explicitly.
 
 	# Registry Identifier Parameters:
 	Each accepts one or more comma-separated values and returns trials matching *any* of them
@@ -1489,15 +1494,23 @@ class TrialViewSet(
 
 	def list(self, request, *args, **kwargs):
 		response = super().list(request, *args, **kwargs)
-		# Only inject stats into JSON responses (not CSV)
-		if isinstance(response.data, dict):
+		# Stats are opt-in: computing them runs an extra GROUP BY aggregation over the
+		# full filtered queryset, which is wasted cost on every paginated list request
+		# when the client doesn't want them. Only inject into JSON responses (not CSV).
+		include_stats = request.query_params.get("include_stats", "").lower() in (
+			"true",
+			"1",
+			"yes",
+		)
+		if include_stats and isinstance(response.data, dict):
 			filtered_qs = self.filter_queryset(self.get_queryset())
-			# Single aggregation query — clear ordering to prevent GROUP BY pollution
+			# Single aggregation query — clear ordering to prevent GROUP BY pollution.
+			# distinct=True guards against double-counting a trial visible under two teams.
 			status_counts = {
 				item["recruitment_status"]: item["count"]
 				for item in filtered_qs.order_by()
 				.values("recruitment_status")
-				.annotate(count=Count("trial_id"))
+				.annotate(count=Count("trial_id", distinct=True))
 			}
 
 			def _sum(*keys):
