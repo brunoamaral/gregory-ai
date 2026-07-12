@@ -1130,7 +1130,10 @@ class ArticleViewSet(
 	`by_subject` breakdown (`[{subject_id, subject_name, count}]`, distinct per article,
 	restricted to subjects visible to the caller). It accepts the same query parameters as
 	the list endpoint, so e.g. `/articles/stats/?team_id=1&relevant=true` scopes the counts
-	exactly like the equivalent list request. Results are cached server-side for
+	exactly like the equivalent list request. The `relevant` count uses the same semantics
+	as the list's `?relevant=true` filter: when `subject_id` is present it counts articles
+	relevant *for that subject* (manual review or ML consensus, honoring `ml_threshold`),
+	not articles merely relevant for some other subject. Results are cached server-side for
 	STATS_CACHE_TTL seconds (default 600).
 
 	# Response Fields:
@@ -1258,9 +1261,6 @@ class ArticleViewSet(
 		}
 
 		flags = qs.aggregate(
-			relevant=Count(
-				"article_id", distinct=True, filter=Q(relevant=True)
-			),
 			retracted=Count(
 				"article_id", distinct=True, filter=Q(retracted=True)
 			),
@@ -1271,12 +1271,30 @@ class ArticleViewSet(
 			),
 		)
 
+		# ``relevant`` must mean exactly what ``?relevant=true`` means on
+		# the list endpoint — scoped to subject_id and honoring ml_threshold
+		# when those params are present. The denormalized Articles.relevant
+		# flag is "relevant for ANY subject", which over-counts
+		# subject-scoped requests: an article in subject N that is only
+		# relevant for subject M would still land in N's bucket. Reuse the
+		# filter's live logic instead of duplicating it here.
+		article_filter = ArticleFilter(
+			self.request.GET, queryset=qs, request=self.request
+		)
+		relevant_count = (
+			article_filter.filter_relevant(qs, "relevant", True)
+			.order_by()
+			.values("article_id")
+			.distinct()
+			.count()
+		)
+
 		return {
 			# access groups are disjoint per article, so their distinct
 			# counts sum to the distinct total without a separate query.
 			"total": sum(access_counts.values()),
 			"by_access": by_access,
-			"relevant": flags["relevant"],
+			"relevant": relevant_count,
 			"retracted": flags["retracted"],
 			"missing_doi": flags["missing_doi"],
 			"by_subject": self._by_subject_counts(filtered_qs),
