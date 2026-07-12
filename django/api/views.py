@@ -40,7 +40,16 @@ from api.serializers import (
 )
 from api.pagination import FlexiblePagination, request_bypasses_pagination
 from datetime import datetime, timedelta
-from django.db.models import Count, Q, Prefetch, OuterRef, Subquery, Value, IntegerField
+from django.db.models import (
+	Count,
+	Exists,
+	Q,
+	Prefetch,
+	OuterRef,
+	Subquery,
+	Value,
+	IntegerField,
+)
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper, ClinicalTrial
@@ -195,16 +204,25 @@ class OrgVisibilityMixin:
 	"""
 
 	_org_filter_path = "teams__organization_id"
-	# Set to False for viewsets that reach orgs via a simple FK (not M2M) to
-	# avoid unnecessary DISTINCT overhead on those queries.
+	# Set to False for viewsets that reach orgs via a simple FK (not M2M),
+	# where a plain filter() can't duplicate rows and Exists() would be
+	# unnecessary overhead. True means the path crosses a multi-valued (M2M)
+	# relation, so we use a correlated Exists() subquery instead of a
+	# join + distinct() to avoid duplicating rows without paying the cost of
+	# DISTINCT-ing every column in the paginator's COUNT(*) query.
 	_org_filter_distinct = True
 
 	def get_queryset(self):
 		qs = super().get_queryset()
 		if not hasattr(self.request, "visible_org_ids"):
 			return qs
-		qs = qs.filter(**{f"{self._org_filter_path}__in": self.request.visible_org_ids})
-		return qs.distinct() if self._org_filter_distinct else qs
+		if self._org_filter_distinct:
+			subq = qs.model.objects.filter(
+				pk=OuterRef("pk"),
+				**{f"{self._org_filter_path}__in": self.request.visible_org_ids},
+			)
+			return qs.filter(Exists(subq))
+		return qs.filter(**{f"{self._org_filter_path}__in": self.request.visible_org_ids})
 
 
 def add_deprecation_headers(
@@ -1631,8 +1649,13 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 		# --- Org visibility: only authors with at least one article in a visible org ---
 		if hasattr(self.request, "visible_org_ids"):
 			queryset = queryset.filter(
-				articles__teams__organization_id__in=self.request.visible_org_ids
-			).distinct()
+				Exists(
+					Articles.objects.filter(
+						authors=OuterRef("pk"),
+						teams__organization_id__in=self.request.visible_org_ids,
+					)
+				)
+			)
 
 		# Get query parameters
 		author_id = self.request.query_params.get("author_id")
@@ -1800,7 +1823,7 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 			order_prefix = "-" if order == "desc" else ""
 			queryset = queryset.order_by(f"{order_prefix}{sort_by}")
 
-		return queryset.distinct()
+		return queryset
 
 	def list(self, request, *args, **kwargs):
 		queryset = self.filter_queryset(self.get_queryset())
