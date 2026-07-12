@@ -56,7 +56,7 @@ RUN chmod +x /entrypoint.sh
 EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]
-# --log-level defaults to info; override per-deployment without a rebuild by
-# setting GUNICORN_CMD_ARGS="--log-level debug" (gunicorn reads that env var
-# and its values take precedence over the CMD below).
+# Set gunicorn log level to info by default (was debug).
+# If you need a different log level at runtime, override the container command
+# or use gunicorn's GUNICORN_CMD_ARGS environment variable.
 CMD ["gunicorn", "--workers", "4", "--threads", "2", "--timeout", "300", "--log-level", "info", "-b", "0.0.0.0:8000", "admin.wsgi"]
