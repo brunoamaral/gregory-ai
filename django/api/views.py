@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.cache import cache
+from django.db import IntegrityError
 from django.db.models import F
 from rest_framework.filters import OrderingFilter as _BaseOrderingFilter
 
@@ -89,6 +90,7 @@ import json
 import logging
 import traceback
 from django.utils.dateparse import parse_date
+from django.utils.timezone import now as tz_now
 
 from api.serializers.mixins import _resolve_per_org_fields_org
 from api.utils.utils import (
@@ -125,6 +127,7 @@ from api.utils.responses import (
 	FIELD_NOT_FOUND,
 	INVALID_API_KEY,
 	INVALID_IP_ADDRESS,
+	INVALID_JSON,
 	NO_API_KEY,
 	SOURCE_NOT_FOUND,
 	TRIAL_NOT_FOUND,
@@ -329,24 +332,37 @@ def getDateRangeFromWeek(p_year, p_week):
 	return (firstdayofweek, lastdayofweek)
 
 
-# Util function that creates an instance of the access log model
+# Util function that creates an instance of the access log model.
+#
+# Defensive by design: this is called from inside exception handlers, so a
+# failure here (e.g. an oversized field hitting a DataError) must never
+# propagate and replace the API's real response. Anything that goes wrong
+# writing the audit row is logged via the `logging` module instead.
 def generateAccessSchemeLog(
 	call_type, ip_addr, access_scheme, http_code, error_message, post_data
 ):
-	log = APIAccessSchemeLog()
-	log.call_type = call_type
-	log.ip_addr = ip_addr
-	if access_scheme is not None:
-		log.api_access_scheme = access_scheme
-	log.http_code = http_code
-	if error_message != None and len(error_message) > 499:
-		log.error_message = error_message[0:499]
-	if error_message == None:
+	try:
+		log = APIAccessSchemeLog()
+		log.call_type = call_type
+		log.ip_addr = ip_addr
+		if access_scheme is not None:
+			log.api_access_scheme = access_scheme
+		log.http_code = http_code
+
+		if error_message is not None and len(error_message) > 499:
+			error_message = error_message[:499]
 		log.error_message = error_message
-	else:
-		log.error_message = error_message
-	log.payload_received = post_data
-	log.save()
+
+		payload_str = post_data if isinstance(post_data, str) else str(post_data)
+		if len(payload_str) > 1700:
+			payload_str = payload_str[:1700]
+		log.payload_received = payload_str
+
+		log.save()
+	except Exception:
+		logging.getLogger(__name__).exception(
+			"Failed to write APIAccessSchemeLog row; API response is unaffected."
+		)
 
 
 ###
@@ -368,7 +384,14 @@ def post_article(request):
 	access_scheme = None
 	call_type = request.method + " " + request.path
 	ip_addr = getIPAddress(request)
-	post_data = json.loads(request.body)
+	try:
+		post_data = json.loads(request.body)
+	except json.JSONDecodeError as exception:
+		raw_body = request.body.decode("utf-8", errors="replace")
+		generateAccessSchemeLog(
+			call_type, ip_addr, None, 400, str(exception), raw_body
+		)
+		return returnError(INVALID_JSON, str(exception), 400)
 	try:
 		api_key = getAPIKey(request)
 		access_scheme = checkValidAccess(api_key, ip_addr)
@@ -456,9 +479,12 @@ def post_article(request):
 			if new_article["pdf_link"] is None:
 				new_article["pdf_link"] = science_paper.pdf_link
 
-			# Dedup by DOI
+			# Dedup by DOI. The DB constraint (unique_article_doi) enforces
+			# uniqueness on Lower(doi), so the pre-check must match the same
+			# way — an exact filter() would let a case-variant DOI slip
+			# through here and fail later with an unhandled IntegrityError.
 			if new_article["doi"] is not None:
-				existing = Articles.objects.filter(doi=new_article["doi"])
+				existing = Articles.objects.filter(doi__iexact=new_article["doi"])
 				if existing.exists():
 					for article in existing:
 						article.sources.add(source)
@@ -476,19 +502,43 @@ def post_article(request):
 						"There is already an article with the specified Title"
 					)
 
-			save_article = Articles.objects.create(
-				discovery_date=datetime.now(),
-				title=new_article["title"],
-				summary=new_article["summary"],
-				link=new_article["link"],
-				links=merge_links(None, new_article["link"]),
-				published_date=new_article["published_date"],
-				doi=new_article["doi"],
-				kind=kind,
-				publisher=new_article["publisher"],
-				container_title=new_article["container_title"],
-				pdf_link=new_article["pdf_link"],
-			)
+			try:
+				save_article = Articles.objects.create(
+					title=new_article["title"],
+					summary=new_article["summary"],
+					link=new_article["link"],
+					links=merge_links(None, new_article["link"]),
+					published_date=new_article["published_date"],
+					doi=new_article["doi"],
+					kind=kind,
+					publisher=new_article["publisher"],
+					container_title=new_article["container_title"],
+					pdf_link=new_article["pdf_link"],
+				)
+			except IntegrityError as exc:
+				# Backstop for the race window between the pre-checks above and
+				# this create(): another request inserted a matching row in
+				# between. Fold it into the same ArticleExistsError flow instead
+				# of surfacing a raw 500. Branch on the violated constraint:
+				# a title+link race (unique_article_title_link) can fire even
+				# when the payload carries a DOI, and must not be handled — or
+				# reported — as a DOI conflict. The DOI path also must never
+				# run with a NULL DOI: doi__iexact=None matches every DOI-less
+				# article and would mass-attach the source to all of them.
+				if new_article["doi"] is None or "unique_article_doi" not in str(exc):
+					raise ArticleExistsError(
+						"There is already an article with the specified Title"
+					)
+				existing = Articles.objects.filter(doi__iexact=new_article["doi"])
+				for article in existing:
+					article.sources.add(source)
+					article.teams.add(source.team)
+					if source.subject:
+						article.subjects.add(source.subject)
+				raise ArticleExistsError(
+					"There is already an article with the specified DOI. "
+					"If the source, team, or subject were different, the article was updated."
+				)
 			save_article.sources.add(source)
 			save_article.teams.add(source.team)
 			if source.subject:
@@ -542,7 +592,7 @@ def post_article(request):
 				)
 
 			save_trial = Trials.objects.create(
-				discovery_date=datetime.now(),
+				discovery_date=tz_now(),
 				title=trial_data.title,
 				summary=trial_data.summary,
 				link=trial_data.link,
@@ -594,8 +644,9 @@ def post_article(request):
 						"There is already an article with the specified link"
 					)
 
+			# discovery_date is auto_now_add on Articles, so it is always set
+			# server-side and any value passed here would be ignored anyway.
 			save_article = Articles.objects.create(
-				discovery_date=datetime.now(),
 				title=new_article["title"],
 				summary=new_article["summary"],
 				link=new_article["link"],
@@ -708,7 +759,14 @@ def edit_article(request):
 	access_scheme = None
 	call_type = request.method + " " + request.path
 	ip_addr = getIPAddress(request)
-	post_data = json.loads(request.body)
+	try:
+		post_data = json.loads(request.body)
+	except json.JSONDecodeError as exception:
+		raw_body = request.body.decode("utf-8", errors="replace")
+		generateAccessSchemeLog(
+			call_type, ip_addr, None, 400, str(exception), raw_body
+		)
+		return returnError(INVALID_JSON, str(exception), 400)
 	try:
 		api_key = getAPIKey(request)
 		access_scheme = checkValidAccess(api_key, ip_addr)
@@ -722,7 +780,10 @@ def edit_article(request):
 		if not doi:
 			raise FieldNotFoundError("field `doi` is required")
 
-		matching = Articles.objects.filter(doi=doi)
+		# Case-insensitive: the DB constraint (unique_article_doi) enforces
+		# uniqueness on Lower(doi), so an exact match here could 404 on an
+		# edit whose DOI casing differs from what was stored.
+		matching = Articles.objects.filter(doi__iexact=doi)
 		count = matching.count()
 		if count == 0:
 			raise ArticleNotFoundError(f"No article found with DOI {doi}")
@@ -883,7 +944,14 @@ def edit_trial(request):
 	access_scheme = None
 	call_type = request.method + " " + request.path
 	ip_addr = getIPAddress(request)
-	post_data = json.loads(request.body)
+	try:
+		post_data = json.loads(request.body)
+	except json.JSONDecodeError as exception:
+		raw_body = request.body.decode("utf-8", errors="replace")
+		generateAccessSchemeLog(
+			call_type, ip_addr, None, 400, str(exception), raw_body
+		)
+		return returnError(INVALID_JSON, str(exception), 400)
 	try:
 		api_key = getAPIKey(request)
 		access_scheme = checkValidAccess(api_key, ip_addr)

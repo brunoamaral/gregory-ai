@@ -17,6 +17,7 @@ ARTICLE_NOT_FOUND = 11
 TRIAL_NOT_FOUND = 12
 DUPLICATE_ARTICLE = 13
 DUPLICATE_TRIAL = 14
+INVALID_JSON = 15
 
 ERRORS = {
 	UNEXPECTED: "Unexpected error. Please contact the support team.",
@@ -34,6 +35,7 @@ ERRORS = {
 	TRIAL_NOT_FOUND: "No trial was found matching the provided identifier.",
 	DUPLICATE_ARTICLE: "Multiple articles match the provided DOI. Resolve duplicates before editing.",
 	DUPLICATE_TRIAL: "Multiple trials match the provided identifier. Resolve duplicates before editing.",
+	INVALID_JSON: "The request body is not valid JSON.",
 }
 
 

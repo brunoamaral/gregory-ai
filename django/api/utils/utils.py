@@ -80,7 +80,7 @@ def checkValidAccess(api_key, ip_address):
 def getNumberOfCallsInLastMinute(access_scheme: APIAccessScheme) -> int:
 	now_datetime = now()
 	return getNumberOfCallsForDateRange(
-		now_datetime - timedelta(seconds=60), now_datetime
+		now_datetime - timedelta(seconds=60), now_datetime, access_scheme
 	)
 
 
@@ -88,7 +88,7 @@ def getNumberOfCallsInLastMinute(access_scheme: APIAccessScheme) -> int:
 def getNumberOfCallsInLastHour(access_scheme: APIAccessScheme) -> int:
 	now_datetime = now()
 	return getNumberOfCallsForDateRange(
-		now_datetime - timedelta(minutes=60), now_datetime
+		now_datetime - timedelta(minutes=60), now_datetime, access_scheme
 	)
 
 
@@ -96,14 +96,19 @@ def getNumberOfCallsInLastHour(access_scheme: APIAccessScheme) -> int:
 def getNumberOfCallsInLastDay(access_scheme: APIAccessScheme) -> int:
 	now_datetime = now()
 	return getNumberOfCallsForDateRange(
-		now_datetime - timedelta(hours=24), now_datetime
+		now_datetime - timedelta(hours=24), now_datetime, access_scheme
 	)
 
 
-# Util function to get the number of calls made by the access scheme in a date range
-def getNumberOfCallsForDateRange(earlier_date, later_date) -> int:
+# Util function to get the number of calls made by the access scheme in a date range.
+# Filtered by access_scheme so one client's call volume never counts against
+# another client's quota.
+def getNumberOfCallsForDateRange(
+	earlier_date, later_date, access_scheme: APIAccessScheme
+) -> int:
 	return APIAccessSchemeLog.objects.filter(
-		access_date__range=(earlier_date, later_date)
+		access_date__range=(earlier_date, later_date),
+		api_access_scheme=access_scheme,
 	).count()
 
 

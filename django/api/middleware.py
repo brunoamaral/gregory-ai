@@ -13,21 +13,20 @@ view or serializer.
 
 The middleware never raises — when no key is present or the key is invalid it
 sets the attribute to ``None`` and lets downstream views decide how to respond.
+
+Resolution is delegated to ``gregory.visibility._resolve_api_scheme``, which
+only validates key existence, the begin/end date window, and (when
+configured) the IP allowlist. It deliberately runs none of the quota
+COUNT queries that ``api.utils.utils.checkValidAccess`` performs — this
+attribute is touched by serializers on every request that carries an
+Authorization header, including plain GETs, which are never written to
+``APIAccessSchemeLog`` and so would otherwise be metered for nothing.
+Quota enforcement stays where it belongs: in ``checkValidAccess``, called
+directly by the write endpoints (``post_article``, ``edit_article``,
+``edit_trial``).
 """
 
 from django.utils.functional import SimpleLazyObject
-
-
-def _resolve_api_access_scheme(request):
-	from api.utils.utils import checkValidAccess, getAPIKey, getIPAddress
-	from api.utils.exceptions import APIError
-
-	try:
-		api_key = getAPIKey(request)
-		ip_addr = getIPAddress(request)
-		return checkValidAccess(api_key, ip_addr)
-	except APIError:
-		return None
 
 
 class ApiKeyMiddleware:
@@ -35,7 +34,9 @@ class ApiKeyMiddleware:
 		self.get_response = get_response
 
 	def __call__(self, request):
+		from gregory.visibility import _resolve_api_scheme
+
 		request.api_access_scheme = SimpleLazyObject(
-			lambda: _resolve_api_access_scheme(request)
+			lambda: _resolve_api_scheme(request)
 		)
 		return self.get_response(request)
