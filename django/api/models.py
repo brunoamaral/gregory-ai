@@ -88,7 +88,7 @@ class APIAccessSchemeLog(models.Model):
 	)
 
 	# The date of the access log
-	access_date = models.DateTimeField(blank=False, default=now)
+	access_date = models.DateTimeField(blank=False, default=now, db_index=True)
 
 	# The HTTP code returned (if any)
 	http_code = models.IntegerField(blank=True)
