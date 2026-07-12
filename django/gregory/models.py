@@ -632,6 +632,10 @@ class Articles(models.Model):
 		Check if this article is ML-relevant for a specific subject based on the subject's consensus type
 		and probability threshold.
 
+		Only the latest prediction per algorithm for this (article, subject) pair counts —
+		a retired model_version's stale score must not keep an article "relevant" forever
+		after a retrain.
+
 		Args:
 			subject: Subject instance to check relevance for
 			threshold: Minimum probability score required (default: 0.8)
@@ -639,17 +643,26 @@ class Articles(models.Model):
 		Returns:
 			bool: True if article meets the ML consensus criteria for the subject
 		"""
-		# Get all ML predictions for this article and subject that meet the threshold
-		predictions = self.ml_predictions_detail.filter(
-			subject=subject, predicted_relevant=True, probability_score__gte=threshold
-		).values_list("algorithm", flat=True)
+		# Latest prediction per algorithm for this article+subject pair (Postgres DISTINCT ON).
+		latest_predictions = (
+			self.ml_predictions_detail.filter(subject=subject)
+			.order_by("algorithm", "-created_date")
+			.distinct("algorithm")
+		)
 
-		if not predictions.exists():
-			return False
-
-		# Count unique algorithms that predicted relevant with sufficient confidence
-		relevant_algorithms = set(predictions)
+		# Count unique algorithms whose *latest* prediction predicted relevant with
+		# sufficient confidence.
+		relevant_algorithms = {
+			pred.algorithm
+			for pred in latest_predictions
+			if pred.predicted_relevant
+			and pred.probability_score is not None
+			and pred.probability_score >= threshold
+		}
 		total_predictions = len(relevant_algorithms)
+
+		if total_predictions == 0:
+			return False
 
 		# Apply consensus logic based on subject's ml_consensus_type
 		if subject.ml_consensus_type == "any":
