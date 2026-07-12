@@ -253,20 +253,26 @@ class CachedStatsActionMixin:
 	#: Per-endpoint cache-key prefix; must be unique across stats actions.
 	stats_cache_prefix = None
 
+	#: Query params that never change a stats payload — excluded from the
+	#: cache key so paginated list navigation can't fragment the cache.
+	_stats_key_ignored_params = frozenset({"page", "page_size", "all_results"})
+
 	def _stats_cache_key(self, request):
 		visible_org_ids = getattr(request, "visible_org_ids", None)
-		org_part = (
-			"none"
-			if visible_org_ids is None
-			else ",".join(str(i) for i in sorted(visible_org_ids))
+		orgs = (
+			None if visible_org_ids is None else sorted(visible_org_ids)
 		)
-		params_part = "&".join(
-			f"{key}={value}"
-			for key in sorted(request.query_params.keys())
-			for value in sorted(request.query_params.getlist(key))
+		# JSON of sorted (key, value) pairs is an unambiguous encoding: naive
+		# "k=v&k=v" concatenation lets a param value containing '&' or '=' (easy
+		# via ?search=) collide two different filter sets into one cache key.
+		params = sorted(
+			(key, value)
+			for key in request.query_params.keys()
+			if key not in self._stats_key_ignored_params
+			for value in request.query_params.getlist(key)
 		)
 		digest = hashlib.sha256(
-			f"orgs={org_part}&{params_part}".encode()
+			json.dumps({"orgs": orgs, "params": params}).encode()
 		).hexdigest()
 		return f"{self.stats_cache_prefix}:{digest}"
 

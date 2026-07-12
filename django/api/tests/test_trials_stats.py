@@ -265,6 +265,35 @@ class TrialStatsBySubjectTest(TrialStatsBase):
 class TrialStatsCachingTest(TrialStatsBase):
 	"""Server-side caching: hits, param separation, and tenant isolation."""
 
+	def _cache_key_for(self, params):
+		from django.test import RequestFactory
+		from rest_framework.request import Request
+
+		from api.views import TrialViewSet
+
+		view = TrialViewSet()
+		return view._stats_cache_key(
+			Request(RequestFactory().get("/trials/stats/", params))
+		)
+
+	def test_cache_key_immune_to_param_encoding_collisions(self):
+		"""A param VALUE containing '&'/'=' must not collide with a request
+		where those characters are real separators. Under a naive 'k=v&k=v'
+		concatenation, ?condition=a&intervention=b and
+		?condition=a%26intervention%3Db hash to the same key."""
+		two_params = self._cache_key_for({"condition": "a", "intervention": "b"})
+		one_param = self._cache_key_for({"condition": "a&intervention=b"})
+		self.assertNotEqual(two_params, one_param)
+
+	def test_pagination_params_do_not_fragment_cache(self):
+		"""page/page_size/all_results never change a stats payload, so they
+		are excluded from the cache key."""
+		base = self._cache_key_for({"team_id": "1"})
+		paged = self._cache_key_for(
+			{"team_id": "1", "page": "2", "page_size": "50", "all_results": "true"}
+		)
+		self.assertEqual(base, paged)
+
 	def test_second_identical_request_served_from_cache(self):
 		first = self.client.get("/trials/stats/")
 		self.assertEqual(first.status_code, 200)
