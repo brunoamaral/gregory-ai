@@ -274,12 +274,15 @@ class CategorySerializer(serializers.ModelSerializer):
 		# latest predictions equal the distinct algorithms among ALL predictions for
 		# these articles, because every existing (article, algorithm) pair has a
 		# latest row by definition — so no per-pair "latest" lookup is needed here.
+		# Ordered explicitly so the response (and the per-model dict below) is
+		# deterministic — a bare DISTINCT has undefined order.
 		available_models = list(
 			MLPredictions.objects.filter(
 				article__team_categories=obj, algorithm__isnull=False
 			)
 			.values_list("algorithm", flat=True)
 			.distinct()
+			.order_by("algorithm")
 		)
 
 		# Monthly articles with ML predictions above threshold for each model (latest

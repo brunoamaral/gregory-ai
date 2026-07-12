@@ -455,37 +455,44 @@ class MonthlyCountsQueryBudgetTest(TestCase):
 
 	def test_query_budget_stays_small_regardless_of_article_count(self):
 		"""
-		Query budget for a monthly_counts=true request against this fixture (30
-		articles x 3 algorithms), empirically measured at 15 queries: roughly 7
-		from get_monthly_counts itself (1 monthly_article_counts + 1
-		available_models + 3 -- one aggregate query per model in
-		ml_counts_by_model -- + 1 relevant_counts + 1 trial_counts) plus the
-		remainder from the surrounding view/pagination/auth machinery (org
-		visibility check, category queryset, authors_count, top_authors, etc.).
-		Under the old N+1 implementation this fixture would have issued 30 + 90 =
-		120+ extra per-pair `.first()` queries on top of that. Assert a bound
-		with a little slack (empirical value + a few queries) so a regression
-		toward per-article or per-pair querying can't creep back in silently.
+		Query budget for get_monthly_counts itself against this fixture (30
+		articles x 3 algorithms), metered at the serializer method rather than
+		the full HTTP request so unrelated view/middleware/queryset changes
+		can't trip the guard. Empirically 7 queries: 1 monthly_article_counts +
+		1 available_models + 3 (one aggregate query per model in
+		ml_counts_by_model) + 1 relevant_counts + 1 trial_counts. Under the old
+		N+1 implementation this fixture would have issued 30 + 90 = 120+ extra
+		per-pair `.first()` queries. Assert a bound with a little slack so a
+		regression toward per-article or per-pair querying can't creep back in
+		silently.
 		"""
 		from django.db import connection
 		from django.test.utils import CaptureQueriesContext
 
-		with CaptureQueriesContext(connection) as ctx:
-			resp = self.client.get(
-				"/categories/",
-				{
-					"team_id": self.team.id,
-					"category_id": self.category.id,
-					"monthly_counts": "true",
-					"include_authors": "false",
+		from api.serializers import CategorySerializer
+
+		serializer = CategorySerializer(
+			self.category,
+			context={
+				"monthly_counts_params": {
+					"include_monthly_counts": True,
+					"ml_threshold": 0.5,
 				},
-			)
-		self.assertEqual(resp.status_code, 200)
+				"author_params": {"include_authors": False},
+			},
+		)
+		with CaptureQueriesContext(connection) as ctx:
+			payload = serializer.get_monthly_counts(self.category)
+		self.assertIsNotNone(payload)
+		self.assertEqual(
+			sorted(payload["available_models"]), payload["available_models"],
+			msg="available_models must be deterministically ordered",
+		)
 		self.assertLessEqual(
 			len(ctx.captured_queries),
-			18,
+			9,
 			msg=(
-				"monthly_counts=true request exceeded the query budget: "
+				"get_monthly_counts exceeded the query budget: "
 				f"{len(ctx.captured_queries)} queries"
 			),
 		)
