@@ -125,8 +125,8 @@ class CategoryOptimizationTestCase(TestCase):
 	def test_query_count_optimization(self):
 		"""Test that we're not generating excessive database queries"""
 		with self.assertNumQueries(
-			9
-		):  # site + org visibility + count + select + 3 prefetches + authors count + authors select
+			7
+		):  # site + org visibility + count + select (with count annotations) + subjects prefetch + authors count + authors select
 			response = self.client.get("/categories/")
 
 		self.assertEqual(response.status_code, 200)
@@ -162,36 +162,42 @@ class CategoryOptimizationTestCase(TestCase):
 		self.assertEqual(data["results"][0]["id"], self.category.id)
 
 	@override_settings(DEBUG=True)  # To capture SQL queries
-	def test_no_complex_group_by_queries(self):
-		"""Ensure we're not generating the problematic GROUP BY queries"""
-		# Reset queries
-		connection.queries.clear()
+	def test_query_count_independent_of_article_and_trial_volume(self):
+		"""Counts come from Count(..., distinct=True) annotations over a single
+		bounded query, not from prefetching every article/trial row -- so the
+		query count for a category listing must not grow with how many
+		articles/trials the category has. (A LEFT OUTER JOIN + GROUP BY here is
+		expected and fine: post-#747/#749 it costs one aggregation query over a
+		small page of categories, never a full materialisation of their rows.)"""
+		# Warm the Site cache first so it doesn't add an extra query to only
+		# the baseline call.
+		self.client.get(f"/categories/?team_id={self.team.id}")
 
+		connection.queries.clear()
 		response = self.client.get(f"/categories/?team_id={self.team.id}")
 		self.assertEqual(response.status_code, 200)
+		baseline_query_count = len(connection.queries)
 
-		# Check that none of the queries contain the problematic pattern
-		problematic_patterns = [
-			"GROUP BY 1",  # The original problematic pattern
-			'LEFT OUTER JOIN "articles_team_categories"',  # Complex JOINs
-			'LEFT OUTER JOIN "trials_team_categories"',
-			'LEFT OUTER JOIN "articles_authors"',
-		]
+		for i in range(50):
+			article = Articles.objects.create(
+				title=f"Bulk Article {i}",
+				link=f"http://example.com/bulk-article/{i}",
+				summary=f"Summary {i}",
+			)
+			article.team_categories.add(self.category)
 
-		for query in connection.queries:
-			sql = query["sql"]
-			for pattern in problematic_patterns:
-				if pattern in sql and "COUNT(*)" in sql:
-					self.fail(
-						f"Found problematic query pattern: {pattern} in query: {sql[:200]}..."
-					)
+		connection.queries.clear()
+		response = self.client.get(f"/categories/?team_id={self.team.id}")
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json()["results"][0]["article_count_total"], 55)
+		self.assertEqual(len(connection.queries), baseline_query_count)
 
 	def test_prefetch_efficiency(self):
 		"""Test that our prefetch_related optimizations work correctly"""
 		# Test with include_authors=false (should be very efficient)
 		with self.assertNumQueries(
-			8
-		):  # Basic query + prefetch + authors count query + visibility queries
+			6
+		):  # Basic query (with count annotations) + subjects prefetch + authors count query + visibility queries
 			response = self.client.get(
 				f"/categories/?team_id={self.team.id}&include_authors=false"
 			)
@@ -199,8 +205,8 @@ class CategoryOptimizationTestCase(TestCase):
 
 		# Test with include_authors=true (should still be reasonable; site is cached from first request)
 		with self.assertNumQueries(
-			8
-		):  # org + count + select + 3 prefetches + authors count + authors select
+			6
+		):  # org + count + select (with count annotations) + subjects prefetch + authors count + authors select
 			response = self.client.get(
 				f"/categories/?team_id={self.team.id}&include_authors=true"
 			)

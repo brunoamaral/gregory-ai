@@ -145,33 +145,22 @@ class CategorySerializer(serializers.ModelSerializer):
 		]
 
 	def get_article_count_total(self, obj):
-		"""Optimized article count using prefetched data when available"""
-		# Use prefetched data if available to avoid additional queries
-		if (
-			hasattr(obj, "_prefetched_objects_cache")
-			and "articles" in obj._prefetched_objects_cache
-		):
-			return len(obj._prefetched_objects_cache["articles"])
-
-		# If the queryset has annotated article_count, use it for efficiency
-		if hasattr(obj, "article_count_annotated"):
-			return obj.article_count_annotated
+		"""Prefer the queryset's Count(..., distinct=True) annotation; fall
+		back to a live count for an un-annotated instance (e.g. built
+		directly in a test)."""
+		annotated = getattr(obj, "article_count_annotated", None)
+		if annotated is not None:
+			return annotated
 
 		# Fallback to simple count query (avoid obj.article_count() which may be complex)
 		return obj.articles.count()
 
 	def get_trials_count_total(self, obj):
-		"""Optimized trials count using prefetched data when available"""
-		# Use prefetched data if available to avoid additional queries
-		if (
-			hasattr(obj, "_prefetched_objects_cache")
-			and "trials" in obj._prefetched_objects_cache
-		):
-			return len(obj._prefetched_objects_cache["trials"])
-
-		# If the queryset has annotated trials_count, use it for efficiency
-		if hasattr(obj, "trials_count_annotated"):
-			return obj.trials_count_annotated
+		"""Prefer the queryset's Count(..., distinct=True) annotation; fall
+		back to a live count for an un-annotated instance."""
+		annotated = getattr(obj, "trials_count_annotated", None)
+		if annotated is not None:
+			return annotated
 
 		# Fallback to simple count query
 		return obj.trials.count()
