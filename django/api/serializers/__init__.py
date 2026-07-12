@@ -609,7 +609,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		"""Get articles that reference this trial.
 
 		Uses the prefetched ``article_references`` cache when available (populated
-		by TrialViewSet/AllTrialViewSet via prefetch_related('article_references__article'))
+		by TrialViewSet via prefetch_related('article_references__article'))
 		to avoid one query per trial on list responses.
 		"""
 		references = obj.article_references.all()
@@ -766,16 +766,6 @@ class ArticleReferenceSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = Articles
 		fields = ["article_id", "title", "summary", "link"]
-
-
-class ArticlesByCategoryAndTeamSerializer(serializers.ModelSerializer):
-	articles = ArticleSerializer(many=True, read_only=True)
-	team = TeamSerializer(read_only=True)
-	category = TeamCategorySerializer(read_only=True, source="self")
-
-	class Meta:
-		model = TeamCategory
-		fields = ["id", "team", "category", "articles"]
 
 
 class OrganizationSerializer(serializers.ModelSerializer):

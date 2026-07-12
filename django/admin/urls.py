@@ -31,12 +31,8 @@ from api.views import (
 	CategoryViewSet,
 	LoginView,
 	ProtectedEndpointView,
-	ArticlesByTeam,
-	ArticlesBySubject,
 	TeamsViewSet,
 	SubjectsViewSet,
-	SubjectsByTeam,
-	ArticlesByCategoryAndTeam,
 	ArticleSearchView,
 	TrialSearchView,
 	AuthorSearchView,
@@ -144,37 +140,11 @@ urlpatterns = (
 		),
 		# Team API (excluded from API root, requires authentication)
 		path("", include(teams_router.urls)),
-		## List articles
-		path(
-			"teams/<int:team_id>/articles/",
-			ArticlesByTeam.as_view({"get": "list"}),
-			name="articles-by-team",
-		),
-		## List article per ID
-		## List articles per subject
-		path(
-			"teams/<int:team_id>/articles/subject/<int:subject_id>/",
-			ArticlesBySubject.as_view({"get": "list"}),
-			name="articles-by-subject",
-		),
-		## List articles per category: OK
-		path(
-			"teams/<int:team_id>/articles/category/<str:category_slug>/",
-			ArticlesByCategoryAndTeam.as_view({"get": "list"}),
-			name="articles-by-category-and-team",
-		),
-		## List articles per journal
 		## List categories by team and subject
 		path(
 			"teams/<int:team_id>/subjects/<int:subject_id>/categories/",
 			CategoriesByTeamAndSubject.as_view({"get": "list"}),
 			name="categories-by-team-and-subject",
-		),
-		## List subjects
-		path(
-			"teams/<int:team_id>/subjects/",
-			SubjectsByTeam.as_view({"get": "list"}),
-			name="subjects-by-team",
 		),
 		# Search endpoints
 		path("articles/search/", ArticleSearchView.as_view(), name="article-search"),
