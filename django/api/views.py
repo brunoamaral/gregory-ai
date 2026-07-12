@@ -416,15 +416,17 @@ def post_article(request):
 					container_title=new_article["container_title"],
 					pdf_link=new_article["pdf_link"],
 				)
-			except IntegrityError:
+			except IntegrityError as exc:
 				# Backstop for the race window between the pre-checks above and
 				# this create(): another request inserted a matching row in
 				# between. Fold it into the same ArticleExistsError flow instead
-				# of surfacing a raw 500.
-				if new_article["doi"] is None:
-					# unique_article_doi can't fire on a NULL DOI, so this came
-					# from unique_article_title_link. Never query on a NULL DOI
-					# here — doi__iexact=None matches every DOI-less article.
+				# of surfacing a raw 500. Branch on the violated constraint:
+				# a title+link race (unique_article_title_link) can fire even
+				# when the payload carries a DOI, and must not be handled — or
+				# reported — as a DOI conflict. The DOI path also must never
+				# run with a NULL DOI: doi__iexact=None matches every DOI-less
+				# article and would mass-attach the source to all of them.
+				if new_article["doi"] is None or "unique_article_doi" not in str(exc):
 					raise ArticleExistsError(
 						"There is already an article with the specified Title"
 					)

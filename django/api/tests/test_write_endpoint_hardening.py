@@ -330,6 +330,36 @@ class CaseVariantDoiTest(TestCase):
 			Articles.objects.filter(doi__iexact=race_doi).count(), 1
 		)
 
+	def test_post_article_title_link_race_with_doi_present_reports_title_conflict(self):
+		"""A title+link race can fire even when the payload carries a DOI
+		(concurrent insert with the same title+link but a different DOI).
+		The backstop must branch on the violated constraint: this must NOT
+		be handled as a DOI conflict — the DOI lookup would find nothing
+		and the client would get a misleading DOI-exists message."""
+
+		def _simulate_title_link_race(**kwargs):
+			raise IntegrityError(
+				'duplicate key value violates unique constraint "unique_article_title_link"'
+			)
+
+		payload = {
+			"kind": "science paper",
+			"source_id": self.new_source.pk,
+			"title": "Race condition article with unrelated DOI",
+			"doi": "10.9999/unrelated-doi",
+			"link": "https://example.com/title-link-race-post",
+		}
+		with patch("gregory.classes.SciencePaper.refresh", return_value=None), patch.object(
+			Articles.objects, "create", side_effect=_simulate_title_link_race
+		):
+			resp = _post(self.client, self.scheme.api_key, payload)
+
+		self.assertEqual(resp.status_code, 200)
+		data = resp.json()
+		self.assertEqual(data["code"], ARTICLE_EXISTS)
+		self.assertIn("Title", data["extra_data"])
+		self.assertNotIn("DOI", data["extra_data"])
+
 	def test_post_article_integrity_error_with_null_doi_does_not_mass_attach(self):
 		"""If create() hits an IntegrityError while the payload has no DOI
 		(a title+link race), the backstop must NOT run doi__iexact=None —
