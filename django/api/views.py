@@ -51,7 +51,6 @@ from django.db.models import (
 	IntegerField,
 )
 from django.db.models.functions import Coalesce
-from django.shortcuts import get_object_or_404
 from gregory.classes import SciencePaper, ClinicalTrial
 from gregory.models import (
 	Articles,
@@ -223,22 +222,6 @@ class OrgVisibilityMixin:
 			)
 			return qs.filter(Exists(subq))
 		return qs.filter(**{f"{self._org_filter_path}__in": self.request.visible_org_ids})
-
-
-def add_deprecation_headers(
-	response, deprecated_endpoint, replacement_endpoint, message=None
-):
-	"""
-	Utility function to add deprecation headers to API responses.
-	This helps prepare clients for the transition to new endpoints.
-	"""
-	if message is None:
-		message = f"This endpoint is deprecated. Use {replacement_endpoint} instead."
-
-	response["X-Deprecation-Warning"] = message
-	response["X-Migration-Guide"] = replacement_endpoint
-	response["X-Deprecated-Endpoint"] = deprecated_endpoint
-	return response
 
 
 def getDateRangeFromWeek(p_year, p_week):
@@ -1053,20 +1036,6 @@ class ArticleViewSet(
 		return qs
 
 
-class ArticlesByKeyword(generics.ListAPIView):
-	"""
-	List articles by keyword
-	"""
-
-	serializer_class = ArticleSerializer
-	permissions_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [filters.SearchFilter]
-	search_fields = ["title", "summary"]
-
-	def get_queryset(self):
-		return Articles.objects.all().order_by("-discovery_date")
-
-
 ###
 # CATEGORIES
 ###
@@ -1522,21 +1491,6 @@ class TrialViewSet(
 				"authorised": _sum("Authorised"),
 			}
 		return response
-
-
-class AllTrialViewSet(generics.ListAPIView):
-	"""
-	List all clinical trials by discovery date
-	"""
-
-	pagination_class = None
-	queryset = (
-		Trials.objects.all()
-		.order_by("-discovery_date")
-		.prefetch_related("sources", "team_categories", "article_references__article")
-	)
-	serializer_class = TrialSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
 ###
@@ -2068,167 +2022,6 @@ class SubjectsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	ordering = ["id"]
 
 
-class ArticlesByTeam(viewsets.ModelViewSet):
-	"""
-	⚠️ DEPRECATED: This endpoint will be removed in a future version.
-	Please use /articles/?team_id={team_id} instead.
-
-	List all articles for a specific team by ID.
-
-	Migration Path:
-	- Old: GET /teams/1/articles/?search=keyword
-	- New: GET /articles/?team_id=1&search=keyword
-
-	Now supports enhanced filtering while maintaining backward compatibility.
-	You can use all the same filters as the main /articles/ endpoint:
-	- ?author_id=X - Filter by author ID
-	- ?category_slug=slug - Filter by category slug
-	- ?category_id=X - Filter by category ID
-	- ?journal_slug=slug - Filter by journal (URL-encoded)
-	- ?source_id=Y - Filter by source ID
-	- ?search=keyword - Search in title and summary
-	- ?ordering=field - Order results
-	"""
-
-	serializer_class = ArticleSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	# `search` is handled solely by ArticleFilter.filter_search; DRF's
-	# SearchFilter is omitted to avoid double-filtering ?search=. See ArticleViewSet.
-	filter_backends = [
-		django_filters.DjangoFilterBackend,
-		filters.OrderingFilter,
-	]
-	filterset_class = ArticleFilter
-	ordering_fields = ["discovery_date", "published_date", "title", "article_id"]
-	ordering = ["-discovery_date"]
-
-	def get_queryset(self):
-		team_id = self.kwargs.get("team_id")
-		if hasattr(self.request, "visible_org_ids"):
-			if not Team.objects.filter(
-				id=team_id, organization_id__in=self.request.visible_org_ids
-			).exists():
-				raise Http404
-		return Articles.objects.filter(teams__id=team_id).order_by("-discovery_date")
-
-	def list(self, request, *args, **kwargs):
-		"""Override list to add deprecation warning header"""
-		response = super().list(request, *args, **kwargs)
-		team_id = self.kwargs.get("team_id")
-		deprecated_endpoint = f"/teams/{team_id}/articles/"
-		replacement_endpoint = f"/articles/?team_id={team_id}"
-		return add_deprecation_headers(
-			response, deprecated_endpoint, replacement_endpoint
-		)
-
-
-class ArticlesBySubject(viewsets.ModelViewSet):
-	"""
-	⚠️ DEPRECATED: This endpoint will be removed in a future version.
-	Please use /articles/?team_id={team_id}&subject_id={subject_id} instead.
-
-	List all articles for a specific team and subject combination.
-
-	Migration Path:
-	- Old: GET /teams/1/articles/subject/4/?search=keyword
-	- New: GET /articles/?team_id=1&subject_id=4&search=keyword
-
-	Now supports enhanced filtering while maintaining backward compatibility.
-	You can use all the same filters as the main /articles/ endpoint:
-	- ?author_id=X - Filter by author ID
-	- ?category_slug=slug - Filter by category slug
-	- ?category_id=X - Filter by category ID
-	- ?journal_slug=slug - Filter by journal (URL-encoded)
-	- ?source_id=Y - Filter by source ID
-	- ?search=keyword - Search in title and summary
-	- ?ordering=field - Order results
-	"""
-
-	serializer_class = ArticleSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	# `search` is handled solely by ArticleFilter.filter_search; DRF's
-	# SearchFilter is omitted to avoid double-filtering ?search=. See ArticleViewSet.
-	filter_backends = [
-		django_filters.DjangoFilterBackend,
-		filters.OrderingFilter,
-	]
-	filterset_class = ArticleFilter
-	ordering_fields = ["discovery_date", "published_date", "title", "article_id"]
-	ordering = ["-discovery_date"]
-
-	def get_queryset(self):
-		team_id = self.kwargs.get("team_id")
-		subject_id = self.kwargs.get("subject_id")
-		if hasattr(self.request, "visible_org_ids"):
-			if not Team.objects.filter(
-				id=team_id, organization_id__in=self.request.visible_org_ids
-			).exists():
-				raise Http404
-		return Articles.objects.filter(subjects__id=subject_id, teams=team_id).order_by(
-			"-discovery_date"
-		)
-
-	def list(self, request, *args, **kwargs):
-		"""Override list to add deprecation warning header"""
-		response = super().list(request, *args, **kwargs)
-		team_id = self.kwargs.get("team_id")
-		subject_id = self.kwargs.get("subject_id")
-		deprecated_endpoint = f"/teams/{team_id}/articles/subject/{subject_id}/"
-		replacement_endpoint = f"/articles/?team_id={team_id}&subject_id={subject_id}"
-		return add_deprecation_headers(
-			response, deprecated_endpoint, replacement_endpoint
-		)
-
-
-class SubjectsByTeam(viewsets.ModelViewSet):
-	"""
-	⚠️ DEPRECATED: This endpoint will be removed in a future version.
-	Please use /subjects/?team_id={team_id} instead.
-
-	List all research subjects for a specific team by ID.
-
-	Migration Path:
-	- Old: GET /teams/1/subjects/?search=keyword
-	- New: GET /subjects/?team_id=1&search=keyword
-
-	Now supports enhanced filtering while maintaining backward compatibility.
-	You can use all the same filters as the main /subjects/ endpoint:
-	- ?search=keyword - Search in subject name and description
-	- ?ordering=field - Order results
-	"""
-
-	serializer_class = SubjectsSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-	filter_backends = [
-		django_filters.DjangoFilterBackend,
-		filters.SearchFilter,
-		filters.OrderingFilter,
-	]
-	filterset_class = SubjectFilter
-	search_fields = ["subject_name", "description"]
-	ordering_fields = ["id", "subject_name"]
-	ordering = ["id"]
-
-	def get_queryset(self):
-		team_id = self.kwargs.get("team_id")
-		if hasattr(self.request, "visible_org_ids"):
-			if not Team.objects.filter(
-				id=team_id, organization_id__in=self.request.visible_org_ids
-			).exists():
-				raise Http404
-		return Subject.objects.filter(team__id=team_id).order_by("-id")
-
-	def list(self, request, *args, **kwargs):
-		"""Override list to add deprecation warning header"""
-		response = super().list(request, *args, **kwargs)
-		team_id = self.kwargs.get("team_id")
-		deprecated_endpoint = f"/teams/{team_id}/subjects/"
-		replacement_endpoint = f"/subjects/?team_id={team_id}"
-		return add_deprecation_headers(
-			response, deprecated_endpoint, replacement_endpoint
-		)
-
-
 class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 	"""
 	List all categories for a specific team and subject combination
@@ -2252,62 +2045,6 @@ class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 				trials_count_annotated=Count("trials", distinct=True),
 			)
 			.order_by("-id")
-		)
-
-
-class ArticlesByCategoryAndTeam(viewsets.ModelViewSet):
-	"""
-	⚠️ DEPRECATED: This endpoint will be removed in a future version.
-	Please use /articles/?team_id={team_id}&category_slug={category_slug} instead.
-
-	List all articles for a specific category and team.
-
-	Migration Path:
-	- Old: GET /teams/1/articles/category/natalizumab/
-	- New: GET /articles/?team_id=1&category_slug=natalizumab
-	"""
-
-	serializer_class = ArticleSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-	def get_queryset(self):
-		team_id = self.kwargs.get("team_id")
-		category_slug = self.kwargs.get("category_slug")
-		if hasattr(self.request, "visible_org_ids"):
-			if not Team.objects.filter(
-				id=team_id, organization_id__in=self.request.visible_org_ids
-			).exists():
-				raise Http404
-		team_category = get_object_or_404(
-			TeamCategory, team__id=team_id, category_slug=category_slug
-		)
-		return (
-			Articles.objects.filter(team_categories=team_category)
-			.prefetch_related(
-				"team_categories",
-				"sources",
-				"authors",
-				"teams",
-				"subjects",
-				Prefetch(
-					"ml_predictions_detail",
-					queryset=MLPredictions.objects.select_related("subject"),
-				),
-			)
-			.order_by("-discovery_date")
-		)
-
-	def list(self, request, *args, **kwargs):
-		"""Override list to add deprecation warning header"""
-		response = super().list(request, *args, **kwargs)
-		team_id = self.kwargs.get("team_id")
-		category_slug = self.kwargs.get("category_slug")
-		deprecated_endpoint = f"/teams/{team_id}/articles/category/{category_slug}/"
-		replacement_endpoint = (
-			f"/articles/?team_id={team_id}&category_slug={category_slug}"
-		)
-		return add_deprecation_headers(
-			response, deprecated_endpoint, replacement_endpoint
 		)
 
 
