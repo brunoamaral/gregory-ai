@@ -116,3 +116,24 @@ class IsMlRelevantForSubjectStalePredictionsTestCase(TestCase):
 		self.assertTrue(
 			article.is_ml_relevant_for_subject(self.subject_majority, threshold=0.8)
 		)
+
+	def test_tied_created_date_counts_any_qualifying_row(self):
+		"""Two predictions for the same algorithm share the same created_date (tie).
+		All tied latest rows must be considered — the algorithm qualifies if any
+		tied row does — matching the api.filters and gregory.relevance
+		implementations, which filter on created_date == MAX(created_date)."""
+		article = self._article("Tied created_date", "https://example.com/stale-tie")
+		article.subjects.add(self.subject_any)
+
+		low = self._predict(article, self.subject_any, "pubmed_bert", 0.3, "v1")
+		high = self._predict(article, self.subject_any, "pubmed_bert", 0.9, "v2")
+
+		# Force an exact created_date tie between the two rows.
+		tied_at = timezone.now() - timedelta(days=1)
+		MLPredictions.objects.filter(pk__in=[low.pk, high.pk]).update(
+			created_date=tied_at
+		)
+
+		self.assertTrue(
+			article.is_ml_relevant_for_subject(self.subject_any, threshold=0.8)
+		)
