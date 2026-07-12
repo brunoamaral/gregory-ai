@@ -3,6 +3,16 @@ from django.db import connection
 
 def recompute_article_relevance(article_ids=None, threshold=0.8):
 	"""Sync articles.relevant with manual + ML-consensus relevance.
+
+	ML consensus only counts the *latest* prediction per (article, subject,
+	algorithm) pair — a retired model_version's stale score must not keep an
+	article "relevant" forever after a retrain. The correlated MAX ranges over
+	ALL predictions for the pair (not only qualifying ones), so a latest
+	prediction that dropped below threshold correctly disqualifies the pair.
+	Ties on created_date match multiple rows, which is harmless for the
+	DISTINCT-algorithm count. The lookup is backed by mlpred_art_subj_date_idx
+	on (article, subject, -created_date).
+
 	Full pass when article_ids is None. Returns number of rows changed."""
 	scope, params = "", [threshold]
 	if article_ids is not None:
@@ -29,6 +39,13 @@ def recompute_article_relevance(article_ids=None, threshold=0.8):
 						AND mp.subject_id = xs.subject_id
 						AND mp.predicted_relevant IS TRUE
 						AND mp.probability_score >= %s
+						AND mp.created_date = (
+							SELECT MAX(mp2.created_date)
+							FROM gregory_mlpredictions mp2
+							WHERE mp2.article_id = mp.article_id
+							  AND mp2.subject_id = mp.subject_id
+							  AND mp2.algorithm = mp.algorithm
+						)
 					WHERE xs.articles_id = a2.article_id
 					GROUP BY xs.subject_id, s.ml_consensus_type
 					HAVING COUNT(DISTINCT mp.algorithm) >=
