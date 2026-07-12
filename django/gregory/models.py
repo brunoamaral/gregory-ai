@@ -740,7 +740,7 @@ class Articles(models.Model):
 
 class Trials(models.Model):
 	trial_id = models.AutoField(primary_key=True)
-	discovery_date = models.DateTimeField(blank=True, null=True)
+	discovery_date = models.DateTimeField(blank=True, null=True, db_index=True)
 	last_updated = models.DateTimeField(auto_now=True, null=True, db_index=True)
 	title = models.TextField(blank=False, null=False)
 	summary = models.TextField(blank=True, null=True)
