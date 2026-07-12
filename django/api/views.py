@@ -44,6 +44,7 @@ from datetime import datetime, timedelta
 from django.db.models import (
 	Count,
 	Exists,
+	Max,
 	Q,
 	Prefetch,
 	OuterRef,
@@ -187,6 +188,34 @@ class BulkExportThrottleMixin:
 		if request_bypasses_pagination(self.request):
 			return [ScopedRateThrottle()]
 		return super().get_throttles()
+
+
+def _latest_ml_predictions_queryset():
+	"""``MLPredictions`` queryset restricted to the latest row per
+	(article, subject, algorithm), for use as a serializer prefetch.
+
+	Since PR #748, "current" ML relevance is latest-per-(subject, algorithm)
+	only — a retired model_version's stale score must not keep showing up
+	in the API forever. Same tie-inclusive Max(created_date) correlated
+	subquery as ``Articles.is_ml_relevant_for_subject``, generalised to
+	correlate on article_id too (that method fixes article/subject and
+	correlates only on algorithm). Index-backed by ``mlpred_art_subj_date_idx``.
+	Full prediction history is never deleted; it stays reachable via the
+	admin/DB for anyone who needs it.
+	"""
+	latest_date_per_group = (
+		MLPredictions.objects.filter(
+			article_id=OuterRef("article_id"),
+			subject_id=OuterRef("subject_id"),
+			algorithm=OuterRef("algorithm"),
+		)
+		.values("algorithm")
+		.annotate(latest=Max("created_date"))
+		.values("latest")[:1]
+	)
+	return MLPredictions.objects.filter(
+		created_date=Subquery(latest_date_per_group)
+	).select_related("subject")
 
 
 class OrgVisibilityMixin:
@@ -1164,7 +1193,7 @@ class ArticleViewSet(
 	queryset = Articles.objects.all().prefetch_related(
 		Prefetch(
 			"ml_predictions_detail",
-			queryset=MLPredictions.objects.select_related("subject"),
+			queryset=_latest_ml_predictions_queryset(),
 		),
 		"authors",
 		Prefetch("teams", queryset=Team.objects.prefetch_related("members")),
@@ -2416,7 +2445,7 @@ class ArticleSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 			queryset = queryset.prefetch_related(
 				Prefetch(
 					"ml_predictions_detail",
-					queryset=MLPredictions.objects.select_related("subject"),
+					queryset=_latest_ml_predictions_queryset(),
 				),
 				"authors",
 				Prefetch("teams", queryset=Team.objects.prefetch_related("members")),
