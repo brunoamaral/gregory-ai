@@ -884,6 +884,14 @@ class Trials(models.Model):
 			),
 		]
 		indexes = [
+			# Adopts the index migration 0022 already created as raw SQL
+			# (CREATE INDEX idx_trials_discovery_date ...). Same name, so
+			# Django's model state now matches reality without rebuilding
+			# it -- see migration 0076's SeparateDatabaseAndState.
+			models.Index(
+				fields=["discovery_date"],
+				name="idx_trials_discovery_date",
+			),
 			# Non-unique index on lower(title) to preserve fast title lookups.
 			models.Index(
 				Lower("title"),

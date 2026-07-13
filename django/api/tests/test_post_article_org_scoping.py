@@ -213,3 +213,39 @@ class ValidOrgPostArticleTest(PostArticleOrgScopingBase):
 			resp = _post(self.client, self.scheme.api_key, payload)
 		data = resp.json()
 		self.assertNotEqual(data.get("code"), 10)
+
+
+# ---------------------------------------------------------------------------
+# access defaults to "unknown", never NULL, on new rows (PR: access backfill)
+# ---------------------------------------------------------------------------
+
+
+class NewArticleAccessDefaultTest(PostArticleOrgScopingBase):
+	def test_science_paper_without_crossref_access_defaults_to_unknown(self):
+		"""SciencePaper.refresh is mocked (no CrossRef), so science_paper.access
+		stays None -- the created row must still get "unknown", not NULL."""
+		from gregory.models import Articles
+
+		payload = self._valid_payload(self.my_source.pk)
+		with patch("gregory.classes.SciencePaper.refresh", return_value=None):
+			resp = _post(self.client, self.scheme.api_key, payload)
+		self.assertEqual(resp.status_code, 200)
+		article = Articles.objects.get(pk=resp.json()["article_id"])
+		self.assertEqual(article.access, "unknown")
+
+	def test_news_article_defaults_to_unknown(self):
+		from gregory.models import Articles
+
+		news_source = _make_source(
+			self.my_team, self.my_subj, "pa-news-source", source_for="news article"
+		)
+		payload = {
+			"kind": "news article",
+			"source_id": news_source.pk,
+			"title": "News access default test",
+			"link": "https://example.com/news-access-default",
+		}
+		resp = _post(self.client, self.scheme.api_key, payload)
+		self.assertEqual(resp.status_code, 200)
+		article = Articles.objects.get(pk=resp.json()["article_id"])
+		self.assertEqual(article.access, "unknown")
