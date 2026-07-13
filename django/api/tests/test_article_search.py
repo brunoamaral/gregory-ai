@@ -1,6 +1,9 @@
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from rest_framework.test import APIClient
+from gregory.models import Authors
 from gregory.models import (
 	Articles,
 	Team,
@@ -201,3 +204,66 @@ class ArticleSearchViewTests(TestCase):
 		}
 		response = self.client.post(url, data, format="json")
 		self.assertEqual(response.status_code, 404)
+
+
+class ArticleSearchViewQueryCountTests(TestCase):
+	"""Regression tests for the N+1 prefetch and DISTINCT-pagination fixes."""
+
+	def setUp(self):
+		self.organization = Organization.objects.create(
+			name="Query Count Org", slug="art-search-query-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=self.organization).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			name="Query Count Team",
+			slug="art-search-query-team",
+			organization=self.organization,
+		)
+		self.subject = Subject.objects.create(
+			subject_name="Query Count Subject",
+			subject_slug="query-count-subject",
+			team=self.team,
+		)
+		other_subject = Subject.objects.create(
+			subject_name="Other Subject",
+			subject_slug="other-subject",
+			team=self.team,
+		)
+
+		for i in range(3):
+			article = Articles.objects.create(
+				title=f"Query Count Article {i}",
+				summary="Body text for query count regression test.",
+				link=f"https://example.com/query-count-article-{i}",
+				published_date=timezone.now(),
+			)
+			article.teams.add(self.team)
+			article.subjects.add(self.subject, other_subject)
+			for j in range(2):
+				author = Authors.objects.create(
+					given_name=f"Given{i}{j}", family_name=f"Family{i}{j}"
+				)
+				article.authors.add(author)
+
+		self.client = APIClient()
+
+	def test_list_query_count_is_bounded_and_avoids_distinct(self):
+		url = reverse("article-search")
+		with CaptureQueriesContext(connection) as ctx:
+			response = self.client.get(
+				url, {"team_id": self.team.id, "subject_id": self.subject.id}
+			)
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data["results"]), 3)
+
+		# Query count should be small and independent of the number of
+		# articles/subjects/authors — a per-row query here means the
+		# prefetch regressed back to N+1.
+		self.assertLess(len(ctx.captured_queries), 25)
+
+		for query in ctx.captured_queries:
+			sql = query["sql"].lower()
+			if "gregory_articles" in sql and "select distinct" in sql:
+				self.fail(f"unexpected DISTINCT over articles: {query['sql']}")
