@@ -453,5 +453,43 @@ class DuplicateSubjectSlugTrialsFeedTest(TestCase):
 		resp = self.client.get(f"/feed/trials/subject/{self.pub_subj.subject_slug}/")
 		self.assertEqual(resp.status_code, 404)
 
+	def test_tie_break_is_deterministic_when_both_subjects_are_visible(self):
+		"""With ?include_public=true, an org member sees BOTH the public org's
+		subject and their own private org's subject -- the duplicate-slug
+		tie-break (lowest id) must pick the same one every time, and the feed
+		must contain only that subject's trials, not both."""
+		user = User.objects.create_user(username="dup-slug-member", password="pw")
+		OrganizationUser.objects.create(organization=self.priv_org, user=user)
+		self.client.force_login(user)
+
+		resp = self.client.get(
+			f"/feed/trials/subject/{self.pub_subj.subject_slug}/?include_public=true"
+		)
+		self.assertEqual(resp.status_code, 200)
+		content = resp.content.decode()
+
+		winner = min(self.pub_subj, self.priv_subj, key=lambda s: s.id)
+		self.assertEqual(winner, self.pub_subj)  # created first -> lowest id
+		self.assertIn("Pub Dup Trial", content)
+		self.assertNotIn("Priv Dup Trial", content)
+
+
+class TeamlessSubjectTrialsFeedTest(TestCase):
+	"""A Subject with team=NULL was always visible in the previous code path
+	(the org-visibility check only ran when subject.team_id was set) -- the
+	duplicate-slug fix must not regress that."""
+
+	def setUp(self):
+		self.subject = Subject.objects.create(
+			team=None, subject_name="Teamless Subject", subject_slug="teamless-subj"
+		)
+		Trials.objects.create(
+			title="Teamless Trial", link="https://rss.ex/teamless"
+		).subjects.add(self.subject)
+
+	def test_teamless_subject_returns_200_for_anonymous(self):
+		resp = self.client.get(f"/feed/trials/subject/{self.subject.subject_slug}/")
+		self.assertEqual(resp.status_code, 200)
+
 
 # ---------------------------------------------------------------------------

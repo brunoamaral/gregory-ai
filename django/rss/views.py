@@ -1,6 +1,6 @@
 from django.contrib.syndication.views import Feed
 from django.contrib.sites.models import Site
-from django.db.models import F
+from django.db.models import F, Q
 from django.http import Http404
 from gregory.models import Articles, Authors, Trials, Subject
 from gregory.functions import normalize_orcid
@@ -85,21 +85,22 @@ class TrialsBySubjectFeed(Feed):
 		# subject_slug is only unique per team, not globally -- two teams can
 		# share a slug, so .get() would raise MultipleObjectsReturned (an
 		# uncaught 500) rather than resolving unambiguously. Resolve within
-		# the caller's visible orgs and pick deterministically among any
-		# remaining ties.
+		# the caller's visible orgs and pick deterministically (lowest id)
+		# among any remaining ties, in SQL rather than materialising every
+		# matching subject in Python. A NULL team is always visible --
+		# matching the previous code path, which only ran the visibility
+		# check when subject.team_id was set.
 		visible_org_ids = _visible_org_ids(request)
-		candidates = [
-			subject
-			for subject in Subject.objects.filter(
-				subject_slug=subject_slug
-			).select_related("team")
-			if subject.team is not None
-			and subject.team.organization_id in visible_org_ids
-		]
-		if not candidates:
+		subject = (
+			Subject.objects.filter(subject_slug=subject_slug)
+			.filter(
+				Q(team__isnull=True) | Q(team__organization_id__in=visible_org_ids)
+			)
+			.order_by("id")
+			.first()
+		)
+		if subject is None:
 			raise Http404
-
-		subject = min(candidates, key=lambda s: s.id)
 
 		# Compute visibility and attach to the per-request obj (not self)
 		# so concurrent requests on the shared Feed instance don't interfere.
