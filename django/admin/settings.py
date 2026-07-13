@@ -153,6 +153,11 @@ DATABASES = {
 		'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
 		'HOST': os.environ.get('DB_HOST'),
 		'PORT': 5432,
+		# Reuse connections across requests instead of opening/closing one per
+		# request. gunicorn runs 4 workers x 2 threads (Dockerfile), so worst
+		# case is ~8 persistent connections -- well within Postgres defaults.
+		'CONN_MAX_AGE': int(os.environ.get('CONN_MAX_AGE', '60')),
+		'CONN_HEALTH_CHECKS': True,
 	}
 }
 
