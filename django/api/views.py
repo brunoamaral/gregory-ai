@@ -1403,12 +1403,10 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 	def get_queryset(self):
 		"""
-		Optimized queryset that avoids complex COUNT annotations which cause hanging queries.
-
-		Instead of using expensive Count() annotations with multiple JOINs, we:
-		1. Use simple filtering and prefetch_related for efficiency
-		2. Calculate counts in the serializer using prefetched data when possible
-		3. Use select_related for foreign keys
+		Article/trial counts are computed with Count(..., distinct=True)
+		annotations (see below) rather than prefetching the full related
+		querysets, so a page of categories doesn't materialise every
+		article/trial row just to produce two integers.
 		"""
 		queryset = TeamCategory.objects.all()
 
@@ -1444,23 +1442,17 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 			if len(ids) > 0:
 				queryset = queryset.filter(id__in=ids)
 
-		# Use efficient prefetching instead of annotations
-		# This avoids the complex GROUP BY queries that are hanging the database
-		queryset = queryset.select_related("team").prefetch_related(
-			"subjects",
-			# Only prefetch essential fields to reduce memory usage
-			Prefetch(
-				"articles",
-				queryset=Articles.objects.select_related().only(
-					"article_id", "title", "published_date", "discovery_date"
-				),
-			),
-			Prefetch(
-				"trials",
-				queryset=Trials.objects.select_related().only(
-					"trial_id", "title", "published_date", "discovery_date"
-				),
-			),
+		# Counts are computed via Count(..., distinct=True) annotations rather
+		# than prefetching every article/trial row for the category: a large
+		# category (e.g. ~7,300 articles) would otherwise materialise
+		# thousands of rows just to produce two integers. See the identical
+		# pattern in CategoriesByTeamAndSubject.get_queryset. Annotation-based
+		# COUNT with a JOIN is fine post-#747/#749 — it was only the
+		# unrelated org-visibility DISTINCT-count pagination bug that was
+		# ever slow.
+		queryset = queryset.select_related("team").prefetch_related("subjects").annotate(
+			article_count_annotated=Count("articles", distinct=True),
+			trials_count_annotated=Count("trials", distinct=True),
 		)
 
 		return queryset.distinct()
