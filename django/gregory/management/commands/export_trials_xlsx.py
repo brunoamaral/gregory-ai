@@ -41,6 +41,7 @@ SCALAR_ORDER = [
 	"phase",
 	"phase_normalized",
 	"recruitment_status",
+	"recruitment_status_normalized",
 	"target_size",
 	"date_enrollement",
 	"countries",

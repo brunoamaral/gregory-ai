@@ -1,8 +1,11 @@
 """Tests for gregory.utils.trial_field_normalizers.normalize_phase, the Trials.save()
-hook that keeps phase_normalized in lockstep, the backfill_trial_phases management
-command, and the admin "Recompute normalized phase" action.
+hook that keeps phase_normalized in lockstep, the generalized
+backfill_trial_normalized_fields management command, and the admin "Recompute normalized
+fields" action.
 
-See docs/trials-phase-normalization.md for the design.
+See docs/trials-field-normalization.md for the design. Recruitment-status-specific
+coverage lives in test_trial_recruitment_status_normalization.py, which mirrors this
+file's structure.
 """
 
 from io import StringIO
@@ -12,6 +15,7 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import RequestFactory, TestCase
 
 from gregory.admin import TrialAdmin
@@ -256,13 +260,15 @@ class TrialSaveHookTests(TestCase):
 		self.assertIsNone(trial.phase_normalized)
 
 
-# --- backfill_trial_phases command -----------------------------------------------------
+# --- backfill_trial_normalized_fields command (phase coverage) -------------------------
 
 
 class BackfillTrialPhasesTest(TestCase):
 	def run_command(self, **kwargs):
 		out, err = StringIO(), StringIO()
-		call_command("backfill_trial_phases", stdout=out, stderr=err, **kwargs)
+		call_command(
+			"backfill_trial_normalized_fields", stdout=out, stderr=err, **kwargs
+		)
 		return out.getvalue(), err.getvalue()
 
 	def _make_stale(self, title, link, phase):
@@ -321,11 +327,36 @@ class BackfillTrialPhasesTest(TestCase):
 		self.assertIn("Updated 4/5 trial rows.", out)
 		self.assertIn("Updated 5/5 trial rows.", out)
 
+	def test_field_filter_scopes_to_phase_only(self):
+		"""--field phase must not touch recruitment_status_normalized, even when it is
+		stale — the counterpart to the recruitment_status-only test in
+		test_trial_recruitment_status_normalization.py."""
+		trial = Trials.objects.create(
+			title="A",
+			link="https://example.com/bf-field-phase",
+			phase="Phase III",
+			recruitment_status="Recruiting",
+		)
+		Trials.objects.filter(pk=trial.pk).update(
+			phase_normalized=None, recruitment_status_normalized=None
+		)
+		trial.refresh_from_db()
 
-# --- Admin "Recompute normalized phase" action ------------------------------------------
+		self.run_command(field="phase")
+
+		trial.refresh_from_db()
+		self.assertEqual(trial.phase_normalized, "phase_3")
+		self.assertIsNone(trial.recruitment_status_normalized)  # untouched: not selected
+
+	def test_unknown_field_raises(self):
+		with self.assertRaises(CommandError):
+			self.run_command(field="not_a_real_field")
 
 
-class TrialAdminRecomputePhaseNormalizedTests(TestCase):
+# --- Admin "Recompute normalized fields" action -----------------------------------------
+
+
+class TrialAdminRecomputeNormalizedFieldsTests(TestCase):
 	def setUp(self):
 		self.factory = RequestFactory()
 		self.site = AdminSite()
@@ -343,15 +374,22 @@ class TrialAdminRecomputePhaseNormalizedTests(TestCase):
 
 	def test_action_updates_stale_row(self):
 		trial = Trials.objects.create(
-			title="Phase III trial", link="https://example.com/admin-1", phase="Phase III"
+			title="Phase III trial",
+			link="https://example.com/admin-1",
+			phase="Phase III",
+			recruitment_status="Recruiting",
 		)
-		Trials.objects.filter(pk=trial.pk).update(phase_normalized=None)
+		Trials.objects.filter(pk=trial.pk).update(
+			phase_normalized=None, recruitment_status_normalized=None
+		)
 		trial.refresh_from_db()
 		self.assertIsNone(trial.phase_normalized)
+		self.assertIsNone(trial.recruitment_status_normalized)
 
 		request = self._request()
 		queryset = Trials.objects.filter(pk=trial.pk)
-		self.trial_admin.recompute_phase_normalized(request, queryset)
+		self.trial_admin.recompute_normalized_fields(request, queryset)
 
 		trial.refresh_from_db()
 		self.assertEqual(trial.phase_normalized, "phase_3")
+		self.assertEqual(trial.recruitment_status_normalized, "recruiting")

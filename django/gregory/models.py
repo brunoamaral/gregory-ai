@@ -13,7 +13,7 @@ from organizations.models import Organization, OrganizationUser
 from simple_history.models import HistoricalRecords
 import base64
 from django.db.models.functions import Lower
-from gregory.utils.trial_field_normalizers import TrialPhase, normalize_phase
+from gregory.utils.trial_field_normalizers import NORMALIZED_TRIAL_FIELDS, TrialPhase, TrialRecruitmentStatus
 
 
 class Authors(models.Model):
@@ -790,6 +790,18 @@ class Trials(models.Model):
 	recruitment_status = models.CharField(
 		max_length=200, null=True, blank=True, db_index=True
 	)
+	# Canonical recruitment status derived from `recruitment_status` by
+	# gregory.utils.trial_field_normalizers. Recomputed on every save() below — never set
+	# this directly.
+	recruitment_status_normalized = models.CharField(
+		max_length=30,
+		null=True,
+		blank=True,
+		choices=TrialRecruitmentStatus.choices,
+		db_index=True,
+		editable=False,
+		help_text="Canonical recruitment status derived from the raw 'recruitment_status' value; recomputed on every save.",
+	)
 	inclusion_agemin = models.CharField(max_length=100, null=True, blank=True)
 	inclusion_agemax = models.CharField(max_length=100, null=True, blank=True)
 	inclusion_gender = models.CharField(max_length=500, null=True, blank=True)
@@ -863,18 +875,23 @@ class Trials(models.Model):
 	)
 
 	def save(self, *args, **kwargs):
-		# Keep the derived field in lockstep with `phase` on every write path
+		# Keep every derived field in lockstep with its raw counterpart on every write path
 		# (feedreader_trials, feedreader_trials_ctgov, importWHOXML, TrialSerializer.create/update
 		# all go through .create()/.save()). bulk_update bypasses this — the backfill command
-		# handles that explicitly.
-		self.phase_normalized = normalize_phase(self.phase)
+		# handles that explicitly. See gregory.utils.trial_field_normalizers.NORMALIZED_TRIAL_FIELDS
+		# for the (raw field, derived field, normalizer) registry driving this loop.
 		update_fields = kwargs.get("update_fields")
-		if (
-			update_fields is not None
-			and "phase" in update_fields
-			and "phase_normalized" not in update_fields
-		):
-			kwargs["update_fields"] = [*update_fields, "phase_normalized"]
+		extra_update_fields = []
+		for raw_field, derived_field, normalizer in NORMALIZED_TRIAL_FIELDS:
+			setattr(self, derived_field, normalizer(getattr(self, raw_field)))
+			if (
+				update_fields is not None
+				and raw_field in update_fields
+				and derived_field not in update_fields
+			):
+				extra_update_fields.append(derived_field)
+		if extra_update_fields:
+			kwargs["update_fields"] = [*update_fields, *extra_update_fields]
 		super().save(*args, **kwargs)
 
 	def __str__(self):

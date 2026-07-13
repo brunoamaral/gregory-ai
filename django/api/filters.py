@@ -6,7 +6,7 @@ from django.utils import timezone
 from django import forms
 from datetime import datetime, timedelta
 from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject
-from gregory.utils.trial_field_normalizers import TrialPhase
+from gregory.utils.trial_field_normalizers import TrialPhase, TrialRecruitmentStatus
 
 
 class SubjectFilterMixin:
@@ -534,6 +534,9 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	status = filters.CharFilter(
 		field_name="recruitment_status", lookup_expr="iexact"
 	)  # Legacy alias for backward compatibility
+	recruitment_status_normalized = filters.ChoiceFilter(
+		choices=TrialRecruitmentStatus.choices
+	)
 	internal_number = filters.CharFilter(
 		field_name="internal_number", lookup_expr="icontains"
 	)
@@ -595,6 +598,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"search",
 			"recruitment_status",
 			"status",
+			"recruitment_status_normalized",
 			"team_id",
 			"subject_id",
 			"category_slug",

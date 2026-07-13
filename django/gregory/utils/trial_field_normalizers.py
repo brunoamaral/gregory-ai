@@ -11,8 +11,8 @@ Trials.save() in gregory/models.py).
 This module intentionally does NOT import gregory.models — models.py imports from here,
 not the other way round.
 
-See docs/trials-phase-normalization.md for the full mapping rationale and the extension
-recipe for the next field (recruitment_status, study_type, ...).
+See docs/trials-field-normalization.md for the full mapping rationale and the extension
+recipe for the next field (study_type, ...).
 """
 
 import logging
@@ -153,10 +153,10 @@ def _span_to_phase(phases: set) -> str:
 	return _SPAN_MAP.get(frozenset(phases), TrialPhase.OTHER)
 
 
-def _resolve(result: str, raw: str) -> str:
+def _resolve(result: str, raw: str, field_label: str = "trial phase") -> str:
 	"""Log unmapped raw values so the admin 'other' filter has something to review."""
 	if result == TrialPhase.OTHER:
-		logger.info("Unmapped trial phase value: %r", raw)
+		logger.info("Unmapped %s value: %r", field_label, raw)
 	return result
 
 
@@ -190,3 +190,90 @@ def normalize_phase(raw: str | None) -> str | None:
 	tokens = re.findall(r"phase\s*/?\s*(iv|i{1,3}|[0-4])\b", cleaned)
 	phases = {_token_to_int(token) for token in tokens}
 	return _resolve(_span_to_phase(phases), raw)
+
+
+class TrialRecruitmentStatus(models.TextChoices):
+	NOT_YET_RECRUITING = "not_yet_recruiting", "Not yet recruiting"
+	RECRUITING = "recruiting", "Recruiting"
+	ENROLLING_BY_INVITATION = "enrolling_by_invitation", "Enrolling by invitation"
+	ACTIVE_NOT_RECRUITING = "active_not_recruiting", "Active, not recruiting"
+	NOT_RECRUITING = "not_recruiting", "Not recruiting"
+	SUSPENDED = "suspended", "Suspended"
+	COMPLETED = "completed", "Completed"
+	TERMINATED = "terminated", "Terminated"
+	WITHDRAWN = "withdrawn", "Withdrawn"
+	UNKNOWN = "unknown", "Unknown"
+	OTHER = "other", "Other"
+
+
+# Exact-match lookup for every distinct raw `recruitment_status` value observed in the DB.
+# Keys are the whitespace-collapsed, casefolded raw value. Unlike _EXACT_MATCHES for phase,
+# there is deliberately no generic token fallback below: the recruitment-status vocabulary
+# is small enough that exact matching is safer than guessing at a new registry spelling.
+_RECRUITMENT_STATUS_EXACT_MATCHES: dict[str, str] = {
+	# Not yet recruiting
+	"not_yet_recruiting": TrialRecruitmentStatus.NOT_YET_RECRUITING,  # CT.gov
+	"authorised, recruitment pending": TrialRecruitmentStatus.NOT_YET_RECRUITING,  # EU CTIS
+	# Recruiting
+	"recruiting": TrialRecruitmentStatus.RECRUITING,  # CT.gov + WHO "Recruiting"
+	"ongoing, recruiting": TrialRecruitmentStatus.RECRUITING,  # EU CTIS
+	"authorised, recruiting": TrialRecruitmentStatus.RECRUITING,  # EU CTIS
+	# Enrolling by invitation
+	"enrolling_by_invitation": TrialRecruitmentStatus.ENROLLING_BY_INVITATION,  # CT.gov
+	# Active, not recruiting
+	"active_not_recruiting": TrialRecruitmentStatus.ACTIVE_NOT_RECRUITING,  # CT.gov
+	"ongoing, recruitment ended": TrialRecruitmentStatus.ACTIVE_NOT_RECRUITING,  # EU CTIS
+	# Not recruiting: WHO ICTRP's generic status is deliberately its own bucket — it does
+	# not say whether the trial is pre-start, ongoing, or done, so folding it into
+	# active_not_recruiting would overclaim.
+	"not recruiting": TrialRecruitmentStatus.NOT_RECRUITING,  # WHO ICTRP
+	# Suspended
+	"suspended": TrialRecruitmentStatus.SUSPENDED,  # CT.gov
+	"temporarily halted": TrialRecruitmentStatus.SUSPENDED,  # WHO
+	"temporarily_not_available": TrialRecruitmentStatus.SUSPENDED,  # CT.gov expanded access
+	# Completed
+	"completed": TrialRecruitmentStatus.COMPLETED,  # CT.gov / WHO
+	"ended": TrialRecruitmentStatus.COMPLETED,  # EU CTIS
+	# Terminated
+	"terminated": TrialRecruitmentStatus.TERMINATED,  # CT.gov
+	# Withdrawn
+	"withdrawn": TrialRecruitmentStatus.WITHDRAWN,  # CT.gov
+	# Unknown: registry states that stop short of naming an actual recruitment state.
+	"unknown": TrialRecruitmentStatus.UNKNOWN,  # CT.gov — not verified in >2 years
+	"authorised": TrialRecruitmentStatus.UNKNOWN,  # EUCTR/CTIS: approved, recruitment state unstated
+	"not available": TrialRecruitmentStatus.UNKNOWN,  # WHO: status not available
+	# Other: CT.gov expanded-access program statuses, not trial recruitment states.
+	# Deliberately left in "other" so the raw string shows on display surfaces.
+	"available": TrialRecruitmentStatus.OTHER,
+	"no_longer_available": TrialRecruitmentStatus.OTHER,
+	"approved_for_marketing": TrialRecruitmentStatus.OTHER,
+}
+
+
+def normalize_recruitment_status(raw: str | None) -> str | None:
+	"""
+	Map a raw Trials.recruitment_status value to a canonical TrialRecruitmentStatus value.
+
+	Returns None for missing/blank input, otherwise always a TrialRecruitmentStatus value
+	(falling back to TrialRecruitmentStatus.OTHER for anything unrecognised — never raises).
+	No generic token fallback here (unlike normalize_phase): the vocabulary is small and
+	exact matching is safer.
+	"""
+	if raw is None or not raw.strip():
+		return None
+
+	cleaned = re.sub(r"\s+", " ", raw).strip().casefold()
+
+	if cleaned in _RECRUITMENT_STATUS_EXACT_MATCHES:
+		return _RECRUITMENT_STATUS_EXACT_MATCHES[cleaned]
+
+	return _resolve(TrialRecruitmentStatus.OTHER, raw, field_label="trial recruitment status")
+
+
+# Drives Trials.save() and the generalized backfill/admin-recompute commands: each entry is
+# (raw field name, derived field name, normalizer function). Add a new entry here — plus the
+# matching model field in gregory/models.py — for the next derived field (study_type, ...).
+NORMALIZED_TRIAL_FIELDS = (
+	("phase", "phase_normalized", normalize_phase),
+	("recruitment_status", "recruitment_status_normalized", normalize_recruitment_status),
+)

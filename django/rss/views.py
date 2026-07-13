@@ -135,8 +135,17 @@ class TrialsBySubjectFeed(Feed):
 		# Trial metadata section
 		metadata = []
 
-		if item.recruitment_status:
-			metadata.append(f"<strong>Status:</strong> {item.recruitment_status}")
+		if item.recruitment_status_normalized or item.recruitment_status:
+			# Prefer the canonical label; for "other" the raw registry string is more
+			# informative than the label.
+			status_display = (
+				item.get_recruitment_status_normalized_display()
+				if item.recruitment_status_normalized
+				and item.recruitment_status_normalized != "other"
+				else item.recruitment_status
+				or item.get_recruitment_status_normalized_display()
+			)
+			metadata.append(f"<strong>Status:</strong> {status_display}")
 
 		if item.phase_normalized or item.phase:
 			# Prefer the canonical label; for "other" the raw registry string

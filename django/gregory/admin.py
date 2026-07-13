@@ -45,7 +45,7 @@ from .models import (
 )
 from .widgets import MLPredictionsWidget
 from .fields import MLPredictionsField
-from .utils.trial_field_normalizers import normalize_phase
+from .utils.trial_field_normalizers import NORMALIZED_TRIAL_FIELDS
 
 
 def get_user_organizations(user):
@@ -799,6 +799,9 @@ class TrialAdminForm(forms.ModelForm):
 			# export glossary, which reads TrialAdminForm.Meta.labels directly.
 			"phase_normalized": "Trial phase (normalized)",
 			"recruitment_status": "Recruitment status",
+			# Not a form field (editable=False) — the label is used by the XLSX
+			# export glossary, which reads TrialAdminForm.Meta.labels directly.
+			"recruitment_status_normalized": "Recruitment status (normalized)",
 			"target_size": "Target enrolment",
 			"countries": "Countries",
 			# Conditions & interventions
@@ -908,7 +911,7 @@ class TrialAdminForm(forms.ModelForm):
 class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAdmin):
 	form = TrialAdminForm
 	source_for_values = ["trials"]
-	actions = ["add_source_action", "remove_source_action", "recompute_phase_normalized"]
+	actions = ["add_source_action", "remove_source_action", "recompute_normalized_fields"]
 	list_display = [
 		"trial_id",
 		"title",
@@ -917,9 +920,14 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		"last_updated",
 	]
 	exclude = ["ml_predictions"]
-	# phase_normalized is editable=False (recomputed on save, see Trials.save()); it must be
+	# Derived fields are editable=False (recomputed on save, see Trials.save()); they must be
 	# listed here to appear in the "Study Details" fieldset at all.
-	readonly_fields = ["last_updated", "links", "phase_normalized"]
+	readonly_fields = [
+		"last_updated",
+		"links",
+		"phase_normalized",
+		"recruitment_status_normalized",
+	]
 	inlines = [
 		TrialOrgContentInline,
 		TrialArticleReferenceInline,
@@ -958,6 +966,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		("subjects", OrganizationRestrictedFieldListFilter),
 		("sources", OrganizationRestrictedFieldListFilter),
 		"phase_normalized",
+		"recruitment_status_normalized",
 	]
 	fieldsets = (
 		(
@@ -992,6 +1001,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 					"phase",
 					"phase_normalized",
 					"recruitment_status",
+					"recruitment_status_normalized",
 					"target_size",
 					"date_enrollement",
 					"date_registration",
@@ -1115,16 +1125,26 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 
 	display_identifiers.short_description = "Identifiers"
 
-	@admin.action(description="Recompute normalized phase")
-	def recompute_phase_normalized(self, request, queryset):
-		"""Tuning tool: filter to phase_normalized='other', extend the mapping table in
+	@admin.action(description="Recompute normalized fields")
+	def recompute_normalized_fields(self, request, queryset):
+		"""Tuning tool: filter to e.g. phase_normalized='other', extend the mapping table in
 		gregory/utils/trial_field_normalizers.py for the raw values you see, then select-all
-		and run this to re-derive phase_normalized without waiting for the next save()."""
-		trials = list(queryset.only("trial_id", "phase", "phase_normalized"))
+		and run this to re-derive every registered normalized field (see
+		NORMALIZED_TRIAL_FIELDS) without waiting for the next save()."""
+		select_fields = ["trial_id"]
+		for raw_field, derived_field, _normalizer in NORMALIZED_TRIAL_FIELDS:
+			select_fields += [raw_field, derived_field]
+
+		trials = list(queryset.only(*select_fields))
 		for trial in trials:
-			trial.phase_normalized = normalize_phase(trial.phase)
-		Trials.objects.bulk_update(trials, ["phase_normalized"])
-		self.message_user(request, f"Recomputed phase_normalized for {len(trials)} trial(s).")
+			for raw_field, derived_field, normalizer in NORMALIZED_TRIAL_FIELDS:
+				setattr(trial, derived_field, normalizer(getattr(trial, raw_field)))
+
+		derived_fields = [derived_field for _, derived_field, _ in NORMALIZED_TRIAL_FIELDS]
+		Trials.objects.bulk_update(trials, derived_fields)
+		self.message_user(
+			request, f"Recomputed normalized fields for {len(trials)} trial(s)."
+		)
 
 
 class SourceInline(admin.StackedInline):

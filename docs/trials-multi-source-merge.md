@@ -150,14 +150,15 @@ ran last. This is now fixed:
 
 ## Derived normalized fields are immune to the flip-flop
 
-`phase` is one of the shared/contested fields above — its raw vocabulary can flip-flop
-between registry spellings depending on which importer wrote last. `phase_normalized`
-(see `docs/trials-phase-normalization.md`) is a *derived* companion field recomputed from
-`phase` on every `Trials.save()`, so it always reflects the canonical form of whatever
-`phase` currently holds — it never lags behind a previous importer's value. This is the
-intended pattern for any future derived field (`recruitment_status_normalized`,
-`study_type_normalized`, ...): compute it fresh from the raw field on every save rather
-than merging/preserving it across sources.
+`phase` and `recruitment_status` are shared/contested fields above — their raw vocabulary
+can flip-flop between registry spellings depending on which importer wrote last.
+`phase_normalized` and `recruitment_status_normalized` (see
+`docs/trials-field-normalization.md`) are *derived* companion fields recomputed from their
+raw counterpart on every `Trials.save()`, so each always reflects the canonical form of
+whatever the raw field currently holds — it never lags behind a previous importer's value.
+This is the intended pattern for any future derived field (`study_type_normalized`, ...):
+compute it fresh from the raw field on every save rather than merging/preserving it across
+sources.
 
 ## Open questions before implementing
 

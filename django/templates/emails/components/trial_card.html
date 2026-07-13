@@ -38,11 +38,17 @@ Usage:
         </p>
         {% endif %}
         
-        {% if trial.recruitment_status %}
+        {% if trial.recruitment_status_normalized or trial.recruitment_status %}
         <p class="trial-card-meta" style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
             <strong>Status:</strong>
-            <span style="{% if trial.recruitment_status == 'Recruiting' %}color: #059669; font-weight: 600;{% elif trial.recruitment_status == 'Completed' %}color: #6b7280;{% elif trial.recruitment_status == 'Active, not recruiting' %}color: #d97706; font-weight: 600;{% else %}color: #6b7280;{% endif %}">
-                {{ trial.recruitment_status }}
+            {# Prefer the canonical label; for "other" the raw registry string is more informative #}
+            {# Colours are keyed on recruitment_status_normalized, not the raw string, so they match CT.gov/WHO/CTIS spellings alike #}
+            <span style="{% if trial.recruitment_status_normalized == 'recruiting' %}color: #059669; font-weight: 600;{% elif trial.recruitment_status_normalized == 'active_not_recruiting' %}color: #d97706; font-weight: 600;{% elif trial.recruitment_status_normalized == 'completed' %}color: #6b7280;{% else %}color: #6b7280;{% endif %}">
+                {% if trial.recruitment_status_normalized and trial.recruitment_status_normalized != "other" %}
+                    {{ trial.get_recruitment_status_normalized_display }}
+                {% else %}
+                    {{ trial.recruitment_status }}
+                {% endif %}
             </span>
         </p>
         {% endif %}

@@ -542,6 +542,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 			"date_registration",
 			"source_register",
 			"recruitment_status",
+			"recruitment_status_normalized",
 			"other_records",
 			"inclusion_agemin",
 			"inclusion_agemax",
