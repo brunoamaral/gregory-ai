@@ -25,7 +25,7 @@ from tqdm import tqdm  # Progress bar library
 
 nltk.download("stopwords")
 STOPWORDS = set(stopwords.words("english"))
-get_api_url = "https://api.gregory-ms.com/articles/?format=json"
+get_api_url = "https://api.brain-regeneration.com/articles/?format=json"
 api_key = "your_api_key"  # not need for reading permissions
 REPLACE_BY_SPACE_RE = re.compile(r"[/(){}\[\]\|@,;]")
 BAD_SYMBOLS_RE = re.compile("[^0-9a-z #+_]")

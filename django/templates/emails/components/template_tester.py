@@ -64,11 +64,11 @@ class EmailTemplateTestUtils:
 	@staticmethod
 	def create_mock_context(email_type="weekly_summary"):
 		"""Create mock context data for template testing."""
-		mock_site = {"domain": "gregory-ms.com", "name": "Gregory AI"}
+		mock_site = {"domain": "brain-regeneration.com", "name": "Gregory AI"}
 
 		mock_customsettings = {
 			"title": "Gregory AI - MS Research Updates",
-			"contact_email": "hello@gregory-ms.com",
+			"contact_email": "hello@brain-regeneration.com",
 			"social_links": {
 				"twitter": "https://twitter.com/gregory_ai",
 				"github": "https://github.com/brunoamaral/gregory",
@@ -94,7 +94,7 @@ class EmailTemplateTestUtils:
 		}
 
 		if email_type == "admin_summary":
-			context["admin"] = "admin@gregory-ms.com"
+			context["admin"] = "admin@brain-regeneration.com"
 			context["title"] = mock_customsettings["title"]
 
 		return context

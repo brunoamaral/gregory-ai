@@ -2,7 +2,7 @@
 
 GregoryAI is an AI system that uses Machine Learning and Natural Language Processing to track research and identify papers that improve the wellbeing of patients. It ingests content from RSS feeds, API endpoints, and manual submissions, applies ML relevance predictions, and delivers curated digests via email and API.
 
-A public instance tracking Multiple Sclerosis research is available at [gregory-ms.com](https://gregory-ms.com), with its API at [api.gregory-ms.com](https://api.gregory-ms.com).
+A public instance tracking brain regeneration research is available at [brain-regeneration.com](https://brain-regeneration.com), with its API at [api.brain-regeneration.com](https://api.brain-regeneration.com).
 
 ---
 

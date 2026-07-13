@@ -35,7 +35,7 @@ class AuthorURLFormatTests(TestCase):
 
 		# Set up site for URL generation
 		site = Site.objects.get_current()
-		site.domain = "api.gregory-ms.com"
+		site.domain = "api.brain-regeneration.com"
 		site.save()
 
 		self.client = APIClient()
@@ -46,12 +46,12 @@ class AuthorURLFormatTests(TestCase):
 		data = serializer.data
 
 		expected_url = (
-			f"https://api.gregory-ms.com/articles/?author_id={self.author.author_id}"
+			f"https://api.brain-regeneration.com/articles/?author_id={self.author.author_id}"
 		)
 		self.assertEqual(data["articles_list"], expected_url)
 
 		# Verify it's not using the old format
-		old_url = f"https://api.gregory-ms.com/articles/author/{self.author.author_id}"
+		old_url = f"https://api.brain-regeneration.com/articles/author/{self.author.author_id}"
 		self.assertNotEqual(data["articles_list"], old_url)
 
 	def test_authors_endpoint_response_url_format(self):
@@ -82,10 +82,10 @@ class AuthorURLFormatTests(TestCase):
 
 		# Should use the new format with query parameters
 		expected_url = (
-			f"https://api.gregory-ms.com/articles/?author_id={self.author.author_id}"
+			f"https://api.brain-regeneration.com/articles/?author_id={self.author.author_id}"
 		)
 		self.assertEqual(articles_list_url, expected_url)
 
 		# Verify it's not using the old format
-		old_url = f"https://api.gregory-ms.com/articles/author/{self.author.author_id}"
+		old_url = f"https://api.brain-regeneration.com/articles/author/{self.author.author_id}"
 		self.assertNotEqual(articles_list_url, old_url)

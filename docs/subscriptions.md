@@ -139,7 +139,7 @@ All three weekly summary, admin summary, and trials notification commands inject
 Post to `POST /subscriptions/new/` with `Content-Type: application/x-www-form-urlencoded`. A minimal form looks like:
 
 ```html
-<form method="POST" action="https://api.gregory-ms.com/subscriptions/new/">
+<form method="POST" action="https://api.brain-regeneration.com/subscriptions/new/">
   <input type="text"   name="first_name" required placeholder="First name" />
   <input type="text"   name="last_name"  placeholder="Last name" />
   <input type="email"  name="email"      required placeholder="Email address" />
@@ -189,7 +189,7 @@ params.append('email', 'jane@example.com');
 params.append('list', '2');
 params.append('list', '3');  // repeat for each list
 
-await fetch('https://api.gregory-ms.com/subscriptions/new/', {
+await fetch('https://api.brain-regeneration.com/subscriptions/new/', {
   method: 'POST',
   body: params,
 });

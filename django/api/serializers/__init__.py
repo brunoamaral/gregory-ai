@@ -40,7 +40,11 @@ def get_site():
 class TeamSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = Team
-		fields = "__all__"
+		# Explicit whitelist -- `__all__` leaked `members` (Django auth User
+		# IDs of everyone on the team) to any API caller. `site` is an
+		# internal FK used for outbound email sending, not something API
+		# consumers need.
+		fields = ["id", "name", "slug", "organization", "is_active"]
 
 
 class SubjectsSerializer(serializers.ModelSerializer):

@@ -44,6 +44,7 @@ from datetime import datetime, timedelta
 from django.db.models import (
 	Count,
 	Exists,
+	Max,
 	Q,
 	Prefetch,
 	OuterRef,
@@ -187,6 +188,34 @@ class BulkExportThrottleMixin:
 		if request_bypasses_pagination(self.request):
 			return [ScopedRateThrottle()]
 		return super().get_throttles()
+
+
+def _latest_ml_predictions_queryset():
+	"""``MLPredictions`` queryset restricted to the latest row per
+	(article, subject, algorithm), for use as a serializer prefetch.
+
+	Since PR #748, "current" ML relevance is latest-per-(subject, algorithm)
+	only — a retired model_version's stale score must not keep showing up
+	in the API forever. Same tie-inclusive Max(created_date) correlated
+	subquery as ``Articles.is_ml_relevant_for_subject``, generalised to
+	correlate on article_id too (that method fixes article/subject and
+	correlates only on algorithm). Index-backed by ``mlpred_art_subj_date_idx``.
+	Full prediction history is never deleted; it stays reachable via the
+	admin/DB for anyone who needs it.
+	"""
+	latest_date_per_group = (
+		MLPredictions.objects.filter(
+			article_id=OuterRef("article_id"),
+			subject_id=OuterRef("subject_id"),
+			algorithm=OuterRef("algorithm"),
+		)
+		.values("algorithm")
+		.annotate(latest=Max("created_date"))
+		.values("latest")[:1]
+	)
+	return MLPredictions.objects.filter(
+		created_date=Subquery(latest_date_per_group)
+	).select_related("subject")
 
 
 class OrgVisibilityMixin:
@@ -511,6 +540,11 @@ def post_article(request):
 					published_date=new_article["published_date"],
 					doi=new_article["doi"],
 					kind=kind,
+					# NULL and "unknown" are the same semantic state; normalise
+					# here so nothing writes NULL and drifts back out of sync
+					# with the "unknown" spelling other code already folds
+					# NULL into at read time.
+					access=new_article["access"] or "unknown",
 					publisher=new_article["publisher"],
 					container_title=new_article["container_title"],
 					pdf_link=new_article["pdf_link"],
@@ -646,6 +680,8 @@ def post_article(request):
 
 			# discovery_date is auto_now_add on Articles, so it is always set
 			# server-side and any value passed here would be ignored anyway.
+			# News articles have no CrossRef lookup, so access is always
+			# "unknown" rather than NULL -- see the science-paper branch above.
 			save_article = Articles.objects.create(
 				title=new_article["title"],
 				summary=new_article["summary"],
@@ -653,6 +689,7 @@ def post_article(request):
 				links=merge_links(None, new_article["link"]),
 				published_date=new_article["published_date"],
 				kind=kind,
+				access="unknown",
 			)
 			save_article.sources.add(source)
 			save_article.teams.add(source.team)
@@ -1167,7 +1204,7 @@ class ArticleViewSet(
 	queryset = Articles.objects.all().prefetch_related(
 		Prefetch(
 			"ml_predictions_detail",
-			queryset=MLPredictions.objects.select_related("subject"),
+			queryset=_latest_ml_predictions_queryset(),
 		),
 		"authors",
 		Prefetch("teams", queryset=Team.objects.prefetch_related("members")),
@@ -2402,11 +2439,14 @@ class ArticleSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 				raise Http404
 
 		try:
-			# Start with articles filtered by team and subject
-			# Remove distinct constraint to allow proper ordering
-			queryset = Articles.objects.filter(
-				teams__id=team_id, subjects__id=subject_id
-			).distinct()
+			# Filter via a correlated Exists() subquery instead of joining the
+			# teams/subjects M2M tables and calling .distinct() on the outer
+			# queryset — DISTINCT-ing every serialized column defeats DRF's
+			# paginator COUNT(*) at scale. See OrgVisibilityMixin.get_queryset.
+			match_subq = Articles.objects.filter(
+				pk=OuterRef("pk"), teams__id=team_id, subjects__id=subject_id
+			)
+			queryset = Articles.objects.filter(Exists(match_subq))
 
 			# Apply additional filters
 			title = params.get("title")
@@ -2426,7 +2466,7 @@ class ArticleSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 			queryset = queryset.prefetch_related(
 				Prefetch(
 					"ml_predictions_detail",
-					queryset=MLPredictions.objects.select_related("subject"),
+					queryset=_latest_ml_predictions_queryset(),
 				),
 				"authors",
 				Prefetch("teams", queryset=Team.objects.prefetch_related("members")),
@@ -2442,6 +2482,19 @@ class ArticleSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 					queryset=ArticleTrialReference.objects.select_related("trial"),
 				),
 			)
+
+			# Prefetch the caller-org's ArticleOrgContent so the serializer's
+			# per-org fields don't issue one query per article. Mirrors
+			# ArticleViewSet.get_queryset.
+			org = _resolve_per_org_fields_org(self.request)
+			if org is not None:
+				queryset = queryset.prefetch_related(
+					Prefetch(
+						"org_contents",
+						queryset=ArticleOrgContent.objects.filter(organization=org),
+						to_attr="_prefetched_org_contents",
+					)
+				)
 
 			return queryset
 		except (AttributeError, TypeError, ValueError) as e:
@@ -2630,9 +2683,12 @@ class TrialSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 		except (Team.DoesNotExist, Subject.DoesNotExist):
 			return Trials.objects.none()
 
-		# Start with trials filtered by team and subject
-		# Remove distinct constraint to allow proper ordering
-		queryset = Trials.objects.filter(teams=team, subjects=subject).distinct()
+		# Filter via a correlated Exists() subquery instead of joining the
+		# teams/subjects M2M tables and calling .distinct() on the outer
+		# queryset — DISTINCT-ing every serialized column defeats DRF's
+		# paginator COUNT(*) at scale. See OrgVisibilityMixin.get_queryset.
+		match_subq = Trials.objects.filter(pk=OuterRef("pk"), teams=team, subjects=subject)
+		queryset = Trials.objects.filter(Exists(match_subq))
 
 		# Apply additional filters
 		title = params.get("title")
@@ -2662,6 +2718,19 @@ class TrialSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 		queryset = queryset.prefetch_related(
 			"sources", "team_categories", "article_references__article"
 		)
+
+		# Prefetch the caller-org's TrialOrgContent so the serializer's
+		# per-org fields don't issue one query per trial. Mirrors
+		# TrialViewSet.get_queryset.
+		org = _resolve_per_org_fields_org(self.request)
+		if org is not None:
+			queryset = queryset.prefetch_related(
+				Prefetch(
+					"org_contents",
+					queryset=TrialOrgContent.objects.filter(organization=org),
+					to_attr="_prefetched_org_contents",
+				)
+			)
 
 		return queryset
 
