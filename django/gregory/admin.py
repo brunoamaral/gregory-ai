@@ -14,7 +14,7 @@ import logging
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
 from .admin_filters import DateRangeFilter, SourceHealthFilter
 from django.db import models, transaction  # Add this import for models.Count
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
 from django import forms
 from django.utils.html import format_html, mark_safe
@@ -643,6 +643,26 @@ class ArticleAdminForm(forms.ModelForm):
 				)
 
 
+class DoiAssignedFilter(admin.SimpleListFilter):
+	"""Filter articles by whether they carry a DOI (articles-missing-doi audit)."""
+
+	title = "DOI assigned"
+	parameter_name = "doi_assigned"
+
+	def lookups(self, request, model_admin):
+		return (
+			("yes", "Yes"),
+			("no", "No"),
+		)
+
+	def queryset(self, request, queryset):
+		if self.value() == "no":
+			return queryset.filter(Q(doi__isnull=True) | Q(doi=""))
+		if self.value() == "yes":
+			return queryset.exclude(Q(doi__isnull=True) | Q(doi=""))
+		return queryset
+
+
 class ArticleAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAdmin):
 	form = ArticleAdminForm
 	source_for_values = ["science paper", "news article"]
@@ -711,6 +731,7 @@ class ArticleAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistory
 		("teams", OrganizationRestrictedFieldListFilter),
 		("subjects", OrganizationRestrictedFieldListFilter),
 		("sources", OrganizationRestrictedFieldListFilter),
+		DoiAssignedFilter,
 	]
 	raw_id_fields = ("authors",)
 

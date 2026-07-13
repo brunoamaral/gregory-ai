@@ -10,6 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 from gregory.classes import SciencePaper
 from gregory.services.article_merge import assign_doi_or_merge
+from gregory.utils.doi_utils import extract_doi_from_url, resolve_doi_from_pubmed_url
 from gregory.utils.registry_utils import merge_links
 from sitesettings.models import CustomSetting
 import feedparser
@@ -72,6 +73,22 @@ class FeedProcessor(ABC):
 	def extract_doi(self, entry: dict) -> str:
 		"""Extract DOI from feed entry."""
 		pass
+
+	def extract_doi_with_fallback(self, entry: dict) -> Optional[str]:
+		"""Resolve the DOI for an entry, falling back to the article URL.
+
+		Every subclass implements ``extract_doi`` against its own feed-specific
+		field (dc:identifier, guid, prism:doi, ...). When that yields nothing —
+		notably every entry routed to ``DefaultFeedProcessor``, whose
+		``extract_doi`` always returns ``None`` — fall back to pulling a DOI
+		straight out of the entry's link (e.g. doi.org redirects, or publisher
+		URLs with the DOI embedded in the path). This is a concrete method on
+		the base class so every processor benefits without overriding anything.
+		"""
+		doi = self.extract_doi(entry)
+		if doi:
+			return doi
+		return extract_doi_from_url(entry.get("link"))
 
 	def extract_basic_fields(self, entry: dict) -> dict:
 		"""Extract common fields that are the same across all feed types."""
@@ -169,10 +186,17 @@ class PubMedFeedProcessor(FeedProcessor):
 		return summary
 
 	def extract_doi(self, entry: dict) -> str:
-		"""Extract DOI from PubMed feed entry."""
-		if entry.get("dc_identifier", "").startswith("doi:"):
-			return entry["dc_identifier"].replace("doi:", "")
-		return None
+		"""Extract DOI from PubMed feed entry.
+
+		Primary source is ``dc:identifier`` (``doi:10.xxxx/...``). When that's
+		absent — many PubMed RSS entries don't carry it — fall back to
+		resolving the DOI from the PMID in the entry's link via NCBI
+		E-utilities (see ``gregory.utils.doi_utils.resolve_doi_from_pubmed_url``).
+		"""
+		dc_identifier = entry.get("dc_identifier") or ""
+		if dc_identifier.startswith("doi:"):
+			return dc_identifier.replace("doi:", "")
+		return resolve_doi_from_pubmed_url(entry.get("link"))
 
 
 class FasebFeedProcessor(FeedProcessor):
@@ -607,7 +631,7 @@ class Command(GregoryBaseCommand):
 		if (processor.extract_summary(entry) or "").strip():
 			# The filter already saw a real summary; the exclusion is final.
 			return False, None
-		doi = processor.extract_doi(entry)
+		doi = processor.extract_doi_with_fallback(entry)
 		if not doi:
 			return False, None
 
@@ -649,7 +673,7 @@ class Command(GregoryBaseCommand):
 
 		# Extract feed-specific fields
 		raw_summary = processor.extract_summary(entry)
-		doi = processor.extract_doi(entry)
+		doi = processor.extract_doi_with_fallback(entry)
 
 		# Clean and store the original feed summary
 		feed_summary = (
