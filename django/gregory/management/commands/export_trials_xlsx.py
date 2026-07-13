@@ -39,6 +39,7 @@ SCALAR_ORDER = [
 	"study_type",
 	"study_design",
 	"phase",
+	"phase_normalized",
 	"recruitment_status",
 	"target_size",
 	"date_enrollement",

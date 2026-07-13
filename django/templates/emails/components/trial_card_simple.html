@@ -28,7 +28,12 @@ This is a simplified version for contexts where we just need basic trial display
     
     <!-- Trial Metadata -->
     <div style="margin-bottom: 15px;">
-        {% if trial.phase %}
+        {# Prefer the canonical label; for "other" the raw registry string is more informative #}
+        {% if trial.phase_normalized and trial.phase_normalized != "other" %}
+        <p class="trial-card-meta" style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
+            <strong>Phase:</strong> {{ trial.get_phase_normalized_display }}
+        </p>
+        {% elif trial.phase %}
         <p class="trial-card-meta" style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
             <strong>Phase:</strong> {{ trial.phase }}
         </p>

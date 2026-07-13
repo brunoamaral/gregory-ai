@@ -13,6 +13,7 @@ from organizations.models import Organization, OrganizationUser
 from simple_history.models import HistoricalRecords
 import base64
 from django.db.models.functions import Lower
+from gregory.utils.trial_field_normalizers import TrialPhase, normalize_phase
 
 
 class Authors(models.Model):
@@ -797,6 +798,17 @@ class Trials(models.Model):
 	study_type = models.TextField(null=True, blank=True)
 	study_design = models.TextField(null=True, blank=True)  # Changed to TextField
 	phase = models.TextField(null=True, blank=True)  # Changed to TextField
+	# Canonical phase derived from `phase` by gregory.utils.trial_field_normalizers.
+	# Recomputed on every save() below — never set this directly.
+	phase_normalized = models.CharField(
+		max_length=20,
+		null=True,
+		blank=True,
+		choices=TrialPhase.choices,
+		db_index=True,
+		editable=False,
+		help_text="Canonical trial phase derived from the raw 'phase' value; recomputed on every save.",
+	)
 	countries = models.TextField(null=True, blank=True)
 	contact_firstname = models.TextField(null=True, blank=True)
 	contact_lastname = models.TextField(null=True, blank=True)
@@ -849,6 +861,21 @@ class Trials(models.Model):
 		blank=True,
 		help_text="Detailed description from ClinicalTrials.gov API",
 	)
+
+	def save(self, *args, **kwargs):
+		# Keep the derived field in lockstep with `phase` on every write path
+		# (feedreader_trials, feedreader_trials_ctgov, importWHOXML, TrialSerializer.create/update
+		# all go through .create()/.save()). bulk_update bypasses this — the backfill command
+		# handles that explicitly.
+		self.phase_normalized = normalize_phase(self.phase)
+		update_fields = kwargs.get("update_fields")
+		if (
+			update_fields is not None
+			and "phase" in update_fields
+			and "phase_normalized" not in update_fields
+		):
+			kwargs["update_fields"] = [*update_fields, "phase_normalized"]
+		super().save(*args, **kwargs)
 
 	def __str__(self):
 		return str(self.trial_id)

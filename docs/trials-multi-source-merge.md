@@ -148,6 +148,17 @@ ran last. This is now fixed:
   integration: first-stored registry URL is kept in both import orders, re-imports
   are idempotent, aggregator upgrade).
 
+## Derived normalized fields are immune to the flip-flop
+
+`phase` is one of the shared/contested fields above — its raw vocabulary can flip-flop
+between registry spellings depending on which importer wrote last. `phase_normalized`
+(see `docs/trials-phase-normalization.md`) is a *derived* companion field recomputed from
+`phase` on every `Trials.save()`, so it always reflects the canonical form of whatever
+`phase` currently holds — it never lags behind a previous importer's value. This is the
+intended pattern for any future derived field (`recruitment_status_normalized`,
+`study_type_normalized`, ...): compute it fresh from the raw field on every save rather
+than merging/preserving it across sources.
+
 ## Open questions before implementing
 
 - **Manual edits**: should an admin edit be permanently sticky, or only until the home

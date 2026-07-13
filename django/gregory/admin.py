@@ -45,6 +45,7 @@ from .models import (
 )
 from .widgets import MLPredictionsWidget
 from .fields import MLPredictionsField
+from .utils.trial_field_normalizers import normalize_phase
 
 
 def get_user_organizations(user):
@@ -794,6 +795,9 @@ class TrialAdminForm(forms.ModelForm):
 			"study_type": "Study type",
 			"study_design": "Study design",
 			"phase": "Trial phase",
+			# Not a form field (editable=False) — the label is used by the XLSX
+			# export glossary, which reads TrialAdminForm.Meta.labels directly.
+			"phase_normalized": "Trial phase (normalized)",
 			"recruitment_status": "Recruitment status",
 			"target_size": "Target enrolment",
 			"countries": "Countries",
@@ -904,7 +908,7 @@ class TrialAdminForm(forms.ModelForm):
 class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAdmin):
 	form = TrialAdminForm
 	source_for_values = ["trials"]
-	actions = ["add_source_action", "remove_source_action"]
+	actions = ["add_source_action", "remove_source_action", "recompute_phase_normalized"]
 	list_display = [
 		"trial_id",
 		"title",
@@ -913,7 +917,9 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		"last_updated",
 	]
 	exclude = ["ml_predictions"]
-	readonly_fields = ["last_updated", "links"]
+	# phase_normalized is editable=False (recomputed on save, see Trials.save()); it must be
+	# listed here to appear in the "Study Details" fieldset at all.
+	readonly_fields = ["last_updated", "links", "phase_normalized"]
 	inlines = [
 		TrialOrgContentInline,
 		TrialArticleReferenceInline,
@@ -951,6 +957,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		("teams", OrganizationRestrictedFieldListFilter),
 		("subjects", OrganizationRestrictedFieldListFilter),
 		("sources", OrganizationRestrictedFieldListFilter),
+		"phase_normalized",
 	]
 	fieldsets = (
 		(
@@ -983,6 +990,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 					"study_type",
 					"study_design",
 					"phase",
+					"phase_normalized",
 					"recruitment_status",
 					"target_size",
 					"date_enrollement",
@@ -1106,6 +1114,17 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		return "No Identifiers"
 
 	display_identifiers.short_description = "Identifiers"
+
+	@admin.action(description="Recompute normalized phase")
+	def recompute_phase_normalized(self, request, queryset):
+		"""Tuning tool: filter to phase_normalized='other', extend the mapping table in
+		gregory/utils/trial_field_normalizers.py for the raw values you see, then select-all
+		and run this to re-derive phase_normalized without waiting for the next save()."""
+		trials = list(queryset.only("trial_id", "phase", "phase_normalized"))
+		for trial in trials:
+			trial.phase_normalized = normalize_phase(trial.phase)
+		Trials.objects.bulk_update(trials, ["phase_normalized"])
+		self.message_user(request, f"Recomputed phase_normalized for {len(trials)} trial(s).")
 
 
 class SourceInline(admin.StackedInline):

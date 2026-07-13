@@ -61,6 +61,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
 		"study_type",
 		"study_design",
 		"phase",
+		"phase_normalized",
 		"countries",
 		"contact_firstname",
 		"contact_lastname",

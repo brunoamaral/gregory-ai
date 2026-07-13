@@ -6,6 +6,7 @@ from django.utils import timezone
 from django import forms
 from datetime import datetime, timedelta
 from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject
+from gregory.utils.trial_field_normalizers import TrialPhase
 
 
 class SubjectFilterMixin:
@@ -537,6 +538,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		field_name="internal_number", lookup_expr="icontains"
 	)
 	phase = filters.CharFilter(field_name="phase", lookup_expr="icontains")
+	phase_normalized = filters.ChoiceFilter(choices=TrialPhase.choices)
 	study_type = filters.CharFilter(field_name="study_type", lookup_expr="icontains")
 	primary_sponsor = filters.CharFilter(
 		field_name="primary_sponsor", lookup_expr="icontains"
@@ -606,6 +608,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"acronym",
 			"internal_number",
 			"phase",
+			"phase_normalized",
 			"study_type",
 			"primary_sponsor",
 			"source_register",
