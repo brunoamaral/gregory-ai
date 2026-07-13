@@ -1683,7 +1683,10 @@ class TrialViewSet(
 
 	# Trial-Specific Parameters:
 	- **internal_number** - filter by WHO internal number
-	- **phase** - filter by trial phase (Phase I, II, III, etc.)
+	- **phase** - raw-text contains filter on the registry's own phase string (Phase I, II, III, etc.) — free text, so it silently misses spelling/format variants (e.g. "Phase III" vs "Phase 3")
+	- **phase_normalized** - exact match against the canonical phase; one of: early_phase_1, phase_1, phase_1_2, phase_2, phase_2_3, phase_3, phase_3_4, phase_4, post_market, not_applicable, other
+	- **status** / **recruitment_status** - raw-text `iexact` filters against the registry's own recruitment-status string (e.g. "Recruiting", "RECRUITING", "recruiting" all match each other, but "Not Recruiting" does not match "not_yet_recruiting") — free text, so it silently misses spelling/format variants across registries
+	- **recruitment_status_normalized** - exact match against the canonical recruitment status; one of: not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other
 	- **study_type** - filter by study type (Interventional, Observational)
 	- **primary_sponsor** - filter by sponsor organization
 	- **source_register** - filter by source registry
@@ -1712,7 +1715,7 @@ class TrialViewSet(
 	- Filtered trials: `/trials/?team_id=1&status=Recruiting&format=csv&all_results=true`
 	- Trials with results posted: `/trials/?has_results=true`
 	- Trials registered in 2019–2022: `/trials/?date_registration_after=2019-01-01&date_registration_before=2022-12-31`
-	- Phase III trials registered since 2020: `/trials/?phase=PHASE3&date_registration_after=2020-01-01`
+	- Phase III trials registered since 2020: `/trials/?phase_normalized=phase_3&date_registration_after=2020-01-01`
 	- Date range + subject + CSV: `/trials/?team_id=1&subjects=1&date_registration_after=2019-01-01&date_registration_before=2022-12-31&format=csv&all_results=true`
 	"""
 
