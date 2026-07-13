@@ -10,23 +10,19 @@ class Migration(migrations.Migration):
 	]
 
 	operations = [
-		migrations.AlterField(
-			model_name='historicaltrials',
-			name='discovery_date',
-			field=models.DateTimeField(blank=True, db_index=True, null=True),
-		),
-		migrations.AlterField(
-			model_name='trials',
-			name='discovery_date',
-			field=models.DateTimeField(blank=True, db_index=True, null=True),
-		),
-		# The index already existed as raw SQL (migration 0022) before Django's
-		# model state knew about it, so schema-drift checks and fresh test
-		# databases relied on that RunSQL instead of a model-managed index.
-		# AlterField above adds Django's own index; drop the old hand-made one
-		# so prod doesn't end up with two identical indexes on the same column.
-		migrations.RunSQL(
-			"DROP INDEX IF EXISTS idx_trials_discovery_date;",
-			reverse_sql=migrations.RunSQL.noop,
+		# trials.discovery_date already has this exact index, created as raw
+		# SQL by migration 0022 (CREATE INDEX idx_trials_discovery_date ...).
+		# SeparateDatabaseAndState updates Django's model state to know about
+		# it (matching name) without touching the database -- no duplicate
+		# index, no rebuild, and reversing this migration only reverts state,
+		# leaving the real index from 0022 untouched either way.
+		migrations.SeparateDatabaseAndState(
+			database_operations=[],
+			state_operations=[
+				migrations.AddIndex(
+					model_name='trials',
+					index=models.Index(fields=['discovery_date'], name='idx_trials_discovery_date'),
+				),
+			],
 		),
 	]
