@@ -167,7 +167,7 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Teams | `GET /teams/{id}/subjects/{subject_id}/categories/` | `id`, `subject_id` (path) | |
 | Trials | `GET /trials/` | `team_id`, `subject_id`, `category_id`, `source_id`, `status`, `search`, `ordering`, trial-specific filters, pagination | See parameter details below |
 | Trials | `GET /trials/{id}/` | `id` (path) | |
-| Trials | `GET /trials/stats/` | Same filters as `GET /trials/` | Recruitment-status totals plus `by_subject` over the filtered set. Replaces the `stats` block formerly embedded in `GET /trials/` list responses (breaking change). Cached for `STATS_CACHE_TTL` seconds |
+| Trials | `GET /trials/stats/` | Same filters as `GET /trials/` | Totals per `recruitment_status_normalized` bucket (not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other — always present, 0 when empty) plus `no_status` and `by_subject` over the filtered set. Replaces the `stats` block formerly embedded in `GET /trials/` list responses (breaking change). Cached for `STATS_CACHE_TTL` seconds |
 | Trials | `GET /trials/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `status`, `format`, `all_results` | See [trial-search-api.md](trial-search-api.md) |
 | Trials | `POST /trials/search/` | Same fields in request body | |
 | Email templates | `GET /emails/` | None | Template preview dashboard |

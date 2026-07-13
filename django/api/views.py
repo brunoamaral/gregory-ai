@@ -54,6 +54,7 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce
 from gregory.classes import SciencePaper, ClinicalTrial
+from gregory.utils.trial_field_normalizers import TrialRecruitmentStatus
 from gregory.models import (
 	Articles,
 	ArticleOrgContent,
@@ -1660,15 +1661,22 @@ class TrialViewSet(
 	- **all_results** - set to 'true' to bypass pagination and get all results (useful for CSV export)
 
 	# Stats Endpoint:
-	`GET /trials/stats/` returns recruitment-status totals (total, recruiting, completed, …)
-	plus a `by_subject` breakdown (`[{subject_id, subject_name, count}]`, distinct per trial,
-	restricted to subjects visible to the caller) computed over the filtered queryset. It
-	accepts the same query parameters as the list endpoint, so e.g.
-	`/trials/stats/?team_id=1&status=Recruiting` scopes the totals exactly like the
-	equivalent list request. Results are cached server-side for STATS_CACHE_TTL seconds
-	(default 600). **Breaking change:** the `stats` block that used to be embedded in
-	every paginated list response has moved here — list responses no longer include it, and
-	clients that relied on `response.data["stats"]` must call `/trials/stats/` instead.
+	`GET /trials/stats/` returns `total`, `no_status` (recruitment_status_normalized is
+	null), one key per `TrialRecruitmentStatus` bucket — `not_yet_recruiting`, `recruiting`,
+	`enrolling_by_invitation`, `active_not_recruiting`, `not_recruiting`, `suspended`,
+	`completed`, `terminated`, `withdrawn`, `unknown`, `other` (always present, 0 when
+	empty) — plus a `by_subject` breakdown (`[{subject_id, subject_name, count}]`, distinct
+	per trial, restricted to subjects visible to the caller) computed over the filtered
+	queryset. Buckets are counted on `recruitment_status_normalized`, the same canonical
+	vocabulary as the `recruitment_status_normalized` filter, not on the raw
+	`recruitment_status` string — see docs/trials-field-normalization.md. It accepts the
+	same query parameters as the list endpoint, so e.g.
+	`/trials/stats/?team_id=1&recruitment_status_normalized=recruiting` scopes the totals
+	exactly like the equivalent list request. Results are cached server-side for
+	STATS_CACHE_TTL seconds (default 600). **Breaking change:** the `stats` block that used
+	to be embedded in every paginated list response has moved here — list responses no
+	longer include it, and clients that relied on `response.data["stats"]` must call
+	`/trials/stats/` instead.
 
 	# Registry Identifier Parameters:
 	Each accepts one or more comma-separated values and returns trials matching *any* of them
@@ -1772,11 +1780,12 @@ class TrialViewSet(
 
 	@action(detail=False, methods=["get"], url_path="stats")
 	def stats(self, request):
-		"""Recruitment-status totals over the filtered queryset.
+		"""Recruitment-status totals (by ``recruitment_status_normalized``) over the
+		filtered queryset.
 
 		Accepts the same query parameters as the list endpoint (team_id,
-		subject_id, status, search, registry identifiers, …) and the same
-		org-visibility scoping, so the totals always match what the
+		subject_id, recruitment_status_normalized, search, registry identifiers, …)
+		and the same org-visibility scoping, so the totals always match what the
 		equivalent list request would return. Cached server-side; see
 		``CachedStatsActionMixin``.
 		"""
@@ -1785,35 +1794,28 @@ class TrialViewSet(
 	def build_stats_payload(self, filtered_qs):
 		# Single aggregation query — clear ordering to prevent GROUP BY pollution.
 		# distinct=True guards against double-counting a trial visible under two teams.
+		# Aggregates on recruitment_status_normalized (not the raw recruitment_status
+		# column): the raw column has dozens of per-registry spellings, so grouping on
+		# it directly would require re-deriving the same mapping trial_field_normalizers
+		# already owns. See docs/trials-field-normalization.md.
 		status_counts = {
-			item["recruitment_status"]: item["count"]
+			item["recruitment_status_normalized"]: item["count"]
 			for item in filtered_qs.order_by()
-			.values("recruitment_status")
+			.values("recruitment_status_normalized")
 			.annotate(count=Count("trial_id", distinct=True))
 		}
 
-		def _sum(*keys):
-			return sum(status_counts.get(k, 0) for k in keys)
-
-		return {
+		# Every canonical key is emitted even when its count is 0, so the frontend gets
+		# a stable shape. Iterate the enum rather than hardcoding the key list here —
+		# a bucket added to TrialRecruitmentStatus is picked up automatically.
+		payload = {
 			"total": sum(status_counts.values()),
 			"no_status": status_counts.get(None, 0),
-			"recruiting": _sum("Recruiting", "RECRUITING"),
-			"active_not_recruiting": _sum(
-				"ACTIVE_NOT_RECRUITING", "Not recruiting", "Not Recruiting"
-			),
-			"not_yet_recruiting": _sum("NOT_YET_RECRUITING"),
-			"completed": _sum("COMPLETED"),
-			"enrolling_by_invitation": _sum("ENROLLING_BY_INVITATION"),
-			"terminated": _sum("TERMINATED"),
-			"suspended": _sum("SUSPENDED"),
-			"withdrawn": _sum("WITHDRAWN"),
-			"available": _sum("AVAILABLE"),
-			"not_available": _sum("Not Available"),
-			"withheld": _sum("WITHHELD"),
-			"authorised": _sum("Authorised"),
-			"by_subject": self._by_subject_counts(filtered_qs),
 		}
+		for value in TrialRecruitmentStatus.values:
+			payload[value] = status_counts.get(value, 0)
+		payload["by_subject"] = self._by_subject_counts(filtered_qs)
+		return payload
 
 
 ###

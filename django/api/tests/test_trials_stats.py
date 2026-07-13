@@ -20,6 +20,23 @@ paginated list request. The stats now live on their own routed action
   - routing: /trials/stats/ resolves to the action and /trials/<pk>/
     detail lookups still work
 
+Buckets are counted on ``recruitment_status_normalized`` (the canonical vocabulary in
+``gregory.utils.trial_field_normalizers``), not the raw ``recruitment_status`` column, so
+this suite also locks in:
+
+  - per-registry spelling variants of the same canonical status ("RECRUITING",
+    "Recruiting", "Ongoing, recruiting") all land in the same bucket
+  - WHO's generic "Not recruiting" lands in its own ``not_recruiting`` bucket, not
+    ``active_not_recruiting``
+  - CT.gov's "UNKNOWN" lands in ``unknown``; its expanded-access "AVAILABLE" lands in
+    ``other``
+  - a null ``recruitment_status`` lands in ``no_status``
+  - every canonical ``TrialRecruitmentStatus`` key is present in the response even when
+    its count is 0, and none of the old ad-hoc keys (available/not_available/
+    withheld/authorised) survive
+  - the ``recruitment_status_normalized`` and ``phase_normalized`` query params scope the
+    totals end-to-end (the filtering itself comes free via ``filter_queryset``)
+
 Run with:
     docker exec gregory python manage.py test api.tests.test_trials_stats
 """
@@ -36,6 +53,7 @@ from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
 from gregory.models import OrganizationApiSettings, Subject, Team, Trials
+from gregory.utils.trial_field_normalizers import TrialRecruitmentStatus
 
 
 def _make_org_team(name, slug, public=True):
@@ -51,8 +69,10 @@ def _make_subject(team, name, slug):
 	return Subject.objects.create(team=team, subject_name=name, subject_slug=slug)
 
 
-def _make_trial(title, link, status, teams, subjects=()):
-	trial = Trials.objects.create(title=title, link=link, recruitment_status=status)
+def _make_trial(title, link, status, teams, subjects=(), phase=None):
+	trial = Trials.objects.create(
+		title=title, link=link, recruitment_status=status, phase=phase
+	)
 	for team in teams:
 		trial.teams.add(team)
 	for subject in subjects:
@@ -369,3 +389,99 @@ class TrialStatsRoutingTest(TrialStatsBase):
 		resp = self.client.get(f"/trials/{self.t1.trial_id}/")
 		self.assertEqual(resp.status_code, 200)
 		self.assertEqual(resp.data["trial_id"], self.t1.trial_id)
+
+
+class TrialStatsNormalizedBucketsTest(TrialStatsBase):
+	"""Buckets are counted on recruitment_status_normalized, the canonical vocabulary in
+	gregory.utils.trial_field_normalizers — not a second hand-rolled spelling list."""
+
+	def test_recruiting_spelling_variants_all_land_in_recruiting(self):
+		# "RECRUITING" (CT.gov upper-case) and "Ongoing, recruiting" (EU CTIS) both
+		# normalize to the same canonical bucket as the fixture's "Recruiting".
+		_make_trial("R1", "https://trial.example.com/r1", "RECRUITING", [self.team])
+		_make_trial(
+			"R2", "https://trial.example.com/r2", "Ongoing, recruiting", [self.team]
+		)
+		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
+		self.assertEqual(resp.status_code, 200)
+		# t1, t2 ("Recruiting") + R1 + R2 = 4.
+		self.assertEqual(resp.data["recruiting"], 4)
+
+	def test_who_not_recruiting_lands_in_not_recruiting_not_active(self):
+		_make_trial(
+			"NR", "https://trial.example.com/nr", "Not recruiting", [self.team]
+		)
+		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["not_recruiting"], 1)
+		# WHO's generic status doesn't say the trial is active — it must not be folded
+		# into active_not_recruiting.
+		self.assertEqual(resp.data["active_not_recruiting"], 0)
+
+	def test_ctgov_unknown_lands_in_unknown_bucket(self):
+		_make_trial("UNK", "https://trial.example.com/unk", "UNKNOWN", [self.team])
+		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["unknown"], 1)
+
+	def test_ctgov_available_lands_in_other_bucket(self):
+		_make_trial("AV", "https://trial.example.com/av", "AVAILABLE", [self.team])
+		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["other"], 1)
+
+	def test_null_recruitment_status_lands_in_no_status(self):
+		_make_trial(
+			"NoStatus", "https://trial.example.com/nostatus", None, [self.team]
+		)
+		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["no_status"], 1)
+
+	def test_every_canonical_key_present_even_when_zero(self):
+		# other_team has only t4 (TERMINATED), so most buckets are 0 here — the point is
+		# that the zero-count keys are still in the payload, not omitted.
+		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
+		self.assertEqual(resp.status_code, 200)
+		for value in TrialRecruitmentStatus.values:
+			self.assertIn(value, resp.data)
+		self.assertEqual(resp.data["recruiting"], 0)
+		self.assertEqual(resp.data["terminated"], 1)
+		# The old hand-rolled keys must not survive the rewrite.
+		for stale_key in ("available", "not_available", "withheld", "authorised"):
+			self.assertNotIn(stale_key, resp.data)
+
+
+class TrialStatsNormalizedFilterScopingTest(TrialStatsBase):
+	"""/trials/stats/ scopes totals via the normalized-field filters too — those filters
+	come free through filter_queryset, but must be exercised end-to-end."""
+
+	def test_recruitment_status_normalized_filter_scopes_totals(self):
+		_make_trial(
+			"CTIS-R",
+			"https://trial.example.com/ctis-r",
+			"Ongoing, recruiting",
+			[self.team],
+		)
+		resp = self.client.get(
+			"/trials/stats/", {"recruitment_status_normalized": "recruiting"}
+		)
+		self.assertEqual(resp.status_code, 200)
+		# t1, t2 ("Recruiting") + the CTIS trial above = 3; t3/t4 are excluded.
+		self.assertEqual(resp.data["total"], 3)
+		self.assertEqual(resp.data["recruiting"], 3)
+
+	def test_phase_normalized_filter_scopes_totals(self):
+		_make_trial(
+			"P3",
+			"https://trial.example.com/p3",
+			"Recruiting",
+			[self.team],
+			phase="Phase 3",
+		)
+		resp = self.client.get("/trials/stats/", {"phase_normalized": "phase_3"})
+		self.assertEqual(resp.status_code, 200)
+		# None of the fixture trials (t1-t4) have a phase set, so only the trial created
+		# above matches.
+		self.assertEqual(resp.data["total"], 1)
+		self.assertEqual(resp.data["recruiting"], 1)
