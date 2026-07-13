@@ -40,6 +40,21 @@ def _strip_trailing_punctuation(doi: str) -> str:
 	return doi.rstrip(_TRAILING_PUNCTUATION).rstrip("/")
 
 
+def normalize_doi(doi: str | None) -> str | None:
+	"""Normalise a DOI to the canonical stored form: stripped, lowercased, no
+	trailing punctuation/slash. Returns ``None`` for empty input.
+
+	Kept consistent across every extraction path (URL parsing and PMID
+	resolution) so two sources can't produce DOIs that differ only by case or
+	trailing URL/markup noise and slip past the case-insensitive uniqueness
+	guard.
+	"""
+	if not doi:
+		return None
+	doi = _strip_trailing_punctuation(doi.strip())
+	return doi.lower() or None
+
+
 def extract_doi_from_url(url: str) -> str | None:
 	"""Best-effort extraction of a bare DOI from an article URL.
 
@@ -69,7 +84,7 @@ def extract_doi_from_url(url: str) -> str | None:
 		if path:
 			doi = _strip_trailing_punctuation(path)
 			if doi.lower().startswith("10.") and "/" in doi:
-				return doi.lower()
+				return normalize_doi(doi)
 		# Fall through to the generic regex in case the resolver URL is
 		# malformed (e.g. the DOI ended up in the query string instead).
 
@@ -80,7 +95,7 @@ def extract_doi_from_url(url: str) -> str | None:
 	doi = _strip_trailing_punctuation(match.group(0))
 	if not doi or "/" not in doi:
 		return None
-	return doi.lower()
+	return normalize_doi(doi)
 
 
 def extract_pmid_from_url(url: str | None) -> str | None:
@@ -111,8 +126,9 @@ def resolve_doi_from_pmid(pmid: str) -> str | None:
 		article_ids = data.get("result", {}).get(pmid, {}).get("articleids", [])
 		for article_id in article_ids:
 			if article_id.get("idtype") == "doi":
-				value = article_id.get("value")
-				return value.strip() if value else None
+				# Normalise so a PMID-resolved DOI is stored in the same
+				# canonical form as a URL-parsed one (see normalize_doi).
+				return normalize_doi(article_id.get("value"))
 	except Exception as e:
 		logging.debug(f"Failed to resolve DOI via PMID {pmid}: {e}")
 	return None

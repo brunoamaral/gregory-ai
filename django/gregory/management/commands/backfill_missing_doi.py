@@ -78,7 +78,9 @@ class Command(BaseCommand):
 			.filter(Q(doi__isnull=True) | Q(doi=""))
 			.order_by("article_id")
 		)
-		if limit:
+		# `is not None` (not truthiness): --limit 0 must select zero rows, not
+		# fall through to the full queryset.
+		if limit is not None:
 			queryset = queryset[:limit]
 
 		articles = list(queryset)

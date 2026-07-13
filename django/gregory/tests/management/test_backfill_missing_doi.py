@@ -167,6 +167,21 @@ class BackfillMissingDoiCommandTest(TestCase):
 		output = out.getvalue()
 		self.assertIn("Total processed: 1", output)
 
+	def test_limit_zero_processes_no_rows(self):
+		# --limit 0 must select zero rows, not fall through to the full queryset.
+		out = StringIO()
+		with patch(PUBMED_RESOLVE_TARGET, return_value=None), patch(
+			GET_DOI_TARGET, return_value=None
+		):
+			call_command(
+				"backfill_missing_doi", "--dry-run", "--limit", "0", stdout=out
+			)
+		output = out.getvalue()
+		self.assertIn("Total processed: 0", output)
+		# Nothing was written or even attempted.
+		self.url_case.refresh_from_db()
+		self.assertFalse(self.url_case.doi)
+
 	def test_crossref_network_failure_is_caught_and_counted_as_not_found(self):
 		out = StringIO()
 		with patch(PUBMED_RESOLVE_TARGET, return_value=None), patch(

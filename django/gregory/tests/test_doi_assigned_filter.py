@@ -47,12 +47,17 @@ class DoiAssignedFilterTests(TestCase):
 		)
 
 	def test_no_filters_to_null_or_empty_doi(self):
+		# Django's SimpleListFilter takes params as lists and stores value[-1],
+		# so a single-element list is the correct request shape here; assert
+		# value() resolves to the scalar "no" to prove the branch is exercised
+		# (rather than silently short-circuiting on an unexpected value).
 		filter_instance = DoiAssignedFilter(
 			request=None,
 			params={"doi_assigned": ["no"]},
 			model=Articles,
 			model_admin=ArticleAdmin,
 		)
+		self.assertEqual(filter_instance.value(), "no")
 		result = filter_instance.queryset(None, Articles.objects.all())
 		self.assertIn(self.with_empty_doi, result)
 		self.assertIn(self.without_doi, result)
@@ -65,6 +70,7 @@ class DoiAssignedFilterTests(TestCase):
 			model=Articles,
 			model_admin=ArticleAdmin,
 		)
+		self.assertEqual(filter_instance.value(), "yes")
 		result = filter_instance.queryset(None, Articles.objects.all())
 		self.assertIn(self.with_doi, result)
 		self.assertNotIn(self.with_empty_doi, result)

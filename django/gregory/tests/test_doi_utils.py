@@ -19,9 +19,30 @@ from django.test import TestCase
 from gregory.utils.doi_utils import (
 	extract_doi_from_url,
 	extract_pmid_from_url,
+	normalize_doi,
 	resolve_doi_from_pmid,
 	resolve_doi_from_pubmed_url,
 )
+
+
+class NormalizeDoiTests(TestCase):
+	def test_lowercases(self):
+		self.assertEqual(normalize_doi("10.1234/ABC-XYZ"), "10.1234/abc-xyz")
+
+	def test_strips_trailing_slash(self):
+		self.assertEqual(normalize_doi("10.1234/abc/"), "10.1234/abc")
+
+	def test_strips_trailing_punctuation(self):
+		self.assertEqual(normalize_doi("10.1234/abc)."), "10.1234/abc")
+
+	def test_strips_surrounding_whitespace(self):
+		self.assertEqual(normalize_doi("  10.1234/abc  "), "10.1234/abc")
+
+	def test_none_returns_none(self):
+		self.assertIsNone(normalize_doi(None))
+
+	def test_empty_returns_none(self):
+		self.assertIsNone(normalize_doi(""))
 
 
 class ExtractDoiFromUrlTests(TestCase):
@@ -163,6 +184,25 @@ class ResolveDoiFromPmidTests(TestCase):
 		_, kwargs = mock_get.call_args
 		self.assertEqual(kwargs["params"]["id"], "38812345")
 		self.assertEqual(kwargs["params"]["db"], "pubmed")
+
+	def test_resolved_doi_is_normalized(self):
+		# The esummary API can return mixed-case or trailing-noise DOIs; the
+		# stored value must match the canonical form extract_doi_from_url yields.
+		payload = {
+			"result": {
+				"38812345": {
+					"articleids": [
+						{"idtype": "doi", "value": "10.1234/Example.DOI "},
+					]
+				}
+			}
+		}
+		with patch(
+			"gregory.utils.doi_utils.requests.get",
+			return_value=self._mock_response(payload),
+		):
+			doi = resolve_doi_from_pmid("38812345")
+		self.assertEqual(doi, "10.1234/example.doi")
 
 	def test_no_doi_in_articleids(self):
 		payload = {
