@@ -10,5 +10,4 @@ class Migration(migrations.Migration):
 		('gregory', '0076_trials_discovery_date_model_index'),
 	]
 
-	operations = [
-	]
+	operations = []
