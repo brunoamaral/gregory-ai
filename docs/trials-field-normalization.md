@@ -289,6 +289,14 @@ workflow above. Idempotent: rerunning after the DB is caught up updates nothing.
 4. Optional: review the OTHER list(s) the backfill prints, extend the relevant mapping
    table, deploy, rerun the backfill (or use the admin action) to pick up the new mappings.
 
+`GET /trials/stats/` (`TrialViewSet.build_stats_payload`) aggregates on
+`recruitment_status_normalized`, so its counts are only meaningful **after** step 3 runs.
+Before the backfill, every existing row has `recruitment_status_normalized = NULL` (the
+column doesn't get a value until `Trials.save()` or the backfill computes it), so the
+entire pre-backfill trial set shows up in the `no_status` bucket rather than
+`recruiting`/`completed`/etc. — expect `no_status` to hold the bulk of `total` immediately
+after migrating, until the backfill catches the table up.
+
 ## Extension recipe: study_type
 
 This design is meant to repeat directly for the next raw field with a messy multi-registry
