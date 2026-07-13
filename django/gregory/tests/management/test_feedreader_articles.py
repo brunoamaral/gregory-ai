@@ -683,6 +683,26 @@ class TestCrossRefDataUpdates(TransactionTestCase):
 		self.assertEqual(updated_article.access, "open")
 		self.assertIsNotNone(updated_article.crossref_check)
 
+	@patch.dict(os.environ, {"DOMAIN_NAME": "test.example.com"})
+	def test_create_or_update_article_normalises_none_access_to_unknown(self):
+		"""A new article created with no CrossRef access data gets "unknown",
+		not NULL -- NULL and "unknown" are the same semantic state."""
+		command = Command()
+		command.setup()
+
+		new_article, created, _ = command.create_or_update_article(
+			doi=None,
+			title="Article Without DOI Or Access",
+			summary="Summary",
+			link="https://example.com/article/no-access",
+			published_date=timezone.now(),
+			source=self.source,
+		)
+
+		self.assertTrue(created)
+		new_article.refresh_from_db()
+		self.assertEqual(new_article.access, "unknown")
+
 
 class TestArticleCreationAndUpdate(TransactionTestCase):
 	"""Test article creation and update logic."""

@@ -899,6 +899,12 @@ class Command(GregoryBaseCommand):
 		pdf_link=None,
 	) -> tuple[Articles, bool, bool]:
 		"""Create a new article or update existing one. Returns (article, created, crossref_updated)."""
+		# NULL and "unknown" are the same semantic state (access was never
+		# determined); normalise here so nothing downstream writes NULL and
+		# drifts back out of sync with the "unknown" spelling other code
+		# already folds NULL into at read time.
+		access = access or "unknown"
+
 		existing_article = self.find_existing_article(doi, title, link)
 
 		crossref_was_updated = False
@@ -949,6 +955,7 @@ class Command(GregoryBaseCommand):
 				"links": merge_links(None, link),
 				"published_date": published_date,
 				"crossref_check": crossref_check,
+				"access": access,
 			}
 			if doi:
 				article_data.update(
@@ -956,7 +963,6 @@ class Command(GregoryBaseCommand):
 						"doi": doi,
 						"container_title": container_title,
 						"publisher": publisher,
-						"access": access,
 						"pdf_link": pdf_link,
 					}
 				)
