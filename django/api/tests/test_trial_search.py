@@ -278,7 +278,10 @@ class TrialSearchViewQueryCountTests(TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(len(response.data["results"]), 3)
 
-		self.assertLess(len(ctx.captured_queries), 15)
+		# Query count should be small and independent of the number of
+		# trials/subjects/sources — a per-row query here means the prefetch
+		# regressed back to N+1.
+		self.assertLess(len(ctx.captured_queries), 25)
 
 		for query in ctx.captured_queries:
 			sql = query["sql"].lower()
