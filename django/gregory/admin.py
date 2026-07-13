@@ -1141,7 +1141,9 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 				setattr(trial, derived_field, normalizer(getattr(trial, raw_field)))
 
 		derived_fields = [derived_field for _, derived_field, _ in NORMALIZED_TRIAL_FIELDS]
-		Trials.objects.bulk_update(trials, derived_fields)
+		# batch_size keeps a "select all" over the whole table under Postgres's bind-parameter
+		# limit — without it bulk_update builds one UPDATE with a CASE per row per field.
+		Trials.objects.bulk_update(trials, derived_fields, batch_size=1000)
 		self.message_user(
 			request, f"Recomputed normalized fields for {len(trials)} trial(s)."
 		)

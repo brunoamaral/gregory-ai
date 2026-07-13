@@ -318,14 +318,17 @@ class BackfillTrialPhasesTest(TestCase):
 		self.assertEqual(out.count("Some future registry value"), 1)
 
 	def test_batches_updates_by_batch_size(self):
+		"""Dirty rows are flushed per --batch-size as the scan streams (one progress line per
+		flush, cumulative counts), not accumulated for a single write at the end."""
 		for i in range(5):
 			self._make_stale(f"T{i}", f"https://example.com/bf-batch-{i}", "Phase III")
 
 		out, _ = self.run_command(batch_size=2)
 
-		self.assertIn("Updated 2/5 trial rows.", out)
-		self.assertIn("Updated 4/5 trial rows.", out)
-		self.assertIn("Updated 5/5 trial rows.", out)
+		self.assertIn("Updated 2 trial rows so far.", out)
+		self.assertIn("Updated 4 trial rows so far.", out)
+		self.assertIn("Updated 5 trial rows so far.", out)
+		self.assertEqual(out.count("trial rows so far."), 3)
 
 	def test_field_filter_scopes_to_phase_only(self):
 		"""--field phase must not touch recruitment_status_normalized, even when it is

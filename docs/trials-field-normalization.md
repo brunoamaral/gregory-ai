@@ -269,7 +269,9 @@ python manage.py backfill_trial_normalized_fields [--field phase] [--field recru
 `--field` is repeatable and/or comma-separated (`--field phase,recruitment_status`);
 omitting it backfills every field registered in `NORMALIZED_TRIAL_FIELDS`. Scans every
 `Trials` row once, recomputes the selected derived field(s), and `bulk_update`s the rows
-whose stored value(s) differ, in batches. Intentionally skips django-simple-history — these
+whose stored value(s) differ, flushing every `--batch-size` dirty rows during the scan so
+peak memory stays bounded by the batch rather than the table (on the first run every row
+is dirty). Intentionally skips django-simple-history — these
 are derived fields recomputed from data already in the row, not a meaningful edit, and
 `bulk_update` can't write history anyway (it doesn't call `save()`). Reports total scanned,
 total values changed, a per-field per-canonical-value tally, and (per field) every distinct

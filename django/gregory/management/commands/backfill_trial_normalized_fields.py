@@ -6,7 +6,8 @@ gregory.utils.trial_field_normalizers.NORMALIZED_TRIAL_FIELDS from its raw count
 every write (see gregory/models.py), so this command only matters for rows written before
 that hook existed, and for rows touched by bulk_update elsewhere (which bypasses save()
 entirely). It scans every trial, recomputes the selected derived field(s), and
-bulk_updates rows whose stored value(s) differ.
+bulk_updates rows whose stored value(s) differ, flushing every --batch-size dirty rows so
+peak memory stays bounded by the batch rather than the table.
 
 Intentionally skips django-simple-history: these are derived fields recomputed from data
 already in the row, not a meaningful edit, and tens of thousands of _change_reason entries
@@ -97,11 +98,23 @@ class Command(BaseCommand):
 
 		queryset = Trials.objects.only(*select_fields).order_by("trial_id")
 
+		derived_fields = [derived_field for _, derived_field, _ in fields]
 		scanned = 0
 		dirty_rows = 0
-		to_update = []
+		updated = 0
+		# Dirty rows awaiting the next bulk_update flush. Flushed every --batch-size rows so
+		# peak memory stays bounded by the batch, not the table (on the first prod run every
+		# row is dirty).
+		pending = []
 		tally = {raw_field: Counter() for raw_field, _, _ in fields}
 		other_raw_values = {raw_field: set() for raw_field, _, _ in fields}
+
+		def flush_pending():
+			nonlocal updated
+			Trials.objects.bulk_update(pending, derived_fields)
+			updated += len(pending)
+			self.stdout.write(f"Updated {updated} trial rows so far.")
+			pending.clear()
 
 		for trial in queryset.iterator(chunk_size=2000):
 			scanned += 1
@@ -132,16 +145,12 @@ class Command(BaseCommand):
 			if dirty:
 				dirty_rows += 1
 				if not dry_run:
-					to_update.append(trial)
+					pending.append(trial)
+					if len(pending) >= batch_size:
+						flush_pending()
 
-		derived_fields = [derived_field for _, derived_field, _ in fields]
-		updated = 0
-		if not dry_run:
-			for start in range(0, len(to_update), batch_size):
-				batch = to_update[start : start + batch_size]
-				Trials.objects.bulk_update(batch, derived_fields)
-				updated += len(batch)
-				self.stdout.write(f"Updated {updated}/{len(to_update)} trial rows.")
+		if not dry_run and pending:
+			flush_pending()
 
 		field_names = ", ".join(raw_field for raw_field, _, _ in fields)
 		prefix = "Would update" if dry_run else "Updated"
