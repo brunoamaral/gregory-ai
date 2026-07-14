@@ -57,10 +57,12 @@ from gregory.classes import SciencePaper, ClinicalTrial
 from gregory.utils.trial_field_normalizers import TrialRecruitmentStatus
 from gregory.models import (
 	Articles,
+	ArticleCategoryAssignment,
 	ArticleOrgContent,
 	ArticleSubjectRelevance,
 	ArticleTrialReference,
 	Trials,
+	TrialCategoryAssignment,
 	TrialOrgContent,
 	Sources,
 	Authors,
@@ -1344,6 +1346,34 @@ class ArticleViewSet(
 ###
 
 
+def _category_through_count_subquery(through_model):
+	"""Correlated scalar count of a category's rows in a single M2M through
+	table (article or trial category assignments).
+
+	Annotating a category with Count("articles", distinct=True) AND
+	Count("trials", distinct=True) in the same query joins both M2M
+	relations at once, producing an articles x trials cross product per
+	category before DISTINCT dedups it — for a category with thousands of
+	rows on each side that intermediate result is large enough to spill
+	Postgres's hash aggregate to disk. A correlated subquery per relation
+	counts each through table independently (no cross join), and because
+	each through table already has a unique_together on
+	(article/trial, teamcategory), a plain COUNT(*) here already equals the
+	distinct count.
+	"""
+	return Coalesce(
+		Subquery(
+			through_model.objects.filter(teamcategory=OuterRef("pk"))
+			.order_by()
+			.values("teamcategory")
+			.annotate(c=Count("*"))
+			.values("c"),
+			output_field=IntegerField(),
+		),
+		0,
+	)
+
+
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	List all categories in the database with optional filters for team and subject.
@@ -1404,7 +1434,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 	def get_queryset(self):
 		"""
-		Article/trial counts are computed with Count(..., distinct=True)
+		Article/trial counts are computed with correlated subquery
 		annotations (see below) rather than prefetching the full related
 		querysets, so a page of categories doesn't materialise every
 		article/trial row just to produce two integers.
@@ -1443,17 +1473,19 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 			if len(ids) > 0:
 				queryset = queryset.filter(id__in=ids)
 
-		# Counts are computed via Count(..., distinct=True) annotations rather
-		# than prefetching every article/trial row for the category: a large
+		# Counts are computed via correlated subqueries rather than
+		# prefetching every article/trial row for the category: a large
 		# category (e.g. ~7,300 articles) would otherwise materialise
 		# thousands of rows just to produce two integers. See the identical
-		# pattern in CategoriesByTeamAndSubject.get_queryset. Annotation-based
-		# COUNT with a JOIN is fine post-#747/#749 — it was only the
-		# unrelated org-visibility DISTINCT-count pagination bug that was
-		# ever slow.
+		# pattern in CategoriesByTeamAndSubject.get_queryset. Do NOT switch
+		# this back to annotating both Count("articles", distinct=True) and
+		# Count("trials", distinct=True) in one query — joining both M2M
+		# relations at once fans out to an articles x trials cross product
+		# per category, which spilled Postgres's hash aggregate to disk in
+		# production (see _category_through_count_subquery docstring).
 		queryset = queryset.select_related("team").prefetch_related("subjects").annotate(
-			article_count_annotated=Count("articles", distinct=True),
-			trials_count_annotated=Count("trials", distinct=True),
+			article_count_annotated=_category_through_count_subquery(ArticleCategoryAssignment),
+			trials_count_annotated=_category_through_count_subquery(TrialCategoryAssignment),
 		)
 
 		return queryset.distinct()
@@ -2363,11 +2395,16 @@ class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 				id=team_id, organization_id__in=self.request.visible_org_ids
 			).exists():
 				raise Http404
+		# See CategoryViewSet.get_queryset / _category_through_count_subquery:
+		# do NOT annotate both relations with Count(..., distinct=True) in
+		# one query — that fans out to an articles x trials cross product
+		# per category and spilled Postgres's hash aggregate to disk in
+		# production.
 		return (
 			TeamCategory.objects.filter(team__id=team_id, subjects__id=subject_id)
 			.annotate(
-				article_count_annotated=Count("articles", distinct=True),
-				trials_count_annotated=Count("trials", distinct=True),
+				article_count_annotated=_category_through_count_subquery(ArticleCategoryAssignment),
+				trials_count_annotated=_category_through_count_subquery(TrialCategoryAssignment),
 			)
 			.order_by("-id")
 		)
