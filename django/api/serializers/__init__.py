@@ -12,6 +12,7 @@ from gregory.models import (
 	ArticleTrialReference,
 	ArticleOrgContent,
 	TrialOrgContent,
+	TrialCountry,
 )
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
@@ -504,12 +505,31 @@ class ArticleSerializer(
 		return content.summary_plain_english if content else None
 
 
+class TrialCountrySerializer(serializers.ModelSerializer):
+	"""Normalized per-country row (see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md Layer 2).
+	``country`` is rendered as its ISO 3166-1 alpha-2 code."""
+
+	country = serializers.SerializerMethodField()
+
+	class Meta:
+		model = TrialCountry
+		fields = ["country", "status", "decision_date", "sources"]
+
+	def get_country(self, obj):
+		return obj.country.code if obj.country else None
+
+
 class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 	articles = serializers.SerializerMethodField()
 	takeaways = serializers.SerializerMethodField()
 	summary_plain_english = serializers.SerializerMethodField()
+	# Normalized per-country breakdown (country, status, decision_date, sources) — see
+	# docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md. Relies on TrialViewSet.get_queryset()
+	# prefetching "trial_countries" to avoid one query per trial on list responses.
+	trial_countries = TrialCountrySerializer(many=True, read_only=True)
+	countries_normalized = serializers.SerializerMethodField()
 
 	# Omit these fields from the response when there is no organisation context
 	_per_org_fields = ["takeaways", "summary_plain_english"]
@@ -554,6 +574,9 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 			"phase",
 			"phase_normalized",
 			"countries",
+			"countries_normalized",
+			"trial_countries",
+			"regions_normalized",
 			"contact_firstname",
 			"contact_lastname",
 			"contact_address",
@@ -601,6 +624,13 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		references = obj.article_references.all()
 		articles = [ref.article for ref in references]
 		return ArticleReferenceSerializer(articles, many=True).data
+
+	def get_countries_normalized(self, obj):
+		"""Flat, sorted list of normalized country codes (e.g. ["DE", "FR", "US"]) — the
+		codes on trial_countries, without the per-country status/source detail. Uses the
+		same prefetched cache as the `trial_countries` field."""
+		codes = {tc.country.code for tc in obj.trial_countries.all() if tc.country}
+		return sorted(codes) if codes else None
 
 	def _get_org_content(self, obj, org):
 		"""Return the caller-org's TrialOrgContent for *obj*, or None.

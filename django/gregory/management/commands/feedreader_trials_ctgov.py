@@ -30,6 +30,7 @@ from gregory.utils.registry_utils import (
 	merge_links,
 	canonical_link,
 	merge_identifiers,
+	merge_countries_by_source,
 	safe_change_reason,
 )
 
@@ -413,6 +414,9 @@ class Command(GregoryBaseCommand):
 				study_type=extras.get("study_type"),
 				phase=extras.get("phase"),
 				countries=extras.get("countries"),
+				countries_by_source=merge_countries_by_source(
+					None, "ctgov", extras.get("countries")
+				),
 				inclusion_criteria=extras.get("inclusion_criteria"),
 				exclusion_criteria=extras.get("exclusion_criteria"),
 				intervention=extras.get("intervention"),
@@ -581,6 +585,17 @@ class Command(GregoryBaseCommand):
 				setattr(existing_trial, field, new_value)
 				has_changes = True
 				updated_fields.append(field)
+
+		# Record this source's raw countries value under its own key (never touching any
+		# other source's key) — see docs/trials-multi-source-merge.md and
+		# gregory.utils.registry_utils.merge_countries_by_source.
+		merged_countries_by_source = merge_countries_by_source(
+			existing_trial.countries_by_source, "ctgov", extras.get("countries")
+		)
+		if merged_countries_by_source != (existing_trial.countries_by_source or {}):
+			existing_trial.countries_by_source = merged_countries_by_source
+			has_changes = True
+			updated_fields.append("countries_by_source")
 
 		# Acronym is fill-once: a value set by an earlier import (e.g. WHO ICTRP)
 		# is never replaced, mirroring the first-seen-wins rule for links.

@@ -13,10 +13,17 @@ not the other way round.
 
 See docs/trials-field-normalization.md for the full mapping rationale and the extension
 recipe for the next field (study_type, ...).
+
+`countries`/`regions_normalized` are the first fields whose canonical value derives from
+*multiple* raw columns (`countries_by_source`, `countries`, `country_status`,
+`countries_decision_date`) rather than one — see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md
+and the "countries" section below. NORMALIZED_TRIAL_FIELDS entries accept either a single
+raw field name (str) or a tuple of raw field names for this reason; see `raw_field_names`.
 """
 
 import logging
 import re
+from functools import lru_cache
 
 from django.db import models
 
@@ -270,10 +277,416 @@ def normalize_recruitment_status(raw: str | None) -> str | None:
 	return _resolve(TrialRecruitmentStatus.OTHER, raw, field_label="trial recruitment status")
 
 
+class TrialRegion(models.TextChoices):
+	AFRICA = "africa", "Africa"
+	ASIA = "asia", "Asia"
+	EUROPE = "europe", "Europe"
+	NORTH_AMERICA = "north_america", "North America"
+	SOUTH_AMERICA = "south_america", "South America"
+	OCEANIA = "oceania", "Oceania"
+
+
+# ISO 3166-1 alpha-2 -> region slug, UN M49-ish continental grouping (Central America and
+# the Caribbean fold into north_america, matching common registry usage). A handful of
+# uninhabited/Antarctic-adjacent codes (AQ, BV, HM, TF, UM) are deliberately absent: they
+# have no meaningful region bucket in this vocabulary and essentially never appear in trial
+# country data. Generated from django_countries.data.COUNTRIES (see
+# docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md) — every other ISO code is covered.
+_COUNTRY_TO_REGION: dict[str, str] = {
+	# Africa
+	"AO": TrialRegion.AFRICA, "BF": TrialRegion.AFRICA, "BI": TrialRegion.AFRICA, "BJ": TrialRegion.AFRICA, "BW": TrialRegion.AFRICA, "CD": TrialRegion.AFRICA, "CF": TrialRegion.AFRICA, "CG": TrialRegion.AFRICA, "CI": TrialRegion.AFRICA, "CM": TrialRegion.AFRICA,
+	"CV": TrialRegion.AFRICA, "DJ": TrialRegion.AFRICA, "DZ": TrialRegion.AFRICA, "EG": TrialRegion.AFRICA, "EH": TrialRegion.AFRICA, "ER": TrialRegion.AFRICA, "ET": TrialRegion.AFRICA, "GA": TrialRegion.AFRICA, "GH": TrialRegion.AFRICA, "GM": TrialRegion.AFRICA,
+	"GN": TrialRegion.AFRICA, "GQ": TrialRegion.AFRICA, "GW": TrialRegion.AFRICA, "IO": TrialRegion.AFRICA, "KE": TrialRegion.AFRICA, "KM": TrialRegion.AFRICA, "LR": TrialRegion.AFRICA, "LS": TrialRegion.AFRICA, "LY": TrialRegion.AFRICA, "MA": TrialRegion.AFRICA,
+	"MG": TrialRegion.AFRICA, "ML": TrialRegion.AFRICA, "MR": TrialRegion.AFRICA, "MU": TrialRegion.AFRICA, "MW": TrialRegion.AFRICA, "MZ": TrialRegion.AFRICA, "NA": TrialRegion.AFRICA, "NE": TrialRegion.AFRICA, "NG": TrialRegion.AFRICA, "RE": TrialRegion.AFRICA,
+	"RW": TrialRegion.AFRICA, "SC": TrialRegion.AFRICA, "SD": TrialRegion.AFRICA, "SH": TrialRegion.AFRICA, "SL": TrialRegion.AFRICA, "SN": TrialRegion.AFRICA, "SO": TrialRegion.AFRICA, "SS": TrialRegion.AFRICA, "ST": TrialRegion.AFRICA, "SZ": TrialRegion.AFRICA,
+	"TD": TrialRegion.AFRICA, "TG": TrialRegion.AFRICA, "TN": TrialRegion.AFRICA, "TZ": TrialRegion.AFRICA, "UG": TrialRegion.AFRICA, "YT": TrialRegion.AFRICA, "ZA": TrialRegion.AFRICA, "ZM": TrialRegion.AFRICA, "ZW": TrialRegion.AFRICA,
+	# Asia
+	"AE": TrialRegion.ASIA, "AF": TrialRegion.ASIA, "AM": TrialRegion.ASIA, "AZ": TrialRegion.ASIA, "BD": TrialRegion.ASIA, "BH": TrialRegion.ASIA, "BN": TrialRegion.ASIA, "BT": TrialRegion.ASIA, "CN": TrialRegion.ASIA, "CY": TrialRegion.ASIA,
+	"GE": TrialRegion.ASIA, "HK": TrialRegion.ASIA, "ID": TrialRegion.ASIA, "IL": TrialRegion.ASIA, "IN": TrialRegion.ASIA, "IQ": TrialRegion.ASIA, "IR": TrialRegion.ASIA, "JO": TrialRegion.ASIA, "JP": TrialRegion.ASIA, "KG": TrialRegion.ASIA,
+	"KH": TrialRegion.ASIA, "KP": TrialRegion.ASIA, "KR": TrialRegion.ASIA, "KW": TrialRegion.ASIA, "KZ": TrialRegion.ASIA, "LA": TrialRegion.ASIA, "LB": TrialRegion.ASIA, "LK": TrialRegion.ASIA, "MM": TrialRegion.ASIA, "MN": TrialRegion.ASIA,
+	"MO": TrialRegion.ASIA, "MV": TrialRegion.ASIA, "MY": TrialRegion.ASIA, "NP": TrialRegion.ASIA, "OM": TrialRegion.ASIA, "PH": TrialRegion.ASIA, "PK": TrialRegion.ASIA, "PS": TrialRegion.ASIA, "QA": TrialRegion.ASIA, "SA": TrialRegion.ASIA,
+	"SG": TrialRegion.ASIA, "SY": TrialRegion.ASIA, "TH": TrialRegion.ASIA, "TJ": TrialRegion.ASIA, "TL": TrialRegion.ASIA, "TM": TrialRegion.ASIA, "TR": TrialRegion.ASIA, "TW": TrialRegion.ASIA, "UZ": TrialRegion.ASIA, "VN": TrialRegion.ASIA,
+	"YE": TrialRegion.ASIA,
+	# Europe
+	"AD": TrialRegion.EUROPE, "AL": TrialRegion.EUROPE, "AT": TrialRegion.EUROPE, "AX": TrialRegion.EUROPE, "BA": TrialRegion.EUROPE, "BE": TrialRegion.EUROPE, "BG": TrialRegion.EUROPE, "BY": TrialRegion.EUROPE, "CH": TrialRegion.EUROPE, "CZ": TrialRegion.EUROPE,
+	"DE": TrialRegion.EUROPE, "DK": TrialRegion.EUROPE, "EE": TrialRegion.EUROPE, "ES": TrialRegion.EUROPE, "FI": TrialRegion.EUROPE, "FO": TrialRegion.EUROPE, "FR": TrialRegion.EUROPE, "GB": TrialRegion.EUROPE, "GG": TrialRegion.EUROPE, "GI": TrialRegion.EUROPE,
+	"GR": TrialRegion.EUROPE, "HR": TrialRegion.EUROPE, "HU": TrialRegion.EUROPE, "IE": TrialRegion.EUROPE, "IM": TrialRegion.EUROPE, "IS": TrialRegion.EUROPE, "IT": TrialRegion.EUROPE, "JE": TrialRegion.EUROPE, "LI": TrialRegion.EUROPE, "LT": TrialRegion.EUROPE,
+	"LU": TrialRegion.EUROPE, "LV": TrialRegion.EUROPE, "MC": TrialRegion.EUROPE, "MD": TrialRegion.EUROPE, "ME": TrialRegion.EUROPE, "MK": TrialRegion.EUROPE, "MT": TrialRegion.EUROPE, "NL": TrialRegion.EUROPE, "NO": TrialRegion.EUROPE, "PL": TrialRegion.EUROPE,
+	"PT": TrialRegion.EUROPE, "RO": TrialRegion.EUROPE, "RS": TrialRegion.EUROPE, "RU": TrialRegion.EUROPE, "SE": TrialRegion.EUROPE, "SI": TrialRegion.EUROPE, "SJ": TrialRegion.EUROPE, "SK": TrialRegion.EUROPE, "SM": TrialRegion.EUROPE, "UA": TrialRegion.EUROPE,
+	"VA": TrialRegion.EUROPE,
+	# North America (incl. Central America & Caribbean)
+	"AG": TrialRegion.NORTH_AMERICA, "AI": TrialRegion.NORTH_AMERICA, "AW": TrialRegion.NORTH_AMERICA, "BB": TrialRegion.NORTH_AMERICA, "BL": TrialRegion.NORTH_AMERICA, "BM": TrialRegion.NORTH_AMERICA, "BQ": TrialRegion.NORTH_AMERICA, "BS": TrialRegion.NORTH_AMERICA, "BZ": TrialRegion.NORTH_AMERICA, "CA": TrialRegion.NORTH_AMERICA,
+	"CR": TrialRegion.NORTH_AMERICA, "CU": TrialRegion.NORTH_AMERICA, "CW": TrialRegion.NORTH_AMERICA, "DM": TrialRegion.NORTH_AMERICA, "DO": TrialRegion.NORTH_AMERICA, "GD": TrialRegion.NORTH_AMERICA, "GL": TrialRegion.NORTH_AMERICA, "GP": TrialRegion.NORTH_AMERICA, "GT": TrialRegion.NORTH_AMERICA, "HN": TrialRegion.NORTH_AMERICA,
+	"HT": TrialRegion.NORTH_AMERICA, "JM": TrialRegion.NORTH_AMERICA, "KN": TrialRegion.NORTH_AMERICA, "KY": TrialRegion.NORTH_AMERICA, "LC": TrialRegion.NORTH_AMERICA, "MF": TrialRegion.NORTH_AMERICA, "MQ": TrialRegion.NORTH_AMERICA, "MS": TrialRegion.NORTH_AMERICA, "MX": TrialRegion.NORTH_AMERICA, "NI": TrialRegion.NORTH_AMERICA,
+	"PA": TrialRegion.NORTH_AMERICA, "PM": TrialRegion.NORTH_AMERICA, "PR": TrialRegion.NORTH_AMERICA, "SV": TrialRegion.NORTH_AMERICA, "SX": TrialRegion.NORTH_AMERICA, "TC": TrialRegion.NORTH_AMERICA, "TT": TrialRegion.NORTH_AMERICA, "US": TrialRegion.NORTH_AMERICA, "VC": TrialRegion.NORTH_AMERICA, "VG": TrialRegion.NORTH_AMERICA,
+	"VI": TrialRegion.NORTH_AMERICA,
+	# South America
+	"AR": TrialRegion.SOUTH_AMERICA, "BO": TrialRegion.SOUTH_AMERICA, "BR": TrialRegion.SOUTH_AMERICA, "CL": TrialRegion.SOUTH_AMERICA, "CO": TrialRegion.SOUTH_AMERICA, "EC": TrialRegion.SOUTH_AMERICA, "FK": TrialRegion.SOUTH_AMERICA, "GF": TrialRegion.SOUTH_AMERICA, "GS": TrialRegion.SOUTH_AMERICA, "GY": TrialRegion.SOUTH_AMERICA,
+	"PE": TrialRegion.SOUTH_AMERICA, "PY": TrialRegion.SOUTH_AMERICA, "SR": TrialRegion.SOUTH_AMERICA, "UY": TrialRegion.SOUTH_AMERICA, "VE": TrialRegion.SOUTH_AMERICA,
+	# Oceania
+	"AS": TrialRegion.OCEANIA, "AU": TrialRegion.OCEANIA, "CC": TrialRegion.OCEANIA, "CK": TrialRegion.OCEANIA, "CX": TrialRegion.OCEANIA, "FJ": TrialRegion.OCEANIA, "FM": TrialRegion.OCEANIA, "GU": TrialRegion.OCEANIA, "KI": TrialRegion.OCEANIA, "MH": TrialRegion.OCEANIA,
+	"MP": TrialRegion.OCEANIA, "NC": TrialRegion.OCEANIA, "NF": TrialRegion.OCEANIA, "NR": TrialRegion.OCEANIA, "NU": TrialRegion.OCEANIA, "NZ": TrialRegion.OCEANIA, "PF": TrialRegion.OCEANIA, "PG": TrialRegion.OCEANIA, "PN": TrialRegion.OCEANIA, "PW": TrialRegion.OCEANIA,
+	"SB": TrialRegion.OCEANIA, "TK": TrialRegion.OCEANIA, "TO": TrialRegion.OCEANIA, "TV": TrialRegion.OCEANIA, "VU": TrialRegion.OCEANIA, "WF": TrialRegion.OCEANIA, "WS": TrialRegion.OCEANIA,
+}
+
+# Literal region/continent tokens seen verbatim in WHO ICTRP `countries` values (a trial can
+# be tagged with a whole continent instead of, or alongside, specific countries). These route
+# to normalize_regions rather than the country list — see normalize_countries step 2.
+# "asia"/"africa" are defensive additions beyond the observed inventory (cheap, low-risk).
+_REGION_TOKENS: dict[str, str] = {
+	"europe": TrialRegion.EUROPE,
+	"european union": TrialRegion.EUROPE,
+	"north america": TrialRegion.NORTH_AMERICA,
+	"south america": TrialRegion.SOUTH_AMERICA,
+	"oceania": TrialRegion.OCEANIA,
+	"asia(except japan)": TrialRegion.ASIA,
+	"asia (except japan)": TrialRegion.ASIA,
+	"asia": TrialRegion.ASIA,
+	"africa": TrialRegion.AFRICA,
+}
+
+# Exact-match lookup for raw country tokens that don't round-trip through django_countries'
+# own name lookup: old/alternate names, typos, UK subdivisions, and "US"/"USA" abbreviations.
+# Keys are whitespace-collapsed, casefolded, trailing-punctuation-stripped tokens. See
+# docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md for the token-frequency inventory this was seeded
+# from. Extend this table (not the django_countries fallback) for the next unmapped spelling.
+_COUNTRY_EXACT_MATCHES: dict[str, str] = {
+	# United States
+	"united states": "US",
+	"united states of america": "US",
+	"us": "US",
+	"usa": "US",
+	# United Kingdom + constituent countries (WHO reports these as separate "countries")
+	"united kingdom": "GB",
+	"england": "GB",
+	"scotland": "GB",
+	"wales": "GB",
+	"northern ireland": "GB",
+	"united kindgdom": "GB",  # typo, seen verbatim in WHO ICTRP export
+	# Turkey / Türkiye (CTGov v2 uses the localized display name)
+	"turkey (türkiye)": "TR",
+	"turkey": "TR",
+	"türkiye": "TR",
+	"turkiye": "TR",
+	# Iran
+	"iran (islamic republic of)": "IR",
+	"iran": "IR",
+	# Czechia
+	"czechia": "CZ",
+	"czech republic": "CZ",
+	# South Korea
+	"south korea": "KR",
+	"korea, republic of": "KR",
+	"republic of korea": "KR",
+	# Russia
+	"russia": "RU",
+	"russian federation": "RU",
+	# Netherlands
+	"netherlands": "NL",
+	"the netherlands": "NL",
+	# China
+	"china": "CN",
+	"people's republic of china": "CN",
+	"chian": "CN",  # typo, seen verbatim in WHO ICTRP export
+	# One-off WHO ICTRP noise
+	"modalvia": "MD",  # typo for Moldova
+	"bosnial and herzegovina": "BA",  # typo for Bosnia and Herzegovina
+	"italia": "IT",
+	# "Former Serbia and Montenegro" (dissolved 2006, no clean current ISO code),
+	# "none"/"Other" (not a country) — deliberately absent so they log as unmapped and
+	# are dropped, rather than guessing at a mapping.
+}
+
+
+@lru_cache(maxsize=1)
+def _name_to_code_lookup() -> dict[str, str]:
+	"""Casefolded django_countries display name -> alpha-2 code, built lazily (and cached)
+	so importing this module never forces django_countries to render translated strings
+	before Django's settings are ready."""
+	from django_countries.data import COUNTRIES
+
+	return {str(name).strip().casefold(): code for code, name in COUNTRIES.items()}
+
+
+@lru_cache(maxsize=1)
+def _valid_iso_codes() -> frozenset:
+	from django_countries.data import COUNTRIES
+
+	return frozenset(COUNTRIES.keys())
+
+
+def _clean_token(token: str) -> str:
+	"""Whitespace-collapse, casefold, and strip trailing separator punctuation from a
+	single country/region token (but keep internal punctuation like the parentheses in
+	"Asia(except Japan)" or "Iran (Islamic Republic of)")."""
+	return re.sub(r"\s+", " ", token).strip().casefold().rstrip(" ;,.")
+
+
+def _known_token(cleaned: str) -> bool:
+	"""True if *cleaned* (already run through _clean_token) resolves to a country or a
+	region on its own — used by the tokenizer to decide where to split a multi-value
+	string and to protect names that contain an internal comma (e.g. "Korea, Republic
+	of")."""
+	return (
+		cleaned in _COUNTRY_EXACT_MATCHES
+		or cleaned in _REGION_TOKENS
+		or cleaned in _name_to_code_lookup()
+	)
+
+
+def _tokenize_countries_value(value: str | None) -> list[str]:
+	"""Split one source's raw countries string into individual country/region tokens.
+
+	Order of operations (see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md "Tokenizer"):
+	1. Whole value matches a known country/region on its own -> single token. Protects
+	   comma-containing names stored alone (WHO's "Korea, Republic of").
+	2. Semicolon present -> split on ";" (WHO ICTRP's separator; tolerates a trailing ";").
+	3. Otherwise split on comma (CTGov's ", " separator; also tolerates a bare "," with no
+	   following space), then re-join adjacent fragments that only resolve to a known
+	   country/region when combined — defensively covers a comma-containing name
+	   appearing inside a longer multi-country list.
+	"""
+	if not value:
+		return []
+	cleaned = re.sub(r"\s+", " ", value).strip()
+	if not cleaned:
+		return []
+
+	if _known_token(_clean_token(cleaned)):
+		return [cleaned]
+
+	if ";" in cleaned:
+		return [p.strip() for p in cleaned.split(";") if p.strip()]
+
+	raw_parts = [p.strip() for p in re.split(r",\s*", cleaned) if p.strip()]
+	parts: list[str] = []
+	i = 0
+	while i < len(raw_parts):
+		current = raw_parts[i]
+		if i + 1 < len(raw_parts):
+			combined = f"{current}, {raw_parts[i + 1]}"
+			if _known_token(_clean_token(combined)) and not _known_token(
+				_clean_token(current)
+			):
+				parts.append(combined)
+				i += 2
+				continue
+		parts.append(current)
+		i += 1
+	return parts
+
+
+def _map_token(token: str) -> tuple:
+	"""Map one cleaned token to (country_code, None) or (None, region_slug); (None, None)
+	when unmapped (logged so the review queue can extend the tables above)."""
+	cleaned = _clean_token(token)
+	if not cleaned:
+		return None, None
+	if cleaned in _COUNTRY_EXACT_MATCHES:
+		return _COUNTRY_EXACT_MATCHES[cleaned], None
+	if cleaned in _REGION_TOKENS:
+		return None, _REGION_TOKENS[cleaned]
+	code = _name_to_code_lookup().get(cleaned)
+	if code:
+		return code, None
+	logger.info("Unmapped trial country value: %r", token)
+	return None, None
+
+
+_COUNTRY_STATUS_NAME_RE = re.compile(r"([A-Za-z][A-Za-z ]*):")
+
+
+def _parse_country_status(text: str | None) -> list:
+	"""Parse EU CTIS `country_status` into (country name, status text) pairs.
+
+	Format: "Spain:Authorised, recruitment pending, France:Authorised, recruitment
+	pending, Italy:Ongoing, recruiting" — status text itself contains commas, so this
+	cannot be comma-split. Instead every "Name:" anchor (a run of letters/spaces
+	immediately followed by a colon) is located with a regex; the status text for each
+	country is everything between its anchor and the next one (or end of string), with
+	the trailing ", " separator trimmed off.
+	"""
+	if not text:
+		return []
+	matches = list(_COUNTRY_STATUS_NAME_RE.finditer(text))
+	results = []
+	for i, match in enumerate(matches):
+		name = match.group(1).strip()
+		start = match.end()
+		end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+		value = text[start:end].strip().rstrip(", ").strip()
+		if name and value:
+			results.append((name, value))
+	return results
+
+
+def _parse_decision_date(value) -> str | None:
+	"""Best-effort ISO-8601 date string from a countries_decision_date value (already a
+	date/ISO-string per the EU CTIS parser — gregory/classes.py EUTrialParser.parse_summary)."""
+	if not value:
+		return None
+	if hasattr(value, "isoformat"):
+		return value.isoformat()
+	text = str(value).strip()
+	return text or None
+
+
+def normalize_countries(
+	countries_by_source: dict | None,
+	countries: str | None,
+	country_status: str | None,
+	countries_decision_date: dict | None,
+) -> list | None:
+	"""
+	Compute the canonical per-country rows for a trial from every raw input that can
+	mention a country, as a union (never a last-writer-wins overwrite — see
+	docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md Layer 2):
+
+	1. `countries_decision_date` keys — already ISO alpha-2, validated against the ISO
+	   list; attaches `decision_date`, source `ctis`.
+	2. `countries_by_source` — each key's value tokenized and mapped, tagged with that
+	   key as the source. Falls back to the legacy `countries` column (format-detected:
+	   ";" -> "ictrp", else "ctgov") for rows not yet seeded with `countries_by_source`.
+	3. `country_status` — per-country status parsed out and mapped through
+	   `normalize_recruitment_status` (same vocabulary as the trial-level recruitment
+	   status), source `ctis`.
+
+	Returns a list of dicts sorted by country code:
+	``{"country": "DE", "status": "recruiting", "status_raw": "...",
+	   "decision_date": "2024-07-19", "sources": ["ctgov", "ctis"]}``
+	Returns None when every input is empty (mirrors the other normalizers' None-for-empty
+	convention) rather than an empty list.
+	"""
+	rows: dict[str, dict] = {}
+
+	def ensure(code: str) -> dict:
+		return rows.setdefault(
+			code,
+			{
+				"country": code,
+				"status": None,
+				"status_raw": None,
+				"decision_date": None,
+				"sources": [],
+			},
+		)
+
+	def add_source(code: str, source: str) -> None:
+		row = ensure(code)
+		if source not in row["sources"]:
+			row["sources"].append(source)
+
+	# 1. countries_decision_date: already alpha-2 keys.
+	valid_codes = _valid_iso_codes()
+	for raw_code, date_value in (countries_decision_date or {}).items():
+		code = (raw_code or "").strip().upper()
+		if code not in valid_codes:
+			logger.info("Unmapped trial country decision-date key: %r", raw_code)
+			continue
+		row = ensure(code)
+		row["decision_date"] = _parse_decision_date(date_value)
+		add_source(code, "ctis")
+
+	# 2. countries_by_source, falling back to the legacy `countries` column (format
+	# detection) for trials not yet seeded with countries_by_source.
+	by_source = dict(countries_by_source or {})
+	if not by_source and countries:
+		fallback_key = "ictrp" if ";" in countries else "ctgov"
+		by_source = {fallback_key: countries}
+
+	for source_key, value in by_source.items():
+		for token in _tokenize_countries_value(value):
+			code, _region = _map_token(token)
+			if code:
+				add_source(code, source_key)
+
+	# 3. country_status (EU CTIS): per-country recruitment status.
+	for name, status_raw in _parse_country_status(country_status):
+		code, _region = _map_token(name)
+		if not code:
+			continue
+		row = ensure(code)
+		row["status_raw"] = status_raw
+		row["status"] = normalize_recruitment_status(status_raw)
+		add_source(code, "ctis")
+
+	if not rows:
+		return None
+
+	result = []
+	for code in sorted(rows):
+		row = rows[code]
+		row["sources"] = sorted(row["sources"])
+		result.append(row)
+	return result
+
+
+def normalize_regions(
+	country_codes: list | None, raw_countries: str | None
+) -> list | None:
+	"""
+	Compute the sorted list of region slugs for a trial from its normalized country codes
+	plus a secondary scan of the raw `countries` text for literal region/continent tokens
+	(WHO ICTRP sometimes tags a trial with a whole continent, e.g. "Europe" or
+	"Asia(except Japan)", instead of, or alongside, specific countries — see
+	docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md Layer 3).
+
+	Returns None when no region can be determined (mirrors the other normalizers).
+	"""
+	regions = set()
+	for code in country_codes or []:
+		region = _COUNTRY_TO_REGION.get(code)
+		if region:
+			regions.add(region)
+
+	if raw_countries:
+		cleaned = re.sub(r"\s+", " ", raw_countries).strip()
+		for chunk in re.split(r"[;,]", cleaned):
+			token = _clean_token(chunk)
+			region = _REGION_TOKENS.get(token)
+			if region:
+				regions.add(region)
+
+	return sorted(regions) if regions else None
+
+
+def _compute_regions_from_raw(
+	countries_by_source: dict | None,
+	countries: str | None,
+	country_status: str | None,
+	countries_decision_date: dict | None,
+) -> list | None:
+	"""Glue function registered in NORMALIZED_TRIAL_FIELDS: derives the country list from
+	the same four raw inputs as normalize_countries, then reduces it to regions. Kept
+	separate from normalize_regions so that function's own signature/tests stay in terms
+	of (country_codes, raw_countries) as specified, independent of how the country list
+	itself gets computed."""
+	rows = normalize_countries(
+		countries_by_source, countries, country_status, countries_decision_date
+	)
+	country_codes = [row["country"] for row in rows] if rows else []
+	return normalize_regions(country_codes, countries)
+
+
+def raw_field_names(raw_fields) -> tuple:
+	"""Normalize a NORMALIZED_TRIAL_FIELDS raw-fields spec (a single field name, or a
+	tuple of field names for a multi-input derived field) to a tuple of field names."""
+	return (raw_fields,) if isinstance(raw_fields, str) else tuple(raw_fields)
+
+
 # Drives Trials.save() and the generalized backfill/admin-recompute commands: each entry is
-# (raw field name, derived field name, normalizer function). Add a new entry here — plus the
-# matching model field in gregory/models.py — for the next derived field (study_type, ...).
+# (raw field(s), derived field name, normalizer function). The raw-field slot is a single
+# field name (str) for a single-input field (phase, recruitment_status), or a tuple of field
+# names for a multi-input field (regions_normalized derives from four raw columns) — use
+# raw_field_names() to normalize either shape, and call normalizer(*raw_values) either way.
+# Add a new entry here — plus the matching model field in gregory/models.py — for the next
+# derived field (study_type, ...).
 NORMALIZED_TRIAL_FIELDS = (
 	("phase", "phase_normalized", normalize_phase),
 	("recruitment_status", "recruitment_status_normalized", normalize_recruitment_status),
+	(
+		("countries_by_source", "countries", "country_status", "countries_decision_date"),
+		"regions_normalized",
+		_compute_regions_from_raw,
+	),
 )

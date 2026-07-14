@@ -203,34 +203,79 @@ one-registry-value-to-one-bucket exercise:
    raw string (which is actually informative here) shows on display surfaces instead of a
    generic "Unknown" label.
 
+## Field: `countries` → `TrialCountry` rows + `regions_normalized` (multi-input)
+
+Unlike `phase` and `recruitment_status`, country data is spread across **four** raw columns
+(`countries_by_source`, the legacy `countries`, `country_status`, `countries_decision_date`)
+written by three different sources with three different formats, and the canonical output
+isn't a single scalar — it's a set of per-country rows plus a derived region list. Full audit
+and design rationale: `TRIAL-COUNTRY-NORMALIZATION-PLAN.md` (repo root). Summary:
+
+- **`Trials.countries_by_source`** (JSONField) fixes last-write-wins on the legacy
+  `countries` column: each importer writes only its own key (`ctgov`/`ictrp`, reusing
+  `registry_utils.REGISTRY_DOMAINS` slugs) via `registry_utils.merge_countries_by_source`,
+  mirroring the `links`/`merge_links` pattern but *refreshing* the value on every re-import
+  rather than keeping the first-seen one (a source's own country list can legitimately
+  change between syncs). EU CTIS needs no key — its data lives in its own columns.
+- **`gregory.utils.trial_field_normalizers.normalize_countries(countries_by_source,
+  countries, country_status, countries_decision_date)`** computes the union of every
+  input into `[{"country": "DE", "status": "recruiting", "status_raw": "...",
+  "decision_date": "2024-07-19", "sources": ["ctgov", "ctis"]}, ...]`, sorted by country
+  code, `None` when every input is empty. See the module for the full tokenizer/alias-table
+  design (typos, UK subdivisions, UN-style names, region literals).
+- **`TrialCountry`** (`gregory/models.py`) is a through model (`trial`, `country`
+  (`CountryField`), `status`/`status_raw`/`decision_date` (CTIS-only, null otherwise),
+  `sources`) holding one row per `normalize_countries()` result. `Trials.sync_trial_countries()`
+  replaces the full set after every `Trials.save()`; the backfill command and admin
+  "Recompute normalized fields" action call it explicitly for `bulk_update` paths.
+- **`gregory.utils.trial_field_normalizers.normalize_regions(country_codes,
+  raw_countries)`** reduces a list of country codes (plus a secondary scan of the raw
+  `countries` text for literal region/continent tokens like `"Europe"` or
+  `"Asia(except Japan)"`) to a sorted list of region slugs — `africa`, `asia`, `europe`,
+  `north_america`, `south_america`, `oceania`. `Trials.regions_normalized` is registered in
+  `NORMALIZED_TRIAL_FIELDS` via a private glue function (`_compute_regions_from_raw`) that
+  calls `normalize_countries()` then `normalize_regions()`, so it participates in the
+  standard save()/backfill/admin machinery like `phase_normalized`.
+- API: `TrialSerializer` exposes `trial_countries` (nested: country, status, decision_date,
+  sources), `countries_normalized` (flat code list), and `regions_normalized`; `?country=DE`
+  and `?region=europe` filters in `api/filters.py`. The legacy `countries` field is
+  unchanged.
+
 ## The save() guarantee
 
 `Trials.save()` (in `django/gregory/models.py`) recomputes every derived field registered
-in `NORMALIZED_TRIAL_FIELDS` from its raw counterpart on every write:
+in `NORMALIZED_TRIAL_FIELDS` from its raw counterpart(s) on every write. Since
+`regions_normalized` (see "Field: countries" below) derives from **four** raw columns
+rather than one, the raw-field slot in each `NORMALIZED_TRIAL_FIELDS` entry accepts either
+a single field name (str) or a tuple of field names; `raw_field_names()` normalizes either
+shape to a tuple so the loop is agnostic to which kind of entry it's looking at:
 
 ```python
 def save(self, *args, **kwargs):
 	update_fields = kwargs.get("update_fields")
 	extra_update_fields = []
-	for raw_field, derived_field, normalizer in NORMALIZED_TRIAL_FIELDS:
-		setattr(self, derived_field, normalizer(getattr(self, raw_field)))
+	for raw_fields, derived_field, normalizer in NORMALIZED_TRIAL_FIELDS:
+		names = raw_field_names(raw_fields)
+		setattr(self, derived_field, normalizer(*(getattr(self, name) for name in names)))
 		if (
 			update_fields is not None
-			and raw_field in update_fields
+			and any(name in update_fields for name in names)
 			and derived_field not in update_fields
 		):
 			extra_update_fields.append(derived_field)
 	if extra_update_fields:
 		kwargs["update_fields"] = [*update_fields, *extra_update_fields]
 	super().save(*args, **kwargs)
+	self.sync_trial_countries()
 ```
 
 This covers all four write paths — they all go through `.objects.create()` or `.save()`,
 including e.g. `save(update_fields=["phase"])`, which the code above extends to also
 persist `phase_normalized` (and, symmetrically, `update_fields=["recruitment_status"]`
-extends to persist `recruitment_status_normalized`). Every derived field is
-`editable=False`, so none can be set directly through a form or API POST — they are always
-derived.
+extends to persist `recruitment_status_normalized`, and `update_fields=["countries"]`
+extends to persist `regions_normalized`, since `"countries"` is one of its four raw
+fields). Every derived field is `editable=False`, so none can be set directly through a
+form or API POST — they are always derived.
 
 **`bulk_update()` bypasses `save()`** and therefore bypasses this hook. The only place
 that matters today is the backfill command below and the admin "Recompute normalized
@@ -239,6 +284,12 @@ fields" action, both of which recompute the derived fields explicitly before cal
 
 The derived fields are plain fields on `Trials`, so django-simple-history
 (`HistoricalRecords`) picks them up automatically — no extra wiring needed.
+
+`sync_trial_countries()` — the `TrialCountry` replace-sync described below — is a separate
+step run *after* `super().save()` (it needs a pk for the related rows) and is **not** part
+of the `NORMALIZED_TRIAL_FIELDS` loop, since it replaces related-model rows rather than
+setting a scalar field. `bulk_update()` bypasses it exactly like the scalar derived fields;
+the backfill command and admin action call it explicitly.
 
 ## Admin tuning workflow
 
@@ -267,11 +318,16 @@ python manage.py backfill_trial_normalized_fields [--field phase] [--field recru
 ```
 
 `--field` is repeatable and/or comma-separated (`--field phase,recruitment_status`);
-omitting it backfills every field registered in `NORMALIZED_TRIAL_FIELDS`. Scans every
-`Trials` row once, recomputes the selected derived field(s), and `bulk_update`s the rows
-whose stored value(s) differ, flushing every `--batch-size` dirty rows during the scan so
-peak memory stays bounded by the batch rather than the table (on the first run every row
-is dirty). Intentionally skips django-simple-history — these
+omitting it backfills every field registered in `NORMALIZED_TRIAL_FIELDS`. Selector names
+are the derived field name with `_normalized` dropped — `phase`, `recruitment_status`, and
+`regions` (the countries/`TrialCountry` layer). Scans every `Trials` row once, recomputes
+the selected derived field(s), and `bulk_update`s the rows whose stored scalar value(s)
+differ, flushing every `--batch-size` dirty rows during the scan so peak memory stays
+bounded by the batch rather than the table (on the first run every row is dirty). When
+`regions` is selected, also calls `sync_trial_countries()` for every scanned trial
+(regardless of whether `regions_normalized` itself changed — a trial can need fresh
+`TrialCountry` rows on the very first run even when its computed regions happen to already
+match). Intentionally skips django-simple-history — these
 are derived fields recomputed from data already in the row, not a meaningful edit, and
 `bulk_update` can't write history anyway (it doesn't call `save()`). Reports total scanned,
 total values changed, a per-field per-canonical-value tally, and (per field) every distinct
@@ -345,3 +401,22 @@ the current raw value's canonical form, never a stale one from a previous import
   `recruitment_status_normalized` untouched), and the API filter/serializer tests.
 - The admin "Recompute normalized fields" action has a smoke test alongside the other admin
   tests in `gregory/tests/test_trial_phase_normalization.py`.
+- `gregory/tests/test_trial_country_normalization.py` — `normalize_countries`/
+  `normalize_regions` coverage (CTGov comma lists, WHO semicolon lists with duplicates,
+  `Korea, Republic of` stored alone, `country_status` comma-containing-status parsing,
+  mixed-provenance union, non-ISO decision-date keys, legacy `countries` format-detection
+  fallback, typos/UK-subdivisions/region-literal handling), `registry_utils
+  .merge_countries_by_source`, the `Trials.save()` hook for `regions_normalized` +
+  `TrialCountry` sync (including `update_fields=["countries"]`), the backfill command's
+  `regions` selector (including `TrialCountry` rebuild and its `--dry-run` behaviour), and
+  the admin recompute action.
+- `gregory/tests/test_trial_countries_by_source_importers.py` — importer integration:
+  `feedreader_trials_ctgov.py`/`importWHOXML.py` each write only their own
+  `countries_by_source` key, never clobbering the other source's key, including a
+  cross-source (CTGov + WHO) union test that also checks the resulting
+  `regions_normalized`.
+- `api/tests/test_trial_country_normalization.py` — `?country=DE`/`?region=europe` filters
+  (including invalid-choice 400 and case-insensitivity), the `trial_countries`/
+  `countries_normalized`/`regions_normalized` response fields, `regions_normalized`'s
+  read-only serializer field, and a bounded-query-count check for the list endpoint
+  (`trial_countries` prefetch).

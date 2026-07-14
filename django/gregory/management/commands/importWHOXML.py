@@ -7,6 +7,7 @@ from gregory.utils.registry_utils import (
 	identifiers_conflict,
 	merge_links,
 	canonical_link,
+	merge_countries_by_source,
 )
 import datetime
 import xml.etree.ElementTree as ET
@@ -138,6 +139,19 @@ class Command(BaseCommand):
 						trial.link = new_link
 						has_changes = True
 						updated_fields.append("link")
+			elif key == "countries_by_source":
+				# Record this source's raw countries value under its own key ("ictrp"),
+				# never touching any other source's key (see
+				# gregory.utils.registry_utils.merge_countries_by_source).
+				incoming = (value or {}).get("ictrp")
+				if incoming:
+					merged = merge_countries_by_source(
+						trial.countries_by_source, "ictrp", incoming
+					)
+					if merged != (trial.countries_by_source or {}):
+						trial.countries_by_source = merged
+						has_changes = True
+						updated_fields.append(key)
 			# Only overwrite when the incoming value is non-empty, so a missing XML
 			# field never blanks data a previous source populated.
 			elif value not in (None, "") and current_value != value:
@@ -326,6 +340,16 @@ class Command(BaseCommand):
 				title.replace("\n", " ").replace("\r", " ") if title else None
 			)
 			trial_data["link"] = self.get_text(trial, "web_address")
+
+			# Record this source's raw countries value under its own key ("ictrp"),
+			# mirroring ClinicalTrials.gov's countries_by_source write — see
+			# docs/trials-multi-source-merge.md and
+			# gregory.utils.registry_utils.merge_countries_by_source. update_existing_trial
+			# below merges this key without touching any other source's key.
+			if trial_data.get("countries"):
+				trial_data["countries_by_source"] = merge_countries_by_source(
+					None, "ictrp", trial_data["countries"]
+				)
 
 			for date_field in [
 				"Export_date",

@@ -126,6 +126,24 @@ def canonical_link(links: dict | None, current_link: str | None) -> str | None:
 	return next((links[key] for key in sorted(links) if links[key]), None)
 
 
+def merge_countries_by_source(existing_map: dict | None, key: str, value: str | None) -> dict:
+	"""Return *existing_map* (Trials.countries_by_source) with *value* filed under *key*
+	(a registry slug, e.g. "ctgov"/"ictrp" — reuses REGISTRY_DOMAINS values).
+
+	Each importer writes only its own key, mirroring merge_links — a differently-delimited
+	per-source string (WHO's ";"-joined list vs CTGov's ", "-joined list) is never merged
+	into another source's value under the same key. Unlike merge_links' first-value-wins
+	semantics, the value for a given key is always refreshed on re-import: a source's raw
+	country list can legitimately change between syncs (e.g. a new site added), and there
+	is only one legitimate value per source, so there is nothing to protect by keeping a
+	stale one. See docs/trials-multi-source-merge.md.
+	"""
+	merged = dict(existing_map or {})
+	if value:
+		merged[key] = value
+	return merged
+
+
 def merge_identifiers(
 	existing_identifiers: dict | None, new_identifiers: dict | None
 ) -> dict:
