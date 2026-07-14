@@ -1488,7 +1488,15 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 			trials_count_annotated=_category_through_count_subquery(TrialCategoryAssignment),
 		)
 
-		return queryset.distinct()
+		# No .distinct() needed: the count annotations are now correlated
+		# subqueries (no JOIN), team is select_related via FK, subjects is
+		# prefetch_related (a separate query), and subjects__id=<single id>
+		# filters the default M2M through table, which has a unique
+		# constraint on (teamcategory, subject) — none of these can produce
+		# duplicate category rows. Adding .distinct() back would force the
+		# paginator's count() down a DISTINCT-over-all-columns path,
+		# undermining the cheap-count fix above.
+		return queryset
 
 	def get_serializer_context(self):
 		"""Add author parameters to serializer context"""
