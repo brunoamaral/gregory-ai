@@ -45,6 +45,8 @@ SCALAR_ORDER = [
 	"target_size",
 	"date_enrollement",
 	"countries",
+	"countries_by_source",
+	"regions_normalized",
 	"condition",
 	"intervention",
 	"primary_outcome",
@@ -84,7 +86,14 @@ SCALAR_ORDER = [
 	"ctg_detailed_description",
 ]
 
-RELATION_COLS = ["subjects", "teams", "sources", "team_categories", "articles"]
+RELATION_COLS = [
+	"subjects",
+	"teams",
+	"sources",
+	"team_categories",
+	"articles",
+	"trial_countries",
+]
 
 # Descriptions for exported columns absent from TrialAdminForm.Meta.help_texts.
 # Format: field_name → (label, description, source_registries)
@@ -148,6 +157,27 @@ EXTRA_GLOSSARY = {
 		"Country status",
 		"Authorisation status of the trial in each participating country.",
 		"EU CTIS",
+	),
+	"countries_by_source": (
+		"Countries by source",
+		"Raw per-source country lists as a JSON map keyed by registry slug "
+		"(ctgov, ictrp). Each importer writes only its own key, so sources no longer "
+		"overwrite each other's country data (the flat countries column is last-writer-wins).",
+		"WHO ICTRP, ClinicalTrials.gov",
+	),
+	"regions_normalized": (
+		"Regions (normalized)",
+		"Continental regions derived from the trial's normalized countries "
+		"(africa, asia, europe, north_america, south_america, oceania), plus any "
+		"literal region tokens found in the raw country data.",
+		"WHO ICTRP, ClinicalTrials.gov, EU CTIS",
+	),
+	"trial_countries": (
+		"Countries (normalized)",
+		"Per-country breakdown: display name and ISO 3166-1 alpha-2 code, with EU CTIS "
+		"authorisation status, decision date, and contributing source slugs where known. "
+		'Format: "Germany [DE] (recruiting; 2024-07-19; src: ctgov+ctis); …".',
+		"WHO ICTRP, ClinicalTrials.gov, EU CTIS",
 	),
 	"trial_region": ("Trial region", "Geographic region of the trial.", "EU CTIS"),
 	"overall_decision_date": (
@@ -227,6 +257,8 @@ _WIDE_COLS = {
 	"results_ipd_description",
 	"therapeutic_areas",
 	"country_status",
+	"countries_by_source",
+	"trial_countries",
 	"articles",
 }
 _URL_COLS = {"link", "results_url_link", "identifiers_json"}
@@ -255,11 +287,42 @@ def _cell_value(value):
 		return value
 	if isinstance(value, dict):
 		return json.dumps(value, ensure_ascii=False)
+	if isinstance(value, list):
+		# Lists of scalars (e.g. regions_normalized) render as a "; "-joined string;
+		# lists containing dicts/lists fall back to JSON for fidelity.
+		if all(not isinstance(v, (dict, list)) for v in value):
+			return "; ".join("" if v is None else str(v) for v in value)
+		return json.dumps(value, ensure_ascii=False)
 	if isinstance(value, bool):
 		return value
 	if isinstance(value, (int, float)):
 		return value
 	return str(value)
+
+
+def _format_trial_countries(trial):
+	"""Render a trial's normalized TrialCountry rows as one readable cell.
+
+	Format per country: "Germany [DE] (recruiting; 2024-07-19; src: ctgov+ctis)".
+	The status/date/sources clause is omitted when empty. Uses the prefetched
+	``trial_countries`` cache (sorted in Python — no extra query).
+	"""
+	rows = sorted(trial.trial_countries.all(), key=lambda tc: str(tc.country.code))
+	parts = []
+	for tc in rows:
+		bits = []
+		status = tc.status_raw or tc.status
+		if status:
+			bits.append(str(status))
+		if tc.decision_date:
+			bits.append(str(tc.decision_date))
+		if tc.sources:
+			bits.append("src: " + "+".join(tc.sources))
+		label = f"{tc.country.name} [{tc.country.code}]"
+		if bits:
+			label += " (" + "; ".join(bits) + ")"
+		parts.append(label)
+	return "; ".join(parts)
 
 
 def _apply_header(ws, columns):
@@ -567,6 +630,7 @@ class Command(BaseCommand):
 					"sources",
 					"team_categories",
 					"article_references__article",
+					"trial_countries",
 				)
 			)
 
@@ -621,6 +685,8 @@ class Command(BaseCommand):
 								row_data.append(f"{len(refs)}: {links}")
 							else:
 								row_data.append("")
+						elif col_name == "trial_countries":
+							row_data.append(_format_trial_countries(trial))
 						else:
 							row_data.append("")
 
