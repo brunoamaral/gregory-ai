@@ -88,6 +88,40 @@ def test_none_and_other_literals_are_dropped():
 	assert [row["country"] for row in rows] == ["FR"]
 
 
+def test_common_names_that_differ_from_django_countries_iso_long_name():
+	"""These surfaced as 'Unmapped trial country value' during the prod backfill: WHO
+	ICTRP sends the common name, but django_countries' own fallback lookup only matches
+	the ISO official long name (e.g. "Viet Nam", "Taiwan (Province of China)"), so each
+	needed its own alias table entry."""
+	rows = normalize_countries(
+		{
+			"ictrp": (
+				"Moldova;Republic of Moldova;Moldova, Republic of;"
+				"Taiwan;Macedonia;Macedonia, the former Yugoslav Republic of;"
+				"The former Yugoslav Republic of Macedonia;The Former Yugoslav Rep of Macedonia;"
+				"Republic of Serbia;Venezuela;Syria;Vietnam;"
+				"Korea (the Democratic Peoples Republic of);Korea, Democratic People's Republic of;"
+				"Virgin Islands"
+			)
+		},
+		None,
+		None,
+		None,
+	)
+	codes = sorted(row["country"] for row in rows)
+	assert codes == ["KP", "MD", "MK", "RS", "SY", "TW", "VE", "VI", "VN"]
+
+
+def test_iran_islamic_republic_orphan_fragment_maps_to_iran():
+	"""'Iran, Islamic Republic of' inside a CTGov-style ', '-joined list splits into 'Iran'
+	(resolves alone, so the tokenizer's adjacency re-join never fires) and an orphaned
+	'Islamic Republic of' fragment; both must resolve to IR."""
+	rows = normalize_countries(
+		{"ctgov": "France, Iran, Islamic Republic of, Germany"}, None, None, None
+	)
+	assert sorted(row["country"] for row in rows) == ["DE", "FR", "IR"]
+
+
 def test_unmapped_value_is_logged_and_dropped(caplog):
 	with caplog.at_level("INFO", logger="gregory.utils.trial_field_normalizers"):
 		rows = normalize_countries(
