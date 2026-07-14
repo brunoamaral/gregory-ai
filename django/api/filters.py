@@ -6,7 +6,11 @@ from django.utils import timezone
 from django import forms
 from datetime import datetime, timedelta
 from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject
-from gregory.utils.trial_field_normalizers import TrialPhase, TrialRecruitmentStatus
+from gregory.utils.trial_field_normalizers import (
+	TrialPhase,
+	TrialRecruitmentStatus,
+	TrialRegion,
+)
 
 
 class SubjectFilterMixin:
@@ -550,6 +554,15 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		field_name="source_register", lookup_expr="icontains"
 	)
 	countries = filters.CharFilter(field_name="countries", lookup_expr="icontains")
+	country = filters.CharFilter(
+		method="filter_country",
+		label="Normalized country: ISO 3166-1 alpha-2 code, e.g. ?country=DE",
+	)
+	region = filters.ChoiceFilter(
+		method="filter_region",
+		choices=TrialRegion.choices,
+		label="Normalized region, derived from the trial's countries",
+	)
 
 	# Medical/research filters
 	condition = filters.CharFilter(field_name="condition", lookup_expr="icontains")
@@ -617,6 +630,8 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"primary_sponsor",
 			"source_register",
 			"countries",
+			"country",
+			"region",
 			"condition",
 			"intervention",
 			"therapeutic_areas",
@@ -746,6 +761,20 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		if value:
 			return queryset.filter(has_results_q)
 		return queryset.exclude(has_results_q)
+
+	def filter_country(self, queryset, name, value):
+		"""Filter to trials whose normalized country set (TrialCountry) includes *value*
+		(an ISO 3166-1 alpha-2 code, case-insensitive). See
+		docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md."""
+		if not value:
+			return queryset
+		return queryset.filter(trial_countries__country__iexact=value).distinct()
+
+	def filter_region(self, queryset, name, value):
+		"""Filter to trials whose normalized regions (regions_normalized) include *value*."""
+		if not value:
+			return queryset
+		return queryset.filter(regions_normalized__contains=[value])
 
 
 class AuthorFilter(filters.FilterSet):

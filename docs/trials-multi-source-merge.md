@@ -148,6 +148,36 @@ ran last. This is now fixed:
   integration: first-stored registry URL is kept in both import orders, re-imports
   are idempotent, aggregator upgrade).
 
+## Implemented: per-source countries (`countries_by_source`)
+
+`countries` is a second worst-affected shared field, for the same reason as `link`: every
+source (ClinicalTrials.gov, WHO ICTRP) writes its own legitimately-different country list
+into the one column, so whichever importer ran last wins, and re-importing the *other*
+source's data can blank or overwrite the previous source's list. Full design:
+`TRIAL-COUNTRY-NORMALIZATION-PLAN.md` (repo root) and `docs/trials-field-normalization.md`
+"Field: countries". Summary of the join rule specifically:
+
+- **`Trials.countries_by_source`** (JSONField, migration 0080) stores each source's raw
+  countries string keyed by registry slug, e.g. `{"ctgov": "France, United States",
+  "ictrp": "France;Iran (Islamic Republic of)"}`. `feedreader_trials_ctgov.py` writes only
+  the `ctgov` key; `importWHOXML.py` writes only the `ictrp` key —
+  `gregory.utils.registry_utils.merge_countries_by_source(existing_map, key, value)`
+  enforces that a source can only ever touch its own key, mirroring `merge_links`. EU CTIS
+  needs no key — its country data already lives in its own columns
+  (`country_status`/`countries_decision_date`).
+- **Unlike `merge_links`'** first-value-wins semantics, `merge_countries_by_source` always
+  *refreshes* the value under a source's key on re-import. There is exactly one legitimate
+  value per source (not one-per-registry-URL), so there is nothing to protect by keeping a
+  stale one — a source's raw country list can legitimately change between syncs (e.g. a new
+  trial site added).
+- The legacy `countries` column is untouched by this change and keeps its old
+  last-writer-wins behaviour, documented as deprecated in favour of `countries_by_source`
+  plus the normalized `TrialCountry` rows (`trial.trial_countries`).
+- Tests: `gregory/tests/test_trial_countries_by_source_importers.py` (each importer writes
+  only its own key; a cross-source CTGov + WHO ICTRP trial ends up with both sources' raw
+  values preserved side by side, and the normalized country/region layers reflect the
+  union of both).
+
 ## Derived normalized fields are immune to the flip-flop
 
 `phase` and `recruitment_status` are shared/contested fields above — their raw vocabulary
@@ -159,6 +189,14 @@ whatever the raw field currently holds — it never lags behind a previous impor
 This is the intended pattern for any future derived field (`study_type_normalized`, ...):
 compute it fresh from the raw field on every save rather than merging/preserving it across
 sources.
+
+`regions_normalized` and the `TrialCountry` rows follow the same pattern, one level up: even
+though `countries_by_source` merges non-destructively (each source keeps its own key, so
+there is nothing to flip-flop there), `regions_normalized` and `trial.trial_countries` are
+still *recomputed fresh* from all four raw country columns on every `Trials.save()` rather
+than incrementally merged/preserved — so a change to any one source's data (or the CTIS-only
+`country_status`/`countries_decision_date` columns) is reflected immediately across the
+whole normalized set, never partially stale.
 
 ## Open questions before implementing
 

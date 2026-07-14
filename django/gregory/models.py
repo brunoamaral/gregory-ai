@@ -1,3 +1,5 @@
+import datetime
+
 from cryptography.fernet import Fernet
 from django_countries.fields import CountryField
 from django.conf import settings
@@ -13,7 +15,13 @@ from organizations.models import Organization, OrganizationUser
 from simple_history.models import HistoricalRecords
 import base64
 from django.db.models.functions import Lower
-from gregory.utils.trial_field_normalizers import NORMALIZED_TRIAL_FIELDS, TrialPhase, TrialRecruitmentStatus
+from gregory.utils.trial_field_normalizers import (
+	NORMALIZED_TRIAL_FIELDS,
+	TrialPhase,
+	TrialRecruitmentStatus,
+	raw_field_names,
+	normalize_countries,
+)
 
 
 class Authors(models.Model):
@@ -822,6 +830,27 @@ class Trials(models.Model):
 		help_text="Canonical trial phase derived from the raw 'phase' value; recomputed on every save.",
 	)
 	countries = models.TextField(null=True, blank=True)
+	# Per-source raw countries values, keyed by registry slug (gregory.utils.registry_utils
+	# .REGISTRY_DOMAINS, e.g. "ctgov", "ictrp"). Each importer writes only its own key
+	# (mirroring Trials.links / registry_utils.merge_links) so two differently-delimited
+	# per-source strings are never merged into one. EU CTIS needs no key here — its country
+	# data lives in country_status/countries_decision_date. `countries` (above) keeps its
+	# legacy last-writer-wins behaviour for API compatibility; deprecated in favour of this
+	# field plus `trial_countries` below. See docs/trials-multi-source-merge.md.
+	countries_by_source = models.JSONField(
+		blank=True,
+		null=True,
+		help_text='Raw countries value per source registry, e.g. {"ctgov": "France, United States", "ictrp": "France;Iran (Islamic Republic of)"}. Deprecated "countries" column keeps last-writer-wins behaviour.',
+	)
+	# Canonical region slugs derived from the normalized country set (trial_countries) plus
+	# any literal region/continent tokens in the raw `countries` text. Recomputed on every
+	# save() below via NORMALIZED_TRIAL_FIELDS — never set this directly.
+	regions_normalized = models.JSONField(
+		blank=True,
+		null=True,
+		editable=False,
+		help_text="Canonical region slugs (africa, asia, europe, north_america, south_america, oceania) derived from the trial's countries; recomputed on every save.",
+	)
 	contact_firstname = models.TextField(null=True, blank=True)
 	contact_lastname = models.TextField(null=True, blank=True)
 	contact_address = models.TextField(null=True, blank=True)
@@ -875,24 +904,92 @@ class Trials(models.Model):
 	)
 
 	def save(self, *args, **kwargs):
-		# Keep every derived field in lockstep with its raw counterpart on every write path
+		# Keep every derived field in lockstep with its raw counterpart(s) on every write path
 		# (feedreader_trials, feedreader_trials_ctgov, importWHOXML, TrialSerializer.create/update
 		# all go through .create()/.save()). bulk_update bypasses this — the backfill command
-		# handles that explicitly. See gregory.utils.trial_field_normalizers.NORMALIZED_TRIAL_FIELDS
-		# for the (raw field, derived field, normalizer) registry driving this loop.
+		# and the admin "Recompute normalized fields" action handle that explicitly. See
+		# gregory.utils.trial_field_normalizers.NORMALIZED_TRIAL_FIELDS for the (raw field(s),
+		# derived field, normalizer) registry driving this loop — raw_field_names() normalizes
+		# the raw-field slot (a single field name or a tuple, for multi-input fields like
+		# regions_normalized) to a tuple either way.
 		update_fields = kwargs.get("update_fields")
 		extra_update_fields = []
-		for raw_field, derived_field, normalizer in NORMALIZED_TRIAL_FIELDS:
-			setattr(self, derived_field, normalizer(getattr(self, raw_field)))
+		for raw_fields, derived_field, normalizer in NORMALIZED_TRIAL_FIELDS:
+			names = raw_field_names(raw_fields)
+			setattr(self, derived_field, normalizer(*(getattr(self, name) for name in names)))
 			if (
 				update_fields is not None
-				and raw_field in update_fields
+				and any(name in update_fields for name in names)
 				and derived_field not in update_fields
 			):
 				extra_update_fields.append(derived_field)
 		if extra_update_fields:
 			kwargs["update_fields"] = [*update_fields, *extra_update_fields]
 		super().save(*args, **kwargs)
+		# TrialCountry (Layer 2 of the country-normalization design) needs a pk, so this runs
+		# after super().save(). Recomputes the full per-country row set from the raw country
+		# columns and replaces it — see TRIAL-COUNTRY-NORMALIZATION-PLAN.md (repo root).
+		# bulk_update bypasses save() entirely, so the backfill command and the admin recompute
+		# action call sync_trial_countries() explicitly for those paths.
+		self.sync_trial_countries()
+
+	def sync_trial_countries(self):
+		"""Recompute this trial's TrialCountry rows from its raw country columns and replace
+		the existing set (create/update/delete as needed). Called automatically from save();
+		call directly after a bulk_update-based write, which bypasses save()."""
+		rows = (
+			normalize_countries(
+				self.countries_by_source,
+				self.countries,
+				self.country_status,
+				self.countries_decision_date,
+			)
+			or []
+		)
+		by_code = {row["country"]: row for row in rows}
+		existing = {str(tc.country): tc for tc in self.trial_countries.all()}
+
+		stale_ids = [tc.pk for code, tc in existing.items() if code not in by_code]
+		if stale_ids:
+			TrialCountry.objects.filter(pk__in=stale_ids).delete()
+
+		for code, row in by_code.items():
+			decision_date = None
+			raw_decision_date = row.get("decision_date")
+			if raw_decision_date:
+				try:
+					decision_date = datetime.date.fromisoformat(raw_decision_date)
+				except (TypeError, ValueError):
+					decision_date = None
+			sources = row.get("sources") or []
+
+			existing_row = existing.get(code)
+			if existing_row is None:
+				TrialCountry.objects.create(
+					trial=self,
+					country=code,
+					status=row.get("status"),
+					status_raw=row.get("status_raw"),
+					decision_date=decision_date,
+					sources=sources,
+				)
+				continue
+
+			changed = False
+			if existing_row.status != row.get("status"):
+				existing_row.status = row.get("status")
+				changed = True
+			if existing_row.status_raw != row.get("status_raw"):
+				existing_row.status_raw = row.get("status_raw")
+				changed = True
+			if existing_row.decision_date != decision_date:
+				existing_row.decision_date = decision_date
+				changed = True
+			if existing_row.sources != sources:
+				existing_row.sources = sources
+				changed = True
+			if changed:
+				existing_row.save()
 
 	def __str__(self):
 		return str(self.trial_id)
@@ -979,6 +1076,47 @@ class Trials(models.Model):
 			models.Index(
 				Upper(KeyTextTransform("ctis", "identifiers")), name="trials_uctis_idx"
 			),
+		]
+
+
+class TrialCountry(models.Model):
+	"""Normalized per-country row for a trial (Layer 2 of the country-normalization
+	design — see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md). Kept in sync with the raw
+	`countries`/`countries_by_source`/`country_status`/`countries_decision_date` columns
+	by ``Trials.sync_trial_countries()`` (called from ``Trials.save()``; the backfill
+	command and admin recompute action call it explicitly for bulk_update paths).
+	"""
+
+	trial = models.ForeignKey(
+		Trials, related_name="trial_countries", on_delete=models.CASCADE
+	)
+	country = CountryField()
+	# EU CTIS per-country regulatory status (from country_status), same vocabulary as
+	# Trials.recruitment_status_normalized. Null for countries only known via a site
+	# location (ClinicalTrials.gov) or a WHO ICTRP recruitment-country list.
+	status = models.CharField(
+		max_length=30,
+		null=True,
+		blank=True,
+		choices=TrialRecruitmentStatus.choices,
+	)
+	status_raw = models.CharField(max_length=200, null=True, blank=True)
+	# EU CTIS per-country decision date (from countries_decision_date). Null for
+	# countries not sourced from CTIS.
+	decision_date = models.DateField(null=True, blank=True)
+	# Registry slugs that mentioned this country for this trial, e.g. ["ctgov", "ctis"].
+	sources = models.JSONField(default=list, blank=True)
+
+	def __str__(self):
+		return f"{self.trial_id}/{self.country}"
+
+	class Meta:
+		verbose_name = "trial country"
+		verbose_name_plural = "trial countries"
+		constraints = [
+			models.UniqueConstraint(
+				fields=["trial", "country"], name="unique_trial_country"
+			)
 		]
 
 

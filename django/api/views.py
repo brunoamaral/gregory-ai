@@ -1738,7 +1738,9 @@ class TrialViewSet(
 	- **study_type** - filter by study type (Interventional, Observational)
 	- **primary_sponsor** - filter by sponsor organization
 	- **source_register** - filter by source registry
-	- **countries** - filter by trial countries
+	- **countries** - raw-text `icontains` filter on the registry's own countries string — free text, so it silently misses spelling/format variants across registries (see **country** below for the normalized equivalent)
+	- **country** - exact match against a normalized country code (ISO 3166-1 alpha-2, e.g. `?country=DE`), derived from every source's raw country data — see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md
+	- **region** - exact match against a normalized region derived from the trial's countries; one of: africa, asia, europe, north_america, south_america, oceania (e.g. `?region=europe`)
 
 	# Medical/Research Parameters:
 	- **condition** - filter by medical condition
@@ -1788,12 +1790,18 @@ class TrialViewSet(
 		fields without issuing one query per trial.
 		"""
 		# Prefetch m2m/reverse-FK relations the serializer reads (sources, team_categories,
-		# article_references) so list/CSV-export responses don't issue one query per trial.
+		# article_references, trial_countries) so list/CSV-export responses don't issue one
+		# query per trial. trial_countries backs the "trial_countries" and
+		# "countries_normalized" serializer fields — see
+		# docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md.
 		qs = (
 			super()
 			.get_queryset()
 			.prefetch_related(
-				"sources", "team_categories", "article_references__article"
+				"sources",
+				"team_categories",
+				"article_references__article",
+				"trial_countries",
 			)
 		)
 		org = _resolve_per_org_fields_org(self.request)
@@ -2766,7 +2774,7 @@ class TrialSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 
 		# Prefetch related objects to avoid N+1 queries
 		queryset = queryset.prefetch_related(
-			"sources", "team_categories", "article_references__article"
+			"sources", "team_categories", "article_references__article", "trial_countries"
 		)
 
 		# Prefetch the caller-org's TrialOrgContent so the serializer's

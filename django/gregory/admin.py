@@ -38,6 +38,7 @@ from .models import (
 	OrganizationApiSettings,
 	ArticleOrgContent,
 	TrialOrgContent,
+	TrialCountry,
 	ArticleCategoryAssignment,
 	TrialCategoryAssignment,
 	CategoryType,
@@ -45,7 +46,7 @@ from .models import (
 )
 from .widgets import MLPredictionsWidget
 from .fields import MLPredictionsField
-from .utils.trial_field_normalizers import NORMALIZED_TRIAL_FIELDS
+from .utils.trial_field_normalizers import NORMALIZED_TRIAL_FIELDS, raw_field_names
 
 
 def get_user_organizations(user):
@@ -205,6 +206,24 @@ class TrialArticleReferenceInline(admin.TabularInline):
 
 	def has_add_permission(self, request, obj=None):
 		return False  # Prevent manual adding, should be done by the detect_trial_references command
+
+
+class TrialCountryInline(admin.TabularInline):
+	"""Read-only display of the normalized per-country breakdown (Layer 2 of the
+	country-normalization design — see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md). Rows are
+	managed entirely by Trials.sync_trial_countries(), never edited by hand."""
+
+	model = TrialCountry
+	extra = 0
+	fields = ["country", "status", "status_raw", "decision_date", "sources"]
+	readonly_fields = ["country", "status", "status_raw", "decision_date", "sources"]
+	can_delete = False
+	verbose_name = "Country"
+	verbose_name_plural = "Countries (normalized)"
+	classes = ["collapse"]
+
+	def has_add_permission(self, request, obj=None):
+		return False  # Managed by Trials.sync_trial_countries(), not manual entry
 
 
 class RelevanceRadioWidget(forms.RadioSelect):
@@ -824,7 +843,13 @@ class TrialAdminForm(forms.ModelForm):
 			# export glossary, which reads TrialAdminForm.Meta.labels directly.
 			"recruitment_status_normalized": "Recruitment status (normalized)",
 			"target_size": "Target enrolment",
-			"countries": "Countries",
+			"countries": "Countries (raw, legacy)",
+			# Not a form field (editable) but not editable=False either — kept out of the
+			# form via readonly_fields, same rationale as phase_normalized above.
+			"countries_by_source": "Countries by source",
+			# Not a form field (editable=False) — the label is used by the XLSX
+			# export glossary, which reads TrialAdminForm.Meta.labels directly.
+			"regions_normalized": "Regions (normalized)",
 			# Conditions & interventions
 			"condition": "Health condition",
 			"intervention": "Intervention",
@@ -890,7 +915,9 @@ class TrialAdminForm(forms.ModelForm):
 			"phase": "The stage of testing (Phase 1–4). Early phases check safety in small groups; later phases test effectiveness in larger groups. “N/A” means not applicable. Sources: WHO ICTRP, ClinicalTrials.gov.",
 			"recruitment_status": "Whether the trial is recruiting participants, not yet recruiting, completed, etc. Sources: WHO ICTRP, ClinicalTrials.gov.",
 			"target_size": "The number of participants the trial aims to enrol. Sources: WHO ICTRP, ClinicalTrials.gov.",
-			"countries": "Countries where the trial takes place. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"countries": "Countries where the trial takes place (raw, legacy last-writer-wins value). Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"countries_by_source": 'Raw countries value kept per source registry (e.g. {"ctgov": "France, United States", "ictrp": "France;Iran (Islamic Republic of)"}), so one source can never overwrite another\'s value. Managed automatically by importers — do not edit manually. See the "Countries" tab below for the normalized, per-country breakdown.',
+			"regions_normalized": "Canonical region(s) (Africa, Asia, Europe, North America, South America, Oceania) derived from the trial's normalized countries, recomputed automatically on every save.",
 			# Conditions & interventions
 			"condition": "The disease or health condition being studied. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			"intervention": "The treatment, drug, device, or procedure being tested or compared. Sources: WHO ICTRP, ClinicalTrials.gov.",
@@ -942,17 +969,21 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 	]
 	exclude = ["ml_predictions"]
 	# Derived fields are editable=False (recomputed on save, see Trials.save()); they must be
-	# listed here to appear in the "Study Details" fieldset at all.
+	# listed here to appear in the "Study Details" fieldset at all. countries_by_source is
+	# editable but importer-managed (like "links"), so it's readonly here too.
 	readonly_fields = [
 		"last_updated",
 		"links",
 		"phase_normalized",
 		"recruitment_status_normalized",
+		"countries_by_source",
+		"regions_normalized",
 	]
 	inlines = [
 		TrialOrgContentInline,
 		TrialArticleReferenceInline,
 		TrialCategoryAssignmentInline,
+		TrialCountryInline,
 	]
 	search_fields = [
 		"trial_id",
@@ -1079,12 +1110,18 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 			{
 				"fields": (
 					"countries",
+					"countries_by_source",
+					"regions_normalized",
 					"source_register",
 					"secondary_id",
 					"internal_number",
 					"other_records",
 					"last_refreshed_on",
 					"export_date",
+				),
+				"description": (
+					"Per-country breakdown (normalized country, recruitment status, "
+					"decision date, sources) is in the \"Countries\" inline below."
 				),
 				"classes": ("collapse",),
 			},
@@ -1151,20 +1188,27 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		"""Tuning tool: filter to e.g. phase_normalized='other', extend the mapping table in
 		gregory/utils/trial_field_normalizers.py for the raw values you see, then select-all
 		and run this to re-derive every registered normalized field (see
-		NORMALIZED_TRIAL_FIELDS) without waiting for the next save()."""
+		NORMALIZED_TRIAL_FIELDS) without waiting for the next save(). Also rebuilds each
+		selected trial's TrialCountry rows (bulk_update below bypasses Trials.save(), which
+		is what normally triggers that sync — see Trials.sync_trial_countries())."""
 		select_fields = ["trial_id"]
-		for raw_field, derived_field, _normalizer in NORMALIZED_TRIAL_FIELDS:
-			select_fields += [raw_field, derived_field]
+		for raw_fields, derived_field, _normalizer in NORMALIZED_TRIAL_FIELDS:
+			select_fields += [*raw_field_names(raw_fields), derived_field]
 
 		trials = list(queryset.only(*select_fields))
 		for trial in trials:
-			for raw_field, derived_field, normalizer in NORMALIZED_TRIAL_FIELDS:
-				setattr(trial, derived_field, normalizer(getattr(trial, raw_field)))
+			for raw_fields, derived_field, normalizer in NORMALIZED_TRIAL_FIELDS:
+				names = raw_field_names(raw_fields)
+				setattr(
+					trial, derived_field, normalizer(*(getattr(trial, name) for name in names))
+				)
 
 		derived_fields = [derived_field for _, derived_field, _ in NORMALIZED_TRIAL_FIELDS]
 		# batch_size keeps a "select all" over the whole table under Postgres's bind-parameter
 		# limit — without it bulk_update builds one UPDATE with a CASE per row per field.
 		Trials.objects.bulk_update(trials, derived_fields, batch_size=1000)
+		for trial in trials:
+			trial.sync_trial_countries()
 		self.message_user(
 			request, f"Recomputed normalized fields for {len(trials)} trial(s)."
 		)

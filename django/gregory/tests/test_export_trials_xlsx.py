@@ -21,6 +21,7 @@ from gregory.models import (
 	Subject,
 	Team,
 	Trials,
+	TrialCountry,
 )
 from gregory.management.commands.export_trials_xlsx import (
 	IDENTITY_COLS,
@@ -273,6 +274,113 @@ class ExportTrialsXlsxTests(TestCase):
 				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
 			]
 			self.assertIn("trial_id", headers)
+		finally:
+			os.unlink(path)
+
+	# ------------------------------------------------------------------
+	# Normalized country columns
+	# ------------------------------------------------------------------
+
+	def _cell_for_title(self, ws, headers, col_name, title):
+		"""Return the value of `col_name` on the row whose title matches `title`."""
+		col = headers.index(col_name) + 1
+		title_col = headers.index("title") + 1
+		for r in range(2, ws.max_row + 1):
+			if ws.cell(row=r, column=title_col).value == title:
+				return ws.cell(row=r, column=col).value
+		self.fail(f"Row with title {title!r} not found")
+
+	def test_country_normalization_columns_present(self):
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			for col in ("countries_by_source", "regions_normalized", "trial_countries"):
+				self.assertIn(col, headers, f'Column "{col}" missing from header row')
+		finally:
+			os.unlink(path)
+
+	def test_trial_countries_rendered(self):
+		"""TrialCountry rows render as 'Name [CODE] (status; date; src: …)'."""
+		# Bypass save() so sync_trial_countries() does not overwrite these rows.
+		TrialCountry.objects.create(
+			trial=self.trial_ms,
+			country="DE",
+			status="recruiting",
+			status_raw="Ongoing, recruiting",
+			decision_date="2024-07-19",
+			sources=["ctgov", "ctis"],
+		)
+		TrialCountry.objects.create(
+			trial=self.trial_ms,
+			country="FR",
+			sources=["ctgov"],
+		)
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			value = self._cell_for_title(
+				ws,
+				headers,
+				"trial_countries",
+				"A randomised trial of natalizumab in MS",
+			)
+			self.assertIn("Germany [DE]", value)
+			self.assertIn("Ongoing, recruiting", value)
+			self.assertIn("2024-07-19", value)
+			self.assertIn("src: ctgov+ctis", value)
+			self.assertIn("France [FR]", value)
+		finally:
+			os.unlink(path)
+
+	def test_regions_and_countries_by_source_rendered(self):
+		Trials.objects.filter(pk=self.trial_ms.pk).update(
+			regions_normalized=["europe", "north_america"],
+			countries_by_source={"ctgov": "Germany, United States", "ictrp": "France"},
+		)
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			regions = self._cell_for_title(
+				ws, headers, "regions_normalized",
+				"A randomised trial of natalizumab in MS",
+			)
+			# list-of-scalars renders as a "; "-joined string, not a Python repr
+			self.assertEqual(regions, "europe; north_america")
+
+			by_source = self._cell_for_title(
+				ws, headers, "countries_by_source",
+				"A randomised trial of natalizumab in MS",
+			)
+			self.assertIn("ctgov", by_source)
+			self.assertIn("United States", by_source)
+			self.assertIn("ictrp", by_source)
+		finally:
+			os.unlink(path)
+
+	def test_country_columns_have_glossary_entries(self):
+		"""New columns must be documented (non-empty description) in the Glossary."""
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Glossary"]
+			described = {}
+			for r in range(2, ws.max_row + 1):
+				described[ws.cell(row=r, column=1).value] = ws.cell(
+					row=r, column=3
+				).value
+			for col in ("countries_by_source", "regions_normalized", "trial_countries"):
+				self.assertIn(col, described)
+				self.assertTrue(
+					described[col], f'Glossary description for "{col}" is empty'
+				)
 		finally:
 			os.unlink(path)
 
