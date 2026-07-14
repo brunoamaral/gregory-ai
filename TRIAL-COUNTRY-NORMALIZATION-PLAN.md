@@ -216,6 +216,6 @@ observed inventory.
 - `TrialCountry.Meta` uses `UniqueConstraint(fields=["trial", "country"], ...)` rather than
   `unique_together`, matching the rest of `Trials.Meta` in this codebase (which uses
   `UniqueConstraint` throughout, not `unique_together`).
-- XLSX export (`export_trials_xlsx.py`) was not extended to include the new columns — the
-  rollout steps above (from the original audit) scope the API/serializer/filter wiring but
-  not the XLSX exporter; left as a follow-up.
+- XLSX export (`export_trials_xlsx.py`) was extended in this PR: `countries_by_source`,
+  `regions_normalized`, and a prefetched `trial_countries` column with per-country
+  status/date/source rendering, plus matching Glossary/Registries documentation and tests.

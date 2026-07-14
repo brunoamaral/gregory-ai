@@ -16,9 +16,10 @@ recipe for the next field (study_type, ...).
 
 `countries`/`regions_normalized` are the first fields whose canonical value derives from
 *multiple* raw columns (`countries_by_source`, `countries`, `country_status`,
-`countries_decision_date`) rather than one — see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md
-and the "countries" section below. NORMALIZED_TRIAL_FIELDS entries accept either a single
-raw field name (str) or a tuple of raw field names for this reason; see `raw_field_names`.
+`countries_decision_date`) rather than one — see TRIAL-COUNTRY-NORMALIZATION-PLAN.md
+(repo root) and the "countries" section below. NORMALIZED_TRIAL_FIELDS entries accept
+either a single raw field name (str) or a tuple of raw field names for this reason; see
+`raw_field_names`.
 """
 
 import logging

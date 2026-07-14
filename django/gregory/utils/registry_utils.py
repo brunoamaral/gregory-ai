@@ -133,10 +133,13 @@ def merge_countries_by_source(existing_map: dict | None, key: str, value: str | 
 	Each importer writes only its own key, mirroring merge_links — a differently-delimited
 	per-source string (WHO's ";"-joined list vs CTGov's ", "-joined list) is never merged
 	into another source's value under the same key. Unlike merge_links' first-value-wins
-	semantics, the value for a given key is always refreshed on re-import: a source's raw
-	country list can legitimately change between syncs (e.g. a new site added), and there
-	is only one legitimate value per source, so there is nothing to protect by keeping a
-	stale one. See docs/trials-multi-source-merge.md.
+	semantics, a non-empty *value* always overwrites the existing entry for *key* on
+	re-import: a source's raw country list can legitimately change between syncs (e.g. a
+	new site added), and there is only one legitimate value per source, so there is
+	nothing to protect by keeping a stale one. An empty/None *value* is a no-op — it never
+	clears a previously-recorded key, since that would just mean this sync's incoming
+	payload happened not to mention countries, not that the source stopped reporting any.
+	See docs/trials-multi-source-merge.md.
 	"""
 	merged = dict(existing_map or {})
 	if value:

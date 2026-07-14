@@ -928,9 +928,9 @@ class Trials(models.Model):
 		super().save(*args, **kwargs)
 		# TrialCountry (Layer 2 of the country-normalization design) needs a pk, so this runs
 		# after super().save(). Recomputes the full per-country row set from the raw country
-		# columns and replaces it — see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md. bulk_update
-		# bypasses save() entirely, so the backfill command and the admin recompute action call
-		# sync_trial_countries() explicitly for those paths.
+		# columns and replaces it — see TRIAL-COUNTRY-NORMALIZATION-PLAN.md (repo root).
+		# bulk_update bypasses save() entirely, so the backfill command and the admin recompute
+		# action call sync_trial_countries() explicitly for those paths.
 		self.sync_trial_countries()
 
 	def sync_trial_countries(self):
