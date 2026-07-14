@@ -31,11 +31,11 @@ Sources can also be added to monitor Clinical Trials, in which case Gregory can 
 11. Identify authors and their ORCID
 12. Generate RSS feeds for articles by author
 
-### Current Use Case for Multiple Sclerosis
+### Current Use Case for Multiple Sclerosis, Alzheimer's, and Parkinson's
 
-<https://gregory-ms.com>
+<https://brain-regeneration.com>
 
-#### Rest API: <https://api.gregory-ms.com>
+#### Rest API: <https://api.brain-regeneration.com>
 
 ## Codex Automation
 

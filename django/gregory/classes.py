@@ -465,6 +465,25 @@ class ClinicalTrialsGovAPI:
 
 		return self._make_request("studies", params)
 
+	@staticmethod
+	def extract_countries(study_data: dict) -> str | None:
+		"""Extract the sorted, deduped list of site countries from a CTGov study's
+		``contactsLocationsModule``, joined with ", " — the same string stored in
+		``Trials.countries`` / ``Trials.countries_by_source["ctgov"]``.
+
+		Shared between ``parse_study_to_clinical_trial`` and the
+		``backfill_trial_countries`` management command so the extraction logic (and its
+		join delimiter) lives in exactly one place. Returns None when the study has no
+		site locations with a country.
+		"""
+		protocol = study_data.get("protocolSection", {})
+		contacts_module = protocol.get("contactsLocationsModule", {})
+		locations = contacts_module.get("locations", [])
+		countries = sorted(
+			set(loc.get("country", "") for loc in locations if loc.get("country"))
+		)
+		return ", ".join(countries) if countries else None
+
 	def search_all(self, max_results: int = None, **search_kwargs):
 		"""
 		Search and iterate through all pages of results.
@@ -626,10 +645,7 @@ class ClinicalTrialsGovAPI:
 			interventions.append(f"{int_type}: {int_name} - {int_desc}")
 
 		# Extract locations/countries
-		locations = contacts_module.get("locations", [])
-		countries = sorted(
-			set(loc.get("country", "") for loc in locations if loc.get("country"))
-		)
+		countries_str = self.extract_countries(study_data)
 
 		# Extract contact information
 		central_contacts = contacts_module.get("centralContacts", [])
@@ -714,7 +730,7 @@ class ClinicalTrialsGovAPI:
 			),
 			"study_type": study_type,
 			"phase": phase,
-			"countries": ", ".join(countries) if countries else None,
+			"countries": countries_str,
 			"inclusion_criteria": eligibility_criteria,
 			"exclusion_criteria": None,  # API combines inclusion/exclusion in eligibilityCriteria
 			"intervention": "\n".join(interventions) if interventions else None,
