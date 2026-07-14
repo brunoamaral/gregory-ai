@@ -1,5 +1,5 @@
-"""Tests for the backfill_trial_countries management command (Phase 1 of
-TRIAL-COUNTRY-BACKFILL-PLAN.md, repo root)."""
+"""Tests for the backfill_trial_countries management command (Phase 1 of the
+trial-country backfill; see PR #771)."""
 
 from io import StringIO
 from unittest.mock import patch
@@ -9,6 +9,7 @@ from django.test import TestCase
 
 from gregory.management.commands.backfill_trial_countries import (
 	CHANGE_REASON,
+	FIELDS,
 	Command,
 )
 from gregory.models import Trials
@@ -30,12 +31,14 @@ class FakeAPI:
 
 	studies_by_nct = {}
 	calls = []
+	fields_seen = []
 
 	def __init__(self):
 		pass
 
-	def search(self, filter_ids=None, **kwargs):
+	def search(self, filter_ids=None, fields=None, **kwargs):
 		type(self).calls.append(list(filter_ids))
+		type(self).fields_seen.append(fields)
 		return {
 			"studies": [
 				self.studies_by_nct[nct]
@@ -52,6 +55,7 @@ class BackfillTrialCountriesTest(TestCase):
 	def setUp(self):
 		FakeAPI.studies_by_nct = {}
 		FakeAPI.calls = []
+		FakeAPI.fields_seen = []
 
 	def run_command(self, **kwargs):
 		out, err = StringIO(), StringIO()
@@ -88,6 +92,18 @@ class BackfillTrialCountriesTest(TestCase):
 		)
 		self.assertEqual(trial.history.first().history_change_reason, CHANGE_REASON)
 		self.assertIn("Filled 1 trial rows", out)
+
+	def test_requests_expected_ctgov_fields(self):
+		# Guards against a wrong field selector silently returning payloads without the
+		# nested contactsLocationsModule (which would make every trial look location-less).
+		self.make_trial("NCT00000001")
+		FakeAPI.studies_by_nct = {"NCT00000001": _study("NCT00000001", ["Japan"])}
+
+		self.run_command()
+
+		self.assertEqual(FakeAPI.fields_seen, [FIELDS])
+		self.assertIn("protocolSection.identificationModule.nctId", FIELDS)
+		self.assertIn("protocolSection.contactsLocationsModule", FIELDS)
 
 	def test_batches_requests_by_batch_size(self):
 		for i in range(1, 6):

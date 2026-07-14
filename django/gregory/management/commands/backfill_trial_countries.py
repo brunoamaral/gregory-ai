@@ -1,10 +1,10 @@
 """One-time backfill of Trials.countries (+ countries_by_source["ctgov"]) from the
 ClinicalTrials.gov API, for trials that predate country capture in the CTGov importer.
 
-Phase 1 of TRIAL-COUNTRY-BACKFILL-PLAN.md (repo root): of ~29.7k trials, ~14.1k have no
+Phase 1 of the trial-country backfill (see PR #771): of ~29.7k trials, ~14.1k have no
 country data anywhere. 97.7% of those carry an NCT identifier and can be re-fetched
-directly from ClinicalTrials.gov's bulk `filter.ids` search — see the plan's "Verified:
-ClinicalTrials.gov API covers the bulk" section. Country extraction itself is shared with
+directly from ClinicalTrials.gov's bulk `filter.ids` search. Country extraction itself is
+shared with
 the live importer via ClinicalTrialsGovAPI.extract_countries (gregory/classes.py), so this
 command can never disagree with what feedreader_trials_ctgov would have written.
 
@@ -43,7 +43,14 @@ from gregory.utils.trial_field_normalizers import _map_token, _tokenize_countrie
 _extract_countries = ClinicalTrialsGovAPI.extract_countries
 
 NCT_RE = re.compile(r"^NCT\d{8}$")
-FIELDS = ["NCTId", "ContactsLocationsModule"]
+# Dot-path field selectors, matching backfill_trial_acronyms' convention. Requesting the
+# whole contactsLocationsModule guarantees the nested protocolSection.* structure that
+# extract_countries() reads (verified: both piece-name and dot-path forms return it, but
+# dot-paths keep this consistent with the sibling backfill command).
+FIELDS = [
+	"protocolSection.identificationModule.nctId",
+	"protocolSection.contactsLocationsModule",
+]
 CHANGE_REASON = "Backfilled countries from ClinicalTrials.gov API"
 
 
@@ -206,7 +213,11 @@ class Command(BaseCommand):
 		)
 		trial.countries = countries_str
 		trial._change_reason = CHANGE_REASON
-		trial.save()
+		# update_fields scopes the UPDATE to just the country columns, so a long-running
+		# backfill can't clobber unrelated fields a concurrent importer may have changed
+		# with our stale in-memory copy. Trials.save() still appends derived fields (e.g.
+		# regions_normalized) to update_fields and recomputes TrialCountry rows.
+		trial.save(update_fields=["countries", "countries_by_source"])
 
 	def _fetch_batch(self, api, batch, sleep, failed_batches):
 		"""Fetch one filter.ids batch, retrying with exponential backoff before skipping
