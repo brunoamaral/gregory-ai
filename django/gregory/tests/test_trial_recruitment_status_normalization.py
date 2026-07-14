@@ -47,6 +47,8 @@ EXACT_MATCH_CASES = [
 	("ongoing, recruitment ended", TrialRecruitmentStatus.ACTIVE_NOT_RECRUITING),
 	# Not recruiting (WHO's generic status — its own bucket, see module docstring)
 	("not recruiting", TrialRecruitmentStatus.NOT_RECRUITING),
+	# Not recruiting (EU CTIS per-country: authorisation declined)
+	("not authorised", TrialRecruitmentStatus.NOT_RECRUITING),
 	# Suspended
 	("suspended", TrialRecruitmentStatus.SUSPENDED),
 	("temporarily halted", TrialRecruitmentStatus.SUSPENDED),

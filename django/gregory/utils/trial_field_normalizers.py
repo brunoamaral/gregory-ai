@@ -235,6 +235,10 @@ _RECRUITMENT_STATUS_EXACT_MATCHES: dict[str, str] = {
 	# not say whether the trial is pre-start, ongoing, or done, so folding it into
 	# active_not_recruiting would overclaim.
 	"not recruiting": TrialRecruitmentStatus.NOT_RECRUITING,  # WHO ICTRP
+	# EU CTIS per-country regulatory decision: the member state declined authorisation, so
+	# the trial will not recruit there — distinct from "authorised" (approved, recruitment
+	# state otherwise unstated) below, which maps to UNKNOWN instead.
+	"not authorised": TrialRecruitmentStatus.NOT_RECRUITING,  # EU CTIS country_status
 	# Suspended
 	"suspended": TrialRecruitmentStatus.SUSPENDED,  # CT.gov
 	"temporarily halted": TrialRecruitmentStatus.SUSPENDED,  # WHO
@@ -372,6 +376,12 @@ _COUNTRY_EXACT_MATCHES: dict[str, str] = {
 	# Iran
 	"iran (islamic republic of)": "IR",
 	"iran": "IR",
+	# Orphan fragment: in a CTGov-style ", "-joined list, "Iran, Islamic Republic of" splits
+	# into "Iran" (already resolves alone, so the tokenizer's adjacency re-join never fires —
+	# see _tokenize_countries_value) and this leftover "Islamic Republic of" segment. Mapping
+	# it directly to IR is simpler than special-casing the re-join condition; the duplicate
+	# IR from "Iran" collapses away in normalize_countries' final dedup.
+	"islamic republic of": "IR",
 	# Czechia
 	"czechia": "CZ",
 	"czech republic": "CZ",
@@ -379,6 +389,10 @@ _COUNTRY_EXACT_MATCHES: dict[str, str] = {
 	"south korea": "KR",
 	"korea, republic of": "KR",
 	"republic of korea": "KR",
+	# North Korea (django_countries' own name, "Korea (the Democratic People's Republic of)",
+	# doesn't match either spelling actually sent by WHO ICTRP)
+	"korea (the democratic peoples republic of)": "KP",
+	"korea, democratic people's republic of": "KP",
 	# Russia
 	"russia": "RU",
 	"russian federation": "RU",
@@ -389,6 +403,23 @@ _COUNTRY_EXACT_MATCHES: dict[str, str] = {
 	"china": "CN",
 	"people's republic of china": "CN",
 	"chian": "CN",  # typo, seen verbatim in WHO ICTRP export
+	# Common names that differ from django_countries' ISO official long name (which the
+	# _name_to_code_lookup() fallback matches against), seen verbatim in WHO ICTRP exports.
+	"moldova": "MD",
+	"republic of moldova": "MD",
+	"moldova, republic of": "MD",
+	"taiwan": "TW",  # django_countries: "Taiwan (Province of China)"
+	"macedonia": "MK",  # django_countries: "North Macedonia"
+	"macedonia, the former yugoslav republic of": "MK",
+	"the former yugoslav republic of macedonia": "MK",
+	"the former yugoslav rep of macedonia": "MK",
+	"republic of serbia": "RS",
+	"venezuela": "VE",  # django_countries: "Venezuela (Bolivarian Republic of)"
+	"syria": "SY",  # django_countries: "Syrian Arab Republic"
+	"vietnam": "VN",  # django_countries: "Viet Nam"
+	# Ambiguous without a qualifier (could be US or British Virgin Islands); defaults to the
+	# U.S. territory as the more commonly reported one in trial site/recruitment data.
+	"virgin islands": "VI",
 	# One-off WHO ICTRP noise
 	"modalvia": "MD",  # typo for Moldova
 	"bosnial and herzegovina": "BA",  # typo for Bosnia and Herzegovina
