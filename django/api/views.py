@@ -1987,7 +1987,6 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 		# Get query parameters
 		author_id = self.request.query_params.get("author_id")
 		full_name = self.request.query_params.get("full_name")
-		orcid = self.request.query_params.get("orcid")
 		country = self.request.query_params.get("country")
 		sort_by = self.request.query_params.get("sort_by", "author_id")
 		order = self.request.query_params.get(
@@ -2013,10 +2012,6 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 			# Use uppercase search for better performance with GIN index
 			upper_value = full_name.upper()
 			queryset = queryset.filter(ufull_name__contains=upper_value)
-
-		if orcid:
-			# Filter by ORCID (case-insensitive contains search)
-			queryset = queryset.filter(ORCID__contains=orcid)
 
 		if country:
 			# Filter by country (exact match)

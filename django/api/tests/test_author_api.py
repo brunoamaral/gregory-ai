@@ -123,6 +123,48 @@ class AuthorAPITest(TestCase):
 		self.assertEqual(results[1]["author_id"], self.author2.author_id)
 		self.assertEqual(results[1]["articles_count"], 1)
 
+	def test_authors_filter_by_orcid_case_insensitive(self):
+		"""ORCID filtering should be case-insensitive end to end.
+
+		Regression test: the viewset used to apply a manual case-sensitive
+		`ORCID__contains` filter in addition to the FilterSet's case-insensitive
+		`icontains` filter, ANDing the two together. Since ORCID checksum
+		characters are only ever generated as uppercase 'X' (never lowercase),
+		a lowercase 'x' in the query string silently returned zero results.
+		"""
+		orcid_with_checksum_x = "0000-0002-9999-000X"
+		author = Authors.objects.create(
+			given_name="Ada",
+			family_name="Checksum",
+			ORCID=orcid_with_checksum_x,
+		)
+		article = Articles.objects.create(
+			title="Checksum Article",
+			link="http://example.com/checksum-article",
+		)
+		article.authors.add(author)
+		article.teams.add(self.team)
+		article.subjects.add(self.subject)
+		article.sources.add(self.source)
+
+		# Exact case match
+		response = self.client.get(f"/authors/?orcid={orcid_with_checksum_x}")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["count"], 1)
+		self.assertEqual(response.data["results"][0]["author_id"], author.author_id)
+
+		# Lowercase checksum character should still match (case-insensitive)
+		response = self.client.get("/authors/?orcid=0000-0002-9999-000x")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["count"], 1)
+		self.assertEqual(response.data["results"][0]["author_id"], author.author_id)
+
+		# Lowercase partial/substring match should also work
+		response = self.client.get("/authors/?orcid=9999-000x")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["count"], 1)
+		self.assertEqual(response.data["results"][0]["author_id"], author.author_id)
+
 	def test_authors_filtering_validation_subject_without_team(self):
 		"""Test that filtering by subject_id without team_id returns empty results"""
 		response = self.client.get(

@@ -4,7 +4,7 @@ from cryptography.fernet import Fernet
 from django_countries.fields import CountryField
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
-from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db import models
 from django.db.models import GeneratedField, Max, OuterRef, Q, Subquery
 from django.db.models.fields.json import KeyTextTransform
@@ -61,6 +61,10 @@ class Authors(models.Model):
 				fields=["ufull_name"],
 				opclasses=["gin_trgm_ops"],
 				name="authors_ufull_name_gin_idx",
+			),
+			GinIndex(
+				OpClass(Upper("ORCID"), name="gin_trgm_ops"),
+				name="authors_uorcid_gin_idx",
 			),
 		]
 
