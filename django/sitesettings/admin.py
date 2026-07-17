@@ -10,6 +10,7 @@ class CustomSettingInline(admin.StackedInline):
 	model = CustomSetting
 	extra = 1
 	max_num = 1
+	filter_horizontal = ("sitemap_subjects",)
 	fieldsets = [
 		(
 			None,
@@ -53,6 +54,16 @@ class CustomSettingInline(admin.StackedInline):
 			{
 				"classes": ["collapse"],
 				"fields": ["bluesky_url", "github_url", "mastodon_url"],
+			},
+		),
+		(
+			"Sitemap",
+			{
+				"fields": [
+					"generate_sitemap",
+					"sitemap_subjects",
+					"sitemap_relevant_only",
+				],
 			},
 		),
 	]

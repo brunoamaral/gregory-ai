@@ -13,6 +13,79 @@ from gregory.utils.trial_field_normalizers import (
 )
 
 
+def ml_relevant_articles_q(threshold=0.8, subject_ids=None):
+	"""
+	Build a database-level Q matching articles ML-relevant by consensus.
+
+	Only the latest prediction per (article, subject, algorithm) counts toward
+	consensus — a retired model_version's stale score must not keep an article
+	"relevant" forever after a retrain. The whole thing stays an unevaluated Q
+	of subqueries (no Python id materialization) so the caller's queryset compiles
+	to a single SQL statement.
+
+	subject_ids=None checks every auto_predict subject (existing behavior);
+	otherwise consensus is restricted to the given subjects.
+	"""
+	from django.db.models import Count, Max, OuterRef, Q, Subquery
+
+	from gregory.models import MLPredictions
+
+	auto_predict_subjects = Subject.objects.filter(auto_predict=True)
+	if subject_ids is not None:
+		auto_predict_subjects = auto_predict_subjects.filter(id__in=subject_ids)
+	auto_predict_subjects = auto_predict_subjects.values("id", "ml_consensus_type")
+
+	combined_q = None
+	for subject_data in auto_predict_subjects:
+		subject_id = subject_data["id"]
+		consensus_type = subject_data["ml_consensus_type"]
+
+		# Determine minimum algorithm count based on consensus type
+		min_algorithms = {"any": 1, "majority": 2, "all": 3}.get(
+			consensus_type, 1
+		)  # Default to 'any' if unknown
+
+		# For each (article, algorithm) pair within this subject, find the most
+		# recent prediction's created_date. Filtering on created_date equal to
+		# that maximum isolates the latest prediction per pair (ties simply
+		# match more than one row, which is harmless for the exists/count below).
+		latest_date_per_pair = (
+			MLPredictions.objects.filter(
+				article=OuterRef("article"),
+				subject_id=subject_id,
+				algorithm=OuterRef("algorithm"),
+			)
+			.values("article", "algorithm")
+			.annotate(latest=Max("created_date"))
+			.values("latest")[:1]
+		)
+
+		# Find articles that meet consensus for this subject, using only the
+		# latest prediction per (article, algorithm) pair.
+		articles_for_subject = (
+			MLPredictions.objects.filter(
+				subject_id=subject_id,
+				article__subjects__id=subject_id,
+				algorithm__isnull=False,
+				predicted_relevant=True,
+				probability_score__gte=threshold,
+				created_date=Subquery(latest_date_per_pair),
+			)
+			.values("article_id")
+			.annotate(algorithm_count=Count("algorithm", distinct=True))
+			.filter(algorithm_count__gte=min_algorithms)
+			.values_list("article_id", flat=True)
+		)
+
+		subject_q = Q(article_id__in=articles_for_subject)
+		combined_q = subject_q if combined_q is None else combined_q | subject_q
+
+	if combined_q is None:
+		# No auto_predict subjects (or none matching subject_ids): match nothing.
+		return Q(article_id__in=[])
+	return combined_q
+
+
 class SubjectFilterMixin:
 	"""
 	Mixin that provides subject filters with AND and OR semantics.
@@ -233,77 +306,12 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			return default  # Use default if conversion fails
 
 	def _get_ml_relevant_articles_query(self, threshold=0.8, filtered_subject_id=None):
-		"""
-		Build a database-level query to find ML-relevant articles based on consensus logic.
-		This avoids the N+1 query problem by using efficient Django ORM queries.
-
-		Only the latest prediction per (article, subject, algorithm) counts toward
-		consensus — a retired model_version's stale score must not keep an article
-		"relevant" forever after a retrain. The whole thing stays an unevaluated Q
-		of subqueries (no Python id materialization) so the caller's queryset compiles
-		to a single SQL statement.
+		"""Build a database-level query to find ML-relevant articles based on consensus logic.
 
 		If filtered_subject_id is provided, only check relevance for that specific subject.
 		"""
-		from django.db.models import Count, Max, OuterRef, Q, Subquery
-
-		from gregory.models import MLPredictions
-
-		# Get subjects with auto_predict enabled, optionally filtered by subject_id
-		auto_predict_subjects = Subject.objects.filter(auto_predict=True)
-		if filtered_subject_id is not None:
-			auto_predict_subjects = auto_predict_subjects.filter(id=filtered_subject_id)
-		auto_predict_subjects = auto_predict_subjects.values("id", "ml_consensus_type")
-
-		combined_q = None
-		for subject_data in auto_predict_subjects:
-			subject_id = subject_data["id"]
-			consensus_type = subject_data["ml_consensus_type"]
-
-			# Determine minimum algorithm count based on consensus type
-			min_algorithms = {"any": 1, "majority": 2, "all": 3}.get(
-				consensus_type, 1
-			)  # Default to 'any' if unknown
-
-			# For each (article, algorithm) pair within this subject, find the most
-			# recent prediction's created_date. Filtering on created_date equal to
-			# that maximum isolates the latest prediction per pair (ties simply
-			# match more than one row, which is harmless for the exists/count below).
-			latest_date_per_pair = (
-				MLPredictions.objects.filter(
-					article=OuterRef("article"),
-					subject_id=subject_id,
-					algorithm=OuterRef("algorithm"),
-				)
-				.values("article", "algorithm")
-				.annotate(latest=Max("created_date"))
-				.values("latest")[:1]
-			)
-
-			# Find articles that meet consensus for this subject, using only the
-			# latest prediction per (article, algorithm) pair.
-			articles_for_subject = (
-				MLPredictions.objects.filter(
-					subject_id=subject_id,
-					article__subjects__id=subject_id,
-					algorithm__isnull=False,
-					predicted_relevant=True,
-					probability_score__gte=threshold,
-					created_date=Subquery(latest_date_per_pair),
-				)
-				.values("article_id")
-				.annotate(algorithm_count=Count("algorithm", distinct=True))
-				.filter(algorithm_count__gte=min_algorithms)
-				.values_list("article_id", flat=True)
-			)
-
-			subject_q = Q(article_id__in=articles_for_subject)
-			combined_q = subject_q if combined_q is None else combined_q | subject_q
-
-		if combined_q is None:
-			# No auto_predict subjects (or none matching filtered_subject_id): match nothing.
-			return Q(article_id__in=[])
-		return combined_q
+		subject_ids = None if filtered_subject_id is None else [filtered_subject_id]
+		return ml_relevant_articles_q(threshold, subject_ids)
 
 	def filter_relevant(self, queryset, name, value):
 		"""

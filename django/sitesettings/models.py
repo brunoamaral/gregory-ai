@@ -79,3 +79,30 @@ class CustomSetting(models.Model):
 		help_text="Comma-separated list of domains (e.g. example.com, other-site.org) allowed to submit subscribers for any list on this site. The origin domain is used for post-subscription redirects. The site's own domain is always accepted.",
 		verbose_name="Allowed Domains",
 	)
+	generate_sitemap = models.BooleanField(
+		default=False,
+		help_text=(
+			"Serve an XML sitemap for this site at "
+			"/sitemap/sites/<site_id>/index.xml. Requires at least one "
+			"sitemap subject below."
+		),
+	)
+	sitemap_subjects = models.ManyToManyField(
+		"gregory.Subject",
+		blank=True,
+		related_name="sitemap_sites",
+		help_text=(
+			"Subjects whose articles appear in this site's sitemap. "
+			"Choosing different subjects per site is how two sites backed "
+			"by the same database avoid competing for the same articles "
+			"in search engines."
+		),
+	)
+	sitemap_relevant_only = models.BooleanField(
+		default=False,
+		help_text=(
+			"Only include articles marked relevant for at least one of the "
+			"selected subjects (manual review or ML consensus, same "
+			"semantics as the API's relevant=true filter)."
+		),
+	)
