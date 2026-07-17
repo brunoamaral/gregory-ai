@@ -40,6 +40,7 @@ from api.views import (
 	StatsView,
 )
 from rss.views import ArticlesByAuthorFeed, TrialsBySubjectFeed
+from rss.sitemaps import sitemap_index, sitemap_section
 from subscriptions.views import (
 	subscribe_view,
 	unsubscribe_list,
@@ -93,6 +94,17 @@ urlpatterns = (
 			"feed/trials/subject/<str:subject_slug>/",
 			TrialsBySubjectFeed(),
 			name="trials_by_subject_feed",
+		),
+		# Site-scoped sitemaps (see rss/sitemaps.py)
+		path(
+			"sitemap/sites/<int:site_id>/index.xml",
+			sitemap_index,
+			name="site-sitemap-index",
+		),
+		path(
+			"sitemap/sites/<int:site_id>/<slug:section>.xml",
+			sitemap_section,
+			name="site-sitemap-section",
 		),
 		# Organization routes
 		re_path(r"^accounts/", include("organizations.urls")),

@@ -17,6 +17,17 @@ Both feeds return the 50 most recent items, ordered by newest first.
 
 ---
 
+## Sitemaps
+
+| Sitemap | URL pattern |
+|:--------|:------------|
+| Sitemap index | `GET /sitemap/sites/{site_id}/index.xml` |
+| Articles section (paginated) | `GET /sitemap/sites/{site_id}/articles.xml` (`?p=2…N`) |
+
+One sitemap per frontend site, enabled and curated per site in the Django admin (Sites → the site's settings inline → *Generate sitemap*, *Sitemap subjects*, *Relevant only*). URLs point at the requested site's frontend domain, not the API host. Only articles belonging to a publicly visible organisation are included, regardless of caller identity. Each section page holds up to 10,000 URLs; both endpoints are cached for 1 hour. A site with the switch off, no `CustomSetting` row, or no publicly visible sitemap subjects configured returns 404.
+
+---
+
 ## Subscription endpoint
 
 `POST /subscriptions/new/` accepts HTML form submissions (no CSRF token required).
