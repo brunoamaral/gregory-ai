@@ -1,12 +1,12 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from gregory.models import Authors
-from django.db.models import Q, Count
+from django.db.models import Count
 import re
 
 
 class Command(BaseCommand):
-	help = "Merges authors with the same ORCID. Provide an ORCID as argument to merge all authors with that ORCID into one. Handles both http and https ORCID variants."
+	help = "Merges authors with the same ORCID. Provide an ORCID as argument to merge all authors with that ORCID into one. Matches http and https URL variants and stores the ORCID as the bare ID (without https://orcid.org/)."
 
 	def add_arguments(self, parser):
 		parser.add_argument(
@@ -22,7 +22,7 @@ class Command(BaseCommand):
 		parser.add_argument(
 			"--keep-author",
 			type=int,
-			help="Specify the author_id to keep when merging (default: prefers https version, then most articles, then earliest created)",
+			help="Specify the author_id to keep when merging (default: most articles, then earliest created)",
 		)
 		parser.add_argument(
 			"--force",
@@ -46,13 +46,15 @@ class Command(BaseCommand):
 		# Remove whitespace
 		orcid = orcid.strip()
 
-		# Extract the ORCID ID using regex
+		# Extract the ORCID ID using regex (check digit may be 'x'/'X')
 		# Matches patterns like: 0000-0000-0000-0000
-		orcid_pattern = r"(\d{4}-\d{4}-\d{4}-\d{3}[\dX])"
+		orcid_pattern = r"(\d{4}-\d{4}-\d{4}-\d{3}[\dXx])"
 		match = re.search(orcid_pattern, orcid)
 
 		if match:
-			orcid_id = match.group(1)
+			# Standardize to uppercase so lowercase check digits ("...09x")
+			# canonicalize the same as "...09X"
+			orcid_id = match.group(1).upper()
 			http_variant = f"http://orcid.org/{orcid_id}"
 			https_variant = f"https://orcid.org/{orcid_id}"
 			return orcid_id, http_variant, https_variant
@@ -60,6 +62,19 @@ class Command(BaseCommand):
 			# If no standard ORCID ID found, treat the input as-is
 			# This handles edge cases where the ORCID might be malformed
 			return orcid, orcid, orcid
+
+	def orcid_search_variants(self, orcid_id):
+		"""
+		All URL/bare forms that gregory.functions.normalize_orcid collapses
+		back down to orcid_id: with/without scheme, with/without "www.",
+		and with/without a trailing slash.
+		"""
+		variants = {orcid_id, f"{orcid_id}/"}
+		for scheme in ("http://", "https://", ""):
+			for host in ("orcid.org/", "www.orcid.org/"):
+				variants.add(f"{scheme}{host}{orcid_id}")
+				variants.add(f"{scheme}{host}{orcid_id}/")
+		return variants
 
 	def handle(self, *args, **options):
 		orcid = options["orcid"]
@@ -74,21 +89,17 @@ class Command(BaseCommand):
 		if not orcid.strip():
 			raise CommandError("ORCID cannot be empty.")
 
-		# Normalize the ORCID to find both http and https variants
-		orcid_id, http_variant, https_variant = self.normalize_orcid(orcid)
+		# Normalize the ORCID to a bare canonical ID
+		orcid_id, _, _ = self.normalize_orcid(orcid)
 
 		if not orcid_id:
 			raise CommandError(f"Invalid ORCID format: {orcid}")
 
-		# Find all authors with either the http or https variant of the ORCID
-		authors_query = Q(ORCID=http_variant) | Q(ORCID=https_variant)
-
-		# Also search for the raw ORCID ID in case it's stored without the URL
-		if orcid_id not in [http_variant, https_variant]:
-			authors_query |= Q(ORCID=orcid_id)
+		# Find all authors storing this ORCID as a bare ID or as any URL variant
+		orcid_variants = self.orcid_search_variants(orcid_id)
 
 		authors_with_orcid = (
-			Authors.objects.filter(authors_query)
+			Authors.objects.filter(ORCID__in=orcid_variants)
 			.annotate(article_count=Count("articles"))
 			.order_by("-article_count", "author_id")
 		)
@@ -96,7 +107,7 @@ class Command(BaseCommand):
 		if not authors_with_orcid.exists():
 			self.stdout.write(
 				self.style.WARNING(
-					f"No authors found with ORCID: {orcid} (searched for {orcid_id}, {http_variant}, {https_variant})"
+					f"No authors found with ORCID: {orcid} (searched for {', '.join(sorted(orcid_variants))})"
 				)
 			)
 			return
@@ -109,6 +120,19 @@ class Command(BaseCommand):
 					f"{author.full_name} (ID: {author.author_id}) - ORCID stored as: {author.ORCID}"
 				)
 			)
+			if author.ORCID != orcid_id:
+				if dry_run:
+					self.stdout.write(
+						self.style.WARNING(
+							f"DRY RUN - ORCID would be normalized to: {orcid_id}"
+						)
+					)
+				else:
+					author.ORCID = orcid_id
+					author.save()
+					self.stdout.write(
+						self.style.SUCCESS(f"ORCID normalized to: {orcid_id}")
+					)
 			return
 
 		# Display found authors with their ORCID variants
@@ -118,11 +142,9 @@ class Command(BaseCommand):
 		self.stdout.write("-" * 100)
 
 		for author in authors_with_orcid:
-			https_indicator = (
-				"✓ HTTPS" if author.ORCID and "https://" in author.ORCID else "  HTTP "
-			)
+			format_indicator = "✓ ID " if author.ORCID == orcid_id else "  URL"
 			self.stdout.write(
-				f"{https_indicator} | ID: {author.author_id:5} | "
+				f"{format_indicator} | ID: {author.author_id:5} | "
 				f"Name: {author.full_name:25} | "
 				f"Articles: {author.article_count:3} | "
 				f"ORCID: {author.ORCID}"
@@ -137,24 +159,8 @@ class Command(BaseCommand):
 					f"Author with ID {keep_author_id} not found among authors with ORCID variants of {orcid_id}"
 				)
 		else:
-			# Priority: 1) HTTPS version, 2) Most articles, 3) Earliest created (lowest ID)
-			https_authors = [
-				a for a in authors_with_orcid if a.ORCID and "https://" in a.ORCID
-			]
-
-			if https_authors:
-				# Sort HTTPS authors by article count (desc) then by ID (asc)
-				https_authors.sort(key=lambda a: (-a.article_count, a.author_id))
-				author_to_keep = https_authors[0]
-				self.stdout.write(
-					f"\n📌 Prioritizing HTTPS ORCID version: {author_to_keep.ORCID}"
-				)
-			else:
-				# No HTTPS version found, use the default logic
-				author_to_keep = authors_with_orcid.first()
-				self.stdout.write(
-					f"\n⚠️  No HTTPS ORCID version found, using default selection"
-				)
+			# Priority: most articles, then earliest created (lowest ID)
+			author_to_keep = authors_with_orcid.first()
 
 		authors_to_merge = authors_with_orcid.exclude(
 			author_id=author_to_keep.author_id
@@ -173,15 +179,9 @@ class Command(BaseCommand):
 		for author in authors_to_merge:
 			self.stdout.write(f"           Merging ORCID: {author.ORCID}")
 
-		# If keeping an author with HTTP, suggest updating to HTTPS
-		if (
-			author_to_keep.ORCID
-			and "http://" in author_to_keep.ORCID
-			and "https://" not in author_to_keep.ORCID
-		):
-			suggested_https = author_to_keep.ORCID.replace("http://", "https://")
+		if author_to_keep.ORCID != orcid_id:
 			self.stdout.write(
-				f"\n💡 SUGGESTION: Consider updating the kept author's ORCID to HTTPS: {suggested_https}"
+				f"\n🔄 The kept author's ORCID will be stored as the bare ID: {orcid_id}"
 			)
 
 		if dry_run:
@@ -228,30 +228,6 @@ class Command(BaseCommand):
 			with transaction.atomic():
 				total_articles_transferred = 0
 
-				# Check if we should update the ORCID to HTTPS
-				should_update_orcid = False
-				https_orcid = None
-
-				# Look for an HTTPS version in the authors being merged
-				for author in authors_to_merge:
-					if author.ORCID and "https://" in author.ORCID:
-						https_orcid = author.ORCID
-						should_update_orcid = True
-						break
-
-				# If the author we're keeping has HTTP and we found HTTPS, update it
-				if (
-					should_update_orcid
-					and author_to_keep.ORCID
-					and "http://" in author_to_keep.ORCID
-					and "https://" not in author_to_keep.ORCID
-				):
-					old_orcid = author_to_keep.ORCID
-					author_to_keep.ORCID = https_orcid
-					self.stdout.write(
-						f"\n🔄 Updating ORCID from {old_orcid} to {https_orcid}"
-					)
-
 				for author in authors_to_merge:
 					# Get all articles associated with this author
 					articles = author.articles_set.all()
@@ -289,10 +265,9 @@ class Command(BaseCommand):
 					if not author_to_keep.orcid_check and author.orcid_check:
 						author_to_keep.orcid_check = author.orcid_check
 
-				# Save the updated author_to_keep
-				author_to_keep.save()
-
-				# Delete the duplicate authors
+				# Delete the duplicate authors before saving the kept author:
+				# a duplicate may hold the bare ORCID we are about to store, and
+				# ORCID is unique, so saving first would raise an IntegrityError
 				deleted_count = 0
 				for author in authors_to_merge:
 					self.stdout.write(
@@ -300,6 +275,14 @@ class Command(BaseCommand):
 					)
 					author.delete()
 					deleted_count += 1
+
+				# Store the ORCID as the bare ID (without https://orcid.org/)
+				if author_to_keep.ORCID != orcid_id:
+					self.stdout.write(
+						f"\n🔄 Updating ORCID from {author_to_keep.ORCID} to {orcid_id}"
+					)
+					author_to_keep.ORCID = orcid_id
+				author_to_keep.save()
 
 				self.stdout.write("\n" + "=" * 80)
 				self.stdout.write(
