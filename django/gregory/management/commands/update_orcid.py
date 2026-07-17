@@ -65,7 +65,6 @@ class Command(BaseCommand):
 				ORCID__isnull=False,
 				articles__teams__organization=org,
 			)
-			.filter(Q(country__isnull=True) | Q(biography__isnull=True))
 			.distinct()
 			.order_by("-num_articles")[:1000]
 		)

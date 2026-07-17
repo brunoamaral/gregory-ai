@@ -39,6 +39,42 @@ class Authors(models.Model):
 	country = CountryField(blank=True, null=True)  # New field
 	biography = models.TextField(blank=True, null=True)
 	orcid_check = models.DateTimeField(blank=True, null=True)
+	credit_name = models.CharField(
+		max_length=301,
+		blank=True,
+		null=True,
+		help_text="Researcher's preferred display name from ORCID (person.name.credit-name).",
+	)
+	emails = models.JSONField(
+		default=list,
+		blank=True,
+		help_text="Publicly visible emails from ORCID. Never exposed via the API.",
+	)
+	orcid_keywords = models.JSONField(
+		default=list, blank=True, help_text="Research keywords from ORCID."
+	)
+	external_ids = models.JSONField(
+		default=list,
+		blank=True,
+		help_text="External identifiers from ORCID, e.g. [{'type', 'value', 'url'}].",
+	)
+	researcher_urls = models.JSONField(
+		default=list,
+		blank=True,
+		help_text="Researcher URLs from ORCID, e.g. [{'name', 'url'}].",
+	)
+	current_affiliation = models.CharField(
+		max_length=255,
+		blank=True,
+		null=True,
+		help_text="Organization name of the author's current (or most recent) employment from ORCID.",
+	)
+	orcid_claimed = models.BooleanField(
+		null=True, blank=True, help_text="Whether the ORCID record has been claimed by the researcher."
+	)
+	orcid_verified_email = models.BooleanField(
+		null=True, blank=True, help_text="Whether the ORCID record has a verified email."
+	)
 	# Optimized uppercase column for fast text search
 	ufull_name = GeneratedField(
 		expression=Upper("full_name"), output_field=models.TextField(), db_persist=True
