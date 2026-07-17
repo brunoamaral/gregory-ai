@@ -237,38 +237,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
 				)
 				continue
 
-			# Create a new item with processed values
-			processed_item = {}
-
-			# Copy the item with proper string conversion
-			for key, value in item.items():
-				# Skip excluded columns
-				if key in self.EXCLUDED_COLUMNS or any(
-					key.startswith(excluded + ".") for excluded in self.EXCLUDED_COLUMNS
-				):
-					continue
-
-				# Clean text fields (remove line breaks)
-				if key in self.TEXT_FIELDS_TO_CLEAN and isinstance(value, str):
-					# Replace line breaks with spaces
-					value = value.replace("\n", " ").replace("\r", " ")
-					# Normalize multiple spaces to single spaces
-					while "  " in value:
-						value = value.replace("  ", " ")
-
-				# Handle lists and nested objects
-				if isinstance(value, (list, dict)):
-					try:
-						processed_item[key] = json.dumps(value)
-					except (TypeError, ValueError):
-						logger.error(
-							f"CSV Export: Failed to serialize key '{key}' with value '{value}' to JSON. Storing as string."
-						)
-						processed_item[key] = str(value)
-				else:
-					processed_item[key] = value
-
-			processed_data.append(processed_item)
+			processed_data.append(process_item(item))
 
 		logger.debug(f"CSV Export: Processed data has {len(processed_data)} items")
 		return processed_data
@@ -286,17 +255,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
 		for item in data:
 			all_keys.update(item.keys())
 
-		# Sort keys with preferred columns first
-		ordered_keys = []
-
-		# First add preferred columns in the specified order
-		for key in self.PREFERRED_COLUMN_ORDER:
-			if key in all_keys:
-				ordered_keys.append(key)
-				all_keys.remove(key)
-
-		# Then add remaining keys alphabetically
-		ordered_keys.extend(sorted(all_keys))
+		ordered_keys = order_columns(all_keys)
 
 		# Create the table
 		table = [ordered_keys]  # Header row
@@ -312,3 +271,115 @@ class DirectStreamingCSVRenderer(CSVRenderer):
 			f"CSV Export: Tablized data has {len(table) - 1} rows (plus header)"
 		)
 		return table
+
+
+def process_item(item):
+	"""Prepare one serialized row for CSV output.
+
+	Skips EXCLUDED_COLUMNS, strips linebreaks from TEXT_FIELDS_TO_CLEAN,
+	JSON-encodes list/dict values. Shared by the buffered renderer and the
+	streaming generator so both paths produce identical row semantics.
+	"""
+	processed_item = {}
+	for key, value in item.items():
+		if key in DirectStreamingCSVRenderer.EXCLUDED_COLUMNS or any(
+			key.startswith(excluded + ".")
+			for excluded in DirectStreamingCSVRenderer.EXCLUDED_COLUMNS
+		):
+			continue
+
+		if key in DirectStreamingCSVRenderer.TEXT_FIELDS_TO_CLEAN and isinstance(value, str):
+			value = value.replace("\n", " ").replace("\r", " ")
+			while "  " in value:
+				value = value.replace("  ", " ")
+
+		if isinstance(value, (list, dict)):
+			try:
+				processed_item[key] = json.dumps(value)
+			except (TypeError, ValueError):
+				logger.error(
+					f"CSV Export: Failed to serialize key '{key}' with value '{value}' to JSON. Storing as string."
+				)
+				processed_item[key] = str(value)
+		else:
+			processed_item[key] = value
+	return processed_item
+
+
+def order_columns(keys):
+	"""Order CSV columns: PREFERRED_COLUMN_ORDER first, remainder alphabetical."""
+	remaining = set(keys)
+	ordered = []
+	for key in DirectStreamingCSVRenderer.PREFERRED_COLUMN_ORDER:
+		if key in remaining:
+			ordered.append(key)
+			remaining.remove(key)
+	ordered.extend(sorted(remaining))
+	return ordered
+
+
+def csv_header_fields(serializer, request):
+	"""Static CSV header for a serializer, matching per-row behavior.
+
+	OrgScopedSerializerMixin pops _per_org_fields from every row when the
+	request has no org context, so the header must drop them under the same
+	condition or rows and header would misalign.
+	"""
+	from api.serializers.mixins import _resolve_per_org_fields_org
+
+	field_names = list(serializer.fields.keys())
+	per_org = list(getattr(serializer, "_per_org_fields", []))
+	if per_org and _resolve_per_org_fields_org(request) is None:
+		field_names = [name for name in field_names if name not in per_org]
+	field_names = [
+		name for name in field_names
+		if name not in DirectStreamingCSVRenderer.EXCLUDED_COLUMNS
+	]
+	return order_columns(field_names)
+
+
+def stream_csv(source, serialize_batch, header_fields, chunk_size=2000):
+	"""Yield CSV text chunks: header first, then one chunk per row batch.
+
+	``source`` is a QuerySet (streamed via .iterator(chunk_size), which
+	batches prefetch_related per chunk) or a plain list (an already-
+	paginated page). ``serialize_batch`` maps a list of model instances to
+	a list of dicts (the view passes a bound get_serializer closure).
+	"""
+	buffer = io.StringIO()
+	writer = csv.writer(
+		buffer,
+		quoting=csv.QUOTE_ALL,
+		quotechar='"',
+		doublequote=True,
+		lineterminator="\n",
+	)
+
+	def drain():
+		value = buffer.getvalue()
+		buffer.seek(0)
+		buffer.truncate(0)
+		return value
+
+	def write_batch(batch):
+		for row in serialize_batch(batch):
+			processed = process_item(row)
+			cells = []
+			for key in header_fields:
+				value = processed.get(key, "")
+				cells.append("" if value is None else str(value))
+			writer.writerow(cells)
+		return drain()
+
+	writer.writerow(header_fields)
+	yield drain()  # header goes out immediately -- TTFB is bounded by the first DB batch
+
+	rows = source.iterator(chunk_size=chunk_size) if hasattr(source, "iterator") else iter(source)
+	batch = []
+	for obj in rows:
+		batch.append(obj)
+		if len(batch) >= chunk_size:
+			yield write_batch(batch)
+			batch = []
+	if batch:
+		yield write_batch(batch)
