@@ -2,106 +2,62 @@
 
 ## Overview
 
-This document explains the implementation of streaming CSV responses in the Gregory API. This feature allows the API to stream large datasets as CSV files without loading all data into memory at once, improving performance and reducing the likelihood of timeouts.
+This document explains how the Gregory API streams large CSV exports without loading the whole dataset into memory or holding up the first byte of the response. It replaces an earlier design note that described a middleware-based approach — that code no longer exists.
 
 ## Key Components
 
-We have implemented two approaches for streaming CSV responses:
-
-### 1. Middleware-Based Approach
-
-1. **StreamingCSVRenderer**: A custom renderer that extends `FlattenedCSVRenderer` to support streaming responses.
-2. **StreamingCSVMiddleware**: A middleware that converts regular responses to streaming responses when needed.
-3. **Django's StreamingHttpResponse**: Used to stream the response to the client.
-
-### 2. Direct Streaming Approach
-
-1. **DirectStreamingCSVRenderer**: A simpler renderer that directly returns a `StreamingHttpResponse`.
-2. **Django's StreamingHttpResponse**: Used to stream the response to the client.
+- **`api.direct_streaming.stream_csv`** — a generator that yields CSV text chunks: the header row first, then one chunk per batch of serialized rows.
+- **`api.direct_streaming.csv_header_fields`** — computes the static CSV header (column order) from a serializer's field names, applying the same per-org field rule the rows use, so header and rows always agree.
+- **`api.direct_streaming.process_item` / `order_columns`** — shared per-row cleanup (line-break stripping, JSON-encoding of list/dict values) and column-ordering logic, used identically by the streaming path and the legacy buffered renderer (`DirectStreamingCSVRenderer`, still used for single-object CSV responses).
+- **`api.views.CSVStreamingMixin`** — the viewset mixin that intercepts `list()` for `?format=csv` requests and returns a `StreamingHttpResponse` wrapping `stream_csv`.
+- **Django's `StreamingHttpResponse`** — streams the response to the client as the generator produces chunks.
 
 ## How It Works
 
-### Middleware-Based Approach
+1. `CSVStreamingMixin.list()` checks `request.query_params["format"]`. Non-CSV requests fall through to the normal DRF `list()`.
+2. For CSV requests, it builds the filtered queryset (`filter_queryset(get_queryset())`) and calls `paginate_queryset()`. If pagination applies (a `page_size` was given, or the request isn't exempted), the source is that page (a Python list, ≤100 rows). Otherwise (`all_results=true`) the source is the full queryset.
+3. The CSV header is computed once, up front, from `self.get_serializer().fields` — it's static per serializer, so there's no need to scan rows to discover columns.
+4. `stream_csv()` yields the header chunk immediately, then iterates the source in batches of `csv_stream_chunk_size` (2000 by default). For a queryset source it uses `.iterator(chunk_size=...)`, which Django batches `prefetch_related` calls against per chunk — so memory stays bounded by one batch's worth of prefetched rows, not the whole corpus. Each batch is serialized (`get_serializer(batch, many=True).data`), cleaned via `process_item`, and written into a small in-memory `csv.writer` buffer that is drained and yielded after each batch.
+5. `X-Accel-Buffering: no` is set on the response so nginx doesn't buffer the whole stream before forwarding it — without this header the time-to-first-byte win is lost in production even though Django itself streams correctly.
 
-1. The `StreamingCSVRenderer` generates CSV data row by row using a generator function
-2. The renderer stores this generator in `self.generator_function` and sets `streaming=True` on the response
-3. The middleware detects the streaming flag and creates a `StreamingHttpResponse` using the stored generator
-4. The middleware copies headers from the original response to the streaming response
+## For API Users
 
-### Direct Streaming Approach
+Any endpoint using `CSVStreamingMixin` (currently `ArticleViewSet`, `TrialViewSet`, `ArticleSearchView`, `TrialSearchView`) streams CSV responses transparently:
 
-1. The `DirectStreamingCSVRenderer` prepares data and creates a generator function for CSV rows
-2. The renderer returns a `StreamingHttpResponse` directly, bypassing the normal response flow
-3. The renderer sets appropriate headers on the streaming response
+- `/articles/?format=csv&all_results=true` — stream all articles as CSV
+- `/trials/?format=csv&all_results=true` — stream all clinical trials as CSV
+- `/articles/search/?team_id=1&subject_id=1&format=csv&all_results=true` — stream search results as CSV
 
-## Current Implementation
+Paginated CSV (`?format=csv&page_size=50`, no `all_results`) still returns exactly one page's rows plus the header — behavior here is unchanged from before this design.
 
-The current implementation uses the **Direct Streaming Approach** (`DirectStreamingCSVRenderer`) as the default for CSV responses. This approach was chosen for its simplicity and reliability.
+These endpoints support all the usual filtering parameters, including `site_id` (see `docs/csv-export.md`).
 
-### For API Users
+## For Developers
 
-Any endpoint that accepts the `format=csv` parameter will now automatically stream the response. For example:
+No special setup is required for a viewset that already inherits `CSVStreamingMixin` and DRF's `list()`/`get_queryset()`/`get_serializer()` conventions. `csv_stream_chunk_size` can be overridden per-viewset if a different batch size is needed.
 
-- `/articles/?format=csv` - Stream all articles as CSV
-- `/trials/?format=csv` - Stream all clinical trials as CSV
-- `/teams/1/articles/?format=csv` - Stream team articles as CSV
-
-These endpoints support all the usual filtering parameters.
-
-### For Developers
-
-No special setup is required - all CSV responses are automatically streamed. The StreamingCSVRenderer is registered as the default renderer for CSV responses in settings.py.
+Detail-route CSV responses (single object, not a list) are not streamed this way — `CSVStreamingMixin.finalize_response()` falls back to rendering the response normally and wrapping the resulting bytes in a single-chunk `StreamingHttpResponse`, since those responses are small.
 
 ## Benefits
 
-- **Reduced Memory Usage**: Only processes one row at a time, reducing server memory requirements
-- **Faster Initial Response**: Starts sending data immediately without waiting for all data to be processed
-- **Better for Large Datasets**: Can handle much larger datasets without timing out
-- **Same Filtering Capabilities**: Supports all the same filters as regular endpoints
-- **Seamless Integration**: Works automatically with all existing endpoints
-- **Clean Text Fields**: Line breaks in text fields (like summaries) are automatically removed for better CSV compatibility
+- **Bounded memory**: batches, not the whole queryset, are held in memory at any point.
+- **Fast time-to-first-byte**: the header (and the first data batch) is sent as soon as it's ready, instead of after the entire dataset has been rendered.
+- **Same filtering and column semantics**: column order, JSON-encoding of nested fields, and text cleaning are identical to the legacy renderer (`process_item`/`order_columns` are shared between both paths).
 
-## Implementation Details
-
-### CSV Generation
-
-2. **Cleans Text Fields**: Line breaks in text fields like summaries are removed and replaced with spaces
-3. **Row-by-Row Processing**: Data is processed one row at a time to minimize memory usage
-
-### Response Headers
-
-The streaming response includes the following headers:
+## Response Headers
 
 - `Content-Type: text/csv; charset=utf-8`
 - `Content-Disposition: attachment; filename="gregory-ai-{object_type}-{current_date}.csv"`
+- `X-Accel-Buffering: no`
 
 ## Troubleshooting
 
-### Binary Data in Response
+### High memory or slow first byte
 
-If binary data appears in the response instead of CSV content, it may indicate that:
+- Confirm the endpoint's viewset actually inherits `CSVStreamingMixin` and that `format=csv` is present in the query string — `list()` only takes the streaming path for CSV requests.
+- Check `csv_stream_chunk_size` hasn't been set unreasonably high.
+- In production, confirm `X-Accel-Buffering: no` is reaching nginx unmodified — a proxy that strips or ignores it will buffer the whole response regardless of what Django does.
 
-1. The middleware is improperly handling the generator function
-2. The content is being prematurely consumed
-3. The wrong renderer is being applied
+### Truncated CSV body
 
-**Root Cause of Binary Data Issue:**
-
-The original `StreamingCSVMiddleware` had a critical bug where it would use `response.content` directly for the streaming response, but this was already the binary representation of the generator object, not the actual CSV rows. This caused binary data to be sent to clients instead of CSV.
-
-This was fixed by:
-1. Properly storing the generator function in the renderer
-2. Having the middleware access the generator through `renderer.generator_function` 
-3. Creating the `DirectStreamingCSVRenderer` as a more robust alternative
-
-### Memory Issues
-
-If memory usage is still high despite streaming:
-
-1. Check for any code that might be collecting all rows before sending
-2. Ensure pagination is working correctly
-3. Verify that the generator function is properly yielding one row at a time
-
-## Conclusion
-
-The streaming CSV implementation significantly improves performance and reliability when exporting large datasets. The direct streaming approach provides the most robust solution and is the recommended implementation going forward.
+Exceptions raised mid-stream (e.g. a DB hiccup partway through) cannot become an HTTP 500 once the header has already been sent — the client sees a truncated body instead. This is inherent to HTTP streaming, not a bug to "fix" with pre-buffering.

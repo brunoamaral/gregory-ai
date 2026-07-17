@@ -40,6 +40,11 @@ from api.serializers import (
 	OrganizationSerializer,
 )
 from api.pagination import FlexiblePagination, request_bypasses_pagination
+from api.direct_streaming import (
+	DirectStreamingCSVRenderer,
+	csv_header_fields,
+	stream_csv,
+)
 from datetime import datetime, timedelta
 from django.db.models import (
 	Count,
@@ -143,16 +148,47 @@ from api.utils.responses import (
 
 class CSVStreamingMixin:
 	"""
-	Viewset mixin that wraps a rendered CSV response in a StreamingHttpResponse.
+	Viewset mixin that streams CSV list responses in bounded batches.
 
-	Any viewset that supports ``?format=csv`` should inherit from this mixin so
-	that the CSV bytes are streamed rather than buffered in a single response
-	body.  The filename is derived from the request path via
-	``DirectStreamingCSVRenderer.get_filename``.
+	Intercepts list() for ?format=csv before DRF serializes the full
+	queryset: rows are serialized chunk_size at a time inside a generator
+	(prefetch_related batches per chunk via .iterator()), so memory stays
+	flat regardless of corpus size and the first byte leaves immediately.
 	"""
+
+	csv_stream_chunk_size = 2000
+
+	def list(self, request, *args, **kwargs):
+		if request.query_params.get("format", "").lower() != "csv":
+			return super().list(request, *args, **kwargs)
+
+		queryset = self.filter_queryset(self.get_queryset())
+		page = self.paginate_queryset(queryset)
+		source = page if page is not None else queryset
+
+		header_serializer = self.get_serializer()
+		header_fields = csv_header_fields(header_serializer, request)
+
+		def serialize_batch(batch):
+			return self.get_serializer(batch, many=True).data
+
+		filename = DirectStreamingCSVRenderer().get_filename({"request": request})
+		response = StreamingHttpResponse(
+			stream_csv(source, serialize_batch, header_fields, self.csv_stream_chunk_size),
+			content_type="text/csv; charset=utf-8",
+		)
+		response["Content-Disposition"] = f'attachment; filename="{filename}"'
+		# Without this nginx buffers the whole stream and the TTFB win
+		# evaporates in production.
+		response["X-Accel-Buffering"] = "no"
+		return response
 
 	def finalize_response(self, request, response, *args, **kwargs):
 		response = super().finalize_response(request, response, *args, **kwargs)
+		if getattr(response, "streaming", False):
+			return response
+		# Fallback wrap for non-list CSV responses (e.g. detail routes),
+		# which are single-object and small.
 		if request.query_params.get("format", "").lower() == "csv":
 			response.render()
 			csv_bytes = (
@@ -160,21 +196,14 @@ class CSVStreamingMixin:
 				if isinstance(response.content, bytes)
 				else response.content.encode("utf-8")
 			)
-
-			def csv_stream():
-				yield csv_bytes
-
-			from api.direct_streaming import DirectStreamingCSVRenderer
-
 			filename = DirectStreamingCSVRenderer().get_filename({"request": request})
 			streaming_response = StreamingHttpResponse(
-				streaming_content=csv_stream(),
+				streaming_content=iter([csv_bytes]),
 				content_type="text/csv; charset=utf-8",
 			)
 			streaming_response["Content-Disposition"] = (
 				f'attachment; filename="{filename}"'
 			)
-			streaming_response["Content-Type"] = "text/csv; charset=utf-8"
 			return streaming_response
 		return response
 
@@ -1134,6 +1163,7 @@ class ArticleViewSet(
 
 	# Query Parameters:
 	- **team_id** - filter by team ID
+	- **site_id** - filter by Django Site ID; returns articles belonging to any team attached to that site (see Team.site)
 	- **doi** - filter by DOI, case-insensitive; accepts a single value or a comma-separated list (e.g. `?doi=10.1/a,10.2/b`)
 	- **subject_id** - filter by subject ID (used with team_id)
 	- **subjects** - comma-separated list of subject IDs with AND semantics — returns only articles tagged with *all* listed subjects (e.g., `?subjects=1,2`)
@@ -1688,6 +1718,7 @@ class TrialViewSet(
 	# Core Query Parameters:
 	- **trial_id** - filter by specific trial ID
 	- **team_id** - filter by team ID
+	- **site_id** - filter by Django Site ID; returns trials belonging to any team attached to that site (see Team.site)
 	- **subject_id** - filter by subject ID
 	- **subjects** - comma-separated list of subject IDs with AND semantics — returns only trials tagged with *all* listed subjects (e.g., `?subjects=1,2`)
 	- **subjects_any** - comma-separated list of subject IDs with OR semantics — returns trials tagged with *any* of the listed subjects (e.g., `?subjects_any=1,2`)
@@ -2421,7 +2452,7 @@ class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 		)
 
 
-class ArticleSearchView(BulkExportThrottleMixin, generics.ListAPIView):
+class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListAPIView):
 	"""
 	Advanced search for articles by title and abstract (summary).
 
@@ -2651,7 +2682,7 @@ class ArticleSearchView(BulkExportThrottleMixin, generics.ListAPIView):
 		return self.list(request, *args, **kwargs)
 
 
-class TrialSearchView(BulkExportThrottleMixin, generics.ListAPIView):
+class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListAPIView):
 	"""
 	Advanced search for clinical trials by title, summary, and recruitment status.
 

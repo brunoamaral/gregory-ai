@@ -86,6 +86,7 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 	team_id = filters.NumberFilter(
 		field_name="teams__id", lookup_expr="exact", label="Team ID"
 	)
+	site_id = filters.NumberFilter(method="filter_site", label="Site ID")
 	subject_id = filters.NumberFilter(
 		field_name="subjects__id", lookup_expr="exact", label="Subject ID"
 	)
@@ -140,6 +141,7 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"category_id",
 			"journal_slug",
 			"team_id",
+			"site_id",
 			"subject_id",
 			"source_id",
 			"relevant",
@@ -189,6 +191,19 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		if q is None:
 			return queryset
 		return queryset.filter(q)
+
+	def filter_site(self, queryset, name, value):
+		"""
+		Articles belonging to any team of the given Django Site.
+
+		Uses Exists() rather than a join filter: multiple teams can share a
+		site, and a plain teams__site_id filter would duplicate every article
+		that belongs to two such teams (same reasoning as OrgVisibilityMixin).
+		"""
+		subquery = queryset.model.objects.filter(
+			pk=models.OuterRef("pk"), teams__site_id=value
+		)
+		return queryset.filter(models.Exists(subquery))
 
 	def filter_journal(self, queryset, name, value):
 		"""
@@ -480,6 +495,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	team_id = filters.NumberFilter(
 		field_name="teams__id", lookup_expr="exact", label="Team ID"
 	)
+	site_id = filters.NumberFilter(method="filter_site", label="Site ID")
 	subject_id = filters.NumberFilter(
 		field_name="subjects__id", lookup_expr="exact", label="Subject ID"
 	)
@@ -613,6 +629,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"status",
 			"recruitment_status_normalized",
 			"team_id",
+			"site_id",
 			"subject_id",
 			"category_slug",
 			"category_id",
@@ -667,6 +684,19 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		if q is None:
 			return queryset
 		return queryset.filter(q)
+
+	def filter_site(self, queryset, name, value):
+		"""
+		Trials belonging to any team of the given Django Site.
+
+		Uses Exists() rather than a join filter: multiple teams can share a
+		site, and a plain teams__site_id filter would duplicate every trial
+		that belongs to two such teams (same reasoning as OrgVisibilityMixin).
+		"""
+		subquery = queryset.model.objects.filter(
+			pk=models.OuterRef("pk"), teams__site_id=value
+		)
+		return queryset.filter(models.Exists(subquery))
 
 	def _match_identifier(self, queryset, value, keys):
 		"""Return trials whose ``identifiers`` JSON has any of ``keys`` equal
