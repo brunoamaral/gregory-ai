@@ -65,6 +65,16 @@ class SiteSitemapTests(TestCase):
 		)
 		cls.article_private.subjects.add(cls.private_subject)
 
+		# Cross-team tagging: an article owned only by the private team but
+		# (mis)tagged with a subject that belongs to the public team. Subject
+		# curation alone would let this leak; the article's own team
+		# ownership must also gate visibility.
+		cls.article_wrong_team = Articles.objects.create(
+			title="wrong-team", link="https://example.org/wrong-team", kind="science paper"
+		)
+		cls.article_wrong_team.teams.add(cls.private_team)
+		cls.article_wrong_team.subjects.add(cls.subject_a)
+
 		# Site config: frontend site publishes subject A (+ the private
 		# subject, which must be silently dropped); other site publishes B.
 		cls.config = CustomSetting.objects.create(
@@ -95,6 +105,10 @@ class SiteSitemapTests(TestCase):
 			self.assertNotIn(f"/articles/{article.pk}/", body)
 		self.assertNotIn(f"/articles/{self.article_private.pk}/", body)
 		self.assertIn("<lastmod>", body)
+
+	def test_article_owned_by_private_team_excluded_despite_public_subject_tag(self):
+		body = self.client.get(self._section_url(self.site.pk)).content.decode()
+		self.assertNotIn(f"/articles/{self.article_wrong_team.pk}/", body)
 
 	def test_sites_expose_disjoint_slices_except_shared_tags(self):
 		# The anti-competition property: same DB, different subjects →

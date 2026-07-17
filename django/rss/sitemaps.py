@@ -43,10 +43,11 @@ class SiteArticlesSitemap(Sitemap):
 	# and payload small.
 	limit = 10000
 
-	def __init__(self, site, subject_ids, relevant_only):
+	def __init__(self, site, subject_ids, relevant_only, public_org_ids):
 		self._site = site
 		self._subject_ids = subject_ids
 		self._relevant_only = relevant_only
+		self._public_org_ids = public_org_ids
 
 	def get_domain(self, site=None):
 		# The framework passes the *request's* Site (the API host).
@@ -59,7 +60,16 @@ class SiteArticlesSitemap(Sitemap):
 		tagged = Articles.objects.filter(
 			pk=OuterRef("pk"), subjects__in=self._subject_ids
 		)
-		qs = Articles.objects.filter(Exists(tagged))
+		# subject_ids are already restricted to public-org subjects, but an
+		# article can be tagged with a subject from one team while its own
+		# teams M2M points elsewhere — re-check the article's own team
+		# ownership too, matching the visibility pattern RSS feeds use
+		# (teams__organization_id__in), so a private-org article can never
+		# surface just because it shares a subject tag with a public one.
+		publicly_owned = Articles.objects.filter(
+			pk=OuterRef("pk"), teams__organization_id__in=self._public_org_ids
+		)
+		qs = Articles.objects.filter(Exists(tagged), Exists(publicly_owned))
 		if self._relevant_only:
 			manually_relevant = Q(
 				article_subject_relevances__is_relevant=True,
@@ -91,19 +101,22 @@ def _site_sitemaps(site_id):
 	Google "this site has no content".
 	"""
 	site = get_object_or_404(Site, pk=site_id)
-	settings_row = CustomSetting.objects.filter(site=site).first()
+	# CustomSetting.site is a plain FK (not unique) — order explicitly so
+	# the chosen row is deterministic if more than one ever exists for a site.
+	settings_row = CustomSetting.objects.filter(site=site).order_by("setting_id").first()
 	if settings_row is None or not settings_row.generate_sitemap:
 		raise Http404("Sitemap not enabled for this site.")
+	public_org_ids = _public_org_ids()
 	subject_ids = list(
 		settings_row.sitemap_subjects.filter(
-			team__organization_id__in=_public_org_ids()
+			team__organization_id__in=public_org_ids
 		).values_list("id", flat=True)
 	)
 	if not subject_ids:
 		raise Http404("No publicly visible sitemap subjects configured.")
 	return site, {
 		"articles": SiteArticlesSitemap(
-			site, subject_ids, settings_row.sitemap_relevant_only
+			site, subject_ids, settings_row.sitemap_relevant_only, public_org_ids
 		)
 	}
 
