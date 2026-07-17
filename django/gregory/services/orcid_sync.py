@@ -117,7 +117,7 @@ def apply_orcid_record_to_author(author, record, change_reason_suffix=""):
 	activities_summary = record.get("activities-summary", {}) or {}
 	history = record.get("history", {}) or {}
 
-	addresses = person.get("addresses", {}).get("address", [])
+	addresses = (person.get("addresses") or {}).get("address", [])
 	biography_content = (person.get("biography") or {}).get("content")
 	credit_name = ((person.get("name") or {}).get("credit-name") or {}).get("value")
 	emails = _extract_emails(person)

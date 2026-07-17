@@ -86,6 +86,14 @@ class ApplyOrcidRecordToAuthorTest(TestCase):
 			"Updated country from ORCID API. (manual recheck)",
 		)
 
+	def test_null_addresses_section_does_not_raise(self):
+		record = {"person": {"addresses": None}}
+
+		result = apply_orcid_record_to_author(self.author, record)
+
+		self.author.refresh_from_db()
+		self.assertFalse(result.has_address)
+
 	def test_only_first_address_country_is_used(self):
 		record = {
 			"person": {
