@@ -46,13 +46,15 @@ class Command(BaseCommand):
 		# Remove whitespace
 		orcid = orcid.strip()
 
-		# Extract the ORCID ID using regex
+		# Extract the ORCID ID using regex (check digit may be 'x'/'X')
 		# Matches patterns like: 0000-0000-0000-0000
-		orcid_pattern = r"(\d{4}-\d{4}-\d{4}-\d{3}[\dX])"
+		orcid_pattern = r"(\d{4}-\d{4}-\d{4}-\d{3}[\dXx])"
 		match = re.search(orcid_pattern, orcid)
 
 		if match:
-			orcid_id = match.group(1)
+			# Standardize to uppercase so lowercase check digits ("...09x")
+			# canonicalize the same as "...09X"
+			orcid_id = match.group(1).upper()
 			http_variant = f"http://orcid.org/{orcid_id}"
 			https_variant = f"https://orcid.org/{orcid_id}"
 			return orcid_id, http_variant, https_variant
@@ -60,6 +62,19 @@ class Command(BaseCommand):
 			# If no standard ORCID ID found, treat the input as-is
 			# This handles edge cases where the ORCID might be malformed
 			return orcid, orcid, orcid
+
+	def orcid_search_variants(self, orcid_id):
+		"""
+		All URL/bare forms that gregory.functions.normalize_orcid collapses
+		back down to orcid_id: with/without scheme, with/without "www.",
+		and with/without a trailing slash.
+		"""
+		variants = {orcid_id, f"{orcid_id}/"}
+		for scheme in ("http://", "https://", ""):
+			for host in ("orcid.org/", "www.orcid.org/"):
+				variants.add(f"{scheme}{host}{orcid_id}")
+				variants.add(f"{scheme}{host}{orcid_id}/")
+		return variants
 
 	def handle(self, *args, **options):
 		orcid = options["orcid"]
@@ -74,21 +89,14 @@ class Command(BaseCommand):
 		if not orcid.strip():
 			raise CommandError("ORCID cannot be empty.")
 
-		# Normalize the ORCID to find both http and https variants
-		orcid_id, http_variant, https_variant = self.normalize_orcid(orcid)
+		# Normalize the ORCID to a bare canonical ID
+		orcid_id, _, _ = self.normalize_orcid(orcid)
 
 		if not orcid_id:
 			raise CommandError(f"Invalid ORCID format: {orcid}")
 
-		# Find all authors storing this ORCID as a bare ID or as a URL variant
-		orcid_variants = {orcid_id, http_variant, https_variant}
-		if http_variant != orcid_id:
-			orcid_variants.update(
-				{
-					f"http://www.orcid.org/{orcid_id}",
-					f"https://www.orcid.org/{orcid_id}",
-				}
-			)
+		# Find all authors storing this ORCID as a bare ID or as any URL variant
+		orcid_variants = self.orcid_search_variants(orcid_id)
 
 		authors_with_orcid = (
 			Authors.objects.filter(ORCID__in=orcid_variants)

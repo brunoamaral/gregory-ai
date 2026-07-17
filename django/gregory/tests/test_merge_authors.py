@@ -90,6 +90,30 @@ class MergeAuthorsCommandTest(TestCase):
 		self.assertEqual(http_var, "invalid-orcid")
 		self.assertEqual(https_var, "invalid-orcid")
 
+		# Test with a lowercase check digit - should canonicalize to uppercase
+		orcid_id, http_var, https_var = cmd.normalize_orcid("0000-0000-1234-567x")
+		self.assertEqual(orcid_id, "0000-0000-1234-567X")
+		self.assertEqual(http_var, "http://orcid.org/0000-0000-1234-567X")
+		self.assertEqual(https_var, "https://orcid.org/0000-0000-1234-567X")
+
+	def test_orcid_search_variants_covers_common_storage_forms(self):
+		"""Lookups must match legacy trailing-slash and scheme-less storage forms"""
+		from gregory.management.commands.merge_authors import Command
+
+		cmd = Command()
+		orcid_id = "0000-0000-1234-5678"
+		variants = cmd.orcid_search_variants(orcid_id)
+
+		self.assertIn(orcid_id, variants)
+		self.assertIn(f"{orcid_id}/", variants)
+		self.assertIn(f"orcid.org/{orcid_id}", variants)
+		self.assertIn(f"orcid.org/{orcid_id}/", variants)
+		self.assertIn(f"www.orcid.org/{orcid_id}", variants)
+		self.assertIn(f"http://orcid.org/{orcid_id}/", variants)
+		self.assertIn(f"https://orcid.org/{orcid_id}/", variants)
+		self.assertIn(f"http://www.orcid.org/{orcid_id}/", variants)
+		self.assertIn(f"https://www.orcid.org/{orcid_id}/", variants)
+
 	def test_empty_orcid_handling(self):
 		"""Test that command properly handles empty and whitespace-only ORCID"""
 		# Test with whitespace only - this should trigger our "ORCID cannot be empty" check
@@ -217,6 +241,22 @@ class MergeAuthorsOrcidStorageTest(TestCase):
 		author.refresh_from_db()
 		self.assertEqual(author.ORCID, stored)
 		self.assertIn("ORCID would be normalized to", out.getvalue())
+
+	def test_single_author_matches_trailing_slash_and_lowercase_input(self):
+		"""A trailing-slash URL in storage must be found by a lowercase check-digit query"""
+		orcid_id = "0000-0002-1825-009X"
+		author = Authors.objects.create(
+			given_name="Ana",
+			family_name="Silva",
+			ORCID=f"https://orcid.org/{orcid_id}/",
+		)
+
+		out = StringIO()
+		call_command("merge_authors", "0000-0002-1825-009x", stdout=out)
+
+		author.refresh_from_db()
+		self.assertEqual(author.ORCID, orcid_id)
+		self.assertIn("ORCID normalized to", out.getvalue())
 
 	def test_merge_dry_run_makes_no_changes(self):
 		kept = Authors.objects.create(
