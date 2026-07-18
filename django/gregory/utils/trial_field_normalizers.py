@@ -16,10 +16,9 @@ recipe for the next field (study_type, ...).
 
 `countries`/`regions_normalized` are the first fields whose canonical value derives from
 *multiple* raw columns (`countries_by_source`, `countries`, `country_status`,
-`countries_decision_date`) rather than one — see TRIAL-COUNTRY-NORMALIZATION-PLAN.md
-(repo root) and the "countries" section below. NORMALIZED_TRIAL_FIELDS entries accept
-either a single raw field name (str) or a tuple of raw field names for this reason; see
-`raw_field_names`.
+`countries_decision_date`) rather than one — see docs/trials-field-normalization.md,
+"countries" section. NORMALIZED_TRIAL_FIELDS entries accept either a single raw field
+name (str) or a tuple of raw field names for this reason; see `raw_field_names`.
 """
 
 import logging
@@ -295,8 +294,8 @@ class TrialRegion(models.TextChoices):
 # the Caribbean fold into north_america, matching common registry usage). A handful of
 # uninhabited/Antarctic-adjacent codes (AQ, BV, HM, TF, UM) are deliberately absent: they
 # have no meaningful region bucket in this vocabulary and essentially never appear in trial
-# country data. Generated from django_countries.data.COUNTRIES (see
-# docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md) — every other ISO code is covered.
+# country data. Generated from django_countries.data.COUNTRIES — every other ISO code is
+# covered.
 _COUNTRY_TO_REGION: dict[str, str] = {
 	# Africa
 	"AO": TrialRegion.AFRICA, "BF": TrialRegion.AFRICA, "BI": TrialRegion.AFRICA, "BJ": TrialRegion.AFRICA, "BW": TrialRegion.AFRICA, "CD": TrialRegion.AFRICA, "CF": TrialRegion.AFRICA, "CG": TrialRegion.AFRICA, "CI": TrialRegion.AFRICA, "CM": TrialRegion.AFRICA,
@@ -352,9 +351,9 @@ _REGION_TOKENS: dict[str, str] = {
 
 # Exact-match lookup for raw country tokens that don't round-trip through django_countries'
 # own name lookup: old/alternate names, typos, UK subdivisions, and "US"/"USA" abbreviations.
-# Keys are whitespace-collapsed, casefolded, trailing-punctuation-stripped tokens. See
-# docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md for the token-frequency inventory this was seeded
-# from. Extend this table (not the django_countries fallback) for the next unmapped spelling.
+# Keys are whitespace-collapsed, casefolded, trailing-punctuation-stripped tokens. Seeded
+# from a token-frequency inventory of the production `countries` column (2026-07 audit).
+# Extend this table (not the django_countries fallback) for the next unmapped spelling.
 _COUNTRY_EXACT_MATCHES: dict[str, str] = {
 	# United States
 	"united states": "US",
@@ -469,7 +468,7 @@ def _known_token(cleaned: str) -> bool:
 def _tokenize_countries_value(value: str | None) -> list[str]:
 	"""Split one source's raw countries string into individual country/region tokens.
 
-	Order of operations (see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md "Tokenizer"):
+	Order of operations:
 	1. Whole value matches a known country/region on its own -> single token. Protects
 	   comma-containing names stored alone (WHO's "Korea, Republic of").
 	2. Semicolon present -> split on ";" (WHO ICTRP's separator; tolerates a trailing ";").
@@ -571,8 +570,8 @@ def normalize_countries(
 ) -> list | None:
 	"""
 	Compute the canonical per-country rows for a trial from every raw input that can
-	mention a country, as a union (never a last-writer-wins overwrite — see
-	docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md Layer 2):
+	mention a country, as a union (never a last-writer-wins overwrite — these rows become
+	the per-country `TrialCountry` rows; see docs/trials-field-normalization.md):
 
 	1. `countries_decision_date` keys — already ISO alpha-2, validated against the ISO
 	   list; attaches `decision_date`, source `ctis`.
@@ -660,8 +659,8 @@ def normalize_regions(
 	Compute the sorted list of region slugs for a trial from its normalized country codes
 	plus a secondary scan of the raw `countries` text for literal region/continent tokens
 	(WHO ICTRP sometimes tags a trial with a whole continent, e.g. "Europe" or
-	"Asia(except Japan)", instead of, or alongside, specific countries — see
-	docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md Layer 3).
+	"Asia(except Japan)", instead of, or alongside, specific countries). This is the
+	derived `regions_normalized` list — see docs/trials-field-normalization.md.
 
 	Returns None when no region can be determined (mirrors the other normalizers).
 	"""

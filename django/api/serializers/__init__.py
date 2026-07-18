@@ -506,7 +506,7 @@ class ArticleSerializer(
 
 
 class TrialCountrySerializer(serializers.ModelSerializer):
-	"""Normalized per-country row (see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md Layer 2).
+	"""The normalized per-country rows (see docs/trials-field-normalization.md).
 	``country`` is rendered as its ISO 3166-1 alpha-2 code."""
 
 	country = serializers.SerializerMethodField()
@@ -526,7 +526,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 	takeaways = serializers.SerializerMethodField()
 	summary_plain_english = serializers.SerializerMethodField()
 	# Normalized per-country breakdown (country, status, decision_date, sources) — see
-	# docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md. Relies on TrialViewSet.get_queryset()
+	# docs/trials-field-normalization.md. Relies on TrialViewSet.get_queryset()
 	# prefetching "trial_countries" to avoid one query per trial on list responses.
 	trial_countries = TrialCountrySerializer(many=True, read_only=True)
 	countries_normalized = serializers.SerializerMethodField()

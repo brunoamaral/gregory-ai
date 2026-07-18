@@ -966,11 +966,11 @@ class Trials(models.Model):
 		if extra_update_fields:
 			kwargs["update_fields"] = [*update_fields, *extra_update_fields]
 		super().save(*args, **kwargs)
-		# TrialCountry (Layer 2 of the country-normalization design) needs a pk, so this runs
-		# after super().save(). Recomputes the full per-country row set from the raw country
-		# columns and replaces it — see TRIAL-COUNTRY-NORMALIZATION-PLAN.md (repo root).
-		# bulk_update bypasses save() entirely, so the backfill command and the admin recompute
-		# action call sync_trial_countries() explicitly for those paths.
+		# The per-country TrialCountry rows need a pk, so this runs after super().save().
+		# Recomputes the full per-country row set from the raw country columns and replaces
+		# it — see docs/trials-field-normalization.md. bulk_update bypasses save() entirely,
+		# so the backfill command and the admin recompute action call
+		# sync_trial_countries() explicitly for those paths.
 		self.sync_trial_countries()
 
 	def sync_trial_countries(self):
@@ -1120,8 +1120,8 @@ class Trials(models.Model):
 
 
 class TrialCountry(models.Model):
-	"""Normalized per-country row for a trial (Layer 2 of the country-normalization
-	design — see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md). Kept in sync with the raw
+	"""Normalized per-country row for a trial — see docs/trials-field-normalization.md.
+	Kept in sync with the raw
 	`countries`/`countries_by_source`/`country_status`/`countries_decision_date` columns
 	by ``Trials.sync_trial_countries()`` (called from ``Trials.save()``; the backfill
 	command and admin recompute action call it explicitly for bulk_update paths).

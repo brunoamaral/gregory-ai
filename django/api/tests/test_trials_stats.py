@@ -37,11 +37,28 @@ this suite also locks in:
   - the ``recruitment_status_normalized`` and ``phase_normalized`` query params scope the
     totals end-to-end (the filtering itself comes free via ``filter_queryset``)
 
+``/trials/stats/`` also returns four facet breakdowns (``by_phase``, ``by_region``,
+``by_country``, ``by_year``) over the filtered queryset. This suite locks in:
+
+  - by_phase: every ``TrialPhase`` key always present (0 when empty); raw spelling
+    variants of the same phase land in one bucket; a null raw phase lands in
+    ``no_phase``; values (incl. ``no_phase``) sum to ``total``; scoped by filters
+  - by_country: a multi-country trial appears once per country; sorted by
+    ``-count`` then code with zero-count countries omitted; a trial with no
+    ``TrialCountry`` rows surfaces as a trailing ``{"country": None, ...}`` entry;
+    Count(distinct=True) guards the two-team double-count case here too; the
+    ``?country=DE`` self-faceting interaction is pinned with an explanatory comment
+  - by_region: all 6 ``TrialRegion`` keys always present; a multi-region trial is
+    counted once per region; ``no_region`` catches null/empty ``regions_normalized``
+  - by_year: ascending by year, zero-count years omitted, a null
+    ``date_registration`` surfaces as a trailing ``{"year": None, ...}`` entry;
+    values sum to ``total``
+
 Run with:
     docker exec gregory python manage.py test api.tests.test_trials_stats
 """
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.core.cache import cache
 from django.db import connection
@@ -53,7 +70,11 @@ from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
 from gregory.models import OrganizationApiSettings, Subject, Team, Trials
-from gregory.utils.trial_field_normalizers import TrialRecruitmentStatus
+from gregory.utils.trial_field_normalizers import (
+	TrialPhase,
+	TrialRecruitmentStatus,
+	TrialRegion,
+)
 
 
 def _make_org_team(name, slug, public=True):
@@ -69,9 +90,17 @@ def _make_subject(team, name, slug):
 	return Subject.objects.create(team=team, subject_name=name, subject_slug=slug)
 
 
-def _make_trial(title, link, status, teams, subjects=(), phase=None):
+def _make_trial(
+	title, link, status, teams, subjects=(), phase=None, countries=None,
+	date_registration=None,
+):
 	trial = Trials.objects.create(
-		title=title, link=link, recruitment_status=status, phase=phase
+		title=title,
+		link=link,
+		recruitment_status=status,
+		phase=phase,
+		countries=countries,
+		date_registration=date_registration,
 	)
 	for team in teams:
 		trial.teams.add(team)
@@ -485,3 +514,210 @@ class TrialStatsNormalizedFilterScopingTest(TrialStatsBase):
 		# above matches.
 		self.assertEqual(resp.data["total"], 1)
 		self.assertEqual(resp.data["recruiting"], 1)
+
+
+class TrialStatsPhaseFacetTest(TrialStatsBase):
+	"""by_phase: enum shape, spelling-variant grouping, the no_phase bucket, filter scoping."""
+
+	def test_every_phase_key_present_and_no_stray_keys(self):
+		resp = self.client.get("/trials/stats/")
+		self.assertEqual(resp.status_code, 200)
+		by_phase = resp.data["by_phase"]
+		self.assertEqual(set(by_phase.keys()), set(TrialPhase.values) | {"no_phase"})
+		# None of the fixture trials (t1-t4) have a phase set.
+		for value in TrialPhase.values:
+			self.assertEqual(by_phase[value], 0)
+		self.assertEqual(by_phase["no_phase"], 4)
+
+	def test_raw_spelling_variants_land_in_same_bucket(self):
+		_make_trial(
+			"P3a", "https://trial.example.com/p3a", "Recruiting", [self.team],
+			phase="Phase III",
+		)
+		_make_trial(
+			"P3b", "https://trial.example.com/p3b", "Recruiting", [self.team],
+			phase="PHASE3",
+		)
+		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["by_phase"]["phase_3"], 2)
+
+	def test_null_raw_phase_lands_in_no_phase(self):
+		# other_team has only t4, which has no phase set.
+		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["by_phase"]["no_phase"], 1)
+
+	def test_by_phase_values_sum_to_total(self):
+		_make_trial(
+			"P2", "https://trial.example.com/p2", "Recruiting", [self.team],
+			phase="Phase 2",
+		)
+		resp = self.client.get("/trials/stats/")
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(sum(resp.data["by_phase"].values()), resp.data["total"])
+
+	def test_filter_scopes_by_phase(self):
+		_make_trial(
+			"P3", "https://trial.example.com/p3f", "Recruiting", [self.team],
+			phase="Phase 3",
+		)
+		resp = self.client.get(
+			"/trials/stats/", {"recruitment_status_normalized": "recruiting"}
+		)
+		self.assertEqual(resp.status_code, 200)
+		# t1, t2 ("Recruiting", no phase) + the phase-3 trial above = 3 recruiting
+		# trials; only the trial with a phase set lands in phase_3.
+		self.assertEqual(resp.data["by_phase"]["phase_3"], 1)
+		self.assertEqual(resp.data["by_phase"]["no_phase"], 2)
+
+
+class TrialStatsCountryFacetTest(TrialStatsBase):
+	"""by_country: multi-country fan-out, sort/omit rules, the null bucket, dedup, and the
+	accepted ?country= self-faceting interaction."""
+
+	def test_multi_country_trial_appears_in_both_country_entries(self):
+		_make_trial(
+			"DEFR", "https://trial.example.com/defr", "Recruiting", [self.team],
+			countries="Germany, France",
+		)
+		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
+		self.assertEqual(resp.status_code, 200)
+		by_country = {row["country"]: row["count"] for row in resp.data["by_country"]}
+		self.assertEqual(by_country.get("DE"), 1)
+		self.assertEqual(by_country.get("FR"), 1)
+
+	def test_sorted_by_count_desc_then_code_zero_counts_omitted(self):
+		_make_trial(
+			"DE1", "https://trial.example.com/de1", "Recruiting", [self.team],
+			countries="Germany",
+		)
+		_make_trial(
+			"DE2", "https://trial.example.com/de2", "Recruiting", [self.team],
+			countries="Germany",
+		)
+		_make_trial(
+			"FR1", "https://trial.example.com/fr1", "Recruiting", [self.team],
+			countries="France",
+		)
+		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
+		self.assertEqual(resp.status_code, 200)
+		non_null = [
+			(row["country"], row["count"])
+			for row in resp.data["by_country"]
+			if row["country"] is not None
+		]
+		self.assertEqual(non_null[0], ("DE", 2))
+		self.assertIn(("FR", 1), non_null)
+		# No zero-count country entries — every code present has count > 0.
+		self.assertTrue(all(count > 0 for _country, count in non_null))
+
+	def test_trial_with_no_country_data_is_trailing_null_entry(self):
+		# other_team has only t4, which has no country data at all.
+		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
+		self.assertEqual(resp.status_code, 200)
+		by_country = resp.data["by_country"]
+		self.assertEqual(by_country[-1], {"country": None, "count": 1})
+
+	def test_trial_visible_under_two_teams_counted_once_per_country(self):
+		_make_trial(
+			"Shared", "https://trial.example.com/shared-country", "Recruiting",
+			[self.team, self.other_team], countries="Germany",
+		)
+		resp = self.client.get("/trials/stats/")
+		self.assertEqual(resp.status_code, 200)
+		by_country = {
+			row["country"]: row["count"]
+			for row in resp.data["by_country"]
+			if row["country"] is not None
+		}
+		self.assertEqual(by_country.get("DE"), 1)
+
+	def test_country_query_param_self_facets_by_country(self):
+		# Known/accepted interaction (see plan): filter_country's
+		# `.filter(trial_countries__country__iexact="DE")` and _by_country_counts's
+		# `.values("trial_countries__country")` reuse the same JOIN alias, so the
+		# WHERE clause on that alias restricts by_country to just the DE row — a
+		# multi-country trial's other countries do not surface. Pinned here so a
+		# future change to this behavior is a conscious one, not a regression.
+		_make_trial(
+			"DEFR", "https://trial.example.com/defr-self-facet", "Recruiting",
+			[self.team], countries="Germany, France",
+		)
+		resp = self.client.get("/trials/stats/", {"country": "DE"})
+		self.assertEqual(resp.status_code, 200)
+		countries = {row["country"] for row in resp.data["by_country"]}
+		self.assertEqual(countries, {"DE"})
+
+
+class TrialStatsRegionFacetTest(TrialStatsBase):
+	"""by_region: enum shape, multi-region fan-out, and the no_region bucket."""
+
+	def test_all_region_keys_always_present(self):
+		resp = self.client.get("/trials/stats/")
+		self.assertEqual(resp.status_code, 200)
+		by_region = resp.data["by_region"]
+		self.assertEqual(set(by_region.keys()), set(TrialRegion.values) | {"no_region"})
+		# None of t1-t4 have country data, so every region is 0 and all four
+		# trials land in no_region.
+		for value in TrialRegion.values:
+			self.assertEqual(by_region[value], 0)
+		self.assertEqual(by_region["no_region"], 4)
+
+	def test_multi_region_trial_counted_once_per_region(self):
+		_make_trial(
+			"DEUS", "https://trial.example.com/deus", "Recruiting", [self.team],
+			countries="Germany, United States",
+		)
+		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
+		self.assertEqual(resp.status_code, 200)
+		by_region = resp.data["by_region"]
+		self.assertEqual(by_region["europe"], 1)
+		self.assertEqual(by_region["north_america"], 1)
+
+	def test_no_region_counts_null_or_empty_regions(self):
+		# other_team has only t4, whose regions_normalized is null.
+		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["by_region"]["no_region"], 1)
+
+
+class TrialStatsYearFacetTest(TrialStatsBase):
+	"""by_year: ascending order, zero-count omission, the trailing null bucket, and the
+	total-sum invariant."""
+
+	def test_ascending_years_zero_omitted_null_last(self):
+		_make_trial(
+			"Y2019", "https://trial.example.com/y2019", "Recruiting", [self.team],
+			date_registration=date(2019, 3, 1),
+		)
+		_make_trial(
+			"Y2020a", "https://trial.example.com/y2020a", "Recruiting", [self.team],
+			date_registration=date(2020, 6, 1),
+		)
+		_make_trial(
+			"Y2020b", "https://trial.example.com/y2020b", "Recruiting", [self.team],
+			date_registration=date(2020, 9, 1),
+		)
+		resp = self.client.get(
+			"/trials/stats/",
+			{"team_id": self.team.id, "recruitment_status_normalized": "recruiting"},
+		)
+		self.assertEqual(resp.status_code, 200)
+		# t1, t2 (recruiting, no date_registration) contribute to the trailing null
+		# entry alongside the three dated trials above.
+		self.assertEqual(
+			[(row["year"], row["count"]) for row in resp.data["by_year"]],
+			[(2019, 1), (2020, 2), (None, 2)],
+		)
+
+	def test_by_year_sums_to_total(self):
+		_make_trial(
+			"Y2021", "https://trial.example.com/y2021", "Recruiting", [self.team],
+			date_registration=date(2021, 1, 1),
+		)
+		resp = self.client.get("/trials/stats/")
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(
+			sum(row["count"] for row in resp.data["by_year"]), resp.data["total"]
+		)

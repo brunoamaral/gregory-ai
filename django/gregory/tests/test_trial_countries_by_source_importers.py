@@ -1,5 +1,5 @@
 """Importer integration tests for Trials.countries_by_source (Layer 1 of the
-country-normalization design — see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md).
+country-normalization design — see docs/trials-field-normalization.md).
 
 Mirrors the structure of test_trial_links.py: each importer must write ONLY its own
 key ("ctgov" for feedreader_trials_ctgov.py, "ictrp" for importWHOXML.py), never

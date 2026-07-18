@@ -2,7 +2,7 @@
 
 Fixture/org-visibility setup mirrors api/tests/test_trial_phase_normalization.py — a
 public organization is required for the default (anonymous) APIClient to see any trials
-at all. See docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md for the design.
+at all. See docs/trials-field-normalization.md for the design.
 """
 
 from django.test import TestCase
@@ -116,8 +116,7 @@ class TrialCountryAndRegionFilterTests(TestCase):
 
 	def test_trial_countries_query_count_is_bounded_on_list_endpoint(self):
 		"""TrialViewSet.get_queryset() must prefetch trial_countries — otherwise every
-		row in a list response issues its own query (see
-		docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md 'API perf')."""
+		row in a list response issues its own query for its country data."""
 		from django.db import connection
 		from django.test.utils import CaptureQueriesContext
 

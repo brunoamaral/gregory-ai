@@ -154,8 +154,8 @@ ran last. This is now fixed:
 source (ClinicalTrials.gov, WHO ICTRP) writes its own legitimately-different country list
 into the one column, so whichever importer ran last wins, and re-importing the *other*
 source's data can blank or overwrite the previous source's list. Full design:
-`TRIAL-COUNTRY-NORMALIZATION-PLAN.md` (repo root) and `docs/trials-field-normalization.md`
-"Field: countries". Summary of the join rule specifically:
+`docs/trials-field-normalization.md` "Field: countries". Summary of the join rule
+specifically:
 
 - **`Trials.countries_by_source`** (JSONField, migration 0080) stores each source's raw
   countries string keyed by registry slug, e.g. `{"ctgov": "France, United States",
