@@ -57,9 +57,13 @@ from django.db.models import (
 	Value,
 	IntegerField,
 )
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, ExtractYear
 from gregory.classes import SciencePaper, ClinicalTrial
-from gregory.utils.trial_field_normalizers import TrialRecruitmentStatus
+from gregory.utils.trial_field_normalizers import (
+	TrialPhase,
+	TrialRecruitmentStatus,
+	TrialRegion,
+)
 from gregory.models import (
 	Articles,
 	ArticleCategoryAssignment,
@@ -1736,14 +1740,34 @@ class TrialViewSet(
 	null), one key per `TrialRecruitmentStatus` bucket — `not_yet_recruiting`, `recruiting`,
 	`enrolling_by_invitation`, `active_not_recruiting`, `not_recruiting`, `suspended`,
 	`completed`, `terminated`, `withdrawn`, `unknown`, `other` (always present, 0 when
-	empty) — plus a `by_subject` breakdown (`[{subject_id, subject_name, count}]`, distinct
-	per trial, restricted to subjects visible to the caller) computed over the filtered
-	queryset. Buckets are counted on `recruitment_status_normalized`, the same canonical
-	vocabulary as the `recruitment_status_normalized` filter, not on the raw
-	`recruitment_status` string — see docs/trials-field-normalization.md. It accepts the
+	empty) — plus five facet breakdowns computed over the filtered queryset:
+	- `by_subject` — `[{subject_id, subject_name, count}]`, distinct per trial,
+	  restricted to subjects visible to the caller. Sums to `total`.
+	- `by_phase` — `{phase_slug: count, ...}`, one key per `TrialPhase` value
+	  (always present, 0 when empty) plus `no_phase` (raw `phase` was never set).
+	  Sums to `total`.
+	- `by_region` — `{region_slug: count, ...}`, one key per `TrialRegion` value
+	  (always present, 0 when empty) plus `no_region` (`regions_normalized` is
+	  null or empty). Does **not** sum to `total` — a trial spanning several
+	  regions counts once per region.
+	- `by_country` — `[{country: alpha2_or_null, count}]`, sorted by `-count`
+	  then country code, zero-count countries omitted, a trailing
+	  `{"country": null, ...}` entry for trials with no `TrialCountry` rows
+	  (omitted when 0). Does **not** sum to `total` — multi-country trials count
+	  once per country.
+	- `by_year` — `[{year: int_or_null, count}]`, ascending by year, zero-count
+	  years omitted, a trailing `{"year": null, ...}` entry for trials with no
+	  `date_registration` (omitted when 0). Derived from `date_registration`
+	  only (no `published_date` fallback). Sums to `total`.
+
+	Recruitment-status buckets and `by_phase`/`by_region`/`by_country` are counted on the
+	`*_normalized` canonical vocabularies (same as their respective filters), not on the
+	raw registry strings — see docs/trials-field-normalization.md. It accepts the
 	same query parameters as the list endpoint, so e.g.
 	`/trials/stats/?team_id=1&recruitment_status_normalized=recruiting` scopes the totals
-	exactly like the equivalent list request. Results are cached server-side for
+	exactly like the equivalent list request — including composition across facets, e.g.
+	`/trials/stats/?phase_normalized=phase_3` makes `by_country` the phase-3 × country
+	slice of the matrix. Results are cached server-side for
 	STATS_CACHE_TTL seconds (default 600). **Breaking change:** the `stats` block that used
 	to be embedded in every paginated list response has moved here — list responses no
 	longer include it, and clients that relied on `response.data["stats"]` must call
@@ -1894,7 +1918,95 @@ class TrialViewSet(
 		for value in TrialRecruitmentStatus.values:
 			payload[value] = status_counts.get(value, 0)
 		payload["by_subject"] = self._by_subject_counts(filtered_qs)
+		payload["by_phase"] = self._by_phase_counts(filtered_qs)
+		payload["by_region"] = self._by_region_counts(filtered_qs)
+		payload["by_country"] = self._by_country_counts(filtered_qs)
+		payload["by_year"] = self._by_year_counts(filtered_qs)
 		return payload
+
+	# Phase, region, country, and year are trial-intrinsic (not org-owned data like
+	# subjects), so unlike _by_subject_counts these facets need no visible_org_ids
+	# filtering — every trial in filtered_qs is already scoped to what the caller
+	# may see.
+
+	def _by_phase_counts(self, filtered_qs):
+		"""``{phase_slug: count, ..., "no_phase": count}`` over *filtered_qs*."""
+		counts = {
+			row["phase_normalized"]: row["count"]
+			for row in filtered_qs.order_by()
+			.values("phase_normalized")
+			.annotate(count=Count("trial_id", distinct=True))
+		}
+		payload = {value: counts.get(value, 0) for value in TrialPhase.values}
+		payload["no_phase"] = counts.get(None, 0)
+		return payload
+
+	def _by_region_counts(self, filtered_qs):
+		"""``{region_slug: count, ..., "no_region": count}`` over *filtered_qs*.
+
+		``regions_normalized`` is a JSONField array with no clean ORM GROUP BY
+		over array elements, so this runs one containment-filtered count per
+		region (7 indexed queries) rather than a single aggregation — acceptable
+		since the response sits behind the stats cache.
+		"""
+		base = filtered_qs.order_by()
+		payload = {
+			value: base.filter(regions_normalized__contains=[value]).aggregate(
+				count=Count("trial_id", distinct=True)
+			)["count"]
+			for value in TrialRegion.values
+		}
+		payload["no_region"] = base.filter(
+			Q(regions_normalized__isnull=True) | Q(regions_normalized=[])
+		).aggregate(count=Count("trial_id", distinct=True))["count"]
+		return payload
+
+	def _by_country_counts(self, filtered_qs):
+		"""``[{"country": alpha2_or_None, "count": n}, ...]`` over *filtered_qs*,
+		sorted by ``-count`` then country code, zero-count countries omitted, the
+		null (no ``TrialCountry`` rows) entry last when present.
+		"""
+		rows = (
+			filtered_qs.order_by()
+			.values("trial_countries__country")
+			.annotate(count=Count("trial_id", distinct=True))
+			.order_by("-count", "trial_countries__country")
+		)
+		result = []
+		null_entry = None
+		for row in rows:
+			code = row["trial_countries__country"]
+			if code:
+				result.append({"country": code, "count": row["count"]})
+			else:
+				null_entry = {"country": None, "count": row["count"]}
+		if null_entry:
+			result.append(null_entry)
+		return result
+
+	def _by_year_counts(self, filtered_qs):
+		"""``[{"year": int_or_None, "count": n}, ...]`` over *filtered_qs*, from
+		``date_registration`` only (no ``published_date`` fallback), ascending,
+		zero-count years omitted, the null-registration entry last when present.
+		"""
+		rows = (
+			filtered_qs.order_by()
+			.annotate(registration_year=ExtractYear("date_registration"))
+			.values("registration_year")
+			.annotate(count=Count("trial_id", distinct=True))
+			.order_by("registration_year")
+		)
+		result = []
+		null_entry = None
+		for row in rows:
+			year = row["registration_year"]
+			if year is None:
+				null_entry = {"year": None, "count": row["count"]}
+			else:
+				result.append({"year": year, "count": row["count"]})
+		if null_entry:
+			result.append(null_entry)
+		return result
 
 
 ###
