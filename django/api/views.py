@@ -1794,7 +1794,7 @@ class TrialViewSet(
 	- **primary_sponsor** - filter by sponsor organization
 	- **source_register** - filter by source registry
 	- **countries** - raw-text `icontains` filter on the registry's own countries string — free text, so it silently misses spelling/format variants across registries (see **country** below for the normalized equivalent)
-	- **country** - exact match against a normalized country code (ISO 3166-1 alpha-2, e.g. `?country=DE`), derived from every source's raw country data — see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md
+	- **country** - exact match against a normalized country code (ISO 3166-1 alpha-2, e.g. `?country=DE`), derived from every source's raw country data — see docs/trials-field-normalization.md
 	- **region** - exact match against a normalized region derived from the trial's countries; one of: africa, asia, europe, north_america, south_america, oceania (e.g. `?region=europe`)
 
 	# Medical/Research Parameters:
@@ -1848,7 +1848,7 @@ class TrialViewSet(
 		# article_references, trial_countries) so list/CSV-export responses don't issue one
 		# query per trial. trial_countries backs the "trial_countries" and
 		# "countries_normalized" serializer fields — see
-		# docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md.
+		# docs/trials-field-normalization.md.
 		qs = (
 			super()
 			.get_queryset()

@@ -209,9 +209,9 @@ class TrialArticleReferenceInline(admin.TabularInline):
 
 
 class TrialCountryInline(admin.TabularInline):
-	"""Read-only display of the normalized per-country breakdown (Layer 2 of the
-	country-normalization design — see docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md). Rows are
-	managed entirely by Trials.sync_trial_countries(), never edited by hand."""
+	"""Read-only display of the normalized per-country breakdown — see
+	docs/trials-field-normalization.md. Rows are managed entirely by
+	Trials.sync_trial_countries(), never edited by hand."""
 
 	model = TrialCountry
 	extra = 0

@@ -803,7 +803,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	def filter_country(self, queryset, name, value):
 		"""Filter to trials whose normalized country set (TrialCountry) includes *value*
 		(an ISO 3166-1 alpha-2 code, case-insensitive). See
-		docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md."""
+		docs/trials-field-normalization.md."""
 		if not value:
 			return queryset
 		return queryset.filter(trial_countries__country__iexact=value).distinct()

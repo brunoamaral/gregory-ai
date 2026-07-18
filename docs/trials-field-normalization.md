@@ -208,8 +208,7 @@ one-registry-value-to-one-bucket exercise:
 Unlike `phase` and `recruitment_status`, country data is spread across **four** raw columns
 (`countries_by_source`, the legacy `countries`, `country_status`, `countries_decision_date`)
 written by three different sources with three different formats, and the canonical output
-isn't a single scalar — it's a set of per-country rows plus a derived region list. Full audit
-and design rationale: `TRIAL-COUNTRY-NORMALIZATION-PLAN.md` (repo root). Summary:
+isn't a single scalar — it's a set of per-country rows plus a derived region list. Summary:
 
 - **`Trials.countries_by_source`** (JSONField) fixes last-write-wins on the legacy
   `countries` column: each importer writes only its own key (`ctgov`/`ictrp`, reusing

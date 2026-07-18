@@ -5,8 +5,7 @@ admin "Recompute normalized fields" action.
 
 Mirrors the structure of test_trial_phase_normalization.py /
 test_trial_recruitment_status_normalization.py. See
-docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md for the design and
-docs/trials-field-normalization.md for the shared machinery this extends.
+docs/trials-field-normalization.md for the design and the shared machinery this extends.
 """
 
 from io import StringIO

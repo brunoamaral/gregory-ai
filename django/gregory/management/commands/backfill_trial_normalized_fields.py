@@ -24,7 +24,7 @@ Covers every field registered in NORMALIZED_TRIAL_FIELDS by default; pass --fiel
 a run to one or more of them (e.g. while tuning a single field's mapping table). Selector
 names are the derived field name with its "_normalized" suffix dropped: "phase",
 "recruitment_status", "regions" (the countries/TrialCountry layer — see
-docs/TRIAL-COUNTRY-NORMALIZATION-PLAN.md).
+docs/trials-field-normalization.md).
 
 Do NOT run this against a live/production database as part of this change — it is being
 shipped ahead of the one-time prod backfill run, which happens separately once the migration
@@ -180,8 +180,8 @@ class Command(BaseCommand):
 					if len(pending) >= batch_size:
 						flush_pending()
 
-			# TrialCountry rows (Layer 2 of the country-normalization design) live on a
-			# related model, so bulk_update above can't cover them — sync every scanned
+			# The per-country TrialCountry rows live on a related model, so bulk_update
+			# above can't cover them — sync every scanned
 			# trial explicitly whenever the "regions" field is selected, regardless of
 			# whether regions_normalized itself changed (a trial can need fresh
 			# TrialCountry rows on the very first backfill run even when its computed
