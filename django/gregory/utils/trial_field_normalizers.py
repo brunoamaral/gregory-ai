@@ -23,6 +23,7 @@ name (str) or a tuple of raw field names for this reason; see `raw_field_names`.
 
 import logging
 import re
+import unicodedata
 from functools import lru_cache
 
 from django.db import models
@@ -732,3 +733,151 @@ NORMALIZED_TRIAL_FIELDS = (
 		_compute_regions_from_raw,
 	),
 )
+
+
+# --- Sponsor canonicalization ------------------------------------------------------
+#
+# Unlike the fields above, sponsor resolution is NOT registered in NORMALIZED_TRIAL_FIELDS:
+# it requires DB lookups (SponsorAlias -> Sponsor) rather than a pure raw-value mapping, so
+# it follows the sync_trial_countries() precedent instead (see Trials.save() and
+# Trials._resolve_primary_sponsor() in gregory/models.py). Only the two pure helpers below
+# — normalize_sponsor_key and map_sponsor_type — live here.
+
+
+class SponsorType(models.TextChoices):
+	INDUSTRY = "industry", "Industry"
+	ACADEMIC_MEDICAL = "academic_medical", "Academic / medical"
+	GOVERNMENT = "government", "Government"
+	NONPROFIT = "nonprofit", "Non-profit / patient organisation"
+	OTHER = "other", "Other"
+	# null = unknown / no signal, matching the phase_normalized convention
+
+
+def normalize_sponsor_key(raw: str | None) -> str | None:
+	"""
+	Compute the alias lookup key for a raw Trials.primary_sponsor value.
+
+	Deliberately conservative: only merges spellings that cannot belong to different
+	real-world entities (whitespace, case, diacritics, "&"/"and", trailing punctuation).
+	It never strips legal suffixes (Ltd/Inc/GmbH/AG...) — "Novartis Pharma AG" and
+	"Novartis Pharma GmbH" keep distinct keys; grouping them under one canonical Sponsor
+	is an editorial decision that belongs in the seed table / admin merge, never in this
+	function. It also never does substring matching — "University of Rochester" and
+	"Roche" must never collide (see TRIALS-SPONSOR-CANONICALIZATION-PLAN.md merge traps).
+
+	Returns None for missing/blank input.
+	"""
+	if raw is None or not raw.strip():
+		return None
+
+	cleaned = re.sub(r"\s+", " ", raw).strip()
+	cleaned = cleaned.casefold()
+	cleaned = unicodedata.normalize("NFKD", cleaned)
+	cleaned = "".join(ch for ch in cleaned if not unicodedata.combining(ch))
+	cleaned = cleaned.replace("&", " and ")
+	cleaned = re.sub(r"\s+", " ", cleaned).strip()
+	cleaned = cleaned.rstrip(".,;").strip()
+	return cleaned[:500] or None
+
+
+# CTIS sponsorType raw values are sometimes comma-duplicated ("Pharmaceutical company,
+# Pharmaceutical company") — map_sponsor_type takes the first token before any comma.
+_CTIS_SPONSOR_TYPE_MAP: dict[str, str] = {
+	"pharmaceutical company": SponsorType.INDUSTRY,
+	"industry": SponsorType.INDUSTRY,
+	"hospital/clinic/other health care facility": SponsorType.ACADEMIC_MEDICAL,
+	"laboratory/research/testing facility": SponsorType.ACADEMIC_MEDICAL,
+	"educational institution": SponsorType.ACADEMIC_MEDICAL,
+	"patient organisation/association": SponsorType.NONPROFIT,
+}
+
+# CTGov leadSponsor.class -> SponsorType, for the values that map to something. INDIV,
+# NETWORK, OTHER, AMBIG, UNKNOWN (and missing) fall through to the next priority tier —
+# see map_sponsor_type.
+_CTGOV_CLASS_MAP: dict[str, str] = {
+	"INDUSTRY": SponsorType.INDUSTRY,
+	"NIH": SponsorType.GOVERNMENT,
+	"FED": SponsorType.GOVERNMENT,
+	"OTHER_GOV": SponsorType.GOVERNMENT,
+}
+
+# Keyword rules on the sponsor display name, applied in this fixed order — academic/medical
+# first (so an NHS Foundation Trust or a teaching hospital never falls through to the noisy
+# "trust"/"foundation" nonprofit bucket), industry last (its patterns are the noisiest —
+# generic legal-entity suffixes like "AG"/"Inc"/"Ltd" — so it only wins when nothing more
+# specific matched). Word-boundary regexes, matched case-insensitively against the
+# whitespace-collapsed name.
+_ACADEMIC_MEDICAL_RE = re.compile(
+	r"\b(universit(?:y|e|é|aire|ario|ätsklinikum)|hospital|clinic(?:al)?|klinikum|"
+	r"krankenhaus|polyclinic|medical (?:center|centre|school)|school of medicine|"
+	r"college|nhs|teaching hospital|health system|faculty of medicine|academic)\b",
+	re.IGNORECASE,
+)
+_GOVERNMENT_RE = re.compile(
+	r"\b(ministry|national institutes?|\bnih\b|centers? for disease control|"
+	r"\bcdc\b|federal|government|public health (?:agency|authority|service|england)|"
+	r"food and drug administration|\bfda\b|health canada|department of health|"
+	r"national health service|institut national)\b",
+	re.IGNORECASE,
+)
+_NONPROFIT_RE = re.compile(
+	r"\b(foundation|society|association|trust|stiftung|charity|charitable|"
+	r"patients? organi[sz]ation|alliance|coalition)\b",
+	re.IGNORECASE,
+)
+_INDUSTRY_RE = re.compile(
+	r"\b(pharma(?:ceutical)?s?|biotech(?:nology)?|therapeutics|biosciences|"
+	r"laborator(?:y|ies)|inc\.?|corp(?:oration)?\.?|ltd\.?|llc|gmbh|s\.?a\.?|"
+	r"s\.?p\.?a\.?|ag|co\.,? ltd|pvt\.? ltd)\b",
+	re.IGNORECASE,
+)
+
+
+def _sponsor_type_from_name(name: str | None) -> str | None:
+	"""Keyword classifier over the sponsor display name — the last-resort tier of
+	map_sponsor_type. Applies the four buckets above in fixed order; returns the first
+	match, or None when nothing matches."""
+	if not name:
+		return None
+	if _ACADEMIC_MEDICAL_RE.search(name):
+		return SponsorType.ACADEMIC_MEDICAL
+	if _GOVERNMENT_RE.search(name):
+		return SponsorType.GOVERNMENT
+	if _NONPROFIT_RE.search(name):
+		return SponsorType.NONPROFIT
+	if _INDUSTRY_RE.search(name):
+		return SponsorType.INDUSTRY
+	return None
+
+
+def map_sponsor_type(
+	ctgov_class: str | None, ctis_raw: str | None, name: str | None
+) -> tuple[str | None, str | None]:
+	"""
+	Derive a (sponsor_type, source) pair from every signal available for a sponsor,
+	applying this priority ladder (first non-None wins):
+
+	1. CTGov ``leadSponsor.class`` (source "ctgov") — authoritative for the largest
+	   source. INDIV/NETWORK/OTHER/AMBIG/UNKNOWN/missing fall through to tier 2.
+	2. EU CTIS raw ``sponsor_type`` (source "ctis") — first token before any comma
+	   (the raw column is sometimes comma-duplicated).
+	3. Keyword rules on the sponsor name (source "rules") — see _sponsor_type_from_name.
+
+	Returns (None, None) when no tier produces a match. Never raises.
+	"""
+	if ctgov_class:
+		mapped = _CTGOV_CLASS_MAP.get(ctgov_class.strip().upper())
+		if mapped:
+			return mapped, "ctgov"
+
+	if ctis_raw:
+		first_token = ctis_raw.split(",")[0].strip().casefold()
+		mapped = _CTIS_SPONSOR_TYPE_MAP.get(first_token)
+		if mapped:
+			return mapped, "ctis"
+
+	rule_match = _sponsor_type_from_name(name)
+	if rule_match:
+		return rule_match, "rules"
+
+	return None, None

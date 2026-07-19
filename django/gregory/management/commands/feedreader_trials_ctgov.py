@@ -409,6 +409,7 @@ class Command(GregoryBaseCommand):
 				scientific_title=extras.get("scientific_title"),
 				acronym=extras.get("acronym"),
 				primary_sponsor=extras.get("primary_sponsor"),
+				lead_sponsor_class=extras.get("lead_sponsor_class"),
 				recruitment_status=extras.get("recruitment_status"),
 				date_registration=extras.get("date_registration"),
 				study_type=extras.get("study_type"),
@@ -543,6 +544,7 @@ class Command(GregoryBaseCommand):
 		extra_field_mapping = [
 			"scientific_title",
 			"primary_sponsor",
+			"lead_sponsor_class",
 			"recruitment_status",
 			"date_registration",
 			"study_type",
