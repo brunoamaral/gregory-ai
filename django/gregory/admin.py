@@ -42,6 +42,8 @@ from .models import (
 	ArticleCategoryAssignment,
 	TrialCategoryAssignment,
 	CategoryType,
+	Sponsor,
+	SponsorAlias,
 	default_match_weights,
 )
 from .widgets import MLPredictionsWidget
@@ -224,6 +226,19 @@ class TrialCountryInline(admin.TabularInline):
 
 	def has_add_permission(self, request, obj=None):
 		return False  # Managed by Trials.sync_trial_countries(), not manual entry
+
+
+class SponsorAliasInline(admin.TabularInline):
+	"""Raw spelling variants resolving to this Sponsor. `key` is the normalized lookup
+	value (gregory.utils.trial_field_normalizers.normalize_sponsor_key) and is readonly
+	here — edit `raw_sample` freely, but adding a new variant means adding a new alias
+	row with its own key, not editing an existing one (the key is what the unique index
+	and Trials._resolve_primary_sponsor() actually key off)."""
+
+	model = SponsorAlias
+	extra = 0
+	fields = ["key", "raw_sample"]
+	readonly_fields = ["key"]
 
 
 class RelevanceRadioWidget(forms.RadioSelect):
@@ -806,6 +821,23 @@ class ArticleAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistory
 		}
 
 
+class SponsorAdmin(admin.ModelAdmin):
+	list_display = ["name", "sponsor_type", "sponsor_type_source", "trial_count"]
+	list_filter = ["sponsor_type", "sponsor_type_source"]
+	search_fields = ["name", "aliases__raw_sample"]
+	readonly_fields = ["slug"]
+	inlines = [SponsorAliasInline]
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).annotate(trial_count=models.Count("trials"))
+
+	def trial_count(self, obj):
+		return obj.trial_count
+
+	trial_count.admin_order_field = "trial_count"
+	trial_count.short_description = "Trials"
+
+
 class TrialAdminForm(forms.ModelForm):
 	"""Adds plain-language labels and help text for fields that use clinical-trial jargon."""
 
@@ -978,6 +1010,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		"recruitment_status_normalized",
 		"countries_by_source",
 		"regions_normalized",
+		"primary_sponsor_normalized",
 	]
 	inlines = [
 		TrialOrgContentInline,
@@ -1092,9 +1125,11 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 			{
 				"fields": (
 					"primary_sponsor",
+					"primary_sponsor_normalized",
 					"secondary_sponsor",
 					"source_support",
 					"sponsor_type",
+					"lead_sponsor_class",
 					"contact_firstname",
 					"contact_lastname",
 					"contact_address",
@@ -1189,9 +1224,16 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		gregory/utils/trial_field_normalizers.py for the raw values you see, then select-all
 		and run this to re-derive every registered normalized field (see
 		NORMALIZED_TRIAL_FIELDS) without waiting for the next save(). Also rebuilds each
-		selected trial's TrialCountry rows (bulk_update below bypasses Trials.save(), which
-		is what normally triggers that sync — see Trials.sync_trial_countries())."""
-		select_fields = ["trial_id"]
+		selected trial's TrialCountry rows and re-resolves primary_sponsor_normalized
+		(bulk_update below bypasses Trials.save(), which is what normally triggers both —
+		see Trials.sync_trial_countries() / Trials._resolve_primary_sponsor())."""
+		select_fields = [
+			"trial_id",
+			"primary_sponsor",
+			"primary_sponsor_normalized_id",
+			"lead_sponsor_class",
+			"sponsor_type",
+		]
 		for raw_fields, derived_field, _normalizer in NORMALIZED_TRIAL_FIELDS:
 			select_fields += [*raw_field_names(raw_fields), derived_field]
 
@@ -1202,8 +1244,13 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 				setattr(
 					trial, derived_field, normalizer(*(getattr(trial, name) for name in names))
 				)
+			# Sponsor resolution can create a Sponsor/SponsorAlias as a side effect (first
+			# sight of a new key) — that write happens here, immediately; only the FK
+			# assignment on `trial` itself is deferred to the bulk_update below.
+			trial._resolve_primary_sponsor()
 
 		derived_fields = [derived_field for _, derived_field, _ in NORMALIZED_TRIAL_FIELDS]
+		derived_fields.append("primary_sponsor_normalized")
 		# batch_size keeps a "select all" over the whole table under Postgres's bind-parameter
 		# limit — without it bulk_update builds one UPDATE with a CASE per row per field.
 		Trials.objects.bulk_update(trials, derived_fields, batch_size=1000)
@@ -3118,6 +3165,7 @@ admin.site.register(Authors, AuthorsAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)
+admin.site.register(Sponsor, SponsorAdmin)
 
 
 class _BaseOrgContentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):

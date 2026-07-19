@@ -484,6 +484,32 @@ class ClinicalTrialsGovAPI:
 		)
 		return ", ".join(countries) if countries else None
 
+	@staticmethod
+	def extract_sponsor_fields(study_data: dict) -> dict:
+		"""Extract primary_sponsor / lead_sponsor_class / secondary_sponsor from a CTGov
+		study's ``sponsorCollaboratorsModule``.
+
+		Shared between ``parse_study_to_clinical_trial`` and the
+		``backfill_trial_sponsors_from_ctgov`` management command — same rationale as
+		``extract_countries`` above — so the two can never disagree on how a sponsor is
+		read out of the raw API response.
+		"""
+		sponsor_module = study_data.get("protocolSection", {}).get(
+			"sponsorCollaboratorsModule", {}
+		)
+		lead_sponsor = sponsor_module.get("leadSponsor", {})
+		collaborators = [
+			collab["name"]
+			for collab in sponsor_module.get("collaborators", [])
+			if collab.get("name")
+		]
+		clean_collabs = [name.strip() for name in collaborators if name.strip()]
+		return {
+			"primary_sponsor": lead_sponsor.get("name"),
+			"lead_sponsor_class": lead_sponsor.get("class"),
+			"secondary_sponsor": "; ".join(clean_collabs) if clean_collabs else None,
+		}
+
 	def search_all(self, max_results: int = None, **search_kwargs):
 		"""
 		Search and iterate through all pages of results.
@@ -625,15 +651,12 @@ class ClinicalTrialsGovAPI:
 			time_frame = outcome.get("timeFrame", "")
 			secondary_outcomes.append(f"{measure}: {description_text} ({time_frame})")
 
-		# Extract sponsor information
-		lead_sponsor = sponsor_module.get("leadSponsor", {})
-		primary_sponsor = lead_sponsor.get("name")
-
-		# Extract collaborators
-		collaborators = []
-		for collab in sponsor_module.get("collaborators", []):
-			if collab.get("name"):
-				collaborators.append(collab["name"])
+		# Extract sponsor information (shared with backfill_trial_sponsors_from_ctgov —
+		# see extract_sponsor_fields)
+		sponsor_fields = self.extract_sponsor_fields(study_data)
+		primary_sponsor = sponsor_fields["primary_sponsor"]
+		lead_sponsor_class = sponsor_fields["lead_sponsor_class"]
+		secondary_sponsor = sponsor_fields["secondary_sponsor"]
 
 		# Extract intervention information
 		arms_module = protocol.get("armsInterventionsModule", {})
@@ -701,10 +724,6 @@ class ClinicalTrialsGovAPI:
 		_ipd_desc = (ipd_module.get("description") or "").strip()
 		results_ipd_description = _ipd_desc or None
 
-		# secondary_sponsor — collaborators are already collected above
-		_clean_collabs = [c.strip() for c in collaborators if c.strip()]
-		secondary_sponsor = "; ".join(_clean_collabs) if _clean_collabs else None
-
 		# last_refreshed_on
 		last_refreshed_on = self._parse_date(
 			status_module.get("lastUpdatePostDateStruct", {}).get("date")
@@ -743,6 +762,7 @@ class ClinicalTrialsGovAPI:
 			if secondary_outcomes
 			else None,
 			"primary_sponsor": primary_sponsor,
+			"lead_sponsor_class": lead_sponsor_class,
 			"inclusion_agemin": min_age,
 			"inclusion_agemax": max_age,
 			"inclusion_gender": gender,

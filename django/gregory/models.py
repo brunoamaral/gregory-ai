@@ -1,11 +1,12 @@
 import datetime
+import re
 
 from cryptography.fernet import Fernet
 from django_countries.fields import CountryField
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex, OpClass
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.db.models import GeneratedField, Max, OuterRef, Q, Subquery
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Upper
@@ -17,11 +18,19 @@ import base64
 from django.db.models.functions import Lower
 from gregory.utils.trial_field_normalizers import (
 	NORMALIZED_TRIAL_FIELDS,
+	SponsorType,
 	TrialPhase,
 	TrialRecruitmentStatus,
-	raw_field_names,
+	map_sponsor_type,
 	normalize_countries,
+	normalize_sponsor_key,
+	raw_field_names,
 )
+
+# (curated > ctgov > ctis > rules) — see Trials._update_sponsor_type_from_trial() and
+# TRIALS-SPONSOR-CANONICALIZATION-PLAN.md. A non-curated sponsor_type is only overwritten
+# by a source of equal or higher priority; "curated" is never overwritten automatically.
+_SPONSOR_TYPE_SOURCE_PRIORITY = {"curated": 3, "ctgov": 2, "ctis": 1, "rules": 0}
 
 
 class Authors(models.Model):
@@ -798,6 +807,107 @@ class Articles(models.Model):
 		ordering = ["-discovery_date"]
 
 
+class Sponsor(models.Model):
+	"""Canonical trial sponsor entity — see TRIALS-SPONSOR-CANONICALIZATION-PLAN.md.
+	Resolved from the raw ``Trials.primary_sponsor`` string via SponsorAlias; never set
+	directly on a trial by an importer."""
+
+	name = models.CharField(max_length=500, unique=True)
+	slug = models.SlugField(max_length=200, unique=True)
+	sponsor_type = models.CharField(
+		max_length=20, null=True, blank=True,
+		choices=SponsorType.choices, db_index=True,
+	)
+	# Where sponsor_type came from: "curated" (set via sync_sponsor_seeds/admin, never
+	# overwritten automatically), "ctgov" (leadSponsor.class), "ctis" (raw sponsor_type),
+	# "rules" (keyword classifier on the name). See _SPONSOR_TYPE_SOURCE_PRIORITY above.
+	sponsor_type_source = models.CharField(max_length=10, null=True, blank=True)
+	# EMA OMS organisation id ("ORG-100001445"), available for CTIS trials via the public
+	# API's retrieve endpoint. Nullable, filled opportunistically; a future enrichment
+	# pass can anchor/merge sponsors by it. Not populated by this PR.
+	oms_id = models.CharField(max_length=20, null=True, blank=True, unique=True)
+
+	def __str__(self):
+		return self.name
+
+	class Meta:
+		ordering = ["name"]
+
+
+class SponsorAlias(models.Model):
+	"""One raw spelling variant that resolves to a canonical Sponsor. ``key`` (the
+	normalize_sponsor_key() output) is the only lookup index sponsor resolution needs —
+	see Trials._resolve_primary_sponsor()."""
+
+	sponsor = models.ForeignKey(Sponsor, related_name="aliases", on_delete=models.CASCADE)
+	key = models.CharField(max_length=500, unique=True)
+	raw_sample = models.TextField()
+
+	def __str__(self):
+		return self.raw_sample
+
+
+def _unique_sponsor_slug(name: str) -> str:
+	"""slugify(name), truncated to 190 chars, with a numeric suffix appended on
+	collision (-2, -3, ...). Slug is for URLs/filters only; never parsed back."""
+	base = slugify(name)[:190] or "sponsor"
+	slug = base
+	n = 2
+	while Sponsor.objects.filter(slug=slug).exists():
+		suffix = f"-{n}"
+		slug = f"{base[: 190 - len(suffix)]}{suffix}"
+		n += 1
+	return slug
+
+
+def _create_sponsor_for_key(key: str, display: str) -> "SponsorAlias":
+	"""First-sight creation of a Sponsor + its SponsorAlias for *key*, used by
+	Trials._resolve_primary_sponsor(). Handles two rare races: (a) a concurrent process
+	won the same alias key first — re-fetch and reuse its sponsor; (b) *display* collides
+	with an existing Sponsor.name under a different key (e.g. two source strings that
+	normalize differently but happen to render identically after whitespace collapse) —
+	suffix the name/slug deterministically and retry once."""
+	try:
+		with transaction.atomic():
+			sponsor = Sponsor.objects.create(name=display, slug=_unique_sponsor_slug(display))
+			return SponsorAlias.objects.create(sponsor=sponsor, key=key, raw_sample=display)
+	except IntegrityError:
+		existing_alias = SponsorAlias.objects.select_related("sponsor").filter(key=key).first()
+		if existing_alias is not None:
+			return existing_alias
+		suffixed_name = f"{display} ({key[:40]})"[:500]
+		with transaction.atomic():
+			sponsor = Sponsor.objects.create(
+				name=suffixed_name, slug=_unique_sponsor_slug(suffixed_name)
+			)
+			return SponsorAlias.objects.create(sponsor=sponsor, key=key, raw_sample=display)
+
+
+def _update_sponsor_type_from_trial(sponsor: "Sponsor", trial: "Trials") -> None:
+	"""Derive sponsor_type from this trial's own signals (lead_sponsor_class -> raw
+	sponsor_type -> name keyword rules, see map_sponsor_type) and apply it to *sponsor*
+	only when sponsor_type_source is not "curated" and the new source's priority is
+	equal to or higher than the sponsor's current source. Called on sponsor creation and
+	whenever a trial's sponsor resolution changes — never on the save() happy path where
+	the trial already resolves to the same sponsor (see Trials._resolve_primary_sponsor)."""
+	if sponsor.sponsor_type_source == "curated":
+		return
+	new_type, new_source = map_sponsor_type(
+		trial.lead_sponsor_class, trial.sponsor_type, sponsor.name
+	)
+	if new_type is None:
+		return
+	current_priority = _SPONSOR_TYPE_SOURCE_PRIORITY.get(sponsor.sponsor_type_source, -1)
+	new_priority = _SPONSOR_TYPE_SOURCE_PRIORITY.get(new_source, -1)
+	if new_priority < current_priority:
+		return
+	if sponsor.sponsor_type == new_type and sponsor.sponsor_type_source == new_source:
+		return
+	sponsor.sponsor_type = new_type
+	sponsor.sponsor_type_source = new_source
+	sponsor.save(update_fields=["sponsor_type", "sponsor_type_source"])
+
+
 class Trials(models.Model):
 	trial_id = models.AutoField(primary_key=True)
 	discovery_date = models.DateTimeField(blank=True, null=True)
@@ -953,6 +1063,44 @@ class Trials(models.Model):
 		blank=True,
 		help_text="Detailed description from ClinicalTrials.gov API",
 	)
+	# Verbatim protocolSection.sponsorCollaboratorsModule.leadSponsor.class value from the
+	# ClinicalTrials.gov API (INDUSTRY, NIH, FED, OTHER_GOV, INDIV, NETWORK, AMBIG, OTHER,
+	# UNKNOWN) — same source-fidelity rule as every other raw column. Feeds sponsor_type
+	# derivation via gregory.utils.trial_field_normalizers.map_sponsor_type.
+	lead_sponsor_class = models.CharField(max_length=20, null=True, blank=True)
+
+	# Canonical sponsor entity resolved from the raw `primary_sponsor` value via
+	# SponsorAlias — recomputed on every save() below, see _resolve_primary_sponsor().
+	# Never set this directly. PROTECT: sponsors are only deleted via the merge_sponsors
+	# command, which repoints trials first.
+	primary_sponsor_normalized = models.ForeignKey(
+		"Sponsor", null=True, blank=True, on_delete=models.PROTECT,
+		related_name="trials", editable=False,
+		help_text="Canonical sponsor entity resolved from the raw 'primary_sponsor' value; recomputed on every save.",
+	)
+
+	def _resolve_primary_sponsor(self):
+		"""Resolve primary_sponsor_normalized from the raw `primary_sponsor` string,
+		auto-creating a new Sponsor + SponsorAlias on first sight of a key. Mirrors
+		sync_trial_countries(), but must run before super().save() since it sets a
+		local FK field rather than syncing a related model. See
+		TRIALS-SPONSOR-CANONICALIZATION-PLAN.md PR 1 §3."""
+		key = normalize_sponsor_key(self.primary_sponsor)
+		if key is None:
+			self.primary_sponsor_normalized = None
+			return
+
+		current = self.primary_sponsor_normalized
+		if current is not None and current.aliases.filter(key=key).exists():
+			return  # already resolved to the right entity — skip writes
+
+		alias = SponsorAlias.objects.select_related("sponsor").filter(key=key).first()
+		if alias is None:
+			display = re.sub(r"\s+", " ", self.primary_sponsor).strip()[:500]
+			alias = _create_sponsor_for_key(key, display)
+
+		self.primary_sponsor_normalized = alias.sponsor
+		_update_sponsor_type_from_trial(alias.sponsor, self)
 
 	def save(self, *args, **kwargs):
 		# Keep every derived field in lockstep with its raw counterpart(s) on every write path
@@ -974,6 +1122,18 @@ class Trials(models.Model):
 				and derived_field not in update_fields
 			):
 				extra_update_fields.append(derived_field)
+
+		# Sponsor resolution is not in NORMALIZED_TRIAL_FIELDS (it needs DB lookups, not a
+		# pure raw->derived mapping) but follows the same update_fields-scoping rule: always
+		# recompute in memory, only widen a scoped update when its raw field was in scope.
+		self._resolve_primary_sponsor()
+		if (
+			update_fields is not None
+			and "primary_sponsor" in update_fields
+			and "primary_sponsor_normalized" not in update_fields
+		):
+			extra_update_fields.append("primary_sponsor_normalized")
+
 		if extra_update_fields:
 			kwargs["update_fields"] = [*update_fields, *extra_update_fields]
 		super().save(*args, **kwargs)
