@@ -95,6 +95,51 @@ class NormalizeSponsorKeyTests(TestCase):
 		long_name = "A" * 600
 		self.assertEqual(len(normalize_sponsor_key(long_name)), 500)
 
+	# --- PR D1: full punctuation stripping, safety cases from live duplicate data ------
+
+	def test_1st_biotherapeutics_punctuation_variants_merge(self):
+		self.assertEqual(
+			normalize_sponsor_key("1st Biotherapeutics Inc."),
+			normalize_sponsor_key("1ST Biotherapeutics, Inc."),
+		)
+
+	def test_bristol_myers_squibb_hyphen_variant_merges(self):
+		self.assertEqual(
+			normalize_sponsor_key("Bristol-Myers Squibb"),
+			normalize_sponsor_key("Bristol Myers Squibb"),
+		)
+
+	def test_genentech_comma_period_variants_merge(self):
+		self.assertEqual(
+			normalize_sponsor_key("Genentech, Inc"), normalize_sponsor_key("Genentech Inc.")
+		)
+
+	def test_university_college_comma_variant_merges(self):
+		self.assertEqual(
+			normalize_sponsor_key("University College, London"),
+			normalize_sponsor_key("University College London"),
+		)
+
+	def test_abbvie_parenthetical_does_not_collapse_to_bare_abbvie(self):
+		# Parentheses are stripped but the extra tokens inside remain — no collapse to
+		# the bare-name key.
+		self.assertNotEqual(
+			normalize_sponsor_key("AbbVie (prior sponsor, Abbott)"),
+			normalize_sponsor_key("AbbVie"),
+		)
+
+	def test_aalborg_university_does_not_collide_with_aalborg_university_hospital(self):
+		self.assertNotEqual(
+			normalize_sponsor_key("Aalborg University"),
+			normalize_sponsor_key("Aalborg University Hospital"),
+		)
+
+	def test_merck_kgaa_does_not_collide_with_merck_sharp_and_dohme(self):
+		self.assertNotEqual(
+			normalize_sponsor_key("Merck Sharp & Dohme LLC"),
+			normalize_sponsor_key("Merck KGaA"),
+		)
+
 
 # --- map_sponsor_type -------------------------------------------------------------------
 

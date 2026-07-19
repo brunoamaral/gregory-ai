@@ -18,6 +18,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from gregory.models import Sponsor, SponsorAlias, _unique_sponsor_slug
+from gregory.utils.sponsor_merge import merge_sponsors
 from gregory.utils.sponsor_seeds import SPONSOR_SEEDS
 from gregory.utils.trial_field_normalizers import normalize_sponsor_key
 
@@ -110,13 +111,8 @@ class Command(BaseCommand):
 					if dry_run:
 						trials_repointed += stray_sponsor.trials.count()
 					else:
-						trials_repointed += stray_sponsor.trials.update(
-							primary_sponsor_normalized=sponsor
-						)
-						SponsorAlias.objects.filter(sponsor=stray_sponsor).update(
-							sponsor=sponsor
-						)
-						stray_sponsor.delete()
+						trials_repointed_this, _ = merge_sponsors(sponsor, [stray_sponsor])
+						trials_repointed += trials_repointed_this
 					sponsors_folded += 1
 
 				if dry_run:

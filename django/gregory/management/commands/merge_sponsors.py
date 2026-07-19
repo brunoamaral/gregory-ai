@@ -13,9 +13,9 @@ Usage:
 """
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 
-from gregory.models import Sponsor, SponsorAlias
+from gregory.models import Sponsor
+from gregory.utils.sponsor_merge import merge_sponsors
 
 
 class Command(BaseCommand):
@@ -91,22 +91,7 @@ class Command(BaseCommand):
 				self.stdout.write(self.style.WARNING("Merge cancelled."))
 				return
 
-		total_trials = 0
-		total_aliases = 0
-		with transaction.atomic():
-			target_changed = False
-			for source in sources:
-				total_trials += source.trials.update(primary_sponsor_normalized=target)
-				total_aliases += SponsorAlias.objects.filter(sponsor=source).update(
-					sponsor=target
-				)
-				if not target.sponsor_type and source.sponsor_type:
-					target.sponsor_type = source.sponsor_type
-					target.sponsor_type_source = source.sponsor_type_source
-					target_changed = True
-				source.delete()
-			if target_changed:
-				target.save(update_fields=["sponsor_type", "sponsor_type_source"])
+		total_trials, total_aliases = merge_sponsors(target, sources)
 
 		self.stdout.write(
 			self.style.SUCCESS(
