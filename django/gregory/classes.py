@@ -935,3 +935,340 @@ class EUTrialParser:
 			"target_size": target_size,
 			"last_refreshed_on": last_refreshed_on,
 		}
+
+
+class CTISPublicAPIError(Exception):
+	"""Raised when the CTIS public API returns a response we can't parse: non-JSON
+	body, or valid JSON missing the expected 'data' envelope key. Callers (the
+	feedreader command) catch this per-source, log it, and skip the source rather
+	than aborting the whole run."""
+
+
+class CTISPublicAPI:
+	"""
+	Client for the undocumented CTIS public search API (euclinicaltrials.eu).
+
+	No official spec is published by EMA; this was reverse-engineered from the network
+	calls the public search portal (https://euclinicaltrials.eu/ctis-public/search)
+	makes in a browser. See docs/ctis-public-api-schema.md for the full observed
+	request/response contract, verified live 2026-07-18. If the API drifts, re-derive
+	the contract from the portal's network calls.
+
+	Usage:
+		api = CTISPublicAPI()
+		for record in api.iter_search({"medicalCondition": "Multiple Sclerosis"}):
+			clinical_trial = api.parse_ctis_search_record(record)
+	"""
+
+	BASE_URL = "https://euclinicaltrials.eu/ctis-public-api"
+	SOURCE_REGISTER = "EU CTIS"
+
+	def __init__(self):
+		import requests
+
+		self.session = requests.Session()
+		self.timeout = 30
+
+	def search(
+		self,
+		criteria: dict,
+		page: int = 1,
+		size: int = 50,
+		sort_property: str = "lastPublicationUpdate",
+		direction: str = "DESC",
+	) -> dict:
+		"""POST one page of /ctis-public-api/search.
+
+		Returns the parsed JSON envelope: {"pagination": {...}, "data": [...]}.
+		Raises CTISPublicAPIError if the response isn't JSON or is missing the
+		'data' key; raises requests' own exceptions on transport/HTTP failures.
+		"""
+		import requests
+
+		payload = {
+			"searchCriteria": criteria or {},
+			"pagination": {"page": page, "size": size},
+			"sort": {"property": sort_property, "direction": direction},
+		}
+		url = f"{self.BASE_URL}/search"
+		try:
+			response = self.session.post(url, json=payload, timeout=self.timeout)
+			response.raise_for_status()
+		except requests.exceptions.HTTPError as e:
+			logging.error(f"HTTP Error: {e}")
+			raise
+		except requests.exceptions.RequestException as e:
+			logging.error(f"Request Error: {e}")
+			raise
+
+		try:
+			result = response.json()
+		except ValueError as e:
+			raise CTISPublicAPIError(f"Non-JSON response from CTIS search: {e}") from e
+
+		if not isinstance(result, dict) or "data" not in result:
+			raise CTISPublicAPIError(
+				f"Unexpected CTIS search response shape (missing 'data' key): {str(result)[:200]!r}"
+			)
+
+		return result
+
+	def iter_search(self, criteria: dict, since=None, size: int = 50, sleep: float = 0.5):
+		"""Iterate every record across all pages of /search for *criteria*.
+
+		Pages are fetched sorted by lastPublicationUpdate DESC (the default), so the
+		newest updates come first. In incremental mode (*since* is a date), paging
+		continues until an entire page is stale on BOTH lastUpdated and
+		lastPublicationUpdate — the observed sort is not strictly monotonic (see
+		docs/ctis-public-api-schema.md), so a single stale record within a page must
+		never stop the walk early; only a wholly-stale page does.
+		"""
+		import time
+		from dateutil.parser import parse as parse_date
+
+		page = 1
+		while True:
+			result = self.search(criteria, page=page, size=size)
+			records = result.get("data") or []
+			if not records:
+				return
+
+			page_is_stale = since is not None
+			for record in records:
+				if since is not None:
+					record_is_stale = True
+					for date_field in ("lastUpdated", "lastPublicationUpdate"):
+						raw = record.get(date_field)
+						if not raw:
+							continue
+						try:
+							parsed = parse_date(raw, dayfirst=True).date()
+						except (ValueError, TypeError):
+							continue
+						if parsed >= since:
+							record_is_stale = False
+							break
+					if not record_is_stale:
+						page_is_stale = False
+				yield record
+
+			if page_is_stale:
+				return
+
+			pagination = result.get("pagination") or {}
+			if not pagination.get("nextPage"):
+				return
+			page += 1
+			if sleep:
+				time.sleep(sleep)
+
+	def parse_ctis_search_record(self, record: dict) -> "ClinicalTrial":
+		"""Map one CTIS /search API record into a ClinicalTrial.
+
+		Writes the SAME raw field values/formats EUTrialParser.parse_summary (the RSS
+		path) writes into extra_fields, so every downstream normalizer
+		(recruitment_status_normalized, TrialCountry sync via normalize_countries, …)
+		behaves identically regardless of which channel a trial arrived through. See
+		the mapping table in docs/ctis-public-api-schema.md.
+		"""
+		import re
+		from datetime import datetime
+		import pytz
+		from dateutil.parser import parse as parse_date
+		from gregory.utils.ctis_codes import (
+			CTIS_PUBLIC_STATUS_LABELS,
+			CTIS_TRIAL_REGION_LABELS,
+		)
+
+		ct_number = record.get("ctNumber")
+		title = record.get("ctTitle")
+
+		# Mirrors EUTrialParser.extract_identifiers exactly (same "euct" key, same bare
+		# ctNumber value, no prefix) so a CTIS-API-created row and an RSS-created row
+		# for the same trial carry identical identifiers and can be matched/merged.
+		identifiers = {"eudract": None, "nct": None, "euct": ct_number}
+
+		link = (
+			f"https://euclinicaltrials.eu/search-for-clinical-trials/?lang=en&EUCT={ct_number}"
+			if ct_number
+			else None
+		)
+
+		def _or_none(value):
+			return value if value else None
+
+		def _day_first(value):
+			if not value:
+				return None
+			try:
+				return parse_date(value, dayfirst=True).date()
+			except (ValueError, TypeError):
+				return None
+
+		recruitment_status = None
+		status_code = record.get("ctStatus")
+		if isinstance(status_code, int):
+			label = CTIS_PUBLIC_STATUS_LABELS.get(status_code)
+			if label:
+				recruitment_status = label
+			else:
+				logging.warning(
+					f"CTIS search: unknown ctStatus code {status_code} for {ct_number}; "
+					"leaving recruitment_status unset"
+				)
+
+		country_status_parts = []
+		for entry in record.get("trialCountries") or []:
+			name, sep, code_str = entry.partition(":")
+			if not sep:
+				continue
+			try:
+				code = int(code_str)
+			except ValueError:
+				continue
+			label = CTIS_PUBLIC_STATUS_LABELS.get(code)
+			if not label:
+				logging.warning(
+					f"CTIS search: unknown country status code {code} ({name.strip()}) "
+					f"for {ct_number}; omitting from country_status"
+				)
+				continue
+			country_status_parts.append(f"{name.strip()}:{label}")
+		country_status = ", ".join(country_status_parts) if country_status_parts else None
+
+		# Per-country decision dates: "IT: 24/06/2026, ES: 26/06/2026" -> already
+		# ISO alpha-2 keys, same day-first parsing as EUTrialParser.
+		countries_decision_date = {}
+		decision_date_str = record.get("decisionDate")
+		if decision_date_str:
+			for chunk in re.split(r"[;,]", decision_date_str):
+				chunk_parts = chunk.strip().split(":")
+				if len(chunk_parts) == 2:
+					country_code = chunk_parts[0].strip()
+					date_val = chunk_parts[1].strip()
+					parsed = _day_first(date_val)
+					countries_decision_date[country_code] = str(parsed) if parsed else date_val
+
+		overall_decision_date = _day_first(record.get("decisionDateOverall"))
+
+		trial_region = None
+		region_code = record.get("trialRegion")
+		if isinstance(region_code, int):
+			label = CTIS_TRIAL_REGION_LABELS.get(region_code)
+			if label:
+				trial_region = label
+			else:
+				logging.warning(
+					f"CTIS search: unmapped trialRegion code {region_code} for {ct_number}; "
+					"leaving trial_region unset"
+				)
+
+		results_posted_str = record.get("resultsFirstReceived")
+		results_posted = (
+			(results_posted_str.lower() == "yes") if results_posted_str else None
+		)
+
+		# sponsorType is comma-duplicated for multi-sponsor trials ("Hospital/…,
+		# Hospital/…"); dedupe while preserving order, keep distinct values ", "-joined.
+		sponsor_type = None
+		sponsor_type_raw = record.get("sponsorType")
+		if sponsor_type_raw:
+			seen = []
+			for part in sponsor_type_raw.split(","):
+				part = part.strip()
+				if part and part not in seen:
+					seen.append(part)
+			sponsor_type = ", ".join(seen) if seen else None
+
+		therapeutic_areas_list = record.get("therapeuticAreas") or []
+		therapeutic_areas = (
+			", ".join(therapeutic_areas_list) if therapeutic_areas_list else None
+		)
+
+		# "Age of participants" is "18-64 years"; split into min/max strings (matches
+		# Trials.inclusion_agemin/agemax being CharField, and EUTrialParser's split).
+		age_min = age_max = None
+		age_raw = record.get("ageGroup")
+		if age_raw:
+			age_match = re.search(r"(\d+)\s*-\s*(\d+)", age_raw)
+			if age_match:
+				age_min, age_max = age_match.group(1), age_match.group(2)
+
+		last_updated = _day_first(record.get("lastUpdated"))
+		last_pub_update = _day_first(record.get("lastPublicationUpdate"))
+		candidate_dates = [d for d in (last_updated, last_pub_update) if d]
+		last_refreshed_on = max(candidate_dates) if candidate_dates else None
+
+		published_date = None
+		if last_pub_update:
+			published_date = datetime(
+				last_pub_update.year, last_pub_update.month, last_pub_update.day, tzinfo=pytz.UTC
+			)
+
+		extra_fields = {
+			"source_register": self.SOURCE_REGISTER,
+			"condition": _or_none(record.get("conditions")),
+			"recruitment_status": recruitment_status,
+			"primary_sponsor": _or_none(record.get("sponsor")),
+			"primary_outcome": _or_none(record.get("primaryEndPoint")),
+			"secondary_outcome": _or_none(record.get("endPoint")),
+			"therapeutic_areas": therapeutic_areas,
+			"country_status": country_status,
+			"trial_region": trial_region,
+			"results_posted": results_posted,
+			"overall_decision_date": overall_decision_date,
+			"countries_decision_date": countries_decision_date or None,
+			"sponsor_type": sponsor_type,
+			"phase": _or_none(record.get("trialPhase")),
+			"intervention": _or_none(record.get("product")),
+			"inclusion_agemin": age_min,
+			"inclusion_agemax": age_max,
+			"inclusion_gender": _or_none(record.get("gender")),
+			"target_size": _or_none(record.get("totalNumberEnrolled")),
+			"last_refreshed_on": last_refreshed_on,
+		}
+
+		# summary is composed only as a fill-once fallback for trials that have none —
+		# the command must never overwrite an existing summary with this (see
+		# CTIS-API-FEEDREADER-PLAN.md section 3). Mirrors the RSS description's
+		# "<b>Label</b>: value<br/>" labeled-line format.
+		summary = self._compose_summary(record, extra_fields)
+
+		return ClinicalTrial(
+			title=title,
+			summary=summary,
+			link=link,
+			published_date=published_date,
+			identifiers=identifiers,
+			extra_fields=extra_fields,
+		)
+
+	@staticmethod
+	def _compose_summary(record: dict, extra_fields: dict) -> str | None:
+		"""Deterministically compose a labeled-line summary from mapped fields, for
+		trials that don't have one yet. Mirrors the label text used in the RSS feed
+		description so a human reading either channel's summary sees the same shape."""
+		lines = []
+
+		def add(label, value):
+			if value:
+				lines.append(f"<b>{label}</b>: {value}<br/>")
+
+		add("Trial number", record.get("ctNumber"))
+		add("Overall trial status", extra_fields.get("recruitment_status"))
+		add("Trial title", record.get("ctTitle"))
+		add("Medical conditions", extra_fields.get("condition"))
+		add("Status in each country", extra_fields.get("country_status"))
+		add("Trial phase", extra_fields.get("phase"))
+		add("Therapeutic Areas", extra_fields.get("therapeutic_areas"))
+		add("Primary end point", extra_fields.get("primary_outcome"))
+		add("Secondary end point", extra_fields.get("secondary_outcome"))
+		add("Age of participants", record.get("ageGroup"))
+		add("Gender of participants", extra_fields.get("inclusion_gender"))
+		add("Trial region", extra_fields.get("trial_region"))
+		add("Planned number of participants", extra_fields.get("target_size"))
+		add("Sponsor", extra_fields.get("primary_sponsor"))
+		add("Sponsor type", extra_fields.get("sponsor_type"))
+		add("Trial product", extra_fields.get("intervention"))
+
+		return "".join(lines) or None

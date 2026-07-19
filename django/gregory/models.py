@@ -419,6 +419,7 @@ class Sources(models.Model):
 		("scrape", "Scrape"),
 		("manual", "Manual submission"),
 		("ctgov_api", "ClinicalTrials.gov API"),
+		("ctis_api", "CTIS Public API"),
 	]
 	active = models.BooleanField(default=True)
 	source_id = models.AutoField(primary_key=True)
@@ -443,6 +444,16 @@ class Sources(models.Model):
 		null=True,
 		verbose_name="ClinicalTrials.gov Search condition/Disease",
 		help_text='Search condition/Disease for ClinicalTrials.gov API. Enter conditions/diseases to search (e.g., "multiple sclerosis"). Only used when method is "ClinicalTrials.gov API".',
+	)
+	ctis_search_criteria = models.JSONField(
+		blank=True,
+		null=True,
+		verbose_name="CTIS Public API search criteria",
+		help_text=(
+			"Verbatim searchCriteria dict POSTed to the CTIS public API, e.g. "
+			'{"medicalCondition": "Multiple Sclerosis"}. Supported keys: medicalCondition, '
+			"sponsor, number, containAll, status. Only used when method is \"CTIS Public API\"."
+		),
 	)
 	team = models.ForeignKey(
 		"Team",
