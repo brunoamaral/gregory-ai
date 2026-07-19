@@ -221,9 +221,11 @@ EXTRA_GLOSSARY = {
 		"Sponsor type (canonical)",
 		"Canonical sponsor category for the resolved sponsor entity: industry, "
 		"academic_medical, government, nonprofit, or other. Derived from (in priority "
-		"order) ClinicalTrials.gov's lead_sponsor_class, EU CTIS's raw sponsor_type, "
-		"or keyword rules on the sponsor name — so it is populated far more often than "
-		"the raw sponsor_type column, which only EU CTIS provides. Blank when no "
+		"order) a curated hand-assignment for known sponsor families, "
+		"ClinicalTrials.gov's lead_sponsor_class, EU CTIS's raw sponsor_type, or "
+		"keyword rules on the sponsor name — so it is populated far more often than "
+		"the raw sponsor_type column, which only EU CTIS provides. See "
+		"sponsor_type_source for which of these actually applied. Blank when no "
 		"signal was available to classify the sponsor.",
 		"WHO ICTRP, ClinicalTrials.gov, EU CTIS",
 	),
