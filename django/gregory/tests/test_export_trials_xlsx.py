@@ -399,6 +399,7 @@ class ExportTrialsXlsxTests(TestCase):
 				"lead_sponsor_class",
 				"primary_sponsor_normalized",
 				"sponsor_type_normalized",
+				"sponsor_type_source",
 			):
 				self.assertIn(col, headers, f'Column "{col}" missing from header row')
 		finally:
@@ -453,9 +454,17 @@ class ExportTrialsXlsxTests(TestCase):
 		finally:
 			os.unlink(path)
 
-	def test_unresolved_sponsor_columns_render_blank(self):
-		"""A trial with no primary_sponsor must not error and must render blank, not
-		crash on a None FK dereference."""
+	def test_sponsor_type_source_shows_derivation_provenance(self):
+		"""sponsor_type_source is the audit trail for sponsor_type_normalized: it must
+		show which signal actually won (here, CTGov's lead_sponsor_class, since that
+		outranks the name-keyword-rules tier a name like this would otherwise fall to)."""
+		Trials.objects.filter(pk=self.trial_ms.pk).update(
+			primary_sponsor="Acme Pharmaceuticals Inc.", lead_sponsor_class="INDUSTRY"
+		)
+		self.trial_ms.refresh_from_db()
+		self.trial_ms.save()
+		self.trial_ms.refresh_from_db()
+
 		path, wb = self._export(subjects=str(self.subject_ms.pk))
 		try:
 			ws = wb["Multiple Sclerosis"]
@@ -465,13 +474,34 @@ class ExportTrialsXlsxTests(TestCase):
 			value = self._cell_for_title(
 				ws,
 				headers,
-				"primary_sponsor_normalized",
+				"sponsor_type_source",
 				"A randomised trial of natalizumab in MS",
 			)
+			self.assertEqual(value, "ctgov")
+		finally:
+			os.unlink(path)
+
+	def test_unresolved_sponsor_columns_render_blank(self):
+		"""A trial with no primary_sponsor must not error and must render blank, not
+		crash on a None FK dereference."""
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
 			# openpyxl round-trips an empty string as None on some versions — either is
 			# an acceptable "blank" rendering, matching the codebase's existing
 			# `cell_val or ""` convention (see test_articles_column_shows_link).
-			self.assertFalse(value)
+			for col in (
+				"primary_sponsor_normalized",
+				"sponsor_type_normalized",
+				"sponsor_type_source",
+			):
+				value = self._cell_for_title(
+					ws, headers, col, "A randomised trial of natalizumab in MS"
+				)
+				self.assertFalse(value, f'Expected "{col}" to render blank, got {value!r}')
 		finally:
 			os.unlink(path)
 
@@ -488,6 +518,7 @@ class ExportTrialsXlsxTests(TestCase):
 				"lead_sponsor_class",
 				"primary_sponsor_normalized",
 				"sponsor_type_normalized",
+				"sponsor_type_source",
 			):
 				self.assertIn(col, described)
 				self.assertTrue(

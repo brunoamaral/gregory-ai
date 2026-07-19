@@ -96,6 +96,7 @@ RELATION_COLS = [
 	"trial_countries",
 	"primary_sponsor_normalized",
 	"sponsor_type_normalized",
+	"sponsor_type_source",
 ]
 
 # Descriptions for exported columns absent from TrialAdminForm.Meta.help_texts.
@@ -224,6 +225,15 @@ EXTRA_GLOSSARY = {
 		"or keyword rules on the sponsor name — so it is populated far more often than "
 		"the raw sponsor_type column, which only EU CTIS provides. Blank when no "
 		"signal was available to classify the sponsor.",
+		"WHO ICTRP, ClinicalTrials.gov, EU CTIS",
+	),
+	"sponsor_type_source": (
+		"Sponsor type source",
+		"Audit trail for sponsor_type_normalized: which signal actually determined it — "
+		"\"curated\" (set by hand for a known sponsor family, never overwritten "
+		"automatically), \"ctgov\" (ClinicalTrials.gov's lead_sponsor_class), \"ctis\" "
+		"(EU CTIS's raw sponsor_type), or \"rules\" (keyword match on the sponsor name, "
+		"the lowest-confidence tier). Blank when sponsor_type_normalized itself is blank.",
 		"WHO ICTRP, ClinicalTrials.gov, EU CTIS",
 	),
 	"ctg_detailed_description": (
@@ -726,6 +736,11 @@ class Command(BaseCommand):
 							sponsor = trial.primary_sponsor_normalized
 							row_data.append(
 								(sponsor.sponsor_type or "") if sponsor else ""
+							)
+						elif col_name == "sponsor_type_source":
+							sponsor = trial.primary_sponsor_normalized
+							row_data.append(
+								(sponsor.sponsor_type_source or "") if sponsor else ""
 							)
 						else:
 							row_data.append("")
