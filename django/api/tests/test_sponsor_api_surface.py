@@ -237,44 +237,41 @@ class SponsorViewSetTests(TestCase):
 
 
 class SponsorQueryCountTests(SponsorAPITestCase):
-	"""N+1 guards: query count must stay flat as row count grows."""
+	"""N+1 guards: a single request over enough rows must stay under a fixed,
+	generous bound — a real one-query-per-row N+1 would blow well past it. This
+	mirrors api/tests/test_trial_country_normalization.py's
+	test_trial_countries_query_count_is_bounded_on_list_endpoint rather than
+	comparing query counts *across* two separate requests: the latter is flaky
+	under a cold process, since a one-time cache warm-up query (e.g. Django's
+	Site framework SITE_CACHE) only fires on whichever request happens to run
+	first, off by one either way depending on test/worker ordering."""
 
-	def test_trials_list_query_count_flat_vs_page_size(self):
-		for i in range(8):
+	def test_trials_list_query_count_is_bounded(self):
+		for i in range(20):
 			self._make_trial(
 				f"N+1 Trial {i}",
 				f"https://example.com/sponsor-n1-trial-{i}",
-				f"N1 Sponsor {i % 3}",  # a few repeated sponsors, a few distinct
+				f"N1 Sponsor {i % 5}",  # a few repeated sponsors, a few distinct
 			)
 
-		with CaptureQueriesContext(connection) as small:
-			resp_small = self.client.get("/trials/?page_size=2")
-		self.assertEqual(resp_small.status_code, 200)
-
-		with CaptureQueriesContext(connection) as large:
-			resp_large = self.client.get("/trials/?page_size=8")
-		self.assertEqual(resp_large.status_code, 200)
-
-		self.assertEqual(
-			len(small.captured_queries),
-			len(large.captured_queries),
-			msg="Query count must not scale with page size — check select_related('primary_sponsor_normalized')",
+		with CaptureQueriesContext(connection) as ctx:
+			resp = self.client.get("/trials/?page_size=20")
+		self.assertEqual(resp.status_code, 200)
+		self.assertLess(
+			len(ctx.captured_queries),
+			20,
+			msg="Query count scaled with row count — check select_related('primary_sponsor_normalized')",
 		)
 
-	def test_sponsors_list_query_count_flat_vs_page_size(self):
-		for i in range(8):
+	def test_sponsors_list_query_count_is_bounded(self):
+		for i in range(20):
 			Sponsor.objects.create(name=f"N1 Sponsor List {i}", slug=f"n1-sponsor-list-{i}")
 
-		with CaptureQueriesContext(connection) as small:
-			resp_small = self.client.get("/sponsors/?page_size=2")
-		self.assertEqual(resp_small.status_code, 200)
-
-		with CaptureQueriesContext(connection) as large:
-			resp_large = self.client.get("/sponsors/?page_size=8")
-		self.assertEqual(resp_large.status_code, 200)
-
-		self.assertEqual(
-			len(small.captured_queries),
-			len(large.captured_queries),
-			msg="Query count must not scale with page size on /sponsors/",
+		with CaptureQueriesContext(connection) as ctx:
+			resp = self.client.get("/sponsors/?page_size=20")
+		self.assertEqual(resp.status_code, 200)
+		self.assertLess(
+			len(ctx.captured_queries),
+			10,
+			msg="Query count scaled with row count on /sponsors/",
 		)

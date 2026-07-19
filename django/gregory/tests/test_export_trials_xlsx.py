@@ -397,11 +397,40 @@ class ExportTrialsXlsxTests(TestCase):
 			]
 			for col in (
 				"lead_sponsor_class",
+				"sponsor_id",
+				"sponsor_slug",
 				"primary_sponsor_normalized",
 				"sponsor_type_normalized",
 				"sponsor_type_source",
 			):
 				self.assertIn(col, headers, f'Column "{col}" missing from header row')
+		finally:
+			os.unlink(path)
+
+	def test_sponsor_id_and_slug_render_canonical_entity_identifiers(self):
+		Trials.objects.filter(pk=self.trial_ms.pk).update(
+			primary_sponsor="Novartis Pharma AG"
+		)
+		self.trial_ms.refresh_from_db()
+		self.trial_ms.save()  # trigger sponsor resolution
+		self.trial_ms.refresh_from_db()
+		sponsor = self.trial_ms.primary_sponsor_normalized
+		self.assertIsNotNone(sponsor)
+
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			id_value = self._cell_for_title(
+				ws, headers, "sponsor_id", "A randomised trial of natalizumab in MS"
+			)
+			slug_value = self._cell_for_title(
+				ws, headers, "sponsor_slug", "A randomised trial of natalizumab in MS"
+			)
+			self.assertEqual(id_value, sponsor.pk)
+			self.assertEqual(slug_value, sponsor.slug)
 		finally:
 			os.unlink(path)
 
@@ -494,6 +523,8 @@ class ExportTrialsXlsxTests(TestCase):
 			# an acceptable "blank" rendering, matching the codebase's existing
 			# `cell_val or ""` convention (see test_articles_column_shows_link).
 			for col in (
+				"sponsor_id",
+				"sponsor_slug",
 				"primary_sponsor_normalized",
 				"sponsor_type_normalized",
 				"sponsor_type_source",
@@ -516,6 +547,8 @@ class ExportTrialsXlsxTests(TestCase):
 				).value
 			for col in (
 				"lead_sponsor_class",
+				"sponsor_id",
+				"sponsor_slug",
 				"primary_sponsor_normalized",
 				"sponsor_type_normalized",
 				"sponsor_type_source",

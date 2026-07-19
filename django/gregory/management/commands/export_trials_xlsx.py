@@ -94,6 +94,8 @@ RELATION_COLS = [
 	"team_categories",
 	"articles",
 	"trial_countries",
+	"sponsor_id",
+	"sponsor_slug",
 	"primary_sponsor_normalized",
 	"sponsor_type_normalized",
 	"sponsor_type_source",
@@ -207,6 +209,19 @@ EXTRA_GLOSSARY = {
 		"FED, OTHER_GOV, INDIV, NETWORK, OTHER, AMBIG, UNKNOWN). One of the signals "
 		"feeding sponsor_type_normalized.",
 		"ClinicalTrials.gov",
+	),
+	"sponsor_id": (
+		"Sponsor ID (canonical)",
+		"Database id of the canonical sponsor entity — stable across spelling-variant "
+		"merges, so it's the reliable join key for grouping/joining against the "
+		"/sponsors/ API endpoint. Blank when primary_sponsor is empty.",
+		"WHO ICTRP, ClinicalTrials.gov, EU CTIS",
+	),
+	"sponsor_slug": (
+		"Sponsor slug (canonical)",
+		"URL-safe slug of the canonical sponsor entity, as used by the /sponsors/ API "
+		"endpoint's sponsor_slug filter. Blank when primary_sponsor is empty.",
+		"WHO ICTRP, ClinicalTrials.gov, EU CTIS",
 	),
 	"primary_sponsor_normalized": (
 		"Sponsor (canonical)",
@@ -731,6 +746,12 @@ class Command(BaseCommand):
 								row_data.append("")
 						elif col_name == "trial_countries":
 							row_data.append(_format_trial_countries(trial))
+						elif col_name == "sponsor_id":
+							sponsor = trial.primary_sponsor_normalized
+							row_data.append(sponsor.pk if sponsor else "")
+						elif col_name == "sponsor_slug":
+							sponsor = trial.primary_sponsor_normalized
+							row_data.append(sponsor.slug if sponsor else "")
 						elif col_name == "primary_sponsor_normalized":
 							sponsor = trial.primary_sponsor_normalized
 							row_data.append(sponsor.name if sponsor else "")
