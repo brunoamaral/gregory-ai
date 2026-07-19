@@ -44,8 +44,10 @@ from .models import (
 	CategoryType,
 	Sponsor,
 	SponsorAlias,
+	SponsorMergeCandidate,
 	default_match_weights,
 )
+from .utils.sponsor_merge import merge_sponsors
 from .widgets import MLPredictionsWidget
 from .fields import MLPredictionsField
 from .utils.trial_field_normalizers import NORMALIZED_TRIAL_FIELDS, raw_field_names
@@ -841,6 +843,122 @@ class SponsorAdmin(admin.ModelAdmin):
 
 	trial_count.admin_order_field = "trial_count"
 	trial_count.short_description = "Trials"
+
+
+class SponsorMergeCandidateAdmin(admin.ModelAdmin):
+	"""Review queue for gregory.management.commands.find_sponsor_merge_candidates.
+	Defaults to status=pending; "Dismiss" is the expected action for most containment
+	pairs (see SPONSOR-SURFACE-PLAN.md PR D2 — Aalborg University vs Aalborg University
+	Hospital are genuinely different entities)."""
+
+	list_display = ["sponsor_a_display", "sponsor_b_display", "basis", "shared_key", "status"]
+	list_filter = ["status", "basis"]
+	actions = ["merge_action", "dismiss_action"]
+
+	def changelist_view(self, request, extra_context=None):
+		if "status" not in request.GET:
+			query = request.GET.copy()
+			query["status"] = "pending"
+			request.GET = query
+			request.META["QUERY_STRING"] = request.GET.urlencode()
+		return super().changelist_view(request, extra_context)
+
+	def get_queryset(self, request):
+		return (
+			super()
+			.get_queryset(request)
+			.select_related("sponsor_a", "sponsor_b")
+			.annotate(
+				sponsor_a_trials_count=models.Count("sponsor_a__trials", distinct=True),
+				sponsor_b_trials_count=models.Count("sponsor_b__trials", distinct=True),
+			)
+		)
+
+	def sponsor_a_display(self, obj):
+		return f"{obj.sponsor_a.name} ({obj.sponsor_a_trials_count} trials)"
+
+	sponsor_a_display.short_description = "Sponsor A"
+	sponsor_a_display.admin_order_field = "sponsor_a__name"
+
+	def sponsor_b_display(self, obj):
+		return f"{obj.sponsor_b.name} ({obj.sponsor_b_trials_count} trials)"
+
+	sponsor_b_display.short_description = "Sponsor B"
+	sponsor_b_display.admin_order_field = "sponsor_b__name"
+
+	def _pick_target(self, a: Sponsor, b: Sponsor) -> tuple:
+		"""Curated sponsor wins if exactly one side is curated; otherwise the side with
+		more trials wins. Same priority as recompute_sponsor_alias_keys._pick_survivor,
+		specialised for a two-way pair."""
+		a_curated = a.sponsor_type_source == "curated"
+		b_curated = b.sponsor_type_source == "curated"
+		if a_curated != b_curated:
+			return (a, b) if a_curated else (b, a)
+		return (a, b) if a.trials.count() >= b.trials.count() else (b, a)
+
+	def _sweep_pending_candidates(self, absorbed: Sponsor, survivor: Sponsor, exclude_pk):
+		"""Other pending candidates referencing the sponsor about to be absorbed: repoint
+		them onto the survivor unless that would duplicate an existing pair (any status),
+		in which case just drop the now-redundant row."""
+		referencing = SponsorMergeCandidate.objects.filter(
+			Q(sponsor_a_id=absorbed.pk) | Q(sponsor_b_id=absorbed.pk),
+			status="pending",
+		).exclude(pk=exclude_pk)
+		for candidate in referencing:
+			other_id = (
+				candidate.sponsor_b_id
+				if candidate.sponsor_a_id == absorbed.pk
+				else candidate.sponsor_a_id
+			)
+			if other_id == survivor.pk:
+				candidate.delete()
+				continue
+			a_id, b_id = sorted([survivor.pk, other_id])
+			duplicate = (
+				SponsorMergeCandidate.objects.filter(sponsor_a_id=a_id, sponsor_b_id=b_id)
+				.exclude(pk=candidate.pk)
+				.exists()
+			)
+			if duplicate:
+				candidate.delete()
+			else:
+				candidate.sponsor_a_id = a_id
+				candidate.sponsor_b_id = b_id
+				candidate.save(update_fields=["sponsor_a", "sponsor_b"])
+
+	@admin.action(description="Merge (into curated/larger)")
+	def merge_action(self, request, queryset):
+		merged = 0
+		for candidate in queryset.filter(status="pending"):
+			candidate.refresh_from_db()
+			if candidate.status != "pending":
+				continue
+			target, other = self._pick_target(candidate.sponsor_a, candidate.sponsor_b)
+
+			self._sweep_pending_candidates(other, target, exclude_pk=candidate.pk)
+
+			# Repoint this row's own reference away from `other` before merge_sponsors
+			# deletes it — sponsor_a/sponsor_b is on_delete=CASCADE, so leaving the FK
+			# pointed at `other` would cascade-delete this audit row instead of letting
+			# it persist as status="merged".
+			if candidate.sponsor_a_id == other.pk:
+				candidate.sponsor_a = target
+			else:
+				candidate.sponsor_b = target
+			candidate.status = "merged"
+			candidate.decided_at = timezone.now()
+			candidate.save(update_fields=["sponsor_a", "sponsor_b", "status", "decided_at"])
+
+			merge_sponsors(target, [other])
+			merged += 1
+		self.message_user(request, f"Merged {merged} candidate pair(s).")
+
+	@admin.action(description="Dismiss")
+	def dismiss_action(self, request, queryset):
+		updated = queryset.filter(status="pending").update(
+			status="dismissed", decided_at=timezone.now()
+		)
+		self.message_user(request, f"Dismissed {updated} candidate pair(s).")
 
 
 class TrialAdminForm(forms.ModelForm):
@@ -3171,6 +3289,7 @@ admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)
 admin.site.register(Sponsor, SponsorAdmin)
+admin.site.register(SponsorMergeCandidate, SponsorMergeCandidateAdmin)
 
 
 class _BaseOrgContentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
