@@ -14,6 +14,7 @@ Usage:
 from collections import defaultdict
 
 from django.core.management.base import BaseCommand
+from django.db.models import Count
 
 from gregory.models import Sponsor, SponsorAlias
 from gregory.utils.sponsor_merge import merge_sponsors
@@ -21,21 +22,25 @@ from gregory.utils.trial_field_normalizers import normalize_sponsor_key
 
 
 def _pick_survivor(sponsors: list[Sponsor]) -> Sponsor:
-	"""Curated sponsors win; otherwise the sponsor with the most trials; ties go to
-	the lowest id. A curated survivor must never lose to a bigger but uncurated
-	duplicate (e.g. a stray auto-created singleton)."""
+	"""Curated sponsors win; otherwise the sponsor with the most trials (via the
+	`trials_count` annotation callers must attach); ties go to the lowest id. A
+	curated survivor must never lose to a bigger but uncurated duplicate (e.g. a
+	stray auto-created singleton)."""
 	curated = [s for s in sponsors if s.sponsor_type_source == "curated"]
 	pool = curated if curated else sponsors
-	return max(pool, key=lambda s: (s.trials.count(), -s.pk))
+	return max(pool, key=lambda s: (s.trials_count, -s.pk))
 
 
-def _connected_components(groups: dict) -> list[set]:
+def _connected_components(sponsor_ids_by_key: dict) -> list[set]:
 	"""Union-find over sponsor ids: two sponsors are linked whenever any hardened key
 	groups their aliases together. A sponsor can hold aliases spanning several distinct
 	hardened keys, each colliding with a different set of other sponsors — folding key
 	group by key group independently (rather than by full connected component) risks
 	repointing a trial onto a sponsor a prior, unrelated fold already deleted. Computing
-	full components up front and merging each one exactly once avoids that."""
+	full components up front and merging each one exactly once avoids that.
+
+	`sponsor_ids_by_key` maps hardened key -> set of sponsor ids (not alias instances —
+	only the ids matter for building the collision graph)."""
 	parent: dict[int, int] = {}
 
 	def find(x: int) -> int:
@@ -51,8 +56,7 @@ def _connected_components(groups: dict) -> list[set]:
 		if ra != rb:
 			parent[ra] = rb
 
-	for alias_list in groups.values():
-		sponsor_ids = {a.sponsor_id for a in alias_list}
+	for sponsor_ids in sponsor_ids_by_key.values():
 		for sid in sponsor_ids:
 			parent.setdefault(sid, sid)
 		ids_list = list(sponsor_ids)
@@ -81,17 +85,27 @@ class Command(BaseCommand):
 	def handle(self, *args, **options):
 		dry_run = options["dry_run"]
 
-		aliases = list(SponsorAlias.objects.select_related("sponsor").all())
-		groups: dict[str, list[SponsorAlias]] = defaultdict(list)
-		for alias in aliases:
-			new_key = normalize_sponsor_key(alias.raw_sample)
+		# Pass 1: group sponsor ids by hardened key. Streamed via values_list().iterator()
+		# and keyed by id, not by full SponsorAlias/Sponsor instances — memory stays
+		# proportional to the number of distinct keys and sponsors, not the full alias
+		# table held as model objects.
+		sponsor_ids_by_key: dict[str, set] = defaultdict(set)
+		alias_rows = SponsorAlias.objects.values_list("sponsor_id", "raw_sample").iterator(
+			chunk_size=2000
+		)
+		for sponsor_id, raw_sample in alias_rows:
+			new_key = normalize_sponsor_key(raw_sample)
 			if new_key is None:
 				continue
-			groups[new_key].append(alias)
+			sponsor_ids_by_key[new_key].add(sponsor_id)
 
 		fold_groups = []
-		for sponsor_ids in _connected_components(groups):
-			sponsors = list(Sponsor.objects.filter(pk__in=sponsor_ids))
+		for sponsor_ids in _connected_components(sponsor_ids_by_key):
+			sponsors = list(
+				Sponsor.objects.filter(pk__in=sponsor_ids).annotate(
+					trials_count=Count("trials", distinct=True)
+				)
+			)
 			survivor = _pick_survivor(sponsors)
 			others = [s for s in sponsors if s.pk != survivor.pk]
 			fold_groups.append((survivor, others))
@@ -99,15 +113,14 @@ class Command(BaseCommand):
 		trials_repointed = 0
 		sponsors_folded = 0
 		for survivor, others in fold_groups:
-			trial_counts = {o.pk: o.trials.count() for o in others}
 			self.stdout.write(
 				f"FOLD: {survivor.name!r} (id={survivor.pk}) <- "
 				+ ", ".join(
-					f"{o.name!r} (id={o.pk}, trials={trial_counts[o.pk]})" for o in others
+					f"{o.name!r} (id={o.pk}, trials={o.trials_count})" for o in others
 				)
 			)
 			if dry_run:
-				trials_repointed += sum(trial_counts.values())
+				trials_repointed += sum(o.trials_count for o in others)
 				sponsors_folded += len(others)
 			else:
 				repointed, _ = merge_sponsors(survivor, others)
@@ -124,26 +137,29 @@ class Command(BaseCommand):
 			)
 			return
 
-		# Re-key every alias now that the fold above has resolved every cross-sponsor
-		# collision under the hardened key. Reload since merge_sponsors moved/deleted
-		# rows above.
-		aliases = list(SponsorAlias.objects.all())
-		by_sponsor_key: dict[tuple[int, str], list[SponsorAlias]] = defaultdict(list)
-		for alias in aliases:
-			new_key = normalize_sponsor_key(alias.raw_sample)
+		# Pass 2: re-key every alias now that the fold above has resolved every
+		# cross-sponsor collision under the hardened key. Streamed the same way as pass
+		# 1 — id/sponsor_id/raw_sample/key tuples, not full instances — and bulk_update
+		# is fed bare `SponsorAlias(pk=..., key=...)` stand-ins built straight from those
+		# tuples rather than re-fetching full rows first.
+		by_sponsor_key: dict[tuple, list] = defaultdict(list)
+		alias_rows = SponsorAlias.objects.values_list(
+			"id", "sponsor_id", "raw_sample", "key"
+		).iterator(chunk_size=2000)
+		for alias_id, sponsor_id, raw_sample, key in alias_rows:
+			new_key = normalize_sponsor_key(raw_sample)
 			if new_key is None:
 				continue
-			by_sponsor_key[(alias.sponsor_id, new_key)].append(alias)
+			by_sponsor_key[(sponsor_id, new_key)].append((alias_id, key))
 
 		to_update = []
 		to_delete_ids = []
-		for (_sponsor_id, new_key), alias_list in by_sponsor_key.items():
-			alias_list.sort(key=lambda a: a.pk)
-			survivor_alias, *dupes = alias_list
-			if survivor_alias.key != new_key:
-				survivor_alias.key = new_key
-				to_update.append(survivor_alias)
-			to_delete_ids.extend(a.pk for a in dupes)
+		for (_sponsor_id, new_key), rows in by_sponsor_key.items():
+			rows.sort(key=lambda row: row[0])
+			(survivor_id, survivor_key), *dupes = rows
+			if survivor_key != new_key:
+				to_update.append(SponsorAlias(pk=survivor_id, key=new_key))
+			to_delete_ids.extend(alias_id for alias_id, _key in dupes)
 
 		if to_delete_ids:
 			SponsorAlias.objects.filter(pk__in=to_delete_ids).delete()

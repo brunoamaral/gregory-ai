@@ -59,6 +59,38 @@ class MergeSponsorsTests(TestCase):
 		self.assertEqual(target.sponsor_type, "nonprofit")
 		self.assertEqual(target.sponsor_type_source, "curated")
 
+	def test_best_type_among_multiple_sources_is_order_independent(self):
+		# Two sources with different sponsor_type_source priorities ("rules" < "ctgov"):
+		# the higher-priority one must win regardless of list order.
+		target = self._sponsor("Target Corp", "target-corp-5")
+		low_priority = self._sponsor(
+			"Low Priority Corp", "low-priority-5", sponsor_type="nonprofit", sponsor_type_source="rules"
+		)
+		high_priority = self._sponsor(
+			"High Priority Corp", "high-priority-5", sponsor_type="industry", sponsor_type_source="ctgov"
+		)
+
+		merge_sponsors(target, [low_priority, high_priority])
+
+		target.refresh_from_db()
+		self.assertEqual(target.sponsor_type, "industry")
+		self.assertEqual(target.sponsor_type_source, "ctgov")
+
+	def test_best_type_reverse_order_still_order_independent(self):
+		target = self._sponsor("Target Corp", "target-corp-6")
+		low_priority = self._sponsor(
+			"Low Priority Corp", "low-priority-6", sponsor_type="nonprofit", sponsor_type_source="rules"
+		)
+		high_priority = self._sponsor(
+			"High Priority Corp", "high-priority-6", sponsor_type="industry", sponsor_type_source="ctgov"
+		)
+
+		merge_sponsors(target, [high_priority, low_priority])
+
+		target.refresh_from_db()
+		self.assertEqual(target.sponsor_type, "industry")
+		self.assertEqual(target.sponsor_type_source, "ctgov")
+
 	def test_merges_multiple_sources_in_one_call(self):
 		target = self._sponsor("Target Corp", "target-corp-4")
 		s1 = self._sponsor("Source One", "source-one-4")
