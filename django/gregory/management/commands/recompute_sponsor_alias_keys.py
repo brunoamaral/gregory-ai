@@ -4,7 +4,7 @@ sponsors that collide as a result.
 
 Idempotent and safe to re-run: once every alias carries its hardened key, a second run
 finds no cross-sponsor collisions and no key drift, so it is a no-op. See
-SPONSOR-DUPLICATE-RESOLUTION-PLAN.md PR D1.
+SPONSOR-SURFACE-PLAN.md PR D1.
 
 Usage:
     python manage.py recompute_sponsor_alias_keys --dry-run
