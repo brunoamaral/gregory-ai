@@ -906,29 +906,29 @@ class TrialAdminForm(forms.ModelForm):
 			"date_enrollement": "Date the first participant was (or is expected to be) enrolled. Source: WHO ICTRP.",
 			"last_refreshed_on": "Date the source registry last updated this record. Source: WHO ICTRP.",
 			"export_date": "Date this record was exported from the WHO ICTRP database. Source: WHO ICTRP.",
-			"source_register": "The registry this record came from (e.g. ClinicalTrials.gov, ChiCTR, EU-CTR). Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"source_register": "The registry this record came from (e.g. ClinicalTrials.gov, ChiCTR, EU-CTR). Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			"other_records": "Whether the same trial is also registered in other registries. Source: WHO ICTRP.",
 			"prospective_registration": "“Yes” means the trial was listed in a public registry before it enrolled any participants — the recommended practice. “No” means it was registered afterwards. Source: WHO ICTRP.",
 			# Study details
 			"study_type": "The kind of study — for example interventional (testing a treatment) or observational (only observing). Sources: WHO ICTRP, ClinicalTrials.gov.",
 			"study_design": "How the study is structured — for example randomised, controlled, or single-group. Source: WHO ICTRP.",
-			"phase": "The stage of testing (Phase 1–4). Early phases check safety in small groups; later phases test effectiveness in larger groups. “N/A” means not applicable. Sources: WHO ICTRP, ClinicalTrials.gov.",
-			"recruitment_status": "Whether the trial is recruiting participants, not yet recruiting, completed, etc. Sources: WHO ICTRP, ClinicalTrials.gov.",
-			"target_size": "The number of participants the trial aims to enrol. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"phase": "The stage of testing (Phase 1–4). Early phases check safety in small groups; later phases test effectiveness in larger groups. “N/A” means not applicable. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
+			"recruitment_status": "Whether the trial is recruiting participants, not yet recruiting, completed, etc. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
+			"target_size": "The number of participants the trial aims to enrol. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			"countries": "Countries where the trial takes place (raw, legacy last-writer-wins value). Sources: WHO ICTRP, ClinicalTrials.gov.",
 			"countries_by_source": 'Raw countries value kept per source registry (e.g. {"ctgov": "France, United States", "ictrp": "France;Iran (Islamic Republic of)"}), so one source can never overwrite another\'s value. Managed automatically by importers — do not edit manually. See the "Countries" tab below for the normalized, per-country breakdown.',
 			"regions_normalized": "Canonical region(s) (Africa, Asia, Europe, North America, South America, Oceania) derived from the trial's normalized countries, recomputed automatically on every save.",
 			# Conditions & interventions
 			"condition": "The disease or health condition being studied. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
-			"intervention": "The treatment, drug, device, or procedure being tested or compared. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"intervention": "The treatment, drug, device, or procedure being tested or compared. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			"primary_outcome": "The main result the trial is designed to measure. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			"secondary_outcome": "Additional results the trial measures beyond the main one. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			# Eligibility
 			"inclusion_criteria": "Requirements a person must meet to take part in the trial. Sources: WHO ICTRP, ClinicalTrials.gov.",
 			"exclusion_criteria": "Conditions that prevent a person from taking part in the trial. Source: WHO ICTRP (ClinicalTrials.gov combines this into the inclusion criteria).",
-			"inclusion_agemin": "Youngest age eligible to participate. Sources: WHO ICTRP, ClinicalTrials.gov.",
-			"inclusion_agemax": "Oldest age eligible to participate. Sources: WHO ICTRP, ClinicalTrials.gov.",
-			"inclusion_gender": "Which sexes / genders can take part (e.g. both, female, male). Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"inclusion_agemin": "Youngest age eligible to participate. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
+			"inclusion_agemax": "Oldest age eligible to participate. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
+			"inclusion_gender": "Which sexes / genders can take part (e.g. both, female, male). Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			# Sponsors & contacts
 			"primary_sponsor": "The lead organisation responsible for the trial. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			"secondary_sponsor": "Additional organisations funding or running the trial, besides the main sponsor. May list several, separated by semicolons. Source: WHO ICTRP.",
@@ -1376,6 +1376,19 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 				"fields": ("ctgov_search_condition",),
 				"classes": ("ctgov-settings",),
 				"description": "Settings for ClinicalTrials.gov API sources. Enter the condition/disease to search for clinical trials.",
+			},
+		),
+		(
+			"CTIS Public API Settings",
+			{
+				"fields": ("ctis_search_criteria",),
+				"classes": ("ctis-settings",),
+				"description": (
+					"Settings for CTIS Public API sources. Enter the verbatim searchCriteria "
+					'dict to POST, e.g. {"medicalCondition": "Multiple Sclerosis"}. Supported '
+					"keys: medicalCondition, sponsor, number, containAll, status. Leave "
+					'"link" empty for these sources - search criteria drive the fetch.'
+				),
 			},
 		),
 	)

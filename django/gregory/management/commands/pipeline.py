@@ -40,6 +40,10 @@ class Command(BaseCommand):
 				"feedreader_trials_ctgov",
 				{"max_results": 2000},
 			),  # 3. ClinicalTrials.gov trials (incremental window; cap is a safety ceiling)
+			(
+				"feedreader_trials_ctis",
+				{"limit": 2000},
+			),  # 3b. CTIS public API trials (full result set per source; RSS stays active as fallback)
 			("find_doi", {}),  # 4. Find missing DOI
 			("update_articles_info", {}),  # 5. Find missing data
 			("get_authors", {}),  # 6. Find missing authors

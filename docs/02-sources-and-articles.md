@@ -25,9 +25,24 @@ You can add sources through the Django admin at `/admin/`. The screenshot below 
 | `link` | URL of the RSS feed |
 | `language` | Language of the source content |
 | `subject` | The subject this source belongs to |
-| `method` | How content is fetched — use `rss` |
+| `method` | How content is fetched — `rss`, `scrape`, `manual`, `ctgov_api`, or `ctis_api` |
 | `source_for` | Content type produced: `science paper`, `news`, or `trials` |
 | `ignore_ssl` | Whether to bypass SSL certificate verification |
+
+### CTIS public API sources (`method="ctis_api"`)
+
+Fetches the full CTIS (EU Clinical Trials Information System) result set via the
+undocumented public search API — see [docs/ctis-public-api-schema.md](ctis-public-api-schema.md)
+for the full request/response contract. Unlike the CTIS RSS feed (`method="rss"`,
+still active and never retired — it's the EMA-advertised channel and the fallback if
+the undocumented API access is ever withdrawn), the API returns every matching trial,
+not just the 15 most recently updated.
+
+Configuration: `source_for="trials"`, `link` left empty (search criteria drive the
+fetch, not a URL), and `ctis_search_criteria` set to the verbatim `searchCriteria`
+dict POSTed to the API, e.g. `{"medicalCondition": "Multiple Sclerosis"}`. Supported
+keys: `medicalCondition`, `sponsor`, `number`, `containAll`, `status`. Run via
+`python manage.py feedreader_trials_ctis` (also wired into the `pipeline` command).
 
 ---
 

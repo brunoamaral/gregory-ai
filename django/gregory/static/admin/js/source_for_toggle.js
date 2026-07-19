@@ -2,8 +2,8 @@
 
 (function () {
 	var RULES = {
-		'science paper': ['ctgov-settings'],
-		'news article':  ['ctgov-settings', 'keyword-filter-settings'],
+		'science paper': ['ctgov-settings', 'ctis-settings'],
+		'news article':  ['ctgov-settings', 'ctis-settings', 'keyword-filter-settings'],
 		'trials':        ['keyword-filter-settings'],
 	};
 
