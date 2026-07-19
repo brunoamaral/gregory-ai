@@ -72,7 +72,7 @@ the key):
 | `ageGroup` | str | 100 | "18-64 years" |
 | `ageRangeSecondary` | list | 100 | Usually `[""]` — ignore |
 | `gender` | str | 100 | "Female, Male" |
-| `trialRegion` | int | 100 | 1 or 3 observed; retrieve shows 3="Both" (EEA+non-EEA); 1=EEA-only (inferred, verify before relying) |
+| `trialRegion` | int | 100 | 1="EEA only", 2="Non-EEA only", 3="In both EEA and non-EEA" (confirmed — see code table below) |
 | `totalNumberEnrolled` | str | 100 | Numeric string |
 | `resultsFirstReceived` | str | 100 | "Yes"/"No" |
 | `lastUpdated` | str | 100 | `DD/MM/YYYY` |
@@ -146,29 +146,49 @@ the criteria; description HTML carries labeled lines (`Sponsor`, `Sponsor type`,
 `Overall trial status`, `Status in each country`, …). Kept as the fallback channel — see
 `TRIALS-SPONSOR-CANONICALIZATION-PLAN.md` PR A.
 
-## Public status codes (empirical)
+## Public status codes
 
-Derived by joining the RSS labels to `search` records for the same trials (counts =
-observations); code 11 from a `retrieve` of a terminal-state trial. The same code
-vocabulary is used at trial level (`search.ctStatus`, `retrieve.ctPublicStatusCode`) and
-country level (`trialCountries`, `mscPublicStatusCode`):
+Originally derived 2026-07-18 by joining RSS labels to `search` records for the same
+trials (codes 2, 3, 4, 5, 8, 11). Fully confirmed and completed 2026-07-19 against the
+authoritative source — the public portal's own frontend code: the compiled Angular
+bundle ships an `{id, optionName}` array for this exact enum (grep a fetched portal JS
+chunk for `optionName:"Authorised, recruiting"` to relocate it; the chunk hash rotates
+on portal deploys — as of this writing it was `ctis-public/chunk-TT6KNQDE.js`). The same
+code vocabulary is used at trial level (`search.ctStatus`, `retrieve.ctPublicStatusCode`)
+and country level (`trialCountries`, `mscPublicStatusCode`):
 
-| Code | Label (as the RSS/portal renders it) | Evidence |
-|:-----|:-------------------------------------|:---------|
-| 2 | Authorised, recruitment pending | 10 country obs |
-| 3 | Authorised, recruiting | 1 country obs |
-| 4 | Ongoing, recruiting | 5 trial + 30 country obs |
-| 5 | Ongoing, recruitment ended | 8 trial + 51 country obs |
-| 8 | Ended | 2 trial + 33 country obs |
-| 11 | Not authorised | retrieve label, 1 obs |
+| Code | Label (as the RSS/portal renders it) |
+|:-----|:-------------------------------------|
+| 1 | Under evaluation |
+| 2 | Authorised, recruitment pending |
+| 3 | Authorised, recruiting |
+| 4 | Ongoing, recruiting |
+| 5 | Ongoing, recruitment ended |
+| 6 | Temporarily halted |
+| 7 | Suspended |
+| 8 | Ended |
+| 9 | Expired |
+| 10 | Revoked |
+| 11 | Not authorised |
+| 12 | Cancelled |
 
-Codes 1, 6, 7, 9, 10, 12+ exist in principle (portal filters list more statuses:
-"Ongoing, other", "Temporarily halted", "Suspended", "Ended prematurely", "Expired",
-"Revoked"…) but were **not observed** — an importer must log-and-skip unknown codes,
-never write the bare number. **Trap:** `retrieve.ctStatus` (string) is the
-*application* status ("Authorised" for a trial whose public status is
+An importer must still log-and-skip any code outside this table rather than writing the
+bare number — the portal can add new statuses without notice. **Trap:** `retrieve.ctStatus`
+(string) is the *application* status ("Authorised" for a trial whose public status is
 "Ongoing, recruiting") — never use it as the recruitment status; use the code + this
-table.
+table. The same trap exists one level down: `retrieve.authorizedPartsII[].mscInfo.trialStatus`
+is the per-country *application* status (`Authorised`/`Halted`/`Suspended`/`Ended`/…, a
+different enum — `mscStatus_*` in the portal's i18n strings), not the public per-country
+recruitment status (`publicTrialStatus_*`) that `trialCountries`/`mscPublicStatusCode`
+encode.
+
+`trialRegion` codes, confirmed against the same portal source:
+
+| Code | Label |
+|:-----|:------|
+| 1 | EEA only |
+| 2 | Non-EEA only |
+| 3 | In both EEA and non-EEA |
 
 ## Data we could use beyond sponsor/sponsor_type
 

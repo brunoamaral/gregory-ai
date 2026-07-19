@@ -248,8 +248,53 @@ class ParseSearchRecordTests(SimpleTestCase):
 		trial = self.api.parse_ctis_search_record(record)
 		self.assertEqual(trial.extra_fields["country_status"], "Spain:Ongoing, recruiting")
 
-	def test_unmapped_region_code_leaves_trial_region_unset(self):
+	def test_status_code_6_is_temporarily_halted(self):
+		"""Regression test for a live trial (2024-512914-16-00) that surfaced this gap
+		in production: Sweden/Lithuania/Belgium carried status code 6, which wasn't in
+		the original empirically-derived table. Confirmed 2026-07-19 against the
+		portal's own frontend status enum (see ctis_codes.py docstring) rather than
+		guessed."""
+		record = _record(trialCountries=["Sweden:6", "Lithuania:6", "Belgium:6", "Germany:5"])
+		trial = self.api.parse_ctis_search_record(record)
+		self.assertEqual(
+			trial.extra_fields["country_status"],
+			"Sweden:Temporarily halted, Lithuania:Temporarily halted, "
+			"Belgium:Temporarily halted, Germany:Ongoing, recruitment ended",
+		)
+
+	def test_all_confirmed_status_codes_map_to_expected_labels(self):
+		expected = {
+			1: "Under evaluation",
+			2: "Authorised, recruitment pending",
+			3: "Authorised, recruiting",
+			4: "Ongoing, recruiting",
+			5: "Ongoing, recruitment ended",
+			6: "Temporarily halted",
+			7: "Suspended",
+			8: "Ended",
+			9: "Expired",
+			10: "Revoked",
+			11: "Not authorised",
+			12: "Cancelled",
+		}
+		for code, label in expected.items():
+			with self.subTest(code=code):
+				record = _record(ctStatus=code)
+				trial = self.api.parse_ctis_search_record(record)
+				self.assertEqual(trial.extra_fields["recruitment_status"], label)
+
+	def test_region_code_eea_only(self):
 		record = _record(trialRegion=1)
+		trial = self.api.parse_ctis_search_record(record)
+		self.assertEqual(trial.extra_fields["trial_region"], "EEA only")
+
+	def test_region_code_non_eea_only(self):
+		record = _record(trialRegion=2)
+		trial = self.api.parse_ctis_search_record(record)
+		self.assertEqual(trial.extra_fields["trial_region"], "Non-EEA only")
+
+	def test_unmapped_region_code_leaves_trial_region_unset(self):
+		record = _record(trialRegion=99)
 		trial = self.api.parse_ctis_search_record(record)
 		self.assertIsNone(trial.extra_fields["trial_region"])
 
