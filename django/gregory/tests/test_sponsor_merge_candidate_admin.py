@@ -7,6 +7,7 @@ Run:
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
+from django.core.exceptions import ValidationError
 from django.test import RequestFactory, TestCase
 
 from gregory.admin import SponsorMergeCandidateAdmin
@@ -119,6 +120,68 @@ class SponsorMergeCandidateAdminTests(TestCase):
 
 		self.assertFalse(SponsorMergeCandidate.objects.filter(pk=stale.pk).exists())
 
+	def test_merge_snapshots_absorbed_name_and_nulls_its_own_fk(self):
+		target = self._sponsor(
+			"Target Corp 3", "target-corp-admin-3", sponsor_type="industry", sponsor_type_source="curated"
+		)
+		absorbed = self._sponsor("Absorbed Corp 3", "absorbed-corp-admin-3")
+		candidate = self._pair(target, absorbed)
+
+		self.admin.merge_action(
+			self._request(), SponsorMergeCandidate.objects.filter(pk=candidate.pk)
+		)
+
+		candidate.refresh_from_db()
+		self.assertEqual(candidate.status, "merged")
+		self.assertEqual(candidate.absorbed_sponsor_name, "Absorbed Corp 3")
+		# Never a (target, target) self-pair: exactly one side survives non-null, the
+		# other was cleared by SET_NULL when the absorbed sponsor was deleted.
+		remaining_ids = {candidate.sponsor_a_id, candidate.sponsor_b_id}
+		self.assertIn(target.pk, remaining_ids)
+		self.assertIn(None, remaining_ids)
+
+	def test_second_merge_into_same_target_does_not_raise_integrity_error(self):
+		# Regression test: merging two different candidates into the same survivor used
+		# to repoint both merged rows' FKs onto the target, so the second merge's
+		# unique_sponsor_candidate_pair check saw (target, target) already used by the
+		# first row and raised IntegrityError.
+		target = self._sponsor(
+			"Target Corp 4", "target-corp-admin-4", sponsor_type="industry", sponsor_type_source="curated"
+		)
+		first_absorbed = self._sponsor("First Absorbed Corp 4", "first-absorbed-admin-4")
+		second_absorbed = self._sponsor("Second Absorbed Corp 4", "second-absorbed-admin-4")
+		first_candidate = self._pair(target, first_absorbed, shared_key="first")
+		second_candidate = self._pair(target, second_absorbed, shared_key="second")
+
+		self.admin.merge_action(
+			self._request(), SponsorMergeCandidate.objects.filter(pk=first_candidate.pk)
+		)
+		self.admin.merge_action(
+			self._request(), SponsorMergeCandidate.objects.filter(pk=second_candidate.pk)
+		)
+
+		first_candidate.refresh_from_db()
+		second_candidate.refresh_from_db()
+		self.assertEqual(first_candidate.status, "merged")
+		self.assertEqual(second_candidate.status, "merged")
+		self.assertFalse(Sponsor.objects.filter(pk__in=[first_absorbed.pk, second_absorbed.pk]).exists())
+		self.assertTrue(Sponsor.objects.filter(pk=target.pk).exists())
+
+	def test_changelist_display_does_not_crash_on_merged_row_with_null_side(self):
+		target = self._sponsor(
+			"Target Corp 5", "target-corp-admin-5", sponsor_type="industry", sponsor_type_source="curated"
+		)
+		absorbed = self._sponsor("Absorbed Corp 5", "absorbed-corp-admin-5")
+		candidate = self._pair(target, absorbed)
+
+		self.admin.merge_action(
+			self._request(), SponsorMergeCandidate.objects.filter(pk=candidate.pk)
+		)
+
+		annotated = self.admin.get_queryset(self._request()).get(pk=candidate.pk)
+		self.assertIn("merged away: Absorbed Corp 5", self.admin.sponsor_a_display(annotated) + self.admin.sponsor_b_display(annotated))
+		self.assertIn("Target Corp 5", self.admin.sponsor_a_display(annotated) + self.admin.sponsor_b_display(annotated))
+
 	def test_dismiss_flips_status_and_is_not_regenerated_on_rerun(self):
 		a = self._sponsor("Aalborg University Admin", "aalborg-uni-admin")
 		b = self._sponsor("Aalborg University Hospital Admin", "aalborg-hosp-admin")
@@ -140,3 +203,18 @@ class SponsorMergeCandidateAdminTests(TestCase):
 		self.assertEqual(SponsorMergeCandidate.objects.filter(pk=candidate.pk).count(), 1)
 		candidate.refresh_from_db()
 		self.assertEqual(candidate.status, "dismissed")
+
+
+class SponsorMergeCandidateChoicesTests(TestCase):
+	def test_basis_and_status_reject_invalid_values_on_full_clean(self):
+		a = Sponsor.objects.create(name="Choices Corp A", slug="choices-corp-a")
+		b = Sponsor.objects.create(name="Choices Corp B", slug="choices-corp-b")
+		candidate = SponsorMergeCandidate(
+			sponsor_a=a, sponsor_b=b, basis="not_a_real_basis", shared_key="k", status="not_a_real_status"
+		)
+
+		with self.assertRaises(ValidationError) as ctx:
+			candidate.full_clean()
+
+		self.assertIn("basis", ctx.exception.message_dict)
+		self.assertIn("status", ctx.exception.message_dict)

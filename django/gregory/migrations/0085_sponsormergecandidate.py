@@ -15,13 +15,14 @@ class Migration(migrations.Migration):
             name='SponsorMergeCandidate',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('basis', models.CharField(max_length=20)),
+                ('basis', models.CharField(choices=[('suffix_variant', 'Suffix variant'), ('containment', 'Containment')], max_length=20)),
                 ('shared_key', models.CharField(max_length=500)),
-                ('status', models.CharField(default='pending', max_length=10)),
+                ('status', models.CharField(choices=[('pending', 'Pending'), ('merged', 'Merged'), ('dismissed', 'Dismissed')], default='pending', max_length=10)),
+                ('absorbed_sponsor_name', models.CharField(blank=True, default='', max_length=500)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('decided_at', models.DateTimeField(blank=True, null=True)),
-                ('sponsor_a', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='+', to='gregory.sponsor')),
-                ('sponsor_b', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='+', to='gregory.sponsor')),
+                ('sponsor_a', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='+', to='gregory.sponsor')),
+                ('sponsor_b', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='+', to='gregory.sponsor')),
             ],
             options={
                 'constraints': [models.UniqueConstraint(fields=('sponsor_a', 'sponsor_b'), name='unique_sponsor_candidate_pair')],

@@ -45,6 +45,7 @@ from .models import (
 	Sponsor,
 	SponsorAlias,
 	SponsorMergeCandidate,
+	SponsorMergeCandidateStatus,
 	default_match_weights,
 )
 from .utils.sponsor_merge import merge_sponsors
@@ -858,7 +859,7 @@ class SponsorMergeCandidateAdmin(admin.ModelAdmin):
 	def changelist_view(self, request, extra_context=None):
 		if "status" not in request.GET:
 			query = request.GET.copy()
-			query["status"] = "pending"
+			query["status"] = SponsorMergeCandidateStatus.PENDING
 			request.GET = query
 			request.META["QUERY_STRING"] = request.GET.urlencode()
 		return super().changelist_view(request, extra_context)
@@ -875,12 +876,17 @@ class SponsorMergeCandidateAdmin(admin.ModelAdmin):
 		)
 
 	def sponsor_a_display(self, obj):
+		# None once this side has been merged away (SET_NULL) — see the model docstring.
+		if obj.sponsor_a is None:
+			return f"(merged away: {obj.absorbed_sponsor_name})"
 		return f"{obj.sponsor_a.name} ({obj.sponsor_a_trials_count} trials)"
 
 	sponsor_a_display.short_description = "Sponsor A"
 	sponsor_a_display.admin_order_field = "sponsor_a__name"
 
 	def sponsor_b_display(self, obj):
+		if obj.sponsor_b is None:
+			return f"(merged away: {obj.absorbed_sponsor_name})"
 		return f"{obj.sponsor_b.name} ({obj.sponsor_b_trials_count} trials)"
 
 	sponsor_b_display.short_description = "Sponsor B"
@@ -902,7 +908,7 @@ class SponsorMergeCandidateAdmin(admin.ModelAdmin):
 		in which case just drop the now-redundant row."""
 		referencing = SponsorMergeCandidate.objects.filter(
 			Q(sponsor_a_id=absorbed.pk) | Q(sponsor_b_id=absorbed.pk),
-			status="pending",
+			status=SponsorMergeCandidateStatus.PENDING,
 		).exclude(pk=exclude_pk)
 		for candidate in referencing:
 			other_id = (
@@ -929,25 +935,26 @@ class SponsorMergeCandidateAdmin(admin.ModelAdmin):
 	@admin.action(description="Merge (into curated/larger)")
 	def merge_action(self, request, queryset):
 		merged = 0
-		for candidate in queryset.filter(status="pending"):
+		for candidate in queryset.filter(status=SponsorMergeCandidateStatus.PENDING):
 			candidate.refresh_from_db()
-			if candidate.status != "pending":
+			if candidate.status != SponsorMergeCandidateStatus.PENDING:
 				continue
 			target, other = self._pick_target(candidate.sponsor_a, candidate.sponsor_b)
 
 			self._sweep_pending_candidates(other, target, exclude_pk=candidate.pk)
 
-			# Repoint this row's own reference away from `other` before merge_sponsors
-			# deletes it — sponsor_a/sponsor_b is on_delete=CASCADE, so leaving the FK
-			# pointed at `other` would cascade-delete this audit row instead of letting
-			# it persist as status="merged".
-			if candidate.sponsor_a_id == other.pk:
-				candidate.sponsor_a = target
-			else:
-				candidate.sponsor_b = target
-			candidate.status = "merged"
+			# Snapshot the absorbed side's name for the audit trail, then just mark this
+			# row merged and leave sponsor_a/sponsor_b as-is: merge_sponsors() below
+			# deletes `other`, and since the FK is on_delete=SET_NULL (not CASCADE — see
+			# the model docstring), Django's own deletion collector clears whichever of
+			# sponsor_a/sponsor_b pointed at `other` automatically. Manually repointing
+			# it to `target` here would make both columns equal `target`, turning this
+			# row into a nonsensical (target, target) self-pair and losing which sponsor
+			# was actually absorbed.
+			candidate.absorbed_sponsor_name = other.name
+			candidate.status = SponsorMergeCandidateStatus.MERGED
 			candidate.decided_at = timezone.now()
-			candidate.save(update_fields=["sponsor_a", "sponsor_b", "status", "decided_at"])
+			candidate.save(update_fields=["absorbed_sponsor_name", "status", "decided_at"])
 
 			merge_sponsors(target, [other])
 			merged += 1
@@ -955,8 +962,8 @@ class SponsorMergeCandidateAdmin(admin.ModelAdmin):
 
 	@admin.action(description="Dismiss")
 	def dismiss_action(self, request, queryset):
-		updated = queryset.filter(status="pending").update(
-			status="dismissed", decided_at=timezone.now()
+		updated = queryset.filter(status=SponsorMergeCandidateStatus.PENDING).update(
+			status=SponsorMergeCandidateStatus.DISMISSED, decided_at=timezone.now()
 		)
 		self.message_user(request, f"Dismissed {updated} candidate pair(s).")
 

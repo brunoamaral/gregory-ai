@@ -31,7 +31,7 @@ from collections import defaultdict
 from django.core.management.base import BaseCommand
 from django.db.models import Count
 
-from gregory.models import Sponsor, SponsorMergeCandidate
+from gregory.models import Sponsor, SponsorMergeCandidate, SponsorMergeCandidateBasis
 from gregory.utils.trial_field_normalizers import normalize_sponsor_key
 
 _LEGAL_SUFFIXES = {
@@ -71,7 +71,7 @@ def _suffix_variant_candidates(keyed, existing_pairs):
 			if (a_id, b_id) in existing_pairs:
 				continue
 			existing_pairs.add((a_id, b_id))
-			candidates.append((a_id, b_id, "suffix_variant", stripped_key))
+			candidates.append((a_id, b_id, SponsorMergeCandidateBasis.SUFFIX_VARIANT, stripped_key))
 	return candidates
 
 
@@ -112,7 +112,7 @@ def _containment_candidates(keyed, existing_pairs):
 				if (a_id, b_id) in existing_pairs:
 					continue
 				existing_pairs.add((a_id, b_id))
-				candidates.append((a_id, b_id, "containment", key))
+				candidates.append((a_id, b_id, SponsorMergeCandidateBasis.CONTAINMENT, key))
 			for grandchild_token, grandchild_node in child_node.items():
 				if grandchild_token != _END:
 					stack.append((grandchild_token, grandchild_node))
