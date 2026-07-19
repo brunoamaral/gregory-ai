@@ -1378,6 +1378,19 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 				"description": "Settings for ClinicalTrials.gov API sources. Enter the condition/disease to search for clinical trials.",
 			},
 		),
+		(
+			"CTIS Public API Settings",
+			{
+				"fields": ("ctis_search_criteria",),
+				"classes": ("ctis-settings",),
+				"description": (
+					"Settings for CTIS Public API sources. Enter the verbatim searchCriteria "
+					'dict to POST, e.g. {"medicalCondition": "Multiple Sclerosis"}. Supported '
+					"keys: medicalCondition, sponsor, number, containAll, status. Leave "
+					'"link" empty for these sources - search criteria drive the fetch.'
+				),
+			},
+		),
 	)
 
 	class Media:
