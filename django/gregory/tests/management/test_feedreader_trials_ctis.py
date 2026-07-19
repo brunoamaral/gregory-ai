@@ -19,6 +19,7 @@ Run:
 
 import datetime
 import os
+import tempfile
 from unittest.mock import MagicMock
 
 import django
@@ -354,3 +355,75 @@ class ErrorIsolationTests(TestCase):
 		self.assertEqual(len(cmd.fetch_errors), 1)
 		self.assertIn("Bad Source", cmd.fetch_errors[0])
 		self.assertEqual(Trials.objects.count(), 1)
+
+
+class RetrieveBackupTests(TestCase):
+	"""Archiving the raw /retrieve dossier is a side effect: it must never block or
+	fail the actual trial create/update, which comes entirely from /search."""
+
+	def setUp(self):
+		self.source = _source()
+		self.tmp_dir = tempfile.mkdtemp()
+
+	def test_backup_written_when_retrieve_returns_a_dict(self):
+		api = MagicMock()
+		api.iter_search.return_value = iter([{"ctNumber": "2026-000000-00-30"}])
+		api.parse_ctis_search_record.return_value = _trial("2026-000000-00-30")
+		api.retrieve.return_value = {"ctNumber": "2026-000000-00-30", "deep": "dossier"}
+		cmd = _make_command(api)
+
+		cmd.process_sources(backup_dir=self.tmp_dir)
+
+		api.retrieve.assert_called_once_with("2026-000000-00-30")
+		files = os.listdir(self.tmp_dir)
+		self.assertEqual(len(files), 1)
+		self.assertTrue(files[0].startswith("2026-000000-00-30-"))
+		self.assertEqual(Trials.objects.count(), 1)
+
+	def test_non_dict_retrieve_result_is_skipped_without_error(self):
+		api = MagicMock()
+		api.iter_search.return_value = iter([{"ctNumber": "2026-000000-00-31"}])
+		api.parse_ctis_search_record.return_value = _trial("2026-000000-00-31")
+		# api.retrieve default MagicMock() return value is not a dict.
+		cmd = _make_command(api)
+
+		cmd.process_sources(backup_dir=self.tmp_dir)
+
+		self.assertEqual(os.listdir(self.tmp_dir), [])
+		self.assertEqual(Trials.objects.count(), 1)
+
+	def test_retrieve_exception_does_not_block_trial_processing_or_anchor(self):
+		api = MagicMock()
+		api.iter_search.return_value = iter([{"ctNumber": "2026-000000-00-32"}])
+		api.parse_ctis_search_record.return_value = _trial("2026-000000-00-32")
+		api.retrieve.side_effect = Exception("CTIS retrieve endpoint is down")
+		cmd = _make_command(api)
+
+		cmd.process_sources(backup_dir=self.tmp_dir)
+
+		self.assertEqual(os.listdir(self.tmp_dir), [])
+		self.assertEqual(Trials.objects.count(), 1)
+		self.source.refresh_from_db()
+		self.assertIsNotNone(self.source.last_successful_fetch_at)
+
+	def test_default_backup_dir_is_used_when_not_specified(self):
+		"""Omitting --backup-dir must fall through to the module's BACKUPS_DIR
+		constant, not silently pass None to save_retrieve_backup."""
+		from unittest.mock import patch
+
+		import gregory.management.commands.feedreader_trials_ctis as cmd_module
+
+		api = MagicMock()
+		api.iter_search.return_value = iter([{"ctNumber": "2026-000000-00-33"}])
+		api.parse_ctis_search_record.return_value = _trial("2026-000000-00-33")
+		api.retrieve.return_value = {"ctNumber": "2026-000000-00-33"}
+		cmd = _make_command(api)
+
+		with patch.object(cmd_module, "save_retrieve_backup") as mock_save:
+			cmd.process_sources()
+
+		mock_save.assert_called_once_with(
+			cmd_module.BACKUPS_DIR,
+			"2026-000000-00-33",
+			{"ctNumber": "2026-000000-00-33"},
+		)

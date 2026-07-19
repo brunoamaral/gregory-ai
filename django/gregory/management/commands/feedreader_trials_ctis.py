@@ -18,6 +18,13 @@ Source Configuration:
 - ctis_search_criteria: verbatim searchCriteria dict POSTed to the API, e.g.
     {"medicalCondition": "Multiple Sclerosis"}
 
+For every record /search returns, this command also fetches the full /retrieve
+dossier for that trial and archives it to disk (gregory.utils.ctis_backup) —
+one deduplicated JSON snapshot per trial per distinct content version, not
+parsed or written to the DB. See docs/ctis-public-api-schema.md section on
+retrieve/{ctNumber} for what that payload contains; ingesting it into the DB
+is separately-scoped future work.
+
 Usage:
 	python manage.py feedreader_trials_ctis
 	python manage.py feedreader_trials_ctis --limit 500
@@ -32,6 +39,7 @@ from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import ClinicalTrial, CTISPublicAPI
 from gregory.models import Trials, Sources
+from gregory.utils.ctis_backup import save_retrieve_backup
 from gregory.utils.registry_utils import (
 	identifiers_conflict,
 	merge_links,
@@ -39,6 +47,11 @@ from gregory.utils.registry_utils import (
 	merge_identifiers,
 	safe_change_reason,
 )
+
+# Raw /retrieve JSON dossiers are archived here (one file per distinct content
+# snapshot per trial; see gregory.utils.ctis_backup). Matches the persisted-volume
+# convention of capture_trial_streams.py's DEFAULT_DIR.
+BACKUPS_DIR = "/code/backups"
 
 
 class Command(GregoryBaseCommand):
@@ -60,6 +73,12 @@ class Command(GregoryBaseCommand):
 		parser.add_argument(
 			"--source-id", type=int, help="Process only a specific source by ID"
 		)
+		parser.add_argument(
+			"--backup-dir",
+			default=None,
+			help="Directory to archive raw /retrieve JSON dossiers in (default: %s)"
+			% BACKUPS_DIR,
+		)
 
 	def handle(self, *args, **options):
 		self.api = CTISPublicAPI()
@@ -67,9 +86,10 @@ class Command(GregoryBaseCommand):
 			sleep=options.get("sleep", 0.5),
 			limit=options.get("limit"),
 			source_id=options.get("source_id"),
+			backup_dir=options.get("backup_dir"),
 		)
 
-	def process_sources(self, sleep=0.5, limit=None, source_id=None):
+	def process_sources(self, sleep=0.5, limit=None, source_id=None, backup_dir=None):
 		"""Fetch and process trials from CTIS public API sources.
 
 		Per-source fetch failures are isolated and recorded in ``self.fetch_errors``
@@ -77,6 +97,7 @@ class Command(GregoryBaseCommand):
 		inspect them after the run.
 		"""
 		self.fetch_errors = []
+		backup_dir = backup_dir or BACKUPS_DIR
 		sources = Sources.objects.filter(
 			method="ctis_api", source_for="trials", active=True
 		)
@@ -147,6 +168,10 @@ class Command(GregoryBaseCommand):
 								"Skipping record with no title or ctNumber", level=3
 							)
 							continue
+
+						self._backup_retrieve_dossier(
+							clinical_trial.identifiers["euct"], backup_dir
+						)
 
 						existing_trial = self.find_existing_trial(clinical_trial)
 						if existing_trial:
@@ -236,6 +261,33 @@ class Command(GregoryBaseCommand):
 				f"Updated: {updated_count}, Errors: {error_count}",
 				level=1,
 				style_func=self.style.SUCCESS,
+			)
+
+	def _backup_retrieve_dossier(self, ct_number, backup_dir):
+		"""Fetch the full /retrieve dossier for ct_number and archive it (deduplicated
+		by content — see gregory.utils.ctis_backup.save_retrieve_backup).
+
+		This is a side archive, not required for correctness of the trial data this
+		command stores (that comes entirely from /search) — any failure here (API
+		down, disk full, malformed response) is logged and swallowed so it can never
+		block or fail the actual create/update of a trial.
+		"""
+		try:
+			payload = self.api.retrieve(ct_number)
+			if not isinstance(payload, dict):
+				self.log(
+					f"Skipping retrieve backup for {ct_number}: retrieve() did not "
+					"return a JSON object",
+					level=3,
+					style_func=self.style.WARNING,
+				)
+				return
+			save_retrieve_backup(backup_dir, ct_number, payload)
+		except Exception as e:
+			self.log(
+				f"Failed to save retrieve backup for {ct_number}: {e}",
+				level=2,
+				style_func=self.style.WARNING,
 			)
 
 	def find_existing_trial(self, clinical_trial: ClinicalTrial):

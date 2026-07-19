@@ -130,6 +130,45 @@ class SearchTests(SimpleTestCase):
 			self.api.search({"medicalCondition": "X"})
 
 
+class RetrieveTests(SimpleTestCase):
+	def setUp(self):
+		self.api = CTISPublicAPI()
+		self.api.session = MagicMock()
+
+	def test_retrieve_gets_expected_url(self):
+		self.api.session.get.return_value = _mock_response({"ctNumber": "2025-523726-40-00"})
+		self.api.retrieve("2025-523726-40-00")
+
+		args, kwargs = self.api.session.get.call_args
+		self.assertEqual(args[0], f"{CTISPublicAPI.BASE_URL}/retrieve/2025-523726-40-00")
+		self.assertEqual(kwargs["timeout"], 30)
+
+	def test_retrieve_returns_parsed_json(self):
+		self.api.session.get.return_value = _mock_response(
+			{"ctNumber": "2025-523726-40-00", "ctStatus": "Authorised"}
+		)
+		result = self.api.retrieve("2025-523726-40-00")
+		self.assertEqual(result["ctNumber"], "2025-523726-40-00")
+		self.assertEqual(result["ctStatus"], "Authorised")
+
+	def test_retrieve_raises_typed_error_on_non_json_response(self):
+		self.api.session.get.return_value = _mock_response({}, json_error=True)
+		with self.assertRaises(CTISPublicAPIError):
+			self.api.retrieve("2025-523726-40-00")
+
+	def test_retrieve_raises_typed_error_on_non_object_response(self):
+		self.api.session.get.return_value = _mock_response(["not", "an", "object"])
+		with self.assertRaises(CTISPublicAPIError):
+			self.api.retrieve("2025-523726-40-00")
+
+	def test_retrieve_propagates_http_error(self):
+		import requests
+
+		self.api.session.get.return_value = _mock_response({}, status_ok=False)
+		with self.assertRaises(requests.exceptions.HTTPError):
+			self.api.retrieve("2025-523726-40-00")
+
+
 class IterSearchTests(SimpleTestCase):
 	def setUp(self):
 		self.api = CTISPublicAPI()

@@ -1013,6 +1013,42 @@ class CTISPublicAPI:
 
 		return result
 
+	def retrieve(self, ct_number: str) -> dict:
+		"""GET /ctis-public-api/retrieve/{ctNumber} — the full single-trial dossier
+		(~85 KB of nested JSON; see docs/ctis-public-api-schema.md for the shape).
+
+		This is a separate, much heavier request than search() — one GET per trial,
+		not paginated. Callers are responsible for keeping the call volume bounded
+		(e.g. one per record already returned by a /search run).
+
+		Raises CTISPublicAPIError if the response isn't JSON or isn't an object;
+		raises requests' own exceptions on transport/HTTP failures.
+		"""
+		import requests
+
+		url = f"{self.BASE_URL}/retrieve/{ct_number}"
+		try:
+			response = self.session.get(url, timeout=self.timeout)
+			response.raise_for_status()
+		except requests.exceptions.HTTPError as e:
+			logging.error(f"HTTP Error: {e}")
+			raise
+		except requests.exceptions.RequestException as e:
+			logging.error(f"Request Error: {e}")
+			raise
+
+		try:
+			result = response.json()
+		except ValueError as e:
+			raise CTISPublicAPIError(f"Non-JSON response from CTIS retrieve: {e}") from e
+
+		if not isinstance(result, dict):
+			raise CTISPublicAPIError(
+				f"Unexpected CTIS retrieve response shape (not an object): {str(result)[:200]!r}"
+			)
+
+		return result
+
 	def iter_search(self, criteria: dict, since=None, size: int = 50, sleep: float = 0.5):
 		"""Iterate every record across all pages of /search for *criteria*.
 

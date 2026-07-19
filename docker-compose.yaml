@@ -25,6 +25,7 @@ services:
       - ./django/datasets:/code/datasets            # training data exports (ml-export reads them over SSH)
       - ./django/summary_cache:/code/summary_cache  # LLM summary cache (persist)
       - ./django/static:/code/static                # collectstatic output (host nginx reads it)
+      - ./django/backups:/code/backups              # CTIS /retrieve JSON snapshots (persist)
     ports:
       - "8000:8000"
     environment:
