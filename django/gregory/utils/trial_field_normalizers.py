@@ -758,8 +758,9 @@ def normalize_sponsor_key(raw: str | None) -> str | None:
 	Compute the alias lookup key for a raw Trials.primary_sponsor value.
 
 	Deliberately conservative: only merges spellings that cannot belong to different
-	real-world entities (whitespace, case, diacritics, "&"/"and", trailing punctuation).
-	It never strips legal suffixes (Ltd/Inc/GmbH/AG...) — "Novartis Pharma AG" and
+	real-world entities (whitespace, case, diacritics, "&"/"and", punctuation anywhere
+	in the string — commas, periods, hyphens, parentheses, apostrophes, slashes). It
+	never strips legal suffixes (Ltd/Inc/GmbH/AG...) — "Novartis Pharma AG" and
 	"Novartis Pharma GmbH" keep distinct keys; grouping them under one canonical Sponsor
 	is an editorial decision that belongs in the seed table / admin merge, never in this
 	function. It also never does substring matching — "University of Rochester" and
@@ -775,8 +776,8 @@ def normalize_sponsor_key(raw: str | None) -> str | None:
 	cleaned = unicodedata.normalize("NFKD", cleaned)
 	cleaned = "".join(ch for ch in cleaned if not unicodedata.combining(ch))
 	cleaned = cleaned.replace("&", " and ")
+	cleaned = re.sub(r"[^0-9a-z ]+", " ", cleaned)
 	cleaned = re.sub(r"\s+", " ", cleaned).strip()
-	cleaned = cleaned.rstrip(".,;").strip()
 	return cleaned[:500] or None
 
 

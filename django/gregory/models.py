@@ -1082,8 +1082,10 @@ class Trials(models.Model):
 
 	# Canonical sponsor entity resolved from the raw `primary_sponsor` value via
 	# SponsorAlias — recomputed on every save() below, see _resolve_primary_sponsor().
-	# Never set this directly. PROTECT: sponsors are only deleted via the merge_sponsors
-	# command, which repoints trials first.
+	# Never set this directly. PROTECT: sponsors are only deleted via
+	# gregory.utils.sponsor_merge.merge_sponsors(), which repoints trials first — used by
+	# the merge_sponsors command, sync_sponsor_seeds' fold path, and
+	# recompute_sponsor_alias_keys.
 	primary_sponsor_normalized = models.ForeignKey(
 		"Sponsor", null=True, blank=True, on_delete=models.PROTECT,
 		related_name="trials", editable=False,
