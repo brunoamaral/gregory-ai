@@ -253,6 +253,15 @@ _RECRUITMENT_STATUS_EXACT_MATCHES: dict[str, str] = {
 	"unknown": TrialRecruitmentStatus.UNKNOWN,  # CT.gov — not verified in >2 years
 	"authorised": TrialRecruitmentStatus.UNKNOWN,  # EUCTR/CTIS: approved, recruitment state unstated
 	"not available": TrialRecruitmentStatus.UNKNOWN,  # WHO: status not available
+	# EU CTIS public-status codes confirmed 2026-07-19 against the portal's own frontend
+	# enum (see gregory.utils.ctis_codes) but none names an actual recruitment state —
+	# each is a step before/after regulatory review, not "recruiting"/"not recruiting"/
+	# "completed", so UNKNOWN (not OTHER, which is reserved for CT.gov states that
+	# aren't trial recruitment states at all) is the accurate bucket.
+	"under evaluation": TrialRecruitmentStatus.UNKNOWN,  # EU CTIS: pre-authorisation, recruitment state unstated
+	"expired": TrialRecruitmentStatus.UNKNOWN,  # EU CTIS: authorisation lapsed without a decision
+	"revoked": TrialRecruitmentStatus.UNKNOWN,  # EU CTIS: authorisation withdrawn by the regulator
+	"cancelled": TrialRecruitmentStatus.UNKNOWN,  # EU CTIS: application cancelled by the sponsor
 	# Other: CT.gov expanded-access program statuses, not trial recruitment states.
 	# Deliberately left in "other" so the raw string shows on display surfaces.
 	"available": TrialRecruitmentStatus.OTHER,

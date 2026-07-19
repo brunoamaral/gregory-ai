@@ -64,6 +64,12 @@ EXACT_MATCH_CASES = [
 	("unknown", TrialRecruitmentStatus.UNKNOWN),
 	("authorised", TrialRecruitmentStatus.UNKNOWN),
 	("not available", TrialRecruitmentStatus.UNKNOWN),
+	# Unknown (EU CTIS public-status codes confirmed 2026-07-19 against the portal's
+	# own frontend enum — none names an actual recruitment state)
+	("under evaluation", TrialRecruitmentStatus.UNKNOWN),
+	("expired", TrialRecruitmentStatus.UNKNOWN),
+	("revoked", TrialRecruitmentStatus.UNKNOWN),
+	("cancelled", TrialRecruitmentStatus.UNKNOWN),
 	# Other: expanded-access program statuses, not trial recruitment states
 	("available", TrialRecruitmentStatus.OTHER),
 	("no_longer_available", TrialRecruitmentStatus.OTHER),
