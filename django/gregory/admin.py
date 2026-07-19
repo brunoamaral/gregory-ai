@@ -44,8 +44,11 @@ from .models import (
 	CategoryType,
 	Sponsor,
 	SponsorAlias,
+	SponsorMergeCandidate,
+	SponsorMergeCandidateStatus,
 	default_match_weights,
 )
+from .utils.sponsor_merge import merge_sponsors
 from .widgets import MLPredictionsWidget
 from .fields import MLPredictionsField
 from .utils.trial_field_normalizers import NORMALIZED_TRIAL_FIELDS, raw_field_names
@@ -841,6 +844,135 @@ class SponsorAdmin(admin.ModelAdmin):
 
 	trial_count.admin_order_field = "trial_count"
 	trial_count.short_description = "Trials"
+
+
+class SponsorMergeCandidateAdmin(admin.ModelAdmin):
+	"""Review queue for gregory.management.commands.find_sponsor_merge_candidates.
+	Defaults to status=pending; "Dismiss" is the expected action for most containment
+	pairs (see SPONSOR-SURFACE-PLAN.md PR D2 — Aalborg University vs Aalborg University
+	Hospital are genuinely different entities)."""
+
+	list_display = ["sponsor_a_display", "sponsor_b_display", "basis", "shared_key", "status"]
+	list_filter = ["status", "basis"]
+	actions = ["merge_action", "dismiss_action"]
+
+	def changelist_view(self, request, extra_context=None):
+		# `status` has `choices=`, so Django's admin renders it with ChoicesFieldListFilter,
+		# whose query param is "status__exact" — not the bare field name. Defaulting the
+		# bare "status" key here (as if it were an AllValuesFieldListFilter) leaves it
+		# stuck in every link the sidebar filter subsequently builds, alongside its own
+		# "status__exact": e.g. clicking "Merged" would produce
+		# "?status=pending&status__exact=merged", which is a contradictory AND filter on
+		# the same field and returns zero rows for every option except Pending.
+		if "status__exact" not in request.GET and "status" not in request.GET:
+			query = request.GET.copy()
+			query["status__exact"] = SponsorMergeCandidateStatus.PENDING
+			request.GET = query
+			request.META["QUERY_STRING"] = request.GET.urlencode()
+		return super().changelist_view(request, extra_context)
+
+	def get_queryset(self, request):
+		return (
+			super()
+			.get_queryset(request)
+			.select_related("sponsor_a", "sponsor_b")
+			.annotate(
+				sponsor_a_trials_count=models.Count("sponsor_a__trials", distinct=True),
+				sponsor_b_trials_count=models.Count("sponsor_b__trials", distinct=True),
+			)
+		)
+
+	def sponsor_a_display(self, obj):
+		# None once this side has been merged away (SET_NULL) — see the model docstring.
+		if obj.sponsor_a is None:
+			return f"(merged away: {obj.absorbed_sponsor_name})"
+		return f"{obj.sponsor_a.name} ({obj.sponsor_a_trials_count} trials)"
+
+	sponsor_a_display.short_description = "Sponsor A"
+	sponsor_a_display.admin_order_field = "sponsor_a__name"
+
+	def sponsor_b_display(self, obj):
+		if obj.sponsor_b is None:
+			return f"(merged away: {obj.absorbed_sponsor_name})"
+		return f"{obj.sponsor_b.name} ({obj.sponsor_b_trials_count} trials)"
+
+	sponsor_b_display.short_description = "Sponsor B"
+	sponsor_b_display.admin_order_field = "sponsor_b__name"
+
+	def _pick_target(self, a: Sponsor, b: Sponsor) -> tuple:
+		"""Curated sponsor wins if exactly one side is curated; otherwise the side with
+		more trials wins. Same priority as recompute_sponsor_alias_keys._pick_survivor,
+		specialised for a two-way pair."""
+		a_curated = a.sponsor_type_source == "curated"
+		b_curated = b.sponsor_type_source == "curated"
+		if a_curated != b_curated:
+			return (a, b) if a_curated else (b, a)
+		return (a, b) if a.trials.count() >= b.trials.count() else (b, a)
+
+	def _sweep_pending_candidates(self, absorbed: Sponsor, survivor: Sponsor, exclude_pk):
+		"""Other pending candidates referencing the sponsor about to be absorbed: repoint
+		them onto the survivor unless that would duplicate an existing pair (any status),
+		in which case just drop the now-redundant row."""
+		referencing = SponsorMergeCandidate.objects.filter(
+			Q(sponsor_a_id=absorbed.pk) | Q(sponsor_b_id=absorbed.pk),
+			status=SponsorMergeCandidateStatus.PENDING,
+		).exclude(pk=exclude_pk)
+		for candidate in referencing:
+			other_id = (
+				candidate.sponsor_b_id
+				if candidate.sponsor_a_id == absorbed.pk
+				else candidate.sponsor_a_id
+			)
+			if other_id == survivor.pk:
+				candidate.delete()
+				continue
+			a_id, b_id = sorted([survivor.pk, other_id])
+			duplicate = (
+				SponsorMergeCandidate.objects.filter(sponsor_a_id=a_id, sponsor_b_id=b_id)
+				.exclude(pk=candidate.pk)
+				.exists()
+			)
+			if duplicate:
+				candidate.delete()
+			else:
+				candidate.sponsor_a_id = a_id
+				candidate.sponsor_b_id = b_id
+				candidate.save(update_fields=["sponsor_a", "sponsor_b"])
+
+	@admin.action(description="Merge (into curated/larger)")
+	def merge_action(self, request, queryset):
+		merged = 0
+		for candidate in queryset.filter(status=SponsorMergeCandidateStatus.PENDING):
+			candidate.refresh_from_db()
+			if candidate.status != SponsorMergeCandidateStatus.PENDING:
+				continue
+			target, other = self._pick_target(candidate.sponsor_a, candidate.sponsor_b)
+
+			self._sweep_pending_candidates(other, target, exclude_pk=candidate.pk)
+
+			# Snapshot the absorbed side's name for the audit trail, then just mark this
+			# row merged and leave sponsor_a/sponsor_b as-is: merge_sponsors() below
+			# deletes `other`, and since the FK is on_delete=SET_NULL (not CASCADE — see
+			# the model docstring), Django's own deletion collector clears whichever of
+			# sponsor_a/sponsor_b pointed at `other` automatically. Manually repointing
+			# it to `target` here would make both columns equal `target`, turning this
+			# row into a nonsensical (target, target) self-pair and losing which sponsor
+			# was actually absorbed.
+			candidate.absorbed_sponsor_name = other.name
+			candidate.status = SponsorMergeCandidateStatus.MERGED
+			candidate.decided_at = timezone.now()
+			candidate.save(update_fields=["absorbed_sponsor_name", "status", "decided_at"])
+
+			merge_sponsors(target, [other])
+			merged += 1
+		self.message_user(request, f"Merged {merged} candidate pair(s).")
+
+	@admin.action(description="Dismiss")
+	def dismiss_action(self, request, queryset):
+		updated = queryset.filter(status=SponsorMergeCandidateStatus.PENDING).update(
+			status=SponsorMergeCandidateStatus.DISMISSED, decided_at=timezone.now()
+		)
+		self.message_user(request, f"Dismissed {updated} candidate pair(s).")
 
 
 class TrialAdminForm(forms.ModelForm):
@@ -3171,6 +3303,7 @@ admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)
 admin.site.register(Sponsor, SponsorAdmin)
+admin.site.register(SponsorMergeCandidate, SponsorMergeCandidateAdmin)
 
 
 class _BaseOrgContentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
