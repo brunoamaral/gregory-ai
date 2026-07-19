@@ -2,7 +2,7 @@
 Sponsor/SponsorAlias tables.
 
 Idempotent and safe to re-run after every edit to sponsor_seeds.py: for each family it
-get_or_creates the canonical Sponsor (marking sponsor_type_source="curated", which
+get_or_create's the canonical Sponsor (marking sponsor_type_source="curated", which
 _update_sponsor_type_from_trial() in gregory/models.py never overwrites automatically),
 then for each variant string either creates a fresh alias pointing at that sponsor, or —
 if the key was already auto-created as its own singleton Sponsor by a prior trial save —

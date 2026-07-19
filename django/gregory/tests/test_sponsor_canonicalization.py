@@ -7,9 +7,12 @@ test_backfill_trial_sponsors_from_ctgov.py; sync_sponsor_seeds coverage lives in
 gregory/tests/management/test_sync_sponsor_seeds.py.
 """
 
+from unittest.mock import patch
+
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
+from django.db import IntegrityError
 from django.test import RequestFactory, TestCase
 
 from gregory.admin import TrialAdmin
@@ -215,18 +218,21 @@ class TrialSponsorResolutionTests(TestCase):
 
 		self.assertEqual(trial.primary_sponsor_normalized_id, new_sponsor.pk)
 
-	def test_update_fields_without_primary_sponsor_still_resolves_in_memory(self):
+	def test_update_fields_without_primary_sponsor_is_never_touched(self):
 		trial = self._trial(7, primary_sponsor="Scoped Corp")
 		Trials.objects.filter(pk=trial.pk).update(primary_sponsor_normalized=None)
 		trial.refresh_from_db()
 		self.assertIsNone(trial.primary_sponsor_normalized)
+		sponsor_count_before = Sponsor.objects.count()
 
 		trial.title = "Renamed"
 		trial.save(update_fields=["title"])
 		trial.refresh_from_db()
-		# Scoped update did not include primary_sponsor -> the stale None FK is not
-		# clobbered by the in-memory recompute, mirroring the other derived fields' rule.
+		# Scoped update did not include primary_sponsor -> resolution is skipped
+		# entirely, not just its persistence: no orphan Sponsor/SponsorAlias is created
+		# as a side effect of this unrelated update, and the stale None FK survives.
 		self.assertIsNone(trial.primary_sponsor_normalized)
+		self.assertEqual(Sponsor.objects.count(), sponsor_count_before)
 
 	def test_update_fields_with_primary_sponsor_persists_resolution(self):
 		trial = self._trial(8, primary_sponsor="First Name Corp")
@@ -234,6 +240,26 @@ class TrialSponsorResolutionTests(TestCase):
 		trial.save(update_fields=["primary_sponsor"])
 		trial.refresh_from_db()
 		self.assertEqual(trial.primary_sponsor_normalized.name, "Renamed Corp")
+
+	def test_scoped_save_of_unrelated_field_never_creates_orphan_sponsor_for_unseen_key(
+		self,
+	):
+		# A trial carrying a brand-new (never-before-seen) primary_sponsor value, written
+		# via bulk-style update() so it bypasses save()'s resolution entirely — simulating
+		# a row a concurrent process is mid-writing. A scoped save of an unrelated field
+		# must not eagerly create a Sponsor/SponsorAlias for that unseen key as a side
+		# effect (see TRIALS-SPONSOR-CANONICALIZATION-PLAN.md PR 1 review follow-up).
+		trial = self._trial(11)
+		Trials.objects.filter(pk=trial.pk).update(primary_sponsor="Brand New Sponsor Inc")
+		trial.refresh_from_db()
+		self.assertFalse(Sponsor.objects.filter(name="Brand New Sponsor Inc").exists())
+
+		trial.countries = "France"
+		trial.save(update_fields=["countries"])
+
+		self.assertFalse(Sponsor.objects.filter(name="Brand New Sponsor Inc").exists())
+		trial.refresh_from_db()
+		self.assertIsNone(trial.primary_sponsor_normalized)
 
 	def test_sponsor_type_derived_on_creation(self):
 		trial = self._trial(9, primary_sponsor="Acme Foundation", sponsor_type=None)
@@ -284,6 +310,17 @@ class CreateSponsorForKeyTests(TestCase):
 		self.assertEqual(result.key, key2)
 		self.assertNotEqual(result.sponsor.name, "Acme Corp")
 		self.assertTrue(result.sponsor.name.startswith("Acme Corp ("))
+
+	def test_second_race_without_a_winner_reraises_rather_than_swallowing(self):
+		# Both the primary attempt and the suffixed-name retry hit IntegrityError, and no
+		# alias ever shows up for the key (an unresolvable DB state, not a real race) —
+		# the function must propagate the error rather than returning something bogus.
+		key = "double-failure-corp"
+		with patch.object(
+			SponsorAlias.objects, "create", side_effect=IntegrityError("simulated")
+		):
+			with self.assertRaises(IntegrityError):
+				_create_sponsor_for_key(key, "Double Failure Corp")
 
 
 # --- Sponsor seed data guards ------------------------------------------------------------

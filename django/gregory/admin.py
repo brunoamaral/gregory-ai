@@ -229,16 +229,21 @@ class TrialCountryInline(admin.TabularInline):
 
 
 class SponsorAliasInline(admin.TabularInline):
-	"""Raw spelling variants resolving to this Sponsor. `key` is the normalized lookup
-	value (gregory.utils.trial_field_normalizers.normalize_sponsor_key) and is readonly
-	here — edit `raw_sample` freely, but adding a new variant means adding a new alias
-	row with its own key, not editing an existing one (the key is what the unique index
-	and Trials._resolve_primary_sponsor() actually key off)."""
+	"""Read-only display of the raw spelling variants resolving to this Sponsor. `key` is
+	the normalized lookup value
+	(gregory.utils.trial_field_normalizers.normalize_sponsor_key) that
+	Trials._resolve_primary_sponsor() actually keys off, so it is never hand-edited here
+	— a typo would silently break resolution for every trial using that spelling. Add
+	new variants via `sync_sponsor_seeds` (curated families) or `merge_sponsors`
+	(ad-hoc), not through this inline."""
 
 	model = SponsorAlias
 	extra = 0
 	fields = ["key", "raw_sample"]
 	readonly_fields = ["key"]
+
+	def has_add_permission(self, request, obj=None):
+		return False  # key is readonly, so a blank "add" row could never be saved
 
 
 class RelevanceRadioWidget(forms.RadioSelect):

@@ -876,11 +876,22 @@ def _create_sponsor_for_key(key: str, display: str) -> "SponsorAlias":
 		if existing_alias is not None:
 			return existing_alias
 		suffixed_name = f"{display} ({key[:40]})"[:500]
-		with transaction.atomic():
-			sponsor = Sponsor.objects.create(
-				name=suffixed_name, slug=_unique_sponsor_slug(suffixed_name)
-			)
-			return SponsorAlias.objects.create(sponsor=sponsor, key=key, raw_sample=display)
+		try:
+			with transaction.atomic():
+				sponsor = Sponsor.objects.create(
+					name=suffixed_name, slug=_unique_sponsor_slug(suffixed_name)
+				)
+				return SponsorAlias.objects.create(sponsor=sponsor, key=key, raw_sample=display)
+		except IntegrityError:
+			# Same rare race hit twice in a row: someone else won this key while we were
+			# retrying. Reuse their alias rather than raising — this is the same
+			# concurrent-importer scenario the outer except already handles once.
+			existing_alias = SponsorAlias.objects.select_related("sponsor").filter(
+				key=key
+			).first()
+			if existing_alias is not None:
+				return existing_alias
+			raise
 
 
 def _update_sponsor_type_from_trial(sponsor: "Sponsor", trial: "Trials") -> None:
@@ -1090,8 +1101,13 @@ class Trials(models.Model):
 			self.primary_sponsor_normalized = None
 			return
 
-		current = self.primary_sponsor_normalized
-		if current is not None and current.aliases.filter(key=key).exists():
+		# Compare against the FK id, not self.primary_sponsor_normalized (dereferencing
+		# the descriptor would lazy-load the related Sponsor row on every save of an
+		# already-resolved trial — an avoidable extra query on the happy path).
+		current_id = self.primary_sponsor_normalized_id
+		if current_id is not None and SponsorAlias.objects.filter(
+			key=key, sponsor_id=current_id
+		).exists():
 			return  # already resolved to the right entity — skip writes
 
 		alias = SponsorAlias.objects.select_related("sponsor").filter(key=key).first()
@@ -1124,15 +1140,19 @@ class Trials(models.Model):
 				extra_update_fields.append(derived_field)
 
 		# Sponsor resolution is not in NORMALIZED_TRIAL_FIELDS (it needs DB lookups, not a
-		# pure raw->derived mapping) but follows the same update_fields-scoping rule: always
-		# recompute in memory, only widen a scoped update when its raw field was in scope.
-		self._resolve_primary_sponsor()
-		if (
-			update_fields is not None
-			and "primary_sponsor" in update_fields
-			and "primary_sponsor_normalized" not in update_fields
-		):
-			extra_update_fields.append("primary_sponsor_normalized")
+		# pure raw->derived mapping) and — unlike that loop — it can have DB side effects
+		# (creating a Sponsor/SponsorAlias on first sight of a key). So it is gated by
+		# update_fields scope entirely, not just its persistence: a scoped save that
+		# doesn't touch primary_sponsor must never create sponsor rows as a side effect of
+		# an unrelated update (e.g. backfill_trial_countries' update_fields=["countries",
+		# "countries_by_source"], which deliberately avoids writing anything else).
+		if update_fields is None or "primary_sponsor" in update_fields:
+			self._resolve_primary_sponsor()
+			if (
+				update_fields is not None
+				and "primary_sponsor_normalized" not in update_fields
+			):
+				extra_update_fields.append("primary_sponsor_normalized")
 
 		if extra_update_fields:
 			kwargs["update_fields"] = [*update_fields, *extra_update_fields]
