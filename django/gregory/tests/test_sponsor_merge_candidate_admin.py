@@ -4,11 +4,14 @@ Run:
 	docker exec gregory python manage.py test gregory.tests.test_sponsor_merge_candidate_admin
 """
 
+import re
+
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 
 from gregory.admin import SponsorMergeCandidateAdmin
 from gregory.models import Sponsor, SponsorMergeCandidate, Trials
@@ -203,6 +206,68 @@ class SponsorMergeCandidateAdminTests(TestCase):
 		self.assertEqual(SponsorMergeCandidate.objects.filter(pk=candidate.pk).count(), 1)
 		candidate.refresh_from_db()
 		self.assertEqual(candidate.status, "dismissed")
+
+
+class SponsorMergeCandidateChangelistFilterTests(TestCase):
+	"""Regression test: the changelist_view default-filter injection used to set the
+	bare "status" query param, but the status field's choices= makes Django render its
+	sidebar filter with ChoicesFieldListFilter, whose param is "status__exact" — so the
+	stale "status=pending" survived into every filter link the sidebar generated
+	(e.g. clicking "Merged" produced "?status=pending&status__exact=merged", a
+	self-contradictory AND filter that always returned zero rows)."""
+
+	def setUp(self):
+		self.superuser = User.objects.create_superuser(
+			username="filter-root", email="filter-root@example.com", password="pw"
+		)
+		self.client.force_login(self.superuser)
+		self.url = reverse("admin:gregory_sponsormergecandidate_changelist")
+
+	def _sponsor(self, name, slug, **extra):
+		return Sponsor.objects.create(name=name, slug=slug, **extra)
+
+	def test_default_view_shows_pending_only(self):
+		a = self._sponsor("Filter Pending A", "filter-pending-a")
+		b = self._sponsor("Filter Pending B", "filter-pending-b")
+		c = self._sponsor("Filter Merged C", "filter-merged-c")
+		SponsorMergeCandidate.objects.create(
+			sponsor_a=a, sponsor_b=b, basis="suffix_variant", shared_key="pending-pair"
+		)
+		SponsorMergeCandidate.objects.create(
+			sponsor_a=c, sponsor_b=None, basis="suffix_variant", shared_key="merged-pair",
+			status="merged", absorbed_sponsor_name="Whatever Corp",
+		)
+
+		resp = self.client.get(self.url)
+
+		self.assertContains(resp, "Filter Pending A")
+		self.assertNotContains(resp, "Filter Merged C")
+
+	def test_rendered_merged_filter_link_is_not_self_contradictory(self):
+		a = self._sponsor("Filter Pending A2", "filter-pending-a2")
+		b = self._sponsor("Filter Pending B2", "filter-pending-b2")
+		c = self._sponsor("Filter Merged C2", "filter-merged-c2")
+		SponsorMergeCandidate.objects.create(
+			sponsor_a=a, sponsor_b=b, basis="suffix_variant", shared_key="pending-pair-2"
+		)
+		SponsorMergeCandidate.objects.create(
+			sponsor_a=c, sponsor_b=None, basis="suffix_variant", shared_key="merged-pair-2",
+			status="merged", absorbed_sponsor_name="Whatever Corp 2",
+		)
+
+		default_resp = self.client.get(self.url)
+		body = default_resp.content.decode()
+		match = re.search(r'href="(\?[^"]*status__exact=merged[^"]*)"', body)
+		self.assertIsNotNone(match, "changelist did not render a 'Merged' filter link")
+		merged_link = match.group(1).replace("&amp;", "&")
+
+		# The bug: the rendered link itself still carried the stale bare "status=pending"
+		# alongside "status__exact=merged".
+		self.assertNotIn("status=pending", merged_link)
+
+		merged_resp = self.client.get(self.url + merged_link)
+		self.assertContains(merged_resp, "Filter Merged C2")
+		self.assertNotContains(merged_resp, "Filter Pending A2")
 
 
 class SponsorMergeCandidateChoicesTests(TestCase):

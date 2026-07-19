@@ -857,9 +857,16 @@ class SponsorMergeCandidateAdmin(admin.ModelAdmin):
 	actions = ["merge_action", "dismiss_action"]
 
 	def changelist_view(self, request, extra_context=None):
-		if "status" not in request.GET:
+		# `status` has `choices=`, so Django's admin renders it with ChoicesFieldListFilter,
+		# whose query param is "status__exact" — not the bare field name. Defaulting the
+		# bare "status" key here (as if it were an AllValuesFieldListFilter) leaves it
+		# stuck in every link the sidebar filter subsequently builds, alongside its own
+		# "status__exact": e.g. clicking "Merged" would produce
+		# "?status=pending&status__exact=merged", which is a contradictory AND filter on
+		# the same field and returns zero rows for every option except Pending.
+		if "status__exact" not in request.GET and "status" not in request.GET:
 			query = request.GET.copy()
-			query["status"] = SponsorMergeCandidateStatus.PENDING
+			query["status__exact"] = SponsorMergeCandidateStatus.PENDING
 			request.GET = query
 			request.META["QUERY_STRING"] = request.GET.urlencode()
 		return super().changelist_view(request, extra_context)
