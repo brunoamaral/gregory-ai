@@ -1,6 +1,6 @@
 """
-Tests for the CTIS public search API client and record mapper
-(CTIS-API-FEEDREADER-PLAN.md).
+Tests for the CTIS public search API client and record mapper.
+See docs/ctis-public-api-schema.md for the underlying API contract.
 
 Covers:
   - CTISPublicAPI.search / iter_search: pagination, incremental stop only when a
@@ -167,6 +167,30 @@ class RetrieveTests(SimpleTestCase):
 		self.api.session.get.return_value = _mock_response({}, status_ok=False)
 		with self.assertRaises(requests.exceptions.HTTPError):
 			self.api.retrieve("2025-523726-40-00")
+
+
+class RecordIsStaleTests(SimpleTestCase):
+	"""record_is_stale is shared between iter_search's page-continuation decision
+	and feedreader_trials_ctis's decision to skip the expensive /retrieve backup
+	GET for records outside the incremental window."""
+
+	def test_fresh_on_last_updated_is_not_stale(self):
+		record = _record(last_updated="15/07/2026", last_pub="01/01/2020")
+		self.assertFalse(CTISPublicAPI.record_is_stale(record, datetime.date(2026, 7, 1)))
+
+	def test_fresh_on_last_publication_update_is_not_stale(self):
+		record = _record(last_updated="01/01/2020", last_pub="15/07/2026")
+		self.assertFalse(CTISPublicAPI.record_is_stale(record, datetime.date(2026, 7, 1)))
+
+	def test_stale_on_both_dates_is_stale(self):
+		record = _record(last_updated="01/01/2020", last_pub="02/01/2020")
+		self.assertTrue(CTISPublicAPI.record_is_stale(record, datetime.date(2026, 7, 1)))
+
+	def test_missing_dates_are_stale(self):
+		record = _record()
+		del record["lastUpdated"]
+		del record["lastPublicationUpdate"]
+		self.assertTrue(CTISPublicAPI.record_is_stale(record, datetime.date(2026, 7, 1)))
 
 
 class IterSearchTests(SimpleTestCase):
@@ -357,6 +381,33 @@ class ParseSearchRecordTests(SimpleTestCase):
 		trial = self.api.parse_ctis_search_record(record)
 		self.assertIn("<b>Sponsor</b>: Test Sponsor<br/>", trial.summary)
 
+	def test_summary_includes_results_decision_dates_and_last_updated(self):
+		"""Regression test: the composed summary must carry every RSS-visible field,
+		not a subset — otherwise API-created trials get a less informative summary
+		than RSS-created ones."""
+		record = _record(
+			resultsFirstReceived="No",
+			decisionDateOverall="24/06/2026",
+			decisionDate="IT: 24/06/2026, ES: 26/06/2026",
+			lastUpdated="09/07/2026",
+			lastPublicationUpdate="15/07/2026",
+		)
+		trial = self.api.parse_ctis_search_record(record)
+		self.assertIn("<b>Results posted</b>: No<br/>", trial.summary)
+		self.assertIn("<b>Overall decision date</b>: 24/06/2026<br/>", trial.summary)
+		self.assertIn(
+			"<b>Countries decision date</b>: IT: 24/06/2026, ES: 26/06/2026<br/>",
+			trial.summary,
+		)
+		self.assertIn("<b>Last updated date</b>: 15/07/2026<br/>", trial.summary)
+
+	def test_summary_shows_results_posted_yes_when_true(self):
+		"""'No' would be falsy and dropped by a naive truthiness check — assert the
+		explicit is-not-None guard handles both booleans."""
+		record = _record(resultsFirstReceived="Yes")
+		trial = self.api.parse_ctis_search_record(record)
+		self.assertIn("<b>Results posted</b>: Yes<br/>", trial.summary)
+
 
 class RssParityTests(SimpleTestCase):
 	"""Real trial 2025-523726-40-00, captured live from both the RSS feed and the
@@ -449,9 +500,8 @@ class RssParityTests(SimpleTestCase):
 		self.assertEqual(set(rss_fields.keys()), set(api_fields.keys()))
 		# last_refreshed_on is the one intentional divergence: the RSS feed only
 		# exposes a single "Last updated date" line (-> lastUpdated), while the API
-		# additionally exposes lastPublicationUpdate. Per the mapping table
-		# (CTIS-API-FEEDREADER-PLAN.md section 3) the API mapper takes
-		# max(lastUpdated, lastPublicationUpdate) — a strictly fresher recency
+		# additionally exposes lastPublicationUpdate. The API mapper deliberately
+		# takes max(lastUpdated, lastPublicationUpdate) — a strictly fresher recency
 		# signal than the RSS channel can produce, not a parity bug.
 		for key in rss_fields:
 			if key == "last_refreshed_on":

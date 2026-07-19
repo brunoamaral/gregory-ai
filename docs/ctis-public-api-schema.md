@@ -143,8 +143,10 @@ re-fetch):
 
 The existing feedreader source. Returns only the **15 most recently updated** trials for
 the criteria; description HTML carries labeled lines (`Sponsor`, `Sponsor type`,
-`Overall trial status`, `Status in each country`, …). Kept as the fallback channel — see
-`TRIALS-SPONSOR-CANONICALIZATION-PLAN.md` PR A.
+`Overall trial status`, `Status in each country`, …). Kept as the fallback channel
+permanently: the `/search` API this document describes is undocumented and access
+could be withdrawn without notice, while this RSS feed is the EMA-advertised channel —
+see the rationale in `feedreader_trials_ctis`'s module docstring.
 
 ## Public status codes
 

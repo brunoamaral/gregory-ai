@@ -1049,6 +1049,30 @@ class CTISPublicAPI:
 
 		return result
 
+	@staticmethod
+	def record_is_stale(record: dict, since) -> bool:
+		"""True if *record* is outside the incremental window: both lastUpdated and
+		lastPublicationUpdate are older than *since* (or absent/unparsable).
+
+		Shared by iter_search (to decide whether to keep paging) and by callers that
+		want to skip expensive per-record work — e.g. feedreader_trials_ctis skips
+		the /retrieve backup GET for stale records instead of firing one for every
+		record a page happens to include.
+		"""
+		from dateutil.parser import parse as parse_date
+
+		for date_field in ("lastUpdated", "lastPublicationUpdate"):
+			raw = record.get(date_field)
+			if not raw:
+				continue
+			try:
+				parsed = parse_date(raw, dayfirst=True).date()
+			except (ValueError, TypeError):
+				continue
+			if parsed >= since:
+				return False
+		return True
+
 	def iter_search(self, criteria: dict, since=None, size: int = 50, sleep: float = 0.5):
 		"""Iterate every record across all pages of /search for *criteria*.
 
@@ -1057,10 +1081,12 @@ class CTISPublicAPI:
 		continues until an entire page is stale on BOTH lastUpdated and
 		lastPublicationUpdate — the observed sort is not strictly monotonic (see
 		docs/ctis-public-api-schema.md), so a single stale record within a page must
-		never stop the walk early; only a wholly-stale page does.
+		never stop the walk early; only a wholly-stale page does. Individual stale
+		records are still yielded (so cheap DB non-destructive-updates still run for
+		them) — callers doing expensive per-record work should check
+		record_is_stale() themselves rather than assume every yielded record is fresh.
 		"""
 		import time
-		from dateutil.parser import parse as parse_date
 
 		page = 1
 		while True:
@@ -1071,21 +1097,8 @@ class CTISPublicAPI:
 
 			page_is_stale = since is not None
 			for record in records:
-				if since is not None:
-					record_is_stale = True
-					for date_field in ("lastUpdated", "lastPublicationUpdate"):
-						raw = record.get(date_field)
-						if not raw:
-							continue
-						try:
-							parsed = parse_date(raw, dayfirst=True).date()
-						except (ValueError, TypeError):
-							continue
-						if parsed >= since:
-							record_is_stale = False
-							break
-					if not record_is_stale:
-						page_is_stale = False
+				if since is not None and not self.record_is_stale(record, since):
+					page_is_stale = False
 				yield record
 
 			if page_is_stale:
@@ -1265,9 +1278,8 @@ class CTISPublicAPI:
 		}
 
 		# summary is composed only as a fill-once fallback for trials that have none —
-		# the command must never overwrite an existing summary with this (see
-		# CTIS-API-FEEDREADER-PLAN.md section 3). Mirrors the RSS description's
-		# "<b>Label</b>: value<br/>" labeled-line format.
+		# the command must never overwrite an existing summary with this. Mirrors the
+		# RSS description's "<b>Label</b>: value<br/>" labeled-line format.
 		summary = self._compose_summary(record, extra_fields)
 
 		return ClinicalTrial(
@@ -1284,6 +1296,8 @@ class CTISPublicAPI:
 		"""Deterministically compose a labeled-line summary from mapped fields, for
 		trials that don't have one yet. Mirrors the label text used in the RSS feed
 		description so a human reading either channel's summary sees the same shape."""
+		from datetime import date
+
 		lines = []
 
 		def add(label, value):
@@ -1306,5 +1320,31 @@ class CTISPublicAPI:
 		add("Sponsor", extra_fields.get("primary_sponsor"))
 		add("Sponsor type", extra_fields.get("sponsor_type"))
 		add("Trial product", extra_fields.get("intervention"))
+
+		# results_posted is a bool (or None); "No" is a real, meaningful value that
+		# add()'s truthiness check would otherwise silently drop.
+		results_posted = extra_fields.get("results_posted")
+		if results_posted is not None:
+			add("Results posted", "Yes" if results_posted else "No")
+
+		# Day-first (DD/MM/YYYY) to match the RSS description's date format exactly.
+		overall_decision_date = extra_fields.get("overall_decision_date")
+		if overall_decision_date:
+			add("Overall decision date", overall_decision_date.strftime("%d/%m/%Y"))
+
+		countries_decision_date = extra_fields.get("countries_decision_date")
+		if countries_decision_date:
+			parts = []
+			for country_code, iso_date in countries_decision_date.items():
+				try:
+					parsed = date.fromisoformat(iso_date)
+					parts.append(f"{country_code}: {parsed.strftime('%d/%m/%Y')}")
+				except (ValueError, TypeError):
+					parts.append(f"{country_code}: {iso_date}")
+			add("Countries decision date", ", ".join(parts))
+
+		last_refreshed_on = extra_fields.get("last_refreshed_on")
+		if last_refreshed_on:
+			add("Last updated date", last_refreshed_on.strftime("%d/%m/%Y"))
 
 		return "".join(lines) or None

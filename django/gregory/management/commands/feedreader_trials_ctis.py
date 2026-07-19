@@ -169,9 +169,15 @@ class Command(GregoryBaseCommand):
 							)
 							continue
 
-						self._backup_retrieve_dossier(
-							clinical_trial.identifiers["euct"], backup_dir
-						)
+						# Skip the expensive /retrieve GET for records outside the
+						# incremental window — iter_search still yields them (so the
+						# cheap DB non-destructive-update below still runs), but a
+						# wholly-stale trailing page can otherwise cost up to `size`
+						# unnecessary heavy GETs per run for trials that haven't changed.
+						if since is None or not self.api.record_is_stale(record, since):
+							self._backup_retrieve_dossier(
+								clinical_trial.identifiers["euct"], backup_dir
+							)
 
 						existing_trial = self.find_existing_trial(clinical_trial)
 						if existing_trial:
@@ -199,10 +205,10 @@ class Command(GregoryBaseCommand):
 							if clinical_trial
 							else "N/A"
 						)
-						self.stdout.write(
-							self.style.ERROR(
-								f"IntegrityError for trial (CT number: {ct_number}): {e}"
-							)
+						self.log(
+							f"IntegrityError for trial (CT number: {ct_number}): {e}",
+							level=1,
+							style_func=self.style.ERROR,
 						)
 						error_count += 1
 					except Exception as e:
@@ -211,8 +217,10 @@ class Command(GregoryBaseCommand):
 							if clinical_trial
 							else "unknown"
 						)
-						self.stdout.write(
-							self.style.ERROR(f"Error processing trial {ct_number}: {e}")
+						self.log(
+							f"Error processing trial {ct_number}: {e}",
+							level=1,
+							style_func=self.style.ERROR,
 						)
 						error_count += 1
 
@@ -436,8 +444,7 @@ class Command(GregoryBaseCommand):
 		# summary is fill-once: EUTrialParser/CTISPublicAPI both compose a
 		# deterministic labeled-line summary from mapped fields, which would churn
 		# on every sync if compared for equality like title/published_date. Only
-		# fill it when the trial doesn't have one yet (see
-		# CTIS-API-FEEDREADER-PLAN.md section 3, "summary" row).
+		# fill it when the trial doesn't have one yet.
 		if clinical_trial.summary and not existing_trial.summary:
 			existing_trial.summary = clinical_trial.summary
 			has_changes = True

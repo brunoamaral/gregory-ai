@@ -1,5 +1,6 @@
 """
-Command-level tests for feedreader_trials_ctis (CTIS-API-FEEDREADER-PLAN.md).
+Command-level tests for feedreader_trials_ctis.
+See docs/ctis-public-api-schema.md for the underlying API contract.
 
 Covers:
   - source validation: empty/missing/non-dict ctis_search_criteria is skipped
@@ -427,3 +428,30 @@ class RetrieveBackupTests(TestCase):
 			"2026-000000-00-33",
 			{"ctNumber": "2026-000000-00-33"},
 		)
+
+	def test_stale_records_in_an_incremental_run_skip_the_backup_call(self):
+		"""iter_search still yields records outside the incremental window (so the
+		cheap DB non-destructive-update runs for them), but the command must not
+		fire an expensive /retrieve GET for a record that hasn't actually changed —
+		otherwise a wholly-stale trailing page costs up to `size` wasted GETs."""
+		anchor = timezone.now()
+		self.source.last_successful_fetch_at = anchor
+		self.source.save(update_fields=["last_successful_fetch_at"])
+
+		fresh_record = {"ctNumber": "2026-000000-00-40"}
+		stale_record = {"ctNumber": "2026-000000-00-41"}
+
+		api = MagicMock()
+		api.iter_search.return_value = iter([fresh_record, stale_record])
+		api.parse_ctis_search_record.side_effect = [
+			_trial("2026-000000-00-40"),
+			_trial("2026-000000-00-41"),
+		]
+		api.record_is_stale.side_effect = lambda record, since: record is stale_record
+		api.retrieve.return_value = {"ctNumber": "backup-payload"}
+		cmd = _make_command(api)
+
+		cmd.process_sources(backup_dir=self.tmp_dir)
+
+		api.retrieve.assert_called_once_with("2026-000000-00-40")
+		self.assertEqual(Trials.objects.count(), 2)
