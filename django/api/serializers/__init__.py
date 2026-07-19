@@ -13,6 +13,7 @@ from gregory.models import (
 	ArticleOrgContent,
 	TrialOrgContent,
 	TrialCountry,
+	Sponsor,
 )
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
@@ -519,6 +520,27 @@ class TrialCountrySerializer(serializers.ModelSerializer):
 		return obj.country.code if obj.country else None
 
 
+class TrialSponsorSerializer(serializers.ModelSerializer):
+	"""The canonical sponsor entity a trial's raw ``primary_sponsor`` resolves to —
+	see docs/trials-field-normalization.md. Nested on TrialSerializer as ``sponsor``;
+	null when the raw string hasn't been resolved yet."""
+
+	class Meta:
+		model = Sponsor
+		fields = ["id", "slug", "name", "sponsor_type"]
+
+
+class SponsorSerializer(serializers.ModelSerializer):
+	"""Used by SponsorViewSet (``/sponsors/``). ``trials_count`` is populated by an
+	annotation on the viewset's queryset, not a model field."""
+
+	trials_count = serializers.IntegerField(read_only=True)
+
+	class Meta:
+		model = Sponsor
+		fields = ["id", "slug", "name", "sponsor_type", "trials_count"]
+
+
 class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
@@ -530,6 +552,12 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 	# prefetching "trial_countries" to avoid one query per trial on list responses.
 	trial_countries = TrialCountrySerializer(many=True, read_only=True)
 	countries_normalized = serializers.SerializerMethodField()
+	# Canonical sponsor entity resolved from primary_sponsor — see
+	# docs/trials-field-normalization.md. The raw primary_sponsor/secondary_sponsor/
+	# sponsor_type fields stay untouched; this is purely additive. Null when
+	# unresolved. Relies on TrialViewSet.get_queryset() select_related'ing
+	# primary_sponsor_normalized to avoid one query per trial on list responses.
+	sponsor = TrialSponsorSerializer(source="primary_sponsor_normalized", read_only=True)
 
 	# Omit these fields from the response when there is no organisation context
 	_per_org_fields = ["takeaways", "summary_plain_english"]
@@ -558,6 +586,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 			"primary_sponsor",
 			"secondary_sponsor",
 			"sponsor_type",
+			"sponsor",
 			"prospective_registration",
 			"date_registration",
 			"source_register",
