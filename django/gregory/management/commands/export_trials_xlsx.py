@@ -60,6 +60,7 @@ SCALAR_ORDER = [
 	"secondary_sponsor",
 	"source_support",
 	"sponsor_type",
+	"lead_sponsor_class",
 	"contact_firstname",
 	"contact_lastname",
 	"contact_address",
@@ -93,6 +94,9 @@ RELATION_COLS = [
 	"team_categories",
 	"articles",
 	"trial_countries",
+	"primary_sponsor_normalized",
+	"sponsor_type_normalized",
+	"sponsor_type_source",
 ]
 
 # Descriptions for exported columns absent from TrialAdminForm.Meta.help_texts.
@@ -191,9 +195,48 @@ EXTRA_GLOSSARY = {
 		"EU CTIS",
 	),
 	"sponsor_type": (
-		"Sponsor type",
-		"Whether the sponsor is commercial or non-commercial.",
+		"Sponsor type (raw)",
+		"Sponsor category as reported verbatim by EU CTIS (e.g. \"Pharmaceutical "
+		"company\"). Populated for EU CTIS trials only — see sponsor_type_normalized "
+		"for a canonical category derived across all three registries.",
 		"EU CTIS",
+	),
+	"lead_sponsor_class": (
+		"Lead sponsor class (CTGov)",
+		"Sponsor agency class as classified by ClinicalTrials.gov (e.g. INDUSTRY, NIH, "
+		"FED, OTHER_GOV, INDIV, NETWORK, OTHER, AMBIG, UNKNOWN). One of the signals "
+		"feeding sponsor_type_normalized.",
+		"ClinicalTrials.gov",
+	),
+	"primary_sponsor_normalized": (
+		"Sponsor (canonical)",
+		"Canonical sponsor entity name. Spelling variants of the same real-world "
+		"sponsor across registries (e.g. \"Novartis\", \"Novartis Pharma AG\", "
+		"\"Novartis Pharmaceuticals\") resolve to one name here, so counting/grouping "
+		"trials by sponsor no longer undercounts due to spelling differences. Blank "
+		"when primary_sponsor is empty.",
+		"WHO ICTRP, ClinicalTrials.gov, EU CTIS",
+	),
+	"sponsor_type_normalized": (
+		"Sponsor type (canonical)",
+		"Canonical sponsor category for the resolved sponsor entity: industry, "
+		"academic_medical, government, nonprofit, or other. Derived from (in priority "
+		"order) a curated hand-assignment for known sponsor families, "
+		"ClinicalTrials.gov's lead_sponsor_class, EU CTIS's raw sponsor_type, or "
+		"keyword rules on the sponsor name — so it is populated far more often than "
+		"the raw sponsor_type column, which only EU CTIS provides. See "
+		"sponsor_type_source for which of these actually applied. Blank when no "
+		"signal was available to classify the sponsor.",
+		"WHO ICTRP, ClinicalTrials.gov, EU CTIS",
+	),
+	"sponsor_type_source": (
+		"Sponsor type source",
+		"Audit trail for sponsor_type_normalized: which signal actually determined it — "
+		"\"curated\" (set by hand for a known sponsor family, never overwritten "
+		"automatically), \"ctgov\" (ClinicalTrials.gov's lead_sponsor_class), \"ctis\" "
+		"(EU CTIS's raw sponsor_type), or \"rules\" (keyword match on the sponsor name, "
+		"the lowest-confidence tier). Blank when sponsor_type_normalized itself is blank.",
+		"WHO ICTRP, ClinicalTrials.gov, EU CTIS",
 	),
 	"ctg_detailed_description": (
 		"Detailed description",
@@ -624,6 +667,7 @@ class Command(BaseCommand):
 				Trials.objects.filter(subjects=subject)
 				.distinct()
 				.order_by("-discovery_date")
+				.select_related("primary_sponsor_normalized")
 				.prefetch_related(
 					"subjects",
 					"teams",
@@ -687,6 +731,19 @@ class Command(BaseCommand):
 								row_data.append("")
 						elif col_name == "trial_countries":
 							row_data.append(_format_trial_countries(trial))
+						elif col_name == "primary_sponsor_normalized":
+							sponsor = trial.primary_sponsor_normalized
+							row_data.append(sponsor.name if sponsor else "")
+						elif col_name == "sponsor_type_normalized":
+							sponsor = trial.primary_sponsor_normalized
+							row_data.append(
+								(sponsor.sponsor_type or "") if sponsor else ""
+							)
+						elif col_name == "sponsor_type_source":
+							sponsor = trial.primary_sponsor_normalized
+							row_data.append(
+								(sponsor.sponsor_type_source or "") if sponsor else ""
+							)
 						else:
 							row_data.append("")
 

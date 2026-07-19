@@ -385,6 +385,149 @@ class ExportTrialsXlsxTests(TestCase):
 			os.unlink(path)
 
 	# ------------------------------------------------------------------
+	# Normalized sponsor columns
+	# ------------------------------------------------------------------
+
+	def test_sponsor_normalization_columns_present(self):
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			for col in (
+				"lead_sponsor_class",
+				"primary_sponsor_normalized",
+				"sponsor_type_normalized",
+				"sponsor_type_source",
+			):
+				self.assertIn(col, headers, f'Column "{col}" missing from header row')
+		finally:
+			os.unlink(path)
+
+	def test_primary_sponsor_normalized_renders_canonical_name(self):
+		Trials.objects.filter(pk=self.trial_ms.pk).update(
+			primary_sponsor="Novartis Pharma AG"
+		)
+		self.trial_ms.refresh_from_db()
+		self.trial_ms.save()  # trigger sponsor resolution
+		self.trial_ms.refresh_from_db()
+		self.assertIsNotNone(self.trial_ms.primary_sponsor_normalized)
+
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			value = self._cell_for_title(
+				ws,
+				headers,
+				"primary_sponsor_normalized",
+				"A randomised trial of natalizumab in MS",
+			)
+			self.assertEqual(value, self.trial_ms.primary_sponsor_normalized.name)
+		finally:
+			os.unlink(path)
+
+	def test_sponsor_type_normalized_renders_derived_type(self):
+		Trials.objects.filter(pk=self.trial_ms.pk).update(
+			primary_sponsor="Acme Pharmaceuticals Inc.", lead_sponsor_class="INDUSTRY"
+		)
+		self.trial_ms.refresh_from_db()
+		self.trial_ms.save()  # trigger sponsor resolution + type derivation
+		self.trial_ms.refresh_from_db()
+
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			value = self._cell_for_title(
+				ws,
+				headers,
+				"sponsor_type_normalized",
+				"A randomised trial of natalizumab in MS",
+			)
+			self.assertEqual(value, "industry")
+		finally:
+			os.unlink(path)
+
+	def test_sponsor_type_source_shows_derivation_provenance(self):
+		"""sponsor_type_source is the audit trail for sponsor_type_normalized: it must
+		show which signal actually won (here, CTGov's lead_sponsor_class, since that
+		outranks the name-keyword-rules tier a name like this would otherwise fall to)."""
+		Trials.objects.filter(pk=self.trial_ms.pk).update(
+			primary_sponsor="Acme Pharmaceuticals Inc.", lead_sponsor_class="INDUSTRY"
+		)
+		self.trial_ms.refresh_from_db()
+		self.trial_ms.save()
+		self.trial_ms.refresh_from_db()
+
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			value = self._cell_for_title(
+				ws,
+				headers,
+				"sponsor_type_source",
+				"A randomised trial of natalizumab in MS",
+			)
+			self.assertEqual(value, "ctgov")
+		finally:
+			os.unlink(path)
+
+	def test_unresolved_sponsor_columns_render_blank(self):
+		"""A trial with no primary_sponsor must not error and must render blank, not
+		crash on a None FK dereference."""
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			# openpyxl round-trips an empty string as None on some versions — either is
+			# an acceptable "blank" rendering, matching the codebase's existing
+			# `cell_val or ""` convention (see test_articles_column_shows_link).
+			for col in (
+				"primary_sponsor_normalized",
+				"sponsor_type_normalized",
+				"sponsor_type_source",
+			):
+				value = self._cell_for_title(
+					ws, headers, col, "A randomised trial of natalizumab in MS"
+				)
+				self.assertFalse(value, f'Expected "{col}" to render blank, got {value!r}')
+		finally:
+			os.unlink(path)
+
+	def test_sponsor_columns_have_glossary_entries(self):
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Glossary"]
+			described = {}
+			for r in range(2, ws.max_row + 1):
+				described[ws.cell(row=r, column=1).value] = ws.cell(
+					row=r, column=3
+				).value
+			for col in (
+				"lead_sponsor_class",
+				"primary_sponsor_normalized",
+				"sponsor_type_normalized",
+				"sponsor_type_source",
+			):
+				self.assertIn(col, described)
+				self.assertTrue(
+					described[col], f'Glossary description for "{col}" is empty'
+				)
+		finally:
+			os.unlink(path)
+
+	# ------------------------------------------------------------------
 	# Glossary sheet
 	# ------------------------------------------------------------------
 
