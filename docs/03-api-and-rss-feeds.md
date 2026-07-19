@@ -171,6 +171,8 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Categories | `GET /categories/{slug}/monthly-counts/` | `slug` (path) | Monthly article and trial counts |
 | Sources | `GET /sources/` | `team_id`, `subject_id`, `source_for`, `search`, `ordering`, pagination | |
 | Sources | `GET /sources/{id}/` | `id` (path) | |
+| Sponsors | `GET /sponsors/` | `sponsor_type`, `search`, `ordering` (`name`, `trials_count`), pagination | Canonical, deduplicated sponsor entities — see [Sponsor canonicalization](#sponsor-canonicalization) below |
+| Sponsors | `GET /sponsors/{id}/` | `id` (path) | |
 | Subjects | `GET /subjects/` | `team_id`, `search`, `ordering`, pagination | |
 | Subjects | `GET /subjects/{id}/` | `id` (path) | |
 | Teams | `GET /teams/` | Standard pagination | |
@@ -178,7 +180,7 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Teams | `GET /teams/{id}/subjects/{subject_id}/categories/` | `id`, `subject_id` (path) | |
 | Trials | `GET /trials/` | `team_id`, `subject_id`, `category_id`, `source_id`, `status`, `search`, `ordering`, trial-specific filters, pagination | See parameter details below |
 | Trials | `GET /trials/{id}/` | `id` (path) | |
-| Trials | `GET /trials/stats/` | Same filters as `GET /trials/` | Totals per `recruitment_status_normalized` bucket (not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other — always present, 0 when empty) plus `no_status`, `by_subject`, `by_phase` (per `TrialPhase` + `no_phase`), `by_region` (per `TrialRegion` + `no_region`), `by_country` (`[{country, count}]`, null-country entry last) and `by_year` (`[{year, count}]`, null-year entry last) over the filtered set. Replaces the `stats` block formerly embedded in `GET /trials/` list responses (breaking change). Cached for `STATS_CACHE_TTL` seconds |
+| Trials | `GET /trials/stats/` | Same filters as `GET /trials/` | Totals per `recruitment_status_normalized` bucket (not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other — always present, 0 when empty) plus `no_status`, `by_subject`, `by_phase` (per `TrialPhase` + `no_phase`), `by_region` (per `TrialRegion` + `no_region`), `by_country` (`[{country, count}]`, null-country entry last), `by_year` (`[{year, count}]`, null-year entry last), `by_sponsor` (top 25 `[{sponsor_id, slug, name, sponsor_type, count}]`) + `no_sponsor`, and `by_sponsor_type` (per `SponsorType` + `no_type`) over the filtered set. Replaces the `stats` block formerly embedded in `GET /trials/` list responses (breaking change). Cached for `STATS_CACHE_TTL` seconds |
 | Trials | `GET /trials/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `status`, `format`, `all_results` | See [trial-search-api.md](trial-search-api.md) |
 | Trials | `POST /trials/search/` | Same fields in request body | |
 | Email templates | `GET /emails/` | None | Template preview dashboard |
@@ -250,7 +252,9 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | `internal_number` | Filter by WHO internal number |
 | `phase` | Filter by trial phase (e.g., `Phase III`) |
 | `study_type` | Filter by study type (e.g., `Interventional`) |
-| `primary_sponsor` | Filter by sponsor organisation |
+| `primary_sponsor` | Legacy free-text filter on the raw registry sponsor string — prefer `sponsor_id`/`sponsor_slug` |
+| `sponsor_id` | Exact match against a canonical sponsor's id (see [Sponsor canonicalization](#sponsor-canonicalization)) |
+| `sponsor_slug` | Exact match against a canonical sponsor's slug |
 | `source_register` | Filter by source registry (e.g., `ClinicalTrials.gov`) |
 | `countries` | Filter by trial countries |
 | `condition` | Filter by medical condition |
@@ -260,6 +264,18 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | `inclusion_gender` | Filter by gender inclusion |
 | `date_registration_after` | date (YYYY-MM-DD) | Trials registered on or after this date (inclusive). Returns 400 for invalid dates. |
 | `date_registration_before` | date (YYYY-MM-DD) | Trials registered on or before this date (inclusive). Returns 400 for invalid dates. |
+
+### Sponsor canonicalization
+
+Duplicate/variant spellings of the same real-world sponsor (`"Novartis"`, `"Novartis Pharma AG"`, `"NOVARTIS FARMA"`, ...) are resolved to a single canonical `Sponsor` entity — see `docs/trials-field-normalization.md` for how the resolution works.
+
+Every trial response includes a nested, read-only `sponsor` object resolved from its raw `primary_sponsor` string (the raw `primary_sponsor`/`secondary_sponsor`/`sponsor_type` fields are untouched):
+
+```json
+"sponsor": { "id": 12, "slug": "novartis", "name": "Novartis", "sponsor_type": "industry" }
+```
+
+`sponsor` is `null` when the raw string hasn't been resolved to a canonical entity yet (tracked by the `no_sponsor` count on `/trials/stats/`). Filter trials by canonical sponsor with `sponsor_id` or `sponsor_slug` (both listed above), and browse the full canonical list at `GET /sponsors/`.
 
 ---
 

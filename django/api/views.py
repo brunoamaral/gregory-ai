@@ -38,6 +38,7 @@ from api.serializers import (
 	TeamSerializer,
 	SubjectsSerializer,
 	OrganizationSerializer,
+	SponsorSerializer,
 )
 from api.pagination import FlexiblePagination, request_bypasses_pagination
 from api.direct_streaming import (
@@ -60,6 +61,7 @@ from django.db.models import (
 from django.db.models.functions import Coalesce, ExtractYear
 from gregory.classes import SciencePaper, ClinicalTrial
 from gregory.utils.trial_field_normalizers import (
+	SponsorType,
 	TrialPhase,
 	TrialRecruitmentStatus,
 	TrialRegion,
@@ -79,6 +81,7 @@ from gregory.models import (
 	Subject,
 	TeamCategory,
 	MLPredictions,
+	Sponsor,
 )
 from organizations.models import Organization
 from rest_framework import permissions, viewsets, generics, filters, status
@@ -92,6 +95,7 @@ from api.filters import (
 	SourceFilter,
 	CategoryFilter,
 	SubjectFilter,
+	SponsorFilter,
 )
 from api.utils.search import build_search_q
 from rest_framework.response import Response
@@ -1759,6 +1763,15 @@ class TrialViewSet(
 	  years omitted, a trailing `{"year": null, ...}` entry for trials with no
 	  `date_registration` (omitted when 0). Derived from `date_registration`
 	  only (no `published_date` fallback). Sums to `total`.
+	- `by_sponsor` — `[{sponsor_id, slug, name, sponsor_type, count}]`, top 25 by
+	  count then sponsor name, over the canonical `Sponsor` entity a trial's raw
+	  `primary_sponsor` resolves to (see docs/trials-field-normalization.md) —
+	  excludes trials with no resolved sponsor yet, reported separately as the
+	  sibling key `no_sponsor`. Does not sum to `total` once truncated to 25.
+	- `by_sponsor_type` — `{sponsor_type_slug: count, ...}`, one key per
+	  `SponsorType` value (always present, 0 when empty) plus `no_type`
+	  (resolved sponsor, no sponsor_type derived yet) — excludes the same
+	  null-FK group as `no_sponsor`.
 
 	Recruitment-status buckets and `by_phase`/`by_region`/`by_country` are counted on the
 	`*_normalized` canonical vocabularies (same as their respective filters), not on the
@@ -1791,7 +1804,9 @@ class TrialViewSet(
 	- **status** / **recruitment_status** - raw-text `iexact` filters against the registry's own recruitment-status string (e.g. "Recruiting", "RECRUITING", "recruiting" all match each other, but "Not Recruiting" does not match "not_yet_recruiting") — free text, so it silently misses spelling/format variants across registries
 	- **recruitment_status_normalized** - exact match against the canonical recruitment status; one of: not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other
 	- **study_type** - filter by study type (Interventional, Observational)
-	- **primary_sponsor** - filter by sponsor organization
+	- **primary_sponsor** - legacy free-text `icontains` filter on the raw registry sponsor string — silently misses spelling/duplicate variants across registries; prefer **sponsor_id**/**sponsor_slug** below (same legacy treatment as `phase` vs `phase_normalized`)
+	- **sponsor_id** - exact match against a canonical sponsor's id (see `/sponsors/`)
+	- **sponsor_slug** - exact match against a canonical sponsor's slug (see `/sponsors/`)
 	- **source_register** - filter by source registry
 	- **countries** - raw-text `icontains` filter on the registry's own countries string — free text, so it silently misses spelling/format variants across registries (see **country** below for the normalized equivalent)
 	- **country** - exact match against a normalized country code (ISO 3166-1 alpha-2, e.g. `?country=DE`), derived from every source's raw country data — see docs/trials-field-normalization.md
@@ -1852,6 +1867,7 @@ class TrialViewSet(
 		qs = (
 			super()
 			.get_queryset()
+			.select_related("primary_sponsor_normalized")
 			.prefetch_related(
 				"sources",
 				"team_categories",
@@ -1922,6 +1938,9 @@ class TrialViewSet(
 		payload["by_region"] = self._by_region_counts(filtered_qs)
 		payload["by_country"] = self._by_country_counts(filtered_qs)
 		payload["by_year"] = self._by_year_counts(filtered_qs)
+		payload["by_sponsor"] = self._by_sponsor_counts(filtered_qs)
+		payload["no_sponsor"] = self._no_sponsor_count(filtered_qs)
+		payload["by_sponsor_type"] = self._by_sponsor_type_counts(filtered_qs)
 		return payload
 
 	# Phase, region, country, and year are trial-intrinsic (not org-owned data like
@@ -2007,6 +2026,106 @@ class TrialViewSet(
 		if null_entry:
 			result.append(null_entry)
 		return result
+
+	def _by_sponsor_counts(self, filtered_qs):
+		"""Top 25 ``[{"sponsor_id", "slug", "name", "sponsor_type", "count"}]`` over
+		*filtered_qs*, sorted ``-count`` then sponsor name, excluding the null-FK
+		group (reported separately by ``_no_sponsor_count``). Sponsors are trial-
+		intrinsic (not org-owned), so no visible_org_ids filtering is needed here —
+		same reasoning as _by_phase_counts/_by_region_counts/_by_country_counts.
+		"""
+		rows = (
+			filtered_qs.order_by()
+			.exclude(primary_sponsor_normalized__isnull=True)
+			.values(
+				"primary_sponsor_normalized_id",
+				"primary_sponsor_normalized__slug",
+				"primary_sponsor_normalized__name",
+				"primary_sponsor_normalized__sponsor_type",
+			)
+			.annotate(count=Count("trial_id", distinct=True))
+			.order_by("-count", "primary_sponsor_normalized__name")[:25]
+		)
+		return [
+			{
+				"sponsor_id": row["primary_sponsor_normalized_id"],
+				"slug": row["primary_sponsor_normalized__slug"],
+				"name": row["primary_sponsor_normalized__name"],
+				"sponsor_type": row["primary_sponsor_normalized__sponsor_type"],
+				"count": row["count"],
+			}
+			for row in rows
+		]
+
+	def _no_sponsor_count(self, filtered_qs):
+		"""Count of trials whose raw ``primary_sponsor`` hasn't resolved to a
+		canonical Sponsor yet (null FK) — the sibling of ``by_sponsor``."""
+		return (
+			filtered_qs.order_by()
+			.filter(primary_sponsor_normalized__isnull=True)
+			.aggregate(count=Count("trial_id", distinct=True))["count"]
+		)
+
+	def _by_sponsor_type_counts(self, filtered_qs):
+		"""``{sponsor_type_slug: count, ..., "no_type": count}`` over *filtered_qs*,
+		excluding trials with no resolved sponsor (already reported as
+		``no_sponsor`` — a trial can't be untyped and unresolved at once here).
+		"""
+		counts = {
+			row["primary_sponsor_normalized__sponsor_type"]: row["count"]
+			for row in filtered_qs.order_by()
+			.exclude(primary_sponsor_normalized__isnull=True)
+			.values("primary_sponsor_normalized__sponsor_type")
+			.annotate(count=Count("trial_id", distinct=True))
+		}
+		payload = {value: counts.get(value, 0) for value in SponsorType.values}
+		payload["no_type"] = counts.get(None, 0)
+		return payload
+
+
+###
+# SPONSORS
+###
+
+
+class SponsorViewSet(viewsets.ReadOnlyModelViewSet):
+	"""
+	List canonical sponsor entities (deduplicated trial sponsors — see
+	docs/trials-field-normalization.md). Sponsors are global, not org-owned, so
+	unlike most other viewsets this one carries no OrgVisibilityMixin — same
+	reasoning as the by_sponsor/by_sponsor_type facets on /trials/stats/.
+
+	# Query Parameters:
+	- **search** - search by sponsor name
+	- **sponsor_type** - filter by sponsor type; one of: industry,
+	  academic_medical, government, nonprofit, other
+	- **ordering** - 'name' (default) or 'trials_count' (add '-' for reverse)
+	- **page_size** - items per page (max 100)
+
+	# Examples:
+	- Filter by type: `/sponsors/?sponsor_type=industry`
+	- Search by name: `/sponsors/?search=novartis`
+	- Most-trials first: `/sponsors/?ordering=-trials_count`
+	"""
+
+	queryset = Sponsor.objects.all().order_by("name")
+	serializer_class = SponsorSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	pagination_class = FlexiblePagination
+	filter_backends = [
+		django_filters.DjangoFilterBackend,
+		filters.SearchFilter,
+		filters.OrderingFilter,
+	]
+	filterset_class = SponsorFilter
+	search_fields = ["name"]
+	ordering_fields = ["name", "trials_count"]
+	ordering = ["name"]
+
+	def get_queryset(self):
+		return super().get_queryset().annotate(
+			trials_count=Count("trials", distinct=True)
+		)
 
 
 ###

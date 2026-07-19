@@ -5,8 +5,9 @@ from django.db.models.functions import Upper
 from django.utils import timezone
 from django import forms
 from datetime import datetime, timedelta
-from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject
+from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject, Sponsor
 from gregory.utils.trial_field_normalizers import (
+	SponsorType,
 	TrialPhase,
 	TrialRecruitmentStatus,
 	TrialRegion,
@@ -573,6 +574,16 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	study_type = filters.CharFilter(field_name="study_type", lookup_expr="icontains")
 	primary_sponsor = filters.CharFilter(
 		field_name="primary_sponsor", lookup_expr="icontains"
+	)  # Legacy: free-text on the raw registry string — prefer sponsor_id/sponsor_slug
+	sponsor_id = filters.NumberFilter(
+		field_name="primary_sponsor_normalized_id",
+		lookup_expr="exact",
+		label="Canonical sponsor ID (see /sponsors/)",
+	)
+	sponsor_slug = filters.CharFilter(
+		field_name="primary_sponsor_normalized__slug",
+		lookup_expr="exact",
+		label="Canonical sponsor slug (see /sponsors/)",
 	)
 	source_register = filters.CharFilter(
 		field_name="source_register", lookup_expr="icontains"
@@ -653,6 +664,8 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"phase_normalized",
 			"study_type",
 			"primary_sponsor",
+			"sponsor_id",
+			"sponsor_slug",
 			"source_register",
 			"countries",
 			"country",
@@ -876,6 +889,18 @@ class SourceFilter(filters.FilterSet):
 	class Meta:
 		model = Sources
 		fields = ["source_id", "team_id", "subject_id", "active", "source_for", "link"]
+
+
+class SponsorFilter(filters.FilterSet):
+	"""
+	Filter class for Sponsors (see /sponsors/).
+	"""
+
+	sponsor_type = filters.ChoiceFilter(choices=SponsorType.choices)
+
+	class Meta:
+		model = Sponsor
+		fields = ["sponsor_type"]
 
 
 class SubjectFilter(filters.FilterSet):
