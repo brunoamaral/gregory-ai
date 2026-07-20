@@ -53,11 +53,11 @@ import time
 from datetime import timedelta
 
 from gregory.management.base import GregoryBaseCommand
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import ClinicalTrial, CTISPublicAPI
-from gregory.models import Trials, Sources, TrialSite
+from gregory.models import Trials, Sources
 from gregory.utils.ctis_backup import save_retrieve_backup
 from gregory.utils.registry_utils import (
 	identifiers_conflict,
@@ -68,6 +68,7 @@ from gregory.utils.registry_utils import (
 	safe_change_reason,
 )
 from gregory.utils.trial_field_normalizers import _name_to_code_lookup
+from gregory.utils.trial_site_sync import replace_trial_sites
 
 logger = logging.getLogger(__name__)
 
@@ -647,21 +648,20 @@ class Command(GregoryBaseCommand):
 			)
 
 	def _enrich_trial_sites(self, trial, payload):
-		"""Item 4 (PR 2b): replace this trial's TrialSite rows wholesale with the
-		sites parsed from authorizedPartsII[].trialSites[] — delete all + bulk_create
-		the new set, inside one transaction. Skipped entirely (no delete) when
-		authorizedPartsII isn't a list at all (malformed/missing payload subtree) so
-		a degraded response can never wipe a previously-captured site set; an empty
-		but structurally-present list (e.g. a trial with no Part II sites yet) does
-		still replace with zero rows — that is a legitimate "no sites" answer."""
+		"""Item 4 (PR 2b): replace this trial's "ctis"-sourced TrialSite rows with the
+		sites parsed from authorizedPartsII[].trialSites[] (gregory.utils
+		.trial_site_sync.replace_trial_sites — scoped to "ctis" so it never touches
+		any "ctgov"-sourced rows for the same trial, see TRIAL-GEOGRAPHY-PLAN.md PR
+		G2 §2.2). Skipped entirely (no delete) when authorizedPartsII isn't a list at
+		all (malformed/missing payload subtree) so a degraded response can never wipe
+		a previously-captured site set; an empty but structurally-present list (e.g.
+		a trial with no Part II sites yet) does still replace with zero rows — that
+		is a legitimate "no sites" answer."""
 		sites = _extract_trial_sites(payload)
 		if sites is None:
 			return
-		with transaction.atomic():
-			trial.trial_sites.all().delete()
-			TrialSite.objects.bulk_create(
-				[TrialSite(trial=trial, **site) for site in sites]
-			)
+		rows = [{k: v for k, v in site.items() if k != "sources"} for site in sites]
+		replace_trial_sites(trial, "ctis", rows)
 
 	def _enrich_countries_by_source(self, trial, payload) -> bool:
 		"""Item 1: all participating countries (incl. non-EEA) -> countries_by_source

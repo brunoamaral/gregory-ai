@@ -33,6 +33,7 @@ from gregory.utils.registry_utils import (
 	merge_countries_by_source,
 	safe_change_reason,
 )
+from gregory.utils.trial_site_sync import replace_trial_sites
 
 
 class Command(GregoryBaseCommand):
@@ -193,6 +194,7 @@ class Command(GregoryBaseCommand):
 							self.update_existing_trial(
 								existing_trial, clinical_trial, source
 							)
+							self._capture_trial_sites(existing_trial, study_data)
 							self.log(
 								f"Updated existing trial: {existing_trial.title[:80]}...",
 								level=2,
@@ -200,7 +202,8 @@ class Command(GregoryBaseCommand):
 							)
 							updated_count += 1
 						else:
-							self.create_new_trial(clinical_trial, source)
+							new_trial = self.create_new_trial(clinical_trial, source)
+							self._capture_trial_sites(new_trial, study_data)
 							self.log(
 								f"Created new trial: {clinical_trial.title[:80]}...",
 								level=2,
@@ -391,6 +394,26 @@ class Command(GregoryBaseCommand):
 				return candidate
 
 		return None
+
+	def _capture_trial_sites(self, trial, study_data):
+		"""Replace this trial's "ctgov"-sourced TrialSite rows with the sites parsed
+		from the already-fetched study JSON — no extra API call, since
+		_build_search_params requests the full study body. Isolated in its own
+		try/except so a site-parsing failure never turns a successful trial
+		create/update into a reported item error, and never touches any
+		"ctis"-sourced rows for the same trial (gregory.utils.trial_site_sync
+		.replace_trial_sites, see TRIAL-GEOGRAPHY-PLAN.md PR G2 §2.2)."""
+		if not trial:
+			return
+		try:
+			sites = self.api.extract_sites(study_data)
+			replace_trial_sites(trial, "ctgov", sites)
+		except Exception as e:
+			self.log(
+				f"CTGov site capture failed for trial {trial.pk}: {e}",
+				level=1,
+				style_func=self.style.ERROR,
+			)
 
 	def create_new_trial(self, clinical_trial: ClinicalTrial, source):
 		"""Create a new trial in the database."""

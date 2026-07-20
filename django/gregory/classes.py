@@ -485,6 +485,72 @@ class ClinicalTrialsGovAPI:
 		return ", ".join(countries) if countries else None
 
 	@staticmethod
+	def extract_sites(study_data: dict) -> list:
+		"""Per-site rows from a CTGov study's contactsLocationsModule.locations[],
+		ready to construct TrialSite(**dict): name, city, state, postcode, country,
+		latitude, longitude. Returns [] when the study has no locations (common:
+		~2k of our trials have none upstream — see TRIAL-GEOGRAPHY-PLAN.md).
+
+		Facility names are frequently a placeholder ("Research Site" — industry
+		trials anonymise sites; measured ~8% of sampled locations), so `city` +
+		coordinates are the reliable signal, not `name`. A location with neither
+		`facility` nor `city` is skipped as unusable. `geoPoint` missing or
+		non-numeric yields null coordinates but keeps the row (facility/address are
+		still useful without a pin). Values are truncated to their TrialSite column
+		lengths (name 500, city/state 200, postcode 50). Country names are mapped to
+		ISO alpha-2 via the same token mapper `Trials.countries` parsing uses
+		(gregory.utils.trial_field_normalizers._map_token — handles CTGov's own
+		display names like "United States", which don't always match django_countries'
+		official long name); an unmappable name keeps the row with country=None
+		rather than dropping it.
+		"""
+		from gregory.utils.trial_field_normalizers import _map_token
+
+		def _clean(value, max_length):
+			if not isinstance(value, str):
+				return None
+			value = value.strip()
+			return value[:max_length] if value else None
+
+		protocol = study_data.get("protocolSection", {})
+		contacts_module = protocol.get("contactsLocationsModule", {})
+		locations = contacts_module.get("locations", [])
+		if not isinstance(locations, list):
+			return []
+
+		sites = []
+		for loc in locations:
+			if not isinstance(loc, dict):
+				continue
+			facility = _clean(loc.get("facility"), 500)
+			city = _clean(loc.get("city"), 200)
+			if not facility and not city:
+				continue
+
+			country_name = loc.get("country")
+			country_code = _map_token(country_name)[0] if country_name else None
+
+			geo_point = loc.get("geoPoint")
+			latitude = longitude = None
+			if isinstance(geo_point, dict):
+				lat, lon = geo_point.get("lat"), geo_point.get("lon")
+				if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+					latitude, longitude = lat, lon
+
+			sites.append(
+				{
+					"name": facility,
+					"city": city,
+					"state": _clean(loc.get("state"), 200),
+					"postcode": _clean(loc.get("zip"), 50),
+					"country": country_code,
+					"latitude": latitude,
+					"longitude": longitude,
+				}
+			)
+		return sites
+
+	@staticmethod
 	def extract_sponsor_fields(study_data: dict) -> dict:
 		"""Extract primary_sponsor / lead_sponsor_class / secondary_sponsor from a CTGov
 		study's ``sponsorCollaboratorsModule``.
