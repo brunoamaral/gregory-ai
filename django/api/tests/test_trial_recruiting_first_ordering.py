@@ -189,6 +189,14 @@ class RecruitingFirstOrderingTest(TestCase):
 	def test_query_count_unchanged_for_default_list(self):
 		"""The recruiting_first annotation is one extra CASE expression in the
 		SELECT, not a join — it must not add queries to a plain list request."""
+		# Warm-up request (uncaptured): django.contrib.sites' CurrentSiteMiddleware
+		# calls Site.objects.get_current(), cached in a process-global SITE_CACHE
+		# (not per-test) — so whichever of the two captured requests below ran
+		# first in the process would otherwise pay that one-time query, an
+		# off-by-one that depends on test execution order. See
+		# api/tests/test_trial_site_api.py for the same fix.
+		self.client.get("/trials/")
+
 		with CaptureQueriesContext(connection) as ctx:
 			response = self.client.get("/trials/")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
