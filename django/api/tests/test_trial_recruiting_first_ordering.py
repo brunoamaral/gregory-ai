@@ -4,8 +4,9 @@ Fixture/org-visibility setup mirrors api/tests/test_trial_recruitment_status_nor
 — a public organization is required for the default (anonymous) APIClient to see any
 trials at all.
 
-recruiting_first sorts by recruitment *availability* (see api.views._RECRUITING_RANK),
-not alphabetically on recruitment_status_normalized. See STATUS-ORDERING-PLAN.md.
+recruiting_first sorts by recruitment *availability* (see api.views._RECRUITING_RANK
+and TrialViewSet's docstring under "# Ordering:"), not alphabetically on
+recruitment_status_normalized.
 """
 
 from datetime import datetime, timezone as dt_timezone
@@ -185,6 +186,14 @@ class RecruitingFirstOrderingTest(TestCase):
 		)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(self._trial_ids(response), [self.recruiting.trial_id])
+
+	def test_stats_endpoint_accepts_recruiting_first_ordering(self):
+		"""GET /trials/stats/ also runs filter_queryset(get_queryset()) (see
+		CachedStatsActionMixin._stats_response), so ?ordering=recruiting_first must
+		not 500 there even though the stats payload itself ignores row order."""
+		response = self.client.get("/trials/stats/?ordering=recruiting_first")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["total"], 3)
 
 	def test_query_count_unchanged_for_default_list(self):
 		"""The recruiting_first annotation is one extra CASE expression in the

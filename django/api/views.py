@@ -1724,8 +1724,11 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 # Recruitment-availability rank for ?ordering=recruiting_first — "can a patient join
 # this today?" order, NOT the alphabetical order of the TrialRecruitmentStatus enum
-# values. Null recruitment_status_normalized sorts last via the annotation's
-# default= branch below. See STATUS-ORDERING-PLAN.md.
+# values. A null recruitment_status_normalized is assigned the lowest-priority rank
+# via the annotation's default= branch below (len(_RECRUITING_RANK), i.e. one past
+# WITHDRAWN) — for ascending ?ordering=recruiting_first that sorts last, as intended;
+# reversing with ?ordering=-recruiting_first reverses the whole scale, so null-status
+# trials come first there, not last.
 _RECRUITING_RANK = {
 	TrialRecruitmentStatus.RECRUITING: 0,
 	TrialRecruitmentStatus.ENROLLING_BY_INVITATION: 1,
@@ -1779,8 +1782,11 @@ class TrialViewSet(
 	  `recruitment_status_normalized`: `recruiting` → `enrolling_by_invitation` →
 	  `not_yet_recruiting` → `active_not_recruiting` → `suspended` →
 	  `not_recruiting` → `unknown` → `other` → `completed` → `terminated` →
-	  `withdrawn` → null status last. Ties (many trials share a rank) are broken
-	  by `-discovery_date` automatically. See STATUS-ORDERING-PLAN.md.
+	  `withdrawn`, with null status last — that ordering is for plain
+	  `?ordering=recruiting_first` (ascending); `?ordering=-recruiting_first`
+	  reverses the whole scale, so null-status trials come first there instead.
+	  Ties (many trials share a rank) are broken by `-discovery_date`
+	  automatically, in both directions.
 
 	Unrecognised `ordering` values are silently ignored (not rejected) — a DRF
 	`OrderingFilter` default — so a typo or stale field name falls back to the
@@ -1926,6 +1932,16 @@ class TrialViewSet(
 	]
 	filterset_class = TrialFilter
 
+	def _ordering_requests_recruiting_first(self):
+		"""True when the ``ordering`` query param's terms include ``recruiting_first``
+		(either direction). Used to annotate it on the stats action too — see
+		get_queryset() below."""
+		ordering_param = self.request.query_params.get("ordering", "")
+		return any(
+			term.strip().lstrip("-") == "recruiting_first"
+			for term in ordering_param.split(",")
+		)
+
 	def get_queryset(self):
 		"""Prefetch the caller-org's TrialOrgContent to avoid N+1 on list responses.
 
@@ -1966,10 +1982,14 @@ class TrialViewSet(
 				)
 			)
 		# Backs ?ordering=recruiting_first (see _RECRUITING_RANK above). Skipped for
-		# the stats action: build_stats_payload's facet aggregations call
-		# .order_by() to clear ordering, so the annotation would be pure overhead
-		# on that path — see STATUS-ORDERING-PLAN.md.
-		if self.action != "stats":
+		# the stats action unless explicitly requested there too: build_stats_payload's
+		# facet aggregations call .order_by() to clear ordering, so annotating
+		# unconditionally would be pure overhead on that path — but /trials/stats/
+		# also runs filter_queryset(get_queryset()) before build_stats_payload (see
+		# CachedStatsActionMixin._stats_response), so a stats request that does pass
+		# ?ordering=recruiting_first must still see the annotation, or OrderingFilter
+		# 500s trying to order_by a field the queryset doesn't have.
+		if self.action != "stats" or self._ordering_requests_recruiting_first():
 			qs = qs.annotate(
 				recruiting_first=Case(
 					*[
@@ -2002,10 +2022,9 @@ class TrialViewSet(
 
 	def filter_queryset(self, queryset):
 		"""Append ``-discovery_date`` as a tiebreaker whenever ``recruiting_first``
-		is the requested ordering. Many trials share a rank (see _RECRUITING_RANK),
-		so ``ordering=recruiting_first`` alone gives an unstable page order across
-		requests — a pagination-correctness bug, not cosmetics. See
-		STATUS-ORDERING-PLAN.md.
+		is the requested ordering. Many trials share a rank (see _RECRUITING_RANK
+		above), so ``ordering=recruiting_first`` alone gives an unstable page order
+		across requests — a pagination-correctness bug, not cosmetics.
 		"""
 		queryset = super().filter_queryset(queryset)
 		ordering_param = self.request.query_params.get("ordering", "")

@@ -274,9 +274,11 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 
 `recruiting_first` sorts by recruitment *availability* — "can a patient join this today?" — not alphabetically on `recruitment_status_normalized`:
 
-`recruiting` → `enrolling_by_invitation` → `not_yet_recruiting` → `active_not_recruiting` → `suspended` → `not_recruiting` → `unknown` → `other` → `completed` → `terminated` → `withdrawn` → null status last.
+`recruiting` → `enrolling_by_invitation` → `not_yet_recruiting` → `active_not_recruiting` → `suspended` → `not_recruiting` → `unknown` → `other` → `completed` → `terminated` → `withdrawn`, with null status last.
 
-Many trials share a rank, so ties are broken automatically by `-discovery_date` — page-to-page ordering stays stable.
+That order is for plain `?ordering=recruiting_first` (ascending). `?ordering=-recruiting_first` reverses the whole scale, so null-status trials come first there instead, not last.
+
+Many trials share a rank, so ties are broken automatically by `-discovery_date` in both directions — page-to-page ordering stays stable.
 
 **Unrecognised `ordering` values are silently ignored, not rejected** (DRF `OrderingFilter`'s default behaviour) — a typo or a stale field name falls back to the default ordering instead of returning an error.
 
