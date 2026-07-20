@@ -48,6 +48,7 @@ Usage:
 """
 
 import logging
+import re
 import time
 from datetime import timedelta
 
@@ -74,6 +75,16 @@ logger = logging.getLogger(__name__)
 # snapshot per trial; see gregory.utils.ctis_backup). Matches the persisted-volume
 # convention of capture_trial_streams.py's DEFAULT_DIR.
 BACKUPS_DIR = "/code/backups"
+
+# A genuine CTIS number is 4 hyphen-separated segments (YYYY-NNNNNN-NN-NN, e.g.
+# "2025-523726-40-00") — distinct from the 3-segment legacy EudraCT/EUCTR format
+# (YYYY-NNNNNN-NN) that some pre-CTIS trials also carry under the "euct" identifier
+# key (a historic convention from manual/legacy imports, predating this command).
+# --enrich-all's DB query can't cheaply distinguish the two (or a present-but-null
+# "euct" key, which every ClinicalTrials.gov/WHO-imported trial has as a template
+# placeholder) at the SQL level, so this regex gates the actual /retrieve GET —
+# without it, a non-CTIS ct_number 400s against the CTIS API.
+CTIS_NUMBER_RE = re.compile(r"^\d{4}-\d{6}-\d{2}-\d{2}$")
 
 
 def _extract_row_countries(payload: dict) -> list:
@@ -213,20 +224,36 @@ class Command(GregoryBaseCommand):
 
 	def enrich_all_trials(self, sleep=0.5, limit=None):
 		"""One-time sweep / general re-run path: re-fetch /retrieve and re-apply the
-		enrichment for every trial already holding a euct or ctis identifier,
-		regardless of whether the search sync touched it this run."""
+		enrichment for every trial already holding a genuine CTIS-format identifier,
+		regardless of whether the search sync touched it this run.
+
+		The `has_key` query below is a coarse net, not the real filter: it also
+		matches trials where "euct" is present but null (every ClinicalTrials.gov/
+		WHO-imported trial carries that key as an unset template field) and trials
+		whose "euct" holds a legacy 3-segment EudraCT/EUCTR number rather than a
+		CTIS number — a manual/legacy-import convention that predates this command.
+		CTIS_NUMBER_RE is what actually decides whether a GET is worth firing;
+		everything else is skipped (logged) before it can 400 against the API.
+		"""
 		trials = Trials.objects.filter(
 			Q(identifiers__has_key="euct") | Q(identifiers__has_key="ctis")
 		)
 		processed = 0
 		enriched = 0
+		skipped = 0
 		for trial in trials.iterator():
 			identifiers = trial.identifiers or {}
 			ct_number = identifiers.get("euct")
 			if not ct_number:
 				ctis_value = identifiers.get("ctis") or ""
 				ct_number = ctis_value[len("CTIS"):] if ctis_value.startswith("CTIS") else ctis_value
-			if not ct_number:
+			if not ct_number or not CTIS_NUMBER_RE.match(ct_number):
+				skipped += 1
+				self.log(
+					f"Skipping trial {trial.pk}: {ct_number!r} is not a CTIS-format "
+					"ct number",
+					level=3,
+				)
 				continue
 
 			processed += 1
@@ -241,7 +268,8 @@ class Command(GregoryBaseCommand):
 				break
 
 		self.log(
-			f"CTIS enrich-all: processed {processed} trial(s), enriched {enriched}.",
+			f"CTIS enrich-all: processed {processed} trial(s), enriched {enriched}, "
+			f"skipped {skipped} non-CTIS identifier(s).",
 			level=1,
 			style_func=self.style.SUCCESS,
 		)

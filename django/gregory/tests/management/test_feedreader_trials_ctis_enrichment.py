@@ -390,6 +390,32 @@ class EnrichAllTests(TestCase):
 		cmd = _make_command(api)
 		cmd.enrich_all_trials(sleep=0)  # must not raise
 
+	def test_null_euct_value_is_skipped_without_a_retrieve_call(self):
+		"""Regression guard: every ClinicalTrials.gov/WHO-imported trial carries
+		"euct" as an unset template key (value None) — has_key still matches it,
+		so the ct_number format check must skip it before any GET fires."""
+		Trials.objects.create(
+			title="CTGov trial with a null euct placeholder",
+			identifiers={"nct": "NCT00000000", "euct": None, "eudract": None},
+		)
+		api = MagicMock()
+		cmd = _make_command(api)
+		cmd.enrich_all_trials(sleep=0)
+		api.retrieve.assert_not_called()
+
+	def test_legacy_euctr_style_euct_value_is_skipped_without_a_retrieve_call(self):
+		"""Regression guard: pre-CTIS manual/legacy imports can carry a 3-segment
+		EudraCT/EUCTR number (e.g. "2014-000422-38") under the "euct" key — that is
+		not a valid CTIS ct number and 400s against /retrieve if ever sent there."""
+		Trials.objects.create(
+			title="Legacy EUCTR trial",
+			identifiers={"euct": "2014-000422-38", "eudract": "2014-000422-38"},
+		)
+		api = MagicMock()
+		cmd = _make_command(api)
+		cmd.enrich_all_trials(sleep=0)
+		api.retrieve.assert_not_called()
+
 
 class ProcessSourcesEnrichmentIntegrationTests(TestCase):
 	"""End-to-end: process_sources shares the one retrieve() GET between the disk
