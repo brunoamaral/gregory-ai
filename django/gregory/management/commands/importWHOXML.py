@@ -9,6 +9,7 @@ from gregory.utils.registry_utils import (
 	canonical_link,
 	merge_countries_by_source,
 )
+from gregory.utils.text_utils import clean_field_html
 import datetime
 import xml.etree.ElementTree as ET
 import pytz
@@ -45,8 +46,7 @@ class Command(BaseCommand):
 	def get_text(self, trial, tag_name):
 		element = trial.find(tag_name)
 		if element is not None and element.text is not None:
-			# Strip leading and trailing whitespace and normalize whitespace within
-			return " ".join(element.text.split()).strip()
+			return clean_field_html(element.text)
 		return None
 
 	def _safe_change_reason(self, reason: str) -> str:

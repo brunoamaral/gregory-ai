@@ -1,6 +1,7 @@
 import re
+import warnings
 import stopwords
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 
 # Define some cleaning procedures:
 REPLACE_BY_SPACE_RE = re.compile(r"[/(){}\[\]\|@,;]")
@@ -103,3 +104,78 @@ def cleanHTML(input):
 	if not input:
 		return ""
 	return BeautifulSoup(input, "html.parser").get_text()
+
+
+BLOCK_TAGS = ("br", "p", "li", "tr", "div")
+
+# Tags actually seen in WHO ICTRP registry fields. Shared with backfill_clean_titles'
+# sibling command (clean_trial_html) so row selection uses the same whitelist as the
+# cleaner itself.
+ALLOWED_TAGS = BLOCK_TAGS + (
+	"b", "a", "i", "u", "em", "strong", "ul", "ol", "table", "td", "th", "hr",
+	"sub", "sup", "font", "span",
+)
+
+# html.parser treats *any* "<word word...>" as a tag, which would swallow angle
+# brackets some registries use as quotation marks (e.g. "criteria <the guide of
+# diagnosis and treatment>"). Only whitelisted tags are parsed as markup; everything
+# else is escaped to literal text before parsing so the parser can't misread it.
+_ALLOWED_TAG_RE = re.compile(
+	r"</?(?:" + "|".join(ALLOWED_TAGS) + r")(?:\s[^<>]*)?/?>",
+	re.IGNORECASE,
+)
+
+
+def _escape_non_tag_angle_brackets(text):
+	"""Escape < and > outside whitelisted tags so a parser treats them as literal
+	characters rather than markup."""
+	out = []
+	pos = 0
+	for match in _ALLOWED_TAG_RE.finditer(text):
+		out.append(text[pos:match.start()].replace("<", "&lt;").replace(">", "&gt;"))
+		out.append(match.group(0))
+		pos = match.end()
+	out.append(text[pos:].replace("<", "&lt;").replace(">", "&gt;"))
+	return "".join(out)
+
+
+def clean_field_html(value):
+	"""
+	Plain text from a registry field that may contain HTML.
+
+	Block/line-break tags become whitespace before extraction so "A<br>B" yields
+	"A B", not "AB" (plain get_text() would run the words together). Entities are
+	unescaped by the parser. Whitespace is collapsed and the result stripped;
+	returns None for empty/blank input so callers keep the "absent field" semantics.
+
+	Uses a real parser (not a regex): several ICTRP registries use angle brackets as
+	quotation marks (e.g. "criteria <the guide of diagnosis and treatment>"), which a
+	tag-shaped regex would delete. See WHO-HTML-CLEANUP-PLAN.md.
+
+	Arguments
+	---------
+	value: a string that may contain HTML, or None
+
+	Output
+	------
+	return: plain text, or None if input is empty/blank or becomes empty after cleaning
+	"""
+	if not value or not isinstance(value, str) or not value.strip():
+		return None
+
+	escaped = _escape_non_tag_angle_brackets(value)
+	# Most fields have no HTML at all; plain text can still trip bs4's "resembles a
+	# filename/URL" heuristic, which is irrelevant here (input is always XML field
+	# text, never a path to open).
+	with warnings.catch_warnings():
+		warnings.simplefilter("ignore", MarkupResemblesLocatorWarning)
+		soup = BeautifulSoup(escaped, "html.parser")
+	# unwrap (not replace_with): these tags can carry inner text (<p>, <li>, ...),
+	# so only the tag markup becomes a space -- the content must stay.
+	for tag in soup.find_all(BLOCK_TAGS):
+		tag.insert_before(" ")
+		tag.unwrap()
+
+	text = soup.get_text(" ")
+	text = MULTIPLE_SPACES_RE.sub(" ", text).strip()
+	return text or None
