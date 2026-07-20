@@ -194,7 +194,14 @@ encode.
 
 ## Data we could use beyond sponsor/sponsor_type
 
-Ranked by how directly it serves known roadmap items:
+Ranked by how directly it serves known roadmap items. Items 2 and 4 are **implemented**
+(CTIS-API-PHASE-2-PLAN.md PR 2a, migration 0086): `feedreader_trials_ctis`'s
+`_enrich_from_retrieve` hook harvests `rowCountriesInfo` into `countries_by_source["ctis"]`,
+`mscInfo.trialRecruitmentPeriod` into `Trials.countries_recruitment_date` /
+`TrialCountry.recruitment_start_date`, and `eligibilityCriteria` into
+`inclusion_criteria`/`exclusion_criteria` (fill-if-empty). Item 3 (`trialSites`) is
+implemented as the `TrialSite` model in PR 2b (no API exposure yet). Item 1 (sponsor OMS
+`businessKey`) remains parked with the sponsor canonicalization work.
 
 1. **Sponsor OMS `businessKey`** (`ORG-…`, retrieve) — authoritative entity id for the
    sponsor canonicalization work; an alias anchored to an OMS id never needs curation.

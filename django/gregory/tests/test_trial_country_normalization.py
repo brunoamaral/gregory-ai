@@ -40,6 +40,7 @@ def test_ctgov_style_comma_list():
 			"status": None,
 			"status_raw": None,
 			"decision_date": None,
+			"recruitment_start_date": None,
 			"sources": ["ctgov"],
 		},
 		{
@@ -47,6 +48,7 @@ def test_ctgov_style_comma_list():
 			"status": None,
 			"status_raw": None,
 			"decision_date": None,
+			"recruitment_start_date": None,
 			"sources": ["ctgov"],
 		},
 	]
@@ -206,6 +208,56 @@ def test_non_iso_decision_date_key_is_dropped(caplog):
 		rows = normalize_countries(None, None, None, {"ZZ": "2024-01-01", "DE": "2024-07-19"})
 	assert [row["country"] for row in rows] == ["DE"]
 	assert "ZZ" in caplog.text
+
+
+# --- normalize_countries: countries_recruitment_date (5th param) -----------------------
+
+
+def test_recruitment_date_param_defaults_to_none_and_is_backward_compatible():
+	"""Every pre-existing 4-arg call site must keep working unchanged."""
+	rows = normalize_countries({"ctgov": "France"}, None, None, None)
+	assert rows[0]["recruitment_start_date"] is None
+
+
+def test_recruitment_date_keys_are_alpha2_and_attach_date_and_source():
+	rows = normalize_countries(
+		None, None, None, None, {"IT": "2026-06-26", "ES": "2026-07-08"}
+	)
+	by_code = {row["country"]: row for row in rows}
+	assert by_code["IT"]["recruitment_start_date"] == "2026-06-26"
+	assert by_code["IT"]["sources"] == ["ctis"]
+	assert by_code["ES"]["recruitment_start_date"] == "2026-07-08"
+
+
+def test_non_iso_recruitment_date_key_is_dropped(caplog):
+	with caplog.at_level("INFO", logger="gregory.utils.trial_field_normalizers"):
+		rows = normalize_countries(
+			None, None, None, None, {"ZZ": "2026-01-01", "IT": "2026-06-26"}
+		)
+	assert [row["country"] for row in rows] == ["IT"]
+	assert "ZZ" in caplog.text
+
+
+def test_recruitment_date_attaches_only_to_its_own_country_not_others():
+	"""A recruitment date for one country must not leak onto a different country
+	seen only via another input."""
+	rows = normalize_countries(
+		{"ctgov": "France"}, None, None, None, {"IT": "2026-06-26"}
+	)
+	by_code = {row["country"]: row for row in rows}
+	assert by_code["FR"]["recruitment_start_date"] is None
+	assert by_code["IT"]["recruitment_start_date"] == "2026-06-26"
+
+
+def test_recruitment_date_unions_with_decision_date_on_same_country():
+	rows = normalize_countries(
+		None, None, None, {"IT": "2026-06-24"}, {"IT": "2026-06-26"}
+	)
+	assert len(rows) == 1
+	row = rows[0]
+	assert row["decision_date"] == "2026-06-24"
+	assert row["recruitment_start_date"] == "2026-06-26"
+	assert row["sources"] == ["ctis"]
 
 
 # --- normalize_countries: mixed-provenance union ---------------------------------------

@@ -432,11 +432,20 @@ class RetrieveBackupTests(TestCase):
 	def test_stale_records_in_an_incremental_run_skip_the_backup_call(self):
 		"""iter_search still yields records outside the incremental window (so the
 		cheap DB non-destructive-update runs for them), but the command must not
-		fire an expensive /retrieve GET for a record that hasn't actually changed —
-		otherwise a wholly-stale trailing page costs up to `size` wasted GETs."""
+		fire an expensive /retrieve GET for an EXISTING trial's record that hasn't
+		actually changed — otherwise a wholly-stale trailing page costs up to
+		`size` wasted GETs. (A genuinely new trial is fetched regardless of
+		staleness — see test_new_trial_from_a_stale_record_is_still_fetched.)"""
 		anchor = timezone.now()
 		self.source.last_successful_fetch_at = anchor
 		self.source.save(update_fields=["last_successful_fetch_at"])
+
+		# Pre-seed the trial the "stale" record maps to, so find_existing_trial
+		# actually finds it and the staleness skip has something to apply to.
+		Trials.objects.create(
+			title="Pre-existing stale trial",
+			identifiers={"euct": "2026-000000-00-41"},
+		)
 
 		fresh_record = {"ctNumber": "2026-000000-00-40"}
 		stale_record = {"ctNumber": "2026-000000-00-41"}
@@ -454,4 +463,27 @@ class RetrieveBackupTests(TestCase):
 		cmd.process_sources(backup_dir=self.tmp_dir)
 
 		api.retrieve.assert_called_once_with("2026-000000-00-40")
-		self.assertEqual(Trials.objects.count(), 2)
+		self.assertEqual(Trials.objects.count(), 2)  # pre-existing (updated) + 1 new
+
+	def test_new_trial_from_a_stale_record_is_still_fetched(self):
+		"""record_is_stale answers whether a record is *unchanged*, not whether
+		it's new to our DB — a trailing page can still surface a trial we've never
+		stored (e.g. an aged registry entry seen for the first time). That trial
+		must still get its /retrieve GET (archive + enrichment), even though the
+		record itself reads as stale."""
+		anchor = timezone.now()
+		self.source.last_successful_fetch_at = anchor
+		self.source.save(update_fields=["last_successful_fetch_at"])
+
+		stale_new_record = {"ctNumber": "2026-000000-00-42"}
+		api = MagicMock()
+		api.iter_search.return_value = iter([stale_new_record])
+		api.parse_ctis_search_record.return_value = _trial("2026-000000-00-42")
+		api.record_is_stale.return_value = True
+		api.retrieve.return_value = {"ctNumber": "backup-payload"}
+		cmd = _make_command(api)
+
+		cmd.process_sources(backup_dir=self.tmp_dir)
+
+		api.retrieve.assert_called_once_with("2026-000000-00-42")
+		self.assertEqual(Trials.objects.count(), 1)

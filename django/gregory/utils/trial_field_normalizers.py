@@ -579,6 +579,7 @@ def normalize_countries(
 	countries: str | None,
 	country_status: str | None,
 	countries_decision_date: dict | None,
+	countries_recruitment_date: dict | None = None,
 ) -> list | None:
 	"""
 	Compute the canonical per-country rows for a trial from every raw input that can
@@ -593,10 +594,15 @@ def normalize_countries(
 	3. `country_status` — per-country status parsed out and mapped through
 	   `normalize_recruitment_status` (same vocabulary as the trial-level recruitment
 	   status), source `ctis`.
+	4. `countries_recruitment_date` keys — already ISO alpha-2, validated against the ISO
+	   list (same style as `countries_decision_date`); attaches `recruitment_start_date`,
+	   source `ctis`. Only attaches to a country already present from another input, or
+	   creates one — same union semantics as the other inputs.
 
 	Returns a list of dicts sorted by country code:
 	``{"country": "DE", "status": "recruiting", "status_raw": "...",
-	   "decision_date": "2024-07-19", "sources": ["ctgov", "ctis"]}``
+	   "decision_date": "2024-07-19", "recruitment_start_date": "2024-08-01",
+	   "sources": ["ctgov", "ctis"]}``
 	Returns None when every input is empty (mirrors the other normalizers' None-for-empty
 	convention) rather than an empty list.
 	"""
@@ -610,6 +616,7 @@ def normalize_countries(
 				"status": None,
 				"status_raw": None,
 				"decision_date": None,
+				"recruitment_start_date": None,
 				"sources": [],
 			},
 		)
@@ -651,6 +658,16 @@ def normalize_countries(
 		row = ensure(code)
 		row["status_raw"] = status_raw
 		row["status"] = normalize_recruitment_status(status_raw)
+		add_source(code, "ctis")
+
+	# 4. countries_recruitment_date: already alpha-2 keys (same validation as #1).
+	for raw_code, date_value in (countries_recruitment_date or {}).items():
+		code = (raw_code or "").strip().upper()
+		if code not in valid_codes:
+			logger.info("Unmapped trial country recruitment-date key: %r", raw_code)
+			continue
+		row = ensure(code)
+		row["recruitment_start_date"] = _parse_decision_date(date_value)
 		add_source(code, "ctis")
 
 	if not rows:
@@ -698,14 +715,19 @@ def _compute_regions_from_raw(
 	countries: str | None,
 	country_status: str | None,
 	countries_decision_date: dict | None,
+	countries_recruitment_date: dict | None = None,
 ) -> list | None:
 	"""Glue function registered in NORMALIZED_TRIAL_FIELDS: derives the country list from
-	the same four raw inputs as normalize_countries, then reduces it to regions. Kept
+	the same five raw inputs as normalize_countries, then reduces it to regions. Kept
 	separate from normalize_regions so that function's own signature/tests stay in terms
 	of (country_codes, raw_countries) as specified, independent of how the country list
 	itself gets computed."""
 	rows = normalize_countries(
-		countries_by_source, countries, country_status, countries_decision_date
+		countries_by_source,
+		countries,
+		country_status,
+		countries_decision_date,
+		countries_recruitment_date,
 	)
 	country_codes = [row["country"] for row in rows] if rows else []
 	return normalize_regions(country_codes, countries)
@@ -728,7 +750,13 @@ NORMALIZED_TRIAL_FIELDS = (
 	("phase", "phase_normalized", normalize_phase),
 	("recruitment_status", "recruitment_status_normalized", normalize_recruitment_status),
 	(
-		("countries_by_source", "countries", "country_status", "countries_decision_date"),
+		(
+			"countries_by_source",
+			"countries",
+			"country_status",
+			"countries_decision_date",
+			"countries_recruitment_date",
+		),
 		"regions_normalized",
 		_compute_regions_from_raw,
 	),

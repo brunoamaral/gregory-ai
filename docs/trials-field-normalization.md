@@ -211,22 +211,35 @@ written by three different sources with three different formats, and the canonic
 isn't a single scalar — it's a set of per-country rows plus a derived region list. Summary:
 
 - **`Trials.countries_by_source`** (JSONField) fixes last-write-wins on the legacy
-  `countries` column: each importer writes only its own key (`ctgov`/`ictrp`, reusing
-  `registry_utils.REGISTRY_DOMAINS` slugs) via `registry_utils.merge_countries_by_source`,
-  mirroring the `links`/`merge_links` pattern but *refreshing* the value on every re-import
-  rather than keeping the first-seen one (a source's own country list can legitimately
-  change between syncs). EU CTIS needs no key — its data lives in its own columns.
+  `countries` column: each importer writes only its own key (`ctgov`/`ictrp`/`ctis`,
+  reusing `registry_utils.REGISTRY_DOMAINS` slugs) via
+  `registry_utils.merge_countries_by_source`, mirroring the `links`/`merge_links` pattern
+  but *refreshing* the value on every re-import rather than keeping the first-seen one (a
+  source's own country list can legitimately change between syncs). EU CTIS writes its own
+  `"ctis"` key too, sourced from the `retrieve/{ctNumber}` endpoint's `rowCountriesInfo`
+  (semicolon-joined display names — see `feedreader_trials_ctis`'s `_enrich_from_retrieve`
+  hook, CTIS-API-PHASE-2-PLAN.md) — this is the only source of **non-EEA** participating
+  countries for CTIS trials; `country_status`/`countries_decision_date` remain EEA-only.
+- **`Trials.countries_recruitment_date`** (JSONField) mirrors `countries_decision_date`:
+  per-country recruitment start dates keyed by ISO alpha-2 code, sourced from the retrieve
+  endpoint's `authorizedPartsII[].mscInfo.trialRecruitmentPeriod` (earliest date when a
+  country reports more than one period). CTIS-only, replaced wholesale on every enrichment
+  run (deterministic, idempotent) rather than merged.
 - **`gregory.utils.trial_field_normalizers.normalize_countries(countries_by_source,
-  countries, country_status, countries_decision_date)`** computes the union of every
-  input into `[{"country": "DE", "status": "recruiting", "status_raw": "...",
-  "decision_date": "2024-07-19", "sources": ["ctgov", "ctis"]}, ...]`, sorted by country
-  code, `None` when every input is empty. See the module for the full tokenizer/alias-table
-  design (typos, UK subdivisions, UN-style names, region literals).
+  countries, country_status, countries_decision_date, countries_recruitment_date)`**
+  computes the union of every input into `[{"country": "DE", "status": "recruiting",
+  "status_raw": "...", "decision_date": "2024-07-19",
+  "recruitment_start_date": "2024-08-01", "sources": ["ctgov", "ctis"]}, ...]`, sorted by
+  country code, `None` when every input is empty. `countries_recruitment_date` is optional
+  (defaults to `None`) for backward compatibility with existing call sites. See the module
+  for the full tokenizer/alias-table design (typos, UK subdivisions, UN-style names, region
+  literals).
 - **`TrialCountry`** (`gregory/models.py`) is a through model (`trial`, `country`
-  (`CountryField`), `status`/`status_raw`/`decision_date` (CTIS-only, null otherwise),
-  `sources`) holding one row per `normalize_countries()` result. `Trials.sync_trial_countries()`
-  replaces the full set after every `Trials.save()`; the backfill command and admin
-  "Recompute normalized fields" action call it explicitly for `bulk_update` paths.
+  (`CountryField`), `status`/`status_raw`/`decision_date`/`recruitment_start_date`
+  (CTIS-only, null otherwise), `sources`) holding one row per `normalize_countries()`
+  result. `Trials.sync_trial_countries()` replaces the full set after every
+  `Trials.save()`; the backfill command and admin "Recompute normalized fields" action call
+  it explicitly for `bulk_update` paths.
 - **`gregory.utils.trial_field_normalizers.normalize_regions(country_codes,
   raw_countries)`** reduces a list of country codes (plus a secondary scan of the raw
   `countries` text for literal region/continent tokens like `"Europe"` or
@@ -236,9 +249,9 @@ isn't a single scalar — it's a set of per-country rows plus a derived region l
   calls `normalize_countries()` then `normalize_regions()`, so it participates in the
   standard save()/backfill/admin machinery like `phase_normalized`.
 - API: `TrialSerializer` exposes `trial_countries` (nested: country, status, decision_date,
-  sources), `countries_normalized` (flat code list), and `regions_normalized`; `?country=DE`
-  and `?region=europe` filters in `api/filters.py`. The legacy `countries` field is
-  unchanged.
+  recruitment_start_date, sources), `countries_normalized` (flat code list), and
+  `regions_normalized`; `?country=DE` and `?region=europe` filters in `api/filters.py`. The
+  legacy `countries` field is unchanged.
 
 ## The save() guarantee
 

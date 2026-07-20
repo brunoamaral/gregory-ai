@@ -99,9 +99,26 @@ class TrialCountryAndRegionFilterTests(TestCase):
 		self.assertEqual(len(result["trial_countries"]), 1)
 		self.assertEqual(result["trial_countries"][0]["country"], "DE")
 		self.assertIsNone(result["trial_countries"][0]["status"])
+		self.assertIsNone(result["trial_countries"][0]["recruitment_start_date"])
 		self.assertEqual(result["trial_countries"][0]["sources"], ["ctgov"])
 		# Legacy field kept as-is for API compatibility.
 		self.assertIn("countries", result)
+
+	def test_response_body_includes_recruitment_start_date_when_present(self):
+		trial = Trials.objects.create(
+			title="Italy Recruitment Date Trial",
+			link="https://example.com/country-filter-it",
+			published_date=timezone.now(),
+			countries_recruitment_date={"IT": "2026-06-26"},
+		)
+		trial.teams.add(self.team)
+		trial.subjects.add(self.subject)
+
+		response = self.client.get(f"/trials/?trial_id={trial.trial_id}")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		result = response.data["results"][0]
+		it_row = next(row for row in result["trial_countries"] if row["country"] == "IT")
+		self.assertEqual(it_row["recruitment_start_date"], "2026-06-26")
 
 	def test_regions_normalized_field_is_read_only_on_serializer(self):
 		"""editable=False on the model field makes DRF mark it read-only automatically,
