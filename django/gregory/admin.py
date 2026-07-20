@@ -1137,18 +1137,15 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		"last_updated",
 	]
 	exclude = ["ml_predictions"]
-	# Derived fields are editable=False (recomputed on save, see Trials.save()); they must be
-	# listed here to appear in the "Study Details" fieldset at all. countries_by_source is
-	# editable but importer-managed (like "links"), so it's readonly here too.
-	readonly_fields = [
-		"last_updated",
-		"links",
-		"phase_normalized",
-		"recruitment_status_normalized",
-		"countries_by_source",
-		"regions_normalized",
-		"primary_sponsor_normalized",
-	]
+	# Every field in `fieldsets` below is populated by the automatic importers (WHO
+	# ICTRP, ClinicalTrials.gov, EU CTIS) and re-derived/overwritten on the next sync —
+	# hand-editing it would just be lost, or worse, drift silently from the actual
+	# source of truth. get_readonly_fields() below locks all of them down except this
+	# allowlist, which the admin is genuinely expected to curate by hand: the canonical
+	# link (to fix a wrong URL), the registry identifiers, and the three relationship
+	# fields (source bookkeeping, team/subject tagging). Editorial content and category
+	# assignments are edited via their own inlines below, not fields on this form.
+	ADMIN_EDITABLE_FIELDS = {"link", "identifiers", "sources", "teams", "subjects"}
 	inlines = [
 		TrialOrgContentInline,
 		TrialArticleReferenceInline,
@@ -1354,6 +1351,16 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		return "No Identifiers"
 
 	display_identifiers.short_description = "Identifiers"
+
+	def get_readonly_fields(self, request, obj=None):
+		"""Every field in `fieldsets` is read-only except ADMIN_EDITABLE_FIELDS — see
+		that attribute's comment for why. Computed from `fieldsets` itself (rather than
+		a second hardcoded list) so a field can't end up editable here just because
+		someone added it to a fieldset and forgot to also update a readonly list."""
+		fieldset_fields = set()
+		for _, options in self.fieldsets:
+			fieldset_fields.update(options.get("fields", ()))
+		return sorted(fieldset_fields - self.ADMIN_EDITABLE_FIELDS)
 
 	@admin.action(description="Recompute normalized fields")
 	def recompute_normalized_fields(self, request, queryset):
