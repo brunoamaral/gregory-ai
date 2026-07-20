@@ -37,6 +37,7 @@ SCALAR_ORDER = [
 	"other_records",
 	"prospective_registration",
 	"study_type",
+	"study_type_normalized",
 	"study_design",
 	"phase",
 	"phase_normalized",

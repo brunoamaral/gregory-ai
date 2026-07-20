@@ -12,7 +12,7 @@ This module intentionally does NOT import gregory.models — models.py imports f
 not the other way round.
 
 See docs/trials-field-normalization.md for the full mapping rationale and the extension
-recipe for the next field (study_type, ...).
+recipe for the next derived field.
 
 `countries`/`regions_normalized` are the first fields whose canonical value derives from
 *multiple* raw columns (`countries_by_source`, `countries`, `country_status`,
@@ -291,6 +291,78 @@ def normalize_recruitment_status(raw: str | None) -> str | None:
 		return _RECRUITMENT_STATUS_EXACT_MATCHES[cleaned]
 
 	return _resolve(TrialRecruitmentStatus.OTHER, raw, field_label="trial recruitment status")
+
+
+class TrialStudyType(models.TextChoices):
+	INTERVENTIONAL = "interventional", "Interventional"
+	OBSERVATIONAL = "observational", "Observational"
+	EXPANDED_ACCESS = "expanded_access", "Expanded access"
+	BASIC_SCIENCE = "basic_science", "Basic science"
+	OTHER = "other", "Other"
+
+
+# Exact-match lookup for every distinct raw `study_type` value observed in the DB. Keys are
+# the whitespace-collapsed, casefolded raw value. Like recruitment_status, the study_type
+# vocabulary is small and closed, so there is deliberately no generic token fallback — see
+# normalize_study_type.
+_STUDY_TYPE_EXACT_MATCHES: dict[str, str] = {
+	# Interventional
+	"interventional": TrialStudyType.INTERVENTIONAL,  # CT.gov (INTERVENTIONAL), ANZCTR/NL-OMON/ISRCTN/JPRN, IRCT
+	"intervention": TrialStudyType.INTERVENTIONAL,  # REBEC
+	"interventional study": TrialStudyType.INTERVENTIONAL,  # ChiCTR
+	"interventional clinical trial of medicinal product": TrialStudyType.INTERVENTIONAL,  # EU CTR / EU CTIS
+	"treatment study": TrialStudyType.INTERVENTIONAL,
+	# BA/BE (bioavailability/bioequivalence): subjects are dosed by protocol, interventional
+	# by definition.
+	"ba/be": TrialStudyType.INTERVENTIONAL,
+	# Observational
+	"observational": TrialStudyType.OBSERVATIONAL,  # CT.gov (OBSERVATIONAL), DRKS
+	"observational study": TrialStudyType.OBSERVATIONAL,  # ChiCTR
+	# NL-OMON's invasiveness qualifier is orthogonal to study type; the raw column keeps it,
+	# the normalized value collapses both to observational.
+	"observational non invasive": TrialStudyType.OBSERVATIONAL,  # NL-OMON
+	"observational invasive": TrialStudyType.OBSERVATIONAL,  # NL-OMON
+	# Diagnostic-accuracy/screening studies: ClinicalTrials.gov classifies these as
+	# observational unless they assign an intervention, and the WHO registries that emit
+	# these strings use them as a study *purpose*, not an assignment model.
+	"diagnostic test": TrialStudyType.OBSERVATIONAL,
+	"screening": TrialStudyType.OBSERVATIONAL,
+	"cause": TrialStudyType.OBSERVATIONAL,
+	"cause/relative factors study": TrialStudyType.OBSERVATIONAL,
+	"relative factors research": TrialStudyType.OBSERVATIONAL,
+	"epidemilogical research": TrialStudyType.OBSERVATIONAL,  # sic, registry typo
+	"prognosis study": TrialStudyType.OBSERVATIONAL,
+	# Expanded access: an access program, not a study — kept separate from both
+	# interventional and observational (consistent with how the "available"/
+	# "no_longer_available" recruitment statuses are handled above).
+	"expanded_access": TrialStudyType.EXPANDED_ACCESS,  # CT.gov
+	"expanded access": TrialStudyType.EXPANDED_ACCESS,
+	# Basic science: meaningfully non-clinical, kept out of the "other" bucket so it stays
+	# distinguishable from "we don't know" (same reasoning that gave phase's post_market
+	# its own bucket).
+	"basic science": TrialStudyType.BASIC_SCIENCE,
+	"other": TrialStudyType.OTHER,
+}
+
+
+def normalize_study_type(raw: str | None) -> str | None:
+	"""
+	Map a raw Trials.study_type value to a canonical TrialStudyType value.
+
+	Returns None for missing/blank input, otherwise always a TrialStudyType value (falling
+	back to TrialStudyType.OTHER for anything unrecognised — never raises). No generic token
+	fallback here (unlike normalize_phase): the vocabulary is small and closed, so exact
+	matching is safer than guessing at a new registry spelling.
+	"""
+	if raw is None or not raw.strip():
+		return None
+
+	cleaned = re.sub(r"\s+", " ", raw).strip().casefold()
+
+	if cleaned in _STUDY_TYPE_EXACT_MATCHES:
+		return _STUDY_TYPE_EXACT_MATCHES[cleaned]
+
+	return _resolve(TrialStudyType.OTHER, raw, field_label="trial study type")
 
 
 class TrialRegion(models.TextChoices):
@@ -749,6 +821,7 @@ def raw_field_names(raw_fields) -> tuple:
 NORMALIZED_TRIAL_FIELDS = (
 	("phase", "phase_normalized", normalize_phase),
 	("recruitment_status", "recruitment_status_normalized", normalize_recruitment_status),
+	("study_type", "study_type_normalized", normalize_study_type),
 	(
 		(
 			"countries_by_source",

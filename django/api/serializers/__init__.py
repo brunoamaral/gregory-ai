@@ -607,6 +607,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 			"date_enrollement",
 			"target_size",
 			"study_type",
+			"study_type_normalized",
 			"study_design",
 			"phase",
 			"phase_normalized",
