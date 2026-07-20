@@ -51,6 +51,10 @@ CATEGORY_MODALITY_SEEDS: dict[str, str] = {
 	"mn-166": "small_molecule",
 	"monomethyl-fumarate": "small_molecule",
 	"naltrexone": "small_molecule",
+	# "Niraparib" and "Vafidemstat" (below) are capitalized on purpose: those two
+	# rows' category_slug is stored capitalized in the live DB (not the usual
+	# slugify() lowercase output) — verified against dev/prod, no lowercase
+	# counterpart exists for either.
 	"Niraparib": "small_molecule",
 	"ozanimod": "small_molecule",
 	"pipe-307": "small_molecule",
@@ -62,7 +66,7 @@ CATEGORY_MODALITY_SEEDS: dict[str, str] = {
 	"siponimod": "small_molecule",
 	"teriflunomide": "small_molecule",
 	"tolebrutinib": "small_molecule",
-	"Vafidemstat": "small_molecule",
+	"Vafidemstat": "small_molecule",  # see comment above Niraparib
 	# Antibodies / biologics
 	"alemtuzumab": "biologic_antibody",
 	"anti-nogo-receptor-therapies": "biologic_antibody",
