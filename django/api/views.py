@@ -1972,9 +1972,10 @@ class TrialViewSet(
 		``?all_results=true`` is rejected (400): unlike ``/trials/``, this endpoint
 		is never a bulk export — at mean ~12 sites/trial an unfiltered request over
 		a several-thousand-trial subject would be tens of thousands of rows.
-		``?latitude__isnull=true`` narrows to sites without coordinates (all CTIS
-		sites, currently — see TRIAL-GEOGRAPHY-PLAN.md PR G2); ``=false`` narrows to
-		sites with a pin.
+		``?latitude__isnull=true`` (or ``1``/``yes``) narrows to sites without
+		coordinates (all CTIS sites, currently — see TRIAL-GEOGRAPHY-PLAN.md PR
+		G2); ``=false`` (or ``0``/``no``) narrows to sites with a pin. Any other
+		value is rejected (400).
 		"""
 		if request_bypasses_pagination(request):
 			raise ValidationError(
@@ -1987,8 +1988,16 @@ class TrialViewSet(
 
 		latitude_isnull = request.query_params.get("latitude__isnull")
 		if latitude_isnull is not None:
-			want_null = latitude_isnull.strip().lower() in ("true", "1", "yes")
-			sites_qs = sites_qs.filter(latitude__isnull=want_null)
+			normalized = latitude_isnull.strip().lower()
+			if normalized in ("true", "1", "yes"):
+				sites_qs = sites_qs.filter(latitude__isnull=True)
+			elif normalized in ("false", "0", "no"):
+				sites_qs = sites_qs.filter(latitude__isnull=False)
+			else:
+				raise ValidationError(
+					f"latitude__isnull must be true/false (or 1/0, yes/no); "
+					f"got {latitude_isnull!r}."
+				)
 
 		sites_qs = sites_qs.order_by("trial_id", "pk").values(
 			"trial_id", "name", "city", "country", "latitude", "longitude"

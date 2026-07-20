@@ -158,6 +158,30 @@ class TrialSiteAPITests(TestCase):
 		response = self.client.get("/trials/sites/", {"all_results": "true"})
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+	def test_sites_endpoint_all_results_false_is_not_a_bypass(self):
+		"""all_results=false is not a pagination-bypass value (see
+		request_bypasses_pagination) — must paginate normally, not 400."""
+		response = self.client.get("/trials/sites/", {"all_results": "false"})
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertIn("count", response.data)
+
+	def test_sites_endpoint_rejects_invalid_latitude_isnull_value(self):
+		"""Regression guard (Copilot review on PR #791): an unrecognized
+		latitude__isnull value must 400, not silently fall through to False."""
+		response = self.client.get("/trials/sites/", {"latitude__isnull": "banana"})
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+	def test_sites_endpoint_accepts_numeric_and_word_latitude_isnull_values(self):
+		# Site A has coordinates (latitude not null); Site B does not.
+		for value, expected_name in (("1", "Site B"), ("0", "Site A"), ("yes", "Site B"), ("no", "Site A")):
+			with self.subTest(value=value):
+				response = self.client.get(
+					"/trials/sites/", {"latitude__isnull": value}
+				)
+				self.assertEqual(response.status_code, status.HTTP_200_OK)
+				self.assertEqual(len(response.data["results"]), 1)
+				self.assertEqual(response.data["results"][0]["name"], expected_name)
+
 	def test_sites_endpoint_paginates(self):
 		for i in range(5):
 			TrialSite.objects.create(

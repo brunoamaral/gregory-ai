@@ -101,7 +101,10 @@ class TrialSitePagination(PageNumberPagination):
 	small per row, but at mean ~12 sites/trial an unfiltered request over a
 	several-thousand-trial subject could still be tens of thousands of rows;
 	pagination is mandatory so this endpoint is never a bulk export. See
-	TrialViewSet.sites, which raises a 400 if ``all_results`` is present at all.
+	TrialViewSet.sites, which raises a 400 when ``all_results`` resolves to a
+	pagination-bypass value (true/1/yes — see request_bypasses_pagination);
+	other values (e.g. ``all_results=false``) are not bypasses and paginate
+	normally, same as everywhere else ``all_results`` is accepted.
 	"""
 
 	page_size = 100

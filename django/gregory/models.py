@@ -1512,9 +1512,6 @@ class TrialSite(models.Model):
 	class Meta:
 		verbose_name = "trial site"
 		verbose_name_plural = "trial sites"
-		indexes = [
-			models.Index(fields=["country"], name="trialsite_country_idx"),
-		]
 
 
 class ArticleOrgContent(models.Model):
