@@ -1475,27 +1475,39 @@ class TrialCountry(models.Model):
 
 
 class TrialSite(models.Model):
-	"""Per-site row for a trial, from the CTIS retrieve endpoint
-	(authorizedPartsII[].trialSites[]). Replaced wholesale on each enrichment run
-	(delete all + bulk_create the new set) — no in-place merging, since sites are a
-	small per-trial set (~10 rows) with no natural update semantics. See
-	CTIS-API-PHASE-2-PLAN.md PR 2b. Investigator names are public registry data
-	(CTIS/CTGov both publish them); their phone/email are deliberately never
-	stored."""
+	"""Per-site row for a trial, sourced from the CTIS retrieve endpoint
+	(authorizedPartsII[].trialSites[]) and/or ClinicalTrials.gov's
+	contactsLocationsModule.locations[] — see TRIAL-GEOGRAPHY-PLAN.md PR G2.
+	Replaced wholesale per-source on each enrichment run (delete only that
+	source's rows + bulk_create the new set — gregory.utils.trial_site_sync
+	.replace_trial_sites) — no in-place merging, since sites are a small
+	per-trial set with no natural update semantics. A trial captured by both
+	registries carries both sets side by side, distinguished by `sources`,
+	which is why the replace is scoped to one source rather than the whole
+	trial. Investigator names are public registry data (CTIS/CTGov both
+	publish them); their phone/email are deliberately never stored."""
 
 	trial = models.ForeignKey(Trials, related_name="trial_sites", on_delete=models.CASCADE)
-	name = models.CharField(max_length=500)  # organisation.name
-	site_type = models.CharField(max_length=200, null=True, blank=True)  # organisation.type label
-	address = models.TextField(null=True, blank=True)  # address.oneLine
+	# Nullable: CTIS requires organisation.name and skips sites without one, but
+	# CTGov's facility is occasionally absent — city/coordinates carry the row instead
+	# (see ClinicalTrialsGovAPI.extract_sites).
+	name = models.CharField(max_length=500, null=True, blank=True)  # organisation.name (CTIS) / facility (CTGov)
+	site_type = models.CharField(max_length=200, null=True, blank=True)  # organisation.type label; CTGov has no equivalent, always null
+	address = models.TextField(null=True, blank=True)  # address.oneLine; CTGov has no equivalent, always null
 	city = models.CharField(max_length=200, null=True, blank=True)
+	state = models.CharField(max_length=200, null=True, blank=True)  # CTGov "state"; CTIS leaves null
 	postcode = models.CharField(max_length=50, null=True, blank=True)
-	country = CountryField(null=True, blank=True)  # address.countryName via the name->code helper
+	country = CountryField(null=True, blank=True)  # address.countryName (CTIS) / country (CTGov), via the name->code helper
 	investigator_name = models.CharField(max_length=300, null=True, blank=True)
-	# personInfo firstName + " " + lastName
-	sources = models.JSONField(default=list, blank=True)  # ["ctis"] — future-proofs CTGov site parity
+	# personInfo firstName + " " + lastName (CTIS); CTGov puts PIs in overallOfficials, not per-site, so always null here
+	latitude = models.FloatField(null=True, blank=True)  # geoPoint.lat (CTGov only; CTIS has no coordinates)
+	longitude = models.FloatField(null=True, blank=True)  # geoPoint.lon (CTGov only; CTIS has no coordinates)
+	sources = models.JSONField(default=list, blank=True)  # ["ctis"] or ["ctgov"]
 
 	def __str__(self):
-		return f"{self.trial_id}/{self.name}"
+		# name is nullable (CTGov's facility is occasionally absent) — fall back to
+		# city, then a generic label, so this never renders "123/None".
+		return f"{self.trial_id}/{self.name or self.city or 'site'}"
 
 	class Meta:
 		verbose_name = "trial site"

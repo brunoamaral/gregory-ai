@@ -247,17 +247,29 @@ class TrialCountryInline(admin.TabularInline):
 
 
 class TrialSiteInline(admin.TabularInline):
-	"""Read-only display of the CTIS retrieve-enrichment site rows — see
-	CTIS-API-PHASE-2-PLAN.md PR 2b. Rows are managed entirely by
-	feedreader_trials_ctis's wholesale replace, never edited by hand."""
+	"""Read-only display of site rows captured from CTIS retrieve enrichment
+	and/or ClinicalTrials.gov (see CTIS-API-PHASE-2-PLAN.md PR 2b and
+	TRIAL-GEOGRAPHY-PLAN.md PR G2 — `sources` distinguishes which registry a row
+	came from). Rows are managed entirely by each importer's per-source replace,
+	never edited by hand."""
 
 	model = TrialSite
 	extra = 0
-	fields = ["name", "site_type", "city", "country", "investigator_name"]
-	readonly_fields = ["name", "site_type", "city", "country", "investigator_name"]
+	fields = [
+		"name",
+		"site_type",
+		"city",
+		"state",
+		"country",
+		"latitude",
+		"longitude",
+		"investigator_name",
+		"sources",
+	]
+	readonly_fields = fields
 	can_delete = False
 	verbose_name = "Site"
-	verbose_name_plural = "Sites (CTIS retrieve)"
+	verbose_name_plural = "Sites (CTIS + CTGov)"
 	classes = ["collapse"]
 
 	def has_add_permission(self, request, obj=None):
