@@ -1195,6 +1195,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 					"title",
 					"acronym",
 					"scientific_title",
+					"summary",
 					"link",
 					"links",
 					"identifiers",
@@ -1207,7 +1208,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		(
 			"Description",
 			{
-				"fields": ("summary", "ctg_detailed_description"),
+				"fields": ("ctg_detailed_description",),
 				"classes": ("collapse",),
 			},
 		),
