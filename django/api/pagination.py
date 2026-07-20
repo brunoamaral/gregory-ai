@@ -92,3 +92,18 @@ class FlexiblePagination(PageNumberPagination):
 				"results": data,
 			}
 		)
+
+
+class TrialSitePagination(PageNumberPagination):
+	"""Pagination for ``GET /trials/sites/`` (TRIAL-GEOGRAPHY-PLAN.md PR G3).
+
+	Deliberately does NOT support ``all_results=true`` — the payload is flat and
+	small per row, but at mean ~12 sites/trial an unfiltered request over a
+	several-thousand-trial subject could still be tens of thousands of rows;
+	pagination is mandatory so this endpoint is never a bulk export. See
+	TrialViewSet.sites, which raises a 400 if ``all_results`` is present at all.
+	"""
+
+	page_size = 100
+	page_size_query_param = "page_size"
+	max_page_size = 500

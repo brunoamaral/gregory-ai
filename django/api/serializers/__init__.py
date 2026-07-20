@@ -13,6 +13,7 @@ from gregory.models import (
 	ArticleOrgContent,
 	TrialOrgContent,
 	TrialCountry,
+	TrialSite,
 	Sponsor,
 )
 from organizations.models import Organization
@@ -706,6 +707,50 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 			return None  # field will be popped in to_representation
 		content = self._get_org_content(obj, org)
 		return content.summary_plain_english if content else None
+
+
+class TrialSiteSerializer(serializers.ModelSerializer):
+	"""Per-site rows from CTIS retrieve enrichment and/or ClinicalTrials.gov — see
+	TRIAL-GEOGRAPHY-PLAN.md PR G2/G3. ``country`` is rendered as its ISO 3166-1
+	alpha-2 code. Nested only on the trial detail response (``trial_sites`` is not
+	part of ``TrialSerializer``'s fields, so it never appears on the list endpoint)
+	— use ``GET /trials/sites/`` for a bulk, flat listing across many trials."""
+
+	country = serializers.SerializerMethodField()
+
+	class Meta:
+		model = TrialSite
+		fields = [
+			"name",
+			"site_type",
+			"address",
+			"city",
+			"state",
+			"postcode",
+			"country",
+			"investigator_name",
+			"latitude",
+			"longitude",
+			"sources",
+		]
+
+	def get_country(self, obj):
+		return obj.country.code if obj.country else None
+
+
+class TrialDetailSerializer(TrialSerializer):
+	"""TrialSerializer plus the per-site breakdown (``trial_sites``), used only for
+	the retrieve (single-trial) response — see TrialViewSet.get_serializer_class.
+	Kept off the list serializer because sites fan out (mean ~12/trial, max in the
+	hundreds for large multi-country trials): nesting them on every list row would
+	bloat list/CSV responses for a field most callers don't need there.
+	TrialViewSet.get_queryset() prefetches "trial_sites" only for the retrieve
+	action to back this field without an N+1."""
+
+	trial_sites = TrialSiteSerializer(many=True, read_only=True)
+
+	class Meta(TrialSerializer.Meta):
+		fields = TrialSerializer.Meta.fields + ["trial_sites"]
 
 
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
