@@ -122,3 +122,57 @@ class WHOResultsUrlLinkTest(TestCase):
 		self.assertEqual(
 			t.results_url_link, "https://www.isrctn.com/ISRCTN22222222#results"
 		)
+
+
+_WHO_XML_HTML_TEMPLATE = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<Trials_central>
+  <Trial>
+    <TrialID>{trial_id}</TrialID>
+    <Public_title>Test Trial HTML Cleaning</Public_title>
+    <Scientific_title>Scientific Test Trial</Scientific_title>
+    <Primary_sponsor>Test Sponsor</Primary_sponsor>
+    <Date_registration>2023-01-15</Date_registration>
+    <web_address>https://trialsearch.who.int/Trial2.aspx?TrialID={trial_id}</web_address>
+    <Inclusion_Criteria>{inclusion_criteria}</Inclusion_Criteria>
+    <Inclusion_gender>{inclusion_gender}</Inclusion_gender>
+  </Trial>
+</Trials_central>
+"""
+
+
+class WHOHTMLCleaningTest(TestCase):
+	def setUp(self):
+		self.source = _who_source()
+
+	def test_html_markup_is_stripped_at_ingest(self):
+		# Real WHO ICTRP XML entity-encodes embedded HTML (&lt;br&gt;), since a raw
+		# unescaped <br> would be parsed as a child element, not text content.
+		xml = _WHO_XML_HTML_TEMPLATE.format(
+			trial_id="ISRCTN33333333",
+			inclusion_criteria="Age &gt;18&lt;br&gt;Confirmed diagnosis&lt;br&gt;",
+			inclusion_gender="&lt;br&gt;Female: yes&lt;br&gt;Male: yes&lt;br&gt;",
+		)
+		_run_import(xml, self.source.source_id)
+		t = Trials.objects.get(identifiers__isrctn="ISRCTN33333333")
+		self.assertEqual(t.inclusion_criteria, "Age >18 Confirmed diagnosis")
+		self.assertEqual(t.inclusion_gender, "Female: yes Male: yes")
+		self.assertNotIn("<br>", t.inclusion_criteria)
+		self.assertNotIn("<br>", t.inclusion_gender)
+
+	def test_angle_bracket_quotation_marks_are_preserved(self):
+		xml = _WHO_XML_HTML_TEMPLATE.format(
+			trial_id="ISRCTN44444444",
+			inclusion_criteria=(
+				"Diagnosis with reference to diagnostic criteria "
+				"&lt;the guide of diagnosis and treatment&gt; required"
+			),
+			inclusion_gender="Both",
+		)
+		_run_import(xml, self.source.source_id)
+		t = Trials.objects.get(identifiers__isrctn="ISRCTN44444444")
+		self.assertEqual(
+			t.inclusion_criteria,
+			"Diagnosis with reference to diagnostic criteria "
+			"<the guide of diagnosis and treatment> required",
+		)
