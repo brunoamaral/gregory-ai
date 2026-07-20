@@ -84,6 +84,13 @@ class TrialSiteAPITests(TestCase):
 		self.assertNotIn("trial_sites", result)
 
 	def test_list_query_count_is_not_affected_by_number_of_sites(self):
+		# Warm-up request (uncaptured): django.contrib.sites' CurrentSiteMiddleware
+		# calls Site.objects.get_current(), which is cached in a process-global
+		# SITE_CACHE — not per-test. Whichever of the two captured requests below
+		# happened to run first in the process would otherwise pay that one-time
+		# query, making this an off-by-one flake depending on test execution order.
+		self.client.get("/trials/")
+
 		with CaptureQueriesContext(connection) as ctx:
 			response = self.client.get("/trials/")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -197,6 +204,10 @@ class TrialSiteAPITests(TestCase):
 			TrialSite.objects.create(
 				trial=self.trial, name=f"Flat {i}", city="X", sources=["ctgov"]
 			)
+
+		# Warm-up request (uncaptured) — see the comment in
+		# test_list_query_count_is_not_affected_by_number_of_sites for why.
+		self.client.get("/trials/sites/")
 
 		with CaptureQueriesContext(connection) as ctx:
 			response = self.client.get("/trials/sites/", {"page_size": 5})
