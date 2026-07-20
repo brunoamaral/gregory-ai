@@ -80,6 +80,7 @@ from gregory.models import (
 	Team,
 	Subject,
 	TeamCategory,
+	CategoryModality,
 	MLPredictions,
 	Sponsor,
 )
@@ -1772,6 +1773,17 @@ class TrialViewSet(
 	  `SponsorType` value (always present, 0 when empty) plus `no_type`
 	  (resolved sponsor, no sponsor_type derived yet) — excludes the same
 	  null-FK group as `no_sponsor`.
+	- `by_modality` — `{modality_slug: count, ...}`, one key per
+	  `CategoryModality` value (always present, 0 when empty) plus
+	  `no_modality`, over the trial's `team_categories.modality`. **Not** a
+	  partition of `total` and **not** safe to sum: this joins an M2M, so a
+	  trial carrying two categories of different modalities is counted once
+	  *per modality*. `no_modality` also conflates two different things —
+	  "trial has no category at all" (most trials; categories are a curated
+	  lens over a small subset) and "trial has a category that isn't
+	  curated with a modality yet" — deliberately, to avoid the extra query
+	  cost of splitting them out as separate keys; use `?category_slug=` when
+	  the distinction matters.
 
 	Recruitment-status buckets and `by_phase`/`by_region`/`by_country` are counted on the
 	`*_normalized` canonical vocabularies (same as their respective filters), not on the
@@ -1941,6 +1953,7 @@ class TrialViewSet(
 		payload["by_sponsor"] = self._by_sponsor_counts(filtered_qs)
 		payload["no_sponsor"] = self._no_sponsor_count(filtered_qs)
 		payload["by_sponsor_type"] = self._by_sponsor_type_counts(filtered_qs)
+		payload["by_modality"] = self._by_modality_counts(filtered_qs)
 		return payload
 
 	# Phase, region, country, and year are trial-intrinsic (not org-owned data like
@@ -2080,6 +2093,30 @@ class TrialViewSet(
 		}
 		payload = {value: counts.get(value, 0) for value in SponsorType.values}
 		payload["no_type"] = counts.get(None, 0)
+		return payload
+
+	def _by_modality_counts(self, filtered_qs):
+		"""``{modality_slug: count, ..., "no_modality": count}`` over *filtered_qs*.
+
+		Joins the ``team_categories`` M2M, so unlike most facets here this one is
+		neither a partition of ``total`` nor safe to sum: a trial in two categories
+		of different modalities is counted once *per modality* it carries (this is
+		intentional — see the facet test asserting it explicitly). And
+		``no_modality`` conflates two different situations a caller may want to
+		tell apart — a trial with no category at all (the large majority, since
+		categories are a curated lens over a small subset of trials), and a trial
+		whose category exists but hasn't been curated with a modality yet —
+		deliberately, to avoid the extra query cost of splitting them; use
+		``?category_slug=`` filtering when the distinction matters.
+		"""
+		counts = {
+			row["team_categories__modality"]: row["count"]
+			for row in filtered_qs.order_by()
+			.values("team_categories__modality")
+			.annotate(count=Count("trial_id", distinct=True))
+		}
+		payload = {value: counts.get(value, 0) for value in CategoryModality.values}
+		payload["no_modality"] = counts.get(None, 0)
 		return payload
 
 
