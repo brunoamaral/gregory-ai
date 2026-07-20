@@ -65,6 +65,7 @@ from gregory.utils.trial_field_normalizers import (
 	TrialPhase,
 	TrialRecruitmentStatus,
 	TrialRegion,
+	TrialStudyType,
 )
 from gregory.models import (
 	Articles,
@@ -1784,8 +1785,13 @@ class TrialViewSet(
 	  curated with a modality yet" — deliberately, to avoid the extra query
 	  cost of splitting them out as separate keys; use `?category_slug=` when
 	  the distinction matters.
+	- `by_study_type` — `{study_type_slug: count, ...}`, one key per
+	  `TrialStudyType` value (always present, 0 when empty) plus
+	  `no_study_type`. `no_study_type` is large (~13.2k globally) because most
+	  of it is legacy rows with no `source_register` at all, not a
+	  normalization gap — see docs/trials-field-normalization.md.
 
-	Recruitment-status buckets and `by_phase`/`by_region`/`by_country` are counted on the
+	Recruitment-status buckets and `by_phase`/`by_region`/`by_country`/`by_study_type` are counted on the
 	`*_normalized` canonical vocabularies (same as their respective filters), not on the
 	raw registry strings — see docs/trials-field-normalization.md. It accepts the
 	same query parameters as the list endpoint, so e.g.
@@ -1815,7 +1821,8 @@ class TrialViewSet(
 	- **phase_normalized** - exact match against the canonical phase; one of: early_phase_1, phase_1, phase_1_2, phase_2, phase_2_3, phase_3, phase_3_4, phase_4, post_market, not_applicable, other
 	- **status** / **recruitment_status** - raw-text `iexact` filters against the registry's own recruitment-status string (e.g. "Recruiting", "RECRUITING", "recruiting" all match each other, but "Not Recruiting" does not match "not_yet_recruiting") — free text, so it silently misses spelling/format variants across registries
 	- **recruitment_status_normalized** - exact match against the canonical recruitment status; one of: not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other
-	- **study_type** - filter by study type (Interventional, Observational)
+	- **study_type** - legacy free-text `icontains` filter on the raw registry study-type string — silently misses spelling/format variants across registries (e.g. "INTERVENTIONAL" vs "Interventional clinical trial of medicinal product"); prefer **study_type_normalized** below
+	- **study_type_normalized** - exact match against the canonical study type; one of: interventional, observational, expanded_access, basic_science, other
 	- **primary_sponsor** - legacy free-text `icontains` filter on the raw registry sponsor string — silently misses spelling/duplicate variants across registries; prefer **sponsor_id**/**sponsor_slug** below (same legacy treatment as `phase` vs `phase_normalized`)
 	- **sponsor_id** - exact match against a canonical sponsor's id (see `/sponsors/`)
 	- **sponsor_slug** - exact match against a canonical sponsor's slug (see `/sponsors/`)
@@ -1954,6 +1961,7 @@ class TrialViewSet(
 		payload["no_sponsor"] = self._no_sponsor_count(filtered_qs)
 		payload["by_sponsor_type"] = self._by_sponsor_type_counts(filtered_qs)
 		payload["by_modality"] = self._by_modality_counts(filtered_qs)
+		payload["by_study_type"] = self._by_study_type_counts(filtered_qs)
 		return payload
 
 	# Phase, region, country, and year are trial-intrinsic (not org-owned data like
@@ -1971,6 +1979,23 @@ class TrialViewSet(
 		}
 		payload = {value: counts.get(value, 0) for value in TrialPhase.values}
 		payload["no_phase"] = counts.get(None, 0)
+		return payload
+
+	def _by_study_type_counts(self, filtered_qs):
+		"""``{study_type_slug: count, ..., "no_study_type": count}`` over *filtered_qs*.
+
+		``no_study_type`` is large (~13.2k globally, 2026-07-20) because most of it is
+		legacy rows with no ``source_register`` at all, not a normalization gap — see
+		docs/trials-field-normalization.md.
+		"""
+		counts = {
+			row["study_type_normalized"]: row["count"]
+			for row in filtered_qs.order_by()
+			.values("study_type_normalized")
+			.annotate(count=Count("trial_id", distinct=True))
+		}
+		payload = {value: counts.get(value, 0) for value in TrialStudyType.values}
+		payload["no_study_type"] = counts.get(None, 0)
 		return payload
 
 	def _by_region_counts(self, filtered_qs):

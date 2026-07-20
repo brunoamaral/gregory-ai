@@ -20,6 +20,7 @@ from gregory.utils.trial_field_normalizers import (
 	TrialPhase,
 	TrialRecruitmentStatus,
 	TrialRegion,
+	TrialStudyType,
 )
 
 
@@ -594,6 +595,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	phase = filters.CharFilter(field_name="phase", lookup_expr="icontains")
 	phase_normalized = filters.ChoiceFilter(choices=TrialPhase.choices)
 	study_type = filters.CharFilter(field_name="study_type", lookup_expr="icontains")
+	study_type_normalized = filters.ChoiceFilter(choices=TrialStudyType.choices)
 	primary_sponsor = filters.CharFilter(
 		field_name="primary_sponsor", lookup_expr="icontains"
 	)  # Legacy: free-text on the raw registry string — prefer sponsor_id/sponsor_slug
@@ -686,6 +688,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"phase",
 			"phase_normalized",
 			"study_type",
+			"study_type_normalized",
 			"primary_sponsor",
 			"sponsor_id",
 			"sponsor_slug",

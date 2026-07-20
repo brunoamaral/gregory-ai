@@ -37,8 +37,9 @@ this suite also locks in:
   - the ``recruitment_status_normalized`` and ``phase_normalized`` query params scope the
     totals end-to-end (the filtering itself comes free via ``filter_queryset``)
 
-``/trials/stats/`` also returns four facet breakdowns (``by_phase``, ``by_region``,
-``by_country``, ``by_year``) over the filtered queryset. This suite locks in:
+``/trials/stats/`` also returns facet breakdowns (``by_phase``, ``by_region``,
+``by_country``, ``by_year``, ``by_study_type``) over the filtered queryset. This suite
+locks in:
 
   - by_phase: every ``TrialPhase`` key always present (0 when empty); raw spelling
     variants of the same phase land in one bucket; a null raw phase lands in
@@ -53,6 +54,10 @@ this suite also locks in:
   - by_year: ascending by year, zero-count years omitted, a null
     ``date_registration`` surfaces as a trailing ``{"year": None, ...}`` entry;
     values sum to ``total``
+  - by_study_type: every ``TrialStudyType`` key always present (0 when empty); raw
+    spelling variants of the same study type land in one bucket; a null raw study_type
+    lands in ``no_study_type``; values (incl. ``no_study_type``) sum to ``total``;
+    scoped by filters
 
 Run with:
     docker exec gregory python manage.py test api.tests.test_trials_stats
@@ -74,6 +79,7 @@ from gregory.utils.trial_field_normalizers import (
 	TrialPhase,
 	TrialRecruitmentStatus,
 	TrialRegion,
+	TrialStudyType,
 )
 
 
@@ -92,7 +98,7 @@ def _make_subject(team, name, slug):
 
 def _make_trial(
 	title, link, status, teams, subjects=(), phase=None, countries=None,
-	date_registration=None,
+	date_registration=None, study_type=None,
 ):
 	trial = Trials.objects.create(
 		title=title,
@@ -101,6 +107,7 @@ def _make_trial(
 		phase=phase,
 		countries=countries,
 		date_registration=date_registration,
+		study_type=study_type,
 	)
 	for team in teams:
 		trial.teams.add(team)
@@ -570,6 +577,66 @@ class TrialStatsPhaseFacetTest(TrialStatsBase):
 		# trials; only the trial with a phase set lands in phase_3.
 		self.assertEqual(resp.data["by_phase"]["phase_3"], 1)
 		self.assertEqual(resp.data["by_phase"]["no_phase"], 2)
+
+
+class TrialStatsStudyTypeFacetTest(TrialStatsBase):
+	"""by_study_type: enum shape, spelling-variant grouping, the no_study_type bucket,
+	filter scoping."""
+
+	def test_every_study_type_key_present_and_no_stray_keys(self):
+		resp = self.client.get("/trials/stats/")
+		self.assertEqual(resp.status_code, 200)
+		by_study_type = resp.data["by_study_type"]
+		self.assertEqual(
+			set(by_study_type.keys()), set(TrialStudyType.values) | {"no_study_type"}
+		)
+		# None of the fixture trials (t1-t4) have a study_type set.
+		for value in TrialStudyType.values:
+			self.assertEqual(by_study_type[value], 0)
+		self.assertEqual(by_study_type["no_study_type"], 4)
+
+	def test_raw_spelling_variants_land_in_same_bucket(self):
+		_make_trial(
+			"STa", "https://trial.example.com/st-a", "Recruiting", [self.team],
+			study_type="INTERVENTIONAL",
+		)
+		_make_trial(
+			"STb", "https://trial.example.com/st-b", "Recruiting", [self.team],
+			study_type="Interventional clinical trial of medicinal product",
+		)
+		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["by_study_type"]["interventional"], 2)
+
+	def test_null_raw_study_type_lands_in_no_study_type(self):
+		# other_team has only t4, which has no study_type set.
+		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["by_study_type"]["no_study_type"], 1)
+
+	def test_by_study_type_values_sum_to_total(self):
+		_make_trial(
+			"STc", "https://trial.example.com/st-c", "Recruiting", [self.team],
+			study_type="OBSERVATIONAL",
+		)
+		resp = self.client.get("/trials/stats/")
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(sum(resp.data["by_study_type"].values()), resp.data["total"])
+
+	def test_filter_scopes_by_study_type(self):
+		_make_trial(
+			"STd", "https://trial.example.com/st-d", "Recruiting", [self.team],
+			study_type="INTERVENTIONAL",
+		)
+		resp = self.client.get(
+			"/trials/stats/", {"recruitment_status_normalized": "recruiting"}
+		)
+		self.assertEqual(resp.status_code, 200)
+		# t1, t2 ("Recruiting", no study_type) + the interventional trial above = 3
+		# recruiting trials; only the trial with a study_type set lands in
+		# interventional.
+		self.assertEqual(resp.data["by_study_type"]["interventional"], 1)
+		self.assertEqual(resp.data["by_study_type"]["no_study_type"], 2)
 
 
 class TrialStatsCountryFacetTest(TrialStatsBase):

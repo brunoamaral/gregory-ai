@@ -11,18 +11,21 @@ written by four separate paths:
 - API POST via `TrialSerializer`
 
 Each registry uses its own vocabulary for the same real-world concept, so filtering or
-counting against the raw column silently misses rows. Two fields are normalized so far:
+counting against the raw column silently misses rows. Four fields are normalized so far:
 
 - **`phase`** — the stage of testing (Phase 1–4, ...).
 - **`recruitment_status`** — whether the trial is recruiting, completed, etc.
+- **`study_type`** — interventional vs. observational vs. expanded access vs. basic science.
+- **`countries`** (plus three sibling raw columns) — the trial's participating countries and
+  derived regions.
 
-For both, the raw column must stay untouched — it's the source-of-record value, and
+For each, the raw column must stay untouched — it's the source-of-record value, and
 rewriting it in place would break source-sync fidelity (re-importing the same registry
 record should reproduce the same raw value). So normalization lives in a **derived
 companion field per raw field** (`phase_normalized`, `recruitment_status_normalized`, ...),
-each computed by a pure function and kept in lockstep automatically. This doc covers both
-fields and the shared machinery; see the per-field sections below for vocabulary and
-mapping rules.
+each computed by a pure function and kept in lockstep automatically. This doc covers every
+field and the shared machinery; see the per-field sections below for vocabulary and mapping
+rules.
 
 ## Where the mapper lives
 
@@ -36,6 +39,18 @@ The module also defines the registry that drives every generic piece of machiner
 NORMALIZED_TRIAL_FIELDS = (
 	("phase", "phase_normalized", normalize_phase),
 	("recruitment_status", "recruitment_status_normalized", normalize_recruitment_status),
+	("study_type", "study_type_normalized", normalize_study_type),
+	(
+		(
+			"countries_by_source",
+			"countries",
+			"country_status",
+			"countries_decision_date",
+			"countries_recruitment_date",
+		),
+		"regions_normalized",
+		_compute_regions_from_raw,
+	),
 )
 ```
 
@@ -203,6 +218,74 @@ one-registry-value-to-one-bucket exercise:
    raw string (which is actually informative here) shows on display surfaces instead of a
    generic "Unknown" label.
 
+## Field: `study_type` → `study_type_normalized`
+
+Like `recruitment_status`, the study-type vocabulary is small and closed, so there is
+deliberately **no generic token fallback** — only the exact-match table below and `other`.
+
+### Canonical vocabulary
+
+`gregory.utils.trial_field_normalizers.TrialStudyType` (a `models.TextChoices`):
+
+| Value | Label |
+|---|---|
+| `interventional` | Interventional |
+| `observational` | Observational |
+| `expanded_access` | Expanded access |
+| `basic_science` | Basic science |
+| `other` | Other |
+
+### Mapping table
+
+Keys are the whitespace-collapsed, casefolded raw value. All 27 distinct raw spellings
+observed in the DB (2026-07-20 audit, see STUDY-TYPE-NORMALIZATION-PLAN.md for the full
+per-value count/registry inventory):
+
+| Canonical | Raw values | Source |
+|---|---|---|
+| `interventional` | `INTERVENTIONAL`, `Interventional`, `interventional` | ClinicalTrials.gov, ANZCTR/NL-OMON/ISRCTN/JPRN, IRCT |
+| | `Intervention` | REBEC |
+| | `Interventional study` | ChiCTR |
+| | `Interventional clinical trial of medicinal product` | EU CTR / EU CTIS |
+| | `Treatment study` | — |
+| | `BA/BE` | — |
+| `observational` | `OBSERVATIONAL`, `Observational`, `observational` | ClinicalTrials.gov, DRKS |
+| | `Observational study` | ChiCTR |
+| | `Observational non invasive`, `Observational invasive` | NL-OMON |
+| | `Diagnostic test`, `Screening` | mixed |
+| | `Cause`, `Cause/Relative factors study`, `Relative factors research`, `Epidemilogical research` (sic), `Prognosis study` | — |
+| `expanded_access` | `EXPANDED_ACCESS` | ClinicalTrials.gov |
+| | `Expanded Access` | — |
+| `basic_science` | `Basic Science`, `basic science` | — |
+| `other` | `Other`, plus any unmapped value (logged) | — |
+
+### Judgment calls
+
+Three mappings above are deliberate, non-obvious choices:
+
+1. **`Diagnostic test`/`Screening` → `observational`, not their own bucket.**
+   ClinicalTrials.gov classifies diagnostic-accuracy studies as observational unless they
+   assign an intervention, and the WHO registries that emit these strings use them as a
+   study *purpose*, not an assignment model — folding them into `observational` is the
+   least-wrong bucket for both.
+2. **`BA/BE` → `interventional`.** Bioavailability/bioequivalence studies dose subjects by
+   protocol — interventional by definition.
+3. **`Basic Science` gets its own bucket, not `other`.** Only a handful of rows, but they
+   are meaningfully non-clinical; folding them into `other` (the "we don't know" bucket)
+   would lose that distinction — same reasoning that gave `phase`'s `post_market` its own
+   bucket rather than `other`.
+
+`Observational invasive`/`non invasive` both collapse to `observational` — the invasiveness
+qualifier is NL-OMON-specific and orthogonal to study type; the raw column keeps it, the
+normalized value doesn't fragment the vocabulary for one registry. `expanded_access` stays
+separate from both `interventional` and `observational` — it's an access program, not a
+study, consistent with how the `available`/`no_longer_available` recruitment statuses are
+handled above.
+
+Out of scope: no refetch/backfill-from-registry command exists for the ~13.1k legacy rows
+with no `source_register` and therefore no `study_type` at all — this normalization only
+covers what's already in the raw column.
+
 ## Field: `countries` → `TrialCountry` rows + `regions_normalized` (multi-input)
 
 Unlike `phase` and `recruitment_status`, country data is spread across **four** raw columns
@@ -326,13 +409,13 @@ When registries introduce a new spelling the mapper doesn't recognise, it lands 
 ## Backfill command
 
 ```
-python manage.py backfill_trial_normalized_fields [--field phase] [--field recruitment_status] [--batch-size 1000] [--dry-run]
+python manage.py backfill_trial_normalized_fields [--field phase] [--field recruitment_status] [--field study_type] [--batch-size 1000] [--dry-run]
 ```
 
 `--field` is repeatable and/or comma-separated (`--field phase,recruitment_status`);
 omitting it backfills every field registered in `NORMALIZED_TRIAL_FIELDS`. Selector names
-are the derived field name with `_normalized` dropped — `phase`, `recruitment_status`, and
-`regions` (the countries/`TrialCountry` layer). Scans every `Trials` row once, recomputes
+are the derived field name with `_normalized` dropped — `phase`, `recruitment_status`,
+`study_type`, and `regions` (the countries/`TrialCountry` layer). Scans every `Trials` row once, recomputes
 the selected derived field(s), and `bulk_update`s the rows whose stored scalar value(s)
 differ, flushing every `--batch-size` dirty rows during the scan so peak memory stays
 bounded by the batch rather than the table (on the first run every row is dirty). When
@@ -365,30 +448,38 @@ entire pre-backfill trial set shows up in the `no_status` bucket rather than
 `recruiting`/`completed`/etc. — expect `no_status` to hold the bulk of `total` immediately
 after migrating, until the backfill catches the table up.
 
-## Extension recipe: study_type
+`study_type_normalized` (migration `0089_historicaltrials_study_type_normalized_and_more`)
+follows the same pattern: `docker exec gregory python manage.py migrate`, then
+`docker exec gregory python manage.py backfill_trial_normalized_fields --field study_type
+--dry-run` to review the OTHER report before running it for real. Expect `no_study_type` to
+hold ~13.2k trials even after the backfill catches up — that's mostly legacy rows with no
+`source_register` at all, not a normalization gap (see the `study_type` section above).
+
+## Extension recipe
 
 This design is meant to repeat directly for the next raw field with a messy multi-registry
-vocabulary:
+vocabulary — `phase`, `recruitment_status`, `study_type`, and `countries`/`regions_normalized`
+all followed it:
 
-1. In `gregory/utils/trial_field_normalizers.py`, add a new `models.TextChoices` (e.g.
-   `TrialStudyType`), a new pure function (e.g. `normalize_study_type`), and add a new
-   `("study_type", "study_type_normalized", normalize_study_type)` entry to
+1. In `gregory/utils/trial_field_normalizers.py`, add a new `models.TextChoices`, a new
+   pure function, and add a new `(raw_field, derived_field, normalizer)` entry to
    `NORMALIZED_TRIAL_FIELDS`. Same module — it's named `trial_field_normalizers`, not
    `trial_phase_normalizer`, for exactly this reason.
-2. In `models.py`, add `study_type_normalized` next to `study_type` (`CharField`,
+2. In `models.py`, add the derived field next to its raw counterpart (`CharField`,
    `choices=`, `db_index=True`, `editable=False`). `Trials.save()` needs **no changes** —
    it already iterates `NORMALIZED_TRIAL_FIELDS`, so the new entry is picked up
    automatically, including the `update_fields` shim.
 3. `makemigrations gregory`.
 4. No new backfill command needed —
    `backfill_trial_normalized_fields` already covers every registered field; the new one
-   is included by default, or scoped alone with `--field study_type`.
+   is included by default, or scoped alone with `--field <name>`.
 5. Wire up the API filter/serializer/CSV/XLSX columns and the admin
    list_filter/readonly_fields/fieldset entries the same way as `phase`/`phase_normalized`
    above. The admin "Recompute normalized fields" action needs no changes — it also
    iterates `NORMALIZED_TRIAL_FIELDS`.
 6. Test coverage mirrors `gregory/tests/test_trial_phase_normalization.py` /
-   `gregory/tests/test_trial_recruitment_status_normalization.py`.
+   `gregory/tests/test_trial_recruitment_status_normalization.py` /
+   `gregory/tests/test_trial_study_type_normalization.py`.
 
 ## Cross-reference: multi-source merge
 
@@ -413,6 +504,15 @@ the current raw value's canonical form, never a stale one from a previous import
   `recruitment_status_normalized` untouched), and the API filter/serializer tests.
 - The admin "Recompute normalized fields" action has a smoke test alongside the other admin
   tests in `gregory/tests/test_trial_phase_normalization.py`.
+- `gregory/tests/test_trial_study_type_normalization.py` / `api/tests/test_trial_study_type_normalization.py`
+  — mirror the recruitment_status coverage above for `study_type`: every raw value in
+  `_STUDY_TYPE_EXACT_MATCHES`, `None`/empty/whitespace → `None`, unmapped → `other` +
+  logged, no generic token fallback, the `Trials.save()` hook, backfill coverage
+  (`--field study_type`, `--dry-run`, idempotency, scoping), the admin recompute action,
+  and the API filter/serializer tests (`?study_type_normalized=interventional`, invalid
+  choice, response body, legacy `study_type` `icontains` filter unaffected). The
+  `by_study_type` facet on `/trials/stats/` is covered in
+  `api/tests/test_trials_stats.py::TrialStatsStudyTypeFacetTest`.
 - `gregory/tests/test_trial_country_normalization.py` — `normalize_countries`/
   `normalize_regions` coverage (CTGov comma lists, WHO semicolon lists with duplicates,
   `Korea, Republic of` stored alone, `country_status` comma-containing-status parsing,

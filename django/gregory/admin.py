@@ -1035,6 +1035,9 @@ class TrialAdminForm(forms.ModelForm):
 			"prospective_registration": "Registered before it started?",
 			# Study details
 			"study_type": "Study type",
+			# Not a form field (editable=False) — the label is used by the XLSX
+			# export glossary, which reads TrialAdminForm.Meta.labels directly.
+			"study_type_normalized": "Study type (normalized)",
 			"study_design": "Study design",
 			"phase": "Trial phase",
 			# Not a form field (editable=False) — the label is used by the XLSX
@@ -1178,6 +1181,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		"links",
 		"phase_normalized",
 		"recruitment_status_normalized",
+		"study_type_normalized",
 		"countries_by_source",
 		"regions_normalized",
 		"primary_sponsor_normalized",
@@ -1223,6 +1227,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		("sources", OrganizationRestrictedFieldListFilter),
 		"phase_normalized",
 		"recruitment_status_normalized",
+		"study_type_normalized",
 	]
 	fieldsets = (
 		(
@@ -1253,6 +1258,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 			{
 				"fields": (
 					"study_type",
+					"study_type_normalized",
 					"study_design",
 					"phase",
 					"phase_normalized",

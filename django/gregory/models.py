@@ -21,6 +21,7 @@ from gregory.utils.trial_field_normalizers import (
 	SponsorType,
 	TrialPhase,
 	TrialRecruitmentStatus,
+	TrialStudyType,
 	map_sponsor_type,
 	normalize_countries,
 	normalize_sponsor_key,
@@ -1065,6 +1066,18 @@ class Trials(models.Model):
 	date_enrollement = models.DateField(null=True, blank=True)
 	target_size = models.TextField(null=True, blank=True)
 	study_type = models.TextField(null=True, blank=True)
+	# Canonical study type derived from `study_type` by
+	# gregory.utils.trial_field_normalizers. Recomputed on every save() below — never set
+	# this directly.
+	study_type_normalized = models.CharField(
+		max_length=20,
+		null=True,
+		blank=True,
+		choices=TrialStudyType.choices,
+		db_index=True,
+		editable=False,
+		help_text="Canonical study type derived from the raw 'study_type' value; recomputed on every save.",
+	)
 	study_design = models.TextField(null=True, blank=True)  # Changed to TextField
 	phase = models.TextField(null=True, blank=True)  # Changed to TextField
 	# Canonical phase derived from `phase` by gregory.utils.trial_field_normalizers.
