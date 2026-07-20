@@ -1469,6 +1469,9 @@ class TrialCountry(models.Model):
 				fields=["trial", "country"], name="unique_trial_country"
 			)
 		]
+		indexes = [
+			models.Index(fields=["country"], name="trialcountry_country_idx"),
+		]
 
 
 class TrialSite(models.Model):
