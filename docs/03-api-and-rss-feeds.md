@@ -268,6 +268,18 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | `date_registration_after` | date (YYYY-MM-DD) | Trials registered on or after this date (inclusive). Returns 400 for invalid dates. |
 | `date_registration_before` | date (YYYY-MM-DD) | Trials registered on or before this date (inclusive). Returns 400 for invalid dates. |
 
+### Trials ordering
+
+`GET /trials/?ordering=<field>` (prefix with `-` to reverse). Accepted values: `discovery_date` (default, newest first via `-discovery_date`), `published_date`, `title`, `trial_id`, `last_updated`, `recruiting_first`.
+
+`recruiting_first` sorts by recruitment *availability* — "can a patient join this today?" — not alphabetically on `recruitment_status_normalized`:
+
+`recruiting` → `enrolling_by_invitation` → `not_yet_recruiting` → `active_not_recruiting` → `suspended` → `not_recruiting` → `unknown` → `other` → `completed` → `terminated` → `withdrawn` → null status last.
+
+Many trials share a rank, so ties are broken automatically by `-discovery_date` — page-to-page ordering stays stable.
+
+**Unrecognised `ordering` values are silently ignored, not rejected** (DRF `OrderingFilter`'s default behaviour) — a typo or a stale field name falls back to the default ordering instead of returning an error.
+
 ### Sponsor canonicalization
 
 Duplicate/variant spellings of the same real-world sponsor (`"Novartis"`, `"Novartis Pharma AG"`, `"NOVARTIS FARMA"`, ...) are resolved to a single canonical `Sponsor` entity — see `docs/trials-field-normalization.md` for how the resolution works.

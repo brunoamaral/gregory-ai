@@ -53,6 +53,7 @@ from api.direct_streaming import (
 )
 from datetime import datetime, timedelta
 from django.db.models import (
+	Case,
 	Count,
 	Exists,
 	Max,
@@ -61,6 +62,7 @@ from django.db.models import (
 	OuterRef,
 	Subquery,
 	Value,
+	When,
 	IntegerField,
 )
 from django.db.models.functions import Coalesce, ExtractYear
@@ -1720,6 +1722,24 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 # TRIALS
 ###
 
+# Recruitment-availability rank for ?ordering=recruiting_first — "can a patient join
+# this today?" order, NOT the alphabetical order of the TrialRecruitmentStatus enum
+# values. Null recruitment_status_normalized sorts last via the annotation's
+# default= branch below. See STATUS-ORDERING-PLAN.md.
+_RECRUITING_RANK = {
+	TrialRecruitmentStatus.RECRUITING: 0,
+	TrialRecruitmentStatus.ENROLLING_BY_INVITATION: 1,
+	TrialRecruitmentStatus.NOT_YET_RECRUITING: 2,
+	TrialRecruitmentStatus.ACTIVE_NOT_RECRUITING: 3,
+	TrialRecruitmentStatus.SUSPENDED: 4,
+	TrialRecruitmentStatus.NOT_RECRUITING: 5,
+	TrialRecruitmentStatus.UNKNOWN: 6,
+	TrialRecruitmentStatus.OTHER: 7,
+	TrialRecruitmentStatus.COMPLETED: 8,
+	TrialRecruitmentStatus.TERMINATED: 9,
+	TrialRecruitmentStatus.WITHDRAWN: 10,
+}
+
 
 class TrialViewSet(
 	BulkExportThrottleMixin,
@@ -1747,6 +1767,24 @@ class TrialViewSet(
 	- **page** - page number for pagination
 	- **page_size** - items per page (max 100)
 	- **all_results** - set to 'true' to bypass pagination and get all results (useful for CSV export)
+
+	# Ordering:
+	`?ordering=<field>` (prefix with `-` to reverse). Accepted values:
+	- **discovery_date** - when Gregory first ingested the trial (default: `-discovery_date`, newest first)
+	- **published_date** - registry publication date
+	- **title**
+	- **trial_id**
+	- **last_updated**
+	- **recruiting_first** - recruitment-availability order, NOT alphabetical on
+	  `recruitment_status_normalized`: `recruiting` → `enrolling_by_invitation` →
+	  `not_yet_recruiting` → `active_not_recruiting` → `suspended` →
+	  `not_recruiting` → `unknown` → `other` → `completed` → `terminated` →
+	  `withdrawn` → null status last. Ties (many trials share a rank) are broken
+	  by `-discovery_date` automatically. See STATUS-ORDERING-PLAN.md.
+
+	Unrecognised `ordering` values are silently ignored (not rejected) — a DRF
+	`OrderingFilter` default — so a typo or stale field name falls back to the
+	default ordering rather than erroring.
 
 	# Sites:
 	Per-site rows (`TrialSite` — name/city/state/country/coordinates, sourced from CTIS
@@ -1927,6 +1965,21 @@ class TrialViewSet(
 					to_attr="_prefetched_org_contents",
 				)
 			)
+		# Backs ?ordering=recruiting_first (see _RECRUITING_RANK above). Skipped for
+		# the stats action: build_stats_payload's facet aggregations call
+		# .order_by() to clear ordering, so the annotation would be pure overhead
+		# on that path — see STATUS-ORDERING-PLAN.md.
+		if self.action != "stats":
+			qs = qs.annotate(
+				recruiting_first=Case(
+					*[
+						When(recruitment_status_normalized=status, then=Value(rank))
+						for status, rank in _RECRUITING_RANK.items()
+					],
+					default=Value(len(_RECRUITING_RANK)),
+					output_field=IntegerField(),
+				)
+			)
 		return qs
 
 	def get_serializer_class(self):
@@ -1943,8 +1996,23 @@ class TrialViewSet(
 		"title",
 		"trial_id",
 		"last_updated",
+		"recruiting_first",
 	]
 	ordering = ["-discovery_date"]
+
+	def filter_queryset(self, queryset):
+		"""Append ``-discovery_date`` as a tiebreaker whenever ``recruiting_first``
+		is the requested ordering. Many trials share a rank (see _RECRUITING_RANK),
+		so ``ordering=recruiting_first`` alone gives an unstable page order across
+		requests — a pagination-correctness bug, not cosmetics. See
+		STATUS-ORDERING-PLAN.md.
+		"""
+		queryset = super().filter_queryset(queryset)
+		ordering_param = self.request.query_params.get("ordering", "")
+		primary_term = ordering_param.split(",")[0].strip()
+		if primary_term.lstrip("-") == "recruiting_first":
+			queryset = queryset.order_by(primary_term, "-discovery_date")
+		return queryset
 
 	stats_cache_prefix = "trials_stats"
 
