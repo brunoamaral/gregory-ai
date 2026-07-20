@@ -163,8 +163,10 @@ specifically:
   the `ctgov` key; `importWHOXML.py` writes only the `ictrp` key —
   `gregory.utils.registry_utils.merge_countries_by_source(existing_map, key, value)`
   enforces that a source can only ever touch its own key, mirroring `merge_links`. EU CTIS
-  needs no key — its country data already lives in its own columns
-  (`country_status`/`countries_decision_date`).
+  writes its own `"ctis"` key too (migration 0086, PR 2a of CTIS-API-PHASE-2-PLAN.md): the
+  `feedreader_trials_ctis` retrieve-enrichment hook files the `retrieve/{ctNumber}`
+  endpoint's `rowCountriesInfo` there — the only source of **non-EEA** participating
+  countries for CTIS trials, since `country_status`/`countries_decision_date` are EEA-only.
 - **Unlike `merge_links`'** first-value-wins semantics, `merge_countries_by_source` always
   *refreshes* the value under a source's key on re-import. There is exactly one legitimate
   value per source (not one-per-registry-URL), so there is nothing to protect by keeping a

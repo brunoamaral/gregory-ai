@@ -514,7 +514,13 @@ class TrialCountrySerializer(serializers.ModelSerializer):
 
 	class Meta:
 		model = TrialCountry
-		fields = ["country", "status", "decision_date", "sources"]
+		fields = [
+			"country",
+			"status",
+			"decision_date",
+			"recruitment_start_date",
+			"sources",
+		]
 
 	def get_country(self, obj):
 		return obj.country.code if obj.country else None

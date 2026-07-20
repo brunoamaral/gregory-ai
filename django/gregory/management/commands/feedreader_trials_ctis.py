@@ -19,18 +19,36 @@ Source Configuration:
     {"medicalCondition": "Multiple Sclerosis"}
 
 For every record /search returns, this command also fetches the full /retrieve
-dossier for that trial and archives it to disk (gregory.utils.ctis_backup) —
-one deduplicated JSON snapshot per trial per distinct content version, not
-parsed or written to the DB. See docs/ctis-public-api-schema.md section on
-retrieve/{ctNumber} for what that payload contains; ingesting it into the DB
-is separately-scoped future work.
+dossier for that trial once, archives it to disk (gregory.utils.ctis_backup) —
+one deduplicated JSON snapshot per trial per distinct content version — and
+enriches the trial from it (see docs/ctis-public-api-schema.md for the payload
+shape, and CTIS-API-PHASE-2-PLAN.md for the enrichment design):
+
+1. All participating countries, including non-EEA (`rowCountriesInfo`), filed
+   under the "ctis" key of `countries_by_source`.
+2. Per-country recruitment start dates (`authorizedPartsII[].mscInfo`), stored
+   in `countries_recruitment_date` and, via `Trials.sync_trial_countries()`, on
+   `TrialCountry.recruitment_start_date`.
+3. Structured eligibility criteria, filling `inclusion_criteria`/
+   `exclusion_criteria` only when they are still empty (WHO ICTRP legitimately
+   populates those columns for the same trials and must never be overwritten).
+
+Enrichment failures (404, unexpected shape) are logged and skipped per trial —
+they never abort the source run. `--enrich-all` re-runs enrichment for every
+trial holding a `euct`/`ctis` identifier, independent of the search sync; this
+is both the one-time backfill sweep and the general re-run path, and is
+idempotent by construction (every write above is a deterministic replacement
+or a fill-if-empty).
 
 Usage:
 	python manage.py feedreader_trials_ctis
 	python manage.py feedreader_trials_ctis --limit 500
 	python manage.py feedreader_trials_ctis --source-id 12 --sleep 1
+	python manage.py feedreader_trials_ctis --enrich-all --sleep 0.5
 """
 
+import logging
+import time
 from datetime import timedelta
 
 from gregory.management.base import GregoryBaseCommand
@@ -45,13 +63,104 @@ from gregory.utils.registry_utils import (
 	merge_links,
 	canonical_link,
 	merge_identifiers,
+	merge_countries_by_source,
 	safe_change_reason,
 )
+from gregory.utils.trial_field_normalizers import _name_to_code_lookup
+
+logger = logging.getLogger(__name__)
 
 # Raw /retrieve JSON dossiers are archived here (one file per distinct content
 # snapshot per trial; see gregory.utils.ctis_backup). Matches the persisted-volume
 # convention of capture_trial_streams.py's DEFAULT_DIR.
 BACKUPS_DIR = "/code/backups"
+
+
+def _extract_row_countries(payload: dict) -> list:
+	"""authorizedApplication.authorizedPartI.rowCountriesInfo[] -> the list of
+	{"name", "isoAlpha2Code", "isoAlpha3Code", ...} dicts, or [] if the subtree is
+	missing/malformed (the API is undocumented — parse defensively, never raise)."""
+	part_i = (payload.get("authorizedApplication") or {}).get("authorizedPartI") or {}
+	countries = part_i.get("rowCountriesInfo")
+	if not isinstance(countries, list):
+		return []
+	return [c for c in countries if isinstance(c, dict) and c.get("name")]
+
+
+def _extract_eligibility_criteria(payload: dict) -> tuple:
+	"""authorizedPartI.trialDetails.trialInformation.eligibilityCriteria ->
+	(inclusion_text, exclusion_text): each a newline-separated block, one line per
+	criterion as "<number>. <text>", sorted by number; None if the subtree is
+	missing/malformed or has no usable entries."""
+	part_i = (payload.get("authorizedApplication") or {}).get("authorizedPartI") or {}
+	criteria = (
+		(part_i.get("trialDetails") or {}).get("trialInformation") or {}
+	).get("eligibilityCriteria")
+	if not isinstance(criteria, dict):
+		return None, None
+
+	def _join(entries, text_key):
+		if not isinstance(entries, list):
+			return None
+		lines = []
+		for entry in entries:
+			if not isinstance(entry, dict):
+				continue
+			text = entry.get(text_key)
+			if not text:
+				continue
+			number = entry.get("number")
+			lines.append((number if isinstance(number, int) else 10**9, number, text))
+		if not lines:
+			return None
+		lines.sort(key=lambda item: item[0])
+		return "\n".join(
+			f"{number}. {text}" if number is not None else text
+			for _, number, text in lines
+		)
+
+	inclusion = _join(criteria.get("principalInclusionCriteria"), "principalInclusionCriteria")
+	exclusion = _join(criteria.get("principalExclusionCriteria"), "principalExclusionCriteria")
+	return inclusion, exclusion
+
+
+def _extract_recruitment_dates(payload: dict) -> dict:
+	"""authorizedApplication.authorizedPartsII[].mscInfo -> {alpha2_code: earliest
+	ISO recruitmentStartDate}. Country name -> code via the same cached
+	display-name lookup trial_field_normalizers uses for countries_by_source, so
+	the two never disagree on a mapping. Unmappable names or a part with no
+	recruitment period are skipped (logged), never raising."""
+	parts_ii = (payload.get("authorizedApplication") or {}).get("authorizedPartsII")
+	if not isinstance(parts_ii, list):
+		return {}
+
+	name_to_code = _name_to_code_lookup()
+	dates = {}
+	for part in parts_ii:
+		if not isinstance(part, dict):
+			continue
+		msc_info = part.get("mscInfo")
+		if not isinstance(msc_info, dict):
+			continue
+		country_name = msc_info.get("countryName")
+		periods = msc_info.get("trialRecruitmentPeriod")
+		if not country_name or not isinstance(periods, list):
+			continue
+		code = name_to_code.get(str(country_name).strip().casefold())
+		if not code:
+			logger.info("CTIS retrieve: unmapped recruitment-date country %r", country_name)
+			continue
+		candidates = [
+			p.get("recruitmentStartDate")
+			for p in periods
+			if isinstance(p, dict) and p.get("recruitmentStartDate")
+		]
+		if not candidates:
+			continue
+		earliest = min(candidates)
+		if code not in dates or earliest < dates[code]:
+			dates[code] = earliest
+	return dates
 
 
 class Command(GregoryBaseCommand):
@@ -79,14 +188,62 @@ class Command(GregoryBaseCommand):
 			help="Directory to archive raw /retrieve JSON dossiers in (default: %s)"
 			% BACKUPS_DIR,
 		)
+		parser.add_argument(
+			"--enrich-all",
+			action="store_true",
+			help="Skip the search sync entirely and instead re-run the /retrieve "
+			"enrichment (countries, recruitment dates, eligibility criteria) for "
+			"every trial holding a euct/ctis identifier. This is both the one-time "
+			"backfill sweep and the general re-run path; idempotent.",
+		)
 
 	def handle(self, *args, **options):
 		self.api = CTISPublicAPI()
+		if options.get("enrich_all"):
+			self.enrich_all_trials(
+				sleep=options.get("sleep", 0.5), limit=options.get("limit")
+			)
+			return
 		self.process_sources(
 			sleep=options.get("sleep", 0.5),
 			limit=options.get("limit"),
 			source_id=options.get("source_id"),
 			backup_dir=options.get("backup_dir"),
+		)
+
+	def enrich_all_trials(self, sleep=0.5, limit=None):
+		"""One-time sweep / general re-run path: re-fetch /retrieve and re-apply the
+		enrichment for every trial already holding a euct or ctis identifier,
+		regardless of whether the search sync touched it this run."""
+		trials = Trials.objects.filter(
+			Q(identifiers__has_key="euct") | Q(identifiers__has_key="ctis")
+		)
+		processed = 0
+		enriched = 0
+		for trial in trials.iterator():
+			identifiers = trial.identifiers or {}
+			ct_number = identifiers.get("euct")
+			if not ct_number:
+				ctis_value = identifiers.get("ctis") or ""
+				ct_number = ctis_value[len("CTIS"):] if ctis_value.startswith("CTIS") else ctis_value
+			if not ct_number:
+				continue
+
+			processed += 1
+			payload = self._fetch_retrieve_payload(ct_number)
+			if payload is not None:
+				self._enrich_from_retrieve(trial, payload)
+				enriched += 1
+
+			if sleep:
+				time.sleep(sleep)
+			if limit and processed >= limit:
+				break
+
+		self.log(
+			f"CTIS enrich-all: processed {processed} trial(s), enriched {enriched}.",
+			level=1,
+			style_func=self.style.SUCCESS,
 		)
 
 	def process_sources(self, sleep=0.5, limit=None, source_id=None, backup_dir=None):
@@ -174,16 +331,26 @@ class Command(GregoryBaseCommand):
 						# cheap DB non-destructive-update below still runs), but a
 						# wholly-stale trailing page can otherwise cost up to `size`
 						# unnecessary heavy GETs per run for trials that haven't changed.
+						# Fetched once and reused for both the disk archive and the DB
+						# enrichment below, so a changed trial costs exactly one GET.
+						retrieve_payload = None
 						if since is None or not self.api.record_is_stale(record, since):
-							self._backup_retrieve_dossier(
-								clinical_trial.identifiers["euct"], backup_dir
+							retrieve_payload = self._fetch_retrieve_payload(
+								clinical_trial.identifiers["euct"]
 							)
+							if retrieve_payload is not None:
+								self._archive_retrieve_payload(
+									retrieve_payload,
+									clinical_trial.identifiers["euct"],
+									backup_dir,
+								)
 
 						existing_trial = self.find_existing_trial(clinical_trial)
 						if existing_trial:
 							self.update_existing_trial(
 								existing_trial, clinical_trial, source
 							)
+							trial_obj = existing_trial
 							self.log(
 								f"Updated existing trial: {existing_trial.title[:80]}...",
 								level=2,
@@ -191,13 +358,16 @@ class Command(GregoryBaseCommand):
 							)
 							updated_count += 1
 						else:
-							self.create_new_trial(clinical_trial, source)
+							trial_obj = self.create_new_trial(clinical_trial, source)
 							self.log(
 								f"Created new trial: {clinical_trial.title[:80]}...",
 								level=2,
 								style_func=self.style.SUCCESS,
 							)
 							created_count += 1
+
+						if retrieve_payload is not None and trial_obj is not None:
+							self._enrich_from_retrieve(trial_obj, retrieve_payload)
 
 					except IntegrityError as e:
 						ct_number = (
@@ -271,25 +441,46 @@ class Command(GregoryBaseCommand):
 				style_func=self.style.SUCCESS,
 			)
 
-	def _backup_retrieve_dossier(self, ct_number, backup_dir):
-		"""Fetch the full /retrieve dossier for ct_number and archive it (deduplicated
-		by content — see gregory.utils.ctis_backup.save_retrieve_backup).
-
-		This is a side archive, not required for correctness of the trial data this
-		command stores (that comes entirely from /search) — any failure here (API
-		down, disk full, malformed response) is logged and swallowed so it can never
-		block or fail the actual create/update of a trial.
+	def _fetch_retrieve_payload(self, ct_number):
+		"""Fetch the full /retrieve dossier for ct_number once. Returns None (logged)
+		on a 404, a transport failure, or an unexpected response shape — the API is
+		undocumented, so any failure here must never block or fail the actual
+		create/update of a trial. Shared by the disk archive and the DB enrichment
+		so a changed trial costs exactly one GET regardless of how many downstream
+		uses consume the payload.
 		"""
 		try:
 			payload = self.api.retrieve(ct_number)
-			if not isinstance(payload, dict):
-				self.log(
-					f"Skipping retrieve backup for {ct_number}: retrieve() did not "
-					"return a JSON object",
-					level=3,
-					style_func=self.style.WARNING,
-				)
-				return
+		except Exception as e:
+			self.log(
+				f"Failed to retrieve dossier for {ct_number}: {e}",
+				level=2,
+				style_func=self.style.WARNING,
+			)
+			return None
+		if payload is None:
+			self.log(
+				f"No retrieve dossier for {ct_number} (404 or not retrievable); skipping",
+				level=3,
+			)
+			return None
+		if not isinstance(payload, dict):
+			self.log(
+				f"Skipping retrieve for {ct_number}: did not return a JSON object",
+				level=3,
+				style_func=self.style.WARNING,
+			)
+			return None
+		return payload
+
+	def _archive_retrieve_payload(self, payload, ct_number, backup_dir):
+		"""Archive an already-fetched /retrieve payload (deduplicated by content —
+		see gregory.utils.ctis_backup.save_retrieve_backup). A side archive, not
+		required for correctness of the trial data this command stores (that comes
+		entirely from /search) — any failure here (disk full, ...) is logged and
+		swallowed so it can never block or fail the actual create/update of a trial.
+		"""
+		try:
 			save_retrieve_backup(backup_dir, ct_number, payload)
 		except Exception as e:
 			self.log(
@@ -297,6 +488,83 @@ class Command(GregoryBaseCommand):
 				level=2,
 				style_func=self.style.WARNING,
 			)
+
+	def _enrich_from_retrieve(self, trial, payload):
+		"""Harvest all-countries, per-country recruitment start dates, and
+		eligibility criteria from an already-fetched /retrieve payload onto `trial`,
+		then persist with a single save() (which also recomputes TrialCountry rows
+		and regions_normalized — see Trials.save()/sync_trial_countries()). No save
+		is issued when none of the three items yielded anything (e.g. a malformed
+		or unexpectedly bare payload) — nothing to persist, so no pointless write
+		or history row.
+
+		Never raises: a parse failure in one item logs and is skipped without
+		blocking the others, and any failure here never fails the source run.
+		"""
+		try:
+			changed = (
+				self._enrich_countries_by_source(trial, payload)
+				| self._enrich_recruitment_dates(trial, payload)
+				| self._enrich_eligibility_criteria(trial, payload)
+			)
+		except Exception as e:
+			self.log(
+				f"CTIS retrieve enrichment failed for trial {trial.pk}: {e}",
+				level=1,
+				style_func=self.style.ERROR,
+			)
+			return
+
+		if not changed:
+			return
+
+		trial._change_reason = safe_change_reason(
+			"Enriched from CTIS retrieve endpoint"
+		)
+		trial.save()
+
+	def _enrich_countries_by_source(self, trial, payload) -> bool:
+		"""Item 1: all participating countries (incl. non-EEA) -> countries_by_source
+		["ctis"], semicolon-joined display names (the tokenizer's guaranteed mapping
+		path — see CTIS-API-PHASE-2-PLAN.md). Union with other sources' keys via
+		merge_countries_by_source; never touches another source's key. Returns
+		whether a value was written."""
+		row_countries = _extract_row_countries(payload)
+		value = "; ".join(c["name"] for c in row_countries if c.get("name"))
+		if not value:
+			return False
+		trial.countries_by_source = merge_countries_by_source(
+			trial.countries_by_source, "ctis", value
+		)
+		return True
+
+	def _enrich_recruitment_dates(self, trial, payload) -> bool:
+		"""Item 2: per-country recruitment start dates -> countries_recruitment_date
+		(CTIS-only raw column, mirrors countries_decision_date). Replaced wholesale
+		with the freshly computed dict on every enrichment — deterministic and
+		idempotent, like every other CTIS-only field. Left untouched when nothing
+		parses (defensive: never wipe a previously-recorded value on a degraded
+		response). Returns whether a value was written."""
+		dates = _extract_recruitment_dates(payload)
+		if not dates:
+			return False
+		trial.countries_recruitment_date = dates
+		return True
+
+	def _enrich_eligibility_criteria(self, trial, payload) -> bool:
+		"""Item 3: structured eligibility criteria fill inclusion_criteria/
+		exclusion_criteria only when still empty — WHO ICTRP legitimately populates
+		those columns for the same trials and must never be overwritten. Returns
+		whether a value was written."""
+		inclusion, exclusion = _extract_eligibility_criteria(payload)
+		changed = False
+		if inclusion and not trial.inclusion_criteria:
+			trial.inclusion_criteria = inclusion
+			changed = True
+		if exclusion and not trial.exclusion_criteria:
+			trial.exclusion_criteria = exclusion
+			changed = True
+		return changed
 
 	def find_existing_trial(self, clinical_trial: ClinicalTrial):
 		"""Find an existing trial for this CTIS number, bridging the two identifier

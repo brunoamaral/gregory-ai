@@ -1060,10 +1060,13 @@ class Trials(models.Model):
 	# Per-source raw countries values, keyed by registry slug (gregory.utils.registry_utils
 	# .REGISTRY_DOMAINS, e.g. "ctgov", "ictrp"). Each importer writes only its own key
 	# (mirroring Trials.links / registry_utils.merge_links) so two differently-delimited
-	# per-source strings are never merged into one. EU CTIS needs no key here — its country
-	# data lives in country_status/countries_decision_date. `countries` (above) keeps its
-	# legacy last-writer-wins behaviour for API compatibility; deprecated in favour of this
-	# field plus `trial_countries` below. See docs/trials-multi-source-merge.md.
+	# per-source strings are never merged into one. EU CTIS writes its own "ctis" key too —
+	# sourced from the retrieve endpoint's `rowCountriesInfo` (feedreader_trials_ctis
+	# enrichment hook) — since that is the only source of non-EEA participating countries
+	# for CTIS trials; `country_status`/`countries_decision_date` remain EEA-only.
+	# `countries` (above) keeps its legacy last-writer-wins behaviour for API compatibility;
+	# deprecated in favour of this field plus `trial_countries` below. See
+	# docs/trials-multi-source-merge.md.
 	countries_by_source = models.JSONField(
 		blank=True,
 		null=True,
@@ -1118,6 +1121,12 @@ class Trials(models.Model):
 	results_posted = models.BooleanField(default=False)
 	overall_decision_date = models.DateField(null=True, blank=True)
 	countries_decision_date = models.JSONField(null=True, blank=True)
+	countries_recruitment_date = models.JSONField(
+		null=True, blank=True,
+		help_text='Per-country recruitment start date from the CTIS retrieve endpoint, '
+			'keyed by ISO 3166-1 alpha-2 code, e.g. {"IT": "2026-06-26"}. Mirrors '
+			'countries_decision_date.',
+	)
 	sponsor_type = models.CharField(max_length=500, null=True, blank=True)
 
 	# New field added
@@ -1231,6 +1240,7 @@ class Trials(models.Model):
 				self.countries,
 				self.country_status,
 				self.countries_decision_date,
+				self.countries_recruitment_date,
 			)
 			or []
 		)
@@ -1249,6 +1259,15 @@ class Trials(models.Model):
 					decision_date = datetime.date.fromisoformat(raw_decision_date)
 				except (TypeError, ValueError):
 					decision_date = None
+			recruitment_start_date = None
+			raw_recruitment_start_date = row.get("recruitment_start_date")
+			if raw_recruitment_start_date:
+				try:
+					recruitment_start_date = datetime.date.fromisoformat(
+						raw_recruitment_start_date
+					)
+				except (TypeError, ValueError):
+					recruitment_start_date = None
 			sources = row.get("sources") or []
 
 			existing_row = existing.get(code)
@@ -1259,6 +1278,7 @@ class Trials(models.Model):
 					status=row.get("status"),
 					status_raw=row.get("status_raw"),
 					decision_date=decision_date,
+					recruitment_start_date=recruitment_start_date,
 					sources=sources,
 				)
 				continue
@@ -1272,6 +1292,9 @@ class Trials(models.Model):
 				changed = True
 			if existing_row.decision_date != decision_date:
 				existing_row.decision_date = decision_date
+				changed = True
+			if existing_row.recruitment_start_date != recruitment_start_date:
+				existing_row.recruitment_start_date = recruitment_start_date
 				changed = True
 			if existing_row.sources != sources:
 				existing_row.sources = sources
@@ -1392,6 +1415,11 @@ class TrialCountry(models.Model):
 	# EU CTIS per-country decision date (from countries_decision_date). Null for
 	# countries not sourced from CTIS.
 	decision_date = models.DateField(null=True, blank=True)
+	# EU CTIS per-country recruitment start date (from countries_recruitment_date, sourced
+	# from the retrieve endpoint's authorizedPartsII[].mscInfo.trialRecruitmentPeriod —
+	# earliest date when a country reports more than one period). Null for countries not
+	# sourced from CTIS's retrieve enrichment.
+	recruitment_start_date = models.DateField(null=True, blank=True)
 	# Registry slugs that mentioned this country for this trial, e.g. ["ctgov", "ctis"].
 	sources = models.JSONField(default=list, blank=True)
 

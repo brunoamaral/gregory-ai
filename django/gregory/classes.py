@@ -1033,7 +1033,7 @@ class CTISPublicAPI:
 
 		return result
 
-	def retrieve(self, ct_number: str) -> dict:
+	def retrieve(self, ct_number: str) -> dict | None:
 		"""GET /ctis-public-api/retrieve/{ctNumber} — the full single-trial dossier
 		(~85 KB of nested JSON; see docs/ctis-public-api-schema.md for the shape).
 
@@ -1041,8 +1041,11 @@ class CTISPublicAPI:
 		not paginated. Callers are responsible for keeping the call volume bounded
 		(e.g. one per record already returned by a /search run).
 
-		Raises CTISPublicAPIError if the response isn't JSON or isn't an object;
-		raises requests' own exceptions on transport/HTTP failures.
+		Returns None on a 404 (the trial is not retrievable — some transitioned
+		trials 404 on this endpoint; callers should log and skip rather than treat
+		it as a hard failure). Raises CTISPublicAPIError if the response isn't JSON
+		or isn't an object; raises requests' own exceptions on any other transport/HTTP
+		failure.
 		"""
 		import requests
 
@@ -1051,6 +1054,8 @@ class CTISPublicAPI:
 			response = self.session.get(url, timeout=self.timeout)
 			response.raise_for_status()
 		except requests.exceptions.HTTPError as e:
+			if e.response is not None and e.response.status_code == 404:
+				return None
 			logging.error(f"HTTP Error: {e}")
 			raise
 		except requests.exceptions.RequestException as e:

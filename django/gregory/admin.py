@@ -220,8 +220,22 @@ class TrialCountryInline(admin.TabularInline):
 
 	model = TrialCountry
 	extra = 0
-	fields = ["country", "status", "status_raw", "decision_date", "sources"]
-	readonly_fields = ["country", "status", "status_raw", "decision_date", "sources"]
+	fields = [
+		"country",
+		"status",
+		"status_raw",
+		"decision_date",
+		"recruitment_start_date",
+		"sources",
+	]
+	readonly_fields = [
+		"country",
+		"status",
+		"status_raw",
+		"decision_date",
+		"recruitment_start_date",
+		"sources",
+	]
 	can_delete = False
 	verbose_name = "Country"
 	verbose_name_plural = "Countries (normalized)"

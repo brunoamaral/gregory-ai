@@ -168,6 +168,17 @@ class RetrieveTests(SimpleTestCase):
 		with self.assertRaises(requests.exceptions.HTTPError):
 			self.api.retrieve("2025-523726-40-00")
 
+	def test_retrieve_returns_none_on_404(self):
+		import requests
+
+		response = MagicMock()
+		http_error_response = MagicMock(status_code=404)
+		response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+			"404", response=http_error_response
+		)
+		self.api.session.get.return_value = response
+		self.assertIsNone(self.api.retrieve("2025-523726-40-00"))
+
 
 class RecordIsStaleTests(SimpleTestCase):
 	"""record_is_stale is shared between iter_search's page-continuation decision
