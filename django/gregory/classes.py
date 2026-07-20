@@ -528,7 +528,11 @@ class ClinicalTrialsGovAPI:
 				continue
 
 			country_name = loc.get("country")
-			country_code = _map_token(country_name)[0] if country_name else None
+			country_code = (
+				_map_token(country_name)[0]
+				if isinstance(country_name, str) and country_name
+				else None
+			)
 
 			geo_point = loc.get("geoPoint")
 			latitude = longitude = None

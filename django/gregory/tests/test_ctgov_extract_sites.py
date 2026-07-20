@@ -133,6 +133,20 @@ class ExtractSitesTests(TestCase):
 		self.assertEqual(len(sites), 1)
 		self.assertIsNone(sites[0]["country"])
 
+	def test_non_string_country_does_not_raise_and_yields_null(self):
+		"""Regression guard (Copilot review on PR #790): _map_token expects a str
+		and raises TypeError on other JSON types — a malformed/unexpected CTGov
+		payload with a non-string `country` (e.g. a list or number) must not crash
+		extraction, just leave country=None."""
+		for bad_country in (123, ["Portugal"], {"name": "Portugal"}, True):
+			with self.subTest(bad_country=bad_country):
+				study = _study(
+					[{"facility": "Research Site", "city": "Lisbon", "country": bad_country}]
+				)
+				sites = ClinicalTrialsGovAPI.extract_sites(study)
+				self.assertEqual(len(sites), 1)
+				self.assertIsNone(sites[0]["country"])
+
 	def test_multiple_locations_all_collected(self):
 		study = _study(
 			[
