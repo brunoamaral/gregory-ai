@@ -30,6 +30,7 @@ class NullsLastOrderingFilter(_BaseOrderingFilter):
 from api.serializers import (
 	ArticleSerializer,
 	TrialSerializer,
+	TrialDetailSerializer,
 	SourceSerializer,
 	AuthorSerializer,
 	CoauthorSerializer,
@@ -40,7 +41,11 @@ from api.serializers import (
 	OrganizationSerializer,
 	SponsorSerializer,
 )
-from api.pagination import FlexiblePagination, request_bypasses_pagination
+from api.pagination import (
+	FlexiblePagination,
+	TrialSitePagination,
+	request_bypasses_pagination,
+)
 from api.direct_streaming import (
 	DirectStreamingCSVRenderer,
 	csv_header_fields,
@@ -76,6 +81,7 @@ from gregory.models import (
 	Trials,
 	TrialCategoryAssignment,
 	TrialOrgContent,
+	TrialSite,
 	Sources,
 	Authors,
 	Team,
@@ -88,6 +94,7 @@ from gregory.models import (
 from organizations.models import Organization
 from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
+from rest_framework.exceptions import ValidationError
 from rest_framework.throttling import ScopedRateThrottle
 from django_filters import rest_framework as django_filters
 from api.filters import (
@@ -1741,6 +1748,17 @@ class TrialViewSet(
 	- **page_size** - items per page (max 100)
 	- **all_results** - set to 'true' to bypass pagination and get all results (useful for CSV export)
 
+	# Sites:
+	Per-site rows (`TrialSite` — name/city/state/country/coordinates, sourced from CTIS
+	retrieve enrichment and/or ClinicalTrials.gov) are **detail-only**: `trial_sites`
+	appears on `GET /trials/{id}/` but never on the list/CSV/search responses (sites fan
+	out, mean ~12/trial, so nesting them on every list row would bloat those responses for
+	a field most callers don't need there). For a flat, filterable, paginated listing
+	across many trials — e.g. to build a site-level pin map — use `GET /trials/sites/`
+	instead, which accepts the same filters as this endpoint (team_id, subject_id,
+	country, recruitment_status_normalized, …) plus `latitude__isnull`, and rejects
+	`all_results=true` (it is not a bulk export). See TRIAL-GEOGRAPHY-PLAN.md PR G2/G3.
+
 	# Stats Endpoint:
 	`GET /trials/stats/` returns `total`, `no_status` (recruitment_status_normalized is
 	null), one key per `TrialRecruitmentStatus` bucket — `not_yet_recruiting`, `recruiting`,
@@ -1894,6 +1912,12 @@ class TrialViewSet(
 				"trial_countries",
 			)
 		)
+		# trial_sites backs TrialDetailSerializer's "trial_sites" field, used only on
+		# the retrieve action (see get_serializer_class) — prefetching it on every
+		# list row would cost a query per page for a field list responses never
+		# render. See TRIAL-GEOGRAPHY-PLAN.md PR G3.
+		if self.action == "retrieve":
+			qs = qs.prefetch_related("trial_sites")
 		org = _resolve_per_org_fields_org(self.request)
 		if org is not None:
 			qs = qs.prefetch_related(
@@ -1904,6 +1928,14 @@ class TrialViewSet(
 				)
 			)
 		return qs
+
+	def get_serializer_class(self):
+		"""TrialDetailSerializer (adds ``trial_sites``) only for the single-trial
+		retrieve response; the list/CSV/search paths keep the lighter
+		TrialSerializer. See TRIAL-GEOGRAPHY-PLAN.md PR G3."""
+		if self.action == "retrieve":
+			return TrialDetailSerializer
+		return TrialSerializer
 
 	ordering_fields = [
 		"discovery_date",
@@ -1928,6 +1960,54 @@ class TrialViewSet(
 		``CachedStatsActionMixin``.
 		"""
 		return self._stats_response(request)
+
+	@action(detail=False, methods=["get"], url_path="sites")
+	def sites(self, request):
+		"""Flat, paginated listing of TrialSite rows across the filtered trial set —
+		accepts the same query parameters as the list endpoint (team_id,
+		subject_id, country, recruitment_status_normalized, …), so the map reuses
+		the same filter rail. Rows are ``{trial_id, name, city, country, latitude,
+		longitude}`` — no per-trial nesting; see TrialDetailSerializer for that.
+
+		``?all_results=true`` is rejected (400): unlike ``/trials/``, this endpoint
+		is never a bulk export — at mean ~12 sites/trial an unfiltered request over
+		a several-thousand-trial subject would be tens of thousands of rows.
+		``?latitude__isnull=true`` (or ``1``/``yes``) narrows to sites without
+		coordinates (all CTIS sites, currently — see TRIAL-GEOGRAPHY-PLAN.md PR
+		G2); ``=false`` (or ``0``/``no``) narrows to sites with a pin. Any other
+		value is rejected (400).
+		"""
+		if request_bypasses_pagination(request):
+			raise ValidationError(
+				"all_results is not supported on /trials/sites/ — this endpoint is "
+				"not a bulk export. Use page/page_size instead."
+			)
+
+		trials_qs = self.filter_queryset(self.get_queryset())
+		sites_qs = TrialSite.objects.filter(trial__in=trials_qs)
+
+		latitude_isnull = request.query_params.get("latitude__isnull")
+		if latitude_isnull is not None:
+			normalized = latitude_isnull.strip().lower()
+			if normalized in ("true", "1", "yes"):
+				sites_qs = sites_qs.filter(latitude__isnull=True)
+			elif normalized in ("false", "0", "no"):
+				sites_qs = sites_qs.filter(latitude__isnull=False)
+			else:
+				raise ValidationError(
+					f"latitude__isnull must be true/false (or 1/0, yes/no); "
+					f"got {latitude_isnull!r}."
+				)
+
+		sites_qs = sites_qs.order_by("trial_id", "pk").values(
+			"trial_id", "name", "city", "country", "latitude", "longitude"
+		)
+
+		paginator = TrialSitePagination()
+		page = paginator.paginate_queryset(sites_qs, request, view=self)
+		if page is not None:
+			return paginator.get_paginated_response(list(page))
+		return Response(list(sites_qs))
 
 	def build_stats_payload(self, filtered_qs):
 		# Single aggregation query — clear ordering to prevent GROUP BY pollution.
