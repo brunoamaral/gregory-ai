@@ -171,6 +171,80 @@ class ExtractTrialSitesTests(TestCase):
 		}
 		self.assertEqual(_extract_trial_sites(payload), [])
 
+	def test_non_dict_organisation_does_not_raise(self):
+		"""Regression guard (Copilot review on PR 2b): a malformed CTIS payload
+		where organisation/address/personInfo are strings/lists instead of dicts
+		must never raise — it must be treated as absent so the site is skipped
+		(no organisation.name) rather than failing the whole trial's enrichment."""
+		payload = {
+			"authorizedApplication": {
+				"authorizedPartsII": [
+					{
+						"trialSites": [
+							{
+								"organisationAddressInfo": {
+									"organisation": "not a dict",
+									"address": ["also", "not", "a", "dict"],
+								},
+								"personInfo": "not a dict either",
+							}
+						]
+					}
+				]
+			}
+		}
+		self.assertEqual(_extract_trial_sites(payload), [])
+
+	def test_non_dict_address_and_person_with_valid_organisation_is_tolerated(self):
+		"""A site can still be stored (organisation.name present) even when
+		address/personInfo are malformed — every leaf below name is optional."""
+		payload = {
+			"authorizedApplication": {
+				"authorizedPartsII": [
+					{
+						"trialSites": [
+							{
+								"organisationAddressInfo": {
+									"organisation": {"name": "Valid Hospital"},
+									"address": "not a dict",
+								},
+								"personInfo": ["not", "a", "dict"],
+							}
+						]
+					}
+				]
+			}
+		}
+		result = _extract_trial_sites(payload)
+		self.assertEqual(len(result), 1)
+		site = result[0]
+		self.assertEqual(site["name"], "Valid Hospital")
+		self.assertIsNone(site["city"])
+		self.assertIsNone(site["country"])
+		self.assertIsNone(site["investigator_name"])
+
+	def test_non_string_person_names_do_not_raise(self):
+		payload = {
+			"authorizedApplication": {
+				"authorizedPartsII": [
+					{
+						"trialSites": [
+							{
+								"organisationAddressInfo": {
+									"organisation": {"name": "Valid Hospital"},
+									"address": {},
+								},
+								"personInfo": {"firstName": ["not", "a", "string"], "lastName": 42},
+							}
+						]
+					}
+				]
+			}
+		}
+		result = _extract_trial_sites(payload)
+		self.assertEqual(len(result), 1)
+		self.assertIsNone(result[0]["investigator_name"])
+
 	def test_multiple_parts_ii_are_all_collected(self):
 		payload = {
 			"authorizedApplication": {

@@ -203,15 +203,25 @@ def _extract_trial_sites(payload: dict):
 			org_info = site.get("organisationAddressInfo")
 			if not isinstance(org_info, dict):
 				continue
-			organisation = org_info.get("organisation") or {}
+			organisation = org_info.get("organisation")
+			if not isinstance(organisation, dict):
+				organisation = {}
 			name = organisation.get("name")
 			if not name:
 				logger.info("CTIS retrieve: trial site with no organisation name skipped")
 				continue
-			address = org_info.get("address") or {}
-			person = site.get("personInfo") or {}
+			address = org_info.get("address")
+			if not isinstance(address, dict):
+				address = {}
+			person = site.get("personInfo")
+			if not isinstance(person, dict):
+				person = {}
 			first_name = person.get("firstName")
+			if not isinstance(first_name, str):
+				first_name = None
 			last_name = person.get("lastName")
+			if not isinstance(last_name, str):
+				last_name = None
 			investigator_name = None
 			if first_name or last_name:
 				investigator_name = " ".join(p for p in (first_name, last_name) if p)
