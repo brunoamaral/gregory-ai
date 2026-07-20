@@ -1828,7 +1828,7 @@ class TrialViewSet(
 	- **sponsor_slug** - exact match against a canonical sponsor's slug (see `/sponsors/`)
 	- **source_register** - filter by source registry
 	- **countries** - raw-text `icontains` filter on the registry's own countries string — free text, so it silently misses spelling/format variants across registries (see **country** below for the normalized equivalent)
-	- **country** - exact match against a normalized country code (ISO 3166-1 alpha-2, e.g. `?country=DE`), derived from every source's raw country data — see docs/trials-field-normalization.md
+	- **country** - match against one or more normalized country codes (ISO 3166-1 alpha-2), comma-separated, OR semantics (e.g. `?country=DE` or `?country=DE,FR`), derived from every source's raw country data — see docs/trials-field-normalization.md
 	- **region** - exact match against a normalized region derived from the trial's countries; one of: africa, asia, europe, north_america, south_america, oceania (e.g. `?region=europe`)
 
 	# Medical/Research Parameters:

@@ -700,13 +700,15 @@ class TrialStatsCountryFacetTest(TrialStatsBase):
 		}
 		self.assertEqual(by_country.get("DE"), 1)
 
-	def test_country_query_param_self_facets_by_country(self):
-		# Known/accepted interaction (see plan): filter_country's
-		# `.filter(trial_countries__country__iexact="DE")` and _by_country_counts's
-		# `.values("trial_countries__country")` reuse the same JOIN alias, so the
-		# WHERE clause on that alias restricts by_country to just the DE row — a
-		# multi-country trial's other countries do not surface. Pinned here so a
-		# future change to this behavior is a conscious one, not a regression.
+	def test_country_query_param_no_longer_self_facets_by_country(self):
+		# filter_country switched from a join+.iexact+.distinct() to an EXISTS
+		# subquery (see TRIAL-GEOGRAPHY-PLAN.md PR G1, for perf: 8.8ms vs 21.8ms on
+		# the row fetch). The EXISTS subquery is independent of _by_country_counts's
+		# own `.values("trial_countries__country")` join, so there is no shared JOIN
+		# alias left to restrict — a multi-country trial filtered in by one of its
+		# countries now surfaces ALL of its countries in by_country, not just the
+		# one that matched the filter. This intentionally supersedes the old
+		# self-faceting interaction pinned by this test.
 		_make_trial(
 			"DEFR", "https://trial.example.com/defr-self-facet", "Recruiting",
 			[self.team], countries="Germany, France",
@@ -714,7 +716,7 @@ class TrialStatsCountryFacetTest(TrialStatsBase):
 		resp = self.client.get("/trials/stats/", {"country": "DE"})
 		self.assertEqual(resp.status_code, 200)
 		countries = {row["country"] for row in resp.data["by_country"]}
-		self.assertEqual(countries, {"DE"})
+		self.assertEqual(countries, {"DE", "FR"})
 
 
 class TrialStatsRegionFacetTest(TrialStatsBase):

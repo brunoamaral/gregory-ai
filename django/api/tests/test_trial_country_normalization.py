@@ -131,6 +131,72 @@ class TrialCountryAndRegionFilterTests(TestCase):
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(len(response.data["results"]), 0)
 
+	def test_country_filter_accepts_comma_separated_list(self):
+		response = self.client.get("/trials/?country=DE,US")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		trial_ids = {row["trial_id"] for row in response.data["results"]}
+		self.assertEqual(
+			trial_ids, {self.germany_trial.trial_id, self.us_trial.trial_id}
+		)
+
+	def test_country_filter_list_tolerates_whitespace_and_lowercase(self):
+		response = self.client.get("/trials/?country=de, us")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		trial_ids = {row["trial_id"] for row in response.data["results"]}
+		self.assertEqual(
+			trial_ids, {self.germany_trial.trial_id, self.us_trial.trial_id}
+		)
+
+	def test_country_filter_trial_in_multiple_matched_countries_appears_once(self):
+		"""A trial present in more than one requested country must still surface
+		exactly once — the EXISTS-based filter has no DISTINCT to rely on, but by
+		construction each trial can only match the EXISTS predicate once per row."""
+		multi_country_trial = Trials.objects.create(
+			title="Germany and France Trial",
+			link="https://example.com/country-filter-de-fr",
+			published_date=timezone.now(),
+			countries_by_source={"ctgov": "Germany"},
+		)
+		multi_country_trial.teams.add(self.team)
+		multi_country_trial.subjects.add(self.subject)
+		from gregory.models import TrialCountry
+
+		TrialCountry.objects.create(trial=multi_country_trial, country="FR")
+
+		response = self.client.get("/trials/?country=DE,FR")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		matching = [
+			row
+			for row in response.data["results"]
+			if row["trial_id"] == multi_country_trial.trial_id
+		]
+		self.assertEqual(len(matching), 1)
+
+	def test_country_filter_composes_with_subject_id(self):
+		other_subject = Subject.objects.create(
+			subject_name="Other Subject",
+			subject_slug="country-filter-other-subject",
+			team=self.team,
+		)
+		response = self.client.get(
+			f"/trials/?country=DE&subject_id={other_subject.pk}"
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 0)
+
+		response = self.client.get(f"/trials/?country=DE&subject_id={self.subject.pk}")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(len(response.data["results"]), 1)
+
+	def test_country_filter_generates_no_distinct_sql(self):
+		"""Locks in the perf fix: EXISTS should never require a DISTINCT on the
+		row-fetch query, unlike the old join+.distinct() implementation."""
+		from api.filters import TrialFilter
+
+		qs = Trials.objects.all()
+		filtered = TrialFilter({"country": "DE,FR"}, queryset=qs).qs
+		self.assertNotIn("DISTINCT", str(filtered.query).upper())
+
 	def test_trial_countries_query_count_is_bounded_on_list_endpoint(self):
 		"""TrialViewSet.get_queryset() must prefetch trial_countries — otherwise every
 		row in a list response issues its own query for its country data."""
