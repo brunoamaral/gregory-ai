@@ -72,6 +72,7 @@ from gregory.utils.trial_field_normalizers import (
 	TrialPhase,
 	TrialRecruitmentStatus,
 	TrialRegion,
+	TrialSexEligibility,
 	TrialStudyType,
 )
 from gregory.models import (
@@ -1852,8 +1853,15 @@ class TrialViewSet(
 	  `no_study_type`. `no_study_type` is large (~13.2k globally) because most
 	  of it is legacy rows with no `source_register` at all, not a
 	  normalization gap — see docs/trials-field-normalization.md.
+	- `by_sex` — `{sex_slug: count, ...}`, one key per `TrialSexEligibility`
+	  value (always present, 0 when empty) plus `no_sex_data`. `no_sex_data`
+	  is large (~46% of trials globally) because it includes the legacy
+	  `source_register IS NULL` population that also lacks sponsors and
+	  countries — same caveat as `no_modality`/`no_sponsor`. See
+	  docs/trials-field-normalization.md and
+	  INCLUSION-GENDER-NORMALIZATION-PLAN.md.
 
-	Recruitment-status buckets and `by_phase`/`by_region`/`by_country`/`by_study_type` are counted on the
+	Recruitment-status buckets and `by_phase`/`by_region`/`by_country`/`by_study_type`/`by_sex` are counted on the
 	`*_normalized` canonical vocabularies (same as their respective filters), not on the
 	raw registry strings — see docs/trials-field-normalization.md. It accepts the
 	same query parameters as the list endpoint, so e.g.
@@ -1898,7 +1906,7 @@ class TrialViewSet(
 	- **intervention** - filter by intervention type
 	- **therapeutic_areas** - filter by therapeutic areas
 	- **inclusion_agemin/agemax** - filter by age inclusion criteria
-	- **inclusion_gender** - filter by gender inclusion criteria
+	- **inclusion_gender_normalized** - exact match against canonical sex eligibility; one of: all, female, male. Replaces the removed legacy `inclusion_gender` substring filter, which returned confidently wrong results (`?inclusion_gender=Female` matched "Female, Male", a both-sexes trial) — see docs/trials-field-normalization.md. **Breaking change (2026-07-20):** `?inclusion_gender=...` is no longer a recognised parameter and is silently ignored (unfiltered results), not rejected.
 
 	# Results Parameters:
 	- **has_results** - `true`/`false`; a trial counts as having results when any of `results_posted`, results completion date, results link, or results-available = "Yes" is set
@@ -2129,6 +2137,7 @@ class TrialViewSet(
 		payload["by_sponsor_type"] = self._by_sponsor_type_counts(filtered_qs)
 		payload["by_modality"] = self._by_modality_counts(filtered_qs)
 		payload["by_study_type"] = self._by_study_type_counts(filtered_qs)
+		payload["by_sex"] = self._by_sex_counts(filtered_qs)
 		return payload
 
 	# Phase, region, country, and year are trial-intrinsic (not org-owned data like
@@ -2163,6 +2172,23 @@ class TrialViewSet(
 		}
 		payload = {value: counts.get(value, 0) for value in TrialStudyType.values}
 		payload["no_study_type"] = counts.get(None, 0)
+		return payload
+
+	def _by_sex_counts(self, filtered_qs):
+		"""``{sex_slug: count, ..., "no_sex_data": count}`` over *filtered_qs*.
+
+		``no_sex_data`` is large (~46% of trials globally, 2026-07-20) because it includes
+		the legacy ``source_register IS NULL`` population that also lacks sponsors and
+		countries, not a normalization gap — see docs/trials-field-normalization.md.
+		"""
+		counts = {
+			row["inclusion_gender_normalized"]: row["count"]
+			for row in filtered_qs.order_by()
+			.values("inclusion_gender_normalized")
+			.annotate(count=Count("trial_id", distinct=True))
+		}
+		payload = {value: counts.get(value, 0) for value in TrialSexEligibility.values}
+		payload["no_sex_data"] = counts.get(None, 0)
 		return payload
 
 	def _by_region_counts(self, filtered_qs):

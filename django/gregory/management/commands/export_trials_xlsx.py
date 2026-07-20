@@ -57,6 +57,7 @@ SCALAR_ORDER = [
 	"inclusion_agemin",
 	"inclusion_agemax",
 	"inclusion_gender",
+	"inclusion_gender_normalized",
 	"primary_sponsor",
 	"secondary_sponsor",
 	"source_support",

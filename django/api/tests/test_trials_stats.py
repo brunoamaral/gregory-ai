@@ -79,6 +79,7 @@ from gregory.utils.trial_field_normalizers import (
 	TrialPhase,
 	TrialRecruitmentStatus,
 	TrialRegion,
+	TrialSexEligibility,
 	TrialStudyType,
 )
 
@@ -637,6 +638,83 @@ class TrialStatsStudyTypeFacetTest(TrialStatsBase):
 		# interventional.
 		self.assertEqual(resp.data["by_study_type"]["interventional"], 1)
 		self.assertEqual(resp.data["by_study_type"]["no_study_type"], 2)
+
+
+class TrialStatsSexFacetTest(TrialStatsBase):
+	"""by_sex: enum shape, the "Female, Male" -> all regression guard, the no_sex_data
+	bucket, filter scoping."""
+
+	def _make_trial_with_gender(self, title, link, teams, inclusion_gender):
+		trial = Trials.objects.create(
+			title=title,
+			link=link,
+			recruitment_status="Recruiting",
+			inclusion_gender=inclusion_gender,
+		)
+		for team in teams:
+			trial.teams.add(team)
+		return trial
+
+	def test_every_sex_key_present_and_no_stray_keys(self):
+		resp = self.client.get("/trials/stats/")
+		self.assertEqual(resp.status_code, 200)
+		by_sex = resp.data["by_sex"]
+		self.assertEqual(
+			set(by_sex.keys()), set(TrialSexEligibility.values) | {"no_sex_data"}
+		)
+		# None of the fixture trials (t1-t4) have inclusion_gender set.
+		for value in TrialSexEligibility.values:
+			self.assertEqual(by_sex[value], 0)
+		self.assertEqual(by_sex["no_sex_data"], 4)
+
+	def test_female_comma_male_lands_in_all_not_female(self):
+		"""Regression guard: the substring-match bug this normalization fixes must not
+		resurface in the stats facet either."""
+		self._make_trial_with_gender(
+			"SXa", "https://trial.example.com/sx-a", [self.team], "Female, Male"
+		)
+		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["by_sex"]["all"], 1)
+		self.assertEqual(resp.data["by_sex"]["female"], 0)
+
+	def test_raw_spelling_variants_land_in_same_bucket(self):
+		self._make_trial_with_gender(
+			"SXb", "https://trial.example.com/sx-b", [self.team], "Female"
+		)
+		self._make_trial_with_gender(
+			"SXc", "https://trial.example.com/sx-c", [self.team], "Females"
+		)
+		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["by_sex"]["female"], 2)
+
+	def test_null_raw_inclusion_gender_lands_in_no_sex_data(self):
+		# other_team has only t4, which has no inclusion_gender set.
+		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["by_sex"]["no_sex_data"], 1)
+
+	def test_by_sex_values_sum_to_total(self):
+		self._make_trial_with_gender(
+			"SXd", "https://trial.example.com/sx-d", [self.team], "Male"
+		)
+		resp = self.client.get("/trials/stats/")
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(sum(resp.data["by_sex"].values()), resp.data["total"])
+
+	def test_filter_scopes_by_sex(self):
+		self._make_trial_with_gender(
+			"SXe", "https://trial.example.com/sx-e", [self.team], "Female"
+		)
+		resp = self.client.get(
+			"/trials/stats/", {"recruitment_status_normalized": "recruiting"}
+		)
+		self.assertEqual(resp.status_code, 200)
+		# t1, t2 ("Recruiting", no inclusion_gender) + the female trial above = 3
+		# recruiting trials; only the trial with inclusion_gender set lands in female.
+		self.assertEqual(resp.data["by_sex"]["female"], 1)
+		self.assertEqual(resp.data["by_sex"]["no_sex_data"], 2)
 
 
 class TrialStatsCountryFacetTest(TrialStatsBase):

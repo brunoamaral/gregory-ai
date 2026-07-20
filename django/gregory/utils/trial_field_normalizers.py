@@ -365,6 +365,105 @@ def normalize_study_type(raw: str | None) -> str | None:
 	return _resolve(TrialStudyType.OTHER, raw, field_label="trial study type")
 
 
+class TrialSexEligibility(models.TextChoices):
+	ALL = "all", "All sexes"
+	FEMALE = "female", "Female only"
+	MALE = "male", "Male only"
+
+
+# Exact-match lookup for every distinct raw `inclusion_gender` value observed in the DB
+# (25 raw values collapse to 18 keys after whitespace-collapse + casefold; see
+# INCLUSION-GENDER-NORMALIZATION-PLAN.md for the full per-value count/provenance
+# inventory). Placeholders map to None (no eligibility signal) rather than a canonical
+# value. There is deliberately no "other" bucket for this field: a value literally
+# rendered as `sex = other` would misleadingly read as "intersex / non-binary
+# participants", which is not what an unparsed string means — see normalize_inclusion_gender.
+_INCLUSION_GENDER_EXACT_MATCHES: dict[str, str | None] = {
+	# All sexes
+	"all": TrialSexEligibility.ALL,  # ClinicalTrials.gov
+	"both": TrialSexEligibility.ALL,  # ChiCTR/IRCT/ISRCTN
+	"both males and females": TrialSexEligibility.ALL,  # ANZCTR
+	"female, male": TrialSexEligibility.ALL,  # EU CTIS
+	"male and female": TrialSexEligibility.ALL,
+	"male/female": TrialSexEligibility.ALL,
+	"female: yes male: yes": TrialSexEligibility.ALL,  # EU CTR HTML fragment, tags stripped
+	# HTML-wrapped variants of the yes/yes matrix, straight from the EU Clinical Trials
+	# Register feed. Expected-dead once WHO-HTML-CLEANUP-PLAN.md's ingest-time stripping
+	# has fully landed (this normalizer deliberately does NOT strip tags itself — see its
+	# docstring), but kept here as a complete record of what the registry has historically
+	# sent and as a safety net for a stale re-import of cached XML.
+	"<br>female: yes<br>male: yes<br>": TrialSexEligibility.ALL,
+	"<br> female: yes<br> male: yes<br>": TrialSexEligibility.ALL,
+	# Entity-encoded form of the same fragment ("&lt;br&gt;..."). importWHOXML.py parses
+	# with xml.etree.ElementTree, which decodes ordinary XML entities on the way in — so
+	# this form can only reach this table if the source registry itself double-encoded the
+	# value (WHO ICTRP's upstream data is known to carry this kind of artifact; see the
+	# typo'd country names in _COUNTRY_EXACT_MATCHES above). Same expected-dead/safety-net
+	# reasoning as the literal <br> keys.
+	"&lt;br&gt;female: yes&lt;br&gt;male: yes&lt;br&gt;": TrialSexEligibility.ALL,
+	"&lt;br&gt; female: yes&lt;br&gt; male: yes&lt;br&gt;": TrialSexEligibility.ALL,
+	# Female only
+	"female": TrialSexEligibility.FEMALE,
+	"females": TrialSexEligibility.FEMALE,
+	"f": TrialSexEligibility.FEMALE,
+	"female: yes male: no": TrialSexEligibility.FEMALE,
+	"<br>female: yes<br>male: no<br>": TrialSexEligibility.FEMALE,  # expected-dead, see above
+	"&lt;br&gt;female: yes&lt;br&gt;male: no&lt;br&gt;": TrialSexEligibility.FEMALE,  # entity-encoded, see above
+	# Male only
+	"male": TrialSexEligibility.MALE,
+	"males": TrialSexEligibility.MALE,
+	"female: no male: yes": TrialSexEligibility.MALE,
+	# Placeholders: no eligibility signal, not a fourth state — the original mistake was
+	# storing these as if they were data.
+	"-": None,
+	"--": None,
+	"not specified": None,
+}
+
+# "Female: no Male: no" (2 rows): logically no one could enrol — a registry data-entry
+# artifact, not a genuine fourth eligibility state. Maps to None like the placeholders
+# above, but logged separately so it doesn't silently vanish into the same null bucket as
+# an honest "not specified" — see INCLUSION-GENDER-NORMALIZATION-PLAN.md decision 3.
+_INCLUSION_GENDER_CONTRADICTORY = "female: no male: no"
+
+
+def normalize_inclusion_gender(raw: str | None) -> str | None:
+	"""
+	Map a raw Trials.inclusion_gender value to a canonical TrialSexEligibility value.
+
+	Returns None for missing/blank input, for explicit placeholders ("-", "Not
+	Specified"), for the contradictory "Female: no Male: no" registry artifact, and for
+	anything unrecognised (logged) — there is deliberately no "other" bucket, see
+	INCLUSION-GENDER-NORMALIZATION-PLAN.md.
+
+	The EU Clinical Trials Register stores this field as an HTML fragment
+	("<br>Female: yes<br>Male: yes<br>"), so the exact-match table above keeps the HTML
+	variants, including their entity-encoded form ("&lt;br&gt;Female: yes&lt;br&gt;..."),
+	which a double-encoded upstream value could still produce even after XML parsing. No
+	stripping happens here: WHO-HTML-CLEANUP-PLAN.md removes markup at ingest, the correct
+	choke point (one place, and it fixes several other columns at once) — duplicating a
+	stripper here would hide whether that ingest fix is working.
+
+	No generic token fallback (unlike normalize_phase): the vocabulary is small and
+	closed, and substring-matching "female" would resurrect exactly the bug this field
+	fixes ("Female, Male" contains "female" but is not female-only).
+	"""
+	if raw is None or not raw.strip():
+		return None
+
+	cleaned = re.sub(r"\s+", " ", raw).strip().casefold()
+
+	if cleaned == _INCLUSION_GENDER_CONTRADICTORY:
+		logger.info("Contradictory trial sex eligibility value: %r", raw)
+		return None
+
+	if cleaned in _INCLUSION_GENDER_EXACT_MATCHES:
+		return _INCLUSION_GENDER_EXACT_MATCHES[cleaned]
+
+	logger.info("Unmapped trial sex eligibility value: %r", raw)
+	return None
+
+
 class TrialRegion(models.TextChoices):
 	AFRICA = "africa", "Africa"
 	ASIA = "asia", "Asia"
@@ -822,6 +921,7 @@ NORMALIZED_TRIAL_FIELDS = (
 	("phase", "phase_normalized", normalize_phase),
 	("recruitment_status", "recruitment_status_normalized", normalize_recruitment_status),
 	("study_type", "study_type_normalized", normalize_study_type),
+	("inclusion_gender", "inclusion_gender_normalized", normalize_inclusion_gender),
 	(
 		(
 			"countries_by_source",

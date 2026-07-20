@@ -161,9 +161,15 @@ class TrialFilterTests(TestCase):
 		self.assertEqual(len(response.data["results"]), 1)
 		self.assertEqual(response.data["results"][0]["trial_id"], self.trial1.trial_id)
 
-	def test_inclusion_gender_filter(self):
-		"""Test filtering trials by inclusion_gender"""
-		response = self.client.get("/trials/?inclusion_gender=Female")
+	def test_inclusion_gender_normalized_filter(self):
+		"""Test filtering trials by inclusion_gender_normalized.
+
+		The legacy `?inclusion_gender=` icontains filter was removed 2026-07-20 (it
+		returned confidently wrong results — see docs/trials-field-normalization.md);
+		this is its replacement, covered in detail in
+		api/tests/test_trial_inclusion_gender_normalization.py.
+		"""
+		response = self.client.get("/trials/?inclusion_gender_normalized=female")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(len(response.data["results"]), 1)
 		self.assertEqual(response.data["results"][0]["trial_id"], self.trial2.trial_id)

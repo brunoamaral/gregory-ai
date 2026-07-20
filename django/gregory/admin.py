@@ -1078,6 +1078,9 @@ class TrialAdminForm(forms.ModelForm):
 			"inclusion_agemin": "Minimum age",
 			"inclusion_agemax": "Maximum age",
 			"inclusion_gender": "Eligible sex / gender",
+			# Not a form field (editable=False) — the label is used by the XLSX
+			# export glossary, which reads TrialAdminForm.Meta.labels directly.
+			"inclusion_gender_normalized": "Eligible sex (normalized)",
 			# Sponsors & contacts
 			"primary_sponsor": "Main sponsor",
 			"secondary_sponsor": "Co-sponsors",
@@ -1146,6 +1149,7 @@ class TrialAdminForm(forms.ModelForm):
 			"inclusion_agemin": "Youngest age eligible to participate. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			"inclusion_agemax": "Oldest age eligible to participate. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			"inclusion_gender": "Which sexes / genders can take part (e.g. both, female, male). Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
+			"inclusion_gender_normalized": "Canonical sex eligibility (all/female/male) derived from the raw value above, recomputed automatically on every save. No 'other' bucket — an unrecognised raw value is left null rather than guessed at.",
 			# Sponsors & contacts
 			"primary_sponsor": "The lead organisation responsible for the trial. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			"secondary_sponsor": "Additional organisations funding or running the trial, besides the main sponsor. May list several, separated by semicolons. Source: WHO ICTRP.",
@@ -1197,6 +1201,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		"countries_by_source",
 		"regions_normalized",
 		"primary_sponsor_normalized",
+		"inclusion_gender_normalized",
 	]
 	inlines = [
 		TrialOrgContentInline,
@@ -1240,6 +1245,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		"phase_normalized",
 		"recruitment_status_normalized",
 		"study_type_normalized",
+		"inclusion_gender_normalized",
 	]
 	fieldsets = (
 		(
@@ -1305,6 +1311,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 					"inclusion_agemin",
 					"inclusion_agemax",
 					"inclusion_gender",
+					"inclusion_gender_normalized",
 				),
 				"classes": ("collapse",),
 			},

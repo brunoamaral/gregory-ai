@@ -21,6 +21,7 @@ from gregory.utils.trial_field_normalizers import (
 	SponsorType,
 	TrialPhase,
 	TrialRecruitmentStatus,
+	TrialSexEligibility,
 	TrialStudyType,
 	map_sponsor_type,
 	normalize_countries,
@@ -1063,6 +1064,19 @@ class Trials(models.Model):
 	inclusion_agemin = models.CharField(max_length=100, null=True, blank=True)
 	inclusion_agemax = models.CharField(max_length=100, null=True, blank=True)
 	inclusion_gender = models.CharField(max_length=500, null=True, blank=True)
+	# Canonical sex eligibility derived from `inclusion_gender` by
+	# gregory.utils.trial_field_normalizers. Recomputed on every save() below — never set
+	# this directly. Named for what it holds (sex, not gender identity) — see
+	# INCLUSION-GENDER-NORMALIZATION-PLAN.md.
+	inclusion_gender_normalized = models.CharField(
+		max_length=10,
+		null=True,
+		blank=True,
+		choices=TrialSexEligibility.choices,
+		db_index=True,
+		editable=False,
+		help_text="Canonical sex eligibility (all/female/male) derived from the raw 'inclusion_gender' value; recomputed on every save.",
+	)
 	date_enrollement = models.DateField(null=True, blank=True)
 	target_size = models.TextField(null=True, blank=True)
 	study_type = models.TextField(null=True, blank=True)

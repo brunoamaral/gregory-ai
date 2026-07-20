@@ -22,6 +22,7 @@ from gregory.utils.trial_field_normalizers import (
 	TrialPhase,
 	TrialRecruitmentStatus,
 	TrialRegion,
+	TrialSexEligibility,
 	TrialStudyType,
 )
 
@@ -640,8 +641,12 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	inclusion_agemax = filters.CharFilter(
 		field_name="inclusion_agemax", lookup_expr="exact"
 	)
-	inclusion_gender = filters.CharFilter(
-		field_name="inclusion_gender", lookup_expr="icontains"
+	# The legacy icontains filter here was removed 2026-07-20 — it returned confidently
+	# wrong results (?inclusion_gender=Female matched "Female, Male", a both-sexes trial),
+	# not merely weak like the other legacy filters. See
+	# INCLUSION-GENDER-NORMALIZATION-PLAN.md and docs/trials-field-normalization.md.
+	inclusion_gender_normalized = filters.ChoiceFilter(
+		choices=TrialSexEligibility.choices
 	)
 
 	# Results filters
@@ -704,7 +709,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"therapeutic_areas",
 			"inclusion_agemin",
 			"inclusion_agemax",
-			"inclusion_gender",
+			"inclusion_gender_normalized",
 			"has_results",
 			"date_registration_after",
 			"date_registration_before",
