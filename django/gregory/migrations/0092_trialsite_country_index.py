@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('gregory', '0090_trial_site_ctgov_capture'),
+        ('gregory', '0091_merge_country_filter_and_ctgov_sites'),
     ]
 
     operations = [
