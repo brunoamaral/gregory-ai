@@ -93,6 +93,31 @@ def test_html_matrix_female_only():
 	)
 
 
+def test_html_matrix_entity_encoded_all():
+	"""A double-encoded upstream value can still reach us as "&lt;br&gt;..." even though
+	importWHOXML.py's XML parser decodes ordinary entities on the way in."""
+	assert (
+		normalize_inclusion_gender("&lt;br&gt;Female: yes&lt;br&gt;Male: yes&lt;br&gt;")
+		== TrialSexEligibility.ALL
+	)
+
+
+def test_html_matrix_entity_encoded_leading_space_variant():
+	assert (
+		normalize_inclusion_gender(
+			"&lt;br&gt; Female: yes&lt;br&gt; Male: yes&lt;br&gt;"
+		)
+		== TrialSexEligibility.ALL
+	)
+
+
+def test_html_matrix_entity_encoded_female_only():
+	assert (
+		normalize_inclusion_gender("&lt;br&gt;Female: yes&lt;br&gt;Male: no&lt;br&gt;")
+		== TrialSexEligibility.FEMALE
+	)
+
+
 # --- The regression guard ---------------------------------------------------------------
 
 

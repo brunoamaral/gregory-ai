@@ -394,12 +394,21 @@ _INCLUSION_GENDER_EXACT_MATCHES: dict[str, str | None] = {
 	# sent and as a safety net for a stale re-import of cached XML.
 	"<br>female: yes<br>male: yes<br>": TrialSexEligibility.ALL,
 	"<br> female: yes<br> male: yes<br>": TrialSexEligibility.ALL,
+	# Entity-encoded form of the same fragment ("&lt;br&gt;..."). importWHOXML.py parses
+	# with xml.etree.ElementTree, which decodes ordinary XML entities on the way in — so
+	# this form can only reach this table if the source registry itself double-encoded the
+	# value (WHO ICTRP's upstream data is known to carry this kind of artifact; see the
+	# typo'd country names in _COUNTRY_EXACT_MATCHES above). Same expected-dead/safety-net
+	# reasoning as the literal <br> keys.
+	"&lt;br&gt;female: yes&lt;br&gt;male: yes&lt;br&gt;": TrialSexEligibility.ALL,
+	"&lt;br&gt; female: yes&lt;br&gt; male: yes&lt;br&gt;": TrialSexEligibility.ALL,
 	# Female only
 	"female": TrialSexEligibility.FEMALE,
 	"females": TrialSexEligibility.FEMALE,
 	"f": TrialSexEligibility.FEMALE,
 	"female: yes male: no": TrialSexEligibility.FEMALE,
 	"<br>female: yes<br>male: no<br>": TrialSexEligibility.FEMALE,  # expected-dead, see above
+	"&lt;br&gt;female: yes&lt;br&gt;male: no&lt;br&gt;": TrialSexEligibility.FEMALE,  # entity-encoded, see above
 	# Male only
 	"male": TrialSexEligibility.MALE,
 	"males": TrialSexEligibility.MALE,
@@ -429,9 +438,11 @@ def normalize_inclusion_gender(raw: str | None) -> str | None:
 
 	The EU Clinical Trials Register stores this field as an HTML fragment
 	("<br>Female: yes<br>Male: yes<br>"), so the exact-match table above keeps the HTML
-	variants. No stripping happens here: WHO-HTML-CLEANUP-PLAN.md removes markup at
-	ingest, the correct choke point (one place, and it fixes several other columns at
-	once) — duplicating a stripper here would hide whether that ingest fix is working.
+	variants, including their entity-encoded form ("&lt;br&gt;Female: yes&lt;br&gt;..."),
+	which a double-encoded upstream value could still produce even after XML parsing. No
+	stripping happens here: WHO-HTML-CLEANUP-PLAN.md removes markup at ingest, the correct
+	choke point (one place, and it fixes several other columns at once) — duplicating a
+	stripper here would hide whether that ingest fix is working.
 
 	No generic token fallback (unlike normalize_phase): the vocabulary is small and
 	closed, and substring-matching "female" would resurrect exactly the bug this field
