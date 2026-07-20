@@ -53,11 +53,11 @@ import time
 from datetime import timedelta
 
 from gregory.management.base import GregoryBaseCommand
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 from gregory.classes import ClinicalTrial, CTISPublicAPI
-from gregory.models import Trials, Sources
+from gregory.models import Trials, Sources, TrialSite
 from gregory.utils.ctis_backup import save_retrieve_backup
 from gregory.utils.registry_utils import (
 	identifiers_conflict,
@@ -172,6 +172,69 @@ def _extract_recruitment_dates(payload: dict) -> dict:
 		if code not in dates or earliest < dates[code]:
 			dates[code] = earliest
 	return dates
+
+
+def _extract_trial_sites(payload: dict):
+	"""authorizedApplication.authorizedPartsII[].trialSites[] -> a list of dicts
+	ready to construct TrialSite(**dict): name, site_type, address, city, postcode,
+	country, investigator_name, sources. Returns None (caller must skip the
+	wholesale replace entirely) when authorizedPartsII isn't a list at all —
+	otherwise a list, possibly empty, since a structurally-present-but-sparse
+	response is a legitimate "no sites (yet)" answer. A site missing its
+	organisation name is dropped (logged); every other leaf is optional. Never
+	reads organisationAddressInfo.phone/email or personInfo.telephone/email —
+	investigator names are public registry data, their contact details are not
+	stored."""
+	parts_ii = (payload.get("authorizedApplication") or {}).get("authorizedPartsII")
+	if not isinstance(parts_ii, list):
+		return None
+
+	name_to_code = _name_to_code_lookup()
+	sites = []
+	for part in parts_ii:
+		if not isinstance(part, dict):
+			continue
+		trial_sites = part.get("trialSites")
+		if not isinstance(trial_sites, list):
+			continue
+		for site in trial_sites:
+			if not isinstance(site, dict):
+				continue
+			org_info = site.get("organisationAddressInfo")
+			if not isinstance(org_info, dict):
+				continue
+			organisation = org_info.get("organisation") or {}
+			name = organisation.get("name")
+			if not name:
+				logger.info("CTIS retrieve: trial site with no organisation name skipped")
+				continue
+			address = org_info.get("address") or {}
+			person = site.get("personInfo") or {}
+			first_name = person.get("firstName")
+			last_name = person.get("lastName")
+			investigator_name = None
+			if first_name or last_name:
+				investigator_name = " ".join(p for p in (first_name, last_name) if p)
+			country_name = address.get("countryName")
+			country_code = (
+				name_to_code.get(str(country_name).strip().casefold())
+				if country_name
+				else None
+			)
+
+			sites.append(
+				{
+					"name": name,
+					"site_type": organisation.get("type"),
+					"address": address.get("oneLine"),
+					"city": address.get("city"),
+					"postcode": address.get("postcode"),
+					"country": country_code,
+					"investigator_name": investigator_name,
+					"sources": ["ctis"],
+				}
+			)
+	return sites
 
 
 class Command(GregoryBaseCommand):
@@ -553,15 +616,42 @@ class Command(GregoryBaseCommand):
 				level=1,
 				style_func=self.style.ERROR,
 			)
-			return
+		else:
+			if changed:
+				trial._change_reason = safe_change_reason(
+					"Enriched from CTIS retrieve endpoint"
+				)
+				trial.save()
 
-		if not changed:
-			return
+		# Site capture (item 4, PR 2b) is a separate related-model replace, isolated
+		# in its own try/except so a site-parsing failure never blocks — and is never
+		# blocked by — the fields-based enrichment above (note the try/except/else
+		# above: this line is always reached, even when items 1-3 raised).
+		try:
+			self._enrich_trial_sites(trial, payload)
+		except Exception as e:
+			self.log(
+				f"CTIS retrieve site enrichment failed for trial {trial.pk}: {e}",
+				level=1,
+				style_func=self.style.ERROR,
+			)
 
-		trial._change_reason = safe_change_reason(
-			"Enriched from CTIS retrieve endpoint"
-		)
-		trial.save()
+	def _enrich_trial_sites(self, trial, payload):
+		"""Item 4 (PR 2b): replace this trial's TrialSite rows wholesale with the
+		sites parsed from authorizedPartsII[].trialSites[] — delete all + bulk_create
+		the new set, inside one transaction. Skipped entirely (no delete) when
+		authorizedPartsII isn't a list at all (malformed/missing payload subtree) so
+		a degraded response can never wipe a previously-captured site set; an empty
+		but structurally-present list (e.g. a trial with no Part II sites yet) does
+		still replace with zero rows — that is a legitimate "no sites" answer."""
+		sites = _extract_trial_sites(payload)
+		if sites is None:
+			return
+		with transaction.atomic():
+			trial.trial_sites.all().delete()
+			TrialSite.objects.bulk_create(
+				[TrialSite(trial=trial, **site) for site in sites]
+			)
 
 	def _enrich_countries_by_source(self, trial, payload) -> bool:
 		"""Item 1: all participating countries (incl. non-EEA) -> countries_by_source
