@@ -264,6 +264,22 @@ class EnrichmentHookTests(TestCase):
 		self.assertEqual(first_codes, second_codes)
 		self.assertEqual(first_cbs, trial.countries_by_source)
 
+	def test_reenrichment_with_unchanged_payload_does_not_save_again(self):
+		"""Regression guard (Copilot review on PR 2a): _enrich_countries_by_source
+		and _enrich_recruitment_dates must report "no change" — not just
+		"non-empty" — once a payload's countries/dates already match what's
+		stored, otherwise every re-run writes a pointless save()/history row even
+		when nothing changed."""
+		trial = _make_trial()
+		payload = _retrieve_payload()
+		self.cmd._enrich_from_retrieve(trial, payload)
+
+		save_calls = []
+		trial.save = lambda *a, **k: save_calls.append(1)
+		self.cmd._enrich_from_retrieve(trial, payload)
+
+		self.assertEqual(save_calls, [])
+
 	def test_recruitment_start_date_populated_and_serialized(self):
 		trial = _make_trial()
 		payload = _retrieve_payload()

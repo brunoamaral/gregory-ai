@@ -326,6 +326,8 @@ class Command(GregoryBaseCommand):
 							)
 							continue
 
+						existing_trial = self.find_existing_trial(clinical_trial)
+
 						# Skip the expensive /retrieve GET for records outside the
 						# incremental window — iter_search still yields them (so the
 						# cheap DB non-destructive-update below still runs), but a
@@ -333,8 +335,19 @@ class Command(GregoryBaseCommand):
 						# unnecessary heavy GETs per run for trials that haven't changed.
 						# Fetched once and reused for both the disk archive and the DB
 						# enrichment below, so a changed trial costs exactly one GET.
+						# A genuinely new trial always gets fetched regardless of
+						# staleness: record_is_stale is about a record being
+						# *unchanged*, not about it being new to our DB — a trailing
+						# page can still surface a trial we've never stored (e.g. an
+						# aged registry entry seen for the first time), and skipping
+						# it here would leave that trial with no archive and no
+						# enrichment at all.
 						retrieve_payload = None
-						if since is None or not self.api.record_is_stale(record, since):
+						if (
+							since is None
+							or existing_trial is None
+							or not self.api.record_is_stale(record, since)
+						):
 							retrieve_payload = self._fetch_retrieve_payload(
 								clinical_trial.identifiers["euct"]
 							)
@@ -345,7 +358,6 @@ class Command(GregoryBaseCommand):
 									backup_dir,
 								)
 
-						existing_trial = self.find_existing_trial(clinical_trial)
 						if existing_trial:
 							self.update_existing_trial(
 								existing_trial, clinical_trial, source
@@ -528,14 +540,16 @@ class Command(GregoryBaseCommand):
 		["ctis"], semicolon-joined display names (the tokenizer's guaranteed mapping
 		path — see CTIS-API-PHASE-2-PLAN.md). Union with other sources' keys via
 		merge_countries_by_source; never touches another source's key. Returns
-		whether a value was written."""
+		whether the merged map actually changed — re-enriching with an unchanged
+		payload must not trigger a save()/history row."""
 		row_countries = _extract_row_countries(payload)
 		value = "; ".join(c["name"] for c in row_countries if c.get("name"))
 		if not value:
 			return False
-		trial.countries_by_source = merge_countries_by_source(
-			trial.countries_by_source, "ctis", value
-		)
+		merged = merge_countries_by_source(trial.countries_by_source, "ctis", value)
+		if merged == trial.countries_by_source:
+			return False
+		trial.countries_by_source = merged
 		return True
 
 	def _enrich_recruitment_dates(self, trial, payload) -> bool:
@@ -544,9 +558,10 @@ class Command(GregoryBaseCommand):
 		with the freshly computed dict on every enrichment — deterministic and
 		idempotent, like every other CTIS-only field. Left untouched when nothing
 		parses (defensive: never wipe a previously-recorded value on a degraded
-		response). Returns whether a value was written."""
+		response). Returns whether the dict actually changed — re-enriching with an
+		unchanged payload must not trigger a save()/history row."""
 		dates = _extract_recruitment_dates(payload)
-		if not dates:
+		if not dates or dates == trial.countries_recruitment_date:
 			return False
 		trial.countries_recruitment_date = dates
 		return True
