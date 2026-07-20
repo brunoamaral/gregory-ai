@@ -69,3 +69,23 @@ class ReplaceTrialSitesSourceIsolationTests(TestCase):
 		insert_queries = [q for q in ctx.captured_queries if "INSERT" in q["sql"].upper()]
 		self.assertEqual(len(insert_queries), 1)
 		self.assertEqual(TrialSite.objects.filter(trial=trial).count(), 20)
+
+
+class TrialSiteStrTests(TestCase):
+	"""Regression guard (Copilot review on PR #790): name is nullable (CTGov's
+	facility is occasionally absent), so __str__ must not render "123/None"."""
+
+	def test_str_uses_name_when_present(self):
+		trial = _make_trial()
+		site = TrialSite.objects.create(trial=trial, name="Site A", city="Lisbon")
+		self.assertEqual(str(site), f"{trial.trial_id}/Site A")
+
+	def test_str_falls_back_to_city_when_name_is_null(self):
+		trial = _make_trial()
+		site = TrialSite.objects.create(trial=trial, name=None, city="Lisbon")
+		self.assertEqual(str(site), f"{trial.trial_id}/Lisbon")
+
+	def test_str_falls_back_to_generic_label_when_name_and_city_are_null(self):
+		trial = _make_trial()
+		site = TrialSite.objects.create(trial=trial, name=None, city=None)
+		self.assertEqual(str(site), f"{trial.trial_id}/site")

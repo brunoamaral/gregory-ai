@@ -1505,7 +1505,9 @@ class TrialSite(models.Model):
 	sources = models.JSONField(default=list, blank=True)  # ["ctis"] or ["ctgov"]
 
 	def __str__(self):
-		return f"{self.trial_id}/{self.name}"
+		# name is nullable (CTGov's facility is occasionally absent) — fall back to
+		# city, then a generic label, so this never renders "123/None".
+		return f"{self.trial_id}/{self.name or self.city or 'site'}"
 
 	class Meta:
 		verbose_name = "trial site"
