@@ -1059,6 +1059,14 @@ class TrialAdminForm(forms.ModelForm):
 			# Titles & identity
 			"title": "The plain-language title of the trial, intended for the general public. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.",
 			"scientific_title": "The technical title of the trial, written using medical terminology. Sources: WHO ICTRP, ClinicalTrials.gov.",
+			"summary": (
+				"A brief plain-language description of the trial. ClinicalTrials.gov "
+				"provides its own “brief summary” text. EU CTIS has no free-text summary "
+				"field, so this is composed automatically from other registry fields "
+				"as a fallback, and only fills in when no summary exists yet — it never "
+				"overwrites one from another source. Sources: ClinicalTrials.gov, EU CTIS."
+			),
+			"ctg_detailed_description": "The registry's own longer free-text description of the trial's design and objectives. Source: ClinicalTrials.gov.",
 			"acronym": "Short nickname or abbreviation for the trial (e.g. “IMPACT-MS”). Source: WHO ICTRP.",
 			"link": (
 				'The canonical registry URL for this trial - the first registry URL discovered, kept for good. Exposed as "link" in the API response and on the frontend. Managed automatically by importers; edit only to correct an incorrect URL. Sources: WHO ICTRP, ClinicalTrials.gov, EU CTIS.'
@@ -1196,6 +1204,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 					"acronym",
 					"scientific_title",
 					"summary",
+					"ctg_detailed_description",
 					"link",
 					"links",
 					"identifiers",
@@ -1203,13 +1212,6 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 					"published_date",
 					"last_updated",
 				)
-			},
-		),
-		(
-			"Description",
-			{
-				"fields": ("ctg_detailed_description",),
-				"classes": ("collapse",),
 			},
 		),
 		(
