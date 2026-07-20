@@ -39,6 +39,7 @@ from .models import (
 	ArticleOrgContent,
 	TrialOrgContent,
 	TrialCountry,
+	TrialSite,
 	ArticleCategoryAssignment,
 	TrialCategoryAssignment,
 	CategoryType,
@@ -243,6 +244,24 @@ class TrialCountryInline(admin.TabularInline):
 
 	def has_add_permission(self, request, obj=None):
 		return False  # Managed by Trials.sync_trial_countries(), not manual entry
+
+
+class TrialSiteInline(admin.TabularInline):
+	"""Read-only display of the CTIS retrieve-enrichment site rows — see
+	CTIS-API-PHASE-2-PLAN.md PR 2b. Rows are managed entirely by
+	feedreader_trials_ctis's wholesale replace, never edited by hand."""
+
+	model = TrialSite
+	extra = 0
+	fields = ["name", "site_type", "city", "country", "investigator_name"]
+	readonly_fields = ["name", "site_type", "city", "country", "investigator_name"]
+	can_delete = False
+	verbose_name = "Site"
+	verbose_name_plural = "Sites (CTIS retrieve)"
+	classes = ["collapse"]
+
+	def has_add_permission(self, request, obj=None):
+		return False  # Managed by feedreader_trials_ctis's enrichment hook
 
 
 class SponsorAliasInline(admin.TabularInline):
@@ -1168,6 +1187,7 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		TrialArticleReferenceInline,
 		TrialCategoryAssignmentInline,
 		TrialCountryInline,
+		TrialSiteInline,
 	]
 	search_fields = [
 		"trial_id",

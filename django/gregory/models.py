@@ -1436,6 +1436,34 @@ class TrialCountry(models.Model):
 		]
 
 
+class TrialSite(models.Model):
+	"""Per-site row for a trial, from the CTIS retrieve endpoint
+	(authorizedPartsII[].trialSites[]). Replaced wholesale on each enrichment run
+	(delete all + bulk_create the new set) — no in-place merging, since sites are a
+	small per-trial set (~10 rows) with no natural update semantics. See
+	CTIS-API-PHASE-2-PLAN.md PR 2b. Investigator names are public registry data
+	(CTIS/CTGov both publish them); their phone/email are deliberately never
+	stored."""
+
+	trial = models.ForeignKey(Trials, related_name="trial_sites", on_delete=models.CASCADE)
+	name = models.CharField(max_length=500)  # organisation.name
+	site_type = models.CharField(max_length=200, null=True, blank=True)  # organisation.type label
+	address = models.TextField(null=True, blank=True)  # address.oneLine
+	city = models.CharField(max_length=200, null=True, blank=True)
+	postcode = models.CharField(max_length=50, null=True, blank=True)
+	country = CountryField(null=True, blank=True)  # address.countryName via the name->code helper
+	investigator_name = models.CharField(max_length=300, null=True, blank=True)
+	# personInfo firstName + " " + lastName
+	sources = models.JSONField(default=list, blank=True)  # ["ctis"] — future-proofs CTGov site parity
+
+	def __str__(self):
+		return f"{self.trial_id}/{self.name}"
+
+	class Meta:
+		verbose_name = "trial site"
+		verbose_name_plural = "trial sites"
+
+
 class ArticleOrgContent(models.Model):
 	"""Per-organisation editorial content for an article."""
 
