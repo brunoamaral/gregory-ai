@@ -5,7 +5,16 @@ from django.db.models.functions import Upper
 from django.utils import timezone
 from django import forms
 from datetime import datetime, timedelta
-from gregory.models import Articles, Trials, Authors, Sources, TeamCategory, Subject, Sponsor
+from gregory.models import (
+	Articles,
+	Trials,
+	Authors,
+	Sources,
+	TeamCategory,
+	CategoryModality,
+	Subject,
+	Sponsor,
+)
 from gregory.utils.trial_field_normalizers import (
 	SponsorType,
 	TrialPhase,
@@ -156,6 +165,12 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 	category_id = filters.NumberFilter(
 		field_name="team_categories__id", lookup_expr="exact", label="Category ID"
 	)
+	category_modality = filters.ChoiceFilter(
+		field_name="team_categories__modality",
+		choices=CategoryModality.choices,
+		distinct=True,
+		label="Intervention modality of the article's categories",
+	)
 	journal_slug = filters.CharFilter(method="filter_journal", label="Journal")
 	team_id = filters.NumberFilter(
 		field_name="teams__id", lookup_expr="exact", label="Team ID"
@@ -213,6 +228,7 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"doi",
 			"category_slug",
 			"category_id",
+			"category_modality",
 			"journal_slug",
 			"team_id",
 			"site_id",
@@ -524,6 +540,12 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	category_id = filters.NumberFilter(
 		field_name="team_categories__id", lookup_expr="exact", label="Category ID"
 	)
+	category_modality = filters.ChoiceFilter(
+		field_name="team_categories__modality",
+		choices=CategoryModality.choices,
+		distinct=True,
+		label="Intervention modality of the trial's categories",
+	)
 	source_id = filters.NumberFilter(
 		field_name="sources__source_id", lookup_expr="exact", label="Source ID"
 	)
@@ -652,6 +674,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"subject_id",
 			"category_slug",
 			"category_id",
+			"category_modality",
 			"source_id",
 			"identifiers",
 			"nct",

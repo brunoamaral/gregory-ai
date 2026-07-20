@@ -50,6 +50,7 @@ class CategoryAuthorsTestCase(TestCase):
 			"category_name",
 			"category_slug",
 			"category_terms",
+			"modality",
 			"article_count_total",
 			"trials_count_total",
 			"authors_count",

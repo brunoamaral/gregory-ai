@@ -2324,13 +2324,17 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 		"category_name",
 		"team",
 		"category_type",
+		"modality",
 		"display_match_scope",
 		"article_count",
 		"display_subjects",
 	)
+	list_editable = ("modality",)
+	list_per_page = 100
 	search_fields = ("category_name", "team__name", "subjects__subject_name")
 	list_filter = [
 		"category_type",
+		"modality",
 		"match_scope",
 		("team", OrganizationRestrictedFieldListFilter),
 		("subjects", OrganizationRestrictedFieldListFilter),
@@ -2348,6 +2352,7 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 					"category_description",
 					"subjects",
 					"category_type",
+					"modality",
 				)
 			},
 		),

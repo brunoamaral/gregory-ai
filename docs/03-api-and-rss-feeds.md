@@ -116,6 +116,7 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `doi` | string | Exact DOI match (case-insensitive) |
 | `category_slug` | string | Filter by category slug |
 | `category_id` | integer | Filter by category ID |
+| `category_modality` | string | Filter by a category's curated intervention modality (`small_molecule`, `biologic_antibody`, `cell_gene_therapy`, `rehabilitation`, `device_neuromodulation`, `natural_product`, `research_topic`, `other`). Matches if *any* of the article's categories carry that modality |
 | `journal_slug` | string | Filter by journal (spaces → dashes) |
 | `source_id` | integer | Filter by source |
 | `search` | string | Search in title and summary |
@@ -154,7 +155,7 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 
 | Model | Endpoint | Parameters | Notes |
 |:------|:---------|:-----------|:------|
-| Articles | `GET /articles/` | `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `unsent`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
+| Articles | `GET /articles/` | `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `category_modality`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `unsent`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
 | Articles | `POST /articles/post/` | `title`, `link`, `doi`, `summary`, `source_id`, `kind` | Create article — see [response codes below](#post-articlespost-response-codes) |
 | Articles | `GET /articles/{id}/` | `id` (path) | |
 | Articles | `GET /articles/stats/` | Same filters as `GET /articles/` | Aggregate counts over the filtered set: `total`, `by_access` (NULL folded into `unknown`), `relevant`, `retracted`, `missing_doi`, `by_subject`. Cached for `STATS_CACHE_TTL` seconds |
@@ -178,9 +179,9 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Teams | `GET /teams/` | Standard pagination | |
 | Teams | `GET /teams/{id}/` | `id` (path) | |
 | Teams | `GET /teams/{id}/subjects/{subject_id}/categories/` | `id`, `subject_id` (path) | |
-| Trials | `GET /trials/` | `team_id`, `subject_id`, `category_id`, `source_id`, `status`, `search`, `ordering`, trial-specific filters, pagination | See parameter details below |
+| Trials | `GET /trials/` | `team_id`, `subject_id`, `category_id`, `category_modality`, `source_id`, `status`, `search`, `ordering`, trial-specific filters, pagination | See parameter details below |
 | Trials | `GET /trials/{id}/` | `id` (path) | |
-| Trials | `GET /trials/stats/` | Same filters as `GET /trials/` | Totals per `recruitment_status_normalized` bucket (not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other — always present, 0 when empty) plus `no_status`, `by_subject`, `by_phase` (per `TrialPhase` + `no_phase`), `by_region` (per `TrialRegion` + `no_region`), `by_country` (`[{country, count}]`, null-country entry last), `by_year` (`[{year, count}]`, null-year entry last), `by_sponsor` (top 25 `[{sponsor_id, slug, name, sponsor_type, count}]`) + `no_sponsor`, and `by_sponsor_type` (per `SponsorType` + `no_type`) over the filtered set. Replaces the `stats` block formerly embedded in `GET /trials/` list responses (breaking change). Cached for `STATS_CACHE_TTL` seconds |
+| Trials | `GET /trials/stats/` | Same filters as `GET /trials/` | Totals per `recruitment_status_normalized` bucket (not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other — always present, 0 when empty) plus `no_status`, `by_subject`, `by_phase` (per `TrialPhase` + `no_phase`), `by_region` (per `TrialRegion` + `no_region`), `by_country` (`[{country, count}]`, null-country entry last), `by_year` (`[{year, count}]`, null-year entry last), `by_sponsor` (top 25 `[{sponsor_id, slug, name, sponsor_type, count}]`) + `no_sponsor`, `by_sponsor_type` (per `SponsorType` + `no_type`), and `by_modality` (per `CategoryModality` + `no_modality`, joined over `team_categories.modality` — **not** a partition of `total`: a trial in two categories of different modalities is counted once per modality, and `no_modality` conflates "no category at all" with "category not yet curated with a modality") over the filtered set. Replaces the `stats` block formerly embedded in `GET /trials/` list responses (breaking change). Cached for `STATS_CACHE_TTL` seconds |
 | Trials | `GET /trials/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `status`, `format`, `all_results` | See [trial-search-api.md](trial-search-api.md) |
 | Trials | `POST /trials/search/` | Same fields in request body | |
 | Email templates | `GET /emails/` | None | Template preview dashboard |

@@ -119,6 +119,17 @@ class CategoryType(models.TextChoices):
 	AUTOMATIC = "automatic", "Automatic"
 
 
+class CategoryModality(models.TextChoices):
+	SMALL_MOLECULE = "small_molecule", "Small-molecule drug"
+	BIOLOGIC_ANTIBODY = "biologic_antibody", "Antibody / biologic"
+	CELL_GENE_THERAPY = "cell_gene_therapy", "Cell / gene therapy"
+	REHABILITATION = "rehabilitation", "Rehabilitation / physical"
+	DEVICE_NEUROMODULATION = "device_neuromodulation", "Device / neuromodulation"
+	NATURAL_PRODUCT = "natural_product", "Natural product / supplement"
+	RESEARCH_TOPIC = "research_topic", "Research topic (not an intervention)"
+	OTHER = "other", "Other"
+
+
 class CategoryMatchScope(models.TextChoices):
 	TITLE = "title", "Title only"
 	TITLE_SUMMARY = "title_summary", "Title and summary"
@@ -183,6 +194,17 @@ class TeamCategory(models.Model):
 			"Automatic categories are populated by the rebuild_categories command from the term list "
 			"(manual assignments are still allowed and preserved). Manual categories are curated entirely "
 			"by hand and are never touched by the command."
+		),
+	)
+	modality = models.CharField(
+		max_length=25,
+		null=True,
+		blank=True,
+		choices=CategoryModality.choices,
+		db_index=True,
+		help_text=(
+			"Intervention modality group. Curated by hand (seeded by "
+			"sync_category_modalities); null means not yet classified."
 		),
 	)
 	match_scope = models.CharField(
