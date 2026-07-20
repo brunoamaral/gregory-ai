@@ -11,13 +11,17 @@ written by four separate paths:
 - API POST via `TrialSerializer`
 
 Each registry uses its own vocabulary for the same real-world concept, so filtering or
-counting against the raw column silently misses rows. Four fields are normalized so far:
+counting against the raw column silently misses rows. Five fields are normalized so far:
 
 - **`phase`** — the stage of testing (Phase 1–4, ...).
 - **`recruitment_status`** — whether the trial is recruiting, completed, etc.
 - **`study_type`** — interventional vs. observational vs. expanded access vs. basic science.
 - **`countries`** (plus three sibling raw columns) — the trial's participating countries and
   derived regions.
+- **`inclusion_gender`** — sex eligibility (all sexes / female-only / male-only). Unlike the
+  others, the raw column here doesn't just *miss* variants — it silently returns confidently
+  wrong filter results (see the field section below), so it was the first field where the
+  legacy raw-text filter was removed outright rather than kept as a labeled "legacy" option.
 
 For each, the raw column must stay untouched — it's the source-of-record value, and
 rewriting it in place would break source-sync fidelity (re-importing the same registry
@@ -40,6 +44,7 @@ NORMALIZED_TRIAL_FIELDS = (
 	("phase", "phase_normalized", normalize_phase),
 	("recruitment_status", "recruitment_status_normalized", normalize_recruitment_status),
 	("study_type", "study_type_normalized", normalize_study_type),
+	("inclusion_gender", "inclusion_gender_normalized", normalize_inclusion_gender),
 	(
 		(
 			"countries_by_source",
@@ -286,6 +291,80 @@ Out of scope: no refetch/backfill-from-registry command exists for the ~13.1k le
 with no `source_register` and therefore no `study_type` at all — this normalization only
 covers what's already in the raw column.
 
+## Field: `inclusion_gender` → `inclusion_gender_normalized`
+
+Unlike the other three scalar fields above, the raw `inclusion_gender` filter wasn't just
+weak — it was **confidently wrong**: `?inclusion_gender=Female` matched 1,772 trials via
+substring search, of which only 324 were actually female-only (82% false positives, since
+"Female, Male" contains "female"). This is the field where the legacy raw-text filter was
+removed outright rather than kept as a labeled "legacy" option — see
+INCLUSION-GENDER-NORMALIZATION-PLAN.md for the full audit.
+
+### Canonical vocabulary
+
+`gregory.utils.trial_field_normalizers.TrialSexEligibility` (a `models.TextChoices`):
+
+| Value | Label |
+|---|---|
+| `all` | All sexes |
+| `female` | Female only |
+| `male` | Male only |
+
+There is deliberately **no `other` member** — breaking symmetry with every other field in
+this doc. A value literally rendered as `sex = other` would read to a clinician as
+"intersex / non-binary participants", which is not what "we couldn't parse this string"
+means. Unmapped values map to `None` instead, and are found via the admin/log review
+workflow below (there is no `other`-filter shortcut for this field specifically).
+
+### Mapping table
+
+Keys are the whitespace-collapsed, casefolded raw value (25 distinct raw values collapse to
+18 keys this way):
+
+| Canonical | Raw values | Source |
+|---|---|---|
+| `all` | `ALL` | ClinicalTrials.gov |
+| | `Both` | ChiCTR/IRCT/ISRCTN |
+| | `Both males and females` | ANZCTR |
+| | `Female, Male` | EU CTIS |
+| | `Male and Female`, `Male/Female` | — |
+| | `Female: yes Male: yes` (+ HTML-wrapped variants) | EU Clinical Trials Register |
+| `female` | `Female`, `Females`, `F` | — |
+| | `Female: yes Male: no` (+ HTML variant) | EU Clinical Trials Register |
+| `male` | `Male`, `Males` | — |
+| | `Female: no Male: yes` | EU Clinical Trials Register |
+| `None` | `-`, `--`, `Not Specified` | placeholders, no eligibility signal |
+| `None` (logged) | `Female: no Male: no` | contradictory registry artifact (2 rows) |
+
+### Judgment calls
+
+1. **No `other` bucket** (see above) — the only field in this doc without one.
+2. **Placeholders → `None`, not a value.** Storing `-`/`Not Specified` as if they were data
+   was the original mistake this normalization fixes.
+3. **`Female: no Male: no` → `None`, but logged separately from the placeholders.**
+   Logically no one could enrol — a registry data-entry artifact, not a genuine fourth
+   eligibility state.
+4. **No generic token fallback, and deliberately no substring match on `"female"`.** That
+   substring match is precisely the bug: `"Female, Male"` contains `"female"` but is not
+   female-only. `"Female, Male"` → `all` is the regression guard in the test suite.
+5. **No HTML stripping in the normalizer itself.** The EU Clinical Trials Register sends
+   this field as an HTML fragment (`"<br>Female: yes<br>Male: yes<br>"`); stripping happens
+   once, at ingest, in WHO-HTML-CLEANUP-PLAN.md — this normalizer keeps the HTML-wrapped
+   keys in its exact-match table anyway (expected-dead post-cleanup, but free, and a safety
+   net for a stale re-import of cached XML).
+
+### API
+
+The legacy `inclusion_gender` (`icontains`) filter is **removed**, not deprecated — see the
+judgment call above. `inclusion_gender_normalized` (`ChoiceFilter`) replaces it. The raw
+`inclusion_gender` field stays on the serializer (source-of-record value, unaffected). A
+request using the removed `?inclusion_gender=...` parameter is silently ignored by
+django-filter (unknown params don't error) rather than rejected, so old clients get
+unfiltered results, not a 400 — called out explicitly as a breaking change in
+docs/03-api-and-rss-feeds.md. `/trials/stats/` gets a `by_sex` facet (per
+`TrialSexEligibility` + `no_sex_data`; `no_sex_data` is ~46% of trials globally, same
+legacy-`source_register`-null caveat as `no_modality`/`no_study_type`).
+
 ## Field: `countries` → `TrialCountry` rows + `regions_normalized` (multi-input)
 
 Unlike `phase` and `recruitment_status`, country data is spread across **four** raw columns
@@ -455,6 +534,17 @@ follows the same pattern: `docker exec gregory python manage.py migrate`, then
 hold ~13.2k trials even after the backfill catches up — that's mostly legacy rows with no
 `source_register` at all, not a normalization gap (see the `study_type` section above).
 
+`inclusion_gender_normalized` (migration
+`0092_historicaltrials_inclusion_gender_normalized_and_more`) follows the same pattern:
+`docker exec gregory python manage.py migrate`, then `docker exec gregory python manage.py
+backfill_trial_normalized_fields --field inclusion_gender --dry-run` — review the unmapped
+report (this field has no `other` bucket, so the report is driven by
+`logger.info`/backfill-tally output rather than an admin `= Other` filter), then run for
+real. Sanity check on prod: `?inclusion_gender_normalized=female` should return roughly
+**324** trials globally (vs. 1,772 from the removed legacy substring filter) — that gap *is*
+the bug this field fixes. `by_sex.all` should be ≈ 14,700; expect `no_sex_data` to hold
+~46% of trials (same legacy-`source_register`-null population as `no_study_type`).
+
 ## Extension recipe
 
 This design is meant to repeat directly for the next raw field with a messy multi-registry
@@ -532,3 +622,16 @@ the current raw value's canonical form, never a stale one from a previous import
   `countries_normalized`/`regions_normalized` response fields, `regions_normalized`'s
   read-only serializer field, and a bounded-query-count check for the list endpoint
   (`trial_countries` prefetch).
+- `gregory/tests/test_trial_inclusion_gender_normalization.py` /
+  `api/tests/test_trial_inclusion_gender_normalization.py` — mirror the `study_type`
+  coverage above for `inclusion_gender`: every raw value in
+  `_INCLUSION_GENDER_EXACT_MATCHES` (including the HTML-wrapped EU Clinical Trials Register
+  variants), the `"Female, Male"` → `all` regression guard (not `female`), the contradictory
+  `"Female: no Male: no"` → `None` + logged case, placeholders → `None`,
+  `None`/empty/whitespace → `None`, an unseen spelling → `None` + logged, no generic token
+  fallback, the `Trials.save()` hook, backfill coverage (`--field inclusion_gender`,
+  `--dry-run`, idempotency, scoping), the admin recompute action, the removed legacy
+  `?inclusion_gender=` filter (now silently unfiltered, not 400), and the
+  `?inclusion_gender_normalized=` filter/serializer tests. The `by_sex` facet on
+  `/trials/stats/` is covered in
+  `api/tests/test_trials_stats.py::TrialStatsSexFacetTest`.

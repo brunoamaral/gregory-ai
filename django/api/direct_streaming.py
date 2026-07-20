@@ -64,6 +64,8 @@ class DirectStreamingCSVRenderer(CSVRenderer):
 		"phase",
 		"phase_normalized",
 		"recruitment_status_normalized",
+		"inclusion_gender",
+		"inclusion_gender_normalized",
 		"countries",
 		"inclusion_criteria",
 		"exclusion_criteria",
