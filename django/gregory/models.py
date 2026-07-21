@@ -1063,6 +1063,27 @@ class Trials(models.Model):
 	)
 	inclusion_agemin = models.CharField(max_length=100, null=True, blank=True)
 	inclusion_agemax = models.CharField(max_length=100, null=True, blank=True)
+	# Canonical minimum eligible age in YEARS, derived from `inclusion_agemin` by
+	# gregory.utils.trial_field_normalizers. Recomputed on every save() below — never set
+	# this directly. Null = no stated lower bound. Months/weeks/days are converted to a
+	# fractional year (e.g. "6 Months" -> 0.5).
+	inclusion_age_min_years = models.FloatField(
+		null=True,
+		blank=True,
+		editable=False,
+		db_index=True,
+		help_text="Canonical minimum eligible age in years, derived from 'inclusion_agemin'; recomputed on every save.",
+	)
+	# Canonical maximum eligible age in YEARS, derived from `inclusion_agemax` by
+	# gregory.utils.trial_field_normalizers. Recomputed on every save() below — never set
+	# this directly. Null = no stated upper bound.
+	inclusion_age_max_years = models.FloatField(
+		null=True,
+		blank=True,
+		editable=False,
+		db_index=True,
+		help_text="Canonical maximum eligible age in years, derived from 'inclusion_agemax'; recomputed on every save.",
+	)
 	inclusion_gender = models.CharField(max_length=500, null=True, blank=True)
 	# Canonical sex eligibility derived from `inclusion_gender` by
 	# gregory.utils.trial_field_normalizers. Recomputed on every save() below — never set

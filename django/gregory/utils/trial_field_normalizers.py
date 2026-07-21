@@ -464,6 +464,69 @@ def normalize_inclusion_gender(raw: str | None) -> str | None:
 	return None
 
 
+# Placeholder tokens (whitespace-collapsed, casefolded) that carry no age signal, drawn
+# from the distinct-value inventory of inclusion_agemin/inclusion_agemax (see
+# docs/trials-field-normalization.md, "age" section). "no limit" is also checked as a
+# *substring* below — it shows up trailing a stray/corrupted leading number (e.g. a WHO
+# ICTRP "-2147483648 No limit" sentinel, or "0 N/A (No limit)") where the sentinel itself
+# should not be read as a real age.
+_AGE_PLACEHOLDERS = {
+	"", "-", "--", "n/a", "na", "none", "no limit",
+	"not specified", "not applicable", "not stated",
+}
+
+# Matches a leading number and an optional immediately-following unit word (spaced or not,
+# e.g. "18 Years", "18Years", "18Y", "6 Months"). The unit word is deliberately unconstrained
+# ([a-z]+ rather than an explicit year/month/week/day alternation) so trailing junk like the
+# "age old" in ">= 20age old" or "Pregnancy" in "44 Pregnancy" doesn't stop the number from
+# matching; _AGE_UNIT_MULTIPLIER falls back to a years interpretation for anything it doesn't
+# recognize, which matches the plain-number convention anyway.
+_AGE_NUMBER_RE = re.compile(r"(\d+(?:\.\d+)?)\s*([a-z]+)?", re.IGNORECASE)
+
+
+def _age_unit_multiplier(unit: str | None) -> float:
+	"""Years-per-unit for the word following a parsed age number (case-insensitive)."""
+	if not unit:
+		return 1.0
+	u = unit.lower()
+	if u.startswith("mo"):
+		return 1 / 12
+	if u.startswith("w"):
+		return 1 / 52
+	if u.startswith("d"):
+		return 1 / 365
+	# "y"/"year"/"years"/"yr"/"yrs", and any unrecognized word (e.g. "age", "pregnancy")
+	return 1.0
+
+
+def normalize_age(raw: str | None) -> float | None:
+	"""Parse a raw Trials.inclusion_agemin/inclusion_agemax string to a numeric age in YEARS.
+
+	Returns None for missing/blank/placeholder input or anything unparseable (an unknown
+	or open-ended bound). A bare number with no unit is read as years (the ClinicalTrials.gov
+	and CTIS convention). Months/weeks/days convert to a fractional year (e.g. "6 Months"
+	-> 0.5). Comparator-prefixed WHO ICTRP values (">= 20age old", "<= 80age old") parse to
+	their plain number, treating the bound as exact rather than strict — an accepted
+	simplification for a filter, not an eligibility engine. Never raises.
+
+	One function serves both inclusion_agemin and inclusion_agemax: the parse is identical
+	for either end, and None means "no stated bound" on whichever side calls it.
+	"""
+	if raw is None:
+		return None
+	cleaned = re.sub(r"\s+", " ", raw).strip().casefold()
+	if cleaned in _AGE_PLACEHOLDERS or "no limit" in cleaned:
+		return None
+	match = _AGE_NUMBER_RE.search(cleaned)
+	if not match:
+		return None
+	value = float(match.group(1))
+	years = value * _age_unit_multiplier(match.group(2))
+	# Guard against nonsense (corrupted sentinels, stray large integers) — cap at a
+	# plausible human max age.
+	return years if 0 <= years <= 120 else None
+
+
 class TrialRegion(models.TextChoices):
 	AFRICA = "africa", "Africa"
 	ASIA = "asia", "Asia"
@@ -922,6 +985,8 @@ NORMALIZED_TRIAL_FIELDS = (
 	("recruitment_status", "recruitment_status_normalized", normalize_recruitment_status),
 	("study_type", "study_type_normalized", normalize_study_type),
 	("inclusion_gender", "inclusion_gender_normalized", normalize_inclusion_gender),
+	("inclusion_agemin", "inclusion_age_min_years", normalize_age),
+	("inclusion_agemax", "inclusion_age_max_years", normalize_age),
 	(
 		(
 			"countries_by_source",

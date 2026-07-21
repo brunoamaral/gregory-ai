@@ -604,6 +604,8 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 			"other_records",
 			"inclusion_agemin",
 			"inclusion_agemax",
+			"inclusion_age_min_years",
+			"inclusion_age_max_years",
 			"inclusion_gender",
 			"inclusion_gender_normalized",
 			"date_enrollement",

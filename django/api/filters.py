@@ -1,6 +1,6 @@
 from django_filters import rest_framework as filters
 from django.db import models
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Upper
 from django.utils import timezone
@@ -661,6 +661,11 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	inclusion_agemax = filters.CharFilter(
 		field_name="inclusion_agemax", lookup_expr="exact"
 	)
+	age_eligible = filters.NumberFilter(
+		method="filter_age_eligible",
+		label="Trials whose eligible age range (in years) includes this age, "
+		"e.g. ?age_eligible=40. A null min is treated as no lower bound; a null max as no upper bound.",
+	)
 	# The legacy icontains filter here was removed 2026-07-20 — it returned confidently
 	# wrong results (?inclusion_gender=Female matched "Female, Male", a both-sexes trial),
 	# not merely weak like the other legacy filters. See
@@ -729,6 +734,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"therapeutic_areas",
 			"inclusion_agemin",
 			"inclusion_agemax",
+			"age_eligible",
 			"inclusion_gender_normalized",
 			"has_results",
 			"date_registration_after",
@@ -885,6 +891,17 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		if not value:
 			return queryset
 		return queryset.filter(regions_normalized__contains=[value])
+
+	def filter_age_eligible(self, queryset, name, value):
+		"""Keep trials whose [inclusion_age_min_years, inclusion_age_max_years] range
+		includes *value* (years). A null bound is open on that side, so a trial with no
+		stated min/max still matches."""
+		if value is None:
+			return queryset
+		return queryset.filter(
+			Q(inclusion_age_min_years__lte=value) | Q(inclusion_age_min_years__isnull=True),
+			Q(inclusion_age_max_years__gte=value) | Q(inclusion_age_max_years__isnull=True),
+		)
 
 
 class AuthorFilter(filters.FilterSet):

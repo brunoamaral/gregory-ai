@@ -322,7 +322,8 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | `condition` | Filter by medical condition |
 | `intervention` | Filter by intervention type |
 | `therapeutic_areas` | Filter by therapeutic areas |
-| `inclusion_agemin` / `inclusion_agemax` | Filter by age range |
+| `inclusion_agemin` / `inclusion_agemax` | Legacy exact-match filter on the raw registry age strings (e.g., `18 Years`) — prefer `age_eligible` |
+| `age_eligible` | Numeric age in years (e.g. `?age_eligible=40`). Returns trials whose canonical eligible age range (`inclusion_age_min_years`/`inclusion_age_max_years`) includes this age; a trial with no stated bound on either side is treated as open on that side. Both fields are also exposed on `TrialSerializer` for direct use. |
 | `inclusion_gender_normalized` | Exact match against canonical sex eligibility: `all`, `female`, `male`. **Breaking change (2026-07-20):** replaces the removed legacy `inclusion_gender` substring filter, which returned confidently wrong results (`?inclusion_gender=Female` matched "Female, Male", a both-sexes trial — 82% false positives). `?inclusion_gender=...` is no longer a recognised parameter; requests using it are silently unfiltered rather than rejected. |
 | `date_registration_after` | date (YYYY-MM-DD) | Trials registered on or after this date (inclusive). Returns 400 for invalid dates. |
 | `date_registration_before` | date (YYYY-MM-DD) | Trials registered on or before this date (inclusive). Returns 400 for invalid dates. |
