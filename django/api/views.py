@@ -1774,7 +1774,7 @@ class TrialViewSet(
 	- **category_modality** - filter by the intervention modality of the trial's categories; one of the `CategoryModality` values
 	- **source_id** - filter by source ID
 	- **status/recruitment_status** - filter by recruitment status
-	- **search** - search in title and summary
+	- **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
 	- **title** - search only in the title field (case-insensitive substring)
 	- **summary** - search only in the summary field (case-insensitive substring)
 	- **page** - page number for pagination

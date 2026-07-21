@@ -451,8 +451,10 @@ returns trials whose `[inclusion_age_min_years, inclusion_age_max_years]` range 
 given value, treating a `null` bound as open on that side:
 
 ```python
-Q(inclusion_age_min_years__lte=value) | Q(inclusion_age_min_years__isnull=True),
-Q(inclusion_age_max_years__gte=value) | Q(inclusion_age_max_years__isnull=True),
+queryset.filter(
+	Q(inclusion_age_min_years__lte=value) | Q(inclusion_age_min_years__isnull=True),
+	Q(inclusion_age_max_years__gte=value) | Q(inclusion_age_max_years__isnull=True),
+)
 ```
 
 The legacy `inclusion_agemin`/`inclusion_agemax` exact-match filters on the raw strings stay
