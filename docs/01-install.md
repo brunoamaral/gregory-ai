@@ -111,7 +111,7 @@ docker exec gregory python manage.py test gregory.tests.test_filename
 
 ## Scheduled tasks
 
-GregoryAI relies on cron jobs to keep the data fresh. For local development you can run commands manually. For production setup see the [README](../README.md#automated-tasks).
+GregoryAI relies on cron jobs to keep the data fresh. For local development you can run commands manually. For production setup see the [README](../README.md#8-add-cron-jobs-to-run-the-pipeline-and-send-emails).
 
 ```bash
 # Admin digest email (every 2 days in production)

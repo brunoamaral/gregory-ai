@@ -155,21 +155,21 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 
 | Model | Endpoint | Parameters | Notes |
 |:------|:---------|:-----------|:------|
-| Articles | `GET /articles/` | `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `category_modality`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `unsent`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
+| Articles | `GET /articles/` | `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `category_modality`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
 | Articles | `POST /articles/post/` | `title`, `link`, `doi`, `summary`, `source_id`, `kind` | Create article — see [response codes below](#post-articlespost-response-codes) |
 | Articles | `GET /articles/{id}/` | `id` (path) | |
 | Articles | `GET /articles/stats/` | Same filters as `GET /articles/` | Aggregate counts over the filtered set: `total`, `by_access` (NULL folded into `unknown`), `relevant`, `retracted`, `missing_doi`, `by_subject`. Cached for `STATS_CACHE_TTL` seconds |
-| Articles | `GET /articles/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `format`, `all_results` | See [article-search-api.md](article-search-api.md) |
+| Articles | `GET /articles/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `format`, `all_results` | See [Search endpoints](#search-endpoints) below |
 | Articles | `POST /articles/search/` | Same fields in request body | |
 | Authors | `GET /authors/` | `author_id`, `full_name`, `orcid`, `country`, `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe` | See [authors-api.md](authors-api.md) |
 | Authors | `GET /authors/{id}/` | `id` (path) | |
 | Authors | `GET /authors/search/` | `team_id` *(req)*, `subject_id` *(req)*, `full_name`, `format`, `all_results` | |
 | Authors | `GET /authors/by_team_subject/` | `team_id` *(req)*, `subject_id` *(req)* | |
 | Authors | `GET /authors/by_team_category/` | `team_id` *(req)*, `category_slug` or `category_id` *(req)* | |
+| Authors | `GET /authors/{id}/coauthors/` | `id` (path) | Co-authors of the given author |
 | Categories | `GET /categories/` | `team_id`, `subject_id`, `category_id`, `search`, `ordering`, `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | |
 | Categories | `GET /categories/{id}/` | `id` (path) | |
 | Categories | `GET /categories/{id}/authors/` | `id` (path), `min_articles`, `sort_by`, `order`, date filters | Author stats for a category |
-| Categories | `GET /categories/{slug}/monthly-counts/` | `slug` (path) | Monthly article and trial counts |
 | Sources | `GET /sources/` | `team_id`, `subject_id`, `source_for`, `search`, `ordering`, pagination | |
 | Sources | `GET /sources/{id}/` | `id` (path) | |
 | Sponsors | `GET /sponsors/` | `sponsor_type`, `search`, `ordering` (`name`, `trials_count`), pagination | Canonical, deduplicated sponsor entities — see [Sponsor canonicalization](#sponsor-canonicalization) below |
@@ -182,7 +182,7 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Trials | `GET /trials/` | `team_id`, `subject_id`, `category_id`, `category_modality`, `source_id`, `status`, `search`, `ordering`, trial-specific filters, pagination | See parameter details below |
 | Trials | `GET /trials/{id}/` | `id` (path) | |
 | Trials | `GET /trials/stats/` | Same filters as `GET /trials/` | Totals per `recruitment_status_normalized` bucket (not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other — always present, 0 when empty) plus `no_status`, `by_subject`, `by_phase` (per `TrialPhase` + `no_phase`), `by_region` (per `TrialRegion` + `no_region`), `by_country` (`[{country, count}]`, null-country entry last), `by_year` (`[{year, count}]`, null-year entry last), `by_sponsor` (top 25 `[{sponsor_id, slug, name, sponsor_type, count}]`) + `no_sponsor`, `by_sponsor_type` (per `SponsorType` + `no_type`), `by_modality` (per `CategoryModality` + `no_modality`, joined over `team_categories.modality` — **not** a partition of `total`: a trial in two categories of different modalities is counted once per modality, and `no_modality` conflates "no category at all" with "category not yet curated with a modality"), `by_study_type` (per `TrialStudyType` + `no_study_type`; `no_study_type` is large — ~13.2k globally — mostly legacy rows with no `source_register` rather than a normalization gap), and `by_sex` (per `TrialSexEligibility` + `no_sex_data`; `no_sex_data` is large — ~46% globally — same legacy-rows caveat as `no_study_type`) over the filtered set. Replaces the `stats` block formerly embedded in `GET /trials/` list responses (breaking change). Cached for `STATS_CACHE_TTL` seconds |
-| Trials | `GET /trials/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `status`, `format`, `all_results` | See [trial-search-api.md](trial-search-api.md) |
+| Trials | `GET /trials/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `status`, `format`, `all_results` | See [Search endpoints](#search-endpoints) below |
 | Trials | `POST /trials/search/` | Same fields in request body | |
 | Trials | `GET /trials/sites/` | Same filters as `GET /trials/`, plus `latitude__isnull` (`true`/`false`) | Flat, paginated `TrialSite` listing across the filtered trial set: `{trial_id, name, city, country, latitude, longitude}` per row — for a site-level pin map. `trial_sites` itself is detail-only (appears on `GET /trials/{id}/`, never on the list/CSV/search responses). Pagination is mandatory here — `?all_results=true` returns 400; max `page_size` is 500 |
 | Email templates | `GET /emails/` | None | Template preview dashboard |
@@ -192,6 +192,63 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | RSS feeds | `GET /feed/trials/subject/{subject_slug}/` | `subject_slug` (path) | |
 | Stats | `GET /stats/` | `team`, `organization` (alias `org`), `include_public` | See [Stats endpoint](#stats-endpoint) below |
 | Subscriptions | `POST /subscriptions/new/` | `first_name`, `last_name`, `email`, `profile`, `list` | |
+
+### Search endpoints
+
+The dedicated search endpoints — `/articles/search/`, `/trials/search/`, and
+`/authors/search/` — scope results to a single team + subject and accept richer
+search parameters than the plain list endpoints.
+
+**Shared contract:**
+
+- Both **GET** (query params) and **POST** (JSON body) are supported; the same
+  fields apply either way.
+- `team_id` **and** `subject_id` are **required**. The subject must belong to the
+  team.
+- Results are paginated (default `page_size` 10, max 100) and ordered by
+  `discovery_date` newest-first by default; override with `ordering`.
+- CSV export: add `format=csv` (and usually `all_results=true`). See
+  [csv-export.md](csv-export.md).
+
+**Search parameters:**
+
+| Parameter | Endpoints | Description |
+|:----------|:----------|:------------|
+| `title` | articles, trials | Match in the title only (case-insensitive, partial). |
+| `summary` | articles, trials | Match in the summary/abstract only. |
+| `search` | articles, trials | Match in title **or** summary (supports boolean operators, e.g. `a OR b`). |
+| `status` | trials | Case-insensitive exact match on the raw `recruitment_status` string (e.g. `Recruiting`). For the canonical vocabulary use `recruitment_status_normalized` on `GET /trials/`. |
+| `full_name` | authors | Match on the author's full name (case-insensitive, partial). |
+
+**Error responses** (identical across the three endpoints):
+
+| Status | Body | Condition |
+|:-------|:-----|:----------|
+| `400` | `{"error": "Missing required parameters: team_id, subject_id"}` | `team_id` or `subject_id` omitted |
+| `400` | `{"error": "team_id and subject_id must be integers"}` | Non-integer `team_id`/`subject_id` |
+| `404` | `{"error": "Team with ID <id> not found"}` | `team_id` does not exist |
+| `404` | `{"error": "Subject with ID <id> not found or does not belong to team <team_id>"}` | `subject_id` not found or not in that team |
+
+Each result is a full serializer object — the same shape as the corresponding
+list endpoint (`ArticleSerializer` / `TrialSerializer` / `AuthorSerializer`).
+
+**Examples:**
+
+```bash
+# Article search by keyword (GET)
+GET /articles/search/?team_id=1&subject_id=2&search=Ocrelizumab
+
+# Article search by abstract keyword (POST)
+POST /articles/search/
+{"team_id": 1, "subject_id": 2, "summary": "treatment"}
+
+# Recruiting trials matching a title keyword
+POST /trials/search/
+{"team_id": 1, "subject_id": 2, "title": "cancer", "status": "Recruiting"}
+
+# Export all matching trials as CSV
+GET /trials/search/?team_id=1&subject_id=2&search=diabetes&format=csv&all_results=true
+```
 
 ### Stats endpoint
 
