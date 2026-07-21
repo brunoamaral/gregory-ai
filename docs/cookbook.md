@@ -23,7 +23,7 @@ docker exec gregory python manage.py pipeline
 
 For BASE (Bielefeld Academic Search Engine) feeds, GregoryAI has a dedicated processor that handles DOI extraction from `dc:relation` fields automatically. No extra configuration is needed — just add the BASE feed URL as a standard RSS source.
 
-Reference: [02-sources-and-articles.md](02-sources-and-articles.md), [feed-processors.md](feed-processors.md)
+Reference: [02-sources-and-articles.md](02-sources-and-articles.md)
 
 ---
 
@@ -42,7 +42,7 @@ curl "https://api.example.com/api/articles/search/?team_id=1&subject_id=2&search
 
 Add `all_results=true` to bypass pagination. Without it you get only the first page.
 
-Reference: [csv-export.md](csv-export.md), [article-search-api.md](article-search-api.md)
+Reference: [csv-export.md](csv-export.md), [03-api-and-rss-feeds.md § Search endpoints](03-api-and-rss-feeds.md#search-endpoints)
 
 ---
 

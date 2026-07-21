@@ -365,6 +365,103 @@ docs/03-api-and-rss-feeds.md. `/trials/stats/` gets a `by_sex` facet (per
 `TrialSexEligibility` + `no_sex_data`; `no_sex_data` is ~46% of trials globally, same
 legacy-`source_register`-null caveat as `no_modality`/`no_study_type`).
 
+## Fields: `inclusion_agemin`/`inclusion_agemax` → `inclusion_age_min_years`/`inclusion_age_max_years`
+
+Unlike every other field in this doc, one function — `normalize_age` — serves **two**
+raw/derived pairs: the parse for a minimum-age string and a maximum-age string is
+identical, and `None` means "no stated bound" on whichever side calls it. Both entries are
+registered separately in `NORMALIZED_TRIAL_FIELDS` (`inclusion_agemin` →
+`inclusion_age_min_years`, `inclusion_agemax` → `inclusion_age_max_years`), so `Trials.save()`
+recomputes both from their own raw column on every write, same as any other entry.
+
+### Sample raw values
+
+`inclusion_agemin`/`inclusion_agemax` are free-text CharFields with no shared convention
+across registries — 185 and 231 distinct raw values respectively in the July 2026 inventory:
+
+```
+'18 Years' 6351      '80 Years' 1370      '18' 864
+'6 Months' 26        '65+' 30             'N/A' 245/1682
+'>= 20age old' 52    '<= 80age old' 7     '18Y' 19
+'No limit' 76/178    'Not applicable' 24  '-2147483648 No limit' 1
+```
+
+ClinicalTrials.gov and CTIS write a bare number as years (`"18"`); WHO ICTRP writes
+`"N Years"` or, for pediatric trials, sub-year units (`"6 Months"`); a handful of ICTRP rows
+carry a comparator prefix (`">= 20age old"`, `"<= 80age old"`) rather than a plain bound; and
+one CTIS artifact stores an INT32_MIN sentinel (`"-2147483648 No limit"`) for "no limit".
+
+### Output
+
+`inclusion_age_min_years`/`inclusion_age_max_years` are `FloatField`s (not integers — pediatric
+trials need a fractional year, e.g. `"6 Months"` → `0.5`), `null=True`, `db_index=True`,
+`editable=False`. There is no TextChoices vocabulary here: the output is a continuous numeric
+range, not a closed set of buckets.
+
+### Parsing rules (`normalize_age`)
+
+1. **Placeholder exact-match → `None`.** Whitespace-collapsed, casefolded input in
+   `{"", "-", "--", "n/a", "na", "none", "no limit", "not specified", "not applicable",
+   "not stated"}` carries no age signal.
+2. **`"no limit"` as a substring (not just exact match) → `None`.** Catches a stray leading
+   number stuck to a "no limit" annotation — the INT32_MIN sentinel
+   (`"-2147483648 No limit"`) and a WHO ICTRP `"0 N/A (No limit)"` variant both parse to
+   `None` this way, rather than reading the leading digits as a real bound.
+3. **Leading number, optional unit word.** `(\d+(?:\.\d+)?)\s*([a-z]+)?` finds the first
+   number in the (already placeholder-checked) string and an optional word immediately
+   after it, spaced or not (`"18 Years"`, `"18Years"`, `"18Y"` all parse the same).
+4. **Unit word → years multiplier**, by prefix rather than an explicit enum: `mo…` → `1/12`,
+   `w…` → `1/52`, `d…` → `1/365`, anything else (`y`, `year`, `years`, `yr`, or an
+   unrecognized word like `"age"` in `">= 20age old"` or `"pregnancy"` in
+   `"44 Pregnancy"`) → `1.0` (years). This is deliberately loose: constraining the unit to
+   an explicit year/month/week/day alternation would make the WHO ICTRP `"age old"` suffix
+   (glued directly onto the number, no space) fail to parse at all. Falling back to years
+   for an unrecognized trailing word matches the bare-number convention anyway.
+5. **No unit → years.** Matches the ClinicalTrials.gov/CTIS convention for a bare number.
+6. **Comparator prefixes (`>=`, `<=`, `<`) are not special-cased.** `re.search` just finds
+   the number wherever it sits in the string, so `">= 20age old"` → `20.0` and
+   `"<= 80age old"` → `80.0`. The bound is treated as exact rather than strict — an accepted
+   simplification for a list-endpoint filter, not an eligibility engine.
+7. **Sanity cap: `0 <= years <= 120`.** Guards against corrupted/nonsense magnitudes (e.g. a
+   `"200 Years"` or `"149 years"` typo) without a substring match; combined with rule 2, this
+   is a second, independent line of defense against the INT32_MIN sentinel even if it ever
+   shows up without the "No limit" annotation attached.
+
+### Judgment calls
+
+1. **Bare `"0"` is accepted as a real age (birth), not a placeholder** — pediatric trials
+   legitimately set `inclusion_agemin` to `0`/`0 Years`. This is a known limitation on the
+   *max* side: a bare `"0"` for `inclusion_agemax` (16 rows in the inventory) is far more
+   likely a placeholder/sentinel artifact than a genuine "must be exactly newborn" upper
+   bound, but the parser has no per-field context to disambiguate — it accepts `0.0` on
+   either side rather than guess.
+2. **No generic token fallback beyond "unrecognized word → years."** Unlike
+   `normalize_phase`'s generic-token fallback, there's no attempt to interpret arbitrary
+   trailing words (`"Pregnancy"`) as anything other than the years default — there is no
+   registry vocabulary to extend here, just a units grammar.
+3. **Comparator prefixes are read as exact, not strict.** `age_eligible` is a coarse list
+   filter; treating `"< 80age old"` as `< 80` rather than `<= 80` would need a third
+   inequality direction threaded through the `age_eligible` filter for a handful of rows —
+   not worth the complexity.
+
+### API
+
+`age_eligible=<years>` on `GET /trials/` (`api/filters.py`, `TrialFilter.filter_age_eligible`)
+returns trials whose `[inclusion_age_min_years, inclusion_age_max_years]` range contains the
+given value, treating a `null` bound as open on that side:
+
+```python
+queryset.filter(
+	Q(inclusion_age_min_years__lte=value) | Q(inclusion_age_min_years__isnull=True),
+	Q(inclusion_age_max_years__gte=value) | Q(inclusion_age_max_years__isnull=True),
+)
+```
+
+The legacy `inclusion_agemin`/`inclusion_agemax` exact-match filters on the raw strings stay
+for backward compatibility. Both derived fields are also exposed on `TrialSerializer` so
+callers needing the raw canonical numbers (rather than a single boolean containment check)
+don't have to re-parse the raw strings themselves. See docs/03-api-and-rss-feeds.md.
+
 ## Field: `countries` → `TrialCountry` rows + `regions_normalized` (multi-input)
 
 Unlike `phase` and `recruitment_status`, country data is spread across **four** raw columns
@@ -545,6 +642,15 @@ real. Sanity check on prod: `?inclusion_gender_normalized=female` should return 
 the bug this field fixes. `by_sex.all` should be ≈ 14,700; expect `no_sex_data` to hold
 ~46% of trials (same legacy-`source_register`-null population as `no_study_type`).
 
+`inclusion_age_min_years`/`inclusion_age_max_years` (migration
+`0093_historicaltrials_inclusion_age_max_years_and_more`) follows the same pattern:
+`docker exec gregory python manage.py migrate`, then `docker exec gregory python manage.py
+backfill_trial_normalized_fields --field inclusion_age_min_years,inclusion_age_max_years
+--dry-run -v 2` to sanity-check the tally, then run for real. Unlike the choice-based
+fields above there's no OTHER-report review step: `normalize_age` has no unmapped-value
+log, since anything it can't parse (including a genuinely unparseable raw string) resolves
+to `None` rather than a reviewable "other" bucket.
+
 ## Extension recipe
 
 This design is meant to repeat directly for the next raw field with a messy multi-registry
@@ -635,3 +741,14 @@ the current raw value's canonical form, never a stale one from a previous import
   `?inclusion_gender_normalized=` filter/serializer tests. The `by_sex` facet on
   `/trials/stats/` is covered in
   `api/tests/test_trials_stats.py::TrialStatsSexFacetTest`.
+- `gregory/tests/test_trial_age_normalization.py` — parametrized coverage of
+  `normalize_age` across bare numbers, spaced/unspaced/abbreviated year units, sub-year
+  units (months/weeks/days, including the `6 Months` → `0.5` fractional-year case),
+  WHO ICTRP comparator-prefixed values (`>= 20age old`), an unrecognized trailing word
+  still parsing as years (`44 Pregnancy`), every placeholder (including the `"no limit"`
+  substring match on corrupted sentinels like `-2147483648 No limit`), unparseable
+  garbage, the 0–120 sanity-cap boundary, and the `Trials.save()` hook for both
+  `inclusion_age_min_years`/`inclusion_age_max_years`.
+- `api/tests/test_trial_age_eligible_filter.py` — the `?age_eligible=` range-containment
+  filter: both bounds set, a null max (open-ended), both bounds null, exclusion by a
+  higher min, the boundary-inclusive case, and composition with `subject_id`.

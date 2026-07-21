@@ -118,3 +118,4 @@ Always check `django/gregory/models.py` when:
 - Modern, clean UI design
 - Test coverage for new features
 - Follow Django best practices
+- When changing a filter, serializer, view, model, or route, update the docs in the same PR — `docs/03-api-and-rss-feeds.md` (the canonical API reference), the relevant view docstring, and `docs/02.1-database-tables-and-fields.md` for schema changes. See `docs/README.md`.

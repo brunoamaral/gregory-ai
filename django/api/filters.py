@@ -1,6 +1,6 @@
 from django_filters import rest_framework as filters
 from django.db import models
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Upper
 from django.utils import timezone
@@ -25,6 +25,16 @@ from gregory.utils.trial_field_normalizers import (
 	TrialSexEligibility,
 	TrialStudyType,
 )
+
+
+class ChoiceInFilter(filters.BaseInFilter, filters.ChoiceFilter):
+	"""Comma-separated OR filter with per-value choice validation.
+
+	Accepts a single value (?phase_normalized=phase_2) or a comma-separated list
+	(?phase_normalized=phase_2,phase_3) and matches ANY of them (__in). BaseInFilter
+	supplies the CSV splitting; ChoiceFilter validates each item against `choices`.
+	Backward compatible: a lone value still works.
+	"""
 
 
 def ml_relevant_articles_q(threshold=0.8, subject_ids=None):
@@ -589,14 +599,24 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	status = filters.CharFilter(
 		field_name="recruitment_status", lookup_expr="iexact"
 	)  # Legacy alias for backward compatibility
-	recruitment_status_normalized = filters.ChoiceFilter(
-		choices=TrialRecruitmentStatus.choices
+	recruitment_status_normalized = ChoiceInFilter(
+		field_name="recruitment_status_normalized",
+		lookup_expr="in",
+		choices=TrialRecruitmentStatus.choices,
+		label="One or more canonical recruitment statuses, comma-separated (OR), "
+		"e.g. ?recruitment_status_normalized=recruiting,active_not_recruiting",
 	)
 	internal_number = filters.CharFilter(
 		field_name="internal_number", lookup_expr="icontains"
 	)
 	phase = filters.CharFilter(field_name="phase", lookup_expr="icontains")
-	phase_normalized = filters.ChoiceFilter(choices=TrialPhase.choices)
+	phase_normalized = ChoiceInFilter(
+		field_name="phase_normalized",
+		lookup_expr="in",
+		choices=TrialPhase.choices,
+		label="One or more canonical phases, comma-separated (OR), "
+		"e.g. ?phase_normalized=phase_2,phase_3",
+	)
 	study_type = filters.CharFilter(field_name="study_type", lookup_expr="icontains")
 	study_type_normalized = filters.ChoiceFilter(choices=TrialStudyType.choices)
 	primary_sponsor = filters.CharFilter(
@@ -640,6 +660,11 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	)
 	inclusion_agemax = filters.CharFilter(
 		field_name="inclusion_agemax", lookup_expr="exact"
+	)
+	age_eligible = filters.NumberFilter(
+		method="filter_age_eligible",
+		label="Trials whose eligible age range (in years) includes this age, "
+		"e.g. ?age_eligible=40. A null min is treated as no lower bound; a null max as no upper bound.",
 	)
 	# The legacy icontains filter here was removed 2026-07-20 — it returned confidently
 	# wrong results (?inclusion_gender=Female matched "Female, Male", a both-sexes trial),
@@ -709,6 +734,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"therapeutic_areas",
 			"inclusion_agemin",
 			"inclusion_agemax",
+			"age_eligible",
 			"inclusion_gender_normalized",
 			"has_results",
 			"date_registration_after",
@@ -865,6 +891,17 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		if not value:
 			return queryset
 		return queryset.filter(regions_normalized__contains=[value])
+
+	def filter_age_eligible(self, queryset, name, value):
+		"""Keep trials whose [inclusion_age_min_years, inclusion_age_max_years] range
+		includes *value* (years). A null bound is open on that side, so a trial with no
+		stated min/max still matches."""
+		if value is None:
+			return queryset
+		return queryset.filter(
+			Q(inclusion_age_min_years__lte=value) | Q(inclusion_age_min_years__isnull=True),
+			Q(inclusion_age_max_years__gte=value) | Q(inclusion_age_max_years__isnull=True),
+		)
 
 
 class AuthorFilter(filters.FilterSet):

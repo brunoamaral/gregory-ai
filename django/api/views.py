@@ -1193,7 +1193,11 @@ class ArticleViewSet(
 	- **category_id** - filter by category ID
 	- **journal_slug** - filter by journal (convert spaces to dashes)
 	- **source_id** - filter by source ID
-	- **search** - search in title and summary
+	- **category_modality** - filter by the intervention modality of the article's categories; one of the `CategoryModality` values
+	- **has_clinical_trials** - filter for articles linked to one or more clinical trials (true/false)
+	- **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
+	- **title** - search only in the title field (case-insensitive substring)
+	- **summary** - search only in the summary/abstract field (case-insensitive substring)
 	- **ordering** - sort field, prefix with `-` for descending. Allowed values: `discovery_date`, `published_date`, `title`, `article_id`, `ml_score`. Articles without a score always appear last when ordering by `ml_score`.
 	- **page** - page number for pagination
 	- **page_size** - items per page (max 100)
@@ -1441,6 +1445,8 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	- **timeframe** - 'year', 'month', 'week' (relative to current date)
 	- **monthly_counts** - Include monthly article/trial counts with ML predictions (default: false)
 	- **ml_threshold** - ML prediction probability threshold when monthly_counts=true (0.0-1.0, default: 0.5)
+	- **search** - search in category name and description
+	- **ordering** - sort field, prefix with `-` for descending. Allowed values: `category_name`, `id`, `article_count_annotated`, `authors_count_annotated`
 
 	# Response includes:
 	- Category basic information
@@ -1765,9 +1771,12 @@ class TrialViewSet(
 	- **subjects_any** - comma-separated list of subject IDs with OR semantics — returns trials tagged with *any* of the listed subjects (e.g., `?subjects_any=1,2`)
 	- **category_slug** - filter by category slug
 	- **category_id** - filter by category ID
+	- **category_modality** - filter by the intervention modality of the trial's categories; one of the `CategoryModality` values
 	- **source_id** - filter by source ID
 	- **status/recruitment_status** - filter by recruitment status
-	- **search** - search in title and summary
+	- **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
+	- **title** - search only in the title field (case-insensitive substring)
+	- **summary** - search only in the summary field (case-insensitive substring)
 	- **page** - page number for pagination
 	- **page_size** - items per page (max 100)
 	- **all_results** - set to 'true' to bypass pagination and get all results (useful for CSV export)
@@ -2393,8 +2402,14 @@ class SourceViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	List all sources of data with optional filters for team and subject.
 
 	# Query Parameters:
+	- **source_id** - filter by specific source ID
 	- **team_id** - filter by team ID
 	- **subject_id** - filter by subject ID
+	- **active** - filter by active status (true/false)
+	- **source_for** - filter by what the source feeds; one of: `science paper`, `trials`, `news article`
+	- **link** - filter by source link (case-insensitive substring)
+	- **search** - search in source name and description
+	- **ordering** - sort field, prefix with `-` for descending. Allowed values: `name`, `source_id`
 	"""
 
 	_org_filter_path = "team__organization_id"
