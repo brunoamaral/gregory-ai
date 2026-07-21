@@ -27,6 +27,16 @@ from gregory.utils.trial_field_normalizers import (
 )
 
 
+class ChoiceInFilter(filters.BaseInFilter, filters.ChoiceFilter):
+	"""Comma-separated OR filter with per-value choice validation.
+
+	Accepts a single value (?phase_normalized=phase_2) or a comma-separated list
+	(?phase_normalized=phase_2,phase_3) and matches ANY of them (__in). BaseInFilter
+	supplies the CSV splitting; ChoiceFilter validates each item against `choices`.
+	Backward compatible: a lone value still works.
+	"""
+
+
 def ml_relevant_articles_q(threshold=0.8, subject_ids=None):
 	"""
 	Build a database-level Q matching articles ML-relevant by consensus.
@@ -589,14 +599,24 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	status = filters.CharFilter(
 		field_name="recruitment_status", lookup_expr="iexact"
 	)  # Legacy alias for backward compatibility
-	recruitment_status_normalized = filters.ChoiceFilter(
-		choices=TrialRecruitmentStatus.choices
+	recruitment_status_normalized = ChoiceInFilter(
+		field_name="recruitment_status_normalized",
+		lookup_expr="in",
+		choices=TrialRecruitmentStatus.choices,
+		label="One or more canonical recruitment statuses, comma-separated (OR), "
+		"e.g. ?recruitment_status_normalized=recruiting,active_not_recruiting",
 	)
 	internal_number = filters.CharFilter(
 		field_name="internal_number", lookup_expr="icontains"
 	)
 	phase = filters.CharFilter(field_name="phase", lookup_expr="icontains")
-	phase_normalized = filters.ChoiceFilter(choices=TrialPhase.choices)
+	phase_normalized = ChoiceInFilter(
+		field_name="phase_normalized",
+		lookup_expr="in",
+		choices=TrialPhase.choices,
+		label="One or more canonical phases, comma-separated (OR), "
+		"e.g. ?phase_normalized=phase_2,phase_3",
+	)
 	study_type = filters.CharFilter(field_name="study_type", lookup_expr="icontains")
 	study_type_normalized = filters.ChoiceFilter(choices=TrialStudyType.choices)
 	primary_sponsor = filters.CharFilter(

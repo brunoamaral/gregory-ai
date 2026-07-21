@@ -310,6 +310,8 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | `trial_id` | Filter by specific trial ID |
 | `internal_number` | Filter by WHO internal number |
 | `phase` | Filter by trial phase (e.g., `Phase III`) |
+| `phase_normalized` | Exact match against the canonical phase: `early_phase_1`, `phase_1`, `phase_1_2`, `phase_2`, `phase_2_3`, `phase_3`, `phase_3_4`, `phase_4`, `post_market`, `not_applicable`, `other`. Accepts a single value or a comma-separated list matched with OR, e.g. `?phase_normalized=phase_2,phase_3` |
+| `recruitment_status_normalized` | Exact match against the canonical recruitment status: `not_yet_recruiting`, `recruiting`, `enrolling_by_invitation`, `active_not_recruiting`, `not_recruiting`, `suspended`, `completed`, `terminated`, `withdrawn`, `unknown`, `other`. Accepts a single value or a comma-separated list matched with OR, e.g. `?recruitment_status_normalized=recruiting,active_not_recruiting` |
 | `study_type` | Legacy free-text `icontains` filter on the raw registry study-type string — prefer `study_type_normalized` |
 | `study_type_normalized` | Exact match against the canonical study type: `interventional`, `observational`, `expanded_access`, `basic_science`, `other` |
 | `primary_sponsor` | Legacy free-text filter on the raw registry sponsor string — prefer `sponsor_id`/`sponsor_slug` |
