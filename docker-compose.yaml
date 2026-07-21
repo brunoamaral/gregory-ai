@@ -27,7 +27,7 @@ services:
       - ./django/static:/code/static                # collectstatic output (host nginx reads it)
       - ./django/backups:/code/backups              # CTIS /retrieve JSON snapshots (persist)
     ports:
-      - "8000:8000"
+      - 127.0.0.1:8000:8000
     environment:
       - DB_HOST=db
       - DOMAIN_NAME=${DOMAIN_NAME}
