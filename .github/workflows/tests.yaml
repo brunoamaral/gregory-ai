@@ -36,6 +36,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('django/requirements.txt') }}
+          restore-keys: pip-
+
       - name: Install/update Python dependencies
         working-directory: django
         run: pip install --quiet -r requirements.txt
