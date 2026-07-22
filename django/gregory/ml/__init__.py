@@ -6,11 +6,31 @@ including wrappers for different model architectures, training pipelines, and ev
 It also provides utilities for pseudo-labeling and semi-supervised learning.
 """
 
-# Export public API
-from gregory.ml.trainer import get_trainer
-from gregory.ml.pseudo import (
-	generate_pseudo_labels,
-	save_pseudo_csv,
-	get_pseudo_label_stats,
-	load_and_filter_pseudo_labels,
-)
+# Public API is loaded lazily (PEP 562): `import gregory.ml` alone must not
+# drag in tensorflow/torch/transformers/lightgbm via trainer.py's wrapper
+# imports. Those load only when one of these names is actually accessed.
+_LAZY_ATTRS = {
+	"get_trainer": "gregory.ml.trainer",
+	"generate_pseudo_labels": "gregory.ml.pseudo",
+	"save_pseudo_csv": "gregory.ml.pseudo",
+	"get_pseudo_label_stats": "gregory.ml.pseudo",
+	"load_and_filter_pseudo_labels": "gregory.ml.pseudo",
+}
+
+
+def __getattr__(name):
+	module_name = _LAZY_ATTRS.get(name)
+	if module_name is None:
+		raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+	import importlib
+
+	module = importlib.import_module(module_name)
+	value = getattr(module, name)
+	# Cache in the module namespace so later lookups hit it directly instead
+	# of re-running __getattr__ (plain attribute access checks globals() first).
+	globals()[name] = value
+	return value
+
+
+def __dir__():
+	return sorted(list(globals()) + list(_LAZY_ATTRS))

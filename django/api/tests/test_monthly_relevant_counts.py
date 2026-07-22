@@ -36,78 +36,82 @@ MAY = datetime(2025, 5, 15, 12, 0, tzinfo=dt_timezone.utc)
 class MonthlyRelevantCountsTest(TestCase):
 	maxDiff = None
 
-	def setUp(self):
-		self.client = APIClient()
-
+	@classmethod
+	def setUpTestData(cls):
 		org = Organization.objects.create(name="Relevant Org", slug="relevant-org")
 		OrganizationApiSettings.objects.filter(organization=org).update(
 			make_api_public=True
 		)
-		self.team = Team.objects.create(
+		cls.team = Team.objects.create(
 			organization=org, name="Relevant Team", slug="relevant-team"
 		)
-		self.subject = Subject.objects.create(
-			team=self.team, subject_name="Relevant Subj", subject_slug="relevant-subj"
+		cls.subject = Subject.objects.create(
+			team=cls.team, subject_name="Relevant Subj", subject_slug="relevant-subj"
 		)
-		self.category = TeamCategory.objects.create(
-			team=self.team,
+		cls.category = TeamCategory.objects.create(
+			team=cls.team,
 			category_name="Relevant Category",
 			category_slug="relevant-category",
 		)
-		self.category.subjects.add(self.subject)
+		cls.category.subjects.add(cls.subject)
 
 		# April: three relevant articles flagged by overlapping models plus one
 		# without predictions. The naive per-model sum is 5 (lstm 2 + pubmed_bert 2
 		# + lgbm_tfidf 1) while only 4 articles exist and only 3 are relevant.
-		a_multi = self._article("Multi-model overlap", APRIL)
-		self._predict(a_multi, "lstm", 0.9)
-		self._predict(a_multi, "pubmed_bert", 0.85)
+		a_multi = cls._article("Multi-model overlap", APRIL)
+		cls._predict(a_multi, "lstm", 0.9)
+		cls._predict(a_multi, "pubmed_bert", 0.85)
 
-		a_multi2 = self._article("Multi-model overlap low scores", APRIL)
-		self._predict(a_multi2, "lstm", 0.55)
-		self._predict(a_multi2, "lgbm_tfidf", 0.6)
+		a_multi2 = cls._article("Multi-model overlap low scores", APRIL)
+		cls._predict(a_multi2, "lstm", 0.55)
+		cls._predict(a_multi2, "lgbm_tfidf", 0.6)
 
-		a_single = self._article("Single model", APRIL.replace(day=12))
-		self._predict(a_single, "pubmed_bert", 0.95)
+		a_single = cls._article("Single model", APRIL.replace(day=12))
+		cls._predict(a_single, "pubmed_bert", 0.95)
 
-		self._article("No predictions April", APRIL.replace(day=22))
+		cls._article("No predictions April", APRIL.replace(day=22))
 
 		# March: one article relevant at the default threshold but not at 0.8.
-		a_march = self._article("March borderline", MARCH)
-		self._predict(a_march, "lgbm_tfidf", 0.7)
+		a_march = cls._article("March borderline", MARCH)
+		cls._predict(a_march, "lgbm_tfidf", 0.7)
 
 		# May: nothing relevant — a below-threshold article, one with no
 		# predictions, and one whose latest prediction dropped below threshold.
-		a_low = self._article("Below threshold", MAY)
-		self._predict(a_low, "lstm", 0.2)
+		a_low = cls._article("Below threshold", MAY)
+		cls._predict(a_low, "lstm", 0.2)
 
-		self._article("No predictions May", MAY.replace(day=18))
+		cls._article("No predictions May", MAY.replace(day=18))
 
-		a_superseded = self._article("Superseded prediction", MAY.replace(day=20))
-		old = self._predict(a_superseded, "lgbm_tfidf", 0.9, model_version="v1")
+		a_superseded = cls._article("Superseded prediction", MAY.replace(day=20))
+		old = cls._predict(a_superseded, "lgbm_tfidf", 0.9, model_version="v1")
 		MLPredictions.objects.filter(pk=old.pk).update(
 			created_date=now() - timedelta(days=10)
 		)
-		self._predict(a_superseded, "lgbm_tfidf", 0.2, model_version="v2")
+		cls._predict(a_superseded, "lgbm_tfidf", 0.2, model_version="v2")
 
 		# Relevant but without a publication date: must not produce a null month
 		# bucket in the relevant series.
-		a_nodate = self._article("No published date", None)
-		self._predict(a_nodate, "lstm", 0.99)
+		a_nodate = cls._article("No published date", None)
+		cls._predict(a_nodate, "lstm", 0.99)
 
-	def _article(self, title, published_date):
+	def setUp(self):
+		self.client = APIClient()
+
+	@classmethod
+	def _article(cls, title, published_date):
 		article = Articles.objects.create(
 			title=title,
 			link=f"https://example.com/{title.lower().replace(' ', '-')}",
 			published_date=published_date,
 		)
-		article.team_categories.add(self.category)
+		article.team_categories.add(cls.category)
 		return article
 
-	def _predict(self, article, algorithm, score, model_version="v1"):
+	@classmethod
+	def _predict(cls, article, algorithm, score, model_version="v1"):
 		return MLPredictions.objects.create(
 			article=article,
-			subject=self.subject,
+			subject=cls.subject,
 			algorithm=algorithm,
 			model_version=model_version,
 			probability_score=score,

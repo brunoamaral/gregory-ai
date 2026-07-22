@@ -19,34 +19,35 @@ from gregory.relevance import recompute_article_relevance
 class RecomputeArticleRelevanceTestCase(TestCase):
 	"""Flag matrix: manual relevance, ML consensus per ml_consensus_type, and non-matches."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		org = Organization.objects.create(name="Relevance Test Org")
-		self.team = Team.objects.create(organization=org, name="Relevance Team", slug="relevance-team")
-		self.subject_any = Subject.objects.create(
+		cls.team = Team.objects.create(organization=org, name="Relevance Team", slug="relevance-team")
+		cls.subject_any = Subject.objects.create(
 			subject_name="Any Subject",
 			subject_slug="any-subject",
-			team=self.team,
+			team=cls.team,
 			auto_predict=True,
 			ml_consensus_type="any",
 		)
-		self.subject_majority = Subject.objects.create(
+		cls.subject_majority = Subject.objects.create(
 			subject_name="Majority Subject",
 			subject_slug="majority-subject",
-			team=self.team,
+			team=cls.team,
 			auto_predict=True,
 			ml_consensus_type="majority",
 		)
-		self.subject_all = Subject.objects.create(
+		cls.subject_all = Subject.objects.create(
 			subject_name="All Subject",
 			subject_slug="all-subject",
-			team=self.team,
+			team=cls.team,
 			auto_predict=True,
 			ml_consensus_type="all",
 		)
-		self.subject_no_auto_predict = Subject.objects.create(
+		cls.subject_no_auto_predict = Subject.objects.create(
 			subject_name="No Auto Predict Subject",
 			subject_slug="no-auto-predict-subject",
-			team=self.team,
+			team=cls.team,
 			auto_predict=False,
 			ml_consensus_type="any",
 		)
@@ -219,21 +220,22 @@ class RecomputeArticleRelevanceTestCase(TestCase):
 class ArticleRelevanceSignalTestCase(TestCase):
 	"""post_save/post_delete signals keep Articles.relevant in sync automatically."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		org = Organization.objects.create(name="Signal Relevance Org")
-		self.team = Team.objects.create(organization=org, name="Signal Relevance Team", slug="signal-relevance-team")
-		self.subject = Subject.objects.create(
+		cls.team = Team.objects.create(organization=org, name="Signal Relevance Team", slug="signal-relevance-team")
+		cls.subject = Subject.objects.create(
 			subject_name="Signal Subject",
 			subject_slug="signal-subject",
-			team=self.team,
+			team=cls.team,
 			auto_predict=True,
 			ml_consensus_type="any",
 		)
-		self.article = Articles.objects.create(
+		cls.article = Articles.objects.create(
 			title="Signal relevance article",
 			link="https://example.com/sig-rel-1",
 		)
-		self.article.subjects.add(self.subject)
+		cls.article.subjects.add(cls.subject)
 
 	def _refresh(self):
 		self.article.refresh_from_db()
@@ -313,29 +315,30 @@ class RecomputeArticleRelevanceLatestPredictionTestCase(TestCase):
 	threshold, so an article stayed relevant forever once a since-retired
 	model_version had scored it high."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		org = Organization.objects.create(name="Latest Prediction Relevance Org")
-		self.team = Team.objects.create(
+		cls.team = Team.objects.create(
 			organization=org, name="Latest Prediction Team", slug="latest-prediction-team"
 		)
-		self.subject_any = Subject.objects.create(
+		cls.subject_any = Subject.objects.create(
 			subject_name="Latest Any Subject",
 			subject_slug="latest-any-subject",
-			team=self.team,
+			team=cls.team,
 			auto_predict=True,
 			ml_consensus_type="any",
 		)
-		self.subject_majority = Subject.objects.create(
+		cls.subject_majority = Subject.objects.create(
 			subject_name="Latest Majority Subject",
 			subject_slug="latest-majority-subject",
-			team=self.team,
+			team=cls.team,
 			auto_predict=True,
 			ml_consensus_type="majority",
 		)
-		self.subject_all = Subject.objects.create(
+		cls.subject_all = Subject.objects.create(
 			subject_name="Latest All Subject",
 			subject_slug="latest-all-subject",
-			team=self.team,
+			team=cls.team,
 			auto_predict=True,
 			ml_consensus_type="all",
 		)

@@ -176,37 +176,39 @@ class TestDuplicateSkipsSendingStatus(_BaseTest):
 class TestDuplicateOrgScopeEnforcement(TestCase):
 	"""Org-scope rules govern which announcements a non-superuser may duplicate."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		# Org A — owns the source announcement
 		org_a = Organization.objects.create(name="Org A")
 		team_a = Team.objects.create(
 			organization=org_a, name="Team A", slug="team-a-dup"
 		)
-		self.lst_a = Lists.objects.create(list_name="List A", team=team_a)
+		cls.lst_a = Lists.objects.create(list_name="List A", team=team_a)
 
 		# Org B — the acting user belongs only to this org
-		self.org_b = Organization.objects.create(name="Org B")
+		cls.org_b = Organization.objects.create(name="Org B")
 		team_b = Team.objects.create(
-			organization=self.org_b, name="Team B", slug="team-b-dup"
+			organization=cls.org_b, name="Team B", slug="team-b-dup"
 		)
-		self.lst_b = Lists.objects.create(list_name="List B", team=team_b)
+		cls.lst_b = Lists.objects.create(list_name="List B", team=team_b)
 
 		# Non-superuser staff who belongs only to org B
-		self.user_b = User.objects.create_user(
+		cls.user_b = User.objects.create_user(
 			username="user_b_auth",
 			password="pass",
 			email="user_b_auth@example.com",
 			is_staff=True,
 		)
-		self.user_b.user_permissions.add(
+		cls.user_b.user_permissions.add(
 			Permission.objects.get(codename="add_announcement"),
 			Permission.objects.get(codename="change_announcement"),
 			Permission.objects.get(codename="view_announcement"),
 		)
 		from organizations.models import OrganizationUser
 
-		OrganizationUser.objects.create(organization=self.org_b, user=self.user_b)
+		OrganizationUser.objects.create(organization=cls.org_b, user=cls.user_b)
 
+	def setUp(self):
 		self.client = Client()
 		self.client.force_login(self.user_b)
 

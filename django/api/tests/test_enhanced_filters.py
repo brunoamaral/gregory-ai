@@ -17,23 +17,24 @@ from django.utils import timezone
 class TrialFilterTests(TestCase):
 	"""Test cases for enhanced trial filtering"""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		# Create test organization, team and subject
-		self.organization = Organization.objects.create(
+		cls.organization = Organization.objects.create(
 			name="Test Organization", slug="trial-filter-org"
 		)
-		OrganizationApiSettings.objects.filter(organization=self.organization).update(
+		OrganizationApiSettings.objects.filter(organization=cls.organization).update(
 			make_api_public=True
 		)
-		self.team = Team.objects.create(
-			name="Test Team", slug="trial-filter-team", organization=self.organization
+		cls.team = Team.objects.create(
+			name="Test Team", slug="trial-filter-team", organization=cls.organization
 		)
-		self.subject = Subject.objects.create(
-			subject_name="Test Subject", subject_slug="test-subject", team=self.team
+		cls.subject = Subject.objects.create(
+			subject_name="Test Subject", subject_slug="test-subject", team=cls.team
 		)
 
 		# Create test trials with various fields
-		self.trial1 = Trials.objects.create(
+		cls.trial1 = Trials.objects.create(
 			title="COVID-19 Vaccine Trial",
 			summary="Testing efficacy of mRNA vaccines for coronavirus.",
 			link="https://example.com/trial1",
@@ -52,10 +53,10 @@ class TrialFilterTests(TestCase):
 			inclusion_agemax="65",
 			inclusion_gender="All",
 		)
-		self.trial1.teams.add(self.team)
-		self.trial1.subjects.add(self.subject)
+		cls.trial1.teams.add(cls.team)
+		cls.trial1.subjects.add(cls.subject)
 
-		self.trial2 = Trials.objects.create(
+		cls.trial2 = Trials.objects.create(
 			title="Multiple Sclerosis Treatment Trial",
 			summary="New MS medication phase 2 study.",
 			link="https://example.com/trial2",
@@ -74,9 +75,10 @@ class TrialFilterTests(TestCase):
 			inclusion_agemax="60",
 			inclusion_gender="Female",
 		)
-		self.trial2.teams.add(self.team)
-		self.trial2.subjects.add(self.subject)
+		cls.trial2.teams.add(cls.team)
+		cls.trial2.subjects.add(cls.subject)
 
+	def setUp(self):
 		self.client = APIClient()
 
 	def test_trial_id_filter(self):
@@ -277,30 +279,31 @@ class TrialFilterTests(TestCase):
 class AuthorFilterTests(TestCase):
 	"""Test cases for enhanced author filtering"""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		# Clear any existing authors to avoid interference
 		Authors.objects.all().delete()
 
 		# Public org so anonymous API calls can see the data
-		self.org = Organization.objects.create(
+		cls.org = Organization.objects.create(
 			name="Author Filter Org", slug="author-filter-org"
 		)
-		OrganizationApiSettings.objects.filter(organization=self.org).update(
+		OrganizationApiSettings.objects.filter(organization=cls.org).update(
 			make_api_public=True
 		)
-		self.team = Team.objects.create(
-			name="Author Filter Team", slug="author-filter-team", organization=self.org
+		cls.team = Team.objects.create(
+			name="Author Filter Team", slug="author-filter-team", organization=cls.org
 		)
 
 		# Create test authors
-		self.author1 = Authors.objects.create(
+		cls.author1 = Authors.objects.create(
 			family_name="Smith",
 			given_name="John",
 			full_name="John Smith",
 			ORCID="0000-0000-0000-0001",
 			country="US",
 		)
-		self.author2 = Authors.objects.create(
+		cls.author2 = Authors.objects.create(
 			family_name="Doe",
 			given_name="Jane",
 			full_name="Jane Doe",
@@ -309,14 +312,15 @@ class AuthorFilterTests(TestCase):
 		)
 
 		# Link each author through an article in the public team so visibility filter passes
-		for author in [self.author1, self.author2]:
+		for author in [cls.author1, cls.author2]:
 			a = Articles.objects.create(
 				title=f"Article for {author.full_name}",
 				link=f"https://example.com/{author.ORCID}",
 			)
-			a.teams.add(self.team)
+			a.teams.add(cls.team)
 			a.authors.add(author)
 
+	def setUp(self):
 		self.client = APIClient()
 
 	def test_orcid_filter(self):

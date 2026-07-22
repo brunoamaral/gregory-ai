@@ -14,16 +14,17 @@ from gregory.models import Articles, MLPredictions, Subject, Team
 class MlScoreSignalTestCase(TestCase):
 	"""Signal on MLPredictions.post_save updates article.ml_score."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		org = Organization.objects.create(name="Test Org")
-		self.team = Team.objects.create(organization=org, slug="sig-test-team")
-		self.subject_a = Subject.objects.create(
-			subject_name="Subject A", subject_slug="subject-a", team=self.team
+		cls.team = Team.objects.create(organization=org, slug="sig-test-team")
+		cls.subject_a = Subject.objects.create(
+			subject_name="Subject A", subject_slug="subject-a", team=cls.team
 		)
-		self.subject_b = Subject.objects.create(
-			subject_name="Subject B", subject_slug="subject-b", team=self.team
+		cls.subject_b = Subject.objects.create(
+			subject_name="Subject B", subject_slug="subject-b", team=cls.team
 		)
-		self.article = Articles.objects.create(
+		cls.article = Articles.objects.create(
 			title="Signal test article",
 			link="https://example.com/sig1",
 		)
@@ -199,33 +200,34 @@ class MlScoreSignalTestCase(TestCase):
 class BackfillMlScoresCommandTestCase(TestCase):
 	"""backfill_ml_scores management command."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		org = Organization.objects.create(name="Backfill Org")
 		team = Team.objects.create(organization=org, slug="backfill-team")
-		self.subject = Subject.objects.create(
+		cls.subject = Subject.objects.create(
 			subject_name="Backfill Subject", subject_slug="backfill-sub", team=team
 		)
 
-		self.art_with_preds = Articles.objects.create(
+		cls.art_with_preds = Articles.objects.create(
 			title="Article with predictions",
 			link="https://example.com/b1",
 		)
-		self.art_no_preds = Articles.objects.create(
+		cls.art_no_preds = Articles.objects.create(
 			title="Article without predictions",
 			link="https://example.com/b2",
 		)
 
 		now = timezone.now()
 		older = MLPredictions.objects.create(
-			article=self.art_with_preds,
-			subject=self.subject,
+			article=cls.art_with_preds,
+			subject=cls.subject,
 			algorithm="pubmed_bert",
 			model_version="v1",
 			probability_score=0.4,
 		)
 		newer = MLPredictions.objects.create(
-			article=self.art_with_preds,
-			subject=self.subject,
+			article=cls.art_with_preds,
+			subject=cls.subject,
 			algorithm="pubmed_bert",
 			model_version="v2",
 			probability_score=0.8,
