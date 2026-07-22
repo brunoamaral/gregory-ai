@@ -441,19 +441,17 @@ class StatsQueryCountTest(StatsVisibilityBase):
 		"""
 		A team-scoped /stats/ call must stay within a small query budget.
 
-		Budget breakdown (cold cache, 14 queries):
+		Budget breakdown (cold cache, 8 queries with the test suite's
+		LocMemCache — CACHES in admin.settings_test — which never touches
+		the DB; production's DatabaseCache adds a cache GET/SET pair plus a
+		cull COUNT and SAVEPOINT/RELEASE, hence the generous <=15 ceiling):
 		  1 — VisibleOrgMiddleware: OrganizationApiSettings lookup
 		  1 — team visibility check (Team.objects.filter COUNT)
 		  1 — resolve team_id_list (Team VALUES)
-		  1 — cache GET (miss)
 		  4 — articles, trials, authors, subscribers COUNT DISTINCT
 		  1 — sources VALUES
-		  4 — cache SET (COUNT + SAVEPOINT + key lookup + INSERT + RELEASE)
-		= 14 queries.
+		= 8 queries.
 		"""
-		# The DatabaseCache write adds a cull COUNT plus a SAVEPOINT/RELEASE pair
-		# whose presence varies by backend/transaction mode, so allow a little
-		# slack (<=15) instead of pinning the count exactly.
 		from django.db import connection
 		from django.test.utils import CaptureQueriesContext
 
@@ -468,7 +466,9 @@ class StatsQueryCountTest(StatsVisibilityBase):
 	def test_cached_call_query_budget(self):
 		"""A cache-warm call must issue far fewer queries than a cold one."""
 		self.client.get("/stats/", {"team": self.pub_team.id})  # warm the cache
+		# 3, not 4: the test suite's LocMemCache backend answers cache GET
+		# in-process, issuing no SQL (unlike production's DatabaseCache).
 		with self.assertNumQueries(
-			4, msg="Cache hit should eliminate the count queries"
+			3, msg="Cache hit should eliminate the count queries"
 		):
 			self.client.get("/stats/", {"team": self.pub_team.id})
