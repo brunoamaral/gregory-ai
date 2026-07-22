@@ -24,10 +24,19 @@ database never has the wrong constraint to begin with.
 from django.db import connections
 from django.db.models.signals import post_migrate, pre_migrate
 
+# Both signals fire once per installed app (see
+# django.core.management.sql.emit_{pre,post}_migrate_signal); gate on a
+# single app label so the SQL below runs exactly once per test DB setup
+# instead of once per app.
+_GATE_APP_LABEL = "gregory"
+
 
 def _create_pg_trgm_extension(sender, **kwargs):
 	using = kwargs.get("using", "default")
-	with connections[using].cursor() as cursor:
+	connection = connections[using]
+	if sender.label != _GATE_APP_LABEL or connection.vendor != "postgresql":
+		return
+	with connection.cursor() as cursor:
 		cursor.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
 
 
@@ -49,10 +58,13 @@ _CUSTOM_INDEXES = (
 
 def _create_custom_perf_indexes(sender, **kwargs):
 	using = kwargs.get("using", "default")
-	with connections[using].cursor() as cursor:
+	connection = connections[using]
+	if sender.label != _GATE_APP_LABEL or connection.vendor != "postgresql":
+		return
+	with connection.cursor() as cursor:
 		for sql in _CUSTOM_INDEXES:
 			cursor.execute(sql)
 
 
-pre_migrate.connect(_create_pg_trgm_extension)
-post_migrate.connect(_create_custom_perf_indexes)
+pre_migrate.connect(_create_pg_trgm_extension, dispatch_uid="conftest_create_pg_trgm_extension")
+post_migrate.connect(_create_custom_perf_indexes, dispatch_uid="conftest_create_custom_perf_indexes")
