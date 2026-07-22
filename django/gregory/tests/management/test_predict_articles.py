@@ -34,22 +34,23 @@ class TestPredictArticlesCommand(TestCase):
 	Tests for the predict_articles management command argument parsing and validation.
 	"""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		# Create organization, team, subjects
-		self.organization = Organization.objects.create(name="Test Organization")
-		self.team = Team.objects.create(
-			slug="test-team", organization=self.organization
+		cls.organization = Organization.objects.create(name="Test Organization")
+		cls.team = Team.objects.create(
+			slug="test-team", organization=cls.organization
 		)
-		self.subject = Subject.objects.create(
+		cls.subject = Subject.objects.create(
 			subject_name="Test Subject",
 			subject_slug="test-subject",
-			team=self.team,
+			team=cls.team,
 			auto_predict=True,
 		)
-		self.non_auto_subject = Subject.objects.create(
+		cls.non_auto_subject = Subject.objects.create(
 			subject_name="Non-Auto Subject",
 			subject_slug="non-auto-subject",
-			team=self.team,
+			team=cls.team,
 			auto_predict=False,
 		)
 
@@ -102,19 +103,20 @@ class TestGetArticles(TestCase):
 	Tests for the get_articles helper function.
 	"""
 
-	def setUp(self):
-		self.organization = Organization.objects.create(name="Test Organization")
-		self.team = Team.objects.create(
-			slug="test-team", organization=self.organization
+	@classmethod
+	def setUpTestData(cls):
+		cls.organization = Organization.objects.create(name="Test Organization")
+		cls.team = Team.objects.create(
+			slug="test-team", organization=cls.organization
 		)
-		self.subject = Subject.objects.create(
+		cls.subject = Subject.objects.create(
 			subject_name="Test Subject",
 			subject_slug="test-subject",
-			team=self.team,
+			team=cls.team,
 			auto_predict=True,
 		)
-		self.algorithm = "pubmed_bert"
-		self.model_version = "v1.0"
+		cls.algorithm = "pubmed_bert"
+		cls.model_version = "v1.0"
 
 	def test_get_articles_basic_filtering(self):
 		"""Test that articles are correctly filtered by subject."""
@@ -459,26 +461,29 @@ class TestPrepareText(TestCase):
 @patch("gregory.management.commands.predict_articles.load_model")
 @patch("gregory.management.commands.predict_articles.prepare_text")
 class TestRunPredictionsFor(TestCase):
-	def setUp(self):
-		self.command = Command()
-		self.organization = Organization.objects.create(name="Test Organization")
-		self.team = Team.objects.create(
-			slug="test-team", organization=self.organization
+	@classmethod
+	def setUpTestData(cls):
+		cls.organization = Organization.objects.create(name="Test Organization")
+		cls.team = Team.objects.create(
+			slug="test-team", organization=cls.organization
 		)
-		self.subject = Subject.objects.create(
+		cls.subject = Subject.objects.create(
 			subject_name="Test Subject",
 			subject_slug="test-subject",
-			team=self.team,
+			team=cls.team,
 			auto_predict=True,
 		)
-		self.article1 = Articles.objects.create(
+		cls.article1 = Articles.objects.create(
 			title="Article 1", link="http://example.com/1", summary="Test summary 1"
 		)
-		self.article1.subjects.add(self.subject)
-		self.article2 = Articles.objects.create(
+		cls.article1.subjects.add(cls.subject)
+		cls.article2 = Articles.objects.create(
 			title="Article 2", link="http://example.com/2", summary="Test summary 2"
 		)
-		self.article2.subjects.add(self.subject)
+		cls.article2.subjects.add(cls.subject)
+
+	def setUp(self):
+		self.command = Command()
 		self.options = {
 			"model_version": None,
 			"lookback_days": 90,

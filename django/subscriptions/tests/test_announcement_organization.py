@@ -79,11 +79,12 @@ class TestModelRequiresOrganization(TestCase):
 class TestFormDefaultSingleOrgUser(TestCase):
 	"""Single-org user: form initial = their org, field disabled."""
 
-	def setUp(self):
-		self.org = Organization.objects.create(name="Only Org")
-		team = Team.objects.create(organization=self.org, name="T", slug="t-single")
-		self.lst = Lists.objects.create(list_name="L", team=team)
-		self.user = _staff_user_in_org("single_org_user", self.org)
+	@classmethod
+	def setUpTestData(cls):
+		cls.org = Organization.objects.create(name="Only Org")
+		team = Team.objects.create(organization=cls.org, name="T", slug="t-single")
+		cls.lst = Lists.objects.create(list_name="L", team=team)
+		cls.user = _staff_user_in_org("single_org_user", cls.org)
 
 	def _make_form(self):
 		req = MagicMock()
@@ -103,31 +104,32 @@ class TestFormDefaultSingleOrgUser(TestCase):
 class TestFormDefaultMultiOrgUser(TestCase):
 	"""Multi-org user: initial = first org by PK, field enabled."""
 
-	def setUp(self):
-		self.org_a = Organization.objects.create(name="AAA Org")
-		self.org_b = Organization.objects.create(name="BBB Org")
+	@classmethod
+	def setUpTestData(cls):
+		cls.org_a = Organization.objects.create(name="AAA Org")
+		cls.org_b = Organization.objects.create(name="BBB Org")
 		team_a = Team.objects.create(
-			organization=self.org_a, name="TA", slug="ta-multi"
+			organization=cls.org_a, name="TA", slug="ta-multi"
 		)
 		team_b = Team.objects.create(
-			organization=self.org_b, name="TB", slug="tb-multi"
+			organization=cls.org_b, name="TB", slug="tb-multi"
 		)
 		Lists.objects.create(list_name="LA", team=team_a)
 		Lists.objects.create(list_name="LB", team=team_b)
 
-		self.user = User.objects.create_user(
+		cls.user = User.objects.create_user(
 			username="multi_org",
 			password="pass",
 			email="multi@example.com",
 			is_staff=True,
 		)
-		self.user.user_permissions.add(
+		cls.user.user_permissions.add(
 			Permission.objects.get(codename="add_announcement"),
 			Permission.objects.get(codename="change_announcement"),
 			Permission.objects.get(codename="view_announcement"),
 		)
-		OrganizationUser.objects.create(organization=self.org_a, user=self.user)
-		OrganizationUser.objects.create(organization=self.org_b, user=self.user)
+		OrganizationUser.objects.create(organization=cls.org_a, user=cls.user)
+		OrganizationUser.objects.create(organization=cls.org_b, user=cls.user)
 
 	def _make_form(self):
 		req = MagicMock()
@@ -149,15 +151,16 @@ class TestFormDefaultMultiOrgUser(TestCase):
 class TestFormDefaultSuperuserWithMembership(TestCase):
 	"""Superuser in org B: initial is org B even when org A has lower PK."""
 
-	def setUp(self):
-		self.org_a = Organization.objects.create(name="A-Lower-PK")
-		self.org_b = Organization.objects.create(name="B-Higher-PK")
+	@classmethod
+	def setUpTestData(cls):
+		cls.org_a = Organization.objects.create(name="A-Lower-PK")
+		cls.org_b = Organization.objects.create(name="B-Higher-PK")
 
-		self.superuser = User.objects.create_superuser(
+		cls.superuser = User.objects.create_superuser(
 			username="su_member", password="pass", email="su_member@example.com"
 		)
 		# Superuser is a member only of org B.
-		OrganizationUser.objects.create(organization=self.org_b, user=self.superuser)
+		OrganizationUser.objects.create(organization=cls.org_b, user=cls.superuser)
 
 	def _make_form(self):
 		req = MagicMock()
@@ -173,10 +176,11 @@ class TestFormDefaultSuperuserWithMembership(TestCase):
 class TestFormDefaultSuperuserNoMembership(TestCase):
 	"""Superuser with no OrganizationUser: initial = first org by PK."""
 
-	def setUp(self):
-		self.org = Organization.objects.create(name="First Org")
+	@classmethod
+	def setUpTestData(cls):
+		cls.org = Organization.objects.create(name="First Org")
 		Organization.objects.create(name="Second Org")
-		self.superuser = User.objects.create_superuser(
+		cls.superuser = User.objects.create_superuser(
 			username="su_nomember", password="pass", email="su_nomember@example.com"
 		)
 
@@ -200,31 +204,32 @@ class TestFormDefaultSuperuserNoMembership(TestCase):
 class TestFormListsScopedToSelectedOrg(TestCase):
 	"""Multi-org user: when org=A is posted, only lists of org A are in choices."""
 
-	def setUp(self):
-		self.org_a = Organization.objects.create(name="Scope A")
-		self.org_b = Organization.objects.create(name="Scope B")
+	@classmethod
+	def setUpTestData(cls):
+		cls.org_a = Organization.objects.create(name="Scope A")
+		cls.org_b = Organization.objects.create(name="Scope B")
 		team_a = Team.objects.create(
-			organization=self.org_a, name="SA", slug="sa-scope"
+			organization=cls.org_a, name="SA", slug="sa-scope"
 		)
 		team_b = Team.objects.create(
-			organization=self.org_b, name="SB", slug="sb-scope"
+			organization=cls.org_b, name="SB", slug="sb-scope"
 		)
-		self.list_a = Lists.objects.create(list_name="List A", team=team_a)
-		self.list_b = Lists.objects.create(list_name="List B", team=team_b)
+		cls.list_a = Lists.objects.create(list_name="List A", team=team_a)
+		cls.list_b = Lists.objects.create(list_name="List B", team=team_b)
 
-		self.user = User.objects.create_user(
+		cls.user = User.objects.create_user(
 			username="scope_user",
 			password="pass",
 			email="scope@example.com",
 			is_staff=True,
 		)
-		self.user.user_permissions.add(
+		cls.user.user_permissions.add(
 			Permission.objects.get(codename="add_announcement"),
 			Permission.objects.get(codename="change_announcement"),
 			Permission.objects.get(codename="view_announcement"),
 		)
-		OrganizationUser.objects.create(organization=self.org_a, user=self.user)
-		OrganizationUser.objects.create(organization=self.org_b, user=self.user)
+		OrganizationUser.objects.create(organization=cls.org_a, user=cls.user)
+		OrganizationUser.objects.create(organization=cls.org_b, user=cls.user)
 
 	def test_lists_scoped_to_selected_org(self):
 		req = MagicMock()
@@ -245,19 +250,20 @@ class TestFormListsScopedToSelectedOrg(TestCase):
 class TestFormRejectsCrossOrgList(TestCase):
 	"""Submitting a list from org B when org=A raises ValidationError on 'lists'."""
 
-	def setUp(self):
-		self.org_a = Organization.objects.create(name="CrossA")
-		self.org_b = Organization.objects.create(name="CrossB")
+	@classmethod
+	def setUpTestData(cls):
+		cls.org_a = Organization.objects.create(name="CrossA")
+		cls.org_b = Organization.objects.create(name="CrossB")
 		team_a = Team.objects.create(
-			organization=self.org_a, name="CA", slug="ca-cross"
+			organization=cls.org_a, name="CA", slug="ca-cross"
 		)
 		team_b = Team.objects.create(
-			organization=self.org_b, name="CB", slug="cb-cross"
+			organization=cls.org_b, name="CB", slug="cb-cross"
 		)
-		self.list_a = Lists.objects.create(list_name="Good List", team=team_a)
-		self.list_b = Lists.objects.create(list_name="Bad List", team=team_b)
+		cls.list_a = Lists.objects.create(list_name="Good List", team=team_a)
+		cls.list_b = Lists.objects.create(list_name="Bad List", team=team_b)
 
-		self.superuser = User.objects.create_superuser(
+		cls.superuser = User.objects.create_superuser(
 			username="cross_su", password="pass", email="cross_su@example.com"
 		)
 
@@ -292,15 +298,18 @@ class TestFormRejectsCrossOrgList(TestCase):
 class TestChangelistShowsListlessDrafts(TestCase):
 	"""Draft with no lists for org A must appear in org-A user's changelist."""
 
-	def setUp(self):
-		self.org = Organization.objects.create(name="CL Org")
-		self.user = _staff_user_in_org("cl_user", self.org)
-		self.ann = Announcement.objects.create(
+	@classmethod
+	def setUpTestData(cls):
+		cls.org = Organization.objects.create(name="CL Org")
+		cls.user = _staff_user_in_org("cl_user", cls.org)
+		cls.ann = Announcement.objects.create(
 			subject="Listless Draft",
 			body="<p>x</p>",
-			organization=self.org,
+			organization=cls.org,
 		)
 		# No lists added.
+
+	def setUp(self):
 		self.client = Client()
 		self.client.force_login(self.user)
 
@@ -314,15 +323,18 @@ class TestChangelistShowsListlessDrafts(TestCase):
 class TestChangelistHidesOtherOrg(TestCase):
 	"""Announcement for org B must not appear in org-A user's changelist."""
 
-	def setUp(self):
-		self.org_a = Organization.objects.create(name="Hide A")
-		self.org_b = Organization.objects.create(name="Hide B")
-		self.user_a = _staff_user_in_org("hide_user_a", self.org_a)
-		self.ann_b = Announcement.objects.create(
+	@classmethod
+	def setUpTestData(cls):
+		cls.org_a = Organization.objects.create(name="Hide A")
+		cls.org_b = Organization.objects.create(name="Hide B")
+		cls.user_a = _staff_user_in_org("hide_user_a", cls.org_a)
+		cls.ann_b = Announcement.objects.create(
 			subject="Org B Ann",
 			body="<p>x</p>",
-			organization=self.org_b,
+			organization=cls.org_b,
 		)
+
+	def setUp(self):
 		self.client = Client()
 		self.client.force_login(self.user_a)
 
@@ -341,12 +353,17 @@ class TestChangelistHidesOtherOrg(TestCase):
 class TestGetReadonlyFieldsLocksOrganizationPostSend(TestCase):
 	"""organization must be in readonly_fields when status='sent'."""
 
-	def setUp(self):
-		self.org = Organization.objects.create(name="RO Org")
-		self.admin = AnnouncementAdmin(Announcement, admin_site)
-		self.superuser = User.objects.create_superuser(
+	@classmethod
+	def setUpTestData(cls):
+		cls.org = Organization.objects.create(name="RO Org")
+		cls.superuser = User.objects.create_superuser(
 			username="ro_su", password="pass", email="ro_su@example.com"
 		)
+
+	def setUp(self):
+		# AnnouncementAdmin isn't deep-copyable (holds a reference to the
+		# admin site registry), so it can't live in setUpTestData.
+		self.admin = AnnouncementAdmin(Announcement, admin_site)
 
 	def test_readonly_includes_organization_post_send(self):
 		ann = Announcement(
@@ -382,25 +399,26 @@ class TestSendValidationBlocksCrossOrgList(TestCase):
 	"""validate_announcement_send_config must block when a list belongs to
 	a different org than the announcement."""
 
-	def setUp(self):
-		self.org_a = Organization.objects.create(name="SVA Org A")
-		self.org_b = Organization.objects.create(name="SVA Org B")
+	@classmethod
+	def setUpTestData(cls):
+		cls.org_a = Organization.objects.create(name="SVA Org A")
+		cls.org_b = Organization.objects.create(name="SVA Org B")
 		team_a = Team.objects.create(
-			organization=self.org_a, name="SVA A", slug="sva-a"
+			organization=cls.org_a, name="SVA A", slug="sva-a"
 		)
 		team_b = Team.objects.create(
-			organization=self.org_b, name="SVA B", slug="sva-b"
+			organization=cls.org_b, name="SVA B", slug="sva-b"
 		)
-		self.list_a = Lists.objects.create(list_name="SV List A", team=team_a)
-		self.list_b = Lists.objects.create(list_name="SV List B", team=team_b)
+		cls.list_a = Lists.objects.create(list_name="SV List A", team=team_a)
+		cls.list_b = Lists.objects.create(list_name="SV List B", team=team_b)
 
-		self.ann = Announcement.objects.create(
+		cls.ann = Announcement.objects.create(
 			subject="SV Ann",
 			body="<p>hello</p>",
-			organization=self.org_a,
+			organization=cls.org_a,
 		)
-		self.ann.lists.add(self.list_a)
-		self.ann.lists.add(self.list_b)  # cross-org
+		cls.ann.lists.add(cls.list_a)
+		cls.ann.lists.add(cls.list_b)  # cross-org
 
 	def _make_site(self, domain="ex.com"):
 		s = MagicMock()
@@ -445,31 +463,33 @@ class TestSendValidationBlocksCrossOrgList(TestCase):
 class TestDuplicateInheritsSourceOrganization(TestCase):
 	"""duplicate_announcements copies organization from source, not from actor."""
 
-	def setUp(self):
-		self.org_a = Organization.objects.create(name="DupOrg A")
-		self.org_b = Organization.objects.create(name="DupOrg B")
+	@classmethod
+	def setUpTestData(cls):
+		cls.org_a = Organization.objects.create(name="DupOrg A")
+		cls.org_b = Organization.objects.create(name="DupOrg B")
 		team_a = Team.objects.create(
-			organization=self.org_a, name="DA", slug="da-dup-org"
+			organization=cls.org_a, name="DA", slug="da-dup-org"
 		)
 		team_b = Team.objects.create(
-			organization=self.org_b, name="DB", slug="db-dup-org"
+			organization=cls.org_b, name="DB", slug="db-dup-org"
 		)
-		self.list_a = Lists.objects.create(list_name="DupList A", team=team_a)
-		self.list_b = Lists.objects.create(list_name="DupList B", team=team_b)
+		cls.list_a = Lists.objects.create(list_name="DupList A", team=team_a)
+		cls.list_b = Lists.objects.create(list_name="DupList B", team=team_b)
 
 		# Multi-org user (member of both A and B; first org by PK is A).
-		self.user = User.objects.create_superuser(
+		cls.user = User.objects.create_superuser(
 			username="dup_su", password="pass", email="dup_su@example.com"
 		)
 		# Source is in org_a.
-		self.source = Announcement.objects.create(
+		cls.source = Announcement.objects.create(
 			subject="Source in A",
 			body="<p>x</p>",
-			organization=self.org_a,
+			organization=cls.org_a,
 			status="sent",
 		)
-		self.source.lists.add(self.list_a)
+		cls.source.lists.add(cls.list_a)
 
+	def setUp(self):
 		self.client = Client()
 		self.client.force_login(self.user)
 
@@ -496,21 +516,23 @@ class TestDuplicateActionBlocksSourceUserCannotSee(TestCase):
 	"""duplicate_announcements on a source in org B, run by user in org A only:
 	no row is created because the changelist queryset excludes it."""
 
-	def setUp(self):
-		self.org_a = Organization.objects.create(name="Block A")
-		self.org_b = Organization.objects.create(name="Block B")
-		team_b = Team.objects.create(organization=self.org_b, name="BlkB", slug="blk-b")
-		self.list_b = Lists.objects.create(list_name="BlkList B", team=team_b)
+	@classmethod
+	def setUpTestData(cls):
+		cls.org_a = Organization.objects.create(name="Block A")
+		cls.org_b = Organization.objects.create(name="Block B")
+		team_b = Team.objects.create(organization=cls.org_b, name="BlkB", slug="blk-b")
+		cls.list_b = Lists.objects.create(list_name="BlkList B", team=team_b)
 
-		self.user_a = _staff_user_in_org("blk_user_a", self.org_a)
-		self.source_b = Announcement.objects.create(
+		cls.user_a = _staff_user_in_org("blk_user_a", cls.org_a)
+		cls.source_b = Announcement.objects.create(
 			subject="Blocked Source",
 			body="<p>x</p>",
-			organization=self.org_b,
+			organization=cls.org_b,
 			status="sent",
 		)
-		self.source_b.lists.add(self.list_b)
+		cls.source_b.lists.add(cls.list_b)
 
+	def setUp(self):
 		self.client = Client()
 		self.client.force_login(self.user_a)
 
@@ -537,14 +559,19 @@ class TestSaveModelFallbackForMissingOrganization(TestCase):
 	"""save_model sets organization from user's first OrganizationUser when
 	obj.organization_id is None (defensive path)."""
 
-	def setUp(self):
-		self.org = Organization.objects.create(name="Fallback Org")
+	@classmethod
+	def setUpTestData(cls):
+		cls.org = Organization.objects.create(name="Fallback Org")
 		team = Team.objects.create(
-			organization=self.org, name="FB Team", slug="fb-team"
+			organization=cls.org, name="FB Team", slug="fb-team"
 		)
 		Lists.objects.create(list_name="FB List", team=team)
 
-		self.user = _staff_user_in_org("fb_user", self.org)
+		cls.user = _staff_user_in_org("fb_user", cls.org)
+
+	def setUp(self):
+		# AnnouncementAdmin isn't deep-copyable (holds a reference to the
+		# admin site registry), so it can't live in setUpTestData.
 		self.admin = AnnouncementAdmin(Announcement, admin_site)
 
 	def test_save_model_fallback_sets_org(self):
@@ -573,20 +600,25 @@ class TestFormInitHandlesReadonlyOrgAndLists(TestCase):
 	form's __init__ must not blow up trying to scope queryset/initial on
 	those missing fields."""
 
-	def setUp(self):
-		self.org = Organization.objects.create(name="Readonly Init Org")
-		team = Team.objects.create(organization=self.org, name="RI", slug="ri-team")
-		self.lst = Lists.objects.create(list_name="RI List", team=team)
-		self.admin = AnnouncementAdmin(Announcement, admin_site)
-		self.superuser = User.objects.create_superuser(
+	@classmethod
+	def setUpTestData(cls):
+		cls.org = Organization.objects.create(name="Readonly Init Org")
+		team = Team.objects.create(organization=cls.org, name="RI", slug="ri-team")
+		cls.lst = Lists.objects.create(list_name="RI List", team=team)
+		cls.superuser = User.objects.create_superuser(
 			username="ri_su", password="pass", email="ri_su@example.com"
 		)
-		self.ann = Announcement.objects.create(
+		cls.ann = Announcement.objects.create(
 			subject="Sent Init Ann",
 			body="<p>x</p>",
 			status="sent",
-			organization=self.org,
+			organization=cls.org,
 		)
+
+	def setUp(self):
+		# AnnouncementAdmin isn't deep-copyable (holds a reference to the
+		# admin site registry), so it can't live in setUpTestData.
+		self.admin = AnnouncementAdmin(Announcement, admin_site)
 
 	def test_form_init_does_not_keyerror_on_sent(self):
 		req = MagicMock()

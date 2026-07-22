@@ -17,64 +17,66 @@ from gregory.models import (
 class ArticleMultiSubjectFilterTests(TestCase):
 	"""Tests for the ?subjects= AND-filter on /articles/"""
 
-	def setUp(self):
-		self.client = APIClient()
-
-		self.org = Organization.objects.create(name="Test Org", slug="ms-filter-org")
-		OrganizationApiSettings.objects.filter(organization=self.org).update(
+	@classmethod
+	def setUpTestData(cls):
+		cls.org = Organization.objects.create(name="Test Org", slug="ms-filter-org")
+		OrganizationApiSettings.objects.filter(organization=cls.org).update(
 			make_api_public=True
 		)
-		self.team = Team.objects.create(
-			name="Test Team", slug="test-team-ms", organization=self.org
+		cls.team = Team.objects.create(
+			name="Test Team", slug="test-team-ms", organization=cls.org
 		)
 
-		self.subject_a = Subject.objects.create(
+		cls.subject_a = Subject.objects.create(
 			subject_name="Subject A",
 			subject_slug="subject-a",
-			team=self.team,
+			team=cls.team,
 		)
-		self.subject_b = Subject.objects.create(
+		cls.subject_b = Subject.objects.create(
 			subject_name="Subject B",
 			subject_slug="subject-b",
-			team=self.team,
+			team=cls.team,
 		)
-		self.subject_c = Subject.objects.create(
+		cls.subject_c = Subject.objects.create(
 			subject_name="Subject C",
 			subject_slug="subject-c",
-			team=self.team,
+			team=cls.team,
 		)
 
 		# article_ab  → subjects A + B
-		self.article_ab = Articles.objects.create(
+		cls.article_ab = Articles.objects.create(
 			title="Article AB",
 			link="https://example.com/ab",
 		)
-		self.article_ab.subjects.add(self.subject_a, self.subject_b)
-		self.article_ab.teams.add(self.team)
+		cls.article_ab.subjects.add(cls.subject_a, cls.subject_b)
+		cls.article_ab.teams.add(cls.team)
 
 		# article_a   → subject A only
-		self.article_a = Articles.objects.create(
+		cls.article_a = Articles.objects.create(
 			title="Article A",
 			link="https://example.com/a",
 		)
-		self.article_a.subjects.add(self.subject_a)
-		self.article_a.teams.add(self.team)
+		cls.article_a.subjects.add(cls.subject_a)
+		cls.article_a.teams.add(cls.team)
 
 		# article_b   → subject B only
-		self.article_b = Articles.objects.create(
+		cls.article_b = Articles.objects.create(
 			title="Article B",
 			link="https://example.com/b",
 		)
-		self.article_b.subjects.add(self.subject_b)
-		self.article_b.teams.add(self.team)
+		cls.article_b.subjects.add(cls.subject_b)
+		cls.article_b.teams.add(cls.team)
 
 		# article_abc → subjects A + B + C
-		self.article_abc = Articles.objects.create(
+		cls.article_abc = Articles.objects.create(
 			title="Article ABC",
 			link="https://example.com/abc",
 		)
-		self.article_abc.subjects.add(self.subject_a, self.subject_b, self.subject_c)
-		self.article_abc.teams.add(self.team)
+		cls.article_abc.subjects.add(cls.subject_a, cls.subject_b, cls.subject_c)
+		cls.article_abc.teams.add(cls.team)
+
+	def setUp(self):
+		self.client = APIClient()
 
 	# ------------------------------------------------------------------
 	# AND semantics – must include exactly the articles in both A and B
@@ -220,64 +222,66 @@ class ArticleMultiSubjectFilterTests(TestCase):
 class ArticleSubjectAnyFilterTests(TestCase):
 	"""Tests for the ?subjects_any= OR-filter on /articles/"""
 
-	def setUp(self):
-		self.client = APIClient()
-
-		self.org = Organization.objects.create(name="Any Org", slug="any-filter-org")
-		OrganizationApiSettings.objects.filter(organization=self.org).update(
+	@classmethod
+	def setUpTestData(cls):
+		cls.org = Organization.objects.create(name="Any Org", slug="any-filter-org")
+		OrganizationApiSettings.objects.filter(organization=cls.org).update(
 			make_api_public=True
 		)
-		self.team = Team.objects.create(
-			name="Any Team", slug="any-team-ms", organization=self.org
+		cls.team = Team.objects.create(
+			name="Any Team", slug="any-team-ms", organization=cls.org
 		)
 
-		self.subject_a = Subject.objects.create(
+		cls.subject_a = Subject.objects.create(
 			subject_name="Any Subject A",
 			subject_slug="any-subject-a",
-			team=self.team,
+			team=cls.team,
 		)
-		self.subject_b = Subject.objects.create(
+		cls.subject_b = Subject.objects.create(
 			subject_name="Any Subject B",
 			subject_slug="any-subject-b",
-			team=self.team,
+			team=cls.team,
 		)
-		self.subject_c = Subject.objects.create(
+		cls.subject_c = Subject.objects.create(
 			subject_name="Any Subject C",
 			subject_slug="any-subject-c",
-			team=self.team,
+			team=cls.team,
 		)
 
 		# article_a  → subject A only
-		self.article_a = Articles.objects.create(
+		cls.article_a = Articles.objects.create(
 			title="Any Article A",
 			link="https://example.com/any-a",
 		)
-		self.article_a.subjects.add(self.subject_a)
-		self.article_a.teams.add(self.team)
+		cls.article_a.subjects.add(cls.subject_a)
+		cls.article_a.teams.add(cls.team)
 
 		# article_b  → subject B only
-		self.article_b = Articles.objects.create(
+		cls.article_b = Articles.objects.create(
 			title="Any Article B",
 			link="https://example.com/any-b",
 		)
-		self.article_b.subjects.add(self.subject_b)
-		self.article_b.teams.add(self.team)
+		cls.article_b.subjects.add(cls.subject_b)
+		cls.article_b.teams.add(cls.team)
 
 		# article_c  → subject C only
-		self.article_c = Articles.objects.create(
+		cls.article_c = Articles.objects.create(
 			title="Any Article C",
 			link="https://example.com/any-c",
 		)
-		self.article_c.subjects.add(self.subject_c)
-		self.article_c.teams.add(self.team)
+		cls.article_c.subjects.add(cls.subject_c)
+		cls.article_c.teams.add(cls.team)
 
 		# article_ab → subjects A + B
-		self.article_ab = Articles.objects.create(
+		cls.article_ab = Articles.objects.create(
 			title="Any Article AB",
 			link="https://example.com/any-ab",
 		)
-		self.article_ab.subjects.add(self.subject_a, self.subject_b)
-		self.article_ab.teams.add(self.team)
+		cls.article_ab.subjects.add(cls.subject_a, cls.subject_b)
+		cls.article_ab.teams.add(cls.team)
+
+	def setUp(self):
+		self.client = APIClient()
 
 	def test_or_match_returns_articles_in_either_subject(self):
 		"""?subjects_any=A,B returns all articles tagged with A or B."""
@@ -331,51 +335,53 @@ class ArticleSubjectAnyFilterTests(TestCase):
 class TrialMultiSubjectFilterTests(TestCase):
 	"""Tests for the ?subjects= AND-filter on /trials/"""
 
-	def setUp(self):
-		self.client = APIClient()
-
-		self.org = Organization.objects.create(name="Trial Org", slug="ms-trial-org")
-		OrganizationApiSettings.objects.filter(organization=self.org).update(
+	@classmethod
+	def setUpTestData(cls):
+		cls.org = Organization.objects.create(name="Trial Org", slug="ms-trial-org")
+		OrganizationApiSettings.objects.filter(organization=cls.org).update(
 			make_api_public=True
 		)
-		self.team = Team.objects.create(
-			name="Trial Team", slug="trial-team-slug", organization=self.org
+		cls.team = Team.objects.create(
+			name="Trial Team", slug="trial-team-slug", organization=cls.org
 		)
 
-		self.subject_a = Subject.objects.create(
+		cls.subject_a = Subject.objects.create(
 			subject_name="Trial Subject A",
 			subject_slug="trial-subject-a",
-			team=self.team,
+			team=cls.team,
 		)
-		self.subject_b = Subject.objects.create(
+		cls.subject_b = Subject.objects.create(
 			subject_name="Trial Subject B",
 			subject_slug="trial-subject-b",
-			team=self.team,
+			team=cls.team,
 		)
 
-		self.trial_ab = Trials.objects.create(
+		cls.trial_ab = Trials.objects.create(
 			title="Trial AB",
 			link="https://example.com/trial-ab",
 			published_date=timezone.now(),
 		)
-		self.trial_ab.subjects.add(self.subject_a, self.subject_b)
-		self.trial_ab.teams.add(self.team)
+		cls.trial_ab.subjects.add(cls.subject_a, cls.subject_b)
+		cls.trial_ab.teams.add(cls.team)
 
-		self.trial_a = Trials.objects.create(
+		cls.trial_a = Trials.objects.create(
 			title="Trial A",
 			link="https://example.com/trial-a",
 			published_date=timezone.now(),
 		)
-		self.trial_a.subjects.add(self.subject_a)
-		self.trial_a.teams.add(self.team)
+		cls.trial_a.subjects.add(cls.subject_a)
+		cls.trial_a.teams.add(cls.team)
 
-		self.trial_b = Trials.objects.create(
+		cls.trial_b = Trials.objects.create(
 			title="Trial B",
 			link="https://example.com/trial-b",
 			published_date=timezone.now(),
 		)
-		self.trial_b.subjects.add(self.subject_b)
-		self.trial_b.teams.add(self.team)
+		cls.trial_b.subjects.add(cls.subject_b)
+		cls.trial_b.teams.add(cls.team)
+
+	def setUp(self):
+		self.client = APIClient()
 
 	def test_and_match_returns_correct_trials(self):
 		"""?subjects=A,B returns only trial_ab."""
@@ -423,64 +429,66 @@ class TrialMultiSubjectFilterTests(TestCase):
 class TrialSubjectAnyFilterTests(TestCase):
 	"""Tests for the ?subjects_any= OR-filter on /trials/"""
 
-	def setUp(self):
-		self.client = APIClient()
-
-		self.org = Organization.objects.create(name="Trial Any Org", slug="any-trial-org")
-		OrganizationApiSettings.objects.filter(organization=self.org).update(
+	@classmethod
+	def setUpTestData(cls):
+		cls.org = Organization.objects.create(name="Trial Any Org", slug="any-trial-org")
+		OrganizationApiSettings.objects.filter(organization=cls.org).update(
 			make_api_public=True
 		)
-		self.team = Team.objects.create(
-			name="Trial Any Team", slug="trial-any-team", organization=self.org
+		cls.team = Team.objects.create(
+			name="Trial Any Team", slug="trial-any-team", organization=cls.org
 		)
 
-		self.subject_a = Subject.objects.create(
+		cls.subject_a = Subject.objects.create(
 			subject_name="Trial Any Subject A",
 			subject_slug="trial-any-subject-a",
-			team=self.team,
+			team=cls.team,
 		)
-		self.subject_b = Subject.objects.create(
+		cls.subject_b = Subject.objects.create(
 			subject_name="Trial Any Subject B",
 			subject_slug="trial-any-subject-b",
-			team=self.team,
+			team=cls.team,
 		)
-		self.subject_c = Subject.objects.create(
+		cls.subject_c = Subject.objects.create(
 			subject_name="Trial Any Subject C",
 			subject_slug="trial-any-subject-c",
-			team=self.team,
+			team=cls.team,
 		)
 
-		self.trial_a = Trials.objects.create(
+		cls.trial_a = Trials.objects.create(
 			title="Trial Any A",
 			link="https://example.com/trial-any-a",
 			published_date=timezone.now(),
 		)
-		self.trial_a.subjects.add(self.subject_a)
-		self.trial_a.teams.add(self.team)
+		cls.trial_a.subjects.add(cls.subject_a)
+		cls.trial_a.teams.add(cls.team)
 
-		self.trial_b = Trials.objects.create(
+		cls.trial_b = Trials.objects.create(
 			title="Trial Any B",
 			link="https://example.com/trial-any-b",
 			published_date=timezone.now(),
 		)
-		self.trial_b.subjects.add(self.subject_b)
-		self.trial_b.teams.add(self.team)
+		cls.trial_b.subjects.add(cls.subject_b)
+		cls.trial_b.teams.add(cls.team)
 
-		self.trial_c = Trials.objects.create(
+		cls.trial_c = Trials.objects.create(
 			title="Trial Any C",
 			link="https://example.com/trial-any-c",
 			published_date=timezone.now(),
 		)
-		self.trial_c.subjects.add(self.subject_c)
-		self.trial_c.teams.add(self.team)
+		cls.trial_c.subjects.add(cls.subject_c)
+		cls.trial_c.teams.add(cls.team)
 
-		self.trial_ab = Trials.objects.create(
+		cls.trial_ab = Trials.objects.create(
 			title="Trial Any AB",
 			link="https://example.com/trial-any-ab",
 			published_date=timezone.now(),
 		)
-		self.trial_ab.subjects.add(self.subject_a, self.subject_b)
-		self.trial_ab.teams.add(self.team)
+		cls.trial_ab.subjects.add(cls.subject_a, cls.subject_b)
+		cls.trial_ab.teams.add(cls.team)
+
+	def setUp(self):
+		self.client = APIClient()
 
 	def test_or_match_returns_trials_in_either_subject(self):
 		"""?subjects_any=A,B returns all trials tagged with A or B."""

@@ -17,7 +17,7 @@ import os
 from datetime import timedelta
 from unittest.mock import patch, Mock
 
-from django.test import TestCase, TransactionTestCase, override_settings
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from django.core.exceptions import MultipleObjectsReturned
 from organizations.models import Organization
@@ -304,30 +304,31 @@ class TestCrossRefIntegration(TestCase):
 			self.assertIsNone(crossref_check)
 
 
-class TestCrossRefDataUpdates(TransactionTestCase):
+class TestCrossRefDataUpdates(TestCase):
 	"""Test CrossRef data updates for existing articles."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		"""Set up test data."""
-		self.organization = Organization.objects.create(name="Test Organization")
-		self.team = Team.objects.create(
-			slug="test-team", organization=self.organization
+		cls.organization = Organization.objects.create(name="Test Organization")
+		cls.team = Team.objects.create(
+			slug="test-team", organization=cls.organization
 		)
-		self.subject = Subject.objects.create(
-			subject_name="Test Subject", subject_slug="test-subject", team=self.team
+		cls.subject = Subject.objects.create(
+			subject_name="Test Subject", subject_slug="test-subject", team=cls.team
 		)
-		self.source = Sources.objects.create(
+		cls.source = Sources.objects.create(
 			name="Test Source",
 			link="https://example.com/feed.xml",
 			method="rss",
 			source_for="science paper",
 			active=True,
-			team=self.team,
-			subject=self.subject,
+			team=cls.team,
+			subject=cls.subject,
 		)
-		self.site = Site.objects.create(domain="test.example.com", name="Test Site")
-		self.custom_setting = CustomSetting.objects.create(
-			site=self.site, title="Test Gregory", admin_email="admin@test.example.com"
+		cls.site = Site.objects.create(domain="test.example.com", name="Test Site")
+		cls.custom_setting = CustomSetting.objects.create(
+			site=cls.site, title="Test Gregory", admin_email="admin@test.example.com"
 		)
 
 	@patch.dict(os.environ, {"DOMAIN_NAME": "test.example.com"})
@@ -704,26 +705,27 @@ class TestCrossRefDataUpdates(TransactionTestCase):
 		self.assertEqual(new_article.access, "unknown")
 
 
-class TestArticleCreationAndUpdate(TransactionTestCase):
+class TestArticleCreationAndUpdate(TestCase):
 	"""Test article creation and update logic."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		"""Set up test data."""
-		self.organization = Organization.objects.create(name="Test Organization")
-		self.team = Team.objects.create(
-			slug="test-team", organization=self.organization
+		cls.organization = Organization.objects.create(name="Test Organization")
+		cls.team = Team.objects.create(
+			slug="test-team", organization=cls.organization
 		)
-		self.subject = Subject.objects.create(
-			subject_name="Test Subject", subject_slug="test-subject", team=self.team
+		cls.subject = Subject.objects.create(
+			subject_name="Test Subject", subject_slug="test-subject", team=cls.team
 		)
-		self.source = Sources.objects.create(
+		cls.source = Sources.objects.create(
 			name="Test Source",
 			link="https://example.com/feed.xml",
 			method="rss",
 			source_for="science paper",
 			active=True,
-			team=self.team,
-			subject=self.subject,
+			team=cls.team,
+			subject=cls.subject,
 		)
 
 	def test_create_new_article_with_doi(self):
@@ -837,19 +839,20 @@ class TestArticleCreationAndUpdate(TransactionTestCase):
 		self.assertEqual(existing_article, article1)
 
 
-class TestAuthorProcessing(TransactionTestCase):
+class TestAuthorProcessing(TestCase):
 	"""Test author creation, deduplication, and linking."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		"""Set up test data."""
-		self.organization = Organization.objects.create(name="Test Organization")
-		self.team = Team.objects.create(
-			slug="test-team", organization=self.organization
+		cls.organization = Organization.objects.create(name="Test Organization")
+		cls.team = Team.objects.create(
+			slug="test-team", organization=cls.organization
 		)
-		self.subject = Subject.objects.create(
-			subject_name="Test Subject", subject_slug="test-subject", team=self.team
+		cls.subject = Subject.objects.create(
+			subject_name="Test Subject", subject_slug="test-subject", team=cls.team
 		)
-		self.article = Articles.objects.create(
+		cls.article = Articles.objects.create(
 			title="Test Article for Authors", link="https://example.com/test-authors"
 		)
 
@@ -1012,45 +1015,46 @@ class TestErrorHandling(TestCase):
 		app: None for app in ["gregory", "organizations", "sitesettings", "sites"]
 	}
 )
-class TestFeedreaderArticlesIntegration(TransactionTestCase):
+class TestFeedreaderArticlesIntegration(TestCase):
 	"""Integration tests for the complete feedreader process."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		"""Set up test data."""
 		# Create organization and team
-		self.organization = Organization.objects.create(name="Test Organization")
-		self.team = Team.objects.create(
-			slug="test-team", organization=self.organization
+		cls.organization = Organization.objects.create(name="Test Organization")
+		cls.team = Team.objects.create(
+			slug="test-team", organization=cls.organization
 		)
-		self.subject = Subject.objects.create(
-			subject_name="Test Subject", subject_slug="test-subject", team=self.team
+		cls.subject = Subject.objects.create(
+			subject_name="Test Subject", subject_slug="test-subject", team=cls.team
 		)
 
 		# Create test sources
-		self.pubmed_source = Sources.objects.create(
+		cls.pubmed_source = Sources.objects.create(
 			name="Test PubMed Source",
 			link="https://pubmed.ncbi.nlm.nih.gov/rss/search/?term=test",
 			method="rss",
 			source_for="science paper",
 			active=True,
-			team=self.team,
-			subject=self.subject,
+			team=cls.team,
+			subject=cls.subject,
 		)
 
-		self.regular_source = Sources.objects.create(
+		cls.regular_source = Sources.objects.create(
 			name="Test Regular Source",
 			link="https://example.com/feed.xml",
 			method="rss",
 			source_for="science paper",
 			active=True,
-			team=self.team,
-			subject=self.subject,
+			team=cls.team,
+			subject=cls.subject,
 		)
 
 		# Create site settings
-		self.site = Site.objects.create(domain="test.example.com", name="Test Site")
-		self.custom_setting = CustomSetting.objects.create(
-			site=self.site, title="Test Gregory", admin_email="admin@test.example.com"
+		cls.site = Site.objects.create(domain="test.example.com", name="Test Site")
+		cls.custom_setting = CustomSetting.objects.create(
+			site=cls.site, title="Test Gregory", admin_email="admin@test.example.com"
 		)
 
 	@patch.dict(os.environ, {"DOMAIN_NAME": "test.example.com"})
@@ -1231,20 +1235,22 @@ class TestFeedreaderArticlesIntegration(TransactionTestCase):
 class TestNatureFeedProcessor(TestCase):
 	"""Test Nature.com feed processor functionality."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		"""Set up test data."""
-		self.organization = Organization.objects.create(name="Test Organization")
-		self.team = Team.objects.create(
-			slug="test-team", organization=self.organization
+		cls.organization = Organization.objects.create(name="Test Organization")
+		cls.team = Team.objects.create(
+			slug="test-team", organization=cls.organization
 		)
-		self.subject = Subject.objects.create(
-			subject_name="Test Subject", subject_slug="test-subject", team=self.team
+		cls.subject = Subject.objects.create(
+			subject_name="Test Subject", subject_slug="test-subject", team=cls.team
 		)
-		self.site = Site.objects.create(domain="test.example.com", name="Test Site")
-		self.custom_setting = CustomSetting.objects.create(
-			site=self.site, title="Test Gregory Site", admin_email="admin@test.com"
+		cls.site = Site.objects.create(domain="test.example.com", name="Test Site")
+		cls.custom_setting = CustomSetting.objects.create(
+			site=cls.site, title="Test Gregory Site", admin_email="admin@test.com"
 		)
 
+	def setUp(self):
 		from gregory.management.commands.feedreader_articles import (
 			NatureFeedProcessor,
 			Command,
@@ -1379,20 +1385,22 @@ class TestNatureFeedProcessor(TestCase):
 class TestSagePublicationsFeedProcessor(TestCase):
 	"""Test SAGE Publications feed processor functionality."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		"""Set up test data."""
-		self.organization = Organization.objects.create(name="Test Organization")
-		self.team = Team.objects.create(
-			slug="test-team", organization=self.organization
+		cls.organization = Organization.objects.create(name="Test Organization")
+		cls.team = Team.objects.create(
+			slug="test-team", organization=cls.organization
 		)
-		self.subject = Subject.objects.create(
-			subject_name="Test Subject", subject_slug="test-subject", team=self.team
+		cls.subject = Subject.objects.create(
+			subject_name="Test Subject", subject_slug="test-subject", team=cls.team
 		)
-		self.site = Site.objects.create(domain="test.example.com", name="Test Site")
-		self.custom_setting = CustomSetting.objects.create(
-			site=self.site, title="Test Gregory Site", admin_email="admin@test.com"
+		cls.site = Site.objects.create(domain="test.example.com", name="Test Site")
+		cls.custom_setting = CustomSetting.objects.create(
+			site=cls.site, title="Test Gregory Site", admin_email="admin@test.com"
 		)
 
+	def setUp(self):
 		from gregory.management.commands.feedreader_articles import (
 			SagePublicationsFeedProcessor,
 			Command,

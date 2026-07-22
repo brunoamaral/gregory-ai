@@ -39,14 +39,15 @@ class AnnouncementStrTest(TestCase):
 
 
 class AnnouncementRecipientUniqueTogetherTest(TestCase):
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		org = Organization.objects.create(name="Test Org")
 		team = Team.objects.create(organization=org, name="Team A", slug="team-a")
-		self.lst = Lists.objects.create(list_name="Weekly", team=team)
-		self.ann = Announcement.objects.create(
+		cls.lst = Lists.objects.create(list_name="Weekly", team=team)
+		cls.ann = Announcement.objects.create(
 			subject="Notice", body="<p>Hi</p>", organization=org
 		)
-		self.sub = Subscribers.objects.create(
+		cls.sub = Subscribers.objects.create(
 			first_name="Alice", last_name="Smith", email="alice@example.com"
 		)
 
@@ -82,24 +83,29 @@ class AnnouncementRecipientUniqueTogetherTest(TestCase):
 
 
 class RenderAnnouncementEmailContextTest(TestCase):
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		org = Organization.objects.create(name="Ctx Org")
-		self.team = Team.objects.create(
+		cls.team = Team.objects.create(
 			organization=org, name="Ctx Team", slug="ctx-team"
 		)
-		self.lst = Lists.objects.create(list_name="Digest", team=self.team)
-		self.ann = Announcement.objects.create(
+		cls.lst = Lists.objects.create(list_name="Digest", team=cls.team)
+		cls.ann = Announcement.objects.create(
 			subject="Test Email",
 			body="<p>Hello</p>",
 			header_title="My Title",
 			header_tagline="My Tagline",
 			organization=org,
 		)
-		self.site = Site.objects.get_or_create(
+		cls.site = Site.objects.get_or_create(
 			id=1, defaults={"domain": "example.com", "name": "Example"}
 		)[0]
-		self.site.domain = "example.com"
-		self.site.save()
+		cls.site.domain = "example.com"
+		cls.site.save()
+
+	def setUp(self):
+		# AnnouncementAdmin isn't deep-copyable (holds a reference to the
+		# admin site registry), so it can't live in setUpTestData.
 		self.admin = AnnouncementAdmin(Announcement, admin_site)
 
 	def _render_and_capture_context(self, **kwargs):
@@ -145,15 +151,18 @@ class RenderAnnouncementEmailContextTest(TestCase):
 
 
 class SendViewRedirectTest(TestCase):
-	def setUp(self):
-		self.superuser = User.objects.create_superuser(
+	@classmethod
+	def setUpTestData(cls):
+		cls.superuser = User.objects.create_superuser(
 			username="admin", password="password", email="admin@example.com"
 		)
-		self.org = Organization.objects.create(name="Send Org")
-		self.team = Team.objects.create(
-			organization=self.org, name="Send Team", slug="send-team"
+		cls.org = Organization.objects.create(name="Send Org")
+		cls.team = Team.objects.create(
+			organization=cls.org, name="Send Team", slug="send-team"
 		)
-		self.lst = Lists.objects.create(list_name="News", team=self.team)
+		cls.lst = Lists.objects.create(list_name="News", team=cls.team)
+
+	def setUp(self):
 		self.client = Client()
 		self.client.force_login(self.superuser)
 
@@ -196,35 +205,38 @@ class SendViewRedirectTest(TestCase):
 class SendViewSubjectNormalisationTest(TestCase):
 	"""send_view must strip any leading [TEST] prefix from the subject on live sends."""
 
-	def setUp(self):
-		self.superuser = User.objects.create_superuser(
+	@classmethod
+	def setUpTestData(cls):
+		cls.superuser = User.objects.create_superuser(
 			username="admin2", password="password", email="admin2@example.com"
 		)
-		self.org = Organization.objects.create(name="Norm Org")
-		self.team = Team.objects.create(
-			organization=self.org, name="Norm Team", slug="norm-team"
+		cls.org = Organization.objects.create(name="Norm Org")
+		cls.team = Team.objects.create(
+			organization=cls.org, name="Norm Team", slug="norm-team"
 		)
 		# Give the list a Site + CustomSetting so the validation gate passes.
-		self.norm_site = Site.objects.get_or_create(
+		cls.norm_site = Site.objects.get_or_create(
 			id=20, defaults={"domain": "norm.example.com", "name": "Norm"}
 		)[0]
-		self.norm_site.domain = "norm.example.com"
-		self.norm_site.save()
+		cls.norm_site.domain = "norm.example.com"
+		cls.norm_site.save()
 		CustomSetting.objects.get_or_create(
-			site=self.norm_site,
+			site=cls.norm_site,
 			defaults={"title": "Norm CS", "api_domain": "api.norm.example.com"},
 		)
-		self.lst = Lists.objects.create(
-			list_name="Norm List", team=self.team, site=self.norm_site
+		cls.lst = Lists.objects.create(
+			list_name="Norm List", team=cls.team, site=cls.norm_site
 		)
-		self.sub = Subscribers.objects.create(
+		cls.sub = Subscribers.objects.create(
 			first_name="Carol", last_name="Danvers", email="carol@example.com"
 		)
 		ListSubscription.objects.create(
-			subscriber=self.sub, list=self.lst, is_active=True
+			subscriber=cls.sub, list=cls.lst, is_active=True
 		)
-		self.sub.active = True
-		self.sub.save()
+		cls.sub.active = True
+		cls.sub.save()
+
+	def setUp(self):
 		self.client = Client()
 		self.client.force_login(self.superuser)
 
@@ -266,10 +278,15 @@ class SendViewSubjectNormalisationTest(TestCase):
 class RenderAnnouncementTaglineAndPreheaderTest(TestCase):
 	"""Tests for show_header_tagline and preheader_text rendering."""
 
-	def setUp(self):
+	@classmethod
+	def setUpTestData(cls):
 		org = Organization.objects.create(name="Tag Org")
 		team = Team.objects.create(organization=org, name="Tag Team", slug="tag-team")
-		self.lst = Lists.objects.create(list_name="Tag List", team=team)
+		cls.lst = Lists.objects.create(list_name="Tag List", team=team)
+
+	def setUp(self):
+		# AnnouncementAdmin isn't deep-copyable (holds a reference to the
+		# admin site registry), so it can't live in setUpTestData.
 		self.admin = AnnouncementAdmin(Announcement, admin_site)
 
 	def _render(self, **ann_kwargs):
@@ -336,33 +353,37 @@ class RenderAnnouncementTaglineAndPreheaderTest(TestCase):
 class _SendValidationBase(TestCase):
 	"""Shared setUp for validation-gate tests."""
 
-	def setUp(self):
-		self.superuser = User.objects.create_superuser(
+	@classmethod
+	def setUpTestData(cls):
+		cls.superuser = User.objects.create_superuser(
 			username="val_admin", password="password", email="val_admin@example.com"
 		)
-		self.org = Organization.objects.create(name="Val Org")
-		self.team = Team.objects.create(
-			organization=self.org, name="Val Team", slug="val-team"
+		cls.org = Organization.objects.create(name="Val Org")
+		cls.team = Team.objects.create(
+			organization=cls.org, name="Val Team", slug="val-team"
 		)
 
 		# Site used by tests
-		self.site = Site.objects.get_or_create(
+		cls.site = Site.objects.get_or_create(
 			id=10, defaults={"domain": "val.example.com", "name": "Val Example"}
 		)[0]
-		self.site.domain = "val.example.com"
-		self.site.save()
+		cls.site.domain = "val.example.com"
+		cls.site.save()
 
-		# Default valid CustomSetting — individual tests may mutate api_domain or delete it.
-		self.cs = CustomSetting.objects.create(
-			site=self.site,
+		# Default valid CustomSetting — individual tests mutate api_domain or
+		# delete it; the per-test transaction rollback restores this row
+		# before the next test's setUp runs.
+		cls.cs = CustomSetting.objects.create(
+			site=cls.site,
 			title="Val CS",
 			api_domain="api.val.example.com",
 		)
 
-		self.lst = Lists.objects.create(
-			list_name="Val List", team=self.team, site=self.site
+		cls.lst = Lists.objects.create(
+			list_name="Val List", team=cls.team, site=cls.site
 		)
 
+	def setUp(self):
 		self.client = Client()
 		self.client.force_login(self.superuser)
 
