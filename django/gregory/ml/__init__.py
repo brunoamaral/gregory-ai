@@ -25,7 +25,11 @@ def __getattr__(name):
 	import importlib
 
 	module = importlib.import_module(module_name)
-	return getattr(module, name)
+	value = getattr(module, name)
+	# Cache in the module namespace so later lookups hit it directly instead
+	# of re-running __getattr__ (plain attribute access checks globals() first).
+	globals()[name] = value
+	return value
 
 
 def __dir__():
