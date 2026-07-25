@@ -1,6 +1,6 @@
 # Author Merge Command
 
-This Django management command allows you to merge duplicate authors that have the same ORCID in the database.
+This Django management command allows you to merge duplicate authors that have the same ORCID in the database. The same merge mechanics are also available from the Django admin as a bulk action, for ad-hoc merges that aren't driven by a single known ORCID (see [Admin: Merge Selected Authors](#admin-merge-selected-authors) below).
 
 ## Purpose
 
@@ -175,3 +175,21 @@ The `--force` flag bypasses the confirmation prompt and immediately proceeds wit
 - Database changes are permanent
 
 **Always** run with `--dry-run` first to verify the merge plan before using `--force`.
+
+## Admin: Merge Selected Authors
+
+For one-off cleanups where you're browsing the Authors list rather than working from a known ORCID, the Django admin (`/admin/gregory/authors/`) exposes the same merge mechanics as a bulk action:
+
+1. Select two or more authors in the changelist checkboxes.
+2. Choose **Merge selected authors** from the actions dropdown and click **Go**.
+3. On the confirmation page, pick which author to keep (defaults to the one with the most articles, then the lowest ID) and click **Merge authors**.
+
+**ORCID compatibility check**: the action refuses to merge authors whose ORCIDs disagree. A blank ORCID is treated as compatible with any value, and comparison is normalized (`https://orcid.org/0000-0000-0000-1234`, `http://orcid.org/0000-0000-0000-1234`, and the bare `0000-0000-0000-1234` are all treated as the same ORCID) since stored values mix URL and bare-ID forms. If two selected authors have genuinely different non-blank ORCIDs, the action shows an error and makes no changes.
+
+Once confirmed, the merge:
+- transfers every article from the other authors onto the one kept,
+- fills any blank `given_name`, `family_name`, `country`, or `orcid_check` field on the kept author from the others,
+- stores the kept author's ORCID as the shared bare ID (no URL prefix),
+- permanently deletes the other authors.
+
+This shares its implementation (`gregory.services.author_merge.merge_authors`) with the `merge_authors` command above, so both paths behave identically — the admin action just adds ORCID-conflict validation and a `keep`-author picker UI on top for cases where you don't already know the ORCID to search for.

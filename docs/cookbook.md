@@ -104,6 +104,8 @@ docker exec gregory python manage.py merge_authors 0000-0000-0000-1234
 docker exec gregory python manage.py merge_authors 0000-0000-0000-1234 --keep-author 42
 ```
 
+Prefer the admin over the command when you don't already know the ORCID to search for: select two or more authors in `/admin/gregory/authors/`, then run **Merge selected authors** from the actions dropdown (ORCID must match or be blank across the selection).
+
 Reference: [merge-authors-command.md](merge-authors-command.md)
 
 ---

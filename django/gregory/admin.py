@@ -13,6 +13,7 @@ import csv
 import logging
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
 from .admin_filters import DateRangeFilter, SourceHealthFilter
+from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
 from django.db import models, transaction  # Add this import for models.Count
 from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
@@ -2120,6 +2121,7 @@ class AuthorsAdmin(admin.ModelAdmin):
 	list_filter = ["country", ArticleCountFilter]
 	inlines = [AuthorArticlesInline]
 	readonly_fields = ["biography", "recheck_orcid_button"]
+	actions = ["merge_selected_authors"]
 
 	def display_orcid(self, obj):
 		if obj.ORCID:
@@ -2159,6 +2161,71 @@ class AuthorsAdmin(admin.ModelAdmin):
 		if not obj:  # If we're adding a new object, don't display inlines
 			return []
 		return super().get_inline_instances(request, obj)
+
+	def merge_selected_authors(self, request, queryset):
+		"""Merge two or more selected authors, using the same mechanics as the
+		``merge_authors`` management command. ORCIDs must agree (blank ORCID is
+		treated as compatible with any value) since stored values mix bare IDs
+		and http/https URLs.
+		"""
+		if queryset.count() < 2:
+			self.message_user(
+				request, "Select at least two authors to merge.", level=messages.ERROR
+			)
+			return
+
+		try:
+			orcid_id = shared_orcid(queryset)
+		except ConflictingOrcidError as e:
+			self.message_user(request, str(e), level=messages.ERROR)
+			return
+
+		authors = list(
+			queryset.annotate(article_count=models.Count("articles")).order_by(
+				"-article_count", "author_id"
+			)
+		)
+
+		if "apply" in request.POST:
+			try:
+				author_to_keep = queryset.get(author_id=request.POST.get("keep_author"))
+			except (Authors.DoesNotExist, ValueError, TypeError):
+				self.message_user(
+					request, "Choose which author to keep.", level=messages.ERROR
+				)
+				return
+
+			others = [a for a in authors if a.author_id != author_to_keep.author_id]
+
+			try:
+				with transaction.atomic():
+					if orcid_id and author_to_keep.ORCID != orcid_id:
+						author_to_keep.ORCID = orcid_id
+					_, transferred = merge_authors(author_to_keep, others)
+			except Exception as e:
+				self.message_user(request, f"Merge failed: {e}", level=messages.ERROR)
+				return
+
+			self.message_user(
+				request,
+				f"Merged {len(others)} author(s) into {author_to_keep.full_name} "
+				f"(ID: {author_to_keep.author_id}); {transferred} article(s) transferred.",
+			)
+			return
+
+		return render(
+			request,
+			"admin/gregory/authors/merge_confirmation.html",
+			{
+				"title": "Merge selected authors",
+				"authors": authors,
+				"default_keep_id": authors[0].author_id,
+				"orcid_id": orcid_id,
+				"opts": self.model._meta,
+			},
+		)
+
+	merge_selected_authors.short_description = "Merge selected authors"
 
 	def get_urls(self):
 		custom = [
