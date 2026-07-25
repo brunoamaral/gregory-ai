@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from gregory.models import Authors
+from gregory.services.author_merge import merge_authors as merge_authors_service
 from django.db.models import Count
 import re
 
@@ -226,63 +227,18 @@ class Command(BaseCommand):
 		# Perform the merge within a transaction
 		try:
 			with transaction.atomic():
-				total_articles_transferred = 0
-
-				for author in authors_to_merge:
-					# Get all articles associated with this author
-					articles = author.articles_set.all()
-
-					if articles.exists():
-						self.stdout.write(
-							f"\nTransferring {articles.count()} articles from "
-							f"{author.full_name} (ID: {author.author_id}) to "
-							f"{author_to_keep.full_name} (ID: {author_to_keep.author_id})..."
-						)
-
-						# Transfer articles to the author we're keeping
-						for article in articles:
-							# Remove the article from the old author
-							article.authors.remove(author)
-							# Add the article to the author we're keeping (if not already associated)
-							if not article.authors.filter(
-								author_id=author_to_keep.author_id
-							).exists():
-								article.authors.add(author_to_keep)
-								total_articles_transferred += 1
-							else:
-								self.stdout.write(
-									f'  Article "{article.title[:50]}..." already associated with '
-									f"{author_to_keep.full_name}"
-								)
-
-					# Update the author_to_keep with the best available information
-					if not author_to_keep.given_name and author.given_name:
-						author_to_keep.given_name = author.given_name
-					if not author_to_keep.family_name and author.family_name:
-						author_to_keep.family_name = author.family_name
-					if not author_to_keep.country and author.country:
-						author_to_keep.country = author.country
-					if not author_to_keep.orcid_check and author.orcid_check:
-						author_to_keep.orcid_check = author.orcid_check
-
-				# Delete the duplicate authors before saving the kept author:
-				# a duplicate may hold the bare ORCID we are about to store, and
-				# ORCID is unique, so saving first would raise an IntegrityError
-				deleted_count = 0
-				for author in authors_to_merge:
-					self.stdout.write(
-						f"Deleting author: {author.full_name} (ID: {author.author_id})"
-					)
-					author.delete()
-					deleted_count += 1
+				deleted_count = authors_to_merge.count()
 
 				# Store the ORCID as the bare ID (without https://orcid.org/)
 				if author_to_keep.ORCID != orcid_id:
 					self.stdout.write(
-						f"\n🔄 Updating ORCID from {author_to_keep.ORCID} to {orcid_id}"
+						f"\n\U0001F504 Updating ORCID from {author_to_keep.ORCID} to {orcid_id}"
 					)
 					author_to_keep.ORCID = orcid_id
-				author_to_keep.save()
+
+				_, total_articles_transferred = merge_authors_service(
+					author_to_keep, list(authors_to_merge), stdout=self.stdout
+				)
 
 				self.stdout.write("\n" + "=" * 80)
 				self.stdout.write(

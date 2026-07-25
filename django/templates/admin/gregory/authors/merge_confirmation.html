@@ -1,0 +1,60 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+{% if orcid_id %}
+<p>
+	All selected authors share ORCID <strong>{{ orcid_id }}</strong> (or have none set).
+	The author you keep will have their ORCID stored as this bare ID.
+</p>
+{% else %}
+<p>None of the selected authors have an ORCID set.</p>
+{% endif %}
+
+<form method="post">
+	{% csrf_token %}
+	<input type="hidden" name="action" value="merge_selected_authors">
+	{% for author in authors %}
+	<input type="hidden" name="_selected_action" value="{{ author.author_id }}">
+	{% endfor %}
+
+	<table>
+		<thead>
+			<tr>
+				<th>{% translate "Keep" %}</th>
+				<th>{% translate "Name" %}</th>
+				<th>{% translate "ORCID" %}</th>
+				<th>{% translate "Articles" %}</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for author in authors %}
+			<tr>
+				<td>
+					<input type="radio" name="keep_author" value="{{ author.author_id }}"
+						id="keep_author_{{ author.author_id }}"
+						aria-label="Keep {{ author.full_name }} (ID: {{ author.author_id }})"
+						{% if author.author_id == default_keep_id %}checked{% endif %}>
+				</td>
+				<td>{{ author.full_name }} (ID: {{ author.author_id }})</td>
+				<td>{{ author.ORCID|default:"-" }}</td>
+				<td>{{ author.article_count }}</td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+
+	<p>
+		Every article, and any blank given name, family name, country, or ORCID-check-date
+		field, from the other authors will be transferred to the one you keep. The other
+		authors will be permanently deleted. <strong>This cannot be undone.</strong>
+	</p>
+
+	<div class="submit-row">
+		<input type="submit" name="apply" value="Merge authors" class="default">
+		<a href="{% url 'admin:gregory_authors_changelist' %}" class="button cancel-link">Cancel</a>
+	</div>
+</form>
+{% endblock %}
