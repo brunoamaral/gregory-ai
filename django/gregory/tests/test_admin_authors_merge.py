@@ -7,24 +7,31 @@ Run with:
 """
 
 from django.contrib.admin.sites import AdminSite
+from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
+from django.core.exceptions import PermissionDenied
 from django.test import TestCase, RequestFactory
 
 from gregory.admin import AuthorsAdmin
 from gregory.models import Articles, Authors
+
+User = get_user_model()
 
 
 class AuthorsMergeActionTests(TestCase):
 	def setUp(self):
 		self.factory = RequestFactory()
 		self.admin = AuthorsAdmin(Authors, AdminSite())
+		self.superuser = User.objects.create_superuser(
+			username="admin", email="admin@example.com", password="pw"
+		)
 
-	def _request(self, post_data=None):
+	def _request(self, post_data=None, user=None):
 		if post_data is not None:
 			request = self.factory.post("/admin/gregory/authors/", post_data)
 		else:
 			request = self.factory.get("/admin/gregory/authors/")
-		request.user = None
+		request.user = user or self.superuser
 		request.session = {}
 		request._messages = FallbackStorage(request)
 		return request
@@ -40,6 +47,22 @@ class AuthorsMergeActionTests(TestCase):
 		response = self.admin.merge_selected_authors(request, queryset)
 
 		self.assertEqual(response.status_code, 200)
+		self.assertTrue(Authors.objects.filter(pk=a.pk).exists())
+		self.assertTrue(Authors.objects.filter(pk=b.pk).exists())
+
+	def test_merge_denied_without_delete_permission(self):
+		a = Authors.objects.create(given_name="Ana", family_name="Silva", ORCID="0000-0002-1825-0097")
+		b = Authors.objects.create(
+			given_name="A.", family_name="Silva", ORCID="https://orcid.org/0000-0002-1825-0097"
+		)
+		staff = User.objects.create_user(username="staff-no-perm", password="pw", is_staff=True)
+
+		request = self._request(post_data={"apply": "1", "keep_author": str(a.pk)}, user=staff)
+		queryset = Authors.objects.filter(pk__in=[a.pk, b.pk])
+
+		with self.assertRaises(PermissionDenied):
+			self.admin.merge_selected_authors(request, queryset)
+
 		self.assertTrue(Authors.objects.filter(pk=a.pk).exists())
 		self.assertTrue(Authors.objects.filter(pk=b.pk).exists())
 

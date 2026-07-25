@@ -55,6 +55,8 @@ from .widgets import MLPredictionsWidget
 from .fields import MLPredictionsField
 from .utils.trial_field_normalizers import NORMALIZED_TRIAL_FIELDS, raw_field_names
 
+logger = logging.getLogger(__name__)
+
 
 def get_user_organizations(user):
 	"""Get the list of organization IDs for a user."""
@@ -2168,6 +2170,9 @@ class AuthorsAdmin(admin.ModelAdmin):
 		treated as compatible with any value) since stored values mix bare IDs
 		and http/https URLs.
 		"""
+		if not self.has_delete_permission(request):
+			raise PermissionDenied
+
 		if queryset.count() < 2:
 			self.message_user(
 				request, "Select at least two authors to merge.", level=messages.ERROR
@@ -2202,8 +2207,18 @@ class AuthorsAdmin(admin.ModelAdmin):
 					if orcid_id and author_to_keep.ORCID != orcid_id:
 						author_to_keep.ORCID = orcid_id
 					_, transferred = merge_authors(author_to_keep, others)
-			except Exception as e:
-				self.message_user(request, f"Merge failed: {e}", level=messages.ERROR)
+			except Exception:
+				logger.exception(
+					"Author merge failed (keep=%s, others=%s)",
+					author_to_keep.author_id,
+					[a.author_id for a in others],
+				)
+				self.message_user(
+					request,
+					"Merge failed due to an internal error. Check the server logs "
+					"for details.",
+					level=messages.ERROR,
+				)
 				return
 
 			self.message_user(

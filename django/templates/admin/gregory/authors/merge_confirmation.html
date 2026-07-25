@@ -34,6 +34,8 @@
 			<tr>
 				<td>
 					<input type="radio" name="keep_author" value="{{ author.author_id }}"
+						id="keep_author_{{ author.author_id }}"
+						aria-label="Keep {{ author.full_name }} (ID: {{ author.author_id }})"
 						{% if author.author_id == default_keep_id %}checked{% endif %}>
 				</td>
 				<td>{{ author.full_name }} (ID: {{ author.author_id }})</td>
