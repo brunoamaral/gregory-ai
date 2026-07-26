@@ -166,6 +166,30 @@ class ArticleSearchPostFilterTests(TestCase):
 		ids = {r["article_id"] for r in response.data["results"]}
 		self.assertEqual(ids, {self.a_2024.article_id})
 
+	def test_mismatched_query_string_team_id_has_no_effect_on_post(self):
+		"""team_id/subject_id are ArticleFilter fields too. Without
+		identity_params forcing them from the body, a disagreeing query-string
+		team_id would leak into the filterset and silently intersect against
+		the body's team_id, emptying the results — not just being ignored."""
+		other_team = Team.objects.create(
+			name="Other POST Filter Team",
+			slug="other-post-filter-team",
+			organization=self.org,
+		)
+		url = reverse("article-search")
+		baseline = self.client.post(url, self.base_params, format="json")
+		response = self.client.post(
+			f"{url}?team_id={other_team.id}&subject_id={self.subject.id}",
+			self.base_params,
+			format="json",
+		)
+		self.assertEqual(baseline.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		baseline_ids = {r["article_id"] for r in baseline.data["results"]}
+		ids = {r["article_id"] for r in response.data["results"]}
+		self.assertEqual(ids, baseline_ids)
+		self.assertGreater(len(ids), 0)
+
 	def test_title_search_still_works_on_post(self):
 		"""Regression: title/summary/search still work now that the manual
 		get_queryset handling was removed in favor of ArticleFilter."""
@@ -295,6 +319,30 @@ class TrialSearchPostFilterTests(TestCase):
 		post_ids = {r["trial_id"] for r in post_resp.data["results"]}
 		self.assertEqual(post_ids, {self.t_2024.trial_id})
 
+	def test_mismatched_query_string_subject_id_has_no_effect_on_post(self):
+		"""team_id/subject_id are TrialFilter fields too. Without
+		identity_params forcing them from the body, a disagreeing query-string
+		subject_id would leak into the filterset and silently intersect against
+		the body's subject_id, emptying the results — not just being ignored."""
+		other_subject = Subject.objects.create(
+			subject_name="Other Trial POST Filter Subject",
+			subject_slug="other-trial-post-filter-subject",
+			team=self.team,
+		)
+		url = reverse("trial-search")
+		baseline = self.client.post(url, self.base_params, format="json")
+		response = self.client.post(
+			f"{url}?team_id={self.team.id}&subject_id={other_subject.id}",
+			self.base_params,
+			format="json",
+		)
+		self.assertEqual(baseline.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		baseline_ids = {r["trial_id"] for r in baseline.data["results"]}
+		ids = {r["trial_id"] for r in response.data["results"]}
+		self.assertEqual(ids, baseline_ids)
+		self.assertGreater(len(ids), 0)
+
 	def test_status_search_still_works_on_post(self):
 		"""Regression: status is a legacy CharFilter alias for recruitment_status;
 		still works now the manual get_queryset handling was removed."""
@@ -392,6 +440,21 @@ class AuthorSearchPostFilterTests(TestCase):
 		"""Regression: full_name is handled directly in get_queryset (unchanged
 		by this fix); confirm it still narrows results on POST."""
 		response = self._post({"full_name": "ines"})
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = {r["author_id"] for r in response.data["results"]}
+		self.assertEqual(ids, {self.author_pt.author_id})
+
+	def test_mismatched_query_string_full_name_has_no_effect_on_post(self):
+		"""full_name is an AuthorFilter field too. Without identity_params
+		forcing it from the body, a disagreeing query-string full_name would
+		leak into the filterset and silently intersect against the body's
+		full_name, emptying the results — not just being ignored."""
+		url = reverse("author-search")
+		response = self.client.post(
+			f"{url}?full_name=nonexistent-name-xyz",
+			{**self.base_params, "full_name": "ines"},
+			format="json",
+		)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		ids = {r["author_id"] for r in response.data["results"]}
 		self.assertEqual(ids, {self.author_pt.author_id})

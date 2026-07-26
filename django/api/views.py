@@ -251,10 +251,19 @@ class BodyParamsAsQueryParamsMixin:
 
 	An explicit query-string value wins over the same key in the body, so the
 	documented `POST /search/?filters...` workaround keeps working unchanged.
-	This precedence only applies to keys the filter backends actually read from
-	query_params — it does NOT extend to team_id/subject_id (and full_name on
-	AuthorSearchView), which the views read directly from request.data on POST
-	for validation, before this mixin's merge is even consulted.
+	This precedence applies to filter/ordering keys only — NOT to pagination
+	(`page`/`page_size` are read straight from the body by FlexiblePagination
+	when present, ignoring the query string, so those are body-wins on POST).
+
+	`identity_params` (set per view below) names required-parameter keys —
+	team_id/subject_id, plus full_name on AuthorSearchView — that the view
+	reads directly from request.data on POST for validation. Those same names
+	are also ArticleFilter/TrialFilter/AuthorFilter fields, so without this
+	carve-out a mismatched query-string value would leak into the filterset
+	(via the normal query-string-wins merge) while validation used the body's
+	value, silently intersecting the two and emptying the response. Body wins
+	unconditionally for these keys instead, so the filterset always agrees with
+	what the view validated.
 
 	List-valued body params (`{"subjects": [1, 3]}`, or repeated keys in a
 	form-encoded body) are joined into a single comma-separated string rather
@@ -266,6 +275,8 @@ class BodyParamsAsQueryParamsMixin:
 	reaches the filterset intact.
 	"""
 
+	identity_params = frozenset()
+
 	def initial(self, request, *args, **kwargs):
 		super().initial(request, *args, **kwargs)
 		if request.method != "POST":
@@ -276,8 +287,8 @@ class BodyParamsAsQueryParamsMixin:
 		merged = request.query_params.copy()  # a mutable QueryDict
 		items = data.lists() if hasattr(data, "lists") else data.items()
 		for key, value in items:
-			if key in merged:
-				continue  # query string wins
+			if key in merged and key not in self.identity_params:
+				continue  # query string wins, except for identity_params
 			if isinstance(value, (list, tuple)):
 				merged[key] = ",".join(str(v) for v in value if v is not None)
 			elif value is not None:
@@ -3010,8 +3021,11 @@ class ArticleSearchView(
 	merges the body into query_params before filtering, so both paths run
 	through the same DjangoFilterBackend/OrderingFilter code; if the same filter
 	key is set in both places, the query string wins. team_id and subject_id are
-	the exception: get_queryset() always reads them straight from request.data
-	on POST for validation, regardless of what's on the query string.
+	the exception — they're forced from the body on POST (identity_params),
+	both for get_queryset()'s own validation and for ArticleFilter's identically
+	named fields, so a mismatched query-string team_id/subject_id has no effect
+	at all rather than silently narrowing the filterset against a different
+	team/subject than the one validated.
 
 	Parameters (can be sent as query params for GET or in request body for POST):
 	- title: Search only in title field
@@ -3057,6 +3071,10 @@ class ArticleSearchView(
 	ordering = ["-discovery_date"]  # Default ordering by newest first
 	pagination_class = FlexiblePagination
 	http_method_names = ["get", "post"]  # Support both GET and POST
+	# team_id/subject_id are also ArticleFilter fields; force them from the body
+	# on POST so a mismatched query-string value can't leak into the filterset.
+	# See BodyParamsAsQueryParamsMixin.
+	identity_params = frozenset({"team_id", "subject_id"})
 
 	def get_queryset(self):
 		# This method handles both GET and POST requests
@@ -3227,8 +3245,11 @@ class TrialSearchView(
 	merges the body into query_params before filtering, so both paths run
 	through the same DjangoFilterBackend/OrderingFilter code; if the same filter
 	key is set in both places, the query string wins. team_id and subject_id are
-	the exception: get_queryset() always reads them straight from request.data
-	on POST for validation, regardless of what's on the query string.
+	the exception — they're forced from the body on POST (identity_params),
+	both for get_queryset()'s own validation and for TrialFilter's identically
+	named fields, so a mismatched query-string team_id/subject_id has no effect
+	at all rather than silently narrowing the filterset against a different
+	team/subject than the one validated.
 
 	Parameters (can be sent as query params for GET or in request body for POST):
 	- title: Search only in title field
@@ -3281,6 +3302,10 @@ class TrialSearchView(
 	ordering = ["-discovery_date"]  # Default ordering by newest first
 	pagination_class = FlexiblePagination
 	http_method_names = ["get", "post"]  # Support both GET and POST
+	# team_id/subject_id are also TrialFilter fields; force them from the body
+	# on POST so a mismatched query-string value can't leak into the filterset.
+	# See BodyParamsAsQueryParamsMixin.
+	identity_params = frozenset({"team_id", "subject_id"})
 
 	def get_queryset(self):
 		# This method handles both GET and POST requests
@@ -3435,6 +3460,13 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 	search_fields = ["full_name"]
 	pagination_class = FlexiblePagination
 	http_method_names = ["get", "post"]
+	# team_id/subject_id/full_name are also AuthorFilter fields (team_id/
+	# subject_id are read directly in get_queryset for scoping, not via the
+	# filterset — but the filterset has no team_id/subject_id field so those
+	# two are moot here; full_name is the one that matters). Force full_name
+	# from the body on POST so a mismatched query-string value can't leak into
+	# the filterset. See BodyParamsAsQueryParamsMixin.
+	identity_params = frozenset({"team_id", "subject_id", "full_name"})
 
 	def _check_team_visibility(self, team_id):
 		"""Raise Http404 if team_id is not in the caller's visible orgs."""

@@ -237,14 +237,26 @@ implemented and the one precedence rule to know.
 `/articles/search/`, `/trials/search/` and `/authors/search/` accept the same
 fields on GET and POST. On POST, `BodyParamsAsQueryParamsMixin` merges the JSON
 body into the request's query params before django-filter and `OrderingFilter`
-run, so both verbs share one filtering code path. The one precedence rule for
-those filter/ordering/pagination keys: **if a key is set in both places, the
+run, so both verbs share one filtering code path. The one precedence rule, for
+filter and ordering keys specifically: **if a key is set in both places, the
 query-string value wins.**
 
 `team_id` and `subject_id` (and `full_name` on `/authors/search/`) are the
-exception — the views read those directly from the JSON body on POST for
-required-parameter validation, before the merge is consulted, so a query-string
-value alongside them has no effect on POST.
+exception — the views need those for required-parameter validation before any
+filtering happens, so they're always taken from the JSON body on POST
+(`identity_params` in the mixin), overriding the usual query-string-wins rule.
+This isn't just about validation: `team_id`/`subject_id` are also
+`ArticleFilter`/`TrialFilter` fields (and `full_name` an `AuthorFilter` field),
+so without this carve-out a mismatched query-string value would leak into the
+filterset while validation used the body's value — silently intersecting the
+two and emptying the response, rather than the query string simply having no
+effect as intended.
+
+**Pagination doesn't follow the query-string-wins rule at all.** `page` and
+`page_size` go through `FlexiblePagination`, which reads them straight from the
+JSON body on POST when present — body wins there, the opposite of the
+filter/ordering rule. `all_results` behaves like the filter keys (query string
+wins) since it happens to fall back through the same merged query params.
 
 A list-valued body field (e.g. `{"subjects": [1, 3]}`) is joined into a
 comma-separated string before merging, matching the query-string form
