@@ -251,6 +251,10 @@ class BodyParamsAsQueryParamsMixin:
 
 	An explicit query-string value wins over the same key in the body, so the
 	documented `POST /search/?filters...` workaround keeps working unchanged.
+	This precedence only applies to keys the filter backends actually read from
+	query_params — it does NOT extend to team_id/subject_id (and full_name on
+	AuthorSearchView), which the views read directly from request.data on POST
+	for validation, before this mixin's merge is even consulted.
 
 	List-valued body params (`{"subjects": [1, 3]}`, or repeated keys in a
 	form-encoded body) are joined into a single comma-separated string rather
@@ -3004,8 +3008,10 @@ class ArticleSearchView(
 	ArticleFilter works identically on both verbs — for GET, put them on the
 	query string; for POST, put them in the JSON body. BodyParamsAsQueryParamsMixin
 	merges the body into query_params before filtering, so both paths run
-	through the same DjangoFilterBackend/OrderingFilter code; if the same key is
-	set in both places, the query string wins.
+	through the same DjangoFilterBackend/OrderingFilter code; if the same filter
+	key is set in both places, the query string wins. team_id and subject_id are
+	the exception: get_queryset() always reads them straight from request.data
+	on POST for validation, regardless of what's on the query string.
 
 	Parameters (can be sent as query params for GET or in request body for POST):
 	- title: Search only in title field
@@ -3219,8 +3225,10 @@ class TrialSearchView(
 	TrialFilter works identically on both verbs — for GET, put them on the query
 	string; for POST, put them in the JSON body. BodyParamsAsQueryParamsMixin
 	merges the body into query_params before filtering, so both paths run
-	through the same DjangoFilterBackend/OrderingFilter code; if the same key is
-	set in both places, the query string wins.
+	through the same DjangoFilterBackend/OrderingFilter code; if the same filter
+	key is set in both places, the query string wins. team_id and subject_id are
+	the exception: get_queryset() always reads them straight from request.data
+	on POST for validation, regardless of what's on the query string.
 
 	Parameters (can be sent as query params for GET or in request body for POST):
 	- title: Search only in title field

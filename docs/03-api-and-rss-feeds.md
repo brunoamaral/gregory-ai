@@ -237,8 +237,14 @@ implemented and the one precedence rule to know.
 `/articles/search/`, `/trials/search/` and `/authors/search/` accept the same
 fields on GET and POST. On POST, `BodyParamsAsQueryParamsMixin` merges the JSON
 body into the request's query params before django-filter and `OrderingFilter`
-run, so both verbs share one filtering code path. The one precedence rule: **if
-a key is set in both places, the query-string value wins.**
+run, so both verbs share one filtering code path. The one precedence rule for
+those filter/ordering/pagination keys: **if a key is set in both places, the
+query-string value wins.**
+
+`team_id` and `subject_id` (and `full_name` on `/authors/search/`) are the
+exception — the views read those directly from the JSON body on POST for
+required-parameter validation, before the merge is consulted, so a query-string
+value alongside them has no effect on POST.
 
 A list-valued body field (e.g. `{"subjects": [1, 3]}`) is joined into a
 comma-separated string before merging, matching the query-string form
