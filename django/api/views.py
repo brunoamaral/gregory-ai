@@ -109,7 +109,6 @@ from api.filters import (
 	SubjectFilter,
 	SponsorFilter,
 )
-from api.utils.search import build_search_q
 from rest_framework.response import Response
 from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
@@ -3080,20 +3079,6 @@ class ArticleSearchView(
 			)
 			queryset = Articles.objects.filter(Exists(match_subq))
 
-			# Apply additional filters
-			title = params.get("title")
-			summary = params.get("summary")
-			search = params.get("search")
-
-			if title:
-				queryset = queryset.filter(utitle__contains=title.upper())
-			if summary:
-				queryset = queryset.filter(usummary__contains=summary.upper())
-			if search:
-				q = build_search_q(search)
-				if q is not None:
-					queryset = queryset.filter(q)
-
 			# Prefetch related objects to avoid N+1 queries
 			queryset = queryset.prefetch_related(
 				Prefetch(
@@ -3137,25 +3122,6 @@ class ArticleSearchView(
 				"ArticleSearchView: ignoring malformed search params (%s)", e
 			)
 			return Articles.objects.none()
-
-	def filter_queryset(self, queryset):
-		"""
-		Filter the queryset and handle ordering from both GET and POST requests.
-		"""
-		# First apply standard filters
-		queryset = super().filter_queryset(queryset)
-
-		# Handle ordering for POST requests manually (OrderingFilter only checks query_params by default)
-		if self.request.method == "POST":
-			ordering = self.request.data.get("ordering")
-			if ordering:
-				# Validate that ordering field is in allowed fields
-				if ordering.lstrip("-") in [
-					f.replace("-", "") for f in self.ordering_fields
-				]:
-					queryset = queryset.order_by(ordering)
-
-		return queryset
 
 	def post(self, request, *args, **kwargs):
 		# For POST requests, validate required parameters
@@ -3336,30 +3302,6 @@ class TrialSearchView(
 		match_subq = Trials.objects.filter(pk=OuterRef("pk"), teams=team, subjects=subject)
 		queryset = Trials.objects.filter(Exists(match_subq))
 
-		# Apply additional filters
-		title = params.get("title")
-		summary = params.get("summary")
-		search = params.get("search")
-		status = params.get("status")
-
-		try:
-			if title:
-				queryset = queryset.filter(utitle__contains=title.upper())
-			if summary:
-				queryset = queryset.filter(usummary__contains=summary.upper())
-			if search:
-				q = build_search_q(search)
-				if q is not None:
-					queryset = queryset.filter(q)
-		except (AttributeError, TypeError, ValueError) as e:
-			logging.getLogger(__name__).warning(
-				"TrialSearchView: ignoring malformed search params (%s)", e
-			)
-			return Trials.objects.none()
-
-		if status:
-			queryset = queryset.filter(recruitment_status=status)
-
 		# Prefetch related objects to avoid N+1 queries
 		queryset = queryset.prefetch_related(
 			"sources", "team_categories", "article_references__article", "trial_countries"
@@ -3377,25 +3319,6 @@ class TrialSearchView(
 					to_attr="_prefetched_org_contents",
 				)
 			)
-
-		return queryset
-
-	def filter_queryset(self, queryset):
-		"""
-		Filter the queryset and handle ordering from both GET and POST requests.
-		"""
-		# First apply standard filters
-		queryset = super().filter_queryset(queryset)
-
-		# Handle ordering for POST requests manually (OrderingFilter only checks query_params by default)
-		if self.request.method == "POST":
-			ordering = self.request.data.get("ordering")
-			if ordering:
-				# Validate that ordering field is in allowed fields
-				if ordering.lstrip("-") in [
-					f.replace("-", "") for f in self.ordering_fields
-				]:
-					queryset = queryset.order_by(ordering)
 
 		return queryset
 
