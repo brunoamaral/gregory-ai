@@ -242,6 +242,38 @@ class BulkExportThrottleMixin:
 		return super().get_throttles()
 
 
+class BodyParamsAsQueryParamsMixin:
+	"""Make POST-body params visible to DRF's filter backends.
+
+	DjangoFilterBackend and OrderingFilter read request.query_params only, so on
+	a POST every filterset param used to be dropped silently and the response
+	came back unfiltered — a wrong 200, not an error. Merging the body into
+	query_params gives GET and POST a single code path.
+
+	An explicit query-string value wins over the same key in the body, so the
+	documented `POST /search/?filters...` workaround keeps working unchanged.
+	"""
+
+	def initial(self, request, *args, **kwargs):
+		super().initial(request, *args, **kwargs)
+		if request.method != "POST":
+			return
+		data = request.data
+		if not hasattr(data, "items"):  # not a JSON object / form payload
+			return
+		merged = request.query_params.copy()  # a mutable QueryDict
+		items = data.lists() if hasattr(data, "lists") else data.items()
+		for key, value in items:
+			if key in merged:
+				continue  # query string wins
+			if isinstance(value, (list, tuple)):
+				merged.setlist(key, [str(v) for v in value if v is not None])
+			elif value is not None:
+				merged[key] = str(value)
+		merged._mutable = False
+		request._request.GET = merged
+
+
 def _latest_ml_predictions_queryset():
 	"""``MLPredictions`` queryset restricted to the latest row per
 	(article, subject, algorithm), for use as a serializer prefetch.
@@ -2953,7 +2985,9 @@ class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 		)
 
 
-class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListAPIView):
+class ArticleSearchView(
+	BodyParamsAsQueryParamsMixin, CSVStreamingMixin, BulkExportThrottleMixin, generics.ListAPIView
+):
 	"""
 	Advanced search for articles by title and abstract (summary).
 
@@ -2992,9 +3026,11 @@ class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.Lis
 	permission_classes = [
 		permissions.AllowAny
 	]  # Allow access to anyone since we require team_id and subject_id
-	# `search` is parsed by build_search_q in get_queryset (and by ArticleFilter
-	# for GET query params). DRF's SearchFilter is omitted so it can't AND a
-	# naive token match on top and break boolean queries. See ArticleViewSet.
+	# `search` is parsed by build_search_q inside ArticleFilter.filter_search,
+	# for both GET query params and POST body (merged in by
+	# BodyParamsAsQueryParamsMixin). DRF's SearchFilter is omitted so it can't
+	# AND a naive token match on top and break boolean queries. See
+	# ArticleViewSet.
 	filter_backends = [
 		django_filters.DjangoFilterBackend,
 		filters.OrderingFilter,
@@ -3194,7 +3230,9 @@ class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.Lis
 		return self.list(request, *args, **kwargs)
 
 
-class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListAPIView):
+class TrialSearchView(
+	BodyParamsAsQueryParamsMixin, CSVStreamingMixin, BulkExportThrottleMixin, generics.ListAPIView
+):
 	"""
 	Advanced search for clinical trials by title, summary, and recruitment status.
 
@@ -3234,9 +3272,11 @@ class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListA
 	permission_classes = [
 		permissions.AllowAny
 	]  # Allow access to anyone since we require team_id and subject_id
-	# `search` is parsed by build_search_q in get_queryset (and by TrialFilter
-	# for GET query params). DRF's SearchFilter is omitted so it can't AND a
-	# naive token match on top and break boolean queries. See ArticleViewSet.
+	# `search` is parsed by build_search_q inside TrialFilter.filter_search, for
+	# both GET query params and POST body (merged in by
+	# BodyParamsAsQueryParamsMixin). DRF's SearchFilter is omitted so it can't
+	# AND a naive token match on top and break boolean queries. See
+	# ArticleViewSet.
 	filter_backends = [
 		django_filters.DjangoFilterBackend,
 		filters.OrderingFilter,
@@ -3432,7 +3472,7 @@ class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListA
 		return self.list(request, *args, **kwargs)
 
 
-class AuthorSearchView(generics.ListAPIView):
+class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 	"""
 	Advanced search for authors by full name.
 
