@@ -2971,6 +2971,15 @@ class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.Lis
 	- all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
 	- ordering: Order results by field (e.g., -discovery_date, -published_date, title, article_id)
 
+	GET-only parameters — every filter on ArticleFilter also applies here, e.g.
+	published_date_after / published_date_before, relevant, subjects, open_access:
+	- Published in 2023: /articles/search/?team_id=1&subject_id=1&published_date_after=2023-01-01&published_date_before=2023-12-31
+
+	These come from DjangoFilterBackend, which reads request.query_params only.
+	On a POST they are silently ignored and the response is unfiltered — so use
+	GET for anything beyond title/summary/search, or pass the filters on the
+	query string of the POST (that works, the backend still sees them).
+
 	Results are ordered by discovery date (newest first) by default.
 
 	To download all search results as CSV, add format=csv and all_results=true to the query parameters.
@@ -3195,13 +3204,22 @@ class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListA
 	- summary: Search only in summary/abstract field
 	- search: Search in both title and summary fields
 	- status: Filter by recruitment status (e.g., 'Recruiting', 'Completed')
-	- has_results: 'true'/'false' - filter trials by whether results have been posted (results_posted flag, results completion date, results link, or results-available = 'Yes')
 	- team_id: Required - Team ID to filter trials by (must be provided)
 	- subject_id: Required - Subject ID to filter trials by (must be provided)
 	- page: Page number for pagination (default: 1)
 	- page_size: Number of results per page (default: 10, max: 100)
 	- all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
 	- ordering: Order results by field (e.g., -discovery_date, -published_date, title, trial_id, -last_updated)
+
+	GET-only parameters — every filter on TrialFilter also applies here, e.g.
+	date_registration_after / date_registration_before, has_results,
+	phase_normalized, country, sponsor_id:
+	- Registered in 2024: /trials/search/?team_id=1&subject_id=1&date_registration_after=2024-01-01&date_registration_before=2024-12-31
+
+	These come from DjangoFilterBackend, which reads request.query_params only.
+	On a POST they are silently ignored and the response is unfiltered — so use
+	GET for anything beyond title/summary/search/status, or pass the filters on
+	the query string of the POST (that works, the backend still sees them).
 
 	Results are ordered by discovery date (newest first) by default.
 
