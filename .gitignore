@@ -93,3 +93,4 @@ docker-compose.override.yml
 scripts/merge_pdf_links.py
 .gitignore
 scripts/download_pdfs.py
+_brain-regeneration\ mockups/

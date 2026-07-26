@@ -109,7 +109,6 @@ from api.filters import (
 	SubjectFilter,
 	SponsorFilter,
 )
-from api.utils.search import build_search_q
 from rest_framework.response import Response
 from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
@@ -240,6 +239,62 @@ class BulkExportThrottleMixin:
 		if request_bypasses_pagination(self.request):
 			return [ScopedRateThrottle()]
 		return super().get_throttles()
+
+
+class BodyParamsAsQueryParamsMixin:
+	"""Make POST-body params visible to DRF's filter backends.
+
+	DjangoFilterBackend and OrderingFilter read request.query_params only, so on
+	a POST every filterset param used to be dropped silently and the response
+	came back unfiltered — a wrong 200, not an error. Merging the body into
+	query_params gives GET and POST a single code path.
+
+	An explicit query-string value wins over the same key in the body, so the
+	documented `POST /search/?filters...` workaround keeps working unchanged.
+	This precedence applies to filter/ordering keys only — NOT to pagination
+	(`page`/`page_size` are read straight from the body by FlexiblePagination
+	when present, ignoring the query string, so those are body-wins on POST).
+
+	`identity_params` (set per view below) names required-parameter keys —
+	team_id/subject_id, plus full_name on AuthorSearchView — that the view
+	reads directly from request.data on POST for validation. Those same names
+	are also ArticleFilter/TrialFilter/AuthorFilter fields, so without this
+	carve-out a mismatched query-string value would leak into the filterset
+	(via the normal query-string-wins merge) while validation used the body's
+	value, silently intersecting the two and emptying the response. Body wins
+	unconditionally for these keys instead, so the filterset always agrees with
+	what the view validated.
+
+	List-valued body params (`{"subjects": [1, 3]}`, or repeated keys in a
+	form-encoded body) are joined into a single comma-separated string rather
+	than set as a repeated query key. This codebase's list filters are all
+	``BaseInFilter``/``ChoiceInFilter`` subclasses, whose form field reads a
+	single CSV-formatted value — confirmed empirically that a repeated query
+	key (`?subjects=1&subjects=3`) silently collapses to just the last value,
+	while `?subjects=1,3` parses correctly. Comma-joining is what actually
+	reaches the filterset intact.
+	"""
+
+	identity_params = frozenset()
+
+	def initial(self, request, *args, **kwargs):
+		super().initial(request, *args, **kwargs)
+		if request.method != "POST":
+			return
+		data = request.data
+		if not hasattr(data, "items"):  # not a JSON object / form payload
+			return
+		merged = request.query_params.copy()  # a mutable QueryDict
+		items = data.lists() if hasattr(data, "lists") else data.items()
+		for key, value in items:
+			if key in merged and key not in self.identity_params:
+				continue  # query string wins, except for identity_params
+			if isinstance(value, (list, tuple)):
+				merged[key] = ",".join(str(v) for v in value if v is not None)
+			elif value is not None:
+				merged[key] = str(value)
+		merged._mutable = False
+		request._request.GET = merged
 
 
 def _latest_ml_predictions_queryset():
@@ -2953,12 +3008,24 @@ class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 		)
 
 
-class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListAPIView):
+class ArticleSearchView(
+	BodyParamsAsQueryParamsMixin, CSVStreamingMixin, BulkExportThrottleMixin, generics.ListAPIView
+):
 	"""
 	Advanced search for articles by title and abstract (summary).
 
-	This endpoint accepts both GET and POST requests with team_id and subject_id parameters,
-	along with optional search parameters.
+	This endpoint accepts both GET and POST requests with team_id and subject_id
+	parameters, along with optional search parameters. Every filter on
+	ArticleFilter works identically on both verbs — for GET, put them on the
+	query string; for POST, put them in the JSON body. BodyParamsAsQueryParamsMixin
+	merges the body into query_params before filtering, so both paths run
+	through the same DjangoFilterBackend/OrderingFilter code; if the same filter
+	key is set in both places, the query string wins. team_id and subject_id are
+	the exception — they're forced from the body on POST (identity_params),
+	both for get_queryset()'s own validation and for ArticleFilter's identically
+	named fields, so a mismatched query-string team_id/subject_id has no effect
+	at all rather than silently narrowing the filterset against a different
+	team/subject than the one validated.
 
 	Parameters (can be sent as query params for GET or in request body for POST):
 	- title: Search only in title field
@@ -2971,16 +3038,14 @@ class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.Lis
 	- all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
 	- ordering: Order results by field (e.g., -discovery_date, -published_date, title, article_id)
 
-	Query-string-only parameters — every filter on ArticleFilter also applies
-	here, e.g. published_date_after / published_date_before, relevant, subjects,
+	Every other ArticleFilter field also applies here, e.g.
+	published_date_after / published_date_before, relevant, subjects,
 	open_access:
 	- Published in 2023: /articles/search/?team_id=1&subject_id=1&published_date_after=2023-01-01&published_date_before=2023-12-31
 
-	These come from DjangoFilterBackend, which reads request.query_params only,
-	so they work on GET and on POST — but only from the URL. Sent in a POST
-	*body* they are silently ignored, leaving the response unfiltered by them
-	(the body's title/summary/search still apply). Put filters on the query
-	string, even when POSTing.
+	Prefer GET where practical — it's cacheable and linkable. POST exists for
+	`search` strings with long boolean expressions that would exceed practical
+	URL length limits.
 
 	Results are ordered by discovery date (newest first) by default.
 
@@ -2992,9 +3057,11 @@ class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.Lis
 	permission_classes = [
 		permissions.AllowAny
 	]  # Allow access to anyone since we require team_id and subject_id
-	# `search` is parsed by build_search_q in get_queryset (and by ArticleFilter
-	# for GET query params). DRF's SearchFilter is omitted so it can't AND a
-	# naive token match on top and break boolean queries. See ArticleViewSet.
+	# `search` is parsed by build_search_q inside ArticleFilter.filter_search,
+	# for both GET query params and POST body (merged in by
+	# BodyParamsAsQueryParamsMixin). DRF's SearchFilter is omitted so it can't
+	# AND a naive token match on top and break boolean queries. See
+	# ArticleViewSet.
 	filter_backends = [
 		django_filters.DjangoFilterBackend,
 		filters.OrderingFilter,
@@ -3004,6 +3071,10 @@ class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.Lis
 	ordering = ["-discovery_date"]  # Default ordering by newest first
 	pagination_class = FlexiblePagination
 	http_method_names = ["get", "post"]  # Support both GET and POST
+	# team_id/subject_id are also ArticleFilter fields; force them from the body
+	# on POST so a mismatched query-string value can't leak into the filterset.
+	# See BodyParamsAsQueryParamsMixin.
+	identity_params = frozenset({"team_id", "subject_id"})
 
 	def get_queryset(self):
 		# This method handles both GET and POST requests
@@ -3043,20 +3114,6 @@ class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.Lis
 				pk=OuterRef("pk"), teams__id=team_id, subjects__id=subject_id
 			)
 			queryset = Articles.objects.filter(Exists(match_subq))
-
-			# Apply additional filters
-			title = params.get("title")
-			summary = params.get("summary")
-			search = params.get("search")
-
-			if title:
-				queryset = queryset.filter(utitle__contains=title.upper())
-			if summary:
-				queryset = queryset.filter(usummary__contains=summary.upper())
-			if search:
-				q = build_search_q(search)
-				if q is not None:
-					queryset = queryset.filter(q)
 
 			# Prefetch related objects to avoid N+1 queries
 			queryset = queryset.prefetch_related(
@@ -3102,25 +3159,6 @@ class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.Lis
 			)
 			return Articles.objects.none()
 
-	def filter_queryset(self, queryset):
-		"""
-		Filter the queryset and handle ordering from both GET and POST requests.
-		"""
-		# First apply standard filters
-		queryset = super().filter_queryset(queryset)
-
-		# Handle ordering for POST requests manually (OrderingFilter only checks query_params by default)
-		if self.request.method == "POST":
-			ordering = self.request.data.get("ordering")
-			if ordering:
-				# Validate that ordering field is in allowed fields
-				if ordering.lstrip("-") in [
-					f.replace("-", "") for f in self.ordering_fields
-				]:
-					queryset = queryset.order_by(ordering)
-
-		return queryset
-
 	def post(self, request, *args, **kwargs):
 		# For POST requests, validate required parameters
 		team_id = request.data.get("team_id")
@@ -3194,12 +3232,24 @@ class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.Lis
 		return self.list(request, *args, **kwargs)
 
 
-class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListAPIView):
+class TrialSearchView(
+	BodyParamsAsQueryParamsMixin, CSVStreamingMixin, BulkExportThrottleMixin, generics.ListAPIView
+):
 	"""
 	Advanced search for clinical trials by title, summary, and recruitment status.
 
-	This endpoint accepts both GET and POST requests with team_id and subject_id parameters,
-	along with optional search parameters.
+	This endpoint accepts both GET and POST requests with team_id and subject_id
+	parameters, along with optional search parameters. Every filter on
+	TrialFilter works identically on both verbs — for GET, put them on the query
+	string; for POST, put them in the JSON body. BodyParamsAsQueryParamsMixin
+	merges the body into query_params before filtering, so both paths run
+	through the same DjangoFilterBackend/OrderingFilter code; if the same filter
+	key is set in both places, the query string wins. team_id and subject_id are
+	the exception — they're forced from the body on POST (identity_params),
+	both for get_queryset()'s own validation and for TrialFilter's identically
+	named fields, so a mismatched query-string team_id/subject_id has no effect
+	at all rather than silently narrowing the filterset against a different
+	team/subject than the one validated.
 
 	Parameters (can be sent as query params for GET or in request body for POST):
 	- title: Search only in title field
@@ -3213,16 +3263,14 @@ class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListA
 	- all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
 	- ordering: Order results by field (e.g., -discovery_date, -published_date, title, trial_id, -last_updated)
 
-	Query-string-only parameters — every filter on TrialFilter also applies here,
-	e.g. date_registration_after / date_registration_before, has_results,
+	Every other TrialFilter field also applies here, e.g.
+	date_registration_after / date_registration_before, has_results,
 	phase_normalized, country, sponsor_id:
 	- Registered in 2024: /trials/search/?team_id=1&subject_id=1&date_registration_after=2024-01-01&date_registration_before=2024-12-31
 
-	These come from DjangoFilterBackend, which reads request.query_params only,
-	so they work on GET and on POST — but only from the URL. Sent in a POST
-	*body* they are silently ignored, leaving the response unfiltered by them
-	(the body's title/summary/search/status still apply). Put filters on the
-	query string, even when POSTing.
+	Prefer GET where practical — it's cacheable and linkable. POST exists for
+	`search` strings with long boolean expressions that would exceed practical
+	URL length limits.
 
 	Results are ordered by discovery date (newest first) by default.
 
@@ -3234,9 +3282,11 @@ class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListA
 	permission_classes = [
 		permissions.AllowAny
 	]  # Allow access to anyone since we require team_id and subject_id
-	# `search` is parsed by build_search_q in get_queryset (and by TrialFilter
-	# for GET query params). DRF's SearchFilter is omitted so it can't AND a
-	# naive token match on top and break boolean queries. See ArticleViewSet.
+	# `search` is parsed by build_search_q inside TrialFilter.filter_search, for
+	# both GET query params and POST body (merged in by
+	# BodyParamsAsQueryParamsMixin). DRF's SearchFilter is omitted so it can't
+	# AND a naive token match on top and break boolean queries. See
+	# ArticleViewSet.
 	filter_backends = [
 		django_filters.DjangoFilterBackend,
 		filters.OrderingFilter,
@@ -3252,6 +3302,10 @@ class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListA
 	ordering = ["-discovery_date"]  # Default ordering by newest first
 	pagination_class = FlexiblePagination
 	http_method_names = ["get", "post"]  # Support both GET and POST
+	# team_id/subject_id are also TrialFilter fields; force them from the body
+	# on POST so a mismatched query-string value can't leak into the filterset.
+	# See BodyParamsAsQueryParamsMixin.
+	identity_params = frozenset({"team_id", "subject_id"})
 
 	def get_queryset(self):
 		# This method handles both GET and POST requests
@@ -3296,30 +3350,6 @@ class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListA
 		match_subq = Trials.objects.filter(pk=OuterRef("pk"), teams=team, subjects=subject)
 		queryset = Trials.objects.filter(Exists(match_subq))
 
-		# Apply additional filters
-		title = params.get("title")
-		summary = params.get("summary")
-		search = params.get("search")
-		status = params.get("status")
-
-		try:
-			if title:
-				queryset = queryset.filter(utitle__contains=title.upper())
-			if summary:
-				queryset = queryset.filter(usummary__contains=summary.upper())
-			if search:
-				q = build_search_q(search)
-				if q is not None:
-					queryset = queryset.filter(q)
-		except (AttributeError, TypeError, ValueError) as e:
-			logging.getLogger(__name__).warning(
-				"TrialSearchView: ignoring malformed search params (%s)", e
-			)
-			return Trials.objects.none()
-
-		if status:
-			queryset = queryset.filter(recruitment_status=status)
-
 		# Prefetch related objects to avoid N+1 queries
 		queryset = queryset.prefetch_related(
 			"sources", "team_categories", "article_references__article", "trial_countries"
@@ -3337,25 +3367,6 @@ class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListA
 					to_attr="_prefetched_org_contents",
 				)
 			)
-
-		return queryset
-
-	def filter_queryset(self, queryset):
-		"""
-		Filter the queryset and handle ordering from both GET and POST requests.
-		"""
-		# First apply standard filters
-		queryset = super().filter_queryset(queryset)
-
-		# Handle ordering for POST requests manually (OrderingFilter only checks query_params by default)
-		if self.request.method == "POST":
-			ordering = self.request.data.get("ordering")
-			if ordering:
-				# Validate that ordering field is in allowed fields
-				if ordering.lstrip("-") in [
-					f.replace("-", "") for f in self.ordering_fields
-				]:
-					queryset = queryset.order_by(ordering)
 
 		return queryset
 
@@ -3432,7 +3443,7 @@ class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListA
 		return self.list(request, *args, **kwargs)
 
 
-class AuthorSearchView(generics.ListAPIView):
+class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 	"""
 	Advanced search for authors by full name.
 
@@ -3449,6 +3460,13 @@ class AuthorSearchView(generics.ListAPIView):
 	search_fields = ["full_name"]
 	pagination_class = FlexiblePagination
 	http_method_names = ["get", "post"]
+	# team_id/subject_id/full_name are also AuthorFilter fields (team_id/
+	# subject_id are read directly in get_queryset for scoping, not via the
+	# filterset — but the filterset has no team_id/subject_id field so those
+	# two are moot here; full_name is the one that matters). Force full_name
+	# from the body on POST so a mismatched query-string value can't leak into
+	# the filterset. See BodyParamsAsQueryParamsMixin.
+	identity_params = frozenset({"team_id", "subject_id", "full_name"})
 
 	def _check_team_visibility(self, team_id):
 		"""Raise Http404 if team_id is not in the caller's visible orgs."""
