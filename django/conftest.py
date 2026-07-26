@@ -21,8 +21,38 @@ they patch up databases restored from old dumps, and a syncdb-built test
 database never has the wrong constraint to begin with.
 """
 
+import pytest
+from django.core.cache import cache
 from django.db import connections
 from django.db.models.signals import post_migrate, pre_migrate
+
+
+@pytest.fixture(autouse=True)
+def _reset_cache_between_tests():
+	"""Clear the Django cache before every test.
+
+	Django rolls back the database between tests but never touches the cache,
+	so anything cache-backed leaks from one test into the next. Two things in
+	this codebase are:
+
+	- DRF's ScopedRateThrottle. ``bulk_export`` is 4/hour keyed on client IP,
+	  and every test request comes from the same anonymous 127.0.0.1 — so the
+	  5th ``all_results=true`` request in a worker process got a 429 no matter
+	  which test issued it. The victim was whichever test happened to run 5th,
+	  which under ``--dist loadfile -n auto`` depends on how files land on
+	  workers: green locally, red in CI, different failures each run. It hit
+	  test_trial_site_api (429 instead of the expected 400) and the CSV export
+	  tests (throttle body ``{"detail": ...}`` rendered as a CSV with a single
+	  ``detail`` column, so the row assertions saw an empty set).
+	- The stats endpoints' ``STATS_CACHE_TTL`` responses, where a stale entry
+	  from a previous test's fixtures could be served to the next one.
+
+	A handful of tests already called ``cache.clear()`` by hand; this makes it
+	universal so a new cache-touching test can't reintroduce the same flake.
+	"""
+	cache.clear()
+	yield
+	cache.clear()
 
 # Both signals fire once per installed app (see
 # django.core.management.sql.emit_{pre,post}_migrate_signal); gate on a
