@@ -24,9 +24,13 @@ Same for `relevant`, `subjects`, `open_access`, `phase_normalized`, `country`,
 This is a *class* of bug, not one filter: every filter added to those filtersets
 in future silently fails on POST unless someone remembers to hand-plumb it.
 
-The docs were corrected on branch `merge-authors-admin-action` (see
-`docs/03-api-and-rss-feeds.md`, section "GET vs POST on search endpoints") to
-warn about the behaviour. This plan fixes the behaviour itself.
+`/authors/search/` has the same divergence: `?country=PT` narrows 241,936 authors
+to 140 on the query string, while the same key in a POST body returns all
+241,936.
+
+`docs/03-api-and-rss-feeds.md` (section "GET vs POST on search endpoints") was
+updated to warn about the behaviour. This plan fixes the behaviour itself, after
+which that section should be rewritten — see step 5.
 
 ## Design decision: keep both verbs, fix POST
 

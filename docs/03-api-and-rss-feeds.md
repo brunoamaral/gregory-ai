@@ -160,10 +160,11 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Articles | `GET /articles/{id}/` | `id` (path) | |
 | Articles | `GET /articles/stats/` | Same filters as `GET /articles/` | Aggregate counts over the filtered set: `total`, `by_access` (NULL folded into `unknown`), `relevant`, `retracted`, `missing_doi`, `by_subject`. Cached for `STATS_CACHE_TTL` seconds |
 | Articles | `GET /articles/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `format`, `all_results`, plus every `GET /articles/` filter (`published_date_after`, `published_date_before`, `relevant`, `subjects`, …) | See [Search endpoints](#search-endpoints) below |
-| Articles | `POST /articles/search/` | **Restricted subset** in request body: `team_id`, `subject_id`, `title`, `summary`, `search`, `ordering`, `page`, `page_size` | Filter params are **ignored** on POST — see [GET vs POST](#get-vs-post-on-search-endpoints) |
+| Articles | `POST /articles/search/` | Request **body** accepts a subset: `team_id`, `subject_id`, `title`, `summary`, `search`, `ordering`, `page`, `page_size`, `all_results`. Filters must go on the **query string** (they work there on POST too) | Filters sent in the body are **silently ignored** — see [GET vs POST](#get-vs-post-on-search-endpoints) |
 | Authors | `GET /authors/` | `author_id`, `full_name`, `orcid`, `country`, `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe` | See [authors-api.md](authors-api.md) |
 | Authors | `GET /authors/{id}/` | `id` (path) | |
-| Authors | `GET /authors/search/` | `team_id` *(req)*, `subject_id` *(req)*, `full_name`, `format`, `all_results` | |
+| Authors | `GET /authors/search/` | `team_id` *(req)*, `subject_id` *(req)*, `full_name`, `format`, `all_results`, plus every `GET /authors/` filter (`author_id`, `orcid`, `country`, `given_name`, `family_name`) | See [Search endpoints](#search-endpoints) below |
+| Authors | `POST /authors/search/` | Request **body** accepts a subset: `team_id`, `subject_id`, `full_name`, `page`, `page_size`, `all_results`. Filters must go on the **query string** (they work there on POST too) | Filters sent in the body are **silently ignored** — see [GET vs POST](#get-vs-post-on-search-endpoints). Results are always ordered by `author_id`; this endpoint has no `ordering` support |
 | Authors | `GET /authors/by_team_subject/` | `team_id` *(req)*, `subject_id` *(req)* | |
 | Authors | `GET /authors/by_team_category/` | `team_id` *(req)*, `category_slug` or `category_id` *(req)* | |
 | Authors | `GET /authors/{id}/coauthors/` | `id` (path) | Co-authors of the given author |
@@ -183,7 +184,7 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Trials | `GET /trials/{id}/` | `id` (path) | |
 | Trials | `GET /trials/stats/` | Same filters as `GET /trials/` | Totals per `recruitment_status_normalized` bucket (not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other — always present, 0 when empty) plus `no_status`, `by_subject`, `by_phase` (per `TrialPhase` + `no_phase`), `by_region` (per `TrialRegion` + `no_region`), `by_country` (`[{country, count}]`, null-country entry last), `by_year` (`[{year, count}]`, null-year entry last), `by_sponsor` (top 25 `[{sponsor_id, slug, name, sponsor_type, count}]`) + `no_sponsor`, `by_sponsor_type` (per `SponsorType` + `no_type`), `by_modality` (per `CategoryModality` + `no_modality`, joined over `team_categories.modality` — **not** a partition of `total`: a trial in two categories of different modalities is counted once per modality, and `no_modality` conflates "no category at all" with "category not yet curated with a modality"), `by_study_type` (per `TrialStudyType` + `no_study_type`; `no_study_type` is large — ~13.2k globally — mostly legacy rows with no `source_register` rather than a normalization gap), and `by_sex` (per `TrialSexEligibility` + `no_sex_data`; `no_sex_data` is large — ~46% globally — same legacy-rows caveat as `no_study_type`) over the filtered set. Replaces the `stats` block formerly embedded in `GET /trials/` list responses (breaking change). Cached for `STATS_CACHE_TTL` seconds |
 | Trials | `GET /trials/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `status`, `format`, `all_results`, plus every `GET /trials/` filter (`date_registration_after`, `date_registration_before`, `phase_normalized`, `country`, …) | See [Search endpoints](#search-endpoints) below |
-| Trials | `POST /trials/search/` | **Restricted subset** in request body: `team_id`, `subject_id`, `title`, `summary`, `search`, `status`, `ordering`, `page`, `page_size` | Filter params are **ignored** on POST — see [GET vs POST](#get-vs-post-on-search-endpoints) |
+| Trials | `POST /trials/search/` | Request **body** accepts a subset: `team_id`, `subject_id`, `title`, `summary`, `search`, `status`, `ordering`, `page`, `page_size`, `all_results`. Filters must go on the **query string** (they work there on POST too) | Filters sent in the body are **silently ignored** — see [GET vs POST](#get-vs-post-on-search-endpoints) |
 | Trials | `GET /trials/sites/` | Same filters as `GET /trials/`, plus `latitude__isnull` (`true`/`false`) | Flat, paginated `TrialSite` listing across the filtered trial set: `{trial_id, name, city, country, latitude, longitude}` per row — for a site-level pin map. `trial_sites` itself is detail-only (appears on `GET /trials/{id}/`, never on the list/CSV/search responses). Pagination is mandatory here — `?all_results=true` returns 400; max `page_size` is 500 |
 | Email templates | `GET /emails/` | None | Template preview dashboard |
 | Email templates | `GET /emails/preview/{template_name}/` | `template_name` (path) | |
@@ -201,9 +202,10 @@ search parameters than the plain list endpoints.
 
 **Shared contract:**
 
-- Both **GET** (query params) and **POST** (JSON body) are supported, but **they
-  do not accept the same fields** — see [GET vs POST](#get-vs-post-on-search-endpoints).
-  Prefer GET unless your query string would be too long.
+- Both **GET** (query params) and **POST** (JSON body) are supported, but the
+  JSON body accepts **only a subset** of the fields — filters must go on the
+  query string either way. See [GET vs POST](#get-vs-post-on-search-endpoints).
+  Prefer GET unless your `search` string would be too long for a URL.
 - `team_id` **and** `subject_id` are **required**. The subject must belong to the
   team.
 - Results are paginated (default `page_size` 10, max 100) and ordered by
@@ -213,23 +215,29 @@ search parameters than the plain list endpoints.
 
 **Search parameters:**
 
-| Parameter | Endpoints | GET | POST | Description |
-|:----------|:----------|:---:|:----:|:------------|
-| `title` | articles, trials | ✅ | ✅ | Match in the title only (case-insensitive, partial). |
-| `summary` | articles, trials | ✅ | ✅ | Match in the summary/abstract only. |
-| `search` | articles, trials | ✅ | ✅ | Match in title **or** summary (supports boolean operators, e.g. `a OR b`). |
-| `status` | trials | ✅ | ✅ | Case-insensitive exact match on the raw `recruitment_status` string (e.g. `Recruiting`). For the canonical vocabulary use `recruitment_status_normalized` on `GET /trials/`. |
-| `full_name` | authors | ✅ | ✅ | Match on the author's full name (case-insensitive, partial). |
-| `ordering`, `page`, `page_size` | all | ✅ | ✅ | Ordering and pagination. |
-| `published_date_after` / `published_date_before` | articles | ✅ | ❌ | Publication date range — same semantics as on `GET /articles/`. |
-| `date_registration_after` / `date_registration_before` | trials | ✅ | ❌ | Registration date range — same semantics as on `GET /trials/`. |
-| Any other list-endpoint filter | articles, trials | ✅ | ❌ | `relevant`, `subjects`, `open_access`, `phase_normalized`, `country`, `sponsor_id`, … — the search endpoints mount the same `ArticleFilter`/`TrialFilter` as the list endpoints. |
+The **Read from** column says *where* each parameter is picked up. Query-string
+parameters work on GET and on POST alike — but only from the URL, never from the
+JSON body. See [GET vs POST](#get-vs-post-on-search-endpoints).
+
+| Parameter | Endpoints | Read from | Description |
+|:----------|:----------|:----------|:------------|
+| `title` | articles, trials | query string **or** body | Match in the title only (case-insensitive, partial). |
+| `summary` | articles, trials | query string **or** body | Match in the summary/abstract only. |
+| `search` | articles, trials | query string **or** body | Match in title **or** summary (supports boolean operators, e.g. `a OR b`). |
+| `status` | trials | query string **or** body | Case-insensitive exact match on the raw `recruitment_status` string (e.g. `Recruiting`). For the canonical vocabulary use `recruitment_status_normalized` on `GET /trials/`. |
+| `full_name` | authors | query string **or** body | Match on the author's full name (case-insensitive, partial). |
+| `page`, `page_size`, `all_results` | all | query string **or** body | Pagination. `FlexiblePagination` checks the POST body for all three. |
+| `ordering` | articles, trials | query string **or** body | The article/trial search views read `ordering` from the POST body in their own `filter_queryset`. Not supported on `/authors/search/`, which always orders by `author_id`. |
+| `published_date_after` / `published_date_before` | articles | **query string only** | Publication date range — same semantics as on `GET /articles/`. |
+| `date_registration_after` / `date_registration_before` | trials | **query string only** | Registration date range — same semantics as on `GET /trials/`. |
+| Any other list-endpoint filter | articles, trials, authors | **query string only** | `relevant`, `subjects`, `open_access`, `phase_normalized`, `country`, `sponsor_id`, `orcid`, … — the search endpoints mount the same `ArticleFilter` / `TrialFilter` / `AuthorFilter` as the list endpoints, so every filter defined there applies. |
 
 #### GET vs POST on search endpoints
 
-The `title`/`summary`/`search`/`status` parameters are read from the request body
-on POST, so those work either way. **Every other filter is applied by
-django-filter, which only ever reads the query string** — so on POST it is
+Search terms (`title`, `summary`, `search`, `status`, `full_name`) and the
+ordering/pagination options are read from the request body on POST, so those
+work either way. **Every other filter is applied by django-filter, which only
+ever reads the query string** — so when one is sent in a POST body it is
 silently dropped and you get an unfiltered `200`, not an error.
 
 ```bash
@@ -241,8 +249,11 @@ POST /trials/search/
 {"team_id": 1, "subject_id": 1, "date_registration_after": "2024-01-01", "date_registration_before": "2024-01-31"}
 ```
 
-Because the failure is silent, **use GET whenever you need any filter beyond
-title/summary/search/status.** POST exists for queries whose `search` string is
+`/authors/search/` behaves the same way — `?country=PT` narrows 241,936 authors
+to 140 on GET, while the same key in a POST body returns all 241,936.
+
+Because the failure is silent, **use GET whenever you need any filter beyond the
+search terms and pagination.** POST exists for queries whose `search` string is
 too long or awkward to put in a URL; filters can still be passed on the query
 string of a POST request, where django-filter will see them:
 

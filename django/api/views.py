@@ -2971,14 +2971,16 @@ class ArticleSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.Lis
 	- all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
 	- ordering: Order results by field (e.g., -discovery_date, -published_date, title, article_id)
 
-	GET-only parameters — every filter on ArticleFilter also applies here, e.g.
-	published_date_after / published_date_before, relevant, subjects, open_access:
+	Query-string-only parameters — every filter on ArticleFilter also applies
+	here, e.g. published_date_after / published_date_before, relevant, subjects,
+	open_access:
 	- Published in 2023: /articles/search/?team_id=1&subject_id=1&published_date_after=2023-01-01&published_date_before=2023-12-31
 
-	These come from DjangoFilterBackend, which reads request.query_params only.
-	On a POST they are silently ignored and the response is unfiltered — so use
-	GET for anything beyond title/summary/search, or pass the filters on the
-	query string of the POST (that works, the backend still sees them).
+	These come from DjangoFilterBackend, which reads request.query_params only,
+	so they work on GET and on POST — but only from the URL. Sent in a POST
+	*body* they are silently ignored, leaving the response unfiltered by them
+	(the body's title/summary/search still apply). Put filters on the query
+	string, even when POSTing.
 
 	Results are ordered by discovery date (newest first) by default.
 
@@ -3211,15 +3213,16 @@ class TrialSearchView(CSVStreamingMixin, BulkExportThrottleMixin, generics.ListA
 	- all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
 	- ordering: Order results by field (e.g., -discovery_date, -published_date, title, trial_id, -last_updated)
 
-	GET-only parameters — every filter on TrialFilter also applies here, e.g.
-	date_registration_after / date_registration_before, has_results,
+	Query-string-only parameters — every filter on TrialFilter also applies here,
+	e.g. date_registration_after / date_registration_before, has_results,
 	phase_normalized, country, sponsor_id:
 	- Registered in 2024: /trials/search/?team_id=1&subject_id=1&date_registration_after=2024-01-01&date_registration_before=2024-12-31
 
-	These come from DjangoFilterBackend, which reads request.query_params only.
-	On a POST they are silently ignored and the response is unfiltered — so use
-	GET for anything beyond title/summary/search/status, or pass the filters on
-	the query string of the POST (that works, the backend still sees them).
+	These come from DjangoFilterBackend, which reads request.query_params only,
+	so they work on GET and on POST — but only from the URL. Sent in a POST
+	*body* they are silently ignored, leaving the response unfiltered by them
+	(the body's title/summary/search/status still apply). Put filters on the
+	query string, even when POSTing.
 
 	Results are ordered by discovery date (newest first) by default.
 
