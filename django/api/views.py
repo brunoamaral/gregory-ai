@@ -2999,8 +2999,13 @@ class ArticleSearchView(
 	"""
 	Advanced search for articles by title and abstract (summary).
 
-	This endpoint accepts both GET and POST requests with team_id and subject_id parameters,
-	along with optional search parameters.
+	This endpoint accepts both GET and POST requests with team_id and subject_id
+	parameters, along with optional search parameters. Every filter on
+	ArticleFilter works identically on both verbs — for GET, put them on the
+	query string; for POST, put them in the JSON body. BodyParamsAsQueryParamsMixin
+	merges the body into query_params before filtering, so both paths run
+	through the same DjangoFilterBackend/OrderingFilter code; if the same key is
+	set in both places, the query string wins.
 
 	Parameters (can be sent as query params for GET or in request body for POST):
 	- title: Search only in title field
@@ -3013,16 +3018,14 @@ class ArticleSearchView(
 	- all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
 	- ordering: Order results by field (e.g., -discovery_date, -published_date, title, article_id)
 
-	Query-string-only parameters — every filter on ArticleFilter also applies
-	here, e.g. published_date_after / published_date_before, relevant, subjects,
+	Every other ArticleFilter field also applies here, e.g.
+	published_date_after / published_date_before, relevant, subjects,
 	open_access:
 	- Published in 2023: /articles/search/?team_id=1&subject_id=1&published_date_after=2023-01-01&published_date_before=2023-12-31
 
-	These come from DjangoFilterBackend, which reads request.query_params only,
-	so they work on GET and on POST — but only from the URL. Sent in a POST
-	*body* they are silently ignored, leaving the response unfiltered by them
-	(the body's title/summary/search still apply). Put filters on the query
-	string, even when POSTing.
+	Prefer GET where practical — it's cacheable and linkable. POST exists for
+	`search` strings with long boolean expressions that would exceed practical
+	URL length limits.
 
 	Results are ordered by discovery date (newest first) by default.
 
@@ -3211,8 +3214,13 @@ class TrialSearchView(
 	"""
 	Advanced search for clinical trials by title, summary, and recruitment status.
 
-	This endpoint accepts both GET and POST requests with team_id and subject_id parameters,
-	along with optional search parameters.
+	This endpoint accepts both GET and POST requests with team_id and subject_id
+	parameters, along with optional search parameters. Every filter on
+	TrialFilter works identically on both verbs — for GET, put them on the query
+	string; for POST, put them in the JSON body. BodyParamsAsQueryParamsMixin
+	merges the body into query_params before filtering, so both paths run
+	through the same DjangoFilterBackend/OrderingFilter code; if the same key is
+	set in both places, the query string wins.
 
 	Parameters (can be sent as query params for GET or in request body for POST):
 	- title: Search only in title field
@@ -3226,16 +3234,14 @@ class TrialSearchView(
 	- all_results: Set to 'true' to retrieve all results without pagination (useful for CSV export)
 	- ordering: Order results by field (e.g., -discovery_date, -published_date, title, trial_id, -last_updated)
 
-	Query-string-only parameters — every filter on TrialFilter also applies here,
-	e.g. date_registration_after / date_registration_before, has_results,
+	Every other TrialFilter field also applies here, e.g.
+	date_registration_after / date_registration_before, has_results,
 	phase_normalized, country, sponsor_id:
 	- Registered in 2024: /trials/search/?team_id=1&subject_id=1&date_registration_after=2024-01-01&date_registration_before=2024-12-31
 
-	These come from DjangoFilterBackend, which reads request.query_params only,
-	so they work on GET and on POST — but only from the URL. Sent in a POST
-	*body* they are silently ignored, leaving the response unfiltered by them
-	(the body's title/summary/search/status still apply). Put filters on the
-	query string, even when POSTing.
+	Prefer GET where practical — it's cacheable and linkable. POST exists for
+	`search` strings with long boolean expressions that would exceed practical
+	URL length limits.
 
 	Results are ordered by discovery date (newest first) by default.
 
