@@ -18,7 +18,7 @@ delete its `# noqa` and `RUF100` keeps it clean.
 How to reproduce locally (same version as CI):
 
 ```bash
-uvx ruff@0.15.17 check django/
+uvx ruff@0.16.00 check django/
 ```
 
 > **`F401` / `S113` already cleared.** Enabling them removed 230 unused imports
