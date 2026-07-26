@@ -251,6 +251,15 @@ class BodyParamsAsQueryParamsMixin:
 
 	An explicit query-string value wins over the same key in the body, so the
 	documented `POST /search/?filters...` workaround keeps working unchanged.
+
+	List-valued body params (`{"subjects": [1, 3]}`, or repeated keys in a
+	form-encoded body) are joined into a single comma-separated string rather
+	than set as a repeated query key. This codebase's list filters are all
+	``BaseInFilter``/``ChoiceInFilter`` subclasses, whose form field reads a
+	single CSV-formatted value — confirmed empirically that a repeated query
+	key (`?subjects=1&subjects=3`) silently collapses to just the last value,
+	while `?subjects=1,3` parses correctly. Comma-joining is what actually
+	reaches the filterset intact.
 	"""
 
 	def initial(self, request, *args, **kwargs):
@@ -266,7 +275,7 @@ class BodyParamsAsQueryParamsMixin:
 			if key in merged:
 				continue  # query string wins
 			if isinstance(value, (list, tuple)):
-				merged.setlist(key, [str(v) for v in value if v is not None])
+				merged[key] = ",".join(str(v) for v in value if v is not None)
 			elif value is not None:
 				merged[key] = str(value)
 		merged._mutable = False
