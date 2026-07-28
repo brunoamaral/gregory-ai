@@ -19,13 +19,37 @@ class Lists(models.Model):
 	admin_summary = models.BooleanField(default=False)
 	weekly_digest = models.BooleanField(default=False)
 	clinical_trials_notifications = models.BooleanField(default=False)
-	# Article limit for weekly digest emails
+	# Article limit for weekly digest, admin summary, and trial notification emails
 	article_limit = models.PositiveIntegerField(
 		default=15,
 		null=True,
 		blank=True,
-		help_text="Maximum number of articles to include in weekly digest emails (default: 15)",
-		verbose_name="Article Limit for Weekly Digest Emails",
+		help_text=(
+			"Maximum number of articles to include in a single email (default: 15). "
+			"Applies to weekly digest, admin summary, and trial notification emails. "
+			"Articles that do not fit roll over to the next send."
+		),
+		verbose_name="Article limit per email",
+	)
+	trial_limit = models.PositiveIntegerField(
+		default=15,
+		null=True,
+		blank=True,
+		help_text="Maximum number of clinical trials to include in a single email (default: 15). Trials that do not fit roll over to the next send.",
+		verbose_name="Trial limit per email",
+	)
+	trial_max_age_days = models.PositiveIntegerField(
+		default=90,
+		null=True,
+		blank=True,
+		validators=[MinValueValidator(1), MaxValueValidator(3650)],
+		help_text=(
+			"Skip trials whose own registration or publication date is older than this. "
+			"Guards against bulk imports of historical trials flooding a newsletter, "
+			"because discovery_date only records when GregoryAI first saw the row. "
+			"Leave blank to disable the check."
+		),
+		verbose_name="Maximum trial age (days)",
 	)
 
 	# ML threshold for relevance filtering

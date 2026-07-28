@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from django.utils.timezone import now
 from django.core.management.base import BaseCommand
@@ -17,7 +18,10 @@ from subscriptions.models import (
 	SentTrialNotification,
 	FailedNotification,
 )
+from subscriptions.utils.email_limits import render_within_limit, resolve_limits
 from templates.emails.components.content_organizer import get_optimized_email_context
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
@@ -612,6 +616,27 @@ class Command(BaseCommand):
 					# Convert to list to avoid "Cannot filter a query once a slice has been taken" error
 					unsent_articles = list(limited_articles)
 
+				# Cap trials the same way, so the rendered body can never exceed
+				# Postmark's size limit (audit finding 1). Whatever doesn't fit
+				# rolls over to the next run.
+				_, trial_limit = resolve_limits(digest_list)
+				trials_count = (
+					len(unsent_trials)
+					if isinstance(unsent_trials, list)
+					else unsent_trials.count()
+				)
+				if trials_count > trial_limit:
+					unsent_trials = list(
+						unsent_trials.order_by("-discovery_date")[:trial_limit]
+					)
+					self.stdout.write(
+						self.style.WARNING(
+							f"WARNING: List '{digest_list.list_name}' had {trials_count} trials in the "
+							f"{days_to_look_back}-day window; truncated to trial_limit={trial_limit}. "
+							f"Consider raising trial_limit if this is unintended."
+						)
+					)
+
 				# Step 7: Prepare and send the email using optimized Phase 5 rendering pipeline
 				# CRITICAL FIX: Get the organized content BEFORE recording as sent
 				# This ensures what we record matches what gets sent
@@ -624,34 +649,73 @@ class Command(BaseCommand):
 					"utm_content": f"subscriber_{subscriber.subscriber_id}",
 				}
 
-				summary_context = get_optimized_email_context(
-					email_type="weekly_summary",
-					articles=unsent_articles,
-					trials=unsent_trials,
-					subscriber=subscriber,
-					list_obj=digest_list,
-					site=site,
-					custom_settings=customsettings,
-					utm_params=utm_params,
-					organization=organization,
+				_context_holder = {}
+
+				def _render(
+					articles,
+					trials,
+					_digest_list=digest_list,
+					_subscriber=subscriber,
+					_organization=organization,
+					_utm_params=utm_params,
+				):
+					summary_context = get_optimized_email_context(
+						email_type="weekly_summary",
+						articles=articles,
+						trials=trials,
+						subscriber=_subscriber,
+						list_obj=_digest_list,
+						site=site,
+						custom_settings=customsettings,
+						utm_params=_utm_params,
+						organization=_organization,
+					)
+
+					# Inject unsubscribe context for the footer template
+					summary_context["list_id"] = _digest_list.list_id
+					summary_context["unsubscribe_base_url"] = (
+						build_unsubscribe_base_url(site, customsettings)
+					)
+					summary_context["header_title"] = _digest_list.header_title or ""
+					summary_context["header_tagline"] = (
+						_digest_list.header_tagline or ""
+					)
+					summary_context["show_header_tagline"] = (
+						_digest_list.show_header_tagline
+					)
+
+					html = get_template("emails/weekly_summary.html").render(
+						summary_context
+					)
+					used_articles = list(
+						summary_context.get("articles", [])
+					) + list(summary_context.get("additional_articles", []))
+					used_trials = list(summary_context.get("trials", [])) + list(
+						summary_context.get("additional_trials", [])
+					)
+					_context_holder["context"] = summary_context
+					return html, used_articles, used_trials
+
+				# Cap trials/articles so the rendered body can never exceed
+				# Postmark's size limit (audit finding 1); shrinks further if
+				# the counts above still produce an oversized body.
+				html_content, articles_to_be_sent, trials_to_be_sent = (
+					render_within_limit(_render, unsent_articles, unsent_trials)
 				)
 
-				# Inject unsubscribe context for the footer template
-				summary_context["list_id"] = digest_list.list_id
-				summary_context["unsubscribe_base_url"] = build_unsubscribe_base_url(
-					site, customsettings
-				)
-				summary_context["header_title"] = digest_list.header_title or ""
-				summary_context["header_tagline"] = digest_list.header_tagline or ""
-				summary_context["show_header_tagline"] = digest_list.show_header_tagline
+				if html_content is None:
+					reason = (
+						f"Rendered weekly digest for list '{digest_list.list_name}' "
+						f"still exceeds the safe body size after shrinking to a "
+						f"single article and a single trial."
+					)
+					logger.error(reason)
+					FailedNotification.objects.create(
+						subscriber=subscriber, list=digest_list, reason=reason
+					)
+					continue
 
-				# Extract the actual articles that will be rendered in the email
-				articles_to_be_sent = list(summary_context.get("articles", [])) + list(
-					summary_context.get("additional_articles", [])
-				)
-				trials_to_be_sent = list(summary_context.get("trials", [])) + list(
-					summary_context.get("additional_trials", [])
-				)
+				summary_context = _context_holder["context"]
 
 				# Debug the final content that will appear in the email
 				if debug:
@@ -714,9 +778,8 @@ class Command(BaseCommand):
 								)
 							)
 
-				html_content = get_template("emails/weekly_summary.html").render(
-					summary_context
-				)
+				# html_content was already rendered (possibly shrunk) by
+				# render_within_limit above.
 				text_content = strip_tags(html_content)
 
 				# VERIFICATION: Check that the rendered HTML actually contains the articles

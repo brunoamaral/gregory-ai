@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from django.utils.timezone import now
 from django.core.management.base import BaseCommand
@@ -17,7 +18,10 @@ from subscriptions.management.commands.utils.get_credentials import (
 	get_postmark_credentials,
 	get_site_and_settings,
 )
+from subscriptions.utils.email_limits import render_within_limit, resolve_limits
 from templates.emails.components.content_organizer import get_optimized_email_context
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
@@ -128,31 +132,59 @@ class Command(BaseCommand):
 					emails_skipped += 1
 					continue
 
-				# Step 6: Prepare and send the email using optimized Phase 5 rendering pipeline
-				summary_context = get_optimized_email_context(
-					email_type="trial_notification",
-					trials=new_trials,
-					subscriber=subscriber,
-					list_obj=lst,
-					site=site,
-					custom_settings=customsettings,
-				)
-				# Inject unsubscribe context for the footer template
-				summary_context["list_id"] = lst.list_id
-				summary_context["unsubscribe_base_url"] = build_unsubscribe_base_url(
-					site, customsettings
-				)
-				summary_context["header_title"] = lst.header_title or ""
-				summary_context["header_tagline"] = lst.header_tagline or ""
-				summary_context["show_header_tagline"] = lst.show_header_tagline
+				# Step 6: Cap the number of trials so the rendered body can never
+				# exceed Postmark's size limit (audit finding 1). Newest first;
+				# whatever doesn't fit rolls over to the next run.
+				_, trial_limit = resolve_limits(lst)
+				new_trials = list(new_trials.order_by("-discovery_date")[:trial_limit])
 
-				# Additional safety check: Ensure the context contains trials to display
-				trials_in_context = summary_context.get("trials", [])
-				additional_trials_in_context = summary_context.get(
-					"additional_trials", []
+				def _render(articles, trials, _lst=lst, _subscriber=subscriber):
+					summary_context = get_optimized_email_context(
+						email_type="trial_notification",
+						trials=trials,
+						subscriber=_subscriber,
+						list_obj=_lst,
+						site=site,
+						custom_settings=customsettings,
+					)
+					# Inject unsubscribe context for the footer template
+					summary_context["list_id"] = _lst.list_id
+					summary_context["unsubscribe_base_url"] = (
+						build_unsubscribe_base_url(site, customsettings)
+					)
+					summary_context["header_title"] = _lst.header_title or ""
+					summary_context["header_tagline"] = _lst.header_tagline or ""
+					summary_context["show_header_tagline"] = _lst.show_header_tagline
+
+					html = get_template("emails/trial_notification.html").render(
+						summary_context
+					)
+					used_articles = list(
+						summary_context.get("articles", [])
+					) + list(summary_context.get("additional_articles", []))
+					used_trials = list(summary_context.get("trials", [])) + list(
+						summary_context.get("additional_trials", [])
+					)
+					return html, used_articles, used_trials
+
+				html_content, _articles_to_be_sent, trials_to_be_sent = (
+					render_within_limit(_render, [], new_trials)
 				)
 
-				if not trials_in_context and not additional_trials_in_context:
+				if html_content is None:
+					reason = (
+						f"Rendered trial notification for list '{lst.list_name}' "
+						f"still exceeds the safe body size after shrinking to a "
+						f"single trial."
+					)
+					logger.error(reason)
+					FailedNotification.objects.create(
+						subscriber=subscriber, list=lst, reason=reason
+					)
+					emails_skipped += 1
+					continue
+
+				if not trials_to_be_sent:
 					self.stdout.write(
 						self.style.WARNING(
 							f'No trials to display in email context for {subscriber.email} in list "{lst.list_name}". Skipping email.'
@@ -161,9 +193,6 @@ class Command(BaseCommand):
 					emails_skipped += 1
 					continue
 
-				html_content = get_template("emails/trial_notification.html").render(
-					summary_context
-				)
 				text_content = strip_tags(html_content)
 
 				result = send_email(
@@ -191,8 +220,9 @@ class Command(BaseCommand):
 							)
 						)
 						emails_sent += 1
-						# Record sent notifications for the new trials
-						for trial in new_trials:
+						# Record sent notifications only for trials that were
+						# actually rendered into the email (post-shrink).
+						for trial in trials_to_be_sent:
 							SentTrialNotification.objects.get_or_create(
 								trial=trial, list=lst, subscriber=subscriber
 							)

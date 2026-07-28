@@ -1,3 +1,4 @@
+import logging
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
@@ -19,10 +20,13 @@ from subscriptions.models import (
 	SentTrialNotification,
 	FailedNotification,
 )
+from subscriptions.utils.email_limits import render_within_limit, resolve_limits
 from django.db.models import Prefetch
 from django.utils.timezone import now
 from datetime import timedelta
 from templates.emails.components.content_organizer import get_optimized_email_context
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
@@ -143,30 +147,72 @@ class Command(BaseCommand):
 					self.style.SUCCESS(f"Sending admin summary to {subscriber.email}.")
 				)
 
-				# Step 4: Prepare the summary context for the email using optimized Phase 5 rendering pipeline
-				summary_context = get_optimized_email_context(
-					email_type="admin_summary",
-					articles=new_articles,
-					trials=new_trials,
-					subscriber=subscriber,
-					list_obj=admin_list,
-					site=site,
-					custom_settings=customsettings,
-					organization=organization,
+				# Step 4: Cap articles/trials so the rendered body can never
+				# exceed Postmark's size limit (audit finding 1). Ordered
+				# newest-first so truncation is deterministic run to run;
+				# whatever doesn't fit rolls over to the next send.
+				article_limit, trial_limit = resolve_limits(admin_list)
+				new_articles = list(
+					new_articles.order_by("-discovery_date")[:article_limit]
 				)
-				# Inject unsubscribe context for the footer template
-				summary_context["list_id"] = admin_list.list_id
-				summary_context["unsubscribe_base_url"] = build_unsubscribe_base_url(
-					site, customsettings
-				)
-				summary_context["header_title"] = admin_list.header_title or ""
-				summary_context["header_tagline"] = admin_list.header_tagline or ""
-				summary_context["show_header_tagline"] = admin_list.show_header_tagline
+				new_trials = list(new_trials.order_by("-discovery_date")[:trial_limit])
 
-				# Render email content using new template
-				html_content = get_template("emails/admin_summary.html").render(
-					summary_context
+				def _render(
+					articles,
+					trials,
+					_admin_list=admin_list,
+					_subscriber=subscriber,
+				):
+					summary_context = get_optimized_email_context(
+						email_type="admin_summary",
+						articles=articles,
+						trials=trials,
+						subscriber=_subscriber,
+						list_obj=_admin_list,
+						site=site,
+						custom_settings=customsettings,
+						organization=organization,
+					)
+					# Inject unsubscribe context for the footer template
+					summary_context["list_id"] = _admin_list.list_id
+					summary_context["unsubscribe_base_url"] = (
+						build_unsubscribe_base_url(site, customsettings)
+					)
+					summary_context["header_title"] = _admin_list.header_title or ""
+					summary_context["header_tagline"] = (
+						_admin_list.header_tagline or ""
+					)
+					summary_context["show_header_tagline"] = (
+						_admin_list.show_header_tagline
+					)
+
+					html = get_template("emails/admin_summary.html").render(
+						summary_context
+					)
+					used_articles = list(
+						summary_context.get("articles", [])
+					) + list(summary_context.get("additional_articles", []))
+					used_trials = list(summary_context.get("trials", [])) + list(
+						summary_context.get("additional_trials", [])
+					)
+					return html, used_articles, used_trials
+
+				html_content, articles_to_be_sent, trials_to_be_sent = (
+					render_within_limit(_render, new_articles, new_trials)
 				)
+
+				if html_content is None:
+					reason = (
+						f"Rendered admin summary for list '{admin_list.list_name}' "
+						f"still exceeds the safe body size after shrinking to a "
+						f"single article and a single trial."
+					)
+					logger.error(reason)
+					FailedNotification.objects.create(
+						subscriber=subscriber, list=admin_list, reason=reason
+					)
+					continue
+
 				text_content = strip_tags(html_content)
 
 				# Step 5: Send email
@@ -193,13 +239,13 @@ class Command(BaseCommand):
 								f"Email sent to {subscriber.email} for list '{admin_list.list_name}'."
 							)
 						)
-						# Record sent notifications for the new articles
-						for article in new_articles:
+						# Record sent notifications only for content that was
+						# actually rendered into the email (post-shrink).
+						for article in articles_to_be_sent:
 							SentArticleNotification.objects.get_or_create(
 								article=article, list=admin_list, subscriber=subscriber
 							)
-						# Record sent notifications for the new trials
-						for trial in new_trials:
+						for trial in trials_to_be_sent:
 							SentTrialNotification.objects.get_or_create(
 								trial=trial, list=admin_list, subscriber=subscriber
 							)
