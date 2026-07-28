@@ -51,6 +51,8 @@ walkthrough (read in order); everything else is reference or design material.
 |:----|:---------------|
 | [cookbook.md](cookbook.md) | Recipes for common tasks (pipeline, exports, feeds). |
 | [subscriptions.md](subscriptions.md) | Subscription/newsletter system. |
+| [subscriptions-audit-2026-07.md](subscriptions-audit-2026-07.md) | Audit of newsletter sending and the email content organizer — open bugs, prioritised. |
+| [subscriptions-p0-fix-plan.md](subscriptions-p0-fix-plan.md) | Execution plan for the P0 findings in the subscriptions audit. |
 | [merge-authors-command.md](merge-authors-command.md) | The author-merge management command. |
 | [lint-triage.md](lint-triage.md) | Ruff lint-gate worklist. |
 
@@ -59,4 +61,5 @@ walkthrough (read in order); everything else is reference or design material.
 | Location | What it covers |
 |:---------|:---------------|
 | [changelog/](changelog/) | Per-feature implementation notes, newest work first. |
+| [incidents/](incidents/) | Data protection and operational incident records, kept for audit. |
 | [releases/](releases/) | Release notes, deployment runbooks, and migration-safety checks. |

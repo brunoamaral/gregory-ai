@@ -1,0 +1,224 @@
+# Subscriptions audit — July 2026
+
+Review of the `subscriptions` app, focused on newsletter sending and the shared
+email content organizer. No code was changed; this is a planning document.
+
+Scope of the read:
+
+- `django/subscriptions/` — models, admin, views, forms, management commands
+- `django/templates/emails/components/content_organizer.py` — the shared organizer
+- `django/templates/emails/` — templates and the staff preview views
+
+Findings marked "confirmed against the dev DB" were verified with read-only
+queries on 2026-07-28. Counts are point-in-time.
+
+---
+
+## Priority 0 — failing in production today
+
+Neither of these self-heals, and both are silent from the outside.
+
+### 1. Trial notification emails exceed Postmark's 5 MB body limit
+
+`FailedNotification` holds 413 rows of `ErrorCode: 300, Invalid 'HtmlBody' value.
+It should be up to 5242880 characters in length` — all on the Alzheimer Disease
+list, 28 per day, every day from 2026-07-06 to 2026-07-21 (confirmed against the
+dev DB).
+
+Nothing caps the number of trials on the way into the email:
+
+- `management/commands/utils/subscription.py:9` — `get_trials_for_list` returns every trial in a 30-day window. For that list: 3,570 trials.
+- `management/commands/send_trials_notification.py:120` — `new_trials` is passed through untruncated.
+- `templates/emails/components/content_organizer.py:114` — `# Include ALL trials - don't limit content for subscribers`. The `max_trials_per_email = 999` at line 29 is never read.
+
+The failure is self-perpetuating: the send fails, so no `SentTrialNotification`
+rows are written, so the next run rebuilds the identical 3,570-trial payload and
+fails again. It cannot recover without manual intervention.
+
+The trigger was a bulk import: 3,501 of those trials share
+`discovery_date = 2026-07-06`, and the first failure is 2026-07-06 17:18. Their
+registration dates span 1999 to 2026, so `discovery_date` records when GregoryAI
+first saw the row, not how old the trial is — see
+[subscriptions-p0-fix-plan.md](subscriptions-p0-fix-plan.md) for the numbers and
+the staleness filter that follows from them.
+
+`article_limit` is only honoured by the weekly digest, so `send_admin_summary`
+has the same exposure — MS Admin currently renders 1,218 articles plus 366 trials
+into a single email.
+
+### 2. "Unsubscribe from all lists on <site>" is a silent no-op
+
+`templates/emails/components/footer.html:92` builds the link from the resolved
+site id, which comes from `Lists.site`. `subscriptions/views.py:341` filters on
+`list__team__site_id` — a different, nullable FK.
+
+Confirmed against the dev DB: all 9 lists have `list.site = 3`
+(brain-regeneration.com), while `team.site` is `1` or `None`. The filter matches
+zero rows, no subscription is deactivated, and the subscriber is still shown the
+"you have been unsubscribed" confirmation page.
+
+`docs/subscriptions.md` documents the intent as "Remove from all lists on a
+site", so the implementation is simply reading the wrong field. It should be
+`list__site_id`.
+
+### 3. Hard-bounced and suppressed recipients are retried indefinitely
+
+440 rows of `ErrorCode: 406 … marked as inactive`; one address has been retried
+210 times, several others 20–60 times (confirmed against the dev DB, spanning
+2026-05-08 to 2026-07-21).
+
+Nothing consumes Postmark's suppression state — there is no bounce webhook, no
+`List-Unsubscribe` handling, and no path that flips `Subscribers.active` or a
+`ListSubscription` on a hard bounce or spam complaint. Because a failed send also
+skips the sent-record write, the same recipient is retried on every subsequent
+run. Repeated sends to suppressed addresses damage sender reputation, and they
+are the bulk of the 853 `FailedNotification` rows.
+
+---
+
+## Priority 1 — content organizer correctness
+
+### 4. The recruiting/other trial split is wrong for most trials
+
+`content_organizer.py:102-112` matches the substring `"recruit"` against the raw
+`recruitment_status`. That also matches `Not Recruiting`, `NOT_YET_RECRUITING`,
+`ACTIVE_NOT_RECRUITING`, `Ongoing, recruitment ended` and
+`Authorised, recruitment pending`.
+
+Confirmed against the dev DB:
+
+| Bucket | Trials |
+|:-------|:-------|
+| Genuinely recruiting | 2,739 |
+| Wrongly classified as recruiting | 3,882 |
+
+So roughly 59% of the "recruiting" bucket is wrong. It drives `featured_trials`
+ordering, `content_stats.recruiting_trials` and `has_recruiting_trials`.
+
+`Trials.recruitment_status_normalized` already exists and the trial card
+templates already key off it — the organizer was never updated when the field
+landed. The fix is `recruitment_status_normalized == "recruiting"`.
+
+### 5. Per-list `ml_threshold` is ignored by the organizer
+
+`prepare_optimized_context` accepts a `confidence_threshold` argument
+(`content_organizer.py:435`), but `send_weekly_summary.py:627` never passes it.
+The featured/regular split therefore always uses the hardcoded `0.8` from
+`content_organizer.py:26`.
+
+Article *selection* honours the list's `ml_threshold`; article *presentation*
+does not. A list configured at 0.6 or 0.9 silently gets 0.8 ordering.
+
+### 6. Relevance checks are not scoped to the list's subjects
+
+- `content_organizer.py:247` — `_filter_high_confidence` checks `article_subject_relevances.filter(is_relevant=True)` across every subject.
+- `content_organizer.py:289` — `_get_max_ml_score` scans all of `ml_predictions_detail`, any subject, any team.
+- `send_weekly_summary.py:318` — `is_ml_relevant_any_subject` iterates every `auto_predict` subject on the article rather than the list's subjects.
+
+The manual-review query immediately above (`send_weekly_summary.py:303`) *is*
+scoped to `digest_list.subjects`, so the two halves of the same selection
+disagree with each other.
+
+Confirmed against the dev DB: only 1 article is currently affected, because just
+two subjects have `auto_predict=True` and both belong to the same team. The blast
+radius grows with every subject that enables auto-prediction.
+
+### 7. A blanket `except` turns any bug into a silently empty email
+
+`content_organizer.py:637` wraps the whole of `prepare_optimized_context`. On any
+exception it returns `_get_fallback_context`, which has `articles: []` and no
+`additional_articles`, `latest_research` or `org_content_map`.
+
+- The weekly digest then renders the "No New Content This Week" block (`weekly_summary.html:91`) and sends it.
+- `send_admin_summary.py:197` records every article in `new_articles` as sent regardless of what actually rendered, so one transient error permanently suppresses those articles for that subscriber.
+
+### 8. The Latest Research section sits outside all the bookkeeping
+
+`content_organizer.py:550` calls `get_latest_research_by_category`
+(`management/commands/utils/subscription.py:49`), which hardcodes 30 days and 20
+articles per category, ignoring `lookback_days`. Those articles:
+
+- are not deduplicated against the main article list, so one article can appear twice in the same email
+- are never recorded in `SentArticleNotification`, so they repeat every week
+- are excluded from `org_content_map` (built at `content_organizer.py:611` from the main lists only)
+- are excluded from `content_stats`
+- add unbounded weight to the payload, feeding finding 1
+
+---
+
+## Priority 2 — robustness
+
+### 9. No exception handling around any `send_email` call
+
+`send_weekly_summary.py:872`, `send_admin_summary.py:173`,
+`send_trials_notification.py:169`. A single connection reset or timeout aborts
+the whole cron run: remaining subscribers and remaining lists get nothing, and
+no `FailedNotification` is written, so the failure is invisible.
+
+### 10. The falsy-`Response` fix was never backported
+
+`send_weekly_summary.py:895` carries an explicit comment about
+`requests.Response.__bool__` being `self.ok`, and normalises around it.
+`send_admin_summary.py:185` still does `if result and result.status_code == 200`,
+so every 4xx/5xx falls to the else branch and logs `HTTP Status No Response`,
+and the 422-detail extraction at line 222 is unreachable.
+
+Latent rather than live: that list has one subscriber and no failures recorded
+yet.
+
+### 11. `sent_at` is never refreshed
+
+`send_weekly_summary.py:915` uses `get_or_create`, which returns the existing row
+untouched when one exists. Deduplication looks back 30 days
+(`send_weekly_summary.py:456`) but `lookback_days` allows up to 365. Set any list
+above 30 and articles in the overlap are re-sent on every run indefinitely.
+
+Currently masked — all lists are at `lookback_days = 30` — so this is a
+configuration landmine rather than a live bug.
+
+### 12. Announcements send synchronously inside the admin request
+
+`admin.py:1913`. Two problems:
+
+- A list large enough to exceed the HTTP timeout leaves `status = "sending"`, and `send_view` refuses anything in `("sent", "sending")` — unrecoverable from the UI.
+- A single failure sets `status = "failed"`, which *is* re-sendable, and the retry loops over all subscribers again without filtering on existing successful `AnnouncementRecipient` rows. Everyone who already received it gets a duplicate.
+
+### 13. `lookback_days` only half-works
+
+`send_admin_summary` and `send_trials_notification` go through
+`get_articles_for_list` / `get_trials_for_list`, which hardcode 30 days. Only the
+weekly digest reads the field.
+
+---
+
+## Priority 3 — performance
+
+- `content_organizer.py:468` prefetches `ml_predictions__subject` (the M2M), but every consumer reads `ml_predictions_detail` (the reverse FK). The prefetch is wasted and `_filter_high_confidence` runs roughly 3 queries per article per subscriber. It is skipped entirely once `unsent_articles` becomes a list after truncation.
+- `send_weekly_summary.py:317` calls `is_ml_relevant_any_subject` across the whole window — 1,242 articles for MS Weekly Digest — at about 2 queries each.
+- `send_weekly_summary.py:564` recomputes ML priority scores inside the per-subscriber loop (88 subscribers on that list).
+
+Worth knowing before optimising: the featured/regular split buys nothing
+visually. `weekly_summary.html:31-42` renders both groups with the identical card
+component, back to back. The split only affects ordering.
+
+---
+
+## Smaller items
+
+- `send_trials_notification.py:132` never passes `organization=`, so `org_content_map` is empty and Key Takeaways never render in trial emails. The warning at `content_organizer.py:626` only fires for `weekly_summary` and `admin_summary`, so it is silent.
+- `templates/emails/views.py:160` (staff preview) also omits `organization`, and ignores `article_sort_order` — it takes the newest N by date, so a relevancy-mode digest previews as something no recipient will ever receive.
+- `admin.py:1680` hardcodes `privacy_policy_url` and `terms_url` to `""`, so those footer links disappear for announcements only.
+- `admin.py:1932` deduplicates announcement recipients by email and attributes each to the first list encountered, so the footer unsubscribe link covers only that one list.
+- `management/commands/mark_all_as_sent.py` is `subscribers × lists × all articles` individual `get_or_create` calls, and iterates `subscriber.subscriptions.all()`, which includes lists the subscriber has opted out of.
+
+---
+
+## Suggested order of work
+
+1. Findings 1 and 2 — both are failing silently today and neither recovers on its own. Finding 1 needs a hard cap on trials (and on admin-summary articles) plus a size guard before the Postmark call; finding 2 is a one-field fix plus a regression test.
+2. Finding 3 — decide on a suppression strategy (Postmark bounce webhook, or deactivate after N consecutive 406s) so the retry loop closes.
+3. Finding 4 — mechanical, well covered by the existing normalization work.
+4. Findings 7 and 9 — replace the blanket `except` with a narrow one and stop recording sends that did not happen. These change failure behaviour, so they want tests first.
+5. Findings 5, 6, 8, 13 — consistency work on the organizer; group into one pass.
+6. Finding 12 — needs a design decision (move announcement sending to a management command or a task queue) rather than a patch.
+7. Priority 3 — after the correctness work, since fixing 6 changes which queries are needed.
