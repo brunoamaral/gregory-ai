@@ -141,7 +141,7 @@ failed again — 413 times over 15 days before anyone noticed.
 |---|---|---|
 | `article_limit` | 15 | Weekly digest, admin summary, and trial notification emails |
 | `trial_limit` | 15 | Weekly digest, admin summary, and trial notification emails |
-| `trial_max_age_days` | 90 | `get_trials_for_list` (admin summary, trial notification) |
+| `trial_max_age_days` | 90 | Weekly digest, admin summary, and trial notification emails |
 
 **Rollover:** content that does not fit in one email is not marked as sent —
 only what actually gets rendered into the template is recorded in
@@ -171,15 +171,24 @@ is older than the threshold are skipped, regardless of when they were
 discovered. Trials with neither date set are always kept — the per-email
 `trial_limit` bounds them regardless — so an unusual-but-genuinely-new trial
 is never silently dropped just because its registry didn't supply a date.
-The check only applies to `get_trials_for_list` (admin summary and trial
-notification); it is not applied to the weekly digest's own trial query,
-where the trial count cap alone is enough to bound the payload. Set
-`trial_max_age_days` to blank on a list to disable the check entirely.
+`get_trials_for_list` applies the check for all three email types — weekly
+digest, admin summary, and trial notification — since it is the only one of
+the two jobs the query performs that a count cap cannot substitute for: the
+cap bounds payload size, but only the date check stops a bulk import from
+being presented as new content. Set `trial_max_age_days` to blank on a list
+to disable the check entirely.
 
 The default of 90 days (rather than 30) exists because WHO ICTRP and CTIS
 feeds lag: a trial registered 45 days ago may only reach GregoryAI today. At
 30 days it would be dropped by the age check and would then also age out of
 the 30-day discovery window before ever qualifying for an email.
+
+`get_trials_for_list` also takes a `days` parameter controlling the
+discovery-date window (default 30, unchanged for the admin summary and
+trial notification callers). The weekly digest passes its own resolved
+`lookback_days` (or the `--days` CLI override when set) instead of the
+default, so `lookback_days` is now honoured for both articles and trials in
+that email — previously it only governed the articles query.
 
 ---
 

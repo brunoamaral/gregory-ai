@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
 from subscriptions.management.commands.utils.send_email import send_email
-from gregory.models import Articles, Trials
+from gregory.models import Articles
 from subscriptions.management.commands.utils.get_credentials import (
 	build_unsubscribe_base_url,
 	get_postmark_credentials,
@@ -19,6 +19,7 @@ from subscriptions.models import (
 	SentTrialNotification,
 	FailedNotification,
 )
+from subscriptions.management.commands.utils.subscription import get_trials_for_list
 from subscriptions.utils.email_limits import render_within_limit, resolve_limits
 from subscriptions.utils.postmark import (
 	POSTMARK_INACTIVE_RECIPIENT,
@@ -431,11 +432,7 @@ class Command(BaseCommand):
 					)
 				)
 
-			# Use the helper function to get trials, but pass the days_to_look_back parameter
-			trials = Trials.objects.filter(
-				subjects__in=digest_list.subjects.all(),
-				discovery_date__gte=now() - timedelta(days=days_to_look_back),
-			).distinct()
+			trials = get_trials_for_list(digest_list, days=days_to_look_back)
 			self.stdout.write(self.style.NOTICE(f"Found {trials.count()} trials"))
 
 			if not articles.exists() and not trials.exists():
@@ -693,9 +690,9 @@ class Command(BaseCommand):
 					html = get_template("emails/weekly_summary.html").render(
 						summary_context
 					)
-					used_articles = list(
-						summary_context.get("articles", [])
-					) + list(summary_context.get("additional_articles", []))
+					used_articles = list(summary_context.get("articles", [])) + list(
+						summary_context.get("additional_articles", [])
+					)
 					used_trials = list(summary_context.get("trials", [])) + list(
 						summary_context.get("additional_trials", [])
 					)
