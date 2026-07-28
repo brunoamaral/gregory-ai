@@ -27,6 +27,25 @@ class Command(BaseCommand):
 			return
 
 		for announcement in queued:
+			# Compare-and-swap claim: this UPDATE only affects the row if it
+			# is still 'queued'. Two overlapping cron runs (or a manual
+			# invocation racing the schedule) can both load the same row
+			# from the queryset above, but only one of them will find
+			# claimed == 1 here — the loser skips it instead of sending a
+			# duplicate email before send_announcement() gets a chance to
+			# flip the status itself.
+			claimed = Announcement.objects.filter(
+				pk=announcement.pk, status="queued"
+			).update(status="sending")
+			if not claimed:
+				self.stdout.write(
+					self.style.WARNING(
+						f"Skipping announcement '{announcement.subject}' "
+						f"(id={announcement.pk}) — already claimed by another run."
+					)
+				)
+				continue
+
 			self.stdout.write(
 				self.style.SUCCESS(
 					f"Sending announcement '{announcement.subject}' (id={announcement.pk})…"

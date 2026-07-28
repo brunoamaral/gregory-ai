@@ -85,3 +85,34 @@ class SendAnnouncementCommandTest(TestCase):
 		out = StringIO()
 		call_command("send_announcement", stdout=out)
 		self.assertIn("No queued announcements", out.getvalue())
+
+	def test_claim_update_is_atomic_compare_and_swap(self):
+		"""The per-row `UPDATE ... WHERE status='queued'` claim used by the
+		command must only ever succeed once per row: this is what stops two
+		overlapping cron runs from both sending the same announcement."""
+		ann = self._make_announcement(status="queued")
+		first_claim = Announcement.objects.filter(pk=ann.pk, status="queued").update(
+			status="sending"
+		)
+		second_claim = Announcement.objects.filter(pk=ann.pk, status="queued").update(
+			status="sending"
+		)
+		self.assertEqual(first_claim, 1)
+		self.assertEqual(second_claim, 0)
+
+	def test_row_claimed_by_another_run_is_skipped_not_resent(self):
+		"""If another process has already flipped a row to 'sending' between
+		this run loading the queued queryset and reaching that row, the
+		command must skip it rather than sending a duplicate."""
+		ann = self._make_announcement(status="queued")
+		# Simulate a concurrent run claiming it a moment earlier.
+		Announcement.objects.filter(pk=ann.pk, status="queued").update(status="sending")
+
+		with patch(
+			SEND_EMAIL_TARGET,
+			side_effect=AssertionError("must not send a row claimed elsewhere"),
+		):
+			call_command("send_announcement", stdout=StringIO())
+
+		ann.refresh_from_db()
+		self.assertEqual(ann.status, "sending")
