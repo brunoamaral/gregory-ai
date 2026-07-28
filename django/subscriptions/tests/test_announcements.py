@@ -116,7 +116,13 @@ class RenderAnnouncementEmailContextTest(TestCase):
 			captured.update(context)
 			return "<html></html>"
 
-		with patch("subscriptions.admin.render_to_string", side_effect=fake_render):
+		# admin._render_announcement_email delegates to
+		# announcement_send.render_announcement_email, which is where
+		# render_to_string is actually called now.
+		with patch(
+			"subscriptions.utils.announcement_send.render_to_string",
+			side_effect=fake_render,
+		):
 			self.admin._render_announcement_email(self.ann, **kwargs)
 
 		return captured
@@ -253,8 +259,13 @@ class SendViewSubjectNormalisationTest(TestCase):
 	def _post_send(self, ann):
 		mock_response = MagicMock()
 		mock_response.status_code = 200
+		mock_response.json.return_value = {"MessageID": "test"}
+		# Patched where send_announcement() looks it up, not where it's
+		# defined — announcement_send.py does a top-level `from ... import
+		# send_email`, so patching the source module's attribute after that
+		# import has already run would have no effect.
 		with patch(
-			"subscriptions.management.commands.utils.send_email.send_email",
+			"subscriptions.utils.announcement_send.send_email",
 			return_value=mock_response,
 		) as mock_send:
 			self.client.post(self._send_url(ann.pk))
@@ -292,13 +303,6 @@ class RenderAnnouncementTaglineAndPreheaderTest(TestCase):
 	def _render(self, **ann_kwargs):
 		ann = Announcement(subject="Test", body="<p>Body</p>", **ann_kwargs)
 		# Bypass DB so we can test rendering without saving
-		with patch(
-			"subscriptions.admin.render_to_string",
-			wraps=lambda tpl, ctx: __import__(
-				"django.template.loader", fromlist=["render_to_string"]
-			).render_to_string(tpl, ctx),
-		):
-			pass
 		return self.admin._render_announcement_email(ann)
 
 	def test_tagline_present_by_default(self):

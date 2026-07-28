@@ -437,6 +437,15 @@ class AnnouncementRecipient(models.Model):
 	)
 	sent_at = models.DateTimeField(auto_now_add=True)
 	success = models.BooleanField(default=True)
+	suppressed = models.BooleanField(
+		default=False,
+		help_text=(
+			"True when this recipient was skipped because Postmark reports them "
+			"as suppressed (ErrorCode 406), not because of a delivery error. "
+			"Kept separate from `success` so a suppressed recipient does not "
+			"count toward the announcement's failures_count."
+		),
+	)
 	error_message = models.TextField(blank=True, default="")
 
 	class Meta:
