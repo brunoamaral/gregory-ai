@@ -371,3 +371,67 @@ class OrgContentMapCoverageTest(TestCase):
 			context["org_content_map"][self.article.article_id].takeaways,
 			"LR takeaway",
 		)
+
+
+class SentRecordLookbackWindowTest(LatestResearchDeltaTestCase):
+	"""The sent-record exclusion window must be at least as wide as the
+	content lookback window, or an article sent between 30 days ago and
+	lookback_days ago gets treated as unsent and resent (audit finding 11).
+	This applies to both the main section and Latest Research, since they
+	share the same SentArticleNotification exclusion set."""
+
+	def test_article_sent_beyond_30_days_still_excluded_when_lookback_is_wider(self):
+		self.digest_list.lookback_days = 60
+		self.digest_list.save()
+
+		# A fresh main article keeps the send from being skipped outright
+		# (without it, the old article being correctly excluded would leave
+		# zero unsent content and the whole send would skip, making the
+		# assertion below pass vacuously rather than for the right reason).
+		fresh = self._make_main_article("Fresh Main Article", days_ago=1)
+
+		main_article = self._make_main_article("Old Sent Main Article", days_ago=50)
+		notification = SentArticleNotification.objects.create(
+			article=main_article, list=self.digest_list, subscriber=self.subscriber
+		)
+		# sent_at is auto_now_add — backdate it past the old fixed 30-day
+		# exclusion window but still inside the list's 60-day lookback.
+		SentArticleNotification.objects.filter(pk=notification.pk).update(
+			sent_at=timezone.now() - timedelta(days=40)
+		)
+
+		ctx = self._run_and_capture_context()
+
+		rendered_main = list(ctx.get("articles", [])) + list(
+			ctx.get("additional_articles", [])
+		)
+		self.assertIn(fresh, rendered_main)
+		self.assertNotIn(main_article, rendered_main)
+
+	def test_category_article_sent_beyond_30_days_still_excluded_from_latest_research(
+		self,
+	):
+		self.digest_list.lookback_days = 60
+		self.digest_list.save()
+
+		# A fresh category article keeps the send from being skipped outright
+		# (without it, the old article being correctly excluded would leave
+		# zero content and the whole send would skip, making the assertion
+		# below pass vacuously rather than for the right reason).
+		fresh = self._make_category_article("Fresh Category Article", days_ago=1)
+
+		category_article = self._make_category_article(
+			"Old Sent Category Article", days_ago=50
+		)
+		notification = SentArticleNotification.objects.create(
+			article=category_article, list=self.digest_list, subscriber=self.subscriber
+		)
+		SentArticleNotification.objects.filter(pk=notification.pk).update(
+			sent_at=timezone.now() - timedelta(days=40)
+		)
+
+		ctx = self._run_and_capture_context()
+
+		lr_articles = self._lr_articles_in_context(ctx)
+		self.assertIn(fresh, lr_articles)
+		self.assertNotIn(category_article, lr_articles)

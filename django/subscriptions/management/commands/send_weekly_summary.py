@@ -484,7 +484,12 @@ class Command(BaseCommand):
 
 			for subscriber in subscribers:
 				# Step 5: Filter unsent articles and trials for the subscriber
-				threshold_date = now() - timedelta(days=30)
+				# The sent-record lookback must be at least as wide as the
+				# content lookback window, or an article/trial sent between
+				# 30 days ago and days_to_look_back ago would be treated as
+				# unsent and resent every run (audit finding 11 — previously
+				# masked because every list defaulted to lookback_days=30).
+				threshold_date = now() - timedelta(days=max(30, days_to_look_back))
 				# Not scoped to `article__in=articles`: the same sent-record set
 				# also gates Latest Research below, whose candidate articles come
 				# from category membership rather than the subject-matched

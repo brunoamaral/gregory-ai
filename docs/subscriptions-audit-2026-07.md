@@ -270,6 +270,15 @@ above 30 and articles in the overlap are re-sent on every run indefinitely.
 Currently masked — all lists are at `lookback_days = 30` — so this is a
 configuration landmine rather than a live bug.
 
+**Status: closed 2026-07-28, as a side effect of the Latest Research fix
+(finding 8).** Flagged by PR review on the Latest Research change: reusing
+the same 30-day-capped sent-record exclusion for Latest Research made this
+landmine reachable through a second path. `send_weekly_summary`'s
+`threshold_date` is now `max(30, days_to_look_back)`, so the sent-record
+lookback is always at least as wide as the content lookback window, for both
+the main section and Latest Research. See
+`subscriptions/tests/test_latest_research_delta.py::SentRecordLookbackWindowTest`.
+
 ### 12. Announcements send synchronously inside the admin request
 
 `admin.py:1913`. Two problems:

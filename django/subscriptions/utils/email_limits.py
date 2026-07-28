@@ -37,7 +37,8 @@ def render_within_limit(
 	the content organizer actually placed in the template.
 
 	Returns (html, used_articles, used_trials), or (None, [], []) when even a
-	single article and a single trial will not fit.
+	single article and a single trial will not fit — but see below: passing
+	`latest_research` changes this to a 4-tuple.
 
 	`latest_research`, when not None, is a third shrinkable list (opaque to
 	this function — the weekly digest passes (category, article) pairs so its
