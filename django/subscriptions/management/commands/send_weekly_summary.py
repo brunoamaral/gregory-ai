@@ -1,4 +1,5 @@
 import logging
+import requests
 from datetime import timedelta
 from django.utils.timezone import now
 from django.core.management.base import BaseCommand
@@ -19,6 +20,11 @@ from subscriptions.models import (
 	FailedNotification,
 )
 from subscriptions.utils.email_limits import render_within_limit, resolve_limits
+from subscriptions.utils.postmark import (
+	POSTMARK_INACTIVE_RECIPIENT,
+	classify_postmark_response,
+)
+from subscriptions.utils.suppression import deactivate_subscribers
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 logger = logging.getLogger(__name__)
@@ -932,100 +938,81 @@ class Command(BaseCommand):
 					continue  # Skip to next subscriber without sending
 
 				# If not in dry-run mode, proceed with actual sending
-				result = send_email(
-					to=subscriber.email,
-					subject=email_subject,
-					html=html_content,
-					text=text_content,
-					site=site,
-					sender_name=customsettings.sender_name or customsettings.title,
-					api_token=postmark_api_token,
-					api_url=api_url,
-					sender_prefix=customsettings.sender_email_prefix,
-				)
-
-				# Normalize result so the rest of the block works with both a
-				# real requests.Response object and a plain dict (e.g. returned
-				# by test mocks or alternative send_email implementations).
-				if isinstance(result, dict):
-					_status_code = (
-						200
-						if result.get("status") == "ok"
-						else result.get("status_code", 0)
+				try:
+					result = send_email(
+						to=subscriber.email,
+						subject=email_subject,
+						html=html_content,
+						text=text_content,
+						site=site,
+						sender_name=customsettings.sender_name or customsettings.title,
+						api_token=postmark_api_token,
+						api_url=api_url,
+						sender_prefix=customsettings.sender_email_prefix,
 					)
-					_get_json = lambda: result
-				else:
-					# Use `is not None` rather than truthiness: requests.Response
-					# is falsy for 4xx/5xx responses (Response.__bool__ == self.ok),
-					# so `if result` would wrongly treat error responses as missing.
-					_status_code = result.status_code if result is not None else None
-					_get_json = result.json if result is not None else (lambda: {})
-
-				if result is not None and _status_code == 200:
-					response_data = _get_json()
-					error_code = response_data.get("ErrorCode", 0)
-					message = response_data.get("Message", "Unknown error")
-
-					if error_code == 0:  # Successful delivery
-						self.stdout.write(
-							self.style.SUCCESS(
-								f'Weekly digest email sent to {subscriber.email} for list "{digest_list.list_name}".'
-							)
-						)
-						# Record sent notifications for articles that were actually sent in the email
-						new_sent_count = 0
-						for article in articles_to_be_sent:
-							SentArticleNotification.objects.get_or_create(
-								article=article, list=digest_list, subscriber=subscriber
-							)
-							new_sent_count += 1
-						self.stdout.write(
-							self.style.NOTICE(
-								f"  - Recorded {new_sent_count} new sent article notifications (actually rendered in email)"
-							)
-						)
-
-						new_trial_sent_count = 0
-						for trial in trials_to_be_sent:
-							SentTrialNotification.objects.get_or_create(
-								trial=trial, list=digest_list, subscriber=subscriber
-							)
-							new_trial_sent_count += 1
-						self.stdout.write(
-							self.style.NOTICE(
-								f"  - Recorded {new_trial_sent_count} new sent trial notifications"
-							)
-						)
-					else:  # Failed delivery
-						self.stdout.write(
-							self.style.ERROR(
-								f"Failed to send weekly digest email to {subscriber.email} for list '{digest_list.list_name}'. Reason: {message}"
-							)
-						)
-						FailedNotification.objects.create(
-							subscriber=subscriber, list=digest_list, reason=message
-						)
-				else:
-					# Enhanced error handling for non-200 status codes
-					error_details = f"HTTP Status {_status_code}"
-
-					# For 422 errors, extract detailed Postmark error information
-					if _status_code == 422:
-						try:
-							error_response = _get_json()
-							error_code = error_response.get("ErrorCode", "Unknown")
-							error_message = error_response.get(
-								"Message", "No details provided"
-							)
-							error_details = f"422 Unprocessable Entity - ErrorCode: {error_code}, Message: {error_message}"
-						except (ValueError, KeyError):
-							error_details = f"422 Unprocessable Entity - Unable to parse error details"
-
+				except requests.RequestException as e:
 					self.stdout.write(
 						self.style.ERROR(
-							f"Failed to send weekly digest email to {subscriber.email} for list '{digest_list.list_name}'. {error_details}"
+							f"Failed to send weekly digest email to {subscriber.email} for list '{digest_list.list_name}'. Connection error: {e}"
 						)
 					)
 					FailedNotification.objects.create(
-						subscriber=subscriber, list=digest_list, reason=error_details
+						subscriber=subscriber,
+						list=digest_list,
+						reason=f"Connection error: {e}",
+					)
+					continue
+
+				delivered, error_code, detail = classify_postmark_response(result)
+
+				if delivered:
+					self.stdout.write(
+						self.style.SUCCESS(
+							f'Weekly digest email sent to {subscriber.email} for list "{digest_list.list_name}".'
+						)
+					)
+					# Record sent notifications for articles that were actually sent in the email
+					new_sent_count = 0
+					for article in articles_to_be_sent:
+						SentArticleNotification.objects.get_or_create(
+							article=article, list=digest_list, subscriber=subscriber
+						)
+						new_sent_count += 1
+					self.stdout.write(
+						self.style.NOTICE(
+							f"  - Recorded {new_sent_count} new sent article notifications (actually rendered in email)"
+						)
+					)
+
+					new_trial_sent_count = 0
+					for trial in trials_to_be_sent:
+						SentTrialNotification.objects.get_or_create(
+							trial=trial, list=digest_list, subscriber=subscriber
+						)
+						new_trial_sent_count += 1
+					self.stdout.write(
+						self.style.NOTICE(
+							f"  - Recorded {new_trial_sent_count} new sent trial notifications"
+						)
+					)
+				elif error_code == POSTMARK_INACTIVE_RECIPIENT:
+					logger.error(
+						"Subscriber %s is suppressed at Postmark (list '%s'); "
+						"deactivating globally — no further emails will be sent. %s",
+						subscriber.email,
+						digest_list.list_name,
+						detail,
+					)
+					deactivate_subscribers([subscriber.subscriber_id], reason=detail)
+					FailedNotification.objects.create(
+						subscriber=subscriber, list=digest_list, reason=detail
+					)
+				else:  # Failed delivery
+					self.stdout.write(
+						self.style.ERROR(
+							f"Failed to send weekly digest email to {subscriber.email} for list '{digest_list.list_name}'. {detail}"
+						)
+					)
+					FailedNotification.objects.create(
+						subscriber=subscriber, list=digest_list, reason=detail
 					)

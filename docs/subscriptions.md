@@ -183,6 +183,51 @@ the 30-day discovery window before ever qualifying for an email.
 
 ---
 
+## Bounce and Suppression Handling
+
+Postmark returns HTTP 422 with `ErrorCode: 406` when the recipient is on its
+suppression list — a hard bounce, a spam complaint, or a manual suppression.
+Left unhandled, nothing stops the same address from being retried on every
+subsequent run: one address in production was retried 210 times before this
+was noticed.
+
+All three send commands (`send_weekly_summary`, `send_admin_summary`,
+`send_trials_notification`) now route every Postmark response through
+`subscriptions.utils.postmark.classify_postmark_response`, which normalises a
+`requests.Response`, a plain dict, or `None` into `(delivered, error_code,
+detail)`. This exists because `requests.Response.__bool__` is `self.ok`, so a
+422/500 response is falsy — a bare `if result:` check silently treats a real
+error response as "no response" and loses the actual status and error code.
+`classify_postmark_response` never tests the response for truthiness, so this
+class of bug can't recur.
+
+When `error_code == 406` (`subscriptions.utils.postmark.POSTMARK_INACTIVE_RECIPIENT`),
+the subscriber is deactivated globally via
+`subscriptions.utils.suppression.deactivate_subscribers` — the same helper the
+admin "Disable all emails" action uses (see the `Subscribers.active` field
+above: it's a global switch, not a per-list one), so the two paths can't
+drift. A hard bounce, a spam complaint, and a manual suppression are all
+treated the same way: the address must not be mailed again from *any* list,
+not just the one that triggered the 406. Any other non-200 response is
+recorded as a normal failure without touching the subscriber's active state.
+
+Every outcome is visible in `FailedNotification` (`reason` holds the detail
+string from `classify_postmark_response`), and a 406 additionally shows up in
+`Subscribers.active` going to `False` — check the model's change history for
+when and why.
+
+A connection-level failure (timeout, DNS, reset) from the `send_email` call
+itself is also caught (`requests.RequestException`) and recorded as a
+`FailedNotification` rather than aborting the rest of the run — previously a
+single dropped connection could skip every remaining subscriber and list for
+that cron invocation with no record of it happening.
+
+This handling is reactive only: suppression is discovered by attempting a
+send and reading the response, not by a Postmark bounce webhook. A real-time
+webhook and a reactivation flow are tracked separately, out of scope here.
+
+---
+
 ## Email Footer Unsubscribe Links
 
 The email footer template (`emails/components/footer.html`) renders unsubscribe links when the following context variables are present:
