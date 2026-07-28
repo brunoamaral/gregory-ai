@@ -20,6 +20,15 @@ Neither of these self-heals, and both are silent from the outside.
 
 ### 1. Trial notification emails exceed Postmark's 5 MB body limit
 
+**Status: fixed in code, pending deploy.** `Lists.trial_max_age_days` (default
+90) filters `get_trials_for_list` against the trial's own registration/
+publication date; `Lists.trial_limit` mirrors `article_limit` and now applies
+to all three email types; `subscriptions.utils.email_limits.render_within_limit`
+shrinks and re-renders as a backstop below Postmark's hard limit, recording
+only what was actually rendered as sent. See Task B in
+[subscriptions-p0-fix-plan.md](subscriptions-p0-fix-plan.md) and
+[subscriptions.md](subscriptions.md#content-limits-and-staleness-filtering).
+
 `FailedNotification` holds 413 rows of `ErrorCode: 300, Invalid 'HtmlBody' value.
 It should be up to 5242880 characters in length` — all on the Alzheimer Disease
 list, 28 per day, every day from 2026-07-06 to 2026-07-21 (confirmed against the
@@ -48,6 +57,15 @@ into a single email.
 
 ### 2. "Unsubscribe from all lists on <site>" is a silent no-op
 
+**Status: fixed in code, pending deploy.** The `scope == "site"` filter now
+matches `list__site_id`; the view reports how many rows were actually
+deactivated so a no-op request can no longer render success. Incident record
+in
+[incidents/2026-07-28-site-scope-unsubscribe-not-honoured.md](incidents/2026-07-28-site-scope-unsubscribe-not-honoured.md)
+(open — see that record's open items for what's still outstanding before it
+can be closed). See Task A in
+[subscriptions-p0-fix-plan.md](subscriptions-p0-fix-plan.md).
+
 `templates/emails/components/footer.html:92` builds the link from the resolved
 site id, which comes from `Lists.site`. `subscriptions/views.py:341` filters on
 `list__team__site_id` — a different, nullable FK.
@@ -62,6 +80,17 @@ site", so the implementation is simply reading the wrong field. It should be
 `list__site_id`.
 
 ### 3. Hard-bounced and suppressed recipients are retried indefinitely
+
+**Status: fixed in code, pending deploy.**
+`subscriptions.utils.postmark.classify_postmark_response` centralises response
+parsing (and fixes the falsy-`Response` truthiness bug in `send_admin_summary`
+along the way); a 406 now deactivates the subscriber globally via
+`subscriptions.utils.suppression.deactivate_subscribers`, the same helper the
+admin "Disable all emails" action uses. A `requests.RequestException` from
+`send_email` no longer aborts the rest of the run. Still reactive-only — a
+bounce webhook and reactivation flow remain out of scope. See Task C in
+[subscriptions-p0-fix-plan.md](subscriptions-p0-fix-plan.md) and
+[subscriptions.md](subscriptions.md#bounce-and-suppression-handling).
 
 440 rows of `ErrorCode: 406 … marked as inactive`; one address has been retried
 210 times, several others 20–60 times (confirmed against the dev DB, spanning
