@@ -324,9 +324,15 @@ class Command(BaseCommand):
 				)
 
 				# Get articles that are ML-relevant based on new consensus logic
+				# Scoped to this list's own subjects so an article tagged with an
+				# unrelated team's auto_predict subject can't ride in on that
+				# subject's ML prediction.
+				list_subjects = digest_list.subjects.all()
 				ml_relevant_articles = []
 				for article in subject_articles:
-					if article.is_ml_relevant_any_subject(threshold=threshold):
+					if article.is_ml_relevant_any_subject(
+						threshold=threshold, subjects=list_subjects
+					):
 						ml_relevant_articles.append(article.article_id)
 
 				ml_predicted = Articles.objects.filter(pk__in=ml_relevant_articles)
