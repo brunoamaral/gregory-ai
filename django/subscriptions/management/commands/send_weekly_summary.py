@@ -19,7 +19,10 @@ from subscriptions.models import (
 	SentTrialNotification,
 	FailedNotification,
 )
-from subscriptions.management.commands.utils.subscription import get_trials_for_list
+from subscriptions.management.commands.utils.subscription import (
+	get_latest_research_by_category,
+	get_trials_for_list,
+)
 from subscriptions.utils.email_limits import render_within_limit, resolve_limits
 from subscriptions.utils.postmark import (
 	POSTMARK_INACTIVE_RECIPIENT,
@@ -435,10 +438,31 @@ class Command(BaseCommand):
 			trials = get_trials_for_list(digest_list, days=days_to_look_back)
 			self.stdout.write(self.style.NOTICE(f"Found {trials.count()} trials"))
 
-			if not articles.exists() and not trials.exists():
+			# Latest Research: new articles since the subscriber's last email,
+			# grouped by category. This is the subscriber-independent candidate
+			# pool (category membership + lookback window only); per-subscriber
+			# sent-record exclusion happens below. Honours the list's
+			# lookback_days (or --days override) rather than a fixed 30 days.
+			latest_research_map_all = get_latest_research_by_category(
+				digest_list, days=days_to_look_back
+			)
+			latest_research_categories_ordered = sorted(
+				latest_research_map_all.keys(), key=lambda c: c.category_name
+			)
+			latest_research_pairs_all = [
+				(category, article)
+				for category in latest_research_categories_ordered
+				for article in latest_research_map_all[category]
+			]
+
+			if (
+				not articles.exists()
+				and not trials.exists()
+				and not latest_research_pairs_all
+			):
 				self.stdout.write(
 					self.style.WARNING(
-						f'No articles or trials found for the weekly digest list "{digest_list.list_name}". Skipping.'
+						f'No articles, trials, or Latest Research content found for the weekly digest list "{digest_list.list_name}". Skipping.'
 					)
 				)
 				continue
@@ -460,13 +484,23 @@ class Command(BaseCommand):
 
 			for subscriber in subscribers:
 				# Step 5: Filter unsent articles and trials for the subscriber
-				threshold_date = now() - timedelta(days=30)
-				sent_article_ids = SentArticleNotification.objects.filter(
-					article__in=articles,
-					list=digest_list,
-					subscriber=subscriber,
-					sent_at__gte=threshold_date,
-				).values_list("article_id", flat=True)
+				# The sent-record lookback must be at least as wide as the
+				# content lookback window, or an article/trial sent between
+				# 30 days ago and days_to_look_back ago would be treated as
+				# unsent and resent every run (audit finding 11 — previously
+				# masked because every list defaulted to lookback_days=30).
+				threshold_date = now() - timedelta(days=max(30, days_to_look_back))
+				# Not scoped to `article__in=articles`: the same sent-record set
+				# also gates Latest Research below, whose candidate articles come
+				# from category membership rather than the subject-matched
+				# `articles` queryset.
+				sent_article_ids = set(
+					SentArticleNotification.objects.filter(
+						list=digest_list,
+						subscriber=subscriber,
+						sent_at__gte=threshold_date,
+					).values_list("article_id", flat=True)
+				)
 				unsent_articles = articles.exclude(pk__in=sent_article_ids)
 
 				sent_trial_ids = SentTrialNotification.objects.filter(
@@ -476,6 +510,17 @@ class Command(BaseCommand):
 					sent_at__gte=threshold_date,
 				).values_list("trial_id", flat=True)
 				unsent_trials = trials.exclude(pk__in=sent_trial_ids)
+
+				# Latest Research candidates for this subscriber: exclude
+				# anything already recorded as sent (the delta definition — new
+				# since the subscriber's last email). Dedup against the main
+				# article pool happens in _render, once the main pool's final
+				# (possibly shrunk) size is known.
+				subscriber_latest_research_pairs = [
+					(category, article)
+					for category, article in latest_research_pairs_all
+					if article.pk not in sent_article_ids
+				]
 
 				# Add debugging for the filtered unsent articles
 				if debug:
@@ -521,10 +566,14 @@ class Command(BaseCommand):
 					else unsent_trials.exists()
 				)
 
-				if not has_unsent_articles and not has_unsent_trials:
+				if (
+					not has_unsent_articles
+					and not has_unsent_trials
+					and not subscriber_latest_research_pairs
+				):
 					self.stdout.write(
 						self.style.WARNING(
-							f'No new articles or trials for {subscriber.email} in list "{digest_list.list_name}".'
+							f'No new articles, trials, or Latest Research content for {subscriber.email} in list "{digest_list.list_name}".'
 						)
 					)
 					continue
@@ -657,11 +706,28 @@ class Command(BaseCommand):
 				def _render(
 					articles,
 					trials,
+					latest_research_pairs,
 					_digest_list=digest_list,
 					_subscriber=subscriber,
 					_organization=organization,
 					_utm_params=utm_params,
 				):
+					# Dedup Latest Research against the main pool for *this*
+					# attempt: organize_articles never drops an input article, so
+					# `articles` here is exactly what ends up in
+					# context["articles"] + context["additional_articles"].
+					main_pks = {a.pk for a in articles}
+					deduped_lr_pairs = [
+						(category, article)
+						for category, article in latest_research_pairs
+						if article.pk not in main_pks
+					]
+					latest_research_category_map = {}
+					for category, article in deduped_lr_pairs:
+						latest_research_category_map.setdefault(category, []).append(
+							article
+						)
+
 					summary_context = get_optimized_email_context(
 						email_type="weekly_summary",
 						articles=articles,
@@ -672,6 +738,7 @@ class Command(BaseCommand):
 						custom_settings=customsettings,
 						utm_params=_utm_params,
 						organization=_organization,
+						latest_research_category_map=latest_research_category_map,
 					)
 
 					# Inject unsubscribe context for the footer template
@@ -696,21 +763,64 @@ class Command(BaseCommand):
 					used_trials = list(summary_context.get("trials", [])) + list(
 						summary_context.get("additional_trials", [])
 					)
+					# Dedup by pk: the same article can appear under more than one
+					# category if it matches more than one category's terms.
+					used_latest_research = list(
+						{
+							article.pk: article for _, article in deduped_lr_pairs
+						}.values()
+					)
 					_context_holder["context"] = summary_context
-					return html, used_articles, used_trials
+					return html, used_articles, used_trials, used_latest_research
 
 				# Cap trials/articles so the rendered body can never exceed
 				# Postmark's size limit (audit finding 1); shrinks further if
 				# the counts above still produce an oversized body.
-				html_content, articles_to_be_sent, trials_to_be_sent = (
-					render_within_limit(_render, unsent_articles, unsent_trials)
-				)
+				try:
+					(
+						html_content,
+						articles_to_be_sent,
+						trials_to_be_sent,
+						latest_research_to_be_sent,
+					) = render_within_limit(
+						_render,
+						unsent_articles,
+						unsent_trials,
+						subscriber_latest_research_pairs,
+					)
+				except Exception as e:
+					reason = (
+						f"Error rendering weekly digest for list "
+						f"'{digest_list.list_name}': {e}"
+					)
+					logger.error(reason)
+					FailedNotification.objects.create(
+						subscriber=subscriber, list=digest_list, reason=reason
+					)
+					continue
 
 				if html_content is None:
 					reason = (
 						f"Rendered weekly digest for list '{digest_list.list_name}' "
 						f"still exceeds the safe body size after shrinking to a "
 						f"single article and a single trial."
+					)
+					logger.error(reason)
+					FailedNotification.objects.create(
+						subscriber=subscriber, list=digest_list, reason=reason
+					)
+					continue
+
+				if (
+					not articles_to_be_sent
+					and not trials_to_be_sent
+					and not latest_research_to_be_sent
+				):
+					reason = (
+						f"Weekly digest for list '{digest_list.list_name}' organized to "
+						f"zero articles, zero trials, and zero Latest Research items "
+						f"for {subscriber.email}; skipping rather than sending an "
+						f"empty digest."
 					)
 					logger.error(reason)
 					FailedNotification.objects.create(
@@ -968,9 +1078,17 @@ class Command(BaseCommand):
 							f'Weekly digest email sent to {subscriber.email} for list "{digest_list.list_name}".'
 						)
 					)
-					# Record sent notifications for articles that were actually sent in the email
+					# Record sent notifications for articles that were actually
+					# rendered in the email — both the main section and Latest
+					# Research share this table and key, so an article shown in
+					# either is suppressed from both on the next run.
+					recorded_articles = {
+						article.pk: article
+						for article in list(articles_to_be_sent)
+						+ list(latest_research_to_be_sent)
+					}
 					new_sent_count = 0
-					for article in articles_to_be_sent:
+					for article in recorded_articles.values():
 						SentArticleNotification.objects.get_or_create(
 							article=article, list=digest_list, subscriber=subscriber
 						)

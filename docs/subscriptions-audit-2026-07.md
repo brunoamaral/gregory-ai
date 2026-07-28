@@ -138,6 +138,14 @@ ordering, `content_stats.recruiting_trials` and `has_recruiting_trials`.
 templates already key off it — the organizer was never updated when the field
 landed. The fix is `recruitment_status_normalized == "recruiting"`.
 
+**Status: fixed 2026-07-28.** `organize_trials` now splits on
+`recruitment_status_normalized == "recruiting"`; a `NULL` normalized status
+(the normalizer didn't recognise the raw value) is treated as not-recruiting
+rather than guessed from the raw string. See
+[subscriptions.md](subscriptions.md#content-limits-and-staleness-filtering)
+and `subscriptions/tests/test_content_organizer_trials.py` (9 regression
+cases covering every misclassified raw string above).
+
 ### 5. Per-list `ml_threshold` is ignored by the organizer
 
 `prepare_optimized_context` accepts a `confidence_threshold` argument
@@ -147,6 +155,17 @@ The featured/regular split therefore always uses the hardcoded `0.8` from
 
 Article *selection* honours the list's `ml_threshold`; article *presentation*
 does not. A list configured at 0.6 or 0.9 silently gets 0.8 ordering.
+
+**Status: closed 2026-07-28, two different ways per email type** — see the
+design decision recorded in
+[subscriptions.md](subscriptions.md#featuredregular-article-split-design-decision-2026-07-28).
+The weekly digest's featured/regular split was invisible in the template (no
+heading or styling distinguished the two loops), so it was **deleted**
+outright rather than fixed: `_organize_weekly_articles` now always returns a
+single flat list, and `confidence_threshold` is moot for that email type. The
+admin summary's split drives real triage, so it was **fixed**:
+`send_admin_summary` now passes `confidence_threshold=admin_list.ml_threshold`.
+See `subscriptions/tests/test_admin_summary_relevance_scoping.py`.
 
 ### 6. Relevance checks are not scoped to the list's subjects
 
@@ -162,6 +181,19 @@ Confirmed against the dev DB: only 1 article is currently affected, because just
 two subjects have `auto_predict=True` and both belong to the same team. The blast
 radius grows with every subject that enables auto-prediction.
 
+**Status: partially closed 2026-07-28.** The two organizer methods are moot
+for the weekly digest (deleted along with the split, finding 5). For the
+admin summary, `_get_max_ml_score` was already correctly scoped —
+`send_admin_summary` prefetches `ml_predictions_detail` filtered to
+`subject__in=list_subjects` into `filtered_ml_predictions`, which the method
+prefers when present — confirmed by regression test rather than changed.
+**`Articles.is_ml_relevant_any_subject` (`send_weekly_summary.py:318`) is
+unchanged and still scans every `auto_predict` subject on the article, not
+just the list's own** — this bullet was not part of the P1 fix plan's scoped
+Task 5 (organizer methods only) and remains open. It affects weekly digest
+*selection* (which articles qualify), not presentation, so it survives the
+split's removal.
+
 ### 7. A blanket `except` turns any bug into a silently empty email
 
 `content_organizer.py:637` wraps the whole of `prepare_optimized_context`. On any
@@ -170,6 +202,16 @@ exception it returns `_get_fallback_context`, which has `articles: []` and no
 
 - The weekly digest then renders the "No New Content This Week" block (`weekly_summary.html:91`) and sends it.
 - `send_admin_summary.py:197` records every article in `new_articles` as sent regardless of what actually rendered, so one transient error permanently suppresses those articles for that subscriber.
+
+**Status: fixed 2026-07-28.** The blanket `except`/`_get_fallback_context` was
+deleted; `prepare_optimized_context` now lets exceptions propagate.
+`send_weekly_summary` and `send_admin_summary` each wrap their render call in
+their own `try/except`, recording a `FailedNotification` and skipping the
+send rather than mailing an empty digest or crashing the whole run. Both
+commands also gained a post-render guard: organizing to zero articles, zero
+trials (and, for the weekly digest, zero Latest Research items) skips the
+send with a logged `FailedNotification` instead of delivering nothing. See
+`subscriptions/tests/test_render_error_handling.py`.
 
 ### 8. The Latest Research section sits outside all the bookkeeping
 
@@ -182,6 +224,19 @@ articles per category, ignoring `lookback_days`. Those articles:
 - are excluded from `org_content_map` (built at `content_organizer.py:611` from the main lists only)
 - are excluded from `content_stats`
 - add unbounded weight to the payload, feeding finding 1
+
+**Status: fixed 2026-07-28.** Latest Research now implements the definition
+recorded in
+[subscriptions.md](subscriptions.md#latest-research-section-weekly-digest):
+new articles since the subscriber's last email, grouped by category, tracked
+through the same `SentArticleNotification` table as the main content. The
+section is built in `send_weekly_summary` (not inside the organizer, which
+now only formats a pre-filtered `{TeamCategory: [Articles]}` map), honours
+`lookback_days` as a floor, deduplicates against the main section per render
+attempt, flows through `render_within_limit`'s shrink loop, and is included in
+`org_content_map`. `content_stats` was deliberately left alone — no template
+displays a Latest Research count. See
+`subscriptions/tests/test_latest_research_delta.py`.
 
 ---
 
@@ -214,6 +269,15 @@ above 30 and articles in the overlap are re-sent on every run indefinitely.
 
 Currently masked — all lists are at `lookback_days = 30` — so this is a
 configuration landmine rather than a live bug.
+
+**Status: closed 2026-07-28, as a side effect of the Latest Research fix
+(finding 8).** Flagged by PR review on the Latest Research change: reusing
+the same 30-day-capped sent-record exclusion for Latest Research made this
+landmine reachable through a second path. `send_weekly_summary`'s
+`threshold_date` is now `max(30, days_to_look_back)`, so the sent-record
+lookback is always at least as wide as the content lookback window, for both
+the main section and Latest Research. See
+`subscriptions/tests/test_latest_research_delta.py::SentRecordLookbackWindowTest`.
 
 ### 12. Announcements send synchronously inside the admin request
 

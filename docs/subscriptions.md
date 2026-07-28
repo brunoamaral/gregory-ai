@@ -190,6 +190,82 @@ trial notification callers). The weekly digest passes its own resolved
 default, so `lookback_days` is now honoured for both articles and trials in
 that email — previously it only governed the articles query.
 
+**Featuring trials by recruitment status:** `EmailContentOrganizer.organize_trials`
+splits trials into `featured_trials` (recruiting) and `regular_trials`
+(everything else) by checking `Trials.recruitment_status_normalized ==
+"recruiting"`. It does not fall back to a substring match on the raw
+`recruitment_status` string, and does not guess when the normalized field is
+`NULL` (the normalizer didn't recognise the raw value) — a `NULL` normalized
+status is always treated as not-recruiting. This mirrors how `trial_card.html`
+and `trial_card_simple.html` already key their status colours off the same
+field. See [`docs/trials-field-normalization.md`](trials-field-normalization.md)
+for how raw registry strings map onto `recruitment_status_normalized`.
+
+---
+
+## Featured/Regular Article Split (Design Decision, 2026-07-28)
+
+Both `weekly_summary.html` and `admin_summary.html` used to receive articles
+pre-split into `articles` ("featured", high-confidence) and
+`additional_articles` ("regular", needs review), each rendered through the
+same component with the same parameters. In the weekly digest, that split had
+**no visual effect** — no heading, no styling difference distinguished the two
+loops — so it existed only to reorder articles, at the cost of a per-article
+manual-review/ML query (`EmailContentOrganizer._filter_high_confidence` /
+`_get_max_ml_score`) with N+1 characteristics.
+
+The two emails were resolved differently, because they serve different
+purposes:
+
+- **Weekly digest — split removed.** `EmailContentOrganizer._organize_weekly_articles`
+  now always returns a single flat list (`featured_articles` is always
+  empty), ordered by discovery date, matching what `article_sort_order='date'`
+  already did. Selection (which articles qualify) still happens in
+  `send_weekly_summary` before the organizer runs; its own priority ranking
+  (manual review + ML consensus, then date) still decides order when
+  `article_limit` truncation applies. This is a reading list, where the split
+  was invisible and the ordering barely mattered — subscribers see no change.
+- **Admin summary — split kept, made visible and correct.** The admin summary
+  exists so a human can triage, and "already high-confidence" versus "needs
+  review" is exactly the distinction that email is for. `admin_summary.html`
+  now renders separate "High-Confidence" and "Needs Review" section headings
+  so the split is no longer silent, and the ML threshold + subject-scoping
+  bugs below were fixed since the split is now load-bearing.
+
+---
+
+## Latest Research Section (Weekly Digest)
+
+Latest Research is **new articles since the subscriber's last email for that
+list, grouped by team category** — a delta, not a standing digest, and
+deliberately **articles-only**.
+
+- It shares the exact same bookkeeping as the main article section:
+  `SentArticleNotification` keyed on `(article, list, subscriber)`. An article
+  shown in either section is suppressed from both on the next run — the two
+  sections compete for the same items rather than drawing independently.
+- The candidate pool for a category is `TeamCategory.articles` (populated by
+  `rebuild_categories`), bounded by a lookback floor of the list's
+  `lookback_days` (or the `--days` CLI override), not a fixed 30 days.
+- Within a single email, an article that also matches the list's subjects
+  renders once, in the main section — the main section is selected first and
+  Latest Research is deduplicated against it.
+- The section is built in `send_weekly_summary`, not inside
+  `EmailContentOrganizer`: `organize_latest_research_by_category` is pure
+  formatting over a `{TeamCategory: [Articles]}` map the command hands it
+  (via `prepare_optimized_context(..., latest_research_category_map=...)`),
+  so it flows through `render_within_limit`'s shrink loop like the main
+  articles and trials, and its articles are included in `org_content_map`.
+- A digest list with no `latest_research_categories` configured, or a
+  category with no qualifying articles, simply omits the section
+  (`has_latest_research=False`).
+
+**Trials are excluded from this section by decision, not oversight.**
+`TeamCategory.trials` (`Trials.team_categories`, `related_name="trials"`) is a
+real, populated relation, and a future reader will notice it is unused here —
+that is intentional. A category whose only new content is trials contributes
+nothing to Latest Research.
+
 ---
 
 ## Bounce and Suppression Handling

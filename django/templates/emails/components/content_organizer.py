@@ -98,17 +98,19 @@ class EmailContentOrganizer:
 				trials, key=lambda x: x.discovery_date, reverse=True
 			)
 
-		# Split into categories
+		# Split on the normalized status. A NULL normalized status means the
+		# normalizer did not recognise the raw value; treat that as not-recruiting
+		# rather than falling back to a substring match on the raw string, which is
+		# what produced the original bug (e.g. matching "Not Recruiting").
 		recruiting_trials = [
 			t
 			for t in organized_trials
-			if t.recruitment_status and "recruit" in str(t.recruitment_status).lower()
+			if t.recruitment_status_normalized == "recruiting"
 		]
 		other_trials = [
 			t
 			for t in organized_trials
-			if not t.recruitment_status
-			or "recruit" not in str(t.recruitment_status).lower()
+			if t.recruitment_status_normalized != "recruiting"
 		]
 
 		# Include ALL trials - don't limit content for subscribers
@@ -123,70 +125,35 @@ class EmailContentOrganizer:
 		}
 
 	def _organize_weekly_articles(self, articles, subscriber, list_obj):
-		"""Organize articles for weekly summary emails."""
-		# Date mode: flat list ordered by discovery_date, no featured/regular split.
-		if getattr(list_obj, "article_sort_order", "relevancy") == "date":
-			if hasattr(articles, "order_by"):
-				sorted_list = list(articles.order_by("-discovery_date"))
-			else:
-				sorted_list = sorted(
-					articles, key=lambda x: x.discovery_date, reverse=True
-				)
-			return {
-				"featured_articles": [],
-				"regular_articles": sorted_list,
-				"total_count": len(sorted_list),
-				"high_confidence_count": 0,
-			}
+		"""Organize articles for weekly summary emails: a single flat list,
+		no featured/regular split.
 
-		# Relevancy mode: split into high-confidence (featured) and regular.
-		# Get high-confidence articles first
-		high_confidence_articles = self._filter_high_confidence(articles)
-
-		# Handle both QuerySet and list cases for exclusion
-		if hasattr(articles, "exclude"):
-			# QuerySet case - use exclude
-			regular_articles = articles.exclude(
-				pk__in=[a.pk for a in high_confidence_articles]
-			)
+		Neither `weekly_summary.html` nor the `additional_articles` loop it
+		shares with `articles` draws any visual distinction between the two
+		buckets the split used to produce — the split existed only to
+		reorder articles, at the cost of a per-article manual-review/ML query
+		(see docs/subscriptions.md). Selection (which articles qualify at
+		all) already happened before this method runs; the command's own
+		priority ranking (manual review + ML consensus, `send_weekly_summary`)
+		decides order when `article_limit` truncation applies. Absent
+		truncation, sort by discovery date — the same behavior 'date' sort
+		order already had.
+		"""
+		if hasattr(articles, "order_by"):
+			sorted_list = list(articles.order_by("-discovery_date"))
 		else:
-			# List case - filter manually
-			high_confidence_pks = [a.pk for a in high_confidence_articles]
-			regular_articles = [a for a in articles if a.pk not in high_confidence_pks]
+			sorted_list = sorted(articles, key=lambda x: x.discovery_date, reverse=True)
 
-		# Sort by discovery date for user-friendly experience
-		high_confidence_sorted = sorted(
-			high_confidence_articles, key=lambda x: x.discovery_date, reverse=True
-		)
-
-		# Handle both QuerySet and list cases for ordering
-		if hasattr(regular_articles, "order_by"):
-			# QuerySet case
-			regular_sorted = list(regular_articles.order_by("-discovery_date"))
-		else:
-			# List case - sort manually
-			regular_sorted = sorted(
-				regular_articles, key=lambda x: x.discovery_date, reverse=True
-			)
-
-		# Apply subscriber preferences if available
 		if subscriber and list_obj:
-			high_confidence_sorted = self._apply_subscriber_preferences(
-				high_confidence_sorted, subscriber, list_obj
+			sorted_list = self._apply_subscriber_preferences(
+				sorted_list, subscriber, list_obj
 			)
-			regular_sorted = self._apply_subscriber_preferences(
-				regular_sorted, subscriber, list_obj
-			)
-
-		# Include ALL articles - don't limit content for subscribers
-		featured_articles = high_confidence_sorted  # All high-confidence articles
-		regular_articles = regular_sorted  # All regular articles
 
 		return {
-			"featured_articles": featured_articles,
-			"regular_articles": regular_articles,
-			"total_count": len(high_confidence_sorted) + len(regular_sorted),
-			"high_confidence_count": len(high_confidence_sorted),
+			"featured_articles": [],
+			"regular_articles": sorted_list,
+			"total_count": len(sorted_list),
+			"high_confidence_count": 0,
 		}
 
 	def _organize_admin_articles(self, articles, subscriber):
@@ -435,6 +402,7 @@ class EmailRenderingPipeline:
 		confidence_threshold=None,
 		utm_params=None,
 		organization=None,
+		latest_research_category_map=None,
 	):
 		"""
 		Prepare optimized context with content organization and performance enhancements.
@@ -449,233 +417,75 @@ class EmailRenderingPipeline:
 		    custom_settings: CustomSetting object
 		    confidence_threshold: Custom ML prediction confidence threshold to use
 		    utm_params: Dictionary of UTM parameters for link tracking
+		    latest_research_category_map: dict of {TeamCategory: [Articles]} for the
+		        weekly digest's Latest Research section, already filtered by the
+		        caller (sent-record exclusion, lookback window, dedup against the
+		        main article list). This method only formats it — see
+		        send_weekly_summary for the filtering logic.
 
 		Returns:
 		    dict: Optimized context for template rendering
 		"""
-		try:
-			# Initialize organizer for this email type
-			self.organizer.email_type = email_type
+		# Initialize organizer for this email type
+		self.organizer.email_type = email_type
 
-			# Set custom confidence threshold if provided
-			if confidence_threshold is not None:
-				self.organizer.confidence_threshold = confidence_threshold
+		# Set custom confidence threshold if provided
+		if confidence_threshold is not None:
+			self.organizer.confidence_threshold = confidence_threshold
 
-			# Optimize database queries with prefetch_related
-			if articles is not None and hasattr(articles, "prefetch_related"):
-				# Only apply prefetch if it's not already a sliced QuerySet
-				try:
-					articles = articles.prefetch_related(
-						"authors", "ml_predictions__subject"
-					)
-				except Exception:  # noqa: S110
-					# If prefetch fails (e.g., already sliced), continue with original
-					pass
-
-			if trials is not None and hasattr(trials, "select_related"):
-				# Only apply select_related if it's not already a sliced QuerySet
-				try:
-					trials = trials.select_related()
-				except Exception:  # noqa: S110
-					# If select_related fails (e.g., already sliced), continue with original
-					pass
-
-			# Organize content
-			organized_articles = self.organizer.organize_articles(
-				articles or Articles.objects.none(), subscriber, list_obj
-			)
-
-			organized_trials = self.organizer.organize_trials(
-				trials or Trials.objects.none(), subscriber, list_obj
-			)
-
-			# Generate content statistics
-			content_stats = self.organizer.get_content_statistics(
-				organized_articles, organized_trials
-			)
-
-			# Build optimized context
-			# Derive site domain for URL fallbacks from the site linked to the list.
-			# Strip whitespace to guard against accidental spaces in Site.domain.
-			_site_domain = site.domain.strip() if site and site.domain else ""
-			_site_scheme = (
-				"http" if _site_domain in ("localhost", "127.0.0.1") else "https"
-			)
-			_site_url_base = f"{_site_scheme}://{_site_domain}" if _site_domain else ""
-
-			context = {
-				"email_type": email_type,
-				"current_date": timezone.now(),
-				"subscriber": subscriber,
-				"site": site,
-				"custom_settings": custom_settings,
-				"customsettings": custom_settings,  # Template compatibility
-				# Site domain for URL construction
-				"site_domain": _site_domain,
-				# UTM parameters for link tracking
-				"utm_params": utm_params or {},
-				# Footer context from CustomSetting, falling back to site domain when not set.
-				# This ensures footer links always reflect the domain the list is linked to.
-				"website_url": getattr(custom_settings, "website_url", "")
-				or _site_url_base,
-				"support_url": getattr(custom_settings, "support_url", ""),
-				"about_url": getattr(custom_settings, "about_url", ""),
-				"contact_url": getattr(custom_settings, "contact_url", ""),
-				"bluesky_url": getattr(custom_settings, "bluesky_url", ""),
-				"github_url": getattr(custom_settings, "github_url", ""),
-				"mastodon_url": getattr(custom_settings, "mastodon_url", ""),
-				"privacy_policy_url": getattr(
-					custom_settings, "privacy_policy_url", ""
-				),
-				"terms_url": getattr(custom_settings, "terms_url", ""),
-				# Organized content
-				"articles": organized_articles.get("featured_articles", []),
-				"additional_articles": organized_articles.get("regular_articles", []),
-				"trials": organized_trials.get("featured_trials", []),
-				"additional_trials": organized_trials.get("regular_trials", []),
-				# Content statistics for smart template logic
-				"content_stats": content_stats,
-				"has_high_confidence_articles": content_stats[
-					"high_confidence_articles"
-				]
-				> 0,
-				"has_recruiting_trials": content_stats["recruiting_trials"] > 0,
-				# Performance metadata
-				"render_timestamp": timezone.now(),
-				"optimization_enabled": True,
-			}
-
-			# Add email-type specific context
-			if email_type == "weekly_summary":
-				# Add latest research by category if the list has any latest research categories
-				latest_research = {}
-				if list_obj and hasattr(list_obj, "latest_research_categories"):
-					from subscriptions.management.commands.utils.subscription import (
-						get_latest_research_by_category,
-					)
-
-					category_articles = get_latest_research_by_category(list_obj)
-					latest_research = (
-						self.organizer.organize_latest_research_by_category(
-							category_articles
-						)
-					)
-
-				context.update(
-					{
-						"greeting_time": self._get_greeting_time(),
-						"user": subscriber,
-						"list": list_obj,
-						"title": getattr(custom_settings, "title", "Gregory AI"),
-						"latest_research": latest_research,
-					}
+		# Optimize database queries with prefetch_related
+		if articles is not None and hasattr(articles, "prefetch_related"):
+			# Only apply prefetch if it's not already a sliced QuerySet
+			try:
+				articles = articles.prefetch_related(
+					"authors", "ml_predictions__subject"
 				)
+			except Exception:  # noqa: S110
+				# If prefetch fails (e.g., already sliced), continue with original
+				pass
 
-			elif email_type == "admin_summary":
-				# Handle both dict and object types for subscriber
-				if isinstance(subscriber, dict):
-					admin_email = subscriber.get("email", "admin@example.com")
-				else:
-					admin_email = getattr(subscriber, "email", "admin@example.com")
+		if trials is not None and hasattr(trials, "select_related"):
+			# Only apply select_related if it's not already a sliced QuerySet
+			try:
+				trials = trials.select_related()
+			except Exception:  # noqa: S110
+				# If select_related fails (e.g., already sliced), continue with original
+				pass
 
-				context.update(
-					{
-						"admin": admin_email,
-						"now": timezone.now(),
-						"list": list_obj,
-						"title": getattr(custom_settings, "title", "Gregory AI"),
-						"show_ml_predictions": True,
-						"show_admin_links": True,
-					}
-				)
+		# Organize content
+		organized_articles = self.organizer.organize_articles(
+			articles or Articles.objects.none(), subscriber, list_obj
+		)
 
-			elif email_type == "trial_notification":
-				context.update(
-					{
-						"now": timezone.now(),
-						"title": getattr(custom_settings, "title", "Gregory AI"),
-						"notification_type": "trial_update",
-					}
-				)
+		organized_trials = self.organizer.organize_trials(
+			trials or Trials.objects.none(), subscriber, list_obj
+		)
 
-			logger.info(
-				f"Optimized context prepared for {email_type}: "
-				f"{content_stats['total_articles']} articles, "
-				f"{content_stats['total_trials']} trials"
-			)
+		# Generate content statistics
+		content_stats = self.organizer.get_content_statistics(
+			organized_articles, organized_trials
+		)
 
-			# Build per-org content map for email templates
-			if organization is not None:
-				from gregory.models import ArticleOrgContent
-
-				all_email_articles = list(context.get("articles", [])) + list(
-					context.get("additional_articles", [])
-				)
-				article_ids = [
-					a.article_id for a in all_email_articles if hasattr(a, "article_id")
-				]
-				org_contents = {
-					oc.article_id: oc
-					for oc in ArticleOrgContent.objects.filter(
-						article_id__in=article_ids,
-						organization=organization,
-					)
-				}
-				context["org_content_map"] = org_contents
-			else:
-				_ORG_EXPECTED_TYPES = {"weekly_summary", "admin_summary"}
-				if email_type in _ORG_EXPECTED_TYPES:
-					logger.warning(
-						"prepare_optimized_context called without organization for email_type=%s; "
-						"org_content_map will be empty. Pass organization= for team-owned emails.",
-						email_type,
-					)
-				context["org_content_map"] = {}
-
-			return context
-
-		except Exception as e:
-			logger.error(
-				f"Error preparing optimized context for {email_type}: {str(e)}"
-			)
-			# Fallback to basic context
-			return self._get_fallback_context(
-				email_type, subscriber, site, custom_settings
-			)
-
-	def _get_greeting_time(self):
-		"""Get appropriate greeting based on current time."""
-		current_hour = timezone.now().hour
-		if current_hour < 12:
-			return "morning"
-		elif current_hour < 17:
-			return "afternoon"
-		else:
-			return "evening"
-
-	def _get_fallback_context(self, email_type, subscriber, site, custom_settings):
-		"""Provide fallback context if optimization fails."""
+		# Build optimized context
+		# Derive site domain for URL fallbacks from the site linked to the list.
 		# Strip whitespace to guard against accidental spaces in Site.domain.
 		_site_domain = site.domain.strip() if site and site.domain else ""
 		_site_scheme = "http" if _site_domain in ("localhost", "127.0.0.1") else "https"
 		_site_url_base = f"{_site_scheme}://{_site_domain}" if _site_domain else ""
-		base_context = {
+
+		context = {
 			"email_type": email_type,
 			"current_date": timezone.now(),
 			"subscriber": subscriber,
 			"site": site,
-			"customsettings": custom_settings,
-			"articles": [],
-			"trials": [],
-			"content_stats": {
-				"total_articles": 0,
-				"total_trials": 0,
-				"high_confidence_articles": 0,
-				"recruiting_trials": 0,
-			},
-			"optimization_enabled": False,
-			"error_mode": True,
-			"title": getattr(custom_settings, "title", "Gregory AI"),
+			"custom_settings": custom_settings,
+			"customsettings": custom_settings,  # Template compatibility
+			# Site domain for URL construction
+			"site_domain": _site_domain,
+			# UTM parameters for link tracking
+			"utm_params": utm_params or {},
+			# Footer context from CustomSetting, falling back to site domain when not set.
+			# This ensures footer links always reflect the domain the list is linked to.
 			"website_url": getattr(custom_settings, "website_url", "")
 			or _site_url_base,
 			"support_url": getattr(custom_settings, "support_url", ""),
@@ -686,14 +496,39 @@ class EmailRenderingPipeline:
 			"mastodon_url": getattr(custom_settings, "mastodon_url", ""),
 			"privacy_policy_url": getattr(custom_settings, "privacy_policy_url", ""),
 			"terms_url": getattr(custom_settings, "terms_url", ""),
+			# Organized content
+			"articles": organized_articles.get("featured_articles", []),
+			"additional_articles": organized_articles.get("regular_articles", []),
+			"trials": organized_trials.get("featured_trials", []),
+			"additional_trials": organized_trials.get("regular_trials", []),
+			# Content statistics for smart template logic
+			"content_stats": content_stats,
+			"has_high_confidence_articles": content_stats["high_confidence_articles"]
+			> 0,
+			"has_recruiting_trials": content_stats["recruiting_trials"] > 0,
+			# Performance metadata
+			"render_timestamp": timezone.now(),
+			"optimization_enabled": True,
 		}
 
-		# Add email-type specific context for fallback
+		# Add email-type specific context
 		if email_type == "weekly_summary":
-			base_context.update(
+			# Latest Research formatting only — the caller (send_weekly_summary)
+			# owns the filtering: sent-record exclusion, lookback window, and
+			# dedup against the main article list.
+			latest_research = {}
+			if latest_research_category_map:
+				latest_research = self.organizer.organize_latest_research_by_category(
+					latest_research_category_map
+				)
+
+			context.update(
 				{
-					"greeting_time": "morning",
+					"greeting_time": self._get_greeting_time(),
 					"user": subscriber,
+					"list": list_obj,
+					"title": getattr(custom_settings, "title", "Gregory AI"),
+					"latest_research": latest_research,
 				}
 			)
 
@@ -704,21 +539,75 @@ class EmailRenderingPipeline:
 			else:
 				admin_email = getattr(subscriber, "email", "admin@example.com")
 
-			base_context.update(
+			context.update(
 				{
 					"admin": admin_email,
 					"now": timezone.now(),
+					"list": list_obj,
+					"title": getattr(custom_settings, "title", "Gregory AI"),
 					"show_ml_predictions": True,
 					"show_admin_links": True,
 				}
 			)
 
 		elif email_type == "trial_notification":
-			base_context.update(
-				{"now": timezone.now(), "notification_type": "trial_update"}
+			context.update(
+				{
+					"now": timezone.now(),
+					"title": getattr(custom_settings, "title", "Gregory AI"),
+					"notification_type": "trial_update",
+				}
 			)
 
-		return base_context
+		logger.info(
+			f"Optimized context prepared for {email_type}: "
+			f"{content_stats['total_articles']} articles, "
+			f"{content_stats['total_trials']} trials"
+		)
+
+		# Build per-org content map for email templates
+		if organization is not None:
+			from gregory.models import ArticleOrgContent
+
+			all_email_articles = list(context.get("articles", [])) + list(
+				context.get("additional_articles", [])
+			)
+			for category_data in context.get("latest_research", {}).get(
+				"categories", []
+			):
+				all_email_articles.extend(category_data.get("articles", []))
+			article_ids = [
+				a.article_id for a in all_email_articles if hasattr(a, "article_id")
+			]
+			org_contents = {
+				oc.article_id: oc
+				for oc in ArticleOrgContent.objects.filter(
+					article_id__in=article_ids,
+					organization=organization,
+				)
+			}
+			context["org_content_map"] = org_contents
+		else:
+			_ORG_EXPECTED_TYPES = {"weekly_summary", "admin_summary"}
+			if email_type in _ORG_EXPECTED_TYPES:
+				logger.warning(
+					"prepare_optimized_context called without organization for email_type=%s; "
+					"org_content_map will be empty. Pass organization= for team-owned emails.",
+					email_type,
+				)
+			context["org_content_map"] = {}
+
+		return context
+
+	def _get_greeting_time(self):
+		"""Get appropriate greeting based on current time."""
+		current_hour = timezone.now().hour
+		if current_hour < 12:
+			return "morning"
+		elif current_hour < 17:
+			return "afternoon"
+		else:
+			return "evening"
 
 
 # Convenience functions for easy import by management commands

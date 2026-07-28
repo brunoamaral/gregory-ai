@@ -320,11 +320,14 @@ class TestEmailContentOrganizerDateMode(TestCase):
 		self.assertEqual(regular[0].pk, new.pk)
 		self.assertEqual(regular[1].pk, old.pk)
 
-	def test_relevancy_mode_uses_featured_regular_split(self):
-		"""Relevancy mode still splits articles into featured/regular buckets."""
+	def test_relevancy_mode_has_no_featured_regular_split(self):
+		"""Relevancy mode returns a single flat list, same as date mode — the
+		featured/regular split was removed (docs/subscriptions.md): neither
+		template drew any visual distinction between the two buckets, so it
+		only reordered articles at the cost of a per-article ML/manual query."""
 		list_obj = self._make_list("relevancy")
 		article = self._make_article("Any Article", days_ago=1)
-		# Mark as manually relevant so it lands in featured
+		# Manual relevance no longer affects bucketing (there is no bucket).
 		ArticleSubjectRelevance.objects.create(
 			article=article, subject=self.subject, is_relevant=True
 		)
@@ -332,5 +335,6 @@ class TestEmailContentOrganizerDateMode(TestCase):
 		organizer = EmailContentOrganizer(email_type="weekly_summary")
 		result = organizer.organize_articles([article], list_obj=list_obj)
 
-		# featured_articles should be non-empty for a manually-relevant article
-		self.assertGreater(len(result["featured_articles"]), 0)
+		self.assertEqual(result["featured_articles"], [])
+		self.assertEqual(result["high_confidence_count"], 0)
+		self.assertIn(article, result["regular_articles"])
