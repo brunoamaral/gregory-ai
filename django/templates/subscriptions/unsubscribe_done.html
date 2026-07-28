@@ -27,12 +27,24 @@
 </head>
 <body>
 <div class="card">
-    <h1>You have been unsubscribed</h1>
+    {% if scope != 'all' and not updated_count %}
+        <h1>Nothing to unsubscribe from</h1>
+    {% else %}
+        <h1>You have been unsubscribed</h1>
+    {% endif %}
 
     {% if scope == 'list' %}
-        <p>{{ subscriber.email }} has been removed from the mailing list.</p>
+        {% if updated_count %}
+            <p>{{ subscriber.email }} has been removed from the mailing list.</p>
+        {% else %}
+            <p>{{ subscriber.email }} was not subscribed to this mailing list.</p>
+        {% endif %}
     {% elif scope == 'site' %}
-        <p>{{ subscriber.email }} has been removed from all mailing lists on this site.</p>
+        {% if updated_count %}
+            <p>{{ subscriber.email }} has been removed from all mailing lists on this site.</p>
+        {% else %}
+            <p>{{ subscriber.email }} was not subscribed to anything on this site.</p>
+        {% endif %}
     {% else %}
         <p>{{ subscriber.email }} has been globally unsubscribed and will no longer
         receive any emails from us.</p>

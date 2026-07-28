@@ -115,6 +115,15 @@ All three endpoints accept `GET` (confirmation page) and `POST` (execute). Token
 
 `<token>` is the `unsubscribe_token` UUID from the `Subscribers` record. It is included in every email sent by the system.
 
+The site scope matches `Lists.site` — the field the email footer link is generated
+from — not `Team.site`. A list's team and its site are independent: `Team.site`
+can be `NULL` or point at a different site than the lists it owns, so filtering
+on `list__team__site_id` would silently match nothing. The response reports how
+many `ListSubscription` rows were actually deactivated (`updated_count`); the
+`list` and `site` scopes render a distinct "nothing to unsubscribe from" page
+when that count is zero, so a request that changes nothing can never look like a
+successful unsubscribe.
+
 ---
 
 ## Email Footer Unsubscribe Links

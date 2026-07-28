@@ -330,22 +330,23 @@ def _unsubscribe_confirm(request, token, scope, extra_id=None):
 	subscriber = get_object_or_404(Subscribers, unsubscribe_token=token)
 
 	if request.method == "POST":
+		updated = 0
 		if scope == "list":
-			ListSubscription.objects.filter(
+			updated = ListSubscription.objects.filter(
 				subscriber=subscriber,
 				list_id=extra_id,
 				is_active=True,
 			).update(is_active=False, unsubscribed_at=tz_now())
 		elif scope == "site":
-			ListSubscription.objects.filter(
+			updated = ListSubscription.objects.filter(
 				subscriber=subscriber,
-				list__team__site_id=extra_id,
+				list__site_id=extra_id,
 				is_active=True,
 			).update(is_active=False, unsubscribed_at=tz_now())
 		elif scope == "all":
 			subscriber.active = False
 			subscriber.save(update_fields=["active"])
-			ListSubscription.objects.filter(
+			updated = ListSubscription.objects.filter(
 				subscriber=subscriber,
 				is_active=True,
 			).update(is_active=False, unsubscribed_at=tz_now())
@@ -356,6 +357,7 @@ def _unsubscribe_confirm(request, token, scope, extra_id=None):
 			{
 				"subscriber": subscriber,
 				"scope": scope,
+				"updated_count": updated,
 			},
 		)
 
@@ -379,7 +381,7 @@ def unsubscribe_list(request, token, list_id):
 
 
 def unsubscribe_site(request, token, site_id):
-	"""Unsubscribe from all lists belonging to a specific site's teams."""
+	"""Unsubscribe from every list whose ``Lists.site`` matches the given site."""
 	return _unsubscribe_confirm(request, token, scope="site", extra_id=site_id)
 
 
