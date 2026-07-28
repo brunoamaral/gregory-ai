@@ -198,7 +198,8 @@ class SuppressionWiringTest(BaseSuppressionCommandTestCase):
 		self._make_trial("Trial A")
 
 		resp = _build_response(
-			422, {"ErrorCode": POSTMARK_INACTIVE_RECIPIENT, "Message": "Inactive recipient"}
+			422,
+			{"ErrorCode": POSTMARK_INACTIVE_RECIPIENT, "Message": "Inactive recipient"},
 		)
 		with patch(
 			"subscriptions.management.commands.send_trials_notification.send_email",
@@ -210,9 +211,7 @@ class SuppressionWiringTest(BaseSuppressionCommandTestCase):
 		subscriber.refresh_from_db()
 		self.assertFalse(subscriber.active)
 		self.assertFalse(
-			ListSubscription.objects.get(
-				subscriber=subscriber, list=self.lst
-			).is_active
+			ListSubscription.objects.get(subscriber=subscriber, list=self.lst).is_active
 		)
 		self.assertIsNotNone(
 			ListSubscription.objects.get(
@@ -228,7 +227,8 @@ class SuppressionWiringTest(BaseSuppressionCommandTestCase):
 		self._make_trial("Trial B")
 
 		resp = _build_response(
-			422, {"ErrorCode": POSTMARK_INACTIVE_RECIPIENT, "Message": "Inactive recipient"}
+			422,
+			{"ErrorCode": POSTMARK_INACTIVE_RECIPIENT, "Message": "Inactive recipient"},
 		)
 		with patch(
 			"subscriptions.management.commands.send_trials_notification.send_email",

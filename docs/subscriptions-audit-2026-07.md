@@ -29,6 +29,16 @@ only what was actually rendered as sent. See Task B in
 [subscriptions-p0-fix-plan.md](subscriptions-p0-fix-plan.md) and
 [subscriptions.md](subscriptions.md#content-limits-and-staleness-filtering).
 
+Follow-up closed 2026-07-28: `send_weekly_summary` built its own inline trials
+query and never called `get_trials_for_list`, so `trial_max_age_days` did not
+apply to weekly digests — the count cap alone bounded payload size but could
+not stop a bulk import of historical trials from being presented as new
+content (15 trials from the 2026-07-06 import, some registered as early as
+1999, reached the MS Weekly Digest's 88 subscribers under "New Clinical
+Trials"). `get_trials_for_list` now takes a `days` parameter and the weekly
+digest calls it with its own `lookback_days`, so the staleness filter and the
+per-list lookback window both apply to all three email types.
+
 `FailedNotification` holds 413 rows of `ErrorCode: 300, Invalid 'HtmlBody' value.
 It should be up to 5242880 characters in length` — all on the Alzheimer Disease
 list, 28 per day, every day from 2026-07-06 to 2026-07-21 (confirmed against the
@@ -217,6 +227,14 @@ configuration landmine rather than a live bug.
 `send_admin_summary` and `send_trials_notification` go through
 `get_articles_for_list` / `get_trials_for_list`, which hardcode 30 days. Only the
 weekly digest reads the field.
+
+**Partially closed 2026-07-28.** `get_trials_for_list` now takes a `days`
+parameter, and the weekly digest passes its own `lookback_days` (previously it
+built an inline query and read the field for articles only, not trials). The
+admin summary and trial notification callers still pass no `days` and get the
+30-day default by design, since only the weekly digest exposes a per-list
+lookback override. `get_articles_for_list` is unchanged and still hardcodes
+30 days everywhere.
 
 ---
 

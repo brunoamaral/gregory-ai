@@ -7,9 +7,9 @@ from django.utils.timezone import now
 from gregory.models import Articles, ArticleSubjectRelevance, Subject, Trials
 
 
-def get_trials_for_list(lst):
+def get_trials_for_list(lst, days=30):
 	"""
-	Returns trials discovered in the last 30 days for the given list.
+	Returns trials discovered in the last `days` days for the given list.
 
 	Also applies ``lst.trial_max_age_days`` against the trial's own
 	registration/publication date (not discovery_date, which only records
@@ -20,16 +20,15 @@ def get_trials_for_list(lst):
 	trial_max_age_days is NULL.
 	"""
 	qs = Trials.objects.filter(
-		subjects__in=lst.subjects.all(), discovery_date__gte=now() - timedelta(days=30)
+		subjects__in=lst.subjects.all(),
+		discovery_date__gte=now() - timedelta(days=days),
 	)
 
 	max_age_days = getattr(lst, "trial_max_age_days", None)
 	if max_age_days:
 		cutoff = now().date() - timedelta(days=max_age_days)
 		qs = qs.annotate(
-			effective_date=Coalesce(
-				F("date_registration"), TruncDate("published_date")
-			)
+			effective_date=Coalesce(F("date_registration"), TruncDate("published_date"))
 		).filter(Q(effective_date__gte=cutoff) | Q(effective_date__isnull=True))
 
 	return qs.distinct()
@@ -43,8 +42,8 @@ def get_articles_for_list(lst):
 	# Sub-subquery: has this (article, subject) pair been reviewed?
 	has_review = Exists(
 		ArticleSubjectRelevance.objects.filter(
-			article_id=OuterRef(OuterRef('pk')),
-			subject_id=OuterRef('pk'),
+			article_id=OuterRef(OuterRef("pk")),
+			subject_id=OuterRef("pk"),
 			is_relevant__isnull=False,
 		)
 	)
@@ -53,8 +52,10 @@ def get_articles_for_list(lst):
 	has_unreviewed_subject = Exists(
 		Subject.objects.filter(
 			pk__in=list_subjects,
-			articles__pk=OuterRef('pk'),
-		).alias(reviewed=has_review).filter(reviewed=False)
+			articles__pk=OuterRef("pk"),
+		)
+		.alias(reviewed=has_review)
+		.filter(reviewed=False)
 	)
 
 	return (
