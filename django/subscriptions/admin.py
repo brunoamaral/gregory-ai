@@ -4,7 +4,6 @@ from django.urls import path, reverse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
 import csv
-from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
@@ -33,6 +32,7 @@ from subscriptions.utils.render_email_body import (
 	render_announcement_text as _render_text_body,
 	strip_scheme,
 )
+from subscriptions.utils.suppression import deactivate_subscribers
 
 
 class SubscriberSiteProfileInline(admin.TabularInline):
@@ -938,22 +938,10 @@ class SubscriberAdmin(admin.ModelAdmin):
 	make_active.short_description = "Enable all emails (mark as active)"
 
 	def make_inactive(self, request, queryset):
-		now = timezone.now()
 		# Materialise the selected IDs: get_queryset() is annotated/distinct, which makes
 		# it unreliable as an `__in` subquery.
 		subscriber_ids = list(queryset.values_list("pk", flat=True))
-		with transaction.atomic():
-			updated_count = Subscribers.objects.filter(pk__in=subscriber_ids).update(
-				active=False
-			)
-			# Opt the selected subscribers out of every list they are still on, mirroring
-			# the global "unsubscribe from everything" flow. Preserve any existing
-			# unsubscribed_at; only stamp the rows that lack one.
-			stale_subs = ListSubscription.objects.filter(
-				subscriber_id__in=subscriber_ids, is_active=True
-			)
-			stale_subs.filter(unsubscribed_at__isnull=True).update(unsubscribed_at=now)
-			unsubscribed = stale_subs.update(is_active=False)
+		updated_count, unsubscribed = deactivate_subscribers(subscriber_ids)
 		self.message_user(
 			request,
 			f"{updated_count} subscriber(s) marked inactive — they will receive no emails from any "
@@ -1178,11 +1166,17 @@ class ListsAdmin(admin.ModelAdmin):
 					"article_sort_order",
 					"lookback_days",
 					"article_limit",
+					"trial_limit",
+					"trial_max_age_days",
 					"ml_threshold",
 				],
-				"description": "Configure content limits and ML prediction thresholds for weekly digest emails. "
-				"The ML threshold determines the minimum confidence level required for ML predictions to be considered relevant. "
-				'When sort order is set to "Date", the ML threshold is not used for article selection.',
+				"description": "Configure content limits and ML prediction thresholds. Article and trial limits "
+				"apply to weekly digest, admin summary, and trial notification emails — content that does not fit "
+				"rolls over to the next send instead of being dropped. Trial age is checked against the trial's own "
+				"registration/publication date, not when GregoryAI discovered it, so a bulk import of old trials "
+				"can't flood a newsletter. The ML threshold determines the minimum confidence level required for ML "
+				'predictions to be considered relevant. When sort order is set to "Date", the ML threshold is not '
+				"used for article selection.",
 			},
 		),
 		(

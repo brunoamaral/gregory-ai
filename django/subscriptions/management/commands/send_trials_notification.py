@@ -1,4 +1,6 @@
+import logging
 from datetime import timedelta
+import requests
 from django.utils.timezone import now
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
@@ -17,7 +19,15 @@ from subscriptions.management.commands.utils.get_credentials import (
 	get_postmark_credentials,
 	get_site_and_settings,
 )
+from subscriptions.utils.email_limits import render_within_limit, resolve_limits
+from subscriptions.utils.postmark import (
+	POSTMARK_INACTIVE_RECIPIENT,
+	classify_postmark_response,
+)
+from subscriptions.utils.suppression import deactivate_subscribers
 from templates.emails.components.content_organizer import get_optimized_email_context
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
@@ -128,31 +138,59 @@ class Command(BaseCommand):
 					emails_skipped += 1
 					continue
 
-				# Step 6: Prepare and send the email using optimized Phase 5 rendering pipeline
-				summary_context = get_optimized_email_context(
-					email_type="trial_notification",
-					trials=new_trials,
-					subscriber=subscriber,
-					list_obj=lst,
-					site=site,
-					custom_settings=customsettings,
-				)
-				# Inject unsubscribe context for the footer template
-				summary_context["list_id"] = lst.list_id
-				summary_context["unsubscribe_base_url"] = build_unsubscribe_base_url(
-					site, customsettings
-				)
-				summary_context["header_title"] = lst.header_title or ""
-				summary_context["header_tagline"] = lst.header_tagline or ""
-				summary_context["show_header_tagline"] = lst.show_header_tagline
+				# Step 6: Cap the number of trials so the rendered body can never
+				# exceed Postmark's size limit (audit finding 1). Newest first;
+				# whatever doesn't fit rolls over to the next run.
+				_, trial_limit = resolve_limits(lst)
+				new_trials = list(new_trials.order_by("-discovery_date")[:trial_limit])
 
-				# Additional safety check: Ensure the context contains trials to display
-				trials_in_context = summary_context.get("trials", [])
-				additional_trials_in_context = summary_context.get(
-					"additional_trials", []
+				def _render(articles, trials, _lst=lst, _subscriber=subscriber):
+					summary_context = get_optimized_email_context(
+						email_type="trial_notification",
+						trials=trials,
+						subscriber=_subscriber,
+						list_obj=_lst,
+						site=site,
+						custom_settings=customsettings,
+					)
+					# Inject unsubscribe context for the footer template
+					summary_context["list_id"] = _lst.list_id
+					summary_context["unsubscribe_base_url"] = (
+						build_unsubscribe_base_url(site, customsettings)
+					)
+					summary_context["header_title"] = _lst.header_title or ""
+					summary_context["header_tagline"] = _lst.header_tagline or ""
+					summary_context["show_header_tagline"] = _lst.show_header_tagline
+
+					html = get_template("emails/trial_notification.html").render(
+						summary_context
+					)
+					used_articles = list(
+						summary_context.get("articles", [])
+					) + list(summary_context.get("additional_articles", []))
+					used_trials = list(summary_context.get("trials", [])) + list(
+						summary_context.get("additional_trials", [])
+					)
+					return html, used_articles, used_trials
+
+				html_content, _articles_to_be_sent, trials_to_be_sent = (
+					render_within_limit(_render, [], new_trials)
 				)
 
-				if not trials_in_context and not additional_trials_in_context:
+				if html_content is None:
+					reason = (
+						f"Rendered trial notification for list '{lst.list_name}' "
+						f"still exceeds the safe body size after shrinking to a "
+						f"single trial."
+					)
+					logger.error(reason)
+					FailedNotification.objects.create(
+						subscriber=subscriber, list=lst, reason=reason
+					)
+					emails_skipped += 1
+					continue
+
+				if not trials_to_be_sent:
 					self.stdout.write(
 						self.style.WARNING(
 							f'No trials to display in email context for {subscriber.email} in list "{lst.list_name}". Skipping email.'
@@ -161,75 +199,70 @@ class Command(BaseCommand):
 					emails_skipped += 1
 					continue
 
-				html_content = get_template("emails/trial_notification.html").render(
-					summary_context
-				)
 				text_content = strip_tags(html_content)
 
-				result = send_email(
-					to=subscriber.email,
-					subject=email_subject,
-					html=html_content,
-					text=text_content,
-					site=site,
-					sender_name=customsettings.sender_name or customsettings.title,
-					api_token=postmark_api_token,
-					api_url=api_url,
-					sender_prefix=customsettings.sender_email_prefix,
-				)
-
-				# Step 7: Parse the Postmark response
-				if result.status_code == 200:
-					response_data = result.json()
-					error_code = response_data.get("ErrorCode", 0)
-					message = response_data.get("Message", "Unknown error")
-
-					if error_code == 0:  # Successful delivery
-						self.stdout.write(
-							self.style.SUCCESS(
-								f"Email sent to {subscriber.email} for list '{lst.list_name}'."
-							)
-						)
-						emails_sent += 1
-						# Record sent notifications for the new trials
-						for trial in new_trials:
-							SentTrialNotification.objects.get_or_create(
-								trial=trial, list=lst, subscriber=subscriber
-							)
-					else:  # Failed delivery
-						self.stdout.write(
-							self.style.ERROR(
-								f"Failed to send email to {subscriber.email} for list '{lst.list_name}'. Reason: {message}"
-							)
-						)
-						emails_skipped += 1
-						FailedNotification.objects.create(
-							subscriber=subscriber, list=lst, reason=message
-						)
-				else:
-					# Enhanced error handling for non-200 status codes
-					error_details = f"HTTP Status {result.status_code}"
-
-					# For 422 errors, extract detailed Postmark error information
-					if result.status_code == 422:
-						try:
-							error_response = result.json()
-							error_code = error_response.get("ErrorCode", "Unknown")
-							error_message = error_response.get(
-								"Message", "No details provided"
-							)
-							error_details = f"422 Unprocessable Entity - ErrorCode: {error_code}, Message: {error_message}"
-						except (ValueError, KeyError):
-							error_details = f"422 Unprocessable Entity - Unable to parse error details"
-
+				try:
+					result = send_email(
+						to=subscriber.email,
+						subject=email_subject,
+						html=html_content,
+						text=text_content,
+						site=site,
+						sender_name=customsettings.sender_name or customsettings.title,
+						api_token=postmark_api_token,
+						api_url=api_url,
+						sender_prefix=customsettings.sender_email_prefix,
+					)
+				except requests.RequestException as e:
 					self.stdout.write(
 						self.style.ERROR(
-							f"Failed to send email to {subscriber.email} for list '{lst.list_name}'. {error_details}"
+							f"Failed to send email to {subscriber.email} for list '{lst.list_name}'. Connection error: {e}"
 						)
 					)
 					emails_skipped += 1
 					FailedNotification.objects.create(
-						subscriber=subscriber, list=lst, reason=error_details
+						subscriber=subscriber, list=lst, reason=f"Connection error: {e}"
+					)
+					continue
+
+				# Step 7: Parse the Postmark response
+				delivered, error_code, detail = classify_postmark_response(result)
+
+				if delivered:
+					self.stdout.write(
+						self.style.SUCCESS(
+							f"Email sent to {subscriber.email} for list '{lst.list_name}'."
+						)
+					)
+					emails_sent += 1
+					# Record sent notifications only for trials that were
+					# actually rendered into the email (post-shrink).
+					for trial in trials_to_be_sent:
+						SentTrialNotification.objects.get_or_create(
+							trial=trial, list=lst, subscriber=subscriber
+						)
+				elif error_code == POSTMARK_INACTIVE_RECIPIENT:
+					logger.error(
+						"Subscriber %s is suppressed at Postmark (list '%s'); "
+						"deactivating globally — no further emails will be sent. %s",
+						subscriber.email,
+						lst.list_name,
+						detail,
+					)
+					deactivate_subscribers([subscriber.subscriber_id], reason=detail)
+					emails_skipped += 1
+					FailedNotification.objects.create(
+						subscriber=subscriber, list=lst, reason=detail
+					)
+				else:
+					self.stdout.write(
+						self.style.ERROR(
+							f"Failed to send email to {subscriber.email} for list '{lst.list_name}'. {detail}"
+						)
+					)
+					emails_skipped += 1
+					FailedNotification.objects.create(
+						subscriber=subscriber, list=lst, reason=detail
 					)
 
 		# Print summary

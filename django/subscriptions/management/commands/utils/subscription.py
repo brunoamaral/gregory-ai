@@ -1,16 +1,38 @@
 # utils/subscription.py
 
 from datetime import timedelta
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q, F
+from django.db.models.functions import Coalesce, TruncDate
 from django.utils.timezone import now
 from gregory.models import Articles, ArticleSubjectRelevance, Subject, Trials
 
 
 def get_trials_for_list(lst):
-	"""Returns trials discovered in the last 30 days for the given list."""
-	return Trials.objects.filter(
+	"""
+	Returns trials discovered in the last 30 days for the given list.
+
+	Also applies ``lst.trial_max_age_days`` against the trial's own
+	registration/publication date (not discovery_date, which only records
+	when GregoryAI first saw the row): a bulk import can stamp thousands of
+	historical trials with a fresh discovery_date, and this guards against
+	that flooding a newsletter. Trials with no usable date are kept — the
+	per-email trial_limit bounds them regardless. Skipped entirely when
+	trial_max_age_days is NULL.
+	"""
+	qs = Trials.objects.filter(
 		subjects__in=lst.subjects.all(), discovery_date__gte=now() - timedelta(days=30)
-	).distinct()
+	)
+
+	max_age_days = getattr(lst, "trial_max_age_days", None)
+	if max_age_days:
+		cutoff = now().date() - timedelta(days=max_age_days)
+		qs = qs.annotate(
+			effective_date=Coalesce(
+				F("date_registration"), TruncDate("published_date")
+			)
+		).filter(Q(effective_date__gte=cutoff) | Q(effective_date__isnull=True))
+
+	return qs.distinct()
 
 
 def get_articles_for_list(lst):

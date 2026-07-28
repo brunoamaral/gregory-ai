@@ -115,6 +115,117 @@ All three endpoints accept `GET` (confirmation page) and `POST` (execute). Token
 
 `<token>` is the `unsubscribe_token` UUID from the `Subscribers` record. It is included in every email sent by the system.
 
+The site scope matches `Lists.site` — the field the email footer link is generated
+from — not `Team.site`. A list's team and its site are independent: `Team.site`
+can be `NULL` or point at a different site than the lists it owns, so filtering
+on `list__team__site_id` would silently match nothing. The response reports how
+many `ListSubscription` rows were actually deactivated (`updated_count`); the
+`list` and `site` scopes render a distinct "nothing to unsubscribe from" page
+when that count is zero, so a request that changes nothing can never look like a
+successful unsubscribe.
+
+---
+
+## Content Limits and Staleness Filtering
+
+`Lists` has three fields that bound how much content a single email can carry.
+They exist because nothing capped the number of trials on the way into an
+email: a bulk import once stamped thousands of historical trials with a
+same-day `discovery_date`, one notification list tried to render 3,570 trial
+cards in a single send, and Postmark rejected the body outright
+(`ErrorCode: 300`). Because the send failed, no `SentTrialNotification` rows
+were written, so the next run rebuilt the identical oversized payload and
+failed again — 413 times over 15 days before anyone noticed.
+
+| Field | Default | Applies to |
+|---|---|---|
+| `article_limit` | 15 | Weekly digest, admin summary, and trial notification emails |
+| `trial_limit` | 15 | Weekly digest, admin summary, and trial notification emails |
+| `trial_max_age_days` | 90 | `get_trials_for_list` (admin summary, trial notification) |
+
+**Rollover:** content that does not fit in one email is not marked as sent —
+only what actually gets rendered into the template is recorded in
+`SentArticleNotification` / `SentTrialNotification`. Whatever was truncated
+appears again on the next run, ordered newest-first, until it either gets
+sent or ages out of the lookback window. This is what makes the fix
+self-healing: a stuck backlog drains on its own instead of failing on repeat.
+
+**Size guard:** even after truncating to `article_limit` / `trial_limit`, the
+rendered HTML is checked against Postmark's hard limit
+(`subscriptions.utils.email_limits.SAFE_BODY_CHARS`, comfortably under the
+5,242,880-character `ErrorCode: 300` ceiling). If it's still too large the
+content is halved and re-rendered, down to a single article and a single
+trial. If even that overflows, nothing is sent — a `FailedNotification` is
+written naming the list, and the failure is logged at `ERROR` so it's visible
+rather than silently retried forever. With the counts above in place this
+path should be unreachable in practice.
+
+**Why staleness is measured on the trial's own date, not `discovery_date`:**
+`discovery_date` only records when GregoryAI first saw a row — it says
+nothing about how old the trial actually is. A bulk import can stamp
+thousands of trials registered anywhere from last month to twenty years ago
+with the *same* fresh `discovery_date`, and a window on `discovery_date`
+alone would let all of them through. `trial_max_age_days` instead compares
+against `COALESCE(date_registration, published_date)`: trials whose own date
+is older than the threshold are skipped, regardless of when they were
+discovered. Trials with neither date set are always kept — the per-email
+`trial_limit` bounds them regardless — so an unusual-but-genuinely-new trial
+is never silently dropped just because its registry didn't supply a date.
+The check only applies to `get_trials_for_list` (admin summary and trial
+notification); it is not applied to the weekly digest's own trial query,
+where the trial count cap alone is enough to bound the payload. Set
+`trial_max_age_days` to blank on a list to disable the check entirely.
+
+The default of 90 days (rather than 30) exists because WHO ICTRP and CTIS
+feeds lag: a trial registered 45 days ago may only reach GregoryAI today. At
+30 days it would be dropped by the age check and would then also age out of
+the 30-day discovery window before ever qualifying for an email.
+
+---
+
+## Bounce and Suppression Handling
+
+Postmark returns HTTP 422 with `ErrorCode: 406` when the recipient is on its
+suppression list — a hard bounce, a spam complaint, or a manual suppression.
+Left unhandled, nothing stops the same address from being retried on every
+subsequent run: one address in production was retried 210 times before this
+was noticed.
+
+All three send commands (`send_weekly_summary`, `send_admin_summary`,
+`send_trials_notification`) now route every Postmark response through
+`subscriptions.utils.postmark.classify_postmark_response`, which normalises a
+`requests.Response`, a plain dict, or `None` into `(delivered, error_code,
+detail)`. This exists because `requests.Response.__bool__` is `self.ok`, so a
+422/500 response is falsy — a bare `if result:` check silently treats a real
+error response as "no response" and loses the actual status and error code.
+`classify_postmark_response` never tests the response for truthiness, so this
+class of bug can't recur.
+
+When `error_code == 406` (`subscriptions.utils.postmark.POSTMARK_INACTIVE_RECIPIENT`),
+the subscriber is deactivated globally via
+`subscriptions.utils.suppression.deactivate_subscribers` — the same helper the
+admin "Disable all emails" action uses (see the `Subscribers.active` field
+above: it's a global switch, not a per-list one), so the two paths can't
+drift. A hard bounce, a spam complaint, and a manual suppression are all
+treated the same way: the address must not be mailed again from *any* list,
+not just the one that triggered the 406. Any other non-200 response is
+recorded as a normal failure without touching the subscriber's active state.
+
+Every outcome is visible in `FailedNotification` (`reason` holds the detail
+string from `classify_postmark_response`), and a 406 additionally shows up in
+`Subscribers.active` going to `False` — check the model's change history for
+when and why.
+
+A connection-level failure (timeout, DNS, reset) from the `send_email` call
+itself is also caught (`requests.RequestException`) and recorded as a
+`FailedNotification` rather than aborting the rest of the run — previously a
+single dropped connection could skip every remaining subscriber and list for
+that cron invocation with no record of it happening.
+
+This handling is reactive only: suppression is discovered by attempting a
+send and reading the response, not by a Postmark bounce webhook. A real-time
+webhook and a reactivation flow are tracked separately, out of scope here.
+
 ---
 
 ## Email Footer Unsubscribe Links
