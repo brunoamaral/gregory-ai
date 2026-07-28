@@ -128,7 +128,7 @@ successful unsubscribe.
 
 ## Content Limits and Staleness Filtering
 
-`Lists` has three fields that bound how much content a single email can carry.
+`Lists` has four fields that bound how much content a single email can carry.
 They exist because nothing capped the number of trials on the way into an
 email: a bulk import once stamped thousands of historical trials with a
 same-day `discovery_date`, one notification list tried to render 3,570 trial
@@ -139,6 +139,7 @@ failed again — 413 times over 15 days before anyone noticed.
 
 | Field | Default | Applies to |
 |---|---|---|
+| `lookback_days` | 30 | Weekly digest, admin summary, and trial notification emails |
 | `article_limit` | 15 | Weekly digest, admin summary, and trial notification emails |
 | `trial_limit` | 15 | Weekly digest, admin summary, and trial notification emails |
 | `trial_max_age_days` | 90 | Weekly digest, admin summary, and trial notification emails |
@@ -183,12 +184,23 @@ feeds lag: a trial registered 45 days ago may only reach GregoryAI today. At
 30 days it would be dropped by the age check and would then also age out of
 the 30-day discovery window before ever qualifying for an email.
 
-`get_trials_for_list` also takes a `days` parameter controlling the
-discovery-date window (default 30, unchanged for the admin summary and
-trial notification callers). The weekly digest passes its own resolved
-`lookback_days` (or the `--days` CLI override when set) instead of the
-default, so `lookback_days` is now honoured for both articles and trials in
-that email — previously it only governed the articles query.
+`get_trials_for_list` and `get_articles_for_list` both take a `days`
+parameter controlling the discovery-date window (default 30). All three send
+commands now pass the list's own `lookback_days` at every call site — the
+weekly digest passes its resolved value (or the `--days` CLI override when
+set); `send_admin_summary` and `send_trials_notification` pass
+`lst.lookback_days` directly. Previously only the weekly digest read the
+field at all, and even there it governed articles but not trials, so editing
+`lookback_days` on an admin-summary-only or trial-notification-only list did
+nothing.
+
+Widening the content window without widening the sent-record window would
+reopen audit finding 11 (an item still inside the content window but outside
+a fixed 30-day exclusion window gets treated as unsent and re-mailed every
+run). `send_admin_summary` and `send_trials_notification` compute their
+`threshold_date` the same way the weekly digest already does:
+`now() - timedelta(days=max(30, lst.lookback_days))`, so the exclusion window
+is always at least as wide as the content window.
 
 **Featuring trials by recruitment status:** `EmailContentOrganizer.organize_trials`
 splits trials into `featured_trials` (recruiting) and `regular_trials`

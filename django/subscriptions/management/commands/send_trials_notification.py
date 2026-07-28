@@ -48,9 +48,12 @@ class Command(BaseCommand):
 			self.stdout.write(self.style.WARNING("No lists found with subjects."))
 			return
 
-		threshold_date = now() - timedelta(days=30)  # Filter for the last 30 days
-
 		for lst in subject_lists:
+			# Sent-record exclusion window must be at least as wide as the
+			# content window (lookback_days), or an item still inside the
+			# content window but outside a fixed 30-day exclusion window gets
+			# treated as unsent and re-mailed every run (audit finding 11).
+			threshold_date = now() - timedelta(days=max(30, lst.lookback_days))
 			# Fetch the team directly from the list
 			team = lst.team  # This assumes Lists model has a ForeignKey to Team
 			email_subject = (
@@ -90,7 +93,7 @@ class Command(BaseCommand):
 				continue
 
 			# Step 3: Use the shared utility function to fetch trials
-			list_trials = get_trials_for_list(lst)
+			list_trials = get_trials_for_list(lst, days=lst.lookback_days)
 
 			if not list_trials.exists():
 				self.stdout.write(
@@ -123,7 +126,7 @@ class Command(BaseCommand):
 					trial__in=list_trials,
 					list=lst,
 					subscriber=subscriber,
-					sent_at__gte=threshold_date,  # Only notifications sent in the last 30 days
+					sent_at__gte=threshold_date,  # Only notifications sent within the sent-record exclusion window
 				).values_list("trial_id", flat=True)
 
 				# Filter out already sent trials

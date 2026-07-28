@@ -59,12 +59,13 @@ class Lists(models.Model):
 		help_text="ML prediction confidence threshold (0.0-1.0). Only articles with ML predictions above this threshold will be considered relevant.",
 		verbose_name="ML Threshold for Relevance",
 	)
-	# Lookback window for weekly digest emails
+	# Lookback window for weekly digest, admin summary, and trial notification emails
 	lookback_days = models.PositiveIntegerField(
 		default=30,
 		validators=[MinValueValidator(1), MaxValueValidator(365)],
 		help_text=(
-			"How many days back to look for articles and trials in the weekly digest. "
+			"How many days back to look for articles and trials. Applies to "
+			"weekly digest, admin summary, and trial notification emails. "
 			"Common values: 8, 15, 30. Maximum 365."
 		),
 		verbose_name="Lookback Window (days)",

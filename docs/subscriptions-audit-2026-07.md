@@ -339,13 +339,25 @@ status lifecycle.
 `get_articles_for_list` / `get_trials_for_list`, which hardcode 30 days. Only the
 weekly digest reads the field.
 
-**Partially closed 2026-07-28.** `get_trials_for_list` now takes a `days`
-parameter, and the weekly digest passes its own `lookback_days` (previously it
-built an inline query and read the field for articles only, not trials). The
-admin summary and trial notification callers still pass no `days` and get the
-30-day default by design, since only the weekly digest exposes a per-list
-lookback override. `get_articles_for_list` is unchanged and still hardcodes
-30 days everywhere.
+**Fully closed 2026-07-28.** `get_articles_for_list` now takes a `days`
+parameter (mirroring `get_trials_for_list` and `get_latest_research_by_category`),
+and all three send commands pass the list's own `lookback_days` at every
+remaining call site: `send_admin_summary.py` for both its articles and trials
+queries, and `send_trials_notification.py` for its trials query. Decided by
+Bruno on 2026-07-28: `lookback_days` applies to all three email types — it
+sits in the same "Content Settings" admin fieldset as `article_limit` and
+`trial_limit`, both of which already apply everywhere, so a knob that
+silently ignores you there is worse than one that doesn't exist. This changes
+no behaviour today (every list is at `lookback_days = 30`, matching the old
+hardcoded value) — it only takes effect once someone edits the field.
+
+Widening the content window this way reopens finding 11 unless the
+sent-record exclusion window widens with it.
+`send_admin_summary`/`send_trials_notification` now compute
+`threshold_date = now() - timedelta(days=max(30, lst.lookback_days))`, the
+same guard the weekly digest already uses, so an item inside a widened
+content window can never fall outside a narrower exclusion window. See
+`subscriptions/tests/test_lookback_days_all_email_types.py`.
 
 ---
 
