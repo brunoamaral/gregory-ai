@@ -778,17 +778,32 @@ class Articles(models.Model):
 			# Default to 'any' if unknown consensus type
 			return total_predictions >= 1
 
-	def is_ml_relevant_any_subject(self, threshold=0.8):
+	def is_ml_relevant_any_subject(self, threshold=0.8, subjects=None):
 		"""
 		Check if this article is ML-relevant for any of its associated subjects.
 
 		Args:
 			threshold: Minimum probability score required (default: 0.8)
+			subjects: Optional iterable/queryset of Subject instances to restrict
+				the check to. Callers evaluating relevance for a specific digest
+				list must pass that list's own subjects here -- otherwise an
+				article tagged with both the list's subject and an unrelated
+				team's auto_predict subject would be credited as relevant on the
+				strength of the unrelated subject's ML prediction. Defaults to
+				all of the article's auto_predict subjects when omitted.
 
 		Returns:
 			bool: True if article meets ML consensus criteria for at least one subject
 		"""
-		for subject in self.subjects.filter(auto_predict=True):
+		candidate_subjects = self.subjects.filter(auto_predict=True)
+		if subjects is not None:
+			subject_ids = (
+				subjects.values_list("pk", flat=True)
+				if hasattr(subjects, "values_list")
+				else [s.pk for s in subjects]
+			)
+			candidate_subjects = candidate_subjects.filter(pk__in=subject_ids)
+		for subject in candidate_subjects:
 			if self.is_ml_relevant_for_subject(subject, threshold):
 				return True
 		return False

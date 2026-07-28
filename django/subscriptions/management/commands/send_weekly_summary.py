@@ -295,9 +295,10 @@ class Command(BaseCommand):
 							f"RELEVANCY SORT MODE: Using ML consensus logic with threshold={threshold}"
 						)
 					)
+				list_subjects = digest_list.subjects.all()
 				base_subject_articles = (
 					Articles.objects.filter(
-						subjects__in=digest_list.subjects.all(),
+						subjects__in=list_subjects,
 						discovery_date__gte=now() - timedelta(days=days_to_look_back),
 					)
 					.order_by("-discovery_date")
@@ -315,8 +316,8 @@ class Command(BaseCommand):
 
 				# Then, get manually reviewed articles (only those tagged as relevant for at least one subject)
 				manual_reviewed = Articles.objects.filter(
-					subjects__in=digest_list.subjects.all(),
-					article_subject_relevances__subject__in=digest_list.subjects.all(),
+					subjects__in=list_subjects,
+					article_subject_relevances__subject__in=list_subjects,
 					article_subject_relevances__is_relevant=True,
 					discovery_date__gte=now() - timedelta(days=days_to_look_back),
 				).distinct()
@@ -326,10 +327,15 @@ class Command(BaseCommand):
 					)
 				)
 
-				# Get articles that are ML-relevant based on new consensus logic
+				# Get articles that are ML-relevant based on new consensus logic.
+				# Scoped to this list's own subjects so an article tagged with an
+				# unrelated team's auto_predict subject can't ride in on that
+				# subject's ML prediction.
 				ml_relevant_articles = []
 				for article in subject_articles:
-					if article.is_ml_relevant_any_subject(threshold=threshold):
+					if article.is_ml_relevant_any_subject(
+						threshold=threshold, subjects=list_subjects
+					):
 						ml_relevant_articles.append(article.article_id)
 
 				ml_predicted = Articles.objects.filter(pk__in=ml_relevant_articles)
