@@ -53,6 +53,8 @@ walkthrough (read in order); everything else is reference or design material.
 | [subscriptions.md](subscriptions.md) | Subscription/newsletter system. |
 | [subscriptions-audit-2026-07.md](subscriptions-audit-2026-07.md) | Audit of newsletter sending and the email content organizer — open bugs, prioritised. |
 | [subscriptions-p0-fix-plan.md](subscriptions-p0-fix-plan.md) | Execution plan for the P0 findings in the subscriptions audit. |
+| [subscriptions-p0-followup-plan.md](subscriptions-p0-followup-plan.md) | Follow-up plan: weekly digest staleness gap and format cleanup left open after the P0 fixes. |
+| [subscriptions-p1-fix-plan.md](subscriptions-p1-fix-plan.md) | Execution plan for the P1 findings — content organizer correctness. |
 | [merge-authors-command.md](merge-authors-command.md) | The author-merge management command. |
 | [lint-triage.md](lint-triage.md) | Ruff lint-gate worklist. |
 

@@ -187,12 +187,16 @@ admin summary, `_get_max_ml_score` was already correctly scoped —
 `send_admin_summary` prefetches `ml_predictions_detail` filtered to
 `subject__in=list_subjects` into `filtered_ml_predictions`, which the method
 prefers when present — confirmed by regression test rather than changed.
-**`Articles.is_ml_relevant_any_subject` (`send_weekly_summary.py:318`) is
-unchanged and still scans every `auto_predict` subject on the article, not
-just the list's own** — this bullet was not part of the P1 fix plan's scoped
-Task 5 (organizer methods only) and remains open. It affects weekly digest
-*selection* (which articles qualify), not presentation, so it survives the
-split's removal.
+
+`Articles.is_ml_relevant_any_subject` was the one part left open when this
+annotation was first written, and it closed shortly afterwards in `41f15c2a`,
+`9ca78c98` and `c0c1e80f`: the method now takes an optional `subjects`
+argument, and `send_weekly_summary` passes the digest list's own subjects so
+an article can no longer qualify on the strength of an unrelated team's
+`auto_predict` subject. Regression test in
+`gregory/tests/test_is_ml_relevant_any_subject_scoping.py`. Finding 6 is
+therefore fully closed, not partial — the heading above is kept as written for
+history.
 
 ### 7. A blanket `except` turns any bug into a silently empty email
 
@@ -220,7 +224,8 @@ send with a logged `FailedNotification` instead of delivering nothing. See
 articles per category, ignoring `lookback_days`. Those articles:
 
 - are not deduplicated against the main article list, so one article can appear twice in the same email
-- are never recorded in `SentArticleNotification`, so they repeat every week
+- are never recorded in `SentArticleNotification`, so they repeat every week. Confirmed a defect: the section means "new articles since the last email", grouped by category (Bruno, 2026-07-28), so repetition is not intended behaviour.
+- the section is articles-only by decision (Bruno, 2026-07-28). `TeamCategory` also carries trials via `Trials.team_categories`, and that relation is deliberately unused here — it is not an oversight to fix.
 - are excluded from `org_content_map` (built at `content_organizer.py:611` from the main lists only)
 - are excluded from `content_stats`
 - add unbounded weight to the payload, feeding finding 1
