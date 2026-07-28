@@ -2,7 +2,7 @@
 
 Execution plan for the three P0 findings in
 [subscriptions-audit-2026-07.md](subscriptions-audit-2026-07.md). Each task is
-independently shippable and independently revertable — commit them separately,
+independently shippable and independently revertible — commit them separately,
 in the order below.
 
 Read the audit first for the evidence behind each finding.
