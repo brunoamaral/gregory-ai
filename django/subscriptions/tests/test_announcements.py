@@ -208,8 +208,11 @@ class SendViewRedirectTest(TestCase):
 		self.assertTrue(any("already been sent" in str(m) for m in msgs))
 
 
-class SendViewSubjectNormalisationTest(TestCase):
-	"""send_view must strip any leading [TEST] prefix from the subject on live sends."""
+class SendViewQueuesRatherThanSendsTest(TestCase):
+	"""send_view no longer calls Postmark directly — it validates and sets
+	status='queued'; the send_announcement management command (cron) does
+	the actual send. This keeps a large send from being killed mid-flight
+	by nginx's/gunicorn's request timeouts (audit finding 12)."""
 
 	@classmethod
 	def setUpTestData(cls):
@@ -256,31 +259,90 @@ class SendViewSubjectNormalisationTest(TestCase):
 		ann.lists.add(self.lst)
 		return ann
 
-	def _post_send(self, ann):
+	def test_post_send_sets_status_queued_without_calling_postmark(self):
+		ann = self._make_announcement("My Announcement")
+		with patch(
+			"subscriptions.utils.announcement_send.send_email",
+			side_effect=AssertionError("Postmark must not be called from send_view"),
+		):
+			self.client.post(self._send_url(ann.pk))
+		ann.refresh_from_db()
+		self.assertEqual(ann.status, "queued")
+
+	def test_second_send_post_while_queued_is_rejected(self):
+		ann = self._make_announcement("My Announcement")
+		self.client.post(self._send_url(ann.pk))
+		ann.refresh_from_db()
+		self.assertEqual(ann.status, "queued")
+
+		response = self.client.post(self._send_url(ann.pk))
+		msgs = [str(m) for m in get_messages(response.wsgi_request)]
+		self.assertTrue(any("already queued" in m for m in msgs), msgs)
+		ann.refresh_from_db()
+		self.assertEqual(ann.status, "queued")  # unchanged, not re-validated
+
+
+class SendAnnouncementSubjectNormalisationTest(TestCase):
+	"""send_announcement() (invoked by the send_announcement command once an
+	announcement is queued) must strip any leading [TEST] prefix."""
+
+	@classmethod
+	def setUpTestData(cls):
+		cls.org = Organization.objects.create(name="Norm Org 2")
+		cls.team = Team.objects.create(
+			organization=cls.org, name="Norm Team 2", slug="norm-team-2"
+		)
+		cls.norm_site = Site.objects.get_or_create(
+			id=21, defaults={"domain": "norm2.example.com", "name": "Norm2"}
+		)[0]
+		cls.norm_site.domain = "norm2.example.com"
+		cls.norm_site.save()
+		CustomSetting.objects.get_or_create(
+			site=cls.norm_site,
+			defaults={"title": "Norm CS 2", "api_domain": "api.norm2.example.com"},
+		)
+		cls.lst = Lists.objects.create(
+			list_name="Norm List 2", team=cls.team, site=cls.norm_site
+		)
+		cls.sub = Subscribers.objects.create(
+			first_name="Carol", last_name="Danvers", email="carol2@example.com"
+		)
+		ListSubscription.objects.create(
+			subscriber=cls.sub, list=cls.lst, is_active=True
+		)
+		cls.sub.active = True
+		cls.sub.save()
+
+	def _make_announcement(self, subject):
+		ann = Announcement.objects.create(
+			subject=subject, body="<p>Body</p>", status="queued", organization=self.org
+		)
+		ann.lists.add(self.lst)
+		return ann
+
+	def _send_and_capture(self, ann):
+		from subscriptions.utils.announcement_send import send_announcement
+
 		mock_response = MagicMock()
 		mock_response.status_code = 200
 		mock_response.json.return_value = {"MessageID": "test"}
-		# Patched where send_announcement() looks it up, not where it's
-		# defined — announcement_send.py does a top-level `from ... import
-		# send_email`, so patching the source module's attribute after that
-		# import has already run would have no effect.
 		with patch(
 			"subscriptions.utils.announcement_send.send_email",
 			return_value=mock_response,
 		) as mock_send:
-			self.client.post(self._send_url(ann.pk))
+			send_announcement(ann)
 		return mock_send
 
-	def test_test_prefix_stripped_on_live_send(self):
+	def test_test_prefix_stripped_on_send(self):
 		ann = self._make_announcement("[TEST] My Announcement")
-		mock_send = self._post_send(ann)
+		mock_send = self._send_and_capture(ann)
 		mock_send.assert_called_once()
 		_, kwargs = mock_send.call_args
 		self.assertEqual(kwargs["subject"], "My Announcement")
 
-	def test_clean_subject_unchanged_on_live_send(self):
+	def test_clean_subject_unchanged_on_send(self):
 		ann = self._make_announcement("My Announcement")
-		mock_send = self._post_send(ann)
+		mock_send = self._send_and_capture(ann)
 		mock_send.assert_called_once()
 		_, kwargs = mock_send.call_args
 		self.assertEqual(kwargs["subject"], "My Announcement")

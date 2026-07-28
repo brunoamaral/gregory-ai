@@ -342,6 +342,7 @@ class SubscriberSiteProfile(models.Model):
 class Announcement(models.Model):
 	STATUS_CHOICES = [
 		("draft", "Draft"),
+		("queued", "Queued"),
 		("sending", "Sending"),
 		("sent", "Sent"),
 		("failed", "Failed"),

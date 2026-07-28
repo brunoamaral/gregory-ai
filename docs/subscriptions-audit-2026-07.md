@@ -254,6 +254,12 @@ displays a Latest Research count. See
 the whole cron run: remaining subscribers and remaining lists get nothing, and
 no `FailedNotification` is written, so the failure is invisible.
 
+**Status: closed in P0, confirmed still closed 2026-07-28.** All three send
+commands wrap their `send_email` call in `except requests.RequestException`
+and write a `FailedNotification` before continuing to the next subscriber. No
+code change needed here — annotating only, since this carried no status block
+before and so still read as open.
+
 ### 10. The falsy-`Response` fix was never backported
 
 `send_weekly_summary.py:895` carries an explicit comment about
@@ -264,6 +270,14 @@ and the 422-detail extraction at line 222 is unreachable.
 
 Latent rather than live: that list has one subscriber and no failures recorded
 yet.
+
+**Status: closed in P0, confirmed still closed 2026-07-28.** All three
+commands route the Postmark response through
+`subscriptions.utils.postmark.classify_postmark_response`, which never tests
+the response for truthiness (see the docstring warning about
+`requests.Response.__bool__`). No remaining `if result and result.status_code`
+truthiness check exists outside the comments explaining the trap. Annotating
+only, same reason as finding 9.
 
 ### 11. `sent_at` is never refreshed
 
@@ -290,6 +304,34 @@ the main section and Latest Research. See
 
 - A list large enough to exceed the HTTP timeout leaves `status = "sending"`, and `send_view` refuses anything in `("sent", "sending")` — unrecoverable from the UI.
 - A single failure sets `status = "failed"`, which *is* re-sendable, and the retry loops over all subscribers again without filtering on existing successful `AnnouncementRecipient` rows. Everyone who already received it gets a duplicate.
+
+**Status: fixed 2026-07-28**, in two commits — see
+[subscriptions-p2-fix-plan.md](subscriptions-p2-fix-plan.md#task-1--announcement-sending-never-got-the-p0-treatment).
+
+1. `subscriptions.utils.announcement_send.send_announcement` now routes the
+   Postmark response through `classify_postmark_response` (a 406 deactivates
+   the subscriber and is recorded as `suppressed=True`, not a plain failure,
+   so it no longer flips the whole send to `failed`), skips any subscriber
+   who already has a successful `AnnouncementRecipient` row (the fix for the
+   duplicate-retry trap), narrows the blanket `except` to
+   `requests.RequestException`, and recomputes `recipients_count` /
+   `failures_count` from `AnnouncementRecipient` rows on every run instead of
+   incrementing counters. A new "Reset stuck 'Sending' announcements back to
+   Draft" admin action recovers an announcement left in `sending` by a
+   crashed run.
+2. The admin "Send" action no longer calls Postmark itself: it validates and
+   sets `status = "queued"`, returning immediately. A new
+   `send_announcement` management command (cron-driven, see
+   `docs/cookbook.md#how-do-i-send-queued-announcements`) picks up queued
+   announcements and performs the actual send, so a large announcement can no
+   longer be killed mid-flight by nginx's 60s or gunicorn's 300s request
+   timeouts.
+
+Two prod announcements (#9, #12) were sitting in `failed` purely because of
+suppressed recipients; both can now be safely retried without duplicating any
+of the deliveries that already succeeded. See
+[subscriptions.md](subscriptions.md#announcement-send-lifecycle) for the full
+status lifecycle.
 
 ### 13. `lookback_days` only half-works
 

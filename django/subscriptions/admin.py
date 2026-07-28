@@ -27,7 +27,6 @@ from subscriptions.utils.suppression import deactivate_subscribers
 from subscriptions.utils.announcement_send import (
 	render_announcement_email,
 	render_announcement_text,
-	send_announcement,
 )
 
 
@@ -1166,13 +1165,13 @@ class ListsAdmin(admin.ModelAdmin):
 					"trial_max_age_days",
 					"ml_threshold",
 				],
-				"description": "Configure content limits and ML prediction thresholds. Article and trial limits "
-				"apply to weekly digest, admin summary, and trial notification emails — content that does not fit "
-				"rolls over to the next send instead of being dropped. Trial age is checked against the trial's own "
-				"registration/publication date, not when GregoryAI discovered it, so a bulk import of old trials "
-				"can't flood a newsletter. The ML threshold determines the minimum confidence level required for ML "
-				'predictions to be considered relevant. When sort order is set to "Date", the ML threshold is not '
-				"used for article selection.",
+				"description": "Configure content limits and ML prediction thresholds. The lookback window, and "
+				"the article and trial limits, all apply to weekly digest, admin summary, and trial notification "
+				"emails — content that does not fit rolls over to the next send instead of being dropped. Trial "
+				"age is checked against the trial's own registration/publication date, not when GregoryAI "
+				"discovered it, so a bulk import of old trials can't flood a newsletter. The ML threshold "
+				"determines the minimum confidence level required for ML predictions to be considered relevant. "
+				'When sort order is set to "Date", the ML threshold is not used for article selection.',
 			},
 		),
 		(
@@ -1426,6 +1425,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 	def status_badge(self, obj):
 		colors = {
 			"draft": "#6b7280",
+			"queued": "#3b82f6",
 			"sending": "#f59e0b",
 			"sent": "#10b981",
 			"failed": "#ef4444",
@@ -1524,7 +1524,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					skipped_perm += 1
 					continue
 
-			if source.status == "sending":
+			if source.status in ("sending", "queued"):
 				skipped_sending.append(source.subject)
 				continue
 
@@ -1548,7 +1548,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if skipped_sending:
 			self.message_user(
 				request,
-				"Skipped %d announcement(s) currently sending: %s"
+				"Skipped %d announcement(s) currently sending or queued to send: %s"
 				% (
 					len(skipped_sending),
 					", ".join(skipped_sending),
@@ -1894,8 +1894,13 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 			return HttpResponseForbidden("Access denied.")
 
-		if announcement.status in ("sent", "sending"):
-			messages.warning(request, "This announcement has already been sent.")
+		if announcement.status in ("sent", "sending", "queued"):
+			messages.warning(
+				request,
+				"This announcement has already been sent or queued to send."
+				if announcement.status != "queued"
+				else "This announcement is already queued to send.",
+			)
 			return redirect(
 				reverse(
 					"admin:subscriptions_announcement_change", args=[announcement.pk]
@@ -1937,7 +1942,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			from django.conf import settings as dj_settings
 
 			# Validate every list's config BEFORE marking the announcement as
-			# 'sending' so a broken config leaves the announcement in its
+			# 'queued' so a broken config leaves the announcement in its
 			# prior state (draft/failed) and the author can fix and retry.
 			# send_announcement() re-validates each list at send time too —
 			# this pass exists only to give immediate, per-list feedback
@@ -1975,32 +1980,19 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					)
 				)
 
-			summary = send_announcement(announcement)
-
-			if summary["skipped"]:
-				messages.info(
-					request,
-					f"Skipped {summary['skipped']} subscriber(s) who already "
-					"received this announcement.",
-				)
-			if summary["failed"] == 0:
-				suffix = (
-					f" ({summary['suppressed']} suppressed by Postmark, deactivated)"
-					if summary["suppressed"]
-					else ""
-				)
-				messages.success(
-					request,
-					f"Announcement sent to {summary['sent']} subscriber(s){suffix}.",
-				)
-			else:
-				messages.warning(
-					request,
-					f"Announcement sent to {summary['sent']} subscriber(s) with "
-					f"{summary['failed']} failure(s) "
-					f"({summary['suppressed']} suppressed by Postmark, not "
-					"counted as failures).",
-				)
+			# All lists validated — queue rather than send here. The actual
+			# Postmark calls happen in the send_announcement management
+			# command (cron), so a large send can never be killed mid-flight
+			# by nginx's/gunicorn's request timeouts. send_announcement()
+			# skips subscribers already recorded as successfully delivered,
+			# so this is safe to do again for a "failed" announcement.
+			announcement.status = "queued"
+			announcement.save(update_fields=["status"])
+			messages.success(
+				request,
+				"Announcement queued for sending. It will go out with the "
+				"next scheduled run of the send_announcement command.",
+			)
 			return redirect(
 				reverse(
 					"admin:subscriptions_announcement_change", args=[announcement.pk]

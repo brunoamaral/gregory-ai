@@ -313,6 +313,67 @@ webhook and a reactivation flow are tracked separately, out of scope here.
 
 ---
 
+## Announcement Send Lifecycle
+
+Announcements (one-off emails sent to selected `Lists` from the admin, as
+opposed to the recurring digest/summary/notification commands above) went
+through the same robustness pass as the three digest commands, plus a
+structural change to get the actual Postmark calls out of the request cycle.
+
+**Status machine:** `draft` → `queued` → `sending` → `sent` / `failed`.
+
+- **`draft`** — editable. Clicking "Queue Send to Subscribers" in the admin
+  (`AnnouncementAdmin.send_view`) validates every target list's site/domain
+  configuration (`subscriptions.utils.announcement_send_validation.validate_announcement_send_config`)
+  and, if all lists pass, flips the announcement to `queued` and returns
+  immediately — no Postmark call happens in this request.
+- **`queued`** — waiting for the `send_announcement` management command
+  (cron-driven; see `docs/cookbook.md`) to pick it up. This is what actually
+  gets an announcement out of the request/response cycle: the widest
+  announcement seen in production (192 subscribers) takes 58–192 seconds of
+  Postmark round-trips at 0.3–1.0s each, which straddles nginx's 60s
+  `proxy_read_timeout` and gunicorn's 300s worker timeout
+  (`nginx-example-configuration/nginx.conf`, `Dockerfile`) — a send that used
+  to run inside the admin request could be silently killed mid-flight by
+  either one, leaving no record of where it stopped.
+- **`sending`** — the command has started `subscriptions.utils.announcement_send.send_announcement`
+  for this announcement. If the process is killed mid-run (OOM, restart), the
+  announcement is stuck here — use the **"Reset stuck 'Sending' announcements
+  back to Draft"** admin action to move it back to `draft`, then queue it
+  again.
+- **`sent`** / **`failed`** — set once the send loop finishes, based on
+  non-suppressed failures only (see below). `failed` announcements show the
+  send buttons again (unlike `sent`, which is locked) so they can be queued
+  and retried directly from the change page.
+
+**Idempotent and resumable by construction:** `send_announcement()` skips any
+subscriber who already has a successful `AnnouncementRecipient` row for that
+announcement. This means queueing a `failed` announcement again, or
+resetting-then-requeueing a stuck `sending` one, never re-mails anyone who
+was already delivered to — the classic trap of a naive retry re-sending to
+an entire list. `recipients_count` / `failures_count` are recomputed from
+`AnnouncementRecipient` rows on every run rather than incremented, so the
+counts stay correct across any number of partial runs.
+
+**Suppression is handled exactly like the three digest commands** (see
+"Bounce and Suppression Handling" above): the response is routed through
+`classify_postmark_response`, a 406 deactivates the subscriber via
+`deactivate_subscribers`, and the `AnnouncementRecipient` row is marked
+`suppressed=True` rather than a plain failure. A suppressed recipient does
+not count toward `failures_count` or push the announcement to `failed` — one
+bounced address on an otherwise-clean send should not read as "the send
+failed". Two live announcements motivated this: #12 (177 delivered, 5
+suppressed) and #9 (176 delivered, 12 suppressed) were both sitting in
+`failed` for no reason other than this miscount, and retrying either under
+the old code would have re-mailed everyone who had already received it.
+
+A `requests.RequestException` (timeout, DNS, reset) for one subscriber is
+recorded on that subscriber's row and the loop continues to the next —
+previously any exception, including programming errors, was caught by a
+blanket `except Exception` and silently counted as a delivery failure.
+
+---
+
 ## Email Footer Unsubscribe Links
 
 The email footer template (`emails/components/footer.html`) renders unsubscribe links when the following context variables are present:

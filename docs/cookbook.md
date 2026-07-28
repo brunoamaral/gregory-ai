@@ -147,6 +147,32 @@ Reference: [ml-consensus.md](ml-consensus.md)
 
 ---
 
+## How do I send queued announcements?
+
+Clicking "Queue Send to Subscribers" in the Announcement admin only validates
+and sets `status='queued'` — it does not call Postmark. A separate command
+does the actual send, so a large announcement can't be killed mid-flight by
+nginx's or gunicorn's request timeouts:
+
+```bash
+# Send every announcement currently in status='queued'
+docker exec gregory python manage.py send_announcement
+```
+
+Add it to crontab alongside the other digest jobs, e.g. every 5 minutes:
+
+```cron
+*/5 * * * * docker exec gregory python manage.py send_announcement
+```
+
+Safe to run repeatedly, including on an announcement that was reset from a
+stuck `sending` state and re-queued: `send_announcement` skips any subscriber
+who already has a successful delivery recorded for that announcement.
+
+Reference: [subscriptions.md](subscriptions.md#announcement-send-lifecycle)
+
+---
+
 ## How do I configure ML consensus per subject?
 
 1. Go to the Django admin → **Gregory > Subjects**.
