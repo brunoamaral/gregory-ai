@@ -282,6 +282,50 @@ class RenderWithinLimitTest(TestCase):
 		self.assertEqual(used_articles, [])
 		self.assertEqual(used_trials, [])
 
+	def test_latest_research_none_keeps_three_tuple_contract(self):
+		"""Omitting latest_research must not change behavior for callers that
+		don't have a Latest Research section (admin_summary, trial_notification)."""
+
+		def render(articles, trials):
+			return "ok", articles, trials
+
+		result = render_within_limit(render, [1, 2], ["a"])
+
+		self.assertEqual(result, ("ok", [1, 2], ["a"]))
+
+	def test_latest_research_shrinks_alongside_articles_and_trials(self):
+		call_sizes = []
+
+		def render(articles, trials, latest_research):
+			total = len(articles) + len(trials) + len(latest_research)
+			call_sizes.append(total)
+			if total > 6:
+				html = "x" * (SAFE_BODY_CHARS + 1)
+			else:
+				html = "ok"
+			return html, articles, trials, latest_research
+
+		html, used_articles, used_trials, used_lr = render_within_limit(
+			render, [1, 2], ["a", "b"], ["x", "y", "z", "w"]
+		)
+
+		self.assertEqual(html, "ok")
+		# [1, 2] halves to 1; ["a", "b"] halves to 1; the 4-item Latest
+		# Research list halves to 2 — total 4, fitting under the threshold
+		# on the second attempt.
+		self.assertEqual(len(used_articles), 1)
+		self.assertEqual(len(used_trials), 1)
+		self.assertEqual(len(used_lr), 2)
+		self.assertEqual(call_sizes, [8, 4])
+
+	def test_latest_research_gives_up_returns_four_empty(self):
+		def render(articles, trials, latest_research):
+			return "x" * (SAFE_BODY_CHARS + 1), articles, trials, latest_research
+
+		result = render_within_limit(render, [1, 2], [1, 2], [1, 2])
+
+		self.assertEqual(result, (None, [], [], []))
+
 
 class SendTrialsNotificationLimitTest(BaseSubscriptionCommandTestCase):
 	def setUp(self):

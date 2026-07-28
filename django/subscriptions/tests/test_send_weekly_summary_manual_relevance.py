@@ -355,4 +355,4 @@ class TestManualRelevanceFilteringEdgeCases(TestCase):
 		output = out.getvalue()
 
 		# Should handle gracefully
-		self.assertIn("No articles or trials found", output)
+		self.assertIn("No articles, trials, or Latest Research content found", output)

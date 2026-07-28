@@ -178,6 +178,7 @@ class Command(BaseCommand):
 						site=site,
 						custom_settings=customsettings,
 						organization=organization,
+						confidence_threshold=_admin_list.ml_threshold,
 					)
 					# Inject unsubscribe context for the footer template
 					summary_context["list_id"] = _admin_list.list_id
@@ -201,15 +202,38 @@ class Command(BaseCommand):
 					)
 					return html, used_articles, used_trials
 
-				html_content, articles_to_be_sent, trials_to_be_sent = (
-					render_within_limit(_render, new_articles, new_trials)
-				)
+				try:
+					html_content, articles_to_be_sent, trials_to_be_sent = (
+						render_within_limit(_render, new_articles, new_trials)
+					)
+				except Exception as e:
+					reason = (
+						f"Error rendering admin summary for list "
+						f"'{admin_list.list_name}': {e}"
+					)
+					logger.error(reason)
+					FailedNotification.objects.create(
+						subscriber=subscriber, list=admin_list, reason=reason
+					)
+					continue
 
 				if html_content is None:
 					reason = (
 						f"Rendered admin summary for list '{admin_list.list_name}' "
 						f"still exceeds the safe body size after shrinking to a "
 						f"single article and a single trial."
+					)
+					logger.error(reason)
+					FailedNotification.objects.create(
+						subscriber=subscriber, list=admin_list, reason=reason
+					)
+					continue
+
+				if not articles_to_be_sent and not trials_to_be_sent:
+					reason = (
+						f"Admin summary for list '{admin_list.list_name}' organized to "
+						f"zero articles and zero trials for {subscriber.email}; "
+						f"skipping rather than sending an empty digest."
 					)
 					logger.error(reason)
 					FailedNotification.objects.create(

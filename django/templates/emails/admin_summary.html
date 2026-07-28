@@ -28,15 +28,21 @@
         
         <!-- High-Confidence Articles (Featured) -->
         {% if articles %}
+            <h3 class="content-subtitle" style="color: #15803d; font-size: 16px; margin: 0 0 15px 0;">
+                ✅ High-Confidence ({{ content_stats.high_confidence_articles }})
+            </h3>
             {% for article in articles %}
                 {% with email_type='admin_summary' show_admin_links=True show_discovery_date=True show_ml_predictions=True %}
                     {% include 'emails/components/article_card.html' %}
                 {% endwith %}
             {% endfor %}
         {% endif %}
-        
+
         <!-- Articles Needing Review (Additional) -->
         {% if additional_articles %}
+            <h3 class="content-subtitle" style="color: #b45309; font-size: 16px; margin: 30px 0 15px 0;">
+                🔍 Needs Review ({{ additional_articles|length }})
+            </h3>
             {% for article in additional_articles %}
                 {% with email_type='admin_summary' show_admin_links=True show_discovery_date=True show_ml_predictions=True %}
                     {% include 'emails/components/article_card.html' %}
