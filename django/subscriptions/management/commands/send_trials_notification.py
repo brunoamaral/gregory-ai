@@ -165,9 +165,9 @@ class Command(BaseCommand):
 					html = get_template("emails/trial_notification.html").render(
 						summary_context
 					)
-					used_articles = list(
-						summary_context.get("articles", [])
-					) + list(summary_context.get("additional_articles", []))
+					used_articles = list(summary_context.get("articles", [])) + list(
+						summary_context.get("additional_articles", [])
+					)
 					used_trials = list(summary_context.get("trials", [])) + list(
 						summary_context.get("additional_trials", [])
 					)

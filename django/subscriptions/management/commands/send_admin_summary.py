@@ -185,9 +185,7 @@ class Command(BaseCommand):
 						build_unsubscribe_base_url(site, customsettings)
 					)
 					summary_context["header_title"] = _admin_list.header_title or ""
-					summary_context["header_tagline"] = (
-						_admin_list.header_tagline or ""
-					)
+					summary_context["header_tagline"] = _admin_list.header_tagline or ""
 					summary_context["show_header_tagline"] = (
 						_admin_list.show_header_tagline
 					)
@@ -195,9 +193,9 @@ class Command(BaseCommand):
 					html = get_template("emails/admin_summary.html").render(
 						summary_context
 					)
-					used_articles = list(
-						summary_context.get("articles", [])
-					) + list(summary_context.get("additional_articles", []))
+					used_articles = list(summary_context.get("articles", [])) + list(
+						summary_context.get("additional_articles", [])
+					)
 					used_trials = list(summary_context.get("trials", [])) + list(
 						summary_context.get("additional_trials", [])
 					)

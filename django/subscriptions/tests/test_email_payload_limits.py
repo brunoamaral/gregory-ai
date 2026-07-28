@@ -211,10 +211,7 @@ class GetTrialsForListStalenessTest(BaseSubscriptionCommandTestCase):
 			title__startswith="Historical Trial"
 		) | Trials.objects.filter(title__startswith="Recent Trial")
 		through.objects.bulk_create(
-			[
-				through(trials_id=t.pk, subject_id=self.subject.pk)
-				for t in all_trials
-			],
+			[through(trials_id=t.pk, subject_id=self.subject.pk) for t in all_trials],
 			batch_size=500,
 		)
 
@@ -279,9 +276,7 @@ class RenderWithinLimitTest(TestCase):
 		def render(articles, trials):
 			return "x" * (SAFE_BODY_CHARS + 1), articles, trials
 
-		html, used_articles, used_trials = render_within_limit(
-			render, [1, 2], [1, 2]
-		)
+		html, used_articles, used_trials = render_within_limit(render, [1, 2], [1, 2])
 
 		self.assertIsNone(html)
 		self.assertEqual(used_articles, [])
@@ -350,11 +345,14 @@ class SendTrialsNotificationLimitTest(BaseSubscriptionCommandTestCase):
 		)
 
 		self._run()
-		second_ids = set(
-			SentTrialNotification.objects.filter(
-				list=self.lst, subscriber=self.subscriber
-			).values_list("trial_id", flat=True)
-		) - first_ids
+		second_ids = (
+			set(
+				SentTrialNotification.objects.filter(
+					list=self.lst, subscriber=self.subscriber
+				).values_list("trial_id", flat=True)
+			)
+			- first_ids
+		)
 
 		self.assertEqual(len(first_ids), 5)
 		self.assertEqual(len(second_ids), 5)
@@ -414,7 +412,9 @@ class SendAdminSummaryLimitTest(BaseSubscriptionCommandTestCase):
 		articles = [
 			self._make_article(f"Article {i}", days_ago=i + 1) for i in range(10)
 		]
-		trials = [self._make_trial(f"Trial {i}", discovery_days_ago=i + 1) for i in range(10)]
+		trials = [
+			self._make_trial(f"Trial {i}", discovery_days_ago=i + 1) for i in range(10)
+		]
 
 		self._run()
 
@@ -428,8 +428,14 @@ class SendAdminSummaryLimitTest(BaseSubscriptionCommandTestCase):
 		self.assertEqual(sent_trials.count(), 3)
 
 		# Newest-first ordering means the 3 most-recently-discovered items win.
-		newest_article_ids = {a.pk for a in sorted(articles, key=lambda a: a.discovery_date, reverse=True)[:3]}
-		newest_trial_ids = {t.pk for t in sorted(trials, key=lambda t: t.discovery_date, reverse=True)[:3]}
+		newest_article_ids = {
+			a.pk
+			for a in sorted(articles, key=lambda a: a.discovery_date, reverse=True)[:3]
+		}
+		newest_trial_ids = {
+			t.pk
+			for t in sorted(trials, key=lambda t: t.discovery_date, reverse=True)[:3]
+		}
 		self.assertEqual(
 			set(sent_articles.values_list("article_id", flat=True)), newest_article_ids
 		)
