@@ -34,8 +34,8 @@ def get_trials_for_list(lst, days=30):
 	return qs.distinct()
 
 
-def get_articles_for_list(lst):
-	"""Returns articles discovered in the last 30 days for the given list
+def get_articles_for_list(lst, days=30):
+	"""Returns articles discovered in the last `days` days for the given list
 	that are missing at least one human review across the list's subjects."""
 	list_subjects = lst.subjects.all()
 
@@ -61,7 +61,7 @@ def get_articles_for_list(lst):
 	return (
 		Articles.objects.filter(
 			subjects__in=list_subjects,
-			discovery_date__gte=now() - timedelta(days=30),
+			discovery_date__gte=now() - timedelta(days=days),
 		)
 		.alias(has_unreviewed=has_unreviewed_subject)
 		.filter(has_unreviewed=True)

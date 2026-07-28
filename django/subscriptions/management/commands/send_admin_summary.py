@@ -48,9 +48,12 @@ class Command(BaseCommand):
 			)
 			return
 
-		threshold_date = now() - timedelta(days=30)  # Filter for the last 30 days
-
 		for admin_list in admin_summary_lists:
+			# Sent-record exclusion window must be at least as wide as the
+			# content window (lookback_days), or an item still inside the
+			# content window but outside a fixed 30-day exclusion window gets
+			# treated as unsent and re-mailed every run (audit finding 11).
+			threshold_date = now() - timedelta(days=max(30, admin_list.lookback_days))
 			# Fetch the team directly from the list
 			team = admin_list.team
 			email_subject = (
@@ -95,7 +98,9 @@ class Command(BaseCommand):
 			list_subjects = admin_list.subjects.all()
 
 			# Fetch articles with ML predictions for the list's subjects only
-			list_articles = get_articles_for_list(admin_list).prefetch_related(
+			list_articles = get_articles_for_list(
+				admin_list, days=admin_list.lookback_days
+			).prefetch_related(
 				Prefetch(
 					"ml_predictions_detail",
 					queryset=MLPredictions.objects.filter(subject__in=list_subjects),
@@ -103,7 +108,7 @@ class Command(BaseCommand):
 				)
 			)
 
-			list_trials = get_trials_for_list(admin_list)
+			list_trials = get_trials_for_list(admin_list, days=admin_list.lookback_days)
 
 			# Step 3: Find subscribers of the list (respect per-list opt-out)
 			subscribers = Subscribers.objects.filter(
@@ -126,7 +131,7 @@ class Command(BaseCommand):
 					article__in=list_articles,
 					list=admin_list,
 					subscriber=subscriber,
-					sent_at__gte=threshold_date,  # Only notifications sent in the last 30 days
+					sent_at__gte=threshold_date,  # Only notifications sent within the sent-record exclusion window
 				).values_list("article_id", flat=True)
 
 				new_articles = list_articles.exclude(pk__in=already_sent_article_ids)
@@ -136,7 +141,7 @@ class Command(BaseCommand):
 					trial__in=list_trials,
 					list=admin_list,
 					subscriber=subscriber,
-					sent_at__gte=threshold_date,  # Only notifications sent in the last 30 days
+					sent_at__gte=threshold_date,  # Only notifications sent within the sent-record exclusion window
 				).values_list("trial_id", flat=True)
 
 				new_trials = list_trials.exclude(pk__in=already_sent_trial_ids)

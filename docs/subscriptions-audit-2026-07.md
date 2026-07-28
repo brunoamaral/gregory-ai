@@ -187,12 +187,16 @@ admin summary, `_get_max_ml_score` was already correctly scoped —
 `send_admin_summary` prefetches `ml_predictions_detail` filtered to
 `subject__in=list_subjects` into `filtered_ml_predictions`, which the method
 prefers when present — confirmed by regression test rather than changed.
-**`Articles.is_ml_relevant_any_subject` (`send_weekly_summary.py:318`) is
-unchanged and still scans every `auto_predict` subject on the article, not
-just the list's own** — this bullet was not part of the P1 fix plan's scoped
-Task 5 (organizer methods only) and remains open. It affects weekly digest
-*selection* (which articles qualify), not presentation, so it survives the
-split's removal.
+
+`Articles.is_ml_relevant_any_subject` was the one part left open when this
+annotation was first written, and it closed shortly afterwards in `41f15c2a`,
+`9ca78c98` and `c0c1e80f`: the method now takes an optional `subjects`
+argument, and `send_weekly_summary` passes the digest list's own subjects so
+an article can no longer qualify on the strength of an unrelated team's
+`auto_predict` subject. Regression test in
+`gregory/tests/test_is_ml_relevant_any_subject_scoping.py`. Finding 6 is
+therefore fully closed, not partial — the heading above is kept as written for
+history.
 
 ### 7. A blanket `except` turns any bug into a silently empty email
 
@@ -220,7 +224,8 @@ send with a logged `FailedNotification` instead of delivering nothing. See
 articles per category, ignoring `lookback_days`. Those articles:
 
 - are not deduplicated against the main article list, so one article can appear twice in the same email
-- are never recorded in `SentArticleNotification`, so they repeat every week
+- are never recorded in `SentArticleNotification`, so they repeat every week. Confirmed a defect: the section means "new articles since the last email", grouped by category (Bruno, 2026-07-28), so repetition is not intended behaviour.
+- the section is articles-only by decision (Bruno, 2026-07-28). `TeamCategory` also carries trials via `Trials.team_categories`, and that relation is deliberately unused here — it is not an oversight to fix.
 - are excluded from `org_content_map` (built at `content_organizer.py:611` from the main lists only)
 - are excluded from `content_stats`
 - add unbounded weight to the payload, feeding finding 1
@@ -249,6 +254,12 @@ displays a Latest Research count. See
 the whole cron run: remaining subscribers and remaining lists get nothing, and
 no `FailedNotification` is written, so the failure is invisible.
 
+**Status: closed in P0, confirmed still closed 2026-07-28.** All three send
+commands wrap their `send_email` call in `except requests.RequestException`
+and write a `FailedNotification` before continuing to the next subscriber. No
+code change needed here — annotating only, since this carried no status block
+before and so still read as open.
+
 ### 10. The falsy-`Response` fix was never backported
 
 `send_weekly_summary.py:895` carries an explicit comment about
@@ -259,6 +270,14 @@ and the 422-detail extraction at line 222 is unreachable.
 
 Latent rather than live: that list has one subscriber and no failures recorded
 yet.
+
+**Status: closed in P0, confirmed still closed 2026-07-28.** All three
+commands route the Postmark response through
+`subscriptions.utils.postmark.classify_postmark_response`, which never tests
+the response for truthiness (see the docstring warning about
+`requests.Response.__bool__`). No remaining `if result and result.status_code`
+truthiness check exists outside the comments explaining the trap. Annotating
+only, same reason as finding 9.
 
 ### 11. `sent_at` is never refreshed
 
@@ -286,19 +305,59 @@ the main section and Latest Research. See
 - A list large enough to exceed the HTTP timeout leaves `status = "sending"`, and `send_view` refuses anything in `("sent", "sending")` — unrecoverable from the UI.
 - A single failure sets `status = "failed"`, which *is* re-sendable, and the retry loops over all subscribers again without filtering on existing successful `AnnouncementRecipient` rows. Everyone who already received it gets a duplicate.
 
+**Status: fixed 2026-07-28**, in two commits — see
+[subscriptions-p2-fix-plan.md](subscriptions-p2-fix-plan.md#task-1--announcement-sending-never-got-the-p0-treatment).
+
+1. `subscriptions.utils.announcement_send.send_announcement` now routes the
+   Postmark response through `classify_postmark_response` (a 406 deactivates
+   the subscriber and is recorded as `suppressed=True`, not a plain failure,
+   so it no longer flips the whole send to `failed`), skips any subscriber
+   who already has a successful `AnnouncementRecipient` row (the fix for the
+   duplicate-retry trap), narrows the blanket `except` to
+   `requests.RequestException`, and recomputes `recipients_count` /
+   `failures_count` from `AnnouncementRecipient` rows on every run instead of
+   incrementing counters. A new "Reset stuck 'Sending' announcements back to
+   Draft" admin action recovers an announcement left in `sending` by a
+   crashed run.
+2. The admin "Send" action no longer calls Postmark itself: it validates and
+   sets `status = "queued"`, returning immediately. A new
+   `send_announcement` management command (cron-driven, see
+   `docs/cookbook.md#how-do-i-send-queued-announcements`) picks up queued
+   announcements and performs the actual send, so a large announcement can no
+   longer be killed mid-flight by nginx's 60s or gunicorn's 300s request
+   timeouts.
+
+Two prod announcements (#9, #12) were sitting in `failed` purely because of
+suppressed recipients; both can now be safely retried without duplicating any
+of the deliveries that already succeeded. See
+[subscriptions.md](subscriptions.md#announcement-send-lifecycle) for the full
+status lifecycle.
+
 ### 13. `lookback_days` only half-works
 
 `send_admin_summary` and `send_trials_notification` go through
 `get_articles_for_list` / `get_trials_for_list`, which hardcode 30 days. Only the
 weekly digest reads the field.
 
-**Partially closed 2026-07-28.** `get_trials_for_list` now takes a `days`
-parameter, and the weekly digest passes its own `lookback_days` (previously it
-built an inline query and read the field for articles only, not trials). The
-admin summary and trial notification callers still pass no `days` and get the
-30-day default by design, since only the weekly digest exposes a per-list
-lookback override. `get_articles_for_list` is unchanged and still hardcodes
-30 days everywhere.
+**Fully closed 2026-07-28.** `get_articles_for_list` now takes a `days`
+parameter (mirroring `get_trials_for_list` and `get_latest_research_by_category`),
+and all three send commands pass the list's own `lookback_days` at every
+remaining call site: `send_admin_summary.py` for both its articles and trials
+queries, and `send_trials_notification.py` for its trials query. Decided by
+Bruno on 2026-07-28: `lookback_days` applies to all three email types — it
+sits in the same "Content Settings" admin fieldset as `article_limit` and
+`trial_limit`, both of which already apply everywhere, so a knob that
+silently ignores you there is worse than one that doesn't exist. This changes
+no behaviour today (every list is at `lookback_days = 30`, matching the old
+hardcoded value) — it only takes effect once someone edits the field.
+
+Widening the content window this way reopens finding 11 unless the
+sent-record exclusion window widens with it.
+`send_admin_summary`/`send_trials_notification` now compute
+`threshold_date = now() - timedelta(days=max(30, lst.lookback_days))`, the
+same guard the weekly digest already uses, so an item inside a widened
+content window can never fall outside a narrower exclusion window. See
+`subscriptions/tests/test_lookback_days_all_email_types.py`.
 
 ---
 

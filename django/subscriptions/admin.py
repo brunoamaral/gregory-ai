@@ -7,7 +7,6 @@ import csv
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
-from django.template.loader import render_to_string
 from django.contrib import messages
 from datetime import timedelta
 from django import forms
@@ -23,16 +22,12 @@ from .models import (
 )
 from .forms import ListsAdminForm, AnnouncementAdminForm
 from gregory.models import Team
-from subscriptions.management.commands.utils.get_credentials import (
-	build_unsubscribe_base_url,
-)
-from subscriptions.utils.render_email_body import (
-	sanitize_announcement_html,
-	render_announcement_html,
-	render_announcement_text as _render_text_body,
-	strip_scheme,
-)
+from subscriptions.utils.render_email_body import strip_scheme
 from subscriptions.utils.suppression import deactivate_subscribers
+from subscriptions.utils.announcement_send import (
+	render_announcement_email,
+	render_announcement_text,
+)
 
 
 class SubscriberSiteProfileInline(admin.TabularInline):
@@ -1170,13 +1165,13 @@ class ListsAdmin(admin.ModelAdmin):
 					"trial_max_age_days",
 					"ml_threshold",
 				],
-				"description": "Configure content limits and ML prediction thresholds. Article and trial limits "
-				"apply to weekly digest, admin summary, and trial notification emails — content that does not fit "
-				"rolls over to the next send instead of being dropped. Trial age is checked against the trial's own "
-				"registration/publication date, not when GregoryAI discovered it, so a bulk import of old trials "
-				"can't flood a newsletter. The ML threshold determines the minimum confidence level required for ML "
-				'predictions to be considered relevant. When sort order is set to "Date", the ML threshold is not '
-				"used for article selection.",
+				"description": "Configure content limits and ML prediction thresholds. The lookback window, and "
+				"the article and trial limits, all apply to weekly digest, admin summary, and trial notification "
+				"emails — content that does not fit rolls over to the next send instead of being dropped. Trial "
+				"age is checked against the trial's own registration/publication date, not when GregoryAI "
+				"discovered it, so a bulk import of old trials can't flood a newsletter. The ML threshold "
+				"determines the minimum confidence level required for ML predictions to be considered relevant. "
+				'When sort order is set to "Date", the ML threshold is not used for article selection.',
 			},
 		),
 		(
@@ -1349,7 +1344,14 @@ class ListSubscriptionAdmin(admin.ModelAdmin):
 class AnnouncementRecipientInline(admin.TabularInline):
 	model = AnnouncementRecipient
 	extra = 0
-	readonly_fields = ["subscriber", "list", "sent_at", "success", "error_message"]
+	readonly_fields = [
+		"subscriber",
+		"list",
+		"sent_at",
+		"success",
+		"suppressed",
+		"error_message",
+	]
 	can_delete = False
 
 	def has_add_permission(self, request, obj=None):
@@ -1379,7 +1381,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		"created_at",
 	]
 	inlines = [AnnouncementRecipientInline]
-	actions = ["duplicate_announcements"]
+	actions = ["duplicate_announcements", "reset_stuck_announcements"]
 
 	class Media:
 		# Loaded as a plain <script> tag AFTER the CKEditor bundle (widget
@@ -1423,6 +1425,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 	def status_badge(self, obj):
 		colors = {
 			"draft": "#6b7280",
+			"queued": "#3b82f6",
 			"sending": "#f59e0b",
 			"sent": "#10b981",
 			"failed": "#ef4444",
@@ -1521,7 +1524,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					skipped_perm += 1
 					continue
 
-			if source.status == "sending":
+			if source.status in ("sending", "queued"):
 				skipped_sending.append(source.subject)
 				continue
 
@@ -1545,7 +1548,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		if skipped_sending:
 			self.message_user(
 				request,
-				"Skipped %d announcement(s) currently sending: %s"
+				"Skipped %d announcement(s) currently sending or queued to send: %s"
 				% (
 					len(skipped_sending),
 					", ".join(skipped_sending),
@@ -1585,6 +1588,33 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			level=messages.SUCCESS,
 		)
 		return None
+
+	@admin.action(description="Reset stuck 'Sending' announcements back to Draft")
+	def reset_stuck_announcements(self, request, queryset):
+		"""
+		Recovery for an announcement left in "sending" by a crashed or killed
+		send (process restart, OOM). Resets to "draft" so the author can hit
+		Send again; the idempotent send loop in
+		subscriptions.utils.announcement_send.send_announcement skips any
+		subscriber already recorded as a successful AnnouncementRecipient, so
+		re-sending never duplicates a delivery.
+		"""
+		stuck = queryset.filter(status="sending")
+		count = stuck.count()
+		stuck.update(status="draft")
+		if count:
+			self.message_user(
+				request,
+				"Reset %d stuck announcement(s) back to draft. Re-sending will "
+				"skip subscribers who already received it." % count,
+				level=messages.WARNING,
+			)
+		else:
+			self.message_user(
+				request,
+				"No selected announcements were stuck in 'Sending'.",
+				level=messages.INFO,
+			)
 
 	def get_urls(self):
 		urls = super().get_urls()
@@ -1628,71 +1658,24 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		list_id=None,
 		custom_settings=None,
 	):
-		"""Render announcement as HTML email using the base template."""
-		api_domain = (
-			(getattr(custom_settings, "api_domain", "") or "")
-			if custom_settings
-			else ""
+		"""Render announcement as HTML email using the base template.
+
+		Delegates to subscriptions.utils.announcement_send so the admin
+		preview/test-send paths and the real send loop (used by both the
+		"queued" send flow and the send_announcement command) can never
+		render an announcement differently from one another.
+		"""
+		return render_announcement_email(
+			announcement,
+			subscriber=subscriber,
+			site=site,
+			list_id=list_id,
+			custom_settings=custom_settings,
 		)
-		site_domain = (getattr(site, "domain", "") or "") if site else ""
-		sanitized = sanitize_announcement_html(announcement.body)
-		rendered_body = render_announcement_html(sanitized, api_domain, site_domain)
-		context = {
-			"announcement_subject": announcement.subject,
-			"announcement_body": rendered_body,
-			"email_type": "announcement",
-			"show_date": True,
-			"current_date": timezone.now(),
-			"header_title": announcement.header_title,
-			"header_tagline": announcement.header_tagline,
-			"show_header_tagline": announcement.show_header_tagline,
-			"preheader_text": announcement.preheader_text,
-			"title": getattr(custom_settings, "title", "Gregory AI")
-			if custom_settings
-			else "Gregory AI",
-			"website_url": getattr(custom_settings, "website_url", "")
-			if custom_settings
-			else "",
-			"support_url": getattr(custom_settings, "support_url", "")
-			if custom_settings
-			else "",
-			"about_url": getattr(custom_settings, "about_url", "")
-			if custom_settings
-			else "",
-			"contact_url": getattr(custom_settings, "contact_url", "")
-			if custom_settings
-			else "",
-			"bluesky_url": getattr(custom_settings, "bluesky_url", "")
-			if custom_settings
-			else "",
-			"github_url": getattr(custom_settings, "github_url", "")
-			if custom_settings
-			else "",
-			"mastodon_url": getattr(custom_settings, "mastodon_url", "")
-			if custom_settings
-			else "",
-			"privacy_policy_url": "",
-			"terms_url": "",
-		}
-		if subscriber:
-			context["subscriber"] = subscriber
-		if site:
-			context["unsubscribe_base_url"] = build_unsubscribe_base_url(
-				site, custom_settings
-			)
-			context["site"] = site
-		if list_id:
-			context["list_id"] = list_id
-		html = render_to_string("emails/announcement.html", context)
-		return html
 
 	def _render_announcement_text(self, announcement, subscriber=None):
 		"""Render plain-text version of the announcement."""
-		lines = []
-		if subscriber and subscriber.first_name:
-			lines.append(f"Hello {subscriber.first_name},\n")
-		lines.append(_render_text_body(sanitize_announcement_html(announcement.body)))
-		return "\n".join(lines)
+		return render_announcement_text(announcement, subscriber=subscriber)
 
 	def preview_view(self, request, announcement_id):
 		announcement = self._get_announcement_or_404(request, announcement_id)
@@ -1911,8 +1894,13 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 			return HttpResponseForbidden("Access denied.")
 
-		if announcement.status in ("sent", "sending"):
-			messages.warning(request, "This announcement has already been sent.")
+		if announcement.status in ("sent", "sending", "queued"):
+			messages.warning(
+				request,
+				"This announcement has already been sent or queued to send."
+				if announcement.status != "queued"
+				else "This announcement is already queued to send.",
+			)
 			return redirect(
 				reverse(
 					"admin:subscriptions_announcement_change", args=[announcement.pk]
@@ -1943,9 +1931,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					all_subscribers[sub.email] = (sub, lst)
 
 		if request.method == "POST":
-			from subscriptions.management.commands.utils.send_email import send_email
 			from subscriptions.management.commands.utils.get_credentials import (
-				get_postmark_credentials,
 				get_site_and_settings,
 			)
 			from sitesettings.models import CustomSetting
@@ -1955,19 +1941,16 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			)
 			from django.conf import settings as dj_settings
 
-			success_count = 0
-			failure_count = 0
-
-			# Pre-compute credentials per list to avoid re-fetching for every subscriber.
-			# Validate each list's config BEFORE marking the announcement as 'sending' so
-			# a broken config leaves the announcement in its prior state (draft/scheduled)
-			# and the author can fix and retry.
-			# Iterate target_lists (not all_subscribers) so that lists with zero active
-			# subscribers are also validated and can block the send.
-			list_credentials = {}
+			# Validate every list's config BEFORE marking the announcement as
+			# 'queued' so a broken config leaves the announcement in its
+			# prior state (draft/failed) and the author can fix and retry.
+			# send_announcement() re-validates each list at send time too —
+			# this pass exists only to give immediate, per-list feedback
+			# without flipping status. Iterate target_lists (not
+			# all_subscribers) so a list with zero active subscribers is
+			# still validated and can block the send.
 			list_errors: dict[int, list[str]] = {}
 			for _lst in target_lists:
-				pk = _lst.list_id
 				try:
 					_site, _cs = get_site_and_settings(_lst.team, list_obj=_lst)
 				except CustomSetting.DoesNotExist:
@@ -1980,13 +1963,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					probe_media=getattr(dj_settings, "ANNOUNCEMENT_PROBE_MEDIA", False),
 				)
 				if errs:
-					list_errors[pk] = errs
-					continue
-				_api_token, _api_url = get_postmark_credentials(
-					custom_settings=_cs,
-					organization=_lst.team.organization,
-				)
-				list_credentials[pk] = (_api_token, _api_url, _site, _cs)
+					list_errors[_lst.list_id] = errs
 
 			if list_errors:
 				for pk, errs in list_errors.items():
@@ -2003,92 +1980,19 @@ class AnnouncementAdmin(admin.ModelAdmin):
 					)
 				)
 
-			# All lists validated — safe to flip status.
-			announcement.status = "sending"
+			# All lists validated — queue rather than send here. The actual
+			# Postmark calls happen in the send_announcement management
+			# command (cron), so a large send can never be killed mid-flight
+			# by nginx's/gunicorn's request timeouts. send_announcement()
+			# skips subscribers already recorded as successfully delivered,
+			# so this is safe to do again for a "failed" announcement.
+			announcement.status = "queued"
 			announcement.save(update_fields=["status"])
-
-			# Group subscribers by the list (for credentials resolution)
-			# Use the list from which we first encountered them
-			for email, (subscriber, lst) in all_subscribers.items():
-				api_token, api_url, site, custom_settings = list_credentials.get(
-					lst.list_id, (None, None, None, None)
-				)
-
-				html = self._render_announcement_email(
-					announcement,
-					subscriber=subscriber,
-					site=site,
-					list_id=lst.list_id,
-					custom_settings=custom_settings,
-				)
-				text = self._render_announcement_text(
-					announcement, subscriber=subscriber
-				)
-
-				error_msg = ""
-				success = False
-				try:
-					# Strip any [TEST] prefix from subject for live sends
-					live_subject = announcement.subject
-					if live_subject.startswith("[TEST] "):
-						live_subject = live_subject[7:]
-					_sender_name = (
-						(custom_settings.sender_name or custom_settings.title)
-						if custom_settings
-						else None
-					) or "Gregory AI"
-					response = send_email(
-						to=subscriber.email,
-						subject=live_subject,
-						html=html,
-						text=text,
-						site=site,
-						sender_name=_sender_name,
-						api_token=api_token,
-						api_url=api_url,
-					)
-					if response.status_code == 200:
-						success = True
-						success_count += 1
-					else:
-						error_msg = response.text[:500]
-						failure_count += 1
-				except Exception as e:
-					error_msg = str(e)[:500]
-					failure_count += 1
-
-				AnnouncementRecipient.objects.update_or_create(
-					announcement=announcement,
-					subscriber=subscriber,
-					defaults={
-						"list": lst,
-						"success": success,
-						"error_message": error_msg,
-					},
-				)
-
-			announcement.status = "sent" if failure_count == 0 else "failed"
-			announcement.sent_at = timezone.now()
-			announcement.recipients_count = success_count
-			announcement.failures_count = failure_count
-			announcement.save(
-				update_fields=[
-					"status",
-					"sent_at",
-					"recipients_count",
-					"failures_count",
-				]
+			messages.success(
+				request,
+				"Announcement queued for sending. It will go out with the "
+				"next scheduled run of the send_announcement command.",
 			)
-
-			if failure_count == 0:
-				messages.success(
-					request, f"Announcement sent to {success_count} subscriber(s)."
-				)
-			else:
-				messages.warning(
-					request,
-					f"Announcement sent to {success_count} subscriber(s) with {failure_count} failure(s).",
-				)
 			return redirect(
 				reverse(
 					"admin:subscriptions_announcement_change", args=[announcement.pk]
@@ -2112,7 +2016,14 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		extra_context = extra_context or {}
 		try:
 			announcement = Announcement.objects.get(pk=object_id)
-			extra_context["show_send_buttons"] = announcement.status == "draft"
+			# "failed" is included so an announcement that hit a suppressed
+			# recipient or a transient error can be retried from the UI —
+			# send_announcement() skips subscribers already recorded as
+			# successfully delivered, so retrying never double-mails anyone.
+			extra_context["show_send_buttons"] = announcement.status in (
+				"draft",
+				"failed",
+			)
 		except Announcement.DoesNotExist:
 			pass
 		return super().change_view(

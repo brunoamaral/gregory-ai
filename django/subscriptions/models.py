@@ -59,12 +59,13 @@ class Lists(models.Model):
 		help_text="ML prediction confidence threshold (0.0-1.0). Only articles with ML predictions above this threshold will be considered relevant.",
 		verbose_name="ML Threshold for Relevance",
 	)
-	# Lookback window for weekly digest emails
+	# Lookback window for weekly digest, admin summary, and trial notification emails
 	lookback_days = models.PositiveIntegerField(
 		default=30,
 		validators=[MinValueValidator(1), MaxValueValidator(365)],
 		help_text=(
-			"How many days back to look for articles and trials in the weekly digest. "
+			"How many days back to look for articles and trials. Applies to "
+			"weekly digest, admin summary, and trial notification emails. "
 			"Common values: 8, 15, 30. Maximum 365."
 		),
 		verbose_name="Lookback Window (days)",
@@ -342,6 +343,7 @@ class SubscriberSiteProfile(models.Model):
 class Announcement(models.Model):
 	STATUS_CHOICES = [
 		("draft", "Draft"),
+		("queued", "Queued"),
 		("sending", "Sending"),
 		("sent", "Sent"),
 		("failed", "Failed"),
@@ -437,6 +439,15 @@ class AnnouncementRecipient(models.Model):
 	)
 	sent_at = models.DateTimeField(auto_now_add=True)
 	success = models.BooleanField(default=True)
+	suppressed = models.BooleanField(
+		default=False,
+		help_text=(
+			"True when this recipient was skipped because Postmark reports them "
+			"as suppressed (ErrorCode 406), not because of a delivery error. "
+			"Kept separate from `success` so a suppressed recipient does not "
+			"count toward the announcement's failures_count."
+		),
+	)
 	error_message = models.TextField(blank=True, default="")
 
 	class Meta:

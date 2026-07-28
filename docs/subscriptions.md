@@ -128,7 +128,7 @@ successful unsubscribe.
 
 ## Content Limits and Staleness Filtering
 
-`Lists` has three fields that bound how much content a single email can carry.
+`Lists` has four fields that bound how much content a single email can carry.
 They exist because nothing capped the number of trials on the way into an
 email: a bulk import once stamped thousands of historical trials with a
 same-day `discovery_date`, one notification list tried to render 3,570 trial
@@ -139,6 +139,7 @@ failed again — 413 times over 15 days before anyone noticed.
 
 | Field | Default | Applies to |
 |---|---|---|
+| `lookback_days` | 30 | Weekly digest, admin summary, and trial notification emails |
 | `article_limit` | 15 | Weekly digest, admin summary, and trial notification emails |
 | `trial_limit` | 15 | Weekly digest, admin summary, and trial notification emails |
 | `trial_max_age_days` | 90 | Weekly digest, admin summary, and trial notification emails |
@@ -183,12 +184,23 @@ feeds lag: a trial registered 45 days ago may only reach GregoryAI today. At
 30 days it would be dropped by the age check and would then also age out of
 the 30-day discovery window before ever qualifying for an email.
 
-`get_trials_for_list` also takes a `days` parameter controlling the
-discovery-date window (default 30, unchanged for the admin summary and
-trial notification callers). The weekly digest passes its own resolved
-`lookback_days` (or the `--days` CLI override when set) instead of the
-default, so `lookback_days` is now honoured for both articles and trials in
-that email — previously it only governed the articles query.
+`get_trials_for_list` and `get_articles_for_list` both take a `days`
+parameter controlling the discovery-date window (default 30). All three send
+commands now pass the list's own `lookback_days` at every call site — the
+weekly digest passes its resolved value (or the `--days` CLI override when
+set); `send_admin_summary` and `send_trials_notification` pass
+`lst.lookback_days` directly. Previously only the weekly digest read the
+field at all, and even there it governed articles but not trials, so editing
+`lookback_days` on an admin-summary-only or trial-notification-only list did
+nothing.
+
+Widening the content window without widening the sent-record window would
+reopen audit finding 11 (an item still inside the content window but outside
+a fixed 30-day exclusion window gets treated as unsent and re-mailed every
+run). `send_admin_summary` and `send_trials_notification` compute their
+`threshold_date` the same way the weekly digest already does:
+`now() - timedelta(days=max(30, lst.lookback_days))`, so the exclusion window
+is always at least as wide as the content window.
 
 **Featuring trials by recruitment status:** `EmailContentOrganizer.organize_trials`
 splits trials into `featured_trials` (recruiting) and `regular_trials`
@@ -310,6 +322,67 @@ that cron invocation with no record of it happening.
 This handling is reactive only: suppression is discovered by attempting a
 send and reading the response, not by a Postmark bounce webhook. A real-time
 webhook and a reactivation flow are tracked separately, out of scope here.
+
+---
+
+## Announcement Send Lifecycle
+
+Announcements (one-off emails sent to selected `Lists` from the admin, as
+opposed to the recurring digest/summary/notification commands above) went
+through the same robustness pass as the three digest commands, plus a
+structural change to get the actual Postmark calls out of the request cycle.
+
+**Status machine:** `draft` → `queued` → `sending` → `sent` / `failed`.
+
+- **`draft`** — editable. Clicking "Queue Send to Subscribers" in the admin
+  (`AnnouncementAdmin.send_view`) validates every target list's site/domain
+  configuration (`subscriptions.utils.announcement_send_validation.validate_announcement_send_config`)
+  and, if all lists pass, flips the announcement to `queued` and returns
+  immediately — no Postmark call happens in this request.
+- **`queued`** — waiting for the `send_announcement` management command
+  (cron-driven; see `docs/cookbook.md`) to pick it up. This is what actually
+  gets an announcement out of the request/response cycle: the widest
+  announcement seen in production (192 subscribers) takes 58–192 seconds of
+  Postmark round-trips at 0.3–1.0s each, which straddles nginx's 60s
+  `proxy_read_timeout` and gunicorn's 300s worker timeout
+  (`nginx-example-configuration/nginx.conf`, `Dockerfile`) — a send that used
+  to run inside the admin request could be silently killed mid-flight by
+  either one, leaving no record of where it stopped.
+- **`sending`** — the command has started `subscriptions.utils.announcement_send.send_announcement`
+  for this announcement. If the process is killed mid-run (OOM, restart), the
+  announcement is stuck here — use the **"Reset stuck 'Sending' announcements
+  back to Draft"** admin action to move it back to `draft`, then queue it
+  again.
+- **`sent`** / **`failed`** — set once the send loop finishes, based on
+  non-suppressed failures only (see below). `failed` announcements show the
+  send buttons again (unlike `sent`, which is locked) so they can be queued
+  and retried directly from the change page.
+
+**Idempotent and resumable by construction:** `send_announcement()` skips any
+subscriber who already has a successful `AnnouncementRecipient` row for that
+announcement. This means queueing a `failed` announcement again, or
+resetting-then-requeueing a stuck `sending` one, never re-mails anyone who
+was already delivered to — the classic trap of a naive retry re-sending to
+an entire list. `recipients_count` / `failures_count` are recomputed from
+`AnnouncementRecipient` rows on every run rather than incremented, so the
+counts stay correct across any number of partial runs.
+
+**Suppression is handled exactly like the three digest commands** (see
+"Bounce and Suppression Handling" above): the response is routed through
+`classify_postmark_response`, a 406 deactivates the subscriber via
+`deactivate_subscribers`, and the `AnnouncementRecipient` row is marked
+`suppressed=True` rather than a plain failure. A suppressed recipient does
+not count toward `failures_count` or push the announcement to `failed` — one
+bounced address on an otherwise-clean send should not read as "the send
+failed". Two live announcements motivated this: #12 (177 delivered, 5
+suppressed) and #9 (176 delivered, 12 suppressed) were both sitting in
+`failed` for no reason other than this miscount, and retrying either under
+the old code would have re-mailed everyone who had already received it.
+
+A `requests.RequestException` (timeout, DNS, reset) for one subscriber is
+recorded on that subscriber's row and the loop continues to the next —
+previously any exception, including programming errors, was caught by a
+blanket `except Exception` and silently counted as a delivery failure.
 
 ---
 
