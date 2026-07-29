@@ -1,6 +1,7 @@
 import logging
 import requests
 from datetime import timedelta
+from django.db.models import prefetch_related_objects
 from django.utils.timezone import now
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
@@ -499,7 +500,12 @@ class Command(BaseCommand):
 					).values_list("pk", flat=True)
 				)
 				article_priority_scores = {}
-				for article in articles.prefetch_related(
+				# `articles` already carries a prefetch_related("authors") from
+				# its construction above; scoring doesn't touch authors at
+				# all, so clear that lookup before adding the ones this loop
+				# actually needs rather than fetching authors data nobody
+				# reads here.
+				for article in articles.prefetch_related(None).prefetch_related(
 					"subjects", "ml_predictions_detail"
 				):
 					priority_score = 0
@@ -666,17 +672,33 @@ class Command(BaseCommand):
 						# article_priority_scores, computed once per list above —
 						# they don't vary by subscriber, only which articles in
 						# unsent_articles are still eligible does.
-						article_priorities = [
-							(article, article_priority_scores.get(article.pk, 0))
-							for article in unsent_articles
-						]
-
-						article_priorities.sort(
-							key=lambda x: (-x[1], -x[0].discovery_date.timestamp())
+						#
+						# Rank using (pk, discovery_date) only, not full Article
+						# instances: `articles` (and therefore `unsent_articles`)
+						# carries a prefetch_related("authors") from the queryset
+						# construction above, and materializing every candidate
+						# as a model instance here would prefetch authors for
+						# the *entire* per-subscriber candidate pool even though
+						# only article_limit articles are ever rendered. Only
+						# the selected top-N get that prefetch, applied below.
+						ranked_pks = sorted(
+							unsent_articles.values_list("pk", "discovery_date"),
+							key=lambda row: (
+								-article_priority_scores.get(row[0], 0),
+								-row[1].timestamp(),
+							),
 						)
-						limited_articles = [
-							item[0] for item in article_priorities[:article_limit]
-						]
+						limited_pks = [pk for pk, _ in ranked_pks[:article_limit]]
+						articles_by_pk = {
+							a.pk: a for a in Articles.objects.filter(pk__in=limited_pks)
+						}
+						prefetch_related_objects(
+							list(articles_by_pk.values()), "authors"
+						)
+						# Preserve rank order for the debug preview below — the
+						# organizer always re-sorts by discovery_date for the
+						# actual render, so this ordering only matters here.
+						limited_articles = [articles_by_pk[pk] for pk in limited_pks]
 						self.stdout.write(
 							self.style.WARNING(
 								f"WARNING: List '{digest_list.list_name}' had {articles_count} articles in the "
@@ -690,9 +712,10 @@ class Command(BaseCommand):
 									f"Applied article limit: showing {article_limit} highest-priority articles (manual + ML consensus >= {threshold}) out of {articles_count} available"
 								)
 							)
-							for i, (article, score) in enumerate(
-								article_priorities[: min(5, article_limit)]
+							for i, article in enumerate(
+								limited_articles[: min(5, article_limit)]
 							):
+								score = article_priority_scores.get(article.pk, 0)
 								manual_flag = (
 									"✓"
 									if article.pk in manual_relevant_ids_all
