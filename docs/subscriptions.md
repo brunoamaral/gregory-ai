@@ -367,6 +367,25 @@ an entire list. `recipients_count` / `failures_count` are recomputed from
 `AnnouncementRecipient` rows on every run rather than incremented, so the
 counts stay correct across any number of partial runs.
 
+**Resume semantics reach further than "retry the failures."** The skip rule
+is "already successfully delivered", not "was part of the original attempt" —
+so re-queueing an announcement mails **every subscriber currently on the
+target lists who hasn't already received it**, which includes anyone who
+subscribed *after* the original send, not only prior delivery failures. This
+follows correctly from an idempotent-by-`AnnouncementRecipient`-row design,
+but it surprised an operator retrying announcement #9: of the 44 subscribers
+who would receive it on a retry, only 12 were genuine delivery failures — the
+other ~32 had joined the list in the three months since the original April
+send, and would receive a three-month-old announcement alongside a fresh one.
+The `send_view` confirmation page (`AnnouncementAdmin.send_view`,
+`admin/subscriptions/announcement/send_confirm.html`) reflects this directly:
+it reports the post-skip count that will actually be queued to send,
+separately from the count of subscribers who already received it and will be
+skipped, computed the same way `send_announcement()` filters — by excluding
+subscribers with an existing successful `AnnouncementRecipient` row for that
+announcement — so this fan-out is visible before queueing, not discovered
+afterwards.
+
 **Suppression is handled exactly like the three digest commands** (see
 "Bounce and Suppression Handling" above): the response is routed through
 `classify_postmark_response`, a 406 deactivates the subscriber via

@@ -44,6 +44,11 @@
 	<div style="margin: 20px 0; padding: 15px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px;">
 		<strong>No active subscribers found.</strong> There are no active subscribers on the selected lists.
 	</div>
+	{% elif already_received_count > 0 %}
+	<div style="margin: 20px 0; padding: 15px; background: #eff6ff; border: 1px solid #93c5fd; border-radius: 6px;">
+		<strong>{{ new_recipients_count }} will receive this email</strong> — {{ already_received_count }} of the {{ total_subscribers }} unique subscriber{{ total_subscribers|pluralize }} already received this announcement and will be skipped.
+		<br><small style="color: #6b7280;">This includes anyone who subscribed after the original send — resuming an announcement mails everyone currently subscribed who hasn't already received it, not only prior delivery failures.</small>
+	</div>
 	{% endif %}
 
 	<form method="post">
@@ -53,10 +58,10 @@
 			   style="display: inline-block; padding: 8px 20px; background: #6b7280; color: white; text-decoration: none; border-radius: 5px; margin-right: 10px;">
 				Cancel
 			</a>
-			{% if total_subscribers > 0 %}
+			{% if new_recipients_count > 0 %}
 			<button type="submit"
 					style="padding: 8px 20px; background: #10b981; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
-				Queue Send to {{ total_subscribers }} Subscriber{{ total_subscribers|pluralize }}
+				Queue Send to {{ new_recipients_count }} Subscriber{{ new_recipients_count|pluralize }}
 			</button>
 			{% endif %}
 		</div>

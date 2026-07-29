@@ -250,8 +250,10 @@ class Command(BaseCommand):
 				filtered_pks = self._filter_articles_excluding_all_irrelevant(
 					base_articles, digest_list
 				)
-				articles = Articles.objects.filter(pk__in=filtered_pks).order_by(
-					"-discovery_date"
+				articles = (
+					Articles.objects.filter(pk__in=filtered_pks)
+					.order_by("-discovery_date")
+					.prefetch_related("authors")
 				)
 				self.stdout.write(
 					self.style.NOTICE(
@@ -278,8 +280,10 @@ class Command(BaseCommand):
 				filtered_pks = self._filter_articles_excluding_all_irrelevant(
 					base_articles, digest_list
 				)
-				articles = Articles.objects.filter(pk__in=filtered_pks).order_by(
-					"-discovery_date"
+				articles = (
+					Articles.objects.filter(pk__in=filtered_pks)
+					.order_by("-discovery_date")
+					.prefetch_related("authors")
 				)
 				self.stdout.write(
 					self.style.NOTICE(
@@ -428,7 +432,11 @@ class Command(BaseCommand):
 					list(manual_reviewed.values_list("pk", flat=True))
 					+ ml_relevant_articles
 				)
-				articles = Articles.objects.filter(pk__in=article_ids).distinct()
+				articles = (
+					Articles.objects.filter(pk__in=article_ids)
+					.distinct()
+					.prefetch_related("authors")
+				)
 				self.stdout.write(
 					self.style.NOTICE(
 						f"Filtered by manual review or ML consensus (>= {threshold}): {articles.count()} articles"
@@ -472,6 +480,44 @@ class Command(BaseCommand):
 					)
 				)
 				continue
+
+			# Relevancy-mode article priority scores (manual review + ML
+			# consensus count) depend only on the article and this list's
+			# threshold — never on the subscriber. Computing them here, once
+			# per list, and reusing the lookup below avoids redoing ~2
+			# queries per candidate article for every subscriber: measured
+			# at ~2,440 queries and ~0.8s per subscriber against MS Weekly
+			# Digest's 1,219-article candidate pool (audit P3, task 5) —
+			# roughly 70s across that list's 88 subscribers for identical
+			# results every time, since none of this varies by recipient.
+			article_priority_scores = None
+			if not all_articles and sort_order == "relevancy":
+				manual_relevant_ids_all = set(
+					Articles.objects.filter(
+						pk__in=articles.values_list("pk", flat=True),
+						article_subject_relevances__is_relevant=True,
+					).values_list("pk", flat=True)
+				)
+				article_priority_scores = {}
+				for article in articles.prefetch_related(
+					"subjects", "ml_predictions_detail"
+				):
+					priority_score = 0
+					if article.pk in manual_relevant_ids_all:
+						priority_score += 1000
+					for subject in article.subjects.all():
+						if not subject.auto_predict:
+							continue
+						relevant_algorithms = {
+							p.algorithm
+							for p in article.ml_predictions_detail.all()
+							if p.subject_id == subject.pk
+							and p.predicted_relevant
+							and p.probability_score is not None
+							and p.probability_score >= threshold
+						}
+						priority_score += len(relevant_algorithms) * 100
+					article_priority_scores[article.pk] = priority_score
 
 			# Step 4: Find subscribers of the list (respect per-list opt-out)
 			subscribers = Subscribers.objects.filter(
@@ -615,30 +661,15 @@ class Command(BaseCommand):
 								)
 							)
 					else:
-						# Relevancy mode: order by manual relevance first, then ML consensus count, then date
-						manual_relevant_ids = set(
-							Articles.objects.filter(
-								pk__in=[a.pk for a in unsent_articles],
-								article_subject_relevances__is_relevant=True,
-							).values_list("pk", flat=True)
-						)
-
-						article_priorities = []
-						for article in unsent_articles:
-							priority_score = 0
-							if article.pk in manual_relevant_ids:
-								priority_score += 1000
-							for subject in article.subjects.filter(auto_predict=True):
-								predictions = article.ml_predictions_detail.filter(
-									subject=subject,
-									predicted_relevant=True,
-									probability_score__gte=threshold,
-								).values_list("algorithm", flat=True)
-								relevant_count = (
-									len(set(predictions)) if predictions else 0
-								)
-								priority_score += relevant_count * 100
-							article_priorities.append((article, priority_score))
+						# Relevancy mode: order by manual relevance first, then ML
+						# consensus count, then date. Scores come from
+						# article_priority_scores, computed once per list above —
+						# they don't vary by subscriber, only which articles in
+						# unsent_articles are still eligible does.
+						article_priorities = [
+							(article, article_priority_scores.get(article.pk, 0))
+							for article in unsent_articles
+						]
 
 						article_priorities.sort(
 							key=lambda x: (-x[1], -x[0].discovery_date.timestamp())
@@ -663,7 +694,9 @@ class Command(BaseCommand):
 								article_priorities[: min(5, article_limit)]
 							):
 								manual_flag = (
-									"✓" if article.pk in manual_relevant_ids else "✗"
+									"✓"
+									if article.pk in manual_relevant_ids_all
+									else "✗"
 								)
 								self.stdout.write(
 									self.style.NOTICE(

@@ -59,8 +59,6 @@ class EmailContentOrganizer:
 			return self._organize_weekly_articles(articles, subscriber, list_obj)
 		elif self.email_type == "admin_summary":
 			return self._organize_admin_articles(articles, subscriber)
-		elif self.email_type == "trial_notification":
-			return self._organize_trial_notification_articles(articles, subscriber)
 		else:
 			return self._organize_default_articles(articles)
 
@@ -180,21 +178,6 @@ class EmailContentOrganizer:
 			"high_confidence_count": len(high_confidence),
 		}
 
-	def _organize_trial_notification_articles(self, articles, subscriber):
-		"""Organize articles for trial notification emails (minimal articles)."""
-		# For trial notifications, only include highly relevant articles
-		high_confidence = self._filter_high_confidence(articles)
-		sorted_articles = sorted(
-			high_confidence, key=lambda x: x.discovery_date, reverse=True
-		)
-
-		return {
-			"featured_articles": sorted_articles,  # Include ALL high-confidence trial-related articles
-			"regular_articles": [],
-			"total_count": len(sorted_articles),
-			"high_confidence_count": len(sorted_articles),
-		}
-
 	def _organize_default_articles(self, articles):
 		"""Default organization for unknown email types."""
 		if hasattr(articles, "order_by"):
@@ -210,38 +193,6 @@ class EmailContentOrganizer:
 			"total_count": len(sorted_articles),
 			"high_confidence_count": 0,
 		}
-
-	def _filter_high_confidence(self, articles):
-		"""Filter articles with high ML confidence scores or manual review."""
-		high_confidence = []
-
-		for article in articles:
-			# First check if the article was manually reviewed and marked as relevant
-			if (
-				hasattr(article, "article_subject_relevances")
-				and article.article_subject_relevances.filter(is_relevant=True).exists()
-			):
-				high_confidence.append(article)
-				continue
-
-			# Check for filtered predictions first (used by admin_summary)
-			if (
-				hasattr(article, "filtered_ml_predictions")
-				and article.filtered_ml_predictions
-			):
-				max_score = self._get_max_ml_score(article)
-				if max_score >= self.confidence_threshold:
-					high_confidence.append(article)
-			# Fall back to standard predictions
-			elif (
-				hasattr(article, "ml_predictions_detail")
-				and article.ml_predictions_detail.exists()
-			):
-				max_score = self._get_max_ml_score(article)
-				if max_score >= self.confidence_threshold:
-					high_confidence.append(article)
-
-		return high_confidence
 
 	def _sort_by_ml_score(self, articles):
 		"""Sort articles by highest ML prediction score."""
@@ -433,24 +384,16 @@ class EmailRenderingPipeline:
 		if confidence_threshold is not None:
 			self.organizer.confidence_threshold = confidence_threshold
 
-		# Optimize database queries with prefetch_related
+		# Optimize database queries with prefetch_related. Callers always pass
+		# either an unsliced QuerySet or an already-materialized list (never a
+		# sliced-but-still-QuerySet), so this never raises — see
+		# send_weekly_summary/send_admin_summary/send_trials_notification,
+		# which convert to a list before truncating.
 		if articles is not None and hasattr(articles, "prefetch_related"):
-			# Only apply prefetch if it's not already a sliced QuerySet
-			try:
-				articles = articles.prefetch_related(
-					"authors", "ml_predictions__subject"
-				)
-			except Exception:  # noqa: S110
-				# If prefetch fails (e.g., already sliced), continue with original
-				pass
+			articles = articles.prefetch_related("authors")
 
 		if trials is not None and hasattr(trials, "select_related"):
-			# Only apply select_related if it's not already a sliced QuerySet
-			try:
-				trials = trials.select_related()
-			except Exception:  # noqa: S110
-				# If select_related fails (e.g., already sliced), continue with original
-				pass
+			trials = trials.select_related()
 
 		# Organize content
 		organized_articles = self.organizer.organize_articles(
