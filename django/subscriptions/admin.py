@@ -2000,11 +2000,32 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			)
 
 		# GET — show confirmation page
+		# Mirror send_announcement()'s skip rule: a subscriber with a
+		# successful AnnouncementRecipient row for this announcement won't
+		# be mailed again, so the confirm page's counts (and the button
+		# label) must reflect that split rather than the raw audience —
+		# otherwise a resumed announcement overstates how many people will
+		# actually receive it (see docs/subscriptions.md).
+		already_sent_subscriber_ids = set(
+			AnnouncementRecipient.objects.filter(
+				announcement=announcement, success=True
+			).values_list("subscriber_id", flat=True)
+		)
+		new_recipients_count = 0
+		already_received_count = 0
+		for sub, _lst in all_subscribers.values():
+			if sub.subscriber_id in already_sent_subscriber_ids:
+				already_received_count += 1
+			else:
+				new_recipients_count += 1
+
 		context = {
 			**self.admin_site.each_context(request),
 			"announcement": announcement,
 			"list_info": list_info,
 			"total_subscribers": len(all_subscribers),
+			"new_recipients_count": new_recipients_count,
+			"already_received_count": already_received_count,
 			"title": f"Confirm Send: {announcement.subject}",
 			"opts": self.model._meta,
 		}

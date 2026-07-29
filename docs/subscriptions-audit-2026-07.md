@@ -333,6 +333,22 @@ of the deliveries that already succeeded. See
 [subscriptions.md](subscriptions.md#announcement-send-lifecycle) for the full
 status lifecycle.
 
+**Follow-up fixed 2026-07-28:** the `send_view` confirmation page reported
+`len(all_subscribers)` — the full audience, computed before the skip logic
+above runs — as both the displayed count and the button's send count.
+Against live data this overstated the actual send: announcement #12 said 181
+but would send to 6 (177 already delivered), #9 said 181 but would send to
+44 (176 already delivered). Nothing unsafe happened — it overstates rather
+than understates — but it's the one number an operator needs to judge
+whether a retry is worth doing. Fixed by subtracting subscribers with an
+existing successful `AnnouncementRecipient` row from the confirm count and
+showing both figures — new recipients and already-received/will-be-skipped —
+separately. See [subscriptions.md](subscriptions.md#announcement-send-lifecycle)
+for the resume-semantics note this surfaced (resuming mails everyone
+currently subscribed who hasn't received it, including subscribers who
+joined after the original send) and
+`subscriptions/tests/test_announcement_confirm_count.py`.
+
 ### 13. `lookback_days` only half-works
 
 `send_admin_summary` and `send_trials_notification` go through
@@ -363,13 +379,86 @@ content window can never fall outside a narrower exclusion window. See
 
 ## Priority 3 — performance
 
+**Re-measured against current code on 2026-07-28** before work started, since
+P1 deleted the featured/regular split and changed which code is still on the
+hot path. The re-measurement found a different shape than this section
+originally described (a genuine N+1, but on the *authors* relation, not via
+`_filter_high_confidence`, which P1 already made unreachable — see finding 5
+above) and a much larger cost for the per-subscriber priority loop than
+first estimated. Findings below are annotated individually.
+
 - `content_organizer.py:468` prefetches `ml_predictions__subject` (the M2M), but every consumer reads `ml_predictions_detail` (the reverse FK). The prefetch is wasted and `_filter_high_confidence` runs roughly 3 queries per article per subscriber. It is skipped entirely once `unsent_articles` becomes a list after truncation.
+
+  **Status: fixed 2026-07-28, but not the way originally described.**
+  `_filter_high_confidence` was already unreachable by the time this was
+  re-measured — it was only ever called from `_organize_trial_notification_articles`,
+  and trial notifications never pass `articles=` to the organizer, so both
+  methods were dead code and were deleted outright (see
+  `subscriptions/tests/test_trial_notification_articles_unreachable.py`,
+  which pins the unreachability before the deletion). The wasted
+  `ml_predictions__subject` prefetch was deleted too, along with the
+  `try/except Exception: pass` blocks that had wrapped both prefetch
+  attempts — with the fix below, the callers into `prepare_optimized_context`
+  now only ever pass an unsliced QuerySet or an already-materialized list,
+  never a sliced-but-still-QuerySet, so the exception path was unreachable as
+  well.
+
+  The real, still-live N+1 turned out to be on `authors`, not
+  `ml_predictions`: `content_organizer.py:437`'s prefetch guard
+  (`hasattr(articles, "prefetch_related")`) is skipped once
+  `send_weekly_summary`/`send_admin_summary` truncate `articles` to a plain
+  Python list via `article_limit`, so `article_card.html`'s
+  `article.authors.exists()` / `.all()` cost two queries per article, per
+  subscriber, on exactly the truncated-list path that matters. Fixed by
+  moving the `authors` prefetch into both commands, applied to the queryset
+  *before* truncation, so the prefetch cache survives slicing and
+  materialization. Measured: MS Weekly Digest (88 subscribers, 15-article
+  `article_limit`) drops from ~32 queries to ~4 per subscriber render, ~2,816
+  → ~350 queries across the list. See
+  `subscriptions/tests/test_weekly_summary_authors_prefetch.py` and
+  `subscriptions/tests/test_admin_summary_authors_prefetch.py`.
+
 - `send_weekly_summary.py:317` calls `is_ml_relevant_any_subject` across the whole window — 1,242 articles for MS Weekly Digest — at about 2 queries each.
+
+  **Status: left open, deliberately.** Re-measured at ~2,484 queries and ~2s,
+  once per list per run (not per subscriber, so it doesn't scale with
+  audience). Two seconds doesn't justify a rewrite on its own, and the
+  candidate replacements (`api.filters._get_ml_relevant_articles_query`, the
+  denormalized `Articles.relevant` flag, `gregory.relevance.recompute_article_relevance`)
+  aren't proven to select the identical article set as this loop — swapping
+  in one of them without a test pinning the current selection risks a silent
+  change in which articles a subscriber sees. No such pinning test exists
+  yet, so this was left alone rather than guessed at.
+
 - `send_weekly_summary.py:564` recomputes ML priority scores inside the per-subscriber loop (88 subscribers on that list).
+
+  **Status: fixed 2026-07-28 — and larger than this line suggested.** This
+  cost was never included in the original per-subscriber measurement above
+  (that measurement started from an already-built article list); measured on
+  its own against MS Weekly Digest's 1,219-article candidate pool, it came to
+  ~2,440 queries and ~0.82s **per subscriber**, none of which varies by
+  subscriber — manual-review status and ML consensus count depend only on
+  the article and the list's threshold. Across 88 subscribers that's roughly
+  158,000 queries and ~72 seconds of identical, repeated work every run.
+  Fixed by computing `article_priority_scores` once per list (a handful of
+  batched queries) and having the per-subscriber truncation step look up
+  precomputed scores instead of recomputing them. Re-measured after the fix:
+  4 queries / ~0.28s once per list, then 1 query / ~0.05s per subscriber —
+  roughly 92 queries and ~4.5s total for the same 88-subscriber list, versus
+  ~158,000 queries and ~72s before. See
+  `subscriptions/tests/test_weekly_summary_priority_scores_shared.py`.
 
 Worth knowing before optimising: the featured/regular split buys nothing
 visually. `weekly_summary.html:31-42` renders both groups with the identical card
 component, back to back. The split only affects ordering.
+
+**Not attempted:** batching or parallelising the Postmark HTTP calls
+themselves. At 0.3–1.0s each, sequential sends remain the dominant cost even
+with every finding above fixed (26–88s for MS Weekly Digest's 88
+subscribers) — but changing send concurrency interacts with suppression
+handling, per-recipient error attribution, and Postmark rate limits, and
+deserves its own change with its own testing rather than folding into a
+performance clean-up.
 
 ---
 

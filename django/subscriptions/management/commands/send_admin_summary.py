@@ -105,7 +105,8 @@ class Command(BaseCommand):
 					"ml_predictions_detail",
 					queryset=MLPredictions.objects.filter(subject__in=list_subjects),
 					to_attr="filtered_ml_predictions",
-				)
+				),
+				"authors",
 			)
 
 			list_trials = get_trials_for_list(admin_list, days=admin_list.lookback_days)
