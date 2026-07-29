@@ -20,7 +20,7 @@ Neither of these self-heals, and both are silent from the outside.
 
 ### 1. Trial notification emails exceed Postmark's 5 MB body limit
 
-**Status: fixed in code, pending deploy.** `Lists.trial_max_age_days` (default
+**Status: fixed and deployed 2026-07-28** (CI deploys everything on `main`). `Lists.trial_max_age_days` (default
 90) filters `get_trials_for_list` against the trial's own registration/
 publication date; `Lists.trial_limit` mirrors `article_limit` and now applies
 to all three email types; `subscriptions.utils.email_limits.render_within_limit`
@@ -67,7 +67,7 @@ into a single email.
 
 ### 2. "Unsubscribe from all lists on <site>" is a silent no-op
 
-**Status: fixed in code, pending deploy.** The `scope == "site"` filter now
+**Status: fixed and deployed 2026-07-28** (CI deploys everything on `main`). The `scope == "site"` filter now
 matches `list__site_id`; the view reports how many rows were actually
 deactivated so a no-op request can no longer render success. Incident record
 in
@@ -91,7 +91,7 @@ site", so the implementation is simply reading the wrong field. It should be
 
 ### 3. Hard-bounced and suppressed recipients are retried indefinitely
 
-**Status: fixed in code, pending deploy.**
+**Status: fixed and deployed 2026-07-28** (CI deploys everything on `main`).
 `subscriptions.utils.postmark.classify_postmark_response` centralises response
 parsing (and fixes the falsy-`Response` truthiness bug in `send_admin_summary`
 along the way); a 406 now deactivates the subscriber globally via
