@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
 			model_name="suppressionevent",
 			index=models.Index(
 				fields=["email", "-changed_at"],
-				name="idx_suppression_event_email_changed",
+				name="idx_supp_event_email_changed",
 			),
 		),
 	]

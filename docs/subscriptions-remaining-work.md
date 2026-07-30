@@ -138,17 +138,11 @@ The count caps mean it would no longer break a send — the failure would be
 quieter than the trial one was, which arguably makes it worse: subscribers get a
 digest of decade-old papers and nothing errors.
 
-### Decision required
-
-Articles have `published_date` and `discovery_date`, and the meaningful "how old
-is this" field is `published_date`. Confirm that before building on it, and pick
-a default threshold. Trials landed on 90 days, chosen because slow registries
-lag; journal publication dates behave differently and may want a different
-number.
-
-Mirror the trial implementation: an `Lists.article_max_age_days` field, applied
-in the article selection queries, nulls kept, blank disables. See Task B0 of
-[subscriptions-p0-fix-plan.md](subscriptions-p0-fix-plan.md) for the shape.
+**Decided and moved.** `Lists.article_max_age_days`, default 90, on
+`published_date`, nulls kept, blank disables — confirmed by Bruno 2026-07-29,
+with the measurements behind the threshold. Now Task 6 of
+[subscriptions-cleanup-plan.md](subscriptions-cleanup-plan.md); nothing
+outstanding here.
 
 ---
 
@@ -188,10 +182,8 @@ in three places — this loop, `api.filters._get_ml_relevant_articles_query`, an
 
 ## Also open, tracked elsewhere
 
-- The incident record's open items —
-  [incidents/2026-07-28-site-scope-unsubscribe-not-honoured.md](incidents/2026-07-28-site-scope-unsubscribe-not-honoured.md).
-  Run `scripts/incident-2026-07-28-scope-check.sh` on production. The access-log
-  item expires as logs rotate, so it is the only thing here with a deadline.
+- The incident record is closed as of 2026-07-29 — nothing outstanding.
+  [incidents/2026-07-28-site-scope-unsubscribe-not-honoured.md](incidents/2026-07-28-site-scope-unsubscribe-not-honoured.md)
 - Audit finding 13 shipped in P2 but never got a status annotation, so it still
   reads as open. One-line docs fix.
 - Postmark batch send, noted in the P2 plan as worth measuring inside

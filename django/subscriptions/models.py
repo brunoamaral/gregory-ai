@@ -546,9 +546,13 @@ class SuppressionEvent(models.Model):
 			# (ordering check, original-suppression lookup) — the unique
 			# constraint above is keyed on record_type first, so it doesn't
 			# serve an email-only query efficiently as this table grows.
+			# Name kept under 30 characters: Django enforces that limit on index
+			# names for cross-database portability (models.E034), and the check
+			# only runs when a database is involved — `manage.py check` alone
+			# passes, `migrate` does not.
 			models.Index(
 				fields=["email", "-changed_at"],
-				name="idx_suppression_event_email_changed",
+				name="idx_supp_event_email_changed",
 			),
 		]
 		ordering = ["-changed_at"]
