@@ -5,15 +5,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
+	dependencies = [
+		("subscriptions", "0033_alter_lists_lookback_days"),
+	]
 
-    dependencies = [
-        ('subscriptions', '0033_alter_lists_lookback_days'),
-    ]
-
-    operations = [
-        migrations.AddField(
-            model_name='lists',
-            name='article_max_age_days',
-            field=models.PositiveIntegerField(blank=True, default=90, help_text='Skip articles whose own published_date is older than this. Guards against bulk imports of historical articles flooding a newsletter, because discovery_date only records when GregoryAI first saw the row. Articles with no published_date are always kept. Leave blank to disable the check.', null=True, validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(3650)], verbose_name='Maximum article age (days)'),
-        ),
-    ]
+	operations = [
+		migrations.AddField(
+			model_name="lists",
+			name="article_max_age_days",
+			field=models.PositiveIntegerField(
+				blank=True,
+				default=90,
+				help_text="Skip articles whose own published_date is older than this. Guards against bulk imports of historical articles flooding a newsletter, because discovery_date only records when GregoryAI first saw the row. Articles with no published_date are always kept. Leave blank to disable the check.",
+				null=True,
+				validators=[
+					django.core.validators.MinValueValidator(1),
+					django.core.validators.MaxValueValidator(3650),
+				],
+				verbose_name="Maximum article age (days)",
+			),
+		),
+	]

@@ -66,6 +66,8 @@ def _resolve_date_range(request, default_days=30):
 		days = int(request.GET.get("days", default_days))
 	except (ValueError, TypeError):
 		days = default_days
+	if days < 1:
+		days = default_days
 	end_date = timezone.now().date()
 	start_date = end_date - timedelta(days=days - 1)
 	return start_date, end_date
@@ -82,7 +84,9 @@ def _resolve_days_to_look_back(request, list_obj):
 	days_param = request.GET.get("days")
 	if days_param:
 		try:
-			return int(days_param)
+			days = int(days_param)
+			if days >= 1:
+				return days
 		except (ValueError, TypeError):
 			pass
 	if list_obj is not None:

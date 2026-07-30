@@ -49,13 +49,15 @@ echo
 # ---------------------------------------------------------------------------
 echo -e "${BLUE}--- Part 1: production scope figures (read-only) ---${NC}"
 
-docker exec "$CONTAINER" python manage.py shell -c "
+docker exec -e SCOPE_CHECK_START_DATE="$START_DATE" "$CONTAINER" python manage.py shell -c "
+import os
 from datetime import datetime, timezone
 from subscriptions.models import (
 	Subscribers, ListSubscription, SentArticleNotification, SentTrialNotification, Lists
 )
 
-start = datetime.fromisoformat('${START_DATE}').replace(tzinfo=timezone.utc)
+start_date_str = os.environ['SCOPE_CHECK_START_DATE']
+start = datetime.fromisoformat(start_date_str).replace(tzinfo=timezone.utc)
 
 print('Subscriber totals')
 print('  total subscriber records:            ', Subscribers.objects.count())
@@ -69,17 +71,17 @@ subs = set(
 ) | set(
 	SentTrialNotification.objects.filter(sent_at__gte=start).values_list('subscriber_id', flat=True)
 )
-print('  distinct subscribers with a retained send record since ${START_DATE}:', len(subs))
+print('  distinct subscribers with a retained send record since', start_date_str + ':', len(subs))
 oldest_a = SentArticleNotification.objects.order_by('sent_at').values_list('sent_at', flat=True).first()
 oldest_t = SentTrialNotification.objects.order_by('sent_at').values_list('sent_at', flat=True).first()
 print('  oldest retained article send record: ', oldest_a)
 print('  oldest retained trial send record:   ', oldest_t)
 print('  NOTE: send records are pruned after 30 days, so the number above is a')
-print('        lower bound — it cannot reach back to ${START_DATE}.')
+print('        lower bound — it cannot reach back to', start_date_str + '.')
 
 print()
 print('Unsubscribe requests that DID work in the window (the two other links)')
-print('  ListSubscription rows deactivated since ${START_DATE}:',
+print('  ListSubscription rows deactivated since', start_date_str + ':',
       ListSubscription.objects.filter(is_active=False, unsubscribed_at__gte=start).count())
 
 print()
@@ -218,18 +220,20 @@ if [ $((LIST_HITS + ALL_HITS + FOUND)) -eq 0 ] && [ -n "$OLDEST_ISO" ]; then
 	echo
 	echo -e "${BLUE}All scopes zero — checking whether anyone unsubscribed in that period at all${NC}"
 	echo "Log-covered window starts: $OLDEST_ISO"
-	docker exec "$CONTAINER" python manage.py shell -c "
+	docker exec -e SCOPE_CHECK_OLDEST_ISO="$OLDEST_ISO" "$CONTAINER" python manage.py shell -c "
+import os
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from subscriptions.models import FailedNotification, ListSubscription
 
-start = datetime.fromisoformat('${OLDEST_ISO}').replace(tzinfo=timezone.utc)
+oldest_iso_str = os.environ['SCOPE_CHECK_OLDEST_ISO']
+start = datetime.fromisoformat(oldest_iso_str).replace(tzinfo=timezone.utc)
 rows = list(
 	ListSubscription.objects.filter(is_active=False, unsubscribed_at__gte=start)
 	.select_related('subscriber', 'list')
 	.order_by('unsubscribed_at')
 )
-print('  ListSubscription rows deactivated since ${OLDEST_ISO}:', len(rows))
+print('  ListSubscription rows deactivated since', oldest_iso_str + ':', len(rows))
 
 if not rows:
 	print()
