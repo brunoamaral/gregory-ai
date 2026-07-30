@@ -474,9 +474,40 @@ def getDateRangeFromWeek(p_year, p_week):
 # failure here (e.g. an oversized field hitting a DataError) must never
 # propagate and replace the API's real response. Anything that goes wrong
 # writing the audit row is logged via the `logging` module instead.
+#
+# Three phases:
+#   1. Sanitize/truncate every value BEFORE the try block, so all of them are
+#      guaranteed bound if the full-row write fails and the except handler
+#      needs to reference them (payload_str in particular used to be assigned
+#      inside the try, which would raise UnboundLocalError from the handler
+#      if the failure happened before that line was reached).
+#   2. Attempt the full row.
+#   3. On failure: log full request context, then retry a minimal row (no
+#      payload) so a schema-drift or encoding surprise degrades the audit
+#      trail instead of silently dropping the request from it. If even the
+#      minimal row fails, log and give up — this function must never raise.
+#
+# Note on ip_addr: it is also passed to checkValidAccess, which exact-matches
+# it against the comma-separated APIAccessScheme.ip_addresses allowlist. The
+# truncation below is local to this function and must stay that way — trim
+# it before the allowlist check and a long spoofed X-Forwarded-For could be
+# cut down into matching an allowlisted prefix.
 def generateAccessSchemeLog(
 	call_type, ip_addr, access_scheme, http_code, error_message, post_data
 ):
+	if call_type is not None and len(call_type) > 200:
+		call_type = call_type[:200]
+
+	if ip_addr is not None and len(ip_addr) > 45:
+		ip_addr = ip_addr[:45]
+
+	if error_message is not None and len(error_message) > 499:
+		error_message = error_message[:499]
+
+	payload_str = post_data if isinstance(post_data, str) else str(post_data)
+	if len(payload_str) > 1700:
+		payload_str = payload_str[:1700]
+
 	try:
 		log = APIAccessSchemeLog()
 		log.call_type = call_type
@@ -484,21 +515,37 @@ def generateAccessSchemeLog(
 		if access_scheme is not None:
 			log.api_access_scheme = access_scheme
 		log.http_code = http_code
-
-		if error_message is not None and len(error_message) > 499:
-			error_message = error_message[:499]
 		log.error_message = error_message
-
-		payload_str = post_data if isinstance(post_data, str) else str(post_data)
-		if len(payload_str) > 1700:
-			payload_str = payload_str[:1700]
 		log.payload_received = payload_str
 
 		log.save()
 	except Exception:
-		logging.getLogger(__name__).exception(
-			"Failed to write APIAccessSchemeLog row; API response is unaffected."
+		logger = logging.getLogger(__name__)
+		# Deliberately omit the payload here: it is free-form client-submitted
+		# content (post_article bodies can carry author names, emails, etc.)
+		# and application logs have looser access control / retention than
+		# the database. This line carries exactly the fields the minimal
+		# fallback row below persists, and nothing more — payload_received
+		# is still written to the DB on the normal (non-failure) path.
+		logger.exception(
+			"Failed to write APIAccessSchemeLog row; API response is unaffected. "
+			"call_type=%s ip_addr=%s http_code=%s error_message=%s",
+			call_type,
+			ip_addr,
+			http_code,
+			error_message,
 		)
+		try:
+			APIAccessSchemeLog.objects.create(
+				call_type=call_type,
+				ip_addr=ip_addr,
+				api_access_scheme=access_scheme,
+				http_code=http_code,
+				error_message="[payload dropped after write failure]",
+				payload_received=None,
+			)
+		except Exception:
+			logger.exception("Fallback APIAccessSchemeLog row also failed.")
 
 
 ###
