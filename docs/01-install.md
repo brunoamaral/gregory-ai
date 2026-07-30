@@ -43,6 +43,29 @@ EMAIL_POSTMARK_API_KEY=your-postmark-server-token
 EMAIL_POSTMARK_API_URL=https://api.postmarkapp.com/email
 ```
 
+If you're setting up a production-like deployment, also configure the
+Postmark suppression webhook — without it, suppression is only ever detected
+reactively (after a bounced send), never in real time. See
+[subscriptions.md](subscriptions.md#suppression-and-reactivation-webhook) for
+the full contract.
+
+```bash
+POSTMARK_WEBHOOK_USERNAME=choose-a-username
+POSTMARK_WEBHOOK_PASSWORD=choose-a-strong-password
+```
+
+Then, in the Postmark server's settings, add a webhook on the **broadcast**
+message stream pointing at:
+
+```
+https://<POSTMARK_WEBHOOK_USERNAME>:<POSTMARK_WEBHOOK_PASSWORD>@<your-domain>/webhooks/
+```
+
+with **Delivery, Bounce, Open, and Subscription Change** enabled. An
+unauthenticated or wrongly-authenticated request gets a 403 (by design —
+Postmark stops retrying on 403), so double-check the credentials in the URL
+match `.env` exactly.
+
 Optional — add ORCID credentials if you want to test author enrichment:
 
 ```bash

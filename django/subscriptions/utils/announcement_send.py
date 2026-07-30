@@ -257,6 +257,7 @@ def send_announcement(announcement):
 				sender_name=sender_name,
 				api_token=api_token,
 				api_url=api_url,
+				tag="announcement",
 			)
 		except requests.RequestException as e:
 			error_msg = f"Connection error: {e}"

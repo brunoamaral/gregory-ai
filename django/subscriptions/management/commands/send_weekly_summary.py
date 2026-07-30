@@ -17,6 +17,7 @@ from subscriptions.models import (
 	SentArticleNotification,
 	SentTrialNotification,
 	FailedNotification,
+	SuppressionEvent,
 )
 from subscriptions.management.commands.utils.subscription import (
 	get_latest_research_by_category,
@@ -795,6 +796,7 @@ class Command(BaseCommand):
 						api_token=postmark_api_token,
 						api_url=api_url,
 						sender_prefix=customsettings.sender_email_prefix,
+						tag="weekly_summary",
 					)
 				except requests.RequestException as e:
 					self.stdout.write(
@@ -857,7 +859,11 @@ class Command(BaseCommand):
 						digest_list.list_name,
 						detail,
 					)
-					deactivate_subscribers([subscriber.subscriber_id], reason=detail)
+					deactivate_subscribers(
+						[subscriber.subscriber_id],
+						reason=detail,
+						record_type=SuppressionEvent.RECORD_TYPE_REACTIVE_SEND_FAILURE,
+					)
 					FailedNotification.objects.create(
 						subscriber=subscriber, list=digest_list, reason=detail
 					)

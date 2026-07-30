@@ -1,11 +1,16 @@
+import base64
+import binascii
+import hmac
 import io
+import json
 import logging
+import os
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.sites.models import Site
 from django.core.exceptions import DisallowedHost
 from django.core.files.uploadedfile import InMemoryUploadedFile
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.utils.timezone import now as tz_now
 from django.views.decorators.csrf import csrf_exempt
@@ -21,6 +26,7 @@ from subscriptions.models import (
 	ListSubscription,
 	SubscriberSiteProfile,
 )
+from subscriptions.utils.postmark_webhook import handle_subscription_change
 
 logger = logging.getLogger(__name__)
 
@@ -388,6 +394,102 @@ def unsubscribe_site(request, token, site_id):
 def unsubscribe_all(request, token):
 	"""Global opt-out — marks subscriber as inactive and deactivates all list subscriptions."""
 	return _unsubscribe_confirm(request, token, scope="all")
+
+
+# ---------------------------------------------------------------------------
+# Postmark webhook (suppression / reactivation)
+# ---------------------------------------------------------------------------
+
+# RecordTypes Postmark is configured to send (see docs/subscriptions.md).
+# Anything outside this set is logged and ignored rather than acted on —
+# this endpoint is provider-agnostic (path is /webhooks/, not
+# /webhooks/postmark/), so an unrecognised RecordType may just mean a
+# different system started posting here.
+_POSTMARK_KNOWN_RECORD_TYPES = frozenset(
+	{"SubscriptionChange", "Delivery", "Bounce", "Open", "SpamComplaint", "Click"}
+)
+
+
+def _postmark_webhook_authorized(request):
+	"""
+	HTTP basic auth against POSTMARK_WEBHOOK_USERNAME/PASSWORD.
+
+	Postmark does not support HMAC webhook signatures (their docs say so
+	explicitly, despite a TypeScript sample suggesting otherwise) — basic
+	auth, embedded in the webhook URL Postmark posts to, is the only
+	supported protection. Compared with hmac.compare_digest to avoid a
+	timing side-channel on the credential.
+	"""
+	expected_username = os.environ.get("POSTMARK_WEBHOOK_USERNAME", "")
+	expected_password = os.environ.get("POSTMARK_WEBHOOK_PASSWORD", "")
+	if not expected_username or not expected_password:
+		logger.error(
+			"postmark_webhook: POSTMARK_WEBHOOK_USERNAME/POSTMARK_WEBHOOK_PASSWORD "
+			"are not configured; rejecting all requests."
+		)
+		return False
+
+	auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+	if not auth_header.startswith("Basic "):
+		return False
+
+	try:
+		decoded = base64.b64decode(auth_header[len("Basic ") :]).decode("utf-8")
+		received_username, received_password = decoded.split(":", 1)
+	except (ValueError, UnicodeDecodeError, binascii.Error):
+		return False
+
+	return hmac.compare_digest(
+		received_username, expected_username
+	) and hmac.compare_digest(received_password, expected_password)
+
+
+@csrf_exempt
+@require_POST
+def postmark_webhook(request):
+	"""
+	Receives Postmark webhook events (Delivery, Bounce, Open, Subscription
+	Change). Only Subscription Change drives suppression/reactivation state —
+	see subscriptions.utils.postmark_webhook.handle_subscription_change and
+	docs/subscriptions.md for the policy.
+
+	Auth failures return 403 (not 401): Postmark stops retrying on 403 and
+	keeps retrying everything else, so a misconfigured credential should fail
+	once and loudly rather than hammer this endpoint for hours.
+
+	Every other outcome — including an unrecognised RecordType or a
+	non-SubscriptionChange event — returns 200 quickly. Postmark retries any
+	non-200, and Subscription Change events are only retried for ~21 minutes,
+	so slow or wrongly-erroring responses genuinely lose data.
+	"""
+	if not _postmark_webhook_authorized(request):
+		return HttpResponse(status=403)
+
+	try:
+		payload = json.loads(request.body)
+	except (ValueError, UnicodeDecodeError):
+		logger.warning("postmark_webhook: request body is not valid JSON.")
+		return HttpResponse(status=400)
+
+	if not isinstance(payload, dict):
+		logger.warning("postmark_webhook: request body is not a JSON object.")
+		return HttpResponse(status=400)
+
+	record_type = payload.get("RecordType")
+	if record_type == "SubscriptionChange":
+		handle_subscription_change(payload)
+	elif record_type in _POSTMARK_KNOWN_RECORD_TYPES:
+		# Delivery/Open/Bounce are high-volume and expected — DEBUG, not INFO,
+		# so this endpoint can't flood production logs under normal traffic.
+		logger.debug(
+			"postmark_webhook: received %s event; no action needed.", record_type
+		)
+	else:
+		logger.warning(
+			"postmark_webhook: unrecognised RecordType %r; ignoring.", record_type
+		)
+
+	return HttpResponse(status=200)
 
 
 # ---------------------------------------------------------------------------

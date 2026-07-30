@@ -19,6 +19,7 @@ from .models import (
 	SubscriberSiteProfile,
 	Announcement,
 	AnnouncementRecipient,
+	SuppressionEvent,
 )
 from .forms import ListsAdminForm, AnnouncementAdminForm
 from gregory.models import Team
@@ -936,7 +937,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 		# Materialise the selected IDs: get_queryset() is annotated/distinct, which makes
 		# it unreliable as an `__in` subquery.
 		subscriber_ids = list(queryset.values_list("pk", flat=True))
-		updated_count, unsubscribed = deactivate_subscribers(subscriber_ids)
+		updated_count, unsubscribed, _events = deactivate_subscribers(subscriber_ids)
 		self.message_user(
 			request,
 			f"{updated_count} subscriber(s) marked inactive — they will receive no emails from any "
@@ -1307,6 +1308,56 @@ class FailedNotificationAdmin(admin.ModelAdmin):
 
 admin.site.register(FailedNotification, FailedNotificationAdmin)
 admin.site.register(Lists, ListsAdmin)
+
+
+@admin.register(SuppressionEvent)
+class SuppressionEventAdmin(admin.ModelAdmin):
+	"""
+	Read-only audit trail for Postmark suppress/unsuppress events and their
+	local equivalents (reactive 406, admin bulk disable). `action_taken` /
+	`flag_reason` show what reactivation.py decided and why — in particular,
+	events predating this model always show up here as having no prior
+	SuppressionEvent to restore from, which is the correct, documented
+	behaviour (see docs/subscriptions.md), not a bug.
+	"""
+
+	list_display = [
+		"email",
+		"record_type",
+		"suppress_sending",
+		"suppression_reason",
+		"action_taken",
+		"changed_at",
+	]
+	list_filter = [
+		"record_type",
+		"suppress_sending",
+		"action_taken",
+		"suppression_reason",
+	]
+	search_fields = ["email", "subscriber__email", "message_id"]
+	readonly_fields = [
+		"subscriber",
+		"email",
+		"record_type",
+		"suppress_sending",
+		"suppression_reason",
+		"origin",
+		"message_stream",
+		"message_id",
+		"changed_at",
+		"raw_payload",
+		"deactivated_list_subscription_ids",
+		"action_taken",
+		"flag_reason",
+		"created_at",
+	]
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
 
 
 @admin.register(SubscriberSiteProfile)

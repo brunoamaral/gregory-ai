@@ -12,6 +12,7 @@ def send_email(
 	api_token=None,
 	api_url=None,
 	sender_prefix=None,
+	tag=None,
 ):
 	"""
 	Sends an email using the Postmark API.
@@ -25,6 +26,9 @@ def send_email(
 	:param api_token: Custom Postmark API token (if provided).
 	:param api_url: Custom Postmark API URL (if provided).
 	:param sender_prefix: Local part of the sender address (default: 'gregory').
+	:param tag: Postmark message tag (e.g. "weekly_summary"). Postmark allows
+		exactly one tag per message; used for Postmark-side stats/debugging
+		only, not for suppression, which keys off the recipient address.
 	:return: Response object from the Postmark API.
 	"""
 	prefix = sender_prefix or "gregory"
@@ -42,6 +46,8 @@ def send_email(
 		"TextBody": text,
 		"HtmlBody": html,
 	}
+	if tag:
+		payload["Tag"] = tag
 
 	response = requests.post(
 		email_postmark_api_url,
