@@ -108,7 +108,7 @@
         <p class="ml-drift-text" style="color: {% if ml_drift_total %}#991b1b{% else %}#166534{% endif %}; font-size: 13px; margin: 0;">
             {{ ml_drift.stale_ml_score }} article{{ ml_drift.stale_ml_score|pluralize }} with predictions but no ml_score,
             {{ ml_drift.missing_relevant }} article{{ ml_drift.missing_relevant|pluralize }} that should be flagged relevant but aren't,
-            {{ ml_drift.unexpected_relevant }} flagged relevant that shouldn't be.
+            {{ ml_drift.unexpected_relevant }} article{{ ml_drift.unexpected_relevant|pluralize }} flagged relevant that shouldn't be.
             {% if ml_drift_total %}Non-zero means a write path is bypassing the denormalized-field recompute — see docs/ml-prediction-signal-bypass-plan.md.{% endif %}
         </p>
     </div>

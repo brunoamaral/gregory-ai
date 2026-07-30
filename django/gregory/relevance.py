@@ -80,37 +80,52 @@ def compute_ml_drift(threshold=0.8):
 	  unexpected_relevant: the reverse — should always be 0; non-zero here means
 	    the stored flag is relevant for an article nothing currently justifies,
 	    a different failure mode than staleness
+
+	Each count is a single SQL COUNT — no article IDs are materialized into
+	Python, so this stays cheap to call on every admin summary send even as
+	the articles table grows.
 	"""
+	from django.db.models import Q
+
 	from api.filters import ml_relevant_articles_q
 	from gregory.models import Articles
 
+	# .values("article_id") keeps the DISTINCT (needed because the reverse-FK
+	# joins below can multiply rows) scoped to a single column instead of
+	# every field on Articles — cheaper, and avoids a wide SELECT the count()
+	# wrapper never needed in the first place.
 	stale_ml_score = (
 		Articles.objects.filter(
 			ml_predictions_detail__isnull=False, ml_score__isnull=True
 		)
+		.values("article_id")
 		.distinct()
 		.count()
 	)
 
-	flagged = set(
-		Articles.objects.filter(relevant=True).values_list("article_id", flat=True)
+	should_be_relevant_q = Q(article_subject_relevances__is_relevant=True) | (
+		ml_relevant_articles_q(threshold)
 	)
-	manual = set(
-		Articles.objects.filter(
-			article_subject_relevances__is_relevant=True
-		).values_list("article_id", flat=True)
+
+	missing_relevant = (
+		Articles.objects.filter(should_be_relevant_q)
+		.exclude(relevant=True)
+		.values("article_id")
+		.distinct()
+		.count()
 	)
-	ml = set(
-		Articles.objects.filter(ml_relevant_articles_q(threshold)).values_list(
-			"article_id", flat=True
-		)
+	unexpected_relevant = (
+		Articles.objects.filter(relevant=True)
+		.exclude(should_be_relevant_q)
+		.values("article_id")
+		.distinct()
+		.count()
 	)
-	should_be_relevant = manual | ml
 
 	return {
 		"stale_ml_score": stale_ml_score,
-		"missing_relevant": len(should_be_relevant - flagged),
-		"unexpected_relevant": len(flagged - should_be_relevant),
+		"missing_relevant": missing_relevant,
+		"unexpected_relevant": unexpected_relevant,
 	}
 
 
