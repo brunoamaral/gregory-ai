@@ -94,8 +94,12 @@ def render_announcement_email(
 		"mastodon_url": getattr(custom_settings, "mastodon_url", "")
 		if custom_settings
 		else "",
-		"privacy_policy_url": "",
-		"terms_url": "",
+		"privacy_policy_url": getattr(custom_settings, "privacy_policy_url", "")
+		if custom_settings
+		else "",
+		"terms_url": getattr(custom_settings, "terms_url", "")
+		if custom_settings
+		else "",
 	}
 	if subscriber:
 		context["subscriber"] = subscriber

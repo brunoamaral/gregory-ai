@@ -1,13 +1,11 @@
 import logging
 import requests
 from datetime import timedelta
-from django.db.models import prefetch_related_objects
 from django.utils.timezone import now
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
 from subscriptions.management.commands.utils.send_email import send_email
-from gregory.models import Articles
 from subscriptions.management.commands.utils.get_credentials import (
 	build_unsubscribe_base_url,
 	get_postmark_credentials,
@@ -21,9 +19,10 @@ from subscriptions.models import (
 	FailedNotification,
 )
 from subscriptions.management.commands.utils.subscription import (
-	apply_article_max_age_filter,
 	get_latest_research_by_category,
 	get_trials_for_list,
+	rank_and_limit_articles,
+	select_digest_articles,
 )
 from subscriptions.utils.email_limits import render_within_limit, resolve_limits
 from subscriptions.utils.postmark import (
@@ -37,49 +36,6 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-	@staticmethod
-	def _filter_articles_excluding_all_irrelevant(base_qs, digest_list):
-		"""
-		Return a list of PKs from base_qs, excluding articles that are manually
-		tagged as not-relevant for ALL of their subjects that appear in digest_list.
-		Articles with no relevance records are always included.
-
-		Uses prefetch_related to load subjects and relevance records in bulk,
-		avoiding N+1 / N*M queries.
-		"""
-		list_subject_ids = set(digest_list.subjects.values_list("id", flat=True))
-		# Prefetch both relations so the inner loop hits no extra queries.
-		articles = base_qs.prefetch_related("subjects", "article_subject_relevances")
-		filtered_pks = []
-		for article in articles:
-			# In-memory filter: only subjects shared with this digest list.
-			article_list_subjects = [
-				s for s in article.subjects.all() if s.pk in list_subject_ids
-			]
-			explicit_irrelevant_count = 0
-			total_relevance_records = 0
-			for subject in article_list_subjects:
-				# Use the prefetch cache — no extra query per subject.
-				relevance = next(
-					(
-						r
-						for r in article.article_subject_relevances.all()
-						if r.subject_id == subject.pk
-					),
-					None,
-				)
-				if relevance is not None:
-					total_relevance_records += 1
-					if relevance.is_relevant is False:
-						explicit_irrelevant_count += 1
-			if (
-				total_relevance_records > 0
-				and explicit_irrelevant_count == total_relevance_records
-			):
-				continue
-			filtered_pks.append(article.pk)
-		return filtered_pks
-
 	help = """Sends a weekly digest email for all weekly digest lists.
 	
 	The ML prediction threshold is now configured per list in the admin interface,
@@ -239,217 +195,35 @@ class Command(BaseCommand):
 				)
 			)
 
-			if all_articles:
-				# --all-articles CLI flag: include everything regardless of ML/manual, ordered newest first.
-				base_articles = apply_article_max_age_filter(
-					Articles.objects.filter(
-						subjects__in=digest_list.subjects.all(),
-						discovery_date__gte=now() - timedelta(days=days_to_look_back),
-					),
-					digest_list,
-				).order_by("-discovery_date").distinct()
-				filtered_pks = self._filter_articles_excluding_all_irrelevant(
-					base_articles, digest_list
-				)
-				articles = (
-					Articles.objects.filter(pk__in=filtered_pks)
-					.order_by("-discovery_date")
-					.prefetch_related("authors")
-				)
+			mode_label = (
+				"ALL ARTICLES MODE"
+				if all_articles
+				else "DATE SORT MODE"
+				if sort_order == "date"
+				else "RELEVANCY SORT MODE"
+			)
+			if debug:
 				self.stdout.write(
 					self.style.NOTICE(
-						f"ALL ARTICLES MODE: Found {articles.count()} total articles (excluding articles manually tagged as not relevant for ALL their subjects in this list)"
+						f"{mode_label}: threshold={threshold}, lookback={days_to_look_back}d"
 					)
 				)
 
-			elif sort_order == "date":
-				# DATE SORT MODE: include all subject-matched articles (no ML filtering), ordered newest first.
-				if debug:
-					self.stdout.write(
-						self.style.NOTICE(
-							f"DATE SORT MODE: Skipping ML relevance filtering for list '{digest_list.list_name}' but still excluding articles manually tagged as not relevant for ALL their subjects in this list"
-						)
-					)
-				base_articles = apply_article_max_age_filter(
-					Articles.objects.filter(
-						subjects__in=digest_list.subjects.all(),
-						discovery_date__gte=now() - timedelta(days=days_to_look_back),
-					),
-					digest_list,
-				).order_by("-discovery_date").distinct()
-				filtered_pks = self._filter_articles_excluding_all_irrelevant(
-					base_articles, digest_list
+			# Selection logic (candidate articles + relevancy-mode priority
+			# scores) lives in select_digest_articles so send_weekly_summary
+			# and the staff email preview can never drift on which articles a
+			# list would actually select.
+			articles, article_priority_scores = select_digest_articles(
+				digest_list,
+				days_to_look_back,
+				all_articles=all_articles,
+				threshold=threshold,
+			)
+			self.stdout.write(
+				self.style.NOTICE(
+					f"{mode_label}: Found {articles.count()} total articles (excluding articles manually tagged as not relevant for ALL their subjects in this list)"
 				)
-				articles = (
-					Articles.objects.filter(pk__in=filtered_pks)
-					.order_by("-discovery_date")
-					.prefetch_related("authors")
-				)
-				self.stdout.write(
-					self.style.NOTICE(
-						f"DATE SORT MODE: Found {articles.count()} total articles (excluding articles manually tagged as not relevant for ALL their subjects in this list)"
-					)
-				)
-
-			else:
-				# RELEVANCY MODE (default): manually reviewed OR ML-relevant based on consensus settings.
-				if debug:
-					self.stdout.write(
-						self.style.NOTICE(
-							f"RELEVANCY SORT MODE: Using ML consensus logic with threshold={threshold}"
-						)
-					)
-				list_subjects = digest_list.subjects.all()
-				base_subject_articles = apply_article_max_age_filter(
-					Articles.objects.filter(
-						subjects__in=list_subjects,
-						discovery_date__gte=now() - timedelta(days=days_to_look_back),
-					),
-					digest_list,
-				).order_by("-discovery_date").distinct()
-				filtered_article_ids = self._filter_articles_excluding_all_irrelevant(
-					base_subject_articles, digest_list
-				)
-				subject_articles = Articles.objects.filter(pk__in=filtered_article_ids)
-				self.stdout.write(
-					self.style.NOTICE(
-						f"RELEVANCY SORT MODE: Found {subject_articles.count()} articles by subject (after excluding articles manually tagged as not relevant for ALL their subjects in this list)"
-					)
-				)
-
-				# Then, get manually reviewed articles (only those tagged as relevant for at least one subject)
-				manual_reviewed = apply_article_max_age_filter(
-					Articles.objects.filter(
-						subjects__in=list_subjects,
-						article_subject_relevances__subject__in=list_subjects,
-						article_subject_relevances__is_relevant=True,
-						discovery_date__gte=now() - timedelta(days=days_to_look_back),
-					),
-					digest_list,
-				).distinct()
-				self.stdout.write(
-					self.style.NOTICE(
-						f"Found {manual_reviewed.count()} manually reviewed articles (tagged as relevant for at least one subject)"
-					)
-				)
-
-				# Get articles that are ML-relevant based on new consensus logic.
-				# Scoped to this list's own subjects so an article tagged with an
-				# unrelated team's auto_predict subject can't ride in on that
-				# subject's ML prediction.
-				ml_relevant_articles = []
-				for article in subject_articles:
-					if article.is_ml_relevant_any_subject(
-						threshold=threshold, subjects=list_subjects
-					):
-						ml_relevant_articles.append(article.article_id)
-
-				ml_predicted = Articles.objects.filter(pk__in=ml_relevant_articles)
-				self.stdout.write(
-					self.style.NOTICE(
-						f"Found {ml_predicted.count()} articles meeting ML consensus criteria (threshold >= {threshold})"
-					)
-				)
-
-				# Debugging: Check ML consensus for some articles
-				if debug:
-					sample_articles = subject_articles.order_by("-discovery_date")[
-						:5
-					]  # Get 5 most recent articles
-					self.stdout.write(
-						self.style.NOTICE(
-							f"ML consensus evaluation for recent articles (threshold >= {threshold}):"
-						)
-					)
-					for article in sample_articles:
-						self.stdout.write(
-							self.style.NOTICE(
-								f"  Article {article.article_id}: {article.title[:50]}..."
-							)
-						)
-
-						# Check relevance for each subject this article belongs to
-						article_subjects = article.subjects.filter(auto_predict=True)
-						if article_subjects.exists():
-							for subject in article_subjects:
-								is_relevant = article.is_ml_relevant_for_subject(
-									subject, threshold=threshold
-								)
-								consensus_type = subject.ml_consensus_type
-
-								# Get prediction details for this subject
-								high_confidence_predictions = (
-									article.ml_predictions_detail.filter(
-										subject=subject,
-										predicted_relevant=True,
-										probability_score__gte=threshold,
-									).values_list("algorithm", flat=True)
-								)
-								high_confidence_count = (
-									len(set(high_confidence_predictions))
-									if high_confidence_predictions
-									else 0
-								)
-
-								# Also show all predictions (regardless of threshold) for context
-								all_predictions = article.ml_predictions_detail.filter(
-									subject=subject, predicted_relevant=True
-								)
-								all_scores = [
-									(pred.algorithm, pred.probability_score)
-									for pred in all_predictions
-								]
-
-								self.stdout.write(
-									self.style.NOTICE(
-										f"    - Subject: {subject.subject_name} (consensus: {consensus_type})"
-									)
-								)
-								self.stdout.write(
-									self.style.NOTICE(
-										f"      * {high_confidence_count}/3 models >= {threshold} threshold → {'INCLUDED' if is_relevant else 'EXCLUDED'}"
-									)
-								)
-								if all_scores:
-									scores_text = ", ".join(
-										[
-											f"{alg}: {score:.2f}"
-											for alg, score in all_scores
-										]
-									)
-									self.stdout.write(
-										self.style.NOTICE(
-											f"      * All scores: {scores_text}"
-										)
-									)
-						else:
-							self.stdout.write(
-								self.style.NOTICE(
-									f"    - No subjects with auto_predict=True"
-								)
-							)
-
-				# Combine manually reviewed OR ML-relevant based on consensus and threshold
-				article_ids = (
-					list(manual_reviewed.values_list("pk", flat=True))
-					+ ml_relevant_articles
-				)
-				articles = (
-					Articles.objects.filter(pk__in=article_ids)
-					.distinct()
-					.prefetch_related("authors")
-				)
-				self.stdout.write(
-					self.style.NOTICE(
-						f"Filtered by manual review or ML consensus (>= {threshold}): {articles.count()} articles"
-					)
-				)
-
-				self.stdout.write(
-					self.style.NOTICE(
-						f"Final combined query found {articles.count()} articles"
-					)
-				)
+			)
 
 			trials = get_trials_for_list(digest_list, days=days_to_look_back)
 			self.stdout.write(self.style.NOTICE(f"Found {trials.count()} trials"))
@@ -483,48 +257,9 @@ class Command(BaseCommand):
 				)
 				continue
 
-			# Relevancy-mode article priority scores (manual review + ML
-			# consensus count) depend only on the article and this list's
-			# threshold — never on the subscriber. Computing them here, once
-			# per list, and reusing the lookup below avoids redoing ~2
-			# queries per candidate article for every subscriber: measured
-			# at ~2,440 queries and ~0.8s per subscriber against MS Weekly
-			# Digest's 1,219-article candidate pool (audit P3, task 5) —
-			# roughly 70s across that list's 88 subscribers for identical
-			# results every time, since none of this varies by recipient.
-			article_priority_scores = None
-			if not all_articles and sort_order == "relevancy":
-				manual_relevant_ids_all = set(
-					Articles.objects.filter(
-						pk__in=articles.values_list("pk", flat=True),
-						article_subject_relevances__is_relevant=True,
-					).values_list("pk", flat=True)
-				)
-				article_priority_scores = {}
-				# `articles` already carries a prefetch_related("authors") from
-				# its construction above; scoring doesn't touch authors at
-				# all, so clear that lookup before adding the ones this loop
-				# actually needs rather than fetching authors data nobody
-				# reads here.
-				for article in articles.prefetch_related(None).prefetch_related(
-					"subjects", "ml_predictions_detail"
-				):
-					priority_score = 0
-					if article.pk in manual_relevant_ids_all:
-						priority_score += 1000
-					for subject in article.subjects.all():
-						if not subject.auto_predict:
-							continue
-						relevant_algorithms = {
-							p.algorithm
-							for p in article.ml_predictions_detail.all()
-							if p.subject_id == subject.pk
-							and p.predicted_relevant
-							and p.probability_score is not None
-							and p.probability_score >= threshold
-						}
-						priority_score += len(relevant_algorithms) * 100
-					article_priority_scores[article.pk] = priority_score
+			# article_priority_scores (relevancy mode only — None otherwise)
+			# came back from select_digest_articles above, computed once per
+			# list rather than per subscriber (audit P3, task 5).
 
 			# Step 4: Find subscribers of the list (respect per-list opt-out)
 			subscribers = Subscribers.objects.filter(
@@ -648,88 +383,29 @@ class Command(BaseCommand):
 					else unsent_articles.count()
 				)
 				if articles_count > article_limit:
-					if all_articles or sort_order == "date":
-						# Date-ordered modes: slice newest first
-						limited_articles = unsent_articles.order_by("-discovery_date")[
-							:article_limit
-						]
+					# Ranking (date-order vs. relevancy priority score) lives in
+					# rank_and_limit_articles, shared with the staff email
+					# preview so article_limit is honoured identically there.
+					unsent_articles = rank_and_limit_articles(
+						unsent_articles,
+						article_limit,
+						sort_order,
+						all_articles,
+						article_priority_scores,
+					)
+					self.stdout.write(
+						self.style.WARNING(
+							f"WARNING: List '{digest_list.list_name}' had {articles_count} articles in the "
+							f"{days_to_look_back}-day window; truncated to article_limit={article_limit}. "
+							f"Consider shortening lookback_days or raising article_limit if this is unintended."
+						)
+					)
+					if debug:
 						self.stdout.write(
-							self.style.WARNING(
-								f"WARNING: List '{digest_list.list_name}' had {articles_count} articles in the "
-								f"{days_to_look_back}-day window; truncated to article_limit={article_limit}. "
-								f"Consider shortening lookback_days or raising article_limit if this is unintended."
+							self.style.NOTICE(
+								f"Applied article limit: showing {article_limit} of {articles_count} available articles"
 							)
 						)
-						if debug:
-							mode_label = "ALL ARTICLES" if all_articles else "DATE SORT"
-							self.stdout.write(
-								self.style.NOTICE(
-									f"Applied article limit in {mode_label} mode: showing {article_limit} most recent articles out of {articles_count} available"
-								)
-							)
-					else:
-						# Relevancy mode: order by manual relevance first, then ML
-						# consensus count, then date. Scores come from
-						# article_priority_scores, computed once per list above —
-						# they don't vary by subscriber, only which articles in
-						# unsent_articles are still eligible does.
-						#
-						# Rank using (pk, discovery_date) only, not full Article
-						# instances: `articles` (and therefore `unsent_articles`)
-						# carries a prefetch_related("authors") from the queryset
-						# construction above, and materializing every candidate
-						# as a model instance here would prefetch authors for
-						# the *entire* per-subscriber candidate pool even though
-						# only article_limit articles are ever rendered. Only
-						# the selected top-N get that prefetch, applied below.
-						ranked_pks = sorted(
-							unsent_articles.values_list("pk", "discovery_date"),
-							key=lambda row: (
-								-article_priority_scores.get(row[0], 0),
-								-row[1].timestamp(),
-							),
-						)
-						limited_pks = [pk for pk, _ in ranked_pks[:article_limit]]
-						articles_by_pk = {
-							a.pk: a for a in Articles.objects.filter(pk__in=limited_pks)
-						}
-						prefetch_related_objects(
-							list(articles_by_pk.values()), "authors"
-						)
-						# Preserve rank order for the debug preview below — the
-						# organizer always re-sorts by discovery_date for the
-						# actual render, so this ordering only matters here.
-						limited_articles = [articles_by_pk[pk] for pk in limited_pks]
-						self.stdout.write(
-							self.style.WARNING(
-								f"WARNING: List '{digest_list.list_name}' had {articles_count} articles in the "
-								f"{days_to_look_back}-day window; truncated to article_limit={article_limit}. "
-								f"Consider shortening lookback_days or raising article_limit if this is unintended."
-							)
-						)
-						if debug:
-							self.stdout.write(
-								self.style.NOTICE(
-									f"Applied article limit: showing {article_limit} highest-priority articles (manual + ML consensus >= {threshold}) out of {articles_count} available"
-								)
-							)
-							for i, article in enumerate(
-								limited_articles[: min(5, article_limit)]
-							):
-								score = article_priority_scores.get(article.pk, 0)
-								manual_flag = (
-									"✓"
-									if article.pk in manual_relevant_ids_all
-									else "✗"
-								)
-								self.stdout.write(
-									self.style.NOTICE(
-										f"  {i + 1}. Score {score}: Manual {manual_flag} | {article.title[:40]}..."
-									)
-								)
-
-					# Convert to list to avoid "Cannot filter a query once a slice has been taken" error
-					unsent_articles = list(limited_articles)
 
 				# Cap trials the same way, so the rendered body can never exceed
 				# Postmark's size limit (audit finding 1). Whatever doesn't fit

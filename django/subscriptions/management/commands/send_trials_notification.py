@@ -155,6 +155,7 @@ class Command(BaseCommand):
 						list_obj=_lst,
 						site=site,
 						custom_settings=customsettings,
+						organization=team.organization,
 					)
 					# Inject unsubscribe context for the footer template
 					summary_context["list_id"] = _lst.list_id

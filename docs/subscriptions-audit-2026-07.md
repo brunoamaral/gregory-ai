@@ -465,8 +465,29 @@ performance clean-up.
 ## Smaller items
 
 - `send_trials_notification.py:132` never passes `organization=`, so `org_content_map` is empty and Key Takeaways never render in trial emails. The warning at `content_organizer.py:626` only fires for `weekly_summary` and `admin_summary`, so it is silent.
+
+  **Status: fixed 2026-07-29.** `send_trials_notification.py` now passes `organization=team.organization`
+  alongside the other `get_optimized_email_context` kwargs, and `trial_notification` was added to
+  `_ORG_EXPECTED_TYPES` in `content_organizer.py` so the missing-organization warning covers all three
+  email types instead of silently staying empty for this one. See
+  `subscriptions/tests/test_trial_notification_organization.py`.
+
 - `templates/emails/views.py:160` (staff preview) also omits `organization`, and ignores `article_sort_order` — it takes the newest N by date, so a relevancy-mode digest previews as something no recipient will ever receive.
+
+  **Status: fixed 2026-07-29.** The preview now routes article/trial selection through the same
+  `select_digest_articles` / `rank_and_limit_articles` (weekly digest) and `get_articles_for_list` /
+  `get_trials_for_list` (admin summary, trial notification) helpers the send commands use, extracted out
+  of `send_weekly_summary.py` for this purpose, and passes `organization=`. A relevancy-mode list now
+  previews the same article set — and the same Key Takeaways — a real send would produce. See
+  `subscriptions/tests/test_email_preview_matches_send.py`.
+
 - `admin.py:1680` hardcodes `privacy_policy_url` and `terms_url` to `""`, so those footer links disappear for announcements only.
+
+  **Status: fixed 2026-07-29.** `render_announcement_email` (in `subscriptions/utils/announcement_send.py`,
+  where this logic now lives) reads `privacy_policy_url`/`terms_url` from `custom_settings`, the same way
+  every neighbouring footer key already did — this read as an oversight, not a decision, and no reason to
+  keep them blank turned up. See `subscriptions/tests/test_announcement_legal_links.py`.
+
 - `admin.py:1932` deduplicates announcement recipients by email and attributes each to the first list encountered, so the footer unsubscribe link covers only that one list.
 
   **Status: fixed 2026-07-29.** `send_announcement` now collects every list a subscriber matched while
@@ -476,6 +497,10 @@ performance clean-up.
   unchanged. See `subscriptions/tests/test_announcement_unsubscribe_lists.py`.
 
 - `management/commands/mark_all_as_sent.py` is `subscribers × lists × all articles` individual `get_or_create` calls, and iterates `subscriber.subscriptions.all()`, which includes lists the subscriber has opted out of.
+
+  **Status: deleted 2026-07-29.** Nothing called it — no cron entry, no other code path — and the backlog
+  use case it existed for (writing off a stuck queue by hand) is obsolete now that content rolls over
+  instead of failing sends (finding 1). Removed rather than hardened.
 
 ---
 
