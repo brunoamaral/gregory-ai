@@ -47,14 +47,31 @@ jobs:
         working-directory: django
         run: pip install --quiet -r requirements.txt
 
+      - name: Generate ephemeral keys
+        # Generated per-run so no secrets live in the repo; they only need to
+        # be valid for the CI process. Exported to $GITHUB_ENV so every
+        # subsequent step in this job shares them.
+        run: |
+          echo "SECRET_KEY=$(python -c 'import secrets; print(secrets.token_urlsafe(50))')" >> "$GITHUB_ENV"
+          echo "FERNET_SECRET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
+
       - name: Run pytest
         working-directory: django
-        # SECRET_KEY / FERNET_SECRET_KEY are generated per-run so no secrets
-        # live in the repo; they only need to be valid for the test process.
-        run: |
-          export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(50))')"
-          export FERNET_SECRET_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
-          pytest -p no:cacheprovider
+        run: pytest -p no:cacheprovider
+
+      - name: Django system checks (database-aware)
+        working-directory: django
+        # `manage.py check` alone skips database-dependent model checks, which
+        # is how models.E034 reached production on 2026-07-30 — an index name
+        # over Django's 30-character limit. The flag is what makes those checks
+        # run. No database connection is required, only a configured one.
+        run: python manage.py check --database default
+
+      - name: No missing migrations
+        working-directory: django
+        # Fails if a model changed without a matching migration, which would
+        # drift the production schema from model state.
+        run: python manage.py makemigrations --check --dry-run
 
   # Static gate for "hollow" error handling: bare `except:` and `except: pass`
   # (the empty catch block). Runs on a bare runner — no ML image needed — so it
