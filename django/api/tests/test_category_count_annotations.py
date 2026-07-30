@@ -22,10 +22,11 @@ from django.utils.text import slugify
 from rest_framework.test import APIClient
 
 from api.serializers import CategorySerializer
-from api.views import _category_through_count_subquery
+from api.views import CategoryViewSet, _category_through_count_subquery
 from gregory.models import (
 	ArticleCategoryAssignment,
 	Articles,
+	Authors,
 	Organization,
 	OrganizationApiSettings,
 	Subject,
@@ -179,3 +180,201 @@ class CategoryCountAnnotationTests(TestCase):
 				joins_articles and joins_trials,
 				f"Query joins both through tables, reintroducing the fan-out: {sql}",
 			)
+
+
+class CategoryAuthorsCountOrderingTests(TestCase):
+	"""`authors_count_annotated` is listed in CategoryViewSet.ordering_fields,
+	so DRF's OrderingFilter passes it straight through to order_by() instead
+	of discarding it as an unknown field. When the queryset doesn't annotate
+	that name the request dies with
+	`FieldError: Cannot resolve keyword 'authors_count_annotated' into field`
+	— a 500 seen in production. The annotation is expensive (distinct authors
+	across every article in the category), so it is added only for requests
+	that actually sort by it; these tests pin both halves of that deal.
+	"""
+
+	def setUp(self):
+		self.organization = Organization.objects.create(
+			name="Authors Ordering Org", slug="authors-ordering-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=self.organization).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			name="Authors Ordering Team",
+			slug="authors-ordering-team",
+			organization=self.organization,
+		)
+		self.subject = Subject.objects.create(
+			subject_name="Authors Ordering Subject",
+			subject_slug="authors-ordering-subject",
+			team=self.team,
+		)
+
+		# Two categories with a known, different number of distinct authors.
+		# The 3-author category shares one author across two articles, so a
+		# count that forgets DISTINCT would report 4 and flip the sort order.
+		self.few_authors = _make_category(self.team, self.subject, "Few Authors")
+		self.many_authors = _make_category(self.team, self.subject, "Many Authors")
+
+		authors = [
+			Authors.objects.create(
+				given_name=f"Author{i}", family_name="Test", full_name=f"Author{i} Test"
+			)
+			for i in range(5)
+		]
+
+		shared = authors[0]
+		for i, extra in enumerate(authors[1:3]):
+			article = Articles.objects.create(
+				title=f"Many Authors Article {i}",
+				link=f"https://example.com/many-authors-article-{i}",
+				published_date=timezone.now(),
+			)
+			article.team_categories.add(self.many_authors)
+			article.authors.add(shared, extra)
+
+		article = Articles.objects.create(
+			title="Few Authors Article",
+			link="https://example.com/few-authors-article",
+			published_date=timezone.now(),
+		)
+		article.team_categories.add(self.few_authors)
+		article.authors.add(authors[3])
+
+		self.client = APIClient()
+
+	def _results(self, response):
+		return response.data["results"] if "results" in response.data else response.data
+
+	def test_ordering_by_authors_count_does_not_500(self):
+		url = reverse("categories-list")
+		response = self.client.get(
+			url,
+			{
+				"team_id": self.team.id,
+				"ordering": "-authors_count_annotated",
+				"include_authors": "false",
+			},
+		)
+		self.assertEqual(response.status_code, 200)
+
+		results = self._results(response)
+		names = [row["category_name"] for row in results]
+		self.assertEqual(names, ["Many Authors", "Few Authors"])
+		self.assertEqual(results[0]["authors_count"], 3)
+		self.assertEqual(results[1]["authors_count"], 1)
+
+	def test_ascending_ordering_by_authors_count_does_not_500(self):
+		"""The `-` prefix must not be what makes the name resolvable."""
+		url = reverse("categories-list")
+		response = self.client.get(
+			url,
+			{
+				"team_id": self.team.id,
+				"ordering": "authors_count_annotated",
+				"include_authors": "false",
+			},
+		)
+		self.assertEqual(response.status_code, 200)
+		names = [row["category_name"] for row in self._results(response)]
+		self.assertEqual(names, ["Few Authors", "Many Authors"])
+
+	def test_authors_count_ordering_works_alongside_another_term(self):
+		"""DRF accepts a comma-separated ordering list; the annotation has to
+		be added when the expensive term is anywhere in it, not just first."""
+		url = reverse("categories-list")
+		response = self.client.get(
+			url,
+			{
+				"team_id": self.team.id,
+				"ordering": "category_name,-authors_count_annotated",
+				"include_authors": "false",
+			},
+		)
+		self.assertEqual(response.status_code, 200)
+
+	def test_authors_count_not_annotated_unless_sorted_by(self):
+		"""An ordinary list request must not compute the count in SQL over the
+		whole filtered set. It still reports authors_count — the serializer
+		derives it per row on the page — but that is bounded by page size,
+		whereas the annotation is evaluated before pagination narrows anything
+		down."""
+		url = reverse("categories-list")
+		with CaptureQueriesContext(connection) as ctx:
+			response = self.client.get(
+				url, {"team_id": self.team.id, "include_authors": "false"}
+			)
+		self.assertEqual(response.status_code, 200)
+
+		self.assertFalse(
+			any("authors_count_annotated" in q["sql"] for q in ctx.captured_queries),
+			"Default /categories/ request computed the expensive authors count",
+		)
+
+	def test_count_orderings_are_all_resolvable(self):
+		"""Every name in ordering_fields must resolve against the default
+		queryset (or be added to it on demand, as authors_count_annotated is).
+		A name that is whitelisted but never annotated reaches order_by() and
+		raises FieldError — the production 500 this module guards.
+		"""
+		url = reverse("categories-list")
+		for field in CategoryViewSet.ordering_fields:
+			for term in (field, f"-{field}"):
+				with self.subTest(ordering=term):
+					response = self.client.get(
+						url,
+						{
+							"team_id": self.team.id,
+							"ordering": term,
+							"include_authors": "false",
+						},
+					)
+					self.assertEqual(response.status_code, 200)
+
+	def test_ordering_by_trials_count_uses_the_free_annotation(self):
+		"""trials_count_annotated is always on the queryset, so sorting by it
+		must not add the expensive authors count."""
+		Trials.objects.create(
+			title="Ordering Trial",
+			link="https://example.com/ordering-trial",
+			published_date=timezone.now(),
+		).team_categories.add(self.many_authors)
+
+		url = reverse("categories-list")
+		with CaptureQueriesContext(connection) as ctx:
+			response = self.client.get(
+				url,
+				{
+					"team_id": self.team.id,
+					"ordering": "-trials_count_annotated",
+					"include_authors": "false",
+				},
+			)
+		self.assertEqual(response.status_code, 200)
+
+		results = self._results(response)
+		self.assertEqual(results[0]["category_name"], "Many Authors")
+		self.assertEqual(results[0]["trials_count_total"], 1)
+		self.assertEqual(results[1]["trials_count_total"], 0)
+		self.assertFalse(
+			any("authors_count_annotated" in q["sql"] for q in ctx.captured_queries),
+			"Sorting by trials count computed the expensive authors count",
+		)
+
+	def test_unknown_ordering_field_still_falls_back_silently(self):
+		"""Guards the assumption behind the fix: DRF drops ordering names that
+		are NOT in ordering_fields, which is why only the whitelisted-but-
+		unannotated name could ever reach order_by() and raise FieldError."""
+		url = reverse("categories-list")
+		response = self.client.get(
+			url,
+			{
+				"team_id": self.team.id,
+				"ordering": "no_such_field",
+				"include_authors": "false",
+			},
+		)
+		self.assertEqual(response.status_code, 200)
+		names = [row["category_name"] for row in self._results(response)]
+		self.assertEqual(names, sorted(names))
