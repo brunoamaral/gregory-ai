@@ -192,7 +192,7 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | RSS feeds | `GET /feed/author/{orcid}/` | `orcid` (path) | |
 | RSS feeds | `GET /feed/trials/subject/{subject_slug}/` | `subject_slug` (path) | |
 | Stats | `GET /stats/` | `team`, `organization` (alias `org`), `include_public` | See [Stats endpoint](#stats-endpoint) below |
-| Subscriptions | `POST /subscriptions/new/` | `first_name`, `last_name`, `email`, `profile`, `list` | |
+| Subscriptions | `POST /subscriptions/new/` | `first_name`, `last_name`, `email`, `profile`, `list` | POST-only; `GET` returns `405` with `Allow: POST` |
 
 ### Search endpoints
 

@@ -1,4 +1,6 @@
 import os
+from unittest import mock
+
 import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gregory.tests.test_settings")
@@ -113,6 +115,67 @@ class SubscribeViewTest(TestCase):
 		self.assertEqual(response.status_code, 302)
 		self.assertIn("/error/", response["Location"])
 		self.assertFalse(Subscribers.objects.filter(email="dave@example.com").exists())
+
+	def test_get_returns_405(self):
+		"""subscribe_view is POST-only; a GET must get 405, not the /error/ redirect."""
+		request = self.factory.get("/subscribe/")
+		response = subscribe_view(request)
+		self.assertEqual(response.status_code, 405)
+		self.assertEqual(response["Allow"], "POST")
+
+	def test_get_does_not_log_error(self):
+		"""A GET must be rejected by @require_POST before the view body — and
+		therefore before the logging branch — ever runs, so it must not emit
+		an ERROR-level log line the way the pre-fix 'no list IDs submitted'
+		path did for every crawler/bot hit."""
+		request = self.factory.get("/subscribe/")
+		with self.assertNoLogs("subscriptions.views", level="ERROR"):
+			subscribe_view(request)
+
+	def test_save_failure_logs_traceback(self):
+		"""An exception during save must log with a traceback (exc_info), not
+		just str(e) — the single path most likely to hide a real server-side
+		bug previously had the least diagnostic information."""
+		data = {
+			"first_name": "Erin",
+			"last_name": "Grey",
+			"email": "erin@example.com",
+			"profile": "patient",
+			"list": [str(self.lst.pk)],
+		}
+		request = self.factory.post("/subscribe/", data)
+		with mock.patch(
+			"subscriptions.views.Subscribers.objects.get_or_create",
+			side_effect=RuntimeError("boom"),
+		):
+			with self.assertLogs("subscriptions.views", level="ERROR") as log:
+				response = subscribe_view(request)
+		self.assertEqual(response.status_code, 302)
+		self.assertIn("/error/", response["Location"])
+		self.assertEqual(len(log.records), 1)
+		self.assertIsNotNone(log.records[0].exc_info)
+
+	def test_invalid_form_logs_field_names_not_values(self):
+		"""Privacy regression test — the log for an invalid form must name the
+		failed *field*, never echo the submitted value. This is the mechanism
+		that keeps email addresses out of application logs; it must fail if
+		someone later logs form.errors or form.data directly."""
+		submitted_email = "not-a-real-email"
+		data = {
+			"first_name": "Frank",
+			"last_name": "Stone",
+			"email": submitted_email,
+			"profile": "patient",
+			"list": [str(self.lst.pk)],
+		}
+		request = self.factory.post("/subscribe/", data)
+		with self.assertLogs("subscriptions.views", level="ERROR") as log:
+			response = subscribe_view(request)
+		self.assertEqual(response.status_code, 302)
+		self.assertIn("/error/", response["Location"])
+		joined_output = "\n".join(log.output)
+		self.assertIn("email", joined_output)
+		self.assertNotIn(submitted_email, joined_output)
 
 
 # ---------------------------------------------------------------------------

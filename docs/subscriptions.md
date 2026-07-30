@@ -80,7 +80,10 @@ Unique together: `(subscriber, site)`.
 
 ### `POST /subscriptions/new/`
 
-Subscribes a visitor to one or more lists.
+Subscribes a visitor to one or more lists. POST-only — a `GET` (crawler, link
+preview fetcher, someone pasting the URL into a browser) gets `405 Method Not
+Allowed` with an `Allow: POST` header rather than reaching the form-handling
+code.
 
 **Request body** (`application/x-www-form-urlencoded`):
 
