@@ -34,6 +34,26 @@ def get_trials_for_list(lst, days=30):
 	return qs.distinct()
 
 
+def apply_article_max_age_filter(qs, lst):
+	"""
+	Exclude articles whose own ``published_date`` is older than
+	``lst.article_max_age_days``.
+
+	Mirrors the trial counterpart of this guard
+	(``trial_max_age_days`` in ``get_trials_for_list``): ``discovery_date``
+	only records when GregoryAI first saw the row, so a bulk import can
+	stamp thousands of historical articles with a fresh discovery_date and
+	flood a digest. Articles with no ``published_date`` are always kept —
+	the per-email ``article_limit`` bounds them regardless. No-op when
+	``article_max_age_days`` is NULL.
+	"""
+	max_age_days = getattr(lst, "article_max_age_days", None)
+	if not max_age_days:
+		return qs
+	cutoff = now() - timedelta(days=max_age_days)
+	return qs.filter(Q(published_date__gte=cutoff) | Q(published_date__isnull=True))
+
+
 def get_articles_for_list(lst, days=30):
 	"""Returns articles discovered in the last `days` days for the given list
 	that are missing at least one human review across the list's subjects."""
@@ -58,15 +78,15 @@ def get_articles_for_list(lst, days=30):
 		.filter(reviewed=False)
 	)
 
-	return (
+	qs = (
 		Articles.objects.filter(
 			subjects__in=list_subjects,
 			discovery_date__gte=now() - timedelta(days=days),
 		)
 		.alias(has_unreviewed=has_unreviewed_subject)
 		.filter(has_unreviewed=True)
-		.distinct()
 	)
+	return apply_article_max_age_filter(qs, lst).distinct()
 
 
 def get_latest_research_by_category(lst, days=30):
@@ -93,7 +113,12 @@ def get_latest_research_by_category(lst, days=30):
 	# Get articles for each team category via the team_categories M2M
 	for category in lst.latest_research_categories.all():
 		latest_articles = (
-			category.articles.filter(discovery_date__gte=now() - timedelta(days=days))
+			apply_article_max_age_filter(
+				category.articles.filter(
+					discovery_date__gte=now() - timedelta(days=days)
+				),
+				lst,
+			)
 			.order_by("-discovery_date")
 			.distinct()[:20]
 		)

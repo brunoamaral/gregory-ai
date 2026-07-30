@@ -128,7 +128,7 @@ successful unsubscribe.
 
 ## Content Limits and Staleness Filtering
 
-`Lists` has four fields that bound how much content a single email can carry.
+`Lists` has five fields that bound how much content a single email can carry.
 They exist because nothing capped the number of trials on the way into an
 email: a bulk import once stamped thousands of historical trials with a
 same-day `discovery_date`, one notification list tried to render 3,570 trial
@@ -143,6 +143,7 @@ failed again — 413 times over 15 days before anyone noticed.
 | `article_limit` | 15 | Weekly digest, admin summary, and trial notification emails |
 | `trial_limit` | 15 | Weekly digest, admin summary, and trial notification emails |
 | `trial_max_age_days` | 90 | Weekly digest, admin summary, and trial notification emails |
+| `article_max_age_days` | 90 | Weekly digest, admin summary, and the Latest Research section |
 
 **Rollover:** content that does not fit in one email is not marked as sent —
 only what actually gets rendered into the template is recorded in
@@ -183,6 +184,40 @@ The default of 90 days (rather than 30) exists because WHO ICTRP and CTIS
 feeds lag: a trial registered 45 days ago may only reach GregoryAI today. At
 30 days it would be dropped by the age check and would then also age out of
 the 30-day discovery window before ever qualifying for an email.
+
+**Why the same guard exists for articles, measured on `published_date`:**
+`Articles.discovery_date` is `auto_now_add`, exactly like trials before
+`trial_max_age_days` — it records when the feedreaders first saw the row,
+not when the paper was published. A bulk import stamps every row with the
+same day, and without a guard the whole historical set becomes eligible for
+the next digest. This is the same mechanism behind the 2026-07-06 trial
+flood, just not yet triggered for articles when it was found — quieter, and
+therefore worse: `article_limit` already caps payloads, so nothing would
+error. Subscribers would simply receive digests of decade-old papers with no
+signal anything was wrong. `article_max_age_days` compares against the
+article's own `published_date`; articles with no `published_date` are always
+kept (46 of 49,533 in production), and `article_limit` bounds them
+regardless. The check applies at every place articles are selected: all
+three `send_weekly_summary` modes (all-articles, date-sort, relevancy),
+`get_articles_for_list` (admin summary), and `get_latest_research_by_category`
+(Latest Research) — all routed through the shared
+`apply_article_max_age_filter` helper in
+`subscriptions/management/commands/utils/subscription.py` so a future call
+site can't be missed the way one weekly-digest query site was on the first
+trials pass.
+
+In normal operation `discovery_date` and `published_date` are effectively
+the same day — measured over 6,768 articles across 120 days, excluding bulk
+import days: median lag 0 days, p90 1 day, p95 3 days, p99 21 days. The
+guard is therefore a no-op on normal days and only bites during an import.
+90 was chosen for headroom over that p99 and for consistency with
+`trial_max_age_days`, not because a shorter window would fail: 30 days would
+drop 0.89% of normal-operation articles, 90 days 0.65%, 365 days 0.61% —
+there's a floor of ~0.6% that is genuinely old regardless of threshold.
+Validated retroactively against real imports, a 90-day guard blocks ~98% of
+both historical dumps checked while letting a legitimate 182-article burst
+through untouched. Set `article_max_age_days` to blank on a list to disable
+the check entirely.
 
 `get_trials_for_list` and `get_articles_for_list` both take a `days`
 parameter controlling the discovery-date window (default 30). All three send

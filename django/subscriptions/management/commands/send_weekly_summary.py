@@ -21,6 +21,7 @@ from subscriptions.models import (
 	FailedNotification,
 )
 from subscriptions.management.commands.utils.subscription import (
+	apply_article_max_age_filter,
 	get_latest_research_by_category,
 	get_trials_for_list,
 )
@@ -240,14 +241,13 @@ class Command(BaseCommand):
 
 			if all_articles:
 				# --all-articles CLI flag: include everything regardless of ML/manual, ordered newest first.
-				base_articles = (
+				base_articles = apply_article_max_age_filter(
 					Articles.objects.filter(
 						subjects__in=digest_list.subjects.all(),
 						discovery_date__gte=now() - timedelta(days=days_to_look_back),
-					)
-					.order_by("-discovery_date")
-					.distinct()
-				)
+					),
+					digest_list,
+				).order_by("-discovery_date").distinct()
 				filtered_pks = self._filter_articles_excluding_all_irrelevant(
 					base_articles, digest_list
 				)
@@ -270,14 +270,13 @@ class Command(BaseCommand):
 							f"DATE SORT MODE: Skipping ML relevance filtering for list '{digest_list.list_name}' but still excluding articles manually tagged as not relevant for ALL their subjects in this list"
 						)
 					)
-				base_articles = (
+				base_articles = apply_article_max_age_filter(
 					Articles.objects.filter(
 						subjects__in=digest_list.subjects.all(),
 						discovery_date__gte=now() - timedelta(days=days_to_look_back),
-					)
-					.order_by("-discovery_date")
-					.distinct()
-				)
+					),
+					digest_list,
+				).order_by("-discovery_date").distinct()
 				filtered_pks = self._filter_articles_excluding_all_irrelevant(
 					base_articles, digest_list
 				)
@@ -301,14 +300,13 @@ class Command(BaseCommand):
 						)
 					)
 				list_subjects = digest_list.subjects.all()
-				base_subject_articles = (
+				base_subject_articles = apply_article_max_age_filter(
 					Articles.objects.filter(
 						subjects__in=list_subjects,
 						discovery_date__gte=now() - timedelta(days=days_to_look_back),
-					)
-					.order_by("-discovery_date")
-					.distinct()
-				)
+					),
+					digest_list,
+				).order_by("-discovery_date").distinct()
 				filtered_article_ids = self._filter_articles_excluding_all_irrelevant(
 					base_subject_articles, digest_list
 				)
@@ -320,11 +318,14 @@ class Command(BaseCommand):
 				)
 
 				# Then, get manually reviewed articles (only those tagged as relevant for at least one subject)
-				manual_reviewed = Articles.objects.filter(
-					subjects__in=list_subjects,
-					article_subject_relevances__subject__in=list_subjects,
-					article_subject_relevances__is_relevant=True,
-					discovery_date__gte=now() - timedelta(days=days_to_look_back),
+				manual_reviewed = apply_article_max_age_filter(
+					Articles.objects.filter(
+						subjects__in=list_subjects,
+						article_subject_relevances__subject__in=list_subjects,
+						article_subject_relevances__is_relevant=True,
+						discovery_date__gte=now() - timedelta(days=days_to_look_back),
+					),
+					digest_list,
 				).distinct()
 				self.stdout.write(
 					self.style.NOTICE(
