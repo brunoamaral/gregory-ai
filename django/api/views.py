@@ -1483,6 +1483,30 @@ def _category_through_count_subquery(through_model):
 	)
 
 
+def _category_authors_count_subquery():
+	"""Correlated scalar count of the distinct authors behind a category's
+	articles.
+
+	Unlike the two through-table counts above, this one walks
+	articles_team_categories -> articles_authors, so the DISTINCT is real
+	work rather than a formality (a large category's articles can carry tens
+	of thousands of author rows). It is therefore NOT part of the default
+	/categories/ queryset — see CategoryViewSet.get_queryset, which adds it
+	only when the client explicitly sorts by it.
+	"""
+	return Coalesce(
+		Subquery(
+			ArticleCategoryAssignment.objects.filter(teamcategory=OuterRef("pk"))
+			.order_by()
+			.values("teamcategory")
+			.annotate(c=Count("articles__authors", distinct=True))
+			.values("c"),
+			output_field=IntegerField(),
+		),
+		0,
+	)
+
+
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	List all categories in the database with optional filters for team and subject.
@@ -1501,7 +1525,11 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	- **monthly_counts** - Include monthly article/trial counts with ML predictions (default: false)
 	- **ml_threshold** - ML prediction probability threshold when monthly_counts=true (0.0-1.0, default: 0.5)
 	- **search** - search in category name and description
-	- **ordering** - sort field, prefix with `-` for descending. Allowed values: `category_name`, `id`, `article_count_annotated`, `authors_count_annotated`
+	- **ordering** - sort field, prefix with `-` for descending. Allowed values: `category_name`, `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`.
+	  The first four are free — they sort on columns the queryset already
+	  computes. `authors_count_annotated` is the expensive one: it is the only
+	  value that adds a distinct-author count over every article in each
+	  category, so it is computed only for requests that actually sort by it.
 
 	# Response includes:
 	- Category basic information
@@ -1539,6 +1567,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 		"category_name",
 		"id",
 		"article_count_annotated",
+		"trials_count_annotated",
 		"authors_count_annotated",
 	]
 	ordering = ["category_name"]
@@ -1599,6 +1628,24 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 			trials_count_annotated=_category_through_count_subquery(TrialCategoryAssignment),
 		)
 
+		# `authors_count_annotated` is an allowed ordering value but is NOT
+		# annotated by default: counting a category's distinct authors means
+		# reaching through to articles_authors, which is far more expensive
+		# than the two through-table counts above. Annotate it only when the
+		# client actually sorts by it — leaving it out unconditionally makes
+		# DRF's OrderingFilter hand an unresolvable name to order_by(), which
+		# is a 500 (FieldError), not a graceful fallback, precisely because
+		# the name passes the ordering_fields whitelist.
+		#
+		# Deliberately not date-filtered: the serializer prefers this
+		# annotation over its live-count fallback, so filtering it here would
+		# make a category's reported authors_count change depending on
+		# whether the client happened to sort by it.
+		if self._orders_by_authors_count():
+			queryset = queryset.annotate(
+				authors_count_annotated=_category_authors_count_subquery()
+			)
+
 		# No .distinct() needed: the count annotations are now correlated
 		# subqueries (no JOIN), team is select_related via FK, subjects is
 		# prefetch_related (a separate query), and subjects__id=<single id>
@@ -1608,6 +1655,20 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 		# paginator's count() down a DISTINCT-over-all-columns path,
 		# undermining the cheap-count fix above.
 		return queryset
+
+	def _orders_by_authors_count(self):
+		"""True when this request's `ordering` sorts by authors count.
+
+		Reads the param the same way DRF's OrderingFilter does: one
+		comma-separated value, each term optionally prefixed with `-`.
+		"""
+		raw = self.request.query_params.get(
+			filters.OrderingFilter.ordering_param, ""
+		)
+		return any(
+			term.strip().lstrip("-") == "authors_count_annotated"
+			for term in raw.split(",")
+		)
 
 	def get_serializer_context(self):
 		"""Add author parameters to serializer context"""

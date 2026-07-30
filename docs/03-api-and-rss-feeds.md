@@ -168,7 +168,7 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Authors | `GET /authors/by_team_subject/` | `team_id` *(req)*, `subject_id` *(req)* | |
 | Authors | `GET /authors/by_team_category/` | `team_id` *(req)*, `category_slug` or `category_id` *(req)* | |
 | Authors | `GET /authors/{id}/coauthors/` | `id` (path) | Co-authors of the given author |
-| Categories | `GET /categories/` | `team_id`, `subject_id`, `category_id`, `search`, `ordering`, `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | |
+| Categories | `GET /categories/` | `team_id`, `subject_id`, `category_id`, `get_categories`, `search`, `ordering` (`category_name`, `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`), `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | `ordering=authors_count_annotated` is the expensive sort — see [Categories ordering](#categories-ordering) |
 | Categories | `GET /categories/{id}/` | `id` (path) | |
 | Categories | `GET /categories/{id}/authors/` | `id` (path), `min_articles`, `sort_by`, `order`, date filters | Author stats for a category |
 | Sources | `GET /sources/` | `team_id`, `subject_id`, `source_for`, `search`, `ordering`, pagination | |
@@ -407,7 +407,15 @@ That order is for plain `?ordering=recruiting_first` (ascending). `?ordering=-re
 
 Many trials share a rank, so ties are broken automatically by `-discovery_date` in both directions — page-to-page ordering stays stable.
 
-**Unrecognised `ordering` values are silently ignored, not rejected** (DRF `OrderingFilter`'s default behaviour) — a typo or a stale field name falls back to the default ordering instead of returning an error.
+**Unrecognised `ordering` values are silently ignored, not rejected** (DRF `OrderingFilter`'s default behaviour) — a typo or a stale field name falls back to the default ordering instead of returning an error. This applies to every endpoint that accepts `ordering`.
+
+### Categories ordering
+
+`GET /categories/?ordering=<field>` (prefix with `-` to reverse). Accepted values: `category_name` (default), `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`.
+
+`article_count_annotated` and `trials_count_annotated` sort by the same numbers the response reports as `article_count_total` and `trials_count_total`. Both are free: the queryset already computes them for every request.
+
+`authors_count_annotated` sorts by the number of distinct authors across a category's articles — the same number reported as `authors_count` in the response body. It is materially more expensive than the other four, so the server computes it only for requests that actually sort by it; a plain `GET /categories/` never pays for it. Expect these requests to be slower on teams with large categories.
 
 ### Sponsor canonicalization
 
