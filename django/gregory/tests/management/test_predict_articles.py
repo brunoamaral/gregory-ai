@@ -619,6 +619,95 @@ class TestRunPredictionsFor(TestCase):
 		self.assertEqual(stats["processed"], 2)
 		self.assertEqual(stats["new_predictions"], 1)
 
+	def test_bulk_create_updates_ml_score_and_relevant(
+		self,
+		mock_prepare_text,
+		mock_load_model,
+		mock_resolve_version,
+		mock_get_articles,
+	):
+		"""MLPredictions.objects.bulk_create bypasses post_save, so this is the
+		test that catches the pipeline never updating the denormalized fields.
+		A test using .save() would pass on the signal and prove nothing about
+		what the command actually does."""
+		mock_get_articles.return_value = [self.article1, self.article2]
+		mock_resolve_version.return_value = "v1.0"
+		mock_model = MagicMock()
+		# article1 predicted relevant at 0.9 (>= default 0.8 threshold);
+		# article2 predicted not relevant at 0.3.
+		mock_model.predict.return_value = ([1, 0], [0.9, 0.3])
+		mock_load_model.return_value = mock_model
+		mock_prepare_text.side_effect = ["prepared text 1", "prepared text 2"]
+
+		self.command.run_predictions_for(
+			self.subject, "pubmed_bert", "v1.0", 90, 0.8, dry_run=False, verbose=1
+		)
+
+		self.article1.refresh_from_db()
+		self.article2.refresh_from_db()
+		self.assertAlmostEqual(self.article1.ml_score, 0.9, places=5)
+		self.assertTrue(self.article1.relevant)
+		self.assertAlmostEqual(self.article2.ml_score, 0.3, places=5)
+		self.assertFalse(self.article2.relevant)
+
+	def test_relevant_clears_when_pipeline_retrain_drops_below_threshold(
+		self,
+		mock_prepare_text,
+		mock_load_model,
+		mock_resolve_version,
+		mock_get_articles,
+	):
+		"""A later pipeline run with a retrained model_version can clear
+		relevant, not just set it."""
+		mock_get_articles.return_value = [self.article1]
+		mock_resolve_version.return_value = "v1.0"
+		mock_model = MagicMock()
+		mock_model.predict.return_value = ([1], [0.9])
+		mock_load_model.return_value = mock_model
+		mock_prepare_text.side_effect = ["prepared text 1"]
+
+		self.command.run_predictions_for(
+			self.subject, "pubmed_bert", "v1.0", 90, 0.8, dry_run=False, verbose=1
+		)
+		self.article1.refresh_from_db()
+		self.assertTrue(self.article1.relevant)
+
+		mock_resolve_version.return_value = "v2.0"
+		mock_model.predict.return_value = ([0], [0.1])
+		mock_prepare_text.side_effect = ["prepared text 1"]
+
+		self.command.run_predictions_for(
+			self.subject, "pubmed_bert", "v2.0", 90, 0.8, dry_run=False, verbose=1
+		)
+		self.article1.refresh_from_db()
+		self.assertAlmostEqual(self.article1.ml_score, 0.1, places=5)
+		self.assertFalse(self.article1.relevant)
+
+	def test_dry_run_writes_neither_ml_score_nor_relevant(
+		self,
+		mock_prepare_text,
+		mock_load_model,
+		mock_resolve_version,
+		mock_get_articles,
+	):
+		mock_get_articles.return_value = [self.article1, self.article2]
+		mock_resolve_version.return_value = "v1.0"
+		mock_model = MagicMock()
+		mock_model.predict.return_value = ([1, 0], [0.9, 0.3])
+		mock_load_model.return_value = mock_model
+		mock_prepare_text.side_effect = ["prepared text 1", "prepared text 2"]
+
+		self.command.run_predictions_for(
+			self.subject, "pubmed_bert", "v1.0", 90, 0.8, dry_run=True, verbose=1
+		)
+
+		self.article1.refresh_from_db()
+		self.article2.refresh_from_db()
+		self.assertIsNone(self.article1.ml_score)
+		self.assertFalse(self.article1.relevant)
+		self.assertIsNone(self.article2.ml_score)
+		self.assertFalse(self.article2.relevant)
+
 
 class TestSummaryTableFormatting(TestCase):
 	def setUp(self):

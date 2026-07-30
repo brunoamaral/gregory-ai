@@ -13,7 +13,7 @@ from gregory.models import (
 	Subject,
 	Team,
 )
-from gregory.relevance import recompute_article_relevance
+from gregory.relevance import compute_ml_drift, recompute_article_relevance
 
 
 class RecomputeArticleRelevanceTestCase(TestCase):
@@ -447,3 +447,89 @@ class RecomputeArticleRelevanceLatestPredictionTestCase(TestCase):
 		recompute_article_relevance()
 		article.refresh_from_db()
 		self.assertTrue(article.relevant)
+
+
+class ComputeMlDriftTestCase(TestCase):
+	"""compute_ml_drift is the read-only measurement behind the admin summary's
+	health line and the weekly cron backfills' expected zero result."""
+
+	@classmethod
+	def setUpTestData(cls):
+		org = Organization.objects.create(name="Drift Org")
+		cls.team = Team.objects.create(
+			organization=org, name="Drift Team", slug="drift-team"
+		)
+		cls.subject = Subject.objects.create(
+			subject_name="Drift Subject",
+			subject_slug="drift-subject",
+			team=cls.team,
+			auto_predict=True,
+			ml_consensus_type="any",
+		)
+
+	def _make_article(self, title, link):
+		return Articles.objects.create(title=title, link=link)
+
+	def test_healthy_state_is_all_zero(self):
+		article = self._make_article("Healthy", "https://example.com/drift1")
+		article.subjects.add(self.subject)
+		MLPredictions.objects.create(
+			article=article,
+			subject=self.subject,
+			algorithm="pubmed_bert",
+			model_version="v1",
+			probability_score=0.9,
+			predicted_relevant=True,
+		)
+		drift = compute_ml_drift()
+		self.assertEqual(drift["stale_ml_score"], 0)
+		self.assertEqual(drift["missing_relevant"], 0)
+		self.assertEqual(drift["unexpected_relevant"], 0)
+
+	def test_stale_ml_score_counted(self):
+		article = self._make_article("Stale score", "https://example.com/drift2")
+		article.subjects.add(self.subject)
+		MLPredictions.objects.create(
+			article=article,
+			subject=self.subject,
+			algorithm="pubmed_bert",
+			model_version="v1",
+			probability_score=0.9,
+			predicted_relevant=True,
+		)
+		# Signal already set ml_score; force it back to NULL to simulate a
+		# bulk_create write that skipped the recompute.
+		Articles.objects.filter(pk=article.pk).update(ml_score=None)
+
+		drift = compute_ml_drift()
+		self.assertEqual(drift["stale_ml_score"], 1)
+
+	def test_missing_relevant_counted(self):
+		article = self._make_article("Missing relevant", "https://example.com/drift3")
+		article.subjects.add(self.subject)
+		ArticleSubjectRelevance.objects.create(
+			article=article, subject=self.subject, is_relevant=True
+		)
+		Articles.objects.filter(pk=article.pk).update(relevant=False)
+
+		drift = compute_ml_drift()
+		self.assertEqual(drift["missing_relevant"], 1)
+		self.assertEqual(drift["unexpected_relevant"], 0)
+
+	def test_unexpected_relevant_counted(self):
+		"""Reverse direction: flag is True but nothing currently justifies it.
+		This is a different failure mode than staleness (see docstring)."""
+		article = self._make_article(
+			"Unexpected relevant", "https://example.com/drift4"
+		)
+		article.subjects.add(self.subject)
+		Articles.objects.filter(pk=article.pk).update(relevant=True)
+
+		drift = compute_ml_drift()
+		self.assertEqual(drift["missing_relevant"], 0)
+		self.assertEqual(drift["unexpected_relevant"], 1)
+
+	def test_article_with_no_predictions_does_not_count_as_stale(self):
+		self._make_article("No predictions", "https://example.com/drift5")
+		drift = compute_ml_drift()
+		self.assertEqual(drift["stale_ml_score"], 0)

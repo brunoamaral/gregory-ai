@@ -18,6 +18,7 @@ from django.db.models import Q, Exists, OuterRef
 from django.utils import timezone
 
 from gregory.models import Team, Articles, MLPredictions, PredictionRunLog
+from gregory.relevance import recompute_article_ml_scores, recompute_article_relevance
 from gregory.utils.text_utils import cleanHTML, cleanText, MIN_WORD_COUNT
 
 # Base path for models
@@ -474,6 +475,12 @@ class Command(BaseCommand):
 					prediction_instances, ignore_conflicts=True
 				)
 				stats["new_predictions"] = len(prediction_instances) - conflicts
+
+				# bulk_create bypasses post_save, so the denormalized ml_score
+				# and relevant fields need an explicit recompute for this batch.
+				batch_article_ids = [p.article_id for p in prediction_instances]
+				recompute_article_ml_scores(article_ids=batch_article_ids)
+				recompute_article_relevance(article_ids=batch_article_ids)
 			elif prediction_instances:
 				# For dry run, we just count would-be creations
 				stats["new_predictions"] = len(prediction_instances)
