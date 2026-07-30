@@ -728,8 +728,11 @@ class Articles(models.Model):
 		Only the latest prediction per algorithm for this (article, subject) pair counts —
 		a retired model_version's stale score must not keep an article "relevant" forever
 		after a retrain. Ties on created_date are all considered: the algorithm qualifies
-		if any tied latest row does, matching api.filters._get_ml_relevant_articles_query
-		and gregory.relevance.recompute_article_relevance.
+		if any tied latest row does. This must keep agreeing with the other two consensus
+		implementations — api.filters.ml_relevant_articles_q and
+		gregory.relevance.recompute_article_relevance — see
+		gregory/tests/test_ml_consensus_equivalence.py, which asserts equivalence rather
+		than merely claiming it.
 
 		Args:
 			subject: Subject instance to check relevance for
