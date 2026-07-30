@@ -413,10 +413,23 @@ The email footer template (`emails/components/footer.html`) renders unsubscribe 
 |---|---|---|
 | `subscriber` | Email command | `Subscribers` instance |
 | `list_id` | Email command | `digest_list.list_id` |
+| `unsubscribe_lists` | Announcement send | `[(list_id, list_name), ...]` |
 | `unsubscribe_base_url` | Email command | `https://<site.domain>` |
 | `site` | Email command | `Site` instance |
 
-All three weekly summary, admin summary, and trials notification commands inject these variables.
+All three weekly summary, admin summary, and trials notification commands inject
+`list_id`, since each of those emails is inherently single-list — the footer
+renders one "Unsubscribe from this list" link.
+
+Announcements are different: a single announcement can target several lists at
+once, and a subscriber can be on more than one of them. Rather than attribute
+the send to whichever list happened to be encountered first (ambiguous — the
+recipient can't tell which subscription "this list" refers to), the footer
+renders one named "Unsubscribe from &lt;list name&gt;" link per list the
+subscriber actually matched, via `unsubscribe_lists`. A subscriber on three of
+the announcement's lists still receives exactly one email, with three links.
+When `unsubscribe_lists` is present it takes precedence over `list_id`; when
+absent (every digest command) the single-`list_id` behaviour is unchanged.
 
 ---
 

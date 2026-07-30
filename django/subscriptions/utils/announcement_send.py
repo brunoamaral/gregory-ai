@@ -51,6 +51,7 @@ def render_announcement_email(
 	site=None,
 	list_id=None,
 	custom_settings=None,
+	unsubscribe_lists=None,
 ):
 	"""Render announcement as HTML email using the base template."""
 	api_domain = (
@@ -105,6 +106,8 @@ def render_announcement_email(
 		context["site"] = site
 	if list_id:
 		context["list_id"] = list_id
+	if unsubscribe_lists:
+		context["unsubscribe_lists"] = unsubscribe_lists
 	return render_to_string("emails/announcement.html", context)
 
 
@@ -146,7 +149,11 @@ def send_announcement(announcement):
 		announcement.lists.select_related("team__organization", "site").all()
 	)
 
-	all_subscribers = {}  # email -> (subscriber, list) — first list wins
+	# email -> (subscriber, attributed_list, [every matched list]) — first
+	# list wins attribution (AnnouncementRecipient.list), but every list a
+	# subscriber matched is kept so the footer can render one unsubscribe
+	# link per list instead of an ambiguous single one.
+	all_subscribers = {}
 	for lst in target_lists:
 		active_subs = Subscribers.objects.filter(
 			list_subscriptions__list=lst,
@@ -155,7 +162,9 @@ def send_announcement(announcement):
 		).distinct()
 		for sub in active_subs:
 			if sub.email not in all_subscribers:
-				all_subscribers[sub.email] = (sub, lst)
+				all_subscribers[sub.email] = (sub, lst, [lst])
+			else:
+				all_subscribers[sub.email][2].append(lst)
 
 	already_sent_subscriber_ids = set(
 		AnnouncementRecipient.objects.filter(
@@ -166,7 +175,7 @@ def send_announcement(announcement):
 	list_credentials = {}  # list_id -> None (invalid) or (api_token, api_url, site, custom_settings)
 	skipped = 0
 
-	for subscriber, lst in all_subscribers.values():
+	for subscriber, lst, matched_lists in all_subscribers.values():
 		if subscriber.subscriber_id in already_sent_subscriber_ids:
 			skipped += 1
 			continue
@@ -218,6 +227,7 @@ def send_announcement(announcement):
 			site=site,
 			list_id=lst.list_id,
 			custom_settings=custom_settings,
+			unsubscribe_lists=[(l.list_id, l.list_name) for l in matched_lists],
 		)
 		text = render_announcement_text(announcement, subscriber=subscriber)
 

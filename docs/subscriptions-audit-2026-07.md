@@ -468,6 +468,13 @@ performance clean-up.
 - `templates/emails/views.py:160` (staff preview) also omits `organization`, and ignores `article_sort_order` — it takes the newest N by date, so a relevancy-mode digest previews as something no recipient will ever receive.
 - `admin.py:1680` hardcodes `privacy_policy_url` and `terms_url` to `""`, so those footer links disappear for announcements only.
 - `admin.py:1932` deduplicates announcement recipients by email and attributes each to the first list encountered, so the footer unsubscribe link covers only that one list.
+
+  **Status: fixed 2026-07-29.** `send_announcement` now collects every list a subscriber matched while
+  still deduplicating to exactly one email per subscriber, and the footer renders one named "Unsubscribe
+  from &lt;list name&gt;" link per matched list via the new `unsubscribe_lists` context variable. Digests
+  are unaffected — they only ever pass `list_id`, so the single-link fallback in `footer.html` is
+  unchanged. See `subscriptions/tests/test_announcement_unsubscribe_lists.py`.
+
 - `management/commands/mark_all_as_sent.py` is `subscribers × lists × all articles` individual `get_or_create` calls, and iterates `subscriber.subscriptions.all()`, which includes lists the subscriber has opted out of.
 
 ---
