@@ -479,7 +479,9 @@ def postmark_webhook(request):
 	if record_type == "SubscriptionChange":
 		handle_subscription_change(payload)
 	elif record_type in _POSTMARK_KNOWN_RECORD_TYPES:
-		logger.info(
+		# Delivery/Open/Bounce are high-volume and expected — DEBUG, not INFO,
+		# so this endpoint can't flood production logs under normal traffic.
+		logger.debug(
 			"postmark_webhook: received %s event; no action needed.", record_type
 		)
 	else:

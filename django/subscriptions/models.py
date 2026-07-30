@@ -540,6 +540,17 @@ class SuppressionEvent(models.Model):
 				name="unique_suppression_event_record_type_email_changed_at",
 			)
 		]
+		indexes = [
+			# postmark_webhook.py looks up the latest event for a recipient via
+			# filter(email=...).order_by("-changed_at") on every incoming event
+			# (ordering check, original-suppression lookup) — the unique
+			# constraint above is keyed on record_type first, so it doesn't
+			# serve an email-only query efficiently as this table grows.
+			models.Index(
+				fields=["email", "-changed_at"],
+				name="idx_suppression_event_email_changed",
+			),
+		]
 		ordering = ["-changed_at"]
 		verbose_name = "Suppression Event"
 		verbose_name_plural = "Suppression Events"
