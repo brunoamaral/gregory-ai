@@ -130,6 +130,19 @@ To run a specific test file:
 docker exec gregory python manage.py test gregory.tests.test_filename
 ```
 
+CI also runs two database-aware Django system checks that `manage.py test`
+does not cover (the test suite runs with `--nomigrations`, so it never
+exercises these). Reproduce them locally before pushing:
+
+```bash
+docker exec gregory python manage.py check --database default
+docker exec gregory python manage.py makemigrations --check --dry-run
+```
+
+The first catches model state that's only invalid once a database backend is
+configured — e.g. an index name over the backend's length limit. The second
+catches a model change that's missing its migration.
+
 ---
 
 ## Scheduled tasks
