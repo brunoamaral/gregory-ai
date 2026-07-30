@@ -20,6 +20,7 @@ from subscriptions.models import (
 	SentArticleNotification,
 	SentTrialNotification,
 	FailedNotification,
+	SuppressionEvent,
 )
 from subscriptions.utils.email_limits import render_within_limit, resolve_limits
 from subscriptions.utils.postmark import (
@@ -261,6 +262,7 @@ class Command(BaseCommand):
 						api_token=postmark_api_token,
 						api_url=api_url,
 						sender_prefix=customsettings.sender_email_prefix,
+						tag="admin_summary",
 					)
 				except requests.RequestException as e:
 					self.stdout.write(
@@ -301,7 +303,11 @@ class Command(BaseCommand):
 						admin_list.list_name,
 						detail,
 					)
-					deactivate_subscribers([subscriber.subscriber_id], reason=detail)
+					deactivate_subscribers(
+						[subscriber.subscriber_id],
+						reason=detail,
+						record_type=SuppressionEvent.RECORD_TYPE_REACTIVE_SEND_FAILURE,
+					)
 					FailedNotification.objects.create(
 						subscriber=subscriber, list=admin_list, reason=detail
 					)

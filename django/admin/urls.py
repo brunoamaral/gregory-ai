@@ -48,6 +48,7 @@ from subscriptions.views import (
 	unsubscribe_site,
 	unsubscribe_all,
 	ckeditor_upload,
+	postmark_webhook,
 )
 from organizations.backends import invitation_backend
 
@@ -134,6 +135,10 @@ urlpatterns = (
 			unsubscribe_all,
 			name="unsubscribe_all",
 		),
+		# Postmark webhook (suppression / reactivation) — provider-agnostic
+		# path, not /webhooks/postmark/, since it's the only webhook consumer
+		# today; dispatch is on RecordType (see subscriptions/views.py).
+		path("webhooks/", postmark_webhook, name="postmark_webhook"),
 		# Email template preview and testing routes
 		path("emails/", email_preview_dashboard, name="email_preview_dashboard"),
 		path(

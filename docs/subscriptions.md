@@ -354,9 +354,147 @@ itself is also caught (`requests.RequestException`) and recorded as a
 single dropped connection could skip every remaining subscriber and list for
 that cron invocation with no record of it happening.
 
-This handling is reactive only: suppression is discovered by attempting a
-send and reading the response, not by a Postmark bounce webhook. A real-time
-webhook and a reactivation flow are tracked separately, out of scope here.
+This reactive path never goes away: it is the only thing that catches a
+suppression whose webhook (below) was lost. Both paths converge on
+`subscriptions.utils.suppression.deactivate_subscribers` so they cannot
+drift.
+
+---
+
+## Suppression and Reactivation Webhook
+
+**`POST /webhooks/`** — Postmark's webhook, configured on the **broadcast**
+message stream (the only stream `send_email` sends on today). The path is
+deliberately provider-agnostic (`/webhooks/`, not `/webhooks/postmark/`):
+dispatch happens on the payload's `RecordType`, and anything that doesn't
+look like a Postmark event is logged and ignored rather than acted on.
+
+Postmark is configured to send: **Delivery, Bounce, Open (first open only),
+Subscription Change**. Delivery, Open, and Bounce are accepted and return 200
+with no state change — Bounce is supplementary detail (hard vs soft; a soft
+bounce does not suppress), Delivery/Open are irrelevant to suppression.
+**Subscription Change drives everything**: it is the superset event for
+suppression state and fires in both directions (`SuppressSending: true` /
+`false`). Spam complaints reach us through `SuppressionReason: "SpamComplaint"`
+on this event even with the Spam Complaint event type disabled.
+
+### Authentication
+
+HTTP Basic Auth, credentials embedded in the URL Postmark posts to:
+`https://<user>:<pass>@api.brain-regeneration.com/webhooks/`. Postmark does
+**not** support HMAC webhook signatures — despite a TypeScript sample in
+their docs implying otherwise, there is no signature header to verify, so
+none is implemented. Credentials live in `POSTMARK_WEBHOOK_USERNAME` /
+`POSTMARK_WEBHOOK_PASSWORD` (environment only, never in the repo), compared
+with `hmac.compare_digest`. A missing/wrong credential returns **403**, not
+401 — Postmark stops retrying on 403 and keeps retrying everything else, so a
+misconfigured credential fails once and loudly instead of retrying for hours.
+
+### Idempotency and ordering
+
+Deduplication key is **`(RecordType, Recipient, ChangedAt)`**, enforced by a
+DB constraint on `SuppressionEvent` — **not** `MessageID` as Postmark's own
+docs suggest. Postmark sends an all-zero placeholder `MessageID`
+(`00000000-0000-0000-0000-000000000000`) for Subscription Change events with
+no originating message (e.g. a manual suppression made in the Postmark UI),
+so deduping on `MessageID` alone would collapse every such event into one and
+silently drop the rest. `MessageID` is still recorded as data.
+
+Events can arrive out of order. Each incoming event's `ChangedAt` is compared
+against the most recent `ChangedAt` already recorded for that recipient;
+anything older is recorded (`action_taken="record_only"`) but never changes
+subscription state, so a stale suppress landing after a newer unsuppress (or
+the reverse) can't win.
+
+An unrecognised `Recipient` (test send, old address, different system on the
+same host) is recorded with `subscriber=NULL` — never an error, never a
+created `Subscribers` row.
+
+### The `SuppressionEvent` model
+
+One row per suppress/unsuppress event — the audit trail, and the prerequisite
+for reactivation. See
+[02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md) for
+the full field list. The field that matters most is
+`deactivated_list_subscription_ids`: the exact `ListSubscription` IDs a
+suppression turned off, captured by `deactivate_subscribers` at suppression
+time. Before this model existed, deactivation used `queryset.update()`
+exclusively, which bypasses simple-history's `post_save` hook — measured on
+production data, roughly 82% of past deactivations left no reconstructable
+trace of what they had changed. Reactivation restores exactly this recorded
+set, never a guess at "everything the subscriber probably still wants."
+
+`record_type` distinguishes the three paths that can deactivate a
+subscriber, all funnelled through `deactivate_subscribers`:
+`SubscriptionChange` (this webhook), `ReactiveSendFailure` (the 406 path
+above), `AdminManual` (the admin "Disable all emails" bulk action). Only
+`SubscriptionChange` events carry a Postmark `SuppressionReason`
+(`HardBounce` / `SpamComplaint` / `ManualSuppression`) — the other two are
+never auto-restored by an incoming unsuppress, because their cause is
+unrelated to Postmark's own suppression list.
+
+### Reactivation policy
+
+| `SuppressionReason` on the unsuppress | Behaviour |
+|:--|:--|
+| `HardBounce` | auto-restore (subject to the staleness cap below) |
+| `ManualSuppression` | auto-restore (subject to the staleness cap below) |
+| `SpamComplaint` | **never** — sticky, see below |
+| anything else, or missing | record only, flagged for review |
+
+"Restore" means both the `Subscribers.active` flag **and** the exact
+`ListSubscription` rows named in the original suppression's
+`deactivated_list_subscription_ids` — restoring only the global flag is a
+no-op in practice, since the subscriber would still hold no active list
+subscriptions. Restoring exactly that recorded set (and nothing else) is what
+prevents re-subscribing someone to a list they had already left on their own
+before the suppression happened.
+
+**Spam complaints are sticky.** A complaint is a recorded objection to
+processing and outranks a later unsuppress, including one performed by staff
+in the Postmark UI. There is no automatic path back from `SpamComplaint`; a
+human override would need to be an explicit, recorded admin action, not a
+side effect of a webhook.
+
+The semantics of the `Origin` field (`Recipient` / `Customer`) on an
+*unsuppress* event are not established by Postmark's documentation, so it is
+recorded but never used to gate reactivation — only `SuppressionReason` and
+the staleness cap decide.
+
+**Staleness cap** — `subscriptions.utils.postmark_webhook.REACTIVATION_MAX_AGE`
+(365 days, a module constant rather than a Django setting, since it's a
+policy decision that shouldn't be changed without revisiting the reasoning).
+Auto-restore requires the original suppression to be less than 365 days old,
+measured from that original event's `ChangedAt`. **When no matching
+`SuppressionEvent` exists at all — true for every suppression that predates
+this model — reactivation fails safe and does not restore.** This is
+intentional, not a gap to fix: an unsuppress for one of those subscribers
+will always show up in the admin as recorded-and-flagged, because their age
+and prior subscription state are both unknowable.
+
+### Retry behaviour and why the endpoint responds fast
+
+| Events | Retry schedule |
+|:--|:--|
+| Bounce, Inbound | 1m, 5m, 10m×3, 15m, 30m, 1h, 2h, 6h — ~10 hours |
+| Delivery, Open, Click, **Subscription Change** | 1m, 5m, 15m — **~21 minutes** |
+
+Subscription Change — the event this whole feature depends on — is in the
+short bucket. More than ~20 minutes of downtime and those events are gone for
+good; Postmark does not replay them later. The view responds 200 as fast as
+possible for exactly this reason, and everything above stays cheap enough to
+do inline. This is also why the reactive 406 path is not being retired: it is
+the backstop for suppression events lost to an outage that outlasted the
+retry window.
+
+### Tagging
+
+`send_email` accepts an optional `tag` parameter (Postmark's `Tag` field —
+one per message), passed through as the email type: `weekly_summary`,
+`admin_summary`, `trial_notification`, `announcement`. Not required for
+suppression (`Recipient` already identifies the subscriber) but makes
+Postmark-side stats and debugging much better. Lists are not used as tags —
+Postmark's tag reporting is designed for a small, low-cardinality set.
 
 ---
 

@@ -435,6 +435,120 @@ class Announcement(models.Model):
 		return f"{self.subject} ({self.get_status_display()})"
 
 
+class SuppressionEvent(models.Model):
+	"""
+	Audit trail for Postmark's suppress / unsuppress signal, and the local
+	equivalents (a reactive 406 on send, an admin "Disable all emails" bulk
+	action). One row per event.
+
+	This is the prerequisite for reactivation: `deactivated_list_subscription_ids`
+	is the exact set of `ListSubscription` rows a suppression turned off, so an
+	unsuppress can restore precisely that set instead of guessing. See
+	docs/subscriptions.md#suppression-and-reactivation-webhook for the policy this
+	implements.
+	"""
+
+	RECORD_TYPE_SUBSCRIPTION_CHANGE = "SubscriptionChange"
+	RECORD_TYPE_REACTIVE_SEND_FAILURE = "ReactiveSendFailure"
+	RECORD_TYPE_ADMIN_MANUAL = "AdminManual"
+	RECORD_TYPE_CHOICES = [
+		(RECORD_TYPE_SUBSCRIPTION_CHANGE, "Subscription Change (Postmark webhook)"),
+		(RECORD_TYPE_REACTIVE_SEND_FAILURE, "Reactive send failure (406)"),
+		(RECORD_TYPE_ADMIN_MANUAL, "Manual admin action"),
+	]
+
+	ACTION_SUPPRESSED = "suppressed"
+	ACTION_AUTO_RESTORED = "auto_restored"
+	ACTION_RECORD_ONLY = "record_only"
+	ACTION_CHOICES = [
+		(ACTION_SUPPRESSED, "Suppressed"),
+		(ACTION_AUTO_RESTORED, "Auto-restored"),
+		(ACTION_RECORD_ONLY, "Recorded only (not acted on)"),
+	]
+
+	subscriber = models.ForeignKey(
+		Subscribers,
+		on_delete=models.CASCADE,
+		null=True,
+		blank=True,
+		related_name="suppression_events",
+		help_text="Null when the recipient doesn't match any Subscribers row.",
+	)
+	email = models.EmailField(
+		help_text="Recipient email as reported by the triggering event; kept "
+		"even when it doesn't match a Subscribers row.",
+	)
+	record_type = models.CharField(
+		max_length=40,
+		choices=RECORD_TYPE_CHOICES,
+		default=RECORD_TYPE_ADMIN_MANUAL,
+	)
+	suppress_sending = models.BooleanField(
+		default=True,
+		help_text="True = a suppression event; False = an unsuppress/reactivation signal.",
+	)
+	suppression_reason = models.CharField(
+		max_length=40,
+		blank=True,
+		default="",
+		help_text="Postmark SuppressionReason (HardBounce, SpamComplaint, "
+		"ManualSuppression) when known; blank otherwise.",
+	)
+	origin = models.CharField(
+		max_length=20,
+		blank=True,
+		default="",
+		help_text="Postmark Origin field (Recipient/Customer), recorded as data only "
+		"— not used to gate reactivation (see docs/subscriptions.md).",
+	)
+	message_stream = models.CharField(max_length=40, blank=True, default="")
+	message_id = models.CharField(
+		max_length=64,
+		blank=True,
+		default="",
+		help_text="Postmark MessageID. Often an all-zero placeholder for "
+		"Subscription Change events — not used for idempotency.",
+	)
+	changed_at = models.DateTimeField(
+		help_text="Event time (Postmark ChangedAt, or local event time for "
+		"reactive/admin events). Used for ordering and the reactivation "
+		"staleness cap.",
+	)
+	raw_payload = models.JSONField(null=True, blank=True)
+	deactivated_list_subscription_ids = models.JSONField(
+		default=list,
+		blank=True,
+		help_text="ListSubscription IDs this event deactivated. Reactivation "
+		"restores exactly this set and nothing else.",
+	)
+	action_taken = models.CharField(
+		max_length=20,
+		choices=ACTION_CHOICES,
+		default=ACTION_SUPPRESSED,
+	)
+	flag_reason = models.TextField(
+		blank=True,
+		default="",
+		help_text="Why this event was recorded but not acted on automatically.",
+	)
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		constraints = [
+			models.UniqueConstraint(
+				fields=["record_type", "email", "changed_at"],
+				name="unique_suppression_event_record_type_email_changed_at",
+			)
+		]
+		ordering = ["-changed_at"]
+		verbose_name = "Suppression Event"
+		verbose_name_plural = "Suppression Events"
+
+	def __str__(self):
+		direction = "suppress" if self.suppress_sending else "unsuppress"
+		return f"{self.email} {direction} ({self.record_type}) @ {self.changed_at:%Y-%m-%d %H:%M}"
+
+
 class AnnouncementRecipient(models.Model):
 	announcement = models.ForeignKey(
 		Announcement,

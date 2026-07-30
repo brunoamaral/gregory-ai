@@ -12,6 +12,7 @@ from subscriptions.models import (
 	Subscribers,
 	SentTrialNotification,
 	FailedNotification,
+	SuppressionEvent,
 )
 
 from subscriptions.management.commands.utils.get_credentials import (
@@ -216,6 +217,7 @@ class Command(BaseCommand):
 						api_token=postmark_api_token,
 						api_url=api_url,
 						sender_prefix=customsettings.sender_email_prefix,
+						tag="trial_notification",
 					)
 				except requests.RequestException as e:
 					self.stdout.write(
@@ -253,7 +255,11 @@ class Command(BaseCommand):
 						lst.list_name,
 						detail,
 					)
-					deactivate_subscribers([subscriber.subscriber_id], reason=detail)
+					deactivate_subscribers(
+						[subscriber.subscriber_id],
+						reason=detail,
+						record_type=SuppressionEvent.RECORD_TYPE_REACTIVE_SEND_FAILURE,
+					)
 					emails_skipped += 1
 					FailedNotification.objects.create(
 						subscriber=subscriber, list=lst, reason=detail

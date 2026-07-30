@@ -124,7 +124,7 @@ class DeactivateSubscribersTest(TestCase):
 		)
 
 	def test_deactivates_subscriber_and_subscriptions(self):
-		subs_updated, subscriptions_updated = deactivate_subscribers(
+		subs_updated, subscriptions_updated, events = deactivate_subscribers(
 			[self.subscriber.pk], reason="hard bounce"
 		)
 		self.subscriber.refresh_from_db()
@@ -135,6 +135,11 @@ class DeactivateSubscribersTest(TestCase):
 		self.assertFalse(self.subscriber.active)
 		self.assertFalse(self.sub.is_active)
 		self.assertIsNotNone(self.sub.unsubscribed_at)
+
+		self.assertEqual(len(events), 1)
+		event = events[0]
+		self.assertEqual(event.subscriber_id, self.subscriber.pk)
+		self.assertEqual(event.deactivated_list_subscription_ids, [self.sub.pk])
 
 	def test_preserves_existing_unsubscribed_at(self):
 		earlier = timezone.now() - timedelta(days=5)
