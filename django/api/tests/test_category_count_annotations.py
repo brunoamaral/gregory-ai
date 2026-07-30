@@ -295,8 +295,11 @@ class CategoryAuthorsCountOrderingTests(TestCase):
 		self.assertEqual(response.status_code, 200)
 
 	def test_authors_count_not_annotated_unless_sorted_by(self):
-		"""The whole point of the conditional: an ordinary list request must
-		not pay for the distinct-author count."""
+		"""An ordinary list request must not compute the count in SQL over the
+		whole filtered set. It still reports authors_count — the serializer
+		derives it per row on the page — but that is bounded by page size,
+		whereas the annotation is evaluated before pagination narrows anything
+		down."""
 		url = reverse("categories-list")
 		with CaptureQueriesContext(connection) as ctx:
 			response = self.client.get(

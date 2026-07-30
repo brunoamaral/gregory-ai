@@ -415,7 +415,9 @@ Many trials share a rank, so ties are broken automatically by `-discovery_date` 
 
 `article_count_annotated` and `trials_count_annotated` sort by the same numbers the response reports as `article_count_total` and `trials_count_total`. Both are free: the queryset already computes them for every request.
 
-`authors_count_annotated` sorts by the number of distinct authors across a category's articles — the same number reported as `authors_count` in the response body. It is materially more expensive than the other four, so the server computes it only for requests that actually sort by it; a plain `GET /categories/` never pays for it. Expect these requests to be slower on teams with large categories.
+`authors_count_annotated` sorts by the number of distinct authors across a category's articles — the same number reported as `authors_count` in the response body. Expect it to be slower than the other four on teams with large categories.
+
+`authors_count` is present in every response regardless of ordering, so this sort does not introduce the author counting; it widens it. Ordering is applied before pagination, so ranking by this value counts distinct authors for every category matching the filters, where an unsorted request only counts the ones on the page it returns.
 
 ### Sponsor canonicalization
 

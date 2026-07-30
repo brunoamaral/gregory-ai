@@ -1526,10 +1526,13 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	- **ml_threshold** - ML prediction probability threshold when monthly_counts=true (0.0-1.0, default: 0.5)
 	- **search** - search in category name and description
 	- **ordering** - sort field, prefix with `-` for descending. Allowed values: `category_name`, `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`.
-	  The first four are free — they sort on columns the queryset already
-	  computes. `authors_count_annotated` is the expensive one: it is the only
-	  value that adds a distinct-author count over every article in each
-	  category, so it is computed only for requests that actually sort by it.
+	  The first four sort on values the queryset already computes, so they add
+	  nothing. `authors_count_annotated` is the expensive one: ordering has to
+	  happen before pagination, so it counts distinct authors for every category
+	  matching the filters rather than just the page being returned. It is
+	  therefore annotated only for requests that sort by it — note this changes
+	  *where* the count comes from, not whether it is computed, since the
+	  serializer otherwise derives `authors_count` per row on its own.
 
 	# Response includes:
 	- Category basic information
@@ -1629,18 +1632,28 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 		)
 
 		# `authors_count_annotated` is an allowed ordering value but is NOT
-		# annotated by default: counting a category's distinct authors means
-		# reaching through to articles_authors, which is far more expensive
-		# than the two through-table counts above. Annotate it only when the
-		# client actually sorts by it — leaving it out unconditionally makes
-		# DRF's OrderingFilter hand an unresolvable name to order_by(), which
-		# is a 500 (FieldError), not a graceful fallback, precisely because
-		# the name passes the ordering_fields whitelist.
+		# annotated by default. Leaving it out unconditionally would be a bug
+		# on its own — DRF's OrderingFilter hands the unresolvable name to
+		# order_by(), which is a 500 (FieldError) rather than the graceful
+		# fallback an unknown name gets, precisely because this one passes the
+		# ordering_fields whitelist.
 		#
-		# Deliberately not date-filtered: the serializer prefers this
-		# annotation over its live-count fallback, so filtering it here would
-		# make a category's reported authors_count change depending on
-		# whether the client happened to sort by it.
+		# The count itself is not avoided by skipping the annotation: the
+		# serializer derives authors_count per row when it is absent (see
+		# CategorySerializer.get_authors_count), so a default list response
+		# still runs one such query per category on the page. What the
+		# annotation changes is the scope — ordering is applied before
+		# pagination, so ranking by this value forces the distinct-author
+		# count for every category matching the filters, not just the page.
+		# Annotating on demand keeps that whole-result-set cost on the
+		# requests that asked to be sorted by it. (Those requests get the
+		# serializer's per-row queries for free in exchange, since the
+		# annotation is then present.)
+		#
+		# Deliberately not date-filtered: because the serializer prefers this
+		# annotation over its own fallback, filtering it here would make a
+		# category's reported authors_count change depending on whether the
+		# client happened to sort by it.
 		if self._orders_by_authors_count():
 			queryset = queryset.annotate(
 				authors_count_annotated=_category_authors_count_subquery()
