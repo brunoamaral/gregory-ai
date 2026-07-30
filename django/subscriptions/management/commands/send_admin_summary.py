@@ -4,6 +4,7 @@ from django.core.management.base import BaseCommand
 from django.template.loader import get_template
 from django.utils.html import strip_tags
 from gregory.models import MLPredictions
+from gregory.relevance import compute_ml_drift
 from subscriptions.management.commands.utils.get_credentials import (
 	build_unsubscribe_base_url,
 	get_postmark_credentials,
@@ -48,6 +49,10 @@ class Command(BaseCommand):
 				self.style.WARNING("No lists marked as admin summary found.")
 			)
 			return
+
+		# Global, not scoped to a list — computed once and reused across every
+		# list/subscriber send below. See docs/ml-prediction-signal-bypass-plan.md.
+		ml_drift = compute_ml_drift()
 
 		for admin_list in admin_summary_lists:
 			# Sent-record exclusion window must be at least as wide as the
@@ -197,6 +202,7 @@ class Command(BaseCommand):
 					summary_context["show_header_tagline"] = (
 						_admin_list.show_header_tagline
 					)
+					summary_context["ml_drift"] = ml_drift
 
 					html = get_template("emails/admin_summary.html").render(
 						summary_context

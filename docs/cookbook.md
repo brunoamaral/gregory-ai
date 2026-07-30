@@ -186,6 +186,44 @@ Reference: [ml-consensus.md](ml-consensus.md)
 
 ---
 
+## How do I check whether the denormalized ML fields are still in sync?
+
+`Articles.ml_score` and `Articles.relevant` are maintained at write time by
+`predict_articles` (see [ml-prediction-signal-bypass-plan.md](ml-prediction-signal-bypass-plan.md)
+for why that wasn't always true). Two commands re-derive both fields from the
+underlying predictions and relevance data, and are safe to re-run at any time:
+
+```bash
+docker exec gregory python manage.py backfill_ml_scores
+docker exec gregory python manage.py refresh_article_relevance
+```
+
+Both report a **changed-row count**. Run as a weekly cron health check — not
+nightly, since a frequent sweep would paper over exactly the kind of bug this
+was:
+
+```cron
+# Weekly health check on the denormalized ML fields. These are maintained at
+# write time by predict_articles; this sweep should normally change 0 rows.
+# A non-zero count means some write path is bypassing the recompute — see
+# docs/ml-prediction-signal-bypass-plan.md.
+30 4 * * 0 docker exec gregory python manage.py backfill_ml_scores
+40 4 * * 0 docker exec gregory python manage.py refresh_article_relevance
+```
+
+**0 rows changed is the passing result** — it means the write-time path is
+working and nothing is stale. **Any non-zero count is a bug report, not a
+status update**: it means some code path is writing `MLPredictions` or
+`ArticleSubjectRelevance` without going through the recompute (e.g. a new
+`bulk_create` site), and the next person to see it should treat it as a
+regression to find, not a routine number to file away.
+
+The same drift is also surfaced passively in the admin summary email — see
+[ml-prediction-signal-bypass-plan.md](ml-prediction-signal-bypass-plan.md) for
+what those two numbers mean.
+
+---
+
 ## How do I choose a sort order for a weekly digest list?
 
 Each digest list has an **Article Sort Order** setting with two options:

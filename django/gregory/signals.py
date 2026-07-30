@@ -64,24 +64,12 @@ def create_organization_api_settings(sender, instance, created, **kwargs):
 def _recompute_article_ml_score(article_id):
 	"""Recompute and persist ml_score for the given article.
 
-	Averages the most recent probability_score per (algorithm, subject) pair.
-	Uses .update() to avoid bumping Articles.last_updated.
-	distinct(fields) + aggregate() is unsupported by the Django ORM, so scores
-	are materialised and averaged in Python — the list is tiny (≤ algorithms × subjects).
+	Thin wrapper around the scoped recompute in gregory.relevance so the
+	per-article signal path and the bulk pipeline path can't drift apart.
 	"""
-	from gregory.models import Articles, MLPredictions
+	from gregory.relevance import recompute_article_ml_scores
 
-	scores = list(
-		MLPredictions.objects.filter(
-			article_id=article_id,
-			probability_score__isnull=False,
-		)
-		.order_by("algorithm", "subject_id", "-created_date")
-		.distinct("algorithm", "subject_id")
-		.values_list("probability_score", flat=True)
-	)
-	score = sum(scores) / len(scores) if scores else None
-	Articles.objects.filter(article_id=article_id).update(ml_score=score)
+	recompute_article_ml_scores(article_ids=[article_id])
 
 
 @receiver(post_save, sender="gregory.MLPredictions")
