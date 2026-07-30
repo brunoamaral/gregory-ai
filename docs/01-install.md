@@ -130,9 +130,10 @@ To run a specific test file:
 docker exec gregory python manage.py test gregory.tests.test_filename
 ```
 
-CI also runs two database-aware Django system checks that `manage.py test`
-does not cover (the test suite runs with `--nomigrations`, so it never
-exercises these). Reproduce them locally before pushing:
+CI also runs two database-aware Django system checks that the test suite
+does not cover. CI runs tests with `pytest`, not `manage.py test`, and
+`pytest.ini` sets `--nomigrations`, so `migrate` (and these checks) never
+run as part of testing. Reproduce them locally before pushing:
 
 ```bash
 docker exec gregory python manage.py check --database default
