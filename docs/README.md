@@ -56,6 +56,8 @@ walkthrough (read in order); everything else is reference or design material.
 | [subscriptions-p0-followup-plan.md](subscriptions-p0-followup-plan.md) | Follow-up plan: weekly digest staleness gap and format cleanup left open after the P0 fixes. |
 | [subscriptions-p1-fix-plan.md](subscriptions-p1-fix-plan.md) | Execution plan for the P1 findings — content organizer correctness. |
 | [subscriptions-p2-fix-plan.md](subscriptions-p2-fix-plan.md) | Execution plan for the P2 findings — robustness, mainly announcement sending. |
+| [subscriptions-p3-fix-plan.md](subscriptions-p3-fix-plan.md) | Execution plan for the P3 findings — performance, plus the announcement confirm-count fix. |
+| [subscriptions-remaining-work.md](subscriptions-remaining-work.md) | What was deliberately left out of P0–P3 — latent traps and known gaps, with the decisions each needs. |
 | [merge-authors-command.md](merge-authors-command.md) | The author-merge management command. |
 | [lint-triage.md](lint-triage.md) | Ruff lint-gate worklist. |
 

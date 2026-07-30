@@ -3,7 +3,8 @@
 Record of a defect in the newsletter unsubscribe flow, kept for audit purposes.
 Decision taken: fix forward, no proactive contact, document the incident.
 
-Status: open — remediation not yet deployed.
+Status: closed 2026-07-29. Fix deployed 2026-07-28; all investigation items
+resolved. Affected individuals could not be identified — see below for why.
 
 | Field | Value |
 |:------|:------|
@@ -54,21 +55,27 @@ Every newsletter email sent in the exposure window contained the non-functional
 link, so all recipients in that period were exposed to it. The number who acted
 on it is not known.
 
-Figures below are from the development database on 2026-07-28 and are indicative.
-Production figures must be confirmed before this record is treated as final —
-see open items.
+Figures below are from the **production** database on 2026-07-29, via
+`scripts/incident-2026-07-28-scope-check.sh`.
 
 | Measure | Value |
 |:--------|:------|
-| Distinct subscribers with a retained send record since 2026-06-21 | 155 |
-| Total subscriber records | 535 |
-| Subscribers holding at least one active subscription | 192 |
-| Unsubscribe requests successfully recorded since 2026-04-16 | 138 |
+| Total subscriber records | 540 |
+| Subscribers holding at least one active subscription | 194 |
+| Distinct subscribers with a retained send record since 2026-06-29 | 159 |
+| Unsubscribe requests successfully recorded since 2026-04-16 | 144 |
 | Subscribers known to have used the site-scope link | not recorded |
 
+The production data confirms the defect's shape: all nine lists have
+`Lists.site = 3`, while `Team.site` is `1` on six of them and `NULL` on three.
+The filter matched zero rows for every list, so no site-scope request was ever
+honoured — the failure was total, not partial.
+
 Send records are pruned after 30 days (`prune_sent_notifications`), so the
-retained records reach back only to 2026-06-21. Recipient counts for the earlier
-part of the window cannot be reconstructed from the database.
+retained records reach back only to 2026-06-29 — one month of a roughly
+three-and-a-half month exposure window. Recipient counts for the earlier part of
+the window cannot be reconstructed from the database at all, which is why the
+access-log route below is the only way to size the affected group.
 
 The 138 recorded unsubscribes are requests made through the two working links.
 They are evidence that the majority of opt-out paths functioned; they are not a
@@ -84,11 +91,54 @@ made.
 Consequently the affected individuals cannot be enumerated from application data,
 and their requests cannot be honoured retroactively from that source.
 
-One external source may exist: the unsubscribe token is part of the URL path, so
-production web server access logs would contain
+One external source was considered: the unsubscribe token is part of the URL
+path, so production web server access logs contain
 `POST /subscriptions/unsubscribe/<token>/site/<id>/` entries that map back to
-individual subscribers. Whether those logs are retained for the exposure window
-has not been established — see open items.
+individual subscribers.
+
+Checked on 2026-07-29 with `scripts/incident-2026-07-28-scope-check.sh`. The
+route is closed:
+
+| | |
+|:--|:--|
+| Exposure window | 2026-04-16 to 2026-07-28 (~103 days) |
+| Oldest retained access log | 2026-07-15 |
+| Window covered by logs | 2026-07-15 to 2026-07-28 — 14 days, ~13% |
+| Site-scope POSTs in the covered days | 0 |
+
+Roughly 90 days of the window — 2026-04-16 to 2026-07-14 — predate the oldest
+retained log and cannot be reconstructed from any source. Retroactive
+identification is therefore not possible, and the fix-forward decision stands
+by necessity rather than by choice.
+
+The covered 14 days contain no unsubscribe requests of **any** scope — not the
+broken site link, and not the two that worked. That was checked rather than
+assumed, because zero across all three scopes has two very different
+explanations: nobody used the links, or these logs do not capture the endpoint.
+
+The database resolves it. Nine `ListSubscription` rows were deactivated in the
+covered period, and every one is accounted for without an HTTP request:
+
+| Deactivation | Rows | Cause |
+|:-------------|:-----|:------|
+| 2026-07-19 | 3 | bulk — all of one subscriber's subscriptions at once (admin action) |
+| 2026-07-28 17:00 | 1 | Postmark 406 suppression |
+| 2026-07-28 23:00 | 2 | Postmark 406 suppression |
+| 2026-07-28 23:01 | 3 | Postmark 406 suppression |
+
+None has the single-row shape a link click produces. The admin "Disable all
+emails" action and the Postmark-406 suppression handler both deactivate every
+subscription a person holds, in one transaction, with no request to the
+unsubscribe endpoint — so the absence of POSTs in the logs is exactly what those
+nine rows predict. The logs are sound; the period they cover simply contains no
+link clicks.
+
+That makes the zero result **uninformative rather than invalid**: nobody clicked
+any unsubscribe link during the 14 logged days, so the sample says nothing about
+the 89 unlogged ones. It must not be read as "nobody was affected".
+
+Incidentally confirmed: the three suppression events are the P0 Postmark-406
+handler working in production on the day it deployed.
 
 ## Categories of data involved
 
@@ -102,7 +152,8 @@ individuals:
 
 ## Remediation
 
-Planned, not yet deployed. Detailed in
+Deployed 2026-07-28 — CI ships everything merged to `main`, so the exposure
+window closed on that date. Detailed in
 [subscriptions-p0-fix-plan.md](../subscriptions-p0-fix-plan.md), Task A:
 
 - correct the view to filter on `Lists.site`, matching the field the footer link is generated from
@@ -135,6 +186,19 @@ not been asserted here.
 
 ## Open items
 
-- confirm the scope figures against the production database and replace the indicative development figures above
-- establish whether production web server access logs cover the exposure window. If they do, the site-scope requests can be identified by token and honoured retroactively, which would materially change the remediation and should be done in preference to fixing forward alone
-- update this record with the deployment date of the fix, and change its status to closed
+Run `scripts/incident-2026-07-28-scope-check.sh` on the production host. It is
+read-only and covers the first two items below in one pass.
+
+All resolved 2026-07-29 with `scripts/incident-2026-07-28-scope-check.sh`.
+
+- ~~confirm the scope figures against the production database~~ — done, the figures above are production
+- ~~establish whether production web server access logs cover the exposure window~~ — done. They do not: ~14 days retained against a ~103-day window, so ~90 days are unrecoverable and retroactive identification is not possible
+- ~~record the base rate of the working unsubscribe links, to bound how likely it is anyone used the broken one~~ — done. Zero requests of any scope in the logged period, and all nine deactivations in that period are explained by admin action or Postmark suppression. The sample contains no link clicks at all, so it bounds nothing
+
+No further action is possible on identification. Nothing here is outstanding.
+
+## Follow-up raised, tracked separately
+
+Access-log retention is ~14 days. That is short if logs are expected to serve as
+an audit trail for anything — it is the reason this particular route closed.
+Raised as an infrastructure question, not tracked in this record.

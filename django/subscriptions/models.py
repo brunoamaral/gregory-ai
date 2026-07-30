@@ -51,6 +51,20 @@ class Lists(models.Model):
 		),
 		verbose_name="Maximum trial age (days)",
 	)
+	article_max_age_days = models.PositiveIntegerField(
+		default=90,
+		null=True,
+		blank=True,
+		validators=[MinValueValidator(1), MaxValueValidator(3650)],
+		help_text=(
+			"Skip articles whose own published_date is older than this. Guards "
+			"against bulk imports of historical articles flooding a newsletter, "
+			"because discovery_date only records when GregoryAI first saw the "
+			"row. Articles with no published_date are always kept. Leave blank "
+			"to disable the check."
+		),
+		verbose_name="Maximum article age (days)",
+	)
 
 	# ML threshold for relevance filtering
 	ml_threshold = models.FloatField(

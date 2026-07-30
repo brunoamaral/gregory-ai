@@ -20,7 +20,7 @@ Neither of these self-heals, and both are silent from the outside.
 
 ### 1. Trial notification emails exceed Postmark's 5 MB body limit
 
-**Status: fixed in code, pending deploy.** `Lists.trial_max_age_days` (default
+**Status: fixed and deployed 2026-07-28** (CI deploys everything on `main`). `Lists.trial_max_age_days` (default
 90) filters `get_trials_for_list` against the trial's own registration/
 publication date; `Lists.trial_limit` mirrors `article_limit` and now applies
 to all three email types; `subscriptions.utils.email_limits.render_within_limit`
@@ -67,7 +67,7 @@ into a single email.
 
 ### 2. "Unsubscribe from all lists on <site>" is a silent no-op
 
-**Status: fixed in code, pending deploy.** The `scope == "site"` filter now
+**Status: fixed and deployed 2026-07-28** (CI deploys everything on `main`). The `scope == "site"` filter now
 matches `list__site_id`; the view reports how many rows were actually
 deactivated so a no-op request can no longer render success. Incident record
 in
@@ -91,7 +91,7 @@ site", so the implementation is simply reading the wrong field. It should be
 
 ### 3. Hard-bounced and suppressed recipients are retried indefinitely
 
-**Status: fixed in code, pending deploy.**
+**Status: fixed and deployed 2026-07-28** (CI deploys everything on `main`).
 `subscriptions.utils.postmark.classify_postmark_response` centralises response
 parsing (and fixes the falsy-`Response` truthiness bug in `send_admin_summary`
 along the way); a 406 now deactivates the subscriber globally via
@@ -465,10 +465,42 @@ performance clean-up.
 ## Smaller items
 
 - `send_trials_notification.py:132` never passes `organization=`, so `org_content_map` is empty and Key Takeaways never render in trial emails. The warning at `content_organizer.py:626` only fires for `weekly_summary` and `admin_summary`, so it is silent.
+
+  **Status: fixed 2026-07-29.** `send_trials_notification.py` now passes `organization=team.organization`
+  alongside the other `get_optimized_email_context` kwargs, and `trial_notification` was added to
+  `_ORG_EXPECTED_TYPES` in `content_organizer.py` so the missing-organization warning covers all three
+  email types instead of silently staying empty for this one. See
+  `subscriptions/tests/test_trial_notification_organization.py`.
+
 - `templates/emails/views.py:160` (staff preview) also omits `organization`, and ignores `article_sort_order` — it takes the newest N by date, so a relevancy-mode digest previews as something no recipient will ever receive.
+
+  **Status: fixed 2026-07-29.** The preview now routes article/trial selection through the same
+  `select_digest_articles` / `rank_and_limit_articles` (weekly digest) and `get_articles_for_list` /
+  `get_trials_for_list` (admin summary, trial notification) helpers the send commands use, extracted out
+  of `send_weekly_summary.py` for this purpose, and passes `organization=`. A relevancy-mode list now
+  previews the same article set — and the same Key Takeaways — a real send would produce. See
+  `subscriptions/tests/test_email_preview_matches_send.py`.
+
 - `admin.py:1680` hardcodes `privacy_policy_url` and `terms_url` to `""`, so those footer links disappear for announcements only.
+
+  **Status: fixed 2026-07-29.** `render_announcement_email` (in `subscriptions/utils/announcement_send.py`,
+  where this logic now lives) reads `privacy_policy_url`/`terms_url` from `custom_settings`, the same way
+  every neighbouring footer key already did — this read as an oversight, not a decision, and no reason to
+  keep them blank turned up. See `subscriptions/tests/test_announcement_legal_links.py`.
+
 - `admin.py:1932` deduplicates announcement recipients by email and attributes each to the first list encountered, so the footer unsubscribe link covers only that one list.
+
+  **Status: fixed 2026-07-29.** `send_announcement` now collects every list a subscriber matched while
+  still deduplicating to exactly one email per subscriber, and the footer renders one named "Unsubscribe
+  from &lt;list name&gt;" link per matched list via the new `unsubscribe_lists` context variable. Digests
+  are unaffected — they only ever pass `list_id`, so the single-link fallback in `footer.html` is
+  unchanged. See `subscriptions/tests/test_announcement_unsubscribe_lists.py`.
+
 - `management/commands/mark_all_as_sent.py` is `subscribers × lists × all articles` individual `get_or_create` calls, and iterates `subscriber.subscriptions.all()`, which includes lists the subscriber has opted out of.
+
+  **Status: deleted 2026-07-29.** Nothing called it — no cron entry, no other code path — and the backlog
+  use case it existed for (writing off a stuck queue by hand) is obsolete now that content rolls over
+  instead of failing sends (finding 1). Removed rather than hardened.
 
 ---
 

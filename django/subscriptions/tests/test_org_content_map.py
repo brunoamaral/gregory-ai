@@ -81,7 +81,10 @@ class OrgContentMapTest(TestCase):
 		)
 
 	def test_org_content_map_empty_no_warning_for_non_org_type(self):
-		"""Non-team paths (trial_notification, etc.) omit organization= without a warning."""
+		"""Email types outside _ORG_EXPECTED_TYPES omit organization= without a
+		warning. trial_notification used to be one of these, but now expects
+		organization= like weekly_summary/admin_summary do — see
+		test_trial_notification_organization.py."""
 		pipeline = EmailRenderingPipeline()
 		logger_name = "templates.emails.components.content_organizer"
 		import logging
@@ -90,7 +93,7 @@ class OrgContentMapTest(TestCase):
 			# Emit a dummy DEBUG so assertLogs doesn't raise on empty log output
 			logging.getLogger(logger_name).debug("sentinel")
 			context = pipeline.prepare_optimized_context(
-				email_type="trial_notification",
+				email_type="test_components",
 				articles=Articles.objects.none(),
 				organization=None,
 				site=self.site,
@@ -98,5 +101,5 @@ class OrgContentMapTest(TestCase):
 		self.assertEqual(context["org_content_map"], {})
 		self.assertFalse(
 			any("WARNING" in msg and "organization" in msg for msg in cm.output),
-			msg=f"Unexpected WARNING for trial_notification: {cm.output}",
+			msg=f"Unexpected WARNING for test_components: {cm.output}",
 		)

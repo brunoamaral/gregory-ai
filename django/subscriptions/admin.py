@@ -1163,15 +1163,16 @@ class ListsAdmin(admin.ModelAdmin):
 					"article_limit",
 					"trial_limit",
 					"trial_max_age_days",
+					"article_max_age_days",
 					"ml_threshold",
 				],
 				"description": "Configure content limits and ML prediction thresholds. The lookback window, and "
 				"the article and trial limits, all apply to weekly digest, admin summary, and trial notification "
 				"emails — content that does not fit rolls over to the next send instead of being dropped. Trial "
-				"age is checked against the trial's own registration/publication date, not when GregoryAI "
-				"discovered it, so a bulk import of old trials can't flood a newsletter. The ML threshold "
-				"determines the minimum confidence level required for ML predictions to be considered relevant. "
-				'When sort order is set to "Date", the ML threshold is not used for article selection.',
+				"and article age are each checked against their own registration/publication date, not when "
+				"GregoryAI discovered them, so a bulk import of old content can't flood a newsletter. The ML "
+				"threshold determines the minimum confidence level required for ML predictions to be considered "
+				'relevant. When sort order is set to "Date", the ML threshold is not used for article selection.',
 			},
 		),
 		(

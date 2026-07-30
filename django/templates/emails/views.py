@@ -21,6 +21,12 @@ from sitesettings.models import CustomSetting
 from subscriptions.management.commands.utils.get_credentials import (
 	build_unsubscribe_base_url,
 )
+from subscriptions.management.commands.utils.subscription import (
+	get_articles_for_list,
+	get_trials_for_list,
+	rank_and_limit_articles,
+	select_digest_articles,
+)
 from subscriptions.models import Lists, Subscribers
 from templates.emails.components.content_organizer import get_optimized_email_context
 
@@ -39,10 +45,10 @@ def _make_mock_subscriber():
 	)
 
 
-def _resolve_date_range(request):
+def _resolve_date_range(request, default_days=30):
 	"""
 	Parse GET params into (start_date, end_date).
-	Priority: explicit start/end > days param > default 30 days.
+	Priority: explicit start/end > days param > default_days.
 	"""
 	start_str = request.GET.get("start", "")
 	end_str = request.GET.get("end", "")
@@ -57,12 +63,35 @@ def _resolve_date_range(request):
 			pass
 
 	try:
-		days = int(request.GET.get("days", 30))
+		days = int(request.GET.get("days", default_days))
 	except (ValueError, TypeError):
-		days = 30
+		days = default_days
+	if days < 1:
+		days = default_days
 	end_date = timezone.now().date()
 	start_date = end_date - timedelta(days=days - 1)
 	return start_date, end_date
+
+
+def _resolve_days_to_look_back(request, list_obj):
+	"""
+	Days-back window for list-scoped selection, mirroring how the send
+	commands resolve it: an explicit `days` GET param overrides everything
+	(like each command's `--days`/CLI override), otherwise the list's own
+	`lookback_days` is used — never a hardcoded default — so a relevancy-mode
+	list previews with the same window a real send would use.
+	"""
+	days_param = request.GET.get("days")
+	if days_param:
+		try:
+			days = int(days_param)
+			if days >= 1:
+				return days
+		except (ValueError, TypeError):
+			pass
+	if list_obj is not None:
+		return list_obj.lookback_days
+	return 30
 
 
 def _get_site_and_settings(list_obj=None):
@@ -92,8 +121,6 @@ def _build_preview_context(request, template_name):
 	):
 		raise ValueError(f"Unknown template: {template_name}")
 
-	start_date, end_date = _resolve_date_range(request)
-
 	# --- Subscriber ---
 	subscriber_id = request.GET.get("subscriber_id")
 	if subscriber_id:
@@ -110,52 +137,87 @@ def _build_preview_context(request, template_name):
 	if list_id:
 		try:
 			list_obj = (
-				Lists.objects.select_related("team")
+				Lists.objects.select_related("team__organization")
 				.prefetch_related("subjects")
 				.get(pk=int(list_id))
 			)
 		except (Lists.DoesNotExist, ValueError, TypeError):
 			pass
 
+	organization = (
+		list_obj.team.organization if list_obj is not None and list_obj.team else None
+	)
+
 	# --- Site & settings ---
 	site, custom_settings = _get_site_and_settings(list_obj)
-
-	# --- Articles ---
-	article_qs = Articles.objects.filter(
-		discovery_date__date__gte=start_date,
-		discovery_date__date__lte=end_date,
-	).prefetch_related(
-		"authors", "ml_predictions__subject", "article_subject_relevances__subject"
-	)
-
-	if list_obj is not None and list_obj.subjects.exists():
-		article_qs = article_qs.filter(subjects__in=list_obj.subjects.all()).distinct()
-	else:
-		article_qs = list(article_qs.order_by("-discovery_date")[:50])
-
-	# Apply article_limit from the list, same as send_weekly_summary does pre-send
-	if list_obj is not None:
-		article_limit = getattr(list_obj, "article_limit", 15) or 15
-		article_qs = list(article_qs.order_by("-discovery_date")[:article_limit])
-
-	# --- Trials ---
-	trial_qs = Trials.objects.filter(
-		discovery_date__date__gte=start_date,
-		discovery_date__date__lte=end_date,
-	)
-	if list_obj is not None and list_obj.subjects.exists():
-		trial_limit = getattr(list_obj, "article_limit", 20) or 20
-		trial_qs = list(
-			trial_qs.filter(subjects__in=list_obj.subjects.all())
-			.distinct()
-			.order_by("-discovery_date")[:trial_limit]
-		)
-	else:
-		trial_qs = list(trial_qs.order_by("-discovery_date")[:20])
 
 	email_type = (
 		template_name if template_name != "test_components" else "weekly_summary"
 	)
+
+	# --- Articles & Trials ---
+	# Mirrors the real send path per email type — same lookback window,
+	# article_sort_order, limits, and staleness filter the command uses —
+	# rather than a generic date-range query, so a relevancy-mode list
+	# previews the same article set a real send would select. Falls back to
+	# a generic recent-content query only when no list is selected (nothing
+	# for a list-scoped query to be relative to).
+	if list_obj is not None and list_obj.subjects.exists():
+		days_to_look_back = _resolve_days_to_look_back(request, list_obj)
+		article_limit = getattr(list_obj, "article_limit", 15) or 15
+		trial_limit = getattr(list_obj, "trial_limit", 15) or 15
+
+		if email_type == "weekly_summary":
+			candidate_articles, priority_scores = select_digest_articles(
+				list_obj,
+				days_to_look_back,
+				all_articles=False,
+				threshold=list_obj.ml_threshold,
+			)
+			if candidate_articles.count() > article_limit:
+				article_qs = rank_and_limit_articles(
+					candidate_articles,
+					article_limit,
+					list_obj.article_sort_order,
+					False,
+					priority_scores,
+				)
+			else:
+				article_qs = list(candidate_articles)
+		elif email_type == "admin_summary":
+			article_qs = list(
+				get_articles_for_list(list_obj, days=days_to_look_back)
+				.prefetch_related("authors")
+				.order_by("-discovery_date")[:article_limit]
+			)
+		else:  # trial_notification carries no article content
+			article_qs = []
+
+		trial_qs = list(
+			get_trials_for_list(list_obj, days=days_to_look_back).order_by(
+				"-discovery_date"
+			)[:trial_limit]
+		)
+	else:
+		start_date, end_date = _resolve_date_range(request)
+		article_qs = list(
+			Articles.objects.filter(
+				discovery_date__date__gte=start_date,
+				discovery_date__date__lte=end_date,
+			)
+			.prefetch_related(
+				"authors",
+				"ml_predictions__subject",
+				"article_subject_relevances__subject",
+			)
+			.order_by("-discovery_date")[:50]
+		)
+		trial_qs = list(
+			Trials.objects.filter(
+				discovery_date__date__gte=start_date,
+				discovery_date__date__lte=end_date,
+			).order_by("-discovery_date")[:20]
+		)
 
 	context = get_optimized_email_context(
 		email_type=email_type,
@@ -165,6 +227,7 @@ def _build_preview_context(request, template_name):
 		list_obj=list_obj,
 		site=site,
 		custom_settings=custom_settings,
+		organization=organization,
 	)
 
 	# Inject unsubscribe footer helpers (same as management commands post-call)
