@@ -3731,7 +3731,25 @@ class StatsView(APIView):
 			if not set(org_ids).issubset(visible_org_ids):
 				raise Http404
 
-		if team_ids and visible_org_ids is not None:
+		# Team-visibility check against the requested team_ids.
+		#
+		# When ?organization= is NOT given, effective_org_ids below resolves
+		# to exactly visible_org_ids, so a standalone
+		# `Team.objects.filter(id__in=team_ids, organization_id__in=visible_org_ids)`
+		# here would be the identical predicate to the team_id_list query run
+		# a few lines down — i.e. the same SELECT executed twice. We skip it
+		# in that case and instead derive visibility from team_id_list's
+		# length once it's resolved (see below): any requested team missing
+		# from the result was invisible to the caller.
+		#
+		# When ?organization= IS given, effective_org_ids narrows to org_ids
+		# (a subset of visible_org_ids), which is NOT equivalent: a team that
+		# is visible to the caller but simply doesn't belong to the requested
+		# org(s) must yield a zero count, not a 404 (see
+		# OrgAndTeamIntersectionTest.test_team_not_in_org_returns_zero_not_404).
+		# That distinction requires the broader visible_org_ids check to run
+		# as its own query, independent of the org-narrowed scoping query.
+		if team_ids and visible_org_ids is not None and org_ids is not None:
 			visible = Team.objects.filter(
 				id__in=team_ids, organization_id__in=visible_org_ids
 			)
@@ -3760,6 +3778,18 @@ class StatsView(APIView):
 			team_id_list = list(teams_qs.values_list("id", flat=True))
 		else:
 			team_id_list = None
+
+		# Deferred team-visibility check for the common (?organization=
+		# absent) case: team_id_list above already ran the
+		# id__in=team_ids / organization_id__in=visible_org_ids predicate,
+		# so reuse its result instead of re-querying.
+		if (
+			team_ids
+			and visible_org_ids is not None
+			and org_ids is None
+			and len(team_id_list) != len(set(team_ids))
+		):
+			raise Http404
 
 		# --- Cache lookup -----------------------------------------------
 		cache_key = "stats:" + (
