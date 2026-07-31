@@ -176,11 +176,22 @@ def _resolve_site_from_request(request):
 
 
 @csrf_exempt
+@require_POST
 def subscribe_view(request):
 	# ``request.POST`` may contain multiple ``list`` values when the user
 	# checks more than one subscription option.
 	list_ids = request.POST.getlist("list")
 	subscription_lists = list(Lists.objects.filter(pk__in=list_ids)) if list_ids else []
+
+	# Non-identifying context echoed on every failure-path log line below —
+	# resolved list IDs, origin host, target site. Enough to tell "our own
+	# form is posting bad list IDs" apart from "a scraper is hitting the
+	# endpoint" without ever recording who submitted the form (no email, no
+	# name, no other field value — see the GDPR note in the module plan).
+	origin_header = request.META.get("HTTP_ORIGIN") or request.META.get(
+		"HTTP_REFERER", ""
+	)
+	origin_host = urlparse(origin_header).hostname if origin_header else None  # IPv6-safe, no port
 
 	# Derive the target site from the submitted lists so that origin validation
 	# and redirect-base calculation use the correct site's allowed_domains in
@@ -198,6 +209,12 @@ def subscribe_view(request):
 			)
 		target_site = Site.objects.get_current()
 
+	log_context = "list_ids=%s origin_host=%s target_site=%s" % (
+		list_ids,
+		origin_host,
+		target_site.domain,
+	)
+
 	# Determine redirect base before processing the form so we can redirect
 	# to the correct domain even when the form is invalid.
 	redirect_base = _get_redirect_base(request, target_site)
@@ -209,15 +226,17 @@ def subscribe_view(request):
 		if missing_ids:
 			logger.error(
 				"subscribe_view: requested list IDs %s do not exist in the database. "
-				"Check that the form is posting correct list IDs.",
+				"Check that the form is posting correct list IDs. (%s)",
 				missing_ids,
+				log_context,
 			)
 			return HttpResponseRedirect(f"{redirect_base}/error/")
 	else:
 		# No list selected at all — nothing to subscribe to.
 		logger.error(
 			"subscribe_view: no list IDs submitted. "
-			"The form must include at least one 'list' field value.",
+			"The form must include at least one 'list' field value. (%s)",
+			log_context,
 		)
 		return HttpResponseRedirect(f"{redirect_base}/error/")
 
@@ -225,16 +244,12 @@ def subscribe_view(request):
 	# target site's CustomSetting.allowed_domains (or the site's own domain).
 	# If no Origin/Referer header is present (e.g. server-side or API usage)
 	# the request is allowed through with a warning.
-	origin_header = request.META.get("HTTP_ORIGIN") or request.META.get(
-		"HTTP_REFERER", ""
-	)
 	if origin_header:
-		parsed_origin = urlparse(origin_header)
-		origin_host = parsed_origin.hostname  # IPv6-safe, no port
 		if origin_host and not _check_origin_allowed(origin_host, target_site):
 			logger.warning(
-				"subscribe_view: request from unauthorized origin '%s' rejected.",
+				"subscribe_view: request from unauthorized origin '%s' rejected. (%s)",
 				origin_host,
+				log_context,
 			)
 			accept_header = request.META.get("HTTP_ACCEPT", "")
 			is_ajax = request.META.get("HTTP_X_REQUESTED_WITH") == "XMLHttpRequest"
@@ -244,7 +259,8 @@ def subscribe_view(request):
 	else:
 		logger.warning(
 			"subscribe_view: no Origin or Referer header present; "
-			"site attribution may be inaccurate."
+			"site attribution may be inaccurate. (%s)",
+			log_context,
 		)
 
 	subscriber_form = SubscribersForm(request.POST)
@@ -312,12 +328,30 @@ def subscribe_view(request):
 			return HttpResponseRedirect(f"{redirect_base}/thank-you/")
 
 		except Exception as e:
-			logger.error(f"Subscription error: {e}")
+			# exc_info=True is what makes this actionable: the message alone
+			# (e.g. "duplicate key value violates ...") rarely says where in
+			# the save path it happened. Compare the API's catch-all at
+			# django/api/views.py:875, which also emits a full traceback.
+			logger.error(
+				"Subscription error: %s (%s)",
+				e,
+				log_context,
+				exc_info=True,
+			)
 			return HttpResponseRedirect(f"{redirect_base}/error/")
 
 	else:
-		logger.error("Form is invalid.")
-		logger.error(subscriber_form.errors)
+		# One emission, not two: under concurrent traffic, a separate
+		# "Form is invalid." line and a separate form.errors line interleave
+		# with other requests' log output and can't be reliably paired back
+		# together. Log only the failed *field names* — never
+		# subscriber_form.errors' values or subscriber_form.data, which would
+		# put submitted PII (e.g. the attempted email) into the log.
+		logger.error(
+			"subscribe_view: form invalid, failed fields=%s (%s)",
+			sorted(subscriber_form.errors.keys()),
+			log_context,
+		)
 		return HttpResponseRedirect(f"{redirect_base}/error/")
 
 
