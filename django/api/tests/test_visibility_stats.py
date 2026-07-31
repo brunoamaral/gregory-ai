@@ -441,16 +441,18 @@ class StatsQueryCountTest(StatsVisibilityBase):
 		"""
 		A team-scoped /stats/ call must stay within a small query budget.
 
-		Budget breakdown (cold cache, 8 queries with the test suite's
+		Budget breakdown (cold cache, 7 queries with the test suite's
 		LocMemCache — CACHES in admin.settings_test — which never touches
 		the DB; production's DatabaseCache adds a cache GET/SET pair plus a
 		cull COUNT and SAVEPOINT/RELEASE, hence the generous <=15 ceiling):
 		  1 — VisibleOrgMiddleware: OrganizationApiSettings lookup
-		  1 — team visibility check (Team.objects.filter COUNT)
-		  1 — resolve team_id_list (Team VALUES)
+		  1 — resolve team_id_list (Team VALUES) — doubles as the
+		      team-visibility check when ?organization= is absent, since
+		      that predicate is identical to a standalone visibility query
+		      (see StatsView.get); no separate COUNT is issued
 		  4 — articles, trials, authors, subscribers COUNT DISTINCT
 		  1 — sources VALUES
-		= 8 queries.
+		= 7 queries.
 		"""
 		from django.db import connection
 		from django.test.utils import CaptureQueriesContext
@@ -465,10 +467,23 @@ class StatsQueryCountTest(StatsVisibilityBase):
 
 	def test_cached_call_query_budget(self):
 		"""A cache-warm call must issue far fewer queries than a cold one."""
+		from django.db import connection
+		from django.test.utils import CaptureQueriesContext
+
 		self.client.get("/stats/", {"team": self.pub_team.id})  # warm the cache
-		# 3, not 4: the test suite's LocMemCache backend answers cache GET
-		# in-process, issuing no SQL (unlike production's DatabaseCache).
-		with self.assertNumQueries(
-			3, msg="Cache hit should eliminate the count queries"
-		):
+		with CaptureQueriesContext(connection) as ctx:
 			self.client.get("/stats/", {"team": self.pub_team.id})
+		# <=3, not a pinned exact count: OrganizationApiSettings lookup (1)
+		# + team_id_list resolution, which also serves as the
+		# team-visibility check (1) + cache GET (0 or 1 depending on
+		# backend). LocMemCache (admin.settings_test, what CI's pytest run
+		# uses) answers GET in-process with no SQL, landing at 2;
+		# DatabaseCache backends (production, and admin.settings's default
+		# used when this test is invoked via `manage.py test` instead of
+		# pytest) add one SQL round-trip for the GET, landing at 3. Either
+		# way this must stay far below the cold-cache budget above.
+		self.assertLessEqual(
+			len(ctx.captured_queries),
+			3,
+			msg=f"Cache hit should eliminate the count queries: {len(ctx.captured_queries)} queries",
+		)
