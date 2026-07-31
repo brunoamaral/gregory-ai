@@ -67,6 +67,8 @@ Embed an HTML form that POSTs to `/subscriptions/new/`:
 
 On success the user is redirected to `/thank-you/` on your domain. For this to work, add your domain to the **Allowed Domains** field of the target list in the Django admin (**Subscriptions → Lists**).
 
+The endpoint is POST-only — opening the action URL in a browser returns `405 Method Not Allowed` with an `Allow: POST` header. That is expected, not a misconfiguration: test the form by submitting it, not by visiting the URL.
+
 Reference: [subscriptions.md](subscriptions.md), [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md)
 
 ---
