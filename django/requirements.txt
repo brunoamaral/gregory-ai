@@ -26,7 +26,7 @@ django-extensions==4.1
 django-filter>=25.1
 django-organizations==2.5.0
 django-simple-history==3.8.0
-djangorestframework==3.16.0
+djangorestframework==3.17.1
 djangorestframework-csv==3.0.2
 djangorestframework_simplejwt==5.5.0
 feedparser==6.0.11
