@@ -79,8 +79,12 @@ class APIAccessSchemeLog(models.Model):
 		max_length=200, blank=False, null=False, default="GET /"
 	)
 
-	# The IP address of the client call
-	ip_addr = models.CharField(max_length=20, blank=True, null=True)
+	# The IP address of the client call. 45 chars covers IPv6 in the longest
+	# valid form (IPv4-mapped, e.g. ::ffff:255.255.255.255 padded out).
+	# Deliberately a permissive CharField, not GenericIPAddressField: the value
+	# comes from the client-controlled X-Forwarded-For header, and this audit
+	# log must record what was actually sent rather than reject it.
+	ip_addr = models.CharField(max_length=45, blank=True, null=True)
 
 	# The API Access Scheme that this log refers to
 	api_access_scheme = models.ForeignKey(

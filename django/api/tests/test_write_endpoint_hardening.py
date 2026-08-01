@@ -29,6 +29,7 @@ from organizations.models import Organization
 
 from api.models import APIAccessScheme, APIAccessSchemeLog
 from api.utils.responses import ARTICLE_EXISTS, INVALID_JSON
+from api.views import generateAccessSchemeLog
 from gregory.models import (
 	Articles,
 	Sources,
@@ -243,6 +244,158 @@ class OversizedLogFieldsTest(TestCase):
 		self.assertEqual(log.http_code, 400)
 		self.assertIsNotNone(log.error_message)
 		self.assertLessEqual(len(log.error_message), 499)
+
+
+# ---------------------------------------------------------------------------
+# ip_addr widening (varchar(20) -> varchar(45)) + defensive truncation in
+# generateAccessSchemeLog. See docs/api-log-and-subscribe-hardening-plan.md,
+# "Fix 1".
+# ---------------------------------------------------------------------------
+
+
+class IpAddrTruncationTest(TestCase):
+	def setUp(self):
+		self.org = _make_org("IPAddr Org", "hardening-ipaddr-org")
+		self.scheme = _make_scheme(self.org, "hardening-ipaddr-key")
+
+	def test_ipv6_client_address_is_logged(self):
+		"""A full 39-char IPv6 address must round-trip into ip_addr intact.
+		This fails on unfixed code: varchar(20) is too narrow to hold it, the
+		INSERT raises StringDataRightTruncation, the try/except in
+		generateAccessSchemeLog swallows it, and no row is written."""
+		ipv6 = "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+		self.assertEqual(len(ipv6), 39)
+
+		generateAccessSchemeLog(
+			"GET /articles/", ipv6, self.scheme, 200, None, "{}"
+		)
+
+		log = APIAccessSchemeLog.objects.filter(
+			api_access_scheme=self.scheme
+		).latest("access_date")
+		self.assertEqual(log.ip_addr, ipv6)
+
+	def test_oversized_forwarded_for_still_writes_row(self):
+		"""A 200-char junk X-Forwarded-For value (spoofed/malformed header)
+		must still produce a log row, with ip_addr truncated to fit the
+		column rather than dropping the row entirely."""
+		junk_ip = "1" * 200
+
+		generateAccessSchemeLog(
+			"GET /articles/", junk_ip, self.scheme, 200, None, "{}"
+		)
+
+		log = APIAccessSchemeLog.objects.filter(
+			api_access_scheme=self.scheme
+		).latest("access_date")
+		self.assertIsNotNone(log.ip_addr)
+		self.assertLessEqual(len(log.ip_addr), 45)
+
+	def test_oversized_call_type_still_writes_row(self):
+		"""Same failure shape as ip_addr, via an overlong request path
+		(call_type = request.method + " " + request.path)."""
+		junk_call_type = "GET /" + ("a" * 300)
+
+		generateAccessSchemeLog(
+			junk_call_type, "127.0.0.1", self.scheme, 200, None, "{}"
+		)
+
+		log = APIAccessSchemeLog.objects.filter(
+			api_access_scheme=self.scheme
+		).latest("access_date")
+		self.assertIsNotNone(log.call_type)
+		self.assertLessEqual(len(log.call_type), 200)
+
+
+# ---------------------------------------------------------------------------
+# A failed audit write must not lose the request. See
+# docs/api-log-and-subscribe-hardening-plan.md, "Fix 3".
+# ---------------------------------------------------------------------------
+
+
+class FailedAuditWriteFallbackTest(TestCase):
+	def setUp(self):
+		self.org = _make_org("Fallback Org", "hardening-fallback-org")
+		self.scheme = _make_scheme(self.org, "hardening-fallback-key")
+
+	def test_failed_write_falls_back_to_minimal_row(self):
+		"""If the full-row save() raises, a minimal row (no payload) must
+		still land with the correct call_type/ip_addr/http_code."""
+		original_save = APIAccessSchemeLog.save
+		calls = {"n": 0}
+
+		def flaky_save(self, *args, **kwargs):
+			calls["n"] += 1
+			if calls["n"] == 1:
+				raise IntegrityError("stub failure")
+			return original_save(self, *args, **kwargs)
+
+		with patch.object(APIAccessSchemeLog, "save", new=flaky_save):
+			generateAccessSchemeLog(
+				"POST /articles/post/",
+				"127.0.0.1",
+				self.scheme,
+				200,
+				None,
+				"x" * 3000,
+			)
+
+		log = APIAccessSchemeLog.objects.filter(
+			api_access_scheme=self.scheme
+		).latest("access_date")
+		self.assertEqual(log.call_type, "POST /articles/post/")
+		self.assertEqual(log.ip_addr, "127.0.0.1")
+		self.assertEqual(log.http_code, 200)
+		self.assertIsNone(log.payload_received)
+		self.assertEqual(
+			log.error_message, "[payload dropped after write failure]"
+		)
+
+	def test_failed_write_logs_request_context(self):
+		"""The ERROR line logged on a failed write must carry enough to
+		identify the request (call type, http code) — and must NOT echo the
+		submitted payload. That payload is already persisted to the
+		payload_received DB column; application logs have looser access
+		control/retention, so it must not be duplicated there. This is a
+		privacy regression test, not a formatting one — do not relax it into
+		an assertion about log wording."""
+		secret_payload = "super-secret-payload-marker-should-not-be-logged"
+
+		with patch.object(
+			APIAccessSchemeLog, "save", side_effect=Exception("boom")
+		):
+			with self.assertLogs("api.views", level="ERROR") as captured:
+				generateAccessSchemeLog(
+					"POST /articles/post/",
+					"127.0.0.1",
+					self.scheme,
+					500,
+					"some error",
+					secret_payload,
+				)
+
+		joined = "\n".join(captured.output)
+		self.assertIn("POST /articles/post/", joined)
+		self.assertIn("500", joined)
+		self.assertNotIn(secret_payload, joined)
+
+	def test_total_failure_still_returns_normally(self):
+		"""If both the full-row save and the minimal-row fallback raise,
+		generateAccessSchemeLog must still return without propagating — the
+		invariant from PR #752 must survive this restructure."""
+		with patch.object(
+			APIAccessSchemeLog, "save", side_effect=Exception("boom")
+		):
+			result = generateAccessSchemeLog(
+				"POST /articles/post/",
+				"127.0.0.1",
+				self.scheme,
+				500,
+				"some error",
+				"{}",
+			)
+
+		self.assertIsNone(result)
 
 
 # ---------------------------------------------------------------------------
