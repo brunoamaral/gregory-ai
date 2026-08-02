@@ -57,9 +57,6 @@ walkthrough (read in order); everything else is reference or design material.
 | [subscriptions-p1-fix-plan.md](subscriptions-p1-fix-plan.md) | Execution plan for the P1 findings — content organizer correctness. |
 | [subscriptions-p2-fix-plan.md](subscriptions-p2-fix-plan.md) | Execution plan for the P2 findings — robustness, mainly announcement sending. |
 | [subscriptions-p3-fix-plan.md](subscriptions-p3-fix-plan.md) | Execution plan for the P3 findings — performance, plus the announcement confirm-count fix. |
-| [subscriptions-remaining-work.md](subscriptions-remaining-work.md) | What was deliberately left out of P0–P3 — latent traps and known gaps, with the decisions each needs. |
-| [subscriptions-cleanup-plan.md](subscriptions-cleanup-plan.md) | Ready-to-go cleanup items from the remaining-work list — no open decisions. |
-| [subscriptions-bounce-webhook-plan.md](subscriptions-bounce-webhook-plan.md) | Plan for the Postmark webhook — proactive suppression and reactivation. |
 | [merge-authors-command.md](merge-authors-command.md) | The author-merge management command. |
 | [lint-triage.md](lint-triage.md) | Ruff lint-gate worklist. |
 
