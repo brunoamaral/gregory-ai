@@ -394,3 +394,66 @@ docker exec gregory python manage.py shell -c "from django.test import Client; c
    §4.5: if the authors query holds under half a second, leave it always-on.
 
 Everything else is settled; §2 has the decisions and their reasons.
+
+## 8 — Post-review fixes (PR #823)
+
+Copilot's automated review and a follow-up manual review each caught issues after
+the initial implementation landed on the PR branch. All are fixed on the same
+branch, verified against the full test suite, and folded in here.
+
+**Copilot review:**
+- The `?subject=` 404-existence check ran even when `visible_org_ids` is `None`
+  (middleware bypassed — management commands, tests). Gated it on
+  `visible_org_ids is not None`, matching how `?team=`/`?organization=` already
+  behave in that case (§4.2 above already assumed this; the implementation
+  didn't match it).
+
+**Manual review — two correctness bugs, both wrong-number bugs on the primary
+path, neither caught by the original test suite:**
+
+- **Authors count.** Chaining `.filter(articles__teams__in=...)` then
+  `.filter(articles__subjects__in=...)` on `Authors` re-joins `Authors->Articles`
+  per call, so an author with one article in the team and an unrelated article
+  carrying the subject was wrongly counted. Fixed with a correlated `Exists`
+  subquery that pins both predicates to the *same* article — also faster
+  (dev-measured ~1.2s → ~0.1s for the same result, since it drops the
+  `authors ⋈ articles ⋈ ...` fan-out and the `DISTINCT` it required). Regression
+  test: `SubjectCountCorrectnessTest.test_authors_count_requires_same_article`.
+- **Subscribers count.** Same shape of bug, one level removed: two chained
+  `.filter()` calls let the team predicate land on one `Lists` row and the
+  subject predicate on a different one for the same subscriber. Fixed by
+  collapsing both predicates into one `.filter(**kwargs)` call, forcing a single
+  join. Regression test:
+  `SubjectCountCorrectnessTest.test_subscribers_count_requires_same_list`.
+- Articles, trials, and the `by_subject` group-bys were **not** affected — their
+  team and subject predicates already hang off the same `Articles`/`Trials` row
+  or the same through-table row, so a second chained `.filter()` still
+  constrains that one row.
+
+**Caching — `by_subject` gets a second cache layer.** The per-subject
+`articles`/`trials`/`authors` numbers are identical regardless of which *other*
+subjects were requested alongside them, so they're now cached per
+`(team scope, subject)` (key `stats:subjrow:<team part>:<subject id>`, same TTL),
+independent of the whole-payload cache (`stats:<team part>:subj:<requested
+subjects>`). A payload-cache miss reuses whatever subject rows are already warm
+and computes only the missing ones via `cache.get_many()`/`cache.set_many()`.
+`sources` and `subject_name` stay out of the cached row (both come for free from
+data the call already fetches) so they're never stale. The tradeoff: `by_subject`
+can now lag the top-level totals by up to `STATS_CACHE_TTL` if the payload cache
+expires before a warm subject row does — documented in
+`docs/03-api-and-rss-feeds.md`'s caching section, and pinned by
+`BySubjectRowCacheTest.test_row_cache_survives_layer1_miss`.
+
+One measured wrinkle: production's `DatabaseCache` backend doesn't bulk-optimize
+`set_many()` (it loops individual `set()` calls, each its own transaction — cull
+check, `BEGIN`, existence `SELECT`, `INSERT`/`UPDATE`, `COMMIT`), so a cold call
+against a team with many subjects costs more SQL round-trips on `manage.py test`
+than the original `<=18` query-budget ceiling assumed. `StatsQueryCountTest.
+test_subject_scoped_call_query_budget` measures this directly (23-24 queries for
+one missing subject row under `DatabaseCache`; unaffected — still `<=18` — under
+the `LocMemCache` that CI's pytest run uses) and carries its own, higher ceiling
+rather than loosening the original test's.
+
+Verification: `docker exec gregory python manage.py test api.tests.test_visibility_stats`
+(58 tests) and the full suite (2519 tests) both pass, under both `manage.py test`
+and `pytest`.

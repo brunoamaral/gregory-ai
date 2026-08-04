@@ -388,6 +388,8 @@ When both `organization` and `team` are given the effective scope is their **int
 
 Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using Django's database cache. All gunicorn workers share the same cached value. The cache key encodes both the resolved set of in-scope team IDs and the requested `subject` IDs, so different filter combinations — including the same team with and without a subject filter — are cached independently.
 
+`by_subject` has a second, finer-grained cache layer underneath the whole-payload one: each subject's `articles`/`trials`/`authors` numbers are cached per `(team scope, subject)`, independently of which *other* subjects were requested alongside it. A `?subject=` combination that's new but overlaps a team scope seen before reuses whatever rows are already warm and only computes the missing ones — so, unlike the totals, `by_subject`'s numbers can be up to `STATS_CACHE_TTL` older than the rest of the payload if the whole-payload entry happens to expire before the per-subject one does. `sources` and `subject_name` are excluded from that layer (recomputed from data the call already fetches for the totals) and are therefore always current.
+
 ### Trials-specific filter parameters
 
 | Parameter | Description |

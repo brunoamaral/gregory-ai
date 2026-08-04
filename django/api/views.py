@@ -3907,13 +3907,17 @@ class StatsView(APIView):
 		apply_subject = effective_subject_ids is not None
 
 		# --- Cache lookup -----------------------------------------------
+		# team_part is also the namespace for the per-subject-row cache
+		# (layer 2, see the by_subject facet below) — reused as-is so a row
+		# computed under one team scope is never served under another.
+		team_part = (
+			"all"
+			if team_id_list is None
+			else ",".join(str(i) for i in sorted(team_id_list))
+		)
 		cache_key = (
 			"stats:"
-			+ (
-				"all"
-				if team_id_list is None
-				else ",".join(str(i) for i in sorted(team_id_list))
-			)
+			+ team_part
 			+ ":subj:"
 			+ (
 				"all"
@@ -3933,10 +3937,13 @@ class StatsView(APIView):
 			subscribers_count = Subscribers.objects.filter(active=True).count()
 			sources_qs = Sources.objects.all()
 		else:
-			# .values(pk).distinct().count() instead of .distinct().count():
+			# .order_by().values(pk).distinct().count() instead of .distinct().count():
 			# the latter runs DISTINCT over every column (incl. Authors.biography,
 			# a free-text field), forcing Postgres to dedupe full rows across the
-			# join instead of just primary keys — ~5x slower at prod scale.
+			# join instead of just primary keys — ~5x slower at prod scale. The
+			# .order_by() clears Meta.ordering (Articles orders by -discovery_date
+			# by default), which would otherwise sneak a second column into the
+			# DISTINCT and defeat the point.
 			#
 			# The team join is kept even when only ?subject= is given: an
 			# article belonging solely to a non-visible team could carry a
@@ -3947,35 +3954,55 @@ class StatsView(APIView):
 				articles_qs = articles_qs.filter(teams__in=team_id_list)
 			if apply_subject:
 				articles_qs = articles_qs.filter(subjects__in=effective_subject_ids)
-			articles_count = articles_qs.values("article_id").distinct().count()
+			articles_count = (
+				articles_qs.order_by().values("article_id").distinct().count()
+			)
 
 			trials_qs = Trials.objects.all()
 			if team_id_list is not None:
 				trials_qs = trials_qs.filter(teams__in=team_id_list)
 			if apply_subject:
 				trials_qs = trials_qs.filter(subjects__in=effective_subject_ids)
-			trials_count = trials_qs.values("trial_id").distinct().count()
+			trials_count = (
+				trials_qs.order_by().values("trial_id").distinct().count()
+			)
 
+			# Exists/OuterRef, not chained .filter() calls: Authors has no direct
+			# team/subject columns, so team and subject can only be pinned to the
+			# SAME article via a correlated subquery. Two chained
+			# .filter(articles__teams__in=...).filter(articles__subjects__in=...)
+			# calls each re-join Authors->Articles independently, so an author
+			# with one article in the team and an unrelated article carrying the
+			# subject would be counted — wrong. This also drops the DISTINCT
+			# entirely (Exists is a boolean per author, not a fan-out join).
 			authors_qs = Authors.objects.all()
-			if team_id_list is not None:
-				authors_qs = authors_qs.filter(articles__teams__in=team_id_list)
-			if apply_subject:
-				authors_qs = authors_qs.filter(
-					articles__subjects__in=effective_subject_ids
-				)
-			authors_count = authors_qs.values("author_id").distinct().count()
+			if team_id_list is not None or apply_subject:
+				article_match = Articles.objects.filter(authors=OuterRef("pk"))
+				if team_id_list is not None:
+					article_match = article_match.filter(teams__in=team_id_list)
+				if apply_subject:
+					article_match = article_match.filter(
+						subjects__in=effective_subject_ids
+					)
+				authors_qs = authors_qs.filter(Exists(article_match))
+			authors_count = authors_qs.count()
 
-			subscribers_qs = Subscribers.objects.filter(active=True)
+			# A single filter() call, not chained ones: Subscribers reaches both
+			# team and subject through the same subscriptions (Lists) relation,
+			# so both predicates must land on one filter() call to force a single
+			# join — a subscriber on List A (team T, no subject) and List B
+			# (other team, this subject) must NOT count for ?team=T&subject=S.
+			sub_filters = {"active": True}
 			if team_id_list is not None:
-				subscribers_qs = subscribers_qs.filter(
-					subscriptions__team__in=team_id_list
-				)
+				sub_filters["subscriptions__team__in"] = team_id_list
 			if apply_subject:
-				subscribers_qs = subscribers_qs.filter(
-					subscriptions__subjects__in=effective_subject_ids
-				)
+				sub_filters["subscriptions__subjects__in"] = effective_subject_ids
 			subscribers_count = (
-				subscribers_qs.values("subscriber_id").distinct().count()
+				Subscribers.objects.filter(**sub_filters)
+				.order_by()
+				.values("subscriber_id")
+				.distinct()
+				.count()
 			)
 
 			# Sources has a direct FK to Team and to Subject — no distinct needed.
@@ -4017,21 +4044,48 @@ class StatsView(APIView):
 		)
 
 		# --- by_subject facet --------------------------------------------
+		# Per-(team scope, subject) row cache (layer 2), separate from the
+		# whole-payload cache (layer 1, keyed by cache_key above): the same
+		# row is identical no matter which OTHER subjects were requested
+		# alongside it, so a warm row is reused across every ?subject=
+		# combination over the same team scope instead of being recomputed
+		# per combination. `sources` and `subject_name` are deliberately
+		# left out of the cached value — both come for free from data this
+		# call already fetched (subject_domains / the roster), so caching
+		# them would only add a staleness surface for no gain.
 		by_subject = []
 		if by_subject_roster:
-			roster_ids = [s["id"] for s in by_subject_roster]
-			subj_articles = self._subject_counts(Articles, roster_ids, team_id_list)
-			subj_trials = self._subject_counts(Trials, roster_ids, team_id_list)
-			subj_authors = self._subject_counts(
-				Articles, roster_ids, team_id_list, count_field="articles__authors"
-			)
+			row_keys = {
+				s["id"]: f"stats:subjrow:{team_part}:{s['id']}"
+				for s in by_subject_roster
+			}
+			cached_rows = cache.get_many(list(row_keys.values()))
+			missing_ids = [
+				sid for sid, key in row_keys.items() if key not in cached_rows
+			]
+
+			if missing_ids:
+				subj_articles = self._subject_counts(Articles, missing_ids, team_id_list)
+				subj_trials = self._subject_counts(Trials, missing_ids, team_id_list)
+				subj_authors = self._subject_counts(
+					Articles, missing_ids, team_id_list, count_field="articles__authors"
+				)
+				fresh_rows = {
+					row_keys[sid]: {
+						"articles": subj_articles.get(sid, 0),
+						"trials": subj_trials.get(sid, 0),
+						"authors": subj_authors.get(sid, 0),
+					}
+					for sid in missing_ids
+				}
+				cache.set_many(fresh_rows, settings.STATS_CACHE_TTL)
+				cached_rows.update(fresh_rows)
+
 			by_subject = [
 				{
 					"subject_id": s["id"],
 					"subject_name": s["subject_name"],
-					"articles": subj_articles.get(s["id"], 0),
-					"trials": subj_trials.get(s["id"], 0),
-					"authors": subj_authors.get(s["id"], 0),
+					**cached_rows[row_keys[s["id"]]],
 					"sources": len(subject_domains.get(s["id"], ())),
 				}
 				for s in by_subject_roster

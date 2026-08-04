@@ -499,6 +499,51 @@ class StatsQueryCountTest(StatsVisibilityBase):
 			msg=f"Cache hit should eliminate the count queries: {len(ctx.captured_queries)} queries",
 		)
 
+	def test_subject_scoped_call_query_budget(self):
+		"""
+		A call whose scope actually contains a subject exercises the
+		by_subject group-bys (skipped, and therefore untested, by
+		test_scoped_call_query_budget above — that fixture has no subjects).
+
+		Budget breakdown (cold cache, both cache layers empty):
+		  11 — the 8 from test_scoped_call_query_budget, plus 3 group-bys
+		       (articles/trials/authors) for the one missing by_subject row
+		       — see StatsView.get's by_subject block.
+		Under LocMemCache (admin.settings_test, what CI's pytest run uses)
+		get_many()/set_many() issue no SQL, so this test's real ceiling there
+		is the same <=18 as the other budget tests, and it holds. But under
+		`manage.py test`'s default DatabaseCache (admin.settings — what this
+		test measures when run outside pytest), every individual set() —
+		including each item set_many() loops over, since DatabaseCache
+		doesn't bulk-optimize writes — is its own transaction: a cull-check
+		COUNT, BEGIN, an existence SELECT, an INSERT/UPDATE, COMMIT (5
+		queries). This call makes two separate writes (the one by_subject
+		row, plus the whole-payload cache.set() at the end), so DatabaseCache
+		adds roughly 2 reads + 2*5 writes = 12 queries on top of the 11 core
+		ones — measured at 23-24. Ceiling set well above that measured
+		number, not derived from it, so a real regression still trips it.
+		"""
+		from django.core.cache import cache as django_cache
+		from django.db import connection
+		from django.test.utils import CaptureQueriesContext
+		from gregory.models import Subject
+
+		subject = Subject.objects.create(
+			team=self.pub_team, subject_name="Budget Subject", subject_slug="budget-subject"
+		)
+		self.art_pub.subjects.add(subject)
+		django_cache.clear()
+
+		with CaptureQueriesContext(connection) as ctx:
+			self.client.get(
+				"/stats/", {"team": self.pub_team.id, "subject": subject.id}
+			)
+		self.assertLessEqual(
+			len(ctx.captured_queries),
+			30,
+			msg=f"StatsView exceeded the query budget: {len(ctx.captured_queries)} queries",
+		)
+
 
 # ---------------------------------------------------------------------------
 # ?subject= filtering and by_subject facet
@@ -846,3 +891,200 @@ class BySubjectFacetTest(StatsVisibilityBase):
 		resp = self.client.get("/stats/", {"team": self.my_team.id})
 		for row in resp.data["by_subject"]:
 			self.assertNotIn("subscribers", row)
+
+
+# ---------------------------------------------------------------------------
+# Correctness regressions: team/subject must pin to the SAME row, not just
+# co-occur somewhere in the caller's data (PR #823 review findings).
+# ---------------------------------------------------------------------------
+
+
+class SubjectCountCorrectnessTest(SubjectStatsBase):
+	"""Chained .filter() calls on a multi-valued relation can silently mix
+	rows from two different related objects. These pin the fix.
+	"""
+
+	def test_authors_count_requires_same_article(self):
+		"""An author must have ONE article satisfying both team and subject.
+
+		Before the fix, chaining .filter(articles__teams__in=...).filter(
+		articles__subjects__in=...) re-joins Authors->Articles per call, so an
+		author with one article in the team and an unrelated article carrying
+		the subject was wrongly counted.
+		"""
+		other_team = _make_team(self.pub_org, "Other Team CC")
+		author = Authors.objects.create(given_name="Same", family_name="Article")
+
+		art_team_only = _make_article(
+			"Team Only", "https://cc.ex/team-only", teams=[self.my_team]
+		)
+		art_team_only.authors.add(author)
+
+		art_subject_only = _make_article(
+			"Subject Only",
+			"https://cc.ex/subject-only",
+			teams=[other_team],
+			subjects=[self.subj_a],
+		)
+		art_subject_only.authors.add(author)
+
+		resp = self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["authors"], 0)
+
+	def test_subscribers_count_requires_same_list(self):
+		"""A subscriber must be on ONE list satisfying both team and subject.
+
+		Before the fix, .filter(subscriptions__team__in=...).filter(
+		subscriptions__subjects__in=...) let a subscriber on List A (this
+		team, no subjects) and List B (a different team, this subject) count
+		— two different lists satisfying one predicate each.
+		"""
+		other_team = _make_team(self.pub_org, "Other Team Sub CC")
+		list_team_only = Lists.objects.create(
+			list_name="Team Only List", team=self.my_team
+		)
+		list_subject_only = Lists.objects.create(
+			list_name="Subject Only List", team=other_team
+		)
+		list_subject_only.subjects.add(self.subj_a)
+
+		cross_subscriber = Subscribers.objects.create(
+			first_name="Cross",
+			last_name="List",
+			email="crosslist-cc@example.com",
+			active=True,
+		)
+		cross_subscriber.subscriptions.add(list_team_only, list_subject_only)
+
+		resp = self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)
+		self.assertEqual(resp.status_code, 200)
+		# sub_a (base fixture, on list_a: team=my_team, subject=subj_a) is the
+		# only subscriber that should count; cross_subscriber satisfies team
+		# and subject via two DIFFERENT lists and must not add a second.
+		self.assertEqual(resp.data["subscribers"], 1)
+
+
+# ---------------------------------------------------------------------------
+# by_subject two-layer cache (PR #823 review, fix 3)
+# ---------------------------------------------------------------------------
+
+
+class BySubjectRowCacheTest(SubjectStatsBase):
+	"""Per-(team scope, subject) row cache, separate from the whole-payload
+	cache: a row computed for one ?subject= combination must be reused by
+	every other combination over the same team scope.
+	"""
+
+	def test_rows_reused_across_subject_filters(self):
+		"""A layer-1 miss must not re-run the by_subject group-by queries
+		when the layer-2 rows for the roster are already warm.
+		"""
+		from django.core.cache import cache as django_cache
+		from django.db import connection
+		from django.test.utils import CaptureQueriesContext
+
+		self.client.get("/stats/", {"team": self.my_team.id})  # warms both layers
+
+		layer1_key = f"stats:{self.my_team.id}:subj:all"
+		django_cache.delete(layer1_key)
+
+		through_table = Articles.subjects.through._meta.db_table
+
+		with CaptureQueriesContext(connection) as ctx:
+			self.client.get(
+				"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+			)
+
+		group_by_queries = [
+			q
+			for q in ctx.captured_queries
+			if through_table in q["sql"] and "GROUP BY" in q["sql"].upper()
+		]
+		self.assertEqual(
+			group_by_queries,
+			[],
+			msg="by_subject group-by re-ran despite warm layer-2 rows",
+		)
+
+	def test_row_cache_key_differs_by_team_scope(self):
+		"""The same subject under two different team scopes must not share
+		a row — team_part namespaces the layer-2 key.
+		"""
+		from django.core.cache import cache as django_cache
+
+		wide_team = _make_team(self.my_org, "Wide Team CC")
+		_make_article(
+			"Wide Team Art",
+			"https://cc.ex/wide-team-art",
+			teams=[wide_team],
+			subjects=[self.subj_a],
+		)
+
+		self.client.get("/stats/", {"team": self.my_team.id})
+		self.client.get(
+			"/stats/", {"team": f"{self.my_team.id},{wide_team.id}"}
+		)
+
+		narrow_key = f"stats:subjrow:{self.my_team.id}:{self.subj_a.id}"
+		wide_team_part = ",".join(str(i) for i in sorted([self.my_team.id, wide_team.id]))
+		wide_key = f"stats:subjrow:{wide_team_part}:{self.subj_a.id}"
+
+		narrow_row = django_cache.get(narrow_key)
+		wide_row = django_cache.get(wide_key)
+		self.assertIsNotNone(narrow_row)
+		self.assertIsNotNone(wide_row)
+		# my_team alone only has art_mine tagged with subj_a; the wider
+		# scope also picks up the new wide_team article.
+		self.assertEqual(narrow_row["articles"], 1)
+		self.assertEqual(wide_row["articles"], 2)
+
+	def test_renamed_subject_reflected_without_ttl_wait(self):
+		"""subject_name comes from the roster query, not the cached row."""
+		from django.core.cache import cache as django_cache
+
+		self.client.get("/stats/", {"team": self.my_team.id})  # warms layer 2
+
+		self.subj_a.subject_name = "Renamed Subject A"
+		self.subj_a.save(update_fields=["subject_name"])
+
+		django_cache.delete(f"stats:{self.my_team.id}:subj:all")  # layer-1 only
+
+		resp = self.client.get("/stats/", {"team": self.my_team.id})
+		row = next(r for r in resp.data["by_subject"] if r["subject_id"] == self.subj_a.id)
+		self.assertEqual(row["subject_name"], "Renamed Subject A")
+
+	def test_row_cache_survives_layer1_miss(self):
+		"""Documents the staleness contract: a layer-1 miss can pick up a
+		still-warm layer-2 row, so by_subject can lag the top-level totals
+		by up to STATS_CACHE_TTL. Pinned so a future change to this is
+		deliberate, not accidental.
+		"""
+		from django.core.cache import cache as django_cache
+
+		self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)  # warms both layers
+
+		_make_article(
+			"New After Warm",
+			"https://cc.ex/new-after-warm",
+			teams=[self.my_team],
+			subjects=[self.subj_a],
+		)
+
+		django_cache.delete(f"stats:{self.my_team.id}:subj:{self.subj_a.id}")
+
+		resp = self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)
+		row = next(r for r in resp.data["by_subject"] if r["subject_id"] == self.subj_a.id)
+		# Top-level total is fresh (layer-1 miss recomputes it)...
+		self.assertEqual(resp.data["articles"], 2)  # art_mine + the new article
+		# ...but the by_subject row is served from the still-warm layer-2
+		# cache and has not caught up yet — the documented skew.
+		self.assertEqual(row["articles"], 1)
