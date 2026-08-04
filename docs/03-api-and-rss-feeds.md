@@ -18,6 +18,8 @@ The API also publishes a generated [OpenAPI 3](https://swagger.io/specification/
 
 This page stays the canonical *prose* reference — narrative context, examples, changelogs, and the "why" behind a parameter. The schema is the canonical *machine-checkable* reference for exact parameter names, types, and response shapes. When the two disagree, treat it as a bug: fix the mismatch (see `CLAUDE.md`'s docs rule), don't just pick one and move on. CI generation guard: `python manage.py spectacular --fail-on-warn` (see `api/tests/test_openapi_schema.py`).
 
+A read-only [MCP server](07-mcp-server.md) also exposes this API to LLM clients (Claude Code, Claude Desktop) as a small set of task-shaped tools, built against this schema — see [07-mcp-server.md](07-mcp-server.md).
+
 ---
 
 ## RSS feeds
