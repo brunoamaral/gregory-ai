@@ -91,6 +91,7 @@ INSTALLED_APPS = [
 	'rest_framework',
 	'rest_framework_simplejwt',
 	'rest_framework_csv',  # Add CSV renderer support
+	'drf_spectacular',
 	'django_filters',
 	'django.contrib.postgres',
 	'django.contrib.admin',
@@ -265,7 +266,42 @@ REST_FRAMEWORK = {
 		'django_filters.rest_framework.DjangoFilterBackend',
 		'rest_framework.filters.SearchFilter',
 		'rest_framework.filters.OrderingFilter',
-	]
+	],
+	'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# drf-spectacular — OpenAPI schema generation. See /api/schema/, /api/schema/swagger-ui/,
+# /api/schema/redoc/ (admin/urls.py). Canonical prose reference is
+# docs/03-api-and-rss-feeds.md; this schema is the machine-checkable counterpart.
+SPECTACULAR_SETTINGS = {
+	'TITLE': 'GregoryAI API',
+	'DESCRIPTION': (
+		'REST API for GregoryAI: articles, clinical trials, authors, sources, '
+		'subjects, categories, sponsors and teams. See docs/03-api-and-rss-feeds.md '
+		'for prose documentation and authentication details.'
+	),
+	'VERSION': '1.0.0',
+	'SERVE_INCLUDE_SCHEMA': False,
+	# ApiKeyMiddleware (api/middleware.py) reads a raw API key straight off the
+	# Authorization header (no "Bearer"/"Basic" prefix, no DRF authentication
+	# class) — drf-spectacular can't discover it automatically, so it's declared
+	# by hand here and referenced via `security=` on the views that use it.
+	'APPEND_COMPONENTS': {
+		'securitySchemes': {
+			'apiKeyAuth': {
+				'type': 'apiKey',
+				'in': 'header',
+				'name': 'Authorization',
+				'description': (
+					'Raw API key (no "Bearer"/"Basic" prefix) issued per '
+					'organisation. Required for write endpoints '
+					'(articles/post, articles/edit, trials/edit); optional '
+					'on read endpoints, where it scopes org-visibility and '
+					'unlocks per-org fields (takeaways, summary_plain_english).'
+				),
+			},
+		},
+	},
 }
 
 # Email Settings

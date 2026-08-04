@@ -113,6 +113,20 @@ from rest_framework.response import Response
 from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
+from drf_spectacular.utils import (
+	extend_schema,
+	extend_schema_view,
+	OpenApiParameter,
+	OpenApiTypes,
+)
+from api.schema_serializers import (
+	ArticlesStatsSerializer,
+	ErrorResponseSerializer,
+	GlobalStatsSerializer,
+	TrialSiteRowSerializer,
+	TrialsStatsSerializer,
+	filterset_request_schema,
+)
 import hashlib
 import json
 import logging
@@ -553,6 +567,29 @@ def generateAccessSchemeLog(
 ###
 
 
+@extend_schema(
+	request=OpenApiTypes.OBJECT,
+	responses={
+		200: OpenApiTypes.OBJECT,
+		201: OpenApiTypes.OBJECT,
+		400: ErrorResponseSerializer,
+		401: ErrorResponseSerializer,
+		403: ErrorResponseSerializer,
+		404: ErrorResponseSerializer,
+		409: ErrorResponseSerializer,
+		500: ErrorResponseSerializer,
+	},
+	auth=[{"apiKeyAuth": []}],
+	description=(
+		"Allows authenticated clients to add new articles or trials to the "
+		"database. The `kind` field in the payload must match the `source_for` "
+		"value of the indicated source. Routing per kind: `science paper` → "
+		"CrossRef enrichment, saved to Articles; `trials` → saved to Trials "
+		"(dedup by identifier then title); `news article` → saved to Articles, "
+		"no CrossRef lookup. Requires an API key (`Authorization` header) "
+		"belonging to an organisation — see docs/03-api-and-rss-feeds.md."
+	),
+)
 @api_view(["POST"])
 def post_article(request):
 	"""
@@ -931,6 +968,29 @@ def post_article(request):
 ###
 
 
+@extend_schema(
+	request=OpenApiTypes.OBJECT,
+	responses={
+		200: OpenApiTypes.OBJECT,
+		400: ErrorResponseSerializer,
+		401: ErrorResponseSerializer,
+		403: ErrorResponseSerializer,
+		404: ErrorResponseSerializer,
+		409: ErrorResponseSerializer,
+		500: ErrorResponseSerializer,
+	},
+	auth=[{"apiKeyAuth": []}],
+	description=(
+		"Edit editorial and metadata fields on an existing article. Lookup is "
+		"by `doi` (required). Raises 404 if not found, 409 if the DOI matches "
+		"multiple articles (data quality issue), and 403 if the article is not "
+		"associated with the API key's organisation. Per-org fields "
+		"(`takeaways`, `summary_plain_english`) are upserted into "
+		"ArticleOrgContent for the key's organisation — empty string clears the "
+		"field (stored as NULL). Per-article fields (`access`, `retracted`, "
+		"`kind`) are written back to the Articles row directly."
+	),
+)
 @api_view(["POST"])
 def edit_article(request):
 	"""
@@ -1120,6 +1180,27 @@ def edit_article(request):
 ###
 
 
+@extend_schema(
+	request=OpenApiTypes.OBJECT,
+	responses={
+		200: OpenApiTypes.OBJECT,
+		400: ErrorResponseSerializer,
+		401: ErrorResponseSerializer,
+		403: ErrorResponseSerializer,
+		404: ErrorResponseSerializer,
+		409: ErrorResponseSerializer,
+		500: ErrorResponseSerializer,
+	},
+	auth=[{"apiKeyAuth": []}],
+	description=(
+		"Edit per-organisation editorial fields on an existing trial. Lookup "
+		"is by `identifiers` dict (required, same format as post_article's "
+		"trial branch: keys `nct`, `euct`, `eudract`). Raises 404 if not "
+		"found, 409 if multiple trials match (dedup issue). Only per-org "
+		"fields (`takeaways`, `summary_plain_english`) are editable — trial "
+		"metadata comes from registries and is not client-editable."
+	),
+)
 @api_view(["POST"])
 def edit_trial(request):
 	"""
@@ -1272,6 +1353,19 @@ def edit_trial(request):
 ###
 # ARTICLES
 ###
+_OPTIONAL_API_KEY_SECURITY = [
+	{},
+	{"basicAuth": []},
+	{"jwtAuth": []},
+	{"cookieAuth": []},
+	{"apiKeyAuth": []},
+]
+
+
+@extend_schema_view(
+	list=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY),
+	retrieve=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY),
+)
 class ArticleViewSet(
 	BulkExportThrottleMixin,
 	CSVStreamingMixin,
@@ -1417,6 +1511,7 @@ class ArticleViewSet(
 
 	stats_cache_prefix = "articles_stats"
 
+	@extend_schema(responses=ArticlesStatsSerializer, auth=_OPTIONAL_API_KEY_SECURITY)
 	@action(detail=False, methods=["get"], url_path="stats")
 	def stats(self, request):
 		"""Aggregate counts over the filtered queryset.
@@ -1927,6 +2022,10 @@ _RECRUITING_RANK = {
 }
 
 
+@extend_schema_view(
+	list=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY),
+	retrieve=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY),
+)
 class TrialViewSet(
 	BulkExportThrottleMixin,
 	CSVStreamingMixin,
@@ -2228,6 +2327,7 @@ class TrialViewSet(
 
 	stats_cache_prefix = "trials_stats"
 
+	@extend_schema(responses=TrialsStatsSerializer, auth=_OPTIONAL_API_KEY_SECURITY)
 	@action(detail=False, methods=["get"], url_path="stats")
 	def stats(self, request):
 		"""Recruitment-status totals (by ``recruitment_status_normalized``) over the
@@ -2241,6 +2341,21 @@ class TrialViewSet(
 		"""
 		return self._stats_response(request)
 
+	@extend_schema(
+		parameters=[
+			OpenApiParameter(
+				"latitude__isnull",
+				OpenApiTypes.BOOL,
+				OpenApiParameter.QUERY,
+				description=(
+					"Narrow to sites without coordinates (true/1/yes) or with a pin "
+					"(false/0/no). Any other value is rejected (400)."
+				),
+			),
+		],
+		responses={200: TrialSiteRowSerializer(many=True), 400: ErrorResponseSerializer},
+		auth=_OPTIONAL_API_KEY_SECURITY,
+	)
 	@action(detail=False, methods=["get"], url_path="sites")
 	def sites(self, request):
 		"""Flat, paginated listing of TrialSite rows across the filtered trial set —
@@ -2631,6 +2746,18 @@ def author_articles_count_subquery(visible_org_ids=None, relevant_only=False):
 	return Coalesce(Subquery(counts, output_field=IntegerField()), Value(0))
 
 
+_AUTHOR_ID_PATH_PARAM = OpenApiParameter(
+	"id",
+	OpenApiTypes.INT,
+	OpenApiParameter.PATH,
+	description="Author ID (Authors.author_id).",
+)
+
+
+@extend_schema_view(
+	retrieve=extend_schema(parameters=[_AUTHOR_ID_PATH_PARAM]),
+	coauthors=extend_schema(parameters=[_AUTHOR_ID_PATH_PARAM]),
+)
 class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	Enhanced Authors API with sorting and filtering capabilities.
@@ -3011,6 +3138,7 @@ class LoginView(TokenObtainPairView):
 class ProtectedEndpointView(APIView):
 	permission_classes = [permissions.IsAuthenticated]
 
+	@extend_schema(responses=OpenApiTypes.OBJECT)
 	def get(self, request):
 		return Response({"message": "You have accessed the protected endpoint!"})
 
@@ -3280,6 +3408,20 @@ class ArticleSearchView(
 			)
 			return Articles.objects.none()
 
+	@extend_schema(
+		request={
+			"application/json": filterset_request_schema(
+				ArticleFilter,
+				required=["team_id", "subject_id"],
+				extra_description=(
+					"Every ArticleFilter field is accepted here (identical semantics "
+					"to the matching GET query parameter — see /articles/). "
+					"team_id and subject_id are required."
+				),
+			),
+		},
+		responses={200: OpenApiTypes.OBJECT, 400: ErrorResponseSerializer, 404: ErrorResponseSerializer},
+	)
 	def post(self, request, *args, **kwargs):
 		# For POST requests, validate required parameters
 		team_id = request.data.get("team_id")
@@ -3491,6 +3633,20 @@ class TrialSearchView(
 
 		return queryset
 
+	@extend_schema(
+		request={
+			"application/json": filterset_request_schema(
+				TrialFilter,
+				required=["team_id", "subject_id"],
+				extra_description=(
+					"Every TrialFilter field is accepted here (identical semantics "
+					"to the matching GET query parameter — see /trials/). "
+					"team_id and subject_id are required."
+				),
+			),
+		},
+		responses={200: OpenApiTypes.OBJECT, 400: ErrorResponseSerializer, 404: ErrorResponseSerializer},
+	)
 	def post(self, request, *args, **kwargs):
 		# For POST requests, validate required parameters
 		team_id = request.data.get("team_id")
@@ -3649,6 +3805,20 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 			)
 			return Authors.objects.none()
 
+	@extend_schema(
+		request={
+			"application/json": {
+				"type": "object",
+				"properties": {
+					"team_id": {"type": "integer", "description": "Required. Team ID to scope authors by."},
+					"subject_id": {"type": "integer", "description": "Required. Subject ID to scope authors by."},
+					**filterset_request_schema(AuthorFilter)["properties"],
+				},
+				"required": ["team_id", "subject_id"],
+			},
+		},
+		responses={200: OpenApiTypes.OBJECT, 400: ErrorResponseSerializer, 404: ErrorResponseSerializer},
+	)
 	def post(self, request, *args, **kwargs):
 		# For POST requests, validate required parameters
 		team_id = request.data.get("team_id")
@@ -3748,6 +3918,38 @@ class StatsView(APIView):
 
 	permission_classes = [permissions.AllowAny]
 
+	@extend_schema(
+		parameters=[
+			OpenApiParameter(
+				"team",
+				OpenApiTypes.STR,
+				OpenApiParameter.QUERY,
+				description="Scope to one or more teams (comma-separated integer IDs), e.g. ?team=1,2,3.",
+			),
+			OpenApiParameter(
+				"organization",
+				OpenApiTypes.STR,
+				OpenApiParameter.QUERY,
+				description="Scope to one or more organisations (comma-separated integer IDs). Alias: org.",
+			),
+			OpenApiParameter(
+				"org",
+				OpenApiTypes.STR,
+				OpenApiParameter.QUERY,
+				description="Alias for organization.",
+			),
+			OpenApiParameter(
+				"subject",
+				OpenApiTypes.STR,
+				OpenApiParameter.QUERY,
+				description=(
+					"Scope to one or more subjects (comma-separated integer IDs, OR "
+					"semantics). Adds a by_subject breakdown to the payload."
+				),
+			),
+		],
+		responses={200: GlobalStatsSerializer, 400: ErrorResponseSerializer, 404: ErrorResponseSerializer},
+	)
 	def get(self, request):
 		from urllib.parse import urlparse
 		from subscriptions.models import Subscribers

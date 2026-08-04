@@ -6,6 +6,20 @@ GregoryAI's API is open and does not require authentication unless you need to c
 
 ---
 
+## OpenAPI schema
+
+The API also publishes a generated [OpenAPI 3](https://swagger.io/specification/) schema, built from the views/filtersets/serializers themselves via [drf-spectacular](https://drf-spectacular.readthedocs.io/) — it cannot drift from the code the way this hand-written page can.
+
+| Resource | URL |
+|:---------|:----|
+| Raw schema (YAML/JSON) | `GET /api/schema/` |
+| Swagger UI | `GET /api/schema/swagger-ui/` |
+| ReDoc | `GET /api/schema/redoc/` |
+
+This page stays the canonical *prose* reference — narrative context, examples, changelogs, and the "why" behind a parameter. The schema is the canonical *machine-checkable* reference for exact parameter names, types, and response shapes. When the two disagree, treat it as a bug: fix the mismatch (see `CLAUDE.md`'s docs rule), don't just pick one and move on. CI generation guard: `python manage.py spectacular --fail-on-warn` (see `api/tests/test_openapi_schema.py`).
+
+---
+
 ## RSS feeds
 
 | Feed | URL pattern |
@@ -59,7 +73,6 @@ This prevents open-redirect attacks — only explicitly whitelisted domains are 
 | Endpoint | Description |
 |:---------|:------------|
 | `POST /api/token/` | Obtain JWT token |
-| `POST /api/token/get/` | Obtain auth token (alternative) |
 | `GET /protected_endpoint/` | Test protected endpoint (requires auth header) |
 
 ---
@@ -124,7 +137,6 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `ml_threshold` | float 0–1 | Minimum ML prediction confidence. Scoped to `subject_id` when provided. |
 | `open_access` | boolean | Open access articles only |
 | `has_clinical_trials` | boolean | Filter by whether articles are linked to at least one trial |
-| `unsent` | boolean | Articles not yet sent to subscribers |
 | `last_days` | integer | Articles from the last N days |
 | `week` | integer 1–52 | Filter by week number (requires `year`) |
 | `year` | integer | Year for week filtering |

@@ -118,7 +118,7 @@ class SubjectFilterMixin:
 	``subjects_any`` — OR:  returns objects tagged with *any* of the listed IDs.
 	"""
 
-	def filter_subjects_any(self, queryset, name, value):
+	def filter_subjects_any(self, queryset, name, value: list[str]):
 		if not value:
 			return queryset
 		ids = set()
@@ -164,72 +164,175 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 	category, journal, team, subject, and special article types.
 	"""
 
-	title = filters.CharFilter(method="filter_title", label="Title")
-	summary = filters.CharFilter(method="filter_summary", label="Summary")
-	search = filters.CharFilter(method="filter_search", label="Search")
-	author_id = filters.NumberFilter(
-		field_name="authors__author_id", lookup_expr="exact", label="Author ID"
+	title = filters.CharFilter(
+		method="filter_title",
+		label="Title",
+		help_text="Case-insensitive substring match against the title only.",
 	)
-	doi = filters.CharFilter(method="filter_doi", label="DOI")
+	summary = filters.CharFilter(
+		method="filter_summary",
+		label="Summary",
+		help_text="Case-insensitive substring match against the summary/abstract only.",
+	)
+	search = filters.CharFilter(
+		method="filter_search",
+		label="Search",
+		help_text=(
+			"Boolean search across title and summary. Bare terms are AND-ed; "
+			'uppercase OR/NOT and "quoted phrases" are supported, e.g. '
+			"?search=stem OR cells. Not combinable with title/summary-only search."
+		),
+	)
+	author_id = filters.NumberFilter(
+		field_name="authors__author_id",
+		lookup_expr="exact",
+		label="Author ID",
+		help_text="Filter by author ID (see /authors/).",
+	)
+	doi = filters.CharFilter(
+		method="filter_doi",
+		label="DOI",
+		help_text=(
+			"Filter by DOI, case-insensitive. Accepts a single value or a "
+			"comma-separated list, e.g. ?doi=10.1/a,10.2/b."
+		),
+	)
 	category_slug = filters.CharFilter(
 		field_name="team_categories__category_slug",
 		lookup_expr="exact",
 		label="Category Slug",
+		help_text="Filter by category slug (see /categories/).",
 	)
 	category_id = filters.NumberFilter(
-		field_name="team_categories__id", lookup_expr="exact", label="Category ID"
+		field_name="team_categories__id",
+		lookup_expr="exact",
+		label="Category ID",
+		help_text="Filter by category ID (see /categories/).",
 	)
 	category_modality = filters.ChoiceFilter(
 		field_name="team_categories__modality",
 		choices=CategoryModality.choices,
 		distinct=True,
 		label="Intervention modality of the article's categories",
+		help_text=(
+			"Filter by the intervention modality of the article's categories; "
+			"one of the CategoryModality values."
+		),
 	)
-	journal_slug = filters.CharFilter(method="filter_journal", label="Journal")
+	journal_slug = filters.CharFilter(
+		method="filter_journal",
+		label="Journal",
+		help_text="Filter by journal name (convert spaces to dashes), case-insensitive exact match.",
+	)
 	team_id = filters.NumberFilter(
-		field_name="teams__id", lookup_expr="exact", label="Team ID"
+		field_name="teams__id",
+		lookup_expr="exact",
+		label="Team ID",
+		help_text="Filter by team ID.",
 	)
-	site_id = filters.NumberFilter(method="filter_site", label="Site ID")
+	site_id = filters.NumberFilter(
+		method="filter_site",
+		label="Site ID",
+		help_text=(
+			"Filter by Django Site ID; returns articles belonging to any team "
+			"attached to that site (see Team.site)."
+		),
+	)
 	subject_id = filters.NumberFilter(
-		field_name="subjects__id", lookup_expr="exact", label="Subject ID"
+		field_name="subjects__id",
+		lookup_expr="exact",
+		label="Subject ID",
+		help_text="Filter by subject ID (see /subjects/). Commonly combined with team_id.",
 	)
 	subjects = filters.BaseInFilter(
 		method="filter_subjects_all",
 		label="All subject IDs (comma-separated, AND match)",
+		help_text=(
+			"Comma-separated list of subject IDs with AND semantics — returns "
+			"only articles tagged with *all* listed subjects, e.g. ?subjects=1,2."
+		),
 	)
 	subjects_any = filters.BaseInFilter(
 		method="filter_subjects_any",
 		label="Any subject IDs (comma-separated, OR match)",
+		help_text=(
+			"Comma-separated list of subject IDs with OR semantics — returns "
+			"articles tagged with *any* of the listed subjects, e.g. "
+			"?subjects_any=1,2."
+		),
 	)
 	source_id = filters.NumberFilter(
-		field_name="sources__source_id", lookup_expr="exact", label="Source ID"
+		field_name="sources__source_id",
+		lookup_expr="exact",
+		label="Source ID",
+		help_text="Filter by source ID (see /sources/).",
 	)
 
 	# New parameters for special article types
-	relevant = filters.BooleanFilter(method="filter_relevant", label="Relevant")
+	relevant = filters.BooleanFilter(
+		method="filter_relevant",
+		label="Relevant",
+		help_text=(
+			"Filter for relevant articles (true/false). When combined with "
+			"subject_id, relevance is scoped to that specific subject — only "
+			"articles relevant *for that subject* (via ML predictions or manual "
+			"marking) are returned. Without subject_id, relevance is checked "
+			"across all subjects."
+		),
+	)
 	ml_threshold = filters.NumberFilter(
 		method="filter_ml_threshold",
 		label="ML Threshold (0.0-1.0)",
+		help_text=(
+			"Minimum ML prediction confidence (0.0-1.0, e.g. 0.75). Also scoped "
+			"to subject_id when provided. Defaults to 0.8 when relevant=true and "
+			"this is omitted."
+		),
 		widget=forms.NumberInput(attrs={"step": "0.01", "min": "0.0", "max": "1.0"}),
 	)
 	open_access = filters.BooleanFilter(
-		method="filter_open_access", label="Open Access"
+		method="filter_open_access",
+		label="Open Access",
+		help_text="Filter for open access articles (true/false).",
 	)
-	last_days = filters.NumberFilter(method="filter_last_days", label="Last Days")
-	week = filters.NumberFilter(method="filter_week", label="Week")
-	year = filters.NumberFilter(method="filter_year", label="Year")
+	last_days = filters.NumberFilter(
+		method="filter_last_days",
+		label="Last Days",
+		help_text="Filter for articles discovered in the last N days.",
+	)
+	week = filters.NumberFilter(
+		method="filter_week",
+		label="Week",
+		help_text="Filter for a specific ISO week number; requires year to be set too.",
+	)
+	year = filters.NumberFilter(
+		method="filter_year",
+		label="Year",
+		help_text="Year to use together with the week parameter; has no effect on its own.",
+	)
 	has_clinical_trials = filters.BooleanFilter(
-		method="filter_has_clinical_trials", label="Has Clinical Trials"
+		method="filter_has_clinical_trials",
+		label="Has Clinical Trials",
+		help_text="Filter for articles linked to one or more clinical trials (true/false).",
 	)
 	published_date_after = filters.DateFilter(
 		method="filter_published_date_after",
 		input_formats=["%Y-%m-%d"],
 		label="Published date on or after (YYYY-MM-DD)",
+		help_text=(
+			"Articles published on or after this date (YYYY-MM-DD, inclusive). "
+			"Invalid or non-ISO-8601 dates return 400 Bad Request."
+		),
 	)
 	published_date_before = filters.DateFilter(
 		method="filter_published_date_before",
 		input_formats=["%Y-%m-%d"],
 		label="Published date on or before (YYYY-MM-DD)",
+		help_text=(
+			"Articles published on or before this date (YYYY-MM-DD, inclusive — "
+			"the full day is included). Invalid or non-ISO-8601 dates return 400 "
+			"Bad Request."
+		),
 	)
 
 	class Meta:
@@ -523,45 +626,96 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	"""
 
 	# Core search filters
-	title = filters.CharFilter(method="filter_title", label="Title")
-	summary = filters.CharFilter(method="filter_summary", label="Summary")
-	search = filters.CharFilter(method="filter_search", label="Search")
+	title = filters.CharFilter(
+		method="filter_title",
+		label="Title",
+		help_text="Case-insensitive substring match against the title only.",
+	)
+	summary = filters.CharFilter(
+		method="filter_summary",
+		label="Summary",
+		help_text="Case-insensitive substring match against the summary only.",
+	)
+	search = filters.CharFilter(
+		method="filter_search",
+		label="Search",
+		help_text=(
+			"Boolean search across title and summary. Bare terms are AND-ed; "
+			'uppercase OR/NOT and "quoted phrases" are supported.'
+		),
+	)
 
 	# ID and relationship filters
 	trial_id = filters.NumberFilter(
-		field_name="trial_id", lookup_expr="exact", label="Trial ID"
+		field_name="trial_id",
+		lookup_expr="exact",
+		label="Trial ID",
+		help_text="Filter by a specific trial ID.",
 	)
 	team_id = filters.NumberFilter(
-		field_name="teams__id", lookup_expr="exact", label="Team ID"
+		field_name="teams__id",
+		lookup_expr="exact",
+		label="Team ID",
+		help_text="Filter by team ID.",
 	)
-	site_id = filters.NumberFilter(method="filter_site", label="Site ID")
+	site_id = filters.NumberFilter(
+		method="filter_site",
+		label="Site ID",
+		help_text=(
+			"Filter by Django Site ID; returns trials belonging to any team "
+			"attached to that site (see Team.site)."
+		),
+	)
 	subject_id = filters.NumberFilter(
-		field_name="subjects__id", lookup_expr="exact", label="Subject ID"
+		field_name="subjects__id",
+		lookup_expr="exact",
+		label="Subject ID",
+		help_text="Filter by subject ID (see /subjects/).",
 	)
 	subjects = filters.BaseInFilter(
 		method="filter_subjects_all",
 		label="All subject IDs (comma-separated, AND match)",
+		help_text=(
+			"Comma-separated list of subject IDs with AND semantics — returns "
+			"only trials tagged with *all* listed subjects, e.g. ?subjects=1,2."
+		),
 	)
 	subjects_any = filters.BaseInFilter(
 		method="filter_subjects_any",
 		label="Any subject IDs (comma-separated, OR match)",
+		help_text=(
+			"Comma-separated list of subject IDs with OR semantics — returns "
+			"trials tagged with *any* of the listed subjects, e.g. "
+			"?subjects_any=1,2."
+		),
 	)
 	category_slug = filters.CharFilter(
 		field_name="team_categories__category_slug",
 		lookup_expr="exact",
 		label="Category Slug",
+		help_text="Filter by category slug (see /categories/).",
 	)
 	category_id = filters.NumberFilter(
-		field_name="team_categories__id", lookup_expr="exact", label="Category ID"
+		field_name="team_categories__id",
+		lookup_expr="exact",
+		label="Category ID",
+		help_text="Filter by category ID (see /categories/).",
 	)
 	category_modality = filters.ChoiceFilter(
 		field_name="team_categories__modality",
 		choices=CategoryModality.choices,
 		distinct=True,
 		label="Intervention modality of the trial's categories",
+		help_text=(
+			"Filter by the intervention modality of the trial's categories; "
+			"one of the CategoryModality values."
+		),
 	)
 	source_id = filters.NumberFilter(
-		field_name="sources__source_id", lookup_expr="exact", label="Source ID"
+		field_name="sources__source_id",
+		lookup_expr="exact",
+		label="Source ID",
+		help_text="Filter by source ID (see /sources/).",
 	)
 
 	# Registry identifier filters
@@ -572,32 +726,69 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	identifiers = filters.BaseInFilter(
 		method="filter_identifiers",
 		label="Mixed registry id(s), comma-separated; matches any across NCT/EudraCT/EUCT/EUCTR/CTIS (case-insensitive)",
+		help_text=(
+			"Mixed list of registry identifiers, comma-separated, matched across "
+			"all registry keys at once (NCT/EudraCT/EUCT/EUCTR/CTIS), "
+			"case-insensitive, e.g. ?identifiers=NCT02521311,2020-001234-12. "
+			"Acronyms are excluded (not unique) — use acronym for those."
+		),
 	)
 	nct = filters.BaseInFilter(
 		method="filter_nct",
 		label="NCT ID(s), comma-separated; matches any (case-insensitive)",
+		help_text=(
+			"ClinicalTrials.gov NCT id(s), comma-separated, matches any "
+			"(case-insensitive), e.g. ?nct=NCT02521311,NCT06065670."
+		),
 	)
 	eudract = filters.BaseInFilter(
-		method="filter_eudract", label="EudraCT number(s), comma-separated; matches any"
+		method="filter_eudract",
+		label="EudraCT number(s), comma-separated; matches any",
+		help_text="EudraCT number(s), comma-separated, matches any (case-insensitive).",
 	)
 	euct = filters.BaseInFilter(
 		method="filter_euct",
 		label="EU CT / EUCTR number(s), comma-separated; matches any",
+		help_text=(
+			"EU CT / EUCTR number(s), comma-separated, matches any "
+			"(case-insensitive). Matches either the euct or euctr identifier key."
+		),
 	)
 	ctis = filters.BaseInFilter(
-		method="filter_ctis", label="CTIS number(s), comma-separated; matches any"
+		method="filter_ctis",
+		label="CTIS number(s), comma-separated; matches any",
+		help_text="CTIS number(s), comma-separated, matches any (case-insensitive).",
 	)
 	acronym = filters.BaseInFilter(
 		method="filter_acronym",
 		label="Trial acronym(s), comma-separated; matches any (case-insensitive)",
+		help_text=(
+			"Trial acronym(s), comma-separated, matches any (case-insensitive), "
+			"e.g. ?acronym=ReCOVER,MODIF-MS."
+		),
 	)
 
 	# Trial-specific filters
 	recruitment_status = filters.CharFilter(
-		field_name="recruitment_status", lookup_expr="iexact"
+		field_name="recruitment_status",
+		lookup_expr="iexact",
+		label="Recruitment status (raw, legacy)",
+		help_text=(
+			"Raw-text case-insensitive exact match against the registry's own "
+			'recruitment-status string (e.g. "Recruiting" matches "RECRUITING" '
+			'but not "Not Recruiting") — free text, so it silently misses '
+			"spelling/format variants across registries. Prefer "
+			"recruitment_status_normalized."
+		),
 	)
 	status = filters.CharFilter(
-		field_name="recruitment_status", lookup_expr="iexact"
+		field_name="recruitment_status",
+		lookup_expr="iexact",
+		label="Recruitment status (legacy alias of recruitment_status)",
+		help_text=(
+			"Legacy alias for recruitment_status — same raw-text, "
+			"case-insensitive exact match. Prefer recruitment_status_normalized."
+		),
 	)  # Legacy alias for backward compatibility
 	recruitment_status_normalized = ChoiceInFilter(
 		field_name="recruitment_status_normalized",
@@ -605,79 +796,201 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		choices=TrialRecruitmentStatus.choices,
 		label="One or more canonical recruitment statuses, comma-separated (OR), "
 		"e.g. ?recruitment_status_normalized=recruiting,active_not_recruiting",
+		help_text=(
+			"Exact match against the canonical recruitment status; accepts one "
+			"or more comma-separated values (OR semantics). One of: "
+			"not_yet_recruiting, recruiting, enrolling_by_invitation, "
+			"active_not_recruiting, not_recruiting, suspended, completed, "
+			"terminated, withdrawn, unknown, other."
+		),
 	)
 	internal_number = filters.CharFilter(
-		field_name="internal_number", lookup_expr="icontains"
+		field_name="internal_number",
+		lookup_expr="icontains",
+		label="Internal number",
+		help_text="Filter by WHO internal number (case-insensitive substring).",
 	)
-	phase = filters.CharFilter(field_name="phase", lookup_expr="icontains")
+	phase = filters.CharFilter(
+		field_name="phase",
+		lookup_expr="icontains",
+		label="Phase (raw, legacy)",
+		help_text=(
+			"Raw-text contains filter on the registry's own phase string "
+			'(Phase I, II, III, etc.) — free text, so it silently misses '
+			'spelling/format variants (e.g. "Phase III" vs "Phase 3"). Prefer '
+			"phase_normalized."
+		),
+	)
 	phase_normalized = ChoiceInFilter(
 		field_name="phase_normalized",
 		lookup_expr="in",
 		choices=TrialPhase.choices,
 		label="One or more canonical phases, comma-separated (OR), "
 		"e.g. ?phase_normalized=phase_2,phase_3",
+		help_text=(
+			"Exact match against the canonical phase; accepts one or more "
+			"comma-separated values (OR semantics). One of: early_phase_1, "
+			"phase_1, phase_1_2, phase_2, phase_2_3, phase_3, phase_3_4, "
+			"phase_4, post_market, not_applicable, other."
+		),
 	)
-	study_type = filters.CharFilter(field_name="study_type", lookup_expr="icontains")
-	study_type_normalized = filters.ChoiceFilter(choices=TrialStudyType.choices)
+	study_type = filters.CharFilter(
+		field_name="study_type",
+		lookup_expr="icontains",
+		label="Study type (raw, legacy)",
+		help_text=(
+			"Legacy free-text case-insensitive substring filter on the raw "
+			"registry study-type string — can both overmatch and undermatch "
+			'across registries (e.g. matches "Interventional clinical trial of '
+			'medicinal product" but misses "Intervention"); prefer '
+			"study_type_normalized."
+		),
+	)
+	study_type_normalized = filters.ChoiceFilter(
+		choices=TrialStudyType.choices,
+		label="Canonical study type",
+		help_text=(
+			"Exact match against the canonical study type; one of: "
+			"interventional, observational, expanded_access, basic_science, "
+			"other."
+		),
+	)
 	primary_sponsor = filters.CharFilter(
-		field_name="primary_sponsor", lookup_expr="icontains"
+		field_name="primary_sponsor",
+		lookup_expr="icontains",
+		label="Primary sponsor (raw, legacy)",
+		help_text=(
+			"Legacy free-text case-insensitive substring filter on the raw "
+			"registry sponsor string — silently misses spelling/duplicate "
+			"variants across registries; prefer sponsor_id/sponsor_slug."
+		),
 	)  # Legacy: free-text on the raw registry string — prefer sponsor_id/sponsor_slug
 	sponsor_id = filters.NumberFilter(
 		field_name="primary_sponsor_normalized_id",
 		lookup_expr="exact",
 		label="Canonical sponsor ID (see /sponsors/)",
+		help_text="Exact match against a canonical sponsor's id (see /sponsors/).",
 	)
 	sponsor_slug = filters.CharFilter(
 		field_name="primary_sponsor_normalized__slug",
 		lookup_expr="exact",
 		label="Canonical sponsor slug (see /sponsors/)",
+		help_text="Exact match against a canonical sponsor's slug (see /sponsors/).",
 	)
 	source_register = filters.CharFilter(
-		field_name="source_register", lookup_expr="icontains"
+		field_name="source_register",
+		lookup_expr="icontains",
+		label="Source registry",
+		help_text="Filter by source registry (case-insensitive substring).",
 	)
-	countries = filters.CharFilter(field_name="countries", lookup_expr="icontains")
+	countries = filters.CharFilter(
+		field_name="countries",
+		lookup_expr="icontains",
+		label="Countries (raw, legacy)",
+		help_text=(
+			"Raw-text case-insensitive substring filter on the registry's own "
+			"countries string — free text, so it silently misses "
+			"spelling/format variants across registries. See country for the "
+			"normalized equivalent."
+		),
+	)
 	country = filters.CharFilter(
 		method="filter_country",
 		label="Normalized country: one or more ISO 3166-1 alpha-2 codes, comma-separated, "
 		"e.g. ?country=DE or ?country=DE,FR (OR semantics)",
+		help_text=(
+			"Match against one or more normalized country codes (ISO 3166-1 "
+			"alpha-2), comma-separated, OR semantics (e.g. ?country=DE or "
+			"?country=DE,FR), derived from every source's raw country data."
+		),
 	)
 	region = filters.ChoiceFilter(
 		method="filter_region",
 		choices=TrialRegion.choices,
 		label="Normalized region, derived from the trial's countries",
+		help_text=(
+			"Exact match against a normalized region derived from the trial's "
+			"countries; one of: africa, asia, europe, north_america, "
+			"south_america, oceania (e.g. ?region=europe)."
+		),
 	)
 
 	# Medical/research filters
-	condition = filters.CharFilter(field_name="condition", lookup_expr="icontains")
+	condition = filters.CharFilter(
+		field_name="condition",
+		lookup_expr="icontains",
+		label="Condition",
+		help_text="Filter by medical condition (case-insensitive substring).",
+	)
 	intervention = filters.CharFilter(
-		field_name="intervention", lookup_expr="icontains"
+		field_name="intervention",
+		lookup_expr="icontains",
+		label="Intervention",
+		help_text="Filter by intervention type (case-insensitive substring).",
 	)
 	therapeutic_areas = filters.CharFilter(
-		field_name="therapeutic_areas", lookup_expr="icontains"
+		field_name="therapeutic_areas",
+		lookup_expr="icontains",
+		label="Therapeutic areas",
+		help_text="Filter by therapeutic areas (case-insensitive substring).",
 	)
 	inclusion_agemin = filters.CharFilter(
-		field_name="inclusion_agemin", lookup_expr="exact"
+		field_name="inclusion_agemin",
+		lookup_expr="exact",
+		label="Inclusion age minimum (raw, legacy)",
+		help_text=(
+			"Exact match against the raw inclusion age-minimum criteria string. "
+			"Prefer age_eligible for a numeric range check."
+		),
 	)
 	inclusion_agemax = filters.CharFilter(
-		field_name="inclusion_agemax", lookup_expr="exact"
+		field_name="inclusion_agemax",
+		lookup_expr="exact",
+		label="Inclusion age maximum (raw, legacy)",
+		help_text=(
+			"Exact match against the raw inclusion age-maximum criteria string. "
+			"Prefer age_eligible for a numeric range check."
+		),
 	)
 	age_eligible = filters.NumberFilter(
 		method="filter_age_eligible",
 		label="Trials whose eligible age range (in years) includes this age, "
 		"e.g. ?age_eligible=40. A null min is treated as no lower bound; a null max as no upper bound.",
+		help_text=(
+			"Trials whose eligible age range (inclusion_age_min_years..."
+			"inclusion_age_max_years, in years) includes this age, e.g. "
+			"?age_eligible=40. A null min is treated as no lower bound; a null "
+			"max as no upper bound."
+		),
 	)
 	# The legacy icontains filter here was removed 2026-07-20 — it returned confidently
 	# wrong results (?inclusion_gender=Female matched "Female, Male", a both-sexes trial),
 	# not merely weak like the other legacy filters. See
 	# INCLUSION-GENDER-NORMALIZATION-PLAN.md and docs/trials-field-normalization.md.
 	inclusion_gender_normalized = filters.ChoiceFilter(
-		choices=TrialSexEligibility.choices
+		choices=TrialSexEligibility.choices,
+		label="Canonical sex eligibility",
+		help_text=(
+			"Exact match against canonical sex eligibility; one of: all, "
+			"female, male. Replaces the removed legacy inclusion_gender "
+			"substring filter, which returned confidently wrong results "
+			'(?inclusion_gender=Female matched "Female, Male", a both-sexes '
+			"trial). **Breaking change (2026-07-20):** ?inclusion_gender=... is "
+			"no longer a recognised parameter and is silently ignored "
+			"(unfiltered results), not rejected — see "
+			"docs/trials-field-normalization.md."
+		),
 	)
 
 	# Results filters
 	has_results = filters.BooleanFilter(
 		method="filter_has_results",
 		label="Has results posted (results_posted flag, results completion date, results link, or results available = Yes)",
+		help_text=(
+			"true/false; a trial counts as having results when any of "
+			"results_posted, results completion date, results link, or "
+			'results-available = "Yes" is set.'
+		),
 	)
 
 	# Date-range filters
@@ -686,12 +999,20 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		lookup_expr="gte",
 		input_formats=["%Y-%m-%d"],
 		label="Date registered on or after (YYYY-MM-DD)",
+		help_text=(
+			"Trials registered on or after this date (YYYY-MM-DD, inclusive). "
+			"Invalid or non-ISO-8601 dates return 400 Bad Request."
+		),
 	)
 	date_registration_before = filters.DateFilter(
 		field_name="date_registration",
 		lookup_expr="lte",
 		input_formats=["%Y-%m-%d"],
 		label="Date registered on or before (YYYY-MM-DD)",
+		help_text=(
+			"Trials registered on or before this date (YYYY-MM-DD, inclusive). "
+			"Invalid or non-ISO-8601 dates return 400 Bad Request."
+		),
 	)
 
 	class Meta:
@@ -818,15 +1139,15 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			queryset, value, ["nct", "eudract", "euct", "euctr", "ctis"]
 		)
 
-	def filter_nct(self, queryset, name, value):
+	def filter_nct(self, queryset, name, value: list[str]):
 		"""Match ClinicalTrials.gov NCT id(s) against ``identifiers['nct']``."""
 		return self._match_identifier(queryset, value, ["nct"])
 
-	def filter_eudract(self, queryset, name, value):
+	def filter_eudract(self, queryset, name, value: list[str]):
 		"""Match EudraCT number(s) against ``identifiers['eudract']``."""
 		return self._match_identifier(queryset, value, ["eudract"])
 
-	def filter_euct(self, queryset, name, value):
+	def filter_euct(self, queryset, name, value: list[str]):
 		"""Match EU CT number(s) against ``identifiers['euct']`` or ``['euctr']``.
 
 		The two keys are used interchangeably across the ingestion pipeline for
@@ -834,7 +1155,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		"""
 		return self._match_identifier(queryset, value, ["euct", "euctr"])
 
-	def filter_ctis(self, queryset, name, value):
+	def filter_ctis(self, queryset, name, value: list[str]):
 		"""Match CTIS number(s) against ``identifiers['ctis']``."""
 		return self._match_identifier(queryset, value, ["ctis"])
 
@@ -907,21 +1228,40 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 class AuthorFilter(filters.FilterSet):
 	"""Filter class for Authors, allowing searching by full name, given name, family name and filtering by author ID."""
 
-	full_name = filters.CharFilter(method="filter_full_name", label="Full Name")
+	full_name = filters.CharFilter(
+		method="filter_full_name",
+		label="Full Name",
+		help_text="Case-insensitive substring match against the author's full name.",
+	)
 	given_name = filters.CharFilter(
-		field_name="given_name", lookup_expr="icontains", label="Given Name"
+		field_name="given_name",
+		lookup_expr="icontains",
+		label="Given Name",
+		help_text="Case-insensitive substring match against the given (first) name.",
 	)
 	family_name = filters.CharFilter(
-		field_name="family_name", lookup_expr="icontains", label="Family Name"
+		field_name="family_name",
+		lookup_expr="icontains",
+		label="Family Name",
+		help_text="Case-insensitive substring match against the family (last) name.",
 	)
 	author_id = filters.NumberFilter(
-		field_name="author_id", lookup_expr="exact", label="Author ID"
+		field_name="author_id",
+		lookup_expr="exact",
+		label="Author ID",
+		help_text="Filter by a specific author ID.",
 	)
 	orcid = filters.CharFilter(
-		field_name="ORCID", lookup_expr="icontains", label="ORCID"
+		field_name="ORCID",
+		lookup_expr="icontains",
+		label="ORCID",
+		help_text="Case-insensitive substring match against the author's ORCID iD.",
 	)
 	country = filters.CharFilter(
-		field_name="country", lookup_expr="exact", label="Country"
+		field_name="country",
+		lookup_expr="exact",
+		label="Country",
+		help_text="Exact match against the author's country code.",
 	)
 
 	class Meta:
@@ -948,19 +1288,40 @@ class SourceFilter(filters.FilterSet):
 	"""
 
 	source_id = filters.NumberFilter(
-		field_name="source_id", lookup_expr="exact", label="Source ID"
+		field_name="source_id",
+		lookup_expr="exact",
+		label="Source ID",
+		help_text="Filter by a specific source ID.",
 	)
 	team_id = filters.NumberFilter(
-		field_name="team__id", lookup_expr="exact", label="Team ID"
+		field_name="team__id",
+		lookup_expr="exact",
+		label="Team ID",
+		help_text="Filter by team ID.",
 	)
 	subject_id = filters.NumberFilter(
-		field_name="subject__id", lookup_expr="exact", label="Subject ID"
+		field_name="subject__id",
+		lookup_expr="exact",
+		label="Subject ID",
+		help_text="Filter by subject ID (see /subjects/).",
 	)
-	active = filters.BooleanFilter(field_name="active", label="Active")
+	active = filters.BooleanFilter(
+		field_name="active",
+		label="Active",
+		help_text="Filter by whether the source is actively polled (true/false).",
+	)
 	source_for = filters.CharFilter(
-		field_name="source_for", lookup_expr="exact", label="Source For"
+		field_name="source_for",
+		lookup_expr="exact",
+		label="Source For",
+		help_text="Exact match against the source's content type (e.g. articles vs trials).",
 	)
-	link = filters.CharFilter(field_name="link", lookup_expr="icontains", label="Link")
+	link = filters.CharFilter(
+		field_name="link",
+		lookup_expr="icontains",
+		label="Link",
+		help_text="Case-insensitive substring match against the source's feed/URL.",
+	)
 
 	class Meta:
 		model = Sources
@@ -972,7 +1333,11 @@ class SponsorFilter(filters.FilterSet):
 	Filter class for Sponsors (see /sponsors/).
 	"""
 
-	sponsor_type = filters.ChoiceFilter(choices=SponsorType.choices)
+	sponsor_type = filters.ChoiceFilter(
+		choices=SponsorType.choices,
+		label="Sponsor type",
+		help_text="Exact match against the canonical sponsor type (see SponsorType values).",
+	)
 
 	class Meta:
 		model = Sponsor
@@ -985,7 +1350,10 @@ class SubjectFilter(filters.FilterSet):
 	"""
 
 	team_id = filters.NumberFilter(
-		field_name="team__id", lookup_expr="exact", label="Team ID"
+		field_name="team__id",
+		lookup_expr="exact",
+		label="Team ID",
+		help_text="Filter by team ID.",
 	)
 
 	class Meta:
@@ -999,16 +1367,27 @@ class CategoryFilter(filters.FilterSet):
 	"""
 
 	category_id = filters.NumberFilter(
-		field_name="id", lookup_expr="exact", label="Category ID"
+		field_name="id",
+		lookup_expr="exact",
+		label="Category ID",
+		help_text="Filter by a specific category ID.",
 	)
 	team_id = filters.NumberFilter(
-		field_name="team__id", lookup_expr="exact", label="Team ID"
+		field_name="team__id",
+		lookup_expr="exact",
+		label="Team ID",
+		help_text="Filter by team ID.",
 	)
 	subject_id = filters.NumberFilter(
-		field_name="subjects__id", lookup_expr="exact", label="Subject ID"
+		field_name="subjects__id",
+		lookup_expr="exact",
+		label="Subject ID",
+		help_text="Filter by subject ID (see /subjects/).",
 	)
 	category_terms = filters.CharFilter(
-		method="filter_category_terms", label="Category Terms"
+		method="filter_category_terms",
+		label="Category Terms",
+		help_text="Case-insensitive substring match against the category's terms.",
 	)
 
 	class Meta:
