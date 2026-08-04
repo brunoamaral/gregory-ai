@@ -3882,7 +3882,11 @@ class StatsView(APIView):
 			subj_qs.values("id", "subject_name", "team_id").order_by("subject_name")
 		)
 
-		if subject_ids is not None and len(visible_subjects) != len(set(subject_ids)):
+		if (
+			subject_ids is not None
+			and visible_org_ids is not None
+			and len(visible_subjects) != len(set(subject_ids))
+		):
 			raise Http404
 
 		if subject_ids is not None:

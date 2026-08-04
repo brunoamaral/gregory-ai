@@ -1,6 +1,6 @@
 # Specification — subject filtering on `GET /stats/`
 
-Status: plan, not implemented. Written 2026-08-04.
+Status: implemented, PR [#823](https://github.com/brunoamaral/gregory-ai/pull/823). Written 2026-08-04.
 
 Adds a `?subject=` filter and a `by_subject` breakdown to the site-wide stats
 endpoint (`StatsView`, [django/api/views.py:3715](../django/api/views.py)), so a
