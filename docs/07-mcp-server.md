@@ -105,8 +105,11 @@ with no code change. See `mcp-server/gregory_mcp/config.py`.
 
 None. The server exposes exactly what an anonymous API caller already sees — the same
 public organisations any unauthenticated `GET` against the REST API returns. Nothing new
-is leaked, but the endpoint is unauthenticated, so it's rate-limited per tool name (the
-`Mcp-Name` request header) at the nginx layer — see `nginx-example-configuration/nginx.conf`.
+is leaked, but the endpoint is unauthenticated, so it's rate-limited at the nginx layer:
+per (client address, tool name) — the tool name coming from the client-controlled
+`Mcp-Name` request header, whitelisted to the ten known names so a caller can't dodge the
+limit by inventing new header values — plus a flat per-client cap across all tools as a
+backstop. See `nginx-example-configuration/nginx.conf`.
 
 ## Risks
 

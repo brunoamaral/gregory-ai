@@ -18,19 +18,19 @@ logger = logging.getLogger("gregory_mcp")
 
 
 def main() -> None:
-    settings = load_settings()
-    configure_logging(settings.log_level)
-    init_client(settings)
+	settings = load_settings()
+	configure_logging(settings.log_level)
+	init_client(settings)
 
-    logger.info("gregory_mcp_starting", extra={"path": settings.api_base})
-    server = build_server()
-    server.run(
-        "streamable-http",
-        host=settings.host,
-        port=settings.port,
-        stateless_http=True,
-    )
+	logger.info("gregory_mcp_starting", extra={"path": settings.api_base})
+	server = build_server()
+	server.run(
+		"streamable-http",
+		host=settings.host,
+		port=settings.port,
+		stateless_http=True,
+	)
 
 
 if __name__ == "__main__":
-    main()
+	main()
