@@ -191,7 +191,7 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | |
 | RSS feeds | `GET /feed/author/{orcid}/` | `orcid` (path) | |
 | RSS feeds | `GET /feed/trials/subject/{subject_slug}/` | `subject_slug` (path) | |
-| Stats | `GET /stats/` | `team`, `organization` (alias `org`), `include_public` | See [Stats endpoint](#stats-endpoint) below |
+| Stats | `GET /stats/` | `team`, `organization` (alias `org`), `subject`, `include_public` | See [Stats endpoint](#stats-endpoint) below |
 | Subscriptions | `POST /subscriptions/new/` | `first_name`, `last_name`, `email`, `profile`, `list` | POST-only; `GET` returns `405` with `Allow: POST` |
 
 ### Search endpoints
@@ -328,9 +328,13 @@ GET /stats/?organization=3,7
 GET /stats/?team=12
 GET /stats/?organization=3&team=12
 GET /stats/?include_public=true
+GET /stats/?subject=4
+GET /stats/?subject=4,9
+GET /stats/?team=12&subject=4
 ```
 
-Response shape (unchanged across all filter combinations):
+Response shape (additive: `by_subject` is only meaningfully populated when the
+in-scope team(s) have subjects, but the key is always present):
 
 ```json
 {
@@ -345,7 +349,11 @@ Response shape (unchanged across all filter combinations):
       { "domain": "pubmed.ncbi.nlm.nih.gov", "count": 12 },
       ...
     ]
-  }
+  },
+  "by_subject": [
+    { "subject_id": 2, "subject_name": "Multiple Sclerosis", "articles": 812, "trials": 30, "authors": 640, "sources": 12 },
+    { "subject_id": 5, "subject_name": "Rare Disease", "articles": 0, "trials": 0, "authors": 0, "sources": 0 }
+  ]
 }
 ```
 
@@ -355,20 +363,30 @@ Response shape (unchanged across all filter combinations):
 |:----------|:-----|:----------|
 | `organization` | int or CSV of ints | Scope counts to one or more organisations. Alias `org` is accepted. |
 | `team` | int or CSV of ints | Scope counts to one or more teams. |
+| `subject` | int or CSV of ints | Scope counts to one or more subjects (union, not intersection — matches `team`/`organization`, not the `subject_id` filter on the list endpoints). Adds/populates `by_subject`. IDs only — subject slugs are not unique across teams, so there is no slug form of this filter here. |
 | `include_public` | bool (`true`/`false`) | Handled by the visibility layer — adds public-org data for identified callers. |
 
-When both `organization` and `team` are given the effective scope is their **intersection**: teams that belong to the requested org(s).
+When both `organization` and `team` are given the effective scope is their **intersection**: teams that belong to the requested org(s). The same applies to `subject` versus `team`/`organization`: a subject the caller can see but that doesn't belong to the requested team/org scope does **not** 404 — it returns a well-formed payload with every count at zero and `by_subject: []`.
+
+#### `by_subject`
+
+- Lists **every subject in scope**, including ones with zero articles and zero trials — this is deliberate (it doubles as the data a subject picker needs) and differs from `/articles/stats/` and `/trials/stats/`, which aggregate off the through table and omit empty subjects.
+- Scope: subjects whose team is in the resolved team scope, further narrowed to `?subject=` when given. Ordered by `subject_name` ascending.
+- Per-subject counts are `articles`, `trials`, `authors`, `sources` — **no per-subject `subscribers`**. With `Lists` as the only path from a subscriber to a subject, that number would describe list-tagging more than the subject itself.
+- `sources` counts distinct **domains** (matching the top-level `sources.total` semantics), not feed rows — two RSS feeds on the same domain count once. A `Sources` row with `subject` unset (`null`) is excluded from every `by_subject` row and, when `?subject=` is applied, from the filtered totals too.
+- Neither `authors` nor `sources` in a `by_subject` row sums to the top-level total, and that's correct: both are *distinct within that subject*. An author publishing under two subjects appears in both rows and once at the top; a domain feeding two subjects likewise.
+- Roughly 42% of trials in this dataset have no subject assigned — a subject-filtered `trials` count is expected to be substantially lower than the team-scoped one; that's coverage, not a bug.
 
 #### Error responses
 
 | Status | Condition |
 |:-------|:----------|
-| `400 Bad Request` | Non-integer value in `team` or `organization`. |
-| `404 Not Found` | Any requested `team` or `organization` is not visible to the caller (hidden org — existence is not leaked). |
+| `400 Bad Request` | Non-integer value in `team`, `organization`, or `subject`. |
+| `404 Not Found` | Any requested `team`, `organization`, or `subject` is not visible to the caller (hidden org — existence is not leaked). Subject visibility is judged against the caller's visible organisations only, independent of `team`/`organization` scoping (see the intersection note above). |
 
 #### Caching
 
-Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using Django's database cache. All gunicorn workers share the same cached value. The cache key encodes the resolved set of in-scope team IDs, so different filter combinations are cached independently.
+Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using Django's database cache. All gunicorn workers share the same cached value. The cache key encodes both the resolved set of in-scope team IDs and the requested `subject` IDs, so different filter combinations — including the same team with and without a subject filter — are cached independently.
 
 ### Trials-specific filter parameters
 
