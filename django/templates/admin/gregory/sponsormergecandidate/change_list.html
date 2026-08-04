@@ -1,0 +1,50 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block content_title %}
+{{ block.super }}
+<div class="module" style="padding: 12px 16px; margin-bottom: 12px;">
+	<p>
+		Each row is a pair of <a href="{% url 'admin:gregory_sponsor_changelist' %}">Sponsors</a>
+		that <code>find_sponsor_merge_candidates</code> suspects are the same organisation
+		spelled two different ways &mdash; e.g. <em>Universitair Medisch Centrum Groningen</em>
+		vs. <em>Universitair Medisch Centrum</em>. Nothing is merged automatically; every pair
+		below is <strong>Pending</strong> until a human decides.
+	</p>
+	<p>
+		<strong>Basis</strong> explains why the pair was flagged:
+	</p>
+	<ul style="margin-top: 0;">
+		<li>
+			<strong>Suffix variant</strong> &mdash; the names are identical once a trailing legal-entity
+			suffix (Inc, Ltd, GmbH, AG, &hellip;) is stripped. Usually the same entity.
+		</li>
+		<li>
+			<strong>Containment</strong> &mdash; one name is a token-for-token prefix of the other
+			(e.g. <em>Aalborg University</em> vs. <em>Aalborg University Hospital</em>). This
+			catches genuine variants, but also related-but-distinct organisations &mdash; read
+			both names carefully before deciding.
+		</li>
+	</ul>
+	<p>
+		Select the rows you've reviewed and choose an action from the dropdown below:
+	</p>
+	<ul style="margin-top: 0;">
+		<li>
+			<strong>Merge (into curated/larger)</strong> &mdash; combines the pair into a single
+			Sponsor. The survivor is whichever side is manually curated, or otherwise whichever
+			has more trials; the other side's trials are reassigned to it and its Sponsor record
+			is deleted. <strong>This cannot be undone.</strong>
+		</li>
+		<li>
+			<strong>Dismiss</strong> &mdash; marks the pair as reviewed and not a match (e.g. two
+			genuinely different organisations). Dismissed pairs are remembered and won't be
+			suggested again.
+		</li>
+	</ul>
+	<p>
+		The list defaults to showing only <strong>Pending</strong> pairs; use the Status filter to
+		review pairs already decided.
+	</p>
+</div>
+{% endblock %}
