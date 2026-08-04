@@ -4,8 +4,7 @@ generation via drf-spectacular's ``@extend_schema(responses=...)``.
 These views build their response dicts by hand (aggregation queries, not a
 queryset of model instances), so DRF/drf-spectacular cannot infer a response
 shape from a ``serializer_class`` the normal way. Declaring the shape here
-keeps /api/schema/ honest about what these endpoints actually return — see
-STAGE-1-OPENAPI-SCHEMA-PLAN.md task 3.
+keeps /api/schema/ honest about what these endpoints actually return.
 """
 
 from django_filters import rest_framework as filters

@@ -12,8 +12,7 @@ class OpenAPISchemaGenerationTest(TestCase):
 	introspect (missing serializer_class, an un-annotated SerializerMethodField,
 	a django-filter field it can't resolve, ...) should fail CI here rather than
 	ship a wrong or incomplete schema. Mirrors what
-	``python manage.py spectacular --fail-on-warn`` checks — see
-	STAGE-1-OPENAPI-SCHEMA-PLAN.md.
+	``python manage.py spectacular --fail-on-warn`` checks.
 	"""
 
 	def setUp(self):

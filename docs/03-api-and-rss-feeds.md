@@ -16,7 +16,7 @@ The API also publishes a generated [OpenAPI 3](https://swagger.io/specification/
 | Swagger UI | `GET /api/schema/swagger-ui/` |
 | ReDoc | `GET /api/schema/redoc/` |
 
-This page stays the canonical *prose* reference — narrative context, examples, changelogs, and the "why" behind a parameter. The schema is the canonical *machine-checkable* reference for exact parameter names, types, and response shapes. When the two disagree, treat it as a bug: fix the mismatch (see `CLAUDE.md`'s docs rule), don't just pick one and move on. CI generation guard: `python manage.py spectacular --fail-on-warn` (see `gregory/tests/test_openapi_schema.py`).
+This page stays the canonical *prose* reference — narrative context, examples, changelogs, and the "why" behind a parameter. The schema is the canonical *machine-checkable* reference for exact parameter names, types, and response shapes. When the two disagree, treat it as a bug: fix the mismatch (see `CLAUDE.md`'s docs rule), don't just pick one and move on. CI generation guard: `python manage.py spectacular --fail-on-warn` (see `api/tests/test_openapi_schema.py`).
 
 ---
 
