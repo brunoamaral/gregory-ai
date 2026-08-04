@@ -25,7 +25,8 @@ from organizations.models import Organization, OrganizationUser
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
-from gregory.models import Articles, OrganizationApiSettings, Subject, Team
+from gregory.models import Articles, Authors, OrganizationApiSettings, Sources, Subject, Team
+from subscriptions.models import Lists, Subscribers
 
 User = get_user_model()
 
@@ -56,10 +57,12 @@ def _make_subject(team, name):
 	)
 
 
-def _make_article(title, link, teams=()):
+def _make_article(title, link, teams=(), subjects=()):
 	art = Articles.objects.create(title=title, link=link)
 	for t in teams:
 		art.teams.add(t)
+	for s in subjects:
+		art.subjects.add(s)
 	return art
 
 
@@ -410,8 +413,8 @@ class StatsCacheTest(StatsVisibilityBase):
 		self.client.get("/stats/", {"team": self.pub_team2.id})
 
 		# Both requests must produce distinct, non-None cache entries.
-		key1 = f"stats:{self.pub_team.id}"
-		key2 = f"stats:{self.pub_team2.id}"
+		key1 = f"stats:{self.pub_team.id}:subj:all"
+		key2 = f"stats:{self.pub_team2.id}:subj:all"
 		self.assertIsNotNone(django_cache.get(key1))
 		self.assertIsNotNone(django_cache.get(key2))
 		self.assertNotEqual(key1, key2)
@@ -420,7 +423,7 @@ class StatsCacheTest(StatsVisibilityBase):
 		"""setUp.cache.clear() isolates test runs."""
 		from django.core.cache import cache as django_cache
 
-		self.assertIsNone(django_cache.get("stats:all"))
+		self.assertIsNone(django_cache.get("stats:all:subj:all"))
 
 
 # ---------------------------------------------------------------------------
@@ -441,18 +444,24 @@ class StatsQueryCountTest(StatsVisibilityBase):
 		"""
 		A team-scoped /stats/ call must stay within a small query budget.
 
-		Budget breakdown (cold cache, 7 queries with the test suite's
+		Budget breakdown (cold cache, 8 queries with the test suite's
 		LocMemCache — CACHES in admin.settings_test — which never touches
 		the DB; production's DatabaseCache adds a cache GET/SET pair plus a
-		cull COUNT and SAVEPOINT/RELEASE, hence the generous <=15 ceiling):
+		cull COUNT and SAVEPOINT/RELEASE, hence the generous <=18 ceiling):
 		  1 — VisibleOrgMiddleware: OrganizationApiSettings lookup
 		  1 — resolve team_id_list (Team VALUES) — doubles as the
 		      team-visibility check when ?organization= is absent, since
 		      that predicate is identical to a standalone visibility query
 		      (see StatsView.get); no separate COUNT is issued
+		  1 — resolve visible_subjects (Subject VALUES) — always run, to
+		      build the by_subject roster; here it comes back empty (this
+		      base fixture has no subjects) so the 3 by_subject group-by
+		      queries below are skipped
 		  4 — articles, trials, authors, subscribers COUNT DISTINCT
 		  1 — sources VALUES
-		= 7 queries.
+		= 8 queries. A call whose scope actually contains subjects adds up
+		to 3 more (articles/trials/authors group-bys for by_subject) — see
+		docs/spec-stats-subject-filter.md §4.6.
 		"""
 		from django.db import connection
 		from django.test.utils import CaptureQueriesContext
@@ -461,7 +470,7 @@ class StatsQueryCountTest(StatsVisibilityBase):
 			self.client.get("/stats/", {"team": self.pub_team.id})
 		self.assertLessEqual(
 			len(ctx.captured_queries),
-			15,
+			18,
 			msg=f"StatsView exceeded the query budget: {len(ctx.captured_queries)} queries",
 		)
 
@@ -473,17 +482,609 @@ class StatsQueryCountTest(StatsVisibilityBase):
 		self.client.get("/stats/", {"team": self.pub_team.id})  # warm the cache
 		with CaptureQueriesContext(connection) as ctx:
 			self.client.get("/stats/", {"team": self.pub_team.id})
-		# <=3, not a pinned exact count: OrganizationApiSettings lookup (1)
+		# <=4, not a pinned exact count: OrganizationApiSettings lookup (1)
 		# + team_id_list resolution, which also serves as the
-		# team-visibility check (1) + cache GET (0 or 1 depending on
-		# backend). LocMemCache (admin.settings_test, what CI's pytest run
-		# uses) answers GET in-process with no SQL, landing at 2;
-		# DatabaseCache backends (production, and admin.settings's default
-		# used when this test is invoked via `manage.py test` instead of
-		# pytest) add one SQL round-trip for the GET, landing at 3. Either
-		# way this must stay far below the cold-cache budget above.
+		# team-visibility check (1) + visible_subjects resolution, which
+		# also serves as the ?subject= 404 check and runs before the cache
+		# lookup so a cache hit can't bypass it (1) + cache GET (0 or 1
+		# depending on backend). LocMemCache (admin.settings_test, what
+		# CI's pytest run uses) answers GET in-process with no SQL, landing
+		# at 3; DatabaseCache backends (production, and admin.settings's
+		# default used when this test is invoked via `manage.py test`
+		# instead of pytest) add one SQL round-trip for the GET, landing at
+		# 4. Either way this must stay far below the cold-cache budget above.
 		self.assertLessEqual(
 			len(ctx.captured_queries),
-			3,
+			4,
 			msg=f"Cache hit should eliminate the count queries: {len(ctx.captured_queries)} queries",
 		)
+
+	def test_subject_scoped_call_query_budget(self):
+		"""
+		A call whose scope actually contains a subject exercises the
+		by_subject group-bys (skipped, and therefore untested, by
+		test_scoped_call_query_budget above — that fixture has no subjects).
+
+		Budget breakdown (cold cache, both cache layers empty):
+		  11 — the 8 from test_scoped_call_query_budget, plus 3 group-bys
+		       (articles/trials/authors) for the one missing by_subject row
+		       — see StatsView.get's by_subject block.
+		Under LocMemCache (admin.settings_test, what CI's pytest run uses)
+		get_many()/set_many() issue no SQL, so this test's real ceiling there
+		is the same <=18 as the other budget tests, and it holds. But under
+		`manage.py test`'s default DatabaseCache (admin.settings — what this
+		test measures when run outside pytest), every individual set() —
+		including each item set_many() loops over, since DatabaseCache
+		doesn't bulk-optimize writes — is its own transaction: a cull-check
+		COUNT, BEGIN, an existence SELECT, an INSERT/UPDATE, COMMIT (5
+		queries). This call makes two separate writes (the one by_subject
+		row, plus the whole-payload cache.set() at the end), so DatabaseCache
+		adds roughly 2 reads + 2*5 writes = 12 queries on top of the 11 core
+		ones — measured at 23-24. Ceiling set well above that measured
+		number, not derived from it, so a real regression still trips it.
+		"""
+		from django.core.cache import cache as django_cache
+		from django.db import connection
+		from django.test.utils import CaptureQueriesContext
+		from gregory.models import Subject
+
+		subject = Subject.objects.create(
+			team=self.pub_team, subject_name="Budget Subject", subject_slug="budget-subject"
+		)
+		self.art_pub.subjects.add(subject)
+		django_cache.clear()
+
+		with CaptureQueriesContext(connection) as ctx:
+			self.client.get(
+				"/stats/", {"team": self.pub_team.id, "subject": subject.id}
+			)
+		self.assertLessEqual(
+			len(ctx.captured_queries),
+			30,
+			msg=f"StatsView exceeded the query budget: {len(ctx.captured_queries)} queries",
+		)
+
+
+# ---------------------------------------------------------------------------
+# ?subject= filtering and by_subject facet
+# ---------------------------------------------------------------------------
+
+
+class SubjectStatsBase(StatsVisibilityBase):
+	"""Shared fixture: subjects, tagged articles/trials, a source, a list."""
+
+	def setUp(self):
+		super().setUp()
+		from django.core.cache import cache
+
+		cache.clear()
+
+		self.user = User.objects.create_user(username="subj-member", password="pw")
+		OrganizationUser.objects.create(organization=self.my_org, user=self.user)
+		self.client.force_login(self.user)
+		self.include_public = {"include_public": "true"}
+
+		self.subj_a = _make_subject(self.my_team, "Subject A")
+		self.subj_b = _make_subject(self.my_team, "Subject B")
+		self.subj_pub = _make_subject(self.pub_team, "Subject Pub")
+		self.subj_priv = _make_subject(self.priv_team, "Subject Priv")
+
+		# art_mine / trial_mine (from the base fixture) get tagged with subj_a.
+		self.art_mine.subjects.add(self.subj_a)
+		self.trial_mine.subjects.add(self.subj_a)
+
+		self.art_mine2 = _make_article(
+			"Mine Art 2", "https://st.ex/subj/a4", teams=[self.my_team], subjects=[self.subj_b]
+		)
+
+		# Article tagged with subj_a but belonging to no team — the §4.4 leak
+		# guard: a ?team=my_team&subject=subj_a call must exclude it.
+		self.art_teamless = _make_article(
+			"Teamless", "https://st.ex/subj/teamless", teams=[], subjects=[self.subj_a]
+		)
+
+		self.source_a = Sources.objects.create(
+			name="Src A",
+			link="https://src-a.example.com/feed",
+			team=self.my_team,
+			subject=self.subj_a,
+			source_for="science paper",
+		)
+		self.source_null = Sources.objects.create(
+			name="Src Null",
+			link="https://src-null.example.com/feed",
+			team=self.my_team,
+			subject=None,
+			source_for="science paper",
+		)
+
+		self.list_a = Lists.objects.create(list_name="List A", team=self.my_team)
+		self.list_a.subjects.add(self.subj_a)
+		self.sub_a = Subscribers.objects.create(
+			first_name="Sub", last_name="A", email="suba-stats@example.com", active=True
+		)
+		self.sub_a.subscriptions.add(self.list_a)
+
+		self.list_none = Lists.objects.create(list_name="List None", team=self.my_team)
+		self.sub_none = Subscribers.objects.create(
+			first_name="Sub", last_name="None", email="subnone-stats@example.com", active=True
+		)
+		self.sub_none.subscriptions.add(self.list_none)
+
+
+class SubjectFilterStatsTest(SubjectStatsBase):
+	"""?subject= scopes every count, unions across IDs, and validates input."""
+
+	def test_subject_filter_scopes_counts(self):
+		resp = self.client.get(
+			"/stats/", {"subject": self.subj_a.id, **self.include_public}
+		)
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["articles"], 1)  # art_mine only
+		self.assertEqual(resp.data["trials"], 1)  # trial_mine only
+		self.assertEqual(resp.data["subscribers"], 1)  # sub_a only
+		self.assertEqual(resp.data["sources"]["total"], 1)  # source_a only
+
+	def test_subject_filter_unions_rather_than_intersects(self):
+		resp = self.client.get(
+			"/stats/",
+			{"subject": f"{self.subj_a.id},{self.subj_b.id}", **self.include_public},
+		)
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["articles"], 2)  # art_mine + art_mine2
+
+	def test_invalid_subject_param_returns_400(self):
+		resp = self.client.get("/stats/", {"subject": "abc"})
+		self.assertEqual(resp.status_code, 400)
+		self.assertIn("Invalid subject parameter", resp.data["error"])
+
+	def test_teamless_article_excluded_by_team_scope(self):
+		"""§4.4 leak guard: team join stays in effect even with ?subject=."""
+		resp = self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["articles"], 1)  # art_mine, not art_teamless
+
+	def test_source_with_null_subject_dropped_when_filtering(self):
+		resp_unfiltered = self.client.get("/stats/", {"team": self.my_team.id})
+		self.assertEqual(resp_unfiltered.data["sources"]["total"], 2)
+
+		resp_filtered = self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)
+		self.assertEqual(resp_filtered.data["sources"]["total"], 1)
+
+	def test_list_without_subjects_contributes_no_subscribers(self):
+		resp = self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)
+		self.assertEqual(resp.data["subscribers"], 1)  # sub_a, not sub_none
+
+
+class SubjectVisibilityStatsTest(SubjectStatsBase):
+	"""A subject in a non-visible org is 404, same as team/organization."""
+
+	def test_hidden_org_subject_404_for_anonymous(self):
+		anon = APIClient()
+		resp = anon.get("/stats/", {"subject": self.subj_priv.id})
+		self.assertEqual(resp.status_code, 404)
+
+	def test_hidden_org_subject_404_for_api_key(self):
+		scheme = _make_api_scheme(self.my_org, "subj-visibility-key")
+		key_client = APIClient()
+		key_client.credentials(HTTP_AUTHORIZATION=scheme.api_key)
+		resp = key_client.get("/stats/", {"subject": self.subj_priv.id})
+		self.assertEqual(resp.status_code, 404)
+
+	def test_public_org_subject_404_without_include_public(self):
+		resp = self.client.get("/stats/", {"subject": self.subj_pub.id})
+		self.assertEqual(resp.status_code, 404)
+
+	def test_public_org_subject_200_with_include_public(self):
+		resp = self.client.get(
+			"/stats/", {"subject": self.subj_pub.id, **self.include_public}
+		)
+		self.assertEqual(resp.status_code, 200)
+
+	def test_mixed_visible_hidden_subject_returns_404(self):
+		resp = self.client.get(
+			"/stats/",
+			{"subject": f"{self.subj_a.id},{self.subj_priv.id}", **self.include_public},
+		)
+		self.assertEqual(resp.status_code, 404)
+
+
+class SubjectTeamIntersectionStatsTest(SubjectStatsBase):
+	"""?team= + ?subject= intersection: zero payload, not 404, on mismatch."""
+
+	def test_team_and_subject_of_other_team_returns_zero_not_404(self):
+		resp = self.client.get(
+			"/stats/",
+			{"team": self.pub_team.id, "subject": self.subj_a.id, **self.include_public},
+		)
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["articles"], 0)
+		self.assertEqual(resp.data["trials"], 0)
+		self.assertEqual(resp.data["by_subject"], [])
+
+	def test_team_and_its_own_subject_returns_counts(self):
+		resp = self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["articles"], 1)
+
+
+class SubjectStatsCacheTest(SubjectStatsBase):
+	"""Subject-filtered payloads must not share a cache entry with others."""
+
+	def test_team_only_and_team_plus_subject_do_not_share_cache(self):
+		from django.core.cache import cache as django_cache
+
+		self.client.get("/stats/", {"team": self.my_team.id})
+		self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)
+		key_unfiltered = f"stats:{self.my_team.id}:subj:all"
+		key_filtered = f"stats:{self.my_team.id}:subj:{self.subj_a.id}"
+		cached_unfiltered = django_cache.get(key_unfiltered)
+		cached_filtered = django_cache.get(key_filtered)
+		self.assertIsNotNone(cached_unfiltered)
+		self.assertIsNotNone(cached_filtered)
+		self.assertNotEqual(cached_unfiltered["articles"], cached_filtered["articles"])
+
+	def test_different_subject_filters_cached_independently(self):
+		from django.core.cache import cache as django_cache
+
+		self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)
+		self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_b.id}
+		)
+		key_a = f"stats:{self.my_team.id}:subj:{self.subj_a.id}"
+		key_b = f"stats:{self.my_team.id}:subj:{self.subj_b.id}"
+		self.assertIsNotNone(django_cache.get(key_a))
+		self.assertIsNotNone(django_cache.get(key_b))
+
+	def test_reordered_subject_list_shares_cache_key(self):
+		from django.core.cache import cache as django_cache
+
+		self.client.get(
+			"/stats/",
+			{"team": self.my_team.id, "subject": f"{self.subj_a.id},{self.subj_b.id}"},
+		)
+		sorted_ids = ",".join(
+			str(i) for i in sorted([self.subj_a.id, self.subj_b.id])
+		)
+		key_sorted = f"stats:{self.my_team.id}:subj:{sorted_ids}"
+		self.assertIsNotNone(django_cache.get(key_sorted))
+
+		resp2 = self.client.get(
+			"/stats/",
+			{"team": self.my_team.id, "subject": f"{self.subj_b.id},{self.subj_a.id}"},
+		)
+		self.assertEqual(django_cache.get(key_sorted), resp2.data)
+
+
+class BySubjectFacetTest(StatsVisibilityBase):
+	"""The by_subject breakdown: roster, ordering, and per-subject counts."""
+
+	def setUp(self):
+		super().setUp()
+		from django.core.cache import cache
+
+		cache.clear()
+
+		self.user = User.objects.create_user(username="facet-member", password="pw")
+		OrganizationUser.objects.create(organization=self.my_org, user=self.user)
+		self.client.force_login(self.user)
+
+		# Zero-count subject (name sorts after "Alpha"/"Beta").
+		self.subj_zeta = _make_subject(self.my_team, "Zeta Subject")
+		self.subj_alpha = _make_subject(self.my_team, "Alpha Subject")
+		self.subj_beta = _make_subject(self.my_team, "Beta Subject")
+		# Belongs to a private org invisible to this caller.
+		self.subj_hidden = _make_subject(self.priv_team, "Hidden Subject")
+
+		self.author1 = Authors.objects.create(given_name="Ann", family_name="One")
+		self.author2 = Authors.objects.create(given_name="Bob", family_name="Two")
+
+		# Tagged with both subj_alpha and the invisible subj_hidden: the
+		# by_subject roster must still drop subj_hidden (leak guard).
+		self.art_alpha1 = _make_article(
+			"Alpha Art 1",
+			"https://facet.ex/a1",
+			teams=[self.my_team],
+			subjects=[self.subj_alpha, self.subj_hidden],
+		)
+		self.art_alpha1.authors.add(self.author1)
+
+		self.art_alpha2 = _make_article(
+			"Alpha Art 2",
+			"https://facet.ex/a2",
+			teams=[self.my_team],
+			subjects=[self.subj_alpha],
+		)
+		self.art_alpha2.authors.add(self.author2)
+
+		# Two feeds, same domain, both under subj_alpha → 1 domain for alpha.
+		Sources.objects.create(
+			name="Alpha Feed 1",
+			link="https://shared-domain.example.com/feed1",
+			team=self.my_team,
+			subject=self.subj_alpha,
+			source_for="science paper",
+		)
+		Sources.objects.create(
+			name="Alpha Feed 2",
+			link="https://shared-domain.example.com/feed2",
+			team=self.my_team,
+			subject=self.subj_alpha,
+			source_for="science paper",
+		)
+		# Same domain again, but under subj_beta → domain appears in both
+		# rows while counting once in the top-level sources.total.
+		Sources.objects.create(
+			name="Beta Feed",
+			link="https://shared-domain.example.com/feed3",
+			team=self.my_team,
+			subject=self.subj_beta,
+			source_for="science paper",
+		)
+		# No subject at all → must not appear in any by_subject row.
+		Sources.objects.create(
+			name="Null Feed",
+			link="https://null-domain.example.com/feed",
+			team=self.my_team,
+			subject=None,
+			source_for="science paper",
+		)
+
+	def _by_subject(self, resp):
+		return {row["subject_id"]: row for row in resp.data["by_subject"]}
+
+	def test_roster_includes_zero_count_subjects(self):
+		resp = self.client.get("/stats/", {"team": self.my_team.id})
+		rows = self._by_subject(resp)
+		self.assertIn(self.subj_zeta.id, rows)
+		self.assertEqual(rows[self.subj_zeta.id]["articles"], 0)
+		self.assertEqual(rows[self.subj_zeta.id]["trials"], 0)
+		self.assertEqual(rows[self.subj_zeta.id]["sources"], 0)
+
+	def test_roster_ordered_by_subject_name(self):
+		resp = self.client.get("/stats/", {"team": self.my_team.id})
+		names = [row["subject_name"] for row in resp.data["by_subject"]]
+		self.assertEqual(names, sorted(names))
+
+	def test_roster_respects_subject_filter(self):
+		resp = self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_alpha.id}
+		)
+		ids = [row["subject_id"] for row in resp.data["by_subject"]]
+		self.assertEqual(ids, [self.subj_alpha.id])
+
+	def test_hidden_org_subject_excluded_despite_visible_article_tag(self):
+		resp = self.client.get("/stats/", {"team": self.my_team.id})
+		ids = {row["subject_id"] for row in resp.data["by_subject"]}
+		self.assertNotIn(self.subj_hidden.id, ids)
+
+	def test_per_subject_authors_counted_once_each(self):
+		resp = self.client.get("/stats/", {"team": self.my_team.id})
+		rows = self._by_subject(resp)
+		self.assertEqual(rows[self.subj_alpha.id]["authors"], 2)
+		self.assertEqual(resp.data["authors"], 2)
+
+	def test_per_subject_sources_counts_distinct_domains(self):
+		resp = self.client.get("/stats/", {"team": self.my_team.id})
+		rows = self._by_subject(resp)
+		# Two feeds, same domain, same subject → still 1.
+		self.assertEqual(rows[self.subj_alpha.id]["sources"], 1)
+		# Domain shared with alpha, different subject → appears here too.
+		self.assertEqual(rows[self.subj_beta.id]["sources"], 1)
+		# Shared domain counted once overall despite feeding two subjects,
+		# plus the null-domain source → 2 total.
+		self.assertEqual(resp.data["sources"]["total"], 2)
+
+	def test_no_subscribers_key_in_by_subject_rows(self):
+		resp = self.client.get("/stats/", {"team": self.my_team.id})
+		for row in resp.data["by_subject"]:
+			self.assertNotIn("subscribers", row)
+
+
+# ---------------------------------------------------------------------------
+# Correctness regressions: team/subject must pin to the SAME row, not just
+# co-occur somewhere in the caller's data (PR #823 review findings).
+# ---------------------------------------------------------------------------
+
+
+class SubjectCountCorrectnessTest(SubjectStatsBase):
+	"""Chained .filter() calls on a multi-valued relation can silently mix
+	rows from two different related objects. These pin the fix.
+	"""
+
+	def test_authors_count_requires_same_article(self):
+		"""An author must have ONE article satisfying both team and subject.
+
+		Before the fix, chaining .filter(articles__teams__in=...).filter(
+		articles__subjects__in=...) re-joins Authors->Articles per call, so an
+		author with one article in the team and an unrelated article carrying
+		the subject was wrongly counted.
+		"""
+		other_team = _make_team(self.pub_org, "Other Team CC")
+		author = Authors.objects.create(given_name="Same", family_name="Article")
+
+		art_team_only = _make_article(
+			"Team Only", "https://cc.ex/team-only", teams=[self.my_team]
+		)
+		art_team_only.authors.add(author)
+
+		art_subject_only = _make_article(
+			"Subject Only",
+			"https://cc.ex/subject-only",
+			teams=[other_team],
+			subjects=[self.subj_a],
+		)
+		art_subject_only.authors.add(author)
+
+		resp = self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(resp.data["authors"], 0)
+
+	def test_subscribers_count_requires_same_list(self):
+		"""A subscriber must be on ONE list satisfying both team and subject.
+
+		Before the fix, .filter(subscriptions__team__in=...).filter(
+		subscriptions__subjects__in=...) let a subscriber on List A (this
+		team, no subjects) and List B (a different team, this subject) count
+		— two different lists satisfying one predicate each.
+		"""
+		other_team = _make_team(self.pub_org, "Other Team Sub CC")
+		list_team_only = Lists.objects.create(
+			list_name="Team Only List", team=self.my_team
+		)
+		list_subject_only = Lists.objects.create(
+			list_name="Subject Only List", team=other_team
+		)
+		list_subject_only.subjects.add(self.subj_a)
+
+		cross_subscriber = Subscribers.objects.create(
+			first_name="Cross",
+			last_name="List",
+			email="crosslist-cc@example.com",
+			active=True,
+		)
+		cross_subscriber.subscriptions.add(list_team_only, list_subject_only)
+
+		resp = self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)
+		self.assertEqual(resp.status_code, 200)
+		# sub_a (base fixture, on list_a: team=my_team, subject=subj_a) is the
+		# only subscriber that should count; cross_subscriber satisfies team
+		# and subject via two DIFFERENT lists and must not add a second.
+		self.assertEqual(resp.data["subscribers"], 1)
+
+
+# ---------------------------------------------------------------------------
+# by_subject two-layer cache (PR #823 review, fix 3)
+# ---------------------------------------------------------------------------
+
+
+class BySubjectRowCacheTest(SubjectStatsBase):
+	"""Per-(team scope, subject) row cache, separate from the whole-payload
+	cache: a row computed for one ?subject= combination must be reused by
+	every other combination over the same team scope.
+	"""
+
+	def test_rows_reused_across_subject_filters(self):
+		"""A layer-1 miss must not re-run the by_subject group-by queries
+		when the layer-2 rows for the roster are already warm.
+		"""
+		from django.core.cache import cache as django_cache
+		from django.db import connection
+		from django.test.utils import CaptureQueriesContext
+
+		self.client.get("/stats/", {"team": self.my_team.id})  # warms both layers
+
+		layer1_key = f"stats:{self.my_team.id}:subj:all"
+		django_cache.delete(layer1_key)
+
+		through_table = Articles.subjects.through._meta.db_table
+
+		with CaptureQueriesContext(connection) as ctx:
+			self.client.get(
+				"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+			)
+
+		group_by_queries = [
+			q
+			for q in ctx.captured_queries
+			if through_table in q["sql"] and "GROUP BY" in q["sql"].upper()
+		]
+		self.assertEqual(
+			group_by_queries,
+			[],
+			msg="by_subject group-by re-ran despite warm layer-2 rows",
+		)
+
+	def test_row_cache_key_differs_by_team_scope(self):
+		"""The same subject under two different team scopes must not share
+		a row — team_part namespaces the layer-2 key.
+		"""
+		from django.core.cache import cache as django_cache
+
+		wide_team = _make_team(self.my_org, "Wide Team CC")
+		_make_article(
+			"Wide Team Art",
+			"https://cc.ex/wide-team-art",
+			teams=[wide_team],
+			subjects=[self.subj_a],
+		)
+
+		self.client.get("/stats/", {"team": self.my_team.id})
+		self.client.get(
+			"/stats/", {"team": f"{self.my_team.id},{wide_team.id}"}
+		)
+
+		narrow_key = f"stats:subjrow:{self.my_team.id}:{self.subj_a.id}"
+		wide_team_part = ",".join(str(i) for i in sorted([self.my_team.id, wide_team.id]))
+		wide_key = f"stats:subjrow:{wide_team_part}:{self.subj_a.id}"
+
+		narrow_row = django_cache.get(narrow_key)
+		wide_row = django_cache.get(wide_key)
+		self.assertIsNotNone(narrow_row)
+		self.assertIsNotNone(wide_row)
+		# my_team alone only has art_mine tagged with subj_a; the wider
+		# scope also picks up the new wide_team article.
+		self.assertEqual(narrow_row["articles"], 1)
+		self.assertEqual(wide_row["articles"], 2)
+
+	def test_renamed_subject_reflected_without_ttl_wait(self):
+		"""subject_name comes from the roster query, not the cached row."""
+		from django.core.cache import cache as django_cache
+
+		self.client.get("/stats/", {"team": self.my_team.id})  # warms layer 2
+
+		self.subj_a.subject_name = "Renamed Subject A"
+		self.subj_a.save(update_fields=["subject_name"])
+
+		django_cache.delete(f"stats:{self.my_team.id}:subj:all")  # layer-1 only
+
+		resp = self.client.get("/stats/", {"team": self.my_team.id})
+		row = next(r for r in resp.data["by_subject"] if r["subject_id"] == self.subj_a.id)
+		self.assertEqual(row["subject_name"], "Renamed Subject A")
+
+	def test_row_cache_survives_layer1_miss(self):
+		"""Documents the staleness contract: a layer-1 miss can pick up a
+		still-warm layer-2 row, so by_subject can lag the top-level totals
+		by up to STATS_CACHE_TTL. Pinned so a future change to this is
+		deliberate, not accidental.
+		"""
+		from django.core.cache import cache as django_cache
+
+		self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)  # warms both layers
+
+		_make_article(
+			"New After Warm",
+			"https://cc.ex/new-after-warm",
+			teams=[self.my_team],
+			subjects=[self.subj_a],
+		)
+
+		django_cache.delete(f"stats:{self.my_team.id}:subj:{self.subj_a.id}")
+
+		resp = self.client.get(
+			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
+		)
+		row = next(r for r in resp.data["by_subject"] if r["subject_id"] == self.subj_a.id)
+		# Top-level total is fresh (layer-1 miss recomputes it)...
+		self.assertEqual(resp.data["articles"], 2)  # art_mine + the new article
+		# ...but the by_subject row is served from the still-warm layer-2
+		# cache and has not caught up yet — the documented skew.
+		self.assertEqual(row["articles"], 1)

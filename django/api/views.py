@@ -3724,12 +3724,23 @@ class StatsView(APIView):
 	    Scope to one or more organisations (comma-separated integer IDs).
 	    When combined with ?team=, the effective scope is the intersection:
 	    teams that belong to the requested org(s).
+	?subject=1,2
+	    Scope to one or more subjects (comma-separated integer IDs, OR/union
+	    semantics). Adds a ``by_subject`` breakdown to the payload, listing
+	    every in-scope subject (including zero-count ones) with its own
+	    articles/trials/authors/sources counts. Per-subject subscriber counts
+	    are deliberately omitted — see docs/03-api-and-rss-feeds.md.
 
-	Both params are validated against ``request.visible_org_ids``
-	(set by VisibleOrgMiddleware).  A team or org that is not visible to the
-	caller returns 404 so that existence is not leaked.  When the middleware
-	attribute is absent (management commands, tests bypassing middleware) the
-	visibility check is skipped and the params still narrow the queryset.
+	All three params are validated against ``request.visible_org_ids``
+	(set by VisibleOrgMiddleware). A team, org, or subject that is not visible
+	to the caller returns 404 so that existence is not leaked. When the
+	middleware attribute is absent (management commands, tests bypassing
+	middleware) the visibility check is skipped and the params still narrow
+	the queryset.
+
+	A subject that is visible but outside the requested ``?team=``/``?organization=``
+	scope does not 404 — it returns a well-formed, all-zero payload, matching
+	the existing ``?team=`` + ``?organization=`` intersection behaviour.
 
 	Results are short-lived cached (STATS_CACHE_TTL seconds, default 600) using
 	Django's database cache so all gunicorn workers share the same value.
@@ -3769,6 +3780,22 @@ class StatsView(APIView):
 				return Response(
 					{
 						"error": "Invalid organization parameter. Expected integer or comma-separated integers."
+					},
+					status=status.HTTP_400_BAD_REQUEST,
+				)
+
+		# --- Parse ?subject= ---------------------------------------------
+		subject_param = request.query_params.get("subject")
+		subject_ids = None
+		if subject_param:
+			try:
+				subject_ids = [
+					int(s.strip()) for s in subject_param.split(",") if s.strip()
+				]
+			except ValueError:
+				return Response(
+					{
+						"error": "Invalid subject parameter. Expected integer or comma-separated integers."
 					},
 					status=status.HTTP_400_BAD_REQUEST,
 				)
@@ -3838,56 +3865,152 @@ class StatsView(APIView):
 		):
 			raise Http404
 
+		# --- Resolve subjects (one query: visibility + scope + roster) ---
+		# When ?subject= is absent, this is the in-scope roster used for
+		# by_subject; when present, it's looked up WITHOUT the team narrowing
+		# (applied in Python below), because the team narrowing is what
+		# distinguishes a 404 from an all-zero payload (decision 7 in
+		# docs/spec-stats-subject-filter.md).
+		subj_qs = Subject.objects.all()
+		if visible_org_ids is not None:
+			subj_qs = subj_qs.filter(team__organization_id__in=visible_org_ids)
+		if subject_ids is not None:
+			subj_qs = subj_qs.filter(id__in=subject_ids)
+		elif team_id_list is not None:
+			subj_qs = subj_qs.filter(team_id__in=team_id_list)
+		visible_subjects = list(
+			subj_qs.values("id", "subject_name", "team_id").order_by("subject_name")
+		)
+
+		if (
+			subject_ids is not None
+			and visible_org_ids is not None
+			and len(visible_subjects) != len(set(subject_ids))
+		):
+			raise Http404
+
+		if subject_ids is not None:
+			effective_subject_ids = [
+				s["id"]
+				for s in visible_subjects
+				if team_id_list is None or s["team_id"] in team_id_list
+			]
+			by_subject_roster = [
+				s
+				for s in visible_subjects
+				if team_id_list is None or s["team_id"] in team_id_list
+			]
+		else:
+			effective_subject_ids = None
+			by_subject_roster = visible_subjects
+
+		apply_subject = effective_subject_ids is not None
+
 		# --- Cache lookup -----------------------------------------------
-		cache_key = "stats:" + (
+		# team_part is also the namespace for the per-subject-row cache
+		# (layer 2, see the by_subject facet below) — reused as-is so a row
+		# computed under one team scope is never served under another.
+		team_part = (
 			"all"
 			if team_id_list is None
 			else ",".join(str(i) for i in sorted(team_id_list))
+		)
+		cache_key = (
+			"stats:"
+			+ team_part
+			+ ":subj:"
+			+ (
+				"all"
+				if subject_ids is None
+				else ",".join(str(i) for i in sorted(set(subject_ids)))
+			)
 		)
 		cached = cache.get(cache_key)
 		if cached is not None:
 			return Response(cached)
 
 		# --- Counts (single join per queryset) --------------------------
-		if fully_unscoped:
+		if fully_unscoped and not apply_subject:
 			articles_count = Articles.objects.count()
 			trials_count = Trials.objects.count()
 			authors_count = Authors.objects.count()
 			subscribers_count = Subscribers.objects.filter(active=True).count()
 			sources_qs = Sources.objects.all()
 		else:
-			# .values(pk).distinct().count() instead of .distinct().count():
+			# .order_by().values(pk).distinct().count() instead of .distinct().count():
 			# the latter runs DISTINCT over every column (incl. Authors.biography,
 			# a free-text field), forcing Postgres to dedupe full rows across the
-			# join instead of just primary keys — ~5x slower at prod scale.
+			# join instead of just primary keys — ~5x slower at prod scale. The
+			# .order_by() clears Meta.ordering (Articles orders by -discovery_date
+			# by default), which would otherwise sneak a second column into the
+			# DISTINCT and defeat the point.
+			#
+			# The team join is kept even when only ?subject= is given: an
+			# article belonging solely to a non-visible team could carry a
+			# subject the caller can see, and filtering on subject alone
+			# would leak it into the count.
+			articles_qs = Articles.objects.all()
+			if team_id_list is not None:
+				articles_qs = articles_qs.filter(teams__in=team_id_list)
+			if apply_subject:
+				articles_qs = articles_qs.filter(subjects__in=effective_subject_ids)
 			articles_count = (
-				Articles.objects.filter(teams__in=team_id_list)
-				.values("article_id")
-				.distinct()
-				.count()
+				articles_qs.order_by().values("article_id").distinct().count()
 			)
+
+			trials_qs = Trials.objects.all()
+			if team_id_list is not None:
+				trials_qs = trials_qs.filter(teams__in=team_id_list)
+			if apply_subject:
+				trials_qs = trials_qs.filter(subjects__in=effective_subject_ids)
 			trials_count = (
-				Trials.objects.filter(teams__in=team_id_list)
-				.values("trial_id")
-				.distinct()
-				.count()
+				trials_qs.order_by().values("trial_id").distinct().count()
 			)
-			authors_count = (
-				Authors.objects.filter(articles__teams__in=team_id_list)
-				.values("author_id")
-				.distinct()
-				.count()
-			)
+
+			# Exists/OuterRef, not chained .filter() calls: Authors has no direct
+			# team/subject columns, so team and subject can only be pinned to the
+			# SAME article via a correlated subquery. Two chained
+			# .filter(articles__teams__in=...).filter(articles__subjects__in=...)
+			# calls each re-join Authors->Articles independently, so an author
+			# with one article in the team and an unrelated article carrying the
+			# subject would be counted — wrong. This also drops the DISTINCT
+			# entirely (Exists is a boolean per author, not a fan-out join).
+			authors_qs = Authors.objects.all()
+			if team_id_list is not None or apply_subject:
+				article_match = Articles.objects.filter(authors=OuterRef("pk"))
+				if team_id_list is not None:
+					article_match = article_match.filter(teams__in=team_id_list)
+				if apply_subject:
+					article_match = article_match.filter(
+						subjects__in=effective_subject_ids
+					)
+				authors_qs = authors_qs.filter(Exists(article_match))
+			authors_count = authors_qs.count()
+
+			# A single filter() call, not chained ones: Subscribers reaches both
+			# team and subject through the same subscriptions (Lists) relation,
+			# so both predicates must land on one filter() call to force a single
+			# join — a subscriber on List A (team T, no subject) and List B
+			# (other team, this subject) must NOT count for ?team=T&subject=S.
+			sub_filters = {"active": True}
+			if team_id_list is not None:
+				sub_filters["subscriptions__team__in"] = team_id_list
+			if apply_subject:
+				sub_filters["subscriptions__subjects__in"] = effective_subject_ids
 			subscribers_count = (
-				Subscribers.objects.filter(
-					active=True, subscriptions__team__in=team_id_list
-				)
+				Subscribers.objects.filter(**sub_filters)
+				.order_by()
 				.values("subscriber_id")
 				.distinct()
 				.count()
 			)
-			# Sources has a direct FK to Team — no distinct needed.
-			sources_qs = Sources.objects.filter(team_id__in=team_id_list)
+
+			# Sources has a direct FK to Team and to Subject — no distinct needed.
+			sources_qs = Sources.objects.all()
+			if team_id_list is not None:
+				sources_qs = sources_qs.filter(team_id__in=team_id_list)
+			if apply_subject:
+				sources_qs = sources_qs.filter(subject_id__in=effective_subject_ids)
 
 		# --- Sources domain aggregation (single pass) -------------------
 		def extract_domain(url):
@@ -3898,17 +4021,20 @@ class StatsView(APIView):
 			except Exception:
 				return None
 
-		source_data = list(sources_qs.values("link", "source_for"))
+		source_data = list(sources_qs.values("link", "source_for", "subject_id"))
 
 		all_domains = set()
 		type_domains = {}
 		domain_feed_count = {}
+		subject_domains = {}  # subject_id -> set of netlocs, for by_subject sources
 		for s in source_data:
 			d = extract_domain(s["link"])
 			if d:
 				all_domains.add(d)
 				type_domains.setdefault(s["source_for"], set()).add(d)
 				domain_feed_count[d] = domain_feed_count.get(d, 0) + 1
+				if s["subject_id"] is not None:
+					subject_domains.setdefault(s["subject_id"], set()).add(d)
 
 		sources_by_type = {k: len(v) for k, v in type_domains.items()}
 		sources_by_domain = sorted(
@@ -3916,6 +4042,54 @@ class StatsView(APIView):
 			key=lambda x: x["count"],
 			reverse=True,
 		)
+
+		# --- by_subject facet --------------------------------------------
+		# Per-(team scope, subject) row cache (layer 2), separate from the
+		# whole-payload cache (layer 1, keyed by cache_key above): the same
+		# row is identical no matter which OTHER subjects were requested
+		# alongside it, so a warm row is reused across every ?subject=
+		# combination over the same team scope instead of being recomputed
+		# per combination. `sources` and `subject_name` are deliberately
+		# left out of the cached value — both come for free from data this
+		# call already fetched (subject_domains / the roster), so caching
+		# them would only add a staleness surface for no gain.
+		by_subject = []
+		if by_subject_roster:
+			row_keys = {
+				s["id"]: f"stats:subjrow:{team_part}:{s['id']}"
+				for s in by_subject_roster
+			}
+			cached_rows = cache.get_many(list(row_keys.values()))
+			missing_ids = [
+				sid for sid, key in row_keys.items() if key not in cached_rows
+			]
+
+			if missing_ids:
+				subj_articles = self._subject_counts(Articles, missing_ids, team_id_list)
+				subj_trials = self._subject_counts(Trials, missing_ids, team_id_list)
+				subj_authors = self._subject_counts(
+					Articles, missing_ids, team_id_list, count_field="articles__authors"
+				)
+				fresh_rows = {
+					row_keys[sid]: {
+						"articles": subj_articles.get(sid, 0),
+						"trials": subj_trials.get(sid, 0),
+						"authors": subj_authors.get(sid, 0),
+					}
+					for sid in missing_ids
+				}
+				cache.set_many(fresh_rows, settings.STATS_CACHE_TTL)
+				cached_rows.update(fresh_rows)
+
+			by_subject = [
+				{
+					"subject_id": s["id"],
+					"subject_name": s["subject_name"],
+					**cached_rows[row_keys[s["id"]]],
+					"sources": len(subject_domains.get(s["id"], ())),
+				}
+				for s in by_subject_roster
+			]
 
 		payload = {
 			"articles": articles_count,
@@ -3927,6 +4101,24 @@ class StatsView(APIView):
 				"by_type": sources_by_type,
 				"by_domain": sources_by_domain,
 			},
+			"by_subject": by_subject,
 		}
 		cache.set(cache_key, payload, settings.STATS_CACHE_TTL)
 		return Response(payload)
+
+	@staticmethod
+	def _subject_counts(model, subject_ids, team_id_list, count_field=None):
+		"""Per-subject distinct count of ``count_field`` (default: model pk).
+
+		Aggregates off ``model.subjects.through`` so each of articles/trials/
+		authors is one grouped query, regardless of caller-side filtering.
+		"""
+		through = model.subjects.through
+		src = model._meta.model_name  # "articles" / "trials"
+		qs = through.objects.filter(subject_id__in=subject_ids)
+		if team_id_list is not None:
+			qs = qs.filter(**{f"{src}__teams__in": team_id_list})
+		rows = qs.values("subject_id").annotate(
+			count=Count(count_field or f"{src}_id", distinct=True)
+		)
+		return {r["subject_id"]: r["count"] for r in rows}

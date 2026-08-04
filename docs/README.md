@@ -44,6 +44,7 @@ walkthrough (read in order); everything else is reference or design material.
 | [article-doi-dedup.md](article-doi-dedup.md) | Article de-duplication by DOI. |
 | [streaming-csv-response.md](streaming-csv-response.md) | Implementation of streamed CSV responses. |
 | [spec-ml-training.md](spec-ml-training.md) | Specification for the ML training workflow. |
+| [spec-stats-subject-filter.md](spec-stats-subject-filter.md) | Specification for `?subject=` filtering and the `by_subject` breakdown on `GET /stats/`. |
 
 ## Operations & commands
 
