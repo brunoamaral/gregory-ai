@@ -119,3 +119,4 @@ Always check `django/gregory/models.py` when:
 - Test coverage for new features
 - Follow Django best practices
 - When changing a filter, serializer, view, model, or route, update the docs in the same PR — `docs/03-api-and-rss-feeds.md` (the canonical API reference), the relevant view docstring, and `docs/02.1-database-tables-and-fields.md` for schema changes. See `docs/README.md`.
+- The API also has a generated OpenAPI schema (drf-spectacular) at `/api/schema/` — regenerate it in the same PR (`python manage.py spectacular --file schema.yml --fail-on-warn`) and commit `schema.yml`. New filter fields need `help_text` (see `api/filters.py`); endpoints with no introspectable serializer (manual `APIView`s, `@action`s returning hand-built dicts) need `@extend_schema`/`@extend_schema_view` — see the existing usages in `api/views.py` and `api/schema_serializers.py`.

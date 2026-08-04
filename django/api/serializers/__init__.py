@@ -1,3 +1,5 @@
+from typing import Optional
+
 from rest_framework import serializers
 from gregory.models import (
 	Articles,
@@ -123,10 +125,10 @@ class CategoryTopAuthorSerializer(serializers.ModelSerializer):
 			"articles_count",
 		]
 
-	def get_articles_count(self, obj):
+	def get_articles_count(self, obj) -> int:
 		return getattr(obj, "category_articles_count", 0)
 
-	def get_country(self, obj):
+	def get_country(self, obj) -> Optional[str]:
 		return obj.country.code if obj.country else None
 
 
@@ -153,7 +155,7 @@ class CategorySerializer(serializers.ModelSerializer):
 			"monthly_counts",
 		]
 
-	def get_article_count_total(self, obj):
+	def get_article_count_total(self, obj) -> int:
 		"""Prefer the queryset's Count(..., distinct=True) annotation; fall
 		back to a live count for an un-annotated instance (e.g. built
 		directly in a test)."""
@@ -164,7 +166,7 @@ class CategorySerializer(serializers.ModelSerializer):
 		# Fallback to simple count query (avoid obj.article_count() which may be complex)
 		return obj.articles.count()
 
-	def get_trials_count_total(self, obj):
+	def get_trials_count_total(self, obj) -> int:
 		"""Prefer the queryset's Count(..., distinct=True) annotation; fall
 		back to a live count for an un-annotated instance."""
 		annotated = getattr(obj, "trials_count_annotated", None)
@@ -174,7 +176,7 @@ class CategorySerializer(serializers.ModelSerializer):
 		# Fallback to simple count query
 		return obj.trials.count()
 
-	def get_authors_count(self, obj):
+	def get_authors_count(self, obj) -> int:
 		"""Optimized authors count avoiding complex JOINs"""
 		# Use annotated count if available
 		if hasattr(obj, "authors_count_annotated"):
@@ -189,7 +191,7 @@ class CategorySerializer(serializers.ModelSerializer):
 			Exists(obj.articles.filter(authors=OuterRef("pk")))
 		).count()
 
-	def get_top_authors(self, obj):
+	def get_top_authors(self, obj) -> list:
 		"""Optimized top authors calculation avoiding complex JOINs"""
 		# Get author parameters from serializer context
 		context = self.context
@@ -240,7 +242,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 		return CategoryTopAuthorSerializer(top_authors, many=True).data
 
-	def get_monthly_counts(self, obj):
+	def get_monthly_counts(self, obj) -> Optional[dict]:
 		"""Get monthly counts of articles and trials when requested"""
 		# Get monthly counts parameters from serializer context
 		context = self.context
@@ -399,11 +401,11 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
 			"country",
 		]
 
-	def get_country(self, obj):
+	def get_country(self, obj) -> Optional[str]:
 		# Return the country code or name
 		return obj.country.code if obj.country else None
 
-	def get_full_name(self, obj):
+	def get_full_name(self, obj) -> str:
 		return obj.full_name
 
 
@@ -457,7 +459,7 @@ class ArticleSerializer(
 		]
 		read_only_fields = ("discovery_date", "ml_predictions", "ml_score", "clinical_trials")
 
-	def get_clinical_trials(self, obj):
+	def get_clinical_trials(self, obj) -> list:
 		"""Get trials referenced in the article"""
 		references = obj.trial_references.all()
 		trials = [ref.trial for ref in references]
@@ -492,7 +494,7 @@ class ArticleSerializer(
 		self._org_content_cache[key] = content
 		return content
 
-	def get_takeaways(self, obj):
+	def get_takeaways(self, obj) -> Optional[str]:
 		"""Return takeaways from ArticleOrgContent for the caller's org, or None."""
 		org = _resolve_per_org_fields_org(self.context.get("request"))
 		if org is None:
@@ -500,7 +502,7 @@ class ArticleSerializer(
 		content = self._get_org_content(obj, org)
 		return content.takeaways if content else None
 
-	def get_summary_plain_english(self, obj):
+	def get_summary_plain_english(self, obj) -> Optional[str]:
 		"""Return plain-English summary from ArticleOrgContent for the caller's org, or None."""
 		org = _resolve_per_org_fields_org(self.context.get("request"))
 		if org is None:
@@ -525,7 +527,7 @@ class TrialCountrySerializer(serializers.ModelSerializer):
 			"sources",
 		]
 
-	def get_country(self, obj):
+	def get_country(self, obj) -> Optional[str]:
 		return obj.country.code if obj.country else None
 
 
@@ -650,7 +652,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		]
 		read_only_fields = ("discovery_date", "articles")
 
-	def get_articles(self, obj):
+	def get_articles(self, obj) -> list:
 		"""Get articles that reference this trial.
 
 		Uses the prefetched ``article_references`` cache when available (populated
@@ -661,7 +663,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		articles = [ref.article for ref in references]
 		return ArticleReferenceSerializer(articles, many=True).data
 
-	def get_countries_normalized(self, obj):
+	def get_countries_normalized(self, obj) -> Optional[list]:
 		"""Flat, sorted list of normalized country codes (e.g. ["DE", "FR", "US"]) — the
 		codes on trial_countries, without the per-country status/source detail. Uses the
 		same prefetched cache as the `trial_countries` field."""
@@ -695,7 +697,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		self._org_content_cache[key] = content
 		return content
 
-	def get_takeaways(self, obj):
+	def get_takeaways(self, obj) -> Optional[str]:
 		"""Return takeaways from TrialOrgContent for the caller's org, or None."""
 		org = _resolve_per_org_fields_org(self.context.get("request"))
 		if org is None:
@@ -703,7 +705,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 		content = self._get_org_content(obj, org)
 		return content.takeaways if content else None
 
-	def get_summary_plain_english(self, obj):
+	def get_summary_plain_english(self, obj) -> Optional[str]:
 		"""Return plain-English summary from TrialOrgContent for the caller's org, or None."""
 		org = _resolve_per_org_fields_org(self.context.get("request"))
 		if org is None:
@@ -737,7 +739,7 @@ class TrialSiteSerializer(serializers.ModelSerializer):
 			"sources",
 		]
 
-	def get_country(self, obj):
+	def get_country(self, obj) -> Optional[str]:
 		return obj.country.code if obj.country else None
 
 
@@ -798,7 +800,7 @@ class AuthorSerializer(serializers.ModelSerializer):
 			"articles_list",
 		]
 
-	def get_articles_count(self, obj):
+	def get_articles_count(self, obj) -> int:
 		# The queryset always annotates a (correctly org-scoped) article_count,
 		# so prefer it and avoid a per-row COUNT query. Only fall back to a
 		# live query if a caller passes in an un-annotated instance directly.
@@ -811,7 +813,7 @@ class AuthorSerializer(serializers.ModelSerializer):
 			return qs.filter(teams__organization_id__in=request.visible_org_ids).distinct().count()
 		return qs.count()
 
-	def get_relevant_articles_count(self, obj):
+	def get_relevant_articles_count(self, obj) -> int:
 		annotated = getattr(obj, "relevant_articles_count", None)
 		if annotated is not None:
 			return annotated
@@ -821,11 +823,11 @@ class AuthorSerializer(serializers.ModelSerializer):
 			qs = qs.filter(teams__organization_id__in=request.visible_org_ids)
 		return qs.distinct().count()
 
-	def get_country(self, obj):
+	def get_country(self, obj) -> Optional[str]:
 		# Return the country code or name
 		return obj.country.code if obj.country else None
 
-	def get_articles_list(self, obj):
+	def get_articles_list(self, obj) -> str:
 		site = get_site()
 		if not site:
 			return ""
@@ -853,7 +855,7 @@ class CoauthorSerializer(serializers.ModelSerializer):
 				  "ORCID", "country", "shared_articles", "articles_count",
 				  "relevant_articles_count"]
 
-	def get_country(self, obj):
+	def get_country(self, obj) -> Optional[str]:
 		return obj.country.code if obj.country else None
 
 
