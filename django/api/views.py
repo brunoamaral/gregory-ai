@@ -2996,9 +2996,9 @@ _AUTHORS_LIST_PARAMS = [
 		"sort_by",
 		OpenApiTypes.STR,
 		OpenApiParameter.QUERY,
-		enum=["author_id", "article_count"],
-		description="Sort field (default: author_id). This endpoint does not use the "
-		"standard `ordering` param.",
+		enum=["author_id", "full_name", "country", "article_count"],
+		description="Sort field (default: author_id); an unrecognised value falls back to "
+		"author_id. This endpoint does not use the standard `ordering` param.",
 	),
 	OpenApiParameter(
 		"order",
@@ -3109,7 +3109,15 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 		author_id = self.request.query_params.get("author_id")
 		full_name = self.request.query_params.get("full_name")
 		country = self.request.query_params.get("country")
+		# sort_by feeds straight into order_by() below rather than going through
+		# DjangoFilterBackend/OrderingFilter (this viewset's filter_backends has
+		# no OrderingFilter), so an unrecognised value needs rejecting here or it
+		# raises FieldError -> 500 instead of the silent-fallback behaviour every
+		# other ordering param in this API has. self.ordering_fields is the
+		# allowlist (also what the OpenApiParameter enum on `list` declares).
 		sort_by = self.request.query_params.get("sort_by", "author_id")
+		if sort_by not in self.ordering_fields:
+			sort_by = "author_id"
 		order = self.request.query_params.get(
 			"order", "desc" if sort_by == "article_count" else "asc"
 		)

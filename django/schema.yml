@@ -1312,8 +1312,10 @@ paths:
           enum:
           - article_count
           - author_id
-        description: 'Sort field (default: author_id). This endpoint does not use
-          the standard `ordering` param.'
+          - country
+          - full_name
+        description: 'Sort field (default: author_id); an unrecognised value falls
+          back to author_id. This endpoint does not use the standard `ordering` param.'
       - in: query
         name: subject_id
         schema:
