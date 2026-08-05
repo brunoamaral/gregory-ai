@@ -1386,7 +1386,12 @@ def _ordering_param(fields, description):
 	for field in fields:
 		values.append(field)
 		values.append(f"-{field}")
-	example = f"?ordering={values[0]},{values[1]}"
+	# Two distinct fields so the example actually demonstrates a tiebreaker
+	# (sorting by the same field twice doesn't); fall back to one if that's
+	# all this endpoint has.
+	example = (
+		f"?ordering={fields[0]},-{fields[1]}" if len(fields) > 1 else f"?ordering={values[0]}"
+	)
 	return OpenApiParameter(
 		"ordering",
 		{"type": "array", "items": {"type": "string", "enum": values}},

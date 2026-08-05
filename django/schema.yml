@@ -230,7 +230,7 @@ paths:
         description: Sort field, prefix with `-` for descending. Articles without
           an ml_score always sort last when ordering by ml_score, in both directions.
           Accepts a comma-separated combination of the values above to break ties
-          on a second field, e.g. ?ordering=discovery_date,-discovery_date.
+          on a second field, e.g. ?ordering=discovery_date,-published_date.
         explode: false
         style: form
       - name: page
@@ -1863,7 +1863,7 @@ paths:
           is the expensive one — ordering happens before pagination, so it counts
           distinct authors for every category matching the filters, not just the page
           returned. Accepts a comma-separated combination of the values above to break
-          ties on a second field, e.g. ?ordering=category_name,-category_name.
+          ties on a second field, e.g. ?ordering=category_name,-id.
         explode: false
         style: form
       - name: page
@@ -2291,7 +2291,7 @@ paths:
             - -trials_count
         description: 'Sort field, prefix with `-` for descending (default: name).
           Accepts a comma-separated combination of the values above to break ties
-          on a second field, e.g. ?ordering=name,-name.'
+          on a second field, e.g. ?ordering=name,-trials_count.'
         explode: false
         style: form
       - name: page
@@ -2540,7 +2540,7 @@ paths:
             - -team
         description: 'Sort field, prefix with `-` for descending (default: id). Accepts
           a comma-separated combination of the values above to break ties on a second
-          field, e.g. ?ordering=id,-id.'
+          field, e.g. ?ordering=id,-subject_name.'
         explode: false
         style: form
       - name: page
@@ -3158,7 +3158,7 @@ paths:
           the `-` reverses the whole scale, null included, it does not just reverse
           the named statuses. Ties break on -discovery_date automatically, in both
           directions. Accepts a comma-separated combination of the values above to
-          break ties on a second field, e.g. ?ordering=discovery_date,-discovery_date.
+          break ties on a second field, e.g. ?ordering=discovery_date,-published_date.
         explode: false
         style: form
       - name: page
