@@ -2,22 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from ..client import get_client
 from ..compact import compact_article
+from ..enums import CategoryModality
 from ..pagination import clamp_page, clamp_page_size
-
-CategoryModality = Literal[
-	"biologic_antibody",
-	"cell_gene_therapy",
-	"device_neuromodulation",
-	"natural_product",
-	"other",
-	"rehabilitation",
-	"research_topic",
-	"small_molecule",
-]
 
 DEFAULT_PAGE_SIZE = 10
 MAX_PAGE_SIZE = 25

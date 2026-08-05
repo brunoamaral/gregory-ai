@@ -6,18 +6,9 @@ from typing import Literal
 
 from ..client import get_client
 from ..compact import compact_trial
+from ..enums import CategoryModality
 from ..pagination import clamp_page, clamp_page_size
 
-CategoryModality = Literal[
-	"biologic_antibody",
-	"cell_gene_therapy",
-	"device_neuromodulation",
-	"natural_product",
-	"other",
-	"rehabilitation",
-	"research_topic",
-	"small_molecule",
-]
 SexEligibility = Literal["all", "female", "male"]
 StudyType = Literal["basic_science", "expanded_access", "interventional", "observational", "other"]
 Region = Literal["africa", "asia", "europe", "north_america", "oceania", "south_america"]
