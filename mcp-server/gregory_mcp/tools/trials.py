@@ -40,6 +40,12 @@ async def search_trials(
 	date_registration_after: str | None = None,
 	date_registration_before: str | None = None,
 	nct: str | None = None,
+	euct: str | None = None,
+	eudract: str | None = None,
+	ctis: str | None = None,
+	acronym: str | None = None,
+	has_results: bool | None = None,
+	therapeutic_areas: str | None = None,
 	ordering: str | None = None,
 	page: int = 1,
 	page_size: int = DEFAULT_PAGE_SIZE,
@@ -50,7 +56,15 @@ async def search_trials(
 	`search` is boolean over title + summary (see search_articles for the
 	syntax). `recruitment_status_normalized` and `phase_normalized` accept a
 	comma-separated list matched with OR (e.g. "recruiting,not_recruiting").
-	`nct` matches an NCT registry ID exactly. Dates are YYYY-MM-DD.
+	Dates are YYYY-MM-DD.
+
+	Registry IDs — each accepts a single value or a comma-separated list,
+	matched case-insensitively against any: `nct` (ClinicalTrials.gov),
+	`euct` (EU CT / EUCTR — matches either identifier key), `eudract`
+	(legacy EudraCT, pre-2025 EU trials), `ctis` (EU Clinical Trials
+	Information System number). A European trial commonly only has
+	euct/eudract/ctis, not an nct — use whichever registry the caller
+	already has an ID from.
 	"""
 	clamped_page = clamp_page(page)
 	params = {
@@ -76,6 +90,12 @@ async def search_trials(
 		"date_registration_after": date_registration_after,
 		"date_registration_before": date_registration_before,
 		"nct": nct,
+		"euct": euct,
+		"eudract": eudract,
+		"ctis": ctis,
+		"acronym": acronym,
+		"has_results": has_results,
+		"therapeutic_areas": therapeutic_areas,
 		"ordering": ordering,
 		"page": clamped_page,
 		"page_size": clamp_page_size(page_size, MAX_PAGE_SIZE),

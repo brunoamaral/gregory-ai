@@ -76,6 +76,27 @@ async def test_search_trials_next_page_reflects_clamped_page(mock_gregory):
 	assert "next" not in result
 
 
+async def test_search_trials_eu_registry_ids_and_new_filters(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "next": None, "results": []}))
+
+	await search_trials(
+		euct="2023-500001-38-00",
+		eudract="2009-012345-67",
+		ctis="2023-500001-38",
+		acronym="ReCOVER",
+		has_results=True,
+		therapeutic_areas="oncology",
+	)
+
+	params = mock_gregory.requests[0].url.params
+	assert params["euct"] == "2023-500001-38-00"
+	assert params["eudract"] == "2009-012345-67"
+	assert params["ctis"] == "2023-500001-38"
+	assert params["acronym"] == "ReCOVER"
+	assert params["has_results"] == "true"
+	assert params["therapeutic_areas"] == "oncology"
+
+
 async def test_get_trial_returns_full_record(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"trial_id": 7, "trial_sites": []}))
 

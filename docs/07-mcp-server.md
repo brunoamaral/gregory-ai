@@ -43,9 +43,9 @@ crowds context and degrades model tool selection.
 | Tool | Backing endpoint | Notes |
 |:---|:---|:---|
 | `list_subjects` | `GET /subjects/` | Discovery entry point. Every row carries `team_id`, which most other tools' filters need. |
-| `search_articles` | `GET /articles/` | Boolean `search` plus subject, category, `category_modality`, journal, DOI, `relevant`, `ml_threshold`, `open_access`, `has_clinical_trials`, date range. Compact results — see [Payload shaping](#payload-shaping). |
+| `search_articles` | `GET /articles/` | Boolean `search` plus subject, category, `category_modality`, journal, DOI, `relevant`, `ml_threshold`, `open_access`, `has_clinical_trials`, date range, `last_days`. Compact results — see [Payload shaping](#payload-shaping). |
 | `get_article` | `GET /articles/{article_id}/` | Full record. |
-| `search_trials` | `GET /trials/` | `search` plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates. |
+| `search_trials` | `GET /trials/` | `search` plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates, registry IDs (`nct`, `euct`, `eudract`, `ctis`), `acronym`, `has_results`, `therapeutic_areas`. |
 | `get_trial` | `GET /trials/{trial_id}/` | Full record, incl. eligibility text and results detail. |
 | `search_authors` | `GET /authors/` | Name, ORCID, country, team/subject scope, `sort_by`/`order`. Fixed page size (10) — this endpoint doesn't support `page_size`. |
 | `get_author` | `GET /authors/{id}/` (+ `/coauthors/`) | Co-authors optional (`include_coauthors`), off by default. |

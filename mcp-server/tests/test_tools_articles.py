@@ -87,6 +87,14 @@ async def test_search_articles_next_page_reflects_clamped_page(mock_gregory):
 	assert "next" not in result
 
 
+async def test_search_articles_last_days(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
+
+	await search_articles(last_days=30)
+
+	assert mock_gregory.requests[0].url.params["last_days"] == "30"
+
+
 async def test_get_article_returns_full_record(mock_gregory):
 	mock_gregory.set_handler(
 		lambda request: httpx2.Response(200, json={"article_id": 42, "authors": [{"full_name": "A"}]})

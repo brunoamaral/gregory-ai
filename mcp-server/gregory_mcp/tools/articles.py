@@ -29,6 +29,7 @@ async def search_articles(
 	has_clinical_trials: bool | None = None,
 	published_date_after: str | None = None,
 	published_date_before: str | None = None,
+	last_days: float | None = None,
 	ordering: str | None = None,
 	page: int = 1,
 	page_size: int = DEFAULT_PAGE_SIZE,
@@ -44,8 +45,12 @@ async def search_articles(
 	`relevant` and `ml_threshold` are scoped to `subject_id` when it is
 	given — without a subject_id, relevance is checked across all subjects.
 
-	Dates are YYYY-MM-DD. `ordering` accepts discovery_date, published_date,
-	title, article_id, ml_score (prefix `-` for descending).
+	Dates are YYYY-MM-DD. `last_days` is a simpler alternative to
+	`published_date_after` for "recent papers" (e.g. `last_days=30`) — it
+	filters on discovery date, not publication date, so it also catches
+	older papers Gregory only just ingested. `ordering` accepts
+	discovery_date, published_date, title, article_id, ml_score (prefix `-`
+	for descending).
 	"""
 	clamped_page = clamp_page(page)
 	params = {
@@ -66,6 +71,7 @@ async def search_articles(
 		"has_clinical_trials": has_clinical_trials,
 		"published_date_after": published_date_after,
 		"published_date_before": published_date_before,
+		"last_days": last_days,
 		"ordering": ordering,
 		"page": clamped_page,
 		"page_size": clamp_page_size(page_size, MAX_PAGE_SIZE),

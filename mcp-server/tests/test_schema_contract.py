@@ -84,7 +84,6 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"source_id",  # niche — callers don't know source IDs
 		"subjects",
 		"subjects_any",  # multi-subject AND/OR; subject_id covers the common case
-		"last_days",  # HANDOVER-MCP-FIXES-PLAN.md "Out of scope": filter coverage gap
 		"week",
 		"year",  # legacy ISO-week filtering; published_date_after/before covers this better
 	},
@@ -107,13 +106,6 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"inclusion_agemin",
 		"inclusion_agemax",  # -> age_eligible
 		"countries",  # -> country / region
-		# HANDOVER-MCP-FIXES-PLAN.md "Out of scope" — explicit filter coverage gaps:
-		"euct",
-		"eudract",
-		"ctis",  # EU registry IDs; only nct is exposed
-		"has_results",
-		"acronym",
-		"therapeutic_areas",
 	},
 	"/authors/": {
 		"format",
