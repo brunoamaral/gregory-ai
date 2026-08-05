@@ -105,11 +105,14 @@ with no code change. See `mcp-server/gregory_mcp/config.py`.
 
 None. The server exposes exactly what an anonymous API caller already sees — the same
 public organisations any unauthenticated `GET` against the REST API returns. Nothing new
-is leaked, but the endpoint is unauthenticated, so it's rate-limited at the nginx layer:
+is leaked, but the endpoint is unauthenticated, so it's rate-limited at the nginx layer,
 per (client address, tool name) — the tool name coming from the client-controlled
 `Mcp-Name` request header, whitelisted to the ten known names so a caller can't dodge the
-limit by inventing new header values — plus a flat per-client cap across all tools as a
-backstop. See `nginx-example-configuration/nginx.conf`.
+limit by inventing new header values. The search/stats tools (`search_articles`,
+`search_trials`, `search_authors`, `get_stats` — arbitrary boolean search or an aggregate
+query) throttle harder (10r/min) than ID lookups and catalog listings (60r/min); a flat
+per-client cap (120r/min) across all tools backstops both. See
+`nginx-example-configuration/nginx.conf`.
 
 ## Risks
 

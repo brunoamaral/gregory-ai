@@ -18,19 +18,22 @@ async def get_stats(
 ) -> dict:
 	"""Fetch aggregate counts.
 
+	This tool only takes a narrow filter set (team_id/subject_id/search, plus
+	relevant for "articles") — nothing like the full filter surface of
+	search_articles/search_trials. Call those instead when you need a finer
+	filter than this tool exposes.
+
 	Args:
 		scope: "global" for site-wide totals (articles, trials, subscribers,
 			authors, sources, by_subject breakdown) via GET /stats/;
 			"articles" for GET /articles/stats/ (total, by_access, relevant,
-			retracted, missing_doi, by_subject) — accepts the same filters as
-			search_articles; "trials" for GET /trials/stats/ (by_phase,
-			by_region, by_country, by_sponsor, etc.) — accepts the same
-			filters as search_trials.
+			retracted, missing_doi, by_subject); "trials" for GET
+			/trials/stats/ (by_phase, by_region, by_country, by_sponsor, etc.).
 		team_id: Scope to one team (all scopes).
 		subject_id: Scope to one subject. For "articles"/"trials", also
-			scopes `relevant`/`ml_threshold` semantics the same way the
-			search tools do.
-		search: Boolean search filter, only meaningful for "articles"/"trials".
+			scopes `relevant`'s semantics the same way search_articles does.
+		search: Boolean search filter (see search_articles), only meaningful
+			for "articles"/"trials".
 		relevant: Only meaningful for "articles".
 	"""
 	if scope == "global":
