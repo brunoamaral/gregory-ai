@@ -42,5 +42,7 @@ async def get_stats(
 	if scope == "articles":
 		params = {"team_id": team_id, "subject_id": subject_id, "search": search, "relevant": relevant}
 		return await get_client().get("/articles/stats/", params)
-	params = {"team_id": team_id, "subject_id": subject_id, "search": search}
-	return await get_client().get("/trials/stats/", params)
+	if scope == "trials":
+		params = {"team_id": team_id, "subject_id": subject_id, "search": search}
+		return await get_client().get("/trials/stats/", params)
+	raise ValueError(f"unknown scope {scope!r} — expected 'global', 'articles', or 'trials'")

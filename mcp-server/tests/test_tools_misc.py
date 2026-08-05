@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import httpx2
+import pytest
 
 from gregory_mcp.tools.authors import get_author, search_authors
 from gregory_mcp.tools.catalog import list_categories, list_sponsors, list_subjects
@@ -128,3 +129,10 @@ async def test_get_stats_trials_scope(mock_gregory):
 	request = mock_gregory.requests[0]
 	assert request.url.path == "/trials/stats/"
 	assert request.url.params["subject_id"] == "3"
+
+
+async def test_get_stats_rejects_unknown_scope(mock_gregory):
+	with pytest.raises(ValueError, match="unknown scope"):
+		await get_stats(scope="bogus")
+
+	assert mock_gregory.requests == []
