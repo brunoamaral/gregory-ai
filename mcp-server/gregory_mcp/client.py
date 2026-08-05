@@ -7,7 +7,10 @@ instance named by `GREGORY_API_URL`.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import random
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx2
@@ -15,6 +18,19 @@ import httpx2
 from .config import Settings
 
 logger = logging.getLogger("gregory_mcp.client")
+
+# "Full jitter" exponential backoff (https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/):
+# sleep = uniform(0, min(cap, base * 2**(attempt-1))). Base ~200ms, capped ~2s —
+# with the default max_retries=2 (3 attempts) that adds well under a second to
+# the worst case, comfortably inside the 15s default request timeout.
+BASE_BACKOFF_SECONDS = 0.2
+MAX_BACKOFF_SECONDS = 2.0
+
+# 429 is retried like a 5xx (the Gregory API throttles bulk-export-style
+# requests via BulkExportThrottleMixin; a short backoff-and-retry is more
+# useful to a caller than an immediate error). Anything else >= 400 is a
+# client error retrying won't fix.
+_RETRYABLE_CLIENT_STATUS = {429}
 
 
 class GregoryAPIError(Exception):
@@ -55,19 +71,29 @@ class GregoryClient:
 	the 2026-07-28 spec revision.
 	"""
 
-	def __init__(self, settings: Settings):
+	def __init__(
+		self,
+		settings: Settings,
+		sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+		jitter: Callable[[float, float], float] = random.uniform,
+	):
 		self._settings = settings
 		self._client = httpx2.AsyncClient(
 			base_url=settings.api_base,
 			timeout=httpx2.Timeout(settings.request_timeout, connect=settings.connect_timeout),
 			headers={"Accept": "application/json", "User-Agent": "gregory-mcp/0.1.0"},
 		)
+		# Injectable so tests can assert on backoff spacing without real
+		# sleeping and without depending on random's actual distribution.
+		self._sleep = sleep
+		self._jitter = jitter
 
 	async def aclose(self) -> None:
 		await self._client.aclose()
 
 	async def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-		"""Issue a single GET, retrying transient network/5xx failures.
+		"""Issue a single GET, retrying transient network/5xx/429 failures
+		with exponential backoff and jitter between attempts.
 
 		Query params with a `None` value are dropped so tools can pass every
 		optional filter unconditionally without hand-pruning the dict.
@@ -84,12 +110,15 @@ class GregoryClient:
 				logger.warning("gregory_api_transport_error", extra={"path": path}, exc_info=True)
 				if attempt == attempts:
 					raise GregoryAPIError(0, f"network error calling {path}: {exc}") from exc
+				await self._sleep(self._backoff_seconds(attempt, None))
 				continue
 
-			if response.status_code >= 500 and attempt < attempts:
+			is_retryable = response.status_code >= 500 or response.status_code in _RETRYABLE_CLIENT_STATUS
+			if is_retryable and attempt < attempts:
 				logger.warning(
-					"gregory_api_5xx_retry", extra={"path": path, "status_code": response.status_code}
+					"gregory_api_retry", extra={"path": path, "status_code": response.status_code}
 				)
+				await self._sleep(self._backoff_seconds(attempt, response.headers.get("Retry-After")))
 				continue
 
 			if response.status_code >= 400:
@@ -100,6 +129,18 @@ class GregoryClient:
 		# Unreachable in practice — the loop always returns or raises — but keeps
 		# the type checker honest about last_exc being used.
 		raise GregoryAPIError(0, f"exhausted retries calling {path}: {last_exc}")
+
+	def _backoff_seconds(self, attempt: int, retry_after_header: str | None) -> float:
+		"""Delay before the next attempt. Honors `Retry-After` (seconds form)
+		when the upstream sends one; otherwise full-jitter exponential backoff.
+		"""
+		if retry_after_header is not None:
+			try:
+				return max(0.0, float(retry_after_header))
+			except ValueError:
+				pass  # not a numeric Retry-After (e.g. an HTTP-date) — fall through
+		cap = min(MAX_BACKOFF_SECONDS, BASE_BACKOFF_SECONDS * (2 ** (attempt - 1)))
+		return self._jitter(0, cap)
 
 	async def get_all_pages(
 		self, path: str, params: dict[str, Any] | None = None, max_pages: int = 20
