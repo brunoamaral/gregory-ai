@@ -5,7 +5,7 @@ from dataclasses import replace
 import httpx2
 import pytest
 
-from gregory_mcp.client import GregoryAPIError, GregoryClient
+from gregory_mcp.client import GregoryAPIError, GregoryClient, GregoryPaginationTruncatedError
 from tests.conftest import TEST_SETTINGS
 
 
@@ -68,3 +68,36 @@ async def test_none_params_are_dropped():
 	await client.get("/articles/", {"team_id": 1, "subject_id": None, "search": None})
 
 	assert seen == {"team_id": "1"}
+
+
+async def test_get_all_pages_returns_everything_when_it_fits():
+	client = GregoryClient(TEST_SETTINGS)
+
+	def handler(request):
+		page = request.url.params.get("page", "1")
+		if page == "1":
+			return httpx2.Response(200, json={"next": "https://x/?page=2", "results": [{"id": 1}]})
+		return httpx2.Response(200, json={"next": None, "results": [{"id": 2}]})
+
+	client._client._transport = httpx2.MockTransport(handler)
+
+	results = await client.get_all_pages("/subjects/", max_pages=5)
+
+	assert [r["id"] for r in results] == [1, 2]
+
+
+async def test_get_all_pages_raises_rather_than_silently_truncating():
+	client = GregoryClient(TEST_SETTINGS)
+
+	def handler(request):
+		# `next` never runs out — an unbounded/larger-than-expected catalog.
+		return httpx2.Response(200, json={"next": "https://x/?page=999", "results": [{"id": 1}]})
+
+	client._client._transport = httpx2.MockTransport(handler)
+
+	with pytest.raises(GregoryPaginationTruncatedError) as exc_info:
+		await client.get_all_pages("/sponsors/", max_pages=3)
+
+	assert exc_info.value.path == "/sponsors/"
+	assert exc_info.value.max_pages == 3
+	assert exc_info.value.fetched == 3

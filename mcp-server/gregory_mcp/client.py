@@ -26,6 +26,27 @@ class GregoryAPIError(Exception):
 		super().__init__(f"Gregory API returned {status_code}: {detail}")
 
 
+class GregoryPaginationTruncatedError(Exception):
+	"""Raised when get_all_pages hits max_pages before `next` runs out.
+
+	A silent truncation is worse than a loud failure here: every caller of
+	get_all_pages (catalog tools, catalog resources) treats the result as
+	the complete set — a model reading a truncated list has no way to tell
+	an item is missing from a partial fetch versus genuinely not existing.
+	"""
+
+	def __init__(self, path: str, max_pages: int, fetched: int):
+		self.path = path
+		self.max_pages = max_pages
+		self.fetched = fetched
+		super().__init__(
+			f"get_all_pages({path!r}) did not reach the end of pagination after "
+			f"{max_pages} pages ({fetched} rows fetched) — the result set is larger "
+			"than this call site expected. Narrow the filters, or raise max_pages "
+			"deliberately if the growth is expected."
+		)
+
+
 class GregoryClient:
 	"""Async GET client with timeouts and bounded retries.
 
@@ -85,12 +106,18 @@ class GregoryClient:
 	) -> list[dict[str, Any]]:
 		"""Follow `next` across pages and return the concatenated `results`.
 
-		For the small, slow-changing catalogs (subjects/categories/sponsors)
-		this is the only reliable way to get a complete list: several of
-		those endpoints use plain DRF pagination with a fixed page_size and
-		no `page_size` query param to raise it (see FlexiblePagination vs.
-		the DRF default in django/admin/settings.py) — passing a bigger
-		page_size silently does nothing on those endpoints.
+		For the small, slow-changing catalogs (subjects/categories) this is
+		the only reliable way to get a complete list: those endpoints use
+		plain DRF pagination with a fixed page_size and no `page_size` query
+		param to raise it (see FlexiblePagination vs. the DRF default in
+		django/admin/settings.py) — passing a bigger page_size silently does
+		nothing on those endpoints.
+
+		Raises GregoryPaginationTruncatedError rather than silently returning
+		a partial list if `next` hasn't run out by max_pages — this is meant
+		for catalogs that are known to be small, so hitting the cap means
+		either that assumption broke (the catalog grew) or this was called
+		on the wrong endpoint.
 		"""
 		base_params = dict(params or {})
 		results: list[dict[str, Any]] = []
@@ -99,9 +126,9 @@ class GregoryClient:
 			data = await self.get(path, {**base_params, "page": page})
 			results.extend(data.get("results", []))
 			if not data.get("next"):
-				break
+				return results
 			page += 1
-		return results
+		raise GregoryPaginationTruncatedError(path, max_pages, len(results))
 
 
 _client: GregoryClient | None = None

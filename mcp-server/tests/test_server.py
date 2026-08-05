@@ -28,12 +28,13 @@ async def test_every_tool_is_read_only(server):
 		assert tool.annotations.read_only_hint is True, f"{tool.name} is not marked read-only"
 
 
-async def test_server_registers_three_resources(server):
+async def test_server_registers_two_resources(server):
+	# No sponsors resource — ~8,000 rows is not catalog-shaped; list_sponsors
+	# (search + pagination) is the right tool for that data instead.
 	resources = await server.list_resources()
 	assert {r.uri for r in resources} == {
 		"gregory://subjects",
 		"gregory://categories",
-		"gregory://sponsors",
 	}
 
 
