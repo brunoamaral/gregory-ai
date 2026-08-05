@@ -7,6 +7,7 @@ every row carries `team_id`, which most other tools' filters need.
 from __future__ import annotations
 
 from ..client import get_client
+from ..pagination import clamp_page, clamp_page_size
 
 
 async def list_subjects(team_id: int | None = None, search: str | None = None) -> dict:
@@ -80,7 +81,8 @@ async def list_sponsors(
 		sponsor_type: One of academic_medical, government, industry, nonprofit, other.
 	"""
 	data = await get_client().get(
-		"/sponsors/", {"search": search, "sponsor_type": sponsor_type, "page": page, "page_size": min(page_size, 100)}
+		"/sponsors/",
+		{"search": search, "sponsor_type": sponsor_type, "page": clamp_page(page), "page_size": clamp_page_size(page_size, 100)},
 	)
 	results = data.get("results", [])
 	return {

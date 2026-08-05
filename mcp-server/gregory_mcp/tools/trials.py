@@ -6,6 +6,7 @@ from typing import Literal
 
 from ..client import get_client
 from ..compact import compact_trial
+from ..pagination import clamp_page, clamp_page_size
 
 CategoryModality = Literal[
 	"biologic_antibody",
@@ -84,8 +85,8 @@ async def search_trials(
 		"date_registration_before": date_registration_before,
 		"nct": nct,
 		"ordering": ordering,
-		"page": page,
-		"page_size": min(page_size, MAX_PAGE_SIZE),
+		"page": clamp_page(page),
+		"page_size": clamp_page_size(page_size, MAX_PAGE_SIZE),
 	}
 	data = await get_client().get("/trials/", params)
 	results = data.get("results", [])

@@ -108,11 +108,12 @@ public organisations any unauthenticated `GET` against the REST API returns. Not
 is leaked, but the endpoint is unauthenticated, so it's rate-limited at the nginx layer,
 per (client address, tool name) — the tool name coming from the client-controlled
 `Mcp-Name` request header, whitelisted to the ten known names so a caller can't dodge the
-limit by inventing new header values. The search/stats tools (`search_articles`,
-`search_trials`, `search_authors`, `get_stats` — arbitrary boolean search or an aggregate
-query) throttle harder (10r/min) than ID lookups and catalog listings (60r/min); a flat
-per-client cap (120r/min) across all tools backstops both. See
-`nginx-example-configuration/nginx.conf`.
+limit by inventing new header values. Every tool shares one flat rate rather than a
+stricter one for the search/stats tools — nginx's `limit_req` has no notion of a
+per-request "cost", and doing that correctly needs routing each tool class to its own
+internal location, which is more machinery than this example config carries; see the
+comment above `limit_req_zone` in `nginx-example-configuration/nginx.conf` for what was
+tried and why it was reverted. A flat per-client cap backstops the per-tool buckets.
 
 ## Risks
 

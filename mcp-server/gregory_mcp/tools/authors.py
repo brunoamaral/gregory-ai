@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..client import get_client
 from ..compact import compact_author
+from ..pagination import clamp_page
 
 
 async def search_authors(
@@ -30,7 +31,7 @@ async def search_authors(
 		"family_name": family_name,
 		"orcid": orcid,
 		"country": country,
-		"page": page,
+		"page": clamp_page(page),
 	}
 	data = await get_client().get("/authors/", params)
 	results = data.get("results", [])

@@ -65,6 +65,16 @@ async def test_search_articles_caps_page_size(mock_gregory):
 	assert mock_gregory.requests[0].url.params["page_size"] == "25"
 
 
+async def test_search_articles_clamps_non_positive_page_and_page_size(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
+
+	await search_articles(page=-1, page_size=0)
+
+	params = mock_gregory.requests[0].url.params
+	assert params["page"] == "1"
+	assert params["page_size"] == "1"
+
+
 async def test_get_article_returns_full_record(mock_gregory):
 	mock_gregory.set_handler(
 		lambda request: httpx2.Response(200, json={"article_id": 42, "authors": [{"full_name": "A"}]})
