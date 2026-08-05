@@ -34,6 +34,9 @@ def load_settings() -> Settings:
 		port=int(os.environ.get("MCP_PORT", "8001")),
 		request_timeout=float(os.environ.get("GREGORY_REQUEST_TIMEOUT", "15")),
 		connect_timeout=float(os.environ.get("GREGORY_CONNECT_TIMEOUT", "5")),
-		max_retries=int(os.environ.get("GREGORY_MAX_RETRIES", "2")),
+		# max(0, ...): a negative value here would make GregoryClient.get()'s
+		# `attempts = max_retries + 1` reach 0, so its retry loop never runs at
+		# all and every call fails immediately without ever hitting the network.
+		max_retries=max(0, int(os.environ.get("GREGORY_MAX_RETRIES", "2"))),
 		log_level=os.environ.get("MCP_LOG_LEVEL", "INFO").upper(),
 	)
