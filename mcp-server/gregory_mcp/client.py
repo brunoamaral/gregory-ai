@@ -39,7 +39,7 @@ class GregoryClient:
 		self._client = httpx2.AsyncClient(
 			base_url=settings.api_base,
 			timeout=httpx2.Timeout(settings.request_timeout, connect=settings.connect_timeout),
-			headers={"Accept": "application/json", "User-Agent": "gregory-mcp/0.1"},
+			headers={"Accept": "application/json", "User-Agent": "gregory-mcp/0.1.0"},
 		)
 
 	async def aclose(self) -> None:
