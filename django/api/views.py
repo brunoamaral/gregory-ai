@@ -1362,8 +1362,43 @@ _OPTIONAL_API_KEY_SECURITY = [
 ]
 
 
+def _ordering_param(fields, description):
+	"""Build an explicit ``ordering`` OpenApiParameter with a real enum.
+
+	drf-spectacular auto-detects ``ordering`` from a view's DRF
+	``OrderingFilter``/``ordering_fields``, but only ever emits it as a bare
+	``string`` — never an enum, since the same param also accepts a
+	comma-separated multi-field value. That leaves every accepted value
+	(and, more importantly, every *rejected* one) undocumented: DRF's
+	``OrderingFilter`` silently ignores an unrecognised value rather than
+	rejecting it, so a typo produces a plausible-looking, wrongly-sorted
+	response with no error. An explicit enum (both the bare and ``-``-prefixed
+	descending form of every field) at least makes the accepted set visible.
+	Passed as a manual parameter, this overrides the auto-detected one —
+	drf-spectacular matches by name+location and prefers the manual entry.
+	"""
+	values = []
+	for field in fields:
+		values.append(field)
+		values.append(f"-{field}")
+	return OpenApiParameter(
+		"ordering",
+		OpenApiTypes.STR,
+		OpenApiParameter.QUERY,
+		enum=values,
+		description=description,
+	)
+
+
+_ARTICLES_ORDERING_PARAM = _ordering_param(
+	["discovery_date", "published_date", "title", "article_id", "ml_score"],
+	"Sort field, prefix with `-` for descending. Articles without an ml_score "
+	"always sort last when ordering by ml_score, in both directions.",
+)
+
+
 @extend_schema_view(
-	list=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY),
+	list=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY, parameters=[_ARTICLES_ORDERING_PARAM]),
 	retrieve=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY),
 )
 class ArticleViewSet(
@@ -1649,6 +1684,123 @@ def _category_authors_count_subquery():
 	)
 
 
+_CATEGORIES_LIST_PARAMS = [
+	OpenApiParameter(
+		"get_categories",
+		OpenApiTypes.STR,
+		OpenApiParameter.QUERY,
+		description="Comma-separated list of category IDs, e.g. 1,2,3. Fetches exactly "
+		"those categories, combined with any other filters given.",
+	),
+	OpenApiParameter(
+		"include_authors",
+		OpenApiTypes.BOOL,
+		OpenApiParameter.QUERY,
+		description="Include each category's top_authors list (default: true).",
+	),
+	OpenApiParameter(
+		"max_authors",
+		OpenApiTypes.INT,
+		OpenApiParameter.QUERY,
+		description="Maximum top authors to return per category when include_authors=true "
+		"(default: 10, max: 50).",
+	),
+	OpenApiParameter(
+		"monthly_counts",
+		OpenApiTypes.BOOL,
+		OpenApiParameter.QUERY,
+		description="Include monthly article/trial counts, including ML-relevant article "
+		"counts, per category (default: false).",
+	),
+	OpenApiParameter(
+		"ml_threshold",
+		OpenApiTypes.NUMBER,
+		OpenApiParameter.QUERY,
+		description="ML prediction probability threshold for monthly_counts's relevant-article "
+		"count (0.0-1.0, default: 0.5). No effect unless monthly_counts=true.",
+	),
+	OpenApiParameter(
+		"date_from",
+		OpenApiTypes.DATE,
+		OpenApiParameter.QUERY,
+		description="Restrict monthly_counts / top-authors article counts to articles "
+		"published on or after this date (YYYY-MM-DD).",
+	),
+	OpenApiParameter(
+		"date_to",
+		OpenApiTypes.DATE,
+		OpenApiParameter.QUERY,
+		description="Restrict monthly_counts / top-authors article counts to articles "
+		"published on or before this date (YYYY-MM-DD).",
+	),
+	OpenApiParameter(
+		"timeframe",
+		OpenApiTypes.STR,
+		OpenApiParameter.QUERY,
+		enum=["year", "month", "week"],
+		description="Shortcut for date_from relative to now (overridden by an explicit "
+		"date_from); has no effect on date_to.",
+	),
+]
+
+_CATEGORIES_ORDERING_PARAM = _ordering_param(
+	["category_name", "id", "article_count_annotated", "trials_count_annotated", "authors_count_annotated"],
+	"Sort field, prefix with `-` for descending. authors_count_annotated is the expensive "
+	"one — ordering happens before pagination, so it counts distinct authors for every "
+	"category matching the filters, not just the page returned.",
+)
+
+_CATEGORY_AUTHORS_ACTION_PARAMS = [
+	OpenApiParameter(
+		"min_articles",
+		OpenApiTypes.INT,
+		OpenApiParameter.QUERY,
+		description="Minimum articles this author must have in the category to be included "
+		"(default: 1).",
+	),
+	OpenApiParameter(
+		"sort_by",
+		OpenApiTypes.STR,
+		OpenApiParameter.QUERY,
+		enum=["articles_count", "author_name"],
+		description="Sort field (default: articles_count).",
+	),
+	OpenApiParameter(
+		"order",
+		OpenApiTypes.STR,
+		OpenApiParameter.QUERY,
+		enum=["asc", "desc"],
+		description="Sort direction (default: desc).",
+	),
+	OpenApiParameter(
+		"date_from",
+		OpenApiTypes.DATE,
+		OpenApiParameter.QUERY,
+		description="Restrict each author's article count to articles published on or "
+		"after this date (YYYY-MM-DD).",
+	),
+	OpenApiParameter(
+		"date_to",
+		OpenApiTypes.DATE,
+		OpenApiParameter.QUERY,
+		description="Restrict each author's article count to articles published on or "
+		"before this date (YYYY-MM-DD).",
+	),
+	OpenApiParameter(
+		"timeframe",
+		OpenApiTypes.STR,
+		OpenApiParameter.QUERY,
+		enum=["year", "month", "week"],
+		description="Shortcut for date_from relative to now (overridden by an explicit "
+		"date_from); has no effect on date_to.",
+	),
+]
+
+
+@extend_schema_view(
+	list=extend_schema(parameters=_CATEGORIES_LIST_PARAMS + [_CATEGORIES_ORDERING_PARAM]),
+	authors=extend_schema(parameters=_CATEGORY_AUTHORS_ACTION_PARAMS),
+)
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	List all categories in the database with optional filters for team and subject.
@@ -2022,8 +2174,17 @@ _RECRUITING_RANK = {
 }
 
 
+_TRIALS_ORDERING_PARAM = _ordering_param(
+	["discovery_date", "published_date", "title", "trial_id", "last_updated", "recruiting_first"],
+	"Sort field, prefix with `-` for descending. `recruiting_first` is a "
+	"recruitment-availability rank (recruiting -> ... -> withdrawn, null last), "
+	"NOT alphabetical on recruitment_status_normalized; ties break on "
+	"-discovery_date automatically, in both directions.",
+)
+
+
 @extend_schema_view(
-	list=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY),
+	list=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY, parameters=[_TRIALS_ORDERING_PARAM]),
 	retrieve=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY),
 )
 class TrialViewSet(
@@ -2642,6 +2803,15 @@ class TrialViewSet(
 # SPONSORS
 ###
 
+_SPONSORS_ORDERING_PARAM = _ordering_param(
+	["name", "trials_count"],
+	"Sort field, prefix with `-` for descending (default: name).",
+)
+
+
+@extend_schema_view(
+	list=extend_schema(parameters=[_SPONSORS_ORDERING_PARAM]),
+)
 
 class SponsorViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
@@ -2753,10 +2923,109 @@ _AUTHOR_ID_PATH_PARAM = OpenApiParameter(
 	description="Author ID (Authors.author_id).",
 )
 
+_AUTHORS_LIST_PARAMS = [
+	OpenApiParameter(
+		"team_id",
+		OpenApiTypes.INT,
+		OpenApiParameter.QUERY,
+		description="Restrict to authors with at least one article on this team. "
+		"Required if subject_id, category_slug, or category_id is given — without "
+		"it, the response is an empty page rather than an error.",
+	),
+	OpenApiParameter(
+		"subject_id",
+		OpenApiTypes.INT,
+		OpenApiParameter.QUERY,
+		description="Restrict to authors with at least one article in this subject. "
+		"Requires team_id.",
+	),
+	OpenApiParameter(
+		"category_slug",
+		OpenApiTypes.STR,
+		OpenApiParameter.QUERY,
+		description="Restrict to authors with at least one article in this team "
+		"category (by slug, see /categories/). Requires team_id.",
+	),
+	OpenApiParameter(
+		"category_id",
+		OpenApiTypes.INT,
+		OpenApiParameter.QUERY,
+		description="Restrict to authors with at least one article in this team "
+		"category (by ID, see /categories/). Requires team_id.",
+	),
+	OpenApiParameter(
+		"date_from",
+		OpenApiTypes.DATE,
+		OpenApiParameter.QUERY,
+		description="Only count articles published on or after this date (YYYY-MM-DD) "
+		"toward team_id/subject_id/category filtering and article_count.",
+	),
+	OpenApiParameter(
+		"date_to",
+		OpenApiTypes.DATE,
+		OpenApiParameter.QUERY,
+		description="Only count articles published on or before this date (YYYY-MM-DD) "
+		"toward team_id/subject_id/category filtering and article_count.",
+	),
+	OpenApiParameter(
+		"timeframe",
+		OpenApiTypes.STR,
+		OpenApiParameter.QUERY,
+		enum=["year", "month", "week"],
+		description="Shortcut for date_from relative to now (overridden by an explicit "
+		"date_from); has no effect on date_to.",
+	),
+	OpenApiParameter(
+		"sort_by",
+		OpenApiTypes.STR,
+		OpenApiParameter.QUERY,
+		enum=["author_id", "article_count"],
+		description="Sort field (default: author_id). This endpoint does not use the "
+		"standard `ordering` param.",
+	),
+	OpenApiParameter(
+		"order",
+		OpenApiTypes.STR,
+		OpenApiParameter.QUERY,
+		enum=["asc", "desc"],
+		description="Sort direction (default: desc when sort_by=article_count, asc otherwise).",
+	),
+]
+
+_AUTHORS_BY_TEAM_SUBJECT_PARAMS = [
+	OpenApiParameter(
+		"team_id", OpenApiTypes.INT, OpenApiParameter.QUERY, required=True, description="Team ID."
+	),
+	OpenApiParameter(
+		"subject_id", OpenApiTypes.INT, OpenApiParameter.QUERY, required=True, description="Subject ID."
+	),
+]
+
+_AUTHORS_BY_TEAM_CATEGORY_PARAMS = [
+	OpenApiParameter(
+		"team_id", OpenApiTypes.INT, OpenApiParameter.QUERY, required=True, description="Team ID."
+	),
+	OpenApiParameter(
+		"category_slug",
+		OpenApiTypes.STR,
+		OpenApiParameter.QUERY,
+		description="Team category slug. One of category_slug/category_id is required.",
+	),
+	OpenApiParameter(
+		"category_id",
+		OpenApiTypes.INT,
+		OpenApiParameter.QUERY,
+		description="Team category ID. One of category_slug/category_id is required.",
+	),
+]
+
 
 @extend_schema_view(
+	list=extend_schema(parameters=_AUTHORS_LIST_PARAMS),
 	retrieve=extend_schema(parameters=[_AUTHOR_ID_PATH_PARAM]),
 	coauthors=extend_schema(parameters=[_AUTHOR_ID_PATH_PARAM]),
+	by_team_subject=extend_schema(parameters=_AUTHORS_BY_TEAM_SUBJECT_PARAMS),
+	by_team_category=extend_schema(parameters=_AUTHORS_BY_TEAM_CATEGORY_PARAMS),
 )
 class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
@@ -3191,6 +3460,15 @@ class OrganizationsViewSet(viewsets.ReadOnlyModelViewSet):
 # SUBJECTS
 ###
 
+_SUBJECTS_ORDERING_PARAM = _ordering_param(
+	["id", "subject_name", "team"],
+	"Sort field, prefix with `-` for descending (default: id).",
+)
+
+
+@extend_schema_view(
+	list=extend_schema(parameters=[_SUBJECTS_ORDERING_PARAM]),
+)
 
 class SubjectsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""

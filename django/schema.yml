@@ -210,12 +210,23 @@ paths:
         schema:
           type: boolean
         description: Filter for open access articles (true/false).
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
+      - in: query
+        name: ordering
         schema:
           type: string
+          enum:
+          - -article_id
+          - -discovery_date
+          - -ml_score
+          - -published_date
+          - -title
+          - article_id
+          - discovery_date
+          - ml_score
+          - published_date
+          - title
+        description: Sort field, prefix with `-` for descending. Articles without
+          an ml_score always sort last when ordering by ml_score, in both directions.
       - name: page
         required: false
         in: query
@@ -1210,10 +1221,36 @@ paths:
           type: integer
         description: Filter by a specific author ID.
       - in: query
+        name: category_id
+        schema:
+          type: integer
+        description: Restrict to authors with at least one article in this team category
+          (by ID, see /categories/). Requires team_id.
+      - in: query
+        name: category_slug
+        schema:
+          type: string
+        description: Restrict to authors with at least one article in this team category
+          (by slug, see /categories/). Requires team_id.
+      - in: query
         name: country
         schema:
           type: string
         description: Exact match against the author's country code.
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+        description: Only count articles published on or after this date (YYYY-MM-DD)
+          toward team_id/subject_id/category filtering and article_count.
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date
+        description: Only count articles published on or before this date (YYYY-MM-DD)
+          toward team_id/subject_id/category filtering and article_count.
       - in: query
         name: family_name
         schema:
@@ -1241,6 +1278,15 @@ paths:
         schema:
           type: string
         description: Case-insensitive substring match against the author's ORCID iD.
+      - in: query
+        name: order
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+        description: 'Sort direction (default: desc when sort_by=article_count, asc
+          otherwise).'
       - name: page
         required: false
         in: query
@@ -1253,6 +1299,38 @@ paths:
         description: A search term.
         schema:
           type: string
+      - in: query
+        name: sort_by
+        schema:
+          type: string
+          enum:
+          - article_count
+          - author_id
+        description: 'Sort field (default: author_id). This endpoint does not use
+          the standard `ordering` param.'
+      - in: query
+        name: subject_id
+        schema:
+          type: integer
+        description: Restrict to authors with at least one article in this subject.
+          Requires team_id.
+      - in: query
+        name: team_id
+        schema:
+          type: integer
+        description: Restrict to authors with at least one article on this team. Required
+          if subject_id, category_slug, or category_id is given — without it, the
+          response is an empty page rather than an error.
+      - in: query
+        name: timeframe
+        schema:
+          type: string
+          enum:
+          - month
+          - week
+          - year
+        description: Shortcut for date_from relative to now (overridden by an explicit
+          date_from); has no effect on date_to.
       tags:
       - authors
       security:
@@ -1387,12 +1465,28 @@ paths:
         - Additional filters from main queryset apply
       parameters:
       - in: query
+        name: category_id
+        schema:
+          type: integer
+        description: Team category ID. One of category_slug/category_id is required.
+      - in: query
+        name: category_slug
+        schema:
+          type: string
+        description: Team category slug. One of category_slug/category_id is required.
+      - in: query
         name: format
         schema:
           type: string
           enum:
           - csv
           - json
+      - in: query
+        name: team_id
+        schema:
+          type: integer
+        description: Team ID.
+        required: true
       tags:
       - authors
       security:
@@ -1428,6 +1522,18 @@ paths:
           enum:
           - csv
           - json
+      - in: query
+        name: subject_id
+        schema:
+          type: integer
+        description: Subject ID.
+        required: true
+      - in: query
+        name: team_id
+        schema:
+          type: integer
+        description: Team ID.
+        required: true
       tags:
       - authors
       security:
@@ -1681,18 +1787,74 @@ paths:
           type: string
         description: Case-insensitive substring match against the category's terms.
       - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+        description: Restrict monthly_counts / top-authors article counts to articles
+          published on or after this date (YYYY-MM-DD).
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date
+        description: Restrict monthly_counts / top-authors article counts to articles
+          published on or before this date (YYYY-MM-DD).
+      - in: query
         name: format
         schema:
           type: string
           enum:
           - csv
           - json
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
+      - in: query
+        name: get_categories
         schema:
           type: string
+        description: Comma-separated list of category IDs, e.g. 1,2,3. Fetches exactly
+          those categories, combined with any other filters given.
+      - in: query
+        name: include_authors
+        schema:
+          type: boolean
+        description: 'Include each category''s top_authors list (default: true).'
+      - in: query
+        name: max_authors
+        schema:
+          type: integer
+        description: 'Maximum top authors to return per category when include_authors=true
+          (default: 10, max: 50).'
+      - in: query
+        name: ml_threshold
+        schema:
+          type: number
+        description: 'ML prediction probability threshold for monthly_counts''s relevant-article
+          count (0.0-1.0, default: 0.5). No effect unless monthly_counts=true.'
+      - in: query
+        name: monthly_counts
+        schema:
+          type: boolean
+        description: 'Include monthly article/trial counts, including ML-relevant
+          article counts, per category (default: false).'
+      - in: query
+        name: ordering
+        schema:
+          type: string
+          enum:
+          - -article_count_annotated
+          - -authors_count_annotated
+          - -category_name
+          - -id
+          - -trials_count_annotated
+          - article_count_annotated
+          - authors_count_annotated
+          - category_name
+          - id
+          - trials_count_annotated
+        description: Sort field, prefix with `-` for descending. authors_count_annotated
+          is the expensive one — ordering happens before pagination, so it counts
+          distinct authors for every category matching the filters, not just the page
+          returned.
       - name: page
         required: false
         in: query
@@ -1715,6 +1877,16 @@ paths:
         schema:
           type: integer
         description: Filter by team ID.
+      - in: query
+        name: timeframe
+        schema:
+          type: string
+          enum:
+          - month
+          - week
+          - year
+        description: Shortcut for date_from relative to now (overridden by an explicit
+          date_from); has no effect on date_to.
       tags:
       - categories
       security:
@@ -1828,6 +2000,20 @@ paths:
         **URL:** `/categories/{id}/authors/`
       parameters:
       - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+        description: Restrict each author's article count to articles published on
+          or after this date (YYYY-MM-DD).
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date
+        description: Restrict each author's article count to articles published on
+          or before this date (YYYY-MM-DD).
+      - in: query
         name: format
         schema:
           type: string
@@ -1840,6 +2026,38 @@ paths:
           type: integer
         description: A unique integer value identifying this team category.
         required: true
+      - in: query
+        name: min_articles
+        schema:
+          type: integer
+        description: 'Minimum articles this author must have in the category to be
+          included (default: 1).'
+      - in: query
+        name: order
+        schema:
+          type: string
+          enum:
+          - asc
+          - desc
+        description: 'Sort direction (default: desc).'
+      - in: query
+        name: sort_by
+        schema:
+          type: string
+          enum:
+          - articles_count
+          - author_name
+        description: 'Sort field (default: articles_count).'
+      - in: query
+        name: timeframe
+        schema:
+          type: string
+          enum:
+          - month
+          - week
+          - year
+        description: Shortcut for date_from relative to now (overridden by an explicit
+          date_from); has no effect on date_to.
       tags:
       - categories
       security:
@@ -2049,12 +2267,16 @@ paths:
           enum:
           - csv
           - json
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
+      - in: query
+        name: ordering
         schema:
           type: string
+          enum:
+          - -name
+          - -trials_count
+          - name
+          - trials_count
+        description: 'Sort field, prefix with `-` for descending (default: name).'
       - name: page
         required: false
         in: query
@@ -2286,12 +2508,18 @@ paths:
           enum:
           - csv
           - json
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
+      - in: query
+        name: ordering
         schema:
           type: string
+          enum:
+          - -id
+          - -subject_name
+          - -team
+          - id
+          - subject_name
+          - team
+        description: 'Sort field, prefix with `-` for descending (default: id).'
       - name: page
         required: false
         in: query
@@ -2881,12 +3109,27 @@ paths:
           e.g. ?nct=NCT02521311,NCT06065670.
         explode: false
         style: form
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
+      - in: query
+        name: ordering
         schema:
           type: string
+          enum:
+          - -discovery_date
+          - -last_updated
+          - -published_date
+          - -recruiting_first
+          - -title
+          - -trial_id
+          - discovery_date
+          - last_updated
+          - published_date
+          - recruiting_first
+          - title
+          - trial_id
+        description: Sort field, prefix with `-` for descending. `recruiting_first`
+          is a recruitment-availability rank (recruiting -> ... -> withdrawn, null
+          last), NOT alphabetical on recruitment_status_normalized; ties break on
+          -discovery_date automatically, in both directions.
       - name: page
         required: false
         in: query
