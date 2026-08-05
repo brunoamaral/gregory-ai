@@ -126,6 +126,19 @@ internal location, which is more machinery than this example config carries; see
 comment above `limit_req_zone` in `nginx-example-configuration/nginx.conf` for what was
 tried and why it was reverted. A flat per-client cap backstops the per-tool buckets.
 
+Throttled requests return `429` (`limit_req_status`), not nginx's default `503` — `503`
+reads as "server broken" rather than "you're going too fast." A rejected request never
+reaches the MCP server, so its own logs can't show a throttling event; `/mcp/` logs to
+its own file (`mcp-access.log`, `mcp_combined` format) with an `mcp_name="..."` field so
+429s can be attributed per tool from nginx's side instead:
+
+```bash
+awk '$9 == 429' /var/log/nginx/mcp-access.log | grep -o 'mcp_name="[^"]*"' | sort | uniq -c | sort -rn
+```
+
+Whether 30 r/m per (client, tool) and 120 r/m per client are the right numbers is an open
+question — tune them from what this log actually shows, not speculatively.
+
 ## Risks
 
 **Unauthenticated endpoint.** No data-leak risk, but anyone who learns the URL can drive
