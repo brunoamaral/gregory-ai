@@ -81,7 +81,7 @@ class GregoryClient:
 				response = await self._client.get(path, params=clean_params)
 			except httpx2.TransportError as exc:
 				last_exc = exc
-				logger.warning("gregory_api_transport_error", extra={"path": path})
+				logger.warning("gregory_api_transport_error", extra={"path": path}, exc_info=True)
 				if attempt == attempts:
 					raise GregoryAPIError(0, f"network error calling {path}: {exc}") from exc
 				continue
