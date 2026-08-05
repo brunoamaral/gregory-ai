@@ -47,7 +47,7 @@ crowds context and degrades model tool selection.
 | `get_article` | `GET /articles/{article_id}/` | Full record. |
 | `search_trials` | `GET /trials/` | `search` plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates. |
 | `get_trial` | `GET /trials/{trial_id}/` | Full record, incl. eligibility text and results detail. |
-| `search_authors` | `GET /authors/` | Name, ORCID, country. Fixed page size (10) — this endpoint doesn't support `page_size`. |
+| `search_authors` | `GET /authors/` | Name, ORCID, country, team/subject scope, `sort_by`/`order`. Fixed page size (10) — this endpoint doesn't support `page_size`. |
 | `get_author` | `GET /authors/{id}/` (+ `/coauthors/`) | Co-authors optional (`include_coauthors`), off by default. |
 | `list_categories` | `GET /categories/` | Fetches every page — a small, slow-changing taxonomy. Does not expose `ordering=authors_count_annotated`; that sort is expensive. |
 | `list_sponsors` | `GET /sponsors/` | Paginated, not fetched in full — sponsors can number in the thousands. |
@@ -137,7 +137,13 @@ GREGORY_API_URL=http://localhost:8000 python -m gregory_mcp   # run locally
 pytest                                                         # unit + schema-contract tests
 ```
 
-`tests/test_schema_contract.py` checks every filter a tool passes against
+`tests/test_schema_contract.py` checks the contract in both directions against
 `django/schema.yml` (see [Stage 1](03-api-and-rss-feeds.md#openapi-schema)) — regenerate
 that file (`python manage.py spectacular --file schema.yml --fail-on-warn`) before running
-the suite after changing a filter this server depends on.
+the suite after changing a filter this server depends on:
+- every filter a tool passes must be a real, declared parameter (catches a renamed or
+  removed filter);
+- every parameter a tool *doesn't* expose must be explicitly reviewed in
+  `KNOWN_UNEXPOSED_PARAMS` (catches a new filter landing on the Django side that nobody
+  added to the matching tool — this is how `search_authors`'s team/subject scope went
+  missing the first time).
