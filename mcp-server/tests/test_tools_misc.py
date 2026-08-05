@@ -97,6 +97,7 @@ async def test_list_sponsors_is_paginated_not_exhaustive(mock_gregory):
 	assert len(mock_gregory.requests) == 1
 	assert mock_gregory.requests[0].url.params["page_size"] == "25"
 	assert result["count"] == 500
+	assert result["next"] == "x"
 
 
 async def test_get_stats_global_maps_team_and_subject(mock_gregory):

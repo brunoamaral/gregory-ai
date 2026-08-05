@@ -87,6 +87,7 @@ async def list_sponsors(
 	results = data.get("results", [])
 	return {
 		"count": data.get("count", len(results)),
+		"next": data.get("next"),
 		"sponsors": [
 			{
 				"id": s.get("id"),
