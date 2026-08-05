@@ -213,20 +213,26 @@ paths:
       - in: query
         name: ordering
         schema:
-          type: string
-          enum:
-          - -article_id
-          - -discovery_date
-          - -ml_score
-          - -published_date
-          - -title
-          - article_id
-          - discovery_date
-          - ml_score
-          - published_date
-          - title
+          type: array
+          items:
+            type: string
+            enum:
+            - discovery_date
+            - -discovery_date
+            - published_date
+            - -published_date
+            - title
+            - -title
+            - article_id
+            - -article_id
+            - ml_score
+            - -ml_score
         description: Sort field, prefix with `-` for descending. Articles without
           an ml_score always sort last when ordering by ml_score, in both directions.
+          Accepts a comma-separated combination of the values above to break ties
+          on a second field, e.g. ?ordering=discovery_date,-discovery_date.
+        explode: false
+        style: form
       - name: page
         required: false
         in: query
@@ -1839,22 +1845,27 @@ paths:
       - in: query
         name: ordering
         schema:
-          type: string
-          enum:
-          - -article_count_annotated
-          - -authors_count_annotated
-          - -category_name
-          - -id
-          - -trials_count_annotated
-          - article_count_annotated
-          - authors_count_annotated
-          - category_name
-          - id
-          - trials_count_annotated
+          type: array
+          items:
+            type: string
+            enum:
+            - category_name
+            - -category_name
+            - id
+            - -id
+            - article_count_annotated
+            - -article_count_annotated
+            - trials_count_annotated
+            - -trials_count_annotated
+            - authors_count_annotated
+            - -authors_count_annotated
         description: Sort field, prefix with `-` for descending. authors_count_annotated
           is the expensive one — ordering happens before pagination, so it counts
           distinct authors for every category matching the filters, not just the page
-          returned.
+          returned. Accepts a comma-separated combination of the values above to break
+          ties on a second field, e.g. ?ordering=category_name,-category_name.
+        explode: false
+        style: form
       - name: page
         required: false
         in: query
@@ -2270,13 +2281,19 @@ paths:
       - in: query
         name: ordering
         schema:
-          type: string
-          enum:
-          - -name
-          - -trials_count
-          - name
-          - trials_count
-        description: 'Sort field, prefix with `-` for descending (default: name).'
+          type: array
+          items:
+            type: string
+            enum:
+            - name
+            - -name
+            - trials_count
+            - -trials_count
+        description: 'Sort field, prefix with `-` for descending (default: name).
+          Accepts a comma-separated combination of the values above to break ties
+          on a second field, e.g. ?ordering=name,-name.'
+        explode: false
+        style: form
       - name: page
         required: false
         in: query
@@ -2511,15 +2528,21 @@ paths:
       - in: query
         name: ordering
         schema:
-          type: string
-          enum:
-          - -id
-          - -subject_name
-          - -team
-          - id
-          - subject_name
-          - team
-        description: 'Sort field, prefix with `-` for descending (default: id).'
+          type: array
+          items:
+            type: string
+            enum:
+            - id
+            - -id
+            - subject_name
+            - -subject_name
+            - team
+            - -team
+        description: 'Sort field, prefix with `-` for descending (default: id). Accepts
+          a comma-separated combination of the values above to break ties on a second
+          field, e.g. ?ordering=id,-id.'
+        explode: false
+        style: form
       - name: page
         required: false
         in: query
@@ -3112,24 +3135,32 @@ paths:
       - in: query
         name: ordering
         schema:
-          type: string
-          enum:
-          - -discovery_date
-          - -last_updated
-          - -published_date
-          - -recruiting_first
-          - -title
-          - -trial_id
-          - discovery_date
-          - last_updated
-          - published_date
-          - recruiting_first
-          - title
-          - trial_id
+          type: array
+          items:
+            type: string
+            enum:
+            - discovery_date
+            - -discovery_date
+            - published_date
+            - -published_date
+            - title
+            - -title
+            - trial_id
+            - -trial_id
+            - last_updated
+            - -last_updated
+            - recruiting_first
+            - -recruiting_first
         description: Sort field, prefix with `-` for descending. `recruiting_first`
-          is a recruitment-availability rank (recruiting -> ... -> withdrawn, null
-          last), NOT alphabetical on recruitment_status_normalized; ties break on
-          -discovery_date automatically, in both directions.
+          is a recruitment-availability rank (recruiting -> ... -> withdrawn), NOT
+          alphabetical on recruitment_status_normalized. Null status sorts last for
+          plain `recruiting_first` (ascending) but FIRST for `-recruiting_first` —
+          the `-` reverses the whole scale, null included, it does not just reverse
+          the named statuses. Ties break on -discovery_date automatically, in both
+          directions. Accepts a comma-separated combination of the values above to
+          break ties on a second field, e.g. ?ordering=discovery_date,-discovery_date.
+        explode: false
+        style: form
       - name: page
         required: false
         in: query

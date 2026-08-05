@@ -1367,26 +1367,35 @@ def _ordering_param(fields, description):
 
 	drf-spectacular auto-detects ``ordering`` from a view's DRF
 	``OrderingFilter``/``ordering_fields``, but only ever emits it as a bare
-	``string`` — never an enum, since the same param also accepts a
-	comma-separated multi-field value. That leaves every accepted value
-	(and, more importantly, every *rejected* one) undocumented: DRF's
-	``OrderingFilter`` silently ignores an unrecognised value rather than
-	rejecting it, so a typo produces a plausible-looking, wrongly-sorted
-	response with no error. An explicit enum (both the bare and ``-``-prefixed
-	descending form of every field) at least makes the accepted set visible.
-	Passed as a manual parameter, this overrides the auto-detected one —
-	drf-spectacular matches by name+location and prefers the manual entry.
+	``string`` — never an enum. That leaves every accepted value (and, more
+	importantly, every *rejected* one) undocumented: DRF's ``OrderingFilter``
+	silently ignores an unrecognised value rather than rejecting it, so a
+	typo produces a plausible-looking, wrongly-sorted response with no error.
+
+	Modelled as a comma-separated array of an enum (matching how this file
+	already models ``subjects``/``subjects_any`` — ``style: form,
+	explode: false``), not a plain string enum: ``OrderingFilter`` genuinely
+	accepts multiple comma-separated fields as a tiebreaker
+	(``?ordering=recruiting_first,-discovery_date``), and a string enum would
+	incorrectly mark that valid combined value as not one of the allowed
+	single values. Passed as a manual parameter, this overrides the
+	auto-detected one — drf-spectacular matches by name+location and prefers
+	the manual entry.
 	"""
 	values = []
 	for field in fields:
 		values.append(field)
 		values.append(f"-{field}")
+	example = f"?ordering={values[0]},{values[1]}"
 	return OpenApiParameter(
 		"ordering",
-		OpenApiTypes.STR,
+		{"type": "array", "items": {"type": "string", "enum": values}},
 		OpenApiParameter.QUERY,
-		enum=values,
-		description=description,
+		style="form",
+		explode=False,
+		description=description
+		+ " Accepts a comma-separated combination of the values above to break "
+		f"ties on a second field, e.g. {example}.",
 	)
 
 
@@ -2177,9 +2186,12 @@ _RECRUITING_RANK = {
 _TRIALS_ORDERING_PARAM = _ordering_param(
 	["discovery_date", "published_date", "title", "trial_id", "last_updated", "recruiting_first"],
 	"Sort field, prefix with `-` for descending. `recruiting_first` is a "
-	"recruitment-availability rank (recruiting -> ... -> withdrawn, null last), "
-	"NOT alphabetical on recruitment_status_normalized; ties break on "
-	"-discovery_date automatically, in both directions.",
+	"recruitment-availability rank (recruiting -> ... -> withdrawn), NOT "
+	"alphabetical on recruitment_status_normalized. Null status sorts last for "
+	"plain `recruiting_first` (ascending) but FIRST for `-recruiting_first` — "
+	"the `-` reverses the whole scale, null included, it does not just reverse "
+	"the named statuses. Ties break on -discovery_date automatically, in both "
+	"directions.",
 )
 
 
