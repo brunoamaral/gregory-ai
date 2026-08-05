@@ -33,12 +33,17 @@ async def search_authors(
 	also works. This endpoint has a fixed page size (10) — page through
 	with `page` rather than requesting a larger one.
 
-	`subject_id` requires `team_id` — without it, the API returns an empty
-	page rather than an error. `sort_by=article_count` ranks authors by
+	`subject_id` requires `team_id`. `sort_by=article_count` ranks authors by
 	their article count (add `team_id`/`subject_id` to scope which articles
 	count); default order for it is descending, ascending for everything
 	else.
+
+	Raises:
+		ValueError: If `subject_id` is given without `team_id` — the API
+			would otherwise return a silent empty page rather than an error.
 	"""
+	if subject_id is not None and team_id is None:
+		raise ValueError("subject_id requires team_id to also be set")
 	params = {
 		"search": search,
 		"full_name": full_name,

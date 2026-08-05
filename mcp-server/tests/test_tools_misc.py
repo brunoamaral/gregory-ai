@@ -48,6 +48,13 @@ async def test_search_authors_team_subject_scope(mock_gregory):
 	assert params["order"] == "desc"
 
 
+async def test_search_authors_rejects_subject_id_without_team_id(mock_gregory):
+	with pytest.raises(ValueError, match="subject_id requires team_id"):
+		await search_authors(subject_id=5)
+
+	assert mock_gregory.requests == []
+
+
 async def test_search_authors_drops_none_scope_params(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
 
