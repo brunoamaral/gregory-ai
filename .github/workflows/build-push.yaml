@@ -9,15 +9,29 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  IMAGE: amaralbruno/gregory-ai
-
 jobs:
   build-push:
     # Skip if tests failed (workflow_run conclusion is not 'success').
     # workflow_dispatch always proceeds so manual releases still work.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    strategy:
+      # Both images build on every run, even when only one of them changed.
+      # gregory-mcp is two pip installs, so rebuilding it needlessly costs
+      # seconds — far less than the machinery to detect which paths changed
+      # (workflow_run triggers don't support `paths:` filters). Keeping them
+      # in lockstep also guarantees the deployed MCP server always matches the
+      # API it proxies; see the note in tests.yaml's mcp-tests job.
+      fail-fast: false
+      matrix:
+        include:
+          - image: amaralbruno/gregory-ai
+            context: .
+            file: Dockerfile
+          - image: amaralbruno/gregory-mcp
+            context: ./mcp-server
+            file: ./mcp-server/Dockerfile
+    name: build-push (${{ matrix.image }})
     steps:
       - uses: actions/checkout@v6
         with:
@@ -35,20 +49,21 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
-          context: .
-          file: Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           # CI builds amd64 only (production servers are amd64).
           # For a local arm64 image (Apple Silicon) run:
           #   docker buildx build --platform linux/arm64 -t gregory-ai:local .
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ env.IMAGE }}:latest
-            ${{ env.IMAGE }}:${{ github.event.workflow_run.head_sha || github.sha }}
+            ${{ matrix.image }}:latest
+            ${{ matrix.image }}:${{ github.event.workflow_run.head_sha || github.sha }}
           # Registry cache avoids the 10 GB cap of type=gha, which was being
           # exceeded by the torch/tensorflow wheels and causing full rebuilds.
-          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
-          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+          # Each image gets its own cache ref so they never evict each other.
+          cache-from: type=registry,ref=${{ matrix.image }}:buildcache
+          cache-to: type=registry,ref=${{ matrix.image }}:buildcache,mode=max
 
   deploy:
     needs: build-push
@@ -65,10 +80,16 @@ jobs:
           key: ${{ secrets.HOUSE_SSH_KEY }}
           script: |
             cd /home/gregory/gregory-ai
-            docker compose pull gregory
+            # NOTE: this script does not `git pull`, so it never updates
+            # docker-compose.yaml itself. Adding or changing a *service*
+            # definition needs a manual update of this checkout first — see
+            # "Deployment" in docs/07-mcp-server.md.
+            docker compose pull gregory gregory-mcp
             # Wait for any running management command to finish before restarting
             while docker exec gregory pgrep -f "manage\.py" > /dev/null 2>&1; do
               echo "Management command running, waiting 30s..."
               sleep 30
             done
-            docker compose up -d gregory
+            # Restarted together so the MCP server never proxies an API build
+            # it wasn't tested against. compose orders them via depends_on.
+            docker compose up -d gregory gregory-mcp

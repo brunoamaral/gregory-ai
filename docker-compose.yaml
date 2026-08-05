@@ -63,6 +63,11 @@ services:
   gregory-mcp:
     container_name: gregory-mcp
     restart: always
+    # Both keys, matching the `gregory` service: `image` is what CI pushes and
+    # what `docker compose pull gregory-mcp` resolves on the server; `build`
+    # is the local-dev path. Without `image` the deploy's pull is a silent
+    # no-op and the server keeps running a stale locally-built container.
+    image: amaralbruno/gregory-mcp:latest
     build: ./mcp-server
     ports:
       - 127.0.0.1:8001:8001

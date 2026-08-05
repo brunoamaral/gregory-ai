@@ -21,6 +21,12 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Put the rootdir on sys.path. tests/test_client.py and
+# tests/test_no_internal_url_leak.py import `tests.conftest` absolutely, and
+# tests/ is not a package, so bare `pytest` cannot resolve it — only
+# `python -m pytest` worked, because that form prepends the CWD. Without this
+# the documented `pytest` invocation fails at collection.
+pythonpath = ["."]
 
 [build-system]
 requires = ["setuptools>=68"]
