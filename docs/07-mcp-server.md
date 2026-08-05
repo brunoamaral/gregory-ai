@@ -81,7 +81,15 @@ server — see [Risks](#risks).
 ## Resources
 
 Slow-changing reference data, served with a 10-minute `ttlMs` cache hint (public scope, so
-clients can share one cached copy) so repeated conversations stop refetching it:
+clients can share one cached copy) so repeated conversations stop refetching it. The server
+also caches these two server-side, for the same 10 minutes (`gregory_mcp/cache.py`,
+`CATALOG_CACHE_TTL_MS` — the one constant both the hint and the actual cache derive from) —
+`/categories/` costs about a second per request and takes 12 requests to read in full, so
+this is the difference between a call that answers instantly and one that visibly stalls.
+Per-replica, in-process, with single-flight (concurrent cold-cache callers await one fetch
+rather than each starting their own). `list_subjects`/`list_categories` share the same cache
+entries as these resources when called with equivalent filters — search tools are never
+cached.
 
 - `gregory://subjects` — every subject, with `team_id`
 - `gregory://categories` — every category

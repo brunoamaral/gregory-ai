@@ -5,6 +5,7 @@ from collections.abc import Callable
 import httpx2
 import pytest
 
+from gregory_mcp.cache import reset_catalog_cache
 from gregory_mcp.client import GregoryClient
 from gregory_mcp.config import Settings
 from gregory_mcp.server import build_server
@@ -43,6 +44,11 @@ def mock_gregory(monkeypatch):
 
 	Yields a `set_handler(fn)` setter; `fn(request) -> httpx2.Response`.
 	Also exposes `.requests` (via `recorder`) for asserting on query params.
+
+	Resets the process-wide catalog cache (see gregory_mcp/cache.py) before
+	and after each test — it's a module-level singleton, so without this a
+	list_subjects()/list_categories() call in one test could be served a
+	cached result left behind by a completely different test.
 	"""
 	import gregory_mcp.client as client_module
 
@@ -51,6 +57,7 @@ def mock_gregory(monkeypatch):
 	client._client._transport = recorder.transport
 
 	monkeypatch.setattr(client_module, "_client", client)
+	reset_catalog_cache()
 
 	class Handle:
 		def set_handler(self, fn):
@@ -61,6 +68,7 @@ def mock_gregory(monkeypatch):
 			return recorder.requests
 
 	yield Handle()
+	reset_catalog_cache()
 
 
 @pytest.fixture

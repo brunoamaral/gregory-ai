@@ -12,15 +12,18 @@ from mcp.server.caching import CacheHint
 from mcp.server.mcpserver import MCPServer
 from mcp_types import ToolAnnotations
 
+from .cache import CATALOG_CACHE_TTL_MS
 from .prompts import register_prompts
 from .resources import register_resources
 from .tools import articles, authors, catalog, stats, trials
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
 
-# Reference-data resources change slowly; let clients cache them for 10 minutes
+# Reference-data resources change slowly; let clients cache them for as long as
+# the server itself does (CATALOG_CACHE_TTL_MS, see cache.py — one constant,
+# so the client-facing hint and the server's actual cache can't drift apart)
 # and share the cached value across callers (nothing in the payload is caller-specific).
-CATALOG_CACHE = CacheHint(ttl_ms=10 * 60 * 1000, scope="public")
+CATALOG_CACHE = CacheHint(ttl_ms=CATALOG_CACHE_TTL_MS, scope="public")
 
 
 def build_server() -> MCPServer:

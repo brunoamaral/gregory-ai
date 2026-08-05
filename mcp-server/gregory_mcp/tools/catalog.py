@@ -6,6 +6,7 @@ every row carries `team_id`, which most other tools' filters need.
 
 from __future__ import annotations
 
+from ..cache import get_all_pages_cached
 from ..client import get_client
 from ..pagination import clamp_page, clamp_page_size
 
@@ -16,11 +17,13 @@ async def list_subjects(team_id: int | None = None, search: str | None = None) -
 	Call this first when you don't already know a subject's ID or its
 	team_id — most article/trial filters need one or both.
 
+	Cached server-side for 10 minutes (subjects change rarely).
+
 	Args:
 		team_id: Restrict to subjects belonging to this team.
 		search: Case-insensitive substring match against the subject name.
 	"""
-	results = await get_client().get_all_pages("/subjects/", {"team_id": team_id, "search": search})
+	results = await get_all_pages_cached("/subjects/", {"team_id": team_id, "search": search})
 	return {
 		"count": len(results),
 		"subjects": [
@@ -44,8 +47,12 @@ async def list_categories(
 
 	Note: results are NOT sorted by author count by default — that sort is
 	expensive on this endpoint and is deliberately not exposed here.
+
+	Cached server-side for 10 minutes — /categories/ costs about a second
+	per request and takes 12 requests to read in full, so this avoids a
+	multi-second stall on every call.
 	"""
-	results = await get_client().get_all_pages(
+	results = await get_all_pages_cached(
 		"/categories/", {"team_id": team_id, "subject_id": subject_id, "search": search}
 	)
 	return {

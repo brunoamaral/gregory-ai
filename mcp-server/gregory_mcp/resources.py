@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 
-from .client import get_client
+from .cache import get_all_pages_cached
 
 
 def register_resources(server) -> None:
@@ -25,7 +25,9 @@ def register_resources(server) -> None:
 		mime_type="application/json",
 	)
 	async def subjects_catalog() -> str:
-		results = await get_client().get_all_pages("/subjects/")
+		# No params (the full, unfiltered catalog) — same cache entry as
+		# list_subjects() called with no filters.
+		results = await get_all_pages_cached("/subjects/")
 		return json.dumps(
 			[{"id": s.get("id"), "subject_name": s.get("subject_name"), "team_id": s.get("team_id")} for s in results]
 		)
@@ -38,7 +40,7 @@ def register_resources(server) -> None:
 		mime_type="application/json",
 	)
 	async def categories_catalog() -> str:
-		results = await get_client().get_all_pages("/categories/")
+		results = await get_all_pages_cached("/categories/")
 		return json.dumps(
 			[
 				{"id": c.get("id"), "category_name": c.get("category_name"), "category_slug": c.get("category_slug")}
