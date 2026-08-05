@@ -85,7 +85,10 @@ clients can share one cached copy) so repeated conversations stop refetching it:
 
 - `gregory://subjects` — every subject, with `team_id`
 - `gregory://categories` — every category
-- `gregory://sponsors` — canonical sponsors (capped at ~2000 rows as a safety net)
+
+No sponsors resource: at 8,000+ rows / ~700 KB it isn't catalog-shaped the way
+subjects and categories are — use the `list_sponsors` tool (search + pagination)
+instead.
 
 ## Prompts
 
