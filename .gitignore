@@ -10,6 +10,8 @@ __pycache__/
 venv/
 venv3/
 venv311/
+.pytest_cache/
+*.egg-info/
 
 # Virtual environments
 env

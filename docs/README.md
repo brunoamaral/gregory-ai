@@ -20,6 +20,7 @@ walkthrough (read in order); everything else is reference or design material.
 | [04-machine-learning.md](04-machine-learning.md) | Overview of the ML relevance pipeline. |
 | [05-training-models.md](05-training-models.md) | Training and evaluating the ML models. |
 | [06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md) | Organisations, teams, sites, and visibility scoping. |
+| [07-mcp-server.md](07-mcp-server.md) | Read-only MCP server — connecting an LLM client, available tools/resources/prompts. |
 
 ## API & data reference
 

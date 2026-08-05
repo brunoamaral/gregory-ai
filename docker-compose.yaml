@@ -52,6 +52,30 @@ services:
       - gregory_network
     depends_on:
       - db
+    healthcheck:
+      # Same readiness check entrypoint.sh's wait_for_db already uses.
+      test: ["CMD", "python", "manage.py", "check", "--database", "default"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  gregory-mcp:
+    container_name: gregory-mcp
+    restart: always
+    build: ./mcp-server
+    ports:
+      - 127.0.0.1:8001:8001
+    environment:
+      # Base URL of the GregoryAI instance this server proxies. Defaults to
+      # the sibling `gregory` container for local dev; point it at a public
+      # instance (e.g. https://api.brain-regeneration.com) in production.
+      - GREGORY_API_URL=${GREGORY_MCP_API_URL:-http://gregory:8000}
+    networks:
+      - gregory_network
+    depends_on:
+      gregory:
+        condition: service_healthy
 
 networks:
   gregory_network:
