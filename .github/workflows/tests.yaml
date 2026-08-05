@@ -73,6 +73,37 @@ jobs:
         # drift the production schema from model state.
         run: python manage.py makemigrations --check --dry-run
 
+  # MCP server suite. Runs on a bare runner rather than inside the gregory-ai
+  # image: it needs only `mcp` + `httpx2` + pytest, so pulling the multi-GB ML
+  # image to run it would cost more than the tests themselves.
+  #
+  # This job gates the Docker build for BOTH images (build-push.yaml keys off
+  # this whole workflow's conclusion). That is deliberate: the MCP server
+  # encodes filter names lifted from django/schema.yml, and django-filter
+  # silently ignores unknown query params — so an API change that outruns the
+  # MCP server produces wrong results with no error. test_schema_contract.py
+  # is what catches that, and it is only worth anything if it runs here.
+  mcp-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: mcp-server/pyproject.toml
+
+      - name: Install mcp-server + dev deps
+        working-directory: mcp-server
+        run: pip install --quiet -e ".[dev]"
+
+      - name: Run pytest
+        working-directory: mcp-server
+        # test_schema_contract.py reads ../django/schema.yml from the checkout,
+        # so no Django runtime or database is needed here.
+        run: pytest -p no:cacheprovider
+
   # Static gate for "hollow" error handling: bare `except:` and `except: pass`
   # (the empty catch block). Runs on a bare runner — no ML image needed — so it
   # finishes in seconds, in parallel with the test suite. Config: ruff.toml.

@@ -139,6 +139,83 @@ awk '$9 == 429' /var/log/nginx/mcp-access.log | grep -o 'mcp_name="[^"]*"' | sor
 Whether 30 r/m per (client, tool) and 120 r/m per client are the right numbers is an open
 question — tune them from what this log actually shows, not speculatively.
 
+## Deployment
+
+The image is `amaralbruno/gregory-mcp`, built and pushed by
+[`.github/workflows/build-push.yaml`](../.github/workflows/build-push.yaml) alongside
+`amaralbruno/gregory-ai`. Both build from the same matrix and deploy in the same step, so
+the MCP server is never left proxying an API build it wasn't tested against — which matters
+because django-filter silently ignores unknown query params, so a stale MCP server returns
+wrong results rather than an error.
+
+The gate is the `Tests` workflow: `pytest` (Django), `mcp-tests` (MCP), and `lint` all have
+to pass before either image is built.
+
+### One-time setup on the server
+
+The deploy step **does not `git pull`** — it only pulls images and restarts containers. So
+the `gregory-mcp` service definition has to reach `/home/gregory/gregory-ai` once, by hand,
+before the first automated deploy will do anything:
+
+```bash
+cd /home/gregory/gregory-ai
+git pull                                  # brings in the gregory-mcp compose service
+docker compose pull gregory-mcp
+docker compose up -d gregory-mcp
+docker compose ps gregory-mcp             # expect "healthy" within ~40s
+```
+
+Then add the `/mcp/` block to the live nginx config. The version in
+[`nginx-example-configuration/nginx.conf`](../nginx-example-configuration/nginx.conf) is an
+example, not the deployed file — it needs copying across, including the two `limit_req_zone`
+directives and the `map $http_mcp_name $mcp_tool_bucket` block, which live in the `http`
+context rather than the `server` block.
+
+```bash
+nginx -t && systemctl reload nginx
+```
+
+Verify from outside:
+
+```bash
+curl -s -o /dev/null -w '%{http_code} -> %{redirect_url}\n' https://<host>/mcp/
+```
+
+Expect **`307`** redirecting to `…/mcp`. A `404` means the location block isn't active; a
+`502` means nginx is up but the container isn't reachable on `127.0.0.1:8001`.
+
+> **Do not add `-L`.** Following the redirect with curl's default `Accept: */*` opens an SSE
+> stream that never closes, and the command hangs until you kill it. That is the server
+> working correctly, not a fault. (The container's own `HEALTHCHECK` avoids this by sending
+> no SSE-compatible `Accept` header, so it lands on `406` and exits.)
+
+### Known gap: the trailing slash
+
+The app is mounted at **`/mcp`** and redirects `/mcp/` → `/mcp`. The example nginx config
+only defines `location /mcp/`, so the redirect target has no matching block and falls
+through to `location /`, which proxies to Django and returns 404.
+
+**This has not been verified against a live nginx** — the MCP server has so far only been
+exercised directly on `127.0.0.1:8001`, bypassing nginx entirely. Check it explicitly on the
+first deploy. If it does break, the fix is a prefix match that covers both spellings and
+preserves the original URI:
+
+```nginx
+location /mcp {                        # no trailing slash — matches /mcp and /mcp/
+    proxy_pass http://127.0.0.1:8001;  # no path — don't rewrite the URI
+    # … limit_req and proxy_set_header lines unchanged …
+}
+```
+
+Confirm with a real client afterwards, not just curl: streamable HTTP uses POST, and a 307
+preserves the method and body, so the failure mode differs between the two.
+
+### After that
+
+Every push to `main` that passes `Tests` rebuilds and redeploys both containers with no
+manual step. The one exception is another change to a *service definition* in
+`docker-compose.yaml` — those still need the checkout on the server updating first.
+
 ## Risks
 
 **Unauthenticated endpoint.** No data-leak risk, but anyone who learns the URL can drive
