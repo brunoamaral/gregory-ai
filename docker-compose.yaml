@@ -52,6 +52,13 @@ services:
       - gregory_network
     depends_on:
       - db
+    healthcheck:
+      # Same readiness check entrypoint.sh's wait_for_db already uses.
+      test: ["CMD", "python", "manage.py", "check", "--database", "default"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   gregory-mcp:
     container_name: gregory-mcp
@@ -67,7 +74,8 @@ services:
     networks:
       - gregory_network
     depends_on:
-      - gregory
+      gregory:
+        condition: service_healthy
 
 networks:
   gregory_network:
