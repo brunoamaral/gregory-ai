@@ -52,6 +52,7 @@ async def search_trials(
 	comma-separated list matched with OR (e.g. "recruiting,not_recruiting").
 	`nct` matches an NCT registry ID exactly. Dates are YYYY-MM-DD.
 	"""
+	clamped_page = clamp_page(page)
 	params = {
 		"search": search,
 		"title": title,
@@ -76,14 +77,14 @@ async def search_trials(
 		"date_registration_before": date_registration_before,
 		"nct": nct,
 		"ordering": ordering,
-		"page": clamp_page(page),
+		"page": clamped_page,
 		"page_size": clamp_page_size(page_size, MAX_PAGE_SIZE),
 	}
 	data = await get_client().get("/trials/", params)
 	results = data.get("results", [])
 	return {
 		"count": data.get("count", len(results)),
-		"next": data.get("next"),
+		"next_page": clamped_page + 1 if data.get("next") else None,
 		"trials": [compact_trial(t) for t in results],
 	}
 

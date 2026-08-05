@@ -67,6 +67,19 @@ async def test_search_authors_drops_none_scope_params(mock_gregory):
 	assert "order" not in params
 
 
+async def test_search_authors_next_page_reflects_clamped_page(mock_gregory):
+	mock_gregory.set_handler(
+		lambda request: httpx2.Response(
+			200, json={"count": 100, "next": "http://gregory:8000/authors/?page=3", "results": []}
+		)
+	)
+
+	result = await search_authors(page=2)
+
+	assert result["next_page"] == 3
+	assert "next" not in result
+
+
 async def test_get_author_with_coauthors(mock_gregory):
 	calls = []
 
@@ -128,7 +141,15 @@ async def test_list_sponsors_is_paginated_not_exhaustive(mock_gregory):
 	assert len(mock_gregory.requests) == 1
 	assert mock_gregory.requests[0].url.params["page_size"] == "25"
 	assert result["count"] == 500
-	assert result["next"] == "x"
+	assert result["next_page"] == 2
+
+
+async def test_list_sponsors_next_page_is_none_on_last_page(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 1, "next": None, "results": []}))
+
+	result = await list_sponsors(page=3)
+
+	assert result["next_page"] is None
 
 
 async def test_get_stats_global_maps_team_and_subject(mock_gregory):

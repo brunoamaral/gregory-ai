@@ -44,6 +44,7 @@ async def search_authors(
 	"""
 	if subject_id is not None and team_id is None:
 		raise ValueError("subject_id requires team_id to also be set")
+	clamped_page = clamp_page(page)
 	params = {
 		"search": search,
 		"full_name": full_name,
@@ -55,13 +56,13 @@ async def search_authors(
 		"subject_id": subject_id,
 		"sort_by": sort_by,
 		"order": order,
-		"page": clamp_page(page),
+		"page": clamped_page,
 	}
 	data = await get_client().get("/authors/", params)
 	results = data.get("results", [])
 	return {
 		"count": data.get("count", len(results)),
-		"next": data.get("next"),
+		"next_page": clamped_page + 1 if data.get("next") else None,
 		"authors": [compact_author(a) for a in results],
 	}
 

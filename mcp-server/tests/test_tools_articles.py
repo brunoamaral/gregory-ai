@@ -33,6 +33,7 @@ async def test_search_articles_compacts_results(mock_gregory):
 	result = await search_articles(search="stem cells")
 
 	assert result["count"] == 1
+	assert result["next_page"] is None
 	article = result["articles"][0]
 	assert article["article_id"] == 42
 	assert article["journal"] == "Nature"
@@ -73,6 +74,17 @@ async def test_search_articles_clamps_non_positive_page_and_page_size(mock_grego
 	params = mock_gregory.requests[0].url.params
 	assert params["page"] == "1"
 	assert params["page_size"] == "1"
+
+
+async def test_search_articles_next_page_reflects_clamped_page(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 100, "next": "http://gregory:8000/articles/?page=6", "results": []}))
+
+	result = await search_articles(page=5)
+
+	# next_page is derived from the clamped page we actually requested, not a
+	# passthrough of the upstream URL (which leaks the internal container host).
+	assert result["next_page"] == 6
+	assert "next" not in result
 
 
 async def test_get_article_returns_full_record(mock_gregory):

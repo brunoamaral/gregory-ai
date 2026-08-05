@@ -61,6 +61,21 @@ async def test_search_trials_falls_back_to_primary_sponsor(mock_gregory):
 	assert result["trials"][0]["sponsor"] == "Raw Sponsor String"
 
 
+async def test_search_trials_next_page_reflects_clamped_page(mock_gregory):
+	mock_gregory.set_handler(
+		lambda request: httpx2.Response(
+			200, json={"count": 100, "next": "http://gregory:8000/trials/?page=4", "results": []}
+		)
+	)
+
+	result = await search_trials(page=3)
+
+	# next_page is derived from the clamped page we actually requested, not a
+	# passthrough of the upstream URL (which leaks the internal container host).
+	assert result["next_page"] == 4
+	assert "next" not in result
+
+
 async def test_get_trial_returns_full_record(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"trial_id": 7, "trial_sites": []}))
 

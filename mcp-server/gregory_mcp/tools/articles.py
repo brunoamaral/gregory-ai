@@ -47,6 +47,7 @@ async def search_articles(
 	Dates are YYYY-MM-DD. `ordering` accepts discovery_date, published_date,
 	title, article_id, ml_score (prefix `-` for descending).
 	"""
+	clamped_page = clamp_page(page)
 	params = {
 		"search": search,
 		"title": title,
@@ -66,14 +67,14 @@ async def search_articles(
 		"published_date_after": published_date_after,
 		"published_date_before": published_date_before,
 		"ordering": ordering,
-		"page": clamp_page(page),
+		"page": clamped_page,
 		"page_size": clamp_page_size(page_size, MAX_PAGE_SIZE),
 	}
 	data = await get_client().get("/articles/", params)
 	results = data.get("results", [])
 	return {
 		"count": data.get("count", len(results)),
-		"next": data.get("next"),
+		"next_page": clamped_page + 1 if data.get("next") else None,
 		"articles": [compact_article(a) for a in results],
 	}
 

@@ -80,14 +80,15 @@ async def list_sponsors(
 		search: Case-insensitive substring match against the sponsor name.
 		sponsor_type: One of academic_medical, government, industry, nonprofit, other.
 	"""
+	clamped_page = clamp_page(page)
 	data = await get_client().get(
 		"/sponsors/",
-		{"search": search, "sponsor_type": sponsor_type, "page": clamp_page(page), "page_size": clamp_page_size(page_size, 100)},
+		{"search": search, "sponsor_type": sponsor_type, "page": clamped_page, "page_size": clamp_page_size(page_size, 100)},
 	)
 	results = data.get("results", [])
 	return {
 		"count": data.get("count", len(results)),
-		"next": data.get("next"),
+		"next_page": clamped_page + 1 if data.get("next") else None,
 		"sponsors": [
 			{
 				"id": s.get("id"),
