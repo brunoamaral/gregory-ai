@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 
 def register_prompts(server) -> None:
 	@server.prompt(
@@ -28,10 +30,19 @@ def register_prompts(server) -> None:
 		description="List actively recruiting or recently registered trials for a research subject.",
 	)
 	def recent_trials_for_subject(subject_id: str) -> str:
+		# date_registration is not a valid `ordering` value on /trials/ (see
+		# TrialViewSet.ordering_fields) — DRF's OrderingFilter silently ignores
+		# an unrecognised value rather than rejecting it, so ordering by it
+		# quietly fell back to the default order instead of erroring. Bound
+		# recency with the date_registration_after filter instead; the default
+		# ordering (-discovery_date) already puts newest-discovered first.
+		cutoff = (date.today() - timedelta(days=180)).isoformat()
 		return (
 			f"Find recent clinical trials for subject_id={subject_id} using the GregoryAI tools.\n\n"
 			f"1. Call search_trials with subject_id={subject_id}, "
-			'recruitment_status_normalized="recruiting", ordering="-date_registration".\n'
+			f'recruitment_status_normalized="recruiting", date_registration_after="{cutoff}" '
+			"(roughly the last 6 months) to bound it to recently-registered trials — "
+			"results already come back newest-discovered-first by default.\n"
 			"2. For each result, note phase, sponsor, and countries from the compact result — "
 			"call get_trial only for ones worth a closer look.\n"
 			"3. Summarize what's actively recruiting and where."
