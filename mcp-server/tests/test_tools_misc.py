@@ -36,6 +36,30 @@ async def test_search_authors(mock_gregory):
 	assert "articles_list" not in author
 
 
+async def test_search_authors_team_subject_scope(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
+
+	await search_authors(team_id=1, subject_id=5, sort_by="article_count", order="desc")
+
+	params = mock_gregory.requests[0].url.params
+	assert params["team_id"] == "1"
+	assert params["subject_id"] == "5"
+	assert params["sort_by"] == "article_count"
+	assert params["order"] == "desc"
+
+
+async def test_search_authors_drops_none_scope_params(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
+
+	await search_authors(search="Jane")
+
+	params = mock_gregory.requests[0].url.params
+	assert "team_id" not in params
+	assert "subject_id" not in params
+	assert "sort_by" not in params
+	assert "order" not in params
+
+
 async def test_get_author_with_coauthors(mock_gregory):
 	calls = []
 
