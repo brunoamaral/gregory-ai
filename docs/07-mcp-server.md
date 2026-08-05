@@ -159,56 +159,75 @@ before the first automated deploy will do anything:
 
 ```bash
 cd /home/gregory/gregory-ai
-git pull                                  # brings in the gregory-mcp compose service
+git pull                                  # brings in the service's `image:` key
 docker compose pull gregory-mcp
 docker compose up -d gregory-mcp
 docker compose ps gregory-mcp             # expect "healthy" within ~40s
 ```
 
-Then add the `/mcp/` block to the live nginx config. The version in
+Then add the `/mcp` block to the live nginx config. The version in
 [`nginx-example-configuration/nginx.conf`](../nginx-example-configuration/nginx.conf) is an
 example, not the deployed file — it needs copying across, including the two `limit_req_zone`
 directives and the `map $http_mcp_name $mcp_tool_bucket` block, which live in the `http`
-context rather than the `server` block.
+context rather than the `server` block (on Debian/Ubuntu, `conf.d/` is included there).
+
+Two things that are easy to get wrong:
+
+- **`location /mcp`, no trailing slash, and `proxy_pass http://127.0.0.1:8001;` with no
+  path.** The app is mounted at `/mcp` and 307-redirects `/mcp/` → `/mcp`. A `location
+  /mcp/` block leaves that redirect target unmatched, so it falls through to `location /`,
+  reaches Django, and 404s. The prefix match catches both spellings and the pathless
+  `proxy_pass` preserves the URI.
+- **`http2` syntax depends on the nginx version.** Below 1.25.1 it is part of the listen
+  line (`listen 443 ssl http2;`, which is what the example config and House both use); from
+  1.25.1 it is a separate `http2 on;` directive and the old form warns. Using the wrong one
+  fails the config test with `unknown directive "http2"`.
 
 ```bash
 nginx -t && systemctl reload nginx
 ```
 
-Verify from outside:
+### Verifying
 
 ```bash
-curl -s -o /dev/null -w '%{http_code} -> %{redirect_url}\n' https://<host>/mcp/
+curl -s -o /dev/null --max-time 5 -H 'Accept: application/json' -w '%{http_code}\n' https://<host>/mcp
 ```
 
-Expect **`307`** redirecting to `…/mcp`. A `404` means the location block isn't active; a
-`502` means nginx is up but the container isn't reachable on `127.0.0.1:8001`.
+Expect **`406`**. A `404` means the location block isn't active; a `502` means nginx is up
+but the container isn't reachable on `127.0.0.1:8001`; `000` usually means TLS isn't
+serving that hostname yet.
 
-> **Do not add `-L`.** Following the redirect with curl's default `Accept: */*` opens an SSE
-> stream that never closes, and the command hangs until you kill it. That is the server
-> working correctly, not a fault. (The container's own `HEALTHCHECK` avoids this by sending
-> no SSE-compatible `Accept` header, so it lands on `406` and exits.)
+> **Never probe `/mcp` with curl's default `Accept: */*`.** That returns `200` and then an
+> open SSE stream — the command hangs until you kill it. It looks like a failure and is
+> actually the server working. Same reason not to add `-L` to a `/mcp/` request: following
+> the 307 lands on the streaming path. See `mcp-server/healthcheck.py` for the full matrix
+> of what each method and `Accept` combination returns.
 
-### Known gap: the trailing slash
+A status code only proves something is listening. This exercises the real protocol —
+note the `_meta` envelope is **mandatory** under the stateless `2026-07-28` core, since
+every request has to be self-describing; omit `protocolVersion` or `clientCapabilities` and
+the server returns `-32602`:
 
-The app is mounted at **`/mcp`** and redirects `/mcp/` → `/mcp`. The example nginx config
-only defines `location /mcp/`, so the redirect target has no matching block and falls
-through to `location /`, which proxies to Django and returns 404.
-
-**This has not been verified against a live nginx** — the MCP server has so far only been
-exercised directly on `127.0.0.1:8001`, bypassing nginx entirely. Check it explicitly on the
-first deploy. If it does break, the fix is a prefix match that covers both spellings and
-preserves the original URI:
-
-```nginx
-location /mcp {                        # no trailing slash — matches /mcp and /mcp/
-    proxy_pass http://127.0.0.1:8001;  # no path — don't rewrite the URI
-    # … limit_req and proxy_set_header lines unchanged …
-}
+```bash
+curl -s --max-time 10 -X POST https://<host>/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/list' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{
+       "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+       "io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"},
+       "io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
 
-Confirm with a real client afterwards, not just curl: streamable HTTP uses POST, and a 307
-preserves the method and body, so the failure mode differs between the two.
+Expect a JSON-RPC result listing all ten tools. This is the check that matters: it is a
+POST, which is what real clients use, and it is what proves the routing above is right.
+
+To confirm rate limiting is applied and returns `429` rather than nginx's default `503`,
+send the same request ~16 times in a row with `-H 'Mcp-Name: list_subjects'` — the first
+dozen should return `200` and the rest `429`.
+
+Client config URL, **without the trailing slash**: `https://<host>/mcp`
 
 ### After that
 

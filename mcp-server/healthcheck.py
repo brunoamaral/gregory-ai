@@ -1,14 +1,22 @@
 """Docker HEALTHCHECK probe.
 
-A bare GET on the streamable-http endpoint (this server negotiates POST
-JSON-RPC and SSE, not plain GET) redirects once and lands on 406 Not
-Acceptable — verified against a live instance. A 405 Method Not Allowed is
-also accepted: which of the two a router/server returns for "wrong verb on
-a mounted route" can legitimately vary. Either proves the process is up,
-routed correctly, and the streamable-http app is actually mounted at
-/mcp/, so together they're the only things that count as healthy.
-Anything else — a 404 (route not mounted — a real misconfiguration, not
-just "wrong verb/Accept header"), a 5xx (the app is up but erroring), a
+This server negotiates POST JSON-RPC and SSE, not plain GET, so a GET is a
+cheap liveness probe. Which rejection you get is deterministic, not router
+variance — measured against a live container on 2026-08-05:
+
+    GET  /mcp/  (trailing slash)          -> 307 redirect to /mcp
+    GET  /mcp   Accept: application/json  -> 406 Not Acceptable
+    GET  /mcp   Accept: */*               -> 200, then an open SSE stream
+    HEAD /mcp                             -> 405 Method Not Allowed
+
+urlopen() follows the 307 and sends no SSE-compatible Accept header, so it
+lands on 406. 405 is accepted too so the probe still passes if this is ever
+switched to a HEAD request. Both prove the process is up, routed correctly,
+and the streamable-http app is really mounted.
+
+The 200 row is why this probe must never use a permissive Accept: it would
+hang on the stream until the timeout rather than returning. Anything else —
+404 (route not mounted, a real misconfiguration), 5xx (up but erroring), a
 connection failure, or a timeout — means something is actually wrong.
 """
 
