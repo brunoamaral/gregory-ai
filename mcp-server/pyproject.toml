@@ -5,6 +5,10 @@ description = "Read-only MCP server exposing the GregoryAI REST API to LLM clien
 requires-python = ">=3.12"
 dependencies = [
     "mcp==2.0.0",
+    # gregory_mcp/server.py imports directly from mcp_types (ToolAnnotations) —
+    # pinned explicitly rather than relying on it only being pulled in
+    # transitively via mcp's own dependency on it.
+    "mcp-types==2.0.0",
     "httpx2>=2.9,<3",
 ]
 
