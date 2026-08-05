@@ -48,6 +48,7 @@ services:
       - FERNET_SECRET_KEY=${FERNET_SECRET_KEY}
       - DJANGO_DEBUG=${DJANGO_DEBUG}
       - EXTRA_ALLOWED_HOSTS=${EXTRA_ALLOWED_HOSTS}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
     networks:
       - gregory_network
     depends_on:
