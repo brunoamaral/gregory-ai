@@ -47,11 +47,14 @@ async def test_server_registers_three_prompts(server):
 	}
 
 
-def test_every_cacheable_list_method_carries_a_hint():
+def test_every_cacheable_method_carries_a_hint():
 	"""A missing cache hint means ttlMs=0 — "never cache" — which is the SDK
 	default and therefore fails silently. tools/list is ~17 KB of schemas that
 	lands in the model's system prompt, so losing this hint quietly reintroduces
 	a refetch on every reconnect. Assert the wiring rather than trusting it.
+
+	Not only *list* methods: resources/read and server/discover are cacheable
+	too, and are covered here for the same reason.
 
 	Asserts the dict we pass in, not the server: MCPServer exposes no accessor
 	for the hints it was constructed with. That the SDK honours them was verified
@@ -59,7 +62,13 @@ def test_every_cacheable_list_method_carries_a_hint():
 	"""
 	from gregory_mcp.server import CACHE_HINTS as hints
 
-	for method in ("tools/list", "prompts/list", "resources/list", "resources/read"):
+	for method in (
+		"tools/list",
+		"prompts/list",
+		"resources/list",
+		"resources/read",
+		"server/discover",
+	):
 		assert method in hints, f"{method} has no cache hint — clients will refetch it every time"
 		assert hints[method].ttl_ms > 0, f"{method} hint is ttl_ms=0, same as no hint at all"
 		assert hints[method].scope == "public", (
