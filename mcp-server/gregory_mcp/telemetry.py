@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextvars
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -25,7 +26,14 @@ from pydantic import ValidationError
 from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, ServerRequestContext
 from mcp.shared.exceptions import MCPError
 
+from .enums import CategoryModality
+
 logger = logging.getLogger("gregory_mcp.telemetry")
+
+_CATEGORY_MODALITY_VALUES = frozenset(CategoryModality.__args__)
+# Django's SlugField alphabet: ASCII letters, digits, hyphens, underscores.
+_SLUG_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+_MAX_SLUG_LENGTH = 100
 
 # Which argument(s) hold the free-text query for a given tool, in
 # preference order (the first one present and non-empty wins). Only these
@@ -42,6 +50,29 @@ _QUERY_ARGS_BY_TOOL = {
 # `intervention`, or any other free-text/identifying field here — see
 # MCP-TELEMETRY-PLAN.md's "not logged at any phase".
 _LOGGED_ARG_NAMES = ("page", "page_size", "subject_id", "team_id", "category_slug", "category_modality")
+
+
+def _sanitized_logged_value(key: str, value: Any) -> Any | None:
+	"""The value to log for a `_LOGGED_ARG_NAMES` key, or None to omit it.
+
+	ServerMiddleware runs *before* schema validation (see the class
+	docstring), so this reads the client's raw, unvalidated argument — a
+	malformed or malicious client could send free text in a field the
+	schema would otherwise reject for having the wrong type (e.g.
+	`category_slug: "<arbitrary text>"`), and that text would reach this
+	stdout stream by value before validation ever ran. A basic type/format
+	check here, not trust in the client's claimed type, is what keeps
+	`_LOGGED_ARG_NAMES` honestly limited to "public, low-cardinality" data.
+	"""
+	if key in ("page", "page_size", "subject_id", "team_id"):
+		return value if isinstance(value, int) and not isinstance(value, bool) else None
+	if key == "category_slug":
+		if isinstance(value, str) and len(value) <= _MAX_SLUG_LENGTH and _SLUG_RE.fullmatch(value):
+			return value
+		return None
+	if key == "category_modality":
+		return value if value in _CATEGORY_MODALITY_VALUES else None
+	return None  # pragma: no cover — exhaustive over _LOGGED_ARG_NAMES above
 
 
 @dataclass
@@ -95,7 +126,8 @@ def record_truncation_error() -> None:
 
 
 def record_cache_status(status: str) -> None:
-	"""Called by CatalogCache.get_or_fetch() with 'hit', 'miss', or 'wait'."""
+	"""Called by CatalogCache.get_or_fetch() with 'hit', 'miss', or
+	'single-flight-wait' — matching MCP-TELEMETRY-PLAN.md's documented taxonomy."""
 	acc = _accumulator.get()
 	if acc is not None:
 		acc.cache_status = status
@@ -229,7 +261,7 @@ class TelemetryMiddleware(ServerMiddleware[Any]):
 			if isinstance(arguments, dict):
 				event["params_used"] = sorted(k for k, v in arguments.items() if v is not None)
 				for key in _LOGGED_ARG_NAMES:
-					value = arguments.get(key)
+					value = _sanitized_logged_value(key, arguments.get(key))
 					if value is not None:
 						event[key] = value
 				await _annotate_query_shape(event, tool_name, arguments)
@@ -248,7 +280,7 @@ class TelemetryMiddleware(ServerMiddleware[Any]):
 		except MCPError as exc:
 			event["outcome"] = "error"
 			event["error_kind"] = "protocol_error"
-			event["status_code"] = str(exc.error.code)
+			event["status_code"] = exc.error.code
 			_emit(event, start, accumulator)
 			_accumulator.reset(token)
 			raise

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import httpx2
@@ -102,6 +103,74 @@ async def test_emits_one_record_for_a_successful_tool_call(caplog):
 	assert "duration_ms" in fields
 
 
+def test_sanitized_logged_value_rejects_wrong_types_and_bad_formats():
+	# int-typed fields: only real, non-bool ints pass.
+	assert telemetry._sanitized_logged_value("subject_id", 3) == 3
+	assert telemetry._sanitized_logged_value("subject_id", "3") is None
+	assert telemetry._sanitized_logged_value("page", True) is None  # bool is an int subclass
+
+	# category_slug: Django's SlugField alphabet only, length-capped.
+	assert telemetry._sanitized_logged_value("category_slug", "encephalitis-2026") == "encephalitis-2026"
+	assert telemetry._sanitized_logged_value("category_slug", "not a slug!") is None
+	assert telemetry._sanitized_logged_value("category_slug", "x" * 101) is None
+	assert telemetry._sanitized_logged_value("category_slug", 123) is None
+
+	# category_modality: must be one of the declared literal values.
+	assert telemetry._sanitized_logged_value("category_modality", "small_molecule") == "small_molecule"
+	assert telemetry._sanitized_logged_value("category_modality", "made-up-value") is None
+
+
+async def test_pre_validation_free_text_in_a_logged_arg_is_never_logged_by_value(caplog):
+	"""ServerMiddleware runs before schema validation, so a malformed or
+	malicious client can send a string where the schema expects an int, or
+	free text where it expects a slug — this must never reach the log by
+	value just because the field name is on _LOGGED_ARG_NAMES.
+	"""
+
+	async def call_next(ctx):
+		return CallToolResult(content=[], structured_content={"count": 0, "articles": []})
+
+	ctx = _make_ctx(
+		params={
+			"name": "search_articles",
+			"arguments": {
+				"subject_id": "contact me at jane@example.com",  # schema expects int
+				"category_slug": "not a real slug; DROP TABLE articles",
+				"category_modality": "totally-made-up-modality",
+				"page": "1 OR 1=1",
+			},
+		}
+	)
+	await TelemetryMiddleware()(ctx, call_next)
+
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
+	fields = _record_fields(records[0])
+	# Names still show up in params_used (that's names-only, always safe)...
+	assert fields["params_used"] == ["category_modality", "category_slug", "page", "subject_id"]
+	# ...but none of the malformed values were logged by value.
+	assert "subject_id" not in fields
+	assert "category_slug" not in fields
+	assert "category_modality" not in fields
+	assert "page" not in fields
+	assert "jane@example.com" not in repr(fields)
+	assert "DROP TABLE" not in repr(fields)
+
+
+async def test_a_well_formed_category_slug_is_still_logged_by_value(caplog):
+	async def call_next(ctx):
+		return CallToolResult(content=[], structured_content={"count": 0, "articles": []})
+
+	ctx = _make_ctx(
+		params={"name": "search_articles", "arguments": {"category_slug": "encephalitis-2026", "category_modality": "small_molecule"}}
+	)
+	await TelemetryMiddleware()(ctx, call_next)
+
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
+	fields = _record_fields(records[0])
+	assert fields["category_slug"] == "encephalitis-2026"
+	assert fields["category_modality"] == "small_molecule"
+
+
 async def test_result_shape_falls_back_to_the_text_content_block(caplog):
 	"""None of our tools declare an output schema (they return plain dict),
 	so structured_content is unset on the real wire — confirmed by driving
@@ -182,6 +251,11 @@ async def test_raising_tool_call_still_emits_an_event(caplog):
 	fields = _record_fields(records[0])
 	assert fields["outcome"] == "error"
 	assert fields["error_kind"] == "protocol_error"
+	# Numeric like every other status_code this middleware emits (upstream_error,
+	# tool_error), not a str — keeps downstream aggregation (ranges, histograms)
+	# from needing a special case for the protocol_error path.
+	assert fields["status_code"] == INTERNAL_ERROR
+	assert isinstance(fields["status_code"], int)
 
 
 async def test_tool_error_result_is_recorded_as_error_outcome(caplog):
@@ -432,6 +506,39 @@ async def test_cache_status_hit_then_miss_recorded_on_accumulator():
 		assert accumulator.cache_status == "hit"
 	finally:
 		telemetry._accumulator.reset(token)
+
+
+async def test_cache_status_single_flight_wait_recorded_on_accumulator():
+	"""A concurrent caller that waits on the lock and finds another caller's
+	fetch already landed should record 'single-flight-wait' — matching
+	MCP-TELEMETRY-PLAN.md's documented taxonomy of hit / miss /
+	single-flight-wait exactly (not the older, undocumented 'wait').
+	"""
+	cache = CatalogCache()
+	release = asyncio.Event()
+
+	async def slow_fetch():
+		await release.wait()
+		return ["row"]
+
+	async def call_with_accumulator():
+		accumulator = _UpstreamAccumulator()
+		token = telemetry._accumulator.set(accumulator)
+		try:
+			await cache.get_or_fetch("/categories/", None, slow_fetch)
+			return accumulator.cache_status
+		finally:
+			telemetry._accumulator.reset(token)
+
+	winner_task = asyncio.create_task(call_with_accumulator())
+	await asyncio.sleep(0.01)  # let the winner reach the fetch/lock first
+	waiter_task = asyncio.create_task(call_with_accumulator())
+	await asyncio.sleep(0.01)  # let the waiter block on the lock
+	release.set()
+
+	winner_status, waiter_status = await asyncio.gather(winner_task, waiter_task)
+	assert winner_status == "miss"
+	assert waiter_status == "single-flight-wait"
 
 
 async def test_no_accumulator_active_is_a_silent_no_op():

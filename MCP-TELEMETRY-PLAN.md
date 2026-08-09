@@ -57,6 +57,28 @@ tools, since it's never forwarded to Django).
 Full suite: 156 passed. Phases 5-6 not started — Phase 5 (the scheduled review) can't run for real
 until there's deployed traffic to review.
 
+**PR #831 Copilot review (2026-08-09), 5 findings, all fixed:**
+- `TelemetryMiddleware` read `_LOGGED_ARG_NAMES` values straight from `ctx.params` before schema
+  validation — a malformed/malicious client could put free text in `subject_id`/`category_slug`/etc.
+  and have it logged by value. Fixed with `_sanitized_logged_value`: int fields require a real
+  (non-bool) `int`, `category_slug` must match Django's slug alphabet, `category_modality` must be
+  one of `enums.CategoryModality`'s literal values — anything else is omitted, name-only.
+- `status_code` was a `str` on the protocol-error path but an `int` everywhere else. Now int
+  everywhere.
+- Cache status used undocumented `"wait"`; renamed to `"single-flight-wait"` to match the plan's
+  own taxonomy (`hit` / `miss` / `single-flight-wait`).
+- Both `JsonFormatter` and `IntentJsonFormatter` serialized full tracebacks via `exc_info` —
+  bypassing the explicit-allowlist boundary both formatters otherwise enforce (an exception message
+  can carry a request URL with the raw query string, or an arbitrary `ValueError` message). Now logs
+  only the exception's class name (`exc_type`), never the formatted traceback.
+
+Verified end-to-end (not just unit tests): a `subject_id`/`category_slug` carrying an email and
+`DROP TABLE`-style text produced a telemetry line with only the param *names*, no injected text
+anywhere; a transport error against a URL with a sensitive query string logged only
+`exc_type: "ConnectError"`.
+
+Full suite: 163 passed.
+
 Goal: learn enough about how LLM clients actually use `mcp-server/` to improve it — which tools
 earn their place, which parameters are dead weight in a 17 KB schema payload, where searches come
 back empty, which Gregory API endpoints are the latency floor, and **what people are asking for

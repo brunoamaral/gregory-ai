@@ -96,7 +96,7 @@ class CatalogCache:
 			entry = self._entries.get(key)
 			if entry is not None and entry.expires_at > self._clock():
 				# Another caller filled the entry while this one waited on the lock.
-				record_cache_status("wait")
+				record_cache_status("single-flight-wait")
 				return entry.value
 
 			record_cache_status("miss")

@@ -44,6 +44,22 @@ _EXTRA_FIELDS = (
 )
 
 
+def _add_exc_type(payload: dict, record: logging.LogRecord) -> None:
+	"""Adds the exception's *class name* only — never a formatted traceback.
+
+	A traceback routinely embeds exactly the kind of caller-controlled text
+	this module's two formatters exist to keep out: an httpx transport
+	error's message can carry the full request URL (query string and all),
+	a ValueError's message echoes whatever made it invalid. Both formatters
+	otherwise gate every field through an explicit allowlist for the same
+	reason (see _EXTRA_FIELDS/_INTENT_FIELDS above) — exc_info bypassed that
+	gate entirely until this function existed. The class name alone (e.g.
+	"ConnectError") is diagnostically useful without carrying any of that.
+	"""
+	if record.exc_info:
+		payload["exc_type"] = record.exc_info[0].__name__
+
+
 class JsonFormatter(logging.Formatter):
 	def format(self, record: logging.LogRecord) -> str:
 		payload = {
@@ -56,8 +72,7 @@ class JsonFormatter(logging.Formatter):
 			value = getattr(record, key, None)
 			if value is not None:
 				payload[key] = value
-		if record.exc_info:
-			payload["exc_info"] = self.formatException(record.exc_info)
+		_add_exc_type(payload, record)
 		return json.dumps(payload)
 
 
@@ -83,8 +98,7 @@ class IntentJsonFormatter(logging.Formatter):
 			value = getattr(record, key, None)
 			if value is not None:
 				payload[key] = value
-		if record.exc_info:
-			payload["exc_info"] = self.formatException(record.exc_info)
+		_add_exc_type(payload, record)
 		return json.dumps(payload)
 
 
