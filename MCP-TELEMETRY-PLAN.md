@@ -21,8 +21,20 @@ cycle (`telemetry -> query_shape -> cache -> client -> telemetry`, since client.
 import telemetry.py's `record_*` functions) — fixed with a lazy import inside
 `_annotate_query_shape`, confirmed via a fresh-process import of `gregory_mcp.server`.
 
-`tests/test_telemetry.py` (19 tests) + `tests/test_query_shape.py` (14 tests). Full suite: 116
-passed. Phases 3-6 not started.
+`tests/test_telemetry.py` (19 tests) + `tests/test_query_shape.py` (14 tests).
+
+Phase 3: `gregory_mcp/zero_result.py` (`guidance_for`) — search_articles/search_trials attach a
+`guidance` key (`applied_filters` + ranked suggestions) to a zero-hit response instead of the bare
+`{"count": 0, "articles": []}` dead end. Rule-based, not ML: relevance/threshold, date range,
+taxonomy ID, registry ID, boolean search, in that priority order, falling back to a generic
+suggestion. Filter *names* only, same boundary telemetry.py holds for `params_used` — verified no
+filter value ever appears in the guidance output. Confirmed end-to-end that it composes cleanly
+with Phase 1/2 telemetry (the new `guidance` dict doesn't perturb `_result_shape`'s list-scan for
+`result_count`, since it isn't a list). Docstrings updated for both tools.
+
+`tests/test_zero_result.py` (11 tests) + new cases in `test_tools_articles.py`/`test_tools_trials.py`.
+
+Full suite: 131 passed. Phases 4-6 not started.
 
 Goal: learn enough about how LLM clients actually use `mcp-server/` to improve it — which tools
 earn their place, which parameters are dead weight in a 17 KB schema payload, where searches come

@@ -8,6 +8,7 @@ from ..client import get_client
 from ..compact import compact_trial
 from ..enums import CategoryModality
 from ..pagination import clamp_page, clamp_page_size
+from ..zero_result import guidance_for
 
 SexEligibility = Literal["all", "female", "male"]
 StudyType = Literal["basic_science", "expanded_access", "interventional", "observational", "other"]
@@ -65,6 +66,10 @@ async def search_trials(
 	Information System number). A European trial commonly only has
 	euct/eudract/ctis, not an nct — use whichever registry the caller
 	already has an ID from.
+
+	A zero-hit response adds a `guidance` key: which filters were applied
+	and ranked suggestions for what's most likely over-constraining the
+	search — check that before trying a completely different query.
 	"""
 	clamped_page = clamp_page(page)
 	params = {
@@ -102,11 +107,15 @@ async def search_trials(
 	}
 	data = await get_client().get("/trials/", params)
 	results = data.get("results", [])
-	return {
-		"count": data.get("count", len(results)),
+	count = data.get("count", len(results))
+	response = {
+		"count": count,
 		"next_page": clamped_page + 1 if data.get("next") else None,
 		"trials": [compact_trial(t) for t in results],
 	}
+	if count == 0:
+		response["guidance"] = guidance_for(params)
+	return response
 
 
 async def get_trial(trial_id: int) -> dict:

@@ -97,6 +97,25 @@ async def test_search_trials_eu_registry_ids_and_new_filters(mock_gregory):
 	assert params["therapeutic_areas"] == "oncology"
 
 
+async def test_search_trials_zero_hits_adds_guidance(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "next": None, "results": []}))
+
+	result = await search_trials(nct="NCT00000000", date_registration_after="2026-01-01")
+
+	assert result["guidance"]["applied_filters"] == ["date_registration_after", "nct"]
+	assert len(result["guidance"]["suggestions"]) >= 1
+
+
+async def test_search_trials_nonzero_hits_has_no_guidance_key(mock_gregory):
+	mock_gregory.set_handler(
+		lambda request: httpx2.Response(200, json={"count": 1, "next": None, "results": [{"trial_id": 1}]})
+	)
+
+	result = await search_trials()
+
+	assert "guidance" not in result
+
+
 async def test_get_trial_returns_full_record(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"trial_id": 7, "trial_sites": []}))
 

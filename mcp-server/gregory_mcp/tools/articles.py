@@ -6,6 +6,7 @@ from ..client import get_client
 from ..compact import compact_article
 from ..enums import CategoryModality
 from ..pagination import clamp_page, clamp_page_size
+from ..zero_result import guidance_for
 
 DEFAULT_PAGE_SIZE = 10
 MAX_PAGE_SIZE = 25
@@ -51,6 +52,10 @@ async def search_articles(
 	older papers Gregory only just ingested. `ordering` accepts
 	discovery_date, published_date, title, article_id, ml_score (prefix `-`
 	for descending).
+
+	A zero-hit response adds a `guidance` key: which filters were applied
+	and ranked suggestions for what's most likely over-constraining the
+	search — check that before trying a completely different query.
 	"""
 	clamped_page = clamp_page(page)
 	params = {
@@ -78,11 +83,15 @@ async def search_articles(
 	}
 	data = await get_client().get("/articles/", params)
 	results = data.get("results", [])
-	return {
-		"count": data.get("count", len(results)),
+	count = data.get("count", len(results))
+	response = {
+		"count": count,
 		"next_page": clamped_page + 1 if data.get("next") else None,
 		"articles": [compact_article(a) for a in results],
 	}
+	if count == 0:
+		response["guidance"] = guidance_for(params)
+	return response
 
 
 async def get_article(article_id: int) -> dict:
