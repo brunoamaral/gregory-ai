@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx2
 
+import gregory_mcp.tools.articles as articles_module
 from gregory_mcp.tools.articles import get_article, search_articles
 
 
@@ -93,6 +94,56 @@ async def test_search_articles_last_days(mock_gregory):
 	await search_articles(last_days=30)
 
 	assert mock_gregory.requests[0].url.params["last_days"] == "30"
+
+
+async def test_search_articles_zero_hits_adds_guidance(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "next": None, "results": []}))
+
+	result = await search_articles(search="x", relevant=True, subject_id=3)
+
+	assert result["guidance"]["applied_filters"] == ["relevant", "search", "subject_id"]
+	assert len(result["guidance"]["suggestions"]) >= 1
+
+
+async def test_search_articles_nonzero_hits_has_no_guidance_key(mock_gregory):
+	mock_gregory.set_handler(
+		lambda request: httpx2.Response(200, json={"count": 1, "next": None, "results": [{"article_id": 1}]})
+	)
+
+	result = await search_articles(search="x")
+
+	assert "guidance" not in result
+
+
+async def test_search_articles_records_intent_but_never_sends_it_upstream(mock_gregory, monkeypatch):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "next": None, "results": []}))
+
+	calls = []
+
+	async def fake_record(tool, text):
+		calls.append((tool, text))
+
+	monkeypatch.setattr(articles_module.intent_module, "record", fake_record)
+
+	await search_articles(search="x", intent="looking for MS treatment trials")
+
+	assert calls == [("search_articles", "looking for MS treatment trials")]
+	assert "intent" not in mock_gregory.requests[0].url.params
+
+
+async def test_search_articles_does_not_record_intent_when_absent(mock_gregory, monkeypatch):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "next": None, "results": []}))
+
+	calls = []
+
+	async def fake_record(tool, text):
+		calls.append(1)
+
+	monkeypatch.setattr(articles_module.intent_module, "record", fake_record)
+
+	await search_articles(search="x")
+
+	assert calls == []
 
 
 async def test_get_article_returns_full_record(mock_gregory):
