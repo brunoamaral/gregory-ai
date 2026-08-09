@@ -1,10 +1,13 @@
 """Per-request telemetry: one structured JSON log line per inbound MCP request.
 
-Phase 1 of MCP-TELEMETRY-PLAN.md — timing, outcome, and selectivity only.
-No query content (`search`, `full_name`, `given_name`, `family_name`,
-`orcid`, `doi`) is logged at this phase, or ever for the author fields —
-see the plan's "not logged at any phase" section. `params_used` records
-which argument *names* a call supplied, never their values.
+Phase 1 of MCP-TELEMETRY-PLAN.md — timing, outcome, and selectivity.
+Phase 2 adds bagged query-shape/taxonomy-match fields for search_articles,
+search_trials, and list_categories (see query_shape.py) — still no query
+content: `search`/`title`/`summary` are analyzed and discarded, never
+logged. `full_name`, `given_name`, `family_name`, `orcid`, `doi` are never
+logged at any phase — see the plan's "not logged at any phase" section.
+`params_used` records which argument *names* a call supplied, never their
+values.
 """
 
 from __future__ import annotations
@@ -23,6 +26,15 @@ from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, Server
 from mcp.shared.exceptions import MCPError
 
 logger = logging.getLogger("gregory_mcp.telemetry")
+
+# Which argument(s) hold the free-text query for a given tool, in
+# preference order (the first one present and non-empty wins). Only these
+# three tools get query-shape analysis — see MCP-TELEMETRY-PLAN.md Phase 2.
+_QUERY_ARGS_BY_TOOL = {
+	"search_articles": ("search", "title", "summary"),
+	"search_trials": ("search", "title", "summary"),
+	"list_categories": ("search",),
+}
 
 # Argument names safe to log by value: public, low-cardinality taxonomy IDs
 # and pagination controls. Never add `search`, `title`, `summary`,
@@ -152,6 +164,43 @@ def _result_shape(payload: Any) -> tuple[int | None, int | None, bool | None]:
 	return result_count, total_count, has_next
 
 
+async def _annotate_query_shape(event: dict[str, Any], tool_name: str, arguments: dict[str, Any]) -> None:
+	"""Adds Phase 2's shape/taxonomy fields to `event` for the three tools
+	that take a free-text query — a no-op for every other tool, and
+	best-effort here: a taxonomy-fetch failure (the Gregory API being down)
+	must never fail the request telemetry is describing, so any exception
+	is swallowed and logged rather than propagated.
+
+	Imports query_shape lazily: query_shape -> cache -> client -> telemetry
+	is a real cycle at module-load time (client.py and cache.py both call
+	back into this module's record_* functions), so this module can only
+	reach query_shape once every module in that chain has finished loading.
+	"""
+	query_arg_names = _QUERY_ARGS_BY_TOOL.get(tool_name)
+	if query_arg_names is None:
+		return
+	text = next((arguments[name] for name in query_arg_names if arguments.get(name)), None)
+	if not isinstance(text, str):
+		return
+
+	from . import query_shape
+
+	try:
+		shape = await query_shape.analyze(text)
+	except Exception:
+		logger.warning("query_shape_analysis_failed", exc_info=True)
+		return
+
+	if shape is None:
+		return
+	event["term_count"] = shape.term_count
+	event["has_boolean_ops"] = shape.has_boolean_ops
+	event["has_quoted_phrase"] = shape.has_quoted_phrase
+	event["length_bucket"] = shape.length_bucket
+	event["matched_category_slugs"] = shape.matched_category_slugs
+	event["unmatched_term_count"] = shape.unmatched_term_count
+
+
 class TelemetryMiddleware(ServerMiddleware[Any]):
 	"""Emits one JSON log line per inbound request. No query content, ever.
 
@@ -183,6 +232,7 @@ class TelemetryMiddleware(ServerMiddleware[Any]):
 					value = arguments.get(key)
 					if value is not None:
 						event[key] = value
+				await _annotate_query_shape(event, tool_name, arguments)
 
 		client_info = ctx.meta.get(CLIENT_INFO_META_KEY) if ctx.meta else None
 		if isinstance(client_info, dict):

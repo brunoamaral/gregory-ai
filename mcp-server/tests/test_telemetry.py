@@ -86,7 +86,7 @@ async def test_emits_one_record_for_a_successful_tool_call(caplog):
 	result = await TelemetryMiddleware()(ctx, call_next)
 
 	assert result.structured_content["articles"] == [1, 2, 3]
-	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry"]
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
 	assert len(records) == 1
 
 	fields = _record_fields(records[0])
@@ -118,7 +118,7 @@ async def test_result_shape_falls_back_to_the_text_content_block(caplog):
 	ctx = _make_ctx(params={"name": "search_articles", "arguments": {"subject_id": 3}})
 	await TelemetryMiddleware()(ctx, call_next)
 
-	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry"]
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
 	assert len(records) == 1
 	fields = _record_fields(records[0])
 	assert fields["result_count"] == 2
@@ -141,7 +141,7 @@ async def test_params_used_lists_names_never_values(caplog):
 	)
 	await TelemetryMiddleware()(ctx, call_next)
 
-	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry"]
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
 	assert len(records) == 1
 	fields = _record_fields(records[0])
 	assert fields["params_used"] == ["search", "subject_id"]
@@ -156,7 +156,7 @@ async def test_sensitive_fields_never_appear_in_any_emitted_field(caplog):
 	ctx = _make_ctx(params={"name": "search_authors", "arguments": arguments})
 	await TelemetryMiddleware()(ctx, call_next)
 
-	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry"]
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
 	assert len(records) == 1
 	fields = _record_fields(records[0])
 
@@ -177,7 +177,7 @@ async def test_raising_tool_call_still_emits_an_event(caplog):
 	with pytest.raises(MCPError):
 		await TelemetryMiddleware()(ctx, call_next)
 
-	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry"]
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
 	assert len(records) == 1
 	fields = _record_fields(records[0])
 	assert fields["outcome"] == "error"
@@ -199,11 +199,129 @@ async def test_tool_error_result_is_recorded_as_error_outcome(caplog):
 	result = await TelemetryMiddleware()(ctx, call_next)
 	assert result.is_error
 
-	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry"]
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
 	assert len(records) == 1
 	fields = _record_fields(records[0])
 	assert fields["outcome"] == "error"
 	assert fields["error_kind"] == "tool_error"
+
+
+_QUERY_SHAPE_CATEGORIES = [
+	{"category_slug": "encephalitis", "category_name": "Encephalitis", "category_terms": ["encephalitis"]},
+]
+
+
+def _patch_categories(monkeypatch, categories=_QUERY_SHAPE_CATEGORIES):
+	import gregory_mcp.query_shape as query_shape
+
+	async def fake_get_all_pages_cached(path, params=None):
+		return categories
+
+	monkeypatch.setattr(query_shape, "get_all_pages_cached", fake_get_all_pages_cached)
+
+
+async def test_search_articles_gets_query_shape_fields(caplog, monkeypatch):
+	_patch_categories(monkeypatch)
+
+	async def call_next(ctx):
+		return CallToolResult(content=[], structured_content={"count": 0, "articles": []})
+
+	ctx = _make_ctx(params={"name": "search_articles", "arguments": {"search": "encephalitis outcomes"}})
+	await TelemetryMiddleware()(ctx, call_next)
+
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
+	assert len(records) == 1
+	fields = _record_fields(records[0])
+	assert fields["term_count"] == 2
+	assert fields["matched_category_slugs"] == ["encephalitis"]
+	assert fields["unmatched_term_count"] == 1
+	assert fields["has_boolean_ops"] is False
+	assert fields["has_quoted_phrase"] is False
+	assert "length_bucket" in fields
+	assert "encephalitis outcomes" not in repr(fields)
+
+
+async def test_search_trials_falls_back_to_title_when_search_is_absent(caplog, monkeypatch):
+	_patch_categories(monkeypatch)
+
+	async def call_next(ctx):
+		return CallToolResult(content=[], structured_content={"count": 0, "trials": []})
+
+	ctx = _make_ctx(params={"name": "search_trials", "arguments": {"title": "encephalitis"}})
+	await TelemetryMiddleware()(ctx, call_next)
+
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
+	fields = _record_fields(records[0])
+	assert fields["matched_category_slugs"] == ["encephalitis"]
+
+
+async def test_list_categories_uses_its_own_search_argument(caplog, monkeypatch):
+	_patch_categories(monkeypatch)
+
+	async def call_next(ctx):
+		return CallToolResult(content=[], structured_content={"count": 0, "categories": []})
+
+	ctx = _make_ctx(params={"name": "list_categories", "arguments": {"search": "encephalitis"}})
+	await TelemetryMiddleware()(ctx, call_next)
+
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
+	fields = _record_fields(records[0])
+	assert fields["matched_category_slugs"] == ["encephalitis"]
+
+
+async def test_tools_outside_the_query_shape_allowlist_get_no_shape_fields(caplog, monkeypatch):
+	_patch_categories(monkeypatch)
+
+	async def call_next(ctx):
+		return CallToolResult(content=[], structured_content={"id": 1})
+
+	ctx = _make_ctx(params={"name": "get_article", "arguments": {"article_id": 1}})
+	await TelemetryMiddleware()(ctx, call_next)
+
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
+	fields = _record_fields(records[0])
+	assert "term_count" not in fields
+	assert "matched_category_slugs" not in fields
+
+
+async def test_query_shape_guardrail_hit_means_no_shape_fields_at_all(caplog, monkeypatch):
+	_patch_categories(monkeypatch)
+
+	async def call_next(ctx):
+		return CallToolResult(content=[], structured_content={"count": 0, "articles": []})
+
+	ctx = _make_ctx(params={"name": "search_articles", "arguments": {"search": "contact jane@example.com"}})
+	await TelemetryMiddleware()(ctx, call_next)
+
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
+	fields = _record_fields(records[0])
+	assert "term_count" not in fields
+	assert "jane@example.com" not in repr(fields)
+
+
+async def test_query_shape_fetch_failure_does_not_break_the_request(caplog, monkeypatch):
+	"""The Gregory API being unreachable for the taxonomy fetch must not
+	fail the tool call telemetry is describing — it's a best-effort
+	annotation, not a requirement."""
+	import gregory_mcp.query_shape as query_shape
+
+	async def failing_fetch(path, params=None):
+		raise RuntimeError("upstream unreachable")
+
+	monkeypatch.setattr(query_shape, "get_all_pages_cached", failing_fetch)
+
+	async def call_next(ctx):
+		return CallToolResult(content=[], structured_content={"count": 0, "articles": []})
+
+	ctx = _make_ctx(params={"name": "search_articles", "arguments": {"search": "encephalitis"}})
+	result = await TelemetryMiddleware()(ctx, call_next)
+	assert not result.is_error
+
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
+	assert len(records) == 1
+	fields = _record_fields(records[0])
+	assert fields["outcome"] == "ok"
+	assert "term_count" not in fields
 
 
 async def test_notifications_are_not_logged(caplog):
@@ -213,7 +331,7 @@ async def test_notifications_are_not_logged(caplog):
 	ctx = _make_ctx(method="notifications/cancelled", params={}, request_id=None)
 	await TelemetryMiddleware()(ctx, call_next)
 
-	assert [r for r in caplog.records if r.name == "gregory_mcp.telemetry"] == []
+	assert [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"] == []
 
 
 async def test_non_tool_method_gets_ok_outcome_without_a_tool_field(caplog):
@@ -223,7 +341,7 @@ async def test_non_tool_method_gets_ok_outcome_without_a_tool_field(caplog):
 	ctx = _make_ctx(method="tools/list", params=None)
 	await TelemetryMiddleware()(ctx, call_next)
 
-	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry"]
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
 	assert len(records) == 1
 	fields = _record_fields(records[0])
 	assert fields["method"] == "tools/list"
@@ -242,7 +360,7 @@ async def test_client_name_version_and_protocol_version_captured(caplog):
 	)
 	await TelemetryMiddleware()(ctx, call_next)
 
-	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry"]
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
 	fields = _record_fields(records[0])
 	assert fields["client_name"] == "some-client"
 	assert fields["client_version"] == "1.2.3"

@@ -35,6 +35,12 @@ _EXTRA_FIELDS = (
 	"client_version",
 	"protocol_version",
 	"cache",
+	"term_count",
+	"has_boolean_ops",
+	"has_quoted_phrase",
+	"length_bucket",
+	"matched_category_slugs",
+	"unmatched_term_count",
 )
 
 

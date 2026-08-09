@@ -1,13 +1,28 @@
 # MCP server telemetry — plan
 
-Status: Phase 1 implemented on `fix/mcp-cache-tool-catalog` (not yet merged/deployed — see the
-deployment boundary below). `gregory_mcp/telemetry.py` (`TelemetryMiddleware`), instrumented
-`client.py`/`cache.py`, extended `logging_config.py`'s field allowlist, and `tests/test_telemetry.py`
-(12 tests). Verified against the real server stack, not just unit tests — driving actual
-`tools/call` requests through `build_server()` surfaced that our tools return plain `dict` with no
-declared output schema, so `CallToolResult.structured_content` is unset on the wire; the shape
-fields (`result_count`/`total_count`/`has_next`) fall back to parsing the same payload out of
-`content[0].text` instead. Phases 2-6 not started.
+Status: Phases 1 and 2 implemented on `fix/mcp-cache-tool-catalog` (not yet merged/deployed — see
+the deployment boundary below).
+
+Phase 1: `gregory_mcp/telemetry.py` (`TelemetryMiddleware`), instrumented `client.py`/`cache.py`,
+extended `logging_config.py`'s field allowlist. Verified against the real server stack, not just
+unit tests — driving actual `tools/call` requests through `build_server()` surfaced that our tools
+return plain `dict` with no declared output schema, so `CallToolResult.structured_content` is unset
+on the wire; the shape fields (`result_count`/`total_count`/`has_next`) fall back to parsing the
+same payload out of `content[0].text` instead.
+
+Phase 2: `gregory_mcp/query_shape.py` (tokenizer, guardrails, taxonomy index/match), wired into
+`TelemetryMiddleware` for `search_articles`/`search_trials`/`list_categories` only, best-effort
+(a taxonomy-fetch failure never breaks the request it's describing). Started against Phase 1 with
+zero real traffic — deliberately, at the user's call, ahead of the plan's own "only after Phase 1
+is deployed" gate; thresholds (stopword list, length buckets, the 400-char/7-digit guardrails) are
+untuned defaults and worth revisiting once real query volume exists. Also surfaced and fixed a
+second real bug the same way: `telemetry.py` importing `query_shape` at module scope created a
+cycle (`telemetry -> query_shape -> cache -> client -> telemetry`, since client.py/cache.py already
+import telemetry.py's `record_*` functions) — fixed with a lazy import inside
+`_annotate_query_shape`, confirmed via a fresh-process import of `gregory_mcp.server`.
+
+`tests/test_telemetry.py` (19 tests) + `tests/test_query_shape.py` (14 tests). Full suite: 116
+passed. Phases 3-6 not started.
 
 Goal: learn enough about how LLM clients actually use `mcp-server/` to improve it — which tools
 earn their place, which parameters are dead weight in a 17 KB schema payload, where searches come
