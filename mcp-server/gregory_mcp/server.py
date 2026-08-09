@@ -15,6 +15,7 @@ from mcp_types import ToolAnnotations
 from .cache import CATALOG_CACHE_TTL_MS
 from .prompts import register_prompts
 from .resources import register_resources
+from .telemetry import TelemetryMiddleware
 from .tools import articles, authors, catalog, stats, trials
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
@@ -63,6 +64,7 @@ def build_server() -> MCPServer:
 		),
 		version="0.1.0",
 		cache_hints=CACHE_HINTS,
+		middleware=[TelemetryMiddleware()],
 	)
 
 	server.add_tool(catalog.list_subjects, annotations=READ_ONLY)

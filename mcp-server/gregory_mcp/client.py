@@ -10,12 +10,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx2
 
 from .config import Settings
+from .telemetry import record_truncation_error, record_upstream_call, record_upstream_error
 
 logger = logging.getLogger("gregory_mcp.client")
 
@@ -103,16 +105,20 @@ class GregoryClient:
 		last_exc: Exception | None = None
 
 		for attempt in range(1, attempts + 1):
+			call_start = time.monotonic()
 			try:
 				response = await self._client.get(path, params=clean_params)
 			except httpx2.TransportError as exc:
+				record_upstream_call((time.monotonic() - call_start) * 1000)
 				last_exc = exc
 				logger.warning("gregory_api_transport_error", extra={"path": path}, exc_info=True)
 				if attempt == attempts:
+					record_upstream_error(0)
 					raise GregoryAPIError(0, f"network error calling {path}: {exc}") from exc
 				await self._sleep(self._backoff_seconds(attempt, None))
 				continue
 
+			record_upstream_call((time.monotonic() - call_start) * 1000)
 			is_retryable = response.status_code >= 500 or response.status_code in _RETRYABLE_CLIENT_STATUS
 			if is_retryable and attempt < attempts:
 				logger.warning(
@@ -122,6 +128,7 @@ class GregoryClient:
 				continue
 
 			if response.status_code >= 400:
+				record_upstream_error(response.status_code)
 				raise GregoryAPIError(response.status_code, response.text[:500])
 
 			return response.json()
@@ -169,6 +176,7 @@ class GregoryClient:
 			if not data.get("next"):
 				return results
 			page += 1
+		record_truncation_error()
 		raise GregoryPaginationTruncatedError(path, max_pages, len(results))
 
 

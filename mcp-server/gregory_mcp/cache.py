@@ -27,6 +27,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .client import get_client
+from .telemetry import record_cache_status
 
 # The single source of truth for how long the catalog is considered fresh.
 # CacheHint (server.py, the client-facing MCP `ttlMs` hint) and this
@@ -88,13 +89,17 @@ class CatalogCache:
 		key = self._key(path, params)
 		entry = self._entries.get(key)
 		if entry is not None and entry.expires_at > self._clock():
+			record_cache_status("hit")
 			return entry.value
 
 		async with self._lock_for(key):
 			entry = self._entries.get(key)
 			if entry is not None and entry.expires_at > self._clock():
+				# Another caller filled the entry while this one waited on the lock.
+				record_cache_status("wait")
 				return entry.value
 
+			record_cache_status("miss")
 			value = await fetch()
 			self._entries[key] = _Entry(value, self._clock() + self._ttl_seconds)
 			return value
