@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx2
 
+import gregory_mcp.tools.articles as articles_module
 from gregory_mcp.tools.articles import get_article, search_articles
 
 
@@ -112,6 +113,37 @@ async def test_search_articles_nonzero_hits_has_no_guidance_key(mock_gregory):
 	result = await search_articles(search="x")
 
 	assert "guidance" not in result
+
+
+async def test_search_articles_records_intent_but_never_sends_it_upstream(mock_gregory, monkeypatch):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "next": None, "results": []}))
+
+	calls = []
+
+	async def fake_record(tool, text):
+		calls.append((tool, text))
+
+	monkeypatch.setattr(articles_module.intent_module, "record", fake_record)
+
+	await search_articles(search="x", intent="looking for MS treatment trials")
+
+	assert calls == [("search_articles", "looking for MS treatment trials")]
+	assert "intent" not in mock_gregory.requests[0].url.params
+
+
+async def test_search_articles_does_not_record_intent_when_absent(mock_gregory, monkeypatch):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "next": None, "results": []}))
+
+	calls = []
+
+	async def fake_record(tool, text):
+		calls.append(1)
+
+	monkeypatch.setattr(articles_module.intent_module, "record", fake_record)
+
+	await search_articles(search="x")
+
+	assert calls == []
 
 
 async def test_get_article_returns_full_record(mock_gregory):

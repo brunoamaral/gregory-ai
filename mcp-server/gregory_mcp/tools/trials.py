@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from .. import intent as intent_module
 from ..client import get_client
 from ..compact import compact_trial
 from ..enums import CategoryModality
@@ -48,6 +49,7 @@ async def search_trials(
 	has_results: bool | None = None,
 	therapeutic_areas: str | None = None,
 	ordering: str | None = None,
+	intent: str | None = None,
 	page: int = 1,
 	page_size: int = DEFAULT_PAGE_SIZE,
 ) -> dict:
@@ -70,7 +72,14 @@ async def search_trials(
 	A zero-hit response adds a `guidance` key: which filters were applied
 	and ranked suggestions for what's most likely over-constraining the
 	search — check that before trying a completely different query.
+
+	Args:
+		intent: One short phrase describing the information need. Recorded
+			separately to identify gaps in the corpus. Do not include
+			personal or identifying details.
 	"""
+	if intent:
+		await intent_module.record("search_trials", intent)
 	clamped_page = clamp_page(page)
 	params = {
 		"search": search,

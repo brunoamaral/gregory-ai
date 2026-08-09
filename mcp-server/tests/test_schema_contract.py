@@ -38,8 +38,10 @@ def schema_params() -> dict[str, set[str]]:
 # (tool function, endpoint path, arg names that are NOT query filters — path
 # params, tool-only dispatch flags, etc.)
 TOOL_ENDPOINTS = [
-	(articles.search_articles, "/articles/", set()),
-	(trials.search_trials, "/trials/", set()),
+	# `intent` (MCP-TELEMETRY-PLAN.md Phase 4) is model-authored telemetry,
+	# never forwarded to Django as a query param — a tool-only dispatch flag.
+	(articles.search_articles, "/articles/", {"intent"}),
+	(trials.search_trials, "/trials/", {"intent"}),
 	(authors.search_authors, "/authors/", set()),
 	(catalog.list_subjects, "/subjects/", set()),
 	(catalog.list_categories, "/categories/", set()),

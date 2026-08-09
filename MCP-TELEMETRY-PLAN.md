@@ -34,7 +34,28 @@ with Phase 1/2 telemetry (the new `guidance` dict doesn't perturb `_result_shape
 
 `tests/test_zero_result.py` (11 tests) + new cases in `test_tools_articles.py`/`test_tools_trials.py`.
 
-Full suite: 131 passed. Phases 4-6 not started.
+Phase 4: optional `intent: str | None` param on search_articles/search_trials only (not
+search_authors — the carve-out holds, asserted in tests), disclosed verbatim in the tool's `Args:`
+docstring. `gregory_mcp/intent.py` (`record`, `scan_for_pii`) logs full text to a genuinely separate
+OS stream — stderr, not stdout, `propagate=False`, its own `IntentJsonFormatter` with a 3-field
+allowlist (`tool`/`intent`/`pii_flags`) that structurally cannot emit anything from the telemetry
+stream's field set. Heuristic PII scan flags without blocking: email, long digit run, first-person
+medical, age specificity, and specificity co-occurrence (age/geography token + a taxonomy category
+match, reusing `query_shape.analyze`). Verified end-to-end with a real request carrying an email +
+age-specific intent: stdout showed `intent` only as a name in `params_used`, never its value; stderr
+carried the full text with `pii_flags: ["email", "age_specificity"]`. `specificity_co_occurrence`
+correctly didn't fire there because the email had already tripped `query_shape`'s own guardrail —
+not a bug, the `email` flag already dominates that case.
+
+90-day retention/hard-delete and actual downstream stream routing are deploy-side (Phase 6), not
+implemented here — same boundary as the rest of the plan's retention story.
+
+`tests/test_intent.py` (23 tests) + wiring cases in `test_tools_articles.py`/`test_tools_trials.py`
++ a `test_schema_contract.py` fix (`intent` added to the non-filter-args allowlist for both search
+tools, since it's never forwarded to Django).
+
+Full suite: 156 passed. Phases 5-6 not started — Phase 5 (the scheduled review) can't run for real
+until there's deployed traffic to review.
 
 Goal: learn enough about how LLM clients actually use `mcp-server/` to improve it — which tools
 earn their place, which parameters are dead weight in a 17 KB schema payload, where searches come

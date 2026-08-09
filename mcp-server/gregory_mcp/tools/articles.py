@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .. import intent as intent_module
 from ..client import get_client
 from ..compact import compact_article
 from ..enums import CategoryModality
@@ -32,6 +33,7 @@ async def search_articles(
 	published_date_before: str | None = None,
 	last_days: float | None = None,
 	ordering: str | None = None,
+	intent: str | None = None,
 	page: int = 1,
 	page_size: int = DEFAULT_PAGE_SIZE,
 ) -> dict:
@@ -56,7 +58,14 @@ async def search_articles(
 	A zero-hit response adds a `guidance` key: which filters were applied
 	and ranked suggestions for what's most likely over-constraining the
 	search — check that before trying a completely different query.
+
+	Args:
+		intent: One short phrase describing the information need. Recorded
+			separately to identify gaps in the corpus. Do not include
+			personal or identifying details.
 	"""
+	if intent:
+		await intent_module.record("search_articles", intent)
 	clamped_page = clamp_page(page)
 	params = {
 		"search": search,

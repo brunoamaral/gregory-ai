@@ -61,9 +61,50 @@ class JsonFormatter(logging.Formatter):
 		return json.dumps(payload)
 
 
+# `intent` (Phase 4 of MCP-TELEMETRY-PLAN.md) gets its own tiny, separate
+# allowlist rather than a few more entries on _EXTRA_FIELDS above — so
+# nothing from the telemetry stream's field set (duration_ms, upstream_ms,
+# a request id, ...) can end up on an intent log line even by accident, and
+# so an intent-only field can never end up on a telemetry line either. Two
+# independent boundaries, not one shared one.
+INTENT_LOGGER_NAME = "gregory_mcp.intent"
+_INTENT_FIELDS = ("tool", "intent", "pii_flags")
+
+
+class IntentJsonFormatter(logging.Formatter):
+	def format(self, record: logging.LogRecord) -> str:
+		payload = {
+			"ts": round(time.time(), 3),
+			"level": record.levelname,
+			"logger": record.name,
+			"message": record.getMessage(),
+		}
+		for key in _INTENT_FIELDS:
+			value = getattr(record, key, None)
+			if value is not None:
+				payload[key] = value
+		if record.exc_info:
+			payload["exc_info"] = self.formatException(record.exc_info)
+		return json.dumps(payload)
+
+
 def configure_logging(level: str) -> None:
 	handler = logging.StreamHandler(sys.stdout)
 	handler.setFormatter(JsonFormatter())
 	root = logging.getLogger()
 	root.handlers = [handler]
 	root.setLevel(level)
+
+	# `intent` goes to stderr, not stdout — a distinct OS-level stream, not
+	# just a distinct logger name, so it can be routed and retained
+	# separately downstream (see the plan's "separation is protection").
+	# propagate=False keeps it off the root handler above entirely: an
+	# intent event is written once, to this stream only. Retention (90-day
+	# hard delete) and actual downstream routing are deploy-side — Phase 6,
+	# same boundary as the rest of this file's rotation/retention story.
+	intent_logger = logging.getLogger(INTENT_LOGGER_NAME)
+	intent_handler = logging.StreamHandler(sys.stderr)
+	intent_handler.setFormatter(IntentJsonFormatter())
+	intent_logger.handlers = [intent_handler]
+	intent_logger.propagate = False
+	intent_logger.setLevel(level)
