@@ -996,7 +996,10 @@ class ArticleAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistory
 			"fields": [{"field": fd.field, "raw": fd.raw} for fd in diff.fields],
 			"authors": [{"action": ad.action, "raw": ad.raw} for ad in diff.authors],
 		}
-		signed_payload = signing.dumps(payload, salt=salt)
+		# compress=True: `summary` can be a large TextField, and this payload
+		# round-trips through both the rendered HTML and the POST body.
+		# signing.loads() below decodes it transparently either way.
+		signed_payload = signing.dumps(payload, salt=salt, compress=True)
 
 		return render(
 			request,

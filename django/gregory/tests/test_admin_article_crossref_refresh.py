@@ -193,6 +193,26 @@ class ArticleCrossrefRefreshViewTest(TestCase):
 		self.assertFalse(access_row.preselect)
 
 	@patch("gregory.services.crossref_refresh.SciencePaper")
+	def test_access_unknown_from_unpaywall_never_downgrades_determined_value(
+		self, MockSciencePaper
+	):
+		# SciencePaper.refresh() sets access="unknown" when Unpaywall has
+		# nothing — that must never be proposed as a downgrade over an
+		# already-determined "open"/"restricted" value.
+		self.article.access = "open"
+		self.article.save()
+		self._patch_paper(MockSciencePaper, _mock_paper(access="unknown"))
+		self.client.force_login(self.superuser)
+
+		# access="unknown" is the only thing CrossRef/Unpaywall returned, and
+		# it must not be proposed at all — so there's nothing left to review.
+		response = self.client.get(self.url)
+
+		self.assertRedirects(response, self.change_url)
+		self.article.refresh_from_db()
+		self.assertEqual(self.article.access, "open")
+
+	@patch("gregory.services.crossref_refresh.SciencePaper")
 	def test_year_only_issued_warns_and_is_not_preselected_over_existing_date(
 		self, MockSciencePaper
 	):

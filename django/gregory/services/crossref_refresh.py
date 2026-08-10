@@ -277,7 +277,16 @@ def build_crossref_diff(article: Articles) -> CrossrefDiff:
 			)
 		)
 
-	if paper.access and paper.access != article.access:
+	# "unknown" just means Unpaywall had nothing to say — never propose it as a
+	# downgrade over an already-determined "open"/"restricted" value.
+	access_is_real_downgrade = paper.access == "unknown" and not _is_empty_access(
+		article.access
+	)
+	if (
+		paper.access
+		and paper.access != article.access
+		and not access_is_real_downgrade
+	):
 		fields.append(
 			FieldDiff(
 				field="access",
