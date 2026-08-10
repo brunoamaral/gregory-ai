@@ -67,6 +67,26 @@ keys: `medicalCondition`, `sponsor`, `number`, `containAll`, `status`. Run via
 | `doi` | Digital Object Identifier, used for de-duplication and CrossRef enrichment |
 | `kind` | One of: `science paper`, `news`, `trial` |
 
+### Refreshing metadata from CrossRef in the admin
+
+Articles with a `doi` show a **Refresh from CrossRef** button on their admin
+change page (articles without a DOI show an inert message instead). It fetches
+current CrossRef metadata — plus Unpaywall's `access`/`pdf_link` — and renders a
+field-by-field diff against what the article currently holds, alongside any
+authors CrossRef lists that aren't attached yet (and any attached authors
+CrossRef no longer lists, as opt-in, never pre-ticked, removals). Nothing is
+written until you tick the rows you want and submit; only those rows are
+applied. A CrossRef value of `None` never blanks a populated field, and a
+year-only or year+month `issued` date is flagged with a precision warning
+rather than silently applied as a padded 1 January date. Scalar changes are
+recorded in the article's History tab; author additions/removals are recorded
+as a change-reason note (family names only, to fit the 100-character column)
+plus a full detail entry in the admin's own log.
+
+This uses the same `SciencePaper.refresh()` CrossRef/Unpaywall client as the
+`update_articles_info` pipeline command — see
+[gregory/services/crossref_refresh.py](../django/gregory/services/crossref_refresh.py).
+
 ---
 
 ## Endpoints by subject and category

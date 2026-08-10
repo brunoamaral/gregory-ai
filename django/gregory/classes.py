@@ -27,6 +27,10 @@ class SciencePaper:
 		self.authors = authors
 		self.retracted = retracted
 		self.pdf_link = pdf_link
+		# Cache of the raw CrossRef `work` payload from the last successful
+		# refresh(), for callers that need to inspect fields refresh() doesn't
+		# expose as attributes (e.g. date precision in crossref_refresh.py).
+		self._work = None
 
 	def __str__(self):
 		return f"{self.doi}, {self.title}"
@@ -103,6 +107,7 @@ class SciencePaper:
 		# Only proceed if we successfully got work data
 		if work is None:
 			return "No data retrieved from CrossRef"
+		self._work = work
 
 		if self.link == None:
 			try:
@@ -151,8 +156,13 @@ class SciencePaper:
 				else:
 					self.journal = work["container-title"]
 		if self.published_date == None:
+			issued = []
 			if work != None and "issued" in work:
-				issued = work["issued"]["date-parts"][0]
+				try:
+					issued = work["issued"]["date-parts"][0]
+				except (KeyError, IndexError, TypeError):
+					logging.warning(f"Malformed issued date for DOI {self.doi}")
+					issued = []
 			year, month, day = None, 1, 1
 			try:
 				year = issued[0]
