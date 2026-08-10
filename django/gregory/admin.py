@@ -788,6 +788,7 @@ class ArticleAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistory
 					"crossref_check",
 					"retracted",
 					"crossref_retraction_check",
+					"crossref_refresh_button",
 				),
 				"description": "This section contains general information about the article",
 			},
@@ -814,7 +815,19 @@ class ArticleAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistory
 		qs = super().get_queryset(request)
 		return qs.prefetch_related("sources")
 
-	readonly_fields = ["entities", "discovery_date", "links"]
+	def crossref_refresh_button(self, obj):
+		if not obj.pk:
+			return "-"
+		if not obj.doi:
+			return "Article has no DOI — nothing to look up."
+		url = reverse("admin:gregory_articles_crossref_refresh", args=[obj.pk])
+		return format_html(
+			'<a class="button" href="{}">Refresh from CrossRef</a>', url
+		)
+
+	crossref_refresh_button.short_description = "Refresh from CrossRef"
+
+	readonly_fields = ["entities", "discovery_date", "links", "crossref_refresh_button"]
 	search_fields = ["article_id", "title", "doi"]
 	list_filter = [
 		ArticleOrganizationFilter,
@@ -861,8 +874,141 @@ class ArticleAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistory
 				self.admin_site.admin_view(add_article_by_doi_view),
 				name="article_add_by_doi",
 			),
+			path(
+				"<int:article_id>/crossref-refresh/",
+				self.admin_site.admin_view(self.crossref_refresh_view),
+				name="gregory_articles_crossref_refresh",
+			),
 		]
 		return custom_urls + urls
+
+	def crossref_refresh_view(self, request, article_id):
+		"""Diff the article's CrossRef+Unpaywall metadata against what we hold
+		and let the user apply only the rows they tick.
+
+		GET fetches CrossRef (read-only — nothing is written) and renders the
+		diff/selection page. POST applies only the ticked rows using the exact
+		values shown on that page — round-tripped through a signed payload
+		rather than a second CrossRef fetch — so what gets applied always
+		matches what was displayed.
+		"""
+		from django.core import signing
+		from gregory.services.crossref_refresh import (
+			apply_crossref_diff,
+			build_crossref_diff,
+		)
+
+		article = self.get_object(request, article_id)
+		if article is None:
+			self.message_user(request, "Article not found.", level=messages.ERROR)
+			return redirect("admin:gregory_articles_changelist")
+
+		if not self.has_change_permission(request, article):
+			raise PermissionDenied
+
+		change_url = reverse("admin:gregory_articles_change", args=[article_id])
+
+		if not article.doi:
+			self.message_user(
+				request, "This article has no DOI.", level=messages.ERROR
+			)
+			return redirect(change_url)
+
+		salt = "gregory.admin.crossref_refresh"
+
+		if request.method == "POST":
+			try:
+				payload = signing.loads(
+					request.POST.get("payload", ""), salt=salt, max_age=900
+				)
+			except signing.BadSignature:
+				self.message_user(
+					request,
+					"This review has expired or was tampered with. Please try again.",
+					level=messages.ERROR,
+				)
+				return redirect(change_url)
+
+			if payload.get("article_id") != article.pk:
+				self.message_user(
+					request,
+					"This review does not match this article.",
+					level=messages.ERROR,
+				)
+				return redirect(change_url)
+
+			selected_fields = {
+				row["field"]: row["raw"]
+				for i, row in enumerate(payload.get("fields", []))
+				if f"field_{i}" in request.POST
+			}
+			selected_authors = [
+				row
+				for i, row in enumerate(payload.get("authors", []))
+				if f"author_{i}" in request.POST
+			]
+
+			if not selected_fields and not selected_authors:
+				self.message_user(request, "Nothing was selected to apply.")
+				return redirect(change_url)
+
+			result = apply_crossref_diff(article, selected_fields, selected_authors)
+
+			summary_parts = []
+			if result.updated_fields:
+				summary_parts.append(f"updated {', '.join(result.updated_fields)}")
+			if result.authors_added:
+				summary_parts.append(f"added {len(result.authors_added)} author(s)")
+			if result.authors_removed:
+				summary_parts.append(f"removed {len(result.authors_removed)} author(s)")
+			self.message_user(
+				request, "CrossRef refresh applied: " + "; ".join(summary_parts) + "."
+			)
+
+			log_parts = []
+			if result.updated_fields:
+				log_parts.append(f"Updated fields: {', '.join(result.updated_fields)}.")
+			if result.authors_added:
+				log_parts.append(f"Added authors: {', '.join(result.authors_added)}.")
+			if result.authors_removed:
+				log_parts.append(f"Removed authors: {', '.join(result.authors_removed)}.")
+			if log_parts:
+				self.log_change(request, article, " ".join(log_parts))
+
+			return redirect(change_url)
+
+		diff = build_crossref_diff(article)
+
+		if diff.fetch_error:
+			self.message_user(
+				request,
+				f"Could not refresh from CrossRef: {diff.fetch_error}",
+				level=messages.ERROR,
+			)
+			return redirect(change_url)
+
+		if not diff.fields and not diff.authors:
+			self.message_user(request, "No changes found from CrossRef.")
+			return redirect(change_url)
+
+		payload = {
+			"article_id": article.pk,
+			"fields": [{"field": fd.field, "raw": fd.raw} for fd in diff.fields],
+			"authors": [{"action": ad.action, "raw": ad.raw} for ad in diff.authors],
+		}
+		signed_payload = signing.dumps(payload, salt=salt)
+
+		return render(
+			request,
+			"admin/gregory/articles/crossref_refresh.html",
+			{
+				"title": f"Refresh {article} from CrossRef",
+				"article": article,
+				"diff": diff,
+				"signed_payload": signed_payload,
+				"opts": self.model._meta,
+			},
+		)
 
 	def changelist_view(self, request, extra_context=None):
 		"""Override changelist view to add buttons above the article list"""

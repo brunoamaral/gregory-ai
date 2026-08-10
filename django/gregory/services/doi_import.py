@@ -51,47 +51,54 @@ def normalize_doi(doi: str) -> str:
 	return doi.strip()
 
 
+def resolve_author(author_data: dict) -> Authors | None:
+	"""Get-or-create the Authors row matching a CrossRef author dict, without
+	attaching it to any article. ORCID (when present) takes priority over name
+	matching; falls back to exact given/family name lookup. Returns None when
+	the author data is unusable (missing name) or ambiguous (multiple existing
+	authors share the same name).
+	"""
+	given_name = author_data.get("given")
+	family_name = author_data.get("family")
+	raw_orcid = author_data.get("ORCID")
+	orcid = normalize_orcid(raw_orcid) if raw_orcid else None
+
+	if not given_name or not family_name:
+		logger.warning("Skipping author with missing name: %s", author_data)
+		return None
+
+	if orcid:
+		author_obj, created = Authors.objects.get_or_create(
+			ORCID=orcid,
+			defaults={"given_name": given_name, "family_name": family_name},
+		)
+		if not created and (
+			author_obj.given_name != given_name
+			or author_obj.family_name != family_name
+		):
+			author_obj.given_name = given_name
+			author_obj.family_name = family_name
+			author_obj.save()
+		return author_obj
+
+	try:
+		return Authors.objects.get(given_name=given_name, family_name=family_name)
+	except Authors.DoesNotExist:
+		return Authors.objects.create(
+			given_name=given_name, family_name=family_name, ORCID=orcid
+		)
+	except Authors.MultipleObjectsReturned:
+		logger.warning(
+			"Multiple authors for %s %s — skipping", given_name, family_name
+		)
+		return None
+
+
 def _process_authors(article: Articles, authors_data: list) -> int:
 	"""Attach authors from CrossRef data to an article. Returns count added."""
 	added = 0
 	for author_data in authors_data:
-		given_name = author_data.get("given")
-		family_name = author_data.get("family")
-		raw_orcid = author_data.get("ORCID")
-		orcid = normalize_orcid(raw_orcid) if raw_orcid else None
-
-		if not given_name or not family_name:
-			logger.warning("Skipping author with missing name: %s", author_data)
-			continue
-
-		author_obj = None
-		if orcid:
-			author_obj, created = Authors.objects.get_or_create(
-				ORCID=orcid,
-				defaults={"given_name": given_name, "family_name": family_name},
-			)
-			if not created and (
-				author_obj.given_name != given_name
-				or author_obj.family_name != family_name
-			):
-				author_obj.given_name = given_name
-				author_obj.family_name = family_name
-				author_obj.save()
-		else:
-			try:
-				author_obj = Authors.objects.get(
-					given_name=given_name, family_name=family_name
-				)
-			except Authors.DoesNotExist:
-				author_obj = Authors.objects.create(
-					given_name=given_name, family_name=family_name, ORCID=orcid
-				)
-			except Authors.MultipleObjectsReturned:
-				logger.warning(
-					"Multiple authors for %s %s — skipping", given_name, family_name
-				)
-				continue
-
+		author_obj = resolve_author(author_data)
 		if author_obj:
 			article.authors.add(author_obj)
 			added += 1

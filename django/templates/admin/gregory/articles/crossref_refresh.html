@@ -1,0 +1,87 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<p>
+	This is the current CrossRef{% if diff.authors %} and author{% endif %} data for
+	<strong>{{ article }}</strong> (DOI: {{ article.doi }}), compared against what we
+	hold. Nothing is changed until you tick the rows you want and submit.
+</p>
+
+<form method="post">
+	{% csrf_token %}
+	<input type="hidden" name="payload" value="{{ signed_payload }}">
+
+	{% if diff.fields %}
+	<fieldset class="module aligned">
+		<h2>Fields</h2>
+		<table>
+			<thead>
+				<tr>
+					<th></th>
+					<th>Field</th>
+					<th>Current</th>
+					<th>Proposed</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for row in diff.fields %}
+				<tr>
+					<td>
+						<input type="checkbox" name="field_{{ forloop.counter0 }}" {% if row.preselect %}checked{% endif %}>
+					</td>
+					<td>{{ row.label }}</td>
+					<td>{{ row.current }}</td>
+					<td>
+						{{ row.proposed }}
+						{% if row.warning %}
+						<div class="help">{{ row.warning }}</div>
+						{% endif %}
+						{% if row.extra %}
+						<details>
+							<summary>Show diff</summary>
+							<pre>{{ row.extra }}</pre>
+						</details>
+						{% endif %}
+					</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</fieldset>
+	{% endif %}
+
+	{% if diff.authors %}
+	<fieldset class="module aligned">
+		<h2>Authors</h2>
+		<table>
+			<thead>
+				<tr>
+					<th></th>
+					<th>Action</th>
+					<th>Author</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for row in diff.authors %}
+				<tr>
+					<td>
+						<input type="checkbox" name="author_{{ forloop.counter0 }}" {% if row.preselect %}checked{% endif %}>
+					</td>
+					<td>{% if row.action == "add" %}Add{% else %}Remove{% endif %}</td>
+					<td>{{ row.label }}</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</fieldset>
+	{% endif %}
+
+	<div class="submit-row">
+		<input type="submit" value="Apply selected changes" class="default">
+		<a href="{% url 'admin:gregory_articles_change' article.pk %}" class="button cancel-link">Cancel</a>
+	</div>
+</form>
+{% endblock %}
