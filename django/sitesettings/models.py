@@ -106,3 +106,11 @@ class CustomSetting(models.Model):
 			"semantics as the API's relevant=true filter)."
 		),
 	)
+	has_author_pages = models.BooleanField(
+		default=False,
+		help_text=(
+			"This site publishes author profile pages at /authors/<orcid>/. When enabled, "
+			"author names in digest emails and the author RSS feed link to this site "
+			"instead of orcid.org."
+		),
+	)

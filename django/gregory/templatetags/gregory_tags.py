@@ -165,3 +165,16 @@ def build_article_url(article_id, domain):
 	if not article_id or not domain:
 		return ""
 	return f"https://{domain}/articles/{article_id}/"
+
+
+@register.filter
+def author_profile_url(orcid, base=""):
+	"""
+	Link target for an author: the site's author page when configured, else orcid.org.
+	Usage: {{ author.ORCID|author_profile_url:author_page_base }}
+	"""
+	if not orcid:
+		return ""
+	if not base:
+		return f"https://orcid.org/{orcid}"
+	return f"{base.rstrip('/')}/{orcid}/"

@@ -5,6 +5,7 @@ from django.http import Http404
 from gregory.models import Articles, Authors, Trials, Subject
 from gregory.functions import normalize_orcid
 from gregory.visibility import visible_org_ids as _visible_org_ids
+from sitesettings.utils import author_page_base
 
 
 def get_website_domain():
@@ -38,8 +39,11 @@ class ArticlesByAuthorFeed(Feed):
 		return f"Articles by {obj.full_name or 'Author'}"
 
 	def link(self, obj):
-		# Link to the author page using ORCID
-		return f"https://{get_website_domain()}/authors/{obj.ORCID}/"
+		# Link to the site's author page when it publishes one, else orcid.org
+		base = author_page_base(Site.objects.get_current())
+		if base:
+			return f"{base}/{obj.ORCID}/"
+		return f"https://orcid.org/{obj.ORCID}"
 
 	description = "RSS feed for articles by a specific author."
 

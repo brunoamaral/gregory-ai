@@ -31,6 +31,8 @@ A read-only [MCP server](07-mcp-server.md) also exposes this API to LLM clients 
 
 Both feeds return the 50 most recent items, ordered by newest first.
 
+The author feed's `<link>` element points at the site's author profile page (`https://{site.domain}/authors/{orcid}/`) when the current Site's `CustomSetting.has_author_pages` is on, and at `https://orcid.org/{orcid}` otherwise. See [Author profile page links](06-organisations-teams-and-sites.md#author-profile-page-links).
+
 ---
 
 ## Sitemaps

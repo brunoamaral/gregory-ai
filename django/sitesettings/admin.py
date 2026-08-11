@@ -40,6 +40,7 @@ class CustomSettingInline(admin.StackedInline):
 			"Website URLs",
 			{
 				"fields": [
+					"has_author_pages",
 					"website_url",
 					"support_url",
 					"about_url",
