@@ -1,7 +1,7 @@
 """
 Author names in the weekly digest and admin summary emails link to the
 site's author profile page when CustomSetting.has_author_pages is on, and
-to orcid.org otherwise. See AUTHOR-PAGES-SETTING-PLAN.md.
+to orcid.org otherwise. See docs/06-organisations-teams-and-sites.md#author-profile-page-links.
 
 Run:
   docker exec gregory python manage.py test subscriptions.tests.test_author_page_links

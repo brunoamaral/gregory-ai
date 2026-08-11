@@ -37,7 +37,7 @@ class SenderNameFallbackTests(TestCase):
 class AuthorPageBaseTests(TestCase):
 	"""author_page_base resolves the base URL for a site's author profile
 	pages, or "" when the site doesn't publish them - see
-	AUTHOR-PAGES-SETTING-PLAN.md."""
+	docs/06-organisations-teams-and-sites.md#author-profile-page-links."""
 
 	def setUp(self):
 		self.site = Site.objects.create(domain="brain-regeneration.com", name="BR")

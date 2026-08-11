@@ -1,7 +1,7 @@
 """
 The author RSS feed's <link> element points at the site's author profile
 page when CustomSetting.has_author_pages is on, and at orcid.org
-otherwise. See AUTHOR-PAGES-SETTING-PLAN.md.
+otherwise. See docs/06-organisations-teams-and-sites.md#author-profile-page-links.
 """
 
 from django.contrib.sites.models import Site
