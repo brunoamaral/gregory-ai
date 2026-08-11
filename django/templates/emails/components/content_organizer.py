@@ -6,6 +6,7 @@ for different email types and subscriber preferences.
 
 from django.utils import timezone
 from gregory.models import Articles, Trials
+from sitesettings.utils import author_page_base
 import logging
 
 logger = logging.getLogger(__name__)
@@ -425,6 +426,9 @@ class EmailRenderingPipeline:
 			"customsettings": custom_settings,  # Template compatibility
 			# Site domain for URL construction
 			"site_domain": _site_domain,
+			# Base URL for author profile pages when this site publishes them,
+			# else "" (templates fall back to orcid.org).
+			"author_page_base": author_page_base(site, custom_settings),
 			# UTM parameters for link tracking
 			"utm_params": utm_params or {},
 			# Footer context from CustomSetting, falling back to site domain when not set.

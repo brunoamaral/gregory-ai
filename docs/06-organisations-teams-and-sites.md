@@ -13,7 +13,7 @@ GregoryAI supports a multi-tenant structure where content, credentials, and emai
 | **Organisation** | Top-level grouping (provided by `django-organizations`). Owns teams, credentials, and sites. |
 | **Team** | Belongs to one Organisation. Owns subjects, sources, and optionally its own site and credentials. |
 | **Site** | A Django `sites` framework entry (`domain` + `name`). Used as the base URL for email sender addresses. |
-| **CustomSetting** | Per-site settings: site title, email footer, admin email, and sender email prefix. |
+| **CustomSetting** | Per-site settings: site title, email footer, admin email, sender email prefix, and whether the site publishes author profile pages. |
 | **TeamCredentials** | Postmark API token and URL scoped to a specific team. |
 | **OrganisationCredentials** | Postmark API token and URL scoped to an organisation. Used as fallback when a team has no credentials. |
 | **OrganisationSite** | Links an Organisation to one or more Sites. One can be marked as `is_default`. |
@@ -78,6 +78,17 @@ An Organisation can have one or more Sites. To configure this:
 4. Tick **Is default** on the Site that should be used as the fallback for teams without an explicit site.
 
 Only one Site per Organisation can be marked as default (enforced by a database constraint).
+
+---
+
+## Author profile page links
+
+Some sites publish an author profile page for each author at `/authors/<orcid>/`. Tick **Has author pages** in the Site's Custom Setting (under **Website URLs**) to have GregoryAI link author names there instead of `orcid.org`:
+
+- **Weekly digest and admin summary emails** — each author's name links to `https://{site.domain}/authors/{ORCID}/`.
+- **Author RSS feed** (`/feed/author/<orcid>/`) — the feed's `<link>` element points at the same URL.
+
+When the flag is off (the default), all of the above link to `https://orcid.org/{ORCID}` instead. The base URL is derived from the Site's `domain`, so no separate URL field is needed.
 
 ---
 
