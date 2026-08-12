@@ -132,24 +132,34 @@ def configure_logging(level: str, log_dir: str | None = None) -> None:
 
 	# Optional on-disk mirror of both streams, additive to stdout/stderr
 	# above rather than a replacement — `docker logs` keeps working exactly
-	# as before whether or not this is configured. Unset in local dev; set
-	# via MCP_LOG_DIR in production so the files land on a mounted volume
-	# and survive container restarts.
+	# as before whether or not this is configured. Best-effort: the
+	# container runs as non-root `appuser` (UID 1000, see Dockerfile), so a
+	# bind-mounted host directory that hasn't been created/chowned for that
+	# UID makes this raise OSError. That must not crash the server — fall
+	# back to stdout/stderr-only logging instead. Both handlers are built
+	# before either is attached, so a failure never leaves one stream
+	# mirrored to disk and the other not.
 	if log_dir:
-		os.makedirs(log_dir, exist_ok=True)
+		try:
+			os.makedirs(log_dir, exist_ok=True)
 
-		telemetry_file_handler = RotatingFileHandler(
-			os.path.join(log_dir, "telemetry.log"),
-			maxBytes=_LOG_MAX_BYTES,
-			backupCount=_LOG_BACKUP_COUNT,
-		)
-		telemetry_file_handler.setFormatter(JsonFormatter())
-		root.handlers.append(telemetry_file_handler)
+			telemetry_file_handler = RotatingFileHandler(
+				os.path.join(log_dir, "telemetry.log"),
+				maxBytes=_LOG_MAX_BYTES,
+				backupCount=_LOG_BACKUP_COUNT,
+				encoding="utf-8",
+			)
+			telemetry_file_handler.setFormatter(JsonFormatter())
 
-		intent_file_handler = RotatingFileHandler(
-			os.path.join(log_dir, "intent.log"),
-			maxBytes=_LOG_MAX_BYTES,
-			backupCount=_LOG_BACKUP_COUNT,
-		)
-		intent_file_handler.setFormatter(IntentJsonFormatter())
-		intent_logger.handlers.append(intent_file_handler)
+			intent_file_handler = RotatingFileHandler(
+				os.path.join(log_dir, "intent.log"),
+				maxBytes=_LOG_MAX_BYTES,
+				backupCount=_LOG_BACKUP_COUNT,
+				encoding="utf-8",
+			)
+			intent_file_handler.setFormatter(IntentJsonFormatter())
+		except OSError:
+			logging.getLogger(__name__).warning("mcp_log_dir_unwritable", exc_info=True)
+		else:
+			root.handlers.append(telemetry_file_handler)
+			intent_logger.handlers.append(intent_file_handler)

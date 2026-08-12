@@ -86,3 +86,21 @@ def test_configure_logging_with_log_dir_writes_rotated_files(tmp_path):
 	assert root_handler_types.count(RotatingFileHandler) == 1
 	assert intent_handler_types.count(logging.StreamHandler) == 1
 	assert intent_handler_types.count(RotatingFileHandler) == 1
+
+
+def test_configure_logging_falls_back_when_log_dir_is_unwritable(tmp_path):
+	# A regular file where a directory is expected makes os.makedirs(...,
+	# exist_ok=True) raise FileExistsError (an OSError subclass) — the same
+	# failure shape as a bind-mounted host directory the container's
+	# non-root user can't create/write into.
+	blocked_path = tmp_path / "not-a-directory"
+	blocked_path.write_text("occupied")
+
+	configure_logging("INFO", log_dir=str(blocked_path))
+
+	root_handlers = logging.getLogger().handlers
+	intent_handlers = logging.getLogger(INTENT_LOGGER_NAME).handlers
+	assert len(root_handlers) == 1 and isinstance(root_handlers[0], logging.StreamHandler)
+	assert not isinstance(root_handlers[0], RotatingFileHandler)
+	assert len(intent_handlers) == 1 and isinstance(intent_handlers[0], logging.StreamHandler)
+	assert not isinstance(intent_handlers[0], RotatingFileHandler)
