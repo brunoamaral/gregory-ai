@@ -139,6 +139,28 @@ awk '$9 == 429' /var/log/nginx/mcp-access.log | grep -o 'mcp_name="[^"]*"' | sor
 Whether 30 r/m per (client, tool) and 120 r/m per client are the right numbers is an open
 question — tune them from what this log actually shows, not speculatively.
 
+### Telemetry and intent logs on disk
+
+`gregory_mcp`'s own two log streams (`mcp_request` telemetry on stdout, `mcp_intent` on
+stderr — see `mcp-server/gregory_mcp/logging_config.py`) are, by default, only readable
+via `docker logs`, with no rotation and retention entirely at the mercy of Docker's log
+driver. Setting `MCP_LOG_DIR` (wired up in `docker-compose.yaml` as
+`/var/log/gregory-mcp`, bind-mounted to `./mcp-server/logs/` on the host) additionally
+writes each stream to its own file — `telemetry.log` and `intent.log` — rotated in-app at
+10 MB × 5 backups, no `logrotate` needed. `docker logs` keeps showing the same events
+either way; the files are additive, not a replacement. Leaving `MCP_LOG_DIR` unset (the
+default for local dev) keeps today's stdout/stderr-only behavior.
+
+Audit directly from the files instead of `docker logs` once deployed:
+
+```bash
+tail -f mcp-server/logs/telemetry.log | jq
+tail -f mcp-server/logs/intent.log | jq
+```
+
+This ships persistence and rotation only. The 90-day `intent` hard-delete retention
+policy from `MCP-TELEMETRY-PLAN.md`'s Phase 6 is still separate, not-yet-built work.
+
 ## Deployment
 
 The image is `amaralbruno/gregory-mcp`, built and pushed by

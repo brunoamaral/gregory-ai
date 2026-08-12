@@ -19,7 +19,7 @@ logger = logging.getLogger("gregory_mcp")
 
 def main() -> None:
 	settings = load_settings()
-	configure_logging(settings.log_level)
+	configure_logging(settings.log_level, settings.log_dir)
 	init_client(settings)
 
 	logger.info("gregory_mcp_starting", extra={"path": settings.api_base})

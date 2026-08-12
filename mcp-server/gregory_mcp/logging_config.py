@@ -4,8 +4,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import time
+from logging.handlers import RotatingFileHandler
+
+# 10 MB x 5 backups per file: generous enough that low-traffic instances never
+# rotate for weeks, capped so an unattended instance can't fill the disk.
+_LOG_MAX_BYTES = 10_000_000
+_LOG_BACKUP_COUNT = 5
 
 
 # Explicit allowlist, not "every extra field": this is the boundary that
@@ -102,7 +109,7 @@ class IntentJsonFormatter(logging.Formatter):
 		return json.dumps(payload)
 
 
-def configure_logging(level: str) -> None:
+def configure_logging(level: str, log_dir: str | None = None) -> None:
 	handler = logging.StreamHandler(sys.stdout)
 	handler.setFormatter(JsonFormatter())
 	root = logging.getLogger()
@@ -122,3 +129,27 @@ def configure_logging(level: str) -> None:
 	intent_logger.handlers = [intent_handler]
 	intent_logger.propagate = False
 	intent_logger.setLevel(level)
+
+	# Optional on-disk mirror of both streams, additive to stdout/stderr
+	# above rather than a replacement — `docker logs` keeps working exactly
+	# as before whether or not this is configured. Unset in local dev; set
+	# via MCP_LOG_DIR in production so the files land on a mounted volume
+	# and survive container restarts.
+	if log_dir:
+		os.makedirs(log_dir, exist_ok=True)
+
+		telemetry_file_handler = RotatingFileHandler(
+			os.path.join(log_dir, "telemetry.log"),
+			maxBytes=_LOG_MAX_BYTES,
+			backupCount=_LOG_BACKUP_COUNT,
+		)
+		telemetry_file_handler.setFormatter(JsonFormatter())
+		root.handlers.append(telemetry_file_handler)
+
+		intent_file_handler = RotatingFileHandler(
+			os.path.join(log_dir, "intent.log"),
+			maxBytes=_LOG_MAX_BYTES,
+			backupCount=_LOG_BACKUP_COUNT,
+		)
+		intent_file_handler.setFormatter(IntentJsonFormatter())
+		intent_logger.handlers.append(intent_file_handler)

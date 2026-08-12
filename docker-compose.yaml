@@ -72,11 +72,14 @@ services:
     build: ./mcp-server
     ports:
       - 127.0.0.1:8001:8001
+    volumes:
+      - ./mcp-server/logs:/var/log/gregory-mcp  # telemetry + intent logs (persist, rotated in-app)
     environment:
       # Base URL of the GregoryAI instance this server proxies. Defaults to
       # the sibling `gregory` container for local dev; point it at a public
       # instance (e.g. https://api.brain-regeneration.com) in production.
       - GREGORY_API_URL=${GREGORY_MCP_API_URL:-http://gregory:8000}
+      - MCP_LOG_DIR=/var/log/gregory-mcp
     networks:
       - gregory_network
     depends_on:
