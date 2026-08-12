@@ -4,8 +4,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import time
+from logging.handlers import RotatingFileHandler
+
+# 10 MB x 5 backups per file: generous enough that low-traffic instances never
+# rotate for weeks, capped so an unattended instance can't fill the disk.
+_LOG_MAX_BYTES = 10_000_000
+_LOG_BACKUP_COUNT = 5
 
 
 # Explicit allowlist, not "every extra field": this is the boundary that
@@ -102,7 +109,7 @@ class IntentJsonFormatter(logging.Formatter):
 		return json.dumps(payload)
 
 
-def configure_logging(level: str) -> None:
+def configure_logging(level: str, log_dir: str | None = None) -> None:
 	handler = logging.StreamHandler(sys.stdout)
 	handler.setFormatter(JsonFormatter())
 	root = logging.getLogger()
@@ -122,3 +129,37 @@ def configure_logging(level: str) -> None:
 	intent_logger.handlers = [intent_handler]
 	intent_logger.propagate = False
 	intent_logger.setLevel(level)
+
+	# Optional on-disk mirror of both streams, additive to stdout/stderr
+	# above rather than a replacement — `docker logs` keeps working exactly
+	# as before whether or not this is configured. Best-effort: the
+	# container runs as non-root `appuser` (UID 1000, see Dockerfile), so a
+	# bind-mounted host directory that hasn't been created/chowned for that
+	# UID makes this raise OSError. That must not crash the server — fall
+	# back to stdout/stderr-only logging instead. Both handlers are built
+	# before either is attached, so a failure never leaves one stream
+	# mirrored to disk and the other not.
+	if log_dir:
+		try:
+			os.makedirs(log_dir, exist_ok=True)
+
+			telemetry_file_handler = RotatingFileHandler(
+				os.path.join(log_dir, "telemetry.log"),
+				maxBytes=_LOG_MAX_BYTES,
+				backupCount=_LOG_BACKUP_COUNT,
+				encoding="utf-8",
+			)
+			telemetry_file_handler.setFormatter(JsonFormatter())
+
+			intent_file_handler = RotatingFileHandler(
+				os.path.join(log_dir, "intent.log"),
+				maxBytes=_LOG_MAX_BYTES,
+				backupCount=_LOG_BACKUP_COUNT,
+				encoding="utf-8",
+			)
+			intent_file_handler.setFormatter(IntentJsonFormatter())
+		except OSError:
+			logging.getLogger(__name__).warning("mcp_log_dir_unwritable", exc_info=True)
+		else:
+			root.handlers.append(telemetry_file_handler)
+			intent_logger.handlers.append(intent_file_handler)

@@ -18,6 +18,7 @@ TEST_SETTINGS = Settings(
 	connect_timeout=2,
 	max_retries=0,
 	log_level="ERROR",
+	log_dir=None,
 )
 
 

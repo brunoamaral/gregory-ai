@@ -49,6 +49,9 @@ postgres-data_old/
 # Database backups
 backups/
 
+# MCP server telemetry/intent logs
+mcp-server/logs/
+
 # Metabase
 metabase-data/
 metabase/db-data/

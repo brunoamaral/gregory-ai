@@ -15,6 +15,7 @@ class Settings:
 	connect_timeout: float
 	max_retries: int
 	log_level: str
+	log_dir: str | None
 
 	@property
 	def api_base(self) -> str:
@@ -39,4 +40,5 @@ def load_settings() -> Settings:
 		# all and every call fails immediately without ever hitting the network.
 		max_retries=max(0, int(os.environ.get("GREGORY_MAX_RETRIES", "2"))),
 		log_level=os.environ.get("MCP_LOG_LEVEL", "INFO").upper(),
+		log_dir=os.environ.get("MCP_LOG_DIR", "").strip() or None,
 	)
