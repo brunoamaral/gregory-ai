@@ -23,7 +23,7 @@ This is a simplified version for contexts where we just need basic article displ
         {% if article.authors.exists %}
         <p class="article-card-meta" style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
             <strong>Authors:</strong>
-            {% for author in article.authors.all %}{% if author.ORCID %}{% with author_url=author.ORCID|author_profile_url:author_page_base %}<a href="{% add_utm_params author_url utm_params site_domain %}" class="article-card-link" style="color: #3b82f6; text-decoration: underline;">{{ author.full_name }}</a>{% endwith %}{% else %}{{ author.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% for author in article.authors.all %}{% if author.ORCID %}{% with author_url=author.ORCID|author_profile_url:author_page_base %}<a href="{% add_utm_params author_url utm_params|with_utm_content:'author' site_domain %}" class="article-card-link" style="color: #3b82f6; text-decoration: underline;">{{ author.full_name }}</a>{% endwith %}{% else %}{{ author.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
         </p>
         {% endif %}
     </div>

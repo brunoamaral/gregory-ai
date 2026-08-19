@@ -36,11 +36,14 @@ from subscriptions.utils.postmark import (
 	classify_postmark_response,
 )
 from subscriptions.utils.render_email_body import (
+	apply_utm_params_to_html,
 	render_announcement_html,
 	render_announcement_text as _render_text_body,
 	sanitize_announcement_html,
 )
 from subscriptions.utils.suppression import deactivate_subscribers
+from subscriptions.utils.utm import build_utm_params
+from gregory.templatetags.gregory_tags import with_utm_content as _with_utm_content
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +55,7 @@ def render_announcement_email(
 	list_id=None,
 	custom_settings=None,
 	unsubscribe_lists=None,
+	utm_params=None,
 ):
 	"""Render announcement as HTML email using the base template."""
 	api_domain = (
@@ -59,10 +63,16 @@ def render_announcement_email(
 	)
 	site_domain = (getattr(site, "domain", "") or "") if site else ""
 	sanitized = sanitize_announcement_html(announcement.body)
+	body_utm_params = (
+		_with_utm_content(utm_params, "announcement_body") if utm_params else None
+	)
+	sanitized = apply_utm_params_to_html(sanitized, body_utm_params, site_domain)
 	rendered_body = render_announcement_html(sanitized, api_domain, site_domain)
 	context = {
 		"announcement_subject": announcement.subject,
 		"announcement_body": rendered_body,
+		"utm_params": utm_params or {},
+		"site_domain": site_domain,
 		"email_type": "announcement",
 		"show_date": True,
 		"current_date": timezone.now(),
@@ -115,12 +125,17 @@ def render_announcement_email(
 	return render_to_string("emails/announcement.html", context)
 
 
-def render_announcement_text(announcement, subscriber=None):
+def render_announcement_text(announcement, subscriber=None, utm_params=None, site_domain=None):
 	"""Render plain-text version of the announcement."""
 	lines = []
 	if subscriber and subscriber.first_name:
 		lines.append(f"Hello {subscriber.first_name},\n")
-	lines.append(_render_text_body(sanitize_announcement_html(announcement.body)))
+	sanitized = sanitize_announcement_html(announcement.body)
+	body_utm_params = (
+		_with_utm_content(utm_params, "announcement_body") if utm_params else None
+	)
+	sanitized = apply_utm_params_to_html(sanitized, body_utm_params, site_domain)
+	lines.append(_render_text_body(sanitized))
 	return "\n".join(lines)
 
 
@@ -225,6 +240,13 @@ def send_announcement(announcement):
 
 		api_token, api_url, site, custom_settings = creds
 
+		# Attributed to the same list as AnnouncementRecipient.list — the
+		# first list a subscriber matched — so utm_campaign lines up with
+		# whichever list's unsubscribe link and analytics history this
+		# send is already recorded against.
+		utm_params = build_utm_params("announcement", lst, "announcement_body")
+		site_domain = (getattr(site, "domain", "") or "") if site else ""
+
 		html = render_announcement_email(
 			announcement,
 			subscriber=subscriber,
@@ -232,8 +254,14 @@ def send_announcement(announcement):
 			list_id=lst.list_id,
 			custom_settings=custom_settings,
 			unsubscribe_lists=[(l.list_id, l.list_name) for l in matched_lists],
+			utm_params=utm_params,
 		)
-		text = render_announcement_text(announcement, subscriber=subscriber)
+		text = render_announcement_text(
+			announcement,
+			subscriber=subscriber,
+			utm_params=utm_params,
+			site_domain=site_domain,
+		)
 
 		live_subject = announcement.subject
 		if live_subject.startswith("[TEST] "):

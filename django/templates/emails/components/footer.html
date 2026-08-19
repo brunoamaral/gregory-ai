@@ -1,5 +1,6 @@
 <!-- Reusable Email Footer Component -->
 {% load gregory_tags %}
+{% with utm_params=utm_params|with_utm_content:"footer" %}
 <table role="presentation" border="0" cellpadding="0" cellspacing="0" class="email-footer-container" style="width: 100%; background-color: #f9fafb; border-radius: 0 0 8px 8px; border-top: 1px solid #e5e7eb;">
     <tr>
         <td style="padding: 30px 40px; text-align: center;">
@@ -135,6 +136,7 @@
         </td>
     </tr>
 </table>
+{% endwith %}
 
 <!-- MSO Outlook Specific Footer Fixes -->
 <!--[if mso]>

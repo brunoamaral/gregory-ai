@@ -1135,6 +1135,7 @@ class ListsAdmin(admin.ModelAdmin):
 					"list_email_subject",
 					"team",
 					"site",
+					"utm_campaign_slug",
 				]
 			},
 		),

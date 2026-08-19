@@ -25,6 +25,7 @@ from subscriptions.utils.postmark import (
 	classify_postmark_response,
 )
 from subscriptions.utils.suppression import deactivate_subscribers
+from subscriptions.utils.utm import build_utm_params
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 logger = logging.getLogger(__name__)
@@ -148,6 +149,7 @@ class Command(BaseCommand):
 				new_trials = list(new_trials.order_by("-discovery_date")[:trial_limit])
 
 				_context_holder = {}
+				utm_params = build_utm_params("trial_notification", lst, "trial_card")
 
 				def _render(articles, trials, _lst=lst, _subscriber=subscriber):
 					summary_context = get_optimized_email_context(
@@ -158,6 +160,7 @@ class Command(BaseCommand):
 						site=site,
 						custom_settings=customsettings,
 						organization=team.organization,
+						utm_params=utm_params,
 					)
 					# Inject unsubscribe context for the footer template
 					summary_context["list_id"] = _lst.list_id

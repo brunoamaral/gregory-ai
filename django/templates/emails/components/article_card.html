@@ -33,7 +33,7 @@ Usage:
             {% for author in article.authors.all %}
                 {% if author.ORCID %}
                     {% with author_url=author.ORCID|author_profile_url:author_page_base %}
-                    <a href="{% add_utm_params author_url utm_params site_domain %}" class="article-card-link" style="color: #3b82f6; text-decoration: underline;">{{ author.full_name }}</a>
+                    <a href="{% add_utm_params author_url utm_params|with_utm_content:'author' site_domain %}" class="article-card-link" style="color: #3b82f6; text-decoration: underline;">{{ author.full_name }}</a>
                     {% endwith %}
                 {% else %}
                     {{ author.full_name }}

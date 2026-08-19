@@ -2,7 +2,7 @@
 {% load gregory_tags %}
 <div class="article-link-row" style="margin-bottom: 15px; padding: 5px 0; border-bottom: 1px solid #e5e7eb;">
     {% with article_url=article.article_id|build_article_url:site_domain %}
-    <a href="{% add_utm_params article_url utm_params site_domain %}" class="article-link-title" style="text-decoration: none; color: #2563eb; font-weight: 500; display: block; font-size: 15px;">
+    <a href="{% add_utm_params article_url utm_params|with_utm_content:'latest_research' site_domain %}" class="article-link-title" style="text-decoration: none; color: #2563eb; font-weight: 500; display: block; font-size: 15px;">
         {{ article.title|clean_html_tags|default:"Article title" }}
     </a>
     {% endwith %}
