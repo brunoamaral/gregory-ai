@@ -1,0 +1,40 @@
+{% load gregory_tags %}{{ header_title|default:title|default:"Gregory AI" }} — Admin Review Required
+
+Hello {{ admin|split:"@"|first }},
+
+Here are the articles and clinical trials discovered in the last 48 hours that require your review.
+{% if articles or additional_articles %}
+
+NEW ARTICLES FOR REVIEW ({{ content_stats.total_articles }})
+========================================
+{% if articles %}
+High-Confidence ({{ content_stats.high_confidence_articles }})
+{% for article in articles %}
+{% include 'emails/components/article_text.html' with article=article %}
+{% endfor %}{% endif %}{% if additional_articles %}
+Needs Review ({{ additional_articles|length }})
+{% for article in additional_articles %}
+{% include 'emails/components/article_text.html' with article=article %}
+{% endfor %}{% endif %}{% endif %}{% if trials or additional_trials %}
+
+NEW CLINICAL TRIALS ({{ content_stats.total_trials }})
+========================================
+{% for trial in trials %}
+{% include 'emails/components/trial_text.html' with trial=trial %}
+{% endfor %}{% for trial in additional_trials %}
+{% include 'emails/components/trial_text.html' with trial=trial %}
+{% endfor %}{% endif %}{% if not articles and not additional_articles and not trials and not additional_trials %}
+
+No New Content for Review
+No new articles or clinical trials were discovered in the last 48 hours.
+{% endif %}
+
+Admin Actions: Review the articles above and mark them as relevant in the admin dashboard. This helps improve our machine learning accuracy for future recommendations.
+{% if ml_drift %}{% with ml_drift_total=ml_drift.stale_ml_score|add:ml_drift.missing_relevant|add:ml_drift.unexpected_relevant %}
+ML field health: {{ ml_drift_total }} drifted ({{ ml_drift.stale_ml_score }} stale ml_score, {{ ml_drift.missing_relevant }} missing relevant, {{ ml_drift.unexpected_relevant }} unexpected relevant).
+{% endwith %}{% endif %}
+
+For the complete admin dashboard, visit https://api.{{ site.domain|default:"brain-regeneration.com" }}/
+
+----------------------------------------
+{% include 'emails/components/footer_text.html' %}

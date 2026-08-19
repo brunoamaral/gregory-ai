@@ -4,7 +4,6 @@ from datetime import timedelta
 from django.utils.timezone import now
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
-from django.utils.html import strip_tags
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.get_credentials import (
 	build_unsubscribe_base_url,
@@ -632,8 +631,13 @@ class Command(BaseCommand):
 							)
 
 				# html_content was already rendered (possibly shrunk) by
-				# render_within_limit above.
-				text_content = strip_tags(html_content)
+				# render_within_limit above. Render a dedicated text template
+				# from the same context rather than strip_tags(html_content),
+				# which drags <style> block contents into the body and drops
+				# every href.
+				text_content = get_template("emails/weekly_summary.txt").render(
+					summary_context
+				)
 
 				# VERIFICATION: Check that the rendered HTML actually contains the articles
 				if debug:

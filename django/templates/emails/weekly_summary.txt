@@ -1,0 +1,41 @@
+{% load gregory_tags %}{{ header_title|default:title|default:"Gregory AI" }} — Your Weekly Research Summary
+
+Good {{ greeting_time|default:"morning" }}, {% if user.first_name %}{{ user.first_name }}{% else %}{{ subscriber.email|split:"@"|first }}{% endif %}!
+
+Here are the most relevant articles and clinical trials we discovered this week.
+{% if articles or additional_articles %}
+
+NEW ARTICLES ({{ content_stats.total_articles }})
+========================================
+{% for article in articles %}
+{% include 'emails/components/article_text.html' with article=article %}
+{% endfor %}{% for article in additional_articles %}
+{% include 'emails/components/article_text.html' with article=article %}
+{% endfor %}{% endif %}{% if trials or additional_trials %}
+
+NEW CLINICAL TRIALS ({{ content_stats.total_trials }})
+========================================
+{% for trial in trials %}
+{% include 'emails/components/trial_text.html' with trial=trial %}
+{% endfor %}{% for trial in additional_trials %}
+{% include 'emails/components/trial_text.html' with trial=trial %}
+{% endfor %}{% endif %}{% if latest_research.has_latest_research %}
+
+LATEST RESEARCH BY CATEGORY
+========================================
+{% for category in latest_research.categories %}
+-- {{ category.category_name }} --
+{% for article in category.articles %}
+{{ article.title|clean_html_tags }}
+{% if utm_params %}{{ article.article_id|build_article_url:site_domain|add_utm_params:utm_params }}{% else %}{{ article.article_id|build_article_url:site_domain }}{% endif %}
+{% endfor %}
+{% endfor %}{% endif %}{% if not articles and not additional_articles and not trials and not additional_trials %}
+
+No New Content This Week
+We didn't find any new relevant articles or clinical trials matching your interests this week. Check back next week for updates.
+{% endif %}
+
+For the complete archive, visit https://{{ site.domain|default:'gregory-ai.com' }}/
+
+----------------------------------------
+{% include 'emails/components/footer_text.html' %}
