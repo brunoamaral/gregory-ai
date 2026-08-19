@@ -32,7 +32,9 @@ Usage:
             <strong>Authors:</strong>
             {% for author in article.authors.all %}
                 {% if author.ORCID %}
-                    <a href="{{ author.ORCID|author_profile_url:author_page_base }}" class="article-card-link" style="color: #3b82f6; text-decoration: underline;">{{ author.full_name }}</a>
+                    {% with author_url=author.ORCID|author_profile_url:author_page_base %}
+                    <a href="{% add_utm_params author_url utm_params site_domain %}" class="article-card-link" style="color: #3b82f6; text-decoration: underline;">{{ author.full_name }}</a>
+                    {% endwith %}
                 {% else %}
                     {{ author.full_name }}
                 {% endif %}
@@ -61,9 +63,11 @@ Usage:
         {% else %}
         <!-- Regular user links -->
         {% with domain=site.domain|default:"brain-regeneration.com" %}
-        <a href="https://{{ domain }}/articles/{{ article.article_id }}/" class="article-card-link" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+        {% with article_url=article.article_id|build_article_url:domain %}
+        <a href="{% add_utm_params article_url utm_params domain %}" class="article-card-link" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
             View Full Article →
         </a>
+        {% endwith %}
         {% endwith %}
         {% endif %}
     </div>

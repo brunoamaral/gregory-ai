@@ -9,30 +9,32 @@ This is a simplified version for contexts where we just need basic article displ
 <div class="article-card" style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
     
     <!-- Article Title -->
+    {% with article_url=article.article_id|build_article_url:site_domain %}
     <h3 class="article-card-title" style="color: #1e3a8a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 18px; font-weight: 600; line-height: 1.3; margin: 0 0 15px 0;">
-        <a href="{% if utm_params %}{{ article.article_id|build_article_url:site_domain|add_utm_params:utm_params }}{% else %}{{ article.article_id|build_article_url:site_domain }}{% endif %}">{{ article.title|safe }}</a>
+        <a href="{% add_utm_params article_url utm_params site_domain %}">{{ article.title|safe }}</a>
     </h3>
-    
+
     <!-- Article Metadata -->
     <div style="margin-bottom: 15px;">
         <p class="article-card-meta" style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
             <strong>Discovery Date:</strong> {{ article.discovery_date|date:"M d, Y" }}
         </p>
-        
+
         {% if article.authors.exists %}
         <p class="article-card-meta" style="color: #6b7280; font-size: 14px; margin: 0 0 5px 0;">
             <strong>Authors:</strong>
-            {% for author in article.authors.all %}{% if author.ORCID %}<a href="{{ author.ORCID|author_profile_url:author_page_base }}" class="article-card-link" style="color: #3b82f6; text-decoration: underline;">{{ author.full_name }}</a>{% else %}{{ author.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% for author in article.authors.all %}{% if author.ORCID %}{% with author_url=author.ORCID|author_profile_url:author_page_base %}<a href="{% add_utm_params author_url utm_params site_domain %}" class="article-card-link" style="color: #3b82f6; text-decoration: underline;">{{ author.full_name }}</a>{% endwith %}{% else %}{{ author.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
         </p>
         {% endif %}
     </div>
-    
+
     <!-- Article Link -->
     <div style="margin-bottom: 15px;">
-        <a href="{% if utm_params %}{{ article.article_id|build_article_url:site_domain|add_utm_params:utm_params }}{% else %}{{ article.article_id|build_article_url:site_domain }}{% endif %}" class="article-card-link" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+        <a href="{% add_utm_params article_url utm_params site_domain %}" class="article-card-link" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
             View Full Article →
         </a>
     </div>
+    {% endwith %}
     
     <!-- Key Takeaways (per-organisation) -->
     {% with org_content=org_content_map|get_item:article.article_id %}

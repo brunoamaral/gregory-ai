@@ -113,35 +113,52 @@ def has_attribute(obj, attribute):
 	return hasattr(obj, attribute)
 
 
-@register.filter
-def add_utm_params(url, utm_params):
+@register.simple_tag
+def add_utm_params(url, utm_params, site_domain=""):
 	"""
-	Add UTM parameters to a URL for tracking.
-	Usage: {{ article.link|add_utm_params:utm_params }}
+	Add UTM parameters to a URL for tracking, but only when the URL points
+	at the sending site itself. Third-party destinations (DOI resolvers,
+	trial registries, the original publisher) never get tagged, since
+	Umami cannot see those clicks and the parameters would only leak into
+	someone else's analytics.
+
+	Usage: {% add_utm_params article.link utm_params site_domain %}
+
+	The original query string is preserved byte-for-byte; only UTM keys
+	that are not already present are appended. This avoids the
+	decode/re-encode round trip of parse_qs()+urlencode(), which can
+	silently rewrite '+', literal '%', or repeated keys in the input URL.
 
 	Args:
 	    url: The URL to modify
 	    utm_params: Dictionary of UTM parameters
+	    site_domain: The sending site's domain. When given, the URL is
+	        returned unmodified unless its host matches this domain.
 
 	Returns:
-	    URL with UTM parameters appended
+	    URL with UTM parameters appended, or the original URL unchanged.
 	"""
 	if not url or not utm_params:
 		return url
 
 	from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
-	# Parse the URL
 	parsed_url = urlparse(url)
-	query_params = parse_qs(parsed_url.query)
 
-	# Add UTM parameters (don't override existing ones)
-	for key, value in utm_params.items():
-		if key not in query_params:
-			query_params[key] = [value]
+	if site_domain:
+		host = parsed_url.netloc.split(":")[0].lower()
+		expected = site_domain.split(":")[0].lower()
+		if host != expected:
+			return url
 
-	# Rebuild the URL
-	new_query = urlencode(query_params, doseq=True)
+	existing = parse_qs(parsed_url.query, keep_blank_values=True)
+	additions = [(k, v) for k, v in utm_params.items() if k not in existing]
+	if additions:
+		sep = "&" if parsed_url.query else ""
+		new_query = f"{parsed_url.query}{sep}{urlencode(additions)}"
+	else:
+		new_query = parsed_url.query
+
 	new_url = urlunparse(
 		(
 			parsed_url.scheme,
