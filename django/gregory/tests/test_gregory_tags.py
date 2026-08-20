@@ -56,15 +56,30 @@ class AddUtmParamsTest(SimpleTestCase):
 
 	def test_no_op_without_utm_params(self):
 		self.assertEqual(
-			add_utm_params("https://example.com/x", {}),
+			add_utm_params("https://example.com/x", {}, "example.com"),
 			"https://example.com/x",
 		)
-		self.assertEqual(add_utm_params("", {"utm_source": "a"}), "")
+		self.assertEqual(add_utm_params("", {"utm_source": "a"}, "example.com"), "")
+
+	def test_no_op_without_site_domain(self):
+		# site_domain is required to tag anything — a caller that forgets
+		# to pass it must fail closed (no tagging) rather than fall back
+		# to tagging every host, which would reintroduce the leakage this
+		# host restriction exists to prevent.
+		result = add_utm_params(
+			"https://example.com/articles/1/", {"utm_source": "weekly_summary"}
+		)
+		self.assertEqual(result, "https://example.com/articles/1/")
+		result = add_utm_params(
+			"https://example.com/articles/1/", {"utm_source": "weekly_summary"}, ""
+		)
+		self.assertEqual(result, "https://example.com/articles/1/")
 
 	def test_appends_params_to_bare_url(self):
 		result = add_utm_params(
 			"https://example.com/articles/1/",
 			{"utm_source": "weekly_summary", "utm_medium": "email"},
+			"example.com",
 		)
 		self.assertIn("utm_source=weekly_summary", result)
 		self.assertIn("utm_medium=email", result)
@@ -75,7 +90,7 @@ class AddUtmParamsTest(SimpleTestCase):
 		# differently, and repeated keys must survive — all things
 		# parse_qs()+urlencode() can silently rewrite.
 		url = "https://example.com/x?q=a+b&note=100%25&tag=a&tag=b"
-		result = add_utm_params(url, {"utm_source": "weekly_summary"})
+		result = add_utm_params(url, {"utm_source": "weekly_summary"}, "example.com")
 		self.assertTrue(
 			result.startswith(
 				"https://example.com/x?q=a+b&note=100%25&tag=a&tag=b&"
@@ -87,7 +102,9 @@ class AddUtmParamsTest(SimpleTestCase):
 		# overridden; utm_medium is missing and must be appended.
 		url = "https://example.com/x?utm_source=manual"
 		result = add_utm_params(
-			url, {"utm_source": "weekly_summary", "utm_medium": "email"}
+			url,
+			{"utm_source": "weekly_summary", "utm_medium": "email"},
+			"example.com",
 		)
 		self.assertEqual(result.count("utm_source="), 1)
 		self.assertIn("utm_source=manual", result)

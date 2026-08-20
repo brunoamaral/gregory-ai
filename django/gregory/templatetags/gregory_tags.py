@@ -132,24 +132,26 @@ def add_utm_params(url, utm_params, site_domain=""):
 	Args:
 	    url: The URL to modify
 	    utm_params: Dictionary of UTM parameters
-	    site_domain: The sending site's domain. When given, the URL is
-	        returned unmodified unless its host matches this domain.
+	    site_domain: The sending site's domain. Required to tag anything —
+	        a missing/blank site_domain fails closed to a no-op rather
+	        than falling back to tagging every host, so a caller can
+	        never accidentally leak UTM params onto a third-party link by
+	        forgetting to pass this.
 
 	Returns:
 	    URL with UTM parameters appended, or the original URL unchanged.
 	"""
-	if not url or not utm_params:
+	if not url or not utm_params or not site_domain:
 		return url
 
 	from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 	parsed_url = urlparse(url)
 
-	if site_domain:
-		host = parsed_url.netloc.split(":")[0].lower()
-		expected = site_domain.split(":")[0].lower()
-		if host != expected:
-			return url
+	host = parsed_url.netloc.split(":")[0].lower()
+	expected = site_domain.split(":")[0].lower()
+	if host != expected:
+		return url
 
 	existing = parse_qs(parsed_url.query, keep_blank_values=True)
 	additions = [(k, v) for k, v in utm_params.items() if k not in existing]
