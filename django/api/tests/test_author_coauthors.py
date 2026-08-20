@@ -1,3 +1,4 @@
+from django.core.cache import cache as django_cache
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.sites.models import Site
@@ -11,6 +12,19 @@ from gregory.models import (
 	OrganizationApiSettings,
 )
 from organizations.models import Organization
+
+
+def _count_cache_hit_is_a_db_query():
+	"""True when a warm CachedCountMixin cache hit costs one extra DB query.
+
+	CACHES swaps to LocMemCache under pytest/CI (admin/settings_test.py,
+	specifically to avoid Postgres round-trips) while local `manage.py test`
+	runs against the real DatabaseCache (admin/settings.py). A warm-cache
+	hit replaces the real COUNT(*) query with a cache lookup that is itself
+	a DB query only in the latter case — the two query-budget tests below
+	need to know which, since the pinned total differs by exactly one.
+	"""
+	return type(django_cache).__module__.endswith("backends.db")
 
 
 class AuthorCoauthorsTest(TestCase):
@@ -214,13 +228,15 @@ class AuthorCoauthorsQueryCountTest(TestCase):
 		# cache miss + cache set (several extra statements from
 		# DatabaseCache's cull/insert), which isn't what this test is
 		# pinning. On a warm cache the count query is simply swapped for a
-		# single cache GET, so the total stays identical to the pre-caching
-		# budget. The warm-up request also populates Django's process-level
-		# Site cache as a side effect, so re-clear it to keep that query in
-		# the pinned count too (same reasoning as clear_cache() in setUp).
+		# cache lookup, which costs a DB query only under DatabaseCache —
+		# see _count_cache_hit_is_a_db_query(). The warm-up request also
+		# populates Django's process-level Site cache as a side effect, so
+		# re-clear it to keep that query in the pinned count too (same
+		# reasoning as clear_cache() in setUp).
 		self.client.get(url)
 		Site.objects.clear_cache()
-		with self.assertNumQueries(5):
+		expected_queries = 5 if _count_cache_hit_is_a_db_query() else 4
+		with self.assertNumQueries(expected_queries):
 			response = self.client.get(url)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertGreater(len(response.data["results"]), 0)
@@ -252,7 +268,8 @@ class AuthorCoauthorsQueryCountTest(TestCase):
 		# test_coauthors_query_budget_flat_with_page_content for why.
 		self.client.get("/authors/")
 		Site.objects.clear_cache()
-		with self.assertNumQueries(5):
+		expected_queries = 5 if _count_cache_hit_is_a_db_query() else 4
+		with self.assertNumQueries(expected_queries):
 			response = self.client.get("/authors/")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertGreater(len(response.data["results"]), 0)
