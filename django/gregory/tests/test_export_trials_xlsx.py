@@ -752,6 +752,34 @@ class ExportTrialsXlsxTests(TestCase):
 		finally:
 			os.unlink(path)
 
+	def test_category_description_formula_injection_defused(self):
+		"""A description starting with =, +, -, or @ must not become a live formula cell."""
+		cat_formula = TeamCategory.objects.create(
+			team=self.team,
+			category_name="Formula-like description",
+			category_description="=SUM(A1:A10)",
+			category_terms=["+1(555)", "-benchmark", "@mention"],
+		)
+		cat_formula.subjects.add(self.subject_ms)
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Categories"]
+			headers = [
+				ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			cat_col = headers.index("Category") + 1
+			desc_col = headers.index("Description") + 1
+			for r in range(5, ws.max_row + 1):
+				if ws.cell(row=r, column=cat_col).value == "Formula-like description":
+					cell = ws.cell(row=r, column=desc_col)
+					self.assertNotEqual(cell.data_type, "f")
+					self.assertEqual(cell.value, "'=SUM(A1:A10)")
+					break
+			else:
+				self.fail("Row for Formula-like description not found")
+		finally:
+			os.unlink(path)
+
 	def test_subjectless_category_never_exported(self):
 		path, wb = self._export(
 			subjects=f"{self.subject_ms.pk},{self.subject_cancer.pk}"

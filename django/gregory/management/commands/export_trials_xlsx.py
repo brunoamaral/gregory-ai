@@ -437,12 +437,25 @@ def _excel_text(value, limit=32767):
 	return text
 
 
+_FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@")
+
+
 def _write_safe_text_cell(ws, row, col, value, wrap=False):
-	"""Write a long/user-authored text value, truncated and defused against formula injection."""
+	"""Write a long/user-authored text value, truncated and defused against formula injection.
+
+	A leading apostrophe is the standard mitigation (OWASP CSV injection guidance):
+	it forces the cell to render as literal text in Excel/LibreOffice/Sheets even
+	when the value starts with =, +, -, or @. Relying on openpyxl's data_type alone
+	is not enough — several of those trigger characters (+, -, @) are never
+	auto-detected as formulas by openpyxl in the first place, so its cell.data_type
+	would stay "s" regardless, while spreadsheet applications still treat a leading
+	=, +, -, or @ as a formula cue on their own.
+	"""
 	text = _excel_text(value)
+	if isinstance(text, str) and text.startswith(_FORMULA_TRIGGER_CHARS):
+		text = "'" + text
 	cell = ws.cell(row=row, column=col, value=text)
-	if isinstance(text, str) and text.startswith("="):
-		cell.data_type = "s"
+	cell.data_type = "s"
 	if wrap:
 		cell.alignment = Alignment(wrap_text=True)
 	return cell
