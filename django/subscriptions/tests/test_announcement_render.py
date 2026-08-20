@@ -289,6 +289,14 @@ class RenderAnnouncementTextTests(TestCase):
 
 		self.assertIsNone(re.search(r"\n{3,}", text))
 
+	def test_inline_link_keeps_href(self):
+		# A plain (non-btn-cta) link inside body text used to lose its href
+		# entirely when converted to text — only the link text survived.
+		html = '<p>Read the <a href="https://example.com/paper">full paper</a> here.</p>'
+		sanitized = sanitize_announcement_html(html)
+		text = render_announcement_text(sanitized)
+		self.assertIn("full paper (https://example.com/paper)", text)
+
 
 # ---------------------------------------------------------------------------
 # AnnouncementAdminForm — alt-text validation

@@ -226,8 +226,9 @@ def render_announcement_text(html: str) -> str:
 	"""
 	Generate a plain-text fallback from sanitized announcement HTML.
 
-	- CTA buttons → ``Label: https://…``
-	- Images       → ``[Image: alt text]``
+	- CTA buttons     → ``Label: https://…``
+	- Inline <a> links → ``Label (https://…)``
+	- Images          → ``[Image: alt text]``
 	- Runs of 3+ blank lines are collapsed to 2.
 
 	*html* must be the output of ``sanitize_announcement_html``.
@@ -239,6 +240,14 @@ def render_announcement_text(html: str) -> str:
 		href = a_tag.get("href", "")
 		label = a_tag.get_text()
 		a_tag.replace_with(NavigableString(f"\n\n{label}: {href}\n\n"))
+
+	# Replace remaining (inline) links with "Label (URL)" so the href
+	# survives into the text part instead of being silently dropped.
+	for a_tag in list(soup.find_all("a")):
+		href = a_tag.get("href", "")
+		label = a_tag.get_text()
+		text_value = f"{label} ({href})" if href else label
+		a_tag.replace_with(NavigableString(text_value))
 
 	# Replace images with [Image: alt]
 	for img in list(soup.find_all("img")):

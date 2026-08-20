@@ -4,7 +4,6 @@ import requests
 from django.utils.timezone import now
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
-from django.utils.html import strip_tags
 from subscriptions.management.commands.utils.send_email import send_email
 from subscriptions.management.commands.utils.subscription import get_trials_for_list
 from subscriptions.models import (
@@ -148,6 +147,8 @@ class Command(BaseCommand):
 				_, trial_limit = resolve_limits(lst)
 				new_trials = list(new_trials.order_by("-discovery_date")[:trial_limit])
 
+				_context_holder = {}
+
 				def _render(articles, trials, _lst=lst, _subscriber=subscriber):
 					summary_context = get_optimized_email_context(
 						email_type="trial_notification",
@@ -176,6 +177,7 @@ class Command(BaseCommand):
 					used_trials = list(summary_context.get("trials", [])) + list(
 						summary_context.get("additional_trials", [])
 					)
+					_context_holder["context"] = summary_context
 					return html, used_articles, used_trials
 
 				html_content, _articles_to_be_sent, trials_to_be_sent = (
@@ -204,7 +206,9 @@ class Command(BaseCommand):
 					emails_skipped += 1
 					continue
 
-				text_content = strip_tags(html_content)
+				text_content = get_template("emails/trial_notification.txt").render(
+					_context_holder["context"]
+				)
 
 				try:
 					result = send_email(

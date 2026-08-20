@@ -2,7 +2,6 @@ import logging
 import requests
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
-from django.utils.html import strip_tags
 from gregory.models import MLPredictions
 from gregory.relevance import compute_ml_drift
 from subscriptions.management.commands.utils.get_credentials import (
@@ -175,6 +174,8 @@ class Command(BaseCommand):
 				)
 				new_trials = list(new_trials.order_by("-discovery_date")[:trial_limit])
 
+				_context_holder = {}
+
 				def _render(
 					articles,
 					trials,
@@ -213,6 +214,7 @@ class Command(BaseCommand):
 					used_trials = list(summary_context.get("trials", [])) + list(
 						summary_context.get("additional_trials", [])
 					)
+					_context_holder["context"] = summary_context
 					return html, used_articles, used_trials
 
 				try:
@@ -254,7 +256,9 @@ class Command(BaseCommand):
 					)
 					continue
 
-				text_content = strip_tags(html_content)
+				text_content = get_template("emails/admin_summary.txt").render(
+					_context_holder["context"]
+				)
 
 				# Step 5: Send email
 				try:

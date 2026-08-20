@@ -1,0 +1,6 @@
+{% load gregory_tags %}{{ article.title|clean_html_tags }}
+{% if utm_params %}{{ article.article_id|build_article_url:site_domain|add_utm_params:utm_params }}{% else %}{{ article.article_id|build_article_url:site_domain }}{% endif %}
+{% if article.doi %}DOI: https://doi.org/{{ article.doi }}
+{% endif %}{% if article.authors.exists %}Authors: {% for author in article.authors.all %}{{ author.full_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+{% endif %}{% if article.summary %}{{ article.summary|clean_html_tags|truncatechars:300 }}
+{% endif %}

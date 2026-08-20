@@ -1,0 +1,17 @@
+{% if website_url %}More information: {{ website_url }}
+{% endif %}{% if support_url %}Support: {{ support_url }}
+{% endif %}{% if about_url %}About: {{ about_url }}
+{% endif %}{% if contact_url %}Contact: {{ contact_url }}
+{% endif %}
+This email was sent to {{ subscriber.email|default:"you" }}
+{% if subscriber.unsubscribe_token and unsubscribe_lists %}{% for ul_id, ul_name in unsubscribe_lists %}Unsubscribe from {{ ul_name }}: {{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/list/{{ ul_id }}/
+{% endfor %}{% if site %}Unsubscribe from all lists on {{ site.domain }}: {{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/site/{{ site.id }}/
+{% endif %}Unsubscribe from everything: {{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/all/
+{% elif subscriber.unsubscribe_token and list_id %}Unsubscribe from this list: {{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/list/{{ list_id }}/
+{% if site %}Unsubscribe from all lists on {{ site.domain }}: {{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/site/{{ site.id }}/
+{% endif %}Unsubscribe from everything: {{ unsubscribe_base_url }}/subscriptions/unsubscribe/{{ subscriber.unsubscribe_token }}/all/
+{% endif %}
+{% if privacy_policy_url %}Privacy Policy: {{ privacy_policy_url }}
+{% endif %}{% if terms_url %}Terms of Service: {{ terms_url }}
+{% endif %}
+{{ title|default:"Gregory AI" }} — Powered by Gregory AI (https://gregory-ai.com/)

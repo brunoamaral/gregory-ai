@@ -1,0 +1,21 @@
+{% load gregory_tags %}{{ header_title|default:title|default:"Gregory AI" }} — New Clinical Trials Notification
+
+We've found {{ content_stats.total_trials|default:0 }} new clinical trial{{ content_stats.total_trials|default:0|pluralize }} that match your research interests.
+{% if trials or additional_trials %}
+
+NEW CLINICAL TRIALS ({{ content_stats.total_trials|default:0 }})
+========================================
+{% for trial in trials %}
+{% include 'emails/components/trial_text.html' with trial=trial %}
+{% endfor %}{% for trial in additional_trials %}
+{% include 'emails/components/trial_text.html' with trial=trial %}
+{% endfor %}{% else %}
+
+No New Clinical Trials
+No new clinical trials matching your interests were found at this time. We'll continue monitoring and notify you when new trials are available.
+{% endif %}
+
+Browse all available clinical trials at https://{{ site.domain|default:'gregory-ai.com' }}/
+
+----------------------------------------
+{% include 'emails/components/footer_text.html' %}
