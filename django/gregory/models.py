@@ -620,7 +620,9 @@ class Articles(models.Model):
 	# Deliberately NOT unique: distinct papers can share a title (errata,
 	# corrections, preprint vs published). Dedup is enforced in the feedreader
 	# by DOI-first lookup; unique_article_title_link still guards exact dupes.
-	title = models.TextField(blank=False, null=False)
+	# db_index: ordering=title is exposed on the API and was seen driving full
+	# table sorts under crawler load (HOUSE-LOAD-SPIKE-PLAN.md P1 item 5).
+	title = models.TextField(blank=False, null=False, db_index=True)
 	link = models.URLField(
 		blank=False,
 		null=False,
@@ -1018,9 +1020,12 @@ def _update_sponsor_type_from_trial(sponsor: "Sponsor", trial: "Trials") -> None
 
 class Trials(models.Model):
 	trial_id = models.AutoField(primary_key=True)
-	discovery_date = models.DateTimeField(blank=True, null=True)
+	# db_index: ordering=discovery_date/title are exposed on the API and were
+	# seen driving full table sorts under crawler load
+	# (HOUSE-LOAD-SPIKE-PLAN.md P1 item 5).
+	discovery_date = models.DateTimeField(blank=True, null=True, db_index=True)
 	last_updated = models.DateTimeField(auto_now=True, null=True, db_index=True)
-	title = models.TextField(blank=False, null=False)
+	title = models.TextField(blank=False, null=False, db_index=True)
 	summary = models.TextField(blank=True, null=True)
 
 	# Persisted uppercase columns for performant case-insensitive search
