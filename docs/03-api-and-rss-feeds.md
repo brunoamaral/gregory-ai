@@ -147,7 +147,7 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `published_date_after` | date (YYYY-MM-DD) | Articles published on or after this date (inclusive). Returns 400 for invalid dates. |
 | `published_date_before` | date (YYYY-MM-DD) | Articles published on or before this date (inclusive — the full day is included). Returns 400 for invalid dates. |
 | `ordering` | string | Order results (e.g., `-published_date`, `title`) |
-| `page` | integer | Page number |
+| `page` | integer | Page number. `page * page_size` above 10,000 returns 400 — use `all_results=true` or `format=csv` for deep/bulk reads instead |
 | `page_size` | integer | Items per page (max 100) |
 | `all_results` | boolean | Bypass pagination (useful for CSV export) |
 | `format` | string | `json` (default) or `csv` |

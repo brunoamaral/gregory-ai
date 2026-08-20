@@ -1,3 +1,4 @@
+from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from django.utils.functional import cached_property
@@ -27,6 +28,13 @@ class FlexiblePagination(PageNumberPagination):
 	page_size_query_param = "page_size"
 	max_page_size = 100
 
+	# HOUSE-LOAD-SPIKE-PLAN.md P1 item 4: deep offsets on an unfiltered,
+	# unindexed-order query turn into a full table sort. Crawler traffic was
+	# observed at page=25778 (offset ~250k) driving House into parallel-worker
+	# exhaustion. This caps the worst case regardless of caller; callers who
+	# need the full set should use all_results=true or a CSV export instead.
+	max_offset = 10000
+
 	@cached_property
 	def should_bypass_pagination(self):
 		"""
@@ -42,6 +50,21 @@ class FlexiblePagination(PageNumberPagination):
 
 		if self.should_bypass_pagination:
 			return None
+
+		page_size = self.get_page_size(request)
+		if page_size:
+			try:
+				page_number = int(self.get_page_number(request, None))
+			except (TypeError, ValueError):
+				page_number = None
+
+			if page_number is not None and page_number * page_size > self.max_offset:
+				raise ValidationError(
+					f"Requested offset ({page_number * page_size}) exceeds the maximum "
+					f"of {self.max_offset}. Use all_results=true, or the CSV export "
+					"(format=csv), to retrieve the full result set instead of paging "
+					"this deep."
+				)
 
 		return super().paginate_queryset(queryset, request, view)
 
