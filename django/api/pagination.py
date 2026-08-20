@@ -171,6 +171,13 @@ class FlexiblePagination(MaxOffsetMixin, CachedCountMixin, PageNumberPagination)
 	page_size_query_param = "page_size"
 	max_page_size = 100
 
+	# HOUSE-LOAD-SPIKE-PLAN.md P1 item 4: deep offsets on an unfiltered,
+	# unindexed-order query turn into a full table sort. Crawler traffic was
+	# observed at page=25778 (offset ~250k) driving House into parallel-worker
+	# exhaustion. This caps the worst case regardless of caller; callers who
+	# need the full set should use all_results=true or a CSV export instead.
+	max_offset = 10000
+
 	@cached_property
 	def should_bypass_pagination(self):
 		"""
