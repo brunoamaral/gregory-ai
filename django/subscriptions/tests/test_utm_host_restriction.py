@@ -87,13 +87,18 @@ class UtmHostRestrictionTest(TestCase):
 		)
 
 	def test_author_link_to_site_is_tagged_when_flag_on(self):
+		# Author links always carry utm_content=author (see
+		# gregory_tags.with_utm_content), overriding whatever content
+		# value the base utm_params dict carries.
 		html = self._render(
 			"emails/weekly_summary.html", "weekly_summary", has_author_pages=True
 		)
 		self.assertIn(
-			'href="https://utm-host.example.com/authors/0000-0002-7922-9785/?utm_source=weekly_summary&amp;utm_medium=email"',
+			'href="https://utm-host.example.com/authors/0000-0002-7922-9785/?',
 			html,
 		)
+		self.assertIn("utm_source=weekly_summary", html)
+		self.assertIn("utm_content=author", html)
 
 	def test_author_link_to_orcid_is_not_tagged(self):
 		html = self._render(

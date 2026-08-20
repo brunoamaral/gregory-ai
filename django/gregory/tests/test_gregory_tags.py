@@ -14,7 +14,11 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gregory.tests.test_settings")
 django.setup()
 
 from django.test import SimpleTestCase
-from gregory.templatetags.gregory_tags import author_profile_url, add_utm_params
+from gregory.templatetags.gregory_tags import (
+	author_profile_url,
+	add_utm_params,
+	with_utm_content,
+)
 
 
 class AuthorProfileUrlTest(SimpleTestCase):
@@ -136,3 +140,22 @@ class AddUtmParamsTest(SimpleTestCase):
 			"example.com",
 		)
 		self.assertIn("utm_source=weekly_summary", result)
+
+
+class WithUtmContentTest(SimpleTestCase):
+	def test_overrides_utm_content(self):
+		base = {"utm_source": "weekly_summary", "utm_content": "article_card"}
+		result = with_utm_content(base, "author")
+		self.assertEqual(result["utm_content"], "author")
+
+	def test_does_not_mutate_original_dict(self):
+		base = {"utm_source": "weekly_summary", "utm_content": "article_card"}
+		with_utm_content(base, "author")
+		self.assertEqual(base["utm_content"], "article_card")
+
+	def test_falsy_input_stays_falsy(self):
+		# A falsy utm_params means no tracking is configured for this send
+		# (e.g. an admin preview); it must stay falsy so add_utm_params
+		# still no-ops instead of tagging the link with utm_content alone.
+		self.assertEqual(with_utm_content(None, "footer"), {})
+		self.assertEqual(with_utm_content({}, "footer"), {})

@@ -86,7 +86,7 @@ Usage:
         {% if show_admin_links %}
         <!-- Admin-specific links -->
         {% if trial.link %}
-        <a href="{% add_utm_params trial.link utm_params site_domain %}" class="trial-card-link" style="color: #3b82f6; text-decoration: underline; font-weight: 500; margin-right: 15px;">
+        <a href="{% add_utm_params trial.link utm_params|with_utm_content:'trial_card' site_domain %}" class="trial-card-link" style="color: #3b82f6; text-decoration: underline; font-weight: 500; margin-right: 15px;">
             View Original Trial →
         </a>
         {% endif %}
@@ -96,7 +96,7 @@ Usage:
         {% else %}
         <!-- Regular user links -->
         {% if trial.link %}
-        <a href="{% add_utm_params trial.link utm_params site_domain %}" class="trial-card-link" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+        <a href="{% add_utm_params trial.link utm_params|with_utm_content:'trial_card' site_domain %}" class="trial-card-link" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
             View Trial Details →
         </a>
         {% endif %}

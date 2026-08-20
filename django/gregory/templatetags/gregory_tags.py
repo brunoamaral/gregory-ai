@@ -113,6 +113,25 @@ def has_attribute(obj, attribute):
 	return hasattr(obj, attribute)
 
 
+@register.filter
+def with_utm_content(utm_params, content):
+	"""
+	Return a copy of utm_params with utm_content overridden, so a single
+	base dict built by the sending command can be reused across link
+	slots (article card, trial card, author link, footer, ...) without
+	each slot leaking the wrong utm_content value.
+
+	A falsy utm_params (no tracking configured for this send — e.g. an
+	admin preview) stays falsy, so add_utm_params still no-ops instead of
+	tagging the link with utm_content alone.
+
+	Usage: {% with utm_params=utm_params|with_utm_content:"author" %}
+	"""
+	if not utm_params:
+		return utm_params or {}
+	return {**utm_params, "utm_content": content}
+
+
 @register.simple_tag
 def add_utm_params(url, utm_params, site_domain=""):
 	"""

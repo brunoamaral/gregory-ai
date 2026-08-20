@@ -2,8 +2,9 @@ import uuid
 from django.db import models
 from django.db.models import UniqueConstraint
 from django.db.models.functions import Lower
-from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator
 from django.contrib.sites.models import Site
+from django.utils.text import slugify
 from django_ckeditor_5.fields import CKEditor5Field
 from gregory.models import Articles, Trials, Team
 from simple_history.models import HistoricalRecords
@@ -140,6 +141,25 @@ class Lists(models.Model):
 	show_header_tagline = models.BooleanField(
 		default=True, help_text="Show the tagline in the email header."
 	)
+	utm_campaign_slug = models.CharField(
+		max_length=100,
+		blank=True,
+		validators=[
+			RegexValidator(
+				r"^[a-z0-9_-]+$",
+				"Only lowercase letters, numbers, hyphens, and underscores are allowed.",
+			)
+		],
+		help_text=(
+			"Stable identifier used as utm_campaign in outbound email links. "
+			"Set once from the list name when the list is created and never "
+			"changed automatically afterwards, so renaming the list does not "
+			"fork its analytics history in Umami. Changing this value "
+			"manually forks the history just the same — only do it "
+			"deliberately, and note the cutover date."
+		),
+		verbose_name="UTM campaign slug",
+	)
 
 	def save(self, *args, **kwargs):
 		if not self.site_id:
@@ -155,6 +175,11 @@ class Lists(models.Model):
 				self.site = org_site.site
 			else:
 				self.site = Site.objects.get_current()
+		if not self.utm_campaign_slug:
+			# list_name allows up to 150 chars but utm_campaign_slug is
+			# capped at 100 — truncate so a long name can't raise an
+			# IntegrityError on save.
+			self.utm_campaign_slug = slugify(self.list_name)[:100]
 		super().save(*args, **kwargs)
 
 	class Meta:

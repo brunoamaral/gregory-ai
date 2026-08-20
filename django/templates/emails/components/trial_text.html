@@ -1,5 +1,5 @@
 {% load gregory_tags %}{{ trial.title }}
-{% if trial.link %}{% if utm_params %}{{ trial.link|add_utm_params:utm_params }}{% else %}{{ trial.link }}{% endif %}
+{% if trial.link %}{% add_utm_params trial.link utm_params|with_utm_content:'trial_card' site_domain %}
 {% endif %}{% if trial.phase_normalized and trial.phase_normalized != "other" %}Phase: {{ trial.get_phase_normalized_display }}
 {% elif trial.phase %}Phase: {{ trial.phase }}
 {% endif %}{% if trial.recruitment_status_normalized or trial.recruitment_status %}Status: {% if trial.recruitment_status_normalized and trial.recruitment_status_normalized != "other" %}{{ trial.get_recruitment_status_normalized_display }}{% else %}{{ trial.recruitment_status }}{% endif %}

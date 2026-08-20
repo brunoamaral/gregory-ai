@@ -30,6 +30,7 @@ from subscriptions.utils.postmark import (
 	classify_postmark_response,
 )
 from subscriptions.utils.suppression import deactivate_subscribers
+from subscriptions.utils.utm import build_utm_params
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 logger = logging.getLogger(__name__)
@@ -432,13 +433,11 @@ class Command(BaseCommand):
 				# CRITICAL FIX: Get the organized content BEFORE recording as sent
 				# This ensures what we record matches what gets sent
 
-				# Prepare UTM parameters for tracking
-				utm_params = {
-					"utm_source": "weekly_summary",
-					"utm_medium": "email",
-					"utm_campaign": f"weekly_summary_{digest_list.list_name.lower().replace(' ', '_')}",
-					"utm_content": f"subscriber_{subscriber.subscriber_id}",
-				}
+				# Prepare UTM parameters for tracking. utm_content is a link
+				# slot (article_card, trial_card, ...), never a subscriber
+				# identifier — see gregory_tags.with_utm_content, which each
+				# template uses to override this default per link.
+				utm_params = build_utm_params("weekly_summary", digest_list, "article_card")
 
 				_context_holder = {}
 

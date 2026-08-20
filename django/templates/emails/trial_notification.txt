@@ -15,7 +15,7 @@ No New Clinical Trials
 No new clinical trials matching your interests were found at this time. We'll continue monitoring and notify you when new trials are available.
 {% endif %}
 
-Browse all available clinical trials at https://{{ site.domain|default:'gregory-ai.com' }}/
+{% with domain=site.domain|default:'gregory-ai.com' %}{% with archive_url="https://"|add:domain|add:"/" %}Browse all available clinical trials at {% add_utm_params archive_url utm_params|with_utm_content:'footer' domain %}{% endwith %}{% endwith %}
 
 ----------------------------------------
 {% include 'emails/components/footer_text.html' %}

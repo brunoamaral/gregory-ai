@@ -28,6 +28,7 @@ from subscriptions.utils.postmark import (
 	classify_postmark_response,
 )
 from subscriptions.utils.suppression import deactivate_subscribers
+from subscriptions.utils.utm import build_utm_params
 from django.db.models import Prefetch
 from django.utils.timezone import now
 from datetime import timedelta
@@ -175,6 +176,7 @@ class Command(BaseCommand):
 				new_trials = list(new_trials.order_by("-discovery_date")[:trial_limit])
 
 				_context_holder = {}
+				utm_params = build_utm_params("admin_summary", admin_list, "article_card")
 
 				def _render(
 					articles,
@@ -192,6 +194,7 @@ class Command(BaseCommand):
 						custom_settings=customsettings,
 						organization=organization,
 						confidence_threshold=_admin_list.ml_threshold,
+						utm_params=utm_params,
 					)
 					# Inject unsubscribe context for the footer template
 					summary_context["list_id"] = _admin_list.list_id

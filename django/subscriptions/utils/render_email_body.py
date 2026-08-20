@@ -1,10 +1,15 @@
 """
 Utilities for rendering announcement email bodies.
 
-Three public functions are exposed:
+Four public functions are exposed:
 
 - ``sanitize_announcement_html(html)`` – bleach-clean the body and apply
   post-bleach attribute-value checks that bleach 4.x cannot express.
+- ``apply_utm_params_to_html(html, utm_params, site_domain)`` – tag every
+  <a href> that points at the sending site with UTM parameters, leaving
+  third-party links untouched. Run this once on the sanitized body,
+  before either render below, so the HTML and text parts carry the same
+  tagged URLs.
 - ``render_announcement_html(html, api_domain, site_domain)`` – wrap
   ``<a class="btn-cta">`` in a bulletproof email table and rewrite
   ``/media/…`` image sources to absolute URLs.
@@ -12,7 +17,8 @@ Three public functions are exposed:
   the sanitized HTML; buttons become ``Label: URL``, images become
   ``[Image: alt]``.
 
-Call these in order: sanitize first, then render (HTML or text).
+Call these in order: sanitize, then (optionally) tag, then render (HTML
+or text).
 """
 
 import html as _html_module
@@ -22,6 +28,8 @@ from urllib.parse import urlparse
 
 import bleach
 from bs4 import BeautifulSoup, NavigableString
+
+from gregory.templatetags.gregory_tags import add_utm_params as _add_utm_params
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +150,32 @@ def sanitize_announcement_html(html: str) -> str:
 		src = img.get("src", "")
 		if not (src.startswith("https://") or src.startswith("/media/")):
 			img.decompose()
+
+	return str(soup)
+
+
+def apply_utm_params_to_html(
+	html: str,
+	utm_params: dict | None,
+	site_domain: str | None,
+) -> str:
+	"""
+	Tag every <a href> in *html* that points at *site_domain* with UTM
+	parameters; links to any other host (or with no href) are left
+	unchanged. A no-op when *utm_params* or *site_domain* is falsy.
+
+	Run this once on sanitized body HTML, before either
+	render_announcement_html or render_announcement_text, so the HTML
+	and text parts carry the same tagged URLs.
+	"""
+	if not utm_params or not site_domain:
+		return html
+
+	soup = BeautifulSoup(html, "html.parser")
+	for a_tag in soup.find_all("a"):
+		href = a_tag.get("href")
+		if href:
+			a_tag["href"] = _add_utm_params(href, utm_params, site_domain)
 
 	return str(soup)
 
