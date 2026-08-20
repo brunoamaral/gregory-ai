@@ -59,6 +59,18 @@ jobs:
         working-directory: django
         run: pytest -p no:cacheprovider
 
+      - name: Migrations apply to an empty database
+        working-directory: django
+        # pytest runs with --nomigrations (pytest.ini), so it builds the test
+        # schema straight from model state and never applies a migration. Neither
+        # does `makemigrations --check`, which only compares model state to
+        # migration state. Without this step a migration that works solely against
+        # an already-migrated database ships green — as gregory/0095 did, colliding
+        # with an index gregory/0073 left orphaned on any build from scratch.
+        # Targets the empty `gregory_test` service database; pytest uses the
+        # `test_`-prefixed one, so the two never collide in either order.
+        run: python manage.py migrate
+
       - name: Django system checks (database-aware)
         working-directory: django
         # `manage.py check` alone skips database-dependent model checks, which

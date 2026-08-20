@@ -10,6 +10,13 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # Databases that applied 0073 before it learned to drop this index still
+        # carry it orphaned, and the AlterField below would collide recreating it.
+        # No-op on dev/House, which never had it. See 0073 for the full story.
+        migrations.RunSQL(
+            sql='DROP INDEX IF EXISTS articles_title_ed7ced3d_like;',
+            reverse_sql=migrations.RunSQL.noop,
+        ),
         migrations.AlterField(
             model_name='articles',
             name='title',

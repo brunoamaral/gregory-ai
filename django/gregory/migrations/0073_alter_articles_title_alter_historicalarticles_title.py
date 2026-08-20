@@ -27,6 +27,14 @@ class Migration(migrations.Migration):
                     sql=[
                         'ALTER TABLE articles DROP CONSTRAINT IF EXISTS articles_title_key;',
                         'DROP INDEX IF EXISTS articles_title_key;',
+                        # Postgres-specific companion index Django creates alongside a
+                        # unique/indexed text column (text_pattern_ops, for LIKE 'foo%').
+                        # AlterField drops it automatically; raw SQL has to say so. Name is
+                        # Django's deterministic _create_index_name('articles', ['title'],
+                        # suffix='_like'). Absent on the legacy dev/House schema, which never
+                        # ran 0001_initial for real -- present on any build from scratch,
+                        # where leaving it orphaned collides with 0095 recreating it.
+                        'DROP INDEX IF EXISTS articles_title_ed7ced3d_like;',
                     ],
                     reverse_sql=[
                         'CREATE UNIQUE INDEX articles_title_key ON articles (title);',
