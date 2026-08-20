@@ -22,6 +22,8 @@ from .models import (
 	SuppressionEvent,
 	EmailMessage,
 	EmailEvent,
+	AuthorOutreachCampaign,
+	AuthorOutreach,
 )
 from .forms import ListsAdminForm, AnnouncementAdminForm
 from gregory.models import Team
@@ -1436,6 +1438,257 @@ class EmailEventAdmin(admin.ModelAdmin):
 
 	def has_change_permission(self, request, obj=None):
 		return False
+
+
+@admin.register(AuthorOutreachCampaign)
+class AuthorOutreachCampaignAdmin(admin.ModelAdmin):
+	"""
+	Configuration for one author-outreach campaign. See
+	AuthorOutreachCampaign's model docstring and AUTHOR-OUTREACH-SPEC.md
+	"Configuration" for what each field controls. Queue rows are managed
+	on AuthorOutreachAdmin below, not here.
+	"""
+
+	list_display = [
+		"name",
+		"site",
+		"mode",
+		"utm_campaign_slug",
+		"enabled",
+		"halted",
+		"updated_at",
+	]
+	list_filter = ["site", "mode", "enabled", "halted"]
+	search_fields = ["name", "utm_campaign_slug"]
+	filter_horizontal = ["subjects"]
+	readonly_fields = ["halted_at", "created_at", "updated_at"]
+
+	fieldsets = [
+		(None, {"fields": ["name", "site", "mode", "utm_campaign_slug", "enabled"]}),
+		(
+			"Halt state",
+			{
+				"fields": ["halted", "halted_at", "halted_reason"],
+				"description": (
+					"Set automatically by send_author_outreach (PR 5) when a "
+					"safety-limit circuit breaker trips. Clear 'halted' by "
+					"hand only after investigating halted_reason."
+				),
+			},
+		),
+		(
+			"Eligibility",
+			{
+				"fields": ["subjects", "featured_within_days", "max_articles_per_email"],
+				"description": (
+					"featured_within_days only applies when mode is "
+					"'retrospective' — see the model's clean()."
+				),
+			},
+		),
+		(
+			"Copy",
+			{"fields": ["subject_line", "body_template", "reply_to"]},
+		),
+		(
+			"Safety limits",
+			{
+				"fields": [
+					"daily_send_limit",
+					"send_rate_per_minute",
+					"complaint_halt_absolute",
+					"complaint_halt_rate_percent",
+					"complaint_halt_rate_min_sent",
+					"bounce_halt_absolute",
+					"bounce_halt_rate_percent",
+					"bounce_halt_rate_min_sent",
+					"inactive_halt_absolute",
+				],
+				"classes": ["collapse"],
+			},
+		),
+		("Timestamps", {"fields": ["created_at", "updated_at"], "classes": ["collapse"]}),
+	]
+
+
+class AuthorOutreachArticlesInline(admin.TabularInline):
+	"""Read-only: the qualifying papers named in this row's email."""
+
+	model = AuthorOutreach.articles.through
+	extra = 0
+	verbose_name = "Article"
+	verbose_name_plural = "Articles"
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+
+@admin.register(AuthorOutreach)
+class AuthorOutreachAdmin(admin.ModelAdmin):
+	"""
+	The approval queue: rows written by build_author_outreach (PR 4) as
+	status="pending", reviewed here by a human, then sent — approved rows
+	only — by send_author_outreach (PR 5). See AuthorOutreach's model
+	docstring and AUTHOR-OUTREACH-SPEC.md "Queue and approval".
+
+	Every field is read-only: state changes go through the actions below
+	so approved_at/approved_by (and, for a reset, the fact that a closed
+	slot was deliberately reopened) are always recorded, never a silent
+	field edit. Rows can't be added here either — only
+	build_author_outreach writes them. Deletion is disabled outright, not
+	just the bulk action: AUTHOR-OUTREACH-SPEC.md's retention table marks
+	AuthorOutreach "Indefinite" — the record has to outlive everything
+	else, the same permanence class as AuthorContactOptOut and
+	SuppressionEvent.
+	"""
+
+	list_display = [
+		"author",
+		"email",
+		"status",
+		"campaign",
+		"site",
+		"article_titles",
+		"queued_at",
+		"approved_at",
+		"sent_at",
+	]
+	list_filter = ["status", "campaign", "site"]
+	search_fields = ["email", "author__full_name", "author__ORCID"]
+	# Concrete fields only — "articles" (the M2M) is shown via the inline
+	# below instead, so it isn't duplicated as a plain joined-string field.
+	readonly_fields = [f.name for f in AuthorOutreach._meta.fields]
+	exclude = ["articles"]
+	inlines = [AuthorOutreachArticlesInline]
+	actions = ["approve_selected", "skip_selected", "reset_for_retry"]
+
+	def article_titles(self, obj):
+		return "; ".join(obj.articles.values_list("title", flat=True)[:3])
+
+	article_titles.short_description = "Articles"
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+	def get_actions(self, request):
+		actions = super().get_actions(request)
+		# reset_for_retry is superuser-only. Custom actions aren't gated by
+		# has_*_permission unless registered with @admin.action(permissions=
+		# [...]), so it's stripped from the dropdown here for everyone else
+		# — the is_superuser check inside the action itself is the second,
+		# load-bearing layer in case this method is ever bypassed.
+		if not request.user.is_superuser:
+			actions.pop("reset_for_retry", None)
+		return actions
+
+	@admin.action(permissions=["change"], description="Approve selected")
+	def approve_selected(self, request, queryset):
+		pending = queryset.filter(status=AuthorOutreach.STATUS_PENDING)
+		skipped_count = queryset.exclude(status=AuthorOutreach.STATUS_PENDING).count()
+		count = pending.count()
+		pending.update(
+			status=AuthorOutreach.STATUS_APPROVED,
+			approved_at=timezone.now(),
+			approved_by=request.user,
+		)
+		if count:
+			self.message_user(
+				request, f"Approved {count} row(s).", level=messages.SUCCESS
+			)
+		if skipped_count:
+			self.message_user(
+				request,
+				f"Ignored {skipped_count} row(s) that were not pending.",
+				level=messages.WARNING,
+			)
+
+	@admin.action(permissions=["change"], description="Skip selected")
+	def skip_selected(self, request, queryset):
+		eligible = queryset.filter(
+			status__in=[AuthorOutreach.STATUS_PENDING, AuthorOutreach.STATUS_APPROVED]
+		)
+		skipped_count = queryset.exclude(
+			status__in=[AuthorOutreach.STATUS_PENDING, AuthorOutreach.STATUS_APPROVED]
+		).count()
+		count = eligible.count()
+		eligible.update(status=AuthorOutreach.STATUS_SKIPPED)
+		if count:
+			self.message_user(
+				request, f"Skipped {count} row(s).", level=messages.SUCCESS
+			)
+		if skipped_count:
+			self.message_user(
+				request,
+				f"Ignored {skipped_count} row(s) already sent, sending, or cancelled.",
+				level=messages.WARNING,
+			)
+
+	@admin.action(description="Reset for retry (superuser only)")
+	def reset_for_retry(self, request, queryset):
+		"""
+		Re-opens a slot the eligibility/send rules had closed.
+
+		AuthorOutreach.unique_author_outreach_per_site makes (site, author)
+		a one-time slot: a failed, skipped, or cancelled row burns it
+		permanently, by design — see the model docstring and
+		AUTHOR-OUTREACH-SPEC.md "One row per site per author". This action
+		is the sole, deliberate exception. It does not mean "retry
+		automatically" or "this was probably fine" — it means a human has
+		reviewed why the slot closed and decided, explicitly, to reopen it.
+		Restricted to superusers, and logged the same as any other admin
+		action.
+		"""
+		if not request.user.is_superuser:
+			self.message_user(
+				request,
+				"Only a superuser can reset a row for retry.",
+				level=messages.ERROR,
+			)
+			return
+		eligible = queryset.filter(
+			status__in=[
+				AuthorOutreach.STATUS_FAILED,
+				AuthorOutreach.STATUS_SKIPPED,
+				AuthorOutreach.STATUS_CANCELLED,
+			]
+		)
+		skipped_count = queryset.exclude(
+			status__in=[
+				AuthorOutreach.STATUS_FAILED,
+				AuthorOutreach.STATUS_SKIPPED,
+				AuthorOutreach.STATUS_CANCELLED,
+			]
+		).count()
+		count = eligible.count()
+		eligible.update(
+			status=AuthorOutreach.STATUS_PENDING,
+			approved_at=None,
+			approved_by=None,
+			sent_at=None,
+			error_message="",
+		)
+		if count:
+			self.message_user(
+				request,
+				f"Reset {count} row(s) back to pending. This reopened a "
+				"slot the rules had closed — re-review before approving.",
+				level=messages.WARNING,
+			)
+		if skipped_count:
+			self.message_user(
+				request,
+				f"Ignored {skipped_count} row(s) not in failed/skipped/cancelled status.",
+				level=messages.WARNING,
+			)
 
 
 @admin.register(SubscriberSiteProfile)

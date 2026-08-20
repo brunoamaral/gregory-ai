@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from subscriptions.models import EmailMessage
+from subscriptions.models import AuthorOutreach, EmailMessage
 
 
 class Command(BaseCommand):
@@ -42,23 +42,13 @@ class Command(BaseCommand):
 		# happened under legitimate interest, so it must survive this
 		# command regardless of age — see AUTHOR-OUTREACH-SPEC.md's
 		# retention table ("EmailMessage ... never when referenced by an
-		# AuthorOutreach").
-		#
-		# AuthorOutreach doesn't exist until PR 3, so this import is
-		# guarded and is a deliberate no-op until then: on this branch
-		# (PR 1) every EmailMessage row older than --days is prunable,
-		# because nothing can reference one yet. PR 3 makes the exclusion
-		# real automatically, with no change needed here.
-		try:
-			from subscriptions.models import AuthorOutreach
-		except ImportError:
-			AuthorOutreach = None
-
-		if AuthorOutreach is not None:
-			referenced_ids = AuthorOutreach.objects.exclude(
-				email_message__isnull=True
-			).values_list("email_message_id", flat=True)
-			queryset = queryset.exclude(pk__in=referenced_ids)
+		# AuthorOutreach"). AuthorOutreach now exists (PR 3), so this
+		# exclusion is real: any EmailMessage an AuthorOutreach row
+		# references is skipped, no matter how old sent_at is.
+		referenced_ids = AuthorOutreach.objects.exclude(
+			email_message__isnull=True
+		).values_list("email_message_id", flat=True)
+		queryset = queryset.exclude(pk__in=referenced_ids)
 
 		count = queryset.count()
 

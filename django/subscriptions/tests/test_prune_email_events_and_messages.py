@@ -3,9 +3,8 @@ Tests for prune_email_events (default 180 days) and prune_email_messages
 (default 730 days) — see AUTHOR-OUTREACH-PLAN.md PR 1. Both commands must
 never touch AuthorContactOptOut or SuppressionEvent (not introduced until
 PR 2/already existing respectively); prune_email_messages must additionally
-never delete an EmailMessage an AuthorOutreach (PR 3) references — tested
-here via the guarded import being a no-op, since AuthorOutreach does not
-exist on this branch yet.
+never delete an EmailMessage an AuthorOutreach (PR 3) references, tested
+below against a real AuthorOutreach row now that the model exists.
 """
 
 from datetime import timedelta
@@ -16,7 +15,8 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
-from subscriptions.models import EmailEvent, EmailMessage
+from gregory.models import Authors
+from subscriptions.models import AuthorOutreach, AuthorOutreachCampaign, EmailEvent, EmailMessage
 
 
 class PruneEmailEventsTest(TestCase):
@@ -115,20 +115,39 @@ class PruneEmailMessagesTest(TestCase):
 		self.assertTrue(EmailMessage.objects.filter(pk=message.pk).exists())
 		self.assertIn("DRY RUN", out.getvalue())
 
-	def test_author_outreach_guard_is_a_no_op_when_model_does_not_exist(self):
+	def test_author_outreach_referenced_message_is_never_pruned(self):
 		"""
-		AuthorOutreach (PR 3) doesn't exist on this branch. The guarded
-		import inside prune_email_messages must fail closed to "no
-		exclusion" rather than raise — i.e. the command still runs
-		normally and prunes old rows, proving the guard doesn't break
-		pruning altogether while the model is absent.
+		AuthorOutreach (PR 3) points an email_message FK at the EmailMessage
+		that carried a one-time outreach contact — the durable evidence the
+		contact happened under legitimate interest (AUTHOR-OUTREACH-SPEC.md's
+		retention table: "EmailMessage ... never when referenced by an
+		AuthorOutreach"). That row must survive this command regardless of
+		age, while every other old EmailMessage row is pruned as normal.
 		"""
-		with self.assertRaises(ImportError):
-			from subscriptions.models import AuthorOutreach  # noqa: F401
-
 		now = timezone.now()
-		old = self._make_message(now - timedelta(days=1000))
+		referenced = self._make_message(
+			now - timedelta(days=1000), recipient="researcher@example.com"
+		)
+		unreferenced = self._make_message(now - timedelta(days=1000))
+
+		author = Authors.objects.create(
+			given_name="Ada", family_name="Researcher", ORCID="0000-0000-0000-0001"
+		)
+		campaign = AuthorOutreachCampaign.objects.create(
+			site=self.site,
+			name="Prune Test Campaign",
+			utm_campaign_slug="prune-test-campaign",
+		)
+		AuthorOutreach.objects.create(
+			campaign=campaign,
+			site=self.site,
+			author=author,
+			email="researcher@example.com",
+			status=AuthorOutreach.STATUS_SENT,
+			email_message=referenced,
+		)
 
 		call_command("prune_email_messages", stdout=StringIO())
 
-		self.assertFalse(EmailMessage.objects.filter(pk=old.pk).exists())
+		self.assertTrue(EmailMessage.objects.filter(pk=referenced.pk).exists())
+		self.assertFalse(EmailMessage.objects.filter(pk=unreferenced.pk).exists())

@@ -2,11 +2,13 @@ import uuid
 from django.db import models
 from django.db.models import UniqueConstraint
 from django.db.models.functions import Lower
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator
 from django.contrib.sites.models import Site
 from django.utils.text import slugify
 from django_ckeditor_5.fields import CKEditor5Field
-from gregory.models import Articles, Trials, Team
+from gregory.models import Articles, Authors, Subject, Trials, Team
+from sitesettings.models import CustomSetting
 from simple_history.models import HistoricalRecords
 
 
@@ -848,3 +850,377 @@ class AnnouncementRecipient(models.Model):
 	def __str__(self):
 		status = "OK" if self.success else "FAILED"
 		return f"{self.subscriber.email} [{status}]"
+
+
+class AuthorOutreachCampaign(models.Model):
+	"""
+	Configuration for one author-outreach send campaign on one site. See
+	AUTHOR-OUTREACH-SPEC.md ("Configuration", "Safety limits") and
+	AUTHOR-OUTREACH-PLAN.md ("PR 3 — Campaign and queue models") for the
+	full design this implements.
+
+	A dedicated model rather than booleans on CustomSetting: a campaign
+	carries a mode, a subject selection, a copy override, a set of safety
+	limits, and a halt flag, and needs to be independently pausable and
+	auditable (history = HistoricalRecords()) — CustomSetting is the wrong
+	shape for any of that.
+
+	Two campaigns can coexist on one site: the steady-state `upcoming`
+	campaign, and, for the one-time back-catalogue send, a second
+	`retrospective` campaign with its own utm_campaign_slug and
+	body_template — never a mode flag on the steady-state campaign (see
+	the spec's "The first run, and the back catalogue"). AuthorOutreach's
+	uniqueness is on (site, author), not (campaign, author), so an author
+	reached by either campaign on a site is automatically excluded from
+	the other, forever.
+
+	Building the queue (build_author_outreach, PR 4) and sending it
+	(send_author_outreach, PR 5) are both later work — this model only
+	holds configuration; it sends nothing itself.
+	"""
+
+	MODE_UPCOMING = "upcoming"
+	MODE_RETROSPECTIVE = "retrospective"
+	MODE_CHOICES = [
+		(MODE_UPCOMING, "Upcoming (steady state — ahead of the next digest)"),
+		(MODE_RETROSPECTIVE, "Retrospective (back catalogue — already featured)"),
+	]
+
+	# featured_within_days does nothing in `upcoming` mode (see clean()).
+	# Keeping the field's default equal to this constant means "still at
+	# the default" is exactly the condition clean() treats as "untouched",
+	# so an upcoming campaign can never silently carry a window that has
+	# no effect.
+	DEFAULT_FEATURED_WITHIN_DAYS = 7
+
+	site = models.ForeignKey(
+		Site,
+		on_delete=models.PROTECT,
+		related_name="author_outreach_campaigns",
+		help_text="The site this campaign sends outreach for.",
+	)
+	name = models.CharField(
+		max_length=200,
+		help_text="Internal label shown in the admin, e.g. 'MS Weekly — steady state' or 'MS Weekly — back catalogue'.",
+	)
+	mode = models.CharField(
+		max_length=20,
+		choices=MODE_CHOICES,
+		default=MODE_UPCOMING,
+		help_text=(
+			"'upcoming' (default) evaluates the same candidate set the next "
+			"weekly digest will send, so the outreach email's claim 'this "
+			"will be featured in the next digest' is true by construction. "
+			"'retrospective' looks at already-featured SentArticleNotification "
+			"rows within featured_within_days instead, for a one-time "
+			"back-catalogue send. See AUTHOR-OUTREACH-SPEC.md 'Who qualifies'."
+		),
+	)
+	utm_campaign_slug = models.SlugField(
+		max_length=100,
+		unique=True,
+		help_text=(
+			"utm_campaign value for every tracked link this campaign's "
+			"emails send. Named exactly utm_campaign_slug so "
+			"subscriptions.utils.utm.build_utm_params(source, campaign, "
+			"content) accepts an AuthorOutreachCampaign unchanged, the same "
+			"way it already accepts a Lists row. Must be distinct per "
+			"campaign — the steady-state and back-catalogue campaigns on "
+			"one site must never share a slug, so Umami can tell their "
+			"clicks apart."
+		),
+	)
+	enabled = models.BooleanField(
+		default=False,
+		help_text=(
+			"Master switch. build_author_outreach (PR 4) only writes rows "
+			"for an enabled campaign. Cannot be set True unless the site's "
+			"CustomSetting.has_author_pages is True — see clean()."
+		),
+	)
+	halted = models.BooleanField(
+		default=False,
+		help_text=(
+			"Set by send_author_outreach (PR 5) when a safety-limit "
+			"circuit breaker trips. A halted campaign sends nothing until "
+			"a human clears this flag."
+		),
+	)
+	halted_at = models.DateTimeField(null=True, blank=True)
+	halted_reason = models.TextField(blank=True, default="")
+	subjects = models.ManyToManyField(
+		Subject,
+		blank=True,
+		related_name="author_outreach_campaigns",
+		help_text=(
+			"Restrict this campaign to weekly digest lists sharing one of "
+			"these subjects. Empty means every weekly digest list on the site."
+		),
+	)
+	featured_within_days = models.PositiveIntegerField(
+		default=DEFAULT_FEATURED_WITHIN_DAYS,
+		validators=[MinValueValidator(1), MaxValueValidator(3650)],
+		help_text=(
+			"retrospective mode only: how far back, from now, to look for a "
+			"SentArticleNotification for the candidate article. Does "
+			"nothing in upcoming mode — see clean(), which refuses a "
+			"non-default value there."
+		),
+	)
+	max_articles_per_email = models.PositiveIntegerField(
+		default=3,
+		validators=[MinValueValidator(1), MaxValueValidator(20)],
+		help_text=(
+			"Up to this many qualifying papers are named in one email, "
+			"most recent published_date first. One email per author "
+			"regardless of how many qualifying papers they have."
+		),
+	)
+	subject_line = models.CharField(max_length=255, blank=True, default="")
+	body_template = models.TextField(
+		blank=True,
+		default="",
+		help_text=(
+			"Django template syntax. Blank uses the packaged default "
+			"template (upcoming mode only — retrospective campaigns need "
+			"their own past-tense copy and cannot use the default). "
+			"Rendered (PR 5) against an explicit context of plain strings "
+			"and dicts only — author_name, articles ({title, url}), "
+			"article_title, article_url, author_page_url, site_name, "
+			"site_url, sender_name, opt_out_url — never a model instance, "
+			"so an admin-authored template can't walk the ORM."
+		),
+	)
+	reply_to = models.EmailField(
+		blank=True,
+		default="",
+		help_text="Reply-To header for this campaign's sends, stored per campaign so sites can differ.",
+	)
+	daily_send_limit = models.PositiveIntegerField(
+		default=50,
+		validators=[MinValueValidator(1)],
+		help_text="Stop sending for this campaign once this many messages have gone out today.",
+	)
+	send_rate_per_minute = models.PositiveIntegerField(
+		default=20,
+		validators=[MinValueValidator(1)],
+		help_text="Throttle sending to at most this many messages per minute.",
+	)
+	complaint_halt_absolute = models.PositiveIntegerField(
+		default=2,
+		help_text="Halt after this many total spam complaints on this campaign, regardless of volume sent.",
+	)
+	complaint_halt_rate_percent = models.FloatField(
+		default=0.1,
+		validators=[MinValueValidator(0.0), MaxValueValidator(100.0)],
+		help_text="Halt when the complaint rate exceeds this percentage, once complaint_halt_rate_min_sent has been reached.",
+	)
+	complaint_halt_rate_min_sent = models.PositiveIntegerField(
+		default=500,
+		help_text="Minimum number of sends before the complaint rate threshold is evaluated.",
+	)
+	bounce_halt_absolute = models.PositiveIntegerField(
+		default=10,
+		help_text="Halt after this many total hard bounces on this campaign, regardless of volume sent.",
+	)
+	bounce_halt_rate_percent = models.FloatField(
+		default=5.0,
+		validators=[MinValueValidator(0.0), MaxValueValidator(100.0)],
+		help_text="Halt when the hard-bounce rate exceeds this percentage, once bounce_halt_rate_min_sent has been reached.",
+	)
+	bounce_halt_rate_min_sent = models.PositiveIntegerField(
+		default=40,
+		help_text="Minimum number of sends before the hard-bounce rate threshold is evaluated.",
+	)
+	inactive_halt_absolute = models.PositiveIntegerField(
+		default=5,
+		help_text=(
+			"Halt after this many Postmark 406 (inactive recipient) "
+			"responses. Repeated 406s mean the query is repeatedly "
+			"targeting already-suppressed people — a query bug, not bad luck."
+		),
+	)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+	history = HistoricalRecords()
+
+	class Meta:
+		verbose_name = "Author Outreach Campaign"
+		verbose_name_plural = "Author Outreach Campaigns"
+		ordering = ["-created_at"]
+
+	def __str__(self):
+		return f"{self.name} ({self.get_mode_display()})"
+
+	def clean(self):
+		super().clean()
+		errors = {}
+		if self.enabled and self.site_id:
+			custom_setting = (
+				CustomSetting.objects.filter(site=self.site)
+				.order_by("setting_id")
+				.first()
+			)
+			if custom_setting is None or not custom_setting.has_author_pages:
+				errors["enabled"] = (
+					"Cannot enable this campaign: the site's CustomSetting "
+					"has_author_pages is not True. The outreach email's "
+					"entire second half is about the author profile page — "
+					"see AUTHOR-OUTREACH-SPEC.md 'Configuration'."
+				)
+		if (
+			self.mode == self.MODE_UPCOMING
+			and self.featured_within_days != self.DEFAULT_FEATURED_WITHIN_DAYS
+		):
+			errors["featured_within_days"] = (
+				"featured_within_days only applies in retrospective mode — "
+				"it does nothing for an upcoming campaign, which reads "
+				"eligibility from the live digest candidate set instead. "
+				f"Leave it at the default ({self.DEFAULT_FEATURED_WITHIN_DAYS}) "
+				"for an upcoming campaign, or switch mode to retrospective."
+			)
+		if errors:
+			raise ValidationError(errors)
+
+
+class AuthorOutreach(models.Model):
+	"""
+	One queue/audit row for a single author on a single site: the
+	permanent record of a one-time outreach contact. Written by
+	build_author_outreach (PR 4) as status="pending"; a human approves it
+	in the admin; send_author_outreach (PR 5) sends only "approved" rows.
+	See AUTHOR-OUTREACH-SPEC.md "Queue and approval" and "One row per site
+	per author".
+
+	`unique_author_outreach_per_site` makes (site, author) a slot that can
+	be claimed exactly once, ever — across every campaign on that site,
+	because the constraint is on `site`, not `campaign`. A failed send
+	burns the slot permanently; there is no automatic retry. Re-opening a
+	burned slot is the superuser-only "Reset for retry" admin action (see
+	admin.py) — a deliberate, logged exception to "permanently", not a
+	loophole in it.
+	"""
+
+	STATUS_PENDING = "pending"
+	STATUS_APPROVED = "approved"
+	STATUS_SENDING = "sending"
+	STATUS_SENT = "sent"
+	STATUS_FAILED = "failed"
+	STATUS_SKIPPED = "skipped"
+	STATUS_CANCELLED = "cancelled"
+	STATUS_CHOICES = [
+		(STATUS_PENDING, "Pending"),
+		(STATUS_APPROVED, "Approved"),
+		(STATUS_SENDING, "Sending"),
+		(STATUS_SENT, "Sent"),
+		(STATUS_FAILED, "Failed"),
+		(STATUS_SKIPPED, "Skipped"),
+		(STATUS_CANCELLED, "Cancelled"),
+	]
+
+	LEGAL_BASIS_LEGITIMATE_INTEREST = "legitimate_interest"
+	LEGAL_BASIS_CHOICES = [
+		(LEGAL_BASIS_LEGITIMATE_INTEREST, "Legitimate interest (GDPR Art. 6(1)(f))"),
+	]
+
+	campaign = models.ForeignKey(
+		AuthorOutreachCampaign,
+		# PROTECT: this row is the durable evidence a one-time contact was
+		# made under legitimate interest (see the spec's Retention table —
+		# "AuthorOutreach: Indefinite"). Deleting a campaign must not be
+		# able to take its audit trail down with it; disable it instead.
+		on_delete=models.PROTECT,
+		related_name="outreach_rows",
+		help_text="The campaign that queued this row.",
+	)
+	site = models.ForeignKey(
+		Site,
+		on_delete=models.PROTECT,
+		related_name="author_outreach_rows",
+		help_text=(
+			"Denormalised from campaign.site. This, not campaign, is what "
+			"unique_author_outreach_per_site constrains on, so the slot is "
+			"burned per site regardless of which campaign queued it."
+		),
+	)
+	author = models.ForeignKey(
+		Authors,
+		# PROTECT for the same audit-permanence reason as `campaign` above.
+		on_delete=models.PROTECT,
+		related_name="outreach_rows",
+		help_text="The author this one-time contact slot belongs to.",
+	)
+	email = models.EmailField(
+		help_text="Authors.emails[0], lowercased, captured at build time — the address this row's send actually uses.",
+	)
+	articles = models.ManyToManyField(
+		Articles,
+		blank=True,
+		related_name="author_outreach_rows",
+		help_text="Up to campaign.max_articles_per_email qualifying papers, most recent published_date first.",
+	)
+	status = models.CharField(
+		max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True
+	)
+	legal_basis = models.CharField(
+		max_length=30,
+		choices=LEGAL_BASIS_CHOICES,
+		default=LEGAL_BASIS_LEGITIMATE_INTEREST,
+		help_text=(
+			"Recorded per row, per AUTHOR-OUTREACH-SPEC.md 'Legal basis "
+			"and consent': legitimate interest (GDPR Art. 6(1)(f)), with "
+			"the one-time nature of the contact noted in basis_note."
+		),
+	)
+	basis_note = models.TextField(
+		blank=True,
+		default="",
+		help_text="Free-text note supporting the legal basis for this specific row, e.g. a reference to the stored balancing test.",
+	)
+	opt_out_token = models.UUIDField(
+		default=uuid.uuid4,
+		unique=True,
+		editable=False,
+		help_text=(
+			"Resolves to this row in the opt-out view (PR 2). Never a "
+			"resolvable person identifier on its own — see "
+			"AUTHOR-OUTREACH-SPEC.md 'Non-goals'."
+		),
+	)
+	email_message = models.ForeignKey(
+		EmailMessage,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name="author_outreach_rows",
+		help_text=(
+			"The EmailMessage row for this row's actual send, once sent. "
+			"Named email_message, not message, for the same reason as "
+			"EmailEvent's field of the same name (avoids a models.E006 "
+			"clash with Django's auto-derived message_id accessor). "
+			"Referenced EmailMessage rows are excluded from "
+			"prune_email_messages regardless of age — see that command."
+		),
+	)
+	queued_at = models.DateTimeField(auto_now_add=True)
+	approved_at = models.DateTimeField(null=True, blank=True)
+	approved_by = models.ForeignKey(
+		"auth.User",
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name="approved_author_outreach_rows",
+	)
+	sent_at = models.DateTimeField(null=True, blank=True)
+	error_message = models.TextField(blank=True, default="")
+
+	class Meta:
+		constraints = [
+			UniqueConstraint(fields=["site", "author"], name="unique_author_outreach_per_site")
+		]
+		verbose_name = "Author Outreach"
+		verbose_name_plural = "Author Outreach"
+		ordering = ["-queued_at"]
+
+	def __str__(self):
+		return f"{self.author} → {self.site.domain} [{self.status}]"
