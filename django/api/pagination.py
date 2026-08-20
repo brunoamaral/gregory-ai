@@ -61,9 +61,10 @@ class FlexiblePagination(PageNumberPagination):
 			if page_number is not None and page_number * page_size > self.max_offset:
 				raise ValidationError(
 					f"Requested offset ({page_number * page_size}) exceeds the maximum "
-					f"of {self.max_offset}. Use all_results=true, or the CSV export "
-					"(format=csv), to retrieve the full result set instead of paging "
-					"this deep."
+					f"of {self.max_offset}. Use all_results=true to retrieve the full "
+					"result set instead of paging this deep (optionally combined with "
+					"format=csv) — format=csv alone is still paginated and subject to "
+					"this same limit."
 				)
 
 		return super().paginate_queryset(queryset, request, view)
