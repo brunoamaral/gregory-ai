@@ -252,3 +252,33 @@ docker exec gregory python manage.py send_weekly_summary --dry-run --debug --day
 ```
 
 The `--days` flag controls the lookback window; articles older than N days are excluded regardless of sort order.
+
+---
+
+## How do I export trials to Excel?
+
+```bash
+# Export one or more subjects by ID
+docker exec gregory python manage.py export_trials_xlsx --subjects 1,2 --output /tmp/trials.xlsx
+
+# Export every subject
+docker exec gregory python manage.py export_trials_xlsx --all-subjects --output /tmp/trials.xlsx
+
+# Restrict to subjects belonging to a team
+docker exec gregory python manage.py export_trials_xlsx --all-subjects --team 1 --output /tmp/trials.xlsx
+```
+
+Flags:
+
+| Flag | Purpose |
+|---|---|
+| `--subjects <ids>` | Comma-separated subject IDs to export (mutually exclusive with `--all-subjects`). |
+| `--all-subjects` | Export every subject, one sheet each. |
+| `--team <id>` | Optional; narrows which subjects are exported to one team. |
+| `--output <path>` | Output file path (default: `trials_export_YYYYMMDD.xlsx` in the current directory). |
+
+The workbook has one sheet per exported subject, plus three reference sheets at the end:
+
+- **Categories** — one row per (subject, category) pair, with each category's description, search terms, matching configuration (scope, score threshold, field weights), and trial count scoped to that subject. Categories with no subject assigned are never exported.
+- **Glossary** — one row per exported trial column, with its label, description, and source registries.
+- **Registries** — prose on how trial data from multiple registries (WHO ICTRP, ClinicalTrials.gov, EU CTIS) is merged, plus a field-by-registry coverage matrix.

@@ -3,12 +3,13 @@ import re
 from datetime import datetime, date, timezone as dt_timezone
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import GeneratedField
+from django.db.models import Count, GeneratedField
+from django.db.models.functions import Lower
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
-from gregory.models import Trials, Subject
+from gregory.models import Trials, Subject, TeamCategory
 
 
 EXCLUDED_SCALARS = frozenset({"utitle", "usummary"})
@@ -148,7 +149,8 @@ EXTRA_GLOSSARY = {
 	),
 	"team_categories": (
 		"Categories",
-		"Team categories assigned to this trial (semicolon-separated).",
+		"Team categories assigned to this trial (semicolon-separated). See the "
+		"Categories sheet for each category's description and search terms.",
 		"",
 	),
 	"articles": (
@@ -301,6 +303,33 @@ MERGE_PROSE = (
 
 REGISTRY_NAMES = ["WHO ICTRP", "ClinicalTrials.gov", "EU CTIS"]
 
+CATEGORY_COLUMNS = [
+	"Subject",
+	"Team",
+	"Category",
+	"Slug",
+	"Description",
+	"Search terms",
+	"Terms (count)",
+	"Category type",
+	"Modality",
+	"Match scope",
+	"Min score (trials)",
+	"Field weights (trials)",
+	"Trials (this subject)",
+	"Last synced",
+]
+
+CATEGORY_MATCH_PROSE = (
+	"Each row is one category assigned to one subject. Automatic categories are populated "
+	"by the rebuild_categories command: each search term is matched case-insensitively as a "
+	"whole word against the fields listed in \"Field weights (trials)\" (only those fields "
+	"are searched, per the category's match scope); every matching field adds its weight, "
+	"plus a flat 2 points per unique matched term, and a trial is assigned once the total "
+	"reaches the \"Min score (trials)\" threshold. Manual categories are curated by hand and "
+	"ignore the term list."
+)
+
 # Column widths for data sheets
 _WIDE_COLS = {
 	"title",
@@ -385,17 +414,38 @@ def _format_trial_countries(trial):
 	return "; ".join(parts)
 
 
-def _apply_header(ws, columns):
+def _apply_header(ws, columns, row=1):
 	"""Write a bold, coloured header row and return the cell count."""
 	hdr_font = Font(bold=True, color="FFFFFF")
 	hdr_fill = PatternFill(fill_type="solid", fgColor="2F4F8F")
 	hdr_align = Alignment(vertical="center")
 	for col_idx, name in enumerate(columns, 1):
-		cell = ws.cell(row=1, column=col_idx, value=name)
+		cell = ws.cell(row=row, column=col_idx, value=name)
 		cell.font = hdr_font
 		cell.fill = hdr_fill
 		cell.alignment = hdr_align
 	return len(columns)
+
+
+def _excel_text(value, limit=32767):
+	"""Truncate a string to Excel's per-cell character limit."""
+	if not value:
+		return value
+	text = str(value)
+	if len(text) > limit:
+		text = text[: limit - 1] + "…"
+	return text
+
+
+def _write_safe_text_cell(ws, row, col, value, wrap=False):
+	"""Write a long/user-authored text value, truncated and defused against formula injection."""
+	text = _excel_text(value)
+	cell = ws.cell(row=row, column=col, value=text)
+	if isinstance(text, str) and text.startswith("="):
+		cell.data_type = "s"
+	if wrap:
+		cell.alignment = Alignment(wrap_text=True)
+	return cell
 
 
 def _set_column_widths(ws, columns):
@@ -575,6 +625,95 @@ def _build_registries_sheet(wb, all_data_cols):
 		ws.column_dimensions[letter].width = width
 
 
+def _category_rows(subjects):
+	"""Return one row per (subject, category) pair, ordered by subject then category name.
+
+	Categories with no subject never appear here: filtering by `subjects=subject`
+	only matches categories reachable from an exported subject.
+	"""
+	rows = []
+	for subject in subjects:
+		cats = list(
+			TeamCategory.objects.filter(subjects=subject)
+			.select_related("team")
+			.order_by(Lower("category_name"))
+		)
+		if not cats:
+			continue
+		counts = {
+			r["team_categories"]: r["n"]
+			for r in (
+				Trials.objects.filter(
+					subjects=subject, team_categories__in=[c.pk for c in cats]
+				)
+				.values("team_categories")
+				.annotate(n=Count("pk", distinct=True))
+			)
+		}
+		for cat in cats:
+			weights = cat.get_scored_fields("trial")
+			weights_str = "; ".join(f"{f}:{w}" for f, w in weights.items() if w)
+			rows.append(
+				(
+					subject.subject_name,
+					cat.team.name,
+					cat.category_name,
+					cat.category_slug or "",
+					cat.category_description or "",
+					"; ".join(cat.category_terms or []),
+					len(cat.category_terms or []),
+					cat.get_category_type_display(),
+					cat.get_modality_display() if cat.modality else "",
+					cat.get_match_scope_display(),
+					cat.match_min_score_trials,
+					weights_str,
+					counts.get(cat.pk, 0),
+					_cell_value(cat.last_synced_at),
+				)
+			)
+	return rows
+
+
+def _build_categories_sheet(wb, subjects):
+	"""Add a Categories sheet — one row per (subject, category) pair."""
+	ws = wb.create_sheet(title="Categories")
+	section_font = Font(bold=True, size=13)
+
+	ws.cell(
+		row=1, column=1, value="Categories and their search terms"
+	).font = section_font
+	prose_cell = ws.cell(row=2, column=1, value=CATEGORY_MATCH_PROSE)
+	prose_cell.alignment = Alignment(wrap_text=True)
+	last_col_letter = get_column_letter(len(CATEGORY_COLUMNS))
+	ws.merge_cells(f"A2:{last_col_letter}2")
+	ws.row_dimensions[2].height = 90
+
+	_apply_header(ws, CATEGORY_COLUMNS, row=4)
+	ws.freeze_panes = "A5"
+	ws.auto_filter.ref = f"A4:{last_col_letter}4"
+
+	rows = _category_rows(subjects)
+	desc_col = CATEGORY_COLUMNS.index("Description") + 1
+	terms_col = CATEGORY_COLUMNS.index("Search terms") + 1
+
+	if not rows:
+		ws.cell(row=5, column=1, value="No categories found.")
+	else:
+		for row_idx, row_data in enumerate(rows, 5):
+			for col_idx, value in enumerate(row_data, 1):
+				if col_idx in (desc_col, terms_col):
+					_write_safe_text_cell(ws, row_idx, col_idx, value, wrap=True)
+				else:
+					ws.cell(row=row_idx, column=col_idx, value=value)
+
+	wide_widths = {"Description": 65, "Search terms": 65, "Field weights (trials)": 40}
+	for col_idx, name in enumerate(CATEGORY_COLUMNS, 1):
+		letter = get_column_letter(col_idx)
+		ws.column_dimensions[letter].width = wide_widths.get(
+			name, max(12, min(32, len(name) + 4))
+		)
+
+
 class Command(BaseCommand):
 	help = "Export clinical-trial data to an XLSX workbook, one sheet per subject."
 
@@ -674,7 +813,7 @@ class Command(BaseCommand):
 		# --- Build workbook ---
 		wb = Workbook()
 		wb.remove(wb.active)  # remove the default blank sheet
-		used_sheet_names: set = set()
+		used_sheet_names: set = {"Categories", "Glossary", "Registries"}
 
 		for subject in subjects:
 			sheet_name = _sanitise_sheet_name(subject.subject_name, used_sheet_names)
@@ -775,6 +914,7 @@ class Command(BaseCommand):
 
 			_set_column_widths(ws, all_data_cols)
 
+		_build_categories_sheet(wb, subjects)
 		_build_glossary_sheet(wb, all_data_cols)
 		_build_registries_sheet(wb, all_data_cols)
 
