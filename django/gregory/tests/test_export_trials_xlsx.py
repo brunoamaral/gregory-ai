@@ -17,13 +17,18 @@ import openpyxl
 from gregory.models import (
 	Articles,
 	ArticleTrialReference,
+	CategoryModality,
+	CategoryType,
 	Sources,
 	Subject,
 	Team,
+	TeamCategory,
 	Trials,
+	TrialCategoryAssignment,
 	TrialCountry,
 )
 from gregory.management.commands.export_trials_xlsx import (
+	CATEGORY_COLUMNS,
 	IDENTITY_COLS,
 	RELATION_COLS,
 	REGISTRY_NAMES,
@@ -93,6 +98,41 @@ class ExportTrialsXlsxTests(TestCase):
 			trial=self.trial_ms,
 			identifier_type="nct",
 			identifier_value="NCT00111111",
+		)
+
+		# Categories exercising the Categories sheet
+		self.cat_natalizumab = TeamCategory.objects.create(
+			team=self.team,
+			category_name="Natalizumab",
+			category_description="Trials studying natalizumab (Tysabri) in MS.",
+			category_terms=["natalizumab", "tysabri"],
+			category_type=CategoryType.AUTOMATIC,
+			modality=CategoryModality.BIOLOGIC_ANTIBODY,
+		)
+		self.cat_natalizumab.subjects.add(self.subject_ms)
+		TrialCategoryAssignment.objects.create(
+			trials=self.trial_ms, teamcategory=self.cat_natalizumab
+		)
+
+		self.cat_manual = TeamCategory.objects.create(
+			team=self.team,
+			category_name="Manual watchlist",
+			category_type=CategoryType.MANUAL,
+			category_terms=[],
+		)
+		self.cat_manual.subjects.add(self.subject_ms)
+
+		self.cat_shared = TeamCategory.objects.create(
+			team=self.team,
+			category_name="Shared category",
+			category_terms=["shared-term"],
+		)
+		self.cat_shared.subjects.add(self.subject_ms, self.subject_cancer)
+
+		self.cat_orphan = TeamCategory.objects.create(
+			team=self.team,
+			category_name="Orphan category",
+			category_terms=["orphan-term"],
 		)
 
 	def _export(self, **kwargs):
@@ -620,6 +660,182 @@ class ExportTrialsXlsxTests(TestCase):
 				self.assertIn(
 					reg, all_values, f'Registry column "{reg}" not in field matrix'
 				)
+		finally:
+			os.unlink(path)
+
+	# ------------------------------------------------------------------
+	# Categories sheet
+	# ------------------------------------------------------------------
+
+	def _category_row(self, ws, subject_name, category_name):
+		"""Return {header: value} for the Categories sheet row matching (subject, category)."""
+		headers = [ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)]
+		subj_col = headers.index("Subject") + 1
+		cat_col = headers.index("Category") + 1
+		for r in range(5, ws.max_row + 1):
+			if (
+				ws.cell(row=r, column=subj_col).value == subject_name
+				and ws.cell(row=r, column=cat_col).value == category_name
+			):
+				return {h: ws.cell(row=r, column=c + 1).value for c, h in enumerate(headers)}
+		self.fail(f"Row for subject={subject_name!r} category={category_name!r} not found")
+
+	def test_categories_sheet_present(self):
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			self.assertIn("Categories", wb.sheetnames)
+		finally:
+			os.unlink(path)
+
+	def test_categories_sheet_headers(self):
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Categories"]
+			headers = [
+				ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			self.assertEqual(headers, CATEGORY_COLUMNS)
+		finally:
+			os.unlink(path)
+
+	def test_category_description_and_terms_rendered(self):
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Categories"]
+			row = self._category_row(ws, "Multiple Sclerosis", "Natalizumab")
+			self.assertEqual(
+				row["Description"], "Trials studying natalizumab (Tysabri) in MS."
+			)
+			self.assertEqual(row["Search terms"], "natalizumab; tysabri")
+		finally:
+			os.unlink(path)
+
+	def test_category_row_per_subject_pair(self):
+		path, wb = self._export(
+			subjects=f"{self.subject_ms.pk},{self.subject_cancer.pk}"
+		)
+		try:
+			ws = wb["Categories"]
+			# Present under both subjects it is assigned to
+			self._category_row(ws, "Multiple Sclerosis", "Shared category")
+			self._category_row(ws, "Cancer", "Shared category")
+		finally:
+			os.unlink(path)
+
+	def test_category_trial_count_scoped_to_subject(self):
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Categories"]
+			row = self._category_row(ws, "Multiple Sclerosis", "Natalizumab")
+			self.assertEqual(row["Trials (this subject)"], 1)
+		finally:
+			os.unlink(path)
+
+	def test_manual_category_shows_type_and_empty_terms(self):
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Categories"]
+			row = self._category_row(ws, "Multiple Sclerosis", "Manual watchlist")
+			self.assertEqual(row["Category type"], "Manual")
+			self.assertFalse(row["Search terms"])
+		finally:
+			os.unlink(path)
+
+	def test_match_config_columns_populated(self):
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Categories"]
+			row = self._category_row(ws, "Multiple Sclerosis", "Natalizumab")
+			self.assertTrue(row["Match scope"])
+			self.assertTrue(row["Min score (trials)"])
+			self.assertTrue(row["Field weights (trials)"])
+		finally:
+			os.unlink(path)
+
+	def test_category_description_formula_injection_defused(self):
+		"""A description starting with =, +, -, or @ must not become a live formula cell."""
+		cat_formula = TeamCategory.objects.create(
+			team=self.team,
+			category_name="Formula-like description",
+			category_description="=SUM(A1:A10)",
+			category_terms=["+1(555)", "-benchmark", "@mention"],
+		)
+		cat_formula.subjects.add(self.subject_ms)
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Categories"]
+			headers = [
+				ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			cat_col = headers.index("Category") + 1
+			desc_col = headers.index("Description") + 1
+			for r in range(5, ws.max_row + 1):
+				if ws.cell(row=r, column=cat_col).value == "Formula-like description":
+					cell = ws.cell(row=r, column=desc_col)
+					self.assertNotEqual(cell.data_type, "f")
+					self.assertEqual(cell.value, "'=SUM(A1:A10)")
+					break
+			else:
+				self.fail("Row for Formula-like description not found")
+		finally:
+			os.unlink(path)
+
+	def test_subjectless_category_never_exported(self):
+		path, wb = self._export(
+			subjects=f"{self.subject_ms.pk},{self.subject_cancer.pk}"
+		)
+		try:
+			ws = wb["Categories"]
+			names = [ws.cell(row=r, column=3).value for r in range(5, ws.max_row + 1)]
+			self.assertNotIn("Orphan category", names)
+		finally:
+			os.unlink(path)
+
+		path, wb = self._export(all_subjects=True)
+		try:
+			ws = wb["Categories"]
+			names = [ws.cell(row=r, column=3).value for r in range(5, ws.max_row + 1)]
+			self.assertNotIn("Orphan category", names)
+		finally:
+			os.unlink(path)
+
+	def test_categories_sheet_explains_matching(self):
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Categories"]
+			self.assertTrue(ws.cell(row=1, column=1).value)
+			prose = ws.cell(row=2, column=1).value
+			self.assertTrue(prose)
+			self.assertIn("score", prose.lower())
+		finally:
+			os.unlink(path)
+
+	def test_no_categories_writes_placeholder(self):
+		no_cat_subject = Subject.objects.create(
+			subject_name="No Categories Subject",
+			subject_slug="no-categories-subject",
+			team=self.team,
+		)
+		path, wb = self._export(subjects=str(no_cat_subject.pk))
+		try:
+			ws = wb["Categories"]
+			self.assertEqual(ws.cell(row=5, column=1).value, "No categories found.")
+		finally:
+			os.unlink(path)
+
+	def test_reserved_sheet_names(self):
+		clash = Subject.objects.create(
+			subject_name="Categories", subject_slug="categories-clash", team=self.team
+		)
+		path, wb = self._export(subjects=str(clash.pk))
+		try:
+			self.assertIn("Categories", wb.sheetnames)
+			self.assertIn("Categories_2", wb.sheetnames)
+			ws = wb["Categories"]
+			headers = [
+				ws.cell(row=4, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			self.assertEqual(headers, CATEGORY_COLUMNS)
 		finally:
 			os.unlink(path)
 
