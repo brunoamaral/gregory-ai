@@ -26,7 +26,10 @@ from subscriptions.management.commands.utils.get_credentials import (
 	get_postmark_credentials,
 	get_site_and_settings,
 )
-from subscriptions.management.commands.utils.send_email import send_email
+from subscriptions.management.commands.utils.send_email import (
+	send_email,
+	record_sent_message,
+)
 from subscriptions.models import AnnouncementRecipient, Subscribers
 from subscriptions.utils.announcement_send_validation import (
 	validate_announcement_send_config,
@@ -275,6 +278,7 @@ def send_announcement(announcement):
 		success = False
 		suppressed = False
 		error_msg = ""
+		response = None
 		try:
 			response = send_email(
 				to=subscriber.email,
@@ -306,6 +310,15 @@ def send_announcement(announcement):
 				deactivate_subscribers([subscriber.subscriber_id], reason=detail)
 			else:
 				error_msg = detail
+
+		record_sent_message(
+			response,
+			recipient=subscriber.email,
+			subject=live_subject,
+			tag="announcement",
+			site=site,
+			subscriber=subscriber,
+		)
 
 		AnnouncementRecipient.objects.update_or_create(
 			announcement=announcement,

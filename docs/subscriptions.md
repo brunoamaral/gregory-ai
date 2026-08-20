@@ -373,13 +373,23 @@ dispatch happens on the payload's `RecordType`, and anything that doesn't
 look like a Postmark event is logged and ignored rather than acted on.
 
 Postmark is configured to send: **Delivery, Bounce, Open (first open only),
-Subscription Change**. Delivery, Open, and Bounce are accepted and return 200
-with no state change — Bounce is supplementary detail (hard vs soft; a soft
-bounce does not suppress), Delivery/Open are irrelevant to suppression.
-**Subscription Change drives everything**: it is the superset event for
-suppression state and fires in both directions (`SuppressSending: true` /
-`false`). Spam complaints reach us through `SuppressionReason: "SpamComplaint"`
-on this event even with the Spam Complaint event type disabled.
+Subscription Change** (Spam Complaint and Link Click join this list once
+author outreach ships — see the Deployment notes in
+`AUTHOR-OUTREACH-PLAN.md`). Delivery, Bounce, Spam Complaint, Open, and Click
+never change suppression state — Bounce is supplementary detail (hard vs
+soft; a soft bounce does not suppress), Delivery/Open/Click are irrelevant to
+suppression. **Subscription Change drives everything** here: it is the
+superset event for suppression state and fires in both directions
+(`SuppressSending: true` / `false`). Spam complaints reach us through
+`SuppressionReason: "SpamComplaint"` on this event even with the Spam
+Complaint event type disabled.
+
+**Every recognised event — Subscription Change included — is separately
+logged to `EmailEvent`**, an append-only record kept alongside (not instead
+of) the `SuppressionEvent` handling above. See
+[Email Message and Event Log](#email-message-and-event-log) below: this is
+new behaviour — before it existed, Delivery/Bounce/Open were accepted and
+silently discarded.
 
 ### Authentication
 
@@ -498,6 +508,87 @@ one per message), passed through as the email type: `weekly_summary`,
 suppression (`Recipient` already identifies the subscriber) but makes
 Postmark-side stats and debugging much better. Lists are not used as tags —
 Postmark's tag reporting is designed for a small, low-cardinality set.
+
+`send_email` also accepts `metadata`, `reply_to`, `track_opens`, and
+`track_links`, all optional and all defaulting to `None`/`False`. None of
+the four senders above pass them today, so their Postmark payload is
+unchanged; a future caller (author outreach — see `AUTHOR-OUTREACH-PLAN.md`)
+opts in per message rather than per stream. `metadata` is where
+`EmailMessage.msg_token` gets echoed back to Postmark, for a webhook event
+to correlate against later (see below).
+
+---
+
+## Email Message and Event Log
+
+Two tables, written for **every** sender (weekly digest, admin summary,
+trial notification, announcement, and — from author outreach onward — that
+feature too), not just outreach:
+
+- **`EmailMessage`** — one row per message handed to Postmark. Written at
+  send time by `record_sent_message()`
+  (`subscriptions/management/commands/utils/send_email.py`), called right
+  after `send_email()` by every sender, success or failure. Holds the
+  Postmark `MessageID`, an opaque `msg_token` UUID, recipient, tag, stream,
+  and the aggregate outcome fields the webhook updates later: `delivered_at`,
+  `first_opened_at` (first open only), `bounced_at` / `bounce_type`,
+  `complained_at`.
+- **`EmailEvent`** — one row per webhook call, append-only. Written by
+  `subscriptions.utils.email_events.handle_email_event`, called from
+  `postmark_webhook` for every recognised `RecordType`: `Delivery`,
+  `Bounce`, `SpamComplaint`, `Open`, `Click`, and — additionally, alongside
+  the existing suppression handling, not instead of it — `SubscriptionChange`.
+
+### Correlation
+
+Two independent keys, tried in order: `Metadata.msg_token` (the UUID a
+sender can choose to echo back via `send_email(metadata=...)`), then
+Postmark's own `MessageID`. Neither may match — the four existing senders
+don't pass `metadata` yet, and a message sent before this feature shipped
+has no `EmailMessage` row at all — in which case the event is still
+recorded, with `email_message=NULL`.
+
+### What is deliberately not stored
+
+Open and Click payloads carry `Geo`, `IP`, `UserAgent`, `OS`, `Client`,
+`Platform`, and `ReadSeconds` for the recipient; Bounce/SpamComplaint
+payloads additionally embed the full original message `Content`. **None of
+it is stored.** `EmailEvent` has no field for any of them — see its model
+docstring (`subscriptions/models.py`) for the full list and reasoning, and
+`subscriptions/tests/test_email_events.py::PrivacyRegressionGuardTest` for
+the regression guard that feeds a full Open payload and asserts the stored
+row is clean.
+
+Open and link tracking (`TrackOpens`/`TrackLinks`) are opt-in per message
+via `send_email()` and default off — the four existing senders don't set
+them, so this ships with no behaviour change for weekly digest, admin
+summary, trial notification, or announcement email.
+
+### A quirk worth knowing: `Email` vs `Recipient`
+
+Every Postmark webhook event names the recipient field `Recipient` —
+**except** `Bounce` and `SpamComplaint`, which use `Email` instead
+(confirmed against Postmark's own documented example payloads). Easy to get
+backwards, since nothing about the field's absence raises; `handle_email_event`
+looks up the correct field per `RecordType` rather than assuming one name.
+
+### Retention
+
+| Table | Default retention | Command |
+|:--|:--|:--|
+| `EmailEvent` | 180 days | `prune_email_events --days N --dry-run` |
+| `EmailMessage` | 730 days, **except** rows an `AuthorOutreach` references (never pruned) | `prune_email_messages --days N --dry-run` |
+
+**Invariant, restated in both commands' docstrings: pruning telemetry must
+never weaken a suppression.** Neither command ever touches
+`AuthorContactOptOut` or `SuppressionEvent` — both are permanent, by design,
+independent of this log.
+
+### Admin
+
+Both models are registered read-only (`has_add_permission` /
+`has_change_permission` return `False`) — `EmailMessageAdmin` includes an
+inline listing of its `EmailEvent` rows.
 
 ---
 

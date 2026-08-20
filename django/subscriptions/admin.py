@@ -20,6 +20,8 @@ from .models import (
 	Announcement,
 	AnnouncementRecipient,
 	SuppressionEvent,
+	EmailMessage,
+	EmailEvent,
 )
 from .forms import ListsAdminForm, AnnouncementAdminForm
 from gregory.models import Team
@@ -1353,6 +1355,81 @@ class SuppressionEventAdmin(admin.ModelAdmin):
 		"flag_reason",
 		"created_at",
 	]
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+
+class EmailEventInline(admin.TabularInline):
+	"""Read-only: every EmailEvent recorded against one EmailMessage."""
+
+	model = EmailEvent
+	extra = 0
+	fields = [
+		"record_type",
+		"occurred_at",
+		"tag",
+		"bounce_type",
+		"details",
+		"link_url",
+		"received_at",
+	]
+	readonly_fields = fields
+	can_delete = False
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+
+@admin.register(EmailMessage)
+class EmailMessageAdmin(admin.ModelAdmin):
+	"""
+	Read-only: one row per message handed to Postmark, by any sender. See
+	docs/subscriptions.md for the webhook that updates the aggregate outcome
+	fields below, and EmailMessage's model docstring for what msg_token and
+	message_id are for.
+	"""
+
+	list_display = [
+		"recipient",
+		"tag",
+		"accepted",
+		"sent_at",
+		"delivered_at",
+		"first_opened_at",
+		"bounced_at",
+		"complained_at",
+	]
+	list_filter = ["tag", "accepted", "message_stream", "bounce_type", "site"]
+	search_fields = ["recipient", "message_id", "msg_token", "subject"]
+	readonly_fields = [f.name for f in EmailMessage._meta.fields]
+	inlines = [EmailEventInline]
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+
+@admin.register(EmailEvent)
+class EmailEventAdmin(admin.ModelAdmin):
+	"""
+	Read-only: the append-only Postmark webhook event log. See EmailEvent's
+	model docstring for exactly what is, and deliberately is not, stored
+	from each payload (no IP, geo, user agent, or raw payload — ever).
+	"""
+
+	list_display = ["recipient", "record_type", "occurred_at", "tag", "email_message"]
+	list_filter = ["record_type", "tag", "message_stream"]
+	search_fields = ["recipient", "message_id"]
+	readonly_fields = [f.name for f in EmailEvent._meta.fields]
 
 	def has_add_permission(self, request):
 		return False

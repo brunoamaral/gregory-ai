@@ -589,6 +589,228 @@ class SuppressionEvent(models.Model):
 		return f"{self.email} {direction} ({self.record_type}) @ {self.changed_at:%Y-%m-%d %H:%M}"
 
 
+class EmailMessage(models.Model):
+	"""
+	One row per message handed to Postmark, written at send time by every
+	sender (weekly digest, admin summary, trial notification, announcement,
+	and — from PR 3 of AUTHOR-OUTREACH-PLAN.md onward — author outreach) via
+	subscriptions.management.commands.utils.send_email.record_sent_message.
+	See docs/subscriptions.md for the full webhook contract this feeds.
+
+	Two independent keys let a later Postmark webhook call (see
+	subscriptions.utils.email_events.handle_email_event) correlate an event
+	back to this row: `msg_token`, an opaque UUID echoed in the Postmark
+	`Metadata` field on sends that opt in (nobody yet in PR 1 — the four
+	existing senders don't pass metadata, so correlation for them happens on
+	`message_id` alone), and `message_id`, Postmark's own `MessageID` taken
+	from the send response. Neither key, nor anything else on this row, is a
+	person identifier beyond the recipient address already stored here.
+
+	`delivered_at`, `first_opened_at`, `bounced_at`, `complained_at`, and
+	`bounce_type` are aggregate outcome fields written by the webhook: the
+	latest Delivery/Bounce/SpamComplaint event of that kind, or the first
+	Open (Postmark is configured for first-open tracking only). The full,
+	append-only per-event history lives in EmailEvent instead — these fields
+	exist so a bounce-rate/complaint-rate check can read one row per message
+	rather than aggregate the event log every time.
+
+	Retention: prune_email_messages, default 730 days, which must never
+	delete a row an AuthorOutreach (PR 3) references — see that command's
+	docstring.
+	"""
+
+	msg_token = models.UUIDField(
+		default=uuid.uuid4,
+		unique=True,
+		editable=False,
+		help_text="Opaque per-message id, echoed back in Postmark's Metadata "
+		"field for sends that opt in. Never a resolvable person identifier.",
+	)
+	message_id = models.CharField(
+		max_length=64,
+		blank=True,
+		default="",
+		db_index=True,
+		help_text="Postmark's MessageID from the send response. Blank when "
+		"the send failed before Postmark returned one.",
+	)
+	recipient = models.EmailField(db_index=True)
+	subject = models.CharField(max_length=255, blank=True, default="")
+	tag = models.CharField(
+		max_length=40,
+		blank=True,
+		default="",
+		db_index=True,
+		help_text="Postmark Tag — the email type, e.g. weekly_summary, "
+		"admin_summary, trial_notification, announcement.",
+	)
+	message_stream = models.CharField(max_length=40, blank=True, default="")
+	site = models.ForeignKey(
+		Site,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name="email_messages",
+	)
+	subscriber = models.ForeignKey(
+		Subscribers,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name="email_messages",
+	)
+	sent_at = models.DateTimeField(auto_now_add=True, db_index=True)
+	accepted = models.BooleanField(
+		default=False,
+		help_text="True when Postmark accepted the message for delivery "
+		"(HTTP 200, no ErrorCode).",
+	)
+	error_code = models.IntegerField(
+		null=True, blank=True, help_text="Postmark ErrorCode when not accepted."
+	)
+	error_message = models.TextField(blank=True, default="")
+	# Aggregate outcome, written by subscriptions.utils.email_events.handle_email_event.
+	delivered_at = models.DateTimeField(null=True, blank=True)
+	first_opened_at = models.DateTimeField(null=True, blank=True)
+	bounced_at = models.DateTimeField(null=True, blank=True)
+	complained_at = models.DateTimeField(null=True, blank=True)
+	bounce_type = models.CharField(max_length=40, blank=True, default="")
+
+	class Meta:
+		verbose_name = "Email Message"
+		verbose_name_plural = "Email Messages"
+		ordering = ["-sent_at"]
+
+	def __str__(self):
+		return f"{self.recipient} [{self.tag or 'untagged'}] @ {self.sent_at:%Y-%m-%d %H:%M}"
+
+
+class EmailEvent(models.Model):
+	"""
+	Append-only log of Postmark webhook events for messages this system
+	sent — alongside, not instead of, SuppressionEvent, which continues to
+	drive suppression/reactivation state on its own (see
+	subscriptions.utils.postmark_webhook). Written by
+	subscriptions.utils.email_events.handle_email_event.
+
+	Deliberately NOT stored here, and why (mirrors the "Deliberately NOT
+	implemented here, and why" block at the top of
+	subscriptions/utils/postmark_webhook.py):
+
+	- `Geo`, `IP`, `UserAgent`, `OS`, `Client`, `Platform`, `ReadSeconds`:
+	  Open and Click payloads carry these for a named recipient — for
+	  author outreach (AUTHOR-OUTREACH-PLAN.md, PR 3+) a researcher who
+	  never consented to being tracked at all. This table exists to answer
+	  "was this message delivered / opened / clicked / bounced", not "from
+	  where, on what device, for how long". Storing them would be
+	  collecting personal data with no purpose behind the collection.
+	- Bounce `Content`: the full original message body, embedded by
+	  Postmark in Bounce payloads. Never stored — it would duplicate
+	  personal data already at rest elsewhere (the rendered email itself)
+	  for no purpose this table needs to serve.
+	- The raw payload, in full: only the named fields below are stored, so
+	  a new field Postmark starts sending tomorrow can't leak PII into this
+	  table by accident — storage here is an explicit decision per field,
+	  never "whatever the payload happened to contain".
+
+	record_type spans all six event types subscriptions.views.postmark_webhook
+	dispatches on: five that reach only this model (Delivery, Bounce,
+	SpamComplaint, Open, Click), plus SubscriptionChange — handled first,
+	unchanged, by subscriptions.utils.postmark_webhook.handle_subscription_change
+	(suppression/reactivation state), and additionally logged here so the
+	complete inbound event history lives in one place.
+	"""
+
+	RECORD_TYPE_DELIVERY = "Delivery"
+	RECORD_TYPE_BOUNCE = "Bounce"
+	RECORD_TYPE_SPAM_COMPLAINT = "SpamComplaint"
+	RECORD_TYPE_OPEN = "Open"
+	RECORD_TYPE_CLICK = "Click"
+	RECORD_TYPE_SUBSCRIPTION_CHANGE = "SubscriptionChange"
+	RECORD_TYPE_CHOICES = [
+		(RECORD_TYPE_DELIVERY, "Delivery"),
+		(RECORD_TYPE_BOUNCE, "Bounce"),
+		(RECORD_TYPE_SPAM_COMPLAINT, "Spam Complaint"),
+		(RECORD_TYPE_OPEN, "Open"),
+		(RECORD_TYPE_CLICK, "Click"),
+		(RECORD_TYPE_SUBSCRIPTION_CHANGE, "Subscription Change"),
+	]
+	# Convenience set for callers validating a payload's RecordType before
+	# doing any work — kept next to the choices so the two can't drift.
+	RECORD_TYPES = frozenset(
+		{
+			RECORD_TYPE_DELIVERY,
+			RECORD_TYPE_BOUNCE,
+			RECORD_TYPE_SPAM_COMPLAINT,
+			RECORD_TYPE_OPEN,
+			RECORD_TYPE_CLICK,
+			RECORD_TYPE_SUBSCRIPTION_CHANGE,
+		}
+	)
+
+	# Named email_message, not message: a FK named `message` would collide
+	# with the message_id CharField below (Django auto-derives a `message_id`
+	# attribute for a FK field literally named `message`) — models.E006.
+	# Matches the FK name AuthorOutreach uses for the same relationship
+	# (AUTHOR-OUTREACH-PLAN.md, PR 3).
+	email_message = models.ForeignKey(
+		EmailMessage,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name="events",
+		help_text="Null when this event's msg_token/MessageID matched no "
+		"EmailMessage row — the event is still recorded.",
+	)
+	record_type = models.CharField(max_length=20, choices=RECORD_TYPE_CHOICES)
+	message_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
+	recipient = models.EmailField(db_index=True)
+	occurred_at = models.DateTimeField(
+		db_index=True,
+		help_text="Postmark's own event timestamp (DeliveredAt / BouncedAt / "
+		"ReceivedAt / ChangedAt, depending on record_type).",
+	)
+	received_at = models.DateTimeField(
+		auto_now_add=True, help_text="When this webhook call was processed locally."
+	)
+	tag = models.CharField(max_length=40, blank=True, default="")
+	message_stream = models.CharField(max_length=40, blank=True, default="")
+	# Bounce / SpamComplaint only.
+	bounce_type = models.CharField(
+		max_length=40, blank=True, default="", help_text="Postmark Type."
+	)
+	bounce_type_code = models.IntegerField(
+		null=True, blank=True, help_text="Postmark TypeCode."
+	)
+	details = models.TextField(
+		blank=True,
+		default="",
+		help_text="Postmark Details. Never the message Content, which "
+		"Postmark also embeds in Bounce payloads.",
+	)
+	# Click only.
+	link_url = models.URLField(
+		max_length=1000,
+		blank=True,
+		default="",
+		help_text="Postmark OriginalLink — our own URL, not a tracking link.",
+	)
+
+	class Meta:
+		constraints = [
+			models.UniqueConstraint(
+				fields=["record_type", "message_id", "occurred_at"],
+				name="unique_email_event_type_msgid_occurred",
+			)
+		]
+		ordering = ["-occurred_at"]
+		verbose_name = "Email Event"
+		verbose_name_plural = "Email Events"
+
+	def __str__(self):
+		return f"{self.record_type} — {self.recipient} @ {self.occurred_at:%Y-%m-%d %H:%M}"
+
+
 class AnnouncementRecipient(models.Model):
 	announcement = models.ForeignKey(
 		Announcement,

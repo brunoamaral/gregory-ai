@@ -26,6 +26,7 @@ from subscriptions.models import (
 	ListSubscription,
 	SubscriberSiteProfile,
 )
+from subscriptions.utils.email_events import handle_email_event
 from subscriptions.utils.postmark_webhook import handle_subscription_change
 
 logger = logging.getLogger(__name__)
@@ -482,19 +483,27 @@ def _postmark_webhook_authorized(request):
 @require_POST
 def postmark_webhook(request):
 	"""
-	Receives Postmark webhook events (Delivery, Bounce, Open, Subscription
-	Change). Only Subscription Change drives suppression/reactivation state —
-	see subscriptions.utils.postmark_webhook.handle_subscription_change and
-	docs/subscriptions.md for the policy.
+	Receives Postmark webhook events (Delivery, Bounce, SpamComplaint, Open,
+	Click, Subscription Change).
+
+	Only Subscription Change drives suppression/reactivation state — see
+	subscriptions.utils.postmark_webhook.handle_subscription_change and
+	docs/subscriptions.md for the policy. Every recognised RecordType,
+	Subscription Change included, is additionally appended to the EmailEvent
+	log via subscriptions.utils.email_events.handle_email_event — see
+	EmailEvent's model docstring for exactly what is (and, deliberately, is
+	not) kept from each payload.
 
 	Auth failures return 403 (not 401): Postmark stops retrying on 403 and
 	keeps retrying everything else, so a misconfigured credential should fail
 	once and loudly rather than hammer this endpoint for hours.
 
-	Every other outcome — including an unrecognised RecordType or a
-	non-SubscriptionChange event — returns 200 quickly. Postmark retries any
-	non-200, and Subscription Change events are only retried for ~21 minutes,
-	so slow or wrongly-erroring responses genuinely lose data.
+	Every other outcome — including an unrecognised RecordType — returns 200
+	quickly. Postmark retries any non-200, and Subscription Change events are
+	only retried for ~21 minutes, so slow or wrongly-erroring responses
+	genuinely lose data. handle_email_event and handle_subscription_change
+	are both written to never raise, for the same reason: a bug in either
+	must not turn a webhook call into a non-200 response.
 	"""
 	if not _postmark_webhook_authorized(request):
 		return HttpResponse(status=403)
@@ -512,12 +521,9 @@ def postmark_webhook(request):
 	record_type = payload.get("RecordType")
 	if record_type == "SubscriptionChange":
 		handle_subscription_change(payload)
+		handle_email_event(payload)
 	elif record_type in _POSTMARK_KNOWN_RECORD_TYPES:
-		# Delivery/Open/Bounce are high-volume and expected — DEBUG, not INFO,
-		# so this endpoint can't flood production logs under normal traffic.
-		logger.debug(
-			"postmark_webhook: received %s event; no action needed.", record_type
-		)
+		handle_email_event(payload)
 	else:
 		logger.warning(
 			"postmark_webhook: unrecognised RecordType %r; ignoring.", record_type

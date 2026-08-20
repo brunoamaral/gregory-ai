@@ -4,7 +4,10 @@ from datetime import timedelta
 from django.utils.timezone import now
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
-from subscriptions.management.commands.utils.send_email import send_email
+from subscriptions.management.commands.utils.send_email import (
+	send_email,
+	record_sent_message,
+)
 from subscriptions.management.commands.utils.get_credentials import (
 	build_unsubscribe_base_url,
 	get_postmark_credentials,
@@ -812,7 +815,24 @@ class Command(BaseCommand):
 						list=digest_list,
 						reason=f"Connection error: {e}",
 					)
+					record_sent_message(
+						None,
+						recipient=subscriber.email,
+						subject=email_subject,
+						tag="weekly_summary",
+						site=site,
+						subscriber=subscriber,
+					)
 					continue
+
+				record_sent_message(
+					result,
+					recipient=subscriber.email,
+					subject=email_subject,
+					tag="weekly_summary",
+					site=site,
+					subscriber=subscriber,
+				)
 
 				delivered, error_code, detail = classify_postmark_response(result)
 
