@@ -27,7 +27,7 @@ LATEST RESEARCH BY CATEGORY
 -- {{ category.category_name }} --
 {% for article in category.articles %}
 {{ article.title|clean_html_tags }}
-{% if utm_params %}{{ article.article_id|build_article_url:site_domain|add_utm_params:utm_params }}{% else %}{{ article.article_id|build_article_url:site_domain }}{% endif %}
+{% with article_url=article.article_id|build_article_url:site_domain %}{% add_utm_params article_url utm_params|with_utm_content:'latest_research' site_domain %}{% endwith %}
 {% endfor %}
 {% endfor %}{% endif %}{% if not articles and not additional_articles and not trials and not additional_trials %}
 
@@ -35,7 +35,7 @@ No New Content This Week
 We didn't find any new relevant articles or clinical trials matching your interests this week. Check back next week for updates.
 {% endif %}
 
-For the complete archive, visit https://{{ site.domain|default:'gregory-ai.com' }}/
+{% with domain=site.domain|default:'gregory-ai.com' %}{% with archive_url="https://"|add:domain|add:"/" %}For the complete archive, visit {% add_utm_params archive_url utm_params|with_utm_content:'footer' domain %}{% endwith %}{% endwith %}
 
 ----------------------------------------
 {% include 'emails/components/footer_text.html' %}
