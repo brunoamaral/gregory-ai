@@ -1,5 +1,6 @@
 <!-- Modern Clinical Trials Notification Email Template -->
 {% extends "emails/base_email.html" %}
+{% load gregory_tags %}
 
 <!-- Set email type for components -->
 {% block email_meta_title %}Clinical Trials Update - {{ title|default:"Gregory AI" }}{% endblock %}
@@ -63,10 +64,14 @@
     <!-- Additional Resources -->
     <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #e5e7eb;">
         <p class="content-text" style="text-align: center;">
-            Browse all available clinical trials at 
-            <a href="https://{{ site.domain|default:'gregory-ai.com' }}/" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
-                {{ site.domain|default:'gregory-ai.com' }}/
+            Browse all available clinical trials at
+            {% with domain=site.domain|default:'gregory-ai.com' %}
+            {% with archive_url="https://"|add:domain|add:"/" %}
+            <a href="{% add_utm_params archive_url utm_params|with_utm_content:'footer' domain %}" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+                {{ domain }}/
             </a>
+            {% endwith %}
+            {% endwith %}
         </p>
     </div>
     

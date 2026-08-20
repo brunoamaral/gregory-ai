@@ -134,6 +134,11 @@ class SenderUtmSchemeTest(TestCase):
 		html = kwargs["html"]
 		self.assertIn("utm_source=weekly_summary", html)
 		self.assertIn(f"utm_campaign={digest_list.utm_campaign_slug}", html)
+		# "For the complete archive, visit <site>" was previously untagged.
+		self.assertIn(
+			f'href="https://{self.site.domain}/?utm_medium=email', html
+		)
+		self.assertIn("utm_content=footer", html)
 
 	def test_admin_summary_utm_source_and_campaign(self):
 		admin_list = Lists.objects.create(
@@ -194,6 +199,11 @@ class SenderUtmSchemeTest(TestCase):
 		html = kwargs["html"]
 		self.assertIn("utm_source=trial_notification", html)
 		self.assertIn(f"utm_campaign={lst.utm_campaign_slug}", html)
+		# "Browse all available clinical trials at <site>" was previously untagged.
+		self.assertIn(
+			f'href="https://{self.site.domain}/?utm_medium=email', html
+		)
+		self.assertIn("utm_content=footer", html)
 
 	def test_no_subscriber_identifier_in_weekly_summary_href(self):
 		# Regression guard: utm_content used to be subscriber_<id>, the
