@@ -111,3 +111,20 @@ class CountCacheSmokeTest(TestCase):
 			[],
 			"different ordering should reuse the same count cache entry",
 		)
+
+	def test_authors_sort_by_and_order_do_not_fragment_the_cache(self):
+		"""/authors/ doesn't use DRF's `ordering` param — it has its own
+		sort_by/order (AuthorsViewSet.get_queryset), which is also excluded
+		from the count key since it never changes the row count, only the
+		sort. Without this, sort_by/order would still be in the key (unlike
+		ordering/format) and every sort_by×order combination would miss the
+		cache."""
+		self.client.get("/authors/", {"sort_by": "article_count", "order": "desc"})
+		with CaptureQueriesContext(connection) as ctx:
+			r2 = self.client.get("/authors/", {"sort_by": "full_name", "order": "asc"})
+		self.assertEqual(r2.status_code, 200)
+		self.assertEqual(
+			self._real_count_queries(ctx.captured_queries),
+			[],
+			"different sort_by/order should reuse the same count cache entry",
+		)

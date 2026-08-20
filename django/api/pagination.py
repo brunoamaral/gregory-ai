@@ -44,22 +44,41 @@ class MaxOffsetMixin:
 
 	max_offset = 10000
 
-	def _enforce_max_offset(self, request):
+	def _enforce_max_offset(self, request, queryset):
 		page_size = self.get_page_size(request)
-		if page_size:
-			try:
-				page_number = int(self.get_page_number(request, None))
-			except (TypeError, ValueError):
-				page_number = None
+		if not page_size:
+			return
 
-			if page_number is not None and page_number * page_size > self.max_offset:
-				raise ValidationError(
-					f"Requested offset ({page_number * page_size}) exceeds the maximum "
-					f"of {self.max_offset}. Use all_results=true to retrieve the full "
-					"result set instead of paging this deep (optionally combined with "
-					"format=csv) — format=csv alone is still paginated and subject to "
-					"this same limit."
-				)
+		try:
+			page_number = int(self.get_page_number(request, None))
+		except (TypeError, ValueError):
+			page_number = None
+		except AttributeError:
+			# get_page_number(request, None) raises here for page=last on a
+			# pagination class that doesn't override get_page_number (e.g.
+			# CappedPageNumberPagination): DRF's base implementation
+			# resolves "last" via paginator.num_pages, and the real
+			# paginator doesn't exist at this point in the request, hence
+			# None. Resolve "last" against an actual count instead of
+			# treating it like any other unparseable value and silently
+			# skipping the check — get_page_number(request, <real
+			# paginator>) downstream WILL resolve "last" to the true last
+			# page once the real paginator exists, unprotected, if we don't
+			# cap it here first.
+			raw_page = request.query_params.get(self.page_query_param, 1)
+			if raw_page not in self.last_page_strings:
+				return
+			total = queryset.count()
+			page_number = -(-total // page_size) if total else 1
+
+		if page_number is not None and page_number * page_size > self.max_offset:
+			raise ValidationError(
+				f"Requested offset ({page_number * page_size}) exceeds the maximum "
+				f"of {self.max_offset}. Use all_results=true to retrieve the full "
+				"result set instead of paging this deep (optionally combined with "
+				"format=csv) — format=csv alone is still paginated and subject to "
+				"this same limit."
+			)
 
 
 class CachedCountMixin:
@@ -91,13 +110,19 @@ class CachedCountMixin:
 	"""
 
 	# A count doesn't depend on response shape the way a stats payload does
-	# — `ordering` and `format` don't change it, so give it its own
-	# ignored-params set rather than widening
-	# CachedStatsActionMixin._stats_key_ignored_params. Without this, a
-	# crawler working through N orderings × M formats would fragment into
-	# N*M cache entries for what is always the same number.
+	# — none of these change it, so give it its own ignored-params set
+	# rather than widening CachedStatsActionMixin._stats_key_ignored_params.
+	# `ordering`/`format` cover FlexiblePagination's users (Articles,
+	# Trials, ...); `sort_by`/`order` cover AuthorsViewSet, which doesn't
+	# use DRF's `ordering` param at all and would otherwise fragment the
+	# count cache across every sort_by/order combination for no reason —
+	# neither one is a filterset field anywhere in api/filters.py, so
+	# excluding them can't accidentally hide a real filter's effect on the
+	# count. Without this, a crawler working through N orderings × M
+	# formats would fragment into N*M cache entries for what is always the
+	# same number.
 	_count_key_ignored_params = frozenset(
-		{"page", "page_size", "all_results", "ordering", "format"}
+		{"page", "page_size", "all_results", "ordering", "format", "sort_by", "order"}
 	)
 
 	def _count_cache_key(self, request):
@@ -194,7 +219,7 @@ class FlexiblePagination(MaxOffsetMixin, CachedCountMixin, PageNumberPagination)
 		if self.should_bypass_pagination:
 			return None
 
-		self._enforce_max_offset(request)
+		self._enforce_max_offset(request, queryset)
 
 		return super().paginate_queryset(queryset, request, view)
 
@@ -262,7 +287,7 @@ class CappedPageNumberPagination(MaxOffsetMixin, CachedCountMixin, PageNumberPag
 	"""
 
 	def paginate_queryset(self, queryset, request, view=None):
-		self._enforce_max_offset(request)
+		self._enforce_max_offset(request, queryset)
 		return super().paginate_queryset(queryset, request, view)
 
 

@@ -1,6 +1,11 @@
+from unittest import mock
+
 from rest_framework.test import APITestCase, APIClient
-from gregory.models import Authors
+from gregory.models import Articles, Authors, OrganizationApiSettings, Team
 from django.contrib.auth.models import User
+from organizations.models import Organization
+
+from api.pagination import CappedPageNumberPagination
 
 
 class TestAuthorsPaginationCap(APITestCase):
@@ -43,3 +48,56 @@ class TestAuthorsPaginationCap(APITestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertIn("results", response.data)
 		self.assertIn("count", response.data)
+
+
+class TestAuthorsPageLastOffsetCap(APITestCase):
+	"""``?page=last`` is DRF's own supported page-number value.
+	CappedPageNumberPagination doesn't override get_page_number the way
+	FlexiblePagination does, so DRF's base implementation resolves "last"
+	via a real paginator's num_pages once one exists downstream — if the
+	pre-flight offset check doesn't also resolve it (against an actual
+	count, since there's no cheap way to know the true last page otherwise),
+	`page=last` would either crash (no real paginator yet to resolve
+	against) or silently skip the check and reach the unprotected real
+	resolution, defeating the whole cap.
+	"""
+
+	def setUp(self):
+		# AuthorsViewSet.get_queryset only includes authors with at least
+		# one article in a visible org, so "15 authors" alone isn't enough
+		# to exercise the real queryset.count() this fix depends on — each
+		# author needs a visible article. Public org + an anonymous client
+		# keeps visibility simple: an authenticated-but-org-less caller
+		# would need ?include_public=true to see a public org's authors
+		# (see docs on visible_org_ids), so this deliberately doesn't
+		# authenticate.
+		org = Organization.objects.create(name="Page Last Org", slug="page-last-org")
+		OrganizationApiSettings.objects.filter(organization=org).update(
+			make_api_public=True
+		)
+		team = Team.objects.create(
+			organization=org, name="Page Last Team", slug="page-last-team"
+		)
+		for i in range(15):
+			author = Authors.objects.create(given_name=f"A{i}", family_name="Last")
+			article = Articles.objects.create(
+				title=f"Page Last Article {i}", link=f"https://ex.com/page-last-{i}"
+			)
+			article.teams.add(team)
+			article.authors.add(author)
+
+		self.client = APIClient()
+
+	def test_page_last_is_rejected_when_it_would_exceed_the_cap(self):
+		# 15 authors / page_size 10 (default, not client-configurable here)
+		# => last page is 2, offset 20. Lower max_offset below that so
+		# 'last' must be capped rather than silently resolved.
+		with mock.patch.object(CappedPageNumberPagination, "max_offset", 10):
+			response = self.client.get("/authors/", {"page": "last"})
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("all_results=true", str(response.data))
+
+	def test_page_last_still_works_within_cap(self):
+		response = self.client.get("/authors/", {"page": "last"})
+		self.assertEqual(response.status_code, 200)
+		self.assertIn("results", response.data)
