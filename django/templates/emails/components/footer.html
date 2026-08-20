@@ -1,4 +1,5 @@
 <!-- Reusable Email Footer Component -->
+{% load gregory_tags %}
 <table role="presentation" border="0" cellpadding="0" cellspacing="0" class="email-footer-container" style="width: 100%; background-color: #f9fafb; border-radius: 0 0 8px 8px; border-top: 1px solid #e5e7eb;">
     <tr>
         <td style="padding: 30px 40px; text-align: center;">
@@ -25,8 +26,8 @@
                             <tr>
                                 <td style="text-align: center;">
                                     <p class="footer-text" style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0; line-height: 1.5;">
-                                        For more information visit 
-                                        <a href="{{ website_url }}" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
+                                        For more information visit
+                                        <a href="{% add_utm_params website_url utm_params site_domain %}" style="color: #3b82f6; text-decoration: underline; font-weight: 500;">
                                             {{ website_url }}
                                         </a>
                                     </p>
@@ -41,7 +42,7 @@
                             <tr>
                                 <td style="text-align: center;">
                                     <p class="footer-text" style="color: #6b7280; font-size: 13px; margin: 0; line-height: 1.4;">
-                                        {% if support_url %}<a href="{{ support_url }}" class="footer-link" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Support</a>{% endif %}{% if support_url and about_url %} | {% endif %}{% if about_url %}<a href="{{ about_url }}" class="footer-link" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">About</a>{% endif %}{% if contact_url and about_url or contact_url and support_url %} | {% endif %}{% if contact_url %}<a href="{{ contact_url }}" class="footer-link" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Contact</a>{% endif %}
+                                        {% if support_url %}<a href="{% add_utm_params support_url utm_params site_domain %}" class="footer-link" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Support</a>{% endif %}{% if support_url and about_url %} | {% endif %}{% if about_url %}<a href="{% add_utm_params about_url utm_params site_domain %}" class="footer-link" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">About</a>{% endif %}{% if contact_url and about_url or contact_url and support_url %} | {% endif %}{% if contact_url %}<a href="{% add_utm_params contact_url utm_params site_domain %}" class="footer-link" style="color: #3b82f6; text-decoration: underline; margin: 0 8px;">Contact</a>{% endif %}
                                     </p>
                                 </td>
                             </tr>
