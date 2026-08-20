@@ -146,6 +146,17 @@ All endpoints return paginated results with:
 - `previous`: URL to previous page (if available)  
 - `results`: Array of author objects
 
+### Pagination limits
+
+`GET /authors/` uses standard `page`/`page_size` pagination. Requests whose
+offset (`page * page_size`) would exceed **10,000** return `400 Bad Request`
+(same cap as `/articles/` and `/trials/`). Unlike those two endpoints,
+`/authors/` does **not** support `all_results=true` as a bypass — a full-table
+read of Authors combined with the per-author article-count annotation is too
+expensive to serve inline. For a bulk or team/subject-scoped read, use
+`GET /authors/search/` instead, which does support `all_results=true` and is
+always scoped to a single team.
+
 ### Author Object Fields
 
 - `author_id`: Unique identifier
