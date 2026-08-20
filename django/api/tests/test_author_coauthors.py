@@ -209,6 +209,17 @@ class AuthorCoauthorsQueryCountTest(TestCase):
 		computed via annotations, so the query count must not grow with the
 		number of coauthors on the page."""
 		url = reverse("authors-coauthors", kwargs={"pk": self.target.author_id})
+		# Warm the paginator count cache (HOUSE-LOAD-SPIKE-P2-QUERY-COST.md
+		# item 3) first: a cold cache replaces the plain COUNT(*) with a
+		# cache miss + cache set (several extra statements from
+		# DatabaseCache's cull/insert), which isn't what this test is
+		# pinning. On a warm cache the count query is simply swapped for a
+		# single cache GET, so the total stays identical to the pre-caching
+		# budget. The warm-up request also populates Django's process-level
+		# Site cache as a side effect, so re-clear it to keep that query in
+		# the pinned count too (same reasoning as clear_cache() in setUp).
+		self.client.get(url)
+		Site.objects.clear_cache()
 		with self.assertNumQueries(5):
 			response = self.client.get(url)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -236,6 +247,11 @@ class AuthorCoauthorsQueryCountTest(TestCase):
 		CPU on production. get_site() uses Django's cached
 		Site.objects.get_current(), so the query count must stay flat
 		regardless of how many authors are returned."""
+		# Warm the paginator count cache first, then re-clear the Site cache
+		# it also warms as a side effect — see the comment in
+		# test_coauthors_query_budget_flat_with_page_content for why.
+		self.client.get("/authors/")
+		Site.objects.clear_cache()
 		with self.assertNumQueries(5):
 			response = self.client.get("/authors/")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)

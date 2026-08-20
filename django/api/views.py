@@ -42,6 +42,7 @@ from api.serializers import (
 	SponsorSerializer,
 )
 from api.pagination import (
+	CappedPageNumberPagination,
 	FlexiblePagination,
 	TrialSitePagination,
 	request_bypasses_pagination,
@@ -56,6 +57,7 @@ from django.db.models import (
 	Case,
 	Count,
 	Exists,
+	ForeignKey,
 	Max,
 	Q,
 	Prefetch,
@@ -370,12 +372,53 @@ class OrgVisibilityMixin:
 		if not hasattr(self.request, "visible_org_ids"):
 			return qs
 		if self._org_filter_distinct:
-			subq = qs.model.objects.filter(
-				pk=OuterRef("pk"),
-				**{f"{self._org_filter_path}__in": self.request.visible_org_ids},
-			)
-			return qs.filter(Exists(subq))
+			return qs.filter(Exists(self._org_visible_through_subquery(qs.model)))
 		return qs.filter(**{f"{self._org_filter_path}__in": self.request.visible_org_ids})
+
+	def _org_visible_through_subquery(self, model):
+		"""Correlated Exists() over the ``teams`` M2M through table.
+
+		HOUSE-LOAD-SPIKE-P2-QUERY-COST.md item 2: the previous subquery
+		(``qs.model.objects.filter(pk=OuterRef("pk"), teams__organization_id__in=...)``)
+		joined the outer model back to itself through ``teams`` just to filter
+		on the same row it started from — provably (and measurably) redundant.
+		This traverses the through table directly instead, and resolves
+		organisation ids to team ids in Python first: Postgres estimates the
+		through-table-only rewrite as cheap enough to still go parallel, but
+		only the resolved-team-ids form drops below the parallel-worker
+		threshold, which is what actually mattered for the load-spike
+		incident (3 backends per request vs. 1).
+
+		Uses ``Team.all_objects`` (not ``Team.objects``, which is
+		``ActiveTeamManager`` and filters ``is_active=True``) so soft-deleted
+		teams' content stays visible exactly as it was before this rewrite —
+		the raw SQL this replaces joined ``gregory_team`` with no active
+		filter. Changing that is a separate, deliberate decision, not a side
+		effect of a performance refactor.
+
+		Only reached via ``_org_filter_distinct = True``, whose only two
+		current users (ArticleViewSet, TrialViewSet) both use the default
+		``_org_filter_path = "teams__organization_id"`` — a 2-segment
+		``<m2m relation>__<field on Team>`` path — so that's the only shape
+		handled here.
+		"""
+		relation_name, _, team_field_lookup = self._org_filter_path.partition("__")
+		through = getattr(model, relation_name).through
+		fk_fields = [f for f in through._meta.get_fields() if isinstance(f, ForeignKey)]
+		source_field = next(f for f in fk_fields if f.related_model is model)
+		team_field = next(f for f in fk_fields if f.related_model is Team)
+
+		team_ids = list(
+			Team.all_objects.filter(
+				**{f"{team_field_lookup}__in": self.request.visible_org_ids}
+			).values_list("id", flat=True)
+		)
+		return through.objects.filter(
+			**{
+				source_field.attname: OuterRef("pk"),
+				f"{team_field.attname}__in": team_ids,
+			}
+		)
 
 
 class CachedStatsActionMixin:
@@ -3081,10 +3124,18 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	- Category with ID: `?team_id=1&category_id=5&sort_by=article_count&order=desc`
 	- Category with timeframe: `?team_id=1&category_slug=natalizumab&timeframe=year&sort_by=article_count`
 	- Date range: `?date_from=2024-06-01&date_to=2024-12-31&team_id=1&subject_id=1&sort_by=article_count`
+
+	# Pagination:
+	Standard `page`/`page_size` pagination (`count`/`next`/`previous`/`results`
+	envelope). Requests past offset 10,000 (`page * page_size`) return `400` —
+	see HOUSE-LOAD-SPIKE-P2-QUERY-COST.md item 1. There is no `all_results`
+	bypass on this endpoint; for a bulk/team-scoped read use
+	`GET /authors/search/` instead, which supports `all_results=true`.
 	"""
 
 	serializer_class = AuthorSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	pagination_class = CappedPageNumberPagination
 	filter_backends = [django_filters.DjangoFilterBackend, filters.SearchFilter]
 	filterset_class = AuthorFilter
 	search_fields = ["full_name", "ORCID"]

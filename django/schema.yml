@@ -1220,6 +1220,13 @@ paths:
         - Category with ID: `?team_id=1&category_id=5&sort_by=article_count&order=desc`
         - Category with timeframe: `?team_id=1&category_slug=natalizumab&timeframe=year&sort_by=article_count`
         - Date range: `?date_from=2024-06-01&date_to=2024-12-31&team_id=1&subject_id=1&sort_by=article_count`
+
+        # Pagination:
+        Standard `page`/`page_size` pagination (`count`/`next`/`previous`/`results`
+        envelope). Requests past offset 10,000 (`page * page_size`) return `400` —
+        see HOUSE-LOAD-SPIKE-P2-QUERY-COST.md item 1. There is no `all_results`
+        bypass on this endpoint; for a bulk/team-scoped read use
+        `GET /authors/search/` instead, which supports `all_results=true`.
       parameters:
       - in: query
         name: author_id
@@ -1395,6 +1402,13 @@ paths:
         - Category with ID: `?team_id=1&category_id=5&sort_by=article_count&order=desc`
         - Category with timeframe: `?team_id=1&category_slug=natalizumab&timeframe=year&sort_by=article_count`
         - Date range: `?date_from=2024-06-01&date_to=2024-12-31&team_id=1&subject_id=1&sort_by=article_count`
+
+        # Pagination:
+        Standard `page`/`page_size` pagination (`count`/`next`/`previous`/`results`
+        envelope). Requests past offset 10,000 (`page * page_size`) return `400` —
+        see HOUSE-LOAD-SPIKE-P2-QUERY-COST.md item 1. There is no `all_results`
+        bypass on this endpoint; for a bulk/team-scoped read use
+        `GET /authors/search/` instead, which supports `all_results=true`.
       parameters:
       - in: query
         name: format

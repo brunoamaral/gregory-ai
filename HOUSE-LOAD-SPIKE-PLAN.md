@@ -115,6 +115,8 @@ Measured on the local dev database:
 
 A consistent ~2x. Note that the paginated list page is already fast; the expense lives in the unbounded `COUNT(*)` and in the deep-offset sort. Worth doing, but P2 — it reduces the cost of each abusive request without reducing their number.
 
+**Superseded.** Re-measured after P1 landed; see `HOUSE-LOAD-SPIKE-P2-QUERY-COST.md`. Two corrections: the ~2x holds for Articles only (Authors measured 5–12%, not 2x, and that rewrite is now dropped), and the restructure is worth more than "reduces per-request cost" — resolving org ids to team ids flips the Articles plan from `Gather Merge` to serial, cutting three Postgres backends per request to one.
+
 The unique index `articles_teams(articles_id, team_id)` already exists, so the rewritten subquery becomes an index-only scan with no new DDL required.
 
 ### Item 3 — "the filter is unselective, consider dropping it": reject
@@ -151,11 +153,13 @@ Verify afterwards with `uptime` and by confirming `parallel worker` rows disappe
 ### P1 — bound the worst case in code
 
 4. **Cap deep offsets in `FlexiblePagination`** (`django/api/pagination.py:19`). Reject requests where `page * page_size` exceeds roughly 10,000, returning HTTP 400 with a message pointing at `all_results=true` and the CSV export. This makes the endpoint structurally immune regardless of caller — the durable fix, since the next crawler will not read `robots.txt` either. Needs tests plus a docs update in `docs/03-api-and-rss-feeds.md` and a schema regeneration.
-5. **Audit exposed `ordering` fields for index coverage.** `ordering=title` has no supporting index, which is what turns each request into a full sort of the table. Either add indexes for the orderings actually exposed, or narrow the allowlist.
+5. **Audit exposed `ordering` fields for index coverage.** ~~`ordering=title` has no supporting index~~ — **incorrect**: `articles_title_ed7ced3d btree (title)` exists, as do indexes for `published_date`, `discovery_date`, `last_updated` and `ml_score`. The planner discards them at deep offsets because a seq scan plus sort wins over reading 50k index entries with heap fetches; the offset cap in item 4 is what addresses that, not new DDL. Do not add a duplicate title index. Still worth auditing the allowlist for orderings with no index at all.
 
 ### P2 — reduce per-request cost (deferred)
 
-Split out into `HOUSE-LOAD-SPIKE-P2-QUERY-COST.md` for further analysis later. Not urgent: it only reduces the cost of each legitimate deep-offset request, it does not address the crawler volume or the parallel-worker fan-out that actually caused the load spike and the shared-memory failure — P0/P0.5/P1 do that.
+Analysed and rewritten in `HOUSE-LOAD-SPIKE-P2-QUERY-COST.md`. **One part of it is no longer deferred:** `GET /authors/` never received the P1 offset cap — `AuthorsViewSet` sets no `pagination_class` and falls back to DRF's plain `PageNumberPagination`. It is the largest table in the API with the most expensive visibility filter, and `?page=25000` is served today at ~500 ms. That cap is now the first item in the P2 document and should be treated as P1 work.
+
+The rest — the `EXISTS` restructure and the count cache — stays lower priority, but note it is not purely a per-request-cost item: the restructure also removes the parallel-worker fan-out in code, which P0.5 only fixes via a manual per-server Postgres setting that does not propagate to `gregory-001` / `gregory-002`.
 
 ### P3 — land the autovacuum change properly
 

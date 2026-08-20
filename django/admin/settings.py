@@ -169,11 +169,29 @@ CACHES = {
 	'default': {
 		'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
 		'LOCATION': 'gregory_cache',
+		'OPTIONS': {
+			# Default is 300. HOUSE-LOAD-SPIKE-P2-QUERY-COST.md item 3 adds a
+			# paginator-count cache entry per (endpoint path, visible orgs,
+			# filter params) combination on top of the existing /stats/
+			# entries — left at 300 that thrashes: DatabaseCache's cull runs
+			# a COUNT(*) on the cache table on every set() once over the
+			# limit, then deletes by cache_key < lexical order (sha256 keys,
+			# so effectively arbitrary eviction, not LRU), producing a
+			# steady evict/miss/recompute-the-expensive-count/set cycle.
+			'MAX_ENTRIES': int(os.environ.get('CACHE_MAX_ENTRIES', '10000')),
+		},
 	}
 }
 
 # TTL (seconds) for the /stats/ response cache. Override via STATS_CACHE_TTL env var.
 STATS_CACHE_TTL = int(os.environ.get('STATS_CACHE_TTL', '600'))
+
+# TTL (seconds) for the paginator COUNT(*) cache (HOUSE-LOAD-SPIKE-P2-QUERY-COST.md
+# item 3). Kept short and independently tunable from STATS_CACHE_TTL: a stale
+# count moves total_pages/the next link, and combined with the pagination
+# offset cap a stale-high count can advertise a page that then 400s — see
+# api/pagination.py CachedCountMixin. Override via COUNT_CACHE_TTL env var.
+COUNT_CACHE_TTL = int(os.environ.get('COUNT_CACHE_TTL', '60'))
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
