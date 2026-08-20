@@ -1224,3 +1224,98 @@ class AuthorOutreach(models.Model):
 
 	def __str__(self):
 		return f"{self.author} → {self.site.domain} [{self.status}]"
+
+
+class AuthorContactOptOut(models.Model):
+	"""
+	Global "never contact this address again" record — see
+	AUTHOR-OUTREACH-SPEC.md "Legal basis and consent" / "Bounce and
+	complaint handling" and AUTHOR-OUTREACH-PLAN.md "PR 2 — Author
+	do-not-contact".
+
+	Keyed on the email address, not on `Authors` or `Subscribers` — and
+	that independence is the whole point of this model, not an oversight.
+	An author is not a subscriber: `AuthorOutreach` contacts a researcher
+	whose paper was selected under legitimate interest (GDPR Art.
+	6(1)(f)), never someone who opted in to a newsletter, so its opt-out
+	posture cannot be modelled as a `Subscribers` row without conflating
+	two different consent bases. Keying this table on `Subscribers`
+	instead — even informally, by re-using `Subscribers.active` — would
+	let outreach suppression and newsletter suppression drift into a
+	single record: an author declining a one-time cold-outreach email is
+	not thereby unsubscribing from a newsletter they may separately,
+	deliberately, be subscribed to, and vice versa. The two systems must
+	stay independent: the same address can appear here AND in
+	`Subscribers` with `active=True` at the same time, correctly, and
+	each is checked on its own.
+
+	Written by three independent callers, all funnelled through
+	`subscriptions.utils.author_optout.record_author_opt_out` so they
+	can't drift from one another:
+
+	- `subscriptions.utils.email_events.handle_email_event` — a hard
+	  bounce (Postmark Bounce `Type` of `HardBounce` or `BadEmailAddress`)
+	  or a `SpamComplaint`, for *any* message this system sends, not only
+	  outreach — the address must never be used again anywhere.
+	- `subscriptions.utils.postmark_webhook.handle_subscription_change` —
+	  a suppressed address that matches an existing `AuthorOutreach`
+	  recipient.
+	- `subscriptions.views.author_optout` — the opt-out link's POST.
+
+	Every row is permanent: AUTHOR-OUTREACH-SPEC.md's retention table
+	marks this table "Indefinite — 'Never contact this address' cannot
+	expire", the same permanence class as `SuppressionEvent`. Neither
+	`prune_email_events` nor `prune_email_messages` ever touches this
+	table — see the invariant stated in both commands' docstrings:
+	pruning telemetry must never weaken a suppression.
+	"""
+
+	REASON_OPT_OUT = "opt_out"
+	REASON_SPAM_COMPLAINT = "spam_complaint"
+	REASON_HARD_BOUNCE = "hard_bounce"
+	REASON_ADMIN = "admin"
+	REASON_CHOICES = [
+		(REASON_OPT_OUT, "Opt-out link"),
+		(REASON_SPAM_COMPLAINT, "Spam complaint"),
+		(REASON_HARD_BOUNCE, "Hard bounce"),
+		(REASON_ADMIN, "Added manually (admin)"),
+	]
+
+	author = models.ForeignKey(
+		Authors,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name="contact_opt_outs",
+		help_text=(
+			"The author this address belongs to, when known. Nullable: a "
+			"bounce or spam complaint carries only an address — resolving "
+			"it to an Authors row is a best-effort lookup against existing "
+			"AuthorOutreach rows, not something Postmark tells us directly."
+		),
+	)
+	email = models.EmailField(
+		help_text=(
+			"The suppressed address, lowercased at save time. This, not "
+			"author, is what every eligibility check and the unique "
+			"constraint below key on — see the model docstring."
+		),
+	)
+	reason = models.CharField(max_length=20, choices=REASON_CHOICES)
+	note = models.TextField(blank=True, default="")
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		constraints = [
+			UniqueConstraint(Lower("email"), name="unique_author_optout_email")
+		]
+		verbose_name = "Author Contact Opt-Out"
+		verbose_name_plural = "Author Contact Opt-Outs"
+		ordering = ["-created_at"]
+
+	def __str__(self):
+		return f"{self.email} ({self.get_reason_display()})"
+
+	def save(self, *args, **kwargs):
+		self.email = self.email.lower()
+		super().save(*args, **kwargs)

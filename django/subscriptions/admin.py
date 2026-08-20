@@ -24,6 +24,7 @@ from .models import (
 	EmailEvent,
 	AuthorOutreachCampaign,
 	AuthorOutreach,
+	AuthorContactOptOut,
 )
 from .forms import ListsAdminForm, AnnouncementAdminForm
 from gregory.models import Team
@@ -1689,6 +1690,29 @@ class AuthorOutreachAdmin(admin.ModelAdmin):
 				f"Ignored {skipped_count} row(s) not in failed/skipped/cancelled status.",
 				level=messages.WARNING,
 			)
+
+
+@admin.register(AuthorContactOptOut)
+class AuthorContactOptOutAdmin(admin.ModelAdmin):
+	"""
+	The global "never contact this address again" list. See
+	AuthorContactOptOut's model docstring and AUTHOR-OUTREACH-SPEC.md
+	"Bounce and complaint handling". Most rows are written automatically
+	(hard bounce, spam complaint, a suppressed AuthorOutreach recipient,
+	the opt-out link) — reason="admin" is the one path meant to be
+	created by hand here, for a staff member blocking an address
+	proactively. Deletion is disabled outright: AUTHOR-OUTREACH-SPEC.md's
+	retention table marks this table indefinite — "'Never contact this
+	address' cannot expire" — the same permanence class as
+	SuppressionEvent.
+	"""
+
+	list_display = ["email", "reason", "author", "created_at"]
+	list_filter = ["reason"]
+	search_fields = ["email", "author__full_name", "author__ORCID", "note"]
+
+	def has_delete_permission(self, request, obj=None):
+		return False
 
 
 @admin.register(SubscriberSiteProfile)

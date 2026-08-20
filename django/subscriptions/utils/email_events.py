@@ -14,6 +14,14 @@ EmailMessage, if any.
 
 See EmailEvent's model docstring (subscriptions/models.py) for exactly what
 is — and, more importantly, is deliberately NOT — stored from each payload.
+
+Also writes AuthorContactOptOut (AUTHOR-OUTREACH-PLAN.md "PR 2 — Author
+do-not-contact"): a hard bounce or a spam complaint on *any* message this
+system sends — not only outreach — means the address must never be used
+again anywhere, via subscriptions.utils.author_optout.record_author_opt_out,
+which is itself failure-tolerant. See that module's docstring for why every
+caller, this one included, needs the write to be unable to turn a success
+into a failure.
 """
 
 import logging
@@ -22,9 +30,18 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from subscriptions.models import EmailEvent, EmailMessage
+from subscriptions.models import AuthorContactOptOut, EmailEvent, EmailMessage
+from subscriptions.utils.author_optout import record_author_opt_out
 
 logger = logging.getLogger(__name__)
+
+# Postmark Bounce "Type" values that mean the address itself is bad and
+# should never be used again, per AUTHOR-OUTREACH-SPEC.md "Bounce and
+# complaint handling" ("Hard bounce / bad address"). BadEmailAddress is
+# distinct from HardBounce in Postmark's own taxonomy (malformed/rejected
+# address vs. a mailbox that no longer exists) but both mean the same thing
+# for this purpose.
+HARD_BOUNCE_TYPES = frozenset({"HardBounce", "BadEmailAddress"})
 
 # Which payload field carries this event's own timestamp, per RecordType.
 # Postmark names this field differently per event: DeliveredAt for
@@ -189,6 +206,34 @@ def handle_email_event(payload):
 			)
 			if message is not None:
 				_update_message_aggregates(message, record_type, occurred_at, extra)
+
+		# Not inside the transaction above: this is an independent write to
+		# a different table (AuthorContactOptOut). record_author_opt_out
+		# never raises on its own (see its docstring), but this call is
+		# additionally wrapped on its own, separately from the outer
+		# try/except below, so that even a hypothetical failure here can
+		# never cost us the EmailEvent row already committed above — the
+		# function still returns `event`, and a webhook caller still sees
+		# it as processed, either way.
+		try:
+			if (
+				record_type == EmailEvent.RECORD_TYPE_BOUNCE
+				and extra.get("bounce_type") in HARD_BOUNCE_TYPES
+			):
+				record_author_opt_out(
+					recipient,
+					AuthorContactOptOut.REASON_HARD_BOUNCE,
+					note=f"Postmark Bounce Type={extra.get('bounce_type')!r}.",
+				)
+			elif record_type == EmailEvent.RECORD_TYPE_SPAM_COMPLAINT:
+				record_author_opt_out(recipient, AuthorContactOptOut.REASON_SPAM_COMPLAINT)
+		except Exception:
+			logger.exception(
+				"email_events: failed to record an author opt-out for %s event "
+				"(EmailEvent %s was still recorded).",
+				record_type,
+				event.pk,
+			)
 
 		return event
 	except IntegrityError:

@@ -17,6 +17,15 @@ Deliberately NOT implemented here, and why:
   (record_type, email, changed_at) instead — see SuppressionEvent.Meta.
 - Gating reactivation on the Origin field: undocumented semantics on an
   unsuppress event (see docs/subscriptions.md). Recorded as data only.
+
+Also writes AuthorContactOptOut (AUTHOR-OUTREACH-PLAN.md "PR 2 — Author
+do-not-contact"): when a SubscriptionChange suppresses an address that
+matches an existing AuthorOutreach recipient, that address is additionally
+recorded as opted out of author outreach specifically, permanently — see
+_maybe_record_author_contact_opt_out below. This is a side effect entirely
+independent of the SuppressionEvent/reactivation logic in this module: it
+does not gate on, and does not change, the ordering guard, the idempotency
+key, EXPECTED_MESSAGE_STREAM, or the reactivation policy above.
 """
 
 import logging
@@ -26,7 +35,11 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from subscriptions.models import Subscribers, SuppressionEvent
+from subscriptions.models import AuthorOutreach, Subscribers, SuppressionEvent
+from subscriptions.utils.author_optout import (
+	optout_reason_for_suppression_reason,
+	record_author_opt_out,
+)
 from subscriptions.utils.suppression import (
 	deactivate_subscribers,
 	reactivate_subscribers,
@@ -70,6 +83,44 @@ def _parse_changed_at(raw):
 	return timezone.now()
 
 
+def _maybe_record_author_contact_opt_out(recipient, suppression_reason):
+	"""
+	When a suppressed address matches an existing AuthorOutreach recipient,
+	also write an AuthorContactOptOut row — see AUTHOR-OUTREACH-SPEC.md
+	"Bounce and complaint handling" ("Subscription change (unsubscribe)").
+
+	Deliberately called before, and independent of, the ordering guard and
+	MessageStream check below: Postmark is reporting a real suppression on
+	its own side either way, and adding an address to a permanent
+	do-not-contact list is safe even for an event this function otherwise
+	only records without acting on (e.g. an out-of-order or
+	unexpected-stream SubscriptionChange).
+
+	Never raises. record_author_opt_out already never raises on its own
+	(see its docstring), but this call is additionally wrapped here too —
+	belt and suspenders — because a failure in this specific side effect
+	must never be able to stop handle_subscription_change from creating
+	its SuppressionEvent or turn this webhook call into a non-200 response
+	(see subscriptions.views.postmark_webhook). Its result is discarded
+	either way.
+	"""
+	if not AuthorOutreach.objects.filter(email__iexact=recipient).exists():
+		return
+	try:
+		record_author_opt_out(
+			recipient,
+			optout_reason_for_suppression_reason(suppression_reason),
+			note=(
+				"Matched an AuthorOutreach recipient via Postmark "
+				f"SubscriptionChange (SuppressionReason={suppression_reason or 'none'})."
+			),
+		)
+	except Exception:
+		logger.exception(
+			"postmark_webhook: failed to record an author opt-out for %s.", recipient
+		)
+
+
 def handle_subscription_change(payload):
 	"""
 	Process one Postmark "Subscription Change" event payload.
@@ -93,6 +144,12 @@ def handle_subscription_change(payload):
 	message_stream = payload.get("MessageStream") or ""
 	message_id = payload.get("MessageID") or ""
 	changed_at = _parse_changed_at(payload.get("ChangedAt"))
+
+	# AuthorContactOptOut side effect — see _maybe_record_author_contact_opt_out
+	# above for why this runs here, unconditionally, before the ordering
+	# guard, and never touches anything below.
+	if suppress_sending:
+		_maybe_record_author_contact_opt_out(recipient, suppression_reason)
 
 	# Ordering: events can arrive out of order. Compare against the most
 	# recent ChangedAt already recorded for this recipient (by event time,

@@ -21,11 +21,14 @@ from urllib.parse import urlparse
 from sitesettings.models import CustomSetting
 from subscriptions.forms import SubscribersForm
 from subscriptions.models import (
+	AuthorContactOptOut,
+	AuthorOutreach,
 	Subscribers,
 	Lists,
 	ListSubscription,
 	SubscriberSiteProfile,
 )
+from subscriptions.utils.author_optout import record_author_opt_out
 from subscriptions.utils.email_events import handle_email_event
 from subscriptions.utils.postmark_webhook import handle_subscription_change
 
@@ -429,6 +432,45 @@ def unsubscribe_site(request, token, site_id):
 def unsubscribe_all(request, token):
 	"""Global opt-out — marks subscriber as inactive and deactivates all list subscriptions."""
 	return _unsubscribe_confirm(request, token, scope="all")
+
+
+def author_optout(request, token):
+	"""
+	Author outreach opt-out: ``/subscriptions/author-optout/<token>/``. See
+	AUTHOR-OUTREACH-SPEC.md "Legal basis and consent" ("Opt-out") and
+	AUTHOR-OUTREACH-PLAN.md "PR 2 — Author do-not-contact".
+
+	``token`` is ``AuthorOutreach.opt_out_token`` — it resolves to exactly
+	one (site, author) outreach row and is never a resolvable person
+	identifier on its own (AUTHOR-OUTREACH-SPEC.md "Non-goals"). Mirrors
+	``_unsubscribe_confirm`` above: GET renders a confirmation page and
+	mutates nothing — mail clients and security scanners prefetch links,
+	and a prefetched GET would silently opt someone out without them
+	having clicked anything. The opt-out itself only happens on POST, and
+	is idempotent (``record_author_opt_out`` no-ops on an address that is
+	already opted out).
+
+	The opt-out this writes is global and keyed on the email address, not
+	on this row or this site — see ``AuthorContactOptOut``'s model
+	docstring. It affects future email only: it does not touch
+	``AuthorOutreach.status``, ``Authors``, or anything the author's
+	public profile page reads — see the spec's "Opt-out scope".
+	"""
+	outreach = get_object_or_404(AuthorOutreach, opt_out_token=token)
+
+	if request.method == "POST":
+		record_author_opt_out(outreach.email, AuthorContactOptOut.REASON_OPT_OUT)
+		return render(
+			request,
+			"subscriptions/author_optout_done.html",
+			{"outreach": outreach},
+		)
+
+	return render(
+		request,
+		"subscriptions/author_optout_confirm.html",
+		{"outreach": outreach},
+	)
 
 
 # ---------------------------------------------------------------------------

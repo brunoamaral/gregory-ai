@@ -592,6 +592,72 @@ inline listing of its `EmailEvent` rows.
 
 ---
 
+## Author Outreach Opt-Out
+
+`AuthorContactOptOut` (see
+[02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md) for
+the full field list) is a global "never contact this address again" list,
+keyed on the email address — **not** on `Authors` or `Subscribers`. That
+independence is deliberate: an author contacted under author outreach
+(AUTHOR-OUTREACH-SPEC.md, AUTHOR-OUTREACH-PLAN.md "PR 2 — Author
+do-not-contact") is not a newsletter subscriber, so this table and
+`Subscribers`/`ListSubscription` must never be able to drift into each
+other. The same address can appear in both, correctly, at the same time.
+
+Every write goes through `subscriptions.utils.author_optout.
+record_author_opt_out(email, reason, note="")`, which is idempotent (an
+address already opted out is left alone, regardless of which `reason` a
+later event carries) and never raises — every caller below depends on that,
+the same way `handle_email_event` and `handle_subscription_change` depend
+on never turning a webhook call into a non-200 response.
+
+### The three write paths
+
+| Trigger | Caller | `reason` |
+|:--|:--|:--|
+| Hard bounce (Postmark Bounce `Type` of `HardBounce` or `BadEmailAddress`) | `handle_email_event` | `hard_bounce` |
+| Spam complaint (`SpamComplaint` record) | `handle_email_event` | `spam_complaint` |
+| A `SubscriptionChange` suppression whose recipient matches an existing `AuthorOutreach` row | `handle_subscription_change` | `hard_bounce` / `spam_complaint` / `admin`, mapped from Postmark's `SuppressionReason` via `optout_reason_for_suppression_reason` (`ManualSuppression`, blank, or anything unrecognised falls back to `admin`) |
+| The opt-out link, `POST`ed | `subscriptions.views.author_optout` | `opt_out` |
+
+The first two apply to **any** message this system sends, not only
+outreach — a hard bounce or complaint means the address must never be used
+again anywhere, regardless of which sender triggered it. The third only
+fires when `SuppressSending` is `True`; an *un*suppress is never read as
+"undo the opt-out" — opt-out is one-directional, mirroring spam complaints
+being sticky in the reactivation policy above. All three writes are
+independent of, and cannot block, the `SuppressionEvent` handling described
+earlier in this document: a failure recording an opt-out is caught and
+logged separately from (and in addition to) `record_author_opt_out`'s own
+internal try/except, so it can never cost a webhook call its 200 response
+or an already-written `EmailEvent`/`SuppressionEvent` row.
+
+### The opt-out endpoint
+
+**`GET`/`POST /subscriptions/author-optout/<uuid:token>/`** — registered in
+`admin/urls.py` next to the three unsubscribe routes above, but a distinct
+system: `token` is `AuthorOutreach.opt_out_token`, not
+`Subscribers.unsubscribe_token`.
+
+- **`GET`** renders a confirmation page and mutates nothing. Mail clients
+  and security scanners prefetch links; a prefetching `GET` that performed
+  the opt-out would silently unsubscribe someone who never clicked
+  anything.
+- **`POST`** performs the opt-out via `record_author_opt_out` and is
+  idempotent, mirroring `_unsubscribe_confirm`'s GET/POST split and reusing
+  its template styling (`templates/subscriptions/author_optout_confirm.html`
+  / `author_optout_done.html`).
+- An unknown token 404s (`get_object_or_404`).
+
+The opt-out affects **future email only**. It does not change
+`AuthorOutreach.status` on the row the token resolved (that queue row stays
+whatever it was — cancelling a still-pending send is the admin's Skip
+action, a separate thing), and it never touches `Authors` or anything the
+public author profile page reads — the profile page stays published
+exactly as it was.
+
+---
+
 ## Announcement Send Lifecycle
 
 Announcements (one-off emails sent to selected `Lists` from the admin, as
