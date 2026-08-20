@@ -102,3 +102,14 @@ class ListsUtmCampaignSlugTest(TestCase):
 			utm_campaign_slug="hand-picked-slug",
 		)
 		self.assertEqual(lst.utm_campaign_slug, "hand-picked-slug")
+
+	def test_long_list_name_slug_is_truncated_to_field_max_length(self):
+		# list_name allows up to 150 chars but utm_campaign_slug is capped
+		# at 100 — an untruncated slugify() would raise an IntegrityError
+		# on save for a long, all-ASCII name.
+		long_name = "Weekly List Name " * 7  # 119 chars, well under 150
+		self.assertGreater(len(long_name), 100)
+		self.assertLessEqual(len(long_name), 150)
+		lst = Lists.objects.create(list_name=long_name, team=self.team)
+		self.assertLessEqual(len(lst.utm_campaign_slug), 100)
+		self.assertRegex(lst.utm_campaign_slug, r"^[a-z0-9_-]+$")

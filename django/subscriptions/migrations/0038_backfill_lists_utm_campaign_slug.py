@@ -8,7 +8,9 @@ def backfill(apps, schema_editor):
 	count = 0
 	qs = Lists.objects.filter(utm_campaign_slug="")
 	for lst in qs.iterator():
-		lst.utm_campaign_slug = slugify(lst.list_name)
+		# list_name allows up to 150 chars but utm_campaign_slug is capped
+		# at 100 — truncate so a long name can't fail this migration.
+		lst.utm_campaign_slug = slugify(lst.list_name)[:100]
 		lst.save(update_fields=["utm_campaign_slug"])
 		count += 1
 

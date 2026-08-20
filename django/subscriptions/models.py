@@ -176,7 +176,10 @@ class Lists(models.Model):
 			else:
 				self.site = Site.objects.get_current()
 		if not self.utm_campaign_slug:
-			self.utm_campaign_slug = slugify(self.list_name)
+			# list_name allows up to 150 chars but utm_campaign_slug is
+			# capped at 100 — truncate so a long name can't raise an
+			# IntegrityError on save.
+			self.utm_campaign_slug = slugify(self.list_name)[:100]
 		super().save(*args, **kwargs)
 
 	class Meta:
