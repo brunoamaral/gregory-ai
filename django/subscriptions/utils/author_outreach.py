@@ -1,6 +1,6 @@
 """
-Eligibility engine for author outreach — see AUTHOR-OUTREACH-SPEC.md "Who
-qualifies" and AUTHOR-OUTREACH-PLAN.md "PR 4 — Eligibility engine".
+Eligibility engine for author outreach — see docs/author-outreach-spec.md "Who
+qualifies" and docs/author-outreach.md.
 
 `eligible_authors(campaign, since=None)` is the only entry point
 `build_author_outreach` (the management command in this same PR) uses. It is
@@ -32,7 +32,7 @@ drops an article rejected across *every* one of its list-shared subjects. A
 paper rejected for the campaign's subject but unreviewed for another still
 reaches the digest; it must not trigger an outreach email whose second claim
 is curator approval for the subject it was rejected on. Do not "fix" this
-divergence to match the digest — AUTHOR-OUTREACH-PLAN.md PR 4 calls it out
+divergence to match the digest — docs/author-outreach.md calls it out
 by name, and test_author_outreach_eligibility.py locks it in.
 """
 
@@ -82,7 +82,7 @@ class EligibleAuthor:
 def eligible_authors(campaign, since=None):
 	"""
 	Return the `EligibleAuthor` candidates for `campaign` right now,
-	evaluating every rule in AUTHOR-OUTREACH-SPEC.md "Who qualifies"
+	evaluating every rule in docs/author-outreach-spec.md "Who qualifies"
 	against the live database. Read-only.
 
 	`since`, when given, is a number of days that overrides
@@ -279,7 +279,7 @@ def is_contact_blocked(email):
 	which doesn't apply once a row exists), factored out so
 	send_author_outreach (PR 5) can run the identical checks again
 	immediately before every individual send — see
-	AUTHOR-OUTREACH-SPEC.md "Safety limits": "The guards are evaluated
+	docs/author-outreach-spec.md "Safety limits": "The guards are evaluated
 	before every individual send, not once per run." An address opted
 	out, suppressed, or deactivated in the time between build and send
 	must not receive the email just because it passed this check once

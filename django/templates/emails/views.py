@@ -236,7 +236,7 @@ def _build_preview_context(request, template_name):
 	command and the packaged template both use — rather than the
 	get_optimized_email_context pipeline below, which the other four email
 	types share and author_outreach was deliberately built to bypass (see
-	AUTHOR-OUTREACH-SPEC.md "Configuration"). The JSON context endpoint
+	docs/author-outreach-spec.md "Configuration"). The JSON context endpoint
 	uses this dict as-is; the HTML preview endpoint (email_template_preview)
 	renders it through render_author_outreach_email instead of this
 	function's own template-loading step below, so a campaign's

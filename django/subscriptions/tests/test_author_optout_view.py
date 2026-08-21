@@ -1,7 +1,6 @@
 """
 HTTP-level tests for the author outreach opt-out endpoint —
-``/subscriptions/author-optout/<uuid:token>/``. See AUTHOR-OUTREACH-PLAN.md
-"PR 2 — Author do-not-contact" and AUTHOR-OUTREACH-SPEC.md "Legal basis and
+``/subscriptions/author-optout/<uuid:token>/``. See docs/author-outreach.md and docs/author-outreach-spec.md "Legal basis and
 consent" ("Opt-out"): GET renders a confirmation page and must not mutate
 anything — mail clients and security scanners prefetch links, and a
 prefetching GET would silently opt someone out; the actual opt-out only
@@ -95,7 +94,7 @@ class AuthorOptOutViewTest(TestCase):
 
 class AuthorOptOutDoesNotAffectProfilePageTest(TestCase):
 	"""
-	AUTHOR-OUTREACH-SPEC.md "Legal basis and consent": "Opt-out scope:
+	docs/author-outreach-spec.md "Legal basis and consent": "Opt-out scope:
 	Future email only. It does not hide, alter, or unpublish the author
 	profile page." Asserted directly against the live Authors API — the
 	same data source the public author profile page reads from.

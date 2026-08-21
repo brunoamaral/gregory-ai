@@ -54,6 +54,7 @@ walkthrough (read in order); everything else is reference or design material.
 | [cookbook.md](cookbook.md) | Recipes for common tasks (pipeline, exports, feeds). |
 | [subscriptions.md](subscriptions.md) | Subscription/newsletter system. |
 | [author-outreach.md](author-outreach.md) | One-time author outreach email — campaign modes, eligibility rules, the legitimate-interest balancing test, circuit breakers, and the first-run runbook. |
+| [author-outreach-spec.md](author-outreach-spec.md) | Design spec behind the author outreach feature — the measured data it was sized from, the decisions taken and why, and the alternatives rejected. |
 | [subscriptions-audit-2026-07.md](subscriptions-audit-2026-07.md) | Audit of newsletter sending and the email content organizer — open bugs, prioritised. |
 | [merge-authors-command.md](merge-authors-command.md) | The author-merge management command. |
 | [lint-triage.md](lint-triage.md) | Ruff lint-gate worklist. |

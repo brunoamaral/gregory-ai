@@ -540,3 +540,6 @@ send_author_outreach --campaign <slug> [--limit N] [--dry-run] [--test-to ADDRES
 - [02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md)
   — field-by-field reference for `EmailMessage`, `EmailEvent`,
   `AuthorOutreachCampaign`, `AuthorOutreach`, and `AuthorContactOptOut`.
+- [author-outreach-spec.md](author-outreach-spec.md) — the design spec this
+  implements: the measured data the feature was sized from, the decisions
+  taken and the reasoning behind them, and the alternatives rejected.

@@ -12,7 +12,7 @@ class Command(BaseCommand):
 		"By default, keeps the last 730 days. Never deletes a row an "
 		"AuthorOutreach references — see the AuthorOutreach exclusion note "
 		"below. INVARIANT: pruning telemetry must never weaken a "
-		"suppression. AuthorContactOptOut (AUTHOR-OUTREACH-PLAN.md PR 2) and "
+		"suppression. AuthorContactOptOut (docs/author-outreach.md) and "
 		"SuppressionEvent are never pruned, by this or any command."
 	)
 
@@ -36,11 +36,11 @@ class Command(BaseCommand):
 
 		queryset = EmailMessage.objects.filter(sent_at__lt=cutoff_date)
 
-		# AuthorOutreach (AUTHOR-OUTREACH-PLAN.md PR 3) points an
+		# AuthorOutreach (docs/author-outreach.md) points an
 		# `email_message` FK at the EmailMessage that carried a one-time
 		# outreach contact. That row is the durable evidence the contact
 		# happened under legitimate interest, so it must survive this
-		# command regardless of age — see AUTHOR-OUTREACH-SPEC.md's
+		# command regardless of age — see docs/author-outreach-spec.md's
 		# retention table ("EmailMessage ... never when referenced by an
 		# AuthorOutreach"). AuthorOutreach now exists (PR 3), so this
 		# exclusion is real: any EmailMessage an AuthorOutreach row

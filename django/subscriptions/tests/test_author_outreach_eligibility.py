@@ -1,7 +1,7 @@
 """
 Tests for the author-outreach eligibility engine
-(subscriptions/utils/author_outreach.py) — see AUTHOR-OUTREACH-SPEC.md "Who
-qualifies" and AUTHOR-OUTREACH-PLAN.md "PR 4 — Eligibility engine".
+(subscriptions/utils/author_outreach.py) — see docs/author-outreach-spec.md "Who
+qualifies" and docs/author-outreach.md.
 
 The two tests that matter most: `test_upcoming_mode_agrees_with_digest_subset`
 asserts against `select_digest_articles` itself (not a reimplementation) —
@@ -11,7 +11,7 @@ measured case from the spec (MS Weekly Digest: 12 candidates, only 5
 never-sent).
 
 Every fixture below is built with plain factory helper methods rather than
-Django fixture files, per AUTHOR-OUTREACH-PLAN.md PR 4's "Tests" note.
+Django fixture files, per docs/author-outreach.md's "Tests" note.
 """
 
 from datetime import timedelta

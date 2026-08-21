@@ -1,7 +1,7 @@
 """
 Model-level tests for AuthorOutreachCampaign and AuthorOutreach — see
-AUTHOR-OUTREACH-PLAN.md "PR 3 — Campaign and queue models" and
-AUTHOR-OUTREACH-SPEC.md "Configuration" / "Queue and approval" / "One row
+docs/author-outreach.md and
+docs/author-outreach-spec.md "Configuration" / "Queue and approval" / "One row
 per site per author". Admin actions (approve/skip/reset) are covered
 separately in test_author_outreach_admin.py.
 """

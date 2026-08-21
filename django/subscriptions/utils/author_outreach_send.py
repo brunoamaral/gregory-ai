@@ -1,7 +1,7 @@
 """
 Rendering and circuit-breaker evaluation for author outreach sends — see
-AUTHOR-OUTREACH-SPEC.md "Copy", "Configuration", "UTM", and "Safety limits",
-and AUTHOR-OUTREACH-PLAN.md "PR 5 — Rendering and sending". The
+docs/author-outreach-spec.md "Copy", "Configuration", "UTM", and "Safety limits",
+and docs/author-outreach.md. The
 send_author_outreach management command (same PR) is the only caller.
 
 Two responsibilities live here, both read-only with respect to the database
@@ -17,7 +17,7 @@ Context safety
 build_render_context() returns *only* strings and a list of {title, url}
 dicts — never a model instance, a QuerySet, or anything else that exposes
 attribute/relation traversal. This is not only for
-campaign.body_template's sake (AUTHOR-OUTREACH-SPEC.md "Configuration":
+campaign.body_template's sake (docs/author-outreach-spec.md "Configuration":
 "Rendered against an explicit context of strings and dicts only — never
 model instances — so an admin-authored template can't walk ORM
 relations") — the packaged default templates (emails/author_outreach.html
@@ -76,7 +76,7 @@ def _site_base_url(site):
 def build_render_context(row, campaign, site, custom_settings):
 	"""
 	Build the placeholder context for one AuthorOutreach row, per
-	AUTHOR-OUTREACH-SPEC.md "Configuration": author_name, articles (list of
+	docs/author-outreach-spec.md "Configuration": author_name, articles (list of
 	{title, url}), article_title/article_url (the first article),
 	author_page_url, site_name, site_url, sender_name, opt_out_url.
 
@@ -91,7 +91,7 @@ def build_render_context(row, campaign, site, custom_settings):
 	Privacy: the only per-author values placed in a URL's *path* are the
 	article id (public) and the author's ORCID (the author page is
 	necessarily keyed on it) and, for opt_out_url, the row's own
-	opt_out_token — the sole exception AUTHOR-OUTREACH-SPEC.md "Non-goals"
+	opt_out_token — the sole exception docs/author-outreach-spec.md "Non-goals"
 	names. No author id, ORCID, or email is ever placed in a query
 	parameter.
 	"""
@@ -164,7 +164,7 @@ def render_author_outreach_email(row, campaign, site, custom_settings):
 	(emails/author_outreach.html/.txt) — "upcoming" mode only, since its
 	copy's "will be featured in the next digest" claim is false, in the
 	past tense, for a retrospective (back-catalogue) campaign; see
-	AUTHOR-OUTREACH-SPEC.md "The first run, and the back catalogue" and
+	docs/author-outreach-spec.md "The first run, and the back catalogue" and
 	AuthorOutreachCampaign.body_template's help_text. A retrospective
 	campaign with no body_template is refused here rather than silently
 	sending a false claim — send_author_outreach also checks this once,
@@ -174,7 +174,7 @@ def render_author_outreach_email(row, campaign, site, custom_settings):
 	A non-blank body_template is rendered via django.template.Template
 	against a plain django.template.Context of build_render_context()'s
 	primitives-only dict — never a model instance, per
-	AUTHOR-OUTREACH-SPEC.md "Configuration" — and used directly as the
+	docs/author-outreach-spec.md "Configuration" — and used directly as the
 	HTML body (paragraphs and <a> tags, the same minimal style as the
 	packaged default). The .txt alternative is derived from that same
 	rendered HTML by _html_to_text(), so an admin only ever writes one
@@ -194,7 +194,7 @@ def render_author_outreach_email(row, campaign, site, custom_settings):
 				f"Campaign '{campaign.utm_campaign_slug}' is in "
 				f"'{campaign.mode}' mode but has no body_template. The "
 				"packaged default template's copy is written for "
-				"'upcoming' mode only — see AUTHOR-OUTREACH-SPEC.md "
+				"'upcoming' mode only — see docs/author-outreach-spec.md "
 				"'The first run, and the back catalogue'. Set "
 				"body_template on the campaign before sending."
 			)
@@ -227,7 +227,7 @@ def _html_to_text(html):
 
 def evaluate_circuit_breakers(campaign):
 	"""
-	AUTHOR-OUTREACH-SPEC.md "Safety limits": read this campaign's live
+	docs/author-outreach-spec.md "Safety limits": read this campaign's live
 	EmailMessage aggregates and return a human-readable reason string the
 	moment any threshold is met or exceeded, or None when every guard is
 	still clear. Thresholds are read from the campaign's own fields (PR 3)
@@ -240,7 +240,7 @@ def evaluate_circuit_breakers(campaign):
 	outreach feature or the other three senders sharing EmailMessage.
 
 	send_author_outreach calls this immediately before every individual
-	send (AUTHOR-OUTREACH-SPEC.md: "The guards are evaluated before every
+	send (docs/author-outreach-spec.md: "The guards are evaluated before every
 	individual send, not once per run"), so a breaker that trips mid-run
 	is caught before the very next message goes out, not just at the next
 	invocation.

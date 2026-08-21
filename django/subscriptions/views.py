@@ -437,12 +437,12 @@ def unsubscribe_all(request, token):
 def author_optout(request, token):
 	"""
 	Author outreach opt-out: ``/subscriptions/author-optout/<token>/``. See
-	AUTHOR-OUTREACH-SPEC.md "Legal basis and consent" ("Opt-out") and
-	AUTHOR-OUTREACH-PLAN.md "PR 2 — Author do-not-contact".
+	docs/author-outreach-spec.md "Legal basis and consent" ("Opt-out") and
+	docs/author-outreach.md.
 
 	``token`` is ``AuthorOutreach.opt_out_token`` — it resolves to exactly
 	one (site, author) outreach row and is never a resolvable person
-	identifier on its own (AUTHOR-OUTREACH-SPEC.md "Non-goals"). Mirrors
+	identifier on its own (docs/author-outreach-spec.md "Non-goals"). Mirrors
 	``_unsubscribe_confirm`` above: GET renders a confirmation page and
 	mutates nothing — mail clients and security scanners prefetch links,
 	and a prefetched GET would silently opt someone out without them

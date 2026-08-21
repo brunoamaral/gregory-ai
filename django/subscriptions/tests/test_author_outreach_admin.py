@@ -1,6 +1,6 @@
 """
 Admin tests for the AuthorOutreach approval queue — see
-AUTHOR-OUTREACH-PLAN.md "PR 3 — Campaign and queue models": Approve
+docs/author-outreach.md: Approve
 selected / Skip selected (any staff with change permission), and the
 superuser-only Reset for retry that deliberately reopens a slot the
 eligibility/send rules had closed. Also covers the "no bulk delete, no
@@ -241,7 +241,7 @@ class ResetForRetryActionTest(_AuthorOutreachAdminBase):
 
 class NoBulkDeleteOrManualAddTest(_AuthorOutreachAdminBase):
 	"""
-	AUTHOR-OUTREACH-SPEC.md's retention table marks AuthorOutreach
+	docs/author-outreach-spec.md's retention table marks AuthorOutreach
 	"Indefinite" — the record has to outlive everything else. Deletion is
 	disabled outright (not just the bulk action), and rows can only be
 	created by build_author_outreach (PR 4), never by hand in the admin.

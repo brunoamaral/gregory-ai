@@ -153,8 +153,8 @@ urlpatterns = (
 			unsubscribe_all,
 			name="unsubscribe_all",
 		),
-		# Author outreach opt-out (AUTHOR-OUTREACH-PLAN.md "PR 2 — Author
-		# do-not-contact"). token is AuthorOutreach.opt_out_token, not the
+		# Author outreach opt-out (docs/author-outreach.md, "Approval
+		# workflow"). token is AuthorOutreach.opt_out_token, not the
 		# Subscribers.unsubscribe_token the three routes above use — these
 		# are two independent systems (see AuthorContactOptOut's model
 		# docstring).

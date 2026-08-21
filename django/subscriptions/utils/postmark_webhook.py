@@ -18,8 +18,7 @@ Deliberately NOT implemented here, and why:
 - Gating reactivation on the Origin field: undocumented semantics on an
   unsuppress event (see docs/subscriptions.md). Recorded as data only.
 
-Also writes AuthorContactOptOut (AUTHOR-OUTREACH-PLAN.md "PR 2 — Author
-do-not-contact"): when a SubscriptionChange suppresses an address that
+Also writes AuthorContactOptOut (docs/author-outreach.md): when a SubscriptionChange suppresses an address that
 matches an existing AuthorOutreach recipient, that address is additionally
 recorded as opted out of author outreach specifically, permanently — see
 _maybe_record_author_contact_opt_out below. This is a side effect entirely
@@ -86,7 +85,7 @@ def _parse_changed_at(raw):
 def _maybe_record_author_contact_opt_out(recipient, suppression_reason):
 	"""
 	When a suppressed address matches an existing AuthorOutreach recipient,
-	also write an AuthorContactOptOut row — see AUTHOR-OUTREACH-SPEC.md
+	also write an AuthorContactOptOut row — see docs/author-outreach-spec.md
 	"Bounce and complaint handling" ("Subscription change (unsubscribe)").
 
 	Deliberately called before, and independent of, the ordering guard and

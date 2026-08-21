@@ -1,13 +1,12 @@
 """
 Tests for the build_author_outreach management command — see
-AUTHOR-OUTREACH-SPEC.md "Queue and approval" and AUTHOR-OUTREACH-PLAN.md
-"PR 4 — Eligibility engine". Eligibility rule coverage itself lives in
+docs/author-outreach-spec.md "Queue and approval" and docs/author-outreach.md. Eligibility rule coverage itself lives in
 test_author_outreach_eligibility.py; this file covers the command's own
 behaviour: what it writes, --dry-run, --limit, and the --featured-since
 guard rails (dry-run-only, retrospective-only).
 
 Factory helper methods build fixtures directly rather than using Django
-fixture files, per AUTHOR-OUTREACH-PLAN.md PR 4's "Tests" note.
+fixture files, per docs/author-outreach.md's "Tests" note.
 """
 
 from datetime import timedelta

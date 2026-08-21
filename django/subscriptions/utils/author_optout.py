@@ -1,7 +1,7 @@
 """
 Shared write path for AuthorContactOptOut — the global "never contact this
 address again" list. See AuthorContactOptOut's model docstring
-(subscriptions/models.py) and AUTHOR-OUTREACH-SPEC.md "Legal basis and
+(subscriptions/models.py) and docs/author-outreach-spec.md "Legal basis and
 consent" / "Bounce and complaint handling" for the full design.
 
 Three independent callers write through record_author_opt_out() below, so

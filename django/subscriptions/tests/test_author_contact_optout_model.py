@@ -1,6 +1,5 @@
 """
-Model-level tests for AuthorContactOptOut — see AUTHOR-OUTREACH-PLAN.md
-"PR 2 — Author do-not-contact" and AUTHOR-OUTREACH-SPEC.md "Legal basis and
+Model-level tests for AuthorContactOptOut — see docs/author-outreach.md and docs/author-outreach-spec.md "Legal basis and
 consent" / "Bounce and complaint handling". Wiring into handle_email_event,
 handle_subscription_change, and the opt-out view is covered separately in
 test_author_contact_optout_wiring.py and test_author_optout_view.py.

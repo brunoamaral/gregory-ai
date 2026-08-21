@@ -595,7 +595,7 @@ class EmailMessage(models.Model):
 	"""
 	One row per message handed to Postmark, written at send time by every
 	sender (weekly digest, admin summary, trial notification, announcement,
-	and — from PR 3 of AUTHOR-OUTREACH-PLAN.md onward — author outreach) via
+	and author outreach) via
 	subscriptions.management.commands.utils.send_email.record_sent_message.
 	See docs/subscriptions.md for the full webhook contract this feeds.
 
@@ -715,7 +715,7 @@ class EmailEvent(models.Model):
 
 	- `Geo`, `IP`, `UserAgent`, `OS`, `Client`, `Platform`, `ReadSeconds`:
 	  Open and Click payloads carry these for a named recipient — for
-	  author outreach (AUTHOR-OUTREACH-PLAN.md, PR 3+) a researcher who
+	  author outreach (docs/author-outreach.md) a researcher who
 	  never consented to being tracked at all. This table exists to answer
 	  "was this message delivered / opened / clicked / bounced", not "from
 	  where, on what device, for how long". Storing them would be
@@ -774,7 +774,7 @@ class EmailEvent(models.Model):
 	# with the message_id CharField below (Django auto-derives a `message_id`
 	# attribute for a FK field literally named `message`) — models.E006.
 	# Matches the FK name AuthorOutreach uses for the same relationship
-	# (AUTHOR-OUTREACH-PLAN.md, PR 3).
+	# (docs/author-outreach.md).
 	email_message = models.ForeignKey(
 		EmailMessage,
 		on_delete=models.SET_NULL,
@@ -896,8 +896,8 @@ class AnnouncementRecipient(models.Model):
 class AuthorOutreachCampaign(models.Model):
 	"""
 	Configuration for one author-outreach send campaign on one site. See
-	AUTHOR-OUTREACH-SPEC.md ("Configuration", "Safety limits") and
-	AUTHOR-OUTREACH-PLAN.md ("PR 3 — Campaign and queue models") for the
+	docs/author-outreach-spec.md ("Configuration", "Safety limits") and
+	docs/author-outreach.md ("Campaign modes and eligibility") for the
 	full design this implements.
 
 	A dedicated model rather than booleans on CustomSetting: a campaign
@@ -954,7 +954,7 @@ class AuthorOutreachCampaign(models.Model):
 			"will be featured in the next digest' is true by construction. "
 			"'retrospective' looks at already-featured SentArticleNotification "
 			"rows within featured_within_days instead, for a one-time "
-			"back-catalogue send. See AUTHOR-OUTREACH-SPEC.md 'Who qualifies'."
+			"back-catalogue send. See docs/author-outreach-spec.md 'Who qualifies'."
 		),
 	)
 	utm_campaign_slug = models.SlugField(
@@ -1107,7 +1107,7 @@ class AuthorOutreachCampaign(models.Model):
 					"Cannot enable this campaign: the site's CustomSetting "
 					"has_author_pages is not True. The outreach email's "
 					"entire second half is about the author profile page — "
-					"see AUTHOR-OUTREACH-SPEC.md 'Configuration'."
+					"see docs/author-outreach-spec.md 'Configuration'."
 				)
 		if (
 			self.mode == self.MODE_UPCOMING
@@ -1130,7 +1130,7 @@ class AuthorOutreach(models.Model):
 	permanent record of a one-time outreach contact. Written by
 	build_author_outreach (PR 4) as status="pending"; a human approves it
 	in the admin; send_author_outreach (PR 5) sends only "approved" rows.
-	See AUTHOR-OUTREACH-SPEC.md "Queue and approval" and "One row per site
+	See docs/author-outreach-spec.md "Queue and approval" and "One row per site
 	per author".
 
 	`unique_author_outreach_per_site` makes (site, author) a slot that can
@@ -1208,7 +1208,7 @@ class AuthorOutreach(models.Model):
 		choices=LEGAL_BASIS_CHOICES,
 		default=LEGAL_BASIS_LEGITIMATE_INTEREST,
 		help_text=(
-			"Recorded per row, per AUTHOR-OUTREACH-SPEC.md 'Legal basis "
+			"Recorded per row, per docs/author-outreach-spec.md 'Legal basis "
 			"and consent': legitimate interest (GDPR Art. 6(1)(f)), with "
 			"the one-time nature of the contact noted in basis_note."
 		),
@@ -1225,7 +1225,7 @@ class AuthorOutreach(models.Model):
 		help_text=(
 			"Resolves to this row in the opt-out view (PR 2). Never a "
 			"resolvable person identifier on its own — see "
-			"AUTHOR-OUTREACH-SPEC.md 'Non-goals'."
+			"docs/author-outreach-spec.md 'Non-goals'."
 		),
 	)
 	email_message = models.ForeignKey(
@@ -1270,9 +1270,8 @@ class AuthorOutreach(models.Model):
 class AuthorContactOptOut(models.Model):
 	"""
 	Global "never contact this address again" record — see
-	AUTHOR-OUTREACH-SPEC.md "Legal basis and consent" / "Bounce and
-	complaint handling" and AUTHOR-OUTREACH-PLAN.md "PR 2 — Author
-	do-not-contact".
+	docs/author-outreach-spec.md "Legal basis and consent" / "Bounce and
+	complaint handling" and docs/author-outreach.md.
 
 	Keyed on the email address, not on `Authors` or `Subscribers` — and
 	that independence is the whole point of this model, not an oversight.
@@ -1303,7 +1302,7 @@ class AuthorContactOptOut(models.Model):
 	  recipient.
 	- `subscriptions.views.author_optout` — the opt-out link's POST.
 
-	Every row is permanent: AUTHOR-OUTREACH-SPEC.md's retention table
+	Every row is permanent: docs/author-outreach-spec.md's retention table
 	marks this table "Indefinite — 'Never contact this address' cannot
 	expire", the same permanence class as `SuppressionEvent`. Neither
 	`prune_email_events` nor `prune_email_messages` ever touches this

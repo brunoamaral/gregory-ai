@@ -1,7 +1,7 @@
 """
 Tests for the two webhook paths that write AuthorContactOptOut rows — see
-AUTHOR-OUTREACH-PLAN.md "PR 2 — Author do-not-contact" and
-AUTHOR-OUTREACH-SPEC.md "Bounce and complaint handling":
+docs/author-outreach.md and
+docs/author-outreach-spec.md "Bounce and complaint handling":
 
 - subscriptions.utils.email_events.handle_email_event — a hard bounce
   (Postmark Bounce Type of HardBounce or BadEmailAddress) or a

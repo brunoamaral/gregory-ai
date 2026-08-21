@@ -366,7 +366,7 @@ class WidenedDedupKeyTest(TestCase):
 
 class PrivacyRegressionGuardTest(TestCase):
 	"""
-	Constraint from AUTHOR-OUTREACH-SPEC.md: EmailEvent must never store
+	Constraint from docs/author-outreach-spec.md: EmailEvent must never store
 	Geo, IP, UserAgent, OS, Client, Platform, ReadSeconds, or any raw
 	payload. Feed a full Open payload (every one of those fields present,
 	as Postmark actually sends them) and assert none of it survives.

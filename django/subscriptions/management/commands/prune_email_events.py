@@ -14,7 +14,7 @@ class Command(BaseCommand):
 		"deliverability debugging, not a permanent record. INVARIANT: "
 		"pruning telemetry must never weaken a suppression. This command "
 		"only ever touches EmailEvent — AuthorContactOptOut (added in "
-		"AUTHOR-OUTREACH-PLAN.md PR 2) and SuppressionEvent are never "
+		"docs/author-outreach.md) and SuppressionEvent are never "
 		"pruned, by this or any command, because every fact that has to "
 		"survive already lives outside EmailEvent."
 	)

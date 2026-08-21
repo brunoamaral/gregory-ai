@@ -1,7 +1,7 @@
 """
 Tests for the send_author_outreach management command — see
-AUTHOR-OUTREACH-SPEC.md "Queue and approval", "Safety limits", "Addressing
-and sending" and AUTHOR-OUTREACH-PLAN.md "PR 5 — Rendering and sending".
+docs/author-outreach-spec.md "Queue and approval", "Safety limits", "Addressing
+and sending" and docs/author-outreach.md.
 
 The Postmark call is mocked in every test (subscriptions.management.
 commands.utils.send_email.requests.post) — no test in this file ever

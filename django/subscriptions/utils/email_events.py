@@ -24,8 +24,7 @@ aggregate outcome fields on the matching EmailMessage, if any.
 See EmailEvent's model docstring (subscriptions/models.py) for exactly what
 is — and, more importantly, is deliberately NOT — stored from each payload.
 
-Also writes AuthorContactOptOut (AUTHOR-OUTREACH-PLAN.md "PR 2 — Author
-do-not-contact"): a hard bounce or a spam complaint on *any* message this
+Also writes AuthorContactOptOut (docs/author-outreach.md): a hard bounce or a spam complaint on *any* message this
 system sends — not only outreach — means the address must never be used
 again anywhere, via subscriptions.utils.author_optout.record_author_opt_out,
 which is itself failure-tolerant. See that module's docstring for why every
@@ -45,7 +44,7 @@ from subscriptions.utils.author_optout import record_author_opt_out
 logger = logging.getLogger(__name__)
 
 # Postmark Bounce "Type" values that mean the address itself is bad and
-# should never be used again, per AUTHOR-OUTREACH-SPEC.md "Bounce and
+# should never be used again, per docs/author-outreach-spec.md "Bounce and
 # complaint handling" ("Hard bounce / bad address"). BadEmailAddress is
 # distinct from HardBounce in Postmark's own taxonomy (malformed/rejected
 # address vs. a mailbox that no longer exists) but both mean the same thing

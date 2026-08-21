@@ -1,7 +1,7 @@
 """
 Tests for subscriptions.utils.author_outreach_send — see
-AUTHOR-OUTREACH-SPEC.md "Copy", "Configuration", "UTM", "Safety limits" and
-AUTHOR-OUTREACH-PLAN.md "PR 5 — Rendering and sending".
+docs/author-outreach-spec.md "Copy", "Configuration", "UTM", "Safety limits" and
+docs/author-outreach.md.
 
 Covers: the packaged default templates render with every placeholder,
 correct UTM tagging, the opt-out link's Postmark no-track marker, the
@@ -199,7 +199,7 @@ class AuthorOutreachRenderTestCase(TestCase):
 		self.assertNotIn("?", context["opt_out_url"])
 
 	def test_add_utm_params_does_not_tag_third_party_host(self):
-		"""Regression guard for AUTHOR-OUTREACH-PLAN.md PR 5's 'Confirm
+		"""Regression guard for docs/author-outreach.md's 'Confirm
 		add_utm_params still only tags links on the sending site's own
 		host' — a DOI/registry link on a different host must never be
 		tagged even if a template author tries to pass it through."""
@@ -218,7 +218,7 @@ class AuthorOutreachRenderTestCase(TestCase):
 
 	def test_no_rendered_link_carries_a_person_identifier_as_a_query_parameter(self):
 		"""
-		AUTHOR-OUTREACH-SPEC.md "Non-goals": "No per-recipient identifier
+		docs/author-outreach-spec.md "Non-goals": "No per-recipient identifier
 		in any URL. The opt-out token is the sole exception[...]". This
 		asserts that exception is the ONLY per-person value anywhere, and
 		specifically that nothing resolvable to this author (author_id,
@@ -293,7 +293,7 @@ class AuthorOutreachRenderTestCase(TestCase):
 
 	def test_body_template_override_cannot_reach_orm_relations(self):
 		"""
-		AUTHOR-OUTREACH-SPEC.md "Configuration": rendered against an
+		docs/author-outreach-spec.md "Configuration": rendered against an
 		explicit context of strings and dicts only, never a model
 		instance. An admin-authored template that tries to walk a
 		relation Django would normally allow (e.g. author.emails, or a

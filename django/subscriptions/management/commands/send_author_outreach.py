@@ -1,7 +1,7 @@
 """
 Send the approved AuthorOutreach queue for one campaign. See
-AUTHOR-OUTREACH-SPEC.md "Queue and approval", "Safety limits", and
-AUTHOR-OUTREACH-PLAN.md "PR 5 — Rendering and sending".
+docs/author-outreach-spec.md "Queue and approval", "Safety limits", and
+docs/author-outreach.md.
 
 This is the first command in the feature that can send real email to a
 real person, so every check below is a deliberate safety control, not
@@ -345,7 +345,7 @@ class Command(BaseCommand):
 				continue
 
 			# Then evaluate the circuit breakers — after the opt-out
-			# recheck, per AUTHOR-OUTREACH-SPEC.md "Safety limits", and
+			# recheck, per docs/author-outreach-spec.md "Safety limits", and
 			# against a fresh copy of the campaign in case a previous
 			# iteration of this same loop just halted it.
 			campaign.refresh_from_db()

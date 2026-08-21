@@ -1,5 +1,5 @@
 <!--
-  Author outreach — packaged default body (AUTHOR-OUTREACH-SPEC.md "Copy",
+  Author outreach — packaged default body (docs/author-outreach-spec.md "Copy",
   "upcoming" mode only — see AuthorOutreachCampaign.body_template's
   help_text and subscriptions.utils.author_outreach_send.
   render_author_outreach_email for why a retrospective campaign refuses to
@@ -13,7 +13,7 @@
   Rendered against the primitives-only context
   subscriptions.utils.author_outreach_send.build_render_context builds:
   strings and a list of {title, url} dicts, never a model instance. A
-  site's campaign.body_template override (AUTHOR-OUTREACH-SPEC.md
+  site's campaign.body_template override (docs/author-outreach-spec.md
   "Configuration") is rendered against this exact same context, so this
   file and an override are held to the identical safety bar rather than
   this one getting a looser one "because we wrote it".
@@ -40,7 +40,7 @@
   postmarkapp.com/developer/user-guide/tracking-links, which names this
   exact attribute for opting one anchor out of tracking while the rest of
   the message stays tracked. Used here, and only here, per
-  AUTHOR-OUTREACH-SPEC.md "Privacy of tracking data": "The opt-out link
+  docs/author-outreach-spec.md "Privacy of tracking data": "The opt-out link
   itself is excluded from click tracking."
 -->
 <p>This is a one-time email; we will not contact you again. If you would rather we had not, you can opt out permanently &mdash; it will not affect your author profile page: <a data-pm-no-track href="{{ opt_out_url }}">Never contact me again</a>.</p>

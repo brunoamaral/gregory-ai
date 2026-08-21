@@ -1,6 +1,6 @@
 """
 Tests for prune_email_events (default 180 days) and prune_email_messages
-(default 730 days) — see AUTHOR-OUTREACH-PLAN.md PR 1. Both commands must
+(default 730 days) — see docs/author-outreach.md. Both commands must
 never touch AuthorContactOptOut or SuppressionEvent (not introduced until
 PR 2/already existing respectively); prune_email_messages must additionally
 never delete an EmailMessage an AuthorOutreach (PR 3) references, tested
@@ -119,7 +119,7 @@ class PruneEmailMessagesTest(TestCase):
 		"""
 		AuthorOutreach (PR 3) points an email_message FK at the EmailMessage
 		that carried a one-time outreach contact — the durable evidence the
-		contact happened under legitimate interest (AUTHOR-OUTREACH-SPEC.md's
+		contact happened under legitimate interest (docs/author-outreach-spec.md's
 		retention table: "EmailMessage ... never when referenced by an
 		AuthorOutreach"). That row must survive this command regardless of
 		age, while every other old EmailMessage row is pruned as normal.

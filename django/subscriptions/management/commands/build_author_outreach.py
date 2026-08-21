@@ -1,7 +1,6 @@
 """
 Build the AuthorOutreach queue for one campaign. See
-AUTHOR-OUTREACH-SPEC.md "Queue and approval" and AUTHOR-OUTREACH-PLAN.md
-"PR 4 — Eligibility engine".
+docs/author-outreach-spec.md "Queue and approval" and docs/author-outreach.md.
 
 This command only ever writes status="pending" rows via
 subscriptions.utils.author_outreach.eligible_authors. It never sends

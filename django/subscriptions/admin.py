@@ -1445,7 +1445,7 @@ class EmailEventAdmin(admin.ModelAdmin):
 class AuthorOutreachCampaignAdmin(admin.ModelAdmin):
 	"""
 	Configuration for one author-outreach campaign. See
-	AuthorOutreachCampaign's model docstring and AUTHOR-OUTREACH-SPEC.md
+	AuthorOutreachCampaign's model docstring and docs/author-outreach-spec.md
 	"Configuration" for what each field controls. Queue rows are managed
 	on AuthorOutreachAdmin below, not here.
 	"""
@@ -1536,14 +1536,14 @@ class AuthorOutreachAdmin(admin.ModelAdmin):
 	The approval queue: rows written by build_author_outreach (PR 4) as
 	status="pending", reviewed here by a human, then sent — approved rows
 	only — by send_author_outreach (PR 5). See AuthorOutreach's model
-	docstring and AUTHOR-OUTREACH-SPEC.md "Queue and approval".
+	docstring and docs/author-outreach-spec.md "Queue and approval".
 
 	Every field is read-only: state changes go through the actions below
 	so approved_at/approved_by (and, for a reset, the fact that a closed
 	slot was deliberately reopened) are always recorded, never a silent
 	field edit. Rows can't be added here either — only
 	build_author_outreach writes them. Deletion is disabled outright, not
-	just the bulk action: AUTHOR-OUTREACH-SPEC.md's retention table marks
+	just the bulk action: docs/author-outreach-spec.md's retention table marks
 	AuthorOutreach "Indefinite" — the record has to outlive everything
 	else, the same permanence class as AuthorContactOptOut and
 	SuppressionEvent.
@@ -1641,7 +1641,7 @@ class AuthorOutreachAdmin(admin.ModelAdmin):
 		AuthorOutreach.unique_author_outreach_per_site makes (site, author)
 		a one-time slot: a failed, skipped, or cancelled row burns it
 		permanently, by design — see the model docstring and
-		AUTHOR-OUTREACH-SPEC.md "One row per site per author". This action
+		docs/author-outreach-spec.md "One row per site per author". This action
 		is the sole, deliberate exception. It does not mean "retry
 		automatically" or "this was probably fine" — it means a human has
 		reviewed why the slot closed and decided, explicitly, to reopen it.
@@ -1657,7 +1657,7 @@ class AuthorOutreachAdmin(admin.ModelAdmin):
 		message and the crash happened afterwards, before this row's own
 		status/email_message fields were saved back. Reopening the second
 		kind risks a genuine second send to the same person, which
-		AUTHOR-OUTREACH-SPEC.md's "one email per author per site, ever"
+		docs/author-outreach-spec.md's "one email per author per site, ever"
 		rule forbids outright.
 
 		There is no way to tell the two apart from this row alone, because
@@ -1753,12 +1753,12 @@ class AuthorOutreachAdmin(admin.ModelAdmin):
 class AuthorContactOptOutAdmin(admin.ModelAdmin):
 	"""
 	The global "never contact this address again" list. See
-	AuthorContactOptOut's model docstring and AUTHOR-OUTREACH-SPEC.md
+	AuthorContactOptOut's model docstring and docs/author-outreach-spec.md
 	"Bounce and complaint handling". Most rows are written automatically
 	(hard bounce, spam complaint, a suppressed AuthorOutreach recipient,
 	the opt-out link) — reason="admin" is the one path meant to be
 	created by hand here, for a staff member blocking an address
-	proactively. Deletion is disabled outright: AUTHOR-OUTREACH-SPEC.md's
+	proactively. Deletion is disabled outright: docs/author-outreach-spec.md's
 	retention table marks this table indefinite — "'Never contact this
 	address' cannot expire" — the same permanence class as
 	SuppressionEvent.
