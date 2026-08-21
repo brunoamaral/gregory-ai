@@ -1,0 +1,49 @@
+<!--
+  Author outreach — packaged default body (docs/author-outreach-spec.md "Copy",
+  "upcoming" mode only — see AuthorOutreachCampaign.body_template's
+  help_text and subscriptions.utils.author_outreach_send.
+  render_author_outreach_email for why a retrospective campaign refuses to
+  fall back to this file).
+
+  No base_email.html wrapper: this is cold outreach to a researcher who
+  never subscribed to anything, not a subscriber newsletter — paragraphs
+  and <a> tags only, per the spec's "Addressing and sending" table
+  ("Body").
+
+  Rendered against the primitives-only context
+  subscriptions.utils.author_outreach_send.build_render_context builds:
+  strings and a list of {title, url} dicts, never a model instance. A
+  site's campaign.body_template override (docs/author-outreach-spec.md
+  "Configuration") is rendered against this exact same context, so this
+  file and an override are held to the identical safety bar rather than
+  this one getting a looser one "because we wrote it".
+-->
+<p>Hi {{ author_name }},</p>
+
+{% if articles|length == 1 %}
+<p>Your paper, &ldquo;<a href="{{ article_url }}">{{ article_title }}</a>,&rdquo; will be featured in the next {{ site_name }} research digest newsletter.</p>
+{% else %}
+<p>Your papers below will be featured in the next {{ site_name }} research digest newsletter:</p>
+{% for article in articles %}
+<p><a href="{{ article.url }}">{{ article.title }}</a></p>
+{% endfor %}
+{% endif %}
+
+<p>{{ site_name }} selects articles for its research digest using a high score across three independent machine learning models and a human review &mdash; the same review every article in the digest goes through before a single subscriber sees it.</p>
+
+<p>You can see your author profile on {{ site_name }}, including the research we have indexed for you, here: <a href="{{ author_page_url }}">{{ author_page_url }}</a></p>
+
+<!--
+  data-pm-no-track excludes this specific link from Postmark's click
+  tracking even though the message enables TrackLinks. Verified against
+  Postmark's own developer documentation at
+  postmarkapp.com/developer/user-guide/tracking-links, which names this
+  exact attribute for opting one anchor out of tracking while the rest of
+  the message stays tracked. Used here, and only here, per
+  docs/author-outreach-spec.md "Privacy of tracking data": "The opt-out link
+  itself is excluded from click tracking."
+-->
+<p>This is a one-time email; we will not contact you again. If you would rather we had not, you can opt out permanently &mdash; it will not affect your author profile page: <a data-pm-no-track href="{{ opt_out_url }}">Never contact me again</a>.</p>
+
+<p>{{ sender_name }}</p>
+<p>{{ site_name }} &mdash; <a href="{{ site_url }}">{{ site_url }}</a></p>

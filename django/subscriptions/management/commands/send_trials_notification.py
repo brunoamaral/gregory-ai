@@ -4,7 +4,10 @@ import requests
 from django.utils.timezone import now
 from django.core.management.base import BaseCommand
 from django.template.loader import get_template
-from subscriptions.management.commands.utils.send_email import send_email
+from subscriptions.management.commands.utils.send_email import (
+	send_email,
+	record_sent_message,
+)
 from subscriptions.management.commands.utils.subscription import get_trials_for_list
 from subscriptions.models import (
 	Lists,
@@ -236,7 +239,24 @@ class Command(BaseCommand):
 					FailedNotification.objects.create(
 						subscriber=subscriber, list=lst, reason=f"Connection error: {e}"
 					)
+					record_sent_message(
+						None,
+						recipient=subscriber.email,
+						subject=email_subject,
+						tag="trial_notification",
+						site=site,
+						subscriber=subscriber,
+					)
 					continue
+
+				record_sent_message(
+					result,
+					recipient=subscriber.email,
+					subject=email_subject,
+					tag="trial_notification",
+					site=site,
+					subscriber=subscriber,
+				)
 
 				# Step 7: Parse the Postmark response
 				delivered, error_code, detail = classify_postmark_response(result)

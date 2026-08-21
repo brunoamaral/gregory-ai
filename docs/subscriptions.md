@@ -373,13 +373,31 @@ dispatch happens on the payload's `RecordType`, and anything that doesn't
 look like a Postmark event is logged and ignored rather than acted on.
 
 Postmark is configured to send: **Delivery, Bounce, Open (first open only),
-Subscription Change**. Delivery, Open, and Bounce are accepted and return 200
-with no state change — Bounce is supplementary detail (hard vs soft; a soft
-bounce does not suppress), Delivery/Open are irrelevant to suppression.
-**Subscription Change drives everything**: it is the superset event for
-suppression state and fires in both directions (`SuppressSending: true` /
-`false`). Spam complaints reach us through `SuppressionReason: "SpamComplaint"`
-on this event even with the Spam Complaint event type disabled.
+Subscription Change** (Spam Complaint and Link Click join this list once
+the author outreach webhook config is applied — see
+[author-outreach.md § Postmark setup](author-outreach.md#postmark-setup)).
+Delivery, Bounce, Spam Complaint, Open, and Click never change suppression
+state — Bounce is supplementary detail (hard vs soft; a soft bounce does
+not suppress), Delivery/Open/Click are irrelevant to suppression.
+**Subscription Change drives everything** here: it is the
+superset event for suppression state and fires in both directions
+(`SuppressSending: true` / `false`). Spam complaints reach us through
+`SuppressionReason: "SpamComplaint"` on this event even with the Spam
+Complaint event type disabled.
+
+**Every recognised event except Subscription Change is separately logged
+to `EmailEvent`**, an append-only record kept alongside (not instead of)
+the `SuppressionEvent` handling above. Subscription Change is deliberately
+excluded from this second write: `SuppressionEvent`, above, is its sole
+record. The two were dual-written for a short time; that duplicated the
+event in the admin and, worse, collided, since Postmark sends an all-zero
+placeholder MessageID on a Subscription Change with no originating message
+and `EmailEvent`'s dedup key (before it grew a `recipient` component — see
+below) had no way to tell two different people apart in the same second.
+See
+[Email Message and Event Log](#email-message-and-event-log) below: this is
+new behaviour — before it existed, Delivery/Bounce/Open were accepted and
+silently discarded.
 
 ### Authentication
 
@@ -494,10 +512,198 @@ retry window.
 
 `send_email` accepts an optional `tag` parameter (Postmark's `Tag` field —
 one per message), passed through as the email type: `weekly_summary`,
-`admin_summary`, `trial_notification`, `announcement`. Not required for
-suppression (`Recipient` already identifies the subscriber) but makes
-Postmark-side stats and debugging much better. Lists are not used as tags —
-Postmark's tag reporting is designed for a small, low-cardinality set.
+`admin_summary`, `trial_notification`, `announcement`, `author_outreach`.
+Not required for suppression (`Recipient` already identifies the
+subscriber) but makes Postmark-side stats and debugging much better. Lists
+are not used as tags — Postmark's tag reporting is designed for a small,
+low-cardinality set.
+
+`send_email` also accepts `metadata`, `reply_to`, `track_opens`, and
+`track_links`, all optional and all defaulting to `None`/`False`. None of
+the four original senders (weekly digest, admin summary, trial
+notification, announcement) pass them, so their Postmark payload is
+unchanged; `send_author_outreach` (see
+[author-outreach.md](author-outreach.md)) is the one caller that opts in
+per message rather than per stream. `metadata` is where
+`EmailMessage.msg_token` gets echoed back to Postmark, for a webhook event
+to correlate against later (see below).
+
+---
+
+## Email Message and Event Log
+
+Two tables, written for **every** sender (weekly digest, admin summary,
+trial notification, announcement, and — from author outreach onward — that
+feature too), not just outreach:
+
+- **`EmailMessage`** — one row per message handed to Postmark. Written at
+  send time by `record_sent_message()`
+  (`subscriptions/management/commands/utils/send_email.py`), called right
+  after `send_email()` by every sender, success or failure. Holds the
+  Postmark `MessageID`, an opaque `msg_token` UUID, recipient, tag, stream,
+  and the aggregate outcome fields the webhook updates later: `delivered_at`,
+  `first_opened_at` (first open only), `bounced_at` / `bounce_type`,
+  `complained_at`.
+- **`EmailEvent`** — one row per webhook call, append-only. Written by
+  `subscriptions.utils.email_events.handle_email_event`, called from
+  `postmark_webhook` for every recognised `RecordType` **except**
+  `SubscriptionChange`: `Delivery`, `Bounce`, `SpamComplaint`, `Open`,
+  `Click`. `SubscriptionChange` is handled entirely by
+  `handle_subscription_change` instead (`SuppressionEvent`, above, is its
+  sole record) — the two were briefly dual-written; see "Deduplication"
+  below for why that was removed.
+
+### Correlation
+
+Two independent keys, tried in order: `Metadata.msg_token` (the UUID a
+sender can choose to echo back via `send_email(metadata=...)`), then
+Postmark's own `MessageID`. Neither may match — the four existing senders
+don't pass `metadata` yet, and a message sent before this feature shipped
+has no `EmailMessage` row at all — in which case the event is still
+recorded, with `email_message=NULL`.
+
+### Deduplication
+
+Unique constraint: `(record_type, message_id, occurred_at, recipient,
+link_url)`. Widened from an original `(record_type, message_id,
+occurred_at)` after two real collisions surfaced:
+
+- **`recipient`** — Postmark sends an all-zero placeholder `MessageID`
+  (`00000000-0000-0000-0000-000000000000`) on an event with no originating
+  message. Without `recipient` in the key, two different people affected in
+  the same second collided on that placeholder and the second was silently
+  discarded as a "replay" it wasn't. (This was first found via
+  `SubscriptionChange`, which is why that type was also pulled out of this
+  table entirely — see above — but the same all-zero-`MessageID` hazard
+  isn't unique to that one type, so `recipient` stays in the key for every
+  `record_type` this table does still record.)
+- **`link_url`** — corporate mail scanners (Proofpoint, Mimecast, and
+  similar — common on the university addresses author outreach targets)
+  click every link in a message within the same second to vet it. Without
+  `link_url` in the key, three `Click` events on one message in the same
+  second — three different `OriginalLink` values — collapsed onto a single
+  row and dropped two real clicks.
+
+A genuine replay (the identical payload delivered twice) still dedupes to
+one row, since every field in the key is identical both times. See
+`subscriptions/tests/test_email_events.py::WidenedDedupKeyTest` and
+`::ReplayIsANoOpTest` for the regression coverage.
+
+### What is deliberately not stored
+
+Open and Click payloads carry `Geo`, `IP`, `UserAgent`, `OS`, `Client`,
+`Platform`, and `ReadSeconds` for the recipient; Bounce/SpamComplaint
+payloads additionally embed the full original message `Content`. **None of
+it is stored.** `EmailEvent` has no field for any of them — see its model
+docstring (`subscriptions/models.py`) for the full list and reasoning, and
+`subscriptions/tests/test_email_events.py::PrivacyRegressionGuardTest` for
+the regression guard that feeds a full Open payload and asserts the stored
+row is clean.
+
+Open and link tracking (`TrackOpens`/`TrackLinks`) are opt-in per message
+via `send_email()` and default off — the four existing senders don't set
+them, so this ships with no behaviour change for weekly digest, admin
+summary, trial notification, or announcement email.
+
+`track_links=True` sends `TrackLinks: "HtmlAndText"`; passing a string
+instead (`"HtmlOnly"`, `"TextOnly"`) forwards it verbatim. That matters for
+any message with a link that must stay untracked: Postmark's per-link
+`data-pm-no-track` marker is an HTML attribute, so a URL excluded in the
+HTML body is still rewritten and tracked in the text body under
+`HtmlAndText`. Author outreach sends `"HtmlOnly"` for exactly this reason —
+see [author-outreach.md](author-outreach.md).
+
+### A quirk worth knowing: `Email` vs `Recipient`
+
+Every Postmark webhook event names the recipient field `Recipient` —
+**except** `Bounce` and `SpamComplaint`, which use `Email` instead
+(confirmed against Postmark's own documented example payloads). Easy to get
+backwards, since nothing about the field's absence raises; `handle_email_event`
+looks up the correct field per `RecordType` rather than assuming one name.
+
+### Retention
+
+| Table | Default retention | Command |
+|:--|:--|:--|
+| `EmailEvent` | 180 days | `prune_email_events --days N --dry-run` |
+| `EmailMessage` | 730 days, **except** rows an `AuthorOutreach` references (never pruned) | `prune_email_messages --days N --dry-run` |
+
+**Invariant, restated in both commands' docstrings: pruning telemetry must
+never weaken a suppression.** Neither command ever touches
+`AuthorContactOptOut` or `SuppressionEvent` — both are permanent, by design,
+independent of this log.
+
+### Admin
+
+Both models are registered read-only (`has_add_permission` /
+`has_change_permission` return `False`) — `EmailMessageAdmin` includes an
+inline listing of its `EmailEvent` rows.
+
+---
+
+## Author Outreach Opt-Out
+
+`AuthorContactOptOut` (see
+[02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md) for
+the full field list) is a global "never contact this address again" list,
+keyed on the email address — **not** on `Authors` or `Subscribers`. That
+independence is deliberate: an author contacted under
+[author outreach](author-outreach.md) is not a newsletter subscriber, so
+this table and `Subscribers`/`ListSubscription` must never be able to
+drift into each other. The same address can appear in both, correctly, at
+the same time.
+
+Every write goes through `subscriptions.utils.author_optout.
+record_author_opt_out(email, reason, note="")`, which is idempotent (an
+address already opted out is left alone, regardless of which `reason` a
+later event carries) and never raises — every caller below depends on that,
+the same way `handle_email_event` and `handle_subscription_change` depend
+on never turning a webhook call into a non-200 response.
+
+### The three write paths
+
+| Trigger | Caller | `reason` |
+|:--|:--|:--|
+| Hard bounce (Postmark Bounce `Type` of `HardBounce` or `BadEmailAddress`) | `handle_email_event` | `hard_bounce` |
+| Spam complaint (`SpamComplaint` record) | `handle_email_event` | `spam_complaint` |
+| A `SubscriptionChange` suppression whose recipient matches an existing `AuthorOutreach` row | `handle_subscription_change` | `hard_bounce` / `spam_complaint` / `admin`, mapped from Postmark's `SuppressionReason` via `optout_reason_for_suppression_reason` (`ManualSuppression`, blank, or anything unrecognised falls back to `admin`) |
+| The opt-out link, `POST`ed | `subscriptions.views.author_optout` | `opt_out` |
+
+The first two apply to **any** message this system sends, not only
+outreach — a hard bounce or complaint means the address must never be used
+again anywhere, regardless of which sender triggered it. The third only
+fires when `SuppressSending` is `True`; an *un*suppress is never read as
+"undo the opt-out" — opt-out is one-directional, mirroring spam complaints
+being sticky in the reactivation policy above. All three writes are
+independent of, and cannot block, the `SuppressionEvent` handling described
+earlier in this document: a failure recording an opt-out is caught and
+logged separately from (and in addition to) `record_author_opt_out`'s own
+internal try/except, so it can never cost a webhook call its 200 response
+or an already-written `EmailEvent`/`SuppressionEvent` row.
+
+### The opt-out endpoint
+
+**`GET`/`POST /subscriptions/author-optout/<uuid:token>/`** — registered in
+`admin/urls.py` next to the three unsubscribe routes above, but a distinct
+system: `token` is `AuthorOutreach.opt_out_token`, not
+`Subscribers.unsubscribe_token`.
+
+- **`GET`** renders a confirmation page and mutates nothing. Mail clients
+  and security scanners prefetch links; a prefetching `GET` that performed
+  the opt-out would silently unsubscribe someone who never clicked
+  anything.
+- **`POST`** performs the opt-out via `record_author_opt_out` and is
+  idempotent, mirroring `_unsubscribe_confirm`'s GET/POST split and reusing
+  its template styling (`templates/subscriptions/author_optout_confirm.html`
+  / `author_optout_done.html`).
+- An unknown token 404s (`get_object_or_404`).
+
+The opt-out affects **future email only**. It does not change
+`AuthorOutreach.status` on the row the token resolved (that queue row stays
+whatever it was — cancelling a still-pending send is the admin's Skip
+action, a separate thing), and it never touches `Authors` or anything the
+public author profile page reads — the profile page stays published
+exactly as it was.
 
 ---
 

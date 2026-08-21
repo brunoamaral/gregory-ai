@@ -1,5 +1,10 @@
+import logging
+import uuid
+
 import requests
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 def send_email(
@@ -13,6 +18,10 @@ def send_email(
 	api_url=None,
 	sender_prefix=None,
 	tag=None,
+	metadata=None,
+	reply_to=None,
+	track_opens=False,
+	track_links=False,
 ):
 	"""
 	Sends an email using the Postmark API.
@@ -29,6 +38,28 @@ def send_email(
 	:param tag: Postmark message tag (e.g. "weekly_summary"). Postmark allows
 		exactly one tag per message; used for Postmark-side stats/debugging
 		only, not for suppression, which keys off the recipient address.
+	:param metadata: Optional dict merged into Postmark's Metadata field
+		(e.g. {"msg_token": "<uuid4>", "campaign": "<slug>"} — see
+		EmailMessage.msg_token). None by default, so every existing caller's
+		payload is byte-for-byte unchanged.
+	:param reply_to: Optional Reply-To address. None by default — omitted
+		from the payload entirely rather than sent empty.
+	:param track_opens: Postmark TrackOpens. False by default, matching
+		today's behaviour for every existing sender; digest/admin/trial/
+		announcement email must keep NOT tracking opens unless a caller
+		opts in explicitly.
+	:param track_links: Postmark TrackLinks. False by default for the same
+		reason. True is sent as "HtmlAndText"; a string is passed through
+		verbatim, so a caller can ask for "HtmlOnly" or "TextOnly".
+
+		"HtmlOnly" is not a micro-optimisation — it is the only way to keep
+		a specific link out of Postmark's click tracking. The per-link
+		opt-out marker (data-pm-no-track) is an HTML attribute and has no
+		plain-text equivalent, so under "HtmlAndText" Postmark rewrites and
+		tracks that same URL in the text body regardless. Author outreach
+		therefore sends "HtmlOnly": a click on "never contact me again"
+		must not be tracked in either body (docs/author-outreach.md,
+		"Safeguards").
 	:return: Response object from the Postmark API.
 	"""
 	prefix = sender_prefix or "gregory"
@@ -48,6 +79,16 @@ def send_email(
 	}
 	if tag:
 		payload["Tag"] = tag
+	if metadata:
+		payload["Metadata"] = metadata
+	if reply_to:
+		payload["ReplyTo"] = reply_to
+	if track_opens:
+		payload["TrackOpens"] = True
+	if track_links:
+		payload["TrackLinks"] = (
+			track_links if isinstance(track_links, str) else "HtmlAndText"
+		)
 
 	response = requests.post(
 		email_postmark_api_url,
@@ -61,3 +102,76 @@ def send_email(
 	)
 
 	return response
+
+
+def record_sent_message(
+	response,
+	*,
+	recipient,
+	subject,
+	tag,
+	stream="broadcast",
+	site=None,
+	subscriber=None,
+	msg_token=None,
+):
+	"""
+	Write the EmailMessage row for one send_email() attempt.
+
+	Call this right after send_email() — on success and on failure alike
+	(`response` may be None, e.g. when the caller caught a
+	requests.RequestException before a response ever came back). This is
+	the only place that turns a Postmark send into the durable local record
+	a later webhook call (subscriptions.utils.email_events.handle_email_event)
+	correlates against.
+
+	Deliberately failure-tolerant: any exception here is logged and
+	swallowed, never raised. A bug in this logging path must never take
+	down a send that has already happened (or already been handled as a
+	failure by the caller) — the send itself, and the caller's own
+	FailedNotification/AnnouncementRecipient bookkeeping, always win.
+	"""
+	# Imported here, not at module level: subscriptions.models pulls in a
+	# fair amount (simple_history, gregory.models, ...), and every sender
+	# already imports this module at Django app-loading time.
+	from subscriptions.models import EmailMessage
+	from subscriptions.utils.postmark import classify_postmark_response
+
+	try:
+		accepted, error_code, detail = classify_postmark_response(response)
+
+		message_id = ""
+		if response is not None:
+			body = response if isinstance(response, dict) else None
+			if body is None:
+				try:
+					body = response.json()
+				except ValueError:
+					body = {}
+			message_id = body.get("MessageID") or ""
+
+		EmailMessage.objects.create(
+			msg_token=msg_token or uuid.uuid4(),
+			message_id=message_id,
+			recipient=(recipient or "").strip().lower(),
+			subject=subject or "",
+			tag=tag or "",
+			message_stream=stream or "",
+			site=site,
+			subscriber=subscriber,
+			accepted=accepted,
+			# NULL means "no error", so an accepted send must not persist the
+			# 0 that classify_postmark_response returns on success — otherwise
+			# error_code__isnull=False matches every successful send and the
+			# field can't be used to find failures at all.
+			error_code=(
+				None
+				if accepted
+				else (error_code if isinstance(error_code, int) else None)
+			),
+			error_message="" if accepted else (detail or ""),
+		)
+	except Exception:
+		logger.exception(
+			"record_sent_message: failed to record EmailMessage for %s", recipient
+		)

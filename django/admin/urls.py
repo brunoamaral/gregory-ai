@@ -52,6 +52,7 @@ from subscriptions.views import (
 	unsubscribe_list,
 	unsubscribe_site,
 	unsubscribe_all,
+	author_optout,
 	ckeditor_upload,
 	postmark_webhook,
 )
@@ -151,6 +152,16 @@ urlpatterns = (
 			"subscriptions/unsubscribe/<uuid:token>/all/",
 			unsubscribe_all,
 			name="unsubscribe_all",
+		),
+		# Author outreach opt-out (docs/author-outreach.md, "Approval
+		# workflow"). token is AuthorOutreach.opt_out_token, not the
+		# Subscribers.unsubscribe_token the three routes above use — these
+		# are two independent systems (see AuthorContactOptOut's model
+		# docstring).
+		path(
+			"subscriptions/author-optout/<uuid:token>/",
+			author_optout,
+			name="author_optout",
 		),
 		# Postmark webhook (suppression / reactivation) — provider-agnostic
 		# path, not /webhooks/postmark/, since it's the only webhook consumer

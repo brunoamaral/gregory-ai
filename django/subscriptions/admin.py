@@ -20,6 +20,11 @@ from .models import (
 	Announcement,
 	AnnouncementRecipient,
 	SuppressionEvent,
+	EmailMessage,
+	EmailEvent,
+	AuthorOutreachCampaign,
+	AuthorOutreach,
+	AuthorContactOptOut,
 )
 from .forms import ListsAdminForm, AnnouncementAdminForm
 from gregory.models import Team
@@ -1358,6 +1363,438 @@ class SuppressionEventAdmin(admin.ModelAdmin):
 		return False
 
 	def has_change_permission(self, request, obj=None):
+		return False
+
+
+class EmailEventInline(admin.TabularInline):
+	"""Read-only: every EmailEvent recorded against one EmailMessage."""
+
+	model = EmailEvent
+	extra = 0
+	fields = [
+		"record_type",
+		"occurred_at",
+		"tag",
+		"bounce_type",
+		"details",
+		"link_url",
+		"received_at",
+	]
+	readonly_fields = fields
+	can_delete = False
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+
+@admin.register(EmailMessage)
+class EmailMessageAdmin(admin.ModelAdmin):
+	"""
+	Read-only: one row per message handed to Postmark, by any sender. See
+	docs/subscriptions.md for the webhook that updates the aggregate outcome
+	fields below, and EmailMessage's model docstring for what msg_token and
+	message_id are for.
+	"""
+
+	list_display = [
+		"recipient",
+		"tag",
+		"accepted",
+		"sent_at",
+		"delivered_at",
+		"first_opened_at",
+		"bounced_at",
+		"complained_at",
+	]
+	list_filter = ["tag", "accepted", "message_stream", "bounce_type", "site"]
+	search_fields = ["recipient", "message_id", "msg_token", "subject"]
+	readonly_fields = [f.name for f in EmailMessage._meta.fields]
+	inlines = [EmailEventInline]
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+
+@admin.register(EmailEvent)
+class EmailEventAdmin(admin.ModelAdmin):
+	"""
+	Read-only: the append-only Postmark webhook event log. See EmailEvent's
+	model docstring for exactly what is, and deliberately is not, stored
+	from each payload (no IP, geo, user agent, or raw payload — ever).
+	"""
+
+	list_display = ["recipient", "record_type", "occurred_at", "tag", "email_message"]
+	list_filter = ["record_type", "tag", "message_stream"]
+	search_fields = ["recipient", "message_id"]
+	readonly_fields = [f.name for f in EmailEvent._meta.fields]
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+
+@admin.register(AuthorOutreachCampaign)
+class AuthorOutreachCampaignAdmin(admin.ModelAdmin):
+	"""
+	Configuration for one author-outreach campaign. See
+	AuthorOutreachCampaign's model docstring and docs/author-outreach-spec.md
+	"Configuration" for what each field controls. Queue rows are managed
+	on AuthorOutreachAdmin below, not here.
+	"""
+
+	list_display = [
+		"name",
+		"site",
+		"mode",
+		"utm_campaign_slug",
+		"enabled",
+		"halted",
+		"updated_at",
+	]
+	list_filter = ["site", "mode", "enabled", "halted"]
+	search_fields = ["name", "utm_campaign_slug"]
+	filter_horizontal = ["subjects"]
+	readonly_fields = ["halted_at", "created_at", "updated_at"]
+
+	fieldsets = [
+		(None, {"fields": ["name", "site", "mode", "utm_campaign_slug", "enabled"]}),
+		(
+			"Halt state",
+			{
+				"fields": ["halted", "halted_at", "halted_reason"],
+				"description": (
+					"Set automatically by send_author_outreach (PR 5) when a "
+					"safety-limit circuit breaker trips. Clear 'halted' by "
+					"hand only after investigating halted_reason."
+				),
+			},
+		),
+		(
+			"Eligibility",
+			{
+				"fields": ["subjects", "featured_within_days", "max_articles_per_email"],
+				"description": (
+					"featured_within_days only applies when mode is "
+					"'retrospective' — see the model's clean()."
+				),
+			},
+		),
+		(
+			"Copy",
+			{"fields": ["subject_line", "body_template", "reply_to"]},
+		),
+		(
+			"Safety limits",
+			{
+				"fields": [
+					"daily_send_limit",
+					"send_rate_per_minute",
+					"complaint_halt_absolute",
+					"complaint_halt_rate_percent",
+					"complaint_halt_rate_min_sent",
+					"bounce_halt_absolute",
+					"bounce_halt_rate_percent",
+					"bounce_halt_rate_min_sent",
+					"inactive_halt_absolute",
+				],
+				"classes": ["collapse"],
+			},
+		),
+		("Timestamps", {"fields": ["created_at", "updated_at"], "classes": ["collapse"]}),
+	]
+
+
+class AuthorOutreachArticlesInline(admin.TabularInline):
+	"""Read-only: the qualifying papers named in this row's email."""
+
+	model = AuthorOutreach.articles.through
+	extra = 0
+	verbose_name = "Article"
+	verbose_name_plural = "Articles"
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+
+@admin.register(AuthorOutreach)
+class AuthorOutreachAdmin(admin.ModelAdmin):
+	"""
+	The approval queue: rows written by build_author_outreach (PR 4) as
+	status="pending", reviewed here by a human, then sent — approved rows
+	only — by send_author_outreach (PR 5). See AuthorOutreach's model
+	docstring and docs/author-outreach-spec.md "Queue and approval".
+
+	Every field is read-only: state changes go through the actions below
+	so approved_at/approved_by (and, for a reset, the fact that a closed
+	slot was deliberately reopened) are always recorded, never a silent
+	field edit. Rows can't be added here either — only
+	build_author_outreach writes them. Deletion is disabled outright, not
+	just the bulk action: docs/author-outreach-spec.md's retention table marks
+	AuthorOutreach "Indefinite" — the record has to outlive everything
+	else, the same permanence class as AuthorContactOptOut and
+	SuppressionEvent.
+	"""
+
+	list_display = [
+		"author",
+		"email",
+		"status",
+		"campaign",
+		"site",
+		"article_titles",
+		"queued_at",
+		"approved_at",
+		"sent_at",
+	]
+	list_filter = ["status", "campaign", "site"]
+	search_fields = ["email", "author__full_name", "author__ORCID"]
+	# Concrete fields only — "articles" (the M2M) is shown via the inline
+	# below instead, so it isn't duplicated as a plain joined-string field.
+	readonly_fields = [f.name for f in AuthorOutreach._meta.fields]
+	exclude = ["articles"]
+	inlines = [AuthorOutreachArticlesInline]
+	actions = ["approve_selected", "skip_selected", "reset_for_retry"]
+
+	def article_titles(self, obj):
+		return "; ".join(obj.articles.values_list("title", flat=True)[:3])
+
+	article_titles.short_description = "Articles"
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+	def get_actions(self, request):
+		actions = super().get_actions(request)
+		# reset_for_retry is superuser-only. Custom actions aren't gated by
+		# has_*_permission unless registered with @admin.action(permissions=
+		# [...]), so it's stripped from the dropdown here for everyone else
+		# — the is_superuser check inside the action itself is the second,
+		# load-bearing layer in case this method is ever bypassed.
+		if not request.user.is_superuser:
+			actions.pop("reset_for_retry", None)
+		return actions
+
+	@admin.action(permissions=["change"], description="Approve selected")
+	def approve_selected(self, request, queryset):
+		pending = queryset.filter(status=AuthorOutreach.STATUS_PENDING)
+		skipped_count = queryset.exclude(status=AuthorOutreach.STATUS_PENDING).count()
+		count = pending.count()
+		pending.update(
+			status=AuthorOutreach.STATUS_APPROVED,
+			approved_at=timezone.now(),
+			approved_by=request.user,
+		)
+		if count:
+			self.message_user(
+				request, f"Approved {count} row(s).", level=messages.SUCCESS
+			)
+		if skipped_count:
+			self.message_user(
+				request,
+				f"Ignored {skipped_count} row(s) that were not pending.",
+				level=messages.WARNING,
+			)
+
+	@admin.action(permissions=["change"], description="Skip selected")
+	def skip_selected(self, request, queryset):
+		eligible = queryset.filter(
+			status__in=[AuthorOutreach.STATUS_PENDING, AuthorOutreach.STATUS_APPROVED]
+		)
+		skipped_count = queryset.exclude(
+			status__in=[AuthorOutreach.STATUS_PENDING, AuthorOutreach.STATUS_APPROVED]
+		).count()
+		count = eligible.count()
+		eligible.update(status=AuthorOutreach.STATUS_SKIPPED)
+		if count:
+			self.message_user(
+				request, f"Skipped {count} row(s).", level=messages.SUCCESS
+			)
+		if skipped_count:
+			self.message_user(
+				request,
+				f"Ignored {skipped_count} row(s) already sent, sending, or cancelled.",
+				level=messages.WARNING,
+			)
+
+	@admin.action(description="Reset for retry (superuser only)")
+	def reset_for_retry(self, request, queryset):
+		"""
+		Re-opens a slot the eligibility/send rules had closed.
+
+		AuthorOutreach.unique_author_outreach_per_site makes (site, author)
+		a one-time slot: a failed, skipped, or cancelled row burns it
+		permanently, by design — see the model docstring and
+		docs/author-outreach-spec.md "One row per site per author". This action
+		is the sole, deliberate exception. It does not mean "retry
+		automatically" or "this was probably fine" — it means a human has
+		reviewed why the slot closed and decided, explicitly, to reopen it.
+		Restricted to superusers, and logged the same as any other admin
+		action.
+
+		STATUS_SENDING is also reopenable here, but with a real double-send
+		risk that the other three statuses don't carry. send_author_outreach
+		sets SENDING as a crash-safety marker *immediately before* calling
+		Postmark, so a row stuck there might mean the process died before
+		Postmark was ever contacted (the common, safe-to-retry case this is
+		mainly for) — or it might mean Postmark already accepted the
+		message and the crash happened afterwards, before this row's own
+		status/email_message fields were saved back. Reopening the second
+		kind risks a genuine second send to the same person, which
+		docs/author-outreach-spec.md's "one email per author per site, ever"
+		rule forbids outright.
+
+		There is no way to tell the two apart from this row alone, because
+		the crash can land in the exact gap between record_sent_message()
+		writing the EmailMessage row and this row's own save() linking it
+		via `email_message` — so checking `row.email_message` is not
+		enough; that FK is precisely what can be missing even when a send
+		happened. Instead, a SENDING row is only auto-reset here when NO
+		EmailMessage row exists at all for (site, recipient=row.email,
+		tag="author_outreach") — that absence is the best available
+		evidence nothing was ever handed to Postmark for this attempt. A
+		SENDING row *with* a matching EmailMessage is left untouched and
+		reported separately as refused: that is positive evidence the
+		message may already be out, and it takes a human reading
+		EmailMessage.accepted / that message's EmailEvent history — not a
+		bulk admin action — to decide what to do next.
+		"""
+		if not request.user.is_superuser:
+			self.message_user(
+				request,
+				"Only a superuser can reset a row for retry.",
+				level=messages.ERROR,
+			)
+			return
+
+		unconditional_statuses = [
+			AuthorOutreach.STATUS_FAILED,
+			AuthorOutreach.STATUS_SKIPPED,
+			AuthorOutreach.STATUS_CANCELLED,
+		]
+		unconditional_ids = list(
+			queryset.filter(status__in=unconditional_statuses).values_list(
+				"pk", flat=True
+			)
+		)
+
+		sending_rows = list(queryset.filter(status=AuthorOutreach.STATUS_SENDING))
+		safe_sending_ids = []
+		blocked_sending_ids = []
+		for row in sending_rows:
+			has_evidence_of_send = EmailMessage.objects.filter(
+				recipient=row.email, site=row.site, tag="author_outreach"
+			).exists()
+			if has_evidence_of_send:
+				blocked_sending_ids.append(row.pk)
+			else:
+				safe_sending_ids.append(row.pk)
+
+		eligible = AuthorOutreach.objects.filter(
+			Q(pk__in=unconditional_ids) | Q(pk__in=safe_sending_ids)
+		)
+		# Counted separately because the two carry different risk, and the
+		# messages below have to say so — see the sending message.
+		unconditional_count = len(unconditional_ids)
+		sending_count = len(safe_sending_ids)
+		count = eligible.count()
+		eligible.update(
+			status=AuthorOutreach.STATUS_PENDING,
+			approved_at=None,
+			approved_by=None,
+			sent_at=None,
+			error_message="",
+		)
+
+		ignored_status_count = queryset.exclude(
+			status__in=unconditional_statuses + [AuthorOutreach.STATUS_SENDING]
+		).count()
+
+		if unconditional_count:
+			self.message_user(
+				request,
+				f"Reset {unconditional_count} failed/skipped/cancelled row(s) "
+				"back to pending. This reopened a slot the rules had closed "
+				"— re-review before approving.",
+				level=messages.WARNING,
+			)
+		if sending_count:
+			# Not the same risk as the line above, and must not be reported as
+			# though it were. A failed/skipped row is a known non-send. A
+			# 'sending' row is an *unknown*: send_author_outreach calls
+			# send_email() and only then record_sent_message(), so a process
+			# that died between those two writes leaves no EmailMessage even
+			# though Postmark accepted the message. No evidence is good
+			# evidence, not proof.
+			self.message_user(
+				request,
+				f"Reset {sending_count} row(s) that were stuck in 'sending' "
+				"with no EmailMessage recorded. Absence of that row is strong "
+				"but not conclusive evidence the message never went out: the "
+				"send command records it immediately after the Postmark call, "
+				"so a crash in between leaves no trace of a message that was "
+				"in fact accepted. Before approving again, confirm with the "
+				"recipient or in Postmark's own activity log that they did "
+				"not receive it — a second copy breaks the one-email-per-"
+				"author-per-site guarantee.",
+				level=messages.WARNING,
+			)
+		if blocked_sending_ids:
+			self.message_user(
+				request,
+				f"Refused to reset {len(blocked_sending_ids)} row(s) stuck in "
+				"'sending': an EmailMessage already exists for that "
+				"recipient/site/tag — positive evidence the message may "
+				"already have gone out. Check EmailMessage.accepted and its "
+				"EmailEvent history by hand before deciding whether to "
+				"reopen; resetting here risks a second send.",
+				level=messages.ERROR,
+			)
+		if ignored_status_count:
+			self.message_user(
+				request,
+				f"Ignored {ignored_status_count} row(s) not in "
+				"failed/skipped/cancelled/sending status.",
+				level=messages.WARNING,
+			)
+
+
+@admin.register(AuthorContactOptOut)
+class AuthorContactOptOutAdmin(admin.ModelAdmin):
+	"""
+	The global "never contact this address again" list. See
+	AuthorContactOptOut's model docstring and docs/author-outreach-spec.md
+	"Bounce and complaint handling". Most rows are written automatically
+	(hard bounce, spam complaint, a suppressed AuthorOutreach recipient,
+	the opt-out link) — reason="admin" is the one path meant to be
+	created by hand here, for a staff member blocking an address
+	proactively. Deletion is disabled outright: docs/author-outreach-spec.md's
+	retention table marks this table indefinite — "'Never contact this
+	address' cannot expire" — the same permanence class as
+	SuppressionEvent.
+	"""
+
+	list_display = ["email", "reason", "author", "created_at"]
+	list_filter = ["reason"]
+	search_fields = ["email", "author__full_name", "author__ORCID", "note"]
+
+	def has_delete_permission(self, request, obj=None):
 		return False
 
 

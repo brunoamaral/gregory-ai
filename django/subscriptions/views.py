@@ -21,11 +21,15 @@ from urllib.parse import urlparse
 from sitesettings.models import CustomSetting
 from subscriptions.forms import SubscribersForm
 from subscriptions.models import (
+	AuthorContactOptOut,
+	AuthorOutreach,
 	Subscribers,
 	Lists,
 	ListSubscription,
 	SubscriberSiteProfile,
 )
+from subscriptions.utils.author_optout import record_author_opt_out
+from subscriptions.utils.email_events import handle_email_event
 from subscriptions.utils.postmark_webhook import handle_subscription_change
 
 logger = logging.getLogger(__name__)
@@ -430,6 +434,45 @@ def unsubscribe_all(request, token):
 	return _unsubscribe_confirm(request, token, scope="all")
 
 
+def author_optout(request, token):
+	"""
+	Author outreach opt-out: ``/subscriptions/author-optout/<token>/``. See
+	docs/author-outreach-spec.md "Legal basis and consent" ("Opt-out") and
+	docs/author-outreach.md.
+
+	``token`` is ``AuthorOutreach.opt_out_token`` — it resolves to exactly
+	one (site, author) outreach row and is never a resolvable person
+	identifier on its own (docs/author-outreach-spec.md "Non-goals"). Mirrors
+	``_unsubscribe_confirm`` above: GET renders a confirmation page and
+	mutates nothing — mail clients and security scanners prefetch links,
+	and a prefetched GET would silently opt someone out without them
+	having clicked anything. The opt-out itself only happens on POST, and
+	is idempotent (``record_author_opt_out`` no-ops on an address that is
+	already opted out).
+
+	The opt-out this writes is global and keyed on the email address, not
+	on this row or this site — see ``AuthorContactOptOut``'s model
+	docstring. It affects future email only: it does not touch
+	``AuthorOutreach.status``, ``Authors``, or anything the author's
+	public profile page reads — see the spec's "Opt-out scope".
+	"""
+	outreach = get_object_or_404(AuthorOutreach, opt_out_token=token)
+
+	if request.method == "POST":
+		record_author_opt_out(outreach.email, AuthorContactOptOut.REASON_OPT_OUT)
+		return render(
+			request,
+			"subscriptions/author_optout_done.html",
+			{"outreach": outreach},
+		)
+
+	return render(
+		request,
+		"subscriptions/author_optout_confirm.html",
+		{"outreach": outreach},
+	)
+
+
 # ---------------------------------------------------------------------------
 # Postmark webhook (suppression / reactivation)
 # ---------------------------------------------------------------------------
@@ -482,19 +525,34 @@ def _postmark_webhook_authorized(request):
 @require_POST
 def postmark_webhook(request):
 	"""
-	Receives Postmark webhook events (Delivery, Bounce, Open, Subscription
-	Change). Only Subscription Change drives suppression/reactivation state —
-	see subscriptions.utils.postmark_webhook.handle_subscription_change and
-	docs/subscriptions.md for the policy.
+	Receives Postmark webhook events (Delivery, Bounce, SpamComplaint, Open,
+	Click, Subscription Change).
+
+	Only Subscription Change drives suppression/reactivation state — see
+	subscriptions.utils.postmark_webhook.handle_subscription_change and
+	docs/subscriptions.md for the policy. Every *other* recognised
+	RecordType is appended to the EmailEvent log via
+	subscriptions.utils.email_events.handle_email_event — see EmailEvent's
+	model docstring for exactly what is (and, deliberately, is not) kept
+	from each payload.
+
+	Subscription Change is deliberately NOT also passed to
+	handle_email_event: SuppressionEvent, written above, is the sole record
+	for that type. See handle_email_event's docstring for why (the short
+	version: Postmark's all-zero placeholder MessageID on these events
+	collided with EmailEvent's dedup key and silently dropped genuine
+	events).
 
 	Auth failures return 403 (not 401): Postmark stops retrying on 403 and
 	keeps retrying everything else, so a misconfigured credential should fail
 	once and loudly rather than hammer this endpoint for hours.
 
-	Every other outcome — including an unrecognised RecordType or a
-	non-SubscriptionChange event — returns 200 quickly. Postmark retries any
-	non-200, and Subscription Change events are only retried for ~21 minutes,
-	so slow or wrongly-erroring responses genuinely lose data.
+	Every other outcome — including an unrecognised RecordType — returns 200
+	quickly. Postmark retries any non-200, and Subscription Change events are
+	only retried for ~21 minutes, so slow or wrongly-erroring responses
+	genuinely lose data. handle_email_event and handle_subscription_change
+	are both written to never raise, for the same reason: a bug in either
+	must not turn a webhook call into a non-200 response.
 	"""
 	if not _postmark_webhook_authorized(request):
 		return HttpResponse(status=403)
@@ -511,13 +569,12 @@ def postmark_webhook(request):
 
 	record_type = payload.get("RecordType")
 	if record_type == "SubscriptionChange":
+		# SuppressionEvent (above) is the sole record for this type — do
+		# NOT also call handle_email_event here. See that function's
+		# docstring for why: it's not an oversight.
 		handle_subscription_change(payload)
 	elif record_type in _POSTMARK_KNOWN_RECORD_TYPES:
-		# Delivery/Open/Bounce are high-volume and expected — DEBUG, not INFO,
-		# so this endpoint can't flood production logs under normal traffic.
-		logger.debug(
-			"postmark_webhook: received %s event; no action needed.", record_type
-		)
+		handle_email_event(payload)
 	else:
 		logger.warning(
 			"postmark_webhook: unrecognised RecordType %r; ignoring.", record_type
