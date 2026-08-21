@@ -1,16 +1,25 @@
 """
 Processing for the Postmark webhook events that feed EmailEvent: Delivery,
-Bounce, SpamComplaint, Open, Click, and — as a second, additional record
-alongside the existing suppression handling — SubscriptionChange.
+Bounce, SpamComplaint, Open, Click.
 
-subscriptions.views.postmark_webhook dispatches every RecordType it
-recognises here. SubscriptionChange also still goes to
-subscriptions.utils.postmark_webhook.handle_subscription_change first,
-unchanged — that call, and the SuppressionEvent it writes, is what actually
-drives suppression/reactivation state. This module never touches
-Subscribers, ListSubscription, or SuppressionEvent; it only appends to the
-EmailEvent log and updates the aggregate outcome fields on the matching
-EmailMessage, if any.
+subscriptions.views.postmark_webhook dispatches those five RecordTypes here.
+SubscriptionChange is deliberately NOT among them — it goes only to
+subscriptions.utils.postmark_webhook.handle_subscription_change, which
+writes SuppressionEvent, the sole record for that type. The two were
+previously dual-written (this module additionally recording a
+SubscriptionChange EmailEvent), which both duplicated the record in the
+admin and collided: SubscriptionChange carries an all-zero placeholder
+MessageID when it has no originating message, and without `recipient` in
+EmailEvent's dedup key, two different people suppressed in the same second
+would violate the unique constraint — the second silently discarded below as
+a "replay" it wasn't. See EmailEvent's model docstring for the full
+reasoning. `handle_email_event` needs no special case for this: RecordType
+SubscriptionChange simply isn't in EmailEvent.RECORD_TYPES any more, so the
+early-return guard below already turns it into a no-op.
+
+This module never touches Subscribers, ListSubscription, or
+SuppressionEvent; it only appends to the EmailEvent log and updates the
+aggregate outcome fields on the matching EmailMessage, if any.
 
 See EmailEvent's model docstring (subscriptions/models.py) for exactly what
 is — and, more importantly, is deliberately NOT — stored from each payload.
@@ -45,17 +54,17 @@ HARD_BOUNCE_TYPES = frozenset({"HardBounce", "BadEmailAddress"})
 
 # Which payload field carries this event's own timestamp, per RecordType.
 # Postmark names this field differently per event: DeliveredAt for
-# Delivery, BouncedAt for Bounce/SpamComplaint, ReceivedAt for Open/Click,
-# ChangedAt for SubscriptionChange (mirrors
-# subscriptions.utils.postmark_webhook._parse_changed_at, which reads
-# ChangedAt for the same payload).
+# Delivery, BouncedAt for Bounce/SpamComplaint, ReceivedAt for Open/Click.
+# (SubscriptionChange uses ChangedAt, per
+# subscriptions.utils.postmark_webhook._parse_changed_at — irrelevant here
+# since this module never records that RecordType; see the module
+# docstring.)
 _OCCURRED_AT_FIELD = {
 	EmailEvent.RECORD_TYPE_DELIVERY: "DeliveredAt",
 	EmailEvent.RECORD_TYPE_BOUNCE: "BouncedAt",
 	EmailEvent.RECORD_TYPE_SPAM_COMPLAINT: "BouncedAt",
 	EmailEvent.RECORD_TYPE_OPEN: "ReceivedAt",
 	EmailEvent.RECORD_TYPE_CLICK: "ReceivedAt",
-	EmailEvent.RECORD_TYPE_SUBSCRIPTION_CHANGE: "ChangedAt",
 }
 
 # Which payload field carries the recipient address, per RecordType. Every
@@ -71,7 +80,6 @@ _RECIPIENT_FIELD = {
 	EmailEvent.RECORD_TYPE_SPAM_COMPLAINT: "Email",
 	EmailEvent.RECORD_TYPE_OPEN: "Recipient",
 	EmailEvent.RECORD_TYPE_CLICK: "Recipient",
-	EmailEvent.RECORD_TYPE_SUBSCRIPTION_CHANGE: "Recipient",
 }
 
 
@@ -140,7 +148,7 @@ def _update_message_aggregates(message, record_type, occurred_at, extra):
 	elif record_type == EmailEvent.RECORD_TYPE_SPAM_COMPLAINT:
 		message.complained_at = occurred_at
 		update_fields.append("complained_at")
-	# Click and SubscriptionChange own no aggregate field on EmailMessage.
+	# Click owns no aggregate field on EmailMessage.
 
 	if update_fields:
 		message.save(update_fields=update_fields)
@@ -150,21 +158,22 @@ def handle_email_event(payload):
 	"""
 	Process one Postmark webhook payload and write one EmailEvent row.
 
-	Accepts RecordType Delivery, Bounce, SpamComplaint, Open, Click, or
-	SubscriptionChange; anything else is a no-op (returns None) — dispatch
-	on RecordType happens in subscriptions.views.postmark_webhook, which
-	only calls this for types it recognises, but this function stays
-	defensive on its own.
+	Accepts RecordType Delivery, Bounce, SpamComplaint, Open, or Click;
+	anything else — including SubscriptionChange, which is handled
+	entirely by handle_subscription_change instead, see the module
+	docstring — is a no-op (returns None). Dispatch on RecordType happens
+	in subscriptions.views.postmark_webhook, which only calls this for the
+	five types above, but this function stays defensive on its own via the
+	EmailEvent.RECORD_TYPES check below.
 
 	Never raises. Any exception — including a payload shaped unexpectedly —
 	is logged and swallowed, so a bug here can never turn a webhook call
-	into a non-200 response (see subscriptions.views.postmark_webhook: for
-	SubscriptionChange specifically, Postmark stops retrying after ~21
-	minutes, so a slow or erroring response genuinely loses data).
+	into a non-200 response.
 
 	Returns the created EmailEvent, or None when nothing was written: an
-	unrecognised RecordType, or a replay of an already-recorded
-	(record_type, message_id, occurred_at).
+	unrecognised (or deliberately-excluded) RecordType, or a replay of an
+	already-recorded (record_type, message_id, occurred_at, recipient,
+	link_url).
 	"""
 	record_type = payload.get("RecordType")
 	if record_type not in EmailEvent.RECORD_TYPES:
@@ -237,7 +246,7 @@ def handle_email_event(payload):
 
 		return event
 	except IntegrityError:
-		return None  # replay of an already-recorded (record_type, message_id, occurred_at)
+		return None  # replay of an already-recorded (record_type, message_id, occurred_at, recipient, link_url)
 	except Exception:
 		logger.exception("email_events: failed to process %s event.", record_type)
 		return None

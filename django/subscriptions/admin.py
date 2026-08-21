@@ -1647,6 +1647,33 @@ class AuthorOutreachAdmin(admin.ModelAdmin):
 		reviewed why the slot closed and decided, explicitly, to reopen it.
 		Restricted to superusers, and logged the same as any other admin
 		action.
+
+		STATUS_SENDING is also reopenable here, but with a real double-send
+		risk that the other three statuses don't carry. send_author_outreach
+		sets SENDING as a crash-safety marker *immediately before* calling
+		Postmark, so a row stuck there might mean the process died before
+		Postmark was ever contacted (the common, safe-to-retry case this is
+		mainly for) — or it might mean Postmark already accepted the
+		message and the crash happened afterwards, before this row's own
+		status/email_message fields were saved back. Reopening the second
+		kind risks a genuine second send to the same person, which
+		AUTHOR-OUTREACH-SPEC.md's "one email per author per site, ever"
+		rule forbids outright.
+
+		There is no way to tell the two apart from this row alone, because
+		the crash can land in the exact gap between record_sent_message()
+		writing the EmailMessage row and this row's own save() linking it
+		via `email_message` — so checking `row.email_message` is not
+		enough; that FK is precisely what can be missing even when a send
+		happened. Instead, a SENDING row is only auto-reset here when NO
+		EmailMessage row exists at all for (site, recipient=row.email,
+		tag="author_outreach") — that absence is the best available
+		evidence nothing was ever handed to Postmark for this attempt. A
+		SENDING row *with* a matching EmailMessage is left untouched and
+		reported separately as refused: that is positive evidence the
+		message may already be out, and it takes a human reading
+		EmailMessage.accepted / that message's EmailEvent history — not a
+		bulk admin action — to decide what to do next.
 		"""
 		if not request.user.is_superuser:
 			self.message_user(
@@ -1655,20 +1682,33 @@ class AuthorOutreachAdmin(admin.ModelAdmin):
 				level=messages.ERROR,
 			)
 			return
-		eligible = queryset.filter(
-			status__in=[
-				AuthorOutreach.STATUS_FAILED,
-				AuthorOutreach.STATUS_SKIPPED,
-				AuthorOutreach.STATUS_CANCELLED,
-			]
+
+		unconditional_statuses = [
+			AuthorOutreach.STATUS_FAILED,
+			AuthorOutreach.STATUS_SKIPPED,
+			AuthorOutreach.STATUS_CANCELLED,
+		]
+		unconditional_ids = list(
+			queryset.filter(status__in=unconditional_statuses).values_list(
+				"pk", flat=True
+			)
 		)
-		skipped_count = queryset.exclude(
-			status__in=[
-				AuthorOutreach.STATUS_FAILED,
-				AuthorOutreach.STATUS_SKIPPED,
-				AuthorOutreach.STATUS_CANCELLED,
-			]
-		).count()
+
+		sending_rows = list(queryset.filter(status=AuthorOutreach.STATUS_SENDING))
+		safe_sending_ids = []
+		blocked_sending_ids = []
+		for row in sending_rows:
+			has_evidence_of_send = EmailMessage.objects.filter(
+				recipient=row.email, site=row.site, tag="author_outreach"
+			).exists()
+			if has_evidence_of_send:
+				blocked_sending_ids.append(row.pk)
+			else:
+				safe_sending_ids.append(row.pk)
+
+		eligible = AuthorOutreach.objects.filter(
+			Q(pk__in=unconditional_ids) | Q(pk__in=safe_sending_ids)
+		)
 		count = eligible.count()
 		eligible.update(
 			status=AuthorOutreach.STATUS_PENDING,
@@ -1677,6 +1717,11 @@ class AuthorOutreachAdmin(admin.ModelAdmin):
 			sent_at=None,
 			error_message="",
 		)
+
+		ignored_status_count = queryset.exclude(
+			status__in=unconditional_statuses + [AuthorOutreach.STATUS_SENDING]
+		).count()
+
 		if count:
 			self.message_user(
 				request,
@@ -1684,10 +1729,22 @@ class AuthorOutreachAdmin(admin.ModelAdmin):
 				"slot the rules had closed — re-review before approving.",
 				level=messages.WARNING,
 			)
-		if skipped_count:
+		if blocked_sending_ids:
 			self.message_user(
 				request,
-				f"Ignored {skipped_count} row(s) not in failed/skipped/cancelled status.",
+				f"Refused to reset {len(blocked_sending_ids)} row(s) stuck in "
+				"'sending': an EmailMessage already exists for that "
+				"recipient/site/tag — positive evidence the message may "
+				"already have gone out. Check EmailMessage.accepted and its "
+				"EmailEvent history by hand before deciding whether to "
+				"reopen; resetting here risks a second send.",
+				level=messages.ERROR,
+			)
+		if ignored_status_count:
+			self.message_user(
+				request,
+				f"Ignored {ignored_status_count} row(s) not in "
+				"failed/skipped/cancelled/sending status.",
 				level=messages.WARNING,
 			)
 

@@ -1,9 +1,13 @@
 """
 Tests for subscriptions.utils.email_events.handle_email_event — the append-
 only EmailEvent log fed by five Postmark webhook record types (Delivery,
-Bounce, SpamComplaint, Open, Click) plus a second, additional record of
-SubscriptionChange (whose suppression/reactivation handling is untouched —
-see test_postmark_webhook.py for that).
+Bounce, SpamComplaint, Open, Click). SubscriptionChange is deliberately NOT
+among them — SuppressionEvent, written by
+subscriptions.utils.postmark_webhook.handle_subscription_change (untouched,
+see test_postmark_webhook.py), is the sole record for that type. See
+EmailEvent's model docstring (subscriptions/models.py) for why: the two were
+previously dual-written, which duplicated the record in the admin and
+collided on the dedup key.
 
 Payload shapes below are taken from Postmark's own documented examples
 (developer.postmarkapp.com/developer/webhooks/...) rather than assumed —
@@ -13,6 +17,7 @@ like every other event type, which is easy to get backwards.
 
 from django.contrib.sites.models import Site
 from django.test import TestCase
+from django.utils import timezone
 
 from subscriptions.models import EmailEvent, EmailMessage
 from subscriptions.utils.email_events import handle_email_event
@@ -172,7 +177,7 @@ def _subscription_change_payload(**overrides):
 
 
 class EmailEventPerRecordTypeTest(TestCase):
-	"""Each of the six record types produces exactly one EmailEvent."""
+	"""Each of the five record types produces exactly one EmailEvent."""
 
 	def test_delivery_creates_one_event_with_expected_fields(self):
 		event = handle_email_event(_delivery_payload())
@@ -229,12 +234,17 @@ class EmailEventPerRecordTypeTest(TestCase):
 			"https://example.com/articles/123?utm_source=author_outreach",
 		)
 
-	def test_subscription_change_also_creates_an_event(self):
+	def test_subscription_change_writes_no_email_event(self):
+		"""
+		SubscriptionChange is deliberately NOT recorded here — see the
+		module docstring and EmailEvent's model docstring.
+		SuppressionEvent (written separately by handle_subscription_change,
+		untouched) is the sole record for this type.
+		"""
 		event = handle_email_event(_subscription_change_payload())
 
-		self.assertIsNotNone(event)
-		self.assertEqual(event.record_type, EmailEvent.RECORD_TYPE_SUBSCRIPTION_CHANGE)
-		self.assertEqual(event.recipient, "john@example.com")
+		self.assertIsNone(event)
+		self.assertEqual(EmailEvent.objects.count(), 0)
 
 	def test_unrecognised_record_type_is_a_no_op(self):
 		event = handle_email_event({"RecordType": "SomethingNew"})
@@ -253,25 +263,104 @@ class ReplayIsANoOpTest(TestCase):
 		self.assertIsNone(second)
 		self.assertEqual(EmailEvent.objects.count(), 1)
 
-	def test_replay_across_all_six_record_types(self):
+	def test_replay_across_all_five_record_types(self):
+		"""
+		SubscriptionChange is excluded here on purpose: it never reaches
+		EmailEvent at all any more (see test_subscription_change_writes_no_
+		email_event above), so it has no dedup behaviour of its own to
+		replay-test — it's covered as a plain no-op instead.
+		"""
 		payloads = [
 			_delivery_payload(),
 			_bounce_payload(),
 			_spam_complaint_payload(),
 			_open_payload(),
 			_click_payload(),
-			_subscription_change_payload(),
 		]
 		for payload in payloads:
 			handle_email_event(dict(payload))
-		self.assertEqual(EmailEvent.objects.count(), 6)
+		self.assertEqual(EmailEvent.objects.count(), 5)
 
 		for payload in payloads:
 			handle_email_event(dict(payload))
 		self.assertEqual(
 			EmailEvent.objects.count(),
-			6,
-			"replaying the same six payloads must not create new rows",
+			5,
+			"replaying the same five payloads must not create new rows",
+		)
+
+
+class WidenedDedupKeyTest(TestCase):
+	"""
+	Regression coverage for the unique constraint being widened from
+	(record_type, message_id, occurred_at) to also include recipient and
+	link_url — see EmailEvent.Meta.constraints and its inline comment for
+	the two real collisions this fixes.
+	"""
+
+	def test_mail_scanner_clicking_every_link_in_the_same_second_all_persist(self):
+		"""
+		Corporate mail scanners (Proofpoint, Mimecast, and similar --
+		extremely common on the university addresses author outreach
+		targets) click every link in a message within the same second to
+		vet it. Under the old key (no link_url), three Click events on the
+		same message/recipient/timestamp with three different OriginalLink
+		values collapsed onto one row and silently dropped two real clicks.
+		"""
+		links = [
+			"https://example.com/articles/1",
+			"https://example.com/articles/2",
+			"https://example.com/author-page",
+		]
+		for link in links:
+			event = handle_email_event(_click_payload(OriginalLink=link))
+			self.assertIsNotNone(event)
+
+		self.assertEqual(EmailEvent.objects.count(), 3)
+		self.assertEqual(
+			set(EmailEvent.objects.values_list("link_url", flat=True)),
+			set(links),
+		)
+
+	def test_two_recipients_same_message_id_and_occurred_at_both_persist(self):
+		"""
+		The collision this whole fix exists for: Postmark sends an all-zero
+		placeholder MessageID on events with no originating message (e.g. a
+		SubscriptionChange with no underlying send -- see
+		subscriptions/utils/postmark_webhook.py). Before recipient joined
+		the dedup key, two different people affected in the same second
+		collided on (record_type, "0000...0000", occurred_at) and the
+		second was silently discarded as a "replay" it wasn't.
+
+		Tested directly against the model/constraint, not through
+		handle_email_event: SubscriptionChange itself no longer reaches
+		EmailEvent at all (SuppressionEvent is its sole record now -- see
+		the module docstring), so the only way left to exercise this
+		specific collision shape against EmailEvent is at the ORM/DB layer,
+		using a record_type EmailEvent still accepts.
+		"""
+		occurred_at = timezone.now()
+		placeholder_message_id = "00000000-0000-0000-0000-000000000000"
+
+		first = EmailEvent.objects.create(
+			record_type=EmailEvent.RECORD_TYPE_BOUNCE,
+			message_id=placeholder_message_id,
+			occurred_at=occurred_at,
+			recipient="first-recipient@example.com",
+		)
+		second = EmailEvent.objects.create(
+			record_type=EmailEvent.RECORD_TYPE_BOUNCE,
+			message_id=placeholder_message_id,
+			occurred_at=occurred_at,
+			recipient="second-recipient@example.com",
+		)
+
+		self.assertIsNotNone(first.pk)
+		self.assertIsNotNone(second.pk)
+		self.assertEqual(EmailEvent.objects.count(), 2)
+		self.assertEqual(
+			set(EmailEvent.objects.values_list("recipient", flat=True)),
+			{"first-recipient@example.com", "second-recipient@example.com"},
 		)
 
 

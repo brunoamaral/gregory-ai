@@ -96,11 +96,16 @@ class PostmarkWebhookEmailEventDispatchTest(TestCase):
 		)
 
 	@mock.patch.dict(os.environ, WEBHOOK_ENV)
-	def test_subscription_change_writes_suppression_event_and_email_event(self):
+	def test_subscription_change_writes_suppression_event_and_no_email_event(self):
 		"""
 		SubscriptionChange must keep driving suppression state exactly as
-		before (SuppressionEvent), AND additionally be logged to EmailEvent
-		— the two are independent, additive writes from one webhook call.
+		before (SuppressionEvent) — and must write ZERO EmailEvent rows.
+		SuppressionEvent is now the sole record for this type (see
+		EmailEvent's model docstring): the two were previously dual-written,
+		which duplicated the record in the admin and, worse, collided on
+		EmailEvent's old dedup key, since Postmark sends an all-zero
+		placeholder MessageID for SubscriptionChange events with no
+		originating message.
 		"""
 		payload = {
 			"RecordType": "SubscriptionChange",
@@ -117,10 +122,7 @@ class PostmarkWebhookEmailEventDispatchTest(TestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(SuppressionEvent.objects.count(), 1)
-		self.assertEqual(EmailEvent.objects.count(), 1)
-		event = EmailEvent.objects.get()
-		self.assertEqual(event.record_type, EmailEvent.RECORD_TYPE_SUBSCRIPTION_CHANGE)
-		self.assertEqual(event.recipient, "unknown-recipient@example.com")
+		self.assertEqual(EmailEvent.objects.count(), 0)
 
 	@mock.patch.dict(os.environ, WEBHOOK_ENV)
 	def test_unauthenticated_post_writes_no_email_event(self):

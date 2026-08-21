@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from gregory.models import Authors
 from subscriptions.admin import AuthorOutreachAdmin
-from subscriptions.models import AuthorOutreach, AuthorOutreachCampaign
+from subscriptions.models import AuthorOutreach, AuthorOutreachCampaign, EmailMessage
 
 CHANGELIST_URL = reverse("admin:subscriptions_authoroutreach_changelist")
 
@@ -181,6 +181,48 @@ class ResetForRetryActionTest(_AuthorOutreachAdminBase):
 		row.refresh_from_db()
 		self.assertEqual(row.status, AuthorOutreach.STATUS_FAILED)
 		self.assertEqual(row.error_message, "boom")
+
+	def test_superuser_reopens_sending_row_with_no_email_message_evidence(self):
+		"""
+		A row stuck in 'sending' with no EmailMessage row for it at all is
+		the common, safe-to-retry case: the process most likely crashed
+		*before* ever contacting Postmark, so there's no evidence a message
+		went out. It must be reopened just like failed/skipped/cancelled.
+		"""
+		self.client = Client()
+		self.client.force_login(self.superuser)
+		author = self._author("Ivy", "Sending", "0000-0000-0000-0019", "ivy.sending@example.com")
+		row = self._row(author, AuthorOutreach.STATUS_SENDING)
+
+		self._post_action("reset_for_retry", [row.pk])
+
+		row.refresh_from_db()
+		self.assertEqual(row.status, AuthorOutreach.STATUS_PENDING)
+
+	def test_superuser_refuses_to_reopen_sending_row_with_email_message_evidence(self):
+		"""
+		A row stuck in 'sending' with a matching EmailMessage row already
+		recorded (site, recipient, tag='author_outreach') is positive
+		evidence the message may have already reached Postmark — reopening
+		it risks a genuine second send to the same person, which the spec's
+		"one email per author per site, ever" rule forbids. The action must
+		refuse and leave the row exactly as it was.
+		"""
+		self.client = Client()
+		self.client.force_login(self.superuser)
+		author = self._author("Jax", "Sending", "0000-0000-0000-0020", "jax.sending@example.com")
+		row = self._row(author, AuthorOutreach.STATUS_SENDING)
+		EmailMessage.objects.create(
+			recipient=row.email,
+			site=self.site,
+			tag="author_outreach",
+			accepted=True,
+		)
+
+		self._post_action("reset_for_retry", [row.pk])
+
+		row.refresh_from_db()
+		self.assertEqual(row.status, AuthorOutreach.STATUS_SENDING)
 
 	def test_get_actions_excludes_reset_for_retry_for_non_superuser(self):
 		factory = RequestFactory()

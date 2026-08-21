@@ -695,6 +695,20 @@ class EmailEvent(models.Model):
 	subscriptions.utils.postmark_webhook). Written by
 	subscriptions.utils.email_events.handle_email_event.
 
+	SubscriptionChange is deliberately NOT one of the record types stored
+	here (see RECORD_TYPE_CHOICES below) — SuppressionEvent is the sole
+	record for that type. The two were originally dual-written, which
+	duplicated every SubscriptionChange in the admin and, worse, collided:
+	Postmark sends an all-zero placeholder MessageID on SubscriptionChange
+	events with no originating message, and this table's dedup key had no
+	`recipient` component, so two different people suppressed in the same
+	second violated the unique constraint and the second was silently
+	dropped as a "replay". SuppressionEvent has no such collision (its own
+	idempotency key is `(record_type, email, changed_at)` — see that
+	model's Meta) and already stores strictly more about these events
+	(`deactivated_list_subscription_ids`, `action_taken`, `flag_reason`),
+	retained indefinitely rather than pruned at 180 days like this table.
+
 	Deliberately NOT stored here, and why (mirrors the "Deliberately NOT
 	implemented here, and why" block at the top of
 	subscriptions/utils/postmark_webhook.py):
@@ -715,12 +729,21 @@ class EmailEvent(models.Model):
 	  table by accident — storage here is an explicit decision per field,
 	  never "whatever the payload happened to contain".
 
-	record_type spans all six event types subscriptions.views.postmark_webhook
-	dispatches on: five that reach only this model (Delivery, Bounce,
-	SpamComplaint, Open, Click), plus SubscriptionChange — handled first,
-	unchanged, by subscriptions.utils.postmark_webhook.handle_subscription_change
-	(suppression/reactivation state), and additionally logged here so the
-	complete inbound event history lives in one place.
+	record_type spans the five event types subscriptions.views.postmark_webhook
+	dispatches to subscriptions.utils.email_events.handle_email_event:
+	Delivery, Bounce, SpamComplaint, Open, Click. SubscriptionChange is
+	handled separately, entirely by
+	subscriptions.utils.postmark_webhook.handle_subscription_change
+	(suppression/reactivation state via SuppressionEvent) — see the note
+	above for why it is not also recorded here.
+
+	No SubscriptionChange choice, deliberately: unlike the other five
+	types, EmailEvent never gains a row for it, so a lingering choice would
+	be a dead option in every admin filter/dropdown — and an invitation
+	for a future reader to "restore" the dual-write this fix removed,
+	mistaking its absence for an oversight rather than the point of the
+	fix. SuppressionEvent keeps its own, separate
+	RECORD_TYPE_SUBSCRIPTION_CHANGE for the type it does still record.
 	"""
 
 	RECORD_TYPE_DELIVERY = "Delivery"
@@ -728,14 +751,12 @@ class EmailEvent(models.Model):
 	RECORD_TYPE_SPAM_COMPLAINT = "SpamComplaint"
 	RECORD_TYPE_OPEN = "Open"
 	RECORD_TYPE_CLICK = "Click"
-	RECORD_TYPE_SUBSCRIPTION_CHANGE = "SubscriptionChange"
 	RECORD_TYPE_CHOICES = [
 		(RECORD_TYPE_DELIVERY, "Delivery"),
 		(RECORD_TYPE_BOUNCE, "Bounce"),
 		(RECORD_TYPE_SPAM_COMPLAINT, "Spam Complaint"),
 		(RECORD_TYPE_OPEN, "Open"),
 		(RECORD_TYPE_CLICK, "Click"),
-		(RECORD_TYPE_SUBSCRIPTION_CHANGE, "Subscription Change"),
 	]
 	# Convenience set for callers validating a payload's RecordType before
 	# doing any work — kept next to the choices so the two can't drift.
@@ -746,7 +767,6 @@ class EmailEvent(models.Model):
 			RECORD_TYPE_SPAM_COMPLAINT,
 			RECORD_TYPE_OPEN,
 			RECORD_TYPE_CLICK,
-			RECORD_TYPE_SUBSCRIPTION_CHANGE,
 		}
 	)
 
@@ -800,9 +820,30 @@ class EmailEvent(models.Model):
 
 	class Meta:
 		constraints = [
+			# Widened from (record_type, message_id, occurred_at) to also
+			# include recipient and link_url. Two reasons, both real
+			# collisions on the narrower key:
+			#
+			# 1. recipient: SubscriptionChange events carry an all-zero
+			#    placeholder MessageID when there's no originating message
+			#    (e.g. a manual suppression in the Postmark UI). Without
+			#    recipient in the key, two different people suppressed in
+			#    the same second collided on (SubscriptionChange, all-zero
+			#    id, that second) and the second was silently dropped as a
+			#    "replay" it wasn't. (SubscriptionChange itself is no
+			#    longer recorded here at all — see the model docstring —
+			#    but the same all-zero-MessageID hazard is not unique to
+			#    it, so recipient stays in the key for every record type.)
+			# 2. link_url: corporate mail scanners (Proofpoint, Mimecast,
+			#    and similar — extremely common on the university addresses
+			#    this feature targets) click *every* link in a message
+			#    within the same second to vet it. Without link_url in the
+			#    key, three Click events on the same message in the same
+			#    second — three different OriginalLink values — collapsed
+			#    onto one row and dropped two real clicks.
 			models.UniqueConstraint(
-				fields=["record_type", "message_id", "occurred_at"],
-				name="unique_email_event_type_msgid_occurred",
+				fields=["record_type", "message_id", "occurred_at", "recipient", "link_url"],
+				name="unique_email_event_type_msgid_occurred_recipient_link",
 			)
 		]
 		ordering = ["-occurred_at"]

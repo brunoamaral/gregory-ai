@@ -384,9 +384,16 @@ superset event for suppression state and fires in both directions
 `SuppressionReason: "SpamComplaint"` on this event even with the Spam
 Complaint event type disabled.
 
-**Every recognised event — Subscription Change included — is separately
-logged to `EmailEvent`**, an append-only record kept alongside (not instead
-of) the `SuppressionEvent` handling above. See
+**Every recognised event except Subscription Change is separately logged
+to `EmailEvent`**, an append-only record kept alongside (not instead of)
+the `SuppressionEvent` handling above. Subscription Change is deliberately
+excluded from this second write: `SuppressionEvent`, above, is its sole
+record. The two were dual-written for a short time; that duplicated the
+event in the admin and, worse, collided, since Postmark sends an all-zero
+placeholder MessageID on a Subscription Change with no originating message
+and `EmailEvent`'s dedup key (before it grew a `recipient` component — see
+below) had no way to tell two different people apart in the same second.
+See
 [Email Message and Event Log](#email-message-and-event-log) below: this is
 new behaviour — before it existed, Delivery/Bounce/Open were accepted and
 silently discarded.
@@ -535,9 +542,12 @@ feature too), not just outreach:
   `complained_at`.
 - **`EmailEvent`** — one row per webhook call, append-only. Written by
   `subscriptions.utils.email_events.handle_email_event`, called from
-  `postmark_webhook` for every recognised `RecordType`: `Delivery`,
-  `Bounce`, `SpamComplaint`, `Open`, `Click`, and — additionally, alongside
-  the existing suppression handling, not instead of it — `SubscriptionChange`.
+  `postmark_webhook` for every recognised `RecordType` **except**
+  `SubscriptionChange`: `Delivery`, `Bounce`, `SpamComplaint`, `Open`,
+  `Click`. `SubscriptionChange` is handled entirely by
+  `handle_subscription_change` instead (`SuppressionEvent`, above, is its
+  sole record) — the two were briefly dual-written; see "Deduplication"
+  below for why that was removed.
 
 ### Correlation
 
@@ -547,6 +557,33 @@ Postmark's own `MessageID`. Neither may match — the four existing senders
 don't pass `metadata` yet, and a message sent before this feature shipped
 has no `EmailMessage` row at all — in which case the event is still
 recorded, with `email_message=NULL`.
+
+### Deduplication
+
+Unique constraint: `(record_type, message_id, occurred_at, recipient,
+link_url)`. Widened from an original `(record_type, message_id,
+occurred_at)` after two real collisions surfaced:
+
+- **`recipient`** — Postmark sends an all-zero placeholder `MessageID`
+  (`00000000-0000-0000-0000-000000000000`) on an event with no originating
+  message. Without `recipient` in the key, two different people affected in
+  the same second collided on that placeholder and the second was silently
+  discarded as a "replay" it wasn't. (This was first found via
+  `SubscriptionChange`, which is why that type was also pulled out of this
+  table entirely — see above — but the same all-zero-`MessageID` hazard
+  isn't unique to that one type, so `recipient` stays in the key for every
+  `record_type` this table does still record.)
+- **`link_url`** — corporate mail scanners (Proofpoint, Mimecast, and
+  similar — common on the university addresses author outreach targets)
+  click every link in a message within the same second to vet it. Without
+  `link_url` in the key, three `Click` events on one message in the same
+  second — three different `OriginalLink` values — collapsed onto a single
+  row and dropped two real clicks.
+
+A genuine replay (the identical payload delivered twice) still dedupes to
+one row, since every field in the key is identical both times. See
+`subscriptions/tests/test_email_events.py::WidenedDedupKeyTest` and
+`::ReplayIsANoOpTest` for the regression coverage.
 
 ### What is deliberately not stored
 

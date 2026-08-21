@@ -530,11 +530,18 @@ def postmark_webhook(request):
 
 	Only Subscription Change drives suppression/reactivation state — see
 	subscriptions.utils.postmark_webhook.handle_subscription_change and
-	docs/subscriptions.md for the policy. Every recognised RecordType,
-	Subscription Change included, is additionally appended to the EmailEvent
-	log via subscriptions.utils.email_events.handle_email_event — see
-	EmailEvent's model docstring for exactly what is (and, deliberately, is
-	not) kept from each payload.
+	docs/subscriptions.md for the policy. Every *other* recognised
+	RecordType is appended to the EmailEvent log via
+	subscriptions.utils.email_events.handle_email_event — see EmailEvent's
+	model docstring for exactly what is (and, deliberately, is not) kept
+	from each payload.
+
+	Subscription Change is deliberately NOT also passed to
+	handle_email_event: SuppressionEvent, written above, is the sole record
+	for that type. See handle_email_event's docstring for why (the short
+	version: Postmark's all-zero placeholder MessageID on these events
+	collided with EmailEvent's dedup key and silently dropped genuine
+	events).
 
 	Auth failures return 403 (not 401): Postmark stops retrying on 403 and
 	keeps retrying everything else, so a misconfigured credential should fail
@@ -562,8 +569,10 @@ def postmark_webhook(request):
 
 	record_type = payload.get("RecordType")
 	if record_type == "SubscriptionChange":
+		# SuppressionEvent (above) is the sole record for this type — do
+		# NOT also call handle_email_event here. See that function's
+		# docstring for why: it's not an oversight.
 		handle_subscription_change(payload)
-		handle_email_event(payload)
 	elif record_type in _POSTMARK_KNOWN_RECORD_TYPES:
 		handle_email_event(payload)
 	else:
