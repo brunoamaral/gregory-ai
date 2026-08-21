@@ -1709,6 +1709,10 @@ class AuthorOutreachAdmin(admin.ModelAdmin):
 		eligible = AuthorOutreach.objects.filter(
 			Q(pk__in=unconditional_ids) | Q(pk__in=safe_sending_ids)
 		)
+		# Counted separately because the two carry different risk, and the
+		# messages below have to say so — see the sending message.
+		unconditional_count = len(unconditional_ids)
+		sending_count = len(safe_sending_ids)
 		count = eligible.count()
 		eligible.update(
 			status=AuthorOutreach.STATUS_PENDING,
@@ -1722,11 +1726,33 @@ class AuthorOutreachAdmin(admin.ModelAdmin):
 			status__in=unconditional_statuses + [AuthorOutreach.STATUS_SENDING]
 		).count()
 
-		if count:
+		if unconditional_count:
 			self.message_user(
 				request,
-				f"Reset {count} row(s) back to pending. This reopened a "
-				"slot the rules had closed — re-review before approving.",
+				f"Reset {unconditional_count} failed/skipped/cancelled row(s) "
+				"back to pending. This reopened a slot the rules had closed "
+				"— re-review before approving.",
+				level=messages.WARNING,
+			)
+		if sending_count:
+			# Not the same risk as the line above, and must not be reported as
+			# though it were. A failed/skipped row is a known non-send. A
+			# 'sending' row is an *unknown*: send_author_outreach calls
+			# send_email() and only then record_sent_message(), so a process
+			# that died between those two writes leaves no EmailMessage even
+			# though Postmark accepted the message. No evidence is good
+			# evidence, not proof.
+			self.message_user(
+				request,
+				f"Reset {sending_count} row(s) that were stuck in 'sending' "
+				"with no EmailMessage recorded. Absence of that row is strong "
+				"but not conclusive evidence the message never went out: the "
+				"send command records it immediately after the Postmark call, "
+				"so a crash in between leaves no trace of a message that was "
+				"in fact accepted. Before approving again, confirm with the "
+				"recipient or in Postmark's own activity log that they did "
+				"not receive it — a second copy breaks the one-email-per-"
+				"author-per-site guarantee.",
 				level=messages.WARNING,
 			)
 		if blocked_sending_ids:

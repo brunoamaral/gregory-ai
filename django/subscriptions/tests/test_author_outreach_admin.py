@@ -199,6 +199,38 @@ class ResetForRetryActionTest(_AuthorOutreachAdminBase):
 		row.refresh_from_db()
 		self.assertEqual(row.status, AuthorOutreach.STATUS_PENDING)
 
+	def test_sending_reset_is_reported_distinctly_from_a_routine_reset(self):
+		"""
+		A reopened 'sending' row is not the same risk as a reopened
+		failed/skipped one and must not be reported as though it were.
+		send_author_outreach calls send_email() and only then
+		record_sent_message(), so a crash between those two writes leaves no
+		EmailMessage for a message Postmark did accept. The admin message has
+		to tell the operator to confirm before approving, rather than implying
+		a clean non-send.
+		"""
+		self.client = Client()
+		self.client.force_login(self.superuser)
+		stuck = self._row(
+			self._author("Kit", "Stuck", "0000-0000-0000-0021", "kit.stuck@example.com"),
+			AuthorOutreach.STATUS_SENDING,
+		)
+		failed = self._row(
+			self._author("Lou", "Failed", "0000-0000-0000-0022", "lou.failed@example.com"),
+			AuthorOutreach.STATUS_FAILED,
+		)
+
+		response = self._post_action("reset_for_retry", [stuck.pk, failed.pk])
+
+		messages_text = " ".join(str(m) for m in response.context["messages"])
+		self.assertIn("failed/skipped/cancelled", messages_text)
+		self.assertIn("stuck in 'sending'", messages_text)
+		self.assertIn("not conclusive", messages_text)
+		stuck.refresh_from_db()
+		failed.refresh_from_db()
+		self.assertEqual(stuck.status, AuthorOutreach.STATUS_PENDING)
+		self.assertEqual(failed.status, AuthorOutreach.STATUS_PENDING)
+
 	def test_superuser_refuses_to_reopen_sending_row_with_email_message_evidence(self):
 		"""
 		A row stuck in 'sending' with a matching EmailMessage row already
