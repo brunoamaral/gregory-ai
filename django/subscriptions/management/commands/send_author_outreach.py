@@ -49,7 +49,10 @@ from subscriptions.management.commands.utils.send_email import (
 	send_email,
 )
 from subscriptions.models import AuthorOutreach, AuthorOutreachCampaign, EmailMessage
-from subscriptions.utils.author_outreach import is_contact_blocked
+from subscriptions.utils.author_outreach import (
+	currently_qualifying_article_ids,
+	is_contact_blocked,
+)
 from subscriptions.utils.author_outreach_send import (
 	evaluate_circuit_breakers,
 	render_author_outreach_email,
@@ -180,7 +183,11 @@ class Command(BaseCommand):
 		approved_rows = list(
 			AuthorOutreach.objects.filter(
 				campaign=campaign, status=AuthorOutreach.STATUS_APPROVED
-			).order_by("queued_at")
+			)
+			# Both the send-time candidacy re-check and the renderer walk
+			# row.articles; without this each row costs two extra queries.
+			.prefetch_related("articles")
+			.order_by("queued_at")
 		)
 		if limit is not None:
 			approved_rows = approved_rows[:limit]
@@ -314,6 +321,9 @@ class Command(BaseCommand):
 	):
 		slug = campaign.utm_campaign_slug
 		sent_count = 0
+		# Lazily computed on the first upcoming-mode row, then reused for the
+		# rest of the run — see the re-validation block below.
+		still_qualifying = None
 
 		for index, row in enumerate(rows):
 			today_start = timezone.now().replace(
@@ -330,6 +340,89 @@ class Command(BaseCommand):
 					)
 				)
 				break
+
+			# Re-validate that this row's papers are still headed for the
+			# next digest. Only `upcoming` mode makes a forward-looking
+			# claim; a `retrospective` email says the paper *was* featured,
+			# which no later change can falsify.
+			#
+			# Computed once per run rather than per row: the set cannot
+			# meaningfully move during a run that sends a handful of
+			# messages, and recomputing it per row would re-run
+			# select_digest_articles for every recipient.
+			#
+			# ALL of the row's papers must still qualify, not merely one.
+			# The email names each of them as forthcoming, so a row that
+			# has lost any of its papers would send a partly false promise.
+			# Prefetched above, so this costs no query.
+			row_article_ids = {article.pk for article in row.articles.all()}
+
+			# A row with no papers left would render the template's
+			# multi-paper branch with an empty list — "your recent papers"
+			# followed by nothing. Guard both modes, not just upcoming: a
+			# retrospective row emptied by an article deletion or a manual
+			# edit is just as broken, and the drift check below cannot catch
+			# it (an empty set drops nothing, so it would read as "still
+			# qualifying" and send).
+			if not row_article_ids:
+				row.status = AuthorOutreach.STATUS_PENDING
+				row.approved_at = None
+				row.approved_by = None
+				row.error_message = (
+					"Not sent: the row has no papers attached, so the email "
+					"would name none. Returned to pending — re-build or "
+					"cancel it."
+				)
+				row.save(
+					update_fields=[
+						"status",
+						"approved_at",
+						"approved_by",
+						"error_message",
+					]
+				)
+				self.stdout.write(
+					self.style.WARNING(
+						f"Returned {row.email} to pending: no papers attached."
+					)
+				)
+				continue
+
+			if campaign.mode == AuthorOutreachCampaign.MODE_UPCOMING:
+				if still_qualifying is None:
+					still_qualifying = currently_qualifying_article_ids(campaign)
+				dropped = row_article_ids - still_qualifying
+				if dropped:
+					# Back to pending, not skipped or failed: the slot is
+					# not burned, because nothing was sent and this author
+					# may well qualify again next cycle. It needs a human
+					# to look, so approval is cleared rather than kept.
+					row.status = AuthorOutreach.STATUS_PENDING
+					row.approved_at = None
+					row.approved_by = None
+					row.error_message = (
+						f"Not sent: {len(dropped)} of {len(row_article_ids)} "
+						"queued paper(s) are no longer in the next digest's "
+						"selection, so the email's 'will be featured' claim "
+						"would be false. Returned to pending for review — "
+						"re-approve if they qualify again, or cancel."
+					)
+					row.save(
+						update_fields=[
+							"status",
+							"approved_at",
+							"approved_by",
+							"error_message",
+						]
+					)
+					self.stdout.write(
+						self.style.WARNING(
+							f"Returned {row.email} to pending: "
+							f"{len(dropped)} queued paper(s) dropped out of "
+							"the next digest since the queue was built."
+						)
+					)
+					continue
 
 			# Re-check the opt-out tables immediately before this send —
 			# an address can have been opted out, suppressed, or

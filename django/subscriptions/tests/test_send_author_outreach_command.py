@@ -51,6 +51,12 @@ def _mock_response(status_code=200, error_code=0, message_id="msg-1", message="O
 	return response
 
 
+# Sentinel for _run's default: "stub re-validation to accept whatever this
+# campaign's rows already reference". A sentinel rather than None, because
+# None is a meaningful value to pass (nothing qualifies any more).
+_ALL_STILL_QUALIFY = object()
+
+
 class SendAuthorOutreachCommandTestCase(TestCase):
 	def _new_world(self, tag, campaign_kwargs=None):
 		org = Organization.objects.create(name=f"Org {tag}", slug=f"org-{tag}")
@@ -103,9 +109,39 @@ class SendAuthorOutreachCommandTestCase(TestCase):
 		row.articles.set([article])
 		return row
 
-	def _run(self, campaign_slug, **extra):
+	def _run(self, campaign_slug, still_qualifying=_ALL_STILL_QUALIFY, **extra):
+		"""
+		Run the command with send-time candidacy re-validation stubbed out by
+		default.
+
+		These tests exercise the send loop — approval gating, breakers,
+		throttling, status transitions — not the eligibility engine, which has
+		its own integration tests in test_author_outreach_eligibility.py. The
+		fixtures here build bare Articles with no digest list, subject, or ML
+		predictions, so real re-validation would correctly reject every one of
+		them and every test below would be testing the drift path by accident.
+
+		Pass `still_qualifying` explicitly (a set of article ids, possibly
+		empty) to exercise that path deliberately — see the re-validation
+		tests at the end of this class.
+		"""
 		out = StringIO()
-		call_command("send_author_outreach", campaign=campaign_slug, stdout=out, **extra)
+		if still_qualifying is _ALL_STILL_QUALIFY:
+			resolved = set(
+				AuthorOutreach.objects.filter(
+					campaign__utm_campaign_slug=campaign_slug
+				).values_list("articles__pk", flat=True)
+			)
+		else:
+			resolved = still_qualifying
+		with mock.patch(
+			"subscriptions.management.commands.send_author_outreach."
+			"currently_qualifying_article_ids",
+			return_value=resolved,
+		):
+			call_command(
+				"send_author_outreach", campaign=campaign_slug, stdout=out, **extra
+			)
 		return out.getvalue()
 
 	# ------------------------------------------------------------------
@@ -367,6 +403,142 @@ class SendAuthorOutreachCommandTestCase(TestCase):
 	# ------------------------------------------------------------------
 	# Send-time opt-out recheck
 	# ------------------------------------------------------------------
+
+	# ------------------------------------------------------------------
+	# Send-time candidacy re-validation (upcoming mode only)
+	# ------------------------------------------------------------------
+
+	def test_row_whose_paper_dropped_out_returns_to_pending_unsent(self):
+		"""
+		The recommended schedule builds Thursday and sends Monday, so a
+		queued paper can fall out of the next digest's selection in between.
+		The email claims it "will be featured", so the row must not go out —
+		and must not burn the slot either, since nothing was sent and the
+		author may qualify again next cycle. Approval is cleared so a human
+		has to look before it is sent.
+		"""
+		w = self._new_world("drift1")
+		row = self._new_row(w, "drift1")
+
+		with mock.patch(SEND_EMAIL_POST_TARGET) as mock_post:
+			self._run(w.campaign.utm_campaign_slug, still_qualifying=set())
+
+		mock_post.assert_not_called()
+		row.refresh_from_db()
+		self.assertEqual(row.status, AuthorOutreach.STATUS_PENDING)
+		self.assertIsNone(row.approved_at)
+		self.assertIsNone(row.approved_by)
+		self.assertIn("no longer in the next digest", row.error_message)
+
+	def test_row_still_qualifying_is_sent_normally(self):
+		"""Counterpart to the test above — proves the guard is not simply
+		rejecting everything."""
+		w = self._new_world("drift2")
+		row = self._new_row(w, "drift2")
+		article_ids = set(row.articles.values_list("pk", flat=True))
+
+		with mock.patch(
+			SEND_EMAIL_POST_TARGET, return_value=_mock_response()
+		) as mock_post:
+			self._run(w.campaign.utm_campaign_slug, still_qualifying=article_ids)
+
+		mock_post.assert_called_once()
+		row.refresh_from_db()
+		self.assertEqual(row.status, AuthorOutreach.STATUS_SENT)
+
+	def test_partial_drop_still_returns_row_to_pending(self):
+		"""
+		The email names every queued paper as forthcoming, so losing one of
+		two makes the message partly false. All must still qualify.
+		"""
+		w = self._new_world("drift3")
+		row = self._new_row(w, "drift3")
+		extra = Articles.objects.create(
+			title="Second paper",
+			link="https://example.com/drift3-second",
+			doi="10.9999/drift3-second",
+			published_date=timezone.now() - timedelta(days=2),
+		)
+		extra.authors.add(row.author)
+		row.articles.add(extra)
+		kept = {row.articles.first().pk}
+
+		with mock.patch(SEND_EMAIL_POST_TARGET) as mock_post:
+			self._run(w.campaign.utm_campaign_slug, still_qualifying=kept)
+
+		mock_post.assert_not_called()
+		row.refresh_from_db()
+		self.assertEqual(row.status, AuthorOutreach.STATUS_PENDING)
+
+	def test_row_with_no_papers_is_never_sent_upcoming(self):
+		"""
+		An empty article set drops nothing, so the drift check alone would
+		read it as "still qualifying" and send an email naming no papers at
+		all. Guarded separately, before the drift check.
+		"""
+		w = self._new_world("empty1")
+		row = self._new_row(w, "empty1")
+		row.articles.clear()
+
+		with mock.patch(SEND_EMAIL_POST_TARGET) as mock_post:
+			self._run(w.campaign.utm_campaign_slug, still_qualifying=set())
+
+		mock_post.assert_not_called()
+		row.refresh_from_db()
+		self.assertEqual(row.status, AuthorOutreach.STATUS_PENDING)
+		self.assertIsNone(row.approved_at)
+		self.assertIn("no papers attached", row.error_message)
+
+	def test_row_with_no_papers_is_never_sent_retrospective(self):
+		"""
+		Same guard must apply in retrospective mode, which is exempt from the
+		drift check — a row emptied by an article deletion is just as broken
+		there.
+		"""
+		w = self._new_world(
+			"empty2",
+			campaign_kwargs={
+				"mode": AuthorOutreachCampaign.MODE_RETROSPECTIVE,
+				"featured_within_days": 30,
+				"body_template": "<p>Your paper was featured. {{ opt_out_url }}</p>",
+			},
+		)
+		row = self._new_row(w, "empty2")
+		row.articles.clear()
+
+		with mock.patch(SEND_EMAIL_POST_TARGET) as mock_post:
+			self._run(w.campaign.utm_campaign_slug)
+
+		mock_post.assert_not_called()
+		row.refresh_from_db()
+		self.assertEqual(row.status, AuthorOutreach.STATUS_PENDING)
+
+	def test_retrospective_campaign_skips_revalidation(self):
+		"""
+		A retrospective email says the paper *was* featured — a claim no
+		later change can falsify — so the forward-looking guard must not
+		apply, and must not block a legitimate back-catalogue send.
+		"""
+		w = self._new_world(
+			"retro1",
+			campaign_kwargs={
+				"mode": AuthorOutreachCampaign.MODE_RETROSPECTIVE,
+				"featured_within_days": 30,
+				"body_template": "<p>Your paper was featured. {{ opt_out_url }}</p>",
+			},
+		)
+		row = self._new_row(w, "retro1")
+
+		with mock.patch(
+			SEND_EMAIL_POST_TARGET, return_value=_mock_response()
+		) as mock_post:
+			# Nothing qualifies under the upcoming rules; a retrospective
+			# campaign must send anyway.
+			self._run(w.campaign.utm_campaign_slug, still_qualifying=set())
+
+		mock_post.assert_called_once()
+		row.refresh_from_db()
+		self.assertEqual(row.status, AuthorOutreach.STATUS_SENT)
 
 	def test_send_time_opt_out_recheck_skips_without_calling_postmark(self):
 		w = self._new_world("recheck1")

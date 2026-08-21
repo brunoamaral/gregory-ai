@@ -160,6 +160,48 @@ def eligible_authors(campaign, since=None):
 	return results
 
 
+def currently_qualifying_article_ids(campaign):
+	"""
+	The article ids that satisfy `campaign`'s article-level eligibility
+	rules right now, ignoring every author-level rule (email, ORCID flags,
+	opt-outs, existing rows). Read-only.
+
+	Exists for send_author_outreach's re-validation step. A queue is built
+	days before it is sent — the recommended schedule builds Thursday and
+	sends Monday, ahead of Tuesday's digest — and in `upcoming` mode
+	eligibility is a snapshot of what the *next* digest would feature. New
+	articles arriving in between can push a queued paper past the list's
+	article_limit, at which point the email's "will be featured in the next
+	digest" promise is no longer true. Re-running the same gates at send
+	time is what catches that.
+
+	Deliberately shares `eligible_authors`'s list loop and both candidate
+	helpers rather than reimplementing them: a re-validation that could
+	disagree with the build would be worse than none, because it would
+	reject rows the build would still accept.
+	"""
+	lists = Lists.objects.filter(site=campaign.site, weekly_digest=True)
+	campaign_subject_ids = set(campaign.subjects.values_list("id", flat=True))
+	if campaign_subject_ids:
+		lists = lists.filter(subjects__id__in=campaign_subject_ids).distinct()
+
+	qualifying = set()
+	for digest_list in lists.prefetch_related("subjects"):
+		if campaign.mode == AuthorOutreachCampaign.MODE_UPCOMING:
+			candidate_ids = _upcoming_candidate_ids(digest_list)
+		else:
+			candidate_ids = _retrospective_candidate_ids(
+				digest_list, campaign.featured_within_days
+			)
+		if not candidate_ids:
+			continue
+		list_subjects = list(digest_list.subjects.all())
+		qualifying |= _relevance_gate(
+			candidate_ids, list_subjects, digest_list.ml_threshold
+		)
+	return qualifying
+
+
 def _upcoming_candidate_ids(digest_list):
 	"""
 	Spec "Who qualifies", mode `upcoming`, rules 1-2: call the digest's own

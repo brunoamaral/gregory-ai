@@ -116,14 +116,21 @@ author regardless of how many qualifying papers they have.
 
 ### Timing
 
-In `upcoming` mode the outreach run must complete **immediately before** `send_weekly_summary`
-for that list, in the same cron slot. The two commands read the same candidate set, so a long
-gap lets new articles arrive and change the ranking between the promise and the send.
+**Superseded during implementation — see [author-outreach.md](author-outreach.md#scheduling)
+for the schedule actually in use.** This section originally required the outreach run to
+complete immediately before `send_weekly_summary`, in the same cron slot, because both read
+the same candidate set and any gap lets new articles change the ranking between the promise
+and the send.
+
+That turned out to be unimplementable as stated: the queue needs a human to approve rows
+between the build and the send, so the two cannot share a cron slot. The schedule builds
+Thursday and sends Monday instead, and the drift the same-slot rule was protecting against is
+handled at send time — `send_author_outreach` re-runs the article-level gates immediately
+before dispatch and returns any row that has lost a paper to `pending` rather than sending a
+promise that is no longer true.
 
 If the digest then fails to run, the promise is delayed rather than broken: the article stays
-in the candidate set and goes out the following week. If an article rolls over because of
-`article_limit`, the author sees it one edition later than the email implied — the never-sent
-plus top-N restriction in rule 2 is what keeps that rare.
+in the candidate set and goes out the following week.
 
 ### Addressing and sending
 
@@ -263,9 +270,10 @@ claims both hold.
 
 **"It will be featured in the next research digest newsletter."** True by construction:
 eligibility rule 2 admits only articles that have never been sent for that list and that rank
-within `article_limit` of the digest's own priority order, and the outreach run happens in the
-same cron slot immediately before the digest. A rollover can still push an article one edition
-later — see Timing — which is why the rule is never-sent *and* top-N rather than either alone.
+within `article_limit` of the digest's own priority order, and `send_author_outreach` re-runs
+those same gates immediately before dispatch, returning any row that has lost a paper to
+`pending` instead of sending. A rollover can still push an article one edition later, which is
+why the rule is never-sent *and* top-N rather than either alone.
 
 **"A high score in these three models and the human review."** Every candidate article has
 passed through a curator review surface: the admin summary emails ML-scored articles at the list's
