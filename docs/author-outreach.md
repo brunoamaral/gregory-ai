@@ -427,44 +427,68 @@ campaign be enabled and put on the cron schedule below.
 
 ---
 
-## Cron ordering
+## Scheduling
 
-Cron ordering is load-bearing, not a convenience. In `upcoming` mode, the
-build and the send have to run in the same slot, immediately **before**
-`send_weekly_summary` — both `build_author_outreach` and
-`send_weekly_summary` read the same candidate set
-(`select_digest_articles`), and any gap between them lets a new article
-arrive and change the ranking, breaking the "will be featured in the next
-digest" promise the email already made. `send_weekly_summary` takes no
-`--list` argument — one invocation covers every weekly digest list on
-every site — so one campaign per site, with an empty `subjects` set
-(covering every weekly digest list on that site), needs exactly one
-build-and-send line ahead of the single shared `send_weekly_summary` line.
-A site running more than one `upcoming` campaign (scoped to different
-`subjects`) needs one build-and-send line per campaign, all still ahead of
-that same shared line.
+`build_author_outreach` writes rows as `pending`; `send_author_outreach`
+only ever sends rows a human has moved to `approved`. **The two cannot be
+chained in one cron slot** — a `build && send` line would queue a batch and
+then send nothing, silently, every week. The approval step is deliberate and
+there is no flag to bypass it.
+
+So the schedule is two slots with a person in between:
 
 ```cron
-# Author outreach (upcoming) for gregory-ms.com — must finish before
-# send_weekly_summary below, since both read select_digest_articles's
-# candidate set and a gap between them changes the ranking. One line per
-# site running an enabled upcoming campaign; repeat with that site's own
-# --campaign slug for additional sites.
-50 7 * * 2 flock -n /tmp/author_outreach_ms-weekly-outreach docker exec gregory sh -c "python manage.py build_author_outreach --campaign ms-weekly-outreach && python manage.py send_author_outreach --campaign ms-weekly-outreach"
+# Author outreach: build Thursday, leaving two working days to review the
+# queue in the admin before it is sent.
+0 9 * * 4 /usr/bin/docker exec gregory python manage.py build_author_outreach --campaign ms-weekly-outreach
+
+# Send Monday morning — only sends what was approved. The digest follows on
+# Tuesday, so a problem noticed on Monday is still fixable before the
+# promise in the email comes due.
+0 9 * * 1 /usr/bin/flock -n /tmp/author_outreach_ms-weekly-outreach /usr/bin/docker exec gregory python manage.py send_author_outreach --campaign ms-weekly-outreach
 
 # Weekly summary every Tuesday — unchanged
-5 8 * * 2 docker exec gregory python manage.py send_weekly_summary
+5 8 * * 2 /usr/bin/docker exec gregory python manage.py send_weekly_summary
 ```
 
-The `flock` guard (matching the pipeline entry in `CLAUDE.md`) stops a slow
-run from overlapping with itself on the next cron tick; it says nothing
-about the fifteen-minute gap before `send_weekly_summary`, which exists
-only to leave the send command comfortable headroom under
-`send_rate_per_minute`/`daily_send_limit` at this feature's measured
-volume. If the digest fails to run after outreach has sent, the promise is
-delayed rather than broken — the article stays a candidate and goes out
-the following week. `retrospective` campaigns are one-off and are never
-part of this recurring schedule; run them by hand, per the
+Wrap the send in `runitor` (or your monitoring of choice) as the other jobs
+are. A silent failure here means authors were promised a digest appearance
+and never told, which you would otherwise only notice by spotting that the
+queue never drained.
+
+One campaign needs one build line and one send line. `send_weekly_summary`
+takes no `--list` argument — one invocation covers every weekly digest list
+on every site — so a site running several `upcoming` campaigns scoped to
+different `subjects` needs one pair of lines per campaign, all ahead of that
+single shared Tuesday line.
+
+### Why the gap between build and send is safe
+
+Eligibility in `upcoming` mode is a snapshot of what the *next* digest would
+feature, and the schedule above computes it on Thursday for a send on
+Monday. Articles arriving over those five days can push a queued paper past
+the list's `article_limit`, at which point the email's "will be featured in
+the next digest" claim is no longer true.
+
+`send_author_outreach` therefore re-runs the article-level gates
+(`currently_qualifying_article_ids`, sharing the build's own list loop and
+candidate helpers) immediately before dispatch. A row that has lost **any**
+of its queued papers goes back to `pending` with the reason recorded, and is
+not sent — the email names every queued paper as forthcoming, so losing one
+of two makes the message partly false.
+
+Returning to `pending` rather than `failed` or `skipped` is deliberate: the
+slot is not burned, because nothing was sent and the author may well qualify
+again next cycle. Approval is cleared, so the row cannot go out until a
+person looks at it again.
+
+Opt-outs and the circuit breakers are re-checked per row on the same pass,
+so an author who unsubscribes or complains over the weekend is protected
+regardless of when the queue was built.
+
+`retrospective` campaigns are exempt from the candidacy re-check — their
+copy says the paper *was* featured, a claim no later change can falsify —
+and are one-off in any case. Run them by hand, per the
 [first-run runbook](#first-run-runbook) above.
 
 ---
