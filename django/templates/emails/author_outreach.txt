@@ -1,0 +1,20 @@
+{% autoescape off %}Hi {{ author_name }},
+
+{% if articles|length == 1 %}Your paper, "{{ article_title }}," will be featured in the next {{ site_name }} research digest newsletter:
+{{ article_url }}
+{% else %}Your papers below will be featured in the next {{ site_name }} research digest newsletter:
+{% for article in articles %}
+{{ article.title }}
+{{ article.url }}
+{% endfor %}{% endif %}
+{{ site_name }} selects articles for its research digest using a high score across three independent machine learning models and a human review -- the same review every article in the digest goes through before a single subscriber sees it.
+
+You can see your author profile on {{ site_name }}, including the research we have indexed for you, here:
+{{ author_page_url }}
+
+This is a one-time email; we will not contact you again. If you would rather we had not, you can opt out permanently -- it will not affect your author profile page:
+{{ opt_out_url }}
+
+{{ sender_name }}
+{{ site_name }} -- {{ site_url }}
+{% endautoescape %}

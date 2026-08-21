@@ -267,6 +267,24 @@ def _is_excluded(campaign, author, email):
 		# AuthorOutreach's UniqueConstraint — so a slot claimed by any
 		# campaign on this site (including a different one) burns it here.
 		return True
+	return is_contact_blocked(email)
+
+
+def is_contact_blocked(email):
+	"""
+	Spec "Who qualifies", shared rule 6: every independent, address-only
+	reason an outreach email must not go to `email`. This is the exact
+	set of checks `_is_excluded` above runs at build time (minus the
+	build-time-only "does an AuthorOutreach row already exist" rule 7,
+	which doesn't apply once a row exists), factored out so
+	send_author_outreach (PR 5) can run the identical checks again
+	immediately before every individual send — see
+	AUTHOR-OUTREACH-SPEC.md "Safety limits": "The guards are evaluated
+	before every individual send, not once per run." An address opted
+	out, suppressed, or deactivated in the time between build and send
+	must not receive the email just because it passed this check once
+	at queue-build time.
+	"""
 	if AuthorContactOptOut.objects.filter(email__iexact=email).exists():
 		return True
 	if Subscribers.objects.filter(email__iexact=email, active=False).exists():
