@@ -1027,9 +1027,16 @@ class AuthorOutreachCampaign(models.Model):
 			"their own past-tense copy and cannot use the default). "
 			"Rendered (PR 5) against an explicit context of plain strings "
 			"and dicts only — author_name, articles ({title, url}), "
-			"article_title, article_url, author_page_url, site_name, "
-			"site_url, sender_name, opt_out_url — never a model instance, "
-			"so an admin-authored template can't walk the ORM."
+			"article_title, article_url, author_page_url, "
+			"author_page_url_display, site_name, site_url, sender_name, "
+			"opt_out_url — never a model instance, so an admin-authored "
+			"template can't walk the ORM. Use author_page_url_display as "
+			"anchor text and author_page_url as the href: the display "
+			"variant is untagged and scheme-stripped so no UTM query "
+			"string shows on screen, while the href keeps the parameters "
+			"the click attribution needs. Your template must also include "
+			"opt_out_url — an override replaces the whole body and nothing "
+			"appends the opt-out link for you."
 		),
 	)
 	reply_to = models.EmailField(
