@@ -78,7 +78,8 @@ def build_render_context(row, campaign, site, custom_settings):
 	Build the placeholder context for one AuthorOutreach row, per
 	docs/author-outreach-spec.md "Configuration": author_name, articles (list of
 	{title, url}), article_title/article_url (the first article),
-	author_page_url, site_name, site_url, sender_name, opt_out_url.
+	author_page_url, author_page_url_display, site_name, site_url,
+	sender_name, opt_out_url.
 
 	Every URL is already UTM-tagged (article links with
 	build_utm_params("author_outreach", campaign, "article_link"); the
@@ -113,11 +114,19 @@ def build_render_context(row, campaign, site, custom_settings):
 		article_dicts.append({"title": article.title or "", "url": url})
 
 	author_page_url = ""
+	author_page_url_display = ""
 	page_base = author_page_base(site, custom_settings)
 	if page_base and row.author.ORCID:
 		author_page_utm = {**article_utm, "utm_content": "author_page"}
 		raw_author_page_url = f"{page_base}/{row.author.ORCID}/"
 		author_page_url = add_utm_params(raw_author_page_url, author_page_utm, domain)
+		# Anchor *text* only — the href must stay author_page_url or the
+		# click loses its utm_content=author_page attribution. Untagged and
+		# scheme-stripped so a cold-outreach recipient can read where the
+		# link goes before clicking it, which is worth something to someone
+		# who was not expecting the email, without a query string that
+		# makes a first-person message look machine-generated.
+		author_page_url_display = re.sub(r"^https?://", "", raw_author_page_url)
 
 	site_url = ""
 	if base_url:
@@ -148,6 +157,7 @@ def build_render_context(row, campaign, site, custom_settings):
 		"article_title": article_dicts[0]["title"] if article_dicts else "",
 		"article_url": article_dicts[0]["url"] if article_dicts else "",
 		"author_page_url": author_page_url,
+		"author_page_url_display": author_page_url_display,
 		"site_name": site_name,
 		"site_url": site_url,
 		"sender_name": sender_name,

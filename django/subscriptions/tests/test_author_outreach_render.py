@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlparse
 
 from django.contrib.sites.models import Site
 from django.test import TestCase
+from django.utils.html import escape
 from django.utils import timezone
 
 from gregory.models import Articles, Authors, Team
@@ -264,6 +265,35 @@ class AuthorOutreachRenderTestCase(TestCase):
 		parsed = urlparse(context["author_page_url"])
 		self.assertIn(w.author.ORCID, parsed.path)
 		self.assertNotIn(w.author.ORCID, parsed.query)
+
+	def test_author_page_display_url_is_untagged_but_href_is_not(self):
+		"""
+		The anchor *text* must not show UTM parameters — a query string on
+		screen makes a first-person email read as machine-generated — while
+		the href keeps them, or the click loses its utm_content=author_page
+		attribution. Both halves matter; asserting either alone would let
+		the other regress.
+		"""
+		w = self._new_world("displayurl")
+		context = build_render_context(w.row, w.campaign, w.site, w.custom_settings)
+
+		display = context["author_page_url_display"]
+		self.assertNotIn("utm_", display)
+		self.assertNotIn("?", display)
+		self.assertFalse(display.startswith("http"))
+		self.assertIn(w.author.ORCID, display)
+
+		self.assertIn("utm_content=author_page", context["author_page_url"])
+
+		_subject, html, _text = render_author_outreach_email(
+			w.row, w.campaign, w.site, w.custom_settings
+		)
+		# Assert against the rendered anchor, not just the context. Checking
+		# only the context would still pass if the template were changed to
+		# href="{{ author_page_url_display }}" — the sent email would lose
+		# its attribution while the test stayed green.
+		self.assertIn(f'>{display}</a>', html)
+		self.assertIn(f'href="{escape(context["author_page_url"])}"', html)
 
 	# ------------------------------------------------------------------
 	# Site-level override (campaign.body_template)

@@ -151,7 +151,9 @@ the packaged default template. Rendered against an explicit context of strings a
 — never model instances — so an admin-authored template cannot walk ORM relations.
 
 Placeholders: `{{ author_name }}`, `{{ articles }}` (list of `{title, url}`),
-`{{ article_title }}` / `{{ article_url }}` (the first one), `{{ author_page_url }}`,
+`{{ article_title }}` / `{{ article_url }}` (the first one), `{{ author_page_url }}`
+(the tagged href) and `{{ author_page_url_display }}` (the untagged,
+scheme-stripped anchor text),
 `{{ site_name }}`, `{{ site_url }}`, `{{ sender_name }}`, `{{ opt_out_url }}`.
 
 **A campaign cannot be enabled on a site whose `CustomSetting.has_author_pages` is False.**
