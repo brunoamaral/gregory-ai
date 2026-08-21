@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlparse
 
 from django.contrib.sites.models import Site
 from django.test import TestCase
+from django.utils.html import escape
 from django.utils import timezone
 
 from gregory.models import Articles, Authors, Team
@@ -287,7 +288,12 @@ class AuthorOutreachRenderTestCase(TestCase):
 		_subject, html, _text = render_author_outreach_email(
 			w.row, w.campaign, w.site, w.custom_settings
 		)
+		# Assert against the rendered anchor, not just the context. Checking
+		# only the context would still pass if the template were changed to
+		# href="{{ author_page_url_display }}" — the sent email would lose
+		# its attribution while the test stayed green.
 		self.assertIn(f'>{display}</a>', html)
+		self.assertIn(f'href="{escape(context["author_page_url"])}"', html)
 
 	# ------------------------------------------------------------------
 	# Site-level override (campaign.body_template)
