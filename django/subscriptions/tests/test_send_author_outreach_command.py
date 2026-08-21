@@ -470,6 +470,49 @@ class SendAuthorOutreachCommandTestCase(TestCase):
 		row.refresh_from_db()
 		self.assertEqual(row.status, AuthorOutreach.STATUS_PENDING)
 
+	def test_row_with_no_papers_is_never_sent_upcoming(self):
+		"""
+		An empty article set drops nothing, so the drift check alone would
+		read it as "still qualifying" and send an email naming no papers at
+		all. Guarded separately, before the drift check.
+		"""
+		w = self._new_world("empty1")
+		row = self._new_row(w, "empty1")
+		row.articles.clear()
+
+		with mock.patch(SEND_EMAIL_POST_TARGET) as mock_post:
+			self._run(w.campaign.utm_campaign_slug, still_qualifying=set())
+
+		mock_post.assert_not_called()
+		row.refresh_from_db()
+		self.assertEqual(row.status, AuthorOutreach.STATUS_PENDING)
+		self.assertIsNone(row.approved_at)
+		self.assertIn("no papers attached", row.error_message)
+
+	def test_row_with_no_papers_is_never_sent_retrospective(self):
+		"""
+		Same guard must apply in retrospective mode, which is exempt from the
+		drift check — a row emptied by an article deletion is just as broken
+		there.
+		"""
+		w = self._new_world(
+			"empty2",
+			campaign_kwargs={
+				"mode": AuthorOutreachCampaign.MODE_RETROSPECTIVE,
+				"featured_within_days": 30,
+				"body_template": "<p>Your paper was featured. {{ opt_out_url }}</p>",
+			},
+		)
+		row = self._new_row(w, "empty2")
+		row.articles.clear()
+
+		with mock.patch(SEND_EMAIL_POST_TARGET) as mock_post:
+			self._run(w.campaign.utm_campaign_slug)
+
+		mock_post.assert_not_called()
+		row.refresh_from_db()
+		self.assertEqual(row.status, AuthorOutreach.STATUS_PENDING)
+
 	def test_retrospective_campaign_skips_revalidation(self):
 		"""
 		A retrospective email says the paper *was* featured — a claim no

@@ -183,7 +183,11 @@ class Command(BaseCommand):
 		approved_rows = list(
 			AuthorOutreach.objects.filter(
 				campaign=campaign, status=AuthorOutreach.STATUS_APPROVED
-			).order_by("queued_at")
+			)
+			# Both the send-time candidacy re-check and the renderer walk
+			# row.articles; without this each row costs two extra queries.
+			.prefetch_related("articles")
+			.order_by("queued_at")
 		)
 		if limit is not None:
 			approved_rows = approved_rows[:limit]
@@ -350,10 +354,43 @@ class Command(BaseCommand):
 			# ALL of the row's papers must still qualify, not merely one.
 			# The email names each of them as forthcoming, so a row that
 			# has lost any of its papers would send a partly false promise.
+			# Prefetched above, so this costs no query.
+			row_article_ids = {article.pk for article in row.articles.all()}
+
+			# A row with no papers left would render the template's
+			# multi-paper branch with an empty list — "your recent papers"
+			# followed by nothing. Guard both modes, not just upcoming: a
+			# retrospective row emptied by an article deletion or a manual
+			# edit is just as broken, and the drift check below cannot catch
+			# it (an empty set drops nothing, so it would read as "still
+			# qualifying" and send).
+			if not row_article_ids:
+				row.status = AuthorOutreach.STATUS_PENDING
+				row.approved_at = None
+				row.approved_by = None
+				row.error_message = (
+					"Not sent: the row has no papers attached, so the email "
+					"would name none. Returned to pending — re-build or "
+					"cancel it."
+				)
+				row.save(
+					update_fields=[
+						"status",
+						"approved_at",
+						"approved_by",
+						"error_message",
+					]
+				)
+				self.stdout.write(
+					self.style.WARNING(
+						f"Returned {row.email} to pending: no papers attached."
+					)
+				)
+				continue
+
 			if campaign.mode == AuthorOutreachCampaign.MODE_UPCOMING:
 				if still_qualifying is None:
 					still_qualifying = currently_qualifying_article_ids(campaign)
-				row_article_ids = set(row.articles.values_list("pk", flat=True))
 				dropped = row_article_ids - still_qualifying
 				if dropped:
 					# Back to pending, not skipped or failed: the slot is
