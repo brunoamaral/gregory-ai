@@ -27,7 +27,11 @@ from subscriptions.management.commands.utils.subscription import (
 	rank_and_limit_articles,
 	select_digest_articles,
 )
-from subscriptions.models import Lists, Subscribers
+from subscriptions.models import AuthorOutreach, AuthorOutreachCampaign, Lists, Subscribers
+from subscriptions.utils.author_outreach_send import (
+	build_render_context,
+	render_author_outreach_email,
+)
 from templates.emails.components.content_organizer import get_optimized_email_context
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -43,6 +47,119 @@ def _make_mock_subscriber():
 		active=True,
 		unsubscribe_token=uuid.uuid4(),
 	)
+
+
+def _make_mock_author_outreach_row():
+	"""
+	Stand-in AuthorOutreach row for an author_outreach preview when the
+	resolved campaign has no queued row yet (the common case for a
+	freshly-configured campaign — build_author_outreach only ever writes
+	rows for real digest/back-catalogue candidates). Same fallback role as
+	_make_mock_subscriber() above: only the attributes
+	subscriptions.utils.author_outreach_send.build_render_context actually
+	reads are present — articles (an object exposing .all(), not a real M2M
+	manager), author (ORCID / credit_name / full_name), and opt_out_token.
+	"""
+	mock_article = types.SimpleNamespace(
+		article_id=0,
+		title="Example: A Novel Approach to a Research Question",
+		published_date=timezone.now(),
+	)
+
+	class _MockArticleManager:
+		def all(self):
+			return [mock_article]
+
+	mock_author = types.SimpleNamespace(
+		ORCID="0000-0000-0000-0001",
+		credit_name="",
+		full_name="Preview Author",
+	)
+
+	return types.SimpleNamespace(
+		articles=_MockArticleManager(),
+		author=mock_author,
+		opt_out_token=uuid.uuid4(),
+	)
+
+
+def _make_mock_author_outreach_campaign():
+	"""
+	Stand-in AuthorOutreachCampaign for a preview with no real campaign
+	configured yet on the resolved site. Carries every attribute both
+	build_render_context (utm_campaign_slug, via build_utm_params, itself
+	tolerant of a plain object via getattr) and render_author_outreach_email
+	(subject_line, body_template, mode) read — blank subject_line/
+	body_template and mode="upcoming" mean the mock always resolves to the
+	packaged default template, never the ValueError a retrospective
+	campaign with no body_template raises.
+	"""
+	return types.SimpleNamespace(
+		utm_campaign_slug="author-outreach-preview",
+		subject_line="",
+		body_template="",
+		mode=AuthorOutreachCampaign.MODE_UPCOMING,
+	)
+
+
+def _resolve_author_outreach_preview(request):
+	"""
+	Resolve (row, campaign, site, custom_settings) for an author_outreach
+	preview.
+
+	GET param: list_id selects an AuthorOutreachCampaign by pk — reusing
+	the dashboard's existing "Mailing List" selector rather than inventing
+	a parallel one; email_preview_lists below populates that dropdown with
+	campaigns instead of Lists rows when email_type=author_outreach.
+
+	Prefers a real, already-queued AuthorOutreach row for the resolved
+	campaign (most recently queued first), so a body_template override and
+	real author/article data preview exactly as a real send would render
+	them. Falls back to a mock row and/or campaign, mirroring
+	_make_mock_subscriber's role for the other email types, when no queue
+	has been built yet for that campaign, or no campaign exists at all.
+	"""
+	campaign_id = request.GET.get("list_id")
+	campaign = None
+	campaign_requested = bool(campaign_id)
+	if campaign_id:
+		try:
+			campaign = AuthorOutreachCampaign.objects.select_related("site").get(
+				pk=int(campaign_id)
+			)
+		except (AuthorOutreachCampaign.DoesNotExist, ValueError, TypeError):
+			campaign = None
+
+	rows = (
+		AuthorOutreach.objects.select_related("author", "campaign", "site")
+		.prefetch_related("articles")
+		.order_by("-queued_at")
+	)
+	if campaign is not None:
+		rows = rows.filter(campaign=campaign)
+	elif campaign_requested:
+		# An unresolvable campaign_id must not silently fall through to an
+		# arbitrary campaign's queue.
+		rows = AuthorOutreach.objects.none()
+	row = rows.first()
+
+	if row is not None:
+		campaign = row.campaign
+		site = row.site
+	else:
+		if campaign is None and not campaign_requested:
+			campaign = (
+				AuthorOutreachCampaign.objects.select_related("site")
+				.order_by("-created_at")
+				.first()
+			)
+		site = campaign.site if campaign is not None else Site.objects.get_current()
+		row = _make_mock_author_outreach_row()
+		if campaign is None:
+			campaign = _make_mock_author_outreach_campaign()
+
+	custom_settings = CustomSetting.objects.filter(site=site).order_by("setting_id").first()
+	return row, campaign, site, custom_settings
 
 
 def _resolve_date_range(request, default_days=30):
@@ -112,7 +229,23 @@ def _build_preview_context(request, template_name):
 	Core logic shared by the HTML preview and JSON context endpoints.
 	Accepts GET params: list_id, subscriber_id, days, start, end.
 	Returns a context dict or raises ValueError for unknown template names.
+
+	author_outreach is resolved by _resolve_author_outreach_preview and
+	rendered against subscriptions.utils.author_outreach_send.
+	build_render_context — the exact primitives-only context the real send
+	command and the packaged template both use — rather than the
+	get_optimized_email_context pipeline below, which the other four email
+	types share and author_outreach was deliberately built to bypass (see
+	AUTHOR-OUTREACH-SPEC.md "Configuration"). The JSON context endpoint
+	uses this dict as-is; the HTML preview endpoint (email_template_preview)
+	renders it through render_author_outreach_email instead of this
+	function's own template-loading step below, so a campaign's
+	body_template override previews faithfully.
 	"""
+	if template_name == "author_outreach":
+		row, campaign, site, custom_settings = _resolve_author_outreach_preview(request)
+		return build_render_context(row, campaign, site, custom_settings)
+
 	if template_name not in (
 		"weekly_summary",
 		"admin_summary",
@@ -253,6 +386,7 @@ def email_preview_dashboard(request):
 			("weekly_summary", "Weekly Summary"),
 			("admin_summary", "Admin Summary"),
 			("trial_notification", "Clinical Trials"),
+			("author_outreach", "Author Outreach"),
 			("test_components", "Component Test"),
 		]
 	}
@@ -266,7 +400,28 @@ def email_template_preview(request, template_name):
 	"""
 	Render an email template with real or mock data.
 	GET params: list_id, subscriber_id, days (default 30), start (YYYY-MM-DD), end (YYYY-MM-DD)
+
+	author_outreach renders via render_author_outreach_email — the same
+	function send_author_outreach uses — rather than loading
+	emails/author_outreach.html directly like the block below does for
+	the other types. That is deliberate: it means a campaign's
+	body_template override previews its actual copy, and a retrospective
+	campaign with a blank body_template surfaces here the same refusal
+	send_author_outreach would raise, instead of silently falling back to
+	the upcoming-mode packaged default.
 	"""
+	if template_name == "author_outreach":
+		try:
+			row, campaign, site, custom_settings = _resolve_author_outreach_preview(request)
+			_subject, html_body, _text_body = render_author_outreach_email(
+				row, campaign, site, custom_settings
+			)
+		except ValueError as exc:
+			return HttpResponse(str(exc), status=404)
+		except Exception as exc:
+			return HttpResponse(f"Error rendering template: {exc}", status=500)
+		return HttpResponse(html_body, content_type="text/html")
+
 	try:
 		context = _build_preview_context(request, template_name)
 	except ValueError as exc:
@@ -314,9 +469,32 @@ def email_template_json_context(request, template_name):
 def email_preview_lists(request):
 	"""
 	Return lists available for preview filtered by email type.
-	GET param: email_type = weekly_summary | admin_summary | trial_notification
+	GET param: email_type = weekly_summary | admin_summary | trial_notification | author_outreach
+
+	author_outreach has no Lists row of its own — its list-equivalent is
+	an AuthorOutreachCampaign, returned in the same {id, name, team_name,
+	subject_names} shape so the dashboard's existing "Mailing List"
+	dropdown and its list_id GET param work unchanged; see
+	_resolve_author_outreach_preview, which reads that same param.
 	"""
 	email_type = request.GET.get("email_type", "weekly_summary")
+
+	if email_type == "author_outreach":
+		qs = (
+			AuthorOutreachCampaign.objects.select_related("site")
+			.prefetch_related("subjects")
+			.order_by("name")
+		)
+		data = [
+			{
+				"id": campaign.pk,
+				"name": f"{campaign.name} ({campaign.get_mode_display()})",
+				"team_name": campaign.site.domain if campaign.site_id else "",
+				"subject_names": [s.subject_name for s in campaign.subjects.all()],
+			}
+			for campaign in qs
+		]
+		return JsonResponse({"lists": data})
 
 	type_filter = {
 		"weekly_summary": {"weekly_digest": True},

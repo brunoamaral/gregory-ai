@@ -374,11 +374,12 @@ look like a Postmark event is logged and ignored rather than acted on.
 
 Postmark is configured to send: **Delivery, Bounce, Open (first open only),
 Subscription Change** (Spam Complaint and Link Click join this list once
-author outreach ships — see the Deployment notes in
-`AUTHOR-OUTREACH-PLAN.md`). Delivery, Bounce, Spam Complaint, Open, and Click
-never change suppression state — Bounce is supplementary detail (hard vs
-soft; a soft bounce does not suppress), Delivery/Open/Click are irrelevant to
-suppression. **Subscription Change drives everything** here: it is the
+the author outreach webhook config is applied — see
+[author-outreach.md § Postmark setup](author-outreach.md#postmark-setup)).
+Delivery, Bounce, Spam Complaint, Open, and Click never change suppression
+state — Bounce is supplementary detail (hard vs soft; a soft bounce does
+not suppress), Delivery/Open/Click are irrelevant to suppression.
+**Subscription Change drives everything** here: it is the
 superset event for suppression state and fires in both directions
 (`SuppressSending: true` / `false`). Spam complaints reach us through
 `SuppressionReason: "SpamComplaint"` on this event even with the Spam
@@ -511,16 +512,19 @@ retry window.
 
 `send_email` accepts an optional `tag` parameter (Postmark's `Tag` field —
 one per message), passed through as the email type: `weekly_summary`,
-`admin_summary`, `trial_notification`, `announcement`. Not required for
-suppression (`Recipient` already identifies the subscriber) but makes
-Postmark-side stats and debugging much better. Lists are not used as tags —
-Postmark's tag reporting is designed for a small, low-cardinality set.
+`admin_summary`, `trial_notification`, `announcement`, `author_outreach`.
+Not required for suppression (`Recipient` already identifies the
+subscriber) but makes Postmark-side stats and debugging much better. Lists
+are not used as tags — Postmark's tag reporting is designed for a small,
+low-cardinality set.
 
 `send_email` also accepts `metadata`, `reply_to`, `track_opens`, and
 `track_links`, all optional and all defaulting to `None`/`False`. None of
-the four senders above pass them today, so their Postmark payload is
-unchanged; a future caller (author outreach — see `AUTHOR-OUTREACH-PLAN.md`)
-opts in per message rather than per stream. `metadata` is where
+the four original senders (weekly digest, admin summary, trial
+notification, announcement) pass them, so their Postmark payload is
+unchanged; `send_author_outreach` (see
+[author-outreach.md](author-outreach.md)) is the one caller that opts in
+per message rather than per stream. `metadata` is where
 `EmailMessage.msg_token` gets echoed back to Postmark, for a webhook event
 to correlate against later (see below).
 
@@ -635,11 +639,11 @@ inline listing of its `EmailEvent` rows.
 [02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md) for
 the full field list) is a global "never contact this address again" list,
 keyed on the email address — **not** on `Authors` or `Subscribers`. That
-independence is deliberate: an author contacted under author outreach
-(AUTHOR-OUTREACH-SPEC.md, AUTHOR-OUTREACH-PLAN.md "PR 2 — Author
-do-not-contact") is not a newsletter subscriber, so this table and
-`Subscribers`/`ListSubscription` must never be able to drift into each
-other. The same address can appear in both, correctly, at the same time.
+independence is deliberate: an author contacted under
+[author outreach](author-outreach.md) is not a newsletter subscriber, so
+this table and `Subscribers`/`ListSubscription` must never be able to
+drift into each other. The same address can appear in both, correctly, at
+the same time.
 
 Every write goes through `subscriptions.utils.author_optout.
 record_author_opt_out(email, reason, note="")`, which is idempotent (an
