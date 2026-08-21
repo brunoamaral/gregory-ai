@@ -49,8 +49,17 @@ def send_email(
 		announcement email must keep NOT tracking opens unless a caller
 		opts in explicitly.
 	:param track_links: Postmark TrackLinks. False by default for the same
-		reason. When True, sent as "HtmlAndText" (Postmark tracks links in
-		both bodies rather than picking one).
+		reason. True is sent as "HtmlAndText"; a string is passed through
+		verbatim, so a caller can ask for "HtmlOnly" or "TextOnly".
+
+		"HtmlOnly" is not a micro-optimisation — it is the only way to keep
+		a specific link out of Postmark's click tracking. The per-link
+		opt-out marker (data-pm-no-track) is an HTML attribute and has no
+		plain-text equivalent, so under "HtmlAndText" Postmark rewrites and
+		tracks that same URL in the text body regardless. Author outreach
+		therefore sends "HtmlOnly": a click on "never contact me again"
+		must not be tracked in either body (docs/author-outreach.md,
+		"Safeguards").
 	:return: Response object from the Postmark API.
 	"""
 	prefix = sender_prefix or "gregory"
@@ -77,7 +86,9 @@ def send_email(
 	if track_opens:
 		payload["TrackOpens"] = True
 	if track_links:
-		payload["TrackLinks"] = "HtmlAndText"
+		payload["TrackLinks"] = (
+			track_links if isinstance(track_links, str) else "HtmlAndText"
+		)
 
 	response = requests.post(
 		email_postmark_api_url,
@@ -149,7 +160,15 @@ def record_sent_message(
 			site=site,
 			subscriber=subscriber,
 			accepted=accepted,
-			error_code=error_code if isinstance(error_code, int) else None,
+			# NULL means "no error", so an accepted send must not persist the
+			# 0 that classify_postmark_response returns on success — otherwise
+			# error_code__isnull=False matches every successful send and the
+			# field can't be used to find failures at all.
+			error_code=(
+				None
+				if accepted
+				else (error_code if isinstance(error_code, int) else None)
+			),
 			error_message="" if accepted else (detail or ""),
 		)
 	except Exception:

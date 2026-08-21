@@ -264,7 +264,10 @@ class Command(BaseCommand):
 				metadata={"msg_token": str(msg_token), "campaign": campaign.utm_campaign_slug},
 				reply_to=campaign.reply_to or None,
 				track_opens=True,
-				track_links=True,
+				# HtmlOnly, not HtmlAndText: data-pm-no-track on the opt-out
+				# link is HTML-only, so tracking the text body would rewrite
+				# and track that URL anyway. See send_email.
+				track_links="HtmlOnly",
 			)
 		except requests.RequestException as e:
 			raise CommandError(f"Failed to send test email to {test_to}: {e}")
@@ -408,7 +411,10 @@ class Command(BaseCommand):
 					},
 					reply_to=campaign.reply_to or None,
 					track_opens=True,
-					track_links=True,
+					# HtmlOnly, not HtmlAndText: data-pm-no-track on the opt-out
+				# link is HTML-only, so tracking the text body would rewrite
+				# and track that URL anyway. See send_email.
+				track_links="HtmlOnly",
 				)
 			except requests.RequestException as e:
 				record_sent_message(

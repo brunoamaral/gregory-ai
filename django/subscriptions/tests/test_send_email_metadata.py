@@ -84,6 +84,16 @@ class SendEmailPayloadGatingTest(TestCase):
 		self.assertNotIn("TrackLinks", self._send(track_links=False))
 		self.assertEqual(self._send(track_links=True)["TrackLinks"], "HtmlAndText")
 
+	def test_track_links_string_is_passed_through(self):
+		"""
+		A caller must be able to ask for "HtmlOnly". data-pm-no-track is an
+		HTML attribute with no plain-text equivalent, so "HtmlAndText" would
+		track the author-outreach opt-out URL in the text body no matter what
+		the HTML says. Passing the mode through is what makes that avoidable.
+		"""
+		self.assertEqual(self._send(track_links="HtmlOnly")["TrackLinks"], "HtmlOnly")
+		self.assertEqual(self._send(track_links="TextOnly")["TrackLinks"], "TextOnly")
+
 	def test_tag_still_included_when_passed_as_before(self):
 		payload = self._send(tag="weekly_summary")
 		self.assertEqual(payload["Tag"], "weekly_summary")

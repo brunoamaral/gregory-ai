@@ -9,7 +9,8 @@ from subscriptions.models import EmailEvent
 class Command(BaseCommand):
 	help = (
 		"Prunes old EmailEvent rows (the Postmark webhook log: Delivery, "
-		"Bounce, SpamComplaint, Open, Click, SubscriptionChange). By "
+		"Bounce, SpamComplaint, Open, Click — NOT SubscriptionChange, "
+		"which is recorded only in SuppressionEvent and never pruned). By "
 		"default, keeps the last 180 days — operational telemetry for "
 		"deliverability debugging, not a permanent record. INVARIANT: "
 		"pruning telemetry must never weaken a suppression. This command "

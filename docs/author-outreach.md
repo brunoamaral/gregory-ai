@@ -230,8 +230,13 @@ remove any one of them and the balance would need to be re-struck.
   carries Postmark's `data-pm-no-track` attribute — verified against
   Postmark's own developer documentation, which names this exact attribute
   for excluding one link from tracking while the rest of the message stays
-  tracked — so clicking "never contact me again" is not itself logged as a
-  tracked click.
+  tracked. That attribute is HTML-only and has no plain-text equivalent, so
+  the send also asks Postmark for `TrackLinks: "HtmlOnly"` rather than
+  `"HtmlAndText"`; under `HtmlAndText` Postmark would rewrite and track the
+  same opt-out URL in the text body no matter what the HTML said. Between
+  the two, clicking "never contact me again" is not logged as a tracked
+  click in either body. The cost is that clicks from text-only readers go
+  unattributed, which is the right side of that trade.
 - **No tracking data retained.** Open and Click webhook payloads carry IP
   address, GPS coordinates, city, region, and user agent for the named
   researcher. None of it is stored anywhere — see

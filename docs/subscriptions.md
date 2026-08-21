@@ -605,6 +605,14 @@ via `send_email()` and default off — the four existing senders don't set
 them, so this ships with no behaviour change for weekly digest, admin
 summary, trial notification, or announcement email.
 
+`track_links=True` sends `TrackLinks: "HtmlAndText"`; passing a string
+instead (`"HtmlOnly"`, `"TextOnly"`) forwards it verbatim. That matters for
+any message with a link that must stay untracked: Postmark's per-link
+`data-pm-no-track` marker is an HTML attribute, so a URL excluded in the
+HTML body is still rewritten and tracked in the text body under
+`HtmlAndText`. Author outreach sends `"HtmlOnly"` for exactly this reason —
+see [author-outreach.md](author-outreach.md).
+
 ### A quirk worth knowing: `Email` vs `Recipient`
 
 Every Postmark webhook event names the recipient field `Recipient` —

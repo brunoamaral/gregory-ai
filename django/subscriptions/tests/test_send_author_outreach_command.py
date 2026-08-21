@@ -417,7 +417,10 @@ class SendAuthorOutreachCommandTestCase(TestCase):
 		payload = mock_post.call_args.kwargs["json"]
 		self.assertEqual(payload["ReplyTo"], "bruno@brain-regeneration.com")
 		self.assertEqual(payload["TrackOpens"], True)
-		self.assertEqual(payload["TrackLinks"], "HtmlAndText")
+		# HtmlOnly, deliberately: the opt-out link carries data-pm-no-track,
+		# which is HTML-only, so tracking the text body would rewrite and
+		# track "never contact me again" regardless of the HTML marker.
+		self.assertEqual(payload["TrackLinks"], "HtmlOnly")
 		self.assertEqual(payload["Tag"], "author_outreach")
 		self.assertEqual(payload["MessageStream"], "broadcast")
 

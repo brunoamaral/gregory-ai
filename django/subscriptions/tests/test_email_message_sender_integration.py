@@ -82,6 +82,13 @@ class SendAnnouncementRecordsEmailMessageTest(TestCase):
 		self.assertEqual(message.tag, "announcement")
 		self.assertTrue(message.accepted)
 		self.assertEqual(message.message_id, "postmark-message-id")
+		# NULL, not 0. classify_postmark_response returns (True, 0, ...) on
+		# success, but error_code means "Postmark ErrorCode when not
+		# accepted" — persisting the 0 would make error_code__isnull=False
+		# match every successful send, so the field could never be used to
+		# find failures.
+		self.assertIsNone(message.error_code)
+		self.assertEqual(message.error_message, "")
 
 	def test_connection_error_still_writes_an_email_message_row(self):
 		with patch(SEND_EMAIL_TARGET, side_effect=_connection_error):
