@@ -16,17 +16,21 @@ client — see [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md).
 
 ## Connecting
 
-The server exposes a single Streamable HTTP endpoint, no authentication required (see
-[Auth](#auth) below):
+The server runs on its own dedicated host rather than as a `location` under the main API
+domain — its own DNS record, its own certificate, its own nginx `server` block (see
+[Deployment](#deployment)). No authentication is required (see [Auth](#auth) below):
 
 ```
-https://api.<your-domain>/mcp/
+https://gregory-ai.<your-domain>/mcp
 ```
+
+Note there is no trailing slash — the app 307-redirects `/mcp/` to `/mcp`, and not every
+client follows redirects on this transport.
 
 ### Claude Code
 
 ```bash
-claude mcp add --transport http gregory https://api.<your-domain>/mcp/
+claude mcp add --transport http gregory https://gregory-ai.<your-domain>/mcp
 ```
 
 ### Claude Desktop
@@ -128,13 +132,24 @@ tried and why it was reverted. A flat per-client cap backstops the per-tool buck
 
 Throttled requests return `429` (`limit_req_status`), not nginx's default `503` — `503`
 reads as "server broken" rather than "you're going too fast." A rejected request never
-reaches the MCP server, so its own logs can't show a throttling event; `/mcp/` logs to
-its own file (`mcp-access.log`, `mcp_combined` format) with an `mcp_name="..."` field so
-429s can be attributed per tool from nginx's side instead:
+reaches the MCP server, so its own logs can't show a throttling event; `/mcp` logs to its
+own file (`mcp-access.log`, `mcp_combined` format) with `mcp_name="..."` and
+`mcp_method="..."` fields — the tool name and the JSON-RPC method (`tools/list`,
+`tools/call`, …) — so 429s, and traffic shape generally, can be attributed from nginx's
+side instead:
 
 ```bash
 awk '$9 == 429' /var/log/nginx/mcp-access.log | grep -o 'mcp_name="[^"]*"' | sort | uniq -c | sort -rn
 ```
+
+Both fields come from client-controlled request headers (`Mcp-Name` / `Mcp-Method`) —
+treat an empty value as "unknown," not as "no tool" / "no method."
+
+The dedicated host's `access_log` is set at the **server** level, not just inside
+`location /mcp`, so this file also captures every request that misses `/mcp` and falls
+through to the catch-all `location /` 404 — useful for seeing scanner traffic against a
+single-purpose host, but it means any analysis should filter to `$7 ~ /^\/mcp/` first, or
+it counts probe noise against `/` alongside real MCP requests.
 
 Whether 30 r/m per (client, tool) and 120 r/m per client are the right numbers is an open
 question — tune them from what this log actually shows, not speculatively.
@@ -198,11 +213,33 @@ docker compose up -d gregory-mcp
 docker compose ps gregory-mcp             # expect "healthy" within ~40s
 ```
 
-Then add the `/mcp` block to the live nginx config. The version in
-[`nginx-example-configuration/nginx.conf`](../nginx-example-configuration/nginx.conf) is an
-example, not the deployed file — it needs copying across, including the two `limit_req_zone`
-directives and the `map $http_mcp_name $mcp_tool_bucket` block, which live in the `http`
-context rather than the `server` block (on Debian/Ubuntu, `conf.d/` is included there).
+The MCP server lives on its own dedicated host (`gregory-ai.<your-domain>` below), not as a
+`location` under the API domain, so it needs a DNS record and a certificate of its own
+before nginx can serve it — the old topology needed neither because it inherited the API
+host's cert.
+
+```bash
+# point an A/AAAA record at the server first, then:
+certbot certonly --webroot -d gregory-ai.<your-domain> \
+  -w /var/www/_letsencrypt -n --agree-tos --force-renewal
+```
+
+Wait for DNS to propagate before running `certbot` — the HTTP-01 challenge fails against a
+record that hasn't resolved yet.
+
+Then bring the live nginx config in line with
+[`nginx-example-configuration/nginx.conf`](../nginx-example-configuration/nginx.conf),
+split across two files the way that example is commented:
+
+- **`/etc/nginx/conf.d/mcp.conf`** — the `map $http_mcp_name $mcp_tool_bucket` block, both
+  `limit_req_zone` directives, and the `mcp_combined` log format. These are `http`-context
+  directives and can't live inside a `server` block; on Debian/Ubuntu `conf.d/` is included
+  in the `http` context, so anything dropped there applies to every site.
+- **`/etc/nginx/sites-enabled/gregory-ai.<your-domain>.conf`** — a dedicated `server` block
+  on 443 with its own cert, its own `error_log`, `access_log … mcp_combined` at the
+  **server** level (see [Auth](#auth) for what that means for reading the log), a
+  `location /mcp` proxying to `127.0.0.1:8001`, a catch-all `location /` returning 404, and
+  a companion port-80 server redirecting to HTTPS.
 
 Two things that are easy to get wrong:
 
