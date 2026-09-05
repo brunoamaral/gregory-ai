@@ -1,6 +1,8 @@
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.contrib.sites.models import Site
 from gregory.models import EncryptedTextField
+from gregory.utils.trial_field_normalizers import TrialRecruitmentStatus
 
 
 class CustomSetting(models.Model):
@@ -115,6 +117,20 @@ class CustomSetting(models.Model):
 			"/sitemap/sites/<site_id>/trials.xml. Only enable this if the "
 			"site actually publishes trial pages at /trials/<trial_id>/ — "
 			"otherwise the sitemap would send crawlers to 404s."
+		),
+	)
+	sitemap_trial_statuses = ArrayField(
+		models.CharField(max_length=30, choices=TrialRecruitmentStatus.choices),
+		blank=True,
+		default=list,
+		verbose_name="Sitemap trial statuses",
+		help_text=(
+			"Restrict the trials section to these recruitment statuses. "
+			"Leave all unticked to list every trial for the selected "
+			"subjects. Trials with no normalised status are excluded "
+			"whenever a selection is made. Narrowing to the open/upcoming "
+			"statuses is the usual way to keep the trials section from "
+			"dwarfing the curated articles section."
 		),
 	)
 	has_author_pages = models.BooleanField(

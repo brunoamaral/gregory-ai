@@ -76,9 +76,9 @@ class SiteSitemapTests(TestCase):
 		cls.article_wrong_team.teams.add(cls.private_team)
 		cls.article_wrong_team.subjects.add(cls.subject_a)
 
-		def make_trial(title, *subjects, team=cls.team):
+		def make_trial(title, *subjects, team=cls.team, **fields):
 			trial = Trials.objects.create(
-				title=title, link=f"https://registry.example.org/{title}"
+				title=title, link=f"https://registry.example.org/{title}", **fields
 			)
 			trial.teams.add(team)
 			for subject in subjects:
@@ -92,6 +92,17 @@ class SiteSitemapTests(TestCase):
 		cls.trial_wrong_team = make_trial(
 			"twrong", cls.subject_a, team=cls.private_team
 		)
+
+		# recruitment_status_normalized is editable=False and recomputed
+		# from the raw status on every save(), so seed the raw value.
+		cls.trial_recruiting = make_trial(
+			"trecruiting", cls.subject_a, recruitment_status="Recruiting"
+		)
+		cls.trial_completed = make_trial(
+			"tcompleted", cls.subject_a, recruitment_status="Completed"
+		)
+		# No raw status at all → recruitment_status_normalized stays NULL.
+		cls.trial_no_status = make_trial("tnostatus", cls.subject_a)
 
 		# Site config: frontend site publishes subject A (+ the private
 		# subject, which must be silently dropped); other site publishes B.
@@ -195,6 +206,17 @@ class SiteSitemapTests(TestCase):
 		self.config.sitemap_include_trials = True
 		self.config.save()
 
+	def _visible_trial_count(self):
+		"""Trials the site's trials section should list, counted independently
+		of the sitemap code under test."""
+		return (
+			Trials.objects.filter(
+				subjects__in=[self.subject_a], teams=self.team
+			)
+			.distinct()
+			.count()
+		)
+
 	def test_trials_section_404s_until_the_site_opts_in(self):
 		self.assertEqual(
 			self.client.get(self._section_url(self.site.pk, "trials")).status_code,
@@ -251,12 +273,74 @@ class SiteSitemapTests(TestCase):
 		self._enable_trials()
 		cache.clear()  # the index is cache_page'd
 		original_limit = SiteTrialsSitemap.limit
-		SiteTrialsSitemap.limit = 2  # 3 subject-A trials + trial_both → 2 pages
+		SiteTrialsSitemap.limit = 2
 		self.addCleanup(setattr, SiteTrialsSitemap, "limit", original_limit)
 		body = self.client.get(url).content.decode()
 		self.assertIn(self._section_url(self.site.pk, "trials"), body)
-		# 1 articles page + 2 trials pages
-		self.assertEqual(body.count("<sitemap>"), 3)
+		# 7 subject-A trials at 2 per page → 4 pages, + 1 articles page.
+		# Derived rather than hardcoded so adding a fixture doesn't turn
+		# into a puzzle about which number to bump.
+		trial_pages = -(-self._visible_trial_count() // 2)
+		self.assertEqual(body.count("<sitemap>"), 1 + trial_pages)
+		self.assertEqual(trial_pages, 4)
+
+	def test_no_status_selection_lists_every_status(self):
+		self._enable_trials()
+		body = self.client.get(
+			self._section_url(self.site.pk, "trials")
+		).content.decode()
+		for trial in (
+			self.trial_recruiting,
+			self.trial_completed,
+			self.trial_no_status,
+		):
+			self.assertIn(f"/trials/{trial.pk}/", body)
+
+	def test_status_selection_narrows_the_section(self):
+		self._enable_trials()
+		self.config.sitemap_trial_statuses = ["recruiting"]
+		self.config.save()
+		body = self.client.get(
+			self._section_url(self.site.pk, "trials")
+		).content.decode()
+		self.assertIn(f"/trials/{self.trial_recruiting.pk}/", body)
+		self.assertNotIn(f"/trials/{self.trial_completed.pk}/", body)
+		# Untagged-status trials drop out once a selection is made.
+		self.assertNotIn(f"/trials/{self.trial_no_status.pk}/", body)
+		# ...and so do the fixtures that never had a raw status.
+		self.assertNotIn(f"/trials/{self.trials_a[0].pk}/", body)
+
+	def test_status_selection_accepts_several_statuses(self):
+		self._enable_trials()
+		self.config.sitemap_trial_statuses = ["recruiting", "completed"]
+		self.config.save()
+		body = self.client.get(
+			self._section_url(self.site.pk, "trials")
+		).content.decode()
+		self.assertIn(f"/trials/{self.trial_recruiting.pk}/", body)
+		self.assertIn(f"/trials/{self.trial_completed.pk}/", body)
+		self.assertNotIn(f"/trials/{self.trial_no_status.pk}/", body)
+
+	def test_status_selection_does_not_leak_past_subject_or_team_scoping(self):
+		# The status filter narrows, never widens: a recruiting trial owned
+		# by a private team still must not appear.
+		self._enable_trials()
+		self.trial_wrong_team.recruitment_status = "Recruiting"
+		self.trial_wrong_team.save()
+		self.config.sitemap_trial_statuses = ["recruiting"]
+		self.config.save()
+		body = self.client.get(
+			self._section_url(self.site.pk, "trials")
+		).content.decode()
+		self.assertNotIn(f"/trials/{self.trial_wrong_team.pk}/", body)
+
+	def test_status_selection_does_not_affect_articles(self):
+		self._enable_trials()
+		self.config.sitemap_trial_statuses = ["recruiting"]
+		self.config.save()
+		body = self.client.get(self._section_url(self.site.pk)).content.decode()
+		for article in self.articles_a:
+			self.assertIn(f"/articles/{article.pk}/", body)
 
 	def test_trials_switch_is_per_site(self):
 		self._enable_trials()
