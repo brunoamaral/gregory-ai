@@ -13,7 +13,7 @@ GregoryAI supports a multi-tenant structure where content, credentials, and emai
 | **Organisation** | Top-level grouping (provided by `django-organizations`). Owns teams, credentials, and sites. |
 | **Team** | Belongs to one Organisation. Owns subjects, sources, and optionally its own site and credentials. |
 | **Site** | A Django `sites` framework entry (`domain` + `name`). Used as the base URL for email sender addresses. |
-| **CustomSetting** | Per-site settings: site title, email footer, admin email, sender email prefix, whether the site publishes author profile pages, and the export/about metadata (description, contact email, data licence, citation) shown on the "About this file" sheet of `export_trials_xlsx` workbooks. |
+| **CustomSetting** | Per-site settings: site title, email footer, admin email, sender email prefix, whether the site publishes author profile pages, the [sitemap](03-api-and-rss-feeds.md#sitemaps) switches (master switch, curated subjects, articles-relevant-only, include trials), and the export/about metadata (description, contact email, data licence, citation) shown on the "About this file" sheet of `export_trials_xlsx` workbooks. |
 | **TeamCredentials** | Postmark API token and URL scoped to a specific team. |
 | **OrganisationCredentials** | Postmark API token and URL scoped to an organisation. Used as fallback when a team has no credentials. |
 | **OrganisationSite** | Links an Organisation to one or more Sites. One can be marked as `is_default`. |

@@ -92,10 +92,11 @@ class CustomSetting(models.Model):
 		blank=True,
 		related_name="sitemap_sites",
 		help_text=(
-			"Subjects whose articles appear in this site's sitemap. "
-			"Choosing different subjects per site is how two sites backed "
-			"by the same database avoid competing for the same articles "
-			"in search engines."
+			"Subjects whose articles (and, when enabled below, clinical "
+			"trials) appear in this site's sitemap. Choosing different "
+			"subjects per site is how two sites backed by the same "
+			"database avoid competing for the same content in search "
+			"engines."
 		),
 	)
 	sitemap_relevant_only = models.BooleanField(
@@ -103,7 +104,17 @@ class CustomSetting(models.Model):
 		help_text=(
 			"Only include articles marked relevant for at least one of the "
 			"selected subjects (manual review or ML consensus, same "
-			"semantics as the API's relevant=true filter)."
+			"semantics as the API's relevant=true filter). Does not affect "
+			"clinical trials, which carry no relevance judgement."
+		),
+	)
+	sitemap_include_trials = models.BooleanField(
+		default=False,
+		help_text=(
+			"Also list clinical trials for the selected subjects, at "
+			"/sitemap/sites/<site_id>/trials.xml. Only enable this if the "
+			"site actually publishes trial pages at /trials/<trial_id>/ — "
+			"otherwise the sitemap would send crawlers to 404s."
 		),
 	)
 	has_author_pages = models.BooleanField(

@@ -1,17 +1,20 @@
 """
 rss/sitemaps.py
 
-Site-scoped XML sitemaps for frontend article pages.
+Site-scoped XML sitemaps for frontend article and clinical trial pages.
 
-Serves /sitemap/sites/<site_id>/index.xml (a sitemap index) and
-/sitemap/sites/<site_id>/articles.xml (?p=N pages, up to 10k URLs each).
+Serves /sitemap/sites/<site_id>/index.xml (a sitemap index),
+/sitemap/sites/<site_id>/articles.xml and, when the site opts in,
+/sitemap/sites/<site_id>/trials.xml (?p=N pages, up to 10k URLs each).
 URLs point at the requested Site's *frontend* domain.
 
 Membership is per-site configuration on sitesettings.CustomSetting:
 generate_sitemap (master switch), sitemap_subjects (which subjects this
 site publishes), sitemap_relevant_only (restrict to manually/ML-relevant
-articles for those subjects). Subject curation is what lets two sites
-backed by one database expose non-competing article sets to Google.
+articles for those subjects), sitemap_include_trials (whether this site
+publishes /trials/<trial_id>/ pages at all — not every frontend does).
+Subject curation is what lets two sites backed by one database expose
+non-competing content sets to Google.
 
 Visibility is pinned to PUBLIC organisations regardless of caller
 identity: sitemaps exist for crawlers, and request-dependent visibility
@@ -29,24 +32,33 @@ from django.urls import reverse
 from django.views.decorators.cache import cache_page
 
 from api.filters import ml_relevant_articles_q
-from gregory.models import Articles
+from gregory.models import Articles, Trials
 from gregory.visibility import _public_org_ids
 from sitesettings.models import CustomSetting
 
 SITEMAP_CACHE_SECONDS = 3600
 
 
-class SiteArticlesSitemap(Sitemap):
+class _SiteContentSitemap(Sitemap):
+	"""Shared machinery for the per-site sections.
+
+	Subclasses set ``model`` (which must carry ``subjects`` and ``teams``
+	M2Ms plus a ``last_updated`` column), ``pk_field`` and ``path_prefix``.
+	"""
+
 	# Frontend URLs are always https; don't infer from the API request.
 	protocol = "https"
 	# Google caps a sitemap file at 50k URLs; 10k keeps each page's query
 	# and payload small.
 	limit = 10000
 
-	def __init__(self, site, subject_ids, relevant_only, public_org_ids):
+	model = None
+	pk_field = None
+	path_prefix = None
+
+	def __init__(self, site, subject_ids, public_org_ids):
 		self._site = site
 		self._subject_ids = subject_ids
-		self._relevant_only = relevant_only
 		self._public_org_ids = public_org_ids
 
 	def get_domain(self, site=None):
@@ -54,22 +66,52 @@ class SiteArticlesSitemap(Sitemap):
 		# Sitemap URLs must use the frontend domain of the requested site.
 		return self._site.domain
 
-	def items(self):
-		# Exists() so an article tagged with several qualifying subjects
-		# appears once without DISTINCT-ing the outer query.
-		tagged = Articles.objects.filter(
+	def get_queryset(self):
+		# Exists() so a row tagged with several qualifying subjects appears
+		# once without DISTINCT-ing the outer query.
+		tagged = self.model.objects.filter(
 			pk=OuterRef("pk"), subjects__in=self._subject_ids
 		)
-		# subject_ids are already restricted to public-org subjects, but an
-		# article can be tagged with a subject from one team while its own
-		# teams M2M points elsewhere — re-check the article's own team
+		# subject_ids are already restricted to public-org subjects, but a
+		# row can be tagged with a subject from one team while its own
+		# teams M2M points elsewhere — re-check the row's own team
 		# ownership too, matching the visibility pattern RSS feeds use
-		# (teams__organization_id__in), so a private-org article can never
+		# (teams__organization_id__in), so private-org content can never
 		# surface just because it shares a subject tag with a public one.
-		publicly_owned = Articles.objects.filter(
+		publicly_owned = self.model.objects.filter(
 			pk=OuterRef("pk"), teams__organization_id__in=self._public_org_ids
 		)
-		qs = Articles.objects.filter(Exists(tagged), Exists(publicly_owned))
+		return self.model.objects.filter(Exists(tagged), Exists(publicly_owned))
+
+	def items(self):
+		# Primary-key ordering keeps pagination stable between crawls:
+		# new rows only ever append to the last page.
+		return (
+			self.get_queryset()
+			.order_by(self.pk_field)
+			.values_list(self.pk_field, "last_updated")
+		)
+
+	def location(self, item):
+		return f"/{self.path_prefix}/{item[0]}/"
+
+	def lastmod(self, item):
+		# May be None for rows predating the last_updated column; the
+		# framework simply omits <lastmod> for those URLs.
+		return item[1]
+
+
+class SiteArticlesSitemap(_SiteContentSitemap):
+	model = Articles
+	pk_field = "article_id"
+	path_prefix = "articles"
+
+	def __init__(self, site, subject_ids, relevant_only, public_org_ids):
+		super().__init__(site, subject_ids, public_org_ids)
+		self._relevant_only = relevant_only
+
+	def get_queryset(self):
+		qs = super().get_queryset()
 		if self._relevant_only:
 			manually_relevant = Q(
 				article_subject_relevances__is_relevant=True,
@@ -79,17 +121,16 @@ class SiteArticlesSitemap(Sitemap):
 				manually_relevant
 				| ml_relevant_articles_q(subject_ids=self._subject_ids)
 			).distinct()
-		# article_id ordering keeps pagination stable between crawls:
-		# new articles only ever append to the last page.
-		return qs.order_by("article_id").values_list("article_id", "last_updated")
+		return qs
 
-	def location(self, item):
-		return f"/articles/{item[0]}/"
 
-	def lastmod(self, item):
-		# May be None for rows predating the last_updated column; the
-		# framework simply omits <lastmod> for those URLs.
-		return item[1]
+class SiteTrialsSitemap(_SiteContentSitemap):
+	# Trials carry no relevance judgement (no manual review flag, no ML
+	# predictions), so sitemap_relevant_only deliberately does not apply
+	# here — subject curation is the only filter.
+	model = Trials
+	pk_field = "trial_id"
+	path_prefix = "trials"
 
 
 def _site_sitemaps(site_id):
@@ -114,11 +155,17 @@ def _site_sitemaps(site_id):
 	)
 	if not subject_ids:
 		raise Http404("No publicly visible sitemap subjects configured.")
-	return site, {
+	sitemaps = {
 		"articles": SiteArticlesSitemap(
 			site, subject_ids, settings_row.sitemap_relevant_only, public_org_ids
 		)
 	}
+	# Opt-in: a frontend that has no /trials/<id>/ pages (gregory-ms.com
+	# lists trials but does not give each one a page) must not advertise
+	# trial URLs that would 404 for a crawler.
+	if settings_row.sitemap_include_trials:
+		sitemaps["trials"] = SiteTrialsSitemap(site, subject_ids, public_org_ids)
+	return site, sitemaps
 
 
 @cache_page(SITEMAP_CACHE_SECONDS)

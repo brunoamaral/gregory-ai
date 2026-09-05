@@ -64,6 +64,7 @@ class CustomSettingInline(admin.StackedInline):
 					"generate_sitemap",
 					"sitemap_subjects",
 					"sitemap_relevant_only",
+					"sitemap_include_trials",
 				],
 			},
 		),
