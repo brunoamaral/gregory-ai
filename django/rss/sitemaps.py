@@ -12,9 +12,10 @@ Membership is per-site configuration on sitesettings.CustomSetting:
 generate_sitemap (master switch), sitemap_subjects (which subjects this
 site publishes), sitemap_relevant_only (restrict to manually/ML-relevant
 articles for those subjects), sitemap_include_trials (whether this site
-publishes /trials/<trial_id>/ pages at all — not every frontend does).
-Subject curation is what lets two sites backed by one database expose
-non-competing content sets to Google.
+publishes /trials/<trial_id>/ pages at all — not every frontend does),
+sitemap_trial_statuses (narrow the trials section to given recruitment
+statuses). Subject curation is what lets two sites backed by one
+database expose non-competing content sets to Google.
 
 Visibility is pinned to PUBLIC organisations regardless of caller
 identity: sitemaps exist for crawlers, and request-dependent visibility
@@ -127,10 +128,27 @@ class SiteArticlesSitemap(_SiteContentSitemap):
 class SiteTrialsSitemap(_SiteContentSitemap):
 	# Trials carry no relevance judgement (no manual review flag, no ML
 	# predictions), so sitemap_relevant_only deliberately does not apply
-	# here — subject curation is the only filter.
+	# here. Recruitment status is the closest thing to a quality signal:
+	# a completed or withdrawn trial is a historical record that competes
+	# with the site's own articles for crawl budget, while a recruiting
+	# one is what patients actually search for.
 	model = Trials
 	pk_field = "trial_id"
 	path_prefix = "trials"
+
+	def __init__(self, site, subject_ids, public_org_ids, statuses=()):
+		super().__init__(site, subject_ids, public_org_ids)
+		self._statuses = list(statuses)
+
+	def get_queryset(self):
+		qs = super().get_queryset()
+		if self._statuses:
+			# Empty selection means "every status"; a non-empty one also
+			# drops trials whose registry status didn't normalise to
+			# anything (recruitment_status_normalized IS NULL), since the
+			# operator asked for specific statuses and NULL is not one.
+			qs = qs.filter(recruitment_status_normalized__in=self._statuses)
+		return qs
 
 
 def _site_sitemaps(site_id):
@@ -164,7 +182,12 @@ def _site_sitemaps(site_id):
 	# lists trials but does not give each one a page) must not advertise
 	# trial URLs that would 404 for a crawler.
 	if settings_row.sitemap_include_trials:
-		sitemaps["trials"] = SiteTrialsSitemap(site, subject_ids, public_org_ids)
+		sitemaps["trials"] = SiteTrialsSitemap(
+			site,
+			subject_ids,
+			public_org_ids,
+			statuses=settings_row.sitemap_trial_statuses or (),
+		)
 	return site, sitemaps
 
 

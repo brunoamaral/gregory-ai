@@ -1,6 +1,7 @@
 from django.contrib.sites.models import Site
 from django.test import TestCase
 
+from .admin import CustomSettingAdminForm
 from .models import CustomSetting
 from .utils import author_page_base
 
@@ -93,3 +94,49 @@ class AuthorPageBaseTests(TestCase):
 
 	def test_missing_site_returns_empty(self):
 		self.assertEqual(author_page_base(None), "")
+
+
+class SitemapTrialStatusesAdminFormTests(TestCase):
+	"""The tickbox widget writes into a Postgres ArrayField. A
+	MultipleChoiceField hands back a list of strings, which ArrayField
+	accepts — pin that round trip so a widget change can't silently start
+	storing something the sitemap query won't match."""
+
+	def setUp(self):
+		self.site = Site.objects.create(domain="statuses.test", name="Statuses")
+
+	def _form(self, statuses):
+		data = {
+			"site": self.site.pk,
+			"title": "Statuses Site",
+			"sender_email_prefix": "gregory",
+			"sitemap_trial_statuses": statuses,
+		}
+		return CustomSettingAdminForm(data=data)
+
+	def test_defaults_to_empty_list(self):
+		cs = CustomSetting.objects.create(site=self.site, title="Default Statuses")
+		self.assertEqual(cs.sitemap_trial_statuses, [])
+
+	def test_selected_statuses_round_trip_as_a_list(self):
+		form = self._form(["recruiting", "not_yet_recruiting"])
+		self.assertTrue(form.is_valid(), form.errors)
+		saved = form.save()
+		saved.refresh_from_db()
+		self.assertEqual(
+			sorted(saved.sitemap_trial_statuses),
+			["not_yet_recruiting", "recruiting"],
+		)
+
+	def test_no_selection_saves_an_empty_list_not_a_blank_string(self):
+		form = self._form([])
+		self.assertTrue(form.is_valid(), form.errors)
+		saved = form.save()
+		saved.refresh_from_db()
+		# [""] would make the sitemap filter match nothing at all.
+		self.assertEqual(saved.sitemap_trial_statuses, [])
+
+	def test_status_outside_the_enum_is_rejected(self):
+		form = self._form(["definitely_not_a_status"])
+		self.assertFalse(form.is_valid())
+		self.assertIn("sitemap_trial_statuses", form.errors)
