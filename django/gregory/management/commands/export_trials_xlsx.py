@@ -853,7 +853,10 @@ def _build_about_sheet(ws, attribution, sheet_entries, options_summary):
 		nonlocal row
 		if not value:
 			return
-		ws.cell(row=row, column=1, value=label).font = label_font
+		# Most labels are our own fixed strings, but Section 3's are subject
+		# names, so route every label through the same defusing as the value.
+		_write_safe_text_cell(ws, row, 1, label, wrap=False)
+		ws.cell(row=row, column=1).font = label_font
 		_write_safe_text_cell(ws, row, 2, value, wrap=wrap)
 		row += 1
 
@@ -996,7 +999,11 @@ class Command(BaseCommand):
 			qs = Subject.objects.all()
 			if options["team"]:
 				qs = qs.filter(team_id=options["team"])
-			subjects = list(qs.order_by("subject_name"))
+			# select_related avoids one query per subject in _resolve_default_site,
+			# which walks subject.team and team.site for every exported subject.
+			subjects = list(
+				qs.select_related("team", "team__site").order_by("subject_name")
+			)
 		else:
 			raw = options["subjects"].strip()
 			if not raw:
@@ -1016,7 +1023,11 @@ class Command(BaseCommand):
 				raise CommandError(
 					f"Subject ID(s) not found: {sorted(missing)}. Valid IDs: {valid_list}"
 				)
-			subjects = list(subject_qs.filter(pk__in=ids).order_by("subject_name"))
+			subjects = list(
+				subject_qs.filter(pk__in=ids)
+				.select_related("team", "team__site")
+				.order_by("subject_name")
+			)
 
 		if not subjects:
 			raise CommandError("No subjects found.")

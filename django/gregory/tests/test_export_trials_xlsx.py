@@ -1256,3 +1256,34 @@ class AboutSheetTests(TestCase):
 			self.assertIn("Registries", rows)
 		finally:
 			os.unlink(path)
+
+	def test_subject_name_label_formula_injection_defused(self):
+		"""Section 3's row labels come from subject sheet names, which are
+		user-authored — a name starting with =, +, -, or @ must not become a
+		live formula cell in column A."""
+		weird_subject = Subject.objects.create(
+			subject_name="=SUM(A1:A10)",
+			subject_slug="formula-subject",
+			team=self.team,
+		)
+		trial = Trials.objects.create(
+			title="Trial for formula-named subject",
+			link="https://clinicaltrials.gov/ct2/show/NCT00888888",
+			identifiers={"nct": "NCT00888888"},
+		)
+		trial.subjects.add(weird_subject)
+		path, wb = self._export(subjects=str(weird_subject.pk))
+		try:
+			ws = wb["About this file"]
+			# _sanitise_sheet_name also replaces ":" with "_" (an illegal Excel
+			# sheet-name character), so match loosely rather than on the exact
+			# original subject name.
+			for r in range(1, ws.max_row + 1):
+				cell = ws.cell(row=r, column=1)
+				if cell.value and str(cell.value).startswith("'=SUM(A1"):
+					self.assertNotEqual(cell.data_type, "f")
+					break
+			else:
+				self.fail("Defused formula-like subject-name label not found")
+		finally:
+			os.unlink(path)
