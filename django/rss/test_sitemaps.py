@@ -10,8 +10,9 @@ from gregory.models import (
 	OrganizationApiSettings,
 	Subject,
 	Team,
+	Trials,
 )
-from rss.sitemaps import SiteArticlesSitemap
+from rss.sitemaps import SiteArticlesSitemap, SiteTrialsSitemap
 from sitesettings.models import CustomSetting
 
 
@@ -74,6 +75,23 @@ class SiteSitemapTests(TestCase):
 		)
 		cls.article_wrong_team.teams.add(cls.private_team)
 		cls.article_wrong_team.subjects.add(cls.subject_a)
+
+		def make_trial(title, *subjects, team=cls.team):
+			trial = Trials.objects.create(
+				title=title, link=f"https://registry.example.org/{title}"
+			)
+			trial.teams.add(team)
+			for subject in subjects:
+				trial.subjects.add(subject)
+			return trial
+
+		cls.trials_a = [make_trial(f"ta{i}", cls.subject_a) for i in range(3)]
+		cls.trial_b = make_trial("tb", cls.subject_b)
+		cls.trial_both = make_trial("tboth", cls.subject_a, cls.subject_b)
+		# Same cross-team leak the articles section guards against.
+		cls.trial_wrong_team = make_trial(
+			"twrong", cls.subject_a, team=cls.private_team
+		)
 
 		# Site config: frontend site publishes subject A (+ the private
 		# subject, which must be silently dropped); other site publishes B.
@@ -170,3 +188,85 @@ class SiteSitemapTests(TestCase):
 		self.assertIn(self._section_url(self.site.pk), body)
 		self.assertIn("?p=3", body)
 		self.assertNotIn("?p=4", body)
+
+	# --- trials section (opt-in per site) ---
+
+	def _enable_trials(self):
+		self.config.sitemap_include_trials = True
+		self.config.save()
+
+	def test_trials_section_404s_until_the_site_opts_in(self):
+		self.assertEqual(
+			self.client.get(self._section_url(self.site.pk, "trials")).status_code,
+			404,
+		)
+
+	def test_trials_section_lists_configured_subjects_on_frontend_domain(self):
+		self._enable_trials()
+		body = self.client.get(
+			self._section_url(self.site.pk, "trials")
+		).content.decode()
+		for trial in self.trials_a:
+			self.assertIn(f"https://frontend.example.com/trials/{trial.pk}/", body)
+		self.assertNotIn(f"/trials/{self.trial_b.pk}/", body)
+		# The two sections stay disjoint: no article URLs leak into trials.xml.
+		self.assertNotIn("/articles/", body)
+		self.assertIn("<lastmod>", body)
+
+	def test_trial_owned_by_private_team_excluded_despite_public_subject_tag(self):
+		self._enable_trials()
+		body = self.client.get(
+			self._section_url(self.site.pk, "trials")
+		).content.decode()
+		self.assertNotIn(f"/trials/{self.trial_wrong_team.pk}/", body)
+
+	def test_trial_with_two_qualifying_subjects_listed_once(self):
+		self._enable_trials()
+		self.config.sitemap_subjects.add(self.subject_b)
+		body = self.client.get(
+			self._section_url(self.site.pk, "trials")
+		).content.decode()
+		needle = f"https://frontend.example.com/trials/{self.trial_both.pk}/"
+		self.assertEqual(body.count(needle), 1)
+
+	def test_relevant_only_does_not_filter_trials(self):
+		# Trials carry no relevance judgement, so the article-only switch
+		# must not silently empty the trials section.
+		self._enable_trials()
+		self.config.sitemap_relevant_only = True
+		self.config.save()
+		body = self.client.get(
+			self._section_url(self.site.pk, "trials")
+		).content.decode()
+		for trial in self.trials_a:
+			self.assertIn(f"/trials/{trial.pk}/", body)
+
+	def test_index_gains_trials_entries_only_when_enabled(self):
+		url = reverse("site-sitemap-index", kwargs={"site_id": self.site.pk})
+		self.assertNotIn(
+			self._section_url(self.site.pk, "trials"),
+			self.client.get(url).content.decode(),
+		)
+
+		self._enable_trials()
+		cache.clear()  # the index is cache_page'd
+		original_limit = SiteTrialsSitemap.limit
+		SiteTrialsSitemap.limit = 2  # 3 subject-A trials + trial_both → 2 pages
+		self.addCleanup(setattr, SiteTrialsSitemap, "limit", original_limit)
+		body = self.client.get(url).content.decode()
+		self.assertIn(self._section_url(self.site.pk, "trials"), body)
+		# 1 articles page + 2 trials pages
+		self.assertEqual(body.count("<sitemap>"), 3)
+
+	def test_trials_switch_is_per_site(self):
+		self._enable_trials()
+		self.assertEqual(
+			self.client.get(self._section_url(self.site.pk, "trials")).status_code,
+			200,
+		)
+		self.assertEqual(
+			self.client.get(
+				self._section_url(self.other_site.pk, "trials")
+			).status_code,
+			404,
+		)

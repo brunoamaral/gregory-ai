@@ -41,8 +41,11 @@ The author feed's `<link>` element points at the site's author profile page (`ht
 |:--------|:------------|
 | Sitemap index | `GET /sitemap/sites/{site_id}/index.xml` |
 | Articles section (paginated) | `GET /sitemap/sites/{site_id}/articles.xml` (`?p=2…N`) |
+| Trials section (paginated, opt-in) | `GET /sitemap/sites/{site_id}/trials.xml` (`?p=2…N`) |
 
-One sitemap per frontend site, enabled and curated per site in the Django admin (Sites → the site's settings inline → *Generate sitemap*, *Sitemap subjects*, *Relevant only*). URLs point at the requested site's frontend domain, not the API host. Only articles belonging to a publicly visible organisation are included, regardless of caller identity. Each section page holds up to 10,000 URLs; both endpoints are cached for 1 hour. A site with the switch off, no `CustomSetting` row, or no publicly visible sitemap subjects configured returns 404.
+One sitemap per frontend site, enabled and curated per site in the Django admin (Sites → the site's settings inline → *Generate sitemap*, *Sitemap subjects*, *Relevant only*, *Include trials*). URLs point at the requested site's frontend domain, not the API host — `/articles/{article_id}/` and `/trials/{trial_id}/`. Only content belonging to a publicly visible organisation is included, regardless of caller identity. Each section page holds up to 10,000 URLs; all endpoints are cached for 1 hour. A site with the switch off, no `CustomSetting` row, or no publicly visible sitemap subjects configured returns 404.
+
+The trials section is off by default and appears in the index only when *Include trials* is on: not every frontend gives each trial its own page, and advertising `/trials/{trial_id}/` on a site that only has a trials listing would send crawlers to 404s. *Relevant only* filters articles alone — trials carry no relevance judgement (no manual review flag, no ML predictions), so the trials section is scoped by *Sitemap subjects* and public-organisation ownership only.
 
 ---
 
