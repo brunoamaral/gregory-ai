@@ -67,6 +67,19 @@ class CustomSettingInline(admin.StackedInline):
 				],
 			},
 		),
+		(
+			"About / data export",
+			{
+				"classes": ["collapse"],
+				"fields": [
+					"description",
+					"contact_email",
+					"data_license",
+					"data_license_url",
+					"citation",
+				],
+			},
+		),
 	]
 
 

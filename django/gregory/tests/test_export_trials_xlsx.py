@@ -6,7 +6,9 @@ Run in the gregory Docker container:
 
 import os
 import tempfile
+from io import StringIO
 
+from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
@@ -19,6 +21,7 @@ from gregory.models import (
 	ArticleTrialReference,
 	CategoryModality,
 	CategoryType,
+	OrganizationSite,
 	Sources,
 	Subject,
 	Team,
@@ -35,6 +38,7 @@ from gregory.management.commands.export_trials_xlsx import (
 	_build_scalar_columns,
 	_sanitise_sheet_name,
 )
+from sitesettings.models import CustomSetting
 
 
 class ExportTrialsXlsxTests(TestCase):
@@ -885,3 +889,401 @@ class ExportTrialsXlsxTests(TestCase):
 			"ethics_review_status",
 		]:
 			self.assertIn(col, scalar_cols, f'Expected column "{col}" in scalar list')
+
+
+class AboutSheetTests(TestCase):
+	"""Tests for the 'About this file' sheet and its --site resolution."""
+
+	def setUp(self):
+		self.org = Organization.objects.create(name="About Org", slug="about-org")
+		self.site = Site.objects.create(
+			domain="about-test.example", name="About Test Site"
+		)
+		self.custom_setting = CustomSetting.objects.create(
+			site=self.site,
+			title="About Test Project",
+			admin_email="admin@about-test.example",
+			website_url="https://about-test.example/",
+			about_url="https://about-test.example/about/",
+			contact_url="https://about-test.example/contact/",
+			api_domain="api.about-test.example",
+			github_url="https://github.com/example/about-test",
+		)
+		self.team = Team.objects.create(
+			name="About Team", organization=self.org, slug="about-team", site=self.site
+		)
+		self.subject = Subject.objects.create(
+			subject_name="About Subject",
+			subject_slug="about-subject",
+			team=self.team,
+			description="Subject description text.",
+		)
+		self.trial = Trials.objects.create(
+			title="A trial for the about sheet",
+			link="https://clinicaltrials.gov/ct2/show/NCT00222222",
+			identifiers={"nct": "NCT00222222"},
+		)
+		self.trial.subjects.add(self.subject)
+
+	def _export(self, **kwargs):
+		"""Run the command into a temp file; return (path, workbook)."""
+		fd, path = tempfile.mkstemp(suffix=".xlsx")
+		os.close(fd)
+		call_command("export_trials_xlsx", output=path, **kwargs)
+		wb = openpyxl.load_workbook(path)
+		return path, wb
+
+	def _about_rows(self, ws):
+		"""Return {label: value} for the About sheet's label/value rows."""
+		rows = {}
+		for r in range(1, ws.max_row + 1):
+			label = ws.cell(row=r, column=1).value
+			value = ws.cell(row=r, column=2).value
+			if label:
+				rows[label] = value
+		return rows
+
+	# ------------------------------------------------------------------
+	# Sheet placement
+	# ------------------------------------------------------------------
+
+	def test_about_sheet_is_first(self):
+		path, wb = self._export(subjects=str(self.subject.pk))
+		try:
+			self.assertEqual(wb.sheetnames[0], "About this file")
+		finally:
+			os.unlink(path)
+
+	# ------------------------------------------------------------------
+	# --site flag
+	# ------------------------------------------------------------------
+
+	def test_site_flag_by_numeric_id(self):
+		path, wb = self._export(subjects=str(self.subject.pk), site=str(self.site.pk))
+		try:
+			rows = self._about_rows(wb["About this file"])
+			self.assertEqual(rows["Published by"], "About Test Project")
+		finally:
+			os.unlink(path)
+
+	def test_site_flag_by_domain_case_insensitive(self):
+		path, wb = self._export(
+			subjects=str(self.subject.pk), site=self.site.domain.upper()
+		)
+		try:
+			rows = self._about_rows(wb["About this file"])
+			self.assertEqual(rows["Published by"], "About Test Project")
+		finally:
+			os.unlink(path)
+
+	def test_unknown_site_flag_raises_naming_valid_sites(self):
+		with self.assertRaises(CommandError) as ctx:
+			call_command(
+				"export_trials_xlsx",
+				subjects=str(self.subject.pk),
+				site="does-not-exist.example",
+				output="/tmp/unused-about-sheet-test.xlsx",
+			)
+		self.assertIn(self.site.domain, str(ctx.exception))
+
+	# ------------------------------------------------------------------
+	# Default resolution
+	# ------------------------------------------------------------------
+
+	def test_team_site_wins_over_org_default(self):
+		other_site = Site.objects.create(
+			domain="org-default.example", name="Org Default Site"
+		)
+		OrganizationSite.objects.create(
+			organization=self.org, site=other_site, is_default=True
+		)
+		# self.team.site is already set to self.site, which must win.
+		path, wb = self._export(subjects=str(self.subject.pk))
+		try:
+			rows = self._about_rows(wb["About this file"])
+			self.assertEqual(rows["Published by"], "About Test Project")
+		finally:
+			os.unlink(path)
+
+	def test_org_default_used_when_team_site_is_none(self):
+		team_no_site = Team.objects.create(
+			name="No Site Team", organization=self.org, slug="no-site-team"
+		)
+		OrganizationSite.objects.create(
+			organization=self.org, site=self.site, is_default=True
+		)
+		subject = Subject.objects.create(
+			subject_name="Org Default Subject",
+			subject_slug="org-default-subject",
+			team=team_no_site,
+		)
+		trial = Trials.objects.create(
+			title="Trial for org default site",
+			link="https://clinicaltrials.gov/ct2/show/NCT00333333",
+			identifiers={"nct": "NCT00333333"},
+		)
+		trial.subjects.add(subject)
+		path, wb = self._export(subjects=str(subject.pk))
+		try:
+			rows = self._about_rows(wb["About this file"])
+			self.assertEqual(rows["Published by"], "About Test Project")
+		finally:
+			os.unlink(path)
+
+	def test_no_site_configured_writes_placeholder_and_does_not_raise(self):
+		# Point SITE_ID at a row that doesn't exist so resolution has nothing left
+		# to fall back to: no Team.site, no OrganizationSite default, and no current
+		# Site. Uses override_settings rather than deleting the real Site(pk=1) row,
+		# which would invalidate Django's process-wide site cache and leak into
+		# unrelated tests' query-count assertions.
+		org = Organization.objects.create(name="No Site Org", slug="no-site-org")
+		team = Team.objects.create(
+			name="No Site Team", organization=org, slug="no-site-team"
+		)
+		subject = Subject.objects.create(
+			subject_name="No Site Subject", subject_slug="no-site-subject", team=team
+		)
+		trial = Trials.objects.create(
+			title="Trial with no resolvable site",
+			link="https://clinicaltrials.gov/ct2/show/NCT00444444",
+			identifiers={"nct": "NCT00444444"},
+		)
+		trial.subjects.add(subject)
+		with self.settings(SITE_ID=999999999):
+			path, wb = self._export(subjects=str(subject.pk))
+		try:
+			ws = wb["About this file"]
+			col_a_values = [
+				ws.cell(row=r, column=1).value for r in range(1, ws.max_row + 1)
+			]
+			self.assertTrue(
+				any(
+					v and "No site is configured" in str(v)
+					for v in col_a_values
+				)
+			)
+		finally:
+			os.unlink(path)
+
+	def test_multiple_sites_majority_wins_with_warning_and_note(self):
+		minority_site = Site.objects.create(
+			domain="minority-site.example", name="Minority Site"
+		)
+		minority_team = Team.objects.create(
+			name="Minority Team",
+			organization=self.org,
+			slug="minority-team",
+			site=minority_site,
+		)
+		minority_subject = Subject.objects.create(
+			subject_name="Minority Subject",
+			subject_slug="minority-subject",
+			team=minority_team,
+		)
+		minority_trial = Trials.objects.create(
+			title="Minority site trial",
+			link="https://clinicaltrials.gov/ct2/show/NCT00555555",
+			identifiers={"nct": "NCT00555555"},
+		)
+		minority_trial.subjects.add(minority_subject)
+
+		out = StringIO()
+		path, wb = self._export(
+			subjects=f"{self.subject.pk},{minority_subject.pk}", stdout=out
+		)
+		try:
+			self.assertIn("multiple sites", out.getvalue())
+			rows = self._about_rows(wb["About this file"])
+			# self.site backs one subject, minority_site backs one too — tie-break
+			# on lowest pk decides which wins, so assert against whichever pk is lower.
+			winner = self.site if self.site.pk < minority_site.pk else minority_site
+			loser = minority_site if winner is self.site else self.site
+			self.assertIn(loser.domain, out.getvalue())
+			ws = wb["About this file"]
+			col_a_values = [
+				ws.cell(row=r, column=1).value for r in range(1, ws.max_row + 1)
+			]
+			note_row = next(
+				(v for v in col_a_values if v and "also contains subjects" in str(v)),
+				None,
+			)
+			self.assertIsNotNone(note_row)
+			self.assertIn(loser.domain, note_row)
+		finally:
+			os.unlink(path)
+
+	def test_site_without_custom_setting_falls_back_to_site_name(self):
+		bare_site = Site.objects.create(domain="bare-site.example", name="Bare Site")
+		team = Team.objects.create(
+			name="Bare Team", organization=self.org, slug="bare-team", site=bare_site
+		)
+		subject = Subject.objects.create(
+			subject_name="Bare Subject", subject_slug="bare-subject", team=team
+		)
+		trial = Trials.objects.create(
+			title="Trial for bare site",
+			link="https://clinicaltrials.gov/ct2/show/NCT00666666",
+			identifiers={"nct": "NCT00666666"},
+		)
+		trial.subjects.add(subject)
+		path, wb = self._export(subjects=str(subject.pk))
+		try:
+			rows = self._about_rows(wb["About this file"])
+			self.assertEqual(rows["Published by"], "Bare Site")
+			self.assertEqual(rows["Website"], "https://bare-site.example")
+		finally:
+			os.unlink(path)
+
+	# ------------------------------------------------------------------
+	# Contact email fallback
+	# ------------------------------------------------------------------
+
+	def test_contact_email_blank_falls_back_to_admin_email(self):
+		path, wb = self._export(subjects=str(self.subject.pk))
+		try:
+			rows = self._about_rows(wb["About this file"])
+			self.assertEqual(rows["Contact email"], "admin@about-test.example")
+		finally:
+			os.unlink(path)
+
+	def test_contact_email_set_wins_over_admin_email(self):
+		self.custom_setting.contact_email = "public@about-test.example"
+		self.custom_setting.save()
+		path, wb = self._export(subjects=str(self.subject.pk))
+		try:
+			rows = self._about_rows(wb["About this file"])
+			self.assertEqual(rows["Contact email"], "public@about-test.example")
+		finally:
+			os.unlink(path)
+
+	# ------------------------------------------------------------------
+	# Citation
+	# ------------------------------------------------------------------
+
+	def test_blank_citation_is_generated_with_title_and_year(self):
+		path, wb = self._export(subjects=str(self.subject.pk))
+		try:
+			rows = self._about_rows(wb["About this file"])
+			citation = rows["How to cite"]
+			self.assertIn("About Test Project", citation)
+			import datetime as dt
+
+			self.assertIn(str(dt.date.today().year), citation)
+		finally:
+			os.unlink(path)
+
+	def test_set_citation_is_used_verbatim(self):
+		self.custom_setting.citation = "Custom citation string."
+		self.custom_setting.save()
+		path, wb = self._export(subjects=str(self.subject.pk))
+		try:
+			rows = self._about_rows(wb["About this file"])
+			self.assertEqual(rows["How to cite"], "Custom citation string.")
+		finally:
+			os.unlink(path)
+
+	# ------------------------------------------------------------------
+	# Blank fields produce no row
+	# ------------------------------------------------------------------
+
+	def test_blank_field_produces_no_row(self):
+		# privacy_policy_url is blank by default in setUp's CustomSetting.
+		path, wb = self._export(subjects=str(self.subject.pk))
+		try:
+			rows = self._about_rows(wb["About this file"])
+			self.assertNotIn("Privacy policy", rows)
+		finally:
+			os.unlink(path)
+
+	# ------------------------------------------------------------------
+	# Formula injection
+	# ------------------------------------------------------------------
+
+	def test_description_formula_injection_defused(self):
+		self.custom_setting.description = "=SUM(A1:A10)"
+		self.custom_setting.save()
+		path, wb = self._export(subjects=str(self.subject.pk))
+		try:
+			ws = wb["About this file"]
+			rows = {}
+			for r in range(1, ws.max_row + 1):
+				if ws.cell(row=r, column=1).value == "About this project":
+					cell = ws.cell(row=r, column=2)
+					self.assertNotEqual(cell.data_type, "f")
+					self.assertEqual(cell.value, "'=SUM(A1:A10)")
+					break
+			else:
+				self.fail("About this project row not found")
+		finally:
+			os.unlink(path)
+
+	# ------------------------------------------------------------------
+	# Reserved sheet name
+	# ------------------------------------------------------------------
+
+	def test_subject_named_about_this_file_gets_suffixed_sheet(self):
+		clash = Subject.objects.create(
+			subject_name="About this file",
+			subject_slug="about-this-file-clash",
+			team=self.team,
+		)
+		trial = Trials.objects.create(
+			title="Trial for the clashing subject",
+			link="https://clinicaltrials.gov/ct2/show/NCT00777777",
+			identifiers={"nct": "NCT00777777"},
+		)
+		trial.subjects.add(clash)
+		path, wb = self._export(subjects=str(clash.pk))
+		try:
+			self.assertEqual(wb.sheetnames[0], "About this file")
+			self.assertIn("About this file_2", wb.sheetnames)
+		finally:
+			os.unlink(path)
+
+	# ------------------------------------------------------------------
+	# Section 3 — What's in this workbook
+	# ------------------------------------------------------------------
+
+	def test_whats_in_this_workbook_lists_every_subject_sheet_with_count(self):
+		path, wb = self._export(subjects=str(self.subject.pk))
+		try:
+			rows = self._about_rows(wb["About this file"])
+			self.assertIn("About Subject", rows)
+			self.assertIn("1 clinical trial(s)", rows["About Subject"])
+			self.assertIn("Subject description text.", rows["About Subject"])
+			self.assertIn("Categories", rows)
+			self.assertIn("Glossary", rows)
+			self.assertIn("Registries", rows)
+		finally:
+			os.unlink(path)
+
+	def test_subject_name_label_formula_injection_defused(self):
+		"""Section 3's row labels come from subject sheet names, which are
+		user-authored — a name starting with =, +, -, or @ must not become a
+		live formula cell in column A."""
+		weird_subject = Subject.objects.create(
+			subject_name="=SUM(A1:A10)",
+			subject_slug="formula-subject",
+			team=self.team,
+		)
+		trial = Trials.objects.create(
+			title="Trial for formula-named subject",
+			link="https://clinicaltrials.gov/ct2/show/NCT00888888",
+			identifiers={"nct": "NCT00888888"},
+		)
+		trial.subjects.add(weird_subject)
+		path, wb = self._export(subjects=str(weird_subject.pk))
+		try:
+			ws = wb["About this file"]
+			# _sanitise_sheet_name also replaces ":" with "_" (an illegal Excel
+			# sheet-name character), so match loosely rather than on the exact
+			# original subject name.
+			for r in range(1, ws.max_row + 1):
+				cell = ws.cell(row=r, column=1)
+				if cell.value and str(cell.value).startswith("'=SUM(A1"):
+					self.assertNotEqual(cell.data_type, "f")
+					break
+			else:
+				self.fail("Defused formula-like subject-name label not found")
+		finally:
+			os.unlink(path)

@@ -114,3 +114,30 @@ class CustomSetting(models.Model):
 			"instead of orcid.org."
 		),
 	)
+	description = models.TextField(
+		blank=True,
+		default="",
+		help_text="One paragraph describing what this project is. Shown on the 'About this file' sheet of exported workbooks.",
+	)
+	contact_email = models.EmailField(
+		max_length=254,
+		blank=True,
+		default="",
+		help_text="Public contact address for this site, shown on exported files. Falls back to Admin email when blank.",
+	)
+	data_license = models.CharField(
+		max_length=200,
+		blank=True,
+		default="",
+		help_text="Licence the exported data may be reused under (e.g. 'CC BY 4.0'). Distinct from Terms URL, which is the website's terms of service.",
+	)
+	data_license_url = models.URLField(
+		blank=True,
+		default="",
+		help_text="Link to the licence text referenced by Data licence.",
+	)
+	citation = models.TextField(
+		blank=True,
+		default="",
+		help_text="How to cite an export from this site. Leave blank to generate '{title}. Clinical trials export, {date}. {website_url}'.",
+	)

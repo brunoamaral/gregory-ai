@@ -1,7 +1,10 @@
 import json
 import re
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import datetime, date, timezone as dt_timezone
 
+from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count, GeneratedField
 from django.db.models.functions import Lower
@@ -9,7 +12,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
-from gregory.models import Trials, Subject, TeamCategory
+from gregory.models import OrganizationSite, Trials, Subject, TeamCategory
+from sitesettings.models import CustomSetting
 
 
 EXCLUDED_SCALARS = frozenset({"utitle", "usummary"})
@@ -727,6 +731,232 @@ def _build_categories_sheet(wb, subjects):
 		)
 
 
+GENERATED_BY_PROSE = "GregoryAI — https://github.com/brunoamaral/gregory-ai"
+
+WHATS_INSIDE_FIXED_ROWS = [
+	("Categories", "How trials are tagged, with each category's search terms."),
+	("Glossary", "What every column in the subject sheets means."),
+	(
+		"Registries",
+		"Which clinical-trial registries the data came from, and how records from "
+		"several registries are merged.",
+	),
+]
+
+
+@dataclass
+class SiteAttribution:
+	"""Which Site (and its CustomSetting) an export is attributed to."""
+
+	site: object = None
+	custom_setting: object = None
+	other_sites: list = field(default_factory=list)
+
+
+def _resolve_site_for_team(team):
+	"""Resolve a single team's Site: team.site, else the org's default/first site, else the current site."""
+	if team is None:
+		return None
+	if team.site_id:
+		return team.site
+	if team.organization_id:
+		org_site = (
+			OrganizationSite.objects.filter(organization_id=team.organization_id)
+			.order_by("-is_default", "id")
+			.select_related("site")
+			.first()
+		)
+		if org_site:
+			return org_site.site
+	try:
+		return Site.objects.get_current()
+	except Site.DoesNotExist:
+		return None
+
+
+def _resolve_default_site(subjects):
+	"""Resolve the Site to attribute an export to, from its subjects' teams.
+
+	Returns (site_or_None, other_sites) where other_sites lists every other site
+	found (sorted by pk) when the export spans more than one.
+	"""
+	counts = Counter()
+	by_pk = {}
+	for subject in subjects:
+		site = _resolve_site_for_team(subject.team)
+		if site is None:
+			continue
+		counts[site.pk] += 1
+		by_pk[site.pk] = site
+
+	if not counts:
+		return None, []
+	if len(counts) == 1:
+		(only_pk,) = counts.keys()
+		return by_pk[only_pk], []
+
+	best_pk = max(counts, key=lambda pk: (counts[pk], -pk))
+	others = [by_pk[pk] for pk in sorted(counts) if pk != best_pk]
+	return by_pk[best_pk], others
+
+
+def _resolve_explicit_site(value):
+	"""Resolve --site by numeric ID or domain (case-insensitive). Raises CommandError if not found."""
+	value = value.strip()
+	if value.isdigit():
+		site = Site.objects.filter(pk=int(value)).first()
+	else:
+		site = Site.objects.filter(domain__iexact=value).first()
+	if site is None:
+		listing = ", ".join(f"{s.pk} ({s.domain})" for s in Site.objects.order_by("pk"))
+		raise CommandError(f"Site not found: {value!r}. Valid sites: {listing}")
+	return site
+
+
+def _resolve_site_attribution(subjects, explicit_site_value):
+	"""Resolve the SiteAttribution for an export, from --site or the subjects' teams."""
+	if explicit_site_value:
+		site = _resolve_explicit_site(explicit_site_value)
+		other_sites = []
+	else:
+		site, other_sites = _resolve_default_site(subjects)
+
+	custom_setting = None
+	if site is not None:
+		custom_setting = (
+			CustomSetting.objects.filter(site=site).order_by("setting_id").first()
+		)
+	return SiteAttribution(site=site, custom_setting=custom_setting, other_sites=other_sites)
+
+
+def _build_about_sheet(ws, attribution, sheet_entries, options_summary):
+	"""Populate the 'About this file' sheet: Source, This file, What's in this workbook."""
+	section_fill = PatternFill(fill_type="solid", fgColor="2F4F8F")
+	section_font = Font(bold=True, size=13, color="FFFFFF")
+	label_font = Font(bold=True)
+
+	ws.column_dimensions["A"].width = 28
+	ws.column_dimensions["B"].width = 90
+
+	row = 1
+
+	def write_section_header(text):
+		nonlocal row
+		cell = ws.cell(row=row, column=1, value=text)
+		cell.font = section_font
+		cell.fill = section_fill
+		ws.cell(row=row, column=2).fill = section_fill
+		ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+		row += 1
+
+	def write_row(label, value, wrap=True):
+		nonlocal row
+		if not value:
+			return
+		# Most labels are our own fixed strings, but Section 3's are subject
+		# names, so route every label through the same defusing as the value.
+		_write_safe_text_cell(ws, row, 1, label, wrap=False)
+		ws.cell(row=row, column=1).font = label_font
+		_write_safe_text_cell(ws, row, 2, value, wrap=wrap)
+		row += 1
+
+	def write_note(text):
+		nonlocal row
+		_write_safe_text_cell(ws, row, 1, text, wrap=True)
+		ws.cell(row=row, column=1).font = Font(italic=True)
+		ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+		row += 1
+
+	site = attribution.site
+	cs = attribution.custom_setting
+
+	write_section_header("Source")
+	if site is None:
+		write_note(
+			"No site is configured for the exported subjects' teams. Set a site on "
+			"the team, or pass --site."
+		)
+	else:
+		title = (cs.title if cs and cs.title else None) or site.name or site.domain
+		write_row("Published by", title)
+
+		org_site = (
+			OrganizationSite.objects.filter(site=site)
+			.select_related("organization")
+			.first()
+		)
+		org_name = org_site.organization.name if org_site else ""
+		if org_name and org_name != title:
+			write_row("Organisation", org_name)
+
+		if cs:
+			write_row("About this project", cs.description)
+			write_row("Website", cs.website_url or f"https://{site.domain}")
+			write_row("About page", cs.about_url)
+			write_row("Contact", cs.contact_url)
+			write_row("Contact email", cs.contact_email or cs.admin_email)
+			if cs.api_domain:
+				write_row("API", f"https://{cs.api_domain}")
+			write_row("Source code", cs.github_url)
+			social = "; ".join(
+				filter(
+					None,
+					[
+						f"Mastodon: {cs.mastodon_url}" if cs.mastodon_url else "",
+						f"Bluesky: {cs.bluesky_url}" if cs.bluesky_url else "",
+					],
+				)
+			)
+			write_row("Mastodon / Bluesky", social)
+			write_row("Privacy policy", cs.privacy_policy_url)
+		else:
+			write_row("Website", f"https://{site.domain}")
+
+	if attribution.other_sites and site is not None:
+		all_sites_sorted = sorted([site] + attribution.other_sites, key=lambda s: s.pk)
+		domains = ", ".join(s.domain for s in all_sites_sorted if s.pk != site.pk)
+		write_note(
+			f"This workbook also contains subjects published by {domains}. Pass "
+			"--site to attribute it explicitly."
+		)
+
+	write_section_header("This file")
+	generated = datetime.now(dt_timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+	write_row("Generated", generated)
+	write_row("Generated by", GENERATED_BY_PROSE)
+	write_row("Export options", options_summary)
+
+	data_license = cs.data_license if cs else ""
+	data_license_url = cs.data_license_url if cs else ""
+	write_row("Data licence", data_license)
+	write_row("Licence URL", data_license_url)
+
+	citation = cs.citation if cs else ""
+	if not citation:
+		title_for_citation = (
+			(cs.title if cs and cs.title else None)
+			or (site.name or site.domain if site else "")
+			or "GregoryAI export"
+		)
+		website_for_citation = (cs.website_url if cs else "") or (
+			f"https://{site.domain}" if site else ""
+		)
+		date_str = date.today().strftime("%Y-%m-%d")
+		citation = f"{title_for_citation}. Clinical trials export, {date_str}."
+		if website_for_citation:
+			citation += f" {website_for_citation}"
+	write_row("How to cite", citation)
+
+	write_section_header("What's in this workbook")
+	for sheet_name, subject, count in sheet_entries:
+		value = f'{count} clinical trial(s) for the research subject "{subject.subject_name}"'
+		if subject.description:
+			value += f" — {subject.description}"
+		write_row(sheet_name, value)
+	for label, value in WHATS_INSIDE_FIXED_ROWS:
+		write_row(label, value)
+
+
 class Command(BaseCommand):
 	help = "Export clinical-trial data to an XLSX workbook, one sheet per subject."
 
@@ -755,6 +985,13 @@ class Command(BaseCommand):
 			default=None,
 			help="Optional team ID; filters which subjects are exported.",
 		)
+		parser.add_argument(
+			"--site",
+			type=str,
+			default="",
+			help="Site ID or domain to attribute this export to. Defaults to the site "
+			"resolved from the exported subjects' teams.",
+		)
 
 	def handle(self, *args, **options):
 		# --- Resolve subjects ---
@@ -762,7 +999,11 @@ class Command(BaseCommand):
 			qs = Subject.objects.all()
 			if options["team"]:
 				qs = qs.filter(team_id=options["team"])
-			subjects = list(qs.order_by("subject_name"))
+			# select_related avoids one query per subject in _resolve_default_site,
+			# which walks subject.team and team.site for every exported subject.
+			subjects = list(
+				qs.select_related("team", "team__site").order_by("subject_name")
+			)
 		else:
 			raw = options["subjects"].strip()
 			if not raw:
@@ -782,10 +1023,29 @@ class Command(BaseCommand):
 				raise CommandError(
 					f"Subject ID(s) not found: {sorted(missing)}. Valid IDs: {valid_list}"
 				)
-			subjects = list(subject_qs.filter(pk__in=ids).order_by("subject_name"))
+			subjects = list(
+				subject_qs.filter(pk__in=ids)
+				.select_related("team", "team__site")
+				.order_by("subject_name")
+			)
 
 		if not subjects:
 			raise CommandError("No subjects found.")
+
+		# --- Resolve site attribution ---
+		attribution = _resolve_site_attribution(subjects, options["site"])
+		if attribution.other_sites:
+			all_sites_sorted = sorted(
+				[attribution.site] + attribution.other_sites, key=lambda s: s.pk
+			)
+			domains = ", ".join(s.domain for s in all_sites_sorted)
+			self.stdout.write(
+				self.style.WARNING(
+					f"Exported subjects span multiple sites ({domains}); attributing "
+					f"this export to {attribution.site.domain} (most subjects). Pass "
+					"--site to be explicit."
+				)
+			)
 
 		output_path = (
 			options["output"]
@@ -826,7 +1086,9 @@ class Command(BaseCommand):
 		# --- Build workbook ---
 		wb = Workbook()
 		wb.remove(wb.active)  # remove the default blank sheet
-		used_sheet_names: set = {"Categories", "Glossary", "Registries"}
+		used_sheet_names: set = {"About this file", "Categories", "Glossary", "Registries"}
+		ws_about = wb.create_sheet(title="About this file")
+		sheet_entries = []  # (sheet_name, subject, count)
 
 		for subject in subjects:
 			sheet_name = _sanitise_sheet_name(subject.subject_name, used_sheet_names)
@@ -926,10 +1188,22 @@ class Command(BaseCommand):
 						ws.cell(row=row_idx, column=col_idx, value=value)
 
 			_set_column_widths(ws, all_data_cols)
+			sheet_entries.append((sheet_name, subject, count))
 
 		_build_categories_sheet(wb, subjects)
 		_build_glossary_sheet(wb, all_data_cols)
 		_build_registries_sheet(wb, all_data_cols)
+
+		options_summary_parts = [
+			"subjects: " + ", ".join(s.subject_name for s in subjects)
+		]
+		if options["team"]:
+			options_summary_parts.append(f"team: {options['team']}")
+		if attribution.site:
+			options_summary_parts.append(f"site: {attribution.site.domain}")
+		options_summary = "; ".join(options_summary_parts)
+
+		_build_about_sheet(ws_about, attribution, sheet_entries, options_summary)
 
 		wb.save(output_path)
 		self.stdout.write(self.style.SUCCESS(f"Saved: {output_path}"))
