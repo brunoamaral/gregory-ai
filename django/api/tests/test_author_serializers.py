@@ -4,6 +4,7 @@ from gregory.models import Authors, Articles, Team, Subject, Sources
 from api.serializers import AuthorSerializer, ArticleAuthorSerializer
 from organizations.models import Organization
 from django_countries.fields import Country
+from django.contrib.sites.models import Site
 
 
 class AuthorSerializerTest(TestCase):
@@ -11,6 +12,13 @@ class AuthorSerializerTest(TestCase):
 
 	def setUp(self):
 		"""Set up test data"""
+		# django.contrib.sites caches the current Site in a module-level dict
+		# that no test rollback touches, so a sibling module that rewrites
+		# site.domain leaves this one asserting against its value. Clearing
+		# it here keeps articles_list's Site fallback assertion independent
+		# of test order.
+		Site.objects.clear_cache()
+
 		# Create test organization and team
 		self.organization = Organization.objects.create(name="Test Org")
 		self.team = Team.objects.create(

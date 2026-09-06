@@ -828,6 +828,23 @@ class AuthorSerializer(serializers.ModelSerializer):
 		return obj.country.code if obj.country else None
 
 	def get_articles_list(self, obj) -> str:
+		"""This author's articles endpoint, on the host the caller asked.
+
+		One instance serves several frontends, so a URL built from
+		settings.SITE_ID handed every caller site 1's domain: a request to
+		api.brain-regeneration.com came back with an api.gregory-ms.com
+		link, pointing consumers at a different site's API. The request
+		already arrived at the API host, so its own absolute URI is the
+		answer -- no scheme guessing and no "api." prefix needed.
+
+		The Site fallback below still runs when there is no request in
+		context (a serializer used directly by a command or a test), which
+		is where the prefixing rule is still required.
+		"""
+		request = self.context.get("request")
+		if request is not None:
+			return request.build_absolute_uri(f"/articles/?author_id={obj.author_id}")
+
 		site = get_site()
 		if not site:
 			return ""
