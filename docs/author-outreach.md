@@ -268,7 +268,9 @@ Two management commands, two phases, exactly one human step in between.
 1. `build_author_outreach --campaign <slug>` evaluates every eligibility
    rule above against the live database and writes `AuthorOutreach` rows
    with `status="pending"`. It never sends anything and never touches an
-   existing row.
+   existing row. The **Preview & build queue** button on the campaign in
+   Django admin runs this same command — see
+   [Building the queue from the admin](#building-the-queue-from-the-admin).
 2. A human reviews the queue in Django admin
    (Subscriptions → Author Outreach) and runs the **Approve selected**
    action on the rows that should go out, or **Skip selected** on rows
@@ -285,6 +287,39 @@ at queue-build time) and re-evaluates the campaign's circuit breakers
 against its live `EmailMessage` aggregates. Either can stop a row that
 looked fine when the queue was built, or even one row earlier in the same
 run.
+
+### Building the queue from the admin
+
+The queue can be built without shell access to the container:
+**Subscriptions → Author Outreach Campaigns → ‹campaign› → Preview & build
+queue**.
+
+The button opens a preview first. It lists every author who qualifies right
+now, with the papers their email would name — the same `--dry-run` the
+runbook asks for before every real build, on the page that then does the
+build, so it cannot be skipped. Nothing is written until **Queue N authors
+as pending** is confirmed, and confirming calls `build_author_outreach`
+itself rather than a second implementation: the `enabled` guard, the GDPR
+lawful-basis `basis_note`, and the row shape are identical to what cron
+writes.
+
+Consequences of that shared implementation, all deliberate:
+
+- A campaign that is not `enabled` shows the preview but offers no confirm
+  button — a real queue is only ever built for an enabled campaign, and a
+  preview stays useful while one is still being configured.
+- A halted campaign can still be queued. Halting stops sending, not
+  queueing; the preview says so.
+- Building needs change permission on the campaign. After a successful
+  build you land on this campaign's `pending` rows, or back on the campaign
+  if you have no permission on the queue itself.
+- `--featured-since` and `--limit` are CLI-only. The preview already
+  re-evaluates the campaign's own stored window, and a partial queue built
+  by hand is harder to reason about than a full one reviewed row by row.
+
+The button does not replace the cron schedule below — it is the manual
+path for a first run, a back-catalogue campaign, or a rebuild after
+changing a campaign's subjects.
 
 ### Admin actions
 
@@ -396,12 +431,14 @@ pipeline end to end before `upcoming` mode starts running on a schedule.
    past tense, for anything already featured. A `retrospective` campaign
    left with a blank `body_template` refuses to render rather than
    silently falling back to that copy.
-2. Run `build_author_outreach --campaign <slug> --dry-run` first and read
-   the printed list of candidates. This never writes a row, so it is safe
-   to run repeatedly while tuning the campaign's subjects or window.
-3. Enable the campaign, then run `build_author_outreach --campaign <slug>`
-   for real. Review the queue in the admin — every candidate the dry run
-   showed should now be a `pending` `AuthorOutreach` row.
+2. Open **Preview & build queue** on the campaign (or run
+   `build_author_outreach --campaign <slug> --dry-run`) and read the list
+   of candidates. This never writes a row, so it is safe to look
+   repeatedly while tuning the campaign's subjects or window.
+3. Enable the campaign, then build the queue for real — confirm on that
+   same preview page, or run `build_author_outreach --campaign <slug>`.
+   Review the queue in the admin — every candidate the preview showed
+   should now be a `pending` `AuthorOutreach` row.
 4. Approve exactly **one** row.
 5. Run `send_author_outreach --campaign <slug> --limit 1`.
 6. Watch for the Delivery webhook on that message before approving or
@@ -544,6 +581,11 @@ build_author_outreach --campaign <slug> [--featured-since DAYS] [--dry-run] [--l
 - `--dry-run` — evaluates and prints eligibility; writes nothing. Allowed
   even when `campaign.enabled` is `False`.
 - `--limit N` — stop after this many authors.
+
+The **Preview & build queue** button on an `AuthorOutreachCampaign` in
+Django admin runs this command with `--campaign` alone (see
+[Building the queue from the admin](#building-the-queue-from-the-admin));
+`--featured-since` and `--limit` stay CLI-only.
 
 ```text
 send_author_outreach --campaign <slug> [--limit N] [--dry-run] [--test-to ADDRESS]

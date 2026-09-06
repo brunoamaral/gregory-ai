@@ -1,0 +1,96 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Build outreach queue: {{ campaign.name }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 20px auto; padding: 20px;">
+	<h2>Build outreach queue</h2>
+
+	<div style="margin: 20px 0; padding: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
+		<strong>{{ campaign.name }}</strong> — {{ campaign.get_mode_display }}<br>
+		<small style="color: #6b7280;">
+			Site: {{ campaign.site.domain }} ·
+			Campaign slug: <code>{{ campaign.utm_campaign_slug }}</code> ·
+			Up to {{ campaign.max_articles_per_email }} paper{{ campaign.max_articles_per_email|pluralize }} per email
+			{% if campaign.mode == "retrospective" %} · Featured within {{ campaign.featured_within_days }} days{% endif %}
+		</small>
+	</div>
+
+	<p style="color: #475569;">
+		This is the preview — nothing has been written. It runs the same eligibility rules as
+		<code>build_author_outreach --campaign {{ campaign.utm_campaign_slug }}</code>, so what is listed below is
+		exactly what confirming would queue. Queued rows are <strong>pending</strong>: they are not emailed until
+		someone approves them in the outreach queue and <code>send_author_outreach</code> runs.
+	</p>
+
+	{% if not campaign.enabled %}
+	<div style="margin: 20px 0; padding: 15px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px;">
+		<strong>This campaign is not enabled.</strong> A real queue is only ever built for an enabled campaign — the
+		preview below is safe to read while the campaign is still being configured, but there is nothing to confirm
+		until you enable it on the campaign page.
+	</div>
+	{% endif %}
+
+	{% if campaign.halted %}
+	<div style="margin: 20px 0; padding: 15px; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px;">
+		<strong>⚠️ This campaign is halted.</strong> Building a queue is still allowed — halting stops sending, not
+		queueing — but nothing queued now goes out until the halt is cleared.
+		{% if campaign.halted_reason %}<br><small style="color: #6b7280;">{{ campaign.halted_reason }}</small>{% endif %}
+	</div>
+	{% endif %}
+
+	<h3>{{ candidate_count }} author{{ candidate_count|pluralize }} would be queued</h3>
+
+	{% if candidates %}
+	<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+		<thead>
+			<tr style="background: #f1f5f9;">
+				<th style="padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0;">Author</th>
+				<th style="padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0;">Email</th>
+				<th style="padding: 10px; text-align: left; border-bottom: 2px solid #e2e8f0;">Qualifying papers</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for candidate in candidates %}
+			<tr>
+				<td style="padding: 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+					{{ candidate.author }}
+					{% if candidate.author.ORCID %}<br><small style="color: #6b7280;">{{ candidate.author.ORCID }}</small>{% endif %}
+				</td>
+				<td style="padding: 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">{{ candidate.email }}</td>
+				<td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">
+					<ul style="margin: 0; padding-left: 18px;">
+						{% for article in candidate.articles %}
+						<li>{{ article.title }}</li>
+						{% endfor %}
+					</ul>
+				</td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+	{% else %}
+	<div style="margin: 20px 0; padding: 15px; background: #eff6ff; border: 1px solid #93c5fd; border-radius: 6px;">
+		<strong>No author qualifies right now.</strong> Nothing would be written, so there is nothing to confirm.
+		An author already contacted on this site never qualifies again, by design.
+	</div>
+	{% endif %}
+
+	<form method="post">
+		{% csrf_token %}
+		<div style="margin-top: 20px;">
+			<a href="{{ change_url }}"
+			   style="display: inline-block; padding: 8px 20px; background: #6b7280; color: white; text-decoration: none; border-radius: 5px; margin-right: 10px;">
+				Cancel
+			</a>
+			{% if candidates and campaign.enabled %}
+			<button type="submit"
+					style="padding: 8px 20px; background: #10b981; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
+				Queue {{ candidate_count }} author{{ candidate_count|pluralize }} as pending
+			</button>
+			{% endif %}
+		</div>
+	</form>
+</div>
+{% endblock %}
