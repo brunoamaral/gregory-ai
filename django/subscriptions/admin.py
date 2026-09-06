@@ -2,8 +2,11 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import path, reverse
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
 import csv
+from io import StringIO
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.utils import timezone
@@ -30,6 +33,7 @@ from .forms import ListsAdminForm, AnnouncementAdminForm
 from gregory.models import Team
 from subscriptions.utils.render_email_body import strip_scheme
 from subscriptions.utils.suppression import deactivate_subscribers
+from subscriptions.utils.author_outreach import eligible_authors
 from subscriptions.utils.announcement_send import (
 	render_announcement_email,
 	render_announcement_text,
@@ -1510,6 +1514,108 @@ class AuthorOutreachCampaignAdmin(admin.ModelAdmin):
 		),
 		("Timestamps", {"fields": ["created_at", "updated_at"], "classes": ["collapse"]}),
 	]
+
+	def get_urls(self):
+		urls = super().get_urls()
+		custom_urls = [
+			path(
+				"<int:campaign_id>/build-queue/",
+				self.admin_site.admin_view(self.build_queue_view),
+				name="subscriptions_authoroutreachcampaign_build_queue",
+			),
+		]
+		return custom_urls + urls
+
+	def build_queue_view(self, request, campaign_id):
+		"""
+		The admin's equivalent of `build_author_outreach --campaign <slug>`,
+		so the queue can be built without shell access to the container —
+		see docs/author-outreach.md "Building the queue from the admin".
+
+		GET is the preview: it calls `eligible_authors`, which is read-only
+		by contract (see that module's docstring, which names the admin
+		preview as one of its intended callers), and lists exactly who a
+		real run would queue. That is the `--dry-run` the runbook asks for
+		before every real build, shown on the page that then does the
+		build, so nobody can skip it.
+
+		POST does the write by calling the management command rather than
+		reimplementing it. The `enabled` guard, the basis_note wording, and
+		the row shape therefore have exactly one implementation, shared
+		with the cron schedule — a button that drifted from the command
+		would be a second, untested way to write rows that carry a GDPR
+		lawful-basis note.
+
+		Deliberately not offered here: --featured-since (dry-run-only, and
+		the preview above already re-evaluates the campaign's own stored
+		window) and --limit (a partial queue built by hand is harder to
+		reason about than a full one reviewed row by row, which is what
+		AuthorOutreachAdmin is for).
+		"""
+		campaign = get_object_or_404(AuthorOutreachCampaign, pk=campaign_id)
+		if not self.has_change_permission(request, campaign):
+			return HttpResponseForbidden("Access denied.")
+
+		change_url = reverse(
+			"admin:subscriptions_authoroutreachcampaign_change", args=[campaign.pk]
+		)
+
+		if request.method == "POST":
+			# stderr is folded into the same buffer: CommandError is raised,
+			# not printed, so anything the command writes to stderr is
+			# commentary that belongs with its stdout in one message.
+			output = StringIO()
+			try:
+				call_command(
+					"build_author_outreach",
+					campaign=campaign.utm_campaign_slug,
+					stdout=output,
+					stderr=output,
+				)
+			except CommandError as exc:
+				self.message_user(
+					request, f"Queue not built: {exc}", level=messages.ERROR
+				)
+				return redirect(change_url)
+
+			self.message_user(
+				request,
+				output.getvalue().strip() or "build_author_outreach finished.",
+				level=messages.SUCCESS,
+			)
+			# Land on this campaign's pending rows: reviewing them is the
+			# next step of the runbook, and nothing is sent until a human
+			# approves them there. Permission on the campaign doesn't imply
+			# permission on the queue, though, so someone who can't open
+			# that changelist goes back to the campaign instead of into a
+			# 403 for work that actually succeeded.
+			can_see_queue = request.user.has_perm(
+				"subscriptions.view_authoroutreach"
+			) or request.user.has_perm("subscriptions.change_authoroutreach")
+			if not can_see_queue:
+				return redirect(change_url)
+			queue_url = reverse("admin:subscriptions_authoroutreach_changelist")
+			return redirect(
+				f"{queue_url}?campaign__id__exact={campaign.pk}"
+				f"&status__exact={AuthorOutreach.STATUS_PENDING}"
+			)
+
+		candidates = eligible_authors(campaign)
+		context = {
+			**self.admin_site.each_context(request),
+			"opts": self.model._meta,
+			"original": campaign,
+			"campaign": campaign,
+			"candidates": candidates,
+			"candidate_count": len(candidates),
+			"change_url": change_url,
+			"title": f"Build outreach queue: {campaign.name}",
+		}
+		return render(
+			request,
+			"admin/subscriptions/authoroutreachcampaign/build_queue.html",
+			context,
+		)
 
 
 class AuthorOutreachArticlesInline(admin.TabularInline):

@@ -7,6 +7,8 @@ eligibility/send rules had closed. Also covers the "no bulk delete, no
 manual add" invariants for this queue.
 """
 
+from unittest.mock import patch
+
 from django.contrib.admin.sites import site as admin_site
 from django.contrib.auth.models import Permission, User
 from django.contrib.sites.models import Site
@@ -14,9 +16,10 @@ from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from gregory.models import Authors
+from gregory.models import Articles, Authors
 from subscriptions.admin import AuthorOutreachAdmin
 from subscriptions.models import AuthorOutreach, AuthorOutreachCampaign, EmailMessage
+from subscriptions.utils.author_outreach import EligibleAuthor
 
 CHANGELIST_URL = reverse("admin:subscriptions_authoroutreach_changelist")
 
@@ -299,3 +302,154 @@ class NoBulkDeleteOrManualAddTest(_AuthorOutreachAdminBase):
 		request.user = self.superuser
 		admin = AuthorOutreachAdmin(AuthorOutreach, admin_site)
 		self.assertFalse(admin.has_add_permission(request))
+
+
+class BuildQueueButtonTest(_AuthorOutreachAdminBase):
+	"""
+	The "Preview & build queue" button on AuthorOutreachCampaign — the
+	admin's equivalent of `build_author_outreach --campaign <slug>`, so the
+	queue can be built without shell access to the container.
+
+	What the command itself writes is covered by
+	test_build_author_outreach_command.py; this file covers the admin layer
+	on top of it: who may reach it, that GET previews without writing, and
+	that POST really does go through the command (guard rails included)
+	rather than a second implementation of the write path.
+	"""
+
+	@classmethod
+	def setUpTestData(cls):
+		super().setUpTestData()
+		cls.campaign_staff = User.objects.create_user(
+			username="outreach_campaign_staff",
+			password="pw",
+			email="campaign@example.com",
+			is_staff=True,
+		)
+		cls.campaign_staff.user_permissions.add(
+			Permission.objects.get(codename="change_authoroutreachcampaign"),
+			Permission.objects.get(codename="view_authoroutreachcampaign"),
+			# Whoever builds a queue reviews it: the view lands on the
+			# queue changelist afterwards.
+			Permission.objects.get(codename="view_authoroutreach"),
+		)
+		# Same campaign rights, no rights on the queue itself — the
+		# post-build redirect has to notice.
+		cls.campaign_only_staff = User.objects.create_user(
+			username="outreach_campaign_only",
+			password="pw",
+			email="campaign-only@example.com",
+			is_staff=True,
+		)
+		cls.campaign_only_staff.user_permissions.add(
+			Permission.objects.get(codename="change_authoroutreachcampaign"),
+			Permission.objects.get(codename="view_authoroutreachcampaign"),
+		)
+
+	def setUp(self):
+		self.client = Client()
+		self.client.force_login(self.campaign_staff)
+		self.url = reverse(
+			"admin:subscriptions_authoroutreachcampaign_build_queue",
+			args=[self.campaign.pk],
+		)
+
+	def _candidate(self, author):
+		article = Articles.objects.create(
+			title="A qualifying paper",
+			link="https://example.com/qualifying-paper",
+			doi="10.9999/qualifying-paper",
+		)
+		return EligibleAuthor(author=author, email=author.emails[0], articles=[article])
+
+	def test_preview_lists_candidates_and_writes_nothing(self):
+		author = self._author("Ada", "Preview", "0000-0000-0000-0031", "ada.preview@example.com")
+		candidate = self._candidate(author)
+		with patch("subscriptions.admin.eligible_authors", return_value=[candidate]):
+			response = self.client.get(self.url)
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, "ada.preview@example.com")
+		self.assertContains(response, "A qualifying paper")
+		self.assertEqual(AuthorOutreach.objects.count(), 0)
+
+	def test_preview_is_readable_for_a_campaign_with_no_candidates(self):
+		response = self.client.get(self.url)
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, "No author qualifies right now")
+		self.assertEqual(AuthorOutreach.objects.count(), 0)
+
+	def test_staff_without_change_permission_is_refused(self):
+		self.client.force_login(self.staff)
+		self.assertEqual(self.client.get(self.url).status_code, 403)
+		self.assertEqual(self.client.post(self.url).status_code, 403)
+		self.assertEqual(AuthorOutreach.objects.count(), 0)
+
+	def test_post_writes_pending_rows_through_the_command(self):
+		author = self._author("Ada", "Queued", "0000-0000-0000-0032", "ada.queued@example.com")
+		candidate = self._candidate(author)
+		# enabled is set directly: the model's clean() requires the site's
+		# CustomSetting.has_author_pages, which this fixture has no reason
+		# to build — the guard is tested on the model, not here.
+		AuthorOutreachCampaign.objects.filter(pk=self.campaign.pk).update(enabled=True)
+		with patch(
+			"subscriptions.management.commands.build_author_outreach.eligible_authors",
+			return_value=[candidate],
+		):
+			response = self.client.post(self.url, follow=True)
+		self.assertEqual(response.status_code, 200)
+		row = AuthorOutreach.objects.get(author=author)
+		self.assertEqual(row.status, AuthorOutreach.STATUS_PENDING)
+		self.assertEqual(row.campaign, self.campaign)
+		self.assertEqual(row.site, self.campaign.site)
+		self.assertEqual(list(row.articles.all()), candidate.articles)
+		# GDPR lawful-basis note comes from the command, not from a second
+		# implementation living in the admin.
+		self.assertIn("legitimate interest", row.basis_note)
+		self.assertContains(response, "Queued 1 author")
+		self.assertEqual(
+			response.redirect_chain[-1][0],
+			f"{reverse('admin:subscriptions_authoroutreach_changelist')}"
+			f"?campaign__id__exact={self.campaign.pk}"
+			f"&status__exact={AuthorOutreach.STATUS_PENDING}",
+		)
+
+	def test_post_returns_to_the_campaign_when_the_queue_is_off_limits(self):
+		author = self._author("Ada", "NoQueue", "0000-0000-0000-0034", "ada.noqueue@example.com")
+		candidate = self._candidate(author)
+		AuthorOutreachCampaign.objects.filter(pk=self.campaign.pk).update(enabled=True)
+		self.client.force_login(self.campaign_only_staff)
+		with patch(
+			"subscriptions.management.commands.build_author_outreach.eligible_authors",
+			return_value=[candidate],
+		):
+			response = self.client.post(self.url, follow=True)
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(AuthorOutreach.objects.filter(author=author).count(), 1)
+		self.assertEqual(
+			response.redirect_chain[-1][0],
+			reverse(
+				"admin:subscriptions_authoroutreachcampaign_change",
+				args=[self.campaign.pk],
+			),
+		)
+
+	def test_post_on_a_disabled_campaign_writes_nothing(self):
+		author = self._author("Ada", "Disabled", "0000-0000-0000-0033", "ada.disabled@example.com")
+		candidate = self._candidate(author)
+		with patch(
+			"subscriptions.management.commands.build_author_outreach.eligible_authors",
+			return_value=[candidate],
+		):
+			response = self.client.post(self.url, follow=True)
+		self.assertEqual(AuthorOutreach.objects.count(), 0)
+		self.assertContains(response, "not enabled")
+
+	def test_change_form_shows_the_button(self):
+		response = self.client.get(
+			reverse(
+				"admin:subscriptions_authoroutreachcampaign_change",
+				args=[self.campaign.pk],
+			)
+		)
+		self.assertContains(response, self.url)
+		self.assertContains(response, "Preview &amp; build queue")

@@ -1,0 +1,22 @@
+{% extends "admin/change_form.html" %}
+
+{% block after_related_objects %}
+{{ block.super }}
+{% if original.pk and has_change_permission %}
+<div style="margin: 20px 0; padding: 20px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px;">
+	<h3 style="margin: 0 0 10px 0; color: #0c4a6e;">Outreach Queue</h3>
+	<p style="margin: 0 0 15px 0; color: #475569;">
+		Same thing as <code>build_author_outreach --campaign {{ original.utm_campaign_slug }}</code> on the server.
+		The next page previews every author who currently qualifies and writes nothing until you confirm.
+	</p>
+	<a href="{% url 'admin:subscriptions_authoroutreachcampaign_build_queue' original.pk %}"
+	   style="display: inline-block; padding: 8px 20px; background: #3b82f6; color: white; text-decoration: none; border-radius: 5px; margin-right: 10px;">
+		Preview &amp; build queue
+	</a>
+	<a href="{% url 'admin:subscriptions_authoroutreach_changelist' %}?campaign__id__exact={{ original.pk }}"
+	   style="display: inline-block; padding: 8px 20px; background: #6b7280; color: white; text-decoration: none; border-radius: 5px;">
+		View this campaign's queue
+	</a>
+</div>
+{% endif %}
+{% endblock %}
