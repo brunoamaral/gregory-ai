@@ -34,10 +34,10 @@ jobs:
       POSTGRES_USER: postgres
       DB_HOST: postgres
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: pip-${{ hashFiles('django/requirements.txt') }}
@@ -98,9 +98,9 @@ jobs:
   mcp-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -122,8 +122,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
       - name: Ruff — empty-catch gate (E722/S110/S112)
         # Version pinned so CI and local `uvx ruff` never drift. Config: ruff.toml.
         run: uvx ruff@0.16.00 check django/
