@@ -828,22 +828,38 @@ class AuthorSerializer(serializers.ModelSerializer):
 		return obj.country.code if obj.country else None
 
 	def get_articles_list(self, obj) -> str:
-		"""This author's articles endpoint, on the host the caller asked.
+		"""Absolute URL of this author's articles, on the requested host.
 
-		One instance serves several frontends, so a URL built from
-		settings.SITE_ID handed every caller site 1's domain: a request to
-		api.brain-regeneration.com came back with an api.gregory-ms.com
-		link, pointing consumers at a different site's API. The request
-		already arrived at the API host, so its own absolute URI is the
-		answer -- no scheme guessing and no "api." prefix needed.
-
-		The Site fallback below still runs when there is no request in
-		context (a serializer used directly by a command or a test), which
-		is where the prefixing rule is still required.
+		One instance serves several frontends, so the link is built from the
+		host the request was made to rather than a single configured domain.
+		The scheme follows X-Forwarded-Proto when a proxy sets it.
 		"""
+		# drf-spectacular publishes the docstring above into the public
+		# OpenAPI schema, so the reasoning lives down here instead: a URL
+		# built from settings.SITE_ID (1) handed every caller site 1's
+		# domain, so a request to api.brain-regeneration.com came back with
+		# an api.gregory-ms.com link, pointing consumers at a different
+		# site's API. The request already arrived at the API host, so its
+		# own host is the answer -- no "api." prefix inference needed. The
+		# Site fallback below still runs when there is no request in context
+		# (a serializer used directly by a command or a test), which is the
+		# only place that prefixing rule is still required.
 		request = self.context.get("request")
 		if request is not None:
-			return request.build_absolute_uri(f"/articles/?author_id={obj.author_id}")
+			# Scheme comes from X-Forwarded-Proto when the proxy sends one.
+			# nginx does (nginx-example-configuration/nginx.conf), but
+			# SECURE_PROXY_SSL_HEADER is not configured, so request.scheme is
+			# "http" behind TLS termination and build_absolute_uri would hand
+			# out http:// links where the Site-based code always said https.
+			# Only http/https are accepted: nginx overwrites the header, but
+			# the API can be reached directly, and this value goes out in a
+			# JSON field.
+			forwarded = request.META.get("HTTP_X_FORWARDED_PROTO", "")
+			# A request through several proxies carries a comma-separated
+			# list; the first entry is the original client-facing scheme.
+			forwarded = forwarded.split(",")[0].strip().lower()
+			scheme = forwarded if forwarded in ("http", "https") else request.scheme
+			return f"{scheme}://{request.get_host()}/articles/?author_id={obj.author_id}"
 
 		site = get_site()
 		if not site:
