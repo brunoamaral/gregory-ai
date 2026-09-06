@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework import status
 from gregory.models import Authors, Articles, Team, OrganizationApiSettings
@@ -80,12 +80,78 @@ class AuthorURLFormatTests(TestCase):
 		self.assertIn("articles_list", response.data)
 		articles_list_url = response.data["articles_list"]
 
-		# Should use the new format with query parameters
+		# Should use the new format with query parameters, on the host the
+		# request actually used (testserver here) rather than the configured
+		# Site's domain — see AuthorSerializer.get_articles_list.
 		expected_url = (
-			f"https://api.brain-regeneration.com/articles/?author_id={self.author.author_id}"
+			f"http://testserver/articles/?author_id={self.author.author_id}"
 		)
 		self.assertEqual(articles_list_url, expected_url)
 
 		# Verify it's not using the old format
-		old_url = f"https://api.brain-regeneration.com/articles/author/{self.author.author_id}"
+		old_url = f"http://testserver/articles/author/{self.author.author_id}"
 		self.assertNotEqual(articles_list_url, old_url)
+
+	@override_settings(ALLOWED_HOSTS=["api.brain-regeneration.com", "testserver"])
+	def test_articles_list_follows_the_requested_host(self):
+		"""One instance serves several frontends: a request to one site's API
+		host must not come back with another site's domain."""
+		site = Site.objects.get_current()
+		site.domain = "api.gregory-ms.com"
+		site.save()
+
+		response = self.client.get(
+			f"/authors/{self.author.author_id}/", HTTP_HOST="api.brain-regeneration.com"
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		url = response.data["articles_list"]
+		self.assertIn("api.brain-regeneration.com", url)
+		self.assertNotIn("gregory-ms.com", url)
+		self.assertIn(f"/articles/?author_id={self.author.author_id}", url)
+
+	@override_settings(ALLOWED_HOSTS=["api.brain-regeneration.com", "testserver"])
+	def test_articles_list_honours_forwarded_proto(self):
+		"""Behind TLS-terminating nginx, request.scheme is http (there is no
+		SECURE_PROXY_SSL_HEADER), so the proxy's header is what keeps these
+		links https."""
+		response = self.client.get(
+			f"/authors/{self.author.author_id}/",
+			HTTP_HOST="api.brain-regeneration.com",
+			HTTP_X_FORWARDED_PROTO="https",
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertTrue(
+			response.data["articles_list"].startswith(
+				"https://api.brain-regeneration.com/articles/"
+			),
+			response.data["articles_list"],
+		)
+
+	@override_settings(ALLOWED_HOSTS=["api.brain-regeneration.com", "testserver"])
+	def test_articles_list_ignores_a_junk_forwarded_proto(self):
+		"""The value lands in a JSON field, and the API can be reached without
+		going through the proxy that overwrites this header."""
+		response = self.client.get(
+			f"/authors/{self.author.author_id}/",
+			HTTP_HOST="api.brain-regeneration.com",
+			HTTP_X_FORWARDED_PROTO="javascript",
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertTrue(
+			response.data["articles_list"].startswith("http://"),
+			response.data["articles_list"],
+		)
+
+	def test_articles_list_falls_back_to_the_site_without_a_request(self):
+		"""No request in context (a command, or a serializer used directly) —
+		the configured Site, with its 'api.' prefixing rule, still applies."""
+		site = Site.objects.get_current()
+		site.domain = "gregory-ms.com"
+		site.save()
+
+		serializer = AuthorSerializer(self.author)
+		self.assertEqual(
+			serializer.data["articles_list"],
+			f"https://api.gregory-ms.com/articles/?author_id={self.author.author_id}",
+		)
+

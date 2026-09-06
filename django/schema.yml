@@ -5381,6 +5381,12 @@ components:
           readOnly: true
         articles_list:
           type: string
+          description: |-
+            Absolute URL of this author's articles, on the requested host.
+
+            One instance serves several frontends, so the link is built from the
+            host the request was made to rather than a single configured domain.
+            The scheme follows X-Forwarded-Proto when a proxy sets it.
           readOnly: true
       required:
       - articles_count

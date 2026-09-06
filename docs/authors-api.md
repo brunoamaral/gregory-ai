@@ -67,7 +67,7 @@ GET /authors/?team_id=2&subject_id=3&sort_by=article_count&timeframe=month
       "ORCID": "0000-0000-0000-0000",
       "country": "US",
       "articles_count": 25,
-      "articles_list": "https://api.example.com/articles/author/123"
+      "articles_list": "https://api.brain-regeneration.com/articles/?author_id=123"
     }
   ]
 }
@@ -166,7 +166,11 @@ always scoped to a single team.
 - `ORCID`: ORCID identifier (if available)
 - `country`: Country code
 - `articles_count`: Number of articles (filtered based on query parameters)
-- `articles_list`: URL to author's articles
+- `articles_list`: URL to this author's articles, as
+  `/articles/?author_id={id}`. Built from the host the request was made
+  to, so one instance serving several frontends returns each caller its
+  own API domain rather than the one configured in `settings.SITE_ID`.
+  The scheme follows `X-Forwarded-Proto` when a proxy sets it.
 
 ## Error Handling
 
