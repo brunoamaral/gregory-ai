@@ -90,6 +90,7 @@ class CustomSettingInline(admin.StackedInline):
 					"sitemap_relevant_only",
 					"sitemap_include_trials",
 					"sitemap_trial_statuses",
+					"sitemap_include_authors",
 				],
 			},
 		),

@@ -141,6 +141,15 @@ class CustomSetting(models.Model):
 			"instead of orcid.org."
 		),
 	)
+	sitemap_include_authors = models.BooleanField(
+		default=False,
+		help_text=(
+			"Also list author profile pages for the selected subjects, at "
+			"/sitemap/sites/<site_id>/authors.xml. Only enable this if the "
+			"site actually publishes author pages at /authors/<orcid>/ — "
+			"otherwise the sitemap would send crawlers to 404s."
+		),
+	)
 	description = models.TextField(
 		blank=True,
 		default="",
