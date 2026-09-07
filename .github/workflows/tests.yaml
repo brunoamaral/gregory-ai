@@ -123,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.0.1
       - name: Ruff — empty-catch gate (E722/S110/S112)
         # Version pinned so CI and local `uvx ruff` never drift. Config: ruff.toml.
         run: uvx ruff@0.16.00 check django/
