@@ -7,12 +7,13 @@ from organizations.models import Organization
 from gregory.models import (
 	Articles,
 	ArticleSubjectRelevance,
+	Authors,
 	OrganizationApiSettings,
 	Subject,
 	Team,
 	Trials,
 )
-from rss.sitemaps import SiteArticlesSitemap, SiteTrialsSitemap
+from rss.sitemaps import SiteArticlesSitemap, SiteAuthorsSitemap, SiteTrialsSitemap
 from sitesettings.models import CustomSetting
 
 
@@ -103,6 +104,85 @@ class SiteSitemapTests(TestCase):
 		)
 		# No raw status at all → recruitment_status_normalized stays NULL.
 		cls.trial_no_status = make_trial("tnostatus", cls.subject_a)
+
+		# Authors fixtures live under their own site/org/team/subject rather
+		# than reusing site/subject_a/team above: SiteAuthorsSitemap shares
+		# subject_ids with SiteArticlesSitemap for a given site, so any
+		# qualifying article added under subject_a would also grow the
+		# articles section and break its hardcoded page-count assertions
+		# below (e.g. test_index_lists_one_entry_per_page).
+		cls.authors_org = Organization.objects.create(name="AuthOrg", slug="auth-org")
+		OrganizationApiSettings.objects.filter(organization=cls.authors_org).update(
+			make_api_public=True
+		)
+		cls.authors_private_org = Organization.objects.create(
+			name="AuthPrivOrg", slug="auth-priv-org"
+		)
+		cls.authors_team = Team.objects.create(
+			organization=cls.authors_org, name="AT", slug="at"
+		)
+		cls.authors_private_team = Team.objects.create(
+			organization=cls.authors_private_org, name="APT", slug="apt"
+		)
+		cls.authors_subject = Subject.objects.create(
+			subject_name="AuthorsSubj", subject_slug="authors-subj", team=cls.authors_team
+		)
+		cls.authors_site = Site.objects.create(
+			domain="authors.example.com", name="AuthorsSite"
+		)
+		cls.authors_config = CustomSetting.objects.create(
+			site=cls.authors_site, title="Authors settings", generate_sitemap=True
+		)
+		cls.authors_config.sitemap_subjects.add(cls.authors_subject)
+
+		def make_authors_article(suffix, team):
+			article = Articles.objects.create(
+				title=f"author-fixture-{suffix}",
+				link=f"https://example.org/author-fixture-{suffix}",
+				kind="science paper",
+			)
+			article.teams.add(team)
+			article.subjects.add(cls.authors_subject)
+			return article
+
+		# Clears SiteAuthorsSitemap.MIN_ARTICLES (10).
+		cls.author_qualified = Authors.objects.create(
+			given_name="Prolific", family_name="Researcher", ORCID="0000-0001-0000-0001"
+		)
+		for i in range(10):
+			make_authors_article(f"q{i}", cls.authors_team).authors.add(
+				cls.author_qualified
+			)
+
+		# Below MIN_ARTICLES.
+		cls.author_thin = Authors.objects.create(
+			given_name="Sparse", family_name="Researcher", ORCID="0000-0001-0000-0002"
+		)
+		for i in range(5):
+			make_authors_article(f"t{i}", cls.authors_team).authors.add(cls.author_thin)
+
+		# 10 articles tagged with the site's subject but owned only by a
+		# private team — the same cross-team leak the articles/trials
+		# sections guard against (see article_wrong_team/trial_wrong_team
+		# above). Must not qualify even though the raw count clears
+		# MIN_ARTICLES, proving subject and team are checked on the same
+		# article row rather than independently.
+		cls.author_private_leak = Authors.objects.create(
+			given_name="Hidden", family_name="Researcher", ORCID="0000-0001-0000-0003"
+		)
+		for i in range(10):
+			make_authors_article(f"p{i}", cls.authors_private_team).authors.add(
+				cls.author_private_leak
+			)
+
+		# Clears MIN_ARTICLES but carries no ORCID, so has no page to list.
+		cls.author_no_orcid = Authors.objects.create(
+			given_name="Anon", family_name="Researcher", ORCID=None
+		)
+		for i in range(10):
+			make_authors_article(f"n{i}", cls.authors_team).authors.add(
+				cls.author_no_orcid
+			)
 
 		# Site config: frontend site publishes subject A (+ the private
 		# subject, which must be silently dropped); other site publishes B.
@@ -354,3 +434,89 @@ class SiteSitemapTests(TestCase):
 			).status_code,
 			404,
 		)
+
+	# --- authors section (opt-in per site) ---
+
+	def _enable_authors(self):
+		self.authors_config.sitemap_include_authors = True
+		self.authors_config.save()
+
+	def test_authors_section_404s_until_the_site_opts_in(self):
+		self.assertEqual(
+			self.client.get(
+				self._section_url(self.authors_site.pk, "authors")
+			).status_code,
+			404,
+		)
+
+	def test_authors_section_lists_qualifying_author_by_orcid(self):
+		self._enable_authors()
+		body = self.client.get(
+			self._section_url(self.authors_site.pk, "authors")
+		).content.decode()
+		self.assertIn(
+			f"https://authors.example.com/authors/{self.author_qualified.ORCID}/",
+			body,
+		)
+		# ORCID-keyed, never the numeric author_id the base class's inherited
+		# location() would have built.
+		self.assertNotIn(f"/authors/{self.author_qualified.pk}/", body)
+		self.assertIn("<lastmod>", body)
+
+	def test_author_below_threshold_excluded(self):
+		self._enable_authors()
+		body = self.client.get(
+			self._section_url(self.authors_site.pk, "authors")
+		).content.decode()
+		self.assertNotIn(f"/authors/{self.author_thin.ORCID}/", body)
+
+	def test_author_reaching_threshold_only_via_private_team_articles_excluded(self):
+		self._enable_authors()
+		body = self.client.get(
+			self._section_url(self.authors_site.pk, "authors")
+		).content.decode()
+		self.assertNotIn(f"/authors/{self.author_private_leak.ORCID}/", body)
+
+	def test_author_without_orcid_excluded(self):
+		self._enable_authors()
+		body = self.client.get(
+			self._section_url(self.authors_site.pk, "authors")
+		).content.decode()
+		# The author otherwise clears MIN_ARTICLES on public, subject-matching
+		# articles alone — only the missing ORCID excludes them.
+		self.assertNotIn("/authors/None/", body)
+		self.assertFalse(
+			SiteAuthorsSitemap(
+				self.authors_site, [self.authors_subject.pk], [self.authors_org.pk]
+			)
+			.get_queryset()
+			.filter(pk=self.author_no_orcid.pk)
+			.exists()
+		)
+
+	def test_authors_switch_is_per_site(self):
+		self._enable_authors()
+		self.assertEqual(
+			self.client.get(
+				self._section_url(self.authors_site.pk, "authors")
+			).status_code,
+			200,
+		)
+		self.assertEqual(
+			self.client.get(self._section_url(self.site.pk, "authors")).status_code,
+			404,
+		)
+
+	def test_index_gains_authors_entries_only_when_enabled(self):
+		url = reverse(
+			"site-sitemap-index", kwargs={"site_id": self.authors_site.pk}
+		)
+		self.assertNotIn(
+			self._section_url(self.authors_site.pk, "authors"),
+			self.client.get(url).content.decode(),
+		)
+
+		self._enable_authors()
+		cache.clear()  # the index is cache_page'd
+		body = self.client.get(url).content.decode()
+		self.assertIn(self._section_url(self.authors_site.pk, "authors"), body)

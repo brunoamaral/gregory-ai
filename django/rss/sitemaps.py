@@ -171,8 +171,8 @@ class SiteAuthorsSitemap(_SiteContentSitemap):
 
 	# 10+ tracked papers, not the 3+ threshold the frontend uses for its own
 	# noindex cutoff (see brain-regeneration's functions/authors/[orcid].js) —
-	# deliberately smaller and stricter than what the page itself allows,
-	# so this never advertises a URL the site's own robots meta excludes.
+	# deliberately higher and stricter than what the page itself allows, so
+	# this never advertises a URL the site's own robots meta excludes.
 	MIN_ARTICLES = 10
 
 	def get_queryset(self):
