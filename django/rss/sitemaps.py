@@ -1,12 +1,14 @@
 """
 rss/sitemaps.py
 
-Site-scoped XML sitemaps for frontend article and clinical trial pages.
+Site-scoped XML sitemaps for frontend article, clinical trial and author
+profile pages.
 
 Serves /sitemap/sites/<site_id>/index.xml (a sitemap index),
 /sitemap/sites/<site_id>/articles.xml and, when the site opts in,
-/sitemap/sites/<site_id>/trials.xml (?p=N pages, up to 10k URLs each).
-URLs point at the requested Site's *frontend* domain.
+/sitemap/sites/<site_id>/trials.xml and /sitemap/sites/<site_id>/authors.xml
+(?p=N pages, up to 10k URLs each). URLs point at the requested Site's
+*frontend* domain.
 
 Membership is per-site configuration on sitesettings.CustomSetting:
 generate_sitemap (master switch), sitemap_subjects (which subjects this
@@ -14,8 +16,14 @@ site publishes), sitemap_relevant_only (restrict to manually/ML-relevant
 articles for those subjects), sitemap_include_trials (whether this site
 publishes /trials/<trial_id>/ pages at all — not every frontend does),
 sitemap_trial_statuses (narrow the trials section to given recruitment
-statuses). Subject curation is what lets two sites backed by one
-database expose non-competing content sets to Google.
+statuses), sitemap_include_authors (whether this site publishes
+/authors/<orcid>/ pages at all). Subject curation is what lets two sites
+backed by one database expose non-competing content sets to Google.
+
+The authors section additionally applies its own fixed threshold
+(SiteAuthorsSitemap.MIN_ARTICLES) on top of subject/org membership, since
+an author with only one or two tracked papers is thin content regardless
+of which site is asking — see SiteAuthorsSitemap for the reasoning.
 
 Visibility is pinned to PUBLIC organisations regardless of caller
 identity: sitemaps exist for crawlers, and request-dependent visibility
@@ -26,14 +34,14 @@ article IDs.
 from django.contrib.sitemaps import Sitemap
 from django.contrib.sitemaps.views import sitemap as django_sitemap_view
 from django.contrib.sites.models import Site
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Count, Exists, Max, OuterRef, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.decorators.cache import cache_page
 
 from api.filters import ml_relevant_articles_q
-from gregory.models import Articles, Trials
+from gregory.models import Articles, Authors, Trials
 from gregory.visibility import _public_org_ids
 from sitesettings.models import CustomSetting
 
@@ -151,6 +159,56 @@ class SiteTrialsSitemap(_SiteContentSitemap):
 		return qs
 
 
+class SiteAuthorsSitemap(_SiteContentSitemap):
+	# Authors carry no subjects/teams M2M of their own — unlike Articles and
+	# Trials, they only reach a site's subjects/public orgs by traversing
+	# their tracked articles. That means the base class's get_queryset(),
+	# items() and location() (built around a model that carries those M2Ms
+	# and a pk-keyed URL) don't apply here and are overridden below; only
+	# __init__, protocol and get_domain are inherited as-is.
+	model = Authors
+	path_prefix = "authors"
+
+	# 10+ tracked papers, not the 3+ threshold the frontend uses for its own
+	# noindex cutoff (see brain-regeneration's functions/authors/[orcid].js) —
+	# deliberately higher and stricter than what the page itself allows, so
+	# this never advertises a URL the site's own robots meta excludes.
+	MIN_ARTICLES = 10
+
+	def get_queryset(self):
+		# Authors carry no subjects/teams of their own — traverse articles.
+		# Both conditions are given in a single filter() call so they bind
+		# to the same joined article row (an article tagged with a
+		# qualifying subject that is *also* owned by a public org), the
+		# same defense-in-depth the base class's docstring describes for
+		# Articles/Trials: a shared subject tag must never surface a
+		# private-organisation author.
+		return (
+			Authors.objects.filter(
+				articles__subjects__in=self._subject_ids,
+				articles__teams__organization_id__in=self._public_org_ids,
+			)
+			.exclude(ORCID__isnull=True)
+			.exclude(ORCID="")
+			.annotate(n=Count("articles", distinct=True), lastmod=Max("articles__last_updated"))
+			.filter(n__gte=self.MIN_ARTICLES)
+			.distinct()
+		)
+
+	def items(self):
+		# ORCID-keyed, not pk-keyed — see location() below. Ordered by
+		# author_id (not ORCID) for the same stable-pagination reason the
+		# base class orders by pk_field: new rows only ever append to the
+		# last page.
+		return self.get_queryset().order_by("author_id").values_list("ORCID", "lastmod")
+
+	def location(self, item):
+		# The route is keyed on ORCID, not author_id. The inherited
+		# location() would build /authors/{pk}/ from item[0], which 404s —
+		# item[0] here is already the ORCID (see items()).
+		return f"/authors/{item[0]}/"
+
+
 def _site_sitemaps(site_id):
 	"""Resolve the Site, its sitemap config, and sections — or 404.
 
@@ -188,6 +246,10 @@ def _site_sitemaps(site_id):
 			public_org_ids,
 			statuses=settings_row.sitemap_trial_statuses or (),
 		)
+	# Opt-in for the same reason as trials: a frontend without /authors/<orcid>/
+	# pages must not be handed author URLs that would 404.
+	if settings_row.sitemap_include_authors:
+		sitemaps["authors"] = SiteAuthorsSitemap(site, subject_ids, public_org_ids)
 	return site, sitemaps
 
 
