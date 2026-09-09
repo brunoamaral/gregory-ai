@@ -399,7 +399,7 @@ When both `organization` and `team` are given the effective scope is their **int
 - Per-subject counts are `articles`, `trials`, `authors`, `sources` — **no per-subject `subscribers`**. With `Lists` as the only path from a subscriber to a subject, that number would describe list-tagging more than the subject itself.
 - `sources` counts distinct **domains** (matching the top-level `sources.total` semantics), not feed rows — two RSS feeds on the same domain count once. A `Sources` row with `subject` unset (`null`) is excluded from every `by_subject` row and, when `?subject=` is applied, from the filtered totals too.
 - Neither `authors` nor `sources` in a `by_subject` row sums to the top-level total, and that's correct: both are *distinct within that subject*. An author publishing under two subjects appears in both rows and once at the top; a domain feeding two subjects likewise.
-- Roughly 42% of trials in this dataset have no subject assigned — a subject-filtered `trials` count is expected to be substantially lower than the team-scoped one; that's coverage, not a bug.
+- A trial with no subject assigned is excluded from every `by_subject` row, so a subject-filtered `trials` count can be lower than the team-scoped one. Coverage is now near-complete — measured 2026-09-09, 63 of 17,404 trials (0.4%) and 372 of 53,054 articles (0.7%) carry no subject — so the gap is small, but it is a gap, not a bug.
 
 #### Error responses
 
