@@ -1694,6 +1694,21 @@ class Team(models.Model):
 		help_text="Inactive teams are soft-deleted: their data is preserved and can be reassigned to another team.",
 		db_index=True,
 	)
+	api_listed = models.BooleanField(
+		default=False,
+		help_text=(
+			"Whether this team is listed in /teams/. Gates listing only -- "
+			"it does not affect access to this team's content, which is "
+			"governed entirely by whether its subjects are in a public "
+			"site's scope (CustomSetting.scope_subjects + api_public). "
+			"Conflating the two would let a metadata switch quietly become "
+			"a data-visibility switch. Seeded True at migration time for "
+			"every team that owned a subject in a public site's scope; "
+			"free to override in either direction afterwards -- e.g. to "
+			"hide an internal lab's name from a public listing, or to "
+			"credit a partner team that owns no in-scope subjects."
+		),
+	)
 
 	# Default manager returns only active teams; all_objects returns everything.
 	objects = ActiveTeamManager()

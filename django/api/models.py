@@ -3,6 +3,7 @@ from django.utils.crypto import get_random_string
 from django.utils.timezone import now
 from datetime import timedelta
 from organizations.models import Organization
+from django.contrib.sites.models import Site
 
 DEFAULT_MAX_CALLS_MINUTE = 60
 DEFAULT_MAX_CALLS_HOUR = DEFAULT_MAX_CALLS_MINUTE * 60
@@ -66,6 +67,29 @@ class APIAccessScheme(models.Model):
 		on_delete=models.CASCADE,
 		related_name="api_access_schemes",
 		help_text="Organisation this key represents.",
+	)
+
+	# The site this key is bound to. Null only until the data migration
+	# backfills it from the organisation's default OrganizationSite -- every
+	# row must resolve to one. One key, one site, deliberately not a M2M: a
+	# client needing two sites gets two keys, so the grant stays obvious at
+	# a glance and a leaked key's blast radius is exactly one site.
+	site = models.ForeignKey(
+		Site,
+		on_delete=models.PROTECT,
+		null=True,
+		blank=True,
+		related_name="api_access_schemes",
+		help_text=(
+			"The site this API key is bound to. A key grants exactly that "
+			"site's scope_subjects, whether or not the site is api_public "
+			"-- this is how a private site's own frontend authenticates to "
+			"read its own scope. Existing keys are backfilled by data "
+			"migration from their organisation's default OrganizationSite "
+			"(is_default=True); an organisation with no default site "
+			"cannot be backfilled and the migration raises rather than "
+			"guessing, since a key mapped to nothing is a dead frontend."
+		),
 	)
 
 	def __str__(self):
