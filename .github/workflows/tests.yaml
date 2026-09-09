@@ -85,6 +85,35 @@ jobs:
         # drift the production schema from model state.
         run: python manage.py makemigrations --check --dry-run
 
+      - name: Schema is current
+        working-directory: django
+        # Drift check only — NO git. This job runs inside amaralbruno/gregory-ai,
+        # a python:3.12-slim image carrying only runtime deps, and git is not
+        # installed in it. `git diff` there fails with "command not found",
+        # which an earlier version of this step reported as "schema is out of
+        # date" — a false diagnosis indistinguishable from a real one.
+        #
+        # So: snapshot the committed file, regenerate over it, compare in
+        # Python. The "is it tracked" half runs in the lint job, which is a bare
+        # ubuntu runner and does have git.
+        run: |
+          cp schema.yml /tmp/schema.committed.yml
+          python manage.py spectacular --file schema.yml --fail-on-warn
+          python - <<'EOF'
+          import difflib, pathlib, sys
+          committed = pathlib.Path("/tmp/schema.committed.yml").read_text().splitlines(keepends=True)
+          generated = pathlib.Path("schema.yml").read_text().splitlines(keepends=True)
+          if committed == generated:
+              sys.exit(0)
+          print("::error::django/schema.yml is out of date — regenerated output differs from the committed file.")
+          print("Fix: cd django && python manage.py spectacular --file schema.yml --fail-on-warn, then commit schema.yml.")
+          print("Why: mcp-server validates its tools against this file, and django-filter ignores unknown")
+          print("query params silently — a stale schema means wrong results with no error.")
+          print("--- first 60 lines of the difference ---")
+          sys.stdout.writelines(list(difflib.unified_diff(committed, generated, "committed", "generated"))[:60])
+          sys.exit(1)
+          EOF
+
   # MCP server suite. Runs on a bare runner rather than inside the gregory-ai
   # image: it needs only `mcp` + `httpx2` + pytest, so pulling the multi-GB ML
   # image to run it would cost more than the tests themselves.
@@ -124,6 +153,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.0.1
+
+      - name: django/schema.yml is tracked
+        # The pytest job checks the schema has not drifted, but cannot check it
+        # is still *tracked* — that image has no git. Without this, a PR that
+        # deletes schema.yml would have the generator recreate it untracked, the
+        # drift check pass, and the mcp-tests contract fixture skip on the
+        # missing file: a green workflow with no committed schema at all.
+        run: |
+          git ls-files --error-unmatch django/schema.yml || {
+            echo "::error::django/schema.yml is not tracked by git. It must be committed —"
+            echo "mcp-server validates its tools against it, and its contract test skips silently"
+            echo "when the file is missing, so an untracked schema disables that check."
+            exit 1
+          }
+
       - name: Ruff — empty-catch gate (E722/S110/S112)
         # Version pinned so CI and local `uvx ruff` never drift. Config: ruff.toml.
         run: uvx ruff@0.16.00 check django/
