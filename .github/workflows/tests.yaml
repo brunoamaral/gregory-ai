@@ -96,29 +96,36 @@ jobs:
         # accepts and get a plausible-looking, wrongly-filtered result with no
         # error anywhere. Regenerate, then fail if the file changed.
         run: |
-          # Check the file is TRACKED before regenerating it. `git diff` only
-          # reports tracked paths, so if a PR deletes schema.yml the generator
-          # below recreates it as an untracked file, `git diff --exit-code`
-          # sees nothing and exits 0 — and the mcp-tests job's contract fixture
-          # skips when the file is absent. The workflow would go green with no
-          # committed schema at all. Verified: `git diff --exit-code` on an
-          # untracked path exits 0.
-          git ls-files --error-unmatch schema.yml >/dev/null 2>&1 || {
-            echo "::error::django/schema.yml is not tracked by git. It must be committed —"
-            echo "mcp-server validates its tools against this file, and its contract test"
-            echo "skips silently when the file is missing, so an untracked or deleted schema"
-            echo "disables that check rather than failing it."
-            echo "Fix: cd django && python manage.py spectacular --file schema.yml --fail-on-warn, then git add schema.yml."
+          # Two failure modes, reported separately because the fixes differ.
+          #
+          # 1. NOT TRACKED. `git diff` only reports tracked paths, so if a PR
+          #    deletes schema.yml the generator below recreates it untracked,
+          #    `git diff --exit-code` sees nothing and exits 0 — and the
+          #    mcp-tests contract fixture skips when the file is absent. The
+          #    workflow would go green with no committed schema at all.
+          # 2. DRIFTED. The committed file no longer matches the code.
+          #
+          # stderr is deliberately NOT suppressed: a git failure here (dubious
+          # ownership in the container, a shallow checkout) must be visible
+          # rather than misreported as "not tracked".
+          echo "git $(git --version), drf-spectacular $(python -c 'import drf_spectacular; print(drf_spectacular.__version__)' 2>/dev/null || echo '?')"
+          if ! git ls-files --error-unmatch schema.yml; then
+            echo "::error::django/schema.yml is not tracked by git, or git could not read the index (see above)."
+            echo "If the file was deleted: regenerate and 'git add' it — mcp-server validates its tools"
+            echo "against this file, and its contract test skips silently when it is missing, so an"
+            echo "untracked schema disables that check rather than failing it."
             exit 1
-          }
+          fi
           python manage.py spectacular --file schema.yml --fail-on-warn
-          git diff --exit-code schema.yml || {
-            echo "::error::django/schema.yml is out of date. A filter, serializer, view or route changed without regenerating it."
+          if ! git diff --exit-code --stat schema.yml; then
+            echo "::error::django/schema.yml is out of date — regenerated output differs from the committed file."
             echo "Fix: cd django && python manage.py spectacular --file schema.yml --fail-on-warn, then commit schema.yml."
-            echo "Why this matters: mcp-server validates its tools against this file. A stale schema means the MCP server can send a"
-            echo "parameter the API no longer accepts, and django-filter ignores unknown params silently — wrong results, no error."
+            echo "Why: mcp-server validates its tools against this file, and django-filter ignores unknown"
+            echo "query params silently — a stale schema means wrong results with no error."
+            echo "--- first 60 lines of the difference ---"
+            git --no-pager diff -- schema.yml | head -60
             exit 1
-          }
+          fi
 
   # MCP server suite. Runs on a bare runner rather than inside the gregory-ai
   # image: it needs only `mcp` + `httpx2` + pytest, so pulling the multi-GB ML
