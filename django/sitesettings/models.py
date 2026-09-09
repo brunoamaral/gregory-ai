@@ -81,6 +81,44 @@ class CustomSetting(models.Model):
 		help_text="Comma-separated list of domains (e.g. example.com, other-site.org) allowed to submit subscribers for any list on this site. The origin domain is used for post-subscription redirects. The site's own domain is always accepted.",
 		verbose_name="Allowed Domains",
 	)
+	scope_subjects = models.ManyToManyField(
+		"gregory.Subject",
+		blank=True,
+		related_name="scope_sites",
+		help_text=(
+			"Subjects this site owns for anonymous API/RSS visibility. This "
+			"defines what the site is allowed to publish -- it is distinct "
+			"from sitemap_subjects (SEO curation, which should narrow "
+			"within this scope, not define it). Seeded from "
+			"sitemap_subjects at migration time as a starting value, not a "
+			"rule -- the two are free to diverge from that point on. A "
+			"subject left out of every site's scope is how "
+			"internal/unpublished research stays private; there is no "
+			"separate 'internal' flag."
+		),
+	)
+	api_public = models.BooleanField(
+		default=False,
+		help_text=(
+			"When true, this site's scope_subjects are visible to "
+			"anonymous API callers -- the union of every api_public site's "
+			"scope is what an unauthenticated request can see. Defaults to "
+			"False: a new site is private until someone deliberately "
+			"publishes it. Replaces the organisation-level "
+			"OrganizationApiSettings.make_api_public flag, which could not "
+			"express one organisation owning both a public and a private "
+			"site."
+		),
+	)
+	rss_enabled = models.BooleanField(
+		default=False,
+		help_text=(
+			"When true, this site serves RSS feeds scoped to its "
+			"scope_subjects, at /feed/sites/<site_id>/... . Matches the "
+			"per-surface pattern of generate_sitemap: a site can serve an "
+			"API without feeds, or the reverse. Defaults to False."
+		),
+	)
 	generate_sitemap = models.BooleanField(
 		default=False,
 		help_text=(

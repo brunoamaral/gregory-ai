@@ -34,7 +34,7 @@ class CustomSettingInline(admin.StackedInline):
 	form = CustomSettingAdminForm
 	extra = 1
 	max_num = 1
-	filter_horizontal = ("sitemap_subjects",)
+	filter_horizontal = ("sitemap_subjects", "scope_subjects")
 	fieldsets = [
 		(
 			None,
@@ -79,6 +79,25 @@ class CustomSettingInline(admin.StackedInline):
 			{
 				"classes": ["collapse"],
 				"fields": ["bluesky_url", "github_url", "mastodon_url"],
+			},
+		),
+		(
+			"API visibility",
+			{
+				"fields": [
+					"api_public",
+					"scope_subjects",
+					"rss_enabled",
+				],
+				"description": (
+					"What this site owns and whether it is served anonymously. "
+					"<b>scope_subjects</b> is the site's corpus — distinct from "
+					"<b>sitemap_subjects</b> below, which is SEO curation. They are "
+					"seeded from the same set but are free to diverge; removing a "
+					"subject from the sitemap must not silently make its data private. "
+					"<b>api_public</b> is off by default, so a new site is private "
+					"until someone publishes it deliberately."
+				),
 			},
 		),
 		(

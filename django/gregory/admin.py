@@ -2910,6 +2910,7 @@ class TeamAdminForm(forms.ModelForm):
 		fields = [
 			"organization",
 			"slug",
+			"api_listed",
 		]  # Exclude 'name' since we use 'team_name' instead
 
 	def __init__(self, *args, **kwargs):
@@ -3094,6 +3095,18 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 
 	fieldsets = (
 		(None, {"fields": ("team_name", "organization", "slug", "is_active")}),
+		(
+			"API visibility",
+			{
+				"fields": ("api_listed",),
+				"description": (
+					"Whether this team appears in GET /teams/. Seeded from the teams "
+					"that own a subject in a public site's scope, then free to override "
+					"in either direction. Gates listing only — it does not hide this "
+					"team's articles or trials, which are governed by subject scope."
+				),
+			},
+		),
 	)
 	readonly_fields = ("organization_link",)
 
