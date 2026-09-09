@@ -55,6 +55,20 @@ The trials figure matters: any subject-filtered trial count drops ~42% relative
 to the team-scoped one, and that is correct, not a bug. Worth a line in the docs
 so nobody files it as one.
 
+> **Superseded 2026-09-09.** The table above stands as a record of 2026-08-04 and is
+> deliberately not rewritten. The 42.5% no longer holds: measured against a
+> production-synced dev database, **63 of 17,404 trials (0.4%)** and 372 of 53,054
+> articles (0.7%) carry no subject.
+>
+> The change was not curation. Orphan trials — those with no source — were pruned on
+> 2026-09-08, and the arithmetic shows they were almost exactly the subject-less
+> population: 12,765 trials removed in total, of which 12,766 were the subject-less
+> ones. Practically every trial deleted was one of these rows.
+>
+> So the caveat this section asked for is still true in principle — a subject-filtered
+> trial count *can* be lower than a team-scoped one — but the magnitude is now
+> negligible. `docs/03-api-and-rss-feeds.md` carries the current wording.
+
 ## 2 — Decisions taken
 
 Confirmed with Bruno before drafting:
@@ -320,7 +334,7 @@ together. `EXPLAIN ANALYZE` it on a prod-sized copy before merging (§6).
 |:-----|:-------|
 | `django/api/views.py` | `StatsView.get` — §4.1 to §4.5; extend the class docstring's Filters section with `?subject=` and the 404-vs-zero rule |
 | `django/api/tests/test_visibility_stats.py` | new test classes (§6); raise the query ceiling and fix its breakdown comment |
-| `docs/03-api-and-rss-feeds.md` | endpoint table row (line 194) → add `subject`; Stats section (lines 322-360) → new example URLs, `by_subject` in the sample payload, `subject` row in the filter-parameter table, drop the "unchanged across all filter combinations" claim, note the 42%-of-trials-have-no-subject caveat |
+| `docs/03-api-and-rss-feeds.md` | endpoint table row (line 194) → add `subject`; Stats section (lines 322-360) → new example URLs, `by_subject` in the sample payload, `subject` row in the filter-parameter table, drop the "unchanged across all filter combinations" claim, note the trials-without-subject caveat (originally phrased as "42%"; reworded to measured figures on 2026-09-09, see §1.2) |
 
 No migration. No model change. No new dependency.
 
