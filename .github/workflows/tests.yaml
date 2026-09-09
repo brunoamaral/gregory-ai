@@ -96,6 +96,21 @@ jobs:
         # accepts and get a plausible-looking, wrongly-filtered result with no
         # error anywhere. Regenerate, then fail if the file changed.
         run: |
+          # Check the file is TRACKED before regenerating it. `git diff` only
+          # reports tracked paths, so if a PR deletes schema.yml the generator
+          # below recreates it as an untracked file, `git diff --exit-code`
+          # sees nothing and exits 0 — and the mcp-tests job's contract fixture
+          # skips when the file is absent. The workflow would go green with no
+          # committed schema at all. Verified: `git diff --exit-code` on an
+          # untracked path exits 0.
+          git ls-files --error-unmatch schema.yml >/dev/null 2>&1 || {
+            echo "::error::django/schema.yml is not tracked by git. It must be committed —"
+            echo "mcp-server validates its tools against this file, and its contract test"
+            echo "skips silently when the file is missing, so an untracked or deleted schema"
+            echo "disables that check rather than failing it."
+            echo "Fix: cd django && python manage.py spectacular --file schema.yml --fail-on-warn, then git add schema.yml."
+            exit 1
+          }
           python manage.py spectacular --file schema.yml --fail-on-warn
           git diff --exit-code schema.yml || {
             echo "::error::django/schema.yml is out of date. A filter, serializer, view or route changed without regenerating it."
