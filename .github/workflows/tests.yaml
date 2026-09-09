@@ -85,6 +85,26 @@ jobs:
         # drift the production schema from model state.
         run: python manage.py makemigrations --check --dry-run
 
+      - name: Schema is current
+        working-directory: django
+        # test_openapi_schema.py only checks that generation succeeds with no
+        # warnings — it never compares against the committed file. So nothing
+        # else verifies django/schema.yml still matches the code that produced
+        # it. mcp-server validates its tools against that committed file, and
+        # django-filter silently ignores unknown query params — so a stale
+        # schema means the MCP server can send a parameter the API no longer
+        # accepts and get a plausible-looking, wrongly-filtered result with no
+        # error anywhere. Regenerate, then fail if the file changed.
+        run: |
+          python manage.py spectacular --file schema.yml --fail-on-warn
+          git diff --exit-code schema.yml || {
+            echo "::error::django/schema.yml is out of date. A filter, serializer, view or route changed without regenerating it."
+            echo "Fix: cd django && python manage.py spectacular --file schema.yml --fail-on-warn, then commit schema.yml."
+            echo "Why this matters: mcp-server validates its tools against this file. A stale schema means the MCP server can send a"
+            echo "parameter the API no longer accepts, and django-filter ignores unknown params silently — wrong results, no error."
+            exit 1
+          }
+
   # MCP server suite. Runs on a bare runner rather than inside the gregory-ai
   # image: it needs only `mcp` + `httpx2` + pytest, so pulling the multi-GB ML
   # image to run it would cost more than the tests themselves.
