@@ -7,7 +7,8 @@
 # still False everywhere, which would take the public API dark.
 #
 #   1. Seed CustomSetting.scope_subjects from sitemap_subjects, for every
-#      site. This makes the cutover a no-op: brain-regeneration.com already
+#      site. Public sites are then narrowed to publicly-owned subjects in
+#      step 3b, so the anonymous rule can never widen. This makes the cutover a no-op: brain-regeneration.com already
 #      curates its six sitemap_subjects correctly, and gregory-ms.com (the
 #      decommissioned site) has none.
 #   2. Set api_public=True for brain-regeneration.com only. api_public
@@ -39,6 +40,7 @@ def seed_scope_and_backfill(apps, schema_editor):
 	Subject = apps.get_model("gregory", "Subject")
 	OrganizationSite = apps.get_model("gregory", "OrganizationSite")
 	APIAccessScheme = apps.get_model("api", "APIAccessScheme")
+	OrganizationApiSettings = apps.get_model("gregory", "OrganizationApiSettings")
 
 	# --- Step 1: seed scope_subjects from sitemap_subjects, every site. ---
 	for custom_setting in CustomSetting.objects.all():
@@ -50,6 +52,35 @@ def seed_scope_and_backfill(apps, schema_editor):
 	CustomSetting.objects.filter(site__domain=BRAIN_REGENERATION_DOMAIN).update(
 		api_public=True, rss_enabled=True
 	)
+
+	# --- Step 3b: narrow PUBLIC sites' scope to publicly-owned subjects. ---
+	#
+	# sitemap_subjects is not equivalent to the old public subject set: a
+	# site's sitemap may name a subject owned by a private organisation's
+	# team, and rss/sitemaps.py drops it anyway by re-checking
+	# teams__organization_id__in=public_org_ids on top of the subject filter.
+	# Leaving such a subject in a PUBLIC site's scope would publish, through
+	# the anonymous rule, something the old rule kept private -- widening
+	# visibility, which this project must never do.
+	#
+	# Applied to api_public sites ONLY. A private site's scope is reachable
+	# only through its own site-bound key, so narrowing it there would strip
+	# that key of the access it is meant to have, without protecting anyone.
+	#
+	# Production data is already clean (checked 2026-09-09: neither site has a
+	# private-org or team-less subject in its sitemap), so this is a no-op
+	# today. It makes the equivalence hold by construction, not by luck.
+	public_org_ids = set(
+		OrganizationApiSettings.objects.filter(make_api_public=True).values_list(
+			"organization_id", flat=True
+		)
+	)
+	for custom_setting in CustomSetting.objects.filter(api_public=True):
+		custom_setting.scope_subjects.set(
+			custom_setting.scope_subjects.filter(
+				team__organization_id__in=public_org_ids
+			)
+		)
 
 	# --- Step 4: Team.api_listed for teams owning a subject in a public
 	# site's scope. ---

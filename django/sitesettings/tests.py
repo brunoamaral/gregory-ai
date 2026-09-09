@@ -302,6 +302,41 @@ class SeedSiteVisibilityScopeMigrationTests(TestCase):
 		# no subjects to contribute).
 		self.assertEqual(actual, {self.br_subject_a.id, self.br_subject_b.id})
 
+	def test_public_site_scope_excludes_a_private_orgs_subject(self):
+		"""Step 3b: a PUBLIC site's scope is narrowed to publicly-owned
+		subjects.
+
+		sitemap_subjects is not the old public subject set — a sitemap may
+		name a subject owned by a private organisation's team, and
+		rss/sitemaps.py drops it by re-checking team ownership. Seeding it
+		into a public site's scope would publish, through the anonymous
+		rule, something the old rule kept private. Private sites are NOT
+		narrowed — their scope is reachable only via their own key, and
+		stripping it would remove access that key is meant to have."""
+		# Put the private org's subject into brain-regeneration's sitemap.
+		self.br_setting.sitemap_subjects.add(self.private_subject)
+
+		self._run_migration()
+
+		br_scope = set(
+			self.br_setting.scope_subjects.values_list("id", flat=True)
+		)
+		self.assertNotIn(self.private_subject.id, br_scope)
+		self.assertEqual(
+			br_scope, {self.br_subject_a.id, self.br_subject_b.id}
+		)
+
+		# The private site keeps its own subject — not narrowed.
+		self.assertEqual(
+			set(self.private_setting.scope_subjects.values_list("id", flat=True)),
+			{self.private_subject.id},
+		)
+
+		# And the anonymous rule still matches the old one.
+		req = self.factory.get("/")
+		req.user = AnonymousUser()
+		self.assertNotIn(self.private_subject.id, visible_subject_ids(req))
+
 	def test_all_api_keys_resolve_to_a_site(self):
 		self._run_migration()
 		self.br_org_key.refresh_from_db()

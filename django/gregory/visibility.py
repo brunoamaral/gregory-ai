@@ -135,6 +135,17 @@ def visible_subject_ids(request) -> set[int]:
 	if api_scheme is not None:
 		if api_scheme.site_id is None:
 			return set()
+		# The key's site must belong to the key's organisation. Both fields
+		# exist and are independently editable during Phase 1 -- `organization`
+		# is not retired until Phase 4 -- so a mismatched pair would otherwise
+		# hand one organisation's credential another organisation's subject
+		# scope. Fail closed on a mismatch rather than trusting site_id alone.
+		from gregory.models import OrganizationSite
+
+		if not OrganizationSite.objects.filter(
+			organization_id=api_scheme.organization_id, site_id=api_scheme.site_id
+		).exists():
+			return set()
 		return set(
 			CustomSetting.objects.filter(site_id=api_scheme.site_id)
 			.exclude(scope_subjects__isnull=True)

@@ -197,6 +197,16 @@ class VisibleSubjectIdsAPIKeyTest(TestCase):
 			api_public=False,
 		)
 
+		# A key's site must belong to the key's organisation -- register the
+		# ownership these fixtures rely on. Without OrganizationSite rows the
+		# binding is unverifiable and visible_subject_ids fails closed.
+		OrganizationSite.objects.create(
+			organization=self.org, site=self.site, is_default=True
+		)
+		OrganizationSite.objects.create(
+			organization=self.org, site=self.other_site
+		)
+
 		self.scheme = APIAccessScheme.objects.create(
 			client_name="Bound Key",
 			client_contacts="a@b.com",
@@ -228,6 +238,39 @@ class VisibleSubjectIdsAPIKeyTest(TestCase):
 		self.assertFalse(CustomSetting.objects.get(site=self.site).api_public)
 		result = visible_subject_ids(self._key_request(self.scheme))
 		self.assertIn(self.bound_subject.id, result)
+
+	def test_key_whose_site_is_not_owned_by_its_org_sees_nothing(self):
+		"""A key's site must belong to the key's organisation.
+
+		`organization` and `site` both exist and are independently editable
+		until Phase 4 retires the former, so a mismatched pair is reachable
+		through the admin. It must fail closed rather than hand this
+		credential another organisation's subject scope."""
+		foreign_org = Organization.objects.create(
+			name="Foreign Co", slug="vsi-key-foreign-org"
+		)
+		foreign_team = Team.objects.create(
+			organization=foreign_org, name="Foreign", slug="vsi-key-foreign-team"
+		)
+		foreign_subject = Subject.objects.create(
+			subject_name="Foreign",
+			subject_slug="vsi-key-foreign-subj",
+			team=foreign_team,
+		)
+		foreign_site, _ = _make_site_with_scope(
+			"vsi-key-foreign.test", "Foreign Site", [foreign_subject], api_public=False
+		)
+		OrganizationSite.objects.create(
+			organization=foreign_org, site=foreign_site, is_default=True
+		)
+
+		# Point this organisation's key at a site another organisation owns.
+		self.scheme.site = foreign_site
+		self.scheme.save(update_fields=["site"])
+
+		result = visible_subject_ids(self._key_request(self.scheme))
+		self.assertEqual(result, set())
+		self.assertNotIn(foreign_subject.id, result)
 
 	def test_key_with_no_site_yet_sees_nothing(self):
 		"""Phase 1 does not yet enforce that every key has a site. An
