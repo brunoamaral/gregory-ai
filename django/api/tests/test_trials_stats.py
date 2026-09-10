@@ -74,6 +74,7 @@ from organizations.models import Organization
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
+from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import OrganizationApiSettings, Subject, Team, Trials
 from gregory.utils.trial_field_normalizers import (
 	TrialPhase,
@@ -83,14 +84,34 @@ from gregory.utils.trial_field_normalizers import (
 	TrialStudyType,
 )
 
+# Under subject-scoped visibility a trial with no subject is invisible to
+# everyone, but the overwhelming majority of `_make_trial(...)` calls in this
+# file (nearly all of them) were written against the old organisation rule
+# and pass no `subjects=` at all. Rather than touch every call site, each
+# team created via `_make_org_team` gets one default subject, published (or
+# kept private) to match that team's organisation, and registered here so
+# `_make_trial` can fall back to it when the caller doesn't pass one
+# explicitly. `_ORG_SITES` gives `_make_api_scheme` the matching site to bind
+# a key to, for the same reason.
+_TEAM_DEFAULT_SUBJECTS = {}
+_ORG_SITES = {}
 
-def _make_org_team(name, slug, public=True):
+
+def _make_org_team(name, slug, public=True, subject_name=None, subject_slug=None):
 	org = Organization.objects.create(name=name, slug=slug)
 	OrganizationApiSettings.objects.filter(organization=org).update(
 		make_api_public=public
 	)
 	team = Team.objects.create(organization=org, name=name, slug=slug)
-	return org, team
+	subject = Subject.objects.create(
+		team=team,
+		subject_name=subject_name or f"{name} Subject",
+		subject_slug=subject_slug or f"{slug}-subject",
+	)
+	_TEAM_DEFAULT_SUBJECTS[team.pk] = subject
+	publisher = publish_subjects if public else private_site_publishing
+	_ORG_SITES[org.pk] = publisher(subject, organization=org)
+	return org, team, subject
 
 
 def _make_subject(team, name, slug):
@@ -112,16 +133,26 @@ def _make_trial(
 	)
 	for team in teams:
 		trial.teams.add(team)
-	for subject in subjects:
+	# Explicit subjects win; otherwise fall back to each team's default so
+	# the many pre-existing calls that never mention a subject stay visible.
+	tagged_subjects = list(subjects) or [
+		_TEAM_DEFAULT_SUBJECTS[team.pk]
+		for team in teams
+		if team.pk in _TEAM_DEFAULT_SUBJECTS
+	]
+	for subject in tagged_subjects:
 		trial.subjects.add(subject)
 	return trial
 
 
-def _make_api_scheme(org, name):
+def _make_api_scheme(org, name, site=None):
 	return APIAccessScheme.objects.create(
 		client_name=name,
 		client_contacts=f"{name}@example.com",
 		organization=org,
+		# A key without a site resolves to no subjects at all; fall back to
+		# the site _make_org_team already created for this org.
+		site=site or _ORG_SITES.get(org.pk),
 		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
@@ -142,11 +173,13 @@ class TrialStatsBase(TestCase):
 		# cached stats from a previous test can't leak into this one.
 		cache.clear()
 
-		self.org, self.team = _make_org_team("Stats Org", "stats-org")
-		self.other_org, self.other_team = _make_org_team(
+		self.org, self.team, self.subject = _make_org_team(
+			"Stats Org", "stats-org",
+			subject_name="Stats Subject", subject_slug="stats-subject",
+		)
+		self.other_org, self.other_team, self.other_subject = _make_org_team(
 			"Other Stats Org", "other-stats-org"
 		)
-		self.subject = _make_subject(self.team, "Stats Subject", "stats-subject")
 
 		self.t1 = _make_trial(
 			"T1",
@@ -273,6 +306,11 @@ class TrialStatsBySubjectTest(TrialStatsBase):
 		other_subject = _make_subject(
 			self.other_team, "Other Subject", "other-subject"
 		)
+		# No organization= here: other_org already has a default site from
+		# _make_org_team, and OrganizationSite allows only one default per
+		# org. Anonymous visibility only needs an api_public site scoping
+		# the subject, so this stands alone.
+		publish_subjects(other_subject)
 		self.t3.subjects.add(self.subject)
 		self.t4.subjects.add(other_subject)
 
@@ -291,6 +329,11 @@ class TrialStatsBySubjectTest(TrialStatsBase):
 		other_subject = _make_subject(
 			self.other_team, "Other Subject", "other-subject"
 		)
+		# No organization= here: other_org already has a default site from
+		# _make_org_team, and OrganizationSite allows only one default per
+		# org. Anonymous visibility only needs an api_public site scoping
+		# the subject, so this stands alone.
+		publish_subjects(other_subject)
 		self.t4.subjects.add(other_subject)
 
 		resp = self.client.get("/trials/stats/", {"team_id": self.team.id})
@@ -303,7 +346,7 @@ class TrialStatsBySubjectTest(TrialStatsBase):
 		# A visible (public-org) trial tagged with a subject belonging to a
 		# NON-visible org: the subject must not leak into by_subject, even
 		# though the trial itself is counted.
-		hidden_org, hidden_team = _make_org_team(
+		hidden_org, hidden_team, _hidden_default_subject = _make_org_team(
 			"Hidden Org", "hidden-org", public=False
 		)
 		hidden_subject = _make_subject(
@@ -381,7 +424,7 @@ class TrialStatsCachingTest(TrialStatsBase):
 		# an API key bound to the org can. If the cache key ignored the
 		# caller's visible orgs, whichever request ran first would leak its
 		# stats to the other.
-		priv_org, priv_team = _make_org_team(
+		priv_org, priv_team, _priv_subject = _make_org_team(
 			"Private Stats Org", "private-stats-org", public=False
 		)
 		_make_trial(
@@ -653,6 +696,11 @@ class TrialStatsSexFacetTest(TrialStatsBase):
 		)
 		for team in teams:
 			trial.teams.add(team)
+			# Mirrors _make_trial's default-subject fallback -- this helper
+			# bypasses that function, so it has to repeat the lookup.
+			default_subject = _TEAM_DEFAULT_SUBJECTS.get(team.pk)
+			if default_subject is not None:
+				trial.subjects.add(default_subject)
 		return trial
 
 	def test_every_sex_key_present_and_no_stray_keys(self):

@@ -460,7 +460,7 @@ class CachedStatsActionMixin:
 			for value in request.query_params.getlist(key)
 		)
 		digest = hashlib.sha256(
-			json.dumps({"orgs": orgs, "params": params}).encode()
+			json.dumps({"subjects": subjects, "params": params}).encode()
 		).hexdigest()
 		return f"{self.stats_cache_prefix}:{digest}"
 
