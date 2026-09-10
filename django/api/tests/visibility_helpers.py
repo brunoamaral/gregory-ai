@@ -61,10 +61,20 @@ def _make_site(*subjects, api_public, organization=None, domain=None, name=None)
 		# What visible_subject_ids walks for a signed-in member, and what it
 		# checks a site-bound API key against. Without it an authenticated
 		# caller sees nothing even though their organisation owns the team.
+		#
+		# is_default only on the FIRST site an organisation gets: there is a
+		# UniqueConstraint(organization, condition=is_default=True), and a
+		# fixture that gives one organisation two sites -- a base fixture plus
+		# a subclass adding its own, which is the normal shape here -- would
+		# otherwise fail on the second with an IntegrityError that says
+		# nothing about the real cause.
+		already_has_default = OrganizationSite.objects.filter(
+			organization=organization, is_default=True
+		).exists()
 		OrganizationSite.objects.get_or_create(
 			organization=organization,
 			site=site,
-			defaults={"is_default": True},
+			defaults={"is_default": not already_has_default},
 		)
 	return site
 

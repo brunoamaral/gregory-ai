@@ -4669,6 +4669,49 @@ class PublicSitesView(APIView):
 		return Response(PublicSiteSerializer(unique, many=True).data)
 
 
+def stats_payload_cache_key(team_id_list, visible_subject_ids, subject_ids):
+	"""Cache key for StatsView's whole-payload cache (layer 1).
+
+	Module-level and shared with the tests rather than built inline: the key
+	has three independent components and every one of them is load-bearing,
+	so a test that rebuilds the string by hand drifts silently the moment one
+	is added -- which is exactly what happened when the caller-scope
+	component went in.
+
+	  team_id_list         the requested ?team= narrowing; also the namespace
+	                       for the per-subject-row cache (layer 2), so a row
+	                       computed under one team scope is never served
+	                       under another.
+	  visible_subject_ids  the CALLER's own scope. Two site-bound API keys
+	                       belonging to the same organisation resolve to the
+	                       same team scope and, with no ?subject=, the same
+	                       "subj:all" -- but to different payloads and
+	                       different by_subject rosters. Without this
+	                       component one site is served the other's numbers
+	                       and subject names (PR #863 review finding 7).
+	                       Hashed to bound key length for the DB cache.
+	  subject_ids          the explicit ?subject=/?site= narrowing.
+	"""
+	team_part = (
+		"all"
+		if team_id_list is None
+		else ",".join(str(i) for i in sorted(team_id_list))
+	)
+	scope_part = (
+		"noscope"
+		if visible_subject_ids is None
+		else hashlib.sha256(
+			json.dumps(sorted(visible_subject_ids)).encode()
+		).hexdigest()[:32]
+	)
+	subject_part = (
+		"all"
+		if subject_ids is None
+		else ",".join(str(i) for i in sorted(set(subject_ids)))
+	)
+	return f"stats:{team_part}:scope:{scope_part}:subj:{subject_part}"
+
+
 class StatsView(APIView):
 	"""
 	Returns aggregate statistics about the data in the system.
@@ -4843,17 +4886,34 @@ class StatsView(APIView):
 				)
 			from sitesettings.models import CustomSetting
 
-			site_subject_ids = set(
+			# Validate EVERY requested site, not the union. Unioning first and
+			# checking only that the result is non-empty lets
+			# ?site=<reachable>,<unknown> succeed on the strength of the
+			# reachable one, silently ignoring the other -- so a caller
+			# probing site IDs cannot tell a real site from a typo, and a
+			# request that named something it cannot see still gets an
+			# answer. Each site must resolve to at least one subject the
+			# caller can already see, or the whole request 404s.
+			scope_by_site = {}
+			for row in (
 				CustomSetting.objects.filter(site_id__in=site_ids)
 				.exclude(scope_subjects__isnull=True)
-				.values_list("scope_subjects__id", flat=True)
-			)
-			# A site the caller cannot reach resolves to nothing, and an empty
-			# scope must not read as "no filter" -- that would silently widen
-			# the answer to everything. Force the 404 path instead, matching
-			# how an unreachable ?subject= behaves.
-			if not site_subject_ids:
-				raise Http404
+				.values_list("site_id", "scope_subjects__id")
+			):
+				scope_by_site.setdefault(row[0], set()).add(row[1])
+
+			site_subject_ids = set()
+			for requested in site_ids:
+				reachable = scope_by_site.get(requested, set())
+				if visible_subject_ids is not None:
+					reachable = reachable & set(visible_subject_ids)
+				# Covers all three cases the same way, deliberately: the site
+				# does not exist, it exists with an empty scope, or its whole
+				# scope is outside what this caller may see. Distinguishing
+				# them in the response would leak which site IDs are real.
+				if not reachable:
+					raise Http404
+				site_subject_ids |= reachable
 			subject_ids = (
 				sorted(site_subject_ids)
 				if subject_ids is None
@@ -4964,7 +5024,23 @@ class StatsView(APIView):
 				if team_id_list is None or s["team_id"] in team_id_list
 			]
 		else:
-			effective_subject_ids = None
+			# No explicit ?subject=/?site=. The content counts below must
+			# still be scoped, or an article, trial, source or subscriber
+			# attached only to an out-of-scope subject inflates /stats/ while
+			# being absent from every list endpoint -- the totals would
+			# describe data the caller cannot reach (PR #863 review finding
+			# 6). visible_subjects is already exactly the right default: it
+			# was filtered by visible_subject_ids above, and narrowed by
+			# ?team= when one was given.
+			#
+			# Stays None when the middleware is absent, so management commands
+			# and middleware-bypassing tests keep their unscoped behaviour --
+			# the same fallback contract as SubjectVisibilityMixin.
+			effective_subject_ids = (
+				None
+				if visible_subject_ids is None
+				else [s["id"] for s in visible_subjects]
+			)
 			by_subject_roster = visible_subjects
 
 		apply_subject = effective_subject_ids is not None
@@ -4978,15 +5054,8 @@ class StatsView(APIView):
 			if team_id_list is None
 			else ",".join(str(i) for i in sorted(team_id_list))
 		)
-		cache_key = (
-			"stats:"
-			+ team_part
-			+ ":subj:"
-			+ (
-				"all"
-				if subject_ids is None
-				else ",".join(str(i) for i in sorted(set(subject_ids)))
-			)
+		cache_key = stats_payload_cache_key(
+			team_id_list, visible_subject_ids, subject_ids
 		)
 		cached = cache.get(cache_key)
 		if cached is not None:

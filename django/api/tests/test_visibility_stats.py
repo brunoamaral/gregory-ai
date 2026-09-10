@@ -19,12 +19,15 @@ Run with:
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.test import TestCase
 from django.utils.timezone import now
 from organizations.models import Organization, OrganizationUser
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
+from sitesettings.models import CustomSetting
+from api.views import stats_payload_cache_key
 from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import Articles, Authors, OrganizationApiSettings, Sources, Subject, Team
 from subscriptions.models import Lists, Subscribers
@@ -78,11 +81,12 @@ def _make_trial(title, link, teams=(), subjects=()):
 	return trial
 
 
-def _make_api_scheme(org, name):
+def _make_api_scheme(org, name, site=None):
 	return APIAccessScheme.objects.create(
 		client_name=name,
 		client_contacts=f"{name}@example.com",
 		organization=org,
+		site=site,
 		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
@@ -92,6 +96,32 @@ def _make_api_scheme(org, name):
 # ---------------------------------------------------------------------------
 # Base setUp
 # ---------------------------------------------------------------------------
+
+
+def _key_for(case, team_ids=None, subject_ids=None):
+	"""Build StatsView's layer-1 cache key for the scope `case`'s client has.
+
+	Rebuilding the string by hand is what made these assertions drift the
+	moment the caller-scope component was added, so they go through the same
+	builder the view uses (api.views.stats_payload_cache_key) and resolve the
+	scope through the real visibility function rather than assuming it.
+
+	The caller is taken from the test case: `self.user` when it logged one
+	in, `self.scheme` when it set an API key, anonymous otherwise -- mirroring
+	however that class configured its client.
+	"""
+	from django.contrib.auth.models import AnonymousUser
+	from django.test import RequestFactory
+
+	from gregory.visibility import visible_subject_ids as _resolve
+
+	scheme = getattr(case, "scheme", None)
+	headers = (
+		{"HTTP_AUTHORIZATION": scheme.api_key} if scheme is not None else {}
+	)
+	request = RequestFactory().get("/stats/", **headers)
+	request.user = getattr(case, "user", None) or AnonymousUser()
+	return stats_payload_cache_key(team_ids, _resolve(request), subject_ids)
 
 
 class StatsVisibilityBase(TestCase):
@@ -104,26 +134,48 @@ class StatsVisibilityBase(TestCase):
 		self.pub_team = _make_team(self.pub_org, "Pub Team Stats")
 		self.priv_team = _make_team(self.priv_org, "Priv Team Stats")
 
+		# /stats/ counts are subject-scoped, so content must carry a subject
+		# and a site must publish it. One base subject per organisation, on
+		# that organisation's own site; subclasses add their own on top.
+		self.base_subj_mine = _make_subject(self.my_team, "Base Subj Mine")
+		self.base_subj_pub = _make_subject(self.pub_team, "Base Subj Pub")
+		self.base_subj_priv = _make_subject(self.priv_team, "Base Subj Priv")
+		self.base_site_mine = private_site_publishing(
+			self.base_subj_mine, organization=self.my_org
+		)
+		self.base_site_pub = publish_subjects(
+			self.base_subj_pub, organization=self.pub_org
+		)
+		self.base_site_priv = private_site_publishing(
+			self.base_subj_priv, organization=self.priv_org
+		)
+
 		# Articles
 		self.art_mine = _make_article(
-			"Mine Art", "https://st.ex/a1", teams=[self.my_team]
+			"Mine Art", "https://st.ex/a1", teams=[self.my_team],
+			subjects=[self.base_subj_mine],
 		)
 		self.art_pub = _make_article(
-			"Pub Art", "https://st.ex/a2", teams=[self.pub_team]
+			"Pub Art", "https://st.ex/a2", teams=[self.pub_team],
+			subjects=[self.base_subj_pub],
 		)
 		self.art_priv = _make_article(
-			"Priv Art", "https://st.ex/a3", teams=[self.priv_team]
+			"Priv Art", "https://st.ex/a3", teams=[self.priv_team],
+			subjects=[self.base_subj_priv],
 		)
 
 		# Trials
 		self.trial_mine = _make_trial(
-			"Mine Trial", "https://st.ex/t1", teams=[self.my_team]
+			"Mine Trial", "https://st.ex/t1", teams=[self.my_team],
+			subjects=[self.base_subj_mine],
 		)
 		self.trial_pub = _make_trial(
-			"Pub Trial", "https://st.ex/t2", teams=[self.pub_team]
+			"Pub Trial", "https://st.ex/t2", teams=[self.pub_team],
+			subjects=[self.base_subj_pub],
 		)
 		self.trial_priv = _make_trial(
-			"Priv Trial", "https://st.ex/t3", teams=[self.priv_team]
+			"Priv Trial", "https://st.ex/t3", teams=[self.priv_team],
+			subjects=[self.base_subj_priv],
 		)
 
 		self.client = APIClient()
@@ -226,7 +278,7 @@ class AuthenticatedUserStatsVisibilityTest(StatsVisibilityBase):
 class APIKeyStatsVisibilityTest(StatsVisibilityBase):
 	def setUp(self):
 		super().setUp()
-		self.scheme = _make_api_scheme(self.my_org, "stats-key")
+		self.scheme = _make_api_scheme(self.my_org, "stats-key", site=self.base_site_mine)
 		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
 
 	def test_own_team_visible(self):
@@ -414,8 +466,8 @@ class StatsCacheTest(StatsVisibilityBase):
 		self.client.get("/stats/", {"team": self.pub_team2.id})
 
 		# Both requests must produce distinct, non-None cache entries.
-		key1 = f"stats:{self.pub_team.id}:subj:all"
-		key2 = f"stats:{self.pub_team2.id}:subj:all"
+		key1 = _key_for(self, [self.pub_team.id])
+		key2 = _key_for(self, [self.pub_team2.id])
 		self.assertIsNotNone(django_cache.get(key1))
 		self.assertIsNotNone(django_cache.get(key2))
 		self.assertNotEqual(key1, key2)
@@ -424,7 +476,7 @@ class StatsCacheTest(StatsVisibilityBase):
 		"""setUp.cache.clear() isolates test runs."""
 		from django.core.cache import cache as django_cache
 
-		self.assertIsNone(django_cache.get("stats:all:subj:all"))
+		self.assertIsNone(django_cache.get(_key_for(self)))
 
 
 # ---------------------------------------------------------------------------
@@ -659,9 +711,19 @@ class SubjectFilterStatsTest(SubjectStatsBase):
 		self.assertEqual(resp.status_code, 200)
 		self.assertEqual(resp.data["articles"], 1)  # art_mine, not art_teamless
 
-	def test_source_with_null_subject_dropped_when_filtering(self):
+	def test_source_with_null_subject_is_never_counted(self):
+		"""A Source with subject=None is counted in neither case.
+
+		It used to be counted when no ?subject= was given. That was the stats
+		endpoint disagreeing with /sources/, which scopes on
+		subject_id__in=<visible> — a NULL subject_id matches no IN list, so
+		such a source has always been unreachable there. Since the stats
+		content filter defaults to the caller's visible subject set (PR #863
+		review finding 6), the two agree: /stats/ no longer reports rows the
+		list endpoint will not return.
+		"""
 		resp_unfiltered = self.client.get("/stats/", {"team": self.my_team.id})
-		self.assertEqual(resp_unfiltered.data["sources"]["total"], 2)
+		self.assertEqual(resp_unfiltered.data["sources"]["total"], 1)
 
 		resp_filtered = self.client.get(
 			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
@@ -739,8 +801,8 @@ class SubjectStatsCacheTest(SubjectStatsBase):
 		self.client.get(
 			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
 		)
-		key_unfiltered = f"stats:{self.my_team.id}:subj:all"
-		key_filtered = f"stats:{self.my_team.id}:subj:{self.subj_a.id}"
+		key_unfiltered = _key_for(self, [self.my_team.id])
+		key_filtered = _key_for(self, [self.my_team.id], [self.subj_a.id])
 		cached_unfiltered = django_cache.get(key_unfiltered)
 		cached_filtered = django_cache.get(key_filtered)
 		self.assertIsNotNone(cached_unfiltered)
@@ -756,8 +818,8 @@ class SubjectStatsCacheTest(SubjectStatsBase):
 		self.client.get(
 			"/stats/", {"team": self.my_team.id, "subject": self.subj_b.id}
 		)
-		key_a = f"stats:{self.my_team.id}:subj:{self.subj_a.id}"
-		key_b = f"stats:{self.my_team.id}:subj:{self.subj_b.id}"
+		key_a = _key_for(self, [self.my_team.id], [self.subj_a.id])
+		key_b = _key_for(self, [self.my_team.id], [self.subj_b.id])
 		self.assertIsNotNone(django_cache.get(key_a))
 		self.assertIsNotNone(django_cache.get(key_b))
 
@@ -768,10 +830,9 @@ class SubjectStatsCacheTest(SubjectStatsBase):
 			"/stats/",
 			{"team": self.my_team.id, "subject": f"{self.subj_a.id},{self.subj_b.id}"},
 		)
-		sorted_ids = ",".join(
-			str(i) for i in sorted([self.subj_a.id, self.subj_b.id])
+		key_sorted = _key_for(
+			self, [self.my_team.id], [self.subj_b.id, self.subj_a.id]
 		)
-		key_sorted = f"stats:{self.my_team.id}:subj:{sorted_ids}"
 		self.assertIsNotNone(django_cache.get(key_sorted))
 
 		resp2 = self.client.get(
@@ -858,7 +919,11 @@ class BySubjectFacetTest(StatsVisibilityBase):
 			subject=self.subj_beta,
 			source_for="science paper",
 		)
-		# No subject at all → must not appear in any by_subject row.
+		# No subject at all → appears in no by_subject row, and since the
+		# stats content filter defaults to the caller's visible subjects
+		# (PR #863 review finding 6) it is absent from sources.total too,
+		# matching /sources/ where a NULL subject_id has always been
+		# unreachable.
 		Sources.objects.create(
 			name="Null Feed",
 			link="https://null-domain.example.com/feed",
@@ -908,9 +973,9 @@ class BySubjectFacetTest(StatsVisibilityBase):
 		self.assertEqual(rows[self.subj_alpha.id]["sources"], 1)
 		# Domain shared with alpha, different subject → appears here too.
 		self.assertEqual(rows[self.subj_beta.id]["sources"], 1)
-		# Shared domain counted once overall despite feeding two subjects,
-		# plus the null-domain source → 2 total.
-		self.assertEqual(resp.data["sources"]["total"], 2)
+		# Shared domain counted once overall despite feeding two subjects.
+		# The null-subject source is not counted at all — see the fixture.
+		self.assertEqual(resp.data["sources"]["total"], 1)
 
 	def test_no_subscribers_key_in_by_subject_rows(self):
 		resp = self.client.get("/stats/", {"team": self.my_team.id})
@@ -1015,7 +1080,7 @@ class BySubjectRowCacheTest(SubjectStatsBase):
 
 		self.client.get("/stats/", {"team": self.my_team.id})  # warms both layers
 
-		layer1_key = f"stats:{self.my_team.id}:subj:all"
+		layer1_key = _key_for(self, [self.my_team.id])
 		django_cache.delete(layer1_key)
 
 		through_table = Articles.subjects.through._meta.db_table
@@ -1077,7 +1142,7 @@ class BySubjectRowCacheTest(SubjectStatsBase):
 		self.subj_a.subject_name = "Renamed Subject A"
 		self.subj_a.save(update_fields=["subject_name"])
 
-		django_cache.delete(f"stats:{self.my_team.id}:subj:all")  # layer-1 only
+		django_cache.delete(_key_for(self, [self.my_team.id]))  # layer-1 only
 
 		resp = self.client.get("/stats/", {"team": self.my_team.id})
 		row = next(r for r in resp.data["by_subject"] if r["subject_id"] == self.subj_a.id)
@@ -1102,7 +1167,9 @@ class BySubjectRowCacheTest(SubjectStatsBase):
 			subjects=[self.subj_a],
 		)
 
-		django_cache.delete(f"stats:{self.my_team.id}:subj:{self.subj_a.id}")
+		django_cache.delete(
+			_key_for(self, [self.my_team.id], [self.subj_a.id])
+		)
 
 		resp = self.client.get(
 			"/stats/", {"team": self.my_team.id, "subject": self.subj_a.id}
@@ -1160,7 +1227,95 @@ class SiteFilterStatsTest(SubjectStatsBase):
 		resp = self.client.get("/stats/", {"site": "not-an-id"})
 		self.assertEqual(resp.status_code, 400)
 
+	def test_a_reachable_site_plus_an_unknown_one_404s(self):
+		"""Every requested site is validated, not just the union.
+
+		Unioning first and checking only that the result is non-empty would
+		let the reachable half carry the request, silently ignoring the
+		other -- so a caller probing IDs could not tell a real site from a
+		typo, and a request naming something it cannot see would still get
+		an answer.
+		"""
+		resp = self.client.get(
+			"/stats/", {"site": f"{self.my_site.id},999999"}
+		)
+		self.assertEqual(resp.status_code, 404)
+
+	def test_a_reachable_site_plus_an_unreachable_one_404s(self):
+		resp = self.client.get(
+			"/stats/", {"site": f"{self.my_site.id},{self.priv_site.id}"}
+		)
+		self.assertEqual(resp.status_code, 404)
+
+	def test_a_site_with_an_empty_scope_404s(self):
+		# Same answer as "does not exist" and "cannot see it", on purpose:
+		# distinguishing them would leak which site IDs are real.
+		empty_site = Site.objects.create(
+			domain="empty-scope.example.com", name="Empty Scope"
+		)
+		CustomSetting.objects.create(
+			site=empty_site, title="Empty Scope settings", api_public=True
+		)
+		self.assertEqual(
+			self.client.get("/stats/", {"site": empty_site.id}).status_code, 404
+		)
+
 	def test_organization_still_works_unchanged(self):
 		# Deprecated, not removed, and still means what it always meant.
 		resp = self.client.get("/stats/", {"organization": self.my_org.id})
 		self.assertEqual(resp.status_code, 200)
+
+
+class StatsCrossTenantCacheTest(SubjectStatsBase):
+	"""
+	Two site-bound API keys in the SAME organisation must not share a
+	/stats/ payload (PR #863 review finding 7).
+
+	They resolve to the same ?team= narrowing and, with no ?subject=, to the
+	same "subj:all" — so a key built only from the request parameters is
+	identical for both, while their visible subject sets, their counts and
+	their by_subject rosters are not. The caller's own scope is therefore
+	part of the key.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.client.logout()
+		# A second site under the same organisation, publishing a different
+		# subject with its own article.
+		self.other_subject = _make_subject(self.my_team, "Other Site Subject")
+		self.other_site = private_site_publishing(
+			self.other_subject, organization=self.my_org
+		)
+		_make_article(
+			"Other Site Art",
+			"https://st.ex/other-site",
+			teams=[self.my_team],
+			subjects=[self.other_subject],
+		)
+
+	def _stats_for(self, site):
+		scheme = _make_api_scheme(
+			self.my_org, f"key-{site.id}-{id(site)}", site=site
+		)
+		client = APIClient()
+		client.credentials(HTTP_AUTHORIZATION=scheme.api_key)
+		resp = client.get("/stats/")
+		self.assertEqual(resp.status_code, 200)
+		return resp.data
+
+	def test_two_site_keys_in_one_org_do_not_share_a_payload(self):
+		first = self._stats_for(self.my_site)
+		second = self._stats_for(self.other_site)
+
+		first_subjects = {row["subject_id"] for row in first["by_subject"]}
+		second_subjects = {row["subject_id"] for row in second["by_subject"]}
+
+		# Each key sees only its own site's scope...
+		self.assertIn(self.subj_a.id, first_subjects)
+		self.assertNotIn(self.other_subject.id, first_subjects)
+		self.assertIn(self.other_subject.id, second_subjects)
+		self.assertNotIn(self.subj_a.id, second_subjects)
+		# ...which is only possible if the second request was not served the
+		# first one's cached payload.
+		self.assertNotEqual(first["by_subject"], second["by_subject"])

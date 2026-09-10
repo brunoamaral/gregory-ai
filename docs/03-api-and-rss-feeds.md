@@ -405,7 +405,6 @@ in-scope team(s) have subjects, but the key is always present):
 
 | Parameter | Type | Behaviour |
 |:----------|:-----|:----------|
-| `organization` | int or CSV of ints | Scope counts to one or more organisations. Alias `org` is accepted. |
 | `team` | int or CSV of ints | Scope counts to one or more teams. |
 | `subject` | int or CSV of ints | Scope counts to one or more subjects (union, not intersection — matches `team`/`organization`, not the `subject_id` filter on the list endpoints). Adds/populates `by_subject`. IDs only — subject slugs are not unique across teams, so there is no slug form of this filter here. |
 | `site` | int or comma-separated ints | Scope to the subjects one or more sites publish. Sugar for `subject=` with that site's scope; intersects with an explicit `subject=` rather than overriding it. A site the caller cannot reach returns 404. |
@@ -419,7 +418,7 @@ When both `organization` and `team` are given the effective scope is their **int
 - Lists **every subject in scope**, including ones with zero articles and zero trials — this is deliberate (it doubles as the data a subject picker needs) and differs from `/articles/stats/` and `/trials/stats/`, which aggregate off the through table and omit empty subjects.
 - Scope: subjects whose team is in the resolved team scope, further narrowed to `?subject=` when given. Ordered by `subject_name` ascending.
 - Per-subject counts are `articles`, `trials`, `authors`, `sources` — **no per-subject `subscribers`**. With `Lists` as the only path from a subscriber to a subject, that number would describe list-tagging more than the subject itself.
-- `sources` counts distinct **domains** (matching the top-level `sources.total` semantics), not feed rows — two RSS feeds on the same domain count once. A `Sources` row with `subject` unset (`null`) is excluded from every `by_subject` row and, when `?subject=` is applied, from the filtered totals too.
+- `sources` counts distinct **domains** (matching the top-level `sources.total` semantics), not feed rows — two RSS feeds on the same domain count once. A `Sources` row with `subject` unset (`null`) is excluded from every `by_subject` row and from the totals, with or without `?subject=` — content counts are scoped to the caller's visible subjects, and a NULL subject matches none of them. This matches `/sources/`, where such a row has always been unreachable.
 - Neither `authors` nor `sources` in a `by_subject` row sums to the top-level total, and that's correct: both are *distinct within that subject*. An author publishing under two subjects appears in both rows and once at the top; a domain feeding two subjects likewise.
 - A trial with no subject assigned is excluded from every `by_subject` row, so a subject-filtered `trials` count can be lower than the team-scoped one. Coverage is now near-complete — measured 2026-09-09, 63 of 17,404 trials (0.4%) and 372 of 53,054 articles (0.7%) carry no subject — so the gap is small, but it is a gap, not a bug.
 
