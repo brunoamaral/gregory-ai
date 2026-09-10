@@ -104,11 +104,22 @@ def visible_subject_ids(request) -> set[int]:
 	"""
 	Return the set of Subject IDs the caller is permitted to see.
 
-	Site-scoped API visibility, Phase 1: introduces this function alongside
+	Site-scoped API visibility: introduced in Phase 1 alongside
 	``visible_org_ids`` -- see that function's docstring for the middleware
-	and lazy-evaluation contract, which this follows identically. No call
-	site reads this yet; conversion happens phase by phase later in the
-	project (see SITE-API-VISIBILITY-PLAN.md, a local planning doc).
+	and lazy-evaluation contract, which this follows identically. Call
+	sites are converted phase by phase; as of Phase 4 both RSS feeds
+	(``rss/views.py``) read this, while ``api/views.py``, the serializers
+	and the admin still read ``visible_org_ids``. Both functions are live
+	at once for the duration.
+
+	Curation is the whole grant. A subject is visible when some site the
+	caller can reach lists it in ``scope_subjects`` -- nothing else confers
+	access and nothing else withholds it. In particular a subject with no
+	team is not special-cased: it is unreachable by default because nothing
+	curates it, but an administrator who does put one in a site's scope has
+	deliberately published it, and it resolves like any other. Re-checking
+	the owning team here would reinstate the ownership path this project
+	removes.
 
 	Rules (see spec §"Visibility resolution"):
 	  - Site-bound API key

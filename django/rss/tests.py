@@ -163,6 +163,20 @@ class FeedVisibilityTest(TestCase):
 	def test_subject_with_no_team_404s(self):
 		self.assertEqual(self._trials_feed(self.teamless).status_code, 404)
 
+	def test_subject_with_no_team_is_served_once_a_site_curates_it(self):
+		# The counterpart to the test above, and the reason it passes: a
+		# team-less subject is unreachable because nothing publishes it, not
+		# because it has no team. Curation is the whole grant, so an
+		# administrator who puts one in a public site's scope has published
+		# it deliberately and it resolves like any other subject. Pinned so
+		# that a well-meaning "team-less subjects are never public" guard
+		# cannot be added back without failing here.
+		settings_row = CustomSetting.objects.get(site=self.site)
+		settings_row.scope_subjects.add(self.teamless)
+		response = self._trials_feed(self.teamless)
+		self.assertEqual(response.status_code, 200)
+		self.assertIn("trial-teamless", response.content.decode())
+
 	def test_author_feed_404s_when_no_article_carries_a_visible_subject(self):
 		author = Authors.objects.create(
 			given_name="Un", family_name="Seen", ORCID="0000-0002-0000-0009"

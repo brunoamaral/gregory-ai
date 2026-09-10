@@ -18,7 +18,11 @@ Covers:
       - 404 when the subject is in no reachable site's scope
       - 200 and the subject's trials when it is
       - ?include_public=true extends visibility for identified callers
-  - Four caller archetypes: anonymous, authenticated member, API-key, null-org key
+  - Three caller archetypes: anonymous, authenticated member, API key.
+    (An earlier "null-org key" archetype is not reachable: APIAccessScheme
+    .organization is a non-null FK. A key whose *site* is null is reachable
+    and is covered below -- that is the state every key was in before the
+    Phase 1 backfill, and the one Phase 3 will start rejecting.)
 
 Run with:
     docker exec gregory python manage.py test api.tests.test_visibility_rss
@@ -480,6 +484,40 @@ class APIKeyTrialsFeedTest(TrialsFeedBase):
 			f"/feed/trials/subject/{self.pub_subj.subject_slug}/?include_public=true"
 		)
 		self.assertEqual(resp.status_code, 200)
+
+
+class SitelessAPIKeyTrialsFeedTest(TrialsFeedBase):
+	"""
+	A key with no site resolves to no subjects of its own. Every key has a
+	site in production (backfilled by sitesettings/0019) but the field is
+	still nullable until Phase 3 enforces it, so the branch is live and
+	needs pinning: without a site the key sees nothing, and with
+	?include_public=true it sees exactly the public scope -- public subjects
+	being public to everyone, key or no key.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.scheme = _make_api_scheme(self.my_org, "rss-siteless-key", site=None)
+		self.client.defaults["HTTP_AUTHORIZATION"] = self.scheme.api_key
+
+	def test_own_org_subject_404s_without_a_site(self):
+		# The organisation owns my_subj, but the key is not bound to the site
+		# that publishes it, and organisation membership no longer grants
+		# anything on its own.
+		resp = self.client.get(f"/feed/trials/subject/{self.my_subj.subject_slug}/")
+		self.assertEqual(resp.status_code, 404)
+
+	def test_public_subject_404s_without_the_flag(self):
+		resp = self.client.get(f"/feed/trials/subject/{self.pub_subj.subject_slug}/")
+		self.assertEqual(resp.status_code, 404)
+
+	def test_include_public_still_grants_the_public_scope(self):
+		resp = self.client.get(
+			f"/feed/trials/subject/{self.pub_subj.subject_slug}/?include_public=true"
+		)
+		self.assertEqual(resp.status_code, 200)
+		self.assertIn("Pub Trial", resp.content.decode())
 
 
 # ---------------------------------------------------------------------------
