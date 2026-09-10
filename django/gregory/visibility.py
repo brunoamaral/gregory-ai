@@ -128,13 +128,29 @@ def visible_subject_ids(request) -> set[int]:
 	        Phase 3; until then this is the entire anonymous rule. The
 	        Phase 1 equivalence test asserts this matches every subject
 	        visible under today's public-organisation rule.
+
+	``?include_public=true`` adds the scopes of every ``api_public`` site to
+	an identified caller's own scope, which is how a private site's frontend
+	reads public content alongside its own. It is a no-op for an anonymous
+	caller, whose scope is already exactly that set -- the same shape the
+	flag has in ``visible_org_ids``, restated in subjects (spec: "adds public
+	organisations" stops being true once organisations are not the unit).
+	It applies to an identified caller whose own scope came out empty too
+	(an API key with no site resolved, or one whose site and organisation
+	disagree): those resolve to no subjects of their own, and public
+	subjects are public to everyone, so the flag still means what it says.
 	"""
 	from sitesettings.models import CustomSetting
+
+	include_public = request.GET.get("include_public", "").lower() == "true"
+
+	def _resolve(owned: set[int]) -> set[int]:
+		return owned | _public_subject_ids() if include_public else owned
 
 	api_scheme = _resolve_api_scheme(request)
 	if api_scheme is not None:
 		if api_scheme.site_id is None:
-			return set()
+			return _resolve(set())
 		# The key's site must belong to the key's organisation. Both fields
 		# exist and are independently editable during Phase 1 -- `organization`
 		# is not retired until Phase 4 -- so a mismatched pair would otherwise
@@ -145,11 +161,13 @@ def visible_subject_ids(request) -> set[int]:
 		if not OrganizationSite.objects.filter(
 			organization_id=api_scheme.organization_id, site_id=api_scheme.site_id
 		).exists():
-			return set()
-		return set(
-			CustomSetting.objects.filter(site_id=api_scheme.site_id)
-			.exclude(scope_subjects__isnull=True)
-			.values_list("scope_subjects__id", flat=True)
+			return _resolve(set())
+		return _resolve(
+			set(
+				CustomSetting.objects.filter(site_id=api_scheme.site_id)
+				.exclude(scope_subjects__isnull=True)
+				.values_list("scope_subjects__id", flat=True)
+			)
 		)
 
 	if getattr(request, "user", None) is not None and request.user.is_authenticated:
@@ -161,21 +179,24 @@ def visible_subject_ids(request) -> set[int]:
 			)
 		)
 		if not org_ids:
-			return set()
+			return _resolve(set())
 		site_ids = set(
 			OrganizationSite.objects.filter(organization_id__in=org_ids).values_list(
 				"site_id", flat=True
 			)
 		)
 		if not site_ids:
-			return set()
-		return set(
-			CustomSetting.objects.filter(site_id__in=site_ids)
-			.exclude(scope_subjects__isnull=True)
-			.values_list("scope_subjects__id", flat=True)
+			return _resolve(set())
+		return _resolve(
+			set(
+				CustomSetting.objects.filter(site_id__in=site_ids)
+				.exclude(scope_subjects__isnull=True)
+				.values_list("scope_subjects__id", flat=True)
+			)
 		)
 
-	# Anonymous caller -- Phase 1 rule, see docstring.
+	# Anonymous caller -- Phase 1 rule, see docstring. include_public is a
+	# no-op here: this IS the public set.
 	return _public_subject_ids()
 
 

@@ -31,6 +31,8 @@ A read-only [MCP server](07-mcp-server.md) also exposes this API to LLM clients 
 
 Both feeds return the 50 most recent items, ordered by newest first.
 
+Both are scoped by subject. A subject is readable when it sits in the `scope_subjects` of a site the caller can see — for an anonymous caller, any site with *API public* on; for a site-bound API key, that key's own site; for a signed-in user, the sites owned by their organisations. The trials feed 404s when the requested subject is not one of those, and the author feed 404s when none of the author's articles carries one and otherwise lists only the articles that do. Team ownership grants no access: a subject owned by a team in a publicly visible organisation but curated into no site's scope is not readable, and neither is a subject with no team at all.
+
 The author feed's `<link>` element points at the site's author profile page (`https://{site.domain}/authors/{orcid}/`) when the current Site's `CustomSetting.has_author_pages` is on, and at `https://orcid.org/{orcid}` otherwise. See [Author profile page links](06-organisations-teams-and-sites.md#author-profile-page-links).
 
 ---
