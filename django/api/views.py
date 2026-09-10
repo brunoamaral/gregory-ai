@@ -4636,9 +4636,12 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 class PublicSitesView(APIView):
 	"""Sites with `api_public = True`.
 
-	Unscoped by design. Site-scoped API visibility fails closed when a caller
-	names no site, which leaves a new consumer unable to call anything: it
-	needs a site_id, and nothing else would tell it which exist. This endpoint
+	Unscoped by design. Site-scoped API visibility (Phase 3) fails closed
+	when an anonymous caller names no site AND the public union is
+	ambiguous -- two or more api_public sites exist with nothing to pick
+	one (gregory.site_resolution.NoSiteResolvedError). That leaves a new
+	consumer unable to call anything in that situation: it needs a
+	site_id, and nothing else would tell it which exist. This endpoint
 	breaks that circle.
 
 	Read-only, no auth, no pagination -- the list is a handful of rows and
@@ -4649,11 +4652,12 @@ class PublicSitesView(APIView):
 
 	def get(self, request):
 		# Shared with the 400 body gregory.site_resolution.NoSiteResolvedError
-		# raises when an anonymous caller names no site (Phase 3 of
-		# site-scoped API visibility) -- one code path, so the two can never
-		# disagree about which sites exist. PublicSiteSerializer above is
-		# schema-only (see its @extend_schema): public_sites() already
-		# returns plain {site_id, domain, name} dicts in that exact shape.
+		# raises when an anonymous caller's request is ambiguous between two
+		# or more api_public sites (Phase 3 of site-scoped API visibility) --
+		# one code path, so the two can never disagree about which sites
+		# exist. PublicSiteSerializer above is schema-only (see its
+		# @extend_schema): public_sites() already returns plain
+		# {site_id, domain, name} dicts in that exact shape.
 		return Response(public_sites())
 
 

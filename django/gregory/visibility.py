@@ -259,7 +259,13 @@ def visible_subject_ids(request) -> set[int]:
 		# subjects, no error.
 		return set()
 	return set(
-		CustomSetting.objects.filter(site_id=site_id)
+		# api_public=True, not just site_id=site_id: CustomSetting.site is a
+		# plain FK, not OneToOne, so a site can carry a second, PRIVATE
+		# settings row alongside the public one that made it eligible above.
+		# Filtering on site_id alone would union that private row's own
+		# scope_subjects into this anonymous response -- matching
+		# _public_subject_ids()'s own filter for the same reason.
+		CustomSetting.objects.filter(site_id=site_id, api_public=True)
 		.exclude(scope_subjects__isnull=True)
 		.values_list("scope_subjects__id", flat=True)
 	)

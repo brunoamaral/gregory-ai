@@ -21,14 +21,15 @@ evaluation would have produced.
 see ``gregory/visibility.py`` for the per-caller rules.
 
 As of Phase 3, resolving an anonymous caller's site can consult the
-``Origin``/``Referer`` headers (``gregory.site_resolution.resolve_anonymous_site``),
-which means the response can vary by ``Origin`` even though it's a
-client-controlled header. When ``visible_subject_ids`` does this, it flags
-the request via ``request._site_resolution_varies_by_origin`` (set as a
-side effect of evaluating the SimpleLazyObject inside ``get_response()``
-below), and this middleware turns that into a ``Vary: Origin`` response
-header once ``get_response()`` returns -- so a cache in front of this API
-never serves one Origin's resolution to another.
+``Origin`` header, and the ``Referer`` header when ``Origin`` is absent
+(``gregory.site_resolution.resolve_anonymous_site``), which means the
+response can vary by EITHER even though both are client-controlled. When
+``visible_subject_ids`` does this, it flags the request via
+``request._site_resolution_varies_by_origin`` (set as a side effect of
+evaluating the SimpleLazyObject inside ``get_response()`` below), and this
+middleware turns that into ``Vary: Origin, Referer`` response headers once
+``get_response()`` returns -- so a cache in front of this API never serves
+one Origin's (or Referer's) resolution to a request with a different one.
 """
 
 from django.utils.cache import patch_vary_headers
@@ -48,5 +49,8 @@ class VisibleOrgMiddleware:
 		)
 		response = self.get_response(request)
 		if getattr(request, "_site_resolution_varies_by_origin", False):
-			patch_vary_headers(response, ["Origin"])
+			# Both headers, not just Origin: resolve_anonymous_site() also
+			# falls back to Referer when Origin is absent, so the outcome
+			# can depend on either one.
+			patch_vary_headers(response, ["Origin", "Referer"])
 		return response

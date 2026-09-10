@@ -118,7 +118,9 @@ Only *API public* sites are candidates at every step, which is what makes trusti
 
 A **site-bound API key ignores `Origin`/`Referer`/`?site_id=` entirely** — the credential's own site always wins, so a client-controlled header can't override what the key grants. The same is true for a signed-in user: their organisations' sites decide, unaffected by any of the above.
 
-Responses that consulted `Origin` or `Referer` to reach their result carry `Vary: Origin`, so an HTTP cache in front of the API never serves one Origin's resolution to another. A response resolved purely by `?site_id=` does not vary by `Origin` at all.
+Responses that consulted `Origin` or `Referer` to reach their result carry `Vary: Origin, Referer`, so an HTTP cache in front of the API never serves one Origin's (or Referer's) resolution to a request carrying a different one. A response resolved purely by `?site_id=` does not vary by either header at all.
+
+> **`?site_id=` is also, separately, a content filter on `/articles/` and `/trials/`** (`teams__site_id`, via the legacy `Team.site` field — see [06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md) and the codebase's own tracking of retiring `Team.site`). The two uses are independent and the same query parameter feeds both, so a value that correctly resolves *visibility* can simultaneously narrow the *result set* to nothing, since `Team.site` is stale for most teams today. This is a known, pre-existing gap being tracked for a follow-up fix — until then, prefer `Origin`/`Referer` over `?site_id=` when calling a content endpoint anonymously if you don't also want that content filter applied.
 
 ### Discovering which sites exist
 

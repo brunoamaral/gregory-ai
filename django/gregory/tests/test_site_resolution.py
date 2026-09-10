@@ -172,6 +172,22 @@ class ResolveAnonymousSiteTest(TestCase):
 		self.assertTrue(varies)
 		self.assertFalse(ambiguous)
 
+	def test_malformed_bracketed_origin_does_not_crash(self):
+		"""Origin/Referer are client-controlled; a malformed bracketed host
+		makes urllib.parse's .hostname property raise ValueError instead of
+		returning None. That must fall through to the next resolution step
+		(here, the sole-public-site fallback), not surface as a 500."""
+		request = self.factory.get("/", HTTP_ORIGIN="https://[::1")
+		site_id, varies, ambiguous = resolve_anonymous_site(request)
+		self.assertEqual(site_id, self.pub_site.pk)
+		self.assertFalse(ambiguous)
+
+	def test_malformed_bracketed_referer_does_not_crash(self):
+		request = self.factory.get("/", HTTP_REFERER="https://[::1/page")
+		site_id, varies, ambiguous = resolve_anonymous_site(request)
+		self.assertEqual(site_id, self.pub_site.pk)
+		self.assertFalse(ambiguous)
+
 	def test_origin_spoofed_as_a_private_site_falls_back_to_the_sole_public_site(self):
 		"""The single most important property in this phase: a caller
 		claiming to come from a private site's domain must never be granted

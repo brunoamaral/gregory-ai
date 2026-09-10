@@ -12,12 +12,15 @@ public-union default.
 
 Phase 3 of site-scoped API visibility replaced that default with real site
 resolution: an anonymous caller now sees exactly ONE resolved api_public
-site's scope, and resolving to nothing raises
-gregory.site_resolution.NoSiteResolvedError (a DRF 400) rather than
-falling back to the union of every public site. VisibleSubjectIdsAnonymousTest
-below was rewritten for this -- see gregory/tests/test_site_resolution.py
-for resolve_anonymous_site()'s own resolution-order tests (?site_id= ->
-Origin -> Referer), which this file assumes rather than re-tests.
+site's scope. Resolving to nothing raises
+gregory.site_resolution.NoSiteResolvedError (a DRF 400) only when that
+"nothing" is genuine AMBIGUITY -- two or more api_public sites and no
+indicator naming one; zero api_public sites is unambiguous (an empty
+scope, no error) and is not this exception. See
+test_no_site_indicator_raises_once_a_second_public_site_exists below for
+the case that does raise, and gregory/tests/test_site_resolution.py for
+resolve_anonymous_site()'s own resolution-order tests (?site_id= -> Origin
+-> Referer), which this file assumes rather than re-tests.
 
 Run with:
     docker exec gregory python manage.py test gregory.tests.test_visibility_subjects
@@ -112,6 +115,27 @@ class VisibleSubjectIdsAnonymousTest(TestCase):
 		result = visible_subject_ids(self._anon_request_for_pub_site())
 		self.assertIn(self.pub_subject.id, result)
 		self.assertNotIn(self.priv_subject.id, result)
+
+	def test_a_private_settings_row_on_the_resolved_site_does_not_leak_its_scope(self):
+		"""CustomSetting.site is a plain FK, not OneToOne -- pub_site can
+		carry a SECOND, private settings row alongside the public one that
+		made it resolvable at all. The private row's own scope_subjects must
+		not be unioned into this anonymous response just because it shares
+		a site_id with the public row -- the query must still filter on
+		api_public=True, not site_id alone."""
+		second_row_subject = Subject.objects.create(
+			subject_name="Second Row Private",
+			subject_slug="vsi-anon-second-row-private",
+			team=self.team,
+		)
+		second_row = CustomSetting.objects.create(
+			site=self.pub_site, title="Pub Site Private Row", api_public=False
+		)
+		second_row.scope_subjects.add(second_row_subject)
+
+		result = visible_subject_ids(self._anon_request_for_pub_site())
+		self.assertIn(self.pub_subject.id, result)
+		self.assertNotIn(second_row_subject.id, result)
 
 	def test_spoofed_private_origin_falls_back_to_the_sole_public_site(self):
 		"""The security property Phase 3 exists to preserve: Origin is

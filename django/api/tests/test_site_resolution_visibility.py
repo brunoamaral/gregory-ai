@@ -15,7 +15,9 @@ Covers the acceptance list in PHASE-3-SITE-RESOLUTION-PLAN.md end to end:
     Origin as a private site never grants that site's scope.
   - A site-bound API key ignores a conflicting Origin entirely; so does a
     signed-in member.
-  - Vary: Origin is set exactly when the outcome could depend on it.
+  - Vary: Origin, Referer are set exactly when the outcome could depend on
+    either (resolve_anonymous_site() falls back to Referer when Origin is
+    absent, so a cache must not key on Origin alone).
   - GET /sites/ itself is never gated -- it's the discovery entry point.
   - RSS feeds and sitemaps (which resolve by SITE, not by caller -- Phase
     4b/5) are unaffected by any of this, since they never read
@@ -142,19 +144,37 @@ class TwoPublicSitesAmbiguityTest(TestCase):
 		resp = self.client.get("/articles/", HTTP_ORIGIN="https://not-a-registered-site.example")
 		self.assertEqual(resp.status_code, 400)
 
-	def test_vary_origin_set_on_the_400(self):
+	def test_vary_origin_and_referer_set_on_the_400(self):
 		resp = self.client.get("/articles/")
-		self.assertIn("Origin", resp.headers.get("Vary", ""))
+		vary = resp.headers.get("Vary", "")
+		self.assertIn("Origin", vary)
+		self.assertIn("Referer", vary)
 
-	def test_vary_origin_set_when_origin_actually_resolves(self):
+	def test_vary_origin_and_referer_set_when_origin_actually_resolves(self):
 		resp = self.client.get("/articles/", HTTP_ORIGIN=f"https://{self.site_a.domain}")
-		self.assertIn("Origin", resp.headers.get("Vary", ""))
+		vary = resp.headers.get("Vary", "")
+		self.assertIn("Origin", vary)
+		self.assertIn("Referer", vary)
 
-	def test_vary_origin_not_set_when_explicit_site_id_alone_settles_it(self):
-		"""?site_id= short-circuits before Origin is ever consulted, so a
-		cache keyed on this response need not vary by it."""
+	def test_vary_origin_and_referer_set_when_referer_actually_resolves(self):
+		"""resolve_anonymous_site() falls back to Referer when Origin is
+		absent, so the outcome can depend on Referer's value too -- a cache
+		must not vary by Origin alone."""
+		resp = self.client.get(
+			"/articles/", HTTP_REFERER=f"https://{self.site_a.domain}/page/"
+		)
+		vary = resp.headers.get("Vary", "")
+		self.assertIn("Origin", vary)
+		self.assertIn("Referer", vary)
+
+	def test_vary_not_set_when_explicit_site_id_alone_settles_it(self):
+		"""?site_id= short-circuits before Origin/Referer are ever
+		consulted, so a cache keyed on this response need not vary by
+		either."""
 		resp = self.client.get("/articles/", {"site_id": self.site_a.pk})
-		self.assertNotIn("Origin", resp.headers.get("Vary", ""))
+		vary = resp.headers.get("Vary", "")
+		self.assertNotIn("Origin", vary)
+		self.assertNotIn("Referer", vary)
 
 
 class SpoofedOriginNarrowingTest(TestCase):

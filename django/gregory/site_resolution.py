@@ -220,6 +220,18 @@ def resolve_anonymous_site(request):
 			site_id=site_id, api_public=True
 		).exists()
 
+	# KNOWN, PRE-EXISTING COLLISION (not introduced or fixed by this
+	# function): ArticleFilter/TrialFilter (api/filters.py) ALSO consume
+	# this exact query parameter, independently, as a content filter --
+	# `teams__site_id=value` via the stale Team.site edge (see
+	# SITE-API-VISIBILITY-SPEC.md, "site_id is broken today"). A caller
+	# passing a valid ?site_id= for VISIBILITY here can therefore also get
+	# its results filtered to empty by that unrelated, still-broken
+	# filter -- e.g. `GET /articles/?site_id=3` on this project's own data
+	# returns 0 results today, api_public and scope_subjects notwithstanding.
+	# Reconciling the two is deliberately Phase 6 (see the parent plan's
+	# "Out of scope"), not this function; do not "fix" it here without
+	# also updating that filter, or you'll just move the collision.
 	raw_site_id = request.GET.get("site_id", "").strip()
 	if raw_site_id:
 		try:
@@ -235,7 +247,15 @@ def resolve_anonymous_site(request):
 		value = request.META.get(header)
 		if not value:
 			continue
-		hostname = urlparse(value).hostname
+		try:
+			hostname = urlparse(value).hostname
+		except ValueError:
+			# Origin/Referer are client-controlled; a malformed bracketed
+			# host (e.g. "https://[::1") makes urlparse's .hostname raise
+			# rather than return None. Treat it the same as "no hostname" --
+			# an unresolved header, not a 500 -- and keep going: the next
+			# header, then the public-union fallback, still applies.
+			continue
 		if not hostname:
 			continue
 		site = find_site_by_domain(hostname)
