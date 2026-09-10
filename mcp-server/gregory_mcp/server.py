@@ -15,6 +15,7 @@ from mcp_types import ToolAnnotations
 from .cache import CATALOG_CACHE_TTL_MS
 from .prompts import register_prompts
 from .resources import register_resources
+from .site import SiteMiddleware
 from .telemetry import TelemetryMiddleware
 from .tools import articles, authors, catalog, stats, trials
 
@@ -22,9 +23,30 @@ READ_ONLY = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_worl
 
 # Reference-data resources change slowly; let clients cache them for as long as
 # the server itself does (CATALOG_CACHE_TTL_MS, see cache.py — one constant,
-# so the client-facing hint and the server's actual cache can't drift apart)
-# and share the cached value across callers (nothing in the payload is caller-specific).
-CATALOG_CACHE = CacheHint(ttl_ms=CATALOG_CACHE_TTL_MS, scope="public")
+# so the client-facing hint and the server's actual cache can't drift apart).
+#
+# resources/list only enumerates the two URIs below (gregory://subjects,
+# gregory://categories) — that list is identical for every caller regardless
+# of site, so it's safe to share across callers ("public", the only other
+# value CacheHint accepts per the 2026-07-28 SEP-2549 caching revision —
+# there's no "scoped to one site" option to ask for here).
+CATALOG_LIST_CACHE = CacheHint(ttl_ms=CATALOG_CACHE_TTL_MS, scope="public")
+
+# resources/read is different: SiteMiddleware (site.py) makes the actual
+# subjects/categories content this returns depend on the resolved site_id
+# for whichever request read it — CatalogCache._key() (cache.py) already
+# mixes site_id into the server-side cache key so this process never serves
+# one site's catalog to a caller resolved to another. But CacheHint is one
+# static value per method, chosen once here at server construction, not per
+# call — it can't switch between "public" and "private" depending on
+# whether *this particular* call resolved a site_id. Advertising it as
+# "public" would tell a client/proxy every response is shareable, undoing
+# that isolation the moment one exists (site A's catalog handed to site B's
+# caller from a shared cache). "private" is the safe choice in both cases a
+# single call can land in — it costs a no-site-resolved caller a caching
+# optimization it could technically have shared, but a resolved-site caller
+# can never leak into another's cache.
+CATALOG_READ_CACHE = CacheHint(ttl_ms=CATALOG_CACHE_TTL_MS, scope="private")
 
 # Tool/prompt schemas and server capabilities are static *between deploys* — unlike
 # the reference data above they change only when this code changes, so they get their
@@ -46,8 +68,8 @@ STATIC_CACHE = CacheHint(ttl_ms=30 * 60 * 1000, scope="public")
 # the hints it was constructed with, and a missing entry degrades silently to
 # ttlMs=0 ("never cache"), which is indistinguishable from working.
 CACHE_HINTS = {
-	"resources/list": CATALOG_CACHE,
-	"resources/read": CATALOG_CACHE,
+	"resources/list": CATALOG_LIST_CACHE,
+	"resources/read": CATALOG_READ_CACHE,
 	"tools/list": STATIC_CACHE,
 	"prompts/list": STATIC_CACHE,
 	"server/discover": STATIC_CACHE,
@@ -64,7 +86,12 @@ def build_server() -> MCPServer:
 		),
 		version="0.1.0",
 		cache_hints=CACHE_HINTS,
-		middleware=[TelemetryMiddleware()],
+		# SiteMiddleware first (outermost): it resolves this request's site_id
+		# — env override, else inbound Host via GET /sites/ — before anything
+		# else runs, so a cold-cache /sites/ fetch's latency lands outside
+		# TelemetryMiddleware's own per-tool-call accounting rather than being
+		# smeared into whichever tool call happened to trigger it.
+		middleware=[SiteMiddleware(), TelemetryMiddleware()],
 	)
 
 	server.add_tool(catalog.list_subjects, annotations=READ_ONLY)

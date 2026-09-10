@@ -82,7 +82,11 @@ def test_detail_endpoint_exists_in_schema(fn, path, schema_params):
 KNOWN_UNEXPOSED_PARAMS = {
 	"/articles/": {
 		"format",  # CSV — no export tool, see STAGE-2 plan "Risks"
-		"site_id",  # Django Site scoping; MCP client is already scoped to one instance
+		# Not a *tool* parameter — no LLM caller ever chooses it. GregoryClient.get()
+		# adds it transport-side to every upstream call from its own per-request
+		# resolution (env override, else inbound Host via GET /sites/) — see
+		# gregory_mcp/site.py. Absent from every tool's signature by design.
+		"site_id",
 		"source_id",  # niche — callers don't know source IDs
 		"subjects",
 		"subjects_any",  # multi-subject AND/OR; subject_id covers the common case
@@ -91,7 +95,7 @@ KNOWN_UNEXPOSED_PARAMS = {
 	},
 	"/trials/": {
 		"format",
-		"site_id",
+		"site_id",  # see /articles/'s entry above — same transport-level injection
 		"source_id",
 		"subjects",
 		"subjects_any",
@@ -193,6 +197,19 @@ def test_no_new_unreviewed_schema_params(fn, path, non_filter_args, schema_param
 		"account for. Add it to the tool, or to KNOWN_UNEXPOSED_PARAMS with "
 		"a reason if it's deliberately out of scope."
 	)
+
+
+def test_site_id_declared_endpoints_match_what_this_audit_found(schema_params):
+	"""Not a correctness requirement on GregoryClient.get() — it sends
+	`site_id` to every endpoint regardless (see gregory_mcp/site.py's module
+	docstring for why that's deliberate and safe). This is a drift detector:
+	it records which endpoints declare `site_id` as of the audit that
+	justified that design, so a schema regeneration that adds or removes it
+	somewhere is caught and reviewed rather than silently changing which
+	endpoints the parameter actually *does* something on.
+	"""
+	declared = {path for path, params in schema_params.items() if "site_id" in params}
+	assert declared == {"/articles/", "/articles/search/", "/trials/", "/trials/search/", "/trials/sites/"}
 
 
 def test_stats_endpoints_exist_in_schema(schema_params):

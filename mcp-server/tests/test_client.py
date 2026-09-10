@@ -12,6 +12,7 @@ from gregory_mcp.client import (
 	GregoryClient,
 	GregoryPaginationTruncatedError,
 )
+from gregory_mcp.site_context import _current_site_id
 from tests.conftest import TEST_SETTINGS
 
 
@@ -210,6 +211,102 @@ async def test_get_all_pages_returns_everything_when_it_fits():
 	results = await client.get_all_pages("/subjects/", max_pages=5)
 
 	assert [r["id"] for r in results] == [1, 2]
+
+
+async def test_get_all_pages_carries_site_id_on_every_page():
+	client = GregoryClient(TEST_SETTINGS)
+	seen_site_ids = []
+
+	def handler(request):
+		seen_site_ids.append(request.url.params.get("site_id"))
+		page = request.url.params.get("page", "1")
+		if page == "1":
+			return httpx2.Response(200, json={"next": "https://x/?page=2", "results": [{"id": 1}]})
+		return httpx2.Response(200, json={"next": None, "results": [{"id": 2}]})
+
+	client._client._transport = httpx2.MockTransport(handler)
+
+	token = _current_site_id.set(3)
+	try:
+		await client.get_all_pages("/subjects/", max_pages=5)
+	finally:
+		_current_site_id.reset(token)
+
+	assert seen_site_ids == ["3", "3"]
+
+
+async def test_no_site_id_in_context_means_no_site_id_param():
+	client = GregoryClient(TEST_SETTINGS)
+	seen = {}
+
+	def handler(request):
+		seen.update(request.url.params)
+		return httpx2.Response(200, json={})
+
+	client._client._transport = httpx2.MockTransport(handler)
+
+	await client.get("/articles/", {"team_id": 1})
+
+	assert "site_id" not in seen
+
+
+async def test_current_site_id_is_added_to_every_call():
+	client = GregoryClient(TEST_SETTINGS)
+	seen = {}
+
+	def handler(request):
+		seen.update(request.url.params)
+		return httpx2.Response(200, json={})
+
+	client._client._transport = httpx2.MockTransport(handler)
+
+	token = _current_site_id.set(3)
+	try:
+		await client.get("/articles/", {"team_id": 1})
+	finally:
+		_current_site_id.reset(token)
+
+	assert seen == {"team_id": "1", "site_id": "3"}
+
+
+async def test_current_site_id_is_added_even_with_no_other_params():
+	"""Detail endpoints (get_article, get_trial, ...) call client.get() with
+	no params dict at all — site_id must still be added transport-side."""
+	client = GregoryClient(TEST_SETTINGS)
+	seen = {}
+
+	def handler(request):
+		seen.update(request.url.params)
+		return httpx2.Response(200, json={})
+
+	client._client._transport = httpx2.MockTransport(handler)
+
+	token = _current_site_id.set(3)
+	try:
+		await client.get("/articles/123/")
+	finally:
+		_current_site_id.reset(token)
+
+	assert seen == {"site_id": "3"}
+
+
+async def test_caller_supplied_site_id_is_not_overridden():
+	client = GregoryClient(TEST_SETTINGS)
+	seen = {}
+
+	def handler(request):
+		seen.update(request.url.params)
+		return httpx2.Response(200, json={})
+
+	client._client._transport = httpx2.MockTransport(handler)
+
+	token = _current_site_id.set(3)
+	try:
+		await client.get("/articles/", {"site_id": 99})
+	finally:
+		_current_site_id.reset(token)
+
+	assert seen == {"site_id": "99"}
 
 
 async def test_get_all_pages_raises_rather_than_silently_truncating():

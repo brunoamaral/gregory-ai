@@ -45,3 +45,29 @@ def test_log_dir_passes_through(monkeypatch):
 	settings = load_settings()
 
 	assert settings.log_dir == "/var/log/gregory-mcp"
+
+
+def test_site_id_override_defaults_to_none(monkeypatch):
+	monkeypatch.setenv("GREGORY_API_URL", "https://gregory.test")
+	monkeypatch.delenv("GREGORY_SITE_ID", raising=False)
+
+	settings = load_settings()
+
+	assert settings.site_id_override is None
+
+
+def test_site_id_override_parses_int(monkeypatch):
+	monkeypatch.setenv("GREGORY_API_URL", "https://gregory.test")
+	monkeypatch.setenv("GREGORY_SITE_ID", "3")
+
+	settings = load_settings()
+
+	assert settings.site_id_override == 3
+
+
+def test_site_id_override_rejects_non_integer(monkeypatch):
+	monkeypatch.setenv("GREGORY_API_URL", "https://gregory.test")
+	monkeypatch.setenv("GREGORY_SITE_ID", "brain-regeneration")
+
+	with pytest.raises(RuntimeError, match="GREGORY_SITE_ID"):
+		load_settings()
