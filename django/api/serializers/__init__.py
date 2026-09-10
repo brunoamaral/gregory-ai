@@ -25,7 +25,7 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count, Q
 
-from api.serializers.mixins import OrgScopedSerializerMixin, _resolve_per_org_fields_org
+from api.serializers.mixins import ScopedSerializerMixin, _resolve_per_org_fields_org
 
 
 def get_custom_settings():
@@ -410,7 +410,7 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
 
 
 class ArticleSerializer(
-	OrgScopedSerializerMixin, serializers.HyperlinkedModelSerializer
+	ScopedSerializerMixin, serializers.HyperlinkedModelSerializer
 ):
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
@@ -552,7 +552,7 @@ class SponsorSerializer(serializers.ModelSerializer):
 		fields = ["id", "slug", "name", "sponsor_type", "trials_count"]
 
 
-class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
+class TrialSerializer(ScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
 	subjects = SubjectsSerializer(many=True, read_only=True)
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
@@ -803,7 +803,7 @@ class AuthorSerializer(serializers.ModelSerializer):
 		]
 
 	def get_articles_count(self, obj) -> int:
-		# The queryset always annotates a (correctly org-scoped) article_count,
+		# The queryset always annotates a (correctly subject-scoped) article_count,
 		# so prefer it and avoid a per-row COUNT query. Only fall back to a
 		# live query if a caller passes in an un-annotated instance directly.
 		annotated = getattr(obj, "article_count", None)
@@ -811,8 +811,12 @@ class AuthorSerializer(serializers.ModelSerializer):
 			return annotated
 		qs = obj.articles_set.all()
 		request = self.context.get("request")
-		if request is not None and hasattr(request, "visible_org_ids"):
-			return qs.filter(teams__organization_id__in=request.visible_org_ids).distinct().count()
+		if request is not None and hasattr(request, "visible_subject_ids"):
+			return (
+				qs.filter(subjects__in=request.visible_subject_ids)
+				.distinct()
+				.count()
+			)
 		return qs.count()
 
 	def get_relevant_articles_count(self, obj) -> int:
@@ -821,8 +825,8 @@ class AuthorSerializer(serializers.ModelSerializer):
 			return annotated
 		qs = obj.articles_set.filter(relevant=True)
 		request = self.context.get("request")
-		if request is not None and hasattr(request, "visible_org_ids"):
-			qs = qs.filter(teams__organization_id__in=request.visible_org_ids)
+		if request is not None and hasattr(request, "visible_subject_ids"):
+			qs = qs.filter(subjects__in=request.visible_subject_ids)
 		return qs.distinct().count()
 
 	def get_country(self, obj) -> Optional[str]:

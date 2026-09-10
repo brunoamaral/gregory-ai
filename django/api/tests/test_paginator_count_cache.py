@@ -9,12 +9,16 @@ Run with:
 """
 
 from django.db import connection
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
-from gregory.models import Articles, OrganizationApiSettings, Team, Trials
+from api.pagination import CappedPageNumberPagination
+
+from gregory.models import Articles, OrganizationApiSettings, Subject, Team, Trials
 from organizations.models import Organization
+
+from api.tests.visibility_helpers import publish_subjects
 
 
 class CountCacheSmokeTest(TestCase):
@@ -26,16 +30,22 @@ class CountCacheSmokeTest(TestCase):
 		self.team = Team.objects.create(
 			organization=self.org, name="Smoke Team", slug="smoke-team"
 		)
+		self.subject = Subject.objects.create(
+			subject_name="Smoke Subject", subject_slug="smoke-subject", team=self.team
+		)
+		publish_subjects(self.subject, organization=self.org)
 		for i in range(3):
 			a = Articles.objects.create(
 				title=f"Smoke {i}", link=f"https://ex.com/smoke-{i}"
 			)
 			a.teams.add(self.team)
+			a.subjects.add(self.subject)
 		for i in range(2):
 			t = Trials.objects.create(
 				title=f"Smoke Trial {i}", link=f"https://ex.com/smoke-trial-{i}"
 			)
 			t.teams.add(self.team)
+			t.subjects.add(self.subject)
 
 		self.client = APIClient()
 
@@ -126,4 +136,68 @@ class CountCacheSmokeTest(TestCase):
 			self._real_count_queries(ctx.captured_queries),
 			[],
 			"different sort_by/order should reuse the same count cache entry",
+		)
+
+
+class CountCacheSubjectScopeTests(TestCase):
+	"""Site-scoped API visibility, Phase 4: the subject scope is the cache
+	key's scope component -- visible_org_ids is no longer part of it at all.
+
+	Every endpoint sharing CappedPageNumberPagination (articles, trials,
+	sponsors, authors, the three search views) selects its rows by subject
+	now, so a cached count IS a count over a subject scope; there is no
+	longer a paginated org-keyed endpoint for visible_org_ids to protect,
+	and hashing it too would only fragment the cache for no isolation
+	benefit. See CappedPageNumberPagination._count_cache_key's comment.
+	"""
+
+	def setUp(self):
+		self.factory = RequestFactory()
+
+	def _key(self, org_ids, subject_ids):
+		request = self.factory.get("/articles/")
+		request.visible_org_ids = org_ids
+		request.visible_subject_ids = subject_ids
+		# DRF's query_params is a thin wrapper over GET on a plain request.
+		request.query_params = request.GET
+		return CappedPageNumberPagination()._count_cache_key(request)
+
+	def test_different_subject_scopes_do_not_share_a_cache_entry(self):
+		"""The property the whole key exists for. Two callers whose org scope
+		happens to match but whose subject scope differs must not collide."""
+		same_orgs = {1}
+		self.assertNotEqual(
+			self._key(same_orgs, {1, 2}),
+			self._key(same_orgs, {3, 4}),
+		)
+
+	def test_org_scope_no_longer_affects_the_cache_key(self):
+		"""Superseded rule: this used to assert isolation on visible_org_ids
+		too (the pre-Phase-4 cache key's whole scope component). Now that
+		every endpoint sharing this paginator selects rows by subject,
+		visible_org_ids plays no part in what a cached count means -- two
+		callers who differ only in org scope but share a subject scope
+		legitimately hit the same cache entry."""
+		same_subjects = {1}
+		self.assertEqual(
+			self._key({1}, same_subjects),
+			self._key({2}, same_subjects),
+		)
+
+	def test_identical_scopes_share_a_cache_entry(self):
+		"""Otherwise the cache never hits and the whole mechanism is dead
+		weight -- worth pinning alongside the isolation cases."""
+		self.assertEqual(
+			self._key({1, 2}, {3, 4}),
+			self._key({2, 1}, {4, 3}),
+		)
+
+	def test_a_missing_subject_scope_is_distinct_from_an_empty_one(self):
+		"""None means the middleware never ran (management command, test
+		bypassing middleware); set() means it ran and the caller can see
+		nothing. Collapsing them would let an unscoped internal caller share
+		a cache entry with a caller scoped to nothing."""
+		self.assertNotEqual(
+			self._key({1}, None),
+			self._key({1}, set()),
 		)

@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from rest_framework.test import APIClient
+from api.tests.visibility_helpers import publish_subjects
 from gregory.models import Authors
 from gregory.models import (
 	Articles,
@@ -31,6 +32,9 @@ class ArticleSearchViewTests(TestCase):
 		self.subject = Subject.objects.create(
 			subject_name="Test Subject", subject_slug="test-subject", team=self.team
 		)
+		# /articles/search/ validates subject_id against the caller's subject
+		# scope, so the subject must be published or every search 404s.
+		publish_subjects(self.subject, organization=self.organization)
 
 		# Create test data
 		self.article1 = Articles.objects.create(
@@ -230,6 +234,9 @@ class ArticleSearchViewQueryCountTests(TestCase):
 			subject_name="Other Subject",
 			subject_slug="other-subject",
 			team=self.team,
+		)
+		publish_subjects(
+			self.subject, other_subject, organization=self.organization
 		)
 
 		for i in range(3):

@@ -1,6 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
+from api.tests.visibility_helpers import publish_subjects
 from gregory.models import (
 	Authors,
 	Articles,
@@ -28,6 +29,9 @@ class AuthorSearchViewTests(TestCase):
 		self.subject = Subject.objects.create(
 			subject_name="Test Subject", subject_slug="test-subject", team=self.team
 		)
+		# /authors/search/ validates subject_id against the caller's subject
+		# scope, so the subject must be published or every search 404s.
+		publish_subjects(self.subject, organization=self.organization)
 
 		self.author1 = Authors.objects.create(given_name="Jane", family_name="Doe")
 		self.author2 = Authors.objects.create(given_name="John", family_name="Smith")

@@ -15,6 +15,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from api.serializers import TrialSerializer
+from api.tests.visibility_helpers import publish_subjects
 from gregory.models import Organization, OrganizationApiSettings, Subject, Team, Trials
 
 CONTACT_FIELDS = [
@@ -45,6 +46,7 @@ class TrialContactFieldsHiddenTests(TestCase):
 			subject_slug="contact-fields-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.organization)
 		self.trial = Trials.objects.create(
 			title="Contact Fields Trial",
 			link="https://example.com/contact-fields",

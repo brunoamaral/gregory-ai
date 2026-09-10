@@ -4,6 +4,7 @@ from rest_framework import status
 from django.utils import timezone
 
 from gregory.models import Trials, Team, Subject, Organization, OrganizationApiSettings
+from api.tests.visibility_helpers import publish_subjects
 
 
 class TrialIdentifierFilterTests(TestCase):
@@ -32,6 +33,7 @@ class TrialIdentifierFilterTests(TestCase):
 			subject_slug="identifier-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.org)
 
 		self.trial_nct = self._make_trial(
 			"Trial NCT one", identifiers={"nct": "NCT02521311"}, acronym="ReCOVER"

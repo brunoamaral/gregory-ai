@@ -2,7 +2,7 @@
 Tests for org-scoped takeaways read serialization.
 
 Verify ``ArticleSerializer.get_takeaways`` / ``get_summary_plain_english``
-and the omission behaviour added by ``OrgScopedSerializerMixin``.
+and the omission behaviour added by ``ScopedSerializerMixin``.
 
 Covers spec §10.3:
   - With API key for Org A: takeaways resolves to Org A's ArticleOrgContent
@@ -23,6 +23,7 @@ from organizations.models import Organization
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
+from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import (
 	Articles,
 	ArticleOrgContent,
@@ -60,20 +61,25 @@ def _make_subject(team, name):
 	)
 
 
-def _make_scheme(org, name):
+def _make_scheme(org, name, site=None):
+	"""``site`` is what binds the key to a subject scope; a key without one
+	resolves to no subjects at all."""
 	return APIAccessScheme.objects.create(
 		client_name=name,
 		client_contacts=f"{name}@example.com",
 		organization=org,
+		site=site,
 		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
 	)
 
 
-def _make_article(team, title="Test Article", link="https://example.com/art1"):
+def _make_article(team, title="Test Article", link="https://example.com/art1", subjects=()):
 	article = Articles.objects.create(title=title, link=link)
 	article.teams.add(team)
+	for subject in subjects:
+		article.subjects.add(subject)
 	return article
 
 
@@ -98,8 +104,10 @@ class TakeawaysReadWithApiKeyTest(TestCase):
 		self.client = APIClient()
 		self.org = _make_org("Read Org A")
 		self.team = _make_team(self.org, "Read Team A")
-		self.scheme = _make_scheme(self.org, "read-key-a")
-		self.article = _make_article(self.team)
+		self.subject = _make_subject(self.team, "Read Subject A")
+		self.site = private_site_publishing(self.subject, organization=self.org)
+		self.scheme = _make_scheme(self.org, "read-key-a", site=self.site)
+		self.article = _make_article(self.team, subjects=[self.subject])
 
 	def test_takeaways_from_org_content_when_key_present(self):
 		"""API key for Org A → takeaways resolves to ArticleOrgContent for Org A."""
@@ -147,8 +155,13 @@ class TakeawaysReadAnonymousTest(TestCase):
 		self.client = APIClient()
 		self.org = _make_org("Anon Org", public=True)
 		self.team = _make_team(self.org, "Anon Team")
+		self.subject = _make_subject(self.team, "Anon Subject")
+		publish_subjects(self.subject, organization=self.org)
 		self.article = _make_article(
-			self.team, title="Anon Article", link="https://example.com/anon"
+			self.team,
+			title="Anon Article",
+			link="https://example.com/anon",
+			subjects=[self.subject],
 		)
 		ArticleOrgContent.objects.create(
 			article=self.article,
@@ -180,8 +193,13 @@ class TakeawaysPublicOrgTeamIdTest(TestCase):
 		self.client = APIClient()
 		self.org = _make_org("Public Org TK", public=True)
 		self.team = _make_team(self.org, "Public Team TK")
+		self.subject = _make_subject(self.team, "Public Subject TK")
+		publish_subjects(self.subject, organization=self.org)
 		self.article = _make_article(
-			self.team, title="Public TK Article", link="https://example.com/pbtk"
+			self.team,
+			title="Public TK Article",
+			link="https://example.com/pbtk",
+			subjects=[self.subject],
 		)
 		ArticleOrgContent.objects.create(
 			article=self.article,
@@ -212,14 +230,20 @@ class TakeawaysTwoOrgsTest(TestCase):
 		self.org_b = _make_org("Dual Org B", "dual-org-b")
 		self.team_a = _make_team(self.org_a, "Dual Team A")
 		self.team_b = _make_team(self.org_b, "Dual Team B")
-		self.scheme_a = _make_scheme(self.org_a, "dual-key-a")
-		self.scheme_b = _make_scheme(self.org_b, "dual-key-b")
-		# Article shared across both orgs
+		self.subject_a = _make_subject(self.team_a, "Dual Subject A")
+		self.subject_b = _make_subject(self.team_b, "Dual Subject B")
+		self.site_a = private_site_publishing(self.subject_a, organization=self.org_a)
+		self.site_b = private_site_publishing(self.subject_b, organization=self.org_b)
+		self.scheme_a = _make_scheme(self.org_a, "dual-key-a", site=self.site_a)
+		self.scheme_b = _make_scheme(self.org_b, "dual-key-b", site=self.site_b)
+		# Article shared across both orgs -- each org's key must resolve it
+		# via its own subject, so it carries both.
 		self.article = Articles.objects.create(
 			title="Shared Article",
 			link="https://example.com/shared",
 		)
 		self.article.teams.add(self.team_a, self.team_b)
+		self.article.subjects.add(self.subject_a, self.subject_b)
 		ArticleOrgContent.objects.create(
 			article=self.article, organization=self.org_a, takeaways="Org A takeaway"
 		)

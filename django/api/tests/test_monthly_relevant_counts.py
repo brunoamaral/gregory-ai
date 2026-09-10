@@ -19,6 +19,7 @@ from django.utils.timezone import now
 from organizations.models import Organization
 from rest_framework.test import APIClient
 
+from api.tests.visibility_helpers import publish_subjects
 from gregory.models import (
 	Articles,
 	MLPredictions,
@@ -54,6 +55,7 @@ class MonthlyRelevantCountsTest(TestCase):
 			category_slug="relevant-category",
 		)
 		cls.category.subjects.add(cls.subject)
+		publish_subjects(cls.subject, organization=org)
 
 		# April: three relevant articles flagged by overlapping models plus one
 		# without predictions. The naive per-model sum is 5 (lstm 2 + pubmed_bert 2
@@ -265,6 +267,7 @@ class MonthlyCountsPerModelLatestPredictionTest(TestCase):
 			category_slug="latest-pred-category",
 		)
 		self.category.subjects.add(self.subject)
+		publish_subjects(self.subject, organization=org)
 
 		# Superseded DOWN: an old lstm prediction cleared the threshold, but the
 		# newest lstm prediction for the same article dropped below it. Must NOT
@@ -369,6 +372,7 @@ class MonthlyCountsAvailableModelsTest(TestCase):
 			category_slug="avail-models-category",
 		)
 		self.category.subjects.add(self.subject)
+		publish_subjects(self.subject, organization=org)
 
 		article = Articles.objects.create(
 			title="Below threshold algo",

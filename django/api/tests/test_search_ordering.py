@@ -19,6 +19,8 @@ from organizations.models import Organization
 from rest_framework.test import APIClient
 from rest_framework import status
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 class SearchOrderingTestCase(TestCase):
 	"""Test case for search endpoint ordering functionality"""
@@ -38,6 +40,7 @@ class SearchOrderingTestCase(TestCase):
 		self.subject = Subject.objects.create(
 			subject_name="Test Subject", subject_slug="test-subject", team=self.team
 		)
+		publish_subjects(self.subject, organization=self.organization)
 
 		# Create test source
 		self.source = Sources.objects.create(name="Test Source", link="http://test.com")

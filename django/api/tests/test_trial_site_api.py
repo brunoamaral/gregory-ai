@@ -14,6 +14,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from api.tests.visibility_helpers import publish_subjects
 from gregory.models import (
 	Organization,
 	OrganizationApiSettings,
@@ -47,6 +48,7 @@ class TrialSiteAPITests(TestCase):
 			subject_slug="trial-site-api-other-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, self.other_subject, organization=self.organization)
 
 		self.trial = Trials.objects.create(
 			title="Site API Test Trial",

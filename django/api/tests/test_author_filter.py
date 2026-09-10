@@ -1,8 +1,10 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
-from gregory.models import Authors, Articles, Team, OrganizationApiSettings
+from gregory.models import Authors, Articles, Team, Subject, OrganizationApiSettings
 from organizations.models import Organization
+
+from api.tests.visibility_helpers import publish_subjects
 
 
 class AuthorFilterTests(TestCase):
@@ -19,6 +21,12 @@ class AuthorFilterTests(TestCase):
 		team = Team.objects.create(
 			name="Author Filter Team", slug="aut-filter-team", organization=org
 		)
+		subject = Subject.objects.create(
+			subject_name="Author Filter Subject",
+			subject_slug="aut-filter-subject",
+			team=team,
+		)
+		publish_subjects(subject, organization=org)
 
 		# Create test authors
 		self.author1 = Authors.objects.create(
@@ -38,6 +46,7 @@ class AuthorFilterTests(TestCase):
 				link=f"https://example.com/aut-filter/{author.author_id}",
 			)
 			a.teams.add(team)
+			a.subjects.add(subject)
 			a.authors.add(author)
 
 		self.client = APIClient()

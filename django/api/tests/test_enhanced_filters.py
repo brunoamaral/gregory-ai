@@ -13,6 +13,8 @@ from gregory.models import (
 )
 from django.utils import timezone
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 class TrialFilterTests(TestCase):
 	"""Test cases for enhanced trial filtering"""
@@ -32,6 +34,7 @@ class TrialFilterTests(TestCase):
 		cls.subject = Subject.objects.create(
 			subject_name="Test Subject", subject_slug="test-subject", team=cls.team
 		)
+		publish_subjects(cls.subject, organization=cls.organization)
 
 		# Create test trials with various fields
 		cls.trial1 = Trials.objects.create(
@@ -294,6 +297,12 @@ class AuthorFilterTests(TestCase):
 		cls.team = Team.objects.create(
 			name="Author Filter Team", slug="author-filter-team", organization=cls.org
 		)
+		cls.subject = Subject.objects.create(
+			subject_name="Author Filter Subject",
+			subject_slug="author-filter-subject",
+			team=cls.team,
+		)
+		publish_subjects(cls.subject, organization=cls.org)
 
 		# Create test authors
 		cls.author1 = Authors.objects.create(
@@ -318,6 +327,7 @@ class AuthorFilterTests(TestCase):
 				link=f"https://example.com/{author.ORCID}",
 			)
 			a.teams.add(cls.team)
+			a.subjects.add(cls.subject)
 			a.authors.add(author)
 
 	def setUp(self):
@@ -416,6 +426,7 @@ class CategoryFilterTests(TestCase):
 			category_terms=["test", "category", "example"],
 		)
 		self.category.subjects.add(self.subject)
+		publish_subjects(self.subject, organization=self.organization)
 
 		self.client = APIClient()
 

@@ -13,6 +13,8 @@ from gregory.models import (
 )
 from organizations.models import Organization
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 def _count_cache_hit_is_a_db_query():
 	"""True when a warm CachedCountMixin cache hit costs one extra DB query.
@@ -43,6 +45,7 @@ class AuthorCoauthorsTest(TestCase):
 			subject_slug="coauthors-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.organization)
 
 		self.target = Authors.objects.create(given_name="Target", family_name="Author")
 		self.coauthor_a = Authors.objects.create(given_name="Alpha", family_name="Coauthor")
@@ -199,6 +202,7 @@ class AuthorCoauthorsQueryCountTest(TestCase):
 			subject_slug="coauthors-query-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.organization)
 
 		self.target = Authors.objects.create(given_name="Query", family_name="Target")
 

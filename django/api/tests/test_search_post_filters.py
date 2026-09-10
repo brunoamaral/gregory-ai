@@ -16,6 +16,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from api.tests.visibility_helpers import publish_subjects
 from gregory.models import (
 	ArticleSubjectRelevance,
 	Articles,
@@ -52,6 +53,9 @@ class ArticleSearchPostFilterTests(TestCase):
 			subject_slug="search-post-filter-other-subject",
 			team=self.team,
 		)
+		# The search views validate subject_id against the caller's subject
+		# scope, so both must be published or every search 404s.
+		publish_subjects(self.subject, self.other_subject, organization=self.org)
 
 		def make_article(title, link, pub_date, subjects=(self.subject,)):
 			a = Articles.objects.create(title=title, link=link)
@@ -233,6 +237,7 @@ class TrialSearchPostFilterTests(TestCase):
 			subject_slug="trial-search-post-filter-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.org)
 
 		def make_trial(title, link, date_registration, phase=None, has_results=False):
 			t = Trials.objects.create(
@@ -324,6 +329,11 @@ class TrialSearchPostFilterTests(TestCase):
 		identity_params forcing them from the body, a disagreeing query-string
 		subject_id would leak into the filterset and silently intersect against
 		the body's subject_id, emptying the results — not just being ignored."""
+		# Deliberately NOT published: the search view 404s on a subject_id
+		# outside the caller's scope, so a 200 here is only possible if the
+		# query-string value was discarded before that check ever ran. Do not
+		# "fix" this by publishing it — that would weaken the assertion to
+		# one a leaking query-string subject_id could also satisfy.
 		other_subject = Subject.objects.create(
 			subject_name="Other Trial POST Filter Subject",
 			subject_slug="other-trial-post-filter-subject",
@@ -385,6 +395,7 @@ class AuthorSearchPostFilterTests(TestCase):
 			subject_slug="author-search-post-filter-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.org)
 
 		self.author_pt = Authors.objects.create(
 			given_name="Ines", family_name="Silva", country="PT"

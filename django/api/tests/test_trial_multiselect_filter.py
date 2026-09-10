@@ -11,6 +11,8 @@ from gregory.models import (
 	OrganizationApiSettings,
 )
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 class TrialPhaseNormalizedMultiSelectFilterTests(TestCase):
 	"""Tests for the comma-separated OR filter on ?phase_normalized= for /trials/"""
@@ -67,6 +69,7 @@ class TrialPhaseNormalizedMultiSelectFilterTests(TestCase):
 			subject_slug="phase-ms-other-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, self.other_subject, organization=self.org)
 
 	def test_single_value_still_works(self):
 		"""?phase_normalized=phase_2 behaves exactly as before (regression)."""
@@ -133,6 +136,7 @@ class TrialRecruitmentStatusNormalizedMultiSelectFilterTests(TestCase):
 			subject_slug="status-ms-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.org)
 
 		self.trial_recruiting = Trials.objects.create(
 			title="Trial Recruiting",

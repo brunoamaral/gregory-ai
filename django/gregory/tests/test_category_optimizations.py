@@ -20,6 +20,8 @@ from gregory.models import (
 from organizations.models import Organization
 import time
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 class CategoryOptimizationTestCase(TestCase):
 	"""Test cases for the optimized category queries"""
@@ -44,6 +46,7 @@ class CategoryOptimizationTestCase(TestCase):
 
 		# Create test subject
 		self.subject = Subject.objects.create(subject_name="Test Subject")
+		publish_subjects(self.subject, organization=self.organization)
 
 		# Create test category
 		self.category = TeamCategory.objects.create(
@@ -67,6 +70,9 @@ class CategoryOptimizationTestCase(TestCase):
 				summary=f"Summary for article {i}",
 			)
 			article.team_categories.add(self.category)
+			# Category aggregates are scoped to the caller's subjects, so
+			# untagged content contributes nothing to the counts asserted below.
+			article.subjects.add(self.subject)
 			article.authors.add(self.author1 if i < 3 else self.author2)
 
 		# Create test trials
@@ -77,6 +83,7 @@ class CategoryOptimizationTestCase(TestCase):
 				summary=f"Summary for trial {i}",
 			)
 			trial.team_categories.add(self.category)
+			trial.subjects.add(self.subject)
 
 	def test_category_list_performance(self):
 		"""Test that category listing is fast and returns correct counts"""
@@ -185,6 +192,7 @@ class CategoryOptimizationTestCase(TestCase):
 				summary=f"Summary {i}",
 			)
 			article.team_categories.add(self.category)
+			article.subjects.add(self.subject)
 
 		connection.queries.clear()
 		response = self.client.get(f"/categories/?team_id={self.team.id}")

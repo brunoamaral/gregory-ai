@@ -1,5 +1,5 @@
 """
-Tests for api.serializers.mixins.OrgScopedSerializerMixin.
+Tests for api.serializers.mixins.ScopedSerializerMixin.
 
 Run with:
     docker exec gregory python manage.py test api.tests.test_org_scoped_serializer_mixin
@@ -17,7 +17,7 @@ from gregory.models import (
 	MLPredictions,
 	OrganizationApiSettings,
 )
-from api.serializers.mixins import OrgScopedSerializerMixin
+from api.serializers.mixins import ScopedSerializerMixin
 
 
 def _make_org(name, slug, public=False):
@@ -54,12 +54,18 @@ def _make_team_category(team, name):
 	)
 
 
-def _request_with_visible(visible_ids):
-	"""Build a fake request with a pre-set visible_org_ids attribute."""
+def _request_with_visible_subjects(visible_subject_ids):
+	"""Build a fake request with a pre-set visible_subject_ids attribute.
+
+	ScopedSerializerMixin reads request.visible_subject_ids now (Phase 4 of
+	site-scoped API visibility), not visible_org_ids -- see the mixin's
+	docstring. A request carrying only visible_org_ids is indistinguishable
+	from one with no middleware at all, as far as the mixin is concerned.
+	"""
 	factory = RequestFactory()
 	req = factory.get("/")
 	req.user = AnonymousUser()
-	req.visible_org_ids = visible_ids
+	req.visible_subject_ids = visible_subject_ids
 	return req
 
 
@@ -106,7 +112,7 @@ class _MLPredictionsNestedSerializer(serializers.ModelSerializer):
 		fields = ["id", "subject", "algorithm", "probability_score"]
 
 
-class _TestArticleNestedSubjectSerializer(OrgScopedSerializerMixin, serializers.ModelSerializer):
+class _TestArticleNestedSubjectSerializer(ScopedSerializerMixin, serializers.ModelSerializer):
 	teams = _TeamSerializer(many=True, read_only=True)
 	subjects = _SubjectSerializer(many=True, read_only=True)
 	team_categories = _TeamCategorySerializer(many=True, read_only=True)
@@ -126,7 +132,7 @@ class _TestArticleNestedSubjectSerializer(OrgScopedSerializerMixin, serializers.
 		]
 
 
-class _TestArticleSerializer(OrgScopedSerializerMixin, serializers.ModelSerializer):
+class _TestArticleSerializer(ScopedSerializerMixin, serializers.ModelSerializer):
 	teams = _TeamSerializer(many=True, read_only=True)
 	subjects = _SubjectSerializer(many=True, read_only=True)
 	team_categories = _TeamCategorySerializer(many=True, read_only=True)
@@ -151,37 +157,54 @@ class _TestArticleSerializer(OrgScopedSerializerMixin, serializers.ModelSerializ
 # ---------------------------------------------------------------------------
 
 
-class OrgScopedSerializerMixinTeamsTest(TestCase):
+class ScopedSerializerMixinTeamsTest(TestCase):
+	"""Team stripping no longer depends on the caller's scope at all.
+
+	Before Phase 4, a team's visibility here followed request.visible_org_ids
+	-- the same rule that governed article/subject visibility. Now a Team
+	carries no subject, so subject scope has nothing to say about it: the
+	mixin strips a nested team by its own Team.api_listed flag, which is
+	identical for every caller. Re-deriving it from visible_org_ids (or
+	visible_subject_ids) would resurrect the ownership-based rule this
+	project removes -- see ScopedSerializerMixin's docstring and
+	test_visibility_teams.py.
+	"""
+
 	def setUp(self):
 		self.org_a = _make_org("Org A", "org-a-m", public=False)
 		self.org_b = _make_org("Org B", "org-b-m", public=False)
 		self.team_a = _make_team(self.org_a, "Team A")
 		self.team_b = _make_team(self.org_b, "Team B")
+		Team.objects.filter(pk=self.team_a.pk).update(api_listed=True)
+		Team.objects.filter(pk=self.team_b.pk).update(api_listed=False)
 
 		self.article = _make_article()
 		self.article.teams.add(self.team_a, self.team_b)
 
-	def test_teams_stripped_for_hidden_org(self):
-		"""Only team_a should appear when org_b is not visible."""
-		req = _request_with_visible({self.org_a.id})
+	def test_unlisted_team_stripped_regardless_of_subject_scope(self):
+		"""team_b is unlisted, so it's stripped even though the caller's
+		subject scope has nothing to do with either team."""
+		req = _request_with_visible_subjects({1, 2, 3})
 		data = _TestArticleSerializer(self.article, context={"request": req}).data
 		team_ids = [t["id"] for t in data["teams"]]
 		self.assertIn(self.team_a.id, team_ids)
 		self.assertNotIn(self.team_b.id, team_ids)
 
-	def test_both_teams_visible_when_both_orgs_visible(self):
-		req = _request_with_visible({self.org_a.id, self.org_b.id})
+	def test_listed_team_shown_even_with_empty_subject_scope(self):
+		"""A listed team's name survives a caller with no visible subjects at
+		all -- proof that this is not a subject-scope check in disguise."""
+		req = _request_with_visible_subjects(set())
 		data = _TestArticleSerializer(self.article, context={"request": req}).data
 		team_ids = [t["id"] for t in data["teams"]]
 		self.assertIn(self.team_a.id, team_ids)
-		self.assertIn(self.team_b.id, team_ids)
+		self.assertNotIn(self.team_b.id, team_ids)
 
 	def test_no_middleware_returns_all_teams(self):
-		"""When request has no visible_org_ids, the mixin is a no-op."""
+		"""When request has no visible_subject_ids, the mixin is a no-op."""
 		factory = RequestFactory()
 		req = factory.get("/")
 		req.user = AnonymousUser()
-		# No visible_org_ids attribute set
+		# No visible_subject_ids attribute set
 		data = _TestArticleSerializer(self.article, context={"request": req}).data
 		team_ids = [t["id"] for t in data["teams"]]
 		self.assertIn(self.team_a.id, team_ids)
@@ -193,7 +216,7 @@ class OrgScopedSerializerMixinTeamsTest(TestCase):
 		self.assertIn("teams", data)
 
 
-class OrgScopedSerializerMixinSubjectsTest(TestCase):
+class ScopedSerializerMixinSubjectsTest(TestCase):
 	def setUp(self):
 		self.org_a = _make_org("Org A", "org-a-s", public=False)
 		self.org_b = _make_org("Org B", "org-b-s", public=False)
@@ -208,14 +231,14 @@ class OrgScopedSerializerMixinSubjectsTest(TestCase):
 		self.article.subjects.add(self.subject_a, self.subject_b)
 
 	def test_hidden_subjects_stripped(self):
-		req = _request_with_visible({self.org_a.id})
+		req = _request_with_visible_subjects({self.subject_a.id})
 		data = _TestArticleSerializer(self.article, context={"request": req}).data
 		subject_ids = [s["id"] for s in data["subjects"]]
 		self.assertIn(self.subject_a.id, subject_ids)
 		self.assertNotIn(self.subject_b.id, subject_ids)
 
 
-class OrgScopedSerializerMixinMLPredictionsTest(TestCase):
+class ScopedSerializerMixinMLPredictionsTest(TestCase):
 	def setUp(self):
 		self.org_a = _make_org("Org A", "org-a-ml", public=False)
 		self.org_b = _make_org("Org B", "org-b-ml", public=False)
@@ -244,14 +267,14 @@ class OrgScopedSerializerMixinMLPredictionsTest(TestCase):
 		)
 
 	def test_hidden_ml_predictions_stripped(self):
-		req = _request_with_visible({self.org_a.id})
+		req = _request_with_visible_subjects({self.subject_a.id})
 		data = _TestArticleSerializer(self.article, context={"request": req}).data
 		pred_ids = [p["id"] for p in data["ml_predictions"]]
 		self.assertIn(self.pred_a.id, pred_ids)
 		self.assertNotIn(self.pred_b.id, pred_ids)
 
 
-class OrgScopedSerializerMixinMLPredictionsNestedSubjectTest(TestCase):
+class ScopedSerializerMixinMLPredictionsNestedSubjectTest(TestCase):
 	"""Verify visibility filtering works when subject is a nested dict (new shape)."""
 
 	def setUp(self):
@@ -282,14 +305,14 @@ class OrgScopedSerializerMixinMLPredictionsNestedSubjectTest(TestCase):
 		)
 
 	def test_hidden_ml_predictions_stripped_nested_subject(self):
-		req = _request_with_visible({self.org_a.id})
+		req = _request_with_visible_subjects({self.subject_a.id})
 		data = _TestArticleNestedSubjectSerializer(self.article, context={"request": req}).data
 		pred_ids = [p["id"] for p in data["ml_predictions"]]
 		self.assertIn(self.pred_a.id, pred_ids)
 		self.assertNotIn(self.pred_b.id, pred_ids)
 
 	def test_nested_subject_shape(self):
-		req = _request_with_visible({self.org_a.id})
+		req = _request_with_visible_subjects({self.subject_a.id})
 		data = _TestArticleNestedSubjectSerializer(self.article, context={"request": req}).data
 		self.assertEqual(len(data["ml_predictions"]), 1)
 		subject = data["ml_predictions"][0]["subject"]

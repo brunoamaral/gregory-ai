@@ -6,6 +6,7 @@ from organizations.models import Organization
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from api.tests.visibility_helpers import publish_subjects
 from gregory.models import Articles, MLPredictions, OrganizationApiSettings, Sources, Subject, Team
 
 
@@ -21,6 +22,7 @@ class MlScoreOrderingTestCase(TestCase):
 		self.subject = Subject.objects.create(
 			subject_name="ML Subject", subject_slug="ml-subject", team=self.team
 		)
+		publish_subjects(self.subject, organization=org)
 		source = Sources.objects.create(name="ML Source", link="http://mlsource.com")
 
 		def make_article(title, link, score):
@@ -104,6 +106,7 @@ class MlScoreSignalIntegrationTestCase(TestCase):
 		self.subject = Subject.objects.create(
 			subject_name="Sig Subject", subject_slug="sig-subject", team=self.team
 		)
+		publish_subjects(self.subject, organization=org)
 		self.article = Articles.objects.create(
 			title="Signal integration article",
 			link="https://ex.com/siginteg",

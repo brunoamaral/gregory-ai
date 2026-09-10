@@ -1,9 +1,11 @@
 import unittest
 from django.http import StreamingHttpResponse
 from rest_framework.test import APITestCase, APIClient
-from gregory.models import Articles, Team, Sources
+from gregory.models import Articles, Subject, Team, Sources
 from organizations.models import Organization
 from django.contrib.auth.models import User
+
+from api.tests.visibility_helpers import publish_subjects
 
 
 class TestCSVRenderer(APITestCase):
@@ -29,6 +31,13 @@ class TestCSVRenderer(APITestCase):
 			name="Test Source", source_for="science paper"
 		)
 
+		self.subject = Subject.objects.create(
+			subject_name="CSV Pagination Subject",
+			subject_slug="csv-pagination-subject",
+			team=self.team,
+		)
+		publish_subjects(self.subject, organization=self.organization)
+
 		# Create test articles
 		for i in range(1, 21):  # Create 20 articles for pagination testing
 			article = Articles.objects.create(
@@ -39,6 +48,7 @@ class TestCSVRenderer(APITestCase):
 			)
 			article.sources.add(self.source)
 			article.teams.add(self.team)
+			article.subjects.add(self.subject)
 
 		# Set up API client
 		self.client = APIClient()

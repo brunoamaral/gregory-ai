@@ -17,6 +17,7 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from api.tests.visibility_helpers import publish_subjects
 from api.views import _RECRUITING_RANK
 from gregory.models import Organization, OrganizationApiSettings, Subject, Team, Trials
 from gregory.utils.trial_field_normalizers import TrialRecruitmentStatus
@@ -74,6 +75,7 @@ class RecruitingFirstOrderingTest(TestCase):
 			subject_slug="recruiting-first-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.organization)
 
 		base = datetime(2026, 1, 1, tzinfo=dt_timezone.utc)
 		self.recruiting = _make_trial(
@@ -239,6 +241,7 @@ class RecruitingFirstStablePaginationTest(TestCase):
 			subject_slug="recruiting-first-stable-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.organization)
 
 		# 5 "recruiting" trials (same rank) with distinct discovery_date values so
 		# the tiebreaker gives a single deterministic order.

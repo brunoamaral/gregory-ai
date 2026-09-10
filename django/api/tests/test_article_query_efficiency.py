@@ -31,6 +31,8 @@ from gregory.models import (
 	Trials,
 )
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 def _build_articles(n, suffix):
 	"""Create *n* articles, each wired to one of every related field the
@@ -49,6 +51,7 @@ def _build_articles(n, suffix):
 	subject = Subject.objects.create(
 		team=team, subject_name=f"Subject {suffix}", subject_slug=f"subject-{suffix}"
 	)
+	publish_subjects(subject, organization=org)
 	source = Sources.objects.create(
 		name=f"Source {suffix}", source_for="science paper"
 	)

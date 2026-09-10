@@ -11,6 +11,8 @@ from gregory.models import (
 )
 from django.utils import timezone
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 class ArticleAuthorFilterTests(TestCase):
 	"""Test cases for filtering articles by author_id parameter"""
@@ -31,6 +33,7 @@ class ArticleAuthorFilterTests(TestCase):
 		self.subject = Subject.objects.create(
 			subject_name="Test Subject", subject_slug="test-subject", team=self.team
 		)
+		publish_subjects(self.subject, organization=self.organization)
 
 		# Create test authors
 		self.author1 = Authors.objects.create(

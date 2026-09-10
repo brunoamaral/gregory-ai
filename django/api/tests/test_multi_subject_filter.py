@@ -14,6 +14,8 @@ from gregory.models import (
 	MLPredictions,
 )
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 class ArticleMultiSubjectFilterTests(TestCase):
 	"""Tests for the ?subjects= AND-filter on /articles/"""
@@ -43,6 +45,7 @@ class ArticleMultiSubjectFilterTests(TestCase):
 			subject_slug="subject-c",
 			team=cls.team,
 		)
+		publish_subjects(cls.subject_a, cls.subject_b, cls.subject_c, organization=cls.org)
 
 		# article_ab  → subjects A + B
 		cls.article_ab = Articles.objects.create(
@@ -248,6 +251,7 @@ class ArticleSubjectAnyFilterTests(TestCase):
 			subject_slug="any-subject-c",
 			team=cls.team,
 		)
+		publish_subjects(cls.subject_a, cls.subject_b, cls.subject_c, organization=cls.org)
 
 		# article_a  → subject A only
 		cls.article_a = Articles.objects.create(
@@ -356,6 +360,7 @@ class TrialMultiSubjectFilterTests(TestCase):
 			subject_slug="trial-subject-b",
 			team=cls.team,
 		)
+		publish_subjects(cls.subject_a, cls.subject_b, organization=cls.org)
 
 		cls.trial_ab = Trials.objects.create(
 			title="Trial AB",
@@ -455,6 +460,7 @@ class TrialSubjectAnyFilterTests(TestCase):
 			subject_slug="trial-any-subject-c",
 			team=cls.team,
 		)
+		publish_subjects(cls.subject_a, cls.subject_b, cls.subject_c, organization=cls.org)
 
 		cls.trial_a = Trials.objects.create(
 			title="Trial Any A",
@@ -574,6 +580,7 @@ class RelevantFilterSubjectScopingTests(TestCase):
 			auto_predict=True,
 			ml_consensus_type="any",
 		)
+		publish_subjects(cls.subject_x, cls.subject_y, organization=cls.org)
 
 		# Tagged with BOTH subjects, but only ML-consensus-relevant for X.
 		cls.article = Articles.objects.create(

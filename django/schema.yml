@@ -188,6 +188,14 @@ paths:
           type: boolean
         description: Filter for articles linked to one or more clinical trials (true/false).
       - in: query
+        name: include_public
+        schema:
+          type: boolean
+        description: |-
+          Identified callers only (API key or signed-in user): add the scopes of every publicly readable site to your own, so a private site's frontend can read public content alongside its own. No-op for an anonymous caller, whose scope already is exactly that set.
+
+          Undeclared but functional before Phase 4 of site-scoped API visibility, when it read 'adds public organisations' — organisations are no longer the visibility unit, so it is declared here with its current meaning rather than left to be discovered.
+      - in: query
         name: journal_slug
         schema:
           type: string
@@ -2366,9 +2374,25 @@ paths:
       operationId: sponsors_list
       description: |-
         List canonical sponsor entities (deduplicated trial sponsors — see
-        docs/trials-field-normalization.md). Sponsors are global, not org-owned, so
-        unlike most other viewsets this one carries no OrgVisibilityMixin — same
-        reasoning as the by_sponsor/by_sponsor_type facets on /trials/stats/.
+        docs/trials-field-normalization.md).
+
+        A Sponsor carries no subject of its own; it reaches content only through
+        the trials that name it. So it is scoped to "has at least one trial in the
+        caller's scope" rather than by a field on the row — an Exists() over
+        Trials.primary_sponsor_normalized. Without that, a sponsor's existence
+        (and its name) would disclose that some trial the caller cannot read
+        exists, which is the thing subject scoping is for.
+
+        It carried no scoping at all before Phase 4 of site-scoped API visibility,
+        on the grounds that sponsors are global. That was defensible while
+        visibility was organisation-keyed and every caller effectively saw the same
+        trials; it stops being defensible with two tenants.
+
+        Measured after the 2026-09-10 orphan-sponsor prune: scoping hides 59 of
+        4,686 (1.3%), all Dihydroartemisinin (subject 15, internal research in no
+        site's scope) — the intended exclusion. Before that prune it looked like
+        43%, but 3,406 of those sponsors referenced no trial at all and were
+        debris left behind by the PROTECT FK when their trials were deleted.
 
         # Query Parameters:
         - **search** - search by sponsor name
@@ -2487,9 +2511,25 @@ paths:
       operationId: sponsors_retrieve
       description: |-
         List canonical sponsor entities (deduplicated trial sponsors — see
-        docs/trials-field-normalization.md). Sponsors are global, not org-owned, so
-        unlike most other viewsets this one carries no OrgVisibilityMixin — same
-        reasoning as the by_sponsor/by_sponsor_type facets on /trials/stats/.
+        docs/trials-field-normalization.md).
+
+        A Sponsor carries no subject of its own; it reaches content only through
+        the trials that name it. So it is scoped to "has at least one trial in the
+        caller's scope" rather than by a field on the row — an Exists() over
+        Trials.primary_sponsor_normalized. Without that, a sponsor's existence
+        (and its name) would disclose that some trial the caller cannot read
+        exists, which is the thing subject scoping is for.
+
+        It carried no scoping at all before Phase 4 of site-scoped API visibility,
+        on the grounds that sponsors are global. That was defensible while
+        visibility was organisation-keyed and every caller effectively saw the same
+        trials; it stops being defensible with two tenants.
+
+        Measured after the 2026-09-10 orphan-sponsor prune: scoping hides 59 of
+        4,686 (1.3%), all Dihydroartemisinin (subject 15, internal research in no
+        site's scope) — the intended exclusion. Before that prune it looked like
+        43%, but 3,406 of those sponsors referenced no trial at all and were
+        debris left behind by the PROTECT FK when their trials were deleted.
 
         # Query Parameters:
         - **search** - search by sponsor name
@@ -2547,10 +2587,22 @@ paths:
         -------
         ?team=1,2,3
             Scope to one or more teams (comma-separated integer IDs).
-        ?organization=1,2  (alias: ?org=)
+        ?site=1,2
+            Scope to the subjects one or more sites publish (their
+            CustomSetting.scope_subjects). This is the filter to reach for now
+            that visibility is site-scoped; it is sugar for ?subject= with that
+            site's scope, and intersects with an explicit ?subject= rather than
+            overriding it. A site the caller cannot reach 404s, like any other
+            unreachable scope.
+        ?organization=1,2  (alias: ?org=)  [DEPRECATED]
             Scope to one or more organisations (comma-separated integer IDs).
             When combined with ?team=, the effective scope is the intersection:
             teams that belong to the requested org(s).
+
+            Deprecated because organisations are no longer the visibility unit --
+            a site is. It still works, and still means exactly what it always
+            meant, which is the point: silently redefining a documented parameter
+            is the failure this project exists to prevent. Prefer ?site=.
         ?subject=1,2
             Scope to one or more subjects (comma-separated integer IDs, OR/union
             semantics). Adds a ``by_subject`` breakdown to the payload, listing
@@ -2580,16 +2632,34 @@ paths:
           - csv
           - json
       - in: query
+        name: include_public
+        schema:
+          type: boolean
+        description: |-
+          Identified callers only (API key or signed-in user): add the scopes of every publicly readable site to your own, so a private site's frontend can read public content alongside its own. No-op for an anonymous caller, whose scope already is exactly that set.
+
+          Undeclared but functional before Phase 4 of site-scoped API visibility, when it read 'adds public organisations' — organisations are no longer the visibility unit, so it is declared here with its current meaning rather than left to be discovered.
+      - in: query
         name: org
         schema:
           type: string
-        description: Alias for organization.
+        description: DEPRECATED — alias for organization. Prefer ?site=.
+        deprecated: true
       - in: query
         name: organization
         schema:
           type: string
-        description: 'Scope to one or more organisations (comma-separated integer
-          IDs). Alias: org.'
+        description: 'DEPRECATED — prefer ?site=. Scope to one or more organisations
+          (comma-separated integer IDs). Alias: org. Organisations are no longer the
+          visibility unit; this still works and still means what it always meant.'
+        deprecated: true
+      - in: query
+        name: site
+        schema:
+          type: string
+        description: Scope to the subjects one or more sites publish (comma-separated
+          integer site IDs). Sugar for ?subject= with that site's scope; intersects
+          with an explicit ?subject= rather than overriding it.
       - in: query
         name: subject
         schema:
@@ -2767,7 +2837,32 @@ paths:
   /teams/:
     get:
       operationId: teams_list
-      description: List all teams
+      description: |-
+        List teams that have opted into being listed.
+
+        A team is listed when EITHER holds:
+
+          1. ``Team.api_listed`` is on -- the explicit publication switch, seeded
+             from the derived answer by ``sitesettings/0019``; or
+          2. the team owns a subject already in the caller's scope.
+
+        Rule 1 alone was the first cut, and it is what the spec says literally. It
+        has a cost that only shows up with a second tenant: a private site's own
+        authenticated frontend could not list its own teams, because the teams of
+        a private site are exactly the ones an operator marks unlisted. Rule 2
+        buys that back without reopening anything -- a caller who can already read
+        a team's articles and trials learns nothing new from its name.
+
+        A flag is still the right primary answer, for the reason the spec gives:
+        deriving listing purely from owned subjects cannot express an internal lab
+        that contributes to public content but should not be named, nor a partner
+        an organisation wants to credit that owns nothing in scope. Rule 2 only
+        ever adds, so both of those stay expressible.
+
+        It gates listing, not access. Being unlisted removes a team from this
+        endpoint; it does not hide that team's content, which is governed by
+        subject scope like everything else. Conflating the two is how a metadata
+        switch quietly becomes a data-visibility switch.
       parameters:
       - in: query
         name: format
@@ -2814,7 +2909,32 @@ paths:
   /teams/{id}/:
     get:
       operationId: teams_retrieve
-      description: List all teams
+      description: |-
+        List teams that have opted into being listed.
+
+        A team is listed when EITHER holds:
+
+          1. ``Team.api_listed`` is on -- the explicit publication switch, seeded
+             from the derived answer by ``sitesettings/0019``; or
+          2. the team owns a subject already in the caller's scope.
+
+        Rule 1 alone was the first cut, and it is what the spec says literally. It
+        has a cost that only shows up with a second tenant: a private site's own
+        authenticated frontend could not list its own teams, because the teams of
+        a private site are exactly the ones an operator marks unlisted. Rule 2
+        buys that back without reopening anything -- a caller who can already read
+        a team's articles and trials learns nothing new from its name.
+
+        A flag is still the right primary answer, for the reason the spec gives:
+        deriving listing purely from owned subjects cannot express an internal lab
+        that contributes to public content but should not be named, nor a partner
+        an organisation wants to credit that owns nothing in scope. Rule 2 only
+        ever adds, so both of those stay expressible.
+
+        It gates listing, not access. Being unlisted removes a team from this
+        endpoint; it does not hide that team's content, which is governed by
+        subject scope like everything else. Conflating the two is how a metadata
+        switch quietly becomes a data-visibility switch.
       parameters:
       - in: query
         name: format
@@ -3223,6 +3343,14 @@ paths:
           unique) — use acronym for those.
         explode: false
         style: form
+      - in: query
+        name: include_public
+        schema:
+          type: boolean
+        description: |-
+          Identified callers only (API key or signed-in user): add the scopes of every publicly readable site to your own, so a private site's frontend can read public content alongside its own. No-op for an anonymous caller, whose scope already is exactly that set.
+
+          Undeclared but functional before Phase 4 of site-scoped API visibility, when it read 'adds public organisations' — organisations are no longer the visibility unit, so it is declared here with its current meaning rather than left to be discovered.
       - in: query
         name: inclusion_agemax
         schema:
@@ -5221,12 +5349,12 @@ components:
     Article:
       type: object
       description: |-
-        Mixin for DRF serializers that strips nested associations belonging to
-        organisations the caller cannot see.
+        Mixin for DRF serializers that strips nested associations the caller
+        cannot see.
 
         Usage::
 
-            class ArticleSerializer(OrgScopedSerializerMixin,
+            class ArticleSerializer(ScopedSerializerMixin,
                                     serializers.HyperlinkedModelSerializer):
                 ...
 
@@ -6259,12 +6387,12 @@ components:
     Trial:
       type: object
       description: |-
-        Mixin for DRF serializers that strips nested associations belonging to
-        organisations the caller cannot see.
+        Mixin for DRF serializers that strips nested associations the caller
+        cannot see.
 
         Usage::
 
-            class ArticleSerializer(OrgScopedSerializerMixin,
+            class ArticleSerializer(ScopedSerializerMixin,
                                     serializers.HyperlinkedModelSerializer):
                 ...
 

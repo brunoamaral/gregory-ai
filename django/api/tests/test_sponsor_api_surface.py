@@ -21,8 +21,10 @@ from django.test.utils import CaptureQueriesContext
 from organizations.models import Organization
 from rest_framework.test import APIClient
 
-from gregory.models import OrganizationApiSettings, Sponsor, Team, Trials
+from gregory.models import OrganizationApiSettings, Sponsor, Subject, Team, Trials
 from gregory.utils.trial_field_normalizers import SponsorType
+
+from api.tests.visibility_helpers import publish_subjects
 
 
 class SponsorAPITestCase(TestCase):
@@ -31,10 +33,20 @@ class SponsorAPITestCase(TestCase):
 		org = Organization.objects.create(name="Sponsor API Org", slug="sponsor-api-org")
 		OrganizationApiSettings.objects.filter(organization=org).update(make_api_public=True)
 		self.team = Team.objects.create(organization=org, name="Sponsor API Org", slug="sponsor-api-org")
+		# /trials/ and /trials/stats/ are subject-scoped now: a trial with no
+		# subject is invisible to everyone. /sponsors/ itself carries no such
+		# mixin (deliberately -- sponsors are global, not org/subject-owned,
+		# see SponsorViewSet's docstring), so this is only needed for the
+		# trial-facing assertions below.
+		self.subject = Subject.objects.create(
+			subject_name="Sponsor API Subject", subject_slug="sponsor-api-subject", team=self.team
+		)
+		publish_subjects(self.subject, organization=org)
 
 	def _make_trial(self, title, link, primary_sponsor=None):
 		trial = Trials.objects.create(title=title, link=link, primary_sponsor=primary_sponsor)
 		trial.teams.add(self.team)
+		trial.subjects.add(self.subject)
 		return trial
 
 
@@ -181,6 +193,24 @@ class SponsorFacetsTests(SponsorAPITestCase):
 class SponsorViewSetTests(TestCase):
 	def setUp(self):
 		self.client = APIClient()
+		# A sponsor reaches the caller only through its trials, and a trial
+		# only through its subjects, so both links are load-bearing here:
+		# without them these sponsors are invisible, which is the rule, not a
+		# fixture accident. A sponsor with no trials at all is unreachable by
+		# anyone — that is the population the 2026-09-10 prune removed.
+		org = Organization.objects.create(
+			name="Sponsor VS Org", slug="sponsor-vs-org"
+		)
+		team = Team.objects.create(
+			organization=org, name="Sponsor VS Team", slug="sponsor-vs-team"
+		)
+		self.subject = Subject.objects.create(
+			subject_name="Sponsor VS Subject",
+			subject_slug="sponsor-vs-subject",
+			team=team,
+		)
+		publish_subjects(self.subject, organization=org)
+
 		self.industry = Sponsor.objects.create(
 			name="Industry Sponsor Co", slug="industry-sponsor-co", sponsor_type="industry"
 		)
@@ -188,16 +218,29 @@ class SponsorViewSetTests(TestCase):
 			name="Nonprofit Sponsor Org", slug="nonprofit-sponsor-org", sponsor_type="nonprofit"
 		)
 		for i in range(3):
-			Trials.objects.create(
+			trial = Trials.objects.create(
 				title=f"Industry Trial {i}",
 				link=f"https://example.com/sponsor-viewset-{i}",
 				primary_sponsor=None,
 			)
-		# Attach trials to self.industry without going through resolution, to
+			trial.subjects.add(self.subject)
+		# One trial for the nonprofit too, so it is reachable at all.
+		nonprofit_trial = Trials.objects.create(
+			title="Nonprofit Trial",
+			link="https://example.com/sponsor-viewset-nonprofit",
+			primary_sponsor=None,
+		)
+		nonprofit_trial.subjects.add(self.subject)
+		# Attach trials to sponsors without going through resolution, to
 		# control the exact trials_count independent of the save() hook.
 		Trials.objects.filter(
 			link__startswith="https://example.com/sponsor-viewset-"
-		).update(primary_sponsor_normalized=self.industry)
+		).exclude(pk=nonprofit_trial.pk).update(
+			primary_sponsor_normalized=self.industry
+		)
+		Trials.objects.filter(pk=nonprofit_trial.pk).update(
+			primary_sponsor_normalized=self.nonprofit
+		)
 
 	def test_list_and_detail_routing(self):
 		resp = self.client.get("/sponsors/")
@@ -229,6 +272,69 @@ class SponsorViewSetTests(TestCase):
 		self.assertEqual(resp.status_code, 200)
 		names = [row["name"] for row in resp.data["results"]]
 		self.assertEqual(names[0], "Industry Sponsor Co")
+
+	def test_sponsor_whose_trials_are_all_out_of_scope_is_hidden(self):
+		"""The scoping rule itself. A Sponsor carries no subject, so its
+		visibility is entirely derived from its trials -- and a sponsor row
+		that survived would disclose that a trial the caller cannot read
+		exists."""
+		hidden_sponsor = Sponsor.objects.create(
+			name="Hidden Sponsor Ltd", slug="hidden-sponsor-ltd",
+			sponsor_type="industry",
+		)
+		other_team = Team.objects.create(
+			organization=Organization.objects.create(
+				name="Other Sponsor Org", slug="other-sponsor-org"
+			),
+			name="Other Sponsor Team", slug="other-sponsor-team",
+		)
+		unpublished_subject = Subject.objects.create(
+			subject_name="Unpublished", subject_slug="unpublished-sponsor-subj",
+			team=other_team,
+		)
+		hidden_trial = Trials.objects.create(
+			title="Hidden Trial", link="https://example.com/sponsor-hidden",
+		)
+		hidden_trial.subjects.add(unpublished_subject)
+		Trials.objects.filter(pk=hidden_trial.pk).update(
+			primary_sponsor_normalized=hidden_sponsor
+		)
+
+		resp = self.client.get("/sponsors/")
+		names = [row["name"] for row in resp.data["results"]]
+		self.assertNotIn("Hidden Sponsor Ltd", names)
+		self.assertIn("Industry Sponsor Co", names)
+		# Hide-existence: detail 404s rather than 403.
+		self.assertEqual(
+			self.client.get(f"/sponsors/{hidden_sponsor.pk}/").status_code, 404
+		)
+
+	def test_trials_count_counts_only_trials_in_scope(self):
+		"""Not cosmetic: trials_count is orderable (?ordering=-trials_count),
+		so an unscoped count would leak the size of what the caller cannot
+		read, and leak it again through the ranking."""
+		out_of_scope_subject = Subject.objects.create(
+			subject_name="Out Of Scope", subject_slug="out-of-scope-sponsor-subj",
+			team=Team.objects.create(
+				organization=Organization.objects.create(
+					name="OOS Org", slug="oos-org"
+				),
+				name="OOS Team", slug="oos-team",
+			),
+		)
+		extra = Trials.objects.create(
+			title="Industry Trial Hidden",
+			link="https://example.com/sponsor-viewset-hidden",
+		)
+		extra.subjects.add(out_of_scope_subject)
+		Trials.objects.filter(pk=extra.pk).update(
+			primary_sponsor_normalized=self.industry
+		)
+
+		detail = self.client.get(f"/sponsors/{self.industry.pk}/")
+		self.assertEqual(detail.status_code, 200)
+		# Still 3 — the fourth trial is out of scope.
+		self.assertEqual(detail.data["trials_count"], 3)
 
 	def test_page_size_capped_at_100(self):
 		resp = self.client.get("/sponsors/", {"page_size": "500"})

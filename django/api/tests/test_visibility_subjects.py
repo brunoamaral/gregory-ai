@@ -2,9 +2,13 @@
 Tests for subject visibility enforcement (PR 5).
 
 Covers:
-  - SubjectsViewSet list/detail: only subjects whose team.organization is visible
-  - Detail endpoint 404s when subject belongs to a hidden org
-  - Four caller archetypes × the standard test matrix
+  - SubjectsViewSet list/detail: only subjects in a scope the caller can reach
+  - Detail endpoint 404s when no reachable site publishes the subject
+  - Three caller archetypes × the standard test matrix
+
+The subject IS the row here, so scoping is a set-membership test rather than
+a walk to the owning team's organisation (site-scoped API visibility,
+Phase 4). Each organisation owns a Site publishing its own subject.
 
 Run with:
     docker exec gregory python manage.py test api.tests.test_visibility_subjects
@@ -19,6 +23,7 @@ from organizations.models import Organization, OrganizationUser
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
+from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import OrganizationApiSettings, Subject, Team
 
 User = get_user_model()
@@ -50,11 +55,12 @@ def _make_subject(team, name):
 	)
 
 
-def _make_api_scheme(org, name):
+def _make_api_scheme(org, name, site=None):
 	return APIAccessScheme.objects.create(
 		client_name=name,
 		client_contacts=f"{name}@example.com",
 		organization=org,
+		site=site,
 		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
@@ -79,6 +85,14 @@ class SubjectVisibilityBase(TestCase):
 		self.subj_mine = _make_subject(self.my_team, "Mine Subj")
 		self.subj_pub = _make_subject(self.pub_team, "Public Subj")
 		self.subj_priv = _make_subject(self.priv_team, "Private Subj")
+
+		self.my_site = private_site_publishing(
+			self.subj_mine, organization=self.my_org
+		)
+		self.pub_site = publish_subjects(self.subj_pub, organization=self.pub_org)
+		self.priv_site = private_site_publishing(
+			self.subj_priv, organization=self.priv_org
+		)
 
 		self.client = APIClient()
 
@@ -161,7 +175,7 @@ class AuthenticatedUserSubjectVisibilityTest(SubjectVisibilityBase):
 class APIKeySubjectVisibilityTest(SubjectVisibilityBase):
 	def setUp(self):
 		super().setUp()
-		self.scheme = _make_api_scheme(self.my_org, "subj-key")
+		self.scheme = _make_api_scheme(self.my_org, "subj-key", site=self.my_site)
 		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
 
 	def test_list_shows_own_subject(self):
