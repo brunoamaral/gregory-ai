@@ -146,6 +146,24 @@ class SiteScopeFilterTests(TestCase):
 		# dropdown offered to an org-A staff member.
 		self.assertNotIn(self.django_site_b.domain, domains)
 
+	def test_a_site_with_two_customsetting_rows_appears_once(self):
+		"""CustomSetting.site is a plain FK, not unique.
+
+		Two rows for one site would otherwise offer the same domain twice in
+		the dropdown. Not hypothetical: exactly this shape produced duplicate
+		rows in GET /sites/ (PR #859). No duplicate rows exist in production
+		today, so without this test the guard would be unexercised.
+		"""
+		CustomSetting.objects.create(
+			site=self.django_site_a1, title="Second settings row for A1"
+		)
+		request = self._request_for(self.staff_a)
+		choices = self._filter(request).lookups(request, None)
+		domains = [label for _, label in choices]
+		self.assertEqual(domains.count(self.django_site_a1.domain), 1)
+		site_ids = [value for value, _ in choices]
+		self.assertEqual(len(site_ids), len(set(site_ids)))
+
 	def test_superuser_lookups_lists_every_site(self):
 		request = self._request_for(self.superuser)
 		choices = self._filter(request).lookups(request, None)

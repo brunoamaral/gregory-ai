@@ -244,7 +244,7 @@ class UnpublishedContentFilter(admin.SimpleListFilter):
 	def queryset(self, request, queryset):
 		if self.value() != "1":
 			return queryset
-		return queryset.exclude(subjects__in=_scoped_subject_ids())
+		return queryset.exclude(subjects__id__in=_scoped_subject_ids())
 
 
 class SiteScopeFilter(admin.SimpleListFilter):
@@ -279,10 +279,17 @@ class SiteScopeFilter(admin.SimpleListFilter):
 			settings_qs = CustomSetting.objects.filter(
 				site_id__in=site_ids
 			).select_related("site")
-		return [
-			(cs.site_id, cs.site.domain)
-			for cs in settings_qs.order_by("site__domain")
-		]
+		# CustomSetting.site is a plain FK, NOT unique, so two rows for one
+		# site would offer the same domain twice. Exactly this shape produced
+		# duplicate rows in GET /sites/ (PR #859), so it is a latent bug here
+		# rather than a hypothetical one -- there happen to be no duplicate
+		# rows today. Selecting distinct (site_id, domain) pairs in SQL keeps
+		# the dropdown one-entry-per-site whatever the table holds.
+		return list(
+			settings_qs.order_by("site__domain")
+			.values_list("site_id", "site__domain")
+			.distinct()
+		)
 
 	def queryset(self, request, queryset):
 		if not self.value():

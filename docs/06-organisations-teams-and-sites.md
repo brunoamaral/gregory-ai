@@ -67,7 +67,17 @@ This is a design choice, not an inconsistency to fix:
 | Staff user, "Not in any site's scope" filter | Their own organisation's content that is in no site's `scope_subjects` yet — the curation queue |
 | Superuser | Everything, including content with no source at all |
 
-Content with no `Sources` row at all cannot be attributed to any organisation, so it is visible only to superusers. This is a small sliver of legacy data rather than a normal outcome of ingestion (measured on the development database, before the September 2026 prunes: 375 articles, 0 trials — production, having been pruned, is not directly comparable).
+Content with no `Sources` row at all cannot be attributed to any organisation, so it is visible only to superusers. A source is attached at ingestion, so a row without one never came through the normal pipeline — it was created by hand in the admin, or by an importer that failed before linking a source.
+
+Two different counts get quoted about this population, so to be exact about which is which:
+
+| Measured | Articles | Trials |
+|:---|---:|---:|
+| No `Sources` row at all (development database, pre-prune) | 375 | 0 |
+| …of those, also carrying a team, so they *lose* admin visibility under this rule | 370 | 0 |
+| **Remaining in production**, after the September 2026 prunes removed 364 of them | **6** | **0** |
+
+Production is the number that matters operationally: six articles move from "visible to their team's organisation" to "superuser only". There is no cross-organisation case — **zero** articles or trials have sources pointing at a different organisation than their curated teams, so nothing is being taken from one organisation and given to another.
 
 ### List filters
 
