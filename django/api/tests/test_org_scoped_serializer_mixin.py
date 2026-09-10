@@ -1,5 +1,5 @@
 """
-Tests for api.serializers.mixins.OrgScopedSerializerMixin.
+Tests for api.serializers.mixins.ScopedSerializerMixin.
 
 Run with:
     docker exec gregory python manage.py test api.tests.test_org_scoped_serializer_mixin
@@ -17,7 +17,7 @@ from gregory.models import (
 	MLPredictions,
 	OrganizationApiSettings,
 )
-from api.serializers.mixins import OrgScopedSerializerMixin
+from api.serializers.mixins import ScopedSerializerMixin
 
 
 def _make_org(name, slug, public=False):
@@ -106,7 +106,7 @@ class _MLPredictionsNestedSerializer(serializers.ModelSerializer):
 		fields = ["id", "subject", "algorithm", "probability_score"]
 
 
-class _TestArticleNestedSubjectSerializer(OrgScopedSerializerMixin, serializers.ModelSerializer):
+class _TestArticleNestedSubjectSerializer(ScopedSerializerMixin, serializers.ModelSerializer):
 	teams = _TeamSerializer(many=True, read_only=True)
 	subjects = _SubjectSerializer(many=True, read_only=True)
 	team_categories = _TeamCategorySerializer(many=True, read_only=True)
@@ -126,7 +126,7 @@ class _TestArticleNestedSubjectSerializer(OrgScopedSerializerMixin, serializers.
 		]
 
 
-class _TestArticleSerializer(OrgScopedSerializerMixin, serializers.ModelSerializer):
+class _TestArticleSerializer(ScopedSerializerMixin, serializers.ModelSerializer):
 	teams = _TeamSerializer(many=True, read_only=True)
 	subjects = _SubjectSerializer(many=True, read_only=True)
 	team_categories = _TeamCategorySerializer(many=True, read_only=True)
@@ -151,7 +151,7 @@ class _TestArticleSerializer(OrgScopedSerializerMixin, serializers.ModelSerializ
 # ---------------------------------------------------------------------------
 
 
-class OrgScopedSerializerMixinTeamsTest(TestCase):
+class ScopedSerializerMixinTeamsTest(TestCase):
 	def setUp(self):
 		self.org_a = _make_org("Org A", "org-a-m", public=False)
 		self.org_b = _make_org("Org B", "org-b-m", public=False)
@@ -193,7 +193,7 @@ class OrgScopedSerializerMixinTeamsTest(TestCase):
 		self.assertIn("teams", data)
 
 
-class OrgScopedSerializerMixinSubjectsTest(TestCase):
+class ScopedSerializerMixinSubjectsTest(TestCase):
 	def setUp(self):
 		self.org_a = _make_org("Org A", "org-a-s", public=False)
 		self.org_b = _make_org("Org B", "org-b-s", public=False)
@@ -215,7 +215,7 @@ class OrgScopedSerializerMixinSubjectsTest(TestCase):
 		self.assertNotIn(self.subject_b.id, subject_ids)
 
 
-class OrgScopedSerializerMixinMLPredictionsTest(TestCase):
+class ScopedSerializerMixinMLPredictionsTest(TestCase):
 	def setUp(self):
 		self.org_a = _make_org("Org A", "org-a-ml", public=False)
 		self.org_b = _make_org("Org B", "org-b-ml", public=False)
@@ -251,7 +251,7 @@ class OrgScopedSerializerMixinMLPredictionsTest(TestCase):
 		self.assertNotIn(self.pred_b.id, pred_ids)
 
 
-class OrgScopedSerializerMixinMLPredictionsNestedSubjectTest(TestCase):
+class ScopedSerializerMixinMLPredictionsNestedSubjectTest(TestCase):
 	"""Verify visibility filtering works when subject is a nested dict (new shape)."""
 
 	def setUp(self):

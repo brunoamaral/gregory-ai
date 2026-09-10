@@ -2,7 +2,7 @@
 Tests for org-scoped takeaways read serialization.
 
 Verify ``ArticleSerializer.get_takeaways`` / ``get_summary_plain_english``
-and the omission behaviour added by ``OrgScopedSerializerMixin``.
+and the omission behaviour added by ``ScopedSerializerMixin``.
 
 Covers spec §10.3:
   - With API key for Org A: takeaways resolves to Org A's ArticleOrgContent

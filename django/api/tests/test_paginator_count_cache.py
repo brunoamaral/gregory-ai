@@ -9,9 +9,11 @@ Run with:
 """
 
 from django.db import connection
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
+
+from api.pagination import CappedPageNumberPagination
 
 from gregory.models import Articles, OrganizationApiSettings, Team, Trials
 from organizations.models import Organization
@@ -126,4 +128,62 @@ class CountCacheSmokeTest(TestCase):
 			self._real_count_queries(ctx.captured_queries),
 			[],
 			"different sort_by/order should reuse the same count cache entry",
+		)
+
+
+class CountCacheSubjectScopeTests(TestCase):
+	"""Site-scoped API visibility, Phase 4: the subject scope is part of the
+	cache key.
+
+	The key hashes the org scope AND the subject scope during the transition.
+	Call sites convert file by file, so some responses are still org-scoped
+	while others are subject-scoped; keying on only one of them could serve a
+	count computed under one rule to a caller scoped by the other. The org
+	half retires in Phase 6 along with visible_org_ids.
+	"""
+
+	def setUp(self):
+		self.factory = RequestFactory()
+
+	def _key(self, org_ids, subject_ids):
+		request = self.factory.get("/articles/")
+		request.visible_org_ids = org_ids
+		request.visible_subject_ids = subject_ids
+		# DRF's query_params is a thin wrapper over GET on a plain request.
+		request.query_params = request.GET
+		return CappedPageNumberPagination()._count_cache_key(request)
+
+	def test_different_subject_scopes_do_not_share_a_cache_entry(self):
+		"""The property the whole key exists for. Two callers whose org scope
+		happens to match but whose subject scope differs must not collide."""
+		same_orgs = {1}
+		self.assertNotEqual(
+			self._key(same_orgs, {1, 2}),
+			self._key(same_orgs, {3, 4}),
+		)
+
+	def test_different_org_scopes_still_do_not_share_a_cache_entry(self):
+		"""The pre-existing property, unchanged by adding subjects."""
+		same_subjects = {1}
+		self.assertNotEqual(
+			self._key({1}, same_subjects),
+			self._key({2}, same_subjects),
+		)
+
+	def test_identical_scopes_share_a_cache_entry(self):
+		"""Otherwise the cache never hits and the whole mechanism is dead
+		weight -- worth pinning alongside the isolation cases."""
+		self.assertEqual(
+			self._key({1, 2}, {3, 4}),
+			self._key({2, 1}, {4, 3}),
+		)
+
+	def test_a_missing_subject_scope_is_distinct_from_an_empty_one(self):
+		"""None means the middleware never ran (management command, test
+		bypassing middleware); set() means it ran and the caller can see
+		nothing. Collapsing them would let an unscoped internal caller share
+		a cache entry with a caller scoped to nothing."""
+		self.assertNotEqual(
+			self._key({1}, None),
+			self._key({1}, set()),
 		)

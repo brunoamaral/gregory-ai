@@ -19,6 +19,7 @@ from organizations.models import Organization, OrganizationUser
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
+from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import OrganizationApiSettings, Sources, Subject, Team
 
 User = get_user_model()
@@ -60,11 +61,12 @@ def _make_source(team, subject, name):
 	)
 
 
-def _make_api_scheme(org, name):
+def _make_api_scheme(org, name, site=None):
 	return APIAccessScheme.objects.create(
 		client_name=name,
 		client_contacts=f"{name}@example.com",
 		organization=org,
+		site=site,
 		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
@@ -93,6 +95,15 @@ class SourceVisibilityBase(TestCase):
 		self.src_mine = _make_source(self.my_team, self.my_subj, "Mine Source")
 		self.src_pub = _make_source(self.pub_team, self.pub_subj, "Public Source")
 		self.src_priv = _make_source(self.priv_team, self.priv_subj, "Private Source")
+
+		# Sources reach scope through their subject FK.
+		self.my_site = private_site_publishing(
+			self.my_subj, organization=self.my_org
+		)
+		self.pub_site = publish_subjects(self.pub_subj, organization=self.pub_org)
+		self.priv_site = private_site_publishing(
+			self.priv_subj, organization=self.priv_org
+		)
 
 		self.client = APIClient()
 
@@ -175,7 +186,7 @@ class AuthenticatedUserSourceVisibilityTest(SourceVisibilityBase):
 class APIKeySourceVisibilityTest(SourceVisibilityBase):
 	def setUp(self):
 		super().setUp()
-		self.scheme = _make_api_scheme(self.my_org, "src-key")
+		self.scheme = _make_api_scheme(self.my_org, "src-key", site=self.my_site)
 		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
 
 	def test_list_shows_own_source(self):

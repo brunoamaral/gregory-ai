@@ -343,82 +343,73 @@ def _latest_ml_predictions_queryset():
 	).select_related("subject")
 
 
-class OrgVisibilityMixin:
+class SubjectVisibilityMixin:
 	"""
-	Viewset mixin that scopes the queryset to organisations the caller can see.
+	Viewset mixin that scopes the queryset to subjects the caller can see.
 
-	Uses ``request.visible_org_ids`` (set by ``VisibleOrgMiddleware``).  Falls
-	back to the full queryset when the attribute is absent so tests and
+	Uses ``request.visible_subject_ids`` (set by ``VisibleOrgMiddleware``).
+	Falls back to the full queryset when the attribute is absent so tests and
 	management commands that bypass middleware are not broken.
 
-	Override ``_org_filter_path`` in the subclass to set the ORM lookup path
-	from the model to the Organisation PK.  Defaults to
-	``teams__organization_id`` (Articles and Trials via M2M teams relation).
+	Replaces ``OrgVisibilityMixin`` (site-scoped API visibility, Phase 4).
+	The old mixin parameterised the ORM path from the model to an
+	Organisation PK; this one parameterises the path to a Subject PK. The
+	shapes it has to serve are:
 
-	Examples:
-	  - Team:          _org_filter_path = 'organization_id'
-	  - Subject/Source/Category:  _org_filter_path = 'team__organization_id'
+	  - Articles, Trials:  ``subjects``          (M2M on the model itself)
+	  - Subject:           ``id``                (the subject *is* the row)
+	  - Sources:           ``subject_id``        (FK)
+	  - TeamCategory:      ``subjects``          (M2M)
+
+	Note what is NOT here: ``/teams/`` and ``/organizations/`` are not
+	content and carry no subject, so they do not use this mixin. Teams are
+	gated by the explicit ``Team.api_listed`` flag and organisations still
+	read ``visible_org_ids`` -- see their viewsets. Conflating "which rows of
+	data may I read" with "whose name may I see listed" is the mistake this
+	separation avoids.
 	"""
 
-	_org_filter_path = "teams__organization_id"
-	# Set to False for viewsets that reach orgs via a simple FK (not M2M),
-	# where a plain filter() can't duplicate rows and Exists() would be
-	# unnecessary overhead. True means the path crosses a multi-valued (M2M)
-	# relation, so we use a correlated Exists() subquery instead of a
-	# join + distinct() to avoid duplicating rows without paying the cost of
-	# DISTINCT-ing every column in the paginator's COUNT(*) query.
-	_org_filter_distinct = True
+	#: ORM path from the model to a Subject PK.
+	_subject_filter_path = "subjects"
+	# Set to False where the path reaches subjects through a single-valued
+	# field (an FK, or the PK itself), so a plain filter() cannot duplicate
+	# rows and the Exists() subquery would be pure overhead. True means the
+	# path crosses a multi-valued (M2M) relation, where a join + distinct()
+	# would otherwise make the paginator's COUNT(*) DISTINCT every column.
+	_subject_filter_distinct = True
 
 	def get_queryset(self):
 		qs = super().get_queryset()
-		if not hasattr(self.request, "visible_org_ids"):
+		if not hasattr(self.request, "visible_subject_ids"):
 			return qs
-		if self._org_filter_distinct:
-			return qs.filter(Exists(self._org_visible_through_subquery(qs.model)))
-		return qs.filter(**{f"{self._org_filter_path}__in": self.request.visible_org_ids})
+		subject_ids = self.request.visible_subject_ids
+		if self._subject_filter_distinct:
+			# Correlated Exists() over the subjects M2M through table.
+			#
+			# Kept from the OrgVisibilityMixin rewrite this replaces
+			# (HOUSE-LOAD-SPIKE-P2-QUERY-COST.md item 2): filtering the outer
+			# model back through its own M2M joins the table to itself just
+			# to test the row it started from, and DISTINCT-ing that in the
+			# paginator's COUNT(*) was measured at 946ms/request. Traversing
+			# the through table directly is 15ms.
+			#
+			# Simpler than the org version was, and one query cheaper: that
+			# one had to resolve organisation ids to team ids in Python
+			# first, because the through table holds team ids and the filter
+			# was on Team.organization_id. Subject ids ARE what the through
+			# table holds, so there is nothing to resolve.
+			return qs.filter(Exists(self._subject_visible_subquery(qs.model, subject_ids)))
+		return qs.filter(**{f"{self._subject_filter_path}__in": subject_ids})
 
-	def _org_visible_through_subquery(self, model):
-		"""Correlated Exists() over the ``teams`` M2M through table.
-
-		HOUSE-LOAD-SPIKE-P2-QUERY-COST.md item 2: the previous subquery
-		(``qs.model.objects.filter(pk=OuterRef("pk"), teams__organization_id__in=...)``)
-		joined the outer model back to itself through ``teams`` just to filter
-		on the same row it started from — provably (and measurably) redundant.
-		This traverses the through table directly instead, and resolves
-		organisation ids to team ids in Python first: Postgres estimates the
-		through-table-only rewrite as cheap enough to still go parallel, but
-		only the resolved-team-ids form drops below the parallel-worker
-		threshold, which is what actually mattered for the load-spike
-		incident (3 backends per request vs. 1).
-
-		Uses ``Team.all_objects`` (not ``Team.objects``, which is
-		``ActiveTeamManager`` and filters ``is_active=True``) so soft-deleted
-		teams' content stays visible exactly as it was before this rewrite —
-		the raw SQL this replaces joined ``gregory_team`` with no active
-		filter. Changing that is a separate, deliberate decision, not a side
-		effect of a performance refactor.
-
-		Only reached via ``_org_filter_distinct = True``, whose only two
-		current users (ArticleViewSet, TrialViewSet) both use the default
-		``_org_filter_path = "teams__organization_id"`` — a 2-segment
-		``<m2m relation>__<field on Team>`` path — so that's the only shape
-		handled here.
-		"""
-		relation_name, _, team_field_lookup = self._org_filter_path.partition("__")
-		through = getattr(model, relation_name).through
+	def _subject_visible_subquery(self, model, subject_ids):
+		through = getattr(model, self._subject_filter_path).through
 		fk_fields = [f for f in through._meta.get_fields() if isinstance(f, ForeignKey)]
 		source_field = next(f for f in fk_fields if f.related_model is model)
-		team_field = next(f for f in fk_fields if f.related_model is Team)
-
-		team_ids = list(
-			Team.all_objects.filter(
-				**{f"{team_field_lookup}__in": self.request.visible_org_ids}
-			).values_list("id", flat=True)
-		)
+		subject_field = next(f for f in fk_fields if f.related_model is Subject)
 		return through.objects.filter(
 			**{
 				source_field.attname: OuterRef("pk"),
-				f"{team_field.attname}__in": team_ids,
+				f"{subject_field.attname}__in": subject_ids,
 			}
 		)
 
@@ -455,9 +446,9 @@ class CachedStatsActionMixin:
 	_stats_key_ignored_params = frozenset({"page", "page_size", "all_results"})
 
 	def _stats_cache_key(self, request):
-		visible_org_ids = getattr(request, "visible_org_ids", None)
-		orgs = (
-			None if visible_org_ids is None else sorted(visible_org_ids)
+		visible_subject_ids = getattr(request, "visible_subject_ids", None)
+		subjects = (
+			None if visible_subject_ids is None else sorted(visible_subject_ids)
 		)
 		# JSON of sorted (key, value) pairs is an unambiguous encoding: naive
 		# "k=v&k=v" concatenation lets a param value containing '&' or '=' (easy
@@ -492,10 +483,11 @@ class CachedStatsActionMixin:
 		on a multi-valued relation) with a distinct count per parent row.
 
 		SECURITY: an article/trial visible to the caller can be tagged with
-		a subject belonging to a NON-visible org. The list serializers strip
-		such subjects (OrgScopedSerializerMixin); the stats must not leak
-		them either, so when ``request.visible_org_ids`` exists only subjects
-		whose team's organisation is visible are included.
+		a subject OUTSIDE the caller's scope -- that is the ordinary case for
+		a row that qualified on one of its other subjects. The list
+		serializers strip those (ScopedSerializerMixin); the stats must not
+		leak them either, so only subjects in ``request.visible_subject_ids``
+		are counted.
 		"""
 		model = filtered_qs.model
 		through = model.subjects.through
@@ -503,9 +495,9 @@ class CachedStatsActionMixin:
 		qs = through.objects.filter(
 			**{f"{source_field}__in": filtered_qs.order_by().values("pk")}
 		)
-		visible_org_ids = getattr(self.request, "visible_org_ids", None)
-		if visible_org_ids is not None:
-			qs = qs.filter(subject__team__organization_id__in=visible_org_ids)
+		visible_subject_ids = getattr(self.request, "visible_subject_ids", None)
+		if visible_subject_ids is not None:
+			qs = qs.filter(subject_id__in=visible_subject_ids)
 		rows = (
 			qs.values("subject_id", "subject__subject_name")
 			.annotate(count=Count(f"{source_field}_id", distinct=True))
@@ -1463,7 +1455,7 @@ _ARTICLES_ORDERING_PARAM = _ordering_param(
 class ArticleViewSet(
 	BulkExportThrottleMixin,
 	CSVStreamingMixin,
-	OrgVisibilityMixin,
+	SubjectVisibilityMixin,
 	CachedStatsActionMixin,
 	viewsets.ReadOnlyModelViewSet,
 ):
@@ -1940,11 +1932,14 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 		"""
 		queryset = TeamCategory.objects.all()
 
-		# --- Org visibility: only categories whose team's org is visible ---
-		if hasattr(self.request, "visible_org_ids"):
+		# --- Visibility: a category is reachable when its own subjects M2M
+		# intersects the caller's scope. Not the owning team's organisation:
+		# a category is a view onto subjects, so the subjects it names are
+		# what decides. distinct() because the M2M can match several times.
+		if hasattr(self.request, "visible_subject_ids"):
 			queryset = queryset.filter(
-				team__organization_id__in=self.request.visible_org_ids
-			)
+				subjects__id__in=self.request.visible_subject_ids
+			).distinct()
 
 		# Apply filters without expensive annotations
 		team_id = self.request.query_params.get("team_id")
@@ -2255,7 +2250,7 @@ _TRIALS_ORDERING_PARAM = _ordering_param(
 class TrialViewSet(
 	BulkExportThrottleMixin,
 	CSVStreamingMixin,
-	OrgVisibilityMixin,
+	SubjectVisibilityMixin,
 	CachedStatsActionMixin,
 	viewsets.ReadOnlyModelViewSet,
 ):
@@ -2934,7 +2929,7 @@ class SponsorViewSet(viewsets.ReadOnlyModelViewSet):
 ###
 
 
-class SourceViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
+class SourceViewSet(SubjectVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	List all sources of data with optional filters for team and subject.
 
@@ -2949,8 +2944,9 @@ class SourceViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	- **ordering** - sort field, prefix with `-` for descending. Allowed values: `name`, `source_id`
 	"""
 
-	_org_filter_path = "team__organization_id"
-	_org_filter_distinct = False
+	# Sources.subject is a plain FK, so a filter() cannot duplicate rows.
+	_subject_filter_path = "subject_id"
+	_subject_filter_distinct = False
 	queryset = Sources.objects.all().order_by("name")
 	serializer_class = SourceSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -2970,19 +2966,23 @@ class SourceViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 ###
 
 
-def author_articles_count_subquery(visible_org_ids=None, relevant_only=False):
+def author_articles_count_subquery(visible_subject_ids=None, relevant_only=False):
 	"""Correlated count of an author's articles, immune to outer-query joins.
 
 	A plain ``Count("articles", ...)`` annotation is corrupted whenever the
 	outer queryset already filters across the ``articles__`` join (Django
 	computes the aggregate over the same constrained join). A subquery avoids
 	that trap entirely.
+
+	``visible_subject_ids`` scopes the count to what the caller may see, so
+	the number an author's row reports matches the articles that caller can
+	actually list. None means "no scoping" (middleware absent).
 	"""
 	articles = Articles.objects.filter(authors__author_id=OuterRef("author_id"))
 	if relevant_only:
 		articles = articles.filter(relevant=True)
-	if visible_org_ids is not None:
-		articles = articles.filter(teams__organization_id__in=visible_org_ids)
+	if visible_subject_ids is not None:
+		articles = articles.filter(subjects__in=visible_subject_ids)
 	counts = (
 		articles.order_by()
 		.values("authors__author_id")
@@ -3172,13 +3172,14 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	def get_queryset(self):
 		queryset = Authors.objects.all()
 
-		# --- Org visibility: only authors with at least one article in a visible org ---
-		if hasattr(self.request, "visible_org_ids"):
+		# --- Visibility: an author is reachable through their articles, so
+		# they qualify when at least one carries a subject in scope. ---
+		if hasattr(self.request, "visible_subject_ids"):
 			queryset = queryset.filter(
 				Exists(
 					Articles.objects.filter(
 						authors=OuterRef("pk"),
-						teams__organization_id__in=self.request.visible_org_ids,
+						subjects__in=self.request.visible_subject_ids,
 					)
 				)
 			)
@@ -3348,12 +3349,13 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 		# Add date filters to count filters
 		count_filters.update(date_filters)
 
-		# Build an org-visibility filter for the Count annotation so that
-		# article_count always reflects only visible articles (fixes sorting/
-		# filtering by article_count leaking hidden-org data).
-		has_org_scope = hasattr(self.request, "visible_org_ids")
+		# Build a visibility filter for the Count annotation so that
+		# article_count always reflects only visible articles (sorting or
+		# filtering by article_count would otherwise leak the size of what
+		# the caller cannot read).
+		has_org_scope = hasattr(self.request, "visible_subject_ids")
 		org_q = (
-			Q(articles__teams__organization_id__in=self.request.visible_org_ids)
+			Q(articles__subjects__in=self.request.visible_subject_ids)
 			if has_org_scope
 			else Q()
 		)
@@ -3408,7 +3410,7 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 		target = page if page is not None else list(queryset)
 
 		if target:
-			visible_org_ids = getattr(request, "visible_org_ids", None)
+			visible_subject_ids = getattr(request, "visible_subject_ids", None)
 			author_ids = [obj.author_id for obj in target]
 
 			# article_count is already annotated on the page (via a cheap
@@ -3420,12 +3422,12 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 
 			annotations = {
 				"_relevant_articles_count": author_articles_count_subquery(
-					visible_org_ids, relevant_only=True
+					visible_subject_ids, relevant_only=True
 				),
 			}
 			if needs_article_count:
 				annotations["_article_count"] = author_articles_count_subquery(
-					visible_org_ids, relevant_only=False
+					visible_subject_ids, relevant_only=False
 				)
 
 			counts_by_id = {
@@ -3511,11 +3513,11 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	def coauthors(self, request, pk=None):
 		"""Co-authors ordered by number of shared articles (desc)."""
 		author = self.get_object()
-		visible_org_ids = getattr(request, "visible_org_ids", None)
+		visible_subject_ids = getattr(request, "visible_subject_ids", None)
 
 		shared = Articles.objects.filter(authors__author_id=author.author_id)
-		if visible_org_ids is not None:
-			shared = shared.filter(teams__organization_id__in=visible_org_ids)
+		if visible_subject_ids is not None:
+			shared = shared.filter(subjects__in=visible_subject_ids)
 		shared_ids = shared.values("article_id").distinct()
 
 		coauthors_qs = (
@@ -3526,9 +3528,9 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 				shared_articles=Count(
 					"articles", filter=Q(articles__article_id__in=shared_ids), distinct=True,
 				),
-				articles_count=author_articles_count_subquery(visible_org_ids),
+				articles_count=author_articles_count_subquery(visible_subject_ids),
 				relevant_articles_count=author_articles_count_subquery(
-					visible_org_ids, relevant_only=True,
+					visible_subject_ids, relevant_only=True,
 				),
 			)
 			.order_by("-shared_articles", "author_id")
@@ -3568,14 +3570,25 @@ class ProtectedEndpointView(APIView):
 ###
 
 
-class TeamsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
+class TeamsViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
-	List all teams
+	List teams that have opted into being listed.
+
+	Gated by the explicit ``Team.api_listed`` flag, not by subject scope. A
+	team is not content and owns no subject of its own, so deriving its
+	visibility from the subjects it owns cannot express either of the two
+	things an operator eventually wants: an internal lab that contributes to
+	public content but should not be named, or a partner an organisation
+	wants to credit that owns nothing in scope. The flag was seeded from the
+	derived answer by ``sitesettings/0019`` and can be overridden either way.
+
+	It gates listing, not access. ``api_listed = False`` removes a team from
+	this endpoint; it does not hide that team's content, which is governed by
+	subject scope like everything else. Conflating the two is how a metadata
+	switch quietly becomes a data-visibility switch.
 	"""
 
-	_org_filter_path = "organization_id"
-	_org_filter_distinct = False
-	queryset = Team.objects.all().order_by("id")
+	queryset = Team.objects.filter(api_listed=True).order_by("id")
 	serializer_class = TeamSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
@@ -3621,7 +3634,7 @@ _SUBJECTS_ORDERING_PARAM = _ordering_param(
 	list=extend_schema(parameters=[_SUBJECTS_ORDERING_PARAM]),
 )
 
-class SubjectsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
+class SubjectsViewSet(SubjectVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	"""
 	✅ **PREFERRED ENDPOINT**: This is the main subjects endpoint that supports filtering options.
 
@@ -3639,8 +3652,9 @@ class SubjectsViewSet(OrgVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	- Order by name: `/subjects/?ordering=subject_name`
 	"""
 
-	_org_filter_path = "team__organization_id"
-	_org_filter_distinct = False
+	# The subject is the row itself -- no relation to traverse.
+	_subject_filter_path = "id"
+	_subject_filter_distinct = False
 	queryset = Subject.objects.all().order_by("id")
 	serializer_class = SubjectsSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -4226,10 +4240,10 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 
 			queryset = queryset.annotate(
 				article_count=author_articles_count_subquery(
-					getattr(self.request, "visible_org_ids", None), relevant_only=False
+					getattr(self.request, "visible_subject_ids", None), relevant_only=False
 				),
 				relevant_articles_count=author_articles_count_subquery(
-					getattr(self.request, "visible_org_ids", None), relevant_only=True,
+					getattr(self.request, "visible_subject_ids", None), relevant_only=True,
 				)
 			)
 

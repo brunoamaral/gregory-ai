@@ -126,18 +126,26 @@ class CachedCountMixin:
 	)
 
 	def _count_cache_key(self, request):
-		"""Tenant-safe cache key: path + visible org ids + normalised params.
+		"""Tenant-safe cache key: path + visible scope + normalised params.
 
 		Mirrors CachedStatsActionMixin._stats_cache_key's security shape
-		(org ids and query params are both load-bearing — dropping either
+		(the scope and query params are both load-bearing — dropping either
 		would serve one tenant's count to another caller) but keys on
 		``request.path`` instead of a per-view prefix string, since this
 		pagination class is shared across several viewsets (Articles,
 		Trials, Sponsors, ...) and the path is what actually distinguishes
 		their counts from one another.
 		"""
-		visible_org_ids = getattr(request, "visible_org_ids", None)
-		orgs = None if visible_org_ids is None else sorted(visible_org_ids)
+		# The subject scope, not the org scope: every endpoint that uses this
+		# paginator (articles, trials, sponsors, authors and the three search
+		# views) selects its rows by subject since Phase 4 of site-scoped API
+		# visibility, so the subject set is what a cached count is a count OF.
+		# Hashing visible_org_ids as well would only fragment the cache --
+		# there is no paginated org-keyed endpoint for it to protect.
+		visible_subject_ids = getattr(request, "visible_subject_ids", None)
+		subjects = (
+			None if visible_subject_ids is None else sorted(visible_subject_ids)
+		)
 		params = sorted(
 			(key, value)
 			for key in request.query_params.keys()
@@ -145,7 +153,13 @@ class CachedCountMixin:
 			for value in request.query_params.getlist(key)
 		)
 		digest = hashlib.sha256(
-			json.dumps({"path": request.path, "orgs": orgs, "params": params}).encode()
+			json.dumps(
+				{
+					"path": request.path,
+					"subjects": subjects,
+					"params": params,
+				}
+			).encode()
 		).hexdigest()
 		return f"paginator_count:{digest}"
 

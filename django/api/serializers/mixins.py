@@ -1,38 +1,44 @@
 """
 api/serializers/mixins.py
 
-OrgScopedSerializerMixin — strips nested associations that belong to
-organisations outside ``request.visible_org_ids``.
+ScopedSerializerMixin — strips nested associations the caller cannot see.
+
+A row reaching the serializer has already passed the viewset's scope filter,
+which means *the row* is visible. That says nothing about the associations
+hanging off it: an article carrying two subjects, one of them out of scope,
+is visible on the strength of the first and must not disclose the second.
+Stripping here is what keeps the row's fields consistent with the rule that
+selected the row.
 
 Applied fields (when present on the serialised object):
-  - ``teams``           → Team entries whose org is not visible
-  - ``subjects``        → Subject entries whose team's org is not visible
-  - ``team_categories`` → TeamCategory entries whose team's org is not visible
-  - ``ml_predictions``  → MLPredictions entries whose subject's team's org
-                           is not visible
+  - ``subjects``        → Subject entries outside ``request.visible_subject_ids``
+  - ``ml_predictions``  → MLPredictions entries whose subject is outside it
+  - ``team_categories`` → TeamCategory entries whose ``subjects`` M2M does not
+                           intersect it
+  - ``teams``           → Team entries with ``api_listed=False``
+
+Teams are the odd one out, and deliberately so. A Team carries no subject, so
+subject scope cannot speak to it; it is gated by the same explicit
+``Team.api_listed`` flag that governs ``/teams/``, so a team's name appears
+nested inside an article exactly when it would appear in the team directory.
+Using two different answers for "may I see this team's name" depending on
+which endpoint asked would be a leak in whichever direction was laxer.
 
 The mixin is intentionally a no-op when:
   - There is no ``request`` in the serializer context, OR
-  - ``request.visible_org_ids`` has not been set (middleware not active).
-
-This guarantees zero behaviour change until the viewsets are explicitly
-opted in (PR 4 onwards).
+  - ``request.visible_subject_ids`` has not been set (middleware not active).
 
 Query strategy (avoiding N+1 on list endpoints)
 ------------------------------------------------
-- ``teams``:  ``team.organization_id`` is a direct FK column; iterating
-  ``.all()`` in Python respects ``prefetch_related('teams')`` with zero
-  extra DB queries.
-- ``subjects`` / ``team_categories``:  ``subject.team_id`` is a direct FK
-  column.  Visible team IDs are resolved once per request and cached on
-  ``request._org_scoped_mixin_team_ids`` so the query runs at most once per
-  request regardless of list length.
-- ``ml_predictions``:  Each serialised item already contains a ``subject``
-  key (the FK integer) from ``MLPredictionsSerializer``.  Visible subject IDs
-  are resolved once per request and cached on
-  ``request._org_scoped_mixin_subject_ids``.  Filtering is done entirely on
-  ``ret['ml_predictions']`` — no extra DB query, no dependency on whether
-  ``ml_predictions_detail`` was prefetched.
+- ``subjects`` / ``ml_predictions``:  no query at all. ``visible_subject_ids``
+  IS the answer, so these are set-membership tests on data already loaded.
+  The org version had to resolve orgs → teams → subjects and cache the result
+  per request; that machinery is gone.
+- ``team_categories``:  a category's ``subjects`` M2M has to be consulted, so
+  the qualifying category IDs are resolved once per request and cached on
+  ``request._scoped_mixin_category_ids``.
+- ``teams``:  ``team.api_listed`` is a direct column; iterating ``.all()`` in
+  Python respects ``prefetch_related('teams')`` with zero extra queries.
 
 Per-org fields (``_per_org_fields``)
 -------------------------------------
@@ -99,55 +105,40 @@ def _resolve_per_org_fields_org(request):
 	return org
 
 
-def _request_visible_team_ids(request, visible_org_ids: set) -> set:
-	"""Return all team IDs belonging to visible orgs, cached once per request.
+def _request_visible_category_ids(request, visible_subject_ids: set) -> set:
+	"""TeamCategory IDs whose subjects intersect the caller's scope.
 
-	Caching avoids issuing a team-lookup query for every object in a list
-	endpoint response.
+	Cached once per request: without it a list endpoint would issue this
+	query per serialised row. Unlike subjects and ml_predictions, a category
+	reaches subjects through its own M2M, so there is no way to answer it
+	from data already in hand.
 	"""
-	cache_attr = "_org_scoped_mixin_team_ids"
+	cache_attr = "_scoped_mixin_category_ids"
 	if not hasattr(request, cache_attr):
-		from gregory.models import Team
+		from gregory.models import TeamCategory
 
 		setattr(
 			request,
 			cache_attr,
 			set(
-				Team.objects.filter(organization_id__in=visible_org_ids).values_list(
-					"id", flat=True
+				TeamCategory.objects.filter(
+					subjects__id__in=visible_subject_ids
 				)
+				.values_list("id", flat=True)
+				.distinct()
 			),
 		)
 	return getattr(request, cache_attr)
 
 
-def _request_visible_subject_ids(request, visible_org_ids: set) -> set:
-	"""Return all subject IDs belonging to visible orgs, cached once per request.
-
-	Caching avoids issuing a subject-lookup query for every object in a list
-	endpoint response (used when filtering ml_predictions in Python).
+class ScopedSerializerMixin:
 	"""
-	cache_attr = "_org_scoped_mixin_subject_ids"
-	if not hasattr(request, cache_attr):
-		from gregory.models import Subject
-
-		vt = _request_visible_team_ids(request, visible_org_ids)
-		setattr(
-			request,
-			cache_attr,
-			set(Subject.objects.filter(team_id__in=vt).values_list("id", flat=True)),
-		)
-	return getattr(request, cache_attr)
-
-
-class OrgScopedSerializerMixin:
-	"""
-	Mixin for DRF serializers that strips nested associations belonging to
-	organisations the caller cannot see.
+	Mixin for DRF serializers that strips nested associations the caller
+	cannot see.
 
 	Usage::
 
-	    class ArticleSerializer(OrgScopedSerializerMixin,
+	    class ArticleSerializer(ScopedSerializerMixin,
 	                            serializers.HyperlinkedModelSerializer):
 	        ...
 
@@ -170,34 +161,23 @@ class OrgScopedSerializerMixin:
 				for field in self._per_org_fields:
 					ret.pop(field, None)
 
-		if request is None or not hasattr(request, "visible_org_ids"):
+		if request is None or not hasattr(request, "visible_subject_ids"):
 			return ret
 
-		visible = request.visible_org_ids
+		visible = request.visible_subject_ids
 
-		# --- teams: iterate Python, uses prefetch_related cache ---
+		# --- teams: api_listed is a direct column; uses prefetch cache ---
 		if "teams" in ret and hasattr(instance, "teams"):
-			visible_team_ids = {
-				t.id for t in instance.teams.all() if t.organization_id in visible
-			}
-			ret["teams"] = [t for t in ret["teams"] if t.get("id") in visible_team_ids]
+			listed_team_ids = {t.id for t in instance.teams.all() if t.api_listed}
+			ret["teams"] = [t for t in ret["teams"] if t.get("id") in listed_team_ids]
 
-		# --- subjects: team_id is a direct FK attribute; team IDs cached per request ---
-		if "subjects" in ret and hasattr(instance, "subjects"):
-			vt = _request_visible_team_ids(request, visible)
-			visible_subject_ids = {
-				s.id for s in instance.subjects.all() if s.team_id in vt
-			}
-			ret["subjects"] = [
-				s for s in ret["subjects"] if s.get("id") in visible_subject_ids
-			]
+		# --- subjects: a set-membership test, no query ---
+		if "subjects" in ret:
+			ret["subjects"] = [s for s in ret["subjects"] if s.get("id") in visible]
 
-		# --- team_categories: same approach as subjects ---
+		# --- team_categories: reached through the category's own subjects M2M ---
 		if "team_categories" in ret and hasattr(instance, "team_categories"):
-			vt = _request_visible_team_ids(request, visible)
-			visible_cat_ids = {
-				c.id for c in instance.team_categories.all() if c.team_id in vt
-			}
+			visible_cat_ids = _request_visible_category_ids(request, visible)
 			ret["team_categories"] = [
 				c for c in ret["team_categories"] if c.get("id") in visible_cat_ids
 			]
@@ -209,8 +189,6 @@ class OrgScopedSerializerMixin:
 		# hitting instance.ml_predictions_detail.all() a second time, which would
 		# cause an extra per-object query when the relation is not prefetched.
 		if "ml_predictions" in ret:
-			vs = _request_visible_subject_ids(request, visible)
-
 			def _subject_id(p):
 				s = p.get("subject")
 				if isinstance(s, dict):
@@ -218,7 +196,7 @@ class OrgScopedSerializerMixin:
 				return s if isinstance(s, int) else None
 
 			ret["ml_predictions"] = [
-				p for p in ret["ml_predictions"] if _subject_id(p) in vs
+				p for p in ret["ml_predictions"] if _subject_id(p) in visible
 			]
 
 		return ret

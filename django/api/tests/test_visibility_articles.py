@@ -1,14 +1,23 @@
 """
-Tests for article visibility enforcement (PR 4).
+Tests for article visibility enforcement.
 
-Covers the four caller archetypes × the test matrix from the PR plan:
-  - Article in caller's org only
-  - Article in another public org only
-  - Article in another private org only
-  - Article spanning caller's org + a public org (listing + association stripping)
-  - Article spanning caller's org + a private org (listing + association stripping)
-  - Detail endpoint: all-hidden teams → 404
-  - ArticleSearchView: team_id of hidden team → 404
+Visibility is SUBJECT-scoped (site-scoped API visibility, Phase 4): a caller
+sees an article when one of its subjects is in the scope of a site that
+caller can reach. This suite was written against the earlier organisation
+rule -- articles carried teams, and visibility followed team -> organisation
+-- so its whole matrix has been restated in the new unit. Each organisation
+here now owns a Site publishing exactly one subject, which keeps the
+archetypes one-to-one with what they were: "my org's article" becomes "an
+article carrying my site's subject".
+
+Covers the three caller archetypes × the matrix:
+  - Article in the caller's scope only
+  - Article in another public scope only
+  - Article in another private scope only
+  - Article spanning the caller's scope + a public one (listing + stripping)
+  - Article spanning the caller's scope + a private one (listing + stripping)
+  - Detail endpoint: no visible subject → 404
+  - ArticleSearchView: team_id of a hidden team → 404
 
 Run with:
     docker exec gregory python manage.py test api.tests.test_visibility_articles
@@ -23,6 +32,7 @@ from organizations.models import Organization, OrganizationUser
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
+from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import Articles, OrganizationApiSettings, Subject, Team
 
 User = get_user_model()
@@ -41,9 +51,11 @@ def _make_org(name, slug, public=False):
 	return org
 
 
-def _make_team(org, name):
+def _make_team(org, name, api_listed=True):
 	slug = name.lower().replace(" ", "-")
-	return Team.objects.create(organization=org, name=name, slug=slug)
+	return Team.objects.create(
+		organization=org, name=name, slug=slug, api_listed=api_listed
+	)
 
 
 def _make_subject(team, name):
@@ -63,12 +75,17 @@ def _make_article(title, link, teams=(), subjects=()):
 	return art
 
 
-def _make_api_scheme(org, name):
-	"""Create a valid (not-expired) APIAccessScheme for the given org."""
+def _make_api_scheme(org, name, site=None):
+	"""Create a valid (not-expired) APIAccessScheme for the given org.
+
+	``site`` is what binds the key to a subject scope; a key without one
+	resolves to no subjects at all.
+	"""
 	return APIAccessScheme.objects.create(
 		client_name=name,
 		client_contacts=f"{name}@example.com",
 		organization=org,
+		site=site,
 		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
@@ -91,30 +108,52 @@ class ArticleVisibilityBase(TestCase):
 
 		self.my_team = _make_team(self.my_org, "My Team")
 		self.pub_team = _make_team(self.pub_org, "Pub Team")
-		self.priv_team = _make_team(self.priv_org, "Priv Team")
+		# Unlisted, so the nested-team assertions below have something to
+		# strip. Listing is caller-independent now -- see the tests.
+		self.priv_team = _make_team(self.priv_org, "Priv Team", api_listed=False)
 
 		self.my_subj = _make_subject(self.my_team, "My Subject")
 		self.pub_subj = _make_subject(self.pub_team, "Pub Subject")
+		self.priv_subj = _make_subject(self.priv_team, "Priv Subject")
 
-		# Article in my org only
+		# One site per organisation, each publishing that organisation's
+		# subject. Only pub_site is api_public, so pub_subj is exactly what
+		# an anonymous caller can see; my_site is reachable by a member of
+		# my_org or a key bound to it, and priv_site by nobody in this suite.
+		self.my_site = private_site_publishing(
+			self.my_subj, organization=self.my_org
+		)
+		self.pub_site = publish_subjects(self.pub_subj, organization=self.pub_org)
+		self.priv_site = private_site_publishing(
+			self.priv_subj, organization=self.priv_org
+		)
+
+		# Article in my scope only
 		self.art_mine = _make_article(
-			"Mine Only", "https://ex.com/1", teams=[self.my_team]
+			"Mine Only", "https://ex.com/1",
+			teams=[self.my_team], subjects=[self.my_subj],
 		)
-		# Article in public org only
+		# Article in the public scope only
 		self.art_pub = _make_article(
-			"Public Only", "https://ex.com/2", teams=[self.pub_team]
+			"Public Only", "https://ex.com/2",
+			teams=[self.pub_team], subjects=[self.pub_subj],
 		)
-		# Article in private (hidden) org only
+		# Article in a private (hidden) scope only
 		self.art_priv = _make_article(
-			"Private Only", "https://ex.com/3", teams=[self.priv_team]
+			"Private Only", "https://ex.com/3",
+			teams=[self.priv_team], subjects=[self.priv_subj],
 		)
-		# Article spanning my org + public org
+		# Article spanning my scope + the public scope
 		self.art_mine_pub = _make_article(
-			"Mine+Pub", "https://ex.com/4", teams=[self.my_team, self.pub_team]
+			"Mine+Pub", "https://ex.com/4",
+			teams=[self.my_team, self.pub_team],
+			subjects=[self.my_subj, self.pub_subj],
 		)
-		# Article spanning my org + hidden org
+		# Article spanning my scope + a hidden scope
 		self.art_mine_priv = _make_article(
-			"Mine+Priv", "https://ex.com/5", teams=[self.my_team, self.priv_team]
+			"Mine+Priv", "https://ex.com/5",
+			teams=[self.my_team, self.priv_team],
+			subjects=[self.my_subj, self.priv_subj],
 		)
 
 		self.client = APIClient()
@@ -147,8 +186,15 @@ class AnonymousArticleVisibilityTest(ArticleVisibilityBase):
 		self.assertIn(self.art_mine_pub.article_id, ids)
 		self.assertNotIn(self.art_mine_priv.article_id, ids)
 
-	def test_cross_org_article_has_hidden_team_stripped(self):
-		"""art_mine_pub: my_team should be stripped (not public), pub_team visible."""
+	def test_cross_scope_article_has_out_of_scope_subject_stripped(self):
+		"""art_mine_pub qualifies on pub_subj; my_subj must not be disclosed.
+
+		This is the assertion that used to be made about teams. It belongs on
+		subjects now: a row is selected by subject, so the subject list is
+		the field that has to agree with the rule that selected it. An
+		anonymous caller sees the article because it carries pub_subj, and
+		must not learn that it also carries my_subj.
+		"""
 		resp = self.client.get("/articles/")
 		self.assertEqual(resp.status_code, 200)
 		art = next(
@@ -156,9 +202,24 @@ class AnonymousArticleVisibilityTest(ArticleVisibilityBase):
 			for a in resp.data["results"]
 			if a["article_id"] == self.art_mine_pub.article_id
 		)
-		team_ids = [t["id"] for t in art["teams"]]
+		subject_ids = [s["id"] for s in art["subjects"]]
+		self.assertIn(self.pub_subj.id, subject_ids)
+		self.assertNotIn(self.my_subj.id, subject_ids)
+
+	def test_unlisted_team_is_stripped_from_nested_teams(self):
+		"""Team nesting follows Team.api_listed, the same flag /teams/ uses.
+
+		Caller-independent by design, unlike subject stripping above: a
+		team's name is either published or it is not, and answering that
+		question differently depending on which endpoint asked would be a
+		leak in whichever direction was laxer.
+		"""
+		resp = self.client.get(f"/articles/{self.art_mine_pub.article_id}/")
+		self.assertEqual(resp.status_code, 200)
+		team_ids = [t["id"] for t in resp.data["teams"]]
 		self.assertIn(self.pub_team.id, team_ids)
-		self.assertNotIn(self.my_team.id, team_ids)
+		self.assertIn(self.my_team.id, team_ids)
+		self.assertNotIn(self.priv_team.id, team_ids)
 
 	def test_detail_of_all_hidden_article_returns_404(self):
 		resp = self.client.get(f"/articles/{self.art_mine.article_id}/")
@@ -243,10 +304,18 @@ class AuthenticatedUserArticleVisibilityTest(ArticleVisibilityBase):
 		resp = self.client.get(f"/articles/{self.art_mine.article_id}/")
 		self.assertEqual(resp.status_code, 200)
 
-	def test_cross_org_article_has_hidden_team_stripped(self):
-		"""art_mine_priv: priv_team should be stripped from teams field."""
+	def test_cross_scope_article_has_out_of_scope_subject_stripped(self):
+		"""art_mine_priv qualifies on my_subj; priv_subj must not be disclosed."""
 		resp = self.client.get(f"/articles/{self.art_mine_priv.article_id}/")
 		self.assertEqual(resp.status_code, 200)
+		subject_ids = [s["id"] for s in resp.data["subjects"]]
+		self.assertIn(self.my_subj.id, subject_ids)
+		self.assertNotIn(self.priv_subj.id, subject_ids)
+
+	def test_unlisted_team_is_stripped_for_a_member_too(self):
+		# The flag is caller-independent: being a member of priv_org's peer
+		# does not reveal an unlisted team's name.
+		resp = self.client.get(f"/articles/{self.art_mine_priv.article_id}/")
 		team_ids = [t["id"] for t in resp.data["teams"]]
 		self.assertIn(self.my_team.id, team_ids)
 		self.assertNotIn(self.priv_team.id, team_ids)
@@ -280,7 +349,7 @@ class AuthenticatedUserArticleVisibilityTest(ArticleVisibilityBase):
 class APIKeyArticleVisibilityTest(ArticleVisibilityBase):
 	def setUp(self):
 		super().setUp()
-		self.scheme = _make_api_scheme(self.my_org, "my-key")
+		self.scheme = _make_api_scheme(self.my_org, "my-key", site=self.my_site)
 		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
 
 	def test_list_shows_my_org_article(self):
@@ -366,6 +435,7 @@ class CSVExportArticleVisibilityTest(ArticleVisibilityBase):
 			client_name="csv-key",
 			client_contacts="csv@example.com",
 			organization=self.my_org,
+			site=self.my_site,
 			ip_addresses="",
 			begin_date=now() - timedelta(days=1),
 			end_date=now() + timedelta(days=30),
@@ -384,6 +454,7 @@ class CSVExportArticleVisibilityTest(ArticleVisibilityBase):
 			client_name="csv-key-pub",
 			client_contacts="csvpub@example.com",
 			organization=self.my_org,
+			site=self.my_site,
 			ip_addresses="",
 			begin_date=now() - timedelta(days=1),
 			end_date=now() + timedelta(days=30),

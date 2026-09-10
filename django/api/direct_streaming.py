@@ -319,7 +319,7 @@ def order_columns(keys):
 def csv_header_fields(serializer, request):
 	"""Static CSV header for a serializer, matching per-row behavior.
 
-	OrgScopedSerializerMixin pops _per_org_fields from every row when the
+	ScopedSerializerMixin pops _per_org_fields from every row when the
 	request has no org context, so the header must drop them under the same
 	condition or rows and header would misalign.
 	"""

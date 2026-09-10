@@ -16,6 +16,7 @@ from organizations.models import Organization, OrganizationUser
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
+from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import OrganizationApiSettings, Subject, Team, Trials
 
 User = get_user_model()
@@ -56,11 +57,12 @@ def _make_trial(title, link, teams=(), subjects=()):
 	return trial
 
 
-def _make_api_scheme(org, name):
+def _make_api_scheme(org, name, site=None):
 	return APIAccessScheme.objects.create(
 		client_name=name,
 		client_contacts=f"{name}@example.com",
 		organization=org,
+		site=site,
 		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
@@ -84,21 +86,40 @@ class TrialVisibilityBase(TestCase):
 
 		self.my_subj = _make_subject(self.my_team, "My Subject T")
 		self.pub_subj = _make_subject(self.pub_team, "Pub Subject T")
+		self.priv_subj = _make_subject(self.priv_team, "Priv Subject T")
+
+		# One site per organisation publishing that organisation's subject.
+		# Only pub_site is api_public — see test_visibility_articles.py for
+		# the reasoning, which is identical here.
+		self.my_site = private_site_publishing(
+			self.my_subj, organization=self.my_org
+		)
+		self.pub_site = publish_subjects(self.pub_subj, organization=self.pub_org)
+		self.priv_site = private_site_publishing(
+			self.priv_subj, organization=self.priv_org
+		)
 
 		self.trial_mine = _make_trial(
-			"Mine Only", "https://trial.com/1", teams=[self.my_team]
+			"Mine Only", "https://trial.com/1",
+			teams=[self.my_team], subjects=[self.my_subj],
 		)
 		self.trial_pub = _make_trial(
-			"Public Only", "https://trial.com/2", teams=[self.pub_team]
+			"Public Only", "https://trial.com/2",
+			teams=[self.pub_team], subjects=[self.pub_subj],
 		)
 		self.trial_priv = _make_trial(
-			"Private Only", "https://trial.com/3", teams=[self.priv_team]
+			"Private Only", "https://trial.com/3",
+			teams=[self.priv_team], subjects=[self.priv_subj],
 		)
 		self.trial_mine_pub = _make_trial(
-			"Mine+Pub", "https://trial.com/4", teams=[self.my_team, self.pub_team]
+			"Mine+Pub", "https://trial.com/4",
+			teams=[self.my_team, self.pub_team],
+			subjects=[self.my_subj, self.pub_subj],
 		)
 		self.trial_mine_priv = _make_trial(
-			"Mine+Priv", "https://trial.com/5", teams=[self.my_team, self.priv_team]
+			"Mine+Priv", "https://trial.com/5",
+			teams=[self.my_team, self.priv_team],
+			subjects=[self.my_subj, self.priv_subj],
 		)
 
 		self.client = APIClient()
@@ -240,7 +261,7 @@ class AuthenticatedUserTrialVisibilityTest(TrialVisibilityBase):
 class APIKeyTrialVisibilityTest(TrialVisibilityBase):
 	def setUp(self):
 		super().setUp()
-		self.scheme = _make_api_scheme(self.my_org, "my-key-t")
+		self.scheme = _make_api_scheme(self.my_org, "my-key-t", site=self.my_site)
 		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
 
 	def test_list_shows_my_org_trial(self):
@@ -318,7 +339,7 @@ class CSVExportTrialVisibilityTest(TrialVisibilityBase):
 		self.assertNotIn("Private Only", titles)
 
 	def test_api_key_csv_shows_own_org_trials(self):
-		scheme = _make_api_scheme(self.my_org, "csv-key-t")
+		scheme = _make_api_scheme(self.my_org, "csv-key-t", site=self.my_site)
 		self.client.credentials(HTTP_AUTHORIZATION=scheme.api_key)
 		resp = self.client.get("/trials/?format=csv&all_results=true")
 		self.assertIn(resp.status_code, (200, 206))
@@ -327,7 +348,7 @@ class CSVExportTrialVisibilityTest(TrialVisibilityBase):
 		self.assertNotIn("Private Only", titles)
 
 	def test_api_key_csv_with_include_public_adds_public_trials(self):
-		scheme = _make_api_scheme(self.my_org, "csv-key-pub-t")
+		scheme = _make_api_scheme(self.my_org, "csv-key-pub-t", site=self.my_site)
 		self.client.credentials(HTTP_AUTHORIZATION=scheme.api_key)
 		resp = self.client.get(
 			"/trials/?format=csv&all_results=true&include_public=true"

@@ -2,10 +2,12 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 
+from api.tests.visibility_helpers import publish_subjects
 from gregory.models import (
 	Articles,
 	Trials,
 	ArticleTrialReference,
+	Subject,
 	Team,
 	OrganizationApiSettings,
 )
@@ -28,6 +30,13 @@ class HasClinicalTrialsFilterTests(TestCase):
 		self.team = Team.objects.create(
 			name="Clin Filter Team", slug="clin-filter-team", organization=org
 		)
+		# Subject scope, not the org flag, is what makes content readable.
+		self.subject = Subject.objects.create(
+			subject_name="Clin Filter Subject",
+			subject_slug="clin-filter-subject",
+			team=self.team,
+		)
+		publish_subjects(self.subject, organization=org)
 
 		# Article linked to a trial
 		self.article_with_trial = Articles.objects.create(
@@ -35,6 +44,7 @@ class HasClinicalTrialsFilterTests(TestCase):
 			link="https://example.com/article-with-trial",
 		)
 		self.article_with_trial.teams.add(self.team)
+		self.article_with_trial.subjects.add(self.subject)
 
 		# Article with no trial link
 		self.article_without_trial = Articles.objects.create(
@@ -42,6 +52,7 @@ class HasClinicalTrialsFilterTests(TestCase):
 			link="https://example.com/article-without-trial",
 		)
 		self.article_without_trial.teams.add(self.team)
+		self.article_without_trial.subjects.add(self.subject)
 
 		# Trial to link
 		self.trial = Trials.objects.create(
