@@ -18,6 +18,7 @@ from django.views.decorators.http import require_POST
 from PIL import Image, ImageOps
 from urllib.parse import urlparse
 
+from gregory.site_resolution import find_site_by_domain
 from sitesettings.models import CustomSetting
 from subscriptions.forms import SubscribersForm
 from subscriptions.models import (
@@ -92,33 +93,6 @@ def _get_client_ip(request):
 	return request.META.get("REMOTE_ADDR")
 
 
-def _find_site_by_domain(hostname):
-	"""
-	Look up a Site by exact domain, then by stripping one subdomain level.
-
-	e.g. 'www.example.com' → tries exact, then tries 'example.com'.
-	Accepts host strings that may include a port or IPv6 brackets; these are
-	normalised safely via urlparse before the lookup.
-	Returns the matching Site or None.
-	"""
-	host = urlparse(f"//{hostname}").hostname or ""
-	host = host.lower()
-	if not host:
-		return None
-	try:
-		return Site.objects.get(domain=host)
-	except Site.DoesNotExist:
-		pass
-	parts = host.split(".")
-	if len(parts) >= 3:
-		parent = ".".join(parts[1:])
-		try:
-			return Site.objects.get(domain=parent)
-		except Site.DoesNotExist:
-			pass
-	return None
-
-
 def _origin_matches_allowed(origin_host, allowed_domains_str):
 	"""
 	Return True if origin_host (or its parent domain after stripping one
@@ -165,7 +139,7 @@ def _resolve_site_from_request(request):
 		parsed = urlparse(origin)
 		hostname = parsed.hostname  # IPv6-safe, no port
 		if hostname:
-			site = _find_site_by_domain(hostname)
+			site = find_site_by_domain(hostname)
 			if site:
 				return site
 	try:
@@ -173,7 +147,7 @@ def _resolve_site_from_request(request):
 	except DisallowedHost:
 		host = None
 	if host:
-		site = _find_site_by_domain(host)
+		site = find_site_by_domain(host)
 		if site:
 			return site
 	return Site.objects.get_current()

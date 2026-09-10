@@ -39,6 +39,13 @@ def _build_articles(n, suffix):
 	serializer touches (authors, teams, subjects, sources, team_categories,
 	article_subject_relevances, trial_references) so an un-prefetched
 	relation shows up as O(n) queries instead of O(1).
+
+	Returns the ``Site`` that publishes this batch's subject, so a caller can
+	pin an anonymous request to it (``?site_id=``) -- this helper creates a
+	brand-new Organization + public site every call, so two calls in one test
+	leave more than one ``api_public`` site around and an anonymous request
+	naming none of them is ambiguous under Phase 3 site resolution
+	(gregory/site_resolution.py).
 	"""
 	org = Organization.objects.create(name=f"Org {suffix}", slug=f"org-{suffix}")
 	# Anonymous requests only see orgs flagged public (gregory/visibility.py).
@@ -51,7 +58,7 @@ def _build_articles(n, suffix):
 	subject = Subject.objects.create(
 		team=team, subject_name=f"Subject {suffix}", subject_slug=f"subject-{suffix}"
 	)
-	publish_subjects(subject, organization=org)
+	site = publish_subjects(subject, organization=org)
 	source = Sources.objects.create(
 		name=f"Source {suffix}", source_for="science paper"
 	)
@@ -87,6 +94,8 @@ def _build_articles(n, suffix):
 			identifier_value=f"NCT{suffix}{i}",
 		)
 
+	return site
+
 
 class TestArticleListQueryEfficiency(TestCase):
 	"""Locks in the ArticleViewSet prefetch_related from Phase 0.1."""
@@ -101,16 +110,32 @@ class TestArticleListQueryEfficiency(TestCase):
 
 		Site.objects.get_current()
 
-		_build_articles(3, "a")
+		# Each _build_articles call creates its own Organization + public
+		# site, so pin each anonymous request to that call's own site via
+		# Origin -- otherwise, once both exist, an anonymous request naming
+		# neither is ambiguous under Phase 3 site resolution
+		# (gregory/site_resolution.py) and 400s. NOT ?site_id=: ArticleFilter
+		# already defines that param to mean "articles on a team attached to
+		# this site" (Team.site), an unrelated content filter that would
+		# zero out these results since these teams have no Team.site set.
+		site_a = _build_articles(3, "a")
 		with CaptureQueriesContext(connection) as small:
-			response = client.get("/articles/", {"page_size": 100})
+			response = client.get(
+				"/articles/",
+				{"page_size": 100},
+				HTTP_ORIGIN=f"https://{site_a.domain}",
+			)
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(len(response.data["results"]), 3)
 
 		Articles.objects.all().delete()
-		_build_articles(9, "b")
+		site_b = _build_articles(9, "b")
 		with CaptureQueriesContext(connection) as large:
-			response = client.get("/articles/", {"page_size": 100})
+			response = client.get(
+				"/articles/",
+				{"page_size": 100},
+				HTTP_ORIGIN=f"https://{site_b.domain}",
+			)
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(len(response.data["results"]), 9)
 

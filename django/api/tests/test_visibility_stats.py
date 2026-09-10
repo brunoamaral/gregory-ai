@@ -535,20 +535,22 @@ class StatsQueryCountTest(StatsVisibilityBase):
 		self.client.get("/stats/", {"team": self.pub_team.id})  # warm the cache
 		with CaptureQueriesContext(connection) as ctx:
 			self.client.get("/stats/", {"team": self.pub_team.id})
-		# <=4, not a pinned exact count: OrganizationApiSettings lookup (1)
+		# <=5, not a pinned exact count: OrganizationApiSettings lookup (1)
 		# + team_id_list resolution, which also serves as the
 		# team-visibility check (1) + visible_subjects resolution, which
 		# also serves as the ?subject= 404 check and runs before the cache
-		# lookup so a cache hit can't bypass it (1) + cache GET (0 or 1
-		# depending on backend). LocMemCache (admin.settings_test, what
-		# CI's pytest run uses) answers GET in-process with no SQL, landing
-		# at 3; DatabaseCache backends (production, and admin.settings's
-		# default used when this test is invoked via `manage.py test`
-		# instead of pytest) add one SQL round-trip for the GET, landing at
-		# 4. Either way this must stay far below the cold-cache budget above.
+		# lookup so a cache hit can't bypass it (1) + gregory.site_resolution.
+		# resolve_anonymous_site's public-site-count query for this anonymous,
+		# no-Origin caller (1, Phase 3) + cache GET (0 or 1 depending on
+		# backend). LocMemCache (admin.settings_test, what CI's pytest run
+		# uses) answers GET in-process with no SQL, landing at 4;
+		# DatabaseCache backends (production, and admin.settings's default
+		# used when this test is invoked via `manage.py test` instead of
+		# pytest) add one SQL round-trip for the GET, landing at 5. Either
+		# way this must stay far below the cold-cache budget above.
 		self.assertLessEqual(
 			len(ctx.captured_queries),
-			4,
+			5,
 			msg=f"Cache hit should eliminate the count queries: {len(ctx.captured_queries)} queries",
 		)
 
@@ -741,7 +743,13 @@ class SubjectVisibilityStatsTest(SubjectStatsBase):
 	"""A subject in a non-visible org is 404, same as team/organization."""
 
 	def test_hidden_org_subject_404_for_anonymous(self):
+		# Two api_public sites exist in this fixture (base_site_pub from
+		# StatsVisibilityBase, pub_site from SubjectStatsBase, both on
+		# pub_org); give an Origin so Phase 3 site resolution doesn't 400 on
+		# ambiguity before ever reaching the subj_priv visibility check this
+		# test is about.
 		anon = APIClient()
+		anon.defaults["HTTP_ORIGIN"] = f"https://{self.pub_site.domain}"
 		resp = anon.get("/stats/", {"subject": self.subj_priv.id})
 		self.assertEqual(resp.status_code, 404)
 

@@ -115,7 +115,6 @@ from api.filters import (
 from rest_framework.response import Response
 from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
-from sitesettings.models import CustomSetting
 from rest_framework_simplejwt.views import TokenObtainPairView
 from drf_spectacular.utils import (
 	extend_schema,
@@ -146,6 +145,7 @@ from api.utils.utils import (
 	find_trial_by_identifier,
 )
 from gregory.utils.registry_utils import merge_links
+from gregory.site_resolution import public_sites
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 	APIAccessDeniedError,
@@ -4648,25 +4648,13 @@ class PublicSitesView(APIView):
 	permission_classes = [permissions.AllowAny]
 
 	def get(self, request):
-		# CustomSetting.site is a plain FK, not OneToOne — a site can carry
-		# several settings rows, which sitesettings already handles elsewhere
-		# (see test_lowest_setting_id_wins_when_multiple_rows). Iterating
-		# settings would emit one entry per row and hand clients duplicate
-		# site_ids. Collapse to one row per site, lowest setting_id winning,
-		# matching the tie-break that module already uses.
-		settings_qs = (
-			CustomSetting.objects.filter(api_public=True)
-			.select_related("site")
-			.order_by("site__domain", "setting_id")
-		)
-		seen = set()
-		unique = []
-		for setting in settings_qs:
-			if setting.site_id in seen:
-				continue
-			seen.add(setting.site_id)
-			unique.append(setting)
-		return Response(PublicSiteSerializer(unique, many=True).data)
+		# Shared with the 400 body gregory.site_resolution.NoSiteResolvedError
+		# raises when an anonymous caller names no site (Phase 3 of
+		# site-scoped API visibility) -- one code path, so the two can never
+		# disagree about which sites exist. PublicSiteSerializer above is
+		# schema-only (see its @extend_schema): public_sites() already
+		# returns plain {site_id, domain, name} dicts in that exact shape.
+		return Response(public_sites())
 
 
 def stats_payload_cache_key(team_id_list, visible_subject_ids, subject_ids):

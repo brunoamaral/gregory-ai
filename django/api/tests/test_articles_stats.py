@@ -44,6 +44,7 @@ from gregory.models import (
 	Subject,
 	Team,
 )
+from sitesettings.models import CustomSetting
 
 # Mirrors test_trials_stats.py: under subject-scoped visibility a row with no
 # subject is invisible to everyone, but nearly every `_make_article(...)`
@@ -190,6 +191,14 @@ class ArticleStatsBase(TestCase):
 		)
 
 		self.client = APIClient()
+		# Anonymous site resolution (Phase 3, gregory/site_resolution.py)
+		# needs a site indicator once more than one api_public site exists --
+		# this fixture creates two (self.org and other_org, both public by
+		# default via _make_org_team). Resolve every request in this class to
+		# self.org's site via Origin, matching what "the caller's own scope"
+		# has always meant in these tests -- self.other_org/other_team/
+		# other_subject stay the "should NOT appear" counterexample.
+		self.client.defaults["HTTP_ORIGIN"] = f"https://{_ORG_SITES[self.org.pk].domain}"
 
 
 class ArticleListNoStatsTest(ArticleStatsBase):
@@ -217,10 +226,12 @@ class ArticleStatsEndpointTest(ArticleStatsBase):
 		resp = self.client.get("/articles/stats/")
 		self.assertEqual(resp.status_code, 200)
 		stats = resp.data
-		self.assertEqual(stats["total"], 4)
+		# self.client resolves to self.org's site only (Phase 3), so a4
+		# (other_team/other_subject, a different site) is out of scope: a1-a3.
+		self.assertEqual(stats["total"], 3)
 		self.assertEqual(stats["relevant"], 1)
 		self.assertEqual(stats["retracted"], 1)
-		self.assertEqual(stats["missing_doi"], 2)  # a3 ('') + a4 (NULL)
+		self.assertEqual(stats["missing_doi"], 1)  # a3 ('')
 
 	def test_by_access_folds_null_into_unknown(self):
 		resp = self.client.get("/articles/stats/")
@@ -228,9 +239,9 @@ class ArticleStatsEndpointTest(ArticleStatsBase):
 		by_access = resp.data["by_access"]
 		self.assertEqual(by_access["open"], 1)
 		self.assertEqual(by_access["restricted"], 1)
-		# a3 (explicit 'unknown') + a4 (NULL) — consumers must not see the
-		# internal NULL/'unknown' split.
-		self.assertEqual(by_access["unknown"], 2)
+		# a3 (explicit 'unknown'); a4 (NULL) is other_subject -- a different
+		# site than self.client resolves to (Phase 3) -- so it's out of scope.
+		self.assertEqual(by_access["unknown"], 1)
 		self.assertEqual(set(by_access.keys()), {"open", "restricted", "unknown"})
 
 	def test_stats_with_team_filter_scopes_totals(self):
@@ -248,7 +259,9 @@ class ArticleStatsEndpointTest(ArticleStatsBase):
 		resp = self.client.get("/articles/stats/")
 		self.assertEqual(resp.status_code, 200)
 		stats = resp.data
-		self.assertEqual(stats["total"], 4)  # still 4 distinct articles
+		# a1-a3 visible (self.org's site); a4 is other_team/other_subject, a
+		# different site, out of scope for self.client regardless of this test.
+		self.assertEqual(stats["total"], 3)  # still 3 distinct articles
 		self.assertEqual(stats["by_access"]["open"], 1)
 		self.assertEqual(stats["relevant"], 1)
 
@@ -260,11 +273,15 @@ class ArticleStatsBySubjectTest(ArticleStatsBase):
 		other_subject = _make_subject(
 			self.other_team, "A-Other Subject", "a-other-subject"
 		)
-		# No organization= here: other_org already has a default site from
-		# _make_org_team, and OrganizationSite allows only one default per
-		# org. Anonymous visibility only needs an api_public site scoping
-		# the subject, so this stands alone.
-		publish_subjects(other_subject)
+		# Publishing other_subject on its own (org-less) site would put it on
+		# a different site than self.client resolves to (Phase 3 scopes an
+		# anonymous caller to exactly ONE site), so it would never show up
+		# alongside self.subject in one response. This test just wants both
+		# subjects visible together, so add other_subject to self.org's
+		# existing site scope instead.
+		CustomSetting.objects.get(site=_ORG_SITES[self.org.pk]).scope_subjects.add(
+			other_subject
+		)
 		self.a3.subjects.add(self.subject)
 		self.a4.subjects.add(other_subject)
 
@@ -304,7 +321,9 @@ class ArticleStatsBySubjectTest(ArticleStatsBase):
 
 		resp = self.client.get("/articles/stats/")
 		self.assertEqual(resp.status_code, 200)
-		self.assertEqual(resp.data["total"], 4)  # a1 still counted
+		# a1-a3 visible (self.org's site); a4 is other_team/other_subject, a
+		# different site, out of scope for self.client regardless of this test.
+		self.assertEqual(resp.data["total"], 3)  # a1 still counted
 		subject_ids = [row["subject_id"] for row in resp.data["by_subject"]]
 		self.assertIn(self.subject.id, subject_ids)
 		self.assertNotIn(hidden_subject.id, subject_ids)
@@ -339,9 +358,12 @@ class ArticleStatsCachingTest(ArticleStatsBase):
 		other_stats = self.client.get(
 			"/articles/stats/", {"team_id": self.other_team.id}
 		)
-		self.assertEqual(all_stats.data["total"], 4)
+		# self.client resolves to self.org's site only: a1-a3 visible, a4
+		# (other_team/other_subject) is out of scope, so the other_team filter
+		# now yields an empty result instead of other_team's own article.
+		self.assertEqual(all_stats.data["total"], 3)
 		self.assertEqual(team_stats.data["total"], 3)
-		self.assertEqual(other_stats.data["total"], 1)
+		self.assertEqual(other_stats.data["total"], 0)
 
 	def test_cache_is_isolated_per_visible_org_context(self):
 		# A private org with its own article: anonymous callers cannot see
@@ -369,24 +391,28 @@ class ArticleStatsCachingTest(ArticleStatsBase):
 		scheme = _make_api_scheme(priv_org, "a-stats-key")
 
 		anon = APIClient()
+		# Two api_public sites now exist (self.org, other_org); resolve
+		# anonymous requests to self.org's site specifically, same as
+		# self.client in setUp.
+		anon.defaults["HTTP_ORIGIN"] = f"https://{_ORG_SITES[self.org.pk].domain}"
 		anon_resp = anon.get("/articles/stats/")
 		self.assertEqual(anon_resp.status_code, 200)
-		# Anonymous sees only the two public orgs' 4 articles.
-		self.assertEqual(anon_resp.data["total"], 4)
+		# Anonymous resolves to self.org's site only: a1-a3.
+		self.assertEqual(anon_resp.data["total"], 3)
 
 		keyed = APIClient()
 		keyed.credentials(HTTP_AUTHORIZATION=scheme.api_key)
 		keyed_resp = keyed.get("/articles/stats/")
 		self.assertEqual(keyed_resp.status_code, 200)
 		# The org-scoped caller sees only its own org's single article — if
-		# it got the anonymous caller's cached payload this would be 4.
+		# it got the anonymous caller's cached payload this would be 3.
 		self.assertEqual(keyed_resp.data["total"], 1)
 		self.assertEqual(keyed_resp.data["relevant"], 1)
 
 		# And the reverse: a fresh anonymous request after the keyed one must
 		# not pick up the keyed caller's entry.
 		anon_again = anon.get("/articles/stats/")
-		self.assertEqual(anon_again.data["total"], 4)
+		self.assertEqual(anon_again.data["total"], 3)
 
 
 class ArticleStatsSubjectScopedRelevantTest(TestCase):
@@ -408,7 +434,7 @@ class ArticleStatsSubjectScopedRelevantTest(TestCase):
 		# Anonymous only; the org already has a default site from
 		# _make_org_team, and a second organization= link would collide with
 		# OrganizationSite's one-default-per-org constraint.
-		publish_subjects(self.subject_n, self.subject_m)
+		self.subjects_site = publish_subjects(self.subject_n, self.subject_m)
 
 		# In both subjects, manually relevant ONLY for M.
 		self.article = _make_article(
@@ -424,6 +450,10 @@ class ArticleStatsSubjectScopedRelevantTest(TestCase):
 		)
 
 		self.client = APIClient()
+		# _make_org_team's own default site (self.org) is a SECOND api_public
+		# site here alongside self.subjects_site (subject_n/subject_m); resolve
+		# anonymous requests to the latter, which is what this test is about.
+		self.client.defaults["HTTP_ORIGIN"] = f"https://{self.subjects_site.domain}"
 
 	def _stats(self, **params):
 		resp = self.client.get("/articles/stats/", params)
