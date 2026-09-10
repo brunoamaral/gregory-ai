@@ -1,16 +1,28 @@
 """
-Tests for RSS feed visibility enforcement (PR 6).
+Tests for RSS feed visibility enforcement.
+
+Both feeds are scoped by SUBJECT (site-scoped API visibility, Phase 4);
+this file was written against the earlier organisation rule and its
+fixtures were converted with it. What a caller can see is now the union of
+``CustomSetting.scope_subjects`` over the sites they can reach -- api_public
+sites for an anonymous caller, the key's own site for an API key, the
+organisation's sites for a signed-in member -- so every org/team here now
+carries a Site and a curated subject, and content is tagged into it.
 
 Covers:
   - ArticlesByAuthorFeed (/feed/author/<orcid>/):
-      - 404 when author has no articles in any visible org
-      - 200 and items filtered to visible articles when author is visible
+      - 404 when no article of the author carries a visible subject
+      - 200 and items filtered to visible-subject articles otherwise
       - ?include_public=true extends visibility for identified callers
   - TrialsBySubjectFeed (/feed/trials/subject/<slug>/):
-      - 404 when subject belongs to a hidden org
-      - 200 and items filtered to visible trials when subject is visible
+      - 404 when the subject is in no reachable site's scope
+      - 200 and the subject's trials when it is
       - ?include_public=true extends visibility for identified callers
-  - Four caller archetypes: anonymous, authenticated member, API-key, null-org key
+  - Three caller archetypes: anonymous, authenticated member, API key.
+    (An earlier "null-org key" archetype is not reachable: APIAccessScheme
+    .organization is a non-null FK. A key whose *site* is null is reachable
+    and is covered below -- that is the state every key was in before the
+    Phase 1 backfill, and the one Phase 3 will start rejecting.)
 
 Run with:
     docker exec gregory python manage.py test api.tests.test_visibility_rss
@@ -19,6 +31,7 @@ Run with:
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.test import TestCase
 from django.utils.timezone import now
 from organizations.models import Organization, OrganizationUser
@@ -28,10 +41,12 @@ from gregory.models import (
 	Articles,
 	Authors,
 	OrganizationApiSettings,
+	OrganizationSite,
 	Subject,
 	Team,
 	Trials,
 )
+from sitesettings.models import CustomSetting
 
 User = get_user_model()
 
@@ -68,12 +83,32 @@ def _make_author(given, family, orcid):
 	)
 
 
-def _make_article(title, link, teams=(), authors=()):
+def _make_site(name, org, *, api_public, scope_subjects=()):
+	"""A Site owned by `org`, with a CustomSetting carrying its subject scope.
+
+	The org link goes through OrganizationSite because that is what
+	visible_subject_ids walks for a signed-in member, and what it checks a
+	site-bound API key against.
+	"""
+	slug = name.lower().replace(" ", "-")
+	site = Site.objects.create(domain=f"{slug}.example.com", name=name)
+	OrganizationSite.objects.create(organization=org, site=site, is_default=True)
+	settings_row = CustomSetting.objects.create(
+		site=site, title=f"{name} settings", api_public=api_public
+	)
+	for subject in scope_subjects:
+		settings_row.scope_subjects.add(subject)
+	return site
+
+
+def _make_article(title, link, teams=(), authors=(), subjects=()):
 	art = Articles.objects.create(title=title, link=link)
 	for t in teams:
 		art.teams.add(t)
 	for a in authors:
 		art.authors.add(a)
+	for s in subjects:
+		art.subjects.add(s)
 	return art
 
 
@@ -86,11 +121,14 @@ def _make_trial(title, link, teams=(), subjects=()):
 	return trial
 
 
-def _make_api_scheme(org, name):
+def _make_api_scheme(org, name, site=None):
+	# `site` is what binds the key to a subject scope; a key without one
+	# resolves to no subjects at all (see visible_subject_ids).
 	return APIAccessScheme.objects.create(
 		client_name=name,
 		client_contacts=f"{name}@example.com",
 		organization=org,
+		site=site,
 		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
@@ -116,6 +154,25 @@ class AuthorFeedBase(TestCase):
 		self.pub_team = _make_team(self.pub_org, "Pub Team RSS Auth")
 		self.priv_team = _make_team(self.priv_org, "Priv Team RSS Auth")
 
+		self.my_subj = _make_subject(self.my_team, "my-subj-rss-auth")
+		self.pub_subj = _make_subject(self.pub_team, "pub-subj-rss-auth")
+		self.priv_subj = _make_subject(self.priv_team, "priv-subj-rss-auth")
+
+		# One site per organisation, each publishing its own subject. Only
+		# pub_site is api_public, so pub_subj is the whole anonymous scope.
+		self.my_site = _make_site(
+			"My Site RSS Auth", self.my_org, api_public=False,
+			scope_subjects=[self.my_subj],
+		)
+		self.pub_site = _make_site(
+			"Pub Site RSS Auth", self.pub_org, api_public=True,
+			scope_subjects=[self.pub_subj],
+		)
+		self.priv_site = _make_site(
+			"Priv Site RSS Auth", self.priv_org, api_public=False,
+			scope_subjects=[self.priv_subj],
+		)
+
 		# Authors
 		self.author_mine = _make_author("Alice", "Mine", ORCID_MINE)
 		self.author_pub = _make_author("Bob", "Public", ORCID_PUB)
@@ -127,18 +184,21 @@ class AuthorFeedBase(TestCase):
 			"https://rss.ex/a1",
 			teams=[self.my_team],
 			authors=[self.author_mine],
+			subjects=[self.my_subj],
 		)
 		_make_article(
 			"Pub Art",
 			"https://rss.ex/a2",
 			teams=[self.pub_team],
 			authors=[self.author_pub],
+			subjects=[self.pub_subj],
 		)
 		_make_article(
 			"Priv Art",
 			"https://rss.ex/a3",
 			teams=[self.priv_team],
 			authors=[self.author_priv],
+			subjects=[self.priv_subj],
 		)
 		# author_mine also has a public article
 		_make_article(
@@ -146,6 +206,7 @@ class AuthorFeedBase(TestCase):
 			"https://rss.ex/a4",
 			teams=[self.pub_team],
 			authors=[self.author_mine],
+			subjects=[self.pub_subj],
 		)
 
 
@@ -233,7 +294,9 @@ class AuthenticatedUserAuthorFeedTest(AuthorFeedBase):
 class APIKeyAuthorFeedTest(AuthorFeedBase):
 	def setUp(self):
 		super().setUp()
-		self.scheme = _make_api_scheme(self.my_org, "rss-author-key")
+		self.scheme = _make_api_scheme(
+			self.my_org, "rss-author-key", site=self.my_site
+		)
 		self.client.defaults["HTTP_AUTHORIZATION"] = self.scheme.api_key
 
 	def test_own_author_returns_200(self):
@@ -271,6 +334,21 @@ class TrialsFeedBase(TestCase):
 		self.my_subj = _make_subject(self.my_team, "my-subj-rss")
 		self.pub_subj = _make_subject(self.pub_team, "pub-subj-rss")
 		self.priv_subj = _make_subject(self.priv_team, "priv-subj-rss")
+
+		# One site per organisation, each publishing its own subject. Only
+		# pub_site is api_public, so pub_subj is the whole anonymous scope.
+		self.my_site = _make_site(
+			"My Site RSS Trial", self.my_org, api_public=False,
+			scope_subjects=[self.my_subj],
+		)
+		self.pub_site = _make_site(
+			"Pub Site RSS Trial", self.pub_org, api_public=True,
+			scope_subjects=[self.pub_subj],
+		)
+		self.priv_site = _make_site(
+			"Priv Site RSS Trial", self.priv_org, api_public=False,
+			scope_subjects=[self.priv_subj],
+		)
 
 		# Trials
 		_make_trial(
@@ -354,10 +432,15 @@ class AuthenticatedUserTrialsFeedTest(TrialsFeedBase):
 		resp = self.client.get(f"/feed/trials/subject/{self.my_subj.subject_slug}/")
 		self.assertIn("Mine Trial", resp.content.decode())
 
-	def test_own_feed_excludes_pub_trial_without_flag(self):
-		"""pub trial is not in my_team → filtered out from own-subject feed."""
-		# Add pub trial to my_subj to test filtering
-		pub_trial_in_my_subj = _make_trial(
+	def test_own_feed_lists_the_subjects_trials_whatever_team_owns_them(self):
+		"""
+		The subject is the visibility boundary, so a feed for a visible
+		subject lists every trial tagged with it. Team ownership used to
+		filter within the feed as well; since Phase 4 it does not, and
+		test_public_subject_hidden_without_flag is what pins the boundary
+		that still exists.
+		"""
+		_make_trial(
 			"Pub Trial In My Subj",
 			"https://rss.ex/t99",
 			teams=[self.pub_team],
@@ -365,9 +448,10 @@ class AuthenticatedUserTrialsFeedTest(TrialsFeedBase):
 		)
 		resp = self.client.get(f"/feed/trials/subject/{self.my_subj.subject_slug}/")
 		content = resp.content.decode()
-		# Mine Trial visible, pub-team trial not visible
 		self.assertIn("Mine Trial", content)
-		self.assertNotIn("Pub Trial In My Subj", content)
+		self.assertIn("Pub Trial In My Subj", content)
+		# ...and a trial with no tie to my_subj is still absent.
+		self.assertNotIn("Priv Trial", content)
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +462,9 @@ class AuthenticatedUserTrialsFeedTest(TrialsFeedBase):
 class APIKeyTrialsFeedTest(TrialsFeedBase):
 	def setUp(self):
 		super().setUp()
-		self.scheme = _make_api_scheme(self.my_org, "rss-trials-key")
+		self.scheme = _make_api_scheme(
+			self.my_org, "rss-trials-key", site=self.my_site
+		)
 		self.client.defaults["HTTP_AUTHORIZATION"] = self.scheme.api_key
 
 	def test_own_subject_returns_200(self):
@@ -398,6 +484,40 @@ class APIKeyTrialsFeedTest(TrialsFeedBase):
 			f"/feed/trials/subject/{self.pub_subj.subject_slug}/?include_public=true"
 		)
 		self.assertEqual(resp.status_code, 200)
+
+
+class SitelessAPIKeyTrialsFeedTest(TrialsFeedBase):
+	"""
+	A key with no site resolves to no subjects of its own. Every key has a
+	site in production (backfilled by sitesettings/0019) but the field is
+	still nullable until Phase 3 enforces it, so the branch is live and
+	needs pinning: without a site the key sees nothing, and with
+	?include_public=true it sees exactly the public scope -- public subjects
+	being public to everyone, key or no key.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.scheme = _make_api_scheme(self.my_org, "rss-siteless-key", site=None)
+		self.client.defaults["HTTP_AUTHORIZATION"] = self.scheme.api_key
+
+	def test_own_org_subject_404s_without_a_site(self):
+		# The organisation owns my_subj, but the key is not bound to the site
+		# that publishes it, and organisation membership no longer grants
+		# anything on its own.
+		resp = self.client.get(f"/feed/trials/subject/{self.my_subj.subject_slug}/")
+		self.assertEqual(resp.status_code, 404)
+
+	def test_public_subject_404s_without_the_flag(self):
+		resp = self.client.get(f"/feed/trials/subject/{self.pub_subj.subject_slug}/")
+		self.assertEqual(resp.status_code, 404)
+
+	def test_include_public_still_grants_the_public_scope(self):
+		resp = self.client.get(
+			f"/feed/trials/subject/{self.pub_subj.subject_slug}/?include_public=true"
+		)
+		self.assertEqual(resp.status_code, 200)
+		self.assertIn("Pub Trial", resp.content.decode())
 
 
 # ---------------------------------------------------------------------------

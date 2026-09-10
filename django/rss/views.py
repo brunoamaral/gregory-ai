@@ -4,7 +4,7 @@ from django.db.models import F
 from django.http import Http404
 from gregory.models import Articles, Authors, Trials, Subject
 from gregory.functions import normalize_orcid
-from gregory.visibility import visible_org_ids as _visible_org_ids
+from gregory.visibility import visible_subject_ids as _visible_subject_ids
 from sitesettings.utils import author_page_base
 
 
@@ -24,11 +24,11 @@ class ArticlesByAuthorFeed(Feed):
 
 		# Compute visibility and attach to the per-request obj (not self)
 		# so concurrent requests on the shared Feed instance don't interfere.
-		author._visible_org_ids = _visible_org_ids(request)
+		author._visible_subject_ids = _visible_subject_ids(request)
 
-		# 404 if author has no articles in any visible org
+		# 404 if the author has no articles under any visible subject
 		if not author.articles_set.filter(
-			teams__organization_id__in=author._visible_org_ids
+			subjects__in=author._visible_subject_ids
 		).exists():
 			raise Http404
 
@@ -51,7 +51,7 @@ class ArticlesByAuthorFeed(Feed):
 		return (
 			Articles.objects.filter(
 				authors=obj,
-				teams__organization_id__in=obj._visible_org_ids,
+				subjects__in=obj._visible_subject_ids,
 			)
 			.distinct()
 			# nulls_last: articles ingested without a date (filled later from
@@ -88,20 +88,13 @@ class TrialsBySubjectFeed(Feed):
 	def get_object(self, request, subject_slug):
 		subject = Subject.objects.get(subject_slug=subject_slug)
 
-		# Compute visibility and attach to the per-request obj (not self)
-		# so concurrent requests on the shared Feed instance don't interfere.
-		subject._visible_org_ids = _visible_org_ids(request)
-
-		# 404 if subject belongs to an org that isn't visible
-		if subject.team_id is not None:
-			from gregory.models import Team as _Team
-
-			try:
-				team = _Team.objects.get(id=subject.team_id)
-				if team.organization_id not in subject._visible_org_ids:
-					raise Http404
-			except _Team.DoesNotExist:
-				raise Http404
+		# The subject IS the visibility unit now, so this is a set membership
+		# test rather than a walk up to the owning team's organisation. It
+		# also closes a hole the old check left open: a subject with no team
+		# skipped the check entirely and was served to anyone, which is how
+		# an internal-research subject could be read by slug.
+		if subject.id not in _visible_subject_ids(request):
+			raise Http404
 
 		return subject
 
@@ -117,10 +110,10 @@ class TrialsBySubjectFeed(Feed):
 
 	def items(self, obj):
 		return (
-			Trials.objects.filter(
-				subjects=obj,
-				teams__organization_id__in=obj._visible_org_ids,
-			)
+			# get_object() has already established that obj is a visible
+			# subject, so matching on it is the whole visibility test — no
+			# second filter to add.
+			Trials.objects.filter(subjects=obj)
 			.distinct()
 			.order_by("-discovery_date")[:50]
 		)
