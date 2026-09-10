@@ -52,6 +52,34 @@ See [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#accessing-private-organisa
 
 ---
 
+## Admin visibility
+
+The Django admin (`/admin/`) uses a different visibility rule than the public API and RSS feeds. The API and feeds are [subject-scoped](03-api-and-rss-feeds.md#visibility-rules-summary): a caller sees a row when one of its subjects sits in a site's `scope_subjects`. The admin is deliberately **not** — it scopes content through **source → team → organisation** instead.
+
+This is a design choice, not an inconsistency to fix:
+
+- A `Sources` row is attached at ingestion, before anyone has looked at the content. `subjects` and `teams` are assigned by a curator afterwards. Scoping the admin on subjects would hide exactly the not-yet-curated rows a curator needs to see in order to curate them.
+- Publication (which sites, and anonymous callers, can read) and editorial access (which staff member can edit a row) are independent policies. Changing one must never silently change the other.
+
+| Caller | Sees |
+|:-------|:-----|
+| Staff user | Content whose source's team belongs to one of their organisations, optionally narrowed to a site that organisation owns |
+| Staff user, "Not in any site's scope" filter | Their own organisation's content that is in no site's `scope_subjects` yet — the curation queue |
+| Superuser | Everything, including content with no source at all |
+
+Content with no `Sources` row at all cannot be attributed to any organisation, so it is visible only to superusers. This is a small sliver of legacy data rather than a normal outcome of ingestion (measured on the development database, before the September 2026 prunes: 375 articles, 0 trials — production, having been pruned, is not directly comparable).
+
+### List filters
+
+The Articles and Trials admin changelists each carry two filters built on this rule:
+
+- **Site** — narrows the (already organisation-scoped) list to one site the caller's organisation owns, via `OrganizationSite`. It can only narrow: `get_queryset()` applies the organisation scoping first, and the filter's own choices never include another organisation's sites.
+- **Not in any site's scope (curation queue)** — the same "not yet curated" set that's invisible to the API, but scoped to the caller's own organisation rather than shown globally, which would otherwise leak every organisation's uncurated content to every staff member. Superusers see the true global queue.
+
+`/organizations/`- and `/teams/`-style admin pages are already organisation-keyed directly and carry neither filter.
+
+---
+
 ## Setting Up Sites
 
 Sites are managed at **Sites > Sites** in the Django admin (`/admin/sites/site/`).
