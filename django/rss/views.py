@@ -5,12 +5,12 @@ Site-scoped RSS feeds: /feed/sites/<site_id>/author/<orcid>/ and
 /feed/sites/<site_id>/trials/subject/<subject_slug>/.
 
 A feed serves the REQUESTED SITE's CustomSetting.scope_subjects, not the
-calling caller's own visibility -- these are crawler-and-reader-facing
-surfaces like rss/sitemaps.py, not request-scoped ones like the rest of the
-API. A feed reader has no identity and its response is cached, so the body
-must not vary by who (or what) is asking. See
-PHASE-5-RSS-SITE-SCOPE-PLAN.md and rss/sitemaps.py's module docstring for
-the same reasoning applied to sitemaps.
+caller's own visibility -- these are crawler-and-reader-facing surfaces
+like rss/sitemaps.py, not request-scoped ones like the rest of the API. A
+feed reader has no identity and its response is cached, so the body must
+not vary by who (or what) is asking. See docs/03-api-and-rss-feeds.md#rss-feeds
+and rss/sitemaps.py's module docstring for the same reasoning applied to
+sitemaps.
 
 404 when the site doesn't exist, has no CustomSetting, or has
 CustomSetting.rss_enabled=False -- matching how sitemaps 404 on
@@ -25,7 +25,7 @@ project's one api_public site. Feed readers cache a 301 and stop
 re-requesting the old path, which is the entire reason a redirect was
 chosen over reimplementing the old caller-scoped behaviour here: a feed
 reader never sees an error, so a silent 404 loses a subscriber permanently
-rather than visibly. See the spec's "Old URLs redirect permanently" section.
+rather than visibly. See docs/03-api-and-rss-feeds.md#old-feed-urls--permanent-redirect.
 """
 
 from django.contrib.syndication.views import Feed

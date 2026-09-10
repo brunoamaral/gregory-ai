@@ -8,7 +8,7 @@ an anonymous caller, a signed-in member, and an API key. Phase 5 replaced
 that: those URLs now permanently redirect (301) onto
 feed/sites/<site_id>/..., which is scoped to the REQUESTED SITE's
 CustomSetting.scope_subjects and CustomSetting.rss_enabled -- never to the
-caller. See rss/views.py's module docstring and PHASE-5-RSS-SITE-SCOPE-PLAN.md.
+caller. See rss/views.py's module docstring and docs/03-api-and-rss-feeds.md#rss-feeds.
 
 This file exercises exactly that property -- isolation between two sites'
 scopes, and invariance across caller archetypes for one site -- reusing the

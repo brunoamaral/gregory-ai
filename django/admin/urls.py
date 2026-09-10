@@ -111,14 +111,13 @@ urlpatterns = (
 		path("articles/post/", post_article),
 		path("articles/edit/", edit_article),
 		path("trials/edit/", edit_trial),
-		# Old feed routes (supports ORCID or numeric author_id). These now
-		# permanently redirect (301) to the site-scoped routes below, on
-		# brain-regeneration.com (site id 3) -- see rss/views.py. DO NOT
-		# DELETE these patterns in a future cleanup or Django upgrade:
-		# removing them turns a redirect into a 404, and a feed reader
-		# never surfaces that as an error -- it just goes silent, quietly
-		# dropping every subscriber still on the old URL. See
-		# PHASE-5-RSS-SITE-SCOPE-PLAN.md.
+		# Old feed routes. These now permanently redirect (301) to the
+		# site-scoped routes below, on brain-regeneration.com (site id 3)
+		# -- see rss/views.py. DO NOT DELETE these patterns in a future
+		# cleanup or Django upgrade: removing them turns a redirect into a
+		# 404, and a feed reader never surfaces that as an error -- it
+		# just goes silent, quietly dropping every subscriber still on the
+		# old URL. See docs/03-api-and-rss-feeds.md#old-feed-urls--permanent-redirect.
 		path(
 			"feed/author/<str:orcid>/",
 			redirect_articles_by_author_feed,

@@ -8,12 +8,13 @@ Covers:
     orcid.org otherwise. See
     docs/06-organisations-teams-and-sites.md#author-profile-page-links.
   - Site-scoped feed visibility: a feed is scoped to the REQUESTED site's
-    scope_subjects, not team ownership and not caller identity (Phase 5,
-    PHASE-5-RSS-SITE-SCOPE-PLAN.md). Caller-identity-scoped behaviour for
-    RSS lived here before Phase 5; it now belongs to sitemaps'-style
-    site-scoping instead, so those cases moved to this file too --
-    api/tests/test_visibility_rss.py is for the redirect/404/rss_enabled
-    surface that touches API-visibility fixtures.
+    scope_subjects, not team ownership and not caller identity (Phase 5 of
+    site-scoped API visibility -- see docs/03-api-and-rss-feeds.md#rss-feeds).
+    Caller-identity-scoped behaviour for RSS lived here before Phase 5; it
+    now belongs to sitemaps'-style site-scoping instead, so those cases
+    moved to this file too -- api/tests/test_visibility_rss.py is for the
+    isolation/invariance surface that touches API-visibility fixtures
+    (organisations, API keys).
 """
 
 from django.contrib.sites.models import Site
@@ -167,7 +168,7 @@ class SiteAuthorFeedLinkTest(TestCase):
 class SiteFeedScopeTest(TestCase):
 	"""
 	Both site-scoped feeds are scoped to the REQUESTED SITE's
-	scope_subjects -- not team ownership, and not the calling caller's own
+	scope_subjects -- not team ownership, and not the caller's own
 	visibility (Phase 5). This is the behaviour change from the pre-Phase-5
 	feeds, which read gregory.visibility.visible_subject_ids(request) and
 	therefore varied by who was asking.
