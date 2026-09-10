@@ -25,6 +25,8 @@ from gregory.models import (
 	Trials,
 )
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 class CategoryModalityAPITestCase(TestCase):
 	def setUp(self):
@@ -41,6 +43,7 @@ class CategoryModalityAPITestCase(TestCase):
 		self.subject = Subject.objects.create(
 			subject_name="Modality Subject", subject_slug="modality-subject", team=self.team
 		)
+		publish_subjects(self.subject, organization=org)
 
 	def _make_category(self, name, slug, modality=None):
 		category = TeamCategory.objects.create(
@@ -54,7 +57,10 @@ class CategoryModalityAPITestCase(TestCase):
 		trial.teams.add(self.team)
 		for category in categories:
 			trial.team_categories.add(category)
-		for subject in subjects:
+		# Every other call site in this file predates subject-scoped
+		# visibility and doesn't pass subjects=; default to the fixture's
+		# one subject (already published) so those trials stay visible.
+		for subject in (subjects or (self.subject,)):
 			trial.subjects.add(subject)
 		return trial
 
@@ -93,6 +99,7 @@ class CategorySerializerModalityTests(CategoryModalityAPITestCase):
 			title="Modality Article", link="https://example.com/modality-article-1"
 		)
 		article.teams.add(self.team)
+		article.subjects.add(self.subject)
 		article.team_categories.add(category)
 		resp = self.client.get(f"/articles/{article.article_id}/")
 		self.assertEqual(resp.status_code, 200)
@@ -176,12 +183,14 @@ class CategoryModalityFilterTests(CategoryModalityAPITestCase):
 			title="Antibody Article", link="https://example.com/modality-article-filter-1"
 		)
 		matching.teams.add(self.team)
+		matching.subjects.add(self.subject)
 		matching.team_categories.add(self.antibody_category)
 		non_matching = Articles.objects.create(
 			title="Small Molecule Article",
 			link="https://example.com/modality-article-filter-2",
 		)
 		non_matching.teams.add(self.team)
+		non_matching.subjects.add(self.subject)
 		non_matching.team_categories.add(self.small_molecule_category)
 
 		resp = self.client.get("/articles/", {"category_modality": "biologic_antibody"})

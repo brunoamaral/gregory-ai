@@ -21,6 +21,7 @@ from organizations.models import Organization, OrganizationUser
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
+from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import Articles, Authors, OrganizationApiSettings, Subject, Team
 
 User = get_user_model()
@@ -72,11 +73,14 @@ def _make_article(title, link, teams=(), subjects=(), authors=()):
 	return art
 
 
-def _make_api_scheme(org, name):
+def _make_api_scheme(org, name, site=None):
+	"""``site`` is what binds the key to a subject scope; a key without one
+	resolves to no subjects at all."""
 	return APIAccessScheme.objects.create(
 		client_name=name,
 		client_contacts=f"{name}@example.com",
 		organization=org,
+		site=site,
 		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
@@ -100,6 +104,19 @@ class AuthorVisibilityBase(TestCase):
 
 		self.my_subj = _make_subject(self.my_team, "My Subject Auth")
 		self.pub_subj = _make_subject(self.pub_team, "Pub Subject Auth")
+		self.priv_subj = _make_subject(self.priv_team, "Priv Subject Auth")
+
+		# One site per organisation, each publishing that organisation's
+		# subject -- see test_visibility_articles.py for the same shape. An
+		# author is visible only through an article carrying a subject in
+		# the caller's scope, so every article below needs one.
+		self.my_site = private_site_publishing(
+			self.my_subj, organization=self.my_org
+		)
+		self.pub_site = publish_subjects(self.pub_subj, organization=self.pub_org)
+		self.priv_site = private_site_publishing(
+			self.priv_subj, organization=self.priv_org
+		)
 
 		# Authors
 		self.author_mine = _make_author("Alice", "Mine")
@@ -112,18 +129,21 @@ class AuthorVisibilityBase(TestCase):
 			"Mine Art",
 			"https://ex.com/a1",
 			teams=[self.my_team],
+			subjects=[self.my_subj],
 			authors=[self.author_mine],
 		)
 		_make_article(
 			"Pub Art",
 			"https://ex.com/a2",
 			teams=[self.pub_team],
+			subjects=[self.pub_subj],
 			authors=[self.author_pub],
 		)
 		_make_article(
 			"Priv Art",
 			"https://ex.com/a3",
 			teams=[self.priv_team],
+			subjects=[self.priv_subj],
 			authors=[self.author_priv],
 		)
 		# author_cross has articles in both my_team and priv_team
@@ -131,12 +151,14 @@ class AuthorVisibilityBase(TestCase):
 			"Cross Mine Art",
 			"https://ex.com/a4",
 			teams=[self.my_team],
+			subjects=[self.my_subj],
 			authors=[self.author_cross],
 		)
 		_make_article(
 			"Cross Priv Art",
 			"https://ex.com/a5",
 			teams=[self.priv_team],
+			subjects=[self.priv_subj],
 			authors=[self.author_cross],
 		)
 
@@ -282,7 +304,7 @@ class AuthenticatedUserAuthorVisibilityTest(AuthorVisibilityBase):
 class APIKeyAuthorVisibilityTest(AuthorVisibilityBase):
 	def setUp(self):
 		super().setUp()
-		self.scheme = _make_api_scheme(self.my_org, "author-key")
+		self.scheme = _make_api_scheme(self.my_org, "author-key", site=self.my_site)
 		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
 
 	def test_list_shows_own_org_author(self):
