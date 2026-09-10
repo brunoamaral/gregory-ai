@@ -1,11 +1,12 @@
 from unittest import mock
 
 from rest_framework.test import APITestCase, APIClient
-from gregory.models import Articles, Authors, OrganizationApiSettings, Team
+from gregory.models import Articles, Authors, OrganizationApiSettings, Subject, Team
 from django.contrib.auth.models import User
 from organizations.models import Organization
 
 from api.pagination import CappedPageNumberPagination
+from api.tests.visibility_helpers import publish_subjects
 
 
 class TestAuthorsPaginationCap(APITestCase):
@@ -78,12 +79,17 @@ class TestAuthorsPageLastOffsetCap(APITestCase):
 		team = Team.objects.create(
 			organization=org, name="Page Last Team", slug="page-last-team"
 		)
+		subject = Subject.objects.create(
+			subject_name="Page Last Subject", subject_slug="page-last-subject", team=team
+		)
+		publish_subjects(subject, organization=org)
 		for i in range(15):
 			author = Authors.objects.create(given_name=f"A{i}", family_name="Last")
 			article = Articles.objects.create(
 				title=f"Page Last Article {i}", link=f"https://ex.com/page-last-{i}"
 			)
 			article.teams.add(team)
+			article.subjects.add(subject)
 			article.authors.add(author)
 
 		self.client = APIClient()
