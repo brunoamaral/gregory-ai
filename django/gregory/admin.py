@@ -129,11 +129,19 @@ class BaseOrganizationFilter(admin.SimpleListFilter):
 
 
 class ArticleOrganizationFilter(BaseOrganizationFilter):
-	"""Filter articles by organisation (via teams M2M → organization)."""
+	"""Filter articles by organisation, via sources -> team -> organization.
+
+	Matches OrganizationFilterMixin's content-attribution path below, not the
+	curated `teams` M2M this used before: a `teams`-based filter would go
+	empty-handed on any article the base queryset already shows precisely
+	*because* nobody has curated it yet.
+	"""
 
 	def queryset(self, request, queryset):
 		if self.value():
-			return queryset.filter(teams__organization__id=self.value()).distinct()
+			return queryset.filter(
+				sources__team__organization__id=self.value()
+			).distinct()
 		return queryset
 
 
@@ -150,6 +158,16 @@ class OrganizationFilterMixin:
 	"""
 	Mixin to restrict admin queryset visibility based on user's organization.
 	Superusers see everything; staff users only see objects from their organization.
+
+	Content (Articles, Trials -- any model carrying a `sources` M2M) is
+	deliberately scoped through source -> team -> organisation, NOT through
+	`teams`/`subjects`. Those are assigned by a curator after the fact, so
+	scoping admin on them would hide precisely the not-yet-curated rows this
+	admin exists to show -- a source, by contrast, is attached at ingestion
+	and so is complete for all but a sliver of legacy rows. See
+	docs/06-organisations-teams-and-sites.md ("Admin visibility") for the
+	full rationale, including why this deliberately does NOT match the
+	subject-scoping the public API uses.
 	"""
 
 	def get_queryset(self, request):
@@ -171,14 +189,110 @@ class OrganizationFilterMixin:
 		if hasattr(qs.model, "team"):
 			return qs.filter(team__organization__id__in=user_orgs)
 
-		# If the model has multiple teams (M2M), filter by any team's organization
+		# Content: attribute through source -> team -> organisation (see class
+		# docstring). A row whose sources all belong to other organisations --
+		# or which has no source at all -- simply never matches this filter,
+		# which is what makes a sourceless row superuser-only without a
+		# separate check for it.
 		try:
-			# Check if 'teams' is a M2M field
-			qs.model._meta.get_field("teams")
+			qs.model._meta.get_field("sources")
 		except FieldDoesNotExist:
-			# Model has no 'teams' field; fall through to the unscoped queryset.
+			# Model has neither an organization/team path nor a `sources` M2M;
+			# it isn't org-scoped at all, so leave it unfiltered.
 			return qs
-		return qs.filter(teams__organization__id__in=user_orgs).distinct()
+		return qs.filter(sources__team__organization__id__in=user_orgs).distinct()
+
+
+def _scoped_subject_ids():
+	"""Every Subject ID that appears in at least one site's ``scope_subjects``.
+
+	Unlike ``gregory.visibility._public_subject_ids()`` this does NOT filter
+	by ``api_public``: the admin curation queue below cares whether a subject
+	has been curated onto *any* site, published or not, not whether that
+	site is public yet.
+	"""
+	from sitesettings.models import CustomSetting
+
+	return set(
+		CustomSetting.objects.exclude(scope_subjects__isnull=True).values_list(
+			"scope_subjects__id", flat=True
+		)
+	)
+
+
+class UnpublishedContentFilter(admin.SimpleListFilter):
+	"""Curation queue: content none of whose subjects is in any site's scope.
+
+	Django's ChangeList always calls ``ModelAdmin.get_queryset()`` first and
+	passes each list filter the result, so for a non-superuser the queryset
+	this ``.queryset()`` receives is already restricted to their own
+	organisation's content by ``OrganizationFilterMixin`` (source -> team ->
+	organisation). Excluding "has a scoped subject" on top of that is what
+	makes this the caller's OWN organisation's curation queue rather than
+	everyone's -- curation state carries no organisation of its own to check,
+	so a filter that queried it in isolation would show every organisation's
+	uncurated content to every staff member. Superusers get the true global
+	queue, for the same reason: their base queryset is everything.
+	"""
+
+	title = "site scope"
+	parameter_name = "unpublished"
+
+	def lookups(self, request, model_admin):
+		return (("1", "Not in any site's scope (curation queue)"),)
+
+	def queryset(self, request, queryset):
+		if self.value() != "1":
+			return queryset
+		return queryset.exclude(subjects__in=_scoped_subject_ids())
+
+
+class SiteScopeFilter(admin.SimpleListFilter):
+	"""Narrow the changelist to one site the caller's organisation(s) own.
+
+	A pure narrower, never a widener: this ``.queryset()`` runs as an
+	additional ``.filter()`` on top of the already organisation-scoped
+	queryset ``OrganizationFilterMixin`` produced (see UnpublishedContentFilter's
+	docstring for why list filters always see that queryset, not the raw
+	table) -- so even a tampered ``?site=`` naming a site another
+	organisation owns can only narrow further within rows already limited to
+	the caller's own organisation, never add another organisation's content.
+	``lookups()`` still restricts the offered choices to the caller's own
+	organisation(s) via ``OrganizationSite``, so the dropdown itself never
+	discloses another organisation's site domains. Superusers may pick any
+	site.
+	"""
+
+	title = "site"
+	parameter_name = "site"
+
+	def lookups(self, request, model_admin):
+		from sitesettings.models import CustomSetting
+
+		if request.user.is_superuser:
+			settings_qs = CustomSetting.objects.select_related("site")
+		else:
+			user_orgs = get_user_organizations(request.user)
+			site_ids = OrganizationSite.objects.filter(
+				organization_id__in=user_orgs
+			).values_list("site_id", flat=True)
+			settings_qs = CustomSetting.objects.filter(
+				site_id__in=site_ids
+			).select_related("site")
+		return [
+			(cs.site_id, cs.site.domain)
+			for cs in settings_qs.order_by("site__domain")
+		]
+
+	def queryset(self, request, queryset):
+		if not self.value():
+			return queryset
+		from sitesettings.models import CustomSetting
+
+		subject_ids = CustomSetting.objects.filter(
+			site_id=self.value()
+		).values_list("scope_subjects__id", flat=True)
+		return queryset.filter(subjects__id__in=subject_ids).distinct()
 
 
 class ArticleTrialReferenceInline(admin.TabularInline):
@@ -831,6 +945,8 @@ class ArticleAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistory
 	search_fields = ["article_id", "title", "doi"]
 	list_filter = [
 		ArticleOrganizationFilter,
+		SiteScopeFilter,
+		UnpublishedContentFilter,
 		("teams", OrganizationRestrictedFieldListFilter),
 		("subjects", OrganizationRestrictedFieldListFilter),
 		("sources", OrganizationRestrictedFieldListFilter),
@@ -1391,6 +1507,8 @@ class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAd
 		"ctg_detailed_description",
 	]
 	list_filter = [
+		SiteScopeFilter,
+		UnpublishedContentFilter,
 		("teams", OrganizationRestrictedFieldListFilter),
 		("subjects", OrganizationRestrictedFieldListFilter),
 		("sources", OrganizationRestrictedFieldListFilter),
