@@ -68,14 +68,27 @@ class SiteSitemapTests(TestCase):
 		cls.article_private.subjects.add(cls.private_subject)
 
 		# Cross-team tagging: an article owned only by the private team but
-		# (mis)tagged with a subject that belongs to the public team. Subject
-		# curation alone would let this leak; the article's own team
-		# ownership must also gate visibility.
+		# tagged with a subject that belongs to the public team. Before
+		# Phase 4 of site-scoped API visibility the article's own team
+		# ownership gated this out; now subject curation alone decides, so
+		# it is published. Kept as a fixture because that is exactly the
+		# behaviour change worth pinning.
 		cls.article_wrong_team = Articles.objects.create(
 			title="wrong-team", link="https://example.org/wrong-team", kind="science paper"
 		)
 		cls.article_wrong_team.teams.add(cls.private_team)
 		cls.article_wrong_team.subjects.add(cls.subject_a)
+
+		# No teams M2M at all, tagged with a published subject. This is what
+		# every one of the 64 rows in the production delta looks like: the
+		# old ownership join dropped them for having nothing to match, not
+		# for being private. Pinned separately from article_wrong_team
+		# because a future join on teams would silently re-exclude them
+		# while the private-team case kept passing.
+		cls.article_teamless = Articles.objects.create(
+			title="teamless", link="https://example.org/teamless", kind="science paper"
+		)
+		cls.article_teamless.subjects.add(cls.subject_a)
 
 		def make_trial(title, *subjects, team=cls.team, **fields):
 			trial = Trials.objects.create(
@@ -89,10 +102,16 @@ class SiteSitemapTests(TestCase):
 		cls.trials_a = [make_trial(f"ta{i}", cls.subject_a) for i in range(3)]
 		cls.trial_b = make_trial("tb", cls.subject_b)
 		cls.trial_both = make_trial("tboth", cls.subject_a, cls.subject_b)
-		# Same cross-team leak the articles section guards against.
+		# Same cross-team case as article_wrong_team above.
 		cls.trial_wrong_team = make_trial(
 			"twrong", cls.subject_a, team=cls.private_team
 		)
+
+		# Trials' equivalent of article_teamless above.
+		cls.trial_teamless = Trials.objects.create(
+			title="tteamless", link="https://registry.example.org/tteamless"
+		)
+		cls.trial_teamless.subjects.add(cls.subject_a)
 
 		# recruitment_status_normalized is editable=False and recomputed
 		# from the raw status on every save(), so seed the raw value.
@@ -131,9 +150,13 @@ class SiteSitemapTests(TestCase):
 			domain="authors.example.com", name="AuthorsSite"
 		)
 		cls.authors_config = CustomSetting.objects.create(
-			site=cls.authors_site, title="Authors settings", generate_sitemap=True
+			site=cls.authors_site,
+			title="Authors settings",
+			generate_sitemap=True,
+			api_public=True,
 		)
 		cls.authors_config.sitemap_subjects.add(cls.authors_subject)
+		cls.authors_config.scope_subjects.add(cls.authors_subject)
 
 		def make_authors_article(suffix, team):
 			article = Articles.objects.create(
@@ -162,11 +185,9 @@ class SiteSitemapTests(TestCase):
 			make_authors_article(f"t{i}", cls.authors_team).authors.add(cls.author_thin)
 
 		# 10 articles tagged with the site's subject but owned only by a
-		# private team — the same cross-team leak the articles/trials
-		# sections guard against (see article_wrong_team/trial_wrong_team
-		# above). Must not qualify even though the raw count clears
-		# MIN_ARTICLES, proving subject and team are checked on the same
-		# article row rather than independently.
+		# private team — the same cross-team case as article_wrong_team and
+		# trial_wrong_team above. Since Phase 4 these count towards
+		# MIN_ARTICLES and the author qualifies.
 		cls.author_private_leak = Authors.objects.create(
 			given_name="Hidden", family_name="Researcher", ORCID="0000-0001-0000-0003"
 		)
@@ -187,13 +208,26 @@ class SiteSitemapTests(TestCase):
 		# Site config: frontend site publishes subject A (+ the private
 		# subject, which must be silently dropped); other site publishes B.
 		cls.config = CustomSetting.objects.create(
-			site=cls.site, title="Frontend settings", generate_sitemap=True
+			site=cls.site,
+			title="Frontend settings",
+			generate_sitemap=True,
+			api_public=True,
 		)
 		cls.config.sitemap_subjects.add(cls.subject_a, cls.private_subject)
+		# scope_subjects, not sitemap_subjects, is what makes a subject
+		# publicly visible. private_subject is deliberately left out of
+		# scope, mirroring what migration sitesettings/0019 does to a public
+		# site's scope: a site may curate a subject into its sitemap that it
+		# is not allowed to publish, and the sitemap must drop it.
+		cls.config.scope_subjects.add(cls.subject_a)
 		cls.other_config = CustomSetting.objects.create(
-			site=cls.other_site, title="Other settings", generate_sitemap=True
+			site=cls.other_site,
+			title="Other settings",
+			generate_sitemap=True,
+			api_public=True,
 		)
 		cls.other_config.sitemap_subjects.add(cls.subject_b)
+		cls.other_config.scope_subjects.add(cls.subject_b)
 
 	def setUp(self):
 		cache.clear()
@@ -215,9 +249,37 @@ class SiteSitemapTests(TestCase):
 		self.assertNotIn(f"/articles/{self.article_private.pk}/", body)
 		self.assertIn("<lastmod>", body)
 
-	def test_article_owned_by_private_team_excluded_despite_public_subject_tag(self):
+	def test_article_is_listed_on_its_subject_tag_alone_whatever_team_owns_it(self):
+		# Phase 4 of site-scoped API visibility: team ownership no longer
+		# decides visibility, subject curation does. This article's teams M2M
+		# points only at a private-organisation team, which the old
+		# teams__organization_id__in guard used to drop — but it carries a
+		# subject the site publishes, so it is published. Ownership stays a
+		# staff-permissions concept (the ADMIN path); it is not a publication
+		# rule. The guard that still applies is subject scope, covered by
+		# test_curated_subject_outside_the_public_scope_is_dropped below.
 		body = self.client.get(self._section_url(self.site.pk)).content.decode()
-		self.assertNotIn(f"/articles/{self.article_wrong_team.pk}/", body)
+		self.assertIn(
+			f"https://frontend.example.com/articles/{self.article_wrong_team.pk}/",
+			body,
+		)
+
+	def test_article_with_no_team_at_all_is_listed(self):
+		# The production delta is entirely rows like this one, so it gets its
+		# own assertion rather than riding on the private-team case above.
+		body = self.client.get(self._section_url(self.site.pk)).content.decode()
+		self.assertIn(
+			f"https://frontend.example.com/articles/{self.article_teamless.pk}/",
+			body,
+		)
+
+	def test_curated_subject_outside_the_public_scope_is_dropped(self):
+		# The load-bearing guard now that ownership is gone: the site curates
+		# private_subject into sitemap_subjects, but no api_public site has it
+		# in scope_subjects, so nothing tagged with it reaches the sitemap.
+		self.assertIn(self.private_subject, self.config.sitemap_subjects.all())
+		body = self.client.get(self._section_url(self.site.pk)).content.decode()
+		self.assertNotIn(f"/articles/{self.article_private.pk}/", body)
 
 	def test_sites_expose_disjoint_slices_except_shared_tags(self):
 		# The anti-competition property: same DB, different subjects →
@@ -271,14 +333,15 @@ class SiteSitemapTests(TestCase):
 
 	def test_index_lists_one_entry_per_page(self):
 		original_limit = SiteArticlesSitemap.limit
-		SiteArticlesSitemap.limit = 2  # 5 subject-A articles + article_both → 3 pages
+		# 5 subject-A articles + article_both + article_wrong_team → 4 pages.
+		SiteArticlesSitemap.limit = 2
 		self.addCleanup(setattr, SiteArticlesSitemap, "limit", original_limit)
 		url = reverse("site-sitemap-index", kwargs={"site_id": self.site.pk})
 		body = self.client.get(url).content.decode()
-		self.assertEqual(body.count("<sitemap>"), 3)
+		self.assertEqual(body.count("<sitemap>"), 4)
 		self.assertIn(self._section_url(self.site.pk), body)
-		self.assertIn("?p=3", body)
-		self.assertNotIn("?p=4", body)
+		self.assertIn("?p=4", body)
+		self.assertNotIn("?p=5", body)
 
 	# --- trials section (opt-in per site) ---
 
@@ -288,11 +351,15 @@ class SiteSitemapTests(TestCase):
 
 	def _visible_trial_count(self):
 		"""Trials the site's trials section should list, counted independently
-		of the sitemap code under test."""
+		of the sitemap code under test.
+
+		Subject membership alone — the teams=self.team half this used to
+		carry was the old ownership rule, and it only kept agreeing because
+		no fixture was team-less. trial_teamless made the disagreement
+		visible.
+		"""
 		return (
-			Trials.objects.filter(
-				subjects__in=[self.subject_a], teams=self.team
-			)
+			Trials.objects.filter(subjects__in=[self.subject_a])
 			.distinct()
 			.count()
 		)
@@ -315,12 +382,27 @@ class SiteSitemapTests(TestCase):
 		self.assertNotIn("/articles/", body)
 		self.assertIn("<lastmod>", body)
 
-	def test_trial_owned_by_private_team_excluded_despite_public_subject_tag(self):
+	def test_trial_is_listed_on_its_subject_tag_alone_whatever_team_owns_it(self):
+		# Trials follow the same Phase 4 rule as articles — see
+		# test_article_is_listed_on_its_subject_tag_alone_whatever_team_owns_it.
 		self._enable_trials()
 		body = self.client.get(
 			self._section_url(self.site.pk, "trials")
 		).content.decode()
-		self.assertNotIn(f"/trials/{self.trial_wrong_team.pk}/", body)
+		self.assertIn(
+			f"https://frontend.example.com/trials/{self.trial_wrong_team.pk}/", body
+		)
+
+	def test_trial_with_no_team_at_all_is_listed(self):
+		# See test_article_with_no_team_at_all_is_listed — all 64 trials in
+		# the measured production delta are team-less, not private.
+		self._enable_trials()
+		body = self.client.get(
+			self._section_url(self.site.pk, "trials")
+		).content.decode()
+		self.assertIn(
+			f"https://frontend.example.com/trials/{self.trial_teamless.pk}/", body
+		)
 
 	def test_trial_with_two_qualifying_subjects_listed_once(self):
 		self._enable_trials()
@@ -357,12 +439,13 @@ class SiteSitemapTests(TestCase):
 		self.addCleanup(setattr, SiteTrialsSitemap, "limit", original_limit)
 		body = self.client.get(url).content.decode()
 		self.assertIn(self._section_url(self.site.pk, "trials"), body)
-		# 7 subject-A trials at 2 per page → 4 pages, + 1 articles page.
+		# 9 subject-A trials at 2 per page → 5 pages, + 1 articles page.
 		# Derived rather than hardcoded so adding a fixture doesn't turn
-		# into a puzzle about which number to bump.
+		# into a puzzle about which number to bump; the equality below is
+		# only there so a derivation that collapsed to zero would fail loudly.
 		trial_pages = -(-self._visible_trial_count() // 2)
 		self.assertEqual(body.count("<sitemap>"), 1 + trial_pages)
-		self.assertEqual(trial_pages, 4)
+		self.assertEqual(trial_pages, 5)
 
 	def test_no_status_selection_lists_every_status(self):
 		self._enable_trials()
@@ -401,18 +484,19 @@ class SiteSitemapTests(TestCase):
 		self.assertIn(f"/trials/{self.trial_completed.pk}/", body)
 		self.assertNotIn(f"/trials/{self.trial_no_status.pk}/", body)
 
-	def test_status_selection_does_not_leak_past_subject_or_team_scoping(self):
-		# The status filter narrows, never widens: a recruiting trial owned
-		# by a private team still must not appear.
+	def test_status_selection_does_not_leak_past_subject_scoping(self):
+		# The status filter narrows, never widens: a recruiting trial whose
+		# only subject is outside this site's curated set still must not
+		# appear, however well it matches the requested status.
 		self._enable_trials()
-		self.trial_wrong_team.recruitment_status = "Recruiting"
-		self.trial_wrong_team.save()
+		self.trial_b.recruitment_status = "Recruiting"
+		self.trial_b.save()
 		self.config.sitemap_trial_statuses = ["recruiting"]
 		self.config.save()
 		body = self.client.get(
 			self._section_url(self.site.pk, "trials")
 		).content.decode()
-		self.assertNotIn(f"/trials/{self.trial_wrong_team.pk}/", body)
+		self.assertNotIn(f"/trials/{self.trial_b.pk}/", body)
 
 	def test_status_selection_does_not_affect_articles(self):
 		self._enable_trials()
@@ -470,12 +554,17 @@ class SiteSitemapTests(TestCase):
 		).content.decode()
 		self.assertNotIn(f"/authors/{self.author_thin.ORCID}/", body)
 
-	def test_author_reaching_threshold_only_via_private_team_articles_excluded(self):
+	def test_author_reaching_threshold_via_subject_tagged_articles_qualifies(self):
+		# Same Phase 4 rule as articles and trials: these ten articles are
+		# owned by a private-organisation team but tagged with the site's
+		# subject, so they count towards MIN_ARTICLES and the author is
+		# listed. What still excludes an author is the subject tag itself —
+		# an article outside scope_subjects contributes nothing.
 		self._enable_authors()
 		body = self.client.get(
 			self._section_url(self.authors_site.pk, "authors")
 		).content.decode()
-		self.assertNotIn(f"/authors/{self.author_private_leak.ORCID}/", body)
+		self.assertIn(f"/authors/{self.author_private_leak.ORCID}/", body)
 
 	def test_author_without_orcid_excluded(self):
 		self._enable_authors()
@@ -486,9 +575,7 @@ class SiteSitemapTests(TestCase):
 		# articles alone — only the missing ORCID excludes them.
 		self.assertNotIn("/authors/None/", body)
 		self.assertFalse(
-			SiteAuthorsSitemap(
-				self.authors_site, [self.authors_subject.pk], [self.authors_org.pk]
-			)
+			SiteAuthorsSitemap(self.authors_site, [self.authors_subject.pk])
 			.get_queryset()
 			.filter(pk=self.author_no_orcid.pk)
 			.exists()
