@@ -1868,6 +1868,8 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	# Query Parameters:
 	- **team_id** - filter by team ID
 	- **subject_id** - filter by subject ID
+	- **subjects_any** - comma-separated subject IDs, OR semantics: categories used
+	  within ANY of the listed subjects (e.g. 1,10)
 	- **category_id** - filter by specific category ID
 	- **get_categories** - comma-separated list of category IDs (e.g., 1,2,3)
 	- **include_authors** - Include top authors data (default: true)
@@ -1900,6 +1902,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	- `/categories/{id}/authors/` - Get detailed author statistics for a specific category
 
 	# Examples:
+	- Categories in either subject: `/categories/?subjects_any=1,10`
 	- Basic: `GET /categories/?team_id=1`
 	- With subject: `GET /categories/?team_id=1&subject_id=2`
 	- Date filtered: `GET /categories/?team_id=1&timeframe=year`
@@ -2481,10 +2484,11 @@ class TrialViewSet(
 				"trial_countries",
 				# TrialSerializer exposes nested subjects (added for site-scoped
 				# visibility, so a caller can check a trial's scope without a
-				# second request). Without this it is a query per row —
-				# ArticleSerializer prefetches its own "subjects" for the same
-				# reason.
-				"subjects",
+				# second request). select_related("team") is not optional:
+				# SubjectsSerializer.team_id uses source="team.id", so a plain
+				# M2M prefetch still dereferences team once per nested subject.
+				# ArticleViewSet does exactly this for the same reason.
+				Prefetch("subjects", queryset=Subject.objects.select_related("team")),
 			)
 		)
 		# trial_sites backs TrialDetailSerializer's "trial_sites" field, used only on
@@ -4044,10 +4048,12 @@ class TrialSearchView(
 			"team_categories",
 			"article_references__article",
 			"trial_countries",
-			# Nested subjects on TrialSerializer — a query per row without this.
+			# Nested subjects on TrialSerializer. select_related("team") is
+			# required because SubjectsSerializer.team_id uses source="team.id"
+			# — a plain prefetch still costs a query per nested subject.
 			# Mirrors TrialViewSet.get_queryset; this view builds its own
 			# queryset and inherits none of that.
-			"subjects",
+			Prefetch("subjects", queryset=Subject.objects.select_related("team")),
 		)
 
 		# Prefetch the caller-org's TrialOrgContent so the serializer's
@@ -4339,12 +4345,25 @@ class PublicSitesView(APIView):
 	permission_classes = [permissions.AllowAny]
 
 	def get(self, request):
+		# CustomSetting.site is a plain FK, not OneToOne — a site can carry
+		# several settings rows, which sitesettings already handles elsewhere
+		# (see test_lowest_setting_id_wins_when_multiple_rows). Iterating
+		# settings would emit one entry per row and hand clients duplicate
+		# site_ids. Collapse to one row per site, lowest setting_id winning,
+		# matching the tie-break that module already uses.
 		settings_qs = (
 			CustomSetting.objects.filter(api_public=True)
 			.select_related("site")
-			.order_by("site__domain")
+			.order_by("site__domain", "setting_id")
 		)
-		return Response(PublicSiteSerializer(settings_qs, many=True).data)
+		seen = set()
+		unique = []
+		for setting in settings_qs:
+			if setting.site_id in seen:
+				continue
+			seen.add(setting.site_id)
+			unique.append(setting)
+		return Response(PublicSiteSerializer(unique, many=True).data)
 
 
 class StatsView(APIView):

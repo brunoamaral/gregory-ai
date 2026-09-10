@@ -1797,6 +1797,8 @@ paths:
         # Query Parameters:
         - **team_id** - filter by team ID
         - **subject_id** - filter by subject ID
+        - **subjects_any** - comma-separated subject IDs, OR semantics: categories used
+          within ANY of the listed subjects (e.g. 1,10)
         - **category_id** - filter by specific category ID
         - **get_categories** - comma-separated list of category IDs (e.g., 1,2,3)
         - **include_authors** - Include top authors data (default: true)
@@ -1829,6 +1831,7 @@ paths:
         - `/categories/{id}/authors/` - Get detailed author statistics for a specific category
 
         # Examples:
+        - Categories in either subject: `/categories/?subjects_any=1,10`
         - Basic: `GET /categories/?team_id=1`
         - With subject: `GET /categories/?team_id=1&subject_id=2`
         - Date filtered: `GET /categories/?team_id=1&timeframe=year`
@@ -1993,6 +1996,8 @@ paths:
         # Query Parameters:
         - **team_id** - filter by team ID
         - **subject_id** - filter by subject ID
+        - **subjects_any** - comma-separated subject IDs, OR semantics: categories used
+          within ANY of the listed subjects (e.g. 1,10)
         - **category_id** - filter by specific category ID
         - **get_categories** - comma-separated list of category IDs (e.g., 1,2,3)
         - **include_authors** - Include top authors data (default: true)
@@ -2025,6 +2030,7 @@ paths:
         - `/categories/{id}/authors/` - Get detailed author statistics for a specific category
 
         # Examples:
+        - Categories in either subject: `/categories/?subjects_any=1,10`
         - Basic: `GET /categories/?team_id=1`
         - With subject: `GET /categories/?team_id=1&subject_id=2`
         - Date filtered: `GET /categories/?team_id=1&timeframe=year`
