@@ -13,6 +13,8 @@ from gregory.models import (
 from organizations.models import Organization
 from django_countries.fields import Country
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 class AuthorAPITest(TestCase):
 	"""Test cases for Authors API endpoints"""
@@ -32,6 +34,7 @@ class AuthorAPITest(TestCase):
 		self.subject = Subject.objects.create(
 			subject_name="Test Subject", subject_slug="test-subject", team=self.team
 		)
+		publish_subjects(self.subject, organization=self.organization)
 
 		# Create test category
 		self.category = TeamCategory.objects.create(
@@ -199,6 +202,7 @@ class AuthorAPITest(TestCase):
 		other_subject = Subject.objects.create(
 			subject_name="Other Subject", subject_slug="other-subject", team=self.team
 		)
+		publish_subjects(other_subject)
 		other_author = Authors.objects.create(
 			given_name="Extra", family_name="Author"
 		)
@@ -573,6 +577,7 @@ class AuthorRelevantArticlesCountTest(TestCase):
 			subject_slug="relevant-count-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.organization)
 
 		self.author = Authors.objects.create(given_name="Alice", family_name="Relevant")
 
