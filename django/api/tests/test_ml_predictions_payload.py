@@ -14,6 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from api.tests.visibility_helpers import publish_subjects
 from gregory.models import (
 	Articles,
 	MLPredictions,
@@ -53,6 +54,7 @@ class ArticleMlPredictionsPayloadTests(TestCase):
 			subject_slug="ml-payload-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.organization)
 		self.article = Articles.objects.create(
 			title="ML Payload Article",
 			summary="Article used to test ml_predictions payload filtering.",

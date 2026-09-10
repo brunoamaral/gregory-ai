@@ -15,8 +15,10 @@ from rest_framework.test import APIClient
 
 from api.pagination import CappedPageNumberPagination
 
-from gregory.models import Articles, OrganizationApiSettings, Team, Trials
+from gregory.models import Articles, OrganizationApiSettings, Subject, Team, Trials
 from organizations.models import Organization
+
+from api.tests.visibility_helpers import publish_subjects
 
 
 class CountCacheSmokeTest(TestCase):
@@ -28,16 +30,22 @@ class CountCacheSmokeTest(TestCase):
 		self.team = Team.objects.create(
 			organization=self.org, name="Smoke Team", slug="smoke-team"
 		)
+		self.subject = Subject.objects.create(
+			subject_name="Smoke Subject", subject_slug="smoke-subject", team=self.team
+		)
+		publish_subjects(self.subject, organization=self.org)
 		for i in range(3):
 			a = Articles.objects.create(
 				title=f"Smoke {i}", link=f"https://ex.com/smoke-{i}"
 			)
 			a.teams.add(self.team)
+			a.subjects.add(self.subject)
 		for i in range(2):
 			t = Trials.objects.create(
 				title=f"Smoke Trial {i}", link=f"https://ex.com/smoke-trial-{i}"
 			)
 			t.teams.add(self.team)
+			t.subjects.add(self.subject)
 
 		self.client = APIClient()
 
@@ -132,14 +140,15 @@ class CountCacheSmokeTest(TestCase):
 
 
 class CountCacheSubjectScopeTests(TestCase):
-	"""Site-scoped API visibility, Phase 4: the subject scope is part of the
-	cache key.
+	"""Site-scoped API visibility, Phase 4: the subject scope is the cache
+	key's scope component -- visible_org_ids is no longer part of it at all.
 
-	The key hashes the org scope AND the subject scope during the transition.
-	Call sites convert file by file, so some responses are still org-scoped
-	while others are subject-scoped; keying on only one of them could serve a
-	count computed under one rule to a caller scoped by the other. The org
-	half retires in Phase 6 along with visible_org_ids.
+	Every endpoint sharing CappedPageNumberPagination (articles, trials,
+	sponsors, authors, the three search views) selects its rows by subject
+	now, so a cached count IS a count over a subject scope; there is no
+	longer a paginated org-keyed endpoint for visible_org_ids to protect,
+	and hashing it too would only fragment the cache for no isolation
+	benefit. See CappedPageNumberPagination._count_cache_key's comment.
 	"""
 
 	def setUp(self):
@@ -162,10 +171,15 @@ class CountCacheSubjectScopeTests(TestCase):
 			self._key(same_orgs, {3, 4}),
 		)
 
-	def test_different_org_scopes_still_do_not_share_a_cache_entry(self):
-		"""The pre-existing property, unchanged by adding subjects."""
+	def test_org_scope_no_longer_affects_the_cache_key(self):
+		"""Superseded rule: this used to assert isolation on visible_org_ids
+		too (the pre-Phase-4 cache key's whole scope component). Now that
+		every endpoint sharing this paginator selects rows by subject,
+		visible_org_ids plays no part in what a cached count means -- two
+		callers who differ only in org scope but share a subject scope
+		legitimately hit the same cache entry."""
 		same_subjects = {1}
-		self.assertNotEqual(
+		self.assertEqual(
 			self._key({1}, same_subjects),
 			self._key({2}, same_subjects),
 		)

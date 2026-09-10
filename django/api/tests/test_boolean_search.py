@@ -10,6 +10,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from api.filters import ArticleFilter, TrialFilter
+from api.tests.visibility_helpers import publish_subjects
 from api.utils.search import build_search_q, _tokenize
 from gregory.models import (
 	Articles,
@@ -315,6 +316,7 @@ class ArticleViewSetBooleanSearchE2ETests(TestCase):
 		self.subject = Subject.objects.create(
 			subject_name="Bool Subject", subject_slug="bool-subject", team=self.team
 		)
+		publish_subjects(self.subject, organization=self.org)
 
 		# No single article contains every term — mirrors the production category
 		# query (artemisinin OR dihydroartemisinin OR …) that returned nothing.
@@ -381,6 +383,7 @@ class TrialViewSetBooleanSearchE2ETests(TestCase):
 			subject_slug="bool-trial-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.org)
 		self.t_myelin = Trials.objects.create(
 			title="Myelin restoration trial",
 			link="https://example.com/te1",
