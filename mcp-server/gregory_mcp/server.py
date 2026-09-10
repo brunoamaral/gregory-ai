@@ -15,6 +15,7 @@ from mcp_types import ToolAnnotations
 from .cache import CATALOG_CACHE_TTL_MS
 from .prompts import register_prompts
 from .resources import register_resources
+from .site import SiteMiddleware
 from .telemetry import TelemetryMiddleware
 from .tools import articles, authors, catalog, stats, trials
 
@@ -64,7 +65,12 @@ def build_server() -> MCPServer:
 		),
 		version="0.1.0",
 		cache_hints=CACHE_HINTS,
-		middleware=[TelemetryMiddleware()],
+		# SiteMiddleware first (outermost): it resolves this request's site_id
+		# — env override, else inbound Host via GET /sites/ — before anything
+		# else runs, so a cold-cache /sites/ fetch's latency lands outside
+		# TelemetryMiddleware's own per-tool-call accounting rather than being
+		# smeared into whichever tool call happened to trigger it.
+		middleware=[SiteMiddleware(), TelemetryMiddleware()],
 	)
 
 	server.add_tool(catalog.list_subjects, annotations=READ_ONLY)

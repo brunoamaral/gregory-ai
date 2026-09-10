@@ -116,6 +116,32 @@ The server proxies whatever instance `GREGORY_API_URL` names — one codebase se
 brain-regeneration.com, encefalites.pt, clinicaltrialupdates.com, or a local dev instance,
 with no code change. See `mcp-server/gregory_mcp/config.py`.
 
+### Site scoping (`?site_id=`)
+
+Every upstream call carries a `site_id` query parameter, resolved once per request
+(`mcp-server/gregory_mcp/site.py`) in this order:
+
+1. **`GREGORY_SITE_ID`** (env) — wins outright, without ever calling the API. Set this
+   for a single-tenant deployment that should always report as one site regardless of
+   how it's reached.
+2. **The inbound `Host` header** this server was reached on (nginx sets
+   `proxy_set_header Host $host` — see [Deployment](#deployment)), resolved against the
+   API's `GET /sites/` discovery endpoint (`{site_id, domain, name}` for every
+   `api_public` site) the same way `django/subscriptions/views.py`'s
+   `_find_site_by_domain()` resolves a domain: exact match, then one subdomain level
+   stripped — so `gregory-ai.brain-regeneration.com` resolves via
+   `brain-regeneration.com`. `GET /sites/` is cached in-process for the same 10 minutes
+   as the subjects/categories catalogs (`CATALOG_CACHE_TTL_MS`), not fetched per call.
+3. **Neither resolves** — the parameter is omitted, exactly like today's behaviour.
+   Never guessed, never an error from this server.
+
+This exists so the server keeps working, unchanged, once the site-scoped API visibility
+project's later phase makes the API fail closed for an anonymous caller that names no
+site. An unrecognised query parameter is ignored by django-filter today, so this is a
+no-op until that phase ships. Site resolution is transport-level (`GregoryClient.get()`
+and `CatalogCache`'s cache key, not a parameter on any tool) — no tool signature changes,
+and no LLM caller ever chooses a `site_id` itself.
+
 ## Auth
 
 None. The server exposes exactly what an anonymous API caller already sees — the same

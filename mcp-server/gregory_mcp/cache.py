@@ -27,6 +27,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .client import get_client
+from .site_context import get_current_site_id
 from .telemetry import record_cache_status
 
 # The single source of truth for how long the catalog is considered fresh.
@@ -64,7 +65,13 @@ class CatalogCache:
 		# no-params call would miss each other despite requesting the same data.
 		clean = {k: v for k, v in (params or {}).items() if v is not None}
 		items = tuple(sorted(clean.items()))
-		return f"{path}?{items!r}"
+		# Mixed in regardless of whether `params` itself carries a `site_id` —
+		# GregoryClient.get() adds it transport-side (see client.py), invisible
+		# to callers of this cache, so the key must read the same source of
+		# truth or two different sites would collide on one cache entry. This
+		# is the highest-risk failure mode here: one site's subjects/categories
+		# served to another's caller because the key didn't vary by site.
+		return f"{get_current_site_id()}:{path}?{items!r}"
 
 	def _lock_for(self, key: str) -> asyncio.Lock:
 		lock = self._locks.get(key)

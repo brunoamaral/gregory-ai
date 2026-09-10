@@ -9,6 +9,7 @@ from gregory_mcp.cache import reset_catalog_cache
 from gregory_mcp.client import GregoryClient
 from gregory_mcp.config import Settings
 from gregory_mcp.server import build_server
+from gregory_mcp.site import reset_site_resolution
 
 TEST_SETTINGS = Settings(
 	api_url="https://gregory.test",
@@ -19,6 +20,7 @@ TEST_SETTINGS = Settings(
 	max_retries=0,
 	log_level="ERROR",
 	log_dir=None,
+	site_id_override=None,
 )
 
 
@@ -49,7 +51,9 @@ def mock_gregory(monkeypatch):
 	Resets the process-wide catalog cache (see gregory_mcp/cache.py) before
 	and after each test — it's a module-level singleton, so without this a
 	list_subjects()/list_categories() call in one test could be served a
-	cached result left behind by a completely different test.
+	cached result left behind by a completely different test. Also resets
+	gregory_mcp.site's module-level state (the GREGORY_SITE_ID override and
+	the cached /sites/ directory) for the same reason.
 	"""
 	import gregory_mcp.client as client_module
 
@@ -59,6 +63,7 @@ def mock_gregory(monkeypatch):
 
 	monkeypatch.setattr(client_module, "_client", client)
 	reset_catalog_cache()
+	reset_site_resolution()
 
 	class Handle:
 		def set_handler(self, fn):
@@ -70,6 +75,7 @@ def mock_gregory(monkeypatch):
 
 	yield Handle()
 	reset_catalog_cache()
+	reset_site_resolution()
 
 
 @pytest.fixture
