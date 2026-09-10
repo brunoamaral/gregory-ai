@@ -11,6 +11,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from api.serializers import TrialSerializer
+from api.tests.visibility_helpers import publish_subjects
 from gregory.models import (
 	Organization,
 	OrganizationApiSettings,
@@ -38,6 +39,7 @@ class TrialCountryAndRegionFilterTests(TestCase):
 			subject_slug="country-filter-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.organization)
 
 		self.germany_trial = Trials.objects.create(
 			title="Germany Trial",

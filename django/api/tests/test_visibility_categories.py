@@ -20,6 +20,7 @@ from organizations.models import Organization, OrganizationUser
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
+from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import OrganizationApiSettings, Subject, Team, TeamCategory
 
 User = get_user_model()
@@ -63,11 +64,14 @@ def _make_category(team, subject, name):
 	return cat
 
 
-def _make_api_scheme(org, name):
+def _make_api_scheme(org, name, site=None):
+	"""``site`` is what binds the key to a subject scope; a key without one
+	resolves to no subjects at all."""
 	return APIAccessScheme.objects.create(
 		client_name=name,
 		client_contacts=f"{name}@example.com",
 		organization=org,
+		site=site,
 		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
@@ -92,6 +96,16 @@ class CategoryVisibilityBase(TestCase):
 		self.my_subj = _make_subject(self.my_team, "My Subj Cat")
 		self.pub_subj = _make_subject(self.pub_team, "Pub Subj Cat")
 		self.priv_subj = _make_subject(self.priv_team, "Priv Subj Cat")
+
+		# One site per organisation, each publishing that organisation's
+		# subject -- see test_visibility_articles.py for the same shape.
+		self.my_site = private_site_publishing(
+			self.my_subj, organization=self.my_org
+		)
+		self.pub_site = publish_subjects(self.pub_subj, organization=self.pub_org)
+		self.priv_site = private_site_publishing(
+			self.priv_subj, organization=self.priv_org
+		)
 
 		self.cat_mine = _make_category(self.my_team, self.my_subj, "Mine Category")
 		self.cat_pub = _make_category(self.pub_team, self.pub_subj, "Public Category")
@@ -204,7 +218,7 @@ class AuthenticatedUserCategoryVisibilityTest(CategoryVisibilityBase):
 class APIKeyCategoryVisibilityTest(CategoryVisibilityBase):
 	def setUp(self):
 		super().setUp()
-		self.scheme = _make_api_scheme(self.my_org, "cat-key")
+		self.scheme = _make_api_scheme(self.my_org, "cat-key", site=self.my_site)
 		self.client.credentials(HTTP_AUTHORIZATION=self.scheme.api_key)
 
 	def test_list_shows_own_category(self):
