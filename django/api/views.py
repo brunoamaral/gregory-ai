@@ -40,6 +40,7 @@ from api.serializers import (
 	SubjectsSerializer,
 	OrganizationSerializer,
 	SponsorSerializer,
+	PublicSiteSerializer,
 )
 from api.pagination import (
 	CappedPageNumberPagination,
@@ -114,6 +115,7 @@ from api.filters import (
 from rest_framework.response import Response
 from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
+from sitesettings.models import CustomSetting
 from rest_framework_simplejwt.views import TokenObtainPairView
 from drf_spectacular.utils import (
 	extend_schema,
@@ -2477,6 +2479,12 @@ class TrialViewSet(
 				"team_categories",
 				"article_references__article",
 				"trial_countries",
+				# TrialSerializer exposes nested subjects (added for site-scoped
+				# visibility, so a caller can check a trial's scope without a
+				# second request). Without this it is a query per row —
+				# ArticleSerializer prefetches its own "subjects" for the same
+				# reason.
+				"subjects",
 			)
 		)
 		# trial_sites backs TrialDetailSerializer's "trial_sites" field, used only on
@@ -2884,6 +2892,8 @@ class SponsorViewSet(viewsets.ReadOnlyModelViewSet):
 	- **search** - search by sponsor name
 	- **sponsor_type** - filter by sponsor type; one of: industry,
 	  academic_medical, government, nonprofit, other
+	- **subject_id** - restrict to sponsors with >=1 trial in this subject
+	- **subjects_any** - comma-separated subject IDs, OR semantics
 	- **ordering** - 'name' (default) or 'trials_count' (add '-' for reverse)
 	- **page_size** - items per page (max 100)
 
@@ -2891,6 +2901,8 @@ class SponsorViewSet(viewsets.ReadOnlyModelViewSet):
 	- Filter by type: `/sponsors/?sponsor_type=industry`
 	- Search by name: `/sponsors/?search=novartis`
 	- Most-trials first: `/sponsors/?ordering=-trials_count`
+	- Sponsors active in a subject: `/sponsors/?subject_id=1`
+	- Sponsors active in either subject: `/sponsors/?subjects_any=1,2`
 	"""
 
 	queryset = Sponsor.objects.all().order_by("name")
@@ -2989,15 +3001,23 @@ _AUTHORS_LIST_PARAMS = [
 		OpenApiTypes.INT,
 		OpenApiParameter.QUERY,
 		description="Restrict to authors with at least one article on this team. "
-		"Required if subject_id, category_slug, or category_id is given — without "
-		"it, the response is an empty page rather than an error.",
+		"Required if category_slug or category_id is given — without it, the "
+		"response is an empty page rather than an error. NOT required for "
+		"subject_id/subjects_any.",
 	),
 	OpenApiParameter(
 		"subject_id",
 		OpenApiTypes.INT,
 		OpenApiParameter.QUERY,
-		description="Restrict to authors with at least one article in this subject. "
-		"Requires team_id.",
+		description="Restrict to authors with at least one article in this subject.",
+	),
+	OpenApiParameter(
+		"subjects_any",
+		OpenApiTypes.STR,
+		OpenApiParameter.QUERY,
+		description="Comma-separated subject IDs, OR semantics — restrict to "
+		"authors with at least one article in any of the listed subjects, e.g. "
+		"?subjects_any=1,10.",
 	),
 	OpenApiParameter(
 		"category_slug",
@@ -3101,10 +3121,11 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	- **country** - filter by country code (exact match)
 	- **sort_by** - 'article_count' (default: 'author_id')
 	- **order** - 'asc' or 'desc' (default: 'desc' for article_count, 'asc' for others)
-	- **team_id** - filter by team ID
+	- **team_id** - filter by team ID (required alongside category_slug/category_id; NOT required for subject_id/subjects_any)
 	- **subject_id** - filter by subject ID
-	- **category_slug** - filter by team category slug
-	- **category_id** - filter by team category ID
+	- **subjects_any** - comma-separated subject IDs, OR semantics (e.g. `?subjects_any=1,10`)
+	- **category_slug** - filter by team category slug (requires team_id)
+	- **category_id** - filter by team category ID (requires team_id)
 	- **date_from** - filter articles from this date (YYYY-MM-DD)
 	- **date_to** - filter articles to this date (YYYY-MM-DD)
 	- **timeframe** - 'year', 'month', 'week' (relative to current date)
@@ -3119,6 +3140,8 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	- Filter by country: `?country=US`
 	- Sort by article count: `?sort_by=article_count&order=desc`
 	- Filter by timeframe: `?sort_by=article_count&timeframe=year`
+	- Subject filter, no team_id needed: `?subject_id=5&sort_by=article_count`
+	- Multi-subject OR filter: `?subjects_any=1,10&sort_by=article_count`
 	- Team and subject filter: `?team_id=1&subject_id=5&sort_by=article_count`
 	- Count per category: `?team_id=1&category_slug=natalizumab&sort_by=article_count&order=desc`
 	- Category with ID: `?team_id=1&category_id=5&sort_by=article_count&order=desc`
@@ -3174,11 +3197,30 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 		)
 		team_id = self.request.query_params.get("team_id")
 		subject_id = self.request.query_params.get("subject_id")
+		subjects_any_param = self.request.query_params.get("subjects_any")
 		category_slug = self.request.query_params.get("category_slug")
 		category_id = self.request.query_params.get("category_id")
 		date_from = self.request.query_params.get("date_from")
 		date_to = self.request.query_params.get("date_to")
 		timeframe = self.request.query_params.get("timeframe")
+
+		# Parse subjects_any into a list of ints, OR semantics -- same
+		# comma-separated, invalid-pieces-dropped convention as
+		# SubjectFilterMixin.filter_subjects_any on /articles/ and /trials/
+		# (api/filters.py). Authors has no direct `subjects` field to hang
+		# that mixin off of (it reaches subjects only via articles), so this
+		# is reimplemented inline rather than shared.
+		subjects_any_ids = None
+		if subjects_any_param:
+			subjects_any_ids = []
+			for raw in subjects_any_param.split(","):
+				raw = raw.strip()
+				if not raw:
+					continue
+				try:
+					subjects_any_ids.append(int(raw))
+				except (TypeError, ValueError):
+					continue
 
 		# Apply simple filters first
 		if author_id:
@@ -3241,9 +3283,31 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 		# Apply team/subject/category filters using single-phase approach
 		count_filters = {}  # Used for Count annotation on Authors queryset
 
-		# Validate that team_id is provided when using subject_id or category filters
-		if (subject_id or category_slug or category_id) and not team_id:
-			# Return empty queryset if team_id is missing for subject/category filtering
+		# Validate that team_id is provided when using category filters.
+		#
+		# subject_id/subjects_any are deliberately NOT included here (site-scoped
+		# API visibility, Phase 2 item 2): a caller scoped to a site knows
+		# subjects, not team_ids -- Subject.team is a plain FK, so a subject_id
+		# already resolves unambiguously to one team with no help needed, and
+		# requiring team_id anyway would make subject-based filtering unusable
+		# for exactly that caller.
+		#
+		# category_slug/category_id keep the requirement. They ARE both
+		# globally unique identifiers on their own (TeamCategory has both a
+		# DB-level unique index on category_slug alone and one on category_id
+		# as its PK -- verified against the schema, not just the model
+		# declaration), so team_id adds nothing to disambiguate *identity*.
+		# But count_filters below ANDs `articles__teams__id` (team_id) with
+		# `articles__team_categories__id`/`__category_slug` (category) as two
+		# independent predicates over two different M2M relations -- i.e. it
+		# counts articles that are BOTH tagged to that team AND in that
+		# category, not merely articles in a category that happens to belong
+		# to that team. That is a real, separate narrowing, and TeamCategory
+		# is outside the subject-based scope model this project touches
+		# (CustomSetting.scope_subjects lists Subjects, never TeamCategory),
+		# so there is no site-visibility reason to change it here.
+		if (category_slug or category_id) and not team_id:
+			# Return empty queryset if team_id is missing for category filtering
 			return Authors.objects.none()
 
 		if team_id:
@@ -3259,6 +3323,13 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 				count_filters["articles__subjects__id"] = subject_id
 			except ValueError:
 				pass
+
+		if subjects_any_ids:
+			count_filters["articles__subjects__id__in"] = subjects_any_ids
+		elif subjects_any_param and not subjects_any_ids:
+			# subjects_any was given but every piece was invalid -- match
+			# nothing, same convention as SubjectFilterMixin.filter_subjects_any.
+			return Authors.objects.none()
 
 		if category_slug:
 			count_filters["articles__team_categories__category_slug"] = category_slug
@@ -3969,7 +4040,14 @@ class TrialSearchView(
 
 		# Prefetch related objects to avoid N+1 queries
 		queryset = queryset.prefetch_related(
-			"sources", "team_categories", "article_references__article", "trial_countries"
+			"sources",
+			"team_categories",
+			"article_references__article",
+			"trial_countries",
+			# Nested subjects on TrialSerializer — a query per row without this.
+			# Mirrors TrialViewSet.get_queryset; this view builds its own
+			# queryset and inherits none of that.
+			"subjects",
 		)
 
 		# Prefetch the caller-org's TrialOrgContent so the serializer's
@@ -4234,6 +4312,39 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 ###
 # STATS
 ###
+
+
+@extend_schema(
+	summary="List publicly readable sites",
+	description=(
+		"Sites whose API is public, as {site_id, domain, name}. This is the "
+		"discovery entry point for callers that need a site_id and do not have "
+		"one, so it is deliberately UNSCOPED -- it cannot require the thing it "
+		"exists to provide. Everything it returns is already public."
+	),
+	responses=PublicSiteSerializer(many=True),
+)
+class PublicSitesView(APIView):
+	"""Sites with `api_public = True`.
+
+	Unscoped by design. Site-scoped API visibility fails closed when a caller
+	names no site, which leaves a new consumer unable to call anything: it
+	needs a site_id, and nothing else would tell it which exist. This endpoint
+	breaks that circle.
+
+	Read-only, no auth, no pagination -- the list is a handful of rows and
+	changes when a site is onboarded, which is rare.
+	"""
+
+	permission_classes = [permissions.AllowAny]
+
+	def get(self, request):
+		settings_qs = (
+			CustomSetting.objects.filter(api_public=True)
+			.select_related("site")
+			.order_by("site__domain")
+		)
+		return Response(PublicSiteSerializer(settings_qs, many=True).data)
 
 
 class StatsView(APIView):

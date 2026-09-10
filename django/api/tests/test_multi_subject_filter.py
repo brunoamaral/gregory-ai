@@ -11,6 +11,7 @@ from gregory.models import (
 	Organization,
 	ArticleSubjectRelevance,
 	OrganizationApiSettings,
+	MLPredictions,
 )
 
 
@@ -526,3 +527,120 @@ class TrialSubjectAnyFilterTests(TestCase):
 		response = self.client.get("/trials/?subjects_any=foo,bar")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data["count"], 0)
+
+
+class RelevantFilterSubjectScopingTests(TestCase):
+	"""
+	``relevant=true``/``ml_threshold`` must scope ML-consensus relevance to the
+	same subject(s) the rest of the request is already scoped to (subject_id,
+	subjects, or subjects_any) -- not silently check consensus across every
+	auto_predict subject in the database.
+
+	See SITE-API-VISIBILITY-PLAN.md Phase 2 item 3: under a site scope,
+	unscoped relevance checking would leak an article flagged relevant only
+	for another tenant's subject into a query scoped to a different subject.
+	The bug is reachable today too, without any site scoping, whenever a
+	caller combines relevant=true with subjects/subjects_any instead of the
+	legacy singular subject_id.
+	"""
+
+	@classmethod
+	def setUpTestData(cls):
+		cls.org = Organization.objects.create(
+			name="Relevance Scope Org", slug="relevance-scope-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=cls.org).update(
+			make_api_public=True
+		)
+		cls.team = Team.objects.create(
+			name="Relevance Scope Team",
+			slug="relevance-scope-team",
+			organization=cls.org,
+		)
+
+		# Two independent auto_predict subjects with "any" consensus (a single
+		# algorithm reaching threshold is enough).
+		cls.subject_x = Subject.objects.create(
+			subject_name="Relevance Subject X",
+			subject_slug="relevance-subject-x",
+			team=cls.team,
+			auto_predict=True,
+			ml_consensus_type="any",
+		)
+		cls.subject_y = Subject.objects.create(
+			subject_name="Relevance Subject Y",
+			subject_slug="relevance-subject-y",
+			team=cls.team,
+			auto_predict=True,
+			ml_consensus_type="any",
+		)
+
+		# Tagged with BOTH subjects, but only ML-consensus-relevant for X.
+		cls.article = Articles.objects.create(
+			title="Cross-subject relevance article",
+			link="https://example.com/cross-subject-relevance",
+		)
+		cls.article.subjects.add(cls.subject_x, cls.subject_y)
+		cls.article.teams.add(cls.team)
+		MLPredictions.objects.create(
+			article=cls.article,
+			subject=cls.subject_x,
+			algorithm="pubmed_bert",
+			probability_score=0.95,
+			predicted_relevant=True,
+		)
+
+	def setUp(self):
+		self.client = APIClient()
+
+	def test_relevant_scoped_to_subjects_any_excludes_other_subjects_consensus(self):
+		"""
+		?subjects_any=Y&relevant=true must NOT return an article that is only
+		ML-relevant for X, even though the article is tagged with Y too.
+		"""
+		url = f"/articles/?subjects_any={self.subject_y.id}&relevant=true"
+		response = self.client.get(url)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = {r["article_id"] for r in response.data["results"]}
+		self.assertNotIn(
+			self.article.article_id,
+			ids,
+			"relevant=true leaked ML consensus decided for an out-of-scope "
+			"subject (X) into a query scoped to a different subject (Y) via "
+			"subjects_any",
+		)
+
+	def test_relevant_scoped_to_subjects_any_includes_matching_subject(self):
+		"""?subjects_any=X&relevant=true still returns the article (sanity check)."""
+		url = f"/articles/?subjects_any={self.subject_x.id}&relevant=true"
+		response = self.client.get(url)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = {r["article_id"] for r in response.data["results"]}
+		self.assertIn(self.article.article_id, ids)
+
+	def test_relevant_scoped_to_subjects_all_excludes_other_subjects_consensus(self):
+		"""Same leak, reached via the AND-list ``subjects`` param instead."""
+		url = f"/articles/?subjects={self.subject_y.id}&relevant=true"
+		response = self.client.get(url)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = {r["article_id"] for r in response.data["results"]}
+		self.assertNotIn(self.article.article_id, ids)
+
+	def test_ml_threshold_scoped_to_subjects_any_excludes_other_subjects(self):
+		"""Same leak, via ml_threshold instead of relevant=true."""
+		url = f"/articles/?subjects_any={self.subject_y.id}&ml_threshold=0.5"
+		response = self.client.get(url)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = {r["article_id"] for r in response.data["results"]}
+		self.assertNotIn(self.article.article_id, ids)
+
+	def test_relevant_without_any_subject_param_still_checks_every_subject(self):
+		"""
+		No subject_id/subjects/subjects_any at all → unscoped behaviour is
+		unchanged: the article is still found relevant via X's consensus.
+		"""
+		url = "/articles/?relevant=true"
+		response = self.client.get(url)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = {r["article_id"] for r in response.data["results"]}
+		self.assertIn(self.article.article_id, ids)

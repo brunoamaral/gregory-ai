@@ -110,6 +110,12 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"countries",  # -> country / region
 	},
 	"/authors/": {
+		# Added by site-scoped API visibility Phase 2 as the scoping primitive
+		# for that project. No MCP tool exposes it yet: the MCP server gains
+		# subject scoping through its own multi-tenancy project, which binds a
+		# subject set per tenant rather than taking one per call. Revisit when
+		# that lands -- see MCP-MULTI-TENANCY-SPEC.md (local planning doc).
+		"subjects_any",
 		"format",
 		"author_id",  # redundant with get_author(author_id)
 		# Task 5 restored team_id/subject_id; category/date scoping wasn't
@@ -126,6 +132,12 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"ordering",  # 7 rows total — nothing to usefully sort
 	},
 	"/categories/": {
+		# Added by site-scoped API visibility Phase 2 as the scoping primitive
+		# for that project. No MCP tool exposes it yet: the MCP server gains
+		# subject scoping through its own multi-tenancy project, which binds a
+		# subject set per tenant rather than taking one per call. Revisit when
+		# that lands -- see MCP-MULTI-TENANCY-SPEC.md (local planning doc).
+		"subjects_any",
 		"format",
 		"page",  # list_categories always fetches every page (get_all_pages)
 		"ordering",
@@ -142,6 +154,17 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"timeframe",
 	},
 	"/sponsors/": {
+		# Sponsor subject scoping arrived with site-scoped API visibility
+		# Phase 2 (a sponsor is reached only through its trials, via
+		# Exists() on primary_sponsor_normalized). list_sponsors stays
+		# unscoped for now for the same reason as subjects_any below.
+		"subject_id",
+		# Added by site-scoped API visibility Phase 2 as the scoping primitive
+		# for that project. No MCP tool exposes it yet: the MCP server gains
+		# subject scoping through its own multi-tenancy project, which binds a
+		# subject set per tenant rather than taking one per call. Revisit when
+		# that lands -- see MCP-MULTI-TENANCY-SPEC.md (local planning doc).
+		"subjects_any",
 		"format",
 		"ordering",  # list_sponsors doesn't expose a sort; search narrows results instead
 	},

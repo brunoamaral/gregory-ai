@@ -203,8 +203,8 @@ paths:
         schema:
           type: number
         description: Minimum ML prediction confidence (0.0-1.0, e.g. 0.75). Also scoped
-          to subject_id when provided. Defaults to 0.8 when relevant=true and this
-          is omitted.
+          to subject_id/subjects/subjects_any when provided. Defaults to 0.8 when
+          relevant=true and this is omitted.
       - in: query
         name: open_access
         schema:
@@ -265,9 +265,12 @@ paths:
         schema:
           type: boolean
         description: Filter for relevant articles (true/false). When combined with
-          subject_id, relevance is scoped to that specific subject — only articles
-          relevant *for that subject* (via ML predictions or manual marking) are returned.
-          Without subject_id, relevance is checked across all subjects.
+          subject_id, subjects, and/or subjects_any, relevance is scoped to that subject
+          or subjects — only articles relevant *for one of those subjects* (via ML
+          predictions or manual marking) are returned. Without any of those, relevance
+          is checked across every subject in the database, so a caller that also scopes
+          the query by subject should always pass the same subject(s) here to avoid
+          picking up relevance decided by an unrelated subject.
       - in: query
         name: search
         schema:
@@ -804,8 +807,8 @@ paths:
         schema:
           type: number
         description: Minimum ML prediction confidence (0.0-1.0, e.g. 0.75). Also scoped
-          to subject_id when provided. Defaults to 0.8 when relevant=true and this
-          is omitted.
+          to subject_id/subjects/subjects_any when provided. Defaults to 0.8 when
+          relevant=true and this is omitted.
       - in: query
         name: open_access
         schema:
@@ -849,9 +852,12 @@ paths:
         schema:
           type: boolean
         description: Filter for relevant articles (true/false). When combined with
-          subject_id, relevance is scoped to that specific subject — only articles
-          relevant *for that subject* (via ML predictions or manual marking) are returned.
-          Without subject_id, relevance is checked across all subjects.
+          subject_id, subjects, and/or subjects_any, relevance is scoped to that subject
+          or subjects — only articles relevant *for one of those subjects* (via ML
+          predictions or manual marking) are returned. Without any of those, relevance
+          is checked across every subject in the database, so a caller that also scopes
+          the query by subject should always pass the same subject(s) here to avoid
+          picking up relevance decided by an unrelated subject.
       - in: query
         name: search
         schema:
@@ -1051,15 +1057,18 @@ paths:
                 relevant:
                   type: boolean
                   description: Filter for relevant articles (true/false). When combined
-                    with subject_id, relevance is scoped to that specific subject
-                    — only articles relevant *for that subject* (via ML predictions
-                    or manual marking) are returned. Without subject_id, relevance
-                    is checked across all subjects.
+                    with subject_id, subjects, and/or subjects_any, relevance is scoped
+                    to that subject or subjects — only articles relevant *for one
+                    of those subjects* (via ML predictions or manual marking) are
+                    returned. Without any of those, relevance is checked across every
+                    subject in the database, so a caller that also scopes the query
+                    by subject should always pass the same subject(s) here to avoid
+                    picking up relevance decided by an unrelated subject.
                 ml_threshold:
                   type: number
                   description: Minimum ML prediction confidence (0.0-1.0, e.g. 0.75).
-                    Also scoped to subject_id when provided. Defaults to 0.8 when
-                    relevant=true and this is omitted.
+                    Also scoped to subject_id/subjects/subjects_any when provided.
+                    Defaults to 0.8 when relevant=true and this is omitted.
                 open_access:
                   type: boolean
                   description: Filter for open access articles (true/false).
@@ -1197,10 +1206,11 @@ paths:
         - **country** - filter by country code (exact match)
         - **sort_by** - 'article_count' (default: 'author_id')
         - **order** - 'asc' or 'desc' (default: 'desc' for article_count, 'asc' for others)
-        - **team_id** - filter by team ID
+        - **team_id** - filter by team ID (required alongside category_slug/category_id; NOT required for subject_id/subjects_any)
         - **subject_id** - filter by subject ID
-        - **category_slug** - filter by team category slug
-        - **category_id** - filter by team category ID
+        - **subjects_any** - comma-separated subject IDs, OR semantics (e.g. `?subjects_any=1,10`)
+        - **category_slug** - filter by team category slug (requires team_id)
+        - **category_id** - filter by team category ID (requires team_id)
         - **date_from** - filter articles from this date (YYYY-MM-DD)
         - **date_to** - filter articles to this date (YYYY-MM-DD)
         - **timeframe** - 'year', 'month', 'week' (relative to current date)
@@ -1215,6 +1225,8 @@ paths:
         - Filter by country: `?country=US`
         - Sort by article count: `?sort_by=article_count&order=desc`
         - Filter by timeframe: `?sort_by=article_count&timeframe=year`
+        - Subject filter, no team_id needed: `?subject_id=5&sort_by=article_count`
+        - Multi-subject OR filter: `?subjects_any=1,10&sort_by=article_count`
         - Team and subject filter: `?team_id=1&subject_id=5&sort_by=article_count`
         - Count per category: `?team_id=1&category_slug=natalizumab&sort_by=article_count&order=desc`
         - Category with ID: `?team_id=1&category_id=5&sort_by=article_count&order=desc`
@@ -1328,14 +1340,19 @@ paths:
         schema:
           type: integer
         description: Restrict to authors with at least one article in this subject.
-          Requires team_id.
+      - in: query
+        name: subjects_any
+        schema:
+          type: string
+        description: Comma-separated subject IDs, OR semantics — restrict to authors
+          with at least one article in any of the listed subjects, e.g. ?subjects_any=1,10.
       - in: query
         name: team_id
         schema:
           type: integer
         description: Restrict to authors with at least one article on this team. Required
-          if subject_id, category_slug, or category_id is given — without it, the
-          response is an empty page rather than an error.
+          if category_slug or category_id is given — without it, the response is an
+          empty page rather than an error. NOT required for subject_id/subjects_any.
       - in: query
         name: timeframe
         schema:
@@ -1379,10 +1396,11 @@ paths:
         - **country** - filter by country code (exact match)
         - **sort_by** - 'article_count' (default: 'author_id')
         - **order** - 'asc' or 'desc' (default: 'desc' for article_count, 'asc' for others)
-        - **team_id** - filter by team ID
+        - **team_id** - filter by team ID (required alongside category_slug/category_id; NOT required for subject_id/subjects_any)
         - **subject_id** - filter by subject ID
-        - **category_slug** - filter by team category slug
-        - **category_id** - filter by team category ID
+        - **subjects_any** - comma-separated subject IDs, OR semantics (e.g. `?subjects_any=1,10`)
+        - **category_slug** - filter by team category slug (requires team_id)
+        - **category_id** - filter by team category ID (requires team_id)
         - **date_from** - filter articles from this date (YYYY-MM-DD)
         - **date_to** - filter articles to this date (YYYY-MM-DD)
         - **timeframe** - 'year', 'month', 'week' (relative to current date)
@@ -1397,6 +1415,8 @@ paths:
         - Filter by country: `?country=US`
         - Sort by article count: `?sort_by=article_count&order=desc`
         - Filter by timeframe: `?sort_by=article_count&timeframe=year`
+        - Subject filter, no team_id needed: `?subject_id=5&sort_by=article_count`
+        - Multi-subject OR filter: `?subjects_any=1,10&sort_by=article_count`
         - Team and subject filter: `?team_id=1&subject_id=5&sort_by=article_count`
         - Count per category: `?team_id=1&category_slug=natalizumab&sort_by=article_count&order=desc`
         - Category with ID: `?team_id=1&category_id=5&sort_by=article_count&order=desc`
@@ -1639,6 +1659,18 @@ paths:
         description: A search term.
         schema:
           type: string
+      - in: query
+        name: subjects_any
+        schema:
+          type: array
+          items:
+            type: string
+        description: 'Comma-separated subject IDs, OR semantics: authors with at least
+          one article in ANY of the listed subjects, e.g. ?subjects_any=1,10. An author
+          is reached only through their articles, so this is an Exists() over articles
+          rather than a direct field.'
+        explode: false
+        style: form
       tags:
       - authors
       security:
@@ -1709,6 +1741,14 @@ paths:
                 country:
                   type: string
                   description: Exact match against the author's country code.
+                subjects_any:
+                  type: array
+                  items:
+                    type: string
+                  description: 'Comma-separated subject IDs, OR semantics: authors
+                    with at least one article in ANY of the listed subjects, e.g.
+                    ?subjects_any=1,10. An author is reached only through their articles,
+                    so this is an Exists() over articles rather than a direct field.'
               required:
               - team_id
               - subject_id
@@ -1899,6 +1939,18 @@ paths:
         schema:
           type: integer
         description: Filter by subject ID (see /subjects/).
+      - in: query
+        name: subjects_any
+        schema:
+          type: array
+          items:
+            type: string
+        description: 'Comma-separated subject IDs, OR semantics: categories used within
+          ANY of the listed subjects, e.g. ?subjects_any=1,10. Uses Exists() rather
+          than a join so a category tagged with several of the listed subjects appears
+          once without DISTINCT-ing the outer query.'
+        explode: false
+        style: form
       - in: query
         name: team_id
         schema:
@@ -2131,6 +2183,43 @@ paths:
                 type: object
                 additionalProperties: {}
           description: ''
+  /sites/:
+    get:
+      operationId: sites_list
+      description: Sites whose API is public, as {site_id, domain, name}. This is
+        the discovery entry point for callers that need a site_id and do not have
+        one, so it is deliberately UNSCOPED -- it cannot require the thing it exists
+        to provide. Everything it returns is already public.
+      summary: List publicly readable sites
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      tags:
+      - sites
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicSite'
+            text/csv:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicSite'
+          description: ''
   /sources/:
     get:
       operationId: sources_list
@@ -2279,6 +2368,8 @@ paths:
         - **search** - search by sponsor name
         - **sponsor_type** - filter by sponsor type; one of: industry,
           academic_medical, government, nonprofit, other
+        - **subject_id** - restrict to sponsors with >=1 trial in this subject
+        - **subjects_any** - comma-separated subject IDs, OR semantics
         - **ordering** - 'name' (default) or 'trials_count' (add '-' for reverse)
         - **page_size** - items per page (max 100)
 
@@ -2286,6 +2377,8 @@ paths:
         - Filter by type: `/sponsors/?sponsor_type=industry`
         - Search by name: `/sponsors/?search=novartis`
         - Most-trials first: `/sponsors/?ordering=-trials_count`
+        - Sponsors active in a subject: `/sponsors/?subject_id=1`
+        - Sponsors active in either subject: `/sponsors/?subjects_any=1,2`
       parameters:
       - in: query
         name: format
@@ -2347,6 +2440,25 @@ paths:
           * `government` - Government
           * `nonprofit` - Non-profit / patient organisation
           * `other` - Other
+      - in: query
+        name: subject_id
+        schema:
+          type: number
+        description: Restrict to sponsors with at least one trial in this subject
+          (see /subjects/). A Sponsor carries no subject of its own — it is reached
+          only through its trials, via Exists() on Trials.primary_sponsor_normalized
+          (see SITE-API-VISIBILITY project, site-scoped API visibility).
+      - in: query
+        name: subjects_any
+        schema:
+          type: array
+          items:
+            type: string
+        description: Comma-separated list of subject IDs, OR semantics — restrict
+          to sponsors with at least one trial in any of the listed subjects, e.g.
+          ?subjects_any=1,2. Same Exists()-on-trials approach as subject_id.
+        explode: false
+        style: form
       tags:
       - sponsors
       security:
@@ -2377,6 +2489,8 @@ paths:
         - **search** - search by sponsor name
         - **sponsor_type** - filter by sponsor type; one of: industry,
           academic_medical, government, nonprofit, other
+        - **subject_id** - restrict to sponsors with >=1 trial in this subject
+        - **subjects_any** - comma-separated subject IDs, OR semantics
         - **ordering** - 'name' (default) or 'trials_count' (add '-' for reverse)
         - **page_size** - items per page (max 100)
 
@@ -2384,6 +2498,8 @@ paths:
         - Filter by type: `/sponsors/?sponsor_type=industry`
         - Search by name: `/sponsors/?search=novartis`
         - Most-trials first: `/sponsors/?ordering=-trials_count`
+        - Sponsors active in a subject: `/sponsors/?subject_id=1`
+        - Sponsors active in either subject: `/sponsors/?subjects_any=1,2`
       parameters:
       - in: query
         name: format
@@ -5861,6 +5977,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TrialSiteRow'
+    PublicSite:
+      type: object
+      description: |-
+        A publicly readable site, for the GET /sites/ discovery endpoint.
+
+        Deliberately minimal: just enough for a caller to learn which site IDs
+        exist so it can pass ?site_id=. Everything here is already public.
+
+        The MCP multi-tenancy spec proposes a richer per-site config endpoint
+        carrying subjects, prompts and documents. That project is unstarted; when
+        it lands, the two should converge on one endpoint rather than duplicate --
+        this payload is a strict subset of that one.
+      properties:
+        site_id:
+          type: integer
+          readOnly: true
+        domain:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+      required:
+      - domain
+      - name
+      - site_id
     Source:
       type: object
       properties:
@@ -6428,6 +6570,11 @@ components:
             by TrialViewSet via prefetch_related('article_references__article'))
             to avoid one query per trial on list responses.
           readOnly: true
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subjects'
+          readOnly: true
       required:
       - articles
       - countries_normalized
@@ -6443,6 +6590,7 @@ components:
       - sources
       - sponsor
       - study_type_normalized
+      - subjects
       - summary_plain_english
       - takeaways
       - team_categories
@@ -6792,6 +6940,11 @@ components:
             by TrialViewSet via prefetch_related('article_references__article'))
             to avoid one query per trial on list responses.
           readOnly: true
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subjects'
+          readOnly: true
         trial_sites:
           type: array
           items:
@@ -6812,6 +6965,7 @@ components:
       - sources
       - sponsor
       - study_type_normalized
+      - subjects
       - summary_plain_english
       - takeaways
       - team_categories

@@ -165,15 +165,65 @@ class AuthorAPITest(TestCase):
 		self.assertEqual(response.data["count"], 1)
 		self.assertEqual(response.data["results"][0]["author_id"], author.author_id)
 
-	def test_authors_filtering_validation_subject_without_team(self):
-		"""Test that filtering by subject_id without team_id returns empty results"""
+	def test_authors_filtering_by_subject_without_team_works(self):
+		"""
+		subject_id alone (no team_id) must work -- site-scoped API visibility,
+		Phase 2 item 2. A caller scoped to a site knows subjects, not team_ids
+		(Subject.team is a plain FK, so subject_id already resolves to exactly
+		one team with no ambiguity), so requiring team_id here would make
+		subject filtering unusable for that caller.
+		"""
 		response = self.client.get(
 			f"/authors/?subject_id={self.subject.id}&sort_by=article_count"
 		)
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		# Both author1 (2 articles) and author2 (1 article) are tagged with
+		# this subject.
+		self.assertEqual(response.data["count"], 2)
+		results = response.data["results"]
+		self.assertEqual(results[0]["author_id"], self.author1.author_id)
+		self.assertEqual(results[1]["author_id"], self.author2.author_id)
+
+	def test_authors_filtering_by_subjects_any_without_team_works(self):
+		"""?subjects_any=<id> (no team_id) is the OR-list equivalent of subject_id."""
+		response = self.client.get(
+			f"/authors/?subjects_any={self.subject.id}&sort_by=article_count"
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["count"], 2)
+
+	def test_authors_filtering_by_subjects_any_multiple_ids(self):
+		"""?subjects_any=A,B returns authors tagged with either subject."""
+		other_subject = Subject.objects.create(
+			subject_name="Other Subject", subject_slug="other-subject", team=self.team
+		)
+		other_author = Authors.objects.create(
+			given_name="Extra", family_name="Author"
+		)
+		other_article = Articles.objects.create(
+			title="Other subject article",
+			link="http://example.com/other-subject-article",
+		)
+		other_article.authors.add(other_author)
+		other_article.teams.add(self.team)
+		other_article.subjects.add(other_subject)
+
+		response = self.client.get(
+			f"/authors/?subjects_any={self.subject.id},{other_subject.id}"
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = {r["author_id"] for r in response.data["results"]}
+		self.assertIn(self.author1.author_id, ids)
+		self.assertIn(self.author2.author_id, ids)
+		self.assertIn(other_author.author_id, ids)
+
+	def test_authors_filtering_by_subjects_any_all_invalid_returns_empty(self):
+		"""?subjects_any=foo,bar (all non-numeric) matches nothing, not an error."""
+		response = self.client.get("/authors/?subjects_any=foo,bar")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data["count"], 0)
-		self.assertEqual(len(response.data["results"]), 0)
 
 	def test_authors_filtering_validation_category_without_team(self):
 		"""Test that filtering by category_slug without team_id returns empty results"""
@@ -335,9 +385,10 @@ class AuthorAPITest(TestCase):
 
 	def test_team_id_requirement_validation(self):
 		"""
-		Test that team_id is required when filtering by category_slug or subject_id.
-		This enforces the business rule that authors must be filtered within a team context
-		when using subject or category filters.
+		Test that team_id is required when filtering by category_slug, but NOT
+		when filtering by subject_id (site-scoped API visibility, Phase 2 item
+		2 -- see AuthorsViewSet.get_queryset for why the two are no longer
+		symmetric).
 		"""
 		# Test 1: Basic endpoint without filters (should work)
 		response = self.client.get("/authors/?sort_by=article_count")
@@ -349,17 +400,17 @@ class AuthorAPITest(TestCase):
 		)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-		# Test 3: With subject_id but no team_id (should return empty results)
+		# Test 3: With subject_id but no team_id (should now work, and return
+		# both authors tagged with this subject)
 		response = self.client.get(
 			f"/authors/?subject_id={self.subject.id}&sort_by=article_count"
 		)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(
 			response.data["count"],
-			0,
-			"Should return empty results when subject_id is used without team_id",
+			2,
+			"subject_id without team_id should work, not return empty results",
 		)
-		self.assertEqual(len(response.data["results"]), 0)
 
 		# Test 4: With category_slug but no team_id (should return empty results)
 		response = self.client.get(
@@ -387,7 +438,9 @@ class AuthorAPITest(TestCase):
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		# Note: Results depend on test data, but request should be valid
 
-		# Test 7: Both subject_id and category_slug without team_id (should return empty)
+		# Test 7: subject_id + category_slug without team_id -- still empty,
+		# but now solely because of category_slug's requirement (subject_id
+		# alone would not trigger it; see Test 3).
 		response = self.client.get(
 			f"/authors/?subject_id={self.subject.id}&category_slug={self.category.category_slug}&sort_by=article_count"
 		)
@@ -395,7 +448,7 @@ class AuthorAPITest(TestCase):
 		self.assertEqual(
 			response.data["count"],
 			0,
-			"Should return empty results when both subject_id and category_slug are used without team_id",
+			"category_slug without team_id should still return empty results",
 		)
 		self.assertEqual(len(response.data["results"]), 0)
 
@@ -417,26 +470,50 @@ class AuthorAPITest(TestCase):
 
 	def test_team_id_requirement_with_timeframe_filters(self):
 		"""
-		Test that team_id requirement is enforced even when using timeframe filters
+		category_slug still requires team_id even alongside a date/timeframe
+		filter; subject_id does not (Phase 2 item 2).
 		"""
 		from datetime import datetime, timedelta
 
-		# Date filters
+		from django.utils import timezone as django_timezone
+
+		# Give article1/article2 a published_date inside the date window so
+		# the subject_id case below has something to actually find -- without
+		# this, an all-NULL published_date would return empty regardless of
+		# the team_id coupling being tested here, masking the behaviour.
+		# One day back, deliberately: /authors/ parses date_to into a plain
+		# date, so `published_date__lte` compares against midnight. An
+		# article published at any time TODAY sorts after that boundary and
+		# falls outside its own window -- which would make this test fail
+		# for a reason unrelated to the team_id coupling it exists to check.
+		# (Note /articles/ documents published_date_before as including the
+		# full day; /authors/ does not. Pre-existing inconsistency.)
+		now = django_timezone.now() - timedelta(days=1)
+		Articles.objects.filter(
+			pk__in=[self.article1.pk, self.article2.pk]
+		).update(published_date=now)
+
 		date_from = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
 		date_to = datetime.now().strftime("%Y-%m-%d")
 
-		# Test with subject_id and date filters but no team_id (should return empty)
+		# subject_id + date filters, no team_id -- now works, since team_id is
+		# not required for subject-based filtering.
 		response = self.client.get(
 			f"/authors/?subject_id={self.subject.id}&date_from={date_from}&date_to={date_to}"
 		)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(
 			response.data["count"],
-			0,
-			"Should return empty results when subject_id is used with date filters but without team_id",
+			1,
+			"subject_id + date filters without team_id should find author1 "
+			"(the only author with articles published in the window)",
+		)
+		self.assertEqual(
+			response.data["results"][0]["author_id"], self.author1.author_id
 		)
 
-		# Test with category_slug and timeframe but no team_id (should return empty)
+		# category_slug + timeframe, no team_id -- still empty; category_slug
+		# keeps the team_id requirement.
 		response = self.client.get(
 			f"/authors/?category_slug={self.category.category_slug}&timeframe=last_month"
 		)
