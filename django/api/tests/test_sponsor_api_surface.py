@@ -21,8 +21,10 @@ from django.test.utils import CaptureQueriesContext
 from organizations.models import Organization
 from rest_framework.test import APIClient
 
-from gregory.models import OrganizationApiSettings, Sponsor, Team, Trials
+from gregory.models import OrganizationApiSettings, Sponsor, Subject, Team, Trials
 from gregory.utils.trial_field_normalizers import SponsorType
+
+from api.tests.visibility_helpers import publish_subjects
 
 
 class SponsorAPITestCase(TestCase):
@@ -31,10 +33,20 @@ class SponsorAPITestCase(TestCase):
 		org = Organization.objects.create(name="Sponsor API Org", slug="sponsor-api-org")
 		OrganizationApiSettings.objects.filter(organization=org).update(make_api_public=True)
 		self.team = Team.objects.create(organization=org, name="Sponsor API Org", slug="sponsor-api-org")
+		# /trials/ and /trials/stats/ are subject-scoped now: a trial with no
+		# subject is invisible to everyone. /sponsors/ itself carries no such
+		# mixin (deliberately -- sponsors are global, not org/subject-owned,
+		# see SponsorViewSet's docstring), so this is only needed for the
+		# trial-facing assertions below.
+		self.subject = Subject.objects.create(
+			subject_name="Sponsor API Subject", subject_slug="sponsor-api-subject", team=self.team
+		)
+		publish_subjects(self.subject, organization=org)
 
 	def _make_trial(self, title, link, primary_sponsor=None):
 		trial = Trials.objects.create(title=title, link=link, primary_sponsor=primary_sponsor)
 		trial.teams.add(self.team)
+		trial.subjects.add(self.subject)
 		return trial
 
 
