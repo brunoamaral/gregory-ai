@@ -16,13 +16,15 @@ from django.contrib.sites.models import Site
 from django.test import Client, TestCase
 from rest_framework.test import APIClient
 
-from gregory.models import Articles, Authors, OrganizationApiSettings, Team
+from gregory.models import Articles, Authors, OrganizationApiSettings, Subject, Team
 from organizations.models import Organization
 from subscriptions.models import (
 	AuthorContactOptOut,
 	AuthorOutreach,
 	AuthorOutreachCampaign,
 )
+
+from api.tests.visibility_helpers import publish_subjects
 
 
 class AuthorOptOutViewTest(TestCase):
@@ -108,6 +110,10 @@ class AuthorOptOutDoesNotAffectProfilePageTest(TestCase):
 		self.team = Team.objects.create(
 			organization=self.organization, name="Profile Team", slug="profile-team"
 		)
+		self.subject = Subject.objects.create(
+			subject_name="Profile Subject", subject_slug="profile-subject", team=self.team
+		)
+		publish_subjects(self.subject, organization=self.organization)
 		self.site = Site.objects.create(
 			domain="optout-profile.example.com", name="Profile"
 		)
@@ -128,6 +134,7 @@ class AuthorOptOutDoesNotAffectProfilePageTest(TestCase):
 		)
 		self.article.authors.add(self.author)
 		self.article.teams.add(self.team)
+		self.article.subjects.add(self.subject)
 		self.outreach = AuthorOutreach.objects.create(
 			campaign=self.campaign,
 			site=self.site,
