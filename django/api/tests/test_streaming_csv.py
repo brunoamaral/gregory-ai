@@ -4,11 +4,12 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.request import Request
 from rest_framework.test import APIClient, APIRequestFactory
-from gregory.models import Articles, OrganizationApiSettings, Team, TeamCategory, Sources
+from gregory.models import Articles, OrganizationApiSettings, Subject, Team, TeamCategory, Sources
 from organizations.models import Organization
 from django.contrib.auth.models import User
 from api.direct_streaming import DirectStreamingCSVRenderer
 from api.serializers import ArticleSerializer
+from api.tests.visibility_helpers import publish_subjects
 
 
 class StreamingCSVRendererTest(TestCase):
@@ -34,6 +35,13 @@ class StreamingCSVRendererTest(TestCase):
 			team=self.team, category_name="Test Category", category_slug="test-category"
 		)
 
+		self.subject = Subject.objects.create(
+			subject_name="Streaming CSV Subject",
+			subject_slug="streaming-csv-subject",
+			team=self.team,
+		)
+		publish_subjects(self.subject, organization=self.organization)
+
 		# Create test articles
 		for i in range(10):
 			article = Articles.objects.create(
@@ -45,6 +53,7 @@ class StreamingCSVRendererTest(TestCase):
 			# Add source after creation (ManyToMany relationship)
 			article.sources.add(self.source)
 			article.teams.add(self.team)
+			article.subjects.add(self.subject)
 			article.team_categories.add(self.category)
 
 		# Set up client
@@ -113,7 +122,11 @@ class StreamingCSVRendererTest(TestCase):
 		wsgi_request = factory.get("/articles/?format=csv&all_results=true")
 		wsgi_request.user = self.user
 		drf_request = Request(wsgi_request)
-		drf_request.visible_org_ids = {self.organization.id}
+		# ScopedSerializerMixin reads visible_subject_ids now, not
+		# visible_org_ids (Phase 4) -- match what the real middleware
+		# would compute for this user (a member of self.organization,
+		# which publish_subjects() linked to self.subject in setUp).
+		drf_request.visible_subject_ids = {self.subject.id}
 
 		data = ArticleSerializer(
 			Articles.objects.all().order_by("-discovery_date"),

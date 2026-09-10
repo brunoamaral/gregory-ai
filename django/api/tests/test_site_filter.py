@@ -11,10 +11,13 @@ from gregory.models import (
 	Articles,
 	OrganizationApiSettings,
 	Sources,
+	Subject,
 	Team,
 	Trials,
 )
 from organizations.models import Organization
+
+from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 
 
 class SiteFilterTest(TestCase):
@@ -65,6 +68,23 @@ class SiteFilterTest(TestCase):
 			site=self.site_b,
 		)
 
+		# Subject-scoped visibility (unrelated to Team.site / ?site_id= above,
+		# despite both being django.contrib.sites.models.Site rows): content
+		# needs a subject in the caller's scope to be visible at all now.
+		# public_subject is published for public_org, so self.user (a member
+		# of public_org) and the anonymous client both see it; priv_subject
+		# stays private to private_org, which self.user does not belong to.
+		self.public_subject = Subject.objects.create(
+			team=self.team1, subject_name="Site Filter Public Subject",
+			subject_slug="site-filter-public-subject",
+		)
+		publish_subjects(self.public_subject, organization=self.public_org)
+		self.priv_subject = Subject.objects.create(
+			team=self.private_team, subject_name="Site Filter Private Subject",
+			subject_slug="site-filter-private-subject",
+		)
+		private_site_publishing(self.priv_subject, organization=self.private_org)
+
 		# Article belonging to both team1 and team2 (same site) -- must not duplicate.
 		self.shared_article = Articles.objects.create(
 			title="Shared Article",
@@ -74,6 +94,7 @@ class SiteFilterTest(TestCase):
 		)
 		self.shared_article.sources.add(self.source)
 		self.shared_article.teams.add(self.team1, self.team2)
+		self.shared_article.subjects.add(self.public_subject)
 
 		# Article only on the private team's site_a team.
 		self.private_article = Articles.objects.create(
@@ -84,10 +105,12 @@ class SiteFilterTest(TestCase):
 		)
 		self.private_article.sources.add(self.source)
 		self.private_article.teams.add(self.private_team)
+		self.private_article.subjects.add(self.priv_subject)
 
 		# Trial mirrors the same shape.
 		self.shared_trial = Trials.objects.create(title="Shared Trial")
 		self.shared_trial.teams.add(self.team1, self.team2)
+		self.shared_trial.subjects.add(self.public_subject)
 
 		self.client = APIClient()
 		self.client.force_authenticate(user=self.user)

@@ -24,8 +24,14 @@ class TeamSerializerFieldWhitelistTests(TestCase):
 		OrganizationApiSettings.objects.filter(organization=self.org).update(
 			make_api_public=True
 		)
+		# /teams/ is gated by the explicit api_listed flag now, independent of
+		# the caller and of the organisation's public/private status -- see
+		# test_visibility_teams.py.
 		self.team = Team.objects.create(
-			organization=self.org, name="Team Fields Team", slug="team-fields-team"
+			organization=self.org,
+			name="Team Fields Team",
+			slug="team-fields-team",
+			api_listed=True,
 		)
 		self.user = User.objects.create_user(
 			username="team-fields-member", password="unused"
