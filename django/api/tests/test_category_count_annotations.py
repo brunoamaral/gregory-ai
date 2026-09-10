@@ -22,6 +22,7 @@ from django.utils.text import slugify
 from rest_framework.test import APIClient
 
 from api.serializers import CategorySerializer
+from api.tests.visibility_helpers import publish_subjects
 from api.views import CategoryViewSet, _category_through_count_subquery
 from gregory.models import (
 	ArticleCategoryAssignment,
@@ -63,6 +64,7 @@ class CategoryCountAnnotationTests(TestCase):
 			subject_slug="category-count-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.organization)
 		self.category = _make_category(self.team, self.subject, "Count Test Category")
 
 		for i in range(5):
@@ -210,6 +212,7 @@ class CategoryAuthorsCountOrderingTests(TestCase):
 			subject_slug="authors-ordering-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, organization=self.organization)
 
 		# Two categories with a known, different number of distinct authors.
 		# The 3-author category shares one author across two articles, so a

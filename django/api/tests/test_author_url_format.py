@@ -1,8 +1,9 @@
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework import status
-from gregory.models import Authors, Articles, Team, OrganizationApiSettings
+from gregory.models import Authors, Articles, Team, Subject, OrganizationApiSettings
 from api.serializers import AuthorSerializer
+from api.tests.visibility_helpers import publish_subjects
 from django.contrib.sites.models import Site
 from organizations.models import Organization
 
@@ -19,6 +20,10 @@ class AuthorURLFormatTests(TestCase):
 		team = Team.objects.create(
 			name="URL Format Team", slug="url-fmt-team", organization=org
 		)
+		subject = Subject.objects.create(
+			subject_name="URL Format Subject", subject_slug="url-fmt-subject", team=team
+		)
+		publish_subjects(subject, organization=org)
 
 		# Create test author
 		self.author = Authors.objects.create(
@@ -31,6 +36,7 @@ class AuthorURLFormatTests(TestCase):
 			link="https://example.com/url-fmt",
 		)
 		article.teams.add(team)
+		article.subjects.add(subject)
 		article.authors.add(self.author)
 
 		# Set up site for URL generation
