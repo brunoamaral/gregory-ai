@@ -35,6 +35,7 @@ it isn't defined here.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 from urllib.parse import urlparse
@@ -110,10 +111,18 @@ async def _fetch_site_directory() -> dict[str, int]:
 	to "no domain map available" — which resolves to omitting site_id, the
 	same safe fallback as an unresolvable Host — rather than breaking every
 	tool call on this server.
+
+	GregoryAPIError covers non-2xx statuses and transport failures, but a
+	2xx response isn't guaranteed to be JSON — an intermediate proxy can
+	return an HTML error page with a 200/204 (e.g. a misconfigured gateway
+	swallowing the real status). GregoryClient.get() calls response.json()
+	unguarded, so that shows up here as json.JSONDecodeError, not
+	GregoryAPIError — caught alongside it for the same degrade-not-raise
+	reason.
 	"""
 	try:
 		data = await get_client().get("/sites/")
-	except GregoryAPIError:
+	except (GregoryAPIError, json.JSONDecodeError):
 		logger.warning("gregory_sites_directory_unavailable", exc_info=True)
 		return {}
 	if not isinstance(data, list):

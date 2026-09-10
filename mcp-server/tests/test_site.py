@@ -257,3 +257,16 @@ async def test_middleware_with_no_matching_site_calls_upstream_without_site_id(m
 	subjects_requests = [r for r in mock_gregory.requests if r.url.path == "/subjects/"]
 	assert len(subjects_requests) == 1
 	assert "site_id" not in subjects_requests[0].url.params
+
+
+async def test_sites_endpoint_non_json_body_degrades_to_none(mock_gregory):
+	"""A 2xx response with a non-JSON body (e.g. an HTML proxy/gateway error
+	page returned with a 200/204) makes response.json() raise
+	json.JSONDecodeError from inside GregoryClient.get() — a different
+	exception than GregoryAPIError, which only covers HTTP error statuses
+	and transport failures. _fetch_site_directory's docstring promises it
+	never raises; this must degrade to "no domain map" like every other
+	failure mode here, not propagate and fail the whole request."""
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, text="<html>Bad Gateway</html>"))
+
+	assert await resolve_site_id("gregory-ai.brain-regeneration.com") is None

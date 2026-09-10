@@ -84,10 +84,15 @@ server — see [Risks](#risks).
 
 ## Resources
 
-Slow-changing reference data, served with a 10-minute `ttlMs` cache hint (public scope, so
-clients can share one cached copy) so repeated conversations stop refetching it. The server
-also caches these two server-side, for the same 10 minutes (`gregory_mcp/cache.py`,
-`CATALOG_CACHE_TTL_MS` — the one constant both the hint and the actual cache derive from) —
+Slow-changing reference data, served with a 10-minute `ttlMs` cache hint so repeated
+conversations stop refetching it. The list of resource URIs (`resources/list`) is `public`
+scope — it never varies by site, so clients can share one cached copy. The content each one
+reads (`resources/read`) is `private` scope instead: it varies by the resolved site (see
+[Site scoping](#site-scoping-site_id) below), and a hint can't switch per call, so it has to
+assume the conservative value in both cases rather than let a shared cache hand one site's
+catalog to another's caller. The server also caches these two server-side, for the same 10
+minutes (`gregory_mcp/cache.py`, `CATALOG_CACHE_TTL_MS` — the one constant both the hint and
+the actual cache derive from), already keyed by site there —
 `/categories/` costs about a second per request and takes 12 requests to read in full, so
 this is the difference between a call that answers instantly and one that visibly stalls.
 Per-replica, in-process, with single-flight (concurrent cold-cache callers await one fetch
@@ -118,8 +123,12 @@ with no code change. See `mcp-server/gregory_mcp/config.py`.
 
 ### Site scoping (`?site_id=`)
 
-Every upstream call carries a `site_id` query parameter, resolved once per request
-(`mcp-server/gregory_mcp/site.py`) in this order:
+Every upstream call carries a `site_id` query parameter — except `GET /sites/` itself,
+the unscoped discovery call this resolution depends on (see step 2 below); it can't require
+the thing it exists to provide, and `test_sites_call_itself_carries_no_site_id` enforces
+that it never gets one, even transitively through the same client every other call goes
+through. Otherwise, `site_id` is resolved once per request (`mcp-server/gregory_mcp/site.py`)
+in this order:
 
 1. **`GREGORY_SITE_ID`** (env) — wins outright, without ever calling the API. Set this
    for a single-tenant deployment that should always report as one site regardless of
