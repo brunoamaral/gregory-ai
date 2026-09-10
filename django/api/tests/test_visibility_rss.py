@@ -1,28 +1,22 @@
 """
-Tests for RSS feed visibility enforcement.
+Tests for the site-scoped RSS feeds (Phase 5 of site-scoped API visibility).
 
-Both feeds are scoped by SUBJECT (site-scoped API visibility, Phase 4);
-this file was written against the earlier organisation rule and its
-fixtures were converted with it. What a caller can see is now the union of
-``CustomSetting.scope_subjects`` over the sites they can reach -- api_public
-sites for an anonymous caller, the key's own site for an API key, the
-organisation's sites for a signed-in member -- so every org/team here now
-carries a Site and a curated subject, and content is tagged into it.
+Before Phase 5, both feeds read gregory.visibility.visible_subject_ids(request)
+directly on the unprefixed URLs (feed/author/<orcid>/,
+feed/trials/subject/<slug>/), so the same URL returned different content to
+an anonymous caller, a signed-in member, and an API key. Phase 5 replaced
+that: those URLs now permanently redirect (301) onto
+feed/sites/<site_id>/..., which is scoped to the REQUESTED SITE's
+CustomSetting.scope_subjects and CustomSetting.rss_enabled -- never to the
+caller. See rss/views.py's module docstring and PHASE-5-RSS-SITE-SCOPE-PLAN.md.
 
-Covers:
-  - ArticlesByAuthorFeed (/feed/author/<orcid>/):
-      - 404 when no article of the author carries a visible subject
-      - 200 and items filtered to visible-subject articles otherwise
-      - ?include_public=true extends visibility for identified callers
-  - TrialsBySubjectFeed (/feed/trials/subject/<slug>/):
-      - 404 when the subject is in no reachable site's scope
-      - 200 and the subject's trials when it is
-      - ?include_public=true extends visibility for identified callers
-  - Three caller archetypes: anonymous, authenticated member, API key.
-    (An earlier "null-org key" archetype is not reachable: APIAccessScheme
-    .organization is a non-null FK. A key whose *site* is null is reachable
-    and is covered below -- that is the state every key was in before the
-    Phase 1 backfill, and the one Phase 3 will start rejecting.)
+This file exercises exactly that property -- isolation between two sites'
+scopes, and invariance across caller archetypes for one site -- reusing the
+org/site/API-key scaffolding this suite already has. Redirect mechanics,
+the author-<link> element, and item-level content (which subjects show up
+in which site's feed) are covered in rss/tests.py instead; this file is for
+the interaction between the site-scoped feed and the rest of the
+site-visibility model (organisations, API keys, api_public).
 
 Run with:
     docker exec gregory python manage.py test api.tests.test_visibility_rss
@@ -33,6 +27,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.test import TestCase
+from django.urls import reverse
 from django.utils.timezone import now
 from organizations.models import Organization, OrganizationUser
 
@@ -83,18 +78,22 @@ def _make_author(given, family, orcid):
 	)
 
 
-def _make_site(name, org, *, api_public, scope_subjects=()):
-	"""A Site owned by `org`, with a CustomSetting carrying its subject scope.
+def _make_site(name, org, *, api_public, rss_enabled=True, scope_subjects=()):
+	"""A Site owned by `org`, with a CustomSetting carrying its RSS scope.
 
-	The org link goes through OrganizationSite because that is what
-	visible_subject_ids walks for a signed-in member, and what it checks a
-	site-bound API key against.
+	The org link goes through OrganizationSite purely so these tests can
+	build a signed-in-member / API-key caller and show their identity
+	changes nothing about the feed -- the feed views themselves never
+	consult it.
 	"""
 	slug = name.lower().replace(" ", "-")
 	site = Site.objects.create(domain=f"{slug}.example.com", name=name)
 	OrganizationSite.objects.create(organization=org, site=site, is_default=True)
 	settings_row = CustomSetting.objects.create(
-		site=site, title=f"{name} settings", api_public=api_public
+		site=site,
+		title=f"{name} settings",
+		api_public=api_public,
+		rss_enabled=rss_enabled,
 	)
 	for subject in scope_subjects:
 		settings_row.scope_subjects.add(subject)
@@ -122,8 +121,6 @@ def _make_trial(title, link, teams=(), subjects=()):
 
 
 def _make_api_scheme(org, name, site=None):
-	# `site` is what binds the key to a subject scope; a key without one
-	# resolves to no subjects at all (see visible_subject_ids).
 	return APIAccessScheme.objects.create(
 		client_name=name,
 		client_contacts=f"{name}@example.com",
@@ -135,389 +132,251 @@ def _make_api_scheme(org, name, site=None):
 	)
 
 
-# ---------------------------------------------------------------------------
-# Base setUp for author feed tests
-# ---------------------------------------------------------------------------
-
-ORCID_MINE = "0000-0001-0001-0001"
-ORCID_PUB = "0000-0001-0002-0002"
-ORCID_PRIV = "0000-0001-0003-0003"
+def _author_feed_url(site_id, orcid):
+	return reverse(
+		"site_articles_by_author_feed", kwargs={"site_id": site_id, "orcid": orcid}
+	)
 
 
-class AuthorFeedBase(TestCase):
-	def setUp(self):
-		self.my_org = _make_org("My Org", "my-org-rss-auth", public=False)
-		self.pub_org = _make_org("Public Org", "pub-org-rss-auth", public=True)
-		self.priv_org = _make_org("Private Org", "priv-org-rss-auth", public=False)
-
-		self.my_team = _make_team(self.my_org, "My Team RSS Auth")
-		self.pub_team = _make_team(self.pub_org, "Pub Team RSS Auth")
-		self.priv_team = _make_team(self.priv_org, "Priv Team RSS Auth")
-
-		self.my_subj = _make_subject(self.my_team, "my-subj-rss-auth")
-		self.pub_subj = _make_subject(self.pub_team, "pub-subj-rss-auth")
-		self.priv_subj = _make_subject(self.priv_team, "priv-subj-rss-auth")
-
-		# One site per organisation, each publishing its own subject. Only
-		# pub_site is api_public, so pub_subj is the whole anonymous scope.
-		self.my_site = _make_site(
-			"My Site RSS Auth", self.my_org, api_public=False,
-			scope_subjects=[self.my_subj],
-		)
-		self.pub_site = _make_site(
-			"Pub Site RSS Auth", self.pub_org, api_public=True,
-			scope_subjects=[self.pub_subj],
-		)
-		self.priv_site = _make_site(
-			"Priv Site RSS Auth", self.priv_org, api_public=False,
-			scope_subjects=[self.priv_subj],
-		)
-
-		# Authors
-		self.author_mine = _make_author("Alice", "Mine", ORCID_MINE)
-		self.author_pub = _make_author("Bob", "Public", ORCID_PUB)
-		self.author_priv = _make_author("Carol", "Private", ORCID_PRIV)
-
-		# Articles
-		_make_article(
-			"Mine Art",
-			"https://rss.ex/a1",
-			teams=[self.my_team],
-			authors=[self.author_mine],
-			subjects=[self.my_subj],
-		)
-		_make_article(
-			"Pub Art",
-			"https://rss.ex/a2",
-			teams=[self.pub_team],
-			authors=[self.author_pub],
-			subjects=[self.pub_subj],
-		)
-		_make_article(
-			"Priv Art",
-			"https://rss.ex/a3",
-			teams=[self.priv_team],
-			authors=[self.author_priv],
-			subjects=[self.priv_subj],
-		)
-		# author_mine also has a public article
-		_make_article(
-			"Mine+Pub Art",
-			"https://rss.ex/a4",
-			teams=[self.pub_team],
-			authors=[self.author_mine],
-			subjects=[self.pub_subj],
-		)
+def _trials_feed_url(site_id, subject_slug):
+	return reverse(
+		"site_trials_by_subject_feed",
+		kwargs={"site_id": site_id, "subject_slug": subject_slug},
+	)
 
 
 # ---------------------------------------------------------------------------
-# Anonymous: author feed
+# Isolation: site A's feed never carries site B's scope, or vice versa
 # ---------------------------------------------------------------------------
 
 
-class AnonymousAuthorFeedTest(AuthorFeedBase):
-	"""Anonymous → only public org articles visible."""
-
-	def test_public_author_returns_200(self):
-		resp = self.client.get(f"/feed/author/{ORCID_PUB}/")
-		self.assertEqual(resp.status_code, 200)
-
-	def test_private_author_returns_404(self):
-		"""author_priv only has articles in private org → 404 for anonymous."""
-		resp = self.client.get(f"/feed/author/{ORCID_PRIV}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_private_author_feed_with_mine_and_pub_returns_200(self):
-		"""author_mine has both a private and a public article → visible because of pub article."""
-		resp = self.client.get(f"/feed/author/{ORCID_MINE}/")
-		self.assertEqual(resp.status_code, 200)
-		# The mine-only article should NOT appear; only the pub article
-		content = resp.content.decode()
-		self.assertIn("Mine+Pub Art", content)
-		self.assertNotIn("Mine Art", content)
-
-	def test_nonexistent_orcid_returns_404(self):
-		resp = self.client.get("/feed/author/0000-0000-0000-9999/")
-		self.assertEqual(resp.status_code, 404)
-
-
-# ---------------------------------------------------------------------------
-# Authenticated user (member of my_org): author feed
-# ---------------------------------------------------------------------------
-
-
-class AuthenticatedUserAuthorFeedTest(AuthorFeedBase):
-	def setUp(self):
-		super().setUp()
-		self.user = User.objects.create_user(username="rss-auth-member", password="pw")
-		OrganizationUser.objects.create(organization=self.my_org, user=self.user)
-		self.client.force_login(self.user)
-
-	def test_own_author_returns_200(self):
-		resp = self.client.get(f"/feed/author/{ORCID_MINE}/")
-		self.assertEqual(resp.status_code, 200)
-
-	def test_private_other_org_author_returns_404(self):
-		resp = self.client.get(f"/feed/author/{ORCID_PRIV}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_public_author_hidden_without_flag(self):
-		"""author_pub only has articles in pub_org; not visible without include_public."""
-		resp = self.client.get(f"/feed/author/{ORCID_PUB}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_public_author_visible_with_include_public(self):
-		resp = self.client.get(f"/feed/author/{ORCID_PUB}/?include_public=true")
-		self.assertEqual(resp.status_code, 200)
-
-	def test_own_feed_items_excludes_pub_articles_without_flag(self):
-		"""author_mine items should only include the mine-team article (not pub-team)."""
-		resp = self.client.get(f"/feed/author/{ORCID_MINE}/")
-		self.assertEqual(resp.status_code, 200)
-		content = resp.content.decode()
-		self.assertIn("Mine Art", content)
-		self.assertNotIn("Mine+Pub Art", content)
-
-	def test_own_feed_items_includes_pub_articles_with_flag(self):
-		resp = self.client.get(f"/feed/author/{ORCID_MINE}/?include_public=true")
-		self.assertEqual(resp.status_code, 200)
-		content = resp.content.decode()
-		self.assertIn("Mine Art", content)
-		self.assertIn("Mine+Pub Art", content)
-
-
-# ---------------------------------------------------------------------------
-# API key caller (bound to my_org): author feed
-# ---------------------------------------------------------------------------
-
-
-class APIKeyAuthorFeedTest(AuthorFeedBase):
-	def setUp(self):
-		super().setUp()
-		self.scheme = _make_api_scheme(
-			self.my_org, "rss-author-key", site=self.my_site
-		)
-		self.client.defaults["HTTP_AUTHORIZATION"] = self.scheme.api_key
-
-	def test_own_author_returns_200(self):
-		resp = self.client.get(f"/feed/author/{ORCID_MINE}/")
-		self.assertEqual(resp.status_code, 200)
-
-	def test_private_other_org_author_returns_404(self):
-		resp = self.client.get(f"/feed/author/{ORCID_PRIV}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_public_author_hidden_without_flag(self):
-		resp = self.client.get(f"/feed/author/{ORCID_PUB}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_public_author_visible_with_include_public(self):
-		resp = self.client.get(f"/feed/author/{ORCID_PUB}/?include_public=true")
-		self.assertEqual(resp.status_code, 200)
-
-
-# ---------------------------------------------------------------------------
-# Base setUp for trials feed tests
-# ---------------------------------------------------------------------------
-
-
-class TrialsFeedBase(TestCase):
-	def setUp(self):
-		self.my_org = _make_org("My Org", "my-org-rss-trial", public=False)
-		self.pub_org = _make_org("Public Org", "pub-org-rss-trial", public=True)
-		self.priv_org = _make_org("Private Org", "priv-org-rss-trial", public=False)
-
-		self.my_team = _make_team(self.my_org, "My Team RSS Trial")
-		self.pub_team = _make_team(self.pub_org, "Pub Team RSS Trial")
-		self.priv_team = _make_team(self.priv_org, "Priv Team RSS Trial")
-
-		self.my_subj = _make_subject(self.my_team, "my-subj-rss")
-		self.pub_subj = _make_subject(self.pub_team, "pub-subj-rss")
-		self.priv_subj = _make_subject(self.priv_team, "priv-subj-rss")
-
-		# One site per organisation, each publishing its own subject. Only
-		# pub_site is api_public, so pub_subj is the whole anonymous scope.
-		self.my_site = _make_site(
-			"My Site RSS Trial", self.my_org, api_public=False,
-			scope_subjects=[self.my_subj],
-		)
-		self.pub_site = _make_site(
-			"Pub Site RSS Trial", self.pub_org, api_public=True,
-			scope_subjects=[self.pub_subj],
-		)
-		self.priv_site = _make_site(
-			"Priv Site RSS Trial", self.priv_org, api_public=False,
-			scope_subjects=[self.priv_subj],
-		)
-
-		# Trials
-		_make_trial(
-			"Mine Trial",
-			"https://rss.ex/t1",
-			teams=[self.my_team],
-			subjects=[self.my_subj],
-		)
-		_make_trial(
-			"Pub Trial",
-			"https://rss.ex/t2",
-			teams=[self.pub_team],
-			subjects=[self.pub_subj],
-		)
-		_make_trial(
-			"Priv Trial",
-			"https://rss.ex/t3",
-			teams=[self.priv_team],
-			subjects=[self.priv_subj],
-		)
-
-
-# ---------------------------------------------------------------------------
-# Anonymous: trials feed
-# ---------------------------------------------------------------------------
-
-
-class AnonymousTrialsFeedTest(TrialsFeedBase):
-	def test_public_subject_returns_200(self):
-		resp = self.client.get(f"/feed/trials/subject/{self.pub_subj.subject_slug}/")
-		self.assertEqual(resp.status_code, 200)
-
-	def test_private_subject_returns_404(self):
-		resp = self.client.get(f"/feed/trials/subject/{self.priv_subj.subject_slug}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_mine_subject_returns_404_for_anon(self):
-		resp = self.client.get(f"/feed/trials/subject/{self.my_subj.subject_slug}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_nonexistent_slug_returns_404(self):
-		resp = self.client.get("/feed/trials/subject/does-not-exist/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_public_feed_contains_public_trial(self):
-		resp = self.client.get(f"/feed/trials/subject/{self.pub_subj.subject_slug}/")
-		self.assertIn("Pub Trial", resp.content.decode())
-
-
-# ---------------------------------------------------------------------------
-# Authenticated user: trials feed
-# ---------------------------------------------------------------------------
-
-
-class AuthenticatedUserTrialsFeedTest(TrialsFeedBase):
-	def setUp(self):
-		super().setUp()
-		self.user = User.objects.create_user(username="rss-trial-member", password="pw")
-		OrganizationUser.objects.create(organization=self.my_org, user=self.user)
-		self.client.force_login(self.user)
-
-	def test_own_subject_returns_200(self):
-		resp = self.client.get(f"/feed/trials/subject/{self.my_subj.subject_slug}/")
-		self.assertEqual(resp.status_code, 200)
-
-	def test_private_other_org_subject_returns_404(self):
-		resp = self.client.get(f"/feed/trials/subject/{self.priv_subj.subject_slug}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_public_subject_hidden_without_flag(self):
-		resp = self.client.get(f"/feed/trials/subject/{self.pub_subj.subject_slug}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_public_subject_visible_with_include_public(self):
-		resp = self.client.get(
-			f"/feed/trials/subject/{self.pub_subj.subject_slug}/?include_public=true"
-		)
-		self.assertEqual(resp.status_code, 200)
-
-	def test_own_feed_contains_own_trial(self):
-		resp = self.client.get(f"/feed/trials/subject/{self.my_subj.subject_slug}/")
-		self.assertIn("Mine Trial", resp.content.decode())
-
-	def test_own_feed_lists_the_subjects_trials_whatever_team_owns_them(self):
-		"""
-		The subject is the visibility boundary, so a feed for a visible
-		subject lists every trial tagged with it. Team ownership used to
-		filter within the feed as well; since Phase 4 it does not, and
-		test_public_subject_hidden_without_flag is what pins the boundary
-		that still exists.
-		"""
-		_make_trial(
-			"Pub Trial In My Subj",
-			"https://rss.ex/t99",
-			teams=[self.pub_team],
-			subjects=[self.my_subj],
-		)
-		resp = self.client.get(f"/feed/trials/subject/{self.my_subj.subject_slug}/")
-		content = resp.content.decode()
-		self.assertIn("Mine Trial", content)
-		self.assertIn("Pub Trial In My Subj", content)
-		# ...and a trial with no tie to my_subj is still absent.
-		self.assertNotIn("Priv Trial", content)
-
-
-# ---------------------------------------------------------------------------
-# API key: trials feed
-# ---------------------------------------------------------------------------
-
-
-class APIKeyTrialsFeedTest(TrialsFeedBase):
-	def setUp(self):
-		super().setUp()
-		self.scheme = _make_api_scheme(
-			self.my_org, "rss-trials-key", site=self.my_site
-		)
-		self.client.defaults["HTTP_AUTHORIZATION"] = self.scheme.api_key
-
-	def test_own_subject_returns_200(self):
-		resp = self.client.get(f"/feed/trials/subject/{self.my_subj.subject_slug}/")
-		self.assertEqual(resp.status_code, 200)
-
-	def test_private_other_org_subject_returns_404(self):
-		resp = self.client.get(f"/feed/trials/subject/{self.priv_subj.subject_slug}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_public_subject_hidden_without_flag(self):
-		resp = self.client.get(f"/feed/trials/subject/{self.pub_subj.subject_slug}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_public_subject_visible_with_include_public(self):
-		resp = self.client.get(
-			f"/feed/trials/subject/{self.pub_subj.subject_slug}/?include_public=true"
-		)
-		self.assertEqual(resp.status_code, 200)
-
-
-class SitelessAPIKeyTrialsFeedTest(TrialsFeedBase):
+class SiteScopedFeedIsolationTest(TestCase):
 	"""
-	A key with no site resolves to no subjects of its own. Every key has a
-	site in production (backfilled by sitesettings/0019) but the field is
-	still nullable until Phase 3 enforces it, so the branch is live and
-	needs pinning: without a site the key sees nothing, and with
-	?include_public=true it sees exactly the public scope -- public subjects
-	being public to everyone, key or no key.
+	The case org-level (and, before Phase 5, caller-level) visibility could
+	not express: two sites, each with its own subject, each rss_enabled.
+	Site A's feed must carry only site A's content, whatever the caller and
+	whatever site B publishes -- the leak canary for RSS.
 	"""
 
 	def setUp(self):
-		super().setUp()
-		self.scheme = _make_api_scheme(self.my_org, "rss-siteless-key", site=None)
-		self.client.defaults["HTTP_AUTHORIZATION"] = self.scheme.api_key
+		self.org_a = _make_org("Org A", "org-a-rss-iso")
+		self.org_b = _make_org("Org B", "org-b-rss-iso")
+		self.team_a = _make_team(self.org_a, "Team A RSS Iso")
+		self.team_b = _make_team(self.org_b, "Team B RSS Iso")
+		self.subj_a = _make_subject(self.team_a, "subj-a-rss-iso")
+		self.subj_b = _make_subject(self.team_b, "subj-b-rss-iso")
 
-	def test_own_org_subject_404s_without_a_site(self):
-		# The organisation owns my_subj, but the key is not bound to the site
-		# that publishes it, and organisation membership no longer grants
-		# anything on its own.
-		resp = self.client.get(f"/feed/trials/subject/{self.my_subj.subject_slug}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_public_subject_404s_without_the_flag(self):
-		resp = self.client.get(f"/feed/trials/subject/{self.pub_subj.subject_slug}/")
-		self.assertEqual(resp.status_code, 404)
-
-	def test_include_public_still_grants_the_public_scope(self):
-		resp = self.client.get(
-			f"/feed/trials/subject/{self.pub_subj.subject_slug}/?include_public=true"
+		self.site_a = _make_site(
+			"Site A RSS Iso", self.org_a, api_public=False, scope_subjects=[self.subj_a]
 		)
+		self.site_b = _make_site(
+			"Site B RSS Iso", self.org_b, api_public=True, scope_subjects=[self.subj_b]
+		)
+
+		self.author_a = _make_author("A", "Author", "0000-0003-0001-0001")
+		self.author_b = _make_author("B", "Author", "0000-0003-0002-0002")
+		_make_article(
+			"Article A",
+			"https://rss-iso.ex/a1",
+			teams=[self.team_a],
+			authors=[self.author_a],
+			subjects=[self.subj_a],
+		)
+		_make_article(
+			"Article B",
+			"https://rss-iso.ex/a2",
+			teams=[self.team_b],
+			authors=[self.author_b],
+			subjects=[self.subj_b],
+		)
+		_make_trial(
+			"Trial A", "https://rss-iso.ex/t1", teams=[self.team_a], subjects=[self.subj_a]
+		)
+		_make_trial(
+			"Trial B", "https://rss-iso.ex/t2", teams=[self.team_b], subjects=[self.subj_b]
+		)
+
+	def test_site_as_trials_feed_excludes_site_bs_subject(self):
+		resp = self.client.get(_trials_feed_url(self.site_a.pk, self.subj_a.subject_slug))
 		self.assertEqual(resp.status_code, 200)
-		self.assertIn("Pub Trial", resp.content.decode())
+		self.assertIn("Trial A", resp.content.decode())
+
+	def test_site_a_cannot_serve_site_bs_subject_at_all(self):
+		# subj_b was never added to site_a's scope, so requesting it through
+		# site_a's own feed URL 404s -- the subject/site pairing is what's
+		# checked, not just "is this subject visible somewhere".
+		resp = self.client.get(_trials_feed_url(self.site_a.pk, self.subj_b.subject_slug))
+		self.assertEqual(resp.status_code, 404)
+
+	def test_site_bs_author_feed_excludes_site_as_article(self):
+		# author_a has no article under subj_b, so site B's feed 404s for them.
+		resp = self.client.get(_author_feed_url(self.site_b.pk, self.author_a.ORCID))
+		self.assertEqual(resp.status_code, 404)
+
+	def test_site_as_author_feed_serves_only_site_as_content(self):
+		resp = self.client.get(_author_feed_url(self.site_a.pk, self.author_a.ORCID))
+		self.assertEqual(resp.status_code, 200)
+		self.assertIn("Article A", resp.content.decode())
 
 
 # ---------------------------------------------------------------------------
+# Invariance: caller identity changes nothing about a given site's feed
+# ---------------------------------------------------------------------------
+
+
+class SiteScopedFeedCallerInvarianceTest(TestCase):
+	"""
+	The defining behaviour change of Phase 5. Pinned explicitly so a
+	well-meaning "restore per-caller filtering" change fails loudly here
+	rather than silently reintroducing cache-poisoning-by-identity on a
+	surface that's actually cached and has no notion of identity.
+	"""
+
+	def setUp(self):
+		self.owning_org = _make_org("Owning Org RSS Inv", "owning-org-rss-inv")
+		self.other_org = _make_org("Other Org RSS Inv", "other-org-rss-inv")
+		self.team = _make_team(self.owning_org, "Team RSS Inv")
+		self.subject = _make_subject(self.team, "subj-rss-inv")
+		self.site = _make_site(
+			"Site RSS Inv",
+			self.owning_org,
+			api_public=False,
+			scope_subjects=[self.subject],
+		)
+		# A second, unrelated site the "other" API key is bound to, so that
+		# key resolves to a real but disjoint scope rather than an
+		# unresolvable one.
+		self.other_site = _make_site(
+			"Other Site RSS Inv", self.other_org, api_public=False, scope_subjects=[]
+		)
+
+		self.author = _make_author("Inv", "Author", "0000-0003-0003-0003")
+		_make_article(
+			"Inv Article",
+			"https://rss-inv.ex/a1",
+			teams=[self.team],
+			authors=[self.author],
+			subjects=[self.subject],
+		)
+		_make_trial(
+			"Inv Trial", "https://rss-inv.ex/t1", teams=[self.team], subjects=[self.subject]
+		)
+
+	def _bodies_for(self, url):
+		bodies = []
+
+		# Anonymous.
+		bodies.append(self.client.get(url).content.decode())
+
+		# Signed-in member of an UNRELATED organisation.
+		user = User.objects.create_user(username="rss-inv-member", password="pw")
+		OrganizationUser.objects.create(organization=self.other_org, user=user)
+		self.client.force_login(user)
+		bodies.append(self.client.get(url).content.decode())
+		self.client.logout()
+
+		# API key bound to an UNRELATED site.
+		scheme = _make_api_scheme(self.other_org, "rss-inv-key", site=self.other_site)
+		self.client.defaults["HTTP_AUTHORIZATION"] = scheme.api_key
+		bodies.append(self.client.get(url).content.decode())
+		del self.client.defaults["HTTP_AUTHORIZATION"]
+
+		return bodies
+
+	def test_author_feed_identical_across_callers(self):
+		url = _author_feed_url(self.site.pk, self.author.ORCID)
+		bodies = self._bodies_for(url)
+		self.assertEqual(len(set(bodies)), 1, bodies)
+		self.assertIn("Inv Article", bodies[0])
+
+	def test_trials_feed_identical_across_callers(self):
+		url = _trials_feed_url(self.site.pk, self.subject.subject_slug)
+		bodies = self._bodies_for(url)
+		self.assertEqual(len(set(bodies)), 1, bodies)
+		self.assertIn("Inv Trial", bodies[0])
+
+
+# ---------------------------------------------------------------------------
+# rss_enabled / CustomSetting gating
+# ---------------------------------------------------------------------------
+
+
+class RssEnabledGateTest(TestCase):
+	def setUp(self):
+		self.org = _make_org("Gate Org", "gate-org-rss")
+		self.team = _make_team(self.org, "Gate Team RSS")
+		self.subject = _make_subject(self.team, "gate-subj-rss")
+		_make_trial(
+			"Gate Trial", "https://rss-gate.ex/t1", teams=[self.team], subjects=[self.subject]
+		)
+
+	def test_site_with_rss_disabled_404s(self):
+		site = _make_site(
+			"Disabled Site RSS",
+			self.org,
+			api_public=True,
+			rss_enabled=False,
+			scope_subjects=[self.subject],
+		)
+		resp = self.client.get(_trials_feed_url(site.pk, self.subject.subject_slug))
+		self.assertEqual(resp.status_code, 404)
+
+	def test_site_with_no_customsetting_404s(self):
+		bare_site = Site.objects.create(domain="bare-rss-gate.example.com", name="Bare")
+		resp = self.client.get(_trials_feed_url(bare_site.pk, self.subject.subject_slug))
+		self.assertEqual(resp.status_code, 404)
+
+	def test_unknown_site_id_404s(self):
+		resp = self.client.get(_trials_feed_url(999999, self.subject.subject_slug))
+		self.assertEqual(resp.status_code, 404)
+
+	def test_site_with_rss_enabled_serves_the_feed(self):
+		site = _make_site(
+			"Enabled Site RSS",
+			self.org,
+			api_public=True,
+			rss_enabled=True,
+			scope_subjects=[self.subject],
+		)
+		resp = self.client.get(_trials_feed_url(site.pk, self.subject.subject_slug))
+		self.assertEqual(resp.status_code, 200)
+		self.assertIn("Gate Trial", resp.content.decode())
+
+
+# ---------------------------------------------------------------------------
+# A private site's own feed is not gated by api_public
+# ---------------------------------------------------------------------------
+
+
+class PrivateSiteFeedTest(TestCase):
+	"""
+	rss_enabled is the whole gate; api_public plays no part, mirroring how
+	a site-bound API key reads its own scope_subjects "whether or not the
+	site is api_public" (gregory.visibility.visible_subject_ids). Pinned so
+	a later change doesn't quietly ALSO require api_public=True for the
+	feed -- that would be a different, narrower design than the one this
+	phase built, and should be a deliberate decision, not a regression.
+	"""
+
+	def setUp(self):
+		self.org = _make_org("Private Feed Org", "private-feed-org-rss")
+		self.team = _make_team(self.org, "Private Feed Team RSS")
+		self.subject = _make_subject(self.team, "private-feed-subj-rss")
+		self.site = _make_site(
+			"Private Feed Site RSS",
+			self.org,
+			api_public=False,
+			rss_enabled=True,
+			scope_subjects=[self.subject],
+		)
+		_make_trial(
+			"Private Feed Trial",
+			"https://rss-priv.ex/t1",
+			teams=[self.team],
+			subjects=[self.subject],
+		)
+
+	def test_anonymous_caller_with_no_credential_reads_the_private_sites_feed(self):
+		resp = self.client.get(_trials_feed_url(self.site.pk, self.subject.subject_slug))
+		self.assertEqual(resp.status_code, 200)
+		self.assertIn("Private Feed Trial", resp.content.decode())

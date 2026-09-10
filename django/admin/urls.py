@@ -46,7 +46,12 @@ from api.views import (
 	StatsView,
 	PublicSitesView,
 )
-from rss.views import ArticlesByAuthorFeed, TrialsBySubjectFeed
+from rss.views import (
+	SiteArticlesByAuthorFeed,
+	SiteTrialsBySubjectFeed,
+	redirect_articles_by_author_feed,
+	redirect_trials_by_subject_feed,
+)
 from rss.sitemaps import sitemap_index, sitemap_section
 from subscriptions.views import (
 	subscribe_view,
@@ -106,16 +111,37 @@ urlpatterns = (
 		path("articles/post/", post_article),
 		path("articles/edit/", edit_article),
 		path("trials/edit/", edit_trial),
-		# Feed routes (supports ORCID or numeric author_id)
+		# Old feed routes (supports ORCID or numeric author_id). These now
+		# permanently redirect (301) to the site-scoped routes below, on
+		# brain-regeneration.com (site id 3) -- see rss/views.py. DO NOT
+		# DELETE these patterns in a future cleanup or Django upgrade:
+		# removing them turns a redirect into a 404, and a feed reader
+		# never surfaces that as an error -- it just goes silent, quietly
+		# dropping every subscriber still on the old URL. See
+		# PHASE-5-RSS-SITE-SCOPE-PLAN.md.
 		path(
 			"feed/author/<str:orcid>/",
-			ArticlesByAuthorFeed(),
+			redirect_articles_by_author_feed,
 			name="articles_by_author_feed",
 		),
 		path(
 			"feed/trials/subject/<str:subject_slug>/",
-			TrialsBySubjectFeed(),
+			redirect_trials_by_subject_feed,
 			name="trials_by_subject_feed",
+		),
+		# Site-scoped feed routes (see rss/views.py). Scoped to the
+		# REQUESTED site's CustomSetting.scope_subjects, not the caller's --
+		# crawler/reader-facing like the sitemaps below, not request-scoped
+		# like the rest of the API.
+		path(
+			"feed/sites/<int:site_id>/author/<str:orcid>/",
+			SiteArticlesByAuthorFeed(),
+			name="site_articles_by_author_feed",
+		),
+		path(
+			"feed/sites/<int:site_id>/trials/subject/<str:subject_slug>/",
+			SiteTrialsBySubjectFeed(),
+			name="site_trials_by_subject_feed",
 		),
 		# Site-scoped sitemaps (see rss/sitemaps.py)
 		path(

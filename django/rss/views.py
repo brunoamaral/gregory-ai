@@ -1,72 +1,114 @@
+"""
+rss/views.py
+
+Site-scoped RSS feeds: /feed/sites/<site_id>/author/<orcid>/ and
+/feed/sites/<site_id>/trials/subject/<subject_slug>/.
+
+A feed serves the REQUESTED SITE's CustomSetting.scope_subjects, not the
+calling caller's own visibility -- these are crawler-and-reader-facing
+surfaces like rss/sitemaps.py, not request-scoped ones like the rest of the
+API. A feed reader has no identity and its response is cached, so the body
+must not vary by who (or what) is asking. See
+PHASE-5-RSS-SITE-SCOPE-PLAN.md and rss/sitemaps.py's module docstring for
+the same reasoning applied to sitemaps.
+
+404 when the site doesn't exist, has no CustomSetting, or has
+CustomSetting.rss_enabled=False -- matching how sitemaps 404 on
+generate_sitemap=False. 404 (not an empty feed) when the author/subject
+carries no subject in that site's scope.
+
+The old caller-scoped, unprefixed URLs (feed/author/<orcid>/,
+feed/trials/subject/<slug>/) still resolve, via redirect_articles_by_author_feed
+/redirect_trials_by_subject_feed below, to a permanent (301) redirect onto
+the equivalent site-scoped URL for brain-regeneration.com (site id 3), the
+project's one api_public site. Feed readers cache a 301 and stop
+re-requesting the old path, which is the entire reason a redirect was
+chosen over reimplementing the old caller-scoped behaviour here: a feed
+reader never sees an error, so a silent 404 loses a subscriber permanently
+rather than visibly. See the spec's "Old URLs redirect permanently" section.
+"""
+
 from django.contrib.syndication.views import Feed
 from django.contrib.sites.models import Site
 from django.db.models import F
-from django.http import Http404
+from django.http import Http404, HttpResponsePermanentRedirect
+from django.shortcuts import get_object_or_404
+from django.urls import reverse
 from gregory.models import Articles, Authors, Trials, Subject
 from gregory.functions import normalize_orcid
-from gregory.visibility import visible_subject_ids as _visible_subject_ids
+from sitesettings.models import CustomSetting
 from sitesettings.utils import author_page_base
 
+# brain-regeneration.com -- the project's only api_public site today, and
+# the fixed redirect target for the old unprefixed feed URLs. Revisit only
+# if a second public site ever makes that ambiguous (spec: "Old URLs
+# redirect permanently").
+_REDIRECT_TARGET_SITE_ID = 3
 
-def get_website_domain():
-	current_site = Site.objects.get_current()
-	# Always return a domain, never an email
-	return current_site.domain
+
+def _site_feed_scope(site_id):
+	"""Resolve the Site, its CustomSetting and its RSS-visible subject ids.
+
+	404s exactly like rss/sitemaps.py's _site_sitemaps: unknown site, no
+	CustomSetting row, or the feature switch off. Unlike sitemaps there is
+	no "narrow to the public scope" step -- a feed's scope IS its site's
+	scope_subjects regardless of whether that site is api_public, mirroring
+	how a site-bound API key reads its own scope in
+	gregory.visibility.visible_subject_ids.
+	"""
+	site = get_object_or_404(Site, pk=site_id)
+	# CustomSetting.site is a plain FK (not unique) -- order explicitly so
+	# the chosen row is deterministic if more than one ever exists for a site.
+	settings_row = CustomSetting.objects.filter(site=site).order_by("setting_id").first()
+	if settings_row is None or not settings_row.rss_enabled:
+		raise Http404("RSS feed not enabled for this site.")
+	subject_ids = set(settings_row.scope_subjects.values_list("id", flat=True))
+	return site, settings_row, subject_ids
 
 
-class ArticlesByAuthorFeed(Feed):
-	def get_object(self, request, orcid):
-		# Resolve strictly by normalized ORCID only
-		normalized = normalize_orcid(orcid)
-		if not normalized:
-			raise Authors.DoesNotExist
-		author = Authors.objects.get(ORCID=normalized)
+def _redirect_preserving_query(request, target_url):
+	query_string = request.META.get("QUERY_STRING", "")
+	if query_string:
+		target_url = f"{target_url}?{query_string}"
+	return HttpResponsePermanentRedirect(target_url)
 
-		# Compute visibility and attach to the per-request obj (not self)
-		# so concurrent requests on the shared Feed instance don't interfere.
-		author._visible_subject_ids = _visible_subject_ids(request)
 
-		# 404 if the author has no articles under any visible subject
-		if not author.articles_set.filter(
-			subjects__in=author._visible_subject_ids
-		).exists():
-			raise Http404
+def redirect_articles_by_author_feed(request, orcid):
+	"""301 from the old feed/author/<orcid>/ onto its site-scoped equivalent.
 
-		return author
+	Always redirects, whatever the orcid -- an invalid one 404s at the new
+	URL exactly as it would have here, and a redirect costs nothing extra
+	to compute. See the module docstring for why this is a redirect and not
+	a reimplementation of the old caller-scoped view.
+	"""
+	target = reverse(
+		"site_articles_by_author_feed",
+		kwargs={"site_id": _REDIRECT_TARGET_SITE_ID, "orcid": orcid},
+	)
+	return _redirect_preserving_query(request, target)
 
-	# Feed metadata (dynamic per author)
-	def title(self, obj):
-		return f"Articles by {obj.full_name or 'Author'}"
 
-	def link(self, obj):
-		# Link to the site's author page when it publishes one, else orcid.org
-		base = author_page_base(Site.objects.get_current())
-		if base:
-			return f"{base}/{obj.ORCID}/"
-		return f"https://orcid.org/{obj.ORCID}"
+def redirect_trials_by_subject_feed(request, subject_slug):
+	"""301 from the old feed/trials/subject/<slug>/ onto its site-scoped equivalent."""
+	target = reverse(
+		"site_trials_by_subject_feed",
+		kwargs={"site_id": _REDIRECT_TARGET_SITE_ID, "subject_slug": subject_slug},
+	)
+	return _redirect_preserving_query(request, target)
 
-	description = "RSS feed for articles by a specific author."
 
-	def items(self, obj):
-		return (
-			Articles.objects.filter(
-				authors=obj,
-				subjects__in=obj._visible_subject_ids,
-			)
-			.distinct()
-			# nulls_last: articles ingested without a date (filled later from
-			# CrossRef) must not pin to the top of the feed
-			.order_by(F("published_date").desc(nulls_last=True))[:50]
-		)
+class _ArticleFeedItemMixin:
+	"""item_* methods shared by author-scoped article feeds.
+
+	item_link is deliberately not here: it needs the requested site's
+	domain, which differs per feed class (see SiteArticlesByAuthorFeed).
+	"""
 
 	def item_title(self, item):
 		return item.title
 
 	def item_description(self, item):
 		return item.summary
-
-	def item_link(self, item):
-		return f"https://{get_website_domain()}/articles/{str(item.pk)}/"
 
 	def item_guid(self, item):
 		if item.doi:
@@ -82,41 +124,8 @@ class ArticlesByAuthorFeed(Feed):
 		return item.discovery_date
 
 
-class TrialsBySubjectFeed(Feed):
-	"""RSS feed for clinical trials filtered by subject slug."""
-
-	def get_object(self, request, subject_slug):
-		subject = Subject.objects.get(subject_slug=subject_slug)
-
-		# The subject IS the visibility unit now, so this is a set membership
-		# test rather than a walk up to the owning team's organisation. It
-		# also closes a hole the old check left open: a subject with no team
-		# skipped the check entirely and was served to anyone, which is how
-		# an internal-research subject could be read by slug.
-		if subject.id not in _visible_subject_ids(request):
-			raise Http404
-
-		return subject
-
-	# Feed metadata (dynamic per subject)
-	def title(self, obj):
-		return f"Clinical Trials - {obj.subject_name}"
-
-	def link(self, obj):
-		return f"https://{get_website_domain()}/trials/subject/{obj.subject_slug}/"
-
-	def description(self, obj):
-		return f"RSS feed for clinical trials related to {obj.subject_name}."
-
-	def items(self, obj):
-		return (
-			# get_object() has already established that obj is a visible
-			# subject, so matching on it is the whole visibility test — no
-			# second filter to add.
-			Trials.objects.filter(subjects=obj)
-			.distinct()
-			.order_by("-discovery_date")[:50]
-		)
+class _TrialFeedItemMixin:
+	"""item_* methods shared by subject-scoped trial feeds."""
 
 	def item_title(self, item):
 		return item.title
@@ -214,3 +223,93 @@ class TrialsBySubjectFeed(Feed):
 
 	def item_updateddate(self, item):
 		return item.last_updated
+
+
+class SiteArticlesByAuthorFeed(_ArticleFeedItemMixin, Feed):
+	"""feed/sites/<site_id>/author/<orcid>/ -- see module docstring."""
+
+	def get_object(self, request, site_id, orcid):
+		site, settings_row, subject_ids = _site_feed_scope(site_id)
+
+		normalized = normalize_orcid(orcid)
+		if not normalized:
+			raise Authors.DoesNotExist
+		author = Authors.objects.get(ORCID=normalized)
+
+		# Attach to the per-request obj (not self) so concurrent requests on
+		# the shared Feed instance don't interfere.
+		author._site = site
+		author._settings_row = settings_row
+		author._subject_ids = subject_ids
+
+		# 404 if the author has no articles under this site's scope.
+		if not author.articles_set.filter(subjects__in=subject_ids).exists():
+			raise Http404
+
+		return author
+
+	def title(self, obj):
+		return f"Articles by {obj.full_name or 'Author'}"
+
+	def link(self, obj):
+		# Link to the site's author page when it publishes one, else orcid.org.
+		base = author_page_base(obj._site, obj._settings_row)
+		if base:
+			return f"{base}/{obj.ORCID}/"
+		return f"https://orcid.org/{obj.ORCID}"
+
+	description = "RSS feed for articles by a specific author."
+
+	def items(self, obj):
+		articles = list(
+			Articles.objects.filter(
+				authors=obj,
+				subjects__in=obj._subject_ids,
+			)
+			.distinct()
+			# nulls_last: articles ingested without a date (filled later from
+			# CrossRef) must not pin to the top of the feed
+			.order_by(F("published_date").desc(nulls_last=True))[:50]
+		)
+		# item_link() below only receives the item, not obj -- stash the
+		# requested site's domain on each item rather than on self, for the
+		# same concurrency reason obj carries its own state above.
+		for article in articles:
+			article._feed_site_domain = obj._site.domain
+		return articles
+
+	def item_link(self, item):
+		return f"https://{item._feed_site_domain}/articles/{str(item.pk)}/"
+
+
+class SiteTrialsBySubjectFeed(_TrialFeedItemMixin, Feed):
+	"""feed/sites/<site_id>/trials/subject/<subject_slug>/ -- see module docstring."""
+
+	def get_object(self, request, site_id, subject_slug):
+		site, _settings_row, subject_ids = _site_feed_scope(site_id)
+		subject = Subject.objects.get(subject_slug=subject_slug)
+
+		if subject.id not in subject_ids:
+			raise Http404
+
+		subject._site = site
+		return subject
+
+	def title(self, obj):
+		return f"Clinical Trials - {obj.subject_name}"
+
+	def link(self, obj):
+		return f"https://{obj._site.domain}/trials/subject/{obj.subject_slug}/"
+
+	def description(self, obj):
+		return f"RSS feed for clinical trials related to {obj.subject_name}."
+
+	def items(self, obj):
+		return (
+			# get_object() has already established that obj's subject is in
+			# this site's scope, so matching on it is the whole visibility
+			# test -- no second filter to add.
+			Trials.objects.filter(subjects=obj)
+			.distinct()
+			.order_by("-discovery_date")[:50]
+		)
