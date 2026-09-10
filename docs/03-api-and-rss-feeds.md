@@ -144,6 +144,8 @@ Two endpoints are not content and do not follow this rule:
 
 **`/sponsors/`** is scoped indirectly: a sponsor carries no subject and is visible when at least one of its trials is in scope. Its `trials_count` counts only in-scope trials, so neither the number nor `?ordering=-trials_count` discloses trials the caller cannot read.
 
+> **Note:** This subject-scoped rule is the API's and RSS feeds' alone. The Django admin uses a deliberately different rule — see [06-organisations-teams-and-sites.md#admin-visibility](06-organisations-teams-and-sites.md#admin-visibility).
+
 ---
 
 ## Articles query parameters

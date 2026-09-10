@@ -18,7 +18,7 @@ from django.urls import reverse
 from organizations.models import Organization
 
 from gregory.classes import SciencePaper
-from gregory.models import Articles, Authors, Team
+from gregory.models import Articles, Authors, Sources, Team
 from gregory.services.crossref_refresh import build_change_reason
 
 User = get_user_model()
@@ -58,6 +58,14 @@ class ArticleCrossrefRefreshViewTest(TestCase):
 			doi="10.1000/xyz",
 		)
 		self.article.teams.add(self.team)
+		# OrganizationFilterMixin scopes content through source -> team ->
+		# organisation (not through `teams`, see the mixin's docstring), so
+		# test_staff_without_change_permission_is_forbidden's non-superuser
+		# needs this to resolve the article via get_object() at all.
+		self.source = Sources.objects.create(
+			name="Source", source_for="science paper", team=self.team
+		)
+		self.article.sources.add(self.source)
 
 		self.superuser = User.objects.create_superuser(
 			username="admin", email="admin@example.com", password="pw"
