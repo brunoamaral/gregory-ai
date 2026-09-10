@@ -124,8 +124,8 @@ GET /authors/?team_id=1&sort_by=article_count&order=desc
 # Get authors for a specific subject this year
 GET /authors/?team_id=1&subject_id=2&timeframe=year&sort_by=article_count
 
-# Get author RSS feed by ORCID
-GET /feed/author/0000-0000-0000-1234/
+# Get author RSS feed by ORCID (site-scoped; 3 = brain-regeneration.com)
+GET /feed/sites/3/author/0000-0000-0000-1234/
 ```
 
 Reference: [authors-api.md](authors-api.md), [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md)

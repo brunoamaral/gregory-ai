@@ -26,18 +26,20 @@ A read-only [MCP server](07-mcp-server.md) also exposes this API to LLM clients 
 
 | Feed | URL pattern |
 |:-----|:------------|
-| Articles by author (ORCID) | `GET /feed/author/{orcid}/` |
-| Clinical trials by subject | `GET /feed/trials/subject/{subject_slug}/` |
+| Articles by author (ORCID) | `GET /feed/sites/{site_id}/author/{orcid}/` |
+| Clinical trials by subject | `GET /feed/sites/{site_id}/trials/subject/{subject_slug}/` |
 
 Both feeds return the 50 most recent items, ordered by newest first.
 
-Both are scoped by subject. A subject is readable when it sits in the `scope_subjects` of a site the caller can see — for an anonymous caller, any site with *API public* on; for a site-bound API key, that key's own site; for a signed-in user, the sites owned by their organisations. The trials feed 404s when the requested subject is not one of those, and the author feed 404s when none of the author's articles carries one, otherwise listing only the articles that do.
+**Feeds are site-scoped, not caller-scoped** — the same design as the [sitemaps](#sitemaps) below, and a deliberate change from how this worked before. A feed serves the *requested site's* `CustomSetting.scope_subjects`: the trials feed 404s when the requested subject is not in that site's scope, and the author feed 404s when none of the author's articles carries a subject in it, otherwise listing only the articles that do. The response never varies by who (or what) is asking — a feed reader has no identity and the response is cached, so there is nothing to key a caller-specific response on. `?include_public=true` and any notion of "the caller's own scope" (API key, signed-in user) do not apply to these URLs at all.
 
-Curation into a site's scope is the whole grant, so team ownership neither adds nor removes access. A subject owned by a team in a publicly visible organisation is *not* readable unless some site publishes it, and a subject with no team at all is readable if a site does — team-less subjects are unreachable by default because nothing curates them, not by rule.
+A site's feed is gated by its own `CustomSetting.rss_enabled` alone — 404 when it's off, or when the site has no `CustomSetting` row, or when `site_id` doesn't exist. Unlike the sitemaps, a feed's scope is **not** narrowed to the publicly-visible subject set: `rss_enabled` and `scope_subjects` are the whole gate, whether or not the site is `api_public` — the same rule a site-bound API key follows for its own scope (see [Visibility rules summary](#visibility-rules-summary)). Curation into the site's scope is the whole grant otherwise, so team ownership plays no part: a subject with no team is served once some site's scope names it, exactly as for the API and sitemaps.
 
-`?include_public=true` adds the scopes of every *API public* site to an identified caller's own scope, which is how a private site's frontend reads public content alongside its own. It is a no-op for an anonymous caller, whose scope already is exactly that set. (Under the previous organisation-scoped rule this flag read "adds public organisations".)
+The author feed's `<link>` element points at the requested site's author profile page (`https://{site.domain}/authors/{orcid}/`) when that site's `CustomSetting.has_author_pages` is on, and at `https://orcid.org/{orcid}` otherwise. See [Author profile page links](06-organisations-teams-and-sites.md#author-profile-page-links).
 
-The author feed's `<link>` element points at the site's author profile page (`https://{site.domain}/authors/{orcid}/`) when the current Site's `CustomSetting.has_author_pages` is on, and at `https://orcid.org/{orcid}` otherwise. See [Author profile page links](06-organisations-teams-and-sites.md#author-profile-page-links).
+### Old feed URLs — permanent redirect
+
+`GET /feed/author/{orcid}/` and `GET /feed/trials/subject/{subject_slug}/` (no `site_id`) still resolve, but now return **301** to their `/feed/sites/3/...` equivalent (`3` = brain-regeneration.com, the project's one `api_public` site), preserving any query string. They are not reimplemented against a caller's own scope any more — before this change they were the only caller-scoped surface on this list, returning different content to an anonymous caller, a signed-in member, and an API key on the exact same URL. A feed reader caches a permanent redirect and stops re-requesting the old path; a `404` would instead go unnoticed and silently drop the subscription. **These routes are permanent** — do not remove them in a future cleanup, or the redirect becomes a 404 for every reader still on the old path.
 
 ---
 
@@ -144,7 +146,7 @@ Two endpoints are not content and do not follow this rule:
 
 **`/sponsors/`** is scoped indirectly: a sponsor carries no subject and is visible when at least one of its trials is in scope. Its `trials_count` counts only in-scope trials, so neither the number nor `?ordering=-trials_count` discloses trials the caller cannot read.
 
-> **Note:** This subject-scoped rule is the API's and RSS feeds' alone. The Django admin uses a deliberately different rule — see [06-organisations-teams-and-sites.md#admin-visibility](06-organisations-teams-and-sites.md#admin-visibility).
+> **Note:** This caller-scoped rule is the API's alone. RSS feeds are scoped to the *requested site*, not the caller — see [RSS feeds](#rss-feeds) — much like the [sitemaps](#sitemaps) below. The Django admin uses a deliberately different rule again — see [06-organisations-teams-and-sites.md#admin-visibility](06-organisations-teams-and-sites.md#admin-visibility).
 
 ---
 
@@ -232,8 +234,9 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Email templates | `GET /emails/` | None | Template preview dashboard |
 | Email templates | `GET /emails/preview/{template_name}/` | `template_name` (path) | |
 | Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | |
-| RSS feeds | `GET /feed/author/{orcid}/` | `orcid` (path) | |
-| RSS feeds | `GET /feed/trials/subject/{subject_slug}/` | `subject_slug` (path) | |
+| RSS feeds | `GET /feed/sites/{site_id}/author/{orcid}/` | `site_id`, `orcid` (path) | Site-scoped — see [RSS feeds](#rss-feeds) |
+| RSS feeds | `GET /feed/sites/{site_id}/trials/subject/{subject_slug}/` | `site_id`, `subject_slug` (path) | Site-scoped — see [RSS feeds](#rss-feeds) |
+| RSS feeds (old, no `site_id`) | `GET /feed/author/{orcid}/`, `GET /feed/trials/subject/{subject_slug}/` | `orcid` / `subject_slug` (path) | **301** to the `/feed/sites/3/...` equivalent — see [Old feed URLs](#old-feed-urls--permanent-redirect) |
 | Stats | `GET /stats/` | `team`, `site`, `subject`, `include_public`, `organization` (alias `org`, deprecated) | See [Stats endpoint](#stats-endpoint) below |
 | Sites | `GET /sites/` | None | Publicly readable sites as `{site_id, domain, name}`. **Unscoped by design** — it is the discovery entry point for callers that need a `site_id`, so it cannot require one. Everything returned is already public |
 | Subscriptions | `POST /subscriptions/new/` | `first_name`, `last_name`, `email`, `profile`, `list` | POST-only; `GET` returns `405` with `Allow: POST` |
