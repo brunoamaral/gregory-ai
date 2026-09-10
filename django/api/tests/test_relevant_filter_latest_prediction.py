@@ -15,6 +15,7 @@ from django.utils import timezone
 from organizations.models import Organization
 from rest_framework.test import APIClient
 
+from api.tests.visibility_helpers import publish_subjects
 from gregory.models import (
 	Articles,
 	ArticleSubjectRelevance,
@@ -50,6 +51,7 @@ class RelevantFilterLatestPredictionTestCase(TestCase):
 			auto_predict=True,
 			ml_consensus_type="majority",
 		)
+		publish_subjects(self.subject_any, self.subject_majority, organization=org)
 
 	def _article(self, title, subject):
 		article = Articles.objects.create(

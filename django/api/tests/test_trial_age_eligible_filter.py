@@ -11,6 +11,8 @@ from gregory.models import (
 	OrganizationApiSettings,
 )
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 class TrialAgeEligibleFilterTests(TestCase):
 	"""Tests for the numeric ?age_eligible= range-containment filter on /trials/"""
@@ -35,6 +37,7 @@ class TrialAgeEligibleFilterTests(TestCase):
 			subject_slug="age-other-subject",
 			team=self.team,
 		)
+		publish_subjects(self.subject, self.other_subject, organization=self.org)
 
 		# min 18 / max 65 -> includes 40
 		self.trial_18_65 = Trials.objects.create(
