@@ -15,14 +15,17 @@ Applied fields (when present on the serialised object):
   - ``ml_predictions``  → MLPredictions entries whose subject is outside it
   - ``team_categories`` → TeamCategory entries whose ``subjects`` M2M does not
                            intersect it
-  - ``teams``           → Team entries with ``api_listed=False``
+  - ``teams``           → Team entries that are neither ``api_listed`` nor
+                           owners of a subject in the caller's scope
 
-Teams are the odd one out, and deliberately so. A Team carries no subject, so
-subject scope cannot speak to it; it is gated by the same explicit
-``Team.api_listed`` flag that governs ``/teams/``, so a team's name appears
-nested inside an article exactly when it would appear in the team directory.
-Using two different answers for "may I see this team's name" depending on
-which endpoint asked would be a leak in whichever direction was laxer.
+Teams are the odd one out, and deliberately so. A Team carries no subject of
+its own, so it is gated by exactly the rule ``/teams/`` applies: listed by the
+explicit ``Team.api_listed`` flag, OR owning a subject already in the caller's
+scope. A team's name therefore appears nested inside an article exactly when it
+would appear in the team directory. Using two different answers for "may I see
+this team's name" depending on which endpoint asked would be a leak in
+whichever direction was laxer, so these two must move together -- if you change
+one, change the other.
 
 The mixin is intentionally a no-op when:
   - There is no ``request`` in the serializer context, OR
@@ -37,8 +40,10 @@ Query strategy (avoiding N+1 on list endpoints)
 - ``team_categories``:  a category's ``subjects`` M2M has to be consulted, so
   the qualifying category IDs are resolved once per request and cached on
   ``request._scoped_mixin_category_ids``.
-- ``teams``:  ``team.api_listed`` is a direct column; iterating ``.all()`` in
-  Python respects ``prefetch_related('teams')`` with zero extra queries.
+- ``teams``:  ``team.api_listed`` is a direct column, so the first half costs
+  nothing and respects ``prefetch_related('teams')``. The second half needs the
+  team ids owning an in-scope subject, resolved once per request and cached on
+  ``request._scoped_mixin_listed_team_ids``.
 
 Per-org fields (``_per_org_fields``)
 -------------------------------------
@@ -105,6 +110,30 @@ def _resolve_per_org_fields_org(request):
 	return org
 
 
+def _request_scope_owning_team_ids(request, visible_subject_ids: set) -> set:
+	"""Team IDs that own at least one subject in the caller's scope.
+
+	The second half of the team-listing rule (see module docstring and
+	TeamsViewSet, which must agree). Cached once per request so a list
+	endpoint does not repeat it per serialised row.
+	"""
+	cache_attr = "_scoped_mixin_listed_team_ids"
+	if not hasattr(request, cache_attr):
+		from gregory.models import Subject
+
+		setattr(
+			request,
+			cache_attr,
+			set(
+				Subject.objects.filter(id__in=visible_subject_ids)
+				.exclude(team_id__isnull=True)
+				.values_list("team_id", flat=True)
+				.distinct()
+			),
+		)
+	return getattr(request, cache_attr)
+
+
 def _request_visible_category_ids(request, visible_subject_ids: set) -> set:
 	"""TeamCategory IDs whose subjects intersect the caller's scope.
 
@@ -166,9 +195,14 @@ class ScopedSerializerMixin:
 
 		visible = request.visible_subject_ids
 
-		# --- teams: api_listed is a direct column; uses prefetch cache ---
+		# --- teams: the same rule /teams/ applies, kept in step with it ---
 		if "teams" in ret and hasattr(instance, "teams"):
-			listed_team_ids = {t.id for t in instance.teams.all() if t.api_listed}
+			scope_owning = _request_scope_owning_team_ids(request, visible)
+			listed_team_ids = {
+				t.id
+				for t in instance.teams.all()
+				if t.api_listed or t.id in scope_owning
+			}
 			ret["teams"] = [t for t in ret["teams"] if t.get("id") in listed_team_ids]
 
 		# --- subjects: a set-membership test, no query ---

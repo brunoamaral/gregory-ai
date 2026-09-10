@@ -114,24 +114,35 @@ The key is validated against its date window (`begin_date` / `end_date`) and, if
 
 A user account that is a member of the organisation (an `OrganizationUser` record exists) sees that organisation's data automatically after logging in via the session-based endpoints.
 
-### Including public organisations alongside private data
+### Including public sites alongside private data
 
-Both caller types can append `?include_public=true` to any request to also receive data from organisations that have `make_api_public = True`.
+Identified callers can append `?include_public=true` to any request to add the scopes of every *API public* site to their own — how a private site's frontend reads public content alongside its own.
 
 ```bash
 GET /articles/?include_public=true
 ```
 
+It is a no-op for an anonymous caller, whose scope already is exactly that set. Before subject scoping this parameter meant "adds public organisations"; it now adds public *sites'* subject scopes, and is declared in the OpenAPI schema rather than being undeclared-but-working as it was.
+
 ### Visibility rules summary
 
-| Caller | Visible organisations |
-|:-------|:----------------------|
-| Anonymous (no credentials) | Public orgs only |
-| API key with no org (`organization = null`) | Public orgs only |
-| API key bound to org X | Org X only (+ public if `?include_public=true`) |
-| Authenticated user member of org X | Org X only (+ public if `?include_public=true`) |
+Content visibility is **subject-scoped**: a caller sees a row when one of its subjects is in the `scope_subjects` of a site that caller can reach.
+
+| Caller | Visible subjects |
+|:-------|:-----------------|
+| Anonymous (no credentials) | Every *API public* site's scope |
+| API key bound to a site | That site's scope (+ public sites' if `?include_public=true`) |
+| API key with no site set | Nothing (+ public sites' if `?include_public=true`) |
+| Authenticated user, member of org X | The scopes of every site org X owns (+ public if `?include_public=true`) |
 
 > **Note:** An expired key or a key used from a non-allowed IP is treated as anonymous.
+
+Two endpoints are not content and do not follow this rule:
+
+- **`/teams/`** lists a team when `Team.api_listed` is on, **or** when the team owns a subject already in the caller's scope. The flag is the publication switch; the second clause exists so a private site's own authenticated frontend can list its own teams. It gates *listing*, not access — an unlisted team's articles and trials are governed by subject scope like everything else. The same rule decides whether a team appears nested inside an article or trial.
+- **`/organizations/`** remains organisation-keyed.
+
+**`/sponsors/`** is scoped indirectly: a sponsor carries no subject and is visible when at least one of its trials is in scope. Its `trials_count` counts only in-scope trials, so neither the number nor `?ordering=-trials_count` discloses trials the caller cannot read.
 
 ---
 
@@ -221,7 +232,7 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | |
 | RSS feeds | `GET /feed/author/{orcid}/` | `orcid` (path) | |
 | RSS feeds | `GET /feed/trials/subject/{subject_slug}/` | `subject_slug` (path) | |
-| Stats | `GET /stats/` | `team`, `organization` (alias `org`), `subject`, `include_public` | See [Stats endpoint](#stats-endpoint) below |
+| Stats | `GET /stats/` | `team`, `site`, `subject`, `include_public`, `organization` (alias `org`, deprecated) | See [Stats endpoint](#stats-endpoint) below |
 | Sites | `GET /sites/` | None | Publicly readable sites as `{site_id, domain, name}`. **Unscoped by design** — it is the discovery entry point for callers that need a `site_id`, so it cannot require one. Everything returned is already public |
 | Subscriptions | `POST /subscriptions/new/` | `first_name`, `last_name`, `email`, `profile`, `list` | POST-only; `GET` returns `405` with `Allow: POST` |
 
@@ -354,7 +365,9 @@ GET /trials/search/?team_id=1&subject_id=2&search=diabetes&format=csv&all_result
 
 ```
 GET /stats/
-GET /stats/?organization=3
+GET /stats/?site=2
+GET /stats/?site=2&subject=1
+GET /stats/?organization=3   # deprecated, still supported
 GET /stats/?organization=3,7
 GET /stats/?team=12
 GET /stats/?organization=3&team=12
@@ -395,7 +408,9 @@ in-scope team(s) have subjects, but the key is always present):
 | `organization` | int or CSV of ints | Scope counts to one or more organisations. Alias `org` is accepted. |
 | `team` | int or CSV of ints | Scope counts to one or more teams. |
 | `subject` | int or CSV of ints | Scope counts to one or more subjects (union, not intersection — matches `team`/`organization`, not the `subject_id` filter on the list endpoints). Adds/populates `by_subject`. IDs only — subject slugs are not unique across teams, so there is no slug form of this filter here. |
-| `include_public` | bool (`true`/`false`) | Handled by the visibility layer — adds public-org data for identified callers. |
+| `site` | int or comma-separated ints | Scope to the subjects one or more sites publish. Sugar for `subject=` with that site's scope; intersects with an explicit `subject=` rather than overriding it. A site the caller cannot reach returns 404. |
+| `include_public` | bool (`true`/`false`) | Handled by the visibility layer — adds public sites' scopes for identified callers. |
+| `organization` (alias `org`) | int or comma-separated ints | **Deprecated** — prefer `site`. Organisations are no longer the visibility unit. Still works and still means exactly what it always meant; it is deprecated rather than redefined, because silently changing what a documented parameter returns is worse than keeping it. |
 
 When both `organization` and `team` are given the effective scope is their **intersection**: teams that belong to the requested org(s). The same applies to `subject` versus `team`/`organization`: a subject the caller can see but that doesn't belong to the requested team/org scope does **not** 404 — it returns a well-formed payload with every count at zero and `by_subject: []`.
 

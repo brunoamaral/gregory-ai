@@ -25,6 +25,7 @@ from organizations.models import Organization, OrganizationUser
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
+from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import Articles, Authors, OrganizationApiSettings, Sources, Subject, Team
 from subscriptions.models import Lists, Subscribers
 
@@ -569,6 +570,18 @@ class SubjectStatsBase(StatsVisibilityBase):
 		self.subj_pub = _make_subject(self.pub_team, "Subject Pub")
 		self.subj_priv = _make_subject(self.priv_team, "Subject Priv")
 
+		# One site per organisation publishing its own subjects. This is what
+		# puts them in scope at all: the stats subject roster is subject-scoped
+		# since Phase 4, so an unpublished subject contributes nothing and the
+		# ?subject= checks below would all 404.
+		self.my_site = private_site_publishing(
+			self.subj_a, self.subj_b, organization=self.my_org
+		)
+		self.pub_site = publish_subjects(self.subj_pub, organization=self.pub_org)
+		self.priv_site = private_site_publishing(
+			self.subj_priv, organization=self.priv_org
+		)
+
 		# art_mine / trial_mine (from the base fixture) get tagged with subj_a.
 		self.art_mine.subjects.add(self.subj_a)
 		self.trial_mine.subjects.add(self.subj_a)
@@ -785,8 +798,20 @@ class BySubjectFacetTest(StatsVisibilityBase):
 		self.subj_zeta = _make_subject(self.my_team, "Zeta Subject")
 		self.subj_alpha = _make_subject(self.my_team, "Alpha Subject")
 		self.subj_beta = _make_subject(self.my_team, "Beta Subject")
-		# Belongs to a private org invisible to this caller.
+		# Published on a site this caller's organisation owns, so the three
+		# above are in scope; subj_hidden deliberately is not published here.
+		self.my_site = private_site_publishing(
+			self.subj_zeta,
+			self.subj_alpha,
+			self.subj_beta,
+			organization=self.my_org,
+		)
+		# In no scope this caller can reach — the roster must drop it even
+		# though an article below carries both it and subj_alpha.
 		self.subj_hidden = _make_subject(self.priv_team, "Hidden Subject")
+		self.priv_site = private_site_publishing(
+			self.subj_hidden, organization=self.priv_org
+		)
 
 		self.author1 = Authors.objects.create(given_name="Ann", family_name="One")
 		self.author2 = Authors.objects.create(given_name="Bob", family_name="Two")
@@ -1088,3 +1113,54 @@ class BySubjectRowCacheTest(SubjectStatsBase):
 		# ...but the by_subject row is served from the still-warm layer-2
 		# cache and has not caught up yet — the documented skew.
 		self.assertEqual(row["articles"], 1)
+
+
+class SiteFilterStatsTest(SubjectStatsBase):
+	"""
+	``?site=`` scopes /stats/ to the subjects a site publishes.
+
+	Added with Phase 4 of site-scoped API visibility, as the replacement for
+	``?organization=``: organisations stopped being the visibility unit, and
+	silently redefining a documented parameter is the failure mode this
+	project exists to prevent. So ``?organization=`` keeps its old meaning and
+	is marked deprecated, while ``?site=`` is the one that matches how
+	visibility now works.
+	"""
+
+	def test_site_scopes_to_that_sites_subjects(self):
+		resp = self.client.get("/stats/", {"site": self.my_site.id})
+		self.assertEqual(resp.status_code, 200)
+		roster = {row["subject_id"] for row in resp.data["by_subject"]}
+		self.assertEqual(roster, {self.subj_a.id, self.subj_b.id})
+
+	def test_site_and_subject_intersect_rather_than_override(self):
+		# A filter may only ever narrow. subj_b is in my_site's scope, so
+		# naming both leaves exactly subj_b.
+		resp = self.client.get(
+			"/stats/", {"site": self.my_site.id, "subject": self.subj_b.id}
+		)
+		self.assertEqual(resp.status_code, 200)
+		roster = {row["subject_id"] for row in resp.data["by_subject"]}
+		self.assertEqual(roster, {self.subj_b.id})
+
+	def test_unreachable_site_404s_rather_than_returning_everything(self):
+		# priv_site belongs to an organisation this caller is not in. Its
+		# scope resolves to nothing the caller may see, and an empty scope
+		# must not read as "no filter" — that would widen the answer to
+		# everything, which is the opposite of what was asked.
+		resp = self.client.get("/stats/", {"site": self.priv_site.id})
+		self.assertEqual(resp.status_code, 404)
+
+	def test_unknown_site_404s(self):
+		self.assertEqual(
+			self.client.get("/stats/", {"site": 999999}).status_code, 404
+		)
+
+	def test_non_numeric_site_is_400_not_500(self):
+		resp = self.client.get("/stats/", {"site": "not-an-id"})
+		self.assertEqual(resp.status_code, 400)
+
+	def test_organization_still_works_unchanged(self):
+		# Deprecated, not removed, and still means what it always meant.
+		resp = self.client.get("/stats/", {"organization": self.my_org.id})
+		self.assertEqual(resp.status_code, 200)

@@ -1399,6 +1399,23 @@ _OPTIONAL_API_KEY_SECURITY = [
 ]
 
 
+_INCLUDE_PUBLIC_PARAM = OpenApiParameter(
+	"include_public",
+	OpenApiTypes.BOOL,
+	OpenApiParameter.QUERY,
+	description=(
+		"Identified callers only (API key or signed-in user): add the scopes "
+		"of every publicly readable site to your own, so a private site's "
+		"frontend can read public content alongside its own. No-op for an "
+		"anonymous caller, whose scope already is exactly that set.\n\n"
+		"Undeclared but functional before Phase 4 of site-scoped API "
+		"visibility, when it read 'adds public organisations' — organisations "
+		"are no longer the visibility unit, so it is declared here with its "
+		"current meaning rather than left to be discovered."
+	),
+)
+
+
 def _ordering_param(fields, description):
 	"""Build an explicit ``ordering`` OpenApiParameter with a real enum.
 
@@ -1449,7 +1466,10 @@ _ARTICLES_ORDERING_PARAM = _ordering_param(
 
 
 @extend_schema_view(
-	list=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY, parameters=[_ARTICLES_ORDERING_PARAM]),
+	list=extend_schema(
+		auth=_OPTIONAL_API_KEY_SECURITY,
+		parameters=[_ARTICLES_ORDERING_PARAM, _INCLUDE_PUBLIC_PARAM],
+	),
 	retrieve=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY),
 )
 class ArticleViewSet(
@@ -2244,7 +2264,10 @@ _TRIALS_ORDERING_PARAM = _ordering_param(
 
 
 @extend_schema_view(
-	list=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY, parameters=[_TRIALS_ORDERING_PARAM]),
+	list=extend_schema(
+		auth=_OPTIONAL_API_KEY_SECURITY,
+		parameters=[_TRIALS_ORDERING_PARAM, _INCLUDE_PUBLIC_PARAM],
+	),
 	retrieve=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY),
 )
 class TrialViewSet(
@@ -2883,9 +2906,25 @@ _SPONSORS_ORDERING_PARAM = _ordering_param(
 class SponsorViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	List canonical sponsor entities (deduplicated trial sponsors — see
-	docs/trials-field-normalization.md). Sponsors are global, not org-owned, so
-	unlike most other viewsets this one carries no OrgVisibilityMixin — same
-	reasoning as the by_sponsor/by_sponsor_type facets on /trials/stats/.
+	docs/trials-field-normalization.md).
+
+	A Sponsor carries no subject of its own; it reaches content only through
+	the trials that name it. So it is scoped to "has at least one trial in the
+	caller's scope" rather than by a field on the row — an Exists() over
+	Trials.primary_sponsor_normalized. Without that, a sponsor's existence
+	(and its name) would disclose that some trial the caller cannot read
+	exists, which is the thing subject scoping is for.
+
+	It carried no scoping at all before Phase 4 of site-scoped API visibility,
+	on the grounds that sponsors are global. That was defensible while
+	visibility was organisation-keyed and every caller effectively saw the same
+	trials; it stops being defensible with two tenants.
+
+	Measured after the 2026-09-10 orphan-sponsor prune: scoping hides 59 of
+	4,686 (1.3%), all Dihydroartemisinin (subject 15, internal research in no
+	site's scope) — the intended exclusion. Before that prune it looked like
+	43%, but 3,406 of those sponsors referenced no trial at all and were
+	debris left behind by the PROTECT FK when their trials were deleted.
 
 	# Query Parameters:
 	- **search** - search by sponsor name
@@ -2919,8 +2958,29 @@ class SponsorViewSet(viewsets.ReadOnlyModelViewSet):
 	ordering = ["name"]
 
 	def get_queryset(self):
-		return super().get_queryset().annotate(
-			trials_count=Count("trials", distinct=True)
+		qs = super().get_queryset()
+		visible = getattr(self.request, "visible_subject_ids", None)
+		if visible is None:
+			# No middleware (management command, some tests) -- no scoping,
+			# matching every other viewset's fallback.
+			return qs.annotate(trials_count=Count("trials", distinct=True))
+
+		# Exists() over Trials rather than a join + distinct on the outer
+		# query: a sponsor with many in-scope trials must appear once, and
+		# the paginator's COUNT(*) must not have to DISTINCT every column.
+		has_a_trial_in_scope = Trials.objects.filter(
+			primary_sponsor_normalized=OuterRef("pk"), subjects__in=visible
+		)
+		# trials_count is scoped too, and that is not cosmetic: an unscoped
+		# count on a visible sponsor would disclose how many trials the caller
+		# cannot read, and it is an orderable field (?ordering=-trials_count),
+		# so the ranking itself would leak the same information.
+		return qs.filter(Exists(has_a_trial_in_scope)).annotate(
+			trials_count=Count(
+				"trials",
+				filter=Q(trials__subjects__in=visible),
+				distinct=True,
+			)
 		)
 
 
@@ -3574,23 +3634,54 @@ class TeamsViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	List teams that have opted into being listed.
 
-	Gated by the explicit ``Team.api_listed`` flag, not by subject scope. A
-	team is not content and owns no subject of its own, so deriving its
-	visibility from the subjects it owns cannot express either of the two
-	things an operator eventually wants: an internal lab that contributes to
-	public content but should not be named, or a partner an organisation
-	wants to credit that owns nothing in scope. The flag was seeded from the
-	derived answer by ``sitesettings/0019`` and can be overridden either way.
+	A team is listed when EITHER holds:
 
-	It gates listing, not access. ``api_listed = False`` removes a team from
-	this endpoint; it does not hide that team's content, which is governed by
+	  1. ``Team.api_listed`` is on -- the explicit publication switch, seeded
+	     from the derived answer by ``sitesettings/0019``; or
+	  2. the team owns a subject already in the caller's scope.
+
+	Rule 1 alone was the first cut, and it is what the spec says literally. It
+	has a cost that only shows up with a second tenant: a private site's own
+	authenticated frontend could not list its own teams, because the teams of
+	a private site are exactly the ones an operator marks unlisted. Rule 2
+	buys that back without reopening anything -- a caller who can already read
+	a team's articles and trials learns nothing new from its name.
+
+	A flag is still the right primary answer, for the reason the spec gives:
+	deriving listing purely from owned subjects cannot express an internal lab
+	that contributes to public content but should not be named, nor a partner
+	an organisation wants to credit that owns nothing in scope. Rule 2 only
+	ever adds, so both of those stay expressible.
+
+	It gates listing, not access. Being unlisted removes a team from this
+	endpoint; it does not hide that team's content, which is governed by
 	subject scope like everything else. Conflating the two is how a metadata
 	switch quietly becomes a data-visibility switch.
 	"""
 
+	# get_queryset() below is what actually runs; this attribute exists because
+	# the DRF router derives the URL basename from it, and it is set to the
+	# narrower of the two rules so that any path which somehow skipped
+	# get_queryset() would under-disclose rather than over-disclose.
 	queryset = Team.objects.filter(api_listed=True).order_by("id")
 	serializer_class = TeamSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+	def get_queryset(self):
+		# Team.objects is ActiveTeamManager (is_active=True); soft-deleted
+		# teams stay out either way.
+		qs = Team.objects.all().order_by("id")
+		if not hasattr(self.request, "visible_subject_ids"):
+			# No middleware (management command, some tests). The flag is an
+			# intrinsic property of the team rather than a per-caller scope,
+			# so it still applies -- there is simply no rule 2 to add.
+			return qs.filter(api_listed=True)
+		owns_a_visible_subject = Subject.objects.filter(
+			team_id=OuterRef("pk"), id__in=self.request.visible_subject_ids
+		)
+		# Exists() rather than a join on subjects, so the OR cannot duplicate
+		# a team that owns several in-scope subjects and no DISTINCT is needed.
+		return qs.filter(Q(api_listed=True) | Q(Exists(owns_a_visible_subject)))
 
 
 ###
@@ -4388,10 +4479,22 @@ class StatsView(APIView):
 	-------
 	?team=1,2,3
 	    Scope to one or more teams (comma-separated integer IDs).
-	?organization=1,2  (alias: ?org=)
+	?site=1,2
+	    Scope to the subjects one or more sites publish (their
+	    CustomSetting.scope_subjects). This is the filter to reach for now
+	    that visibility is site-scoped; it is sugar for ?subject= with that
+	    site's scope, and intersects with an explicit ?subject= rather than
+	    overriding it. A site the caller cannot reach 404s, like any other
+	    unreachable scope.
+	?organization=1,2  (alias: ?org=)  [DEPRECATED]
 	    Scope to one or more organisations (comma-separated integer IDs).
 	    When combined with ?team=, the effective scope is the intersection:
 	    teams that belong to the requested org(s).
+
+	    Deprecated because organisations are no longer the visibility unit --
+	    a site is. It still works, and still means exactly what it always
+	    meant, which is the point: silently redefining a documented parameter
+	    is the failure this project exists to prevent. Prefer ?site=.
 	?subject=1,2
 	    Scope to one or more subjects (comma-separated integer IDs, OR/union
 	    semantics). Adds a ``by_subject`` breakdown to the payload, listing
@@ -4424,17 +4527,36 @@ class StatsView(APIView):
 				OpenApiParameter.QUERY,
 				description="Scope to one or more teams (comma-separated integer IDs), e.g. ?team=1,2,3.",
 			),
+			_INCLUDE_PUBLIC_PARAM,
+			OpenApiParameter(
+				"site",
+				OpenApiTypes.STR,
+				OpenApiParameter.QUERY,
+				description=(
+					"Scope to the subjects one or more sites publish "
+					"(comma-separated integer site IDs). Sugar for ?subject= "
+					"with that site's scope; intersects with an explicit "
+					"?subject= rather than overriding it."
+				),
+			),
 			OpenApiParameter(
 				"organization",
 				OpenApiTypes.STR,
 				OpenApiParameter.QUERY,
-				description="Scope to one or more organisations (comma-separated integer IDs). Alias: org.",
+				deprecated=True,
+				description=(
+					"DEPRECATED — prefer ?site=. Scope to one or more "
+					"organisations (comma-separated integer IDs). Alias: org. "
+					"Organisations are no longer the visibility unit; this "
+					"still works and still means what it always meant."
+				),
 			),
 			OpenApiParameter(
 				"org",
 				OpenApiTypes.STR,
 				OpenApiParameter.QUERY,
-				description="Alias for organization.",
+				deprecated=True,
+				description="DEPRECATED — alias for organization. Prefer ?site=.",
 			),
 			OpenApiParameter(
 				"subject",
@@ -4452,7 +4574,11 @@ class StatsView(APIView):
 		from urllib.parse import urlparse
 		from subscriptions.models import Subscribers
 
+		# Both scopes are live here: ?team=/?organization= are org-keyed
+		# parameters validated against visible_org_ids, while the subject
+		# roster and every content count are subject-scoped (Phase 4).
 		visible_org_ids = getattr(request, "visible_org_ids", None)
+		visible_subject_ids = getattr(request, "visible_subject_ids", None)
 
 		# --- Parse ?team= -----------------------------------------------
 		team_param = request.query_params.get("team", None)
@@ -4499,6 +4625,44 @@ class StatsView(APIView):
 					},
 					status=status.HTTP_400_BAD_REQUEST,
 				)
+
+		# --- Parse ?site= -------------------------------------------------
+		# Sugar for "?subject= everything this site publishes". Resolved here
+		# rather than carried separately so it goes through exactly the same
+		# visibility validation, 404 behaviour and cache key as ?subject=.
+		# Combined with an explicit ?subject=, the two intersect -- a filter
+		# can only ever narrow.
+		site_param = request.query_params.get("site")
+		if site_param:
+			try:
+				site_ids = [int(x.strip()) for x in site_param.split(",") if x.strip()]
+			except ValueError:
+				return Response(
+					{
+						"error": "Invalid site parameter. Expected integer or comma-separated integers."
+					},
+					status=status.HTTP_400_BAD_REQUEST,
+				)
+			from sitesettings.models import CustomSetting
+
+			site_subject_ids = set(
+				CustomSetting.objects.filter(site_id__in=site_ids)
+				.exclude(scope_subjects__isnull=True)
+				.values_list("scope_subjects__id", flat=True)
+			)
+			# A site the caller cannot reach resolves to nothing, and an empty
+			# scope must not read as "no filter" -- that would silently widen
+			# the answer to everything. Force the 404 path instead, matching
+			# how an unreachable ?subject= behaves.
+			if not site_subject_ids:
+				raise Http404
+			subject_ids = (
+				sorted(site_subject_ids)
+				if subject_ids is None
+				else sorted(set(subject_ids) & site_subject_ids)
+			)
+			if not subject_ids:
+				raise Http404
 
 		# --- Visibility validation (no extra DB queries for org check) --
 		if org_ids and visible_org_ids is not None:
@@ -4572,8 +4736,9 @@ class StatsView(APIView):
 		# distinguishes a 404 from an all-zero payload (decision 7 in
 		# docs/spec-stats-subject-filter.md).
 		subj_qs = Subject.objects.all()
-		if visible_org_ids is not None:
-			subj_qs = subj_qs.filter(team__organization_id__in=visible_org_ids)
+		if visible_subject_ids is not None:
+			# Subject scope, not the owning team's organisation (Phase 4).
+			subj_qs = subj_qs.filter(id__in=visible_subject_ids)
 		if subject_ids is not None:
 			subj_qs = subj_qs.filter(id__in=subject_ids)
 		elif team_id_list is not None:

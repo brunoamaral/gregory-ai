@@ -82,6 +82,13 @@ def test_detail_endpoint_exists_in_schema(fn, path, schema_params):
 KNOWN_UNEXPOSED_PARAMS = {
 	"/articles/": {
 		"format",  # CSV — no export tool, see STAGE-2 plan "Risks"
+		# Adds public sites' scopes to an *identified* caller's own scope.
+		# GregoryClient sends no Authorization header (client.py) -- this
+		# server is always an anonymous caller upstream, and an anonymous
+		# caller's scope already IS the union of every public site's scope.
+		# So the parameter is a provable no-op here; exposing it would put a
+		# knob on the tool that cannot change any result.
+		"include_public",
 		# Not a *tool* parameter — no LLM caller ever chooses it. GregoryClient.get()
 		# adds it transport-side to every upstream call from its own per-request
 		# resolution (env override, else inbound Host via GET /sites/) — see
@@ -95,6 +102,13 @@ KNOWN_UNEXPOSED_PARAMS = {
 	},
 	"/trials/": {
 		"format",
+		# Adds public sites' scopes to an *identified* caller's own scope.
+		# GregoryClient sends no Authorization header (client.py) -- this
+		# server is always an anonymous caller upstream, and an anonymous
+		# caller's scope already IS the union of every public site's scope.
+		# So the parameter is a provable no-op here; exposing it would put a
+		# knob on the tool that cannot change any result.
+		"include_public",
 		"site_id",  # see /articles/'s entry above — same transport-level injection
 		"source_id",
 		"subjects",
