@@ -11,12 +11,18 @@ Stripping here is what keeps the row's fields consistent with the rule that
 selected the row.
 
 Applied fields (when present on the serialised object):
-  - ``subjects``        → Subject entries outside ``request.visible_subject_ids``
-  - ``ml_predictions``  → MLPredictions entries whose subject is outside it
-  - ``team_categories`` → TeamCategory entries whose ``subjects`` M2M does not
-                           intersect it
-  - ``teams``           → Team entries that are neither ``api_listed`` nor
-                           owners of a subject in the caller's scope
+  - ``subjects``                  → Subject entries outside
+                                     ``request.visible_subject_ids``
+  - ``ml_predictions``            → MLPredictions entries whose subject is
+                                     outside it
+  - ``article_subject_relevances``→ ArticleSubjectRelevance entries whose
+                                     nested subject is outside it (same
+                                     shape/reasoning as ml_predictions)
+  - ``team_categories``           → TeamCategory entries whose ``subjects``
+                                     M2M does not intersect it
+  - ``teams``                     → Team entries that are neither
+                                     ``api_listed`` nor owners of a subject in
+                                     the caller's scope
 
 Teams are the odd one out, and deliberately so. A Team carries no subject of
 its own, so it is gated by exactly the rule ``/teams/`` applies: listed by the
@@ -231,6 +237,24 @@ class ScopedSerializerMixin:
 
 			ret["ml_predictions"] = [
 				p for p in ret["ml_predictions"] if _subject_id(p) in visible
+			]
+
+		# --- article_subject_relevances: same shape/reasoning as ml_predictions ---
+		# ArticleSubjectRelevanceSerializer nests a full subject (id, name, ...)
+		# plus is_relevant. An article tagged with one visible and one hidden
+		# subject would otherwise still disclose the hidden subject's identity
+		# and relevance verdict through this relation (PR #863 review finding 3).
+		if "article_subject_relevances" in ret:
+			def _relevance_subject_id(r):
+				s = r.get("subject")
+				if isinstance(s, dict):
+					return s.get("id")
+				return s if isinstance(s, int) else None
+
+			ret["article_subject_relevances"] = [
+				r
+				for r in ret["article_subject_relevances"]
+				if _relevance_subject_id(r) in visible
 			]
 
 		return ret

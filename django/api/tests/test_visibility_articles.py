@@ -156,6 +156,20 @@ class ArticleVisibilityBase(TestCase):
 			subjects=[self.my_subj, self.priv_subj],
 		)
 
+		# A second subject owned by pub_team but never curated onto ANY
+		# site's scope_subjects -- pub_team's ORGANISATION is reachable
+		# (pub_org is public), but this particular subject is not. Guards
+		# against ArticleSearchView validating team_id against
+		# visible_org_ids and then trusting subject_id unchecked (PR #863
+		# review finding 1).
+		self.pub_subj_unpublished = _make_subject(
+			self.pub_team, "Pub Unpublished Subject"
+		)
+		self.art_pub_unpublished_subj = _make_article(
+			"Public Team, Unpublished Subject", "https://ex.com/6",
+			teams=[self.pub_team], subjects=[self.pub_subj_unpublished],
+		)
+
 		self.client = APIClient()
 
 
@@ -256,6 +270,29 @@ class AnonymousArticleVisibilityTest(ArticleVisibilityBase):
 			},
 		)
 		self.assertEqual(resp.status_code, 200)
+
+	def test_search_with_reachable_team_but_unpublished_subject_returns_404(self):
+		"""PR #863 review finding 1: the team check alone is not enough.
+
+		pub_team's organisation is public (reachable), but
+		pub_subj_unpublished was never curated onto any site's
+		scope_subjects. Before the fix, ArticleSearchView validated only
+		team_id against visible_org_ids and then filtered
+		subjects__id=subject_id unconditionally, returning
+		art_pub_unpublished_subj in full.
+		"""
+		for method in ("get", "post"):
+			with self.subTest(method=method):
+				params = {
+					"team_id": self.pub_team.id,
+					"subject_id": self.pub_subj_unpublished.id,
+				}
+				resp = (
+					self.client.get("/articles/search/", params)
+					if method == "get"
+					else self.client.post("/articles/search/", params, format="json")
+				)
+				self.assertEqual(resp.status_code, 404)
 
 
 # ---------------------------------------------------------------------------

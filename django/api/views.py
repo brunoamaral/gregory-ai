@@ -414,6 +414,56 @@ class SubjectVisibilityMixin:
 		)
 
 
+def visible_trial_references_queryset(visible_subject_ids):
+	"""``ArticleTrialReference`` rows whose TRIAL carries a visible subject.
+
+	Used to prefetch ``Articles.trial_references`` so
+	``ArticleSerializer.get_clinical_trials()`` cannot disclose a hidden
+	trial's id/title/summary/link through an otherwise-visible article (PR
+	#863 review finding 2) -- the row selecting the article says nothing
+	about whether the article's cross-referenced trials are in scope too.
+
+	Filtered here, in the prefetch queryset, rather than in
+	``get_clinical_trials()`` itself: a per-row Python filter would need
+	``ref.trial.subjects.all()``, which is not covered by this prefetch's
+	``select_related("trial")`` and would reintroduce an N+1 (one query per
+	referenced trial per article) -- see the query-budget tests this would
+	trip. An Exists() subquery, not a join + distinct(): the through table
+	already has one row per (article, trial, identifier_type), and a plain
+	``trial__subjects__in=`` join would fan that out once per matching
+	subject.
+
+	``None`` means "no middleware / no scoping" -- same fallback contract as
+	``SubjectVisibilityMixin``.
+	"""
+	qs = ArticleTrialReference.objects.select_related("trial")
+	if visible_subject_ids is not None:
+		qs = qs.filter(
+			Exists(
+				Trials.objects.filter(
+					pk=OuterRef("trial_id"), subjects__id__in=visible_subject_ids
+				)
+			)
+		)
+	return qs
+
+
+def visible_article_references_queryset(visible_subject_ids):
+	"""The reverse of ``visible_trial_references_queryset``: prefetches
+	``Trials.article_references`` filtered to referenced ARTICLES that carry
+	a visible subject, for ``TrialSerializer.get_articles()``."""
+	qs = ArticleTrialReference.objects.select_related("article")
+	if visible_subject_ids is not None:
+		qs = qs.filter(
+			Exists(
+				Articles.objects.filter(
+					pk=OuterRef("article_id"), subjects__id__in=visible_subject_ids
+				)
+			)
+		)
+	return qs
+
+
 class CachedStatsActionMixin:
 	"""
 	Shared machinery for filter-scoped, cached ``GET /<resource>/stats/`` actions.
@@ -1574,10 +1624,11 @@ class ArticleViewSet(
 			"article_subject_relevances",
 			queryset=ArticleSubjectRelevance.objects.select_related("subject__team"),
 		),
-		Prefetch(
-			"trial_references",
-			queryset=ArticleTrialReference.objects.select_related("trial"),
-		),
+		# trial_references is NOT prefetched here — it has to be scoped to
+		# the caller's visible_subject_ids (see get_queryset below), and a
+		# Prefetch object for the same lookup path cannot be added twice
+		# with different querysets (Django raises ValueError: "lookup was
+		# already seen with a different queryset").
 	).order_by("-discovery_date")
 	serializer_class = ArticleSerializer
 	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -1604,6 +1655,18 @@ class ArticleViewSet(
 		fields without issuing one query per article.
 		"""
 		qs = super().get_queryset()
+		# Scoped here, not on the class-level `queryset` attribute, because it
+		# depends on the caller's visible_subject_ids -- see
+		# visible_trial_references_queryset's docstring (PR #863 review
+		# finding 2).
+		qs = qs.prefetch_related(
+			Prefetch(
+				"trial_references",
+				queryset=visible_trial_references_queryset(
+					getattr(self.request, "visible_subject_ids", None)
+				),
+			)
+		)
 		org = _resolve_per_org_fields_org(self.request)
 		if org is not None:
 			qs = qs.prefetch_related(
@@ -1703,7 +1766,35 @@ class ArticleViewSet(
 ###
 
 
-def _category_through_count_subquery(through_model):
+def _visible_or_subjectless_q(content_prefix, visible_subject_ids):
+	"""Q object: the content reached via *content_prefix* has no subject at
+	all, OR has at least one subject in ``visible_subject_ids``.
+
+	*content_prefix* is the ORM path to Articles/Trials -- ``""`` when the
+	queryset being filtered IS Articles/Trials, or e.g. ``"articles__"``
+	when filtering a related model that reaches them through that relation.
+
+	This is the category-aggregate counterpart of StatsView's default
+	content filter (PR #863 review findings 4 and 6): a category assignment
+	whose article/trial carries ONLY an out-of-scope subject must not
+	inflate a category's counts or disclose its authors, but content with no
+	subject at all is not newly excluded by subject-scoping -- see
+	api/tests/test_visibility_stats.py's null-subject-Source fixtures
+	(test_source_with_null_subject_dropped_when_filtering's "unfiltered"
+	case) for why that distinction is load-bearing rather than incidental.
+
+	Returns ``None`` when ``visible_subject_ids`` is ``None`` (no middleware
+	/ no scoping active), so callers can skip filtering entirely -- same
+	fallback contract as SubjectVisibilityMixin.
+	"""
+	if visible_subject_ids is None:
+		return None
+	return Q(**{f"{content_prefix}subjects__isnull": True}) | Q(
+		**{f"{content_prefix}subjects__id__in": visible_subject_ids}
+	)
+
+
+def _category_through_count_subquery(through_model, content_fk, visible_subject_ids=None):
 	"""Correlated scalar count of a category's rows in a single M2M through
 	table (article or trial category assignments).
 
@@ -1716,14 +1807,26 @@ def _category_through_count_subquery(through_model):
 	counts each through table independently (no cross join), and because
 	each through table already has a unique_together on
 	(article/trial, teamcategory), a plain COUNT(*) here already equals the
-	distinct count.
+	distinct count -- UNLESS visible_subject_ids narrows it (below), which
+	joins onward to the content's own subjects and can fan a single
+	through-row out into several, hence Count(content_fk, distinct=True)
+	rather than Count("*") whenever that join is added.
+
+	*content_fk* is the through model's FK field name to the content model
+	("articles" or "trials"), used both for that distinct-count target and
+	to build the subject-visibility predicate (PR #863 review finding 4: a
+	category shared by a visible and a hidden subject must not have its
+	counts inflated by rows the caller cannot otherwise see).
 	"""
+	qs = through_model.objects.filter(teamcategory=OuterRef("pk"))
+	visible_q = _visible_or_subjectless_q(f"{content_fk}__", visible_subject_ids)
+	if visible_q is not None:
+		qs = qs.filter(visible_q)
 	return Coalesce(
 		Subquery(
-			through_model.objects.filter(teamcategory=OuterRef("pk"))
-			.order_by()
+			qs.order_by()
 			.values("teamcategory")
-			.annotate(c=Count("*"))
+			.annotate(c=Count(content_fk, distinct=True))
 			.values("c"),
 			output_field=IntegerField(),
 		),
@@ -1731,7 +1834,7 @@ def _category_through_count_subquery(through_model):
 	)
 
 
-def _category_authors_count_subquery():
+def _category_authors_count_subquery(visible_subject_ids=None):
 	"""Correlated scalar count of the distinct authors behind a category's
 	articles.
 
@@ -1741,11 +1844,18 @@ def _category_authors_count_subquery():
 	of thousands of author rows). It is therefore NOT part of the default
 	/categories/ queryset — see CategoryViewSet.get_queryset, which adds it
 	only when the client explicitly sorts by it.
+
+	visible_subject_ids scopes which of the category's articles contribute
+	authors at all (PR #863 review finding 4) -- an author reachable only
+	through an article carrying solely a hidden subject must not be counted.
 	"""
+	qs = ArticleCategoryAssignment.objects.filter(teamcategory=OuterRef("pk"))
+	visible_q = _visible_or_subjectless_q("articles__", visible_subject_ids)
+	if visible_q is not None:
+		qs = qs.filter(visible_q)
 	return Coalesce(
 		Subquery(
-			ArticleCategoryAssignment.objects.filter(teamcategory=OuterRef("pk"))
-			.order_by()
+			qs.order_by()
 			.values("teamcategory")
 			.annotate(c=Count("articles__authors", distinct=True))
 			.values("c"),
@@ -2498,7 +2608,19 @@ class TrialViewSet(
 			.prefetch_related(
 				"sources",
 				"team_categories",
-				"article_references__article",
+				# Scoped to visible_subject_ids, not a plain
+				# "article_references__article" string lookup: an
+				# unfiltered prefetch would let TrialSerializer.get_articles()
+				# disclose a hidden article's id/title/summary/link through an
+				# otherwise-visible trial. See
+				# visible_article_references_queryset's docstring (PR #863
+				# review finding 2).
+				Prefetch(
+					"article_references",
+					queryset=visible_article_references_queryset(
+						getattr(self.request, "visible_subject_ids", None)
+					),
+				),
 				"trial_countries",
 				# TrialSerializer exposes nested subjects (added for site-scoped
 				# visibility, so a caller can check a trial's scope without a
@@ -3888,6 +4010,18 @@ class ArticleSearchView(
 			).exists():
 				raise Http404
 
+		# Visibility check: the requested subject_id must itself be in the
+		# caller's subject scope. The team check above only proves the team's
+		# ORGANISATION is reachable -- a reachable org can still own a subject
+		# outside the caller's site scope (Phase 4 site-scoped visibility), and
+		# without this check that subject's articles would be returned in
+		# full, unfiltered by ScopedSerializerMixin (which only strips a
+		# HIDDEN subject nested *inside* an otherwise-visible row, not a row
+		# selected entirely because of one).
+		if hasattr(self.request, "visible_subject_ids"):
+			if subject_id not in self.request.visible_subject_ids:
+				raise Http404
+
 		try:
 			# Filter via a correlated Exists() subquery instead of joining the
 			# teams/subjects M2M tables and calling .distinct() on the outer
@@ -3915,7 +4049,9 @@ class ArticleSearchView(
 				),
 				Prefetch(
 					"trial_references",
-					queryset=ArticleTrialReference.objects.select_related("trial"),
+					queryset=visible_trial_references_queryset(
+						getattr(self.request, "visible_subject_ids", None)
+					),
 				),
 			)
 
@@ -4133,6 +4269,14 @@ class TrialSearchView(
 			).exists():
 				raise Http404
 
+		# Visibility check: the requested subject_id must itself be in the
+		# caller's subject scope -- see the identical guard in
+		# ArticleSearchView.get_queryset for why the team check alone is not
+		# enough.
+		if hasattr(self.request, "visible_subject_ids"):
+			if subject_id not in self.request.visible_subject_ids:
+				raise Http404
+
 		try:
 			# Check if team and subject exist
 			team = Team.objects.get(id=team_id)
@@ -4151,7 +4295,17 @@ class TrialSearchView(
 		queryset = queryset.prefetch_related(
 			"sources",
 			"team_categories",
-			"article_references__article",
+			# Scoped to visible_subject_ids -- see
+			# visible_article_references_queryset's docstring (PR #863 review
+			# finding 2). subject_id itself is already validated against
+			# visible_subject_ids above, but a trial can carry OTHER,
+			# out-of-scope subjects too, and so can an article it references.
+			Prefetch(
+				"article_references",
+				queryset=visible_article_references_queryset(
+					getattr(self.request, "visible_subject_ids", None)
+				),
+			),
 			"trial_countries",
 			# Nested subjects on TrialSerializer. select_related("team") is
 			# required because SubjectsSerializer.team_id uses source="team.id"
@@ -4296,6 +4450,22 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 			).exists():
 				raise Http404
 
+	def _check_subject_visibility(self, subject_id):
+		"""Raise Http404 if subject_id is not in the caller's subject scope.
+
+		The team check above only proves the team's ORGANISATION is
+		reachable; a reachable org can still own a subject outside the
+		caller's site scope (Phase 4 site-scoped visibility). Without this,
+		get_queryset() would select author_ids from articles carrying this
+		subject before any scoping applied to the rows themselves -- only
+		the article_count/relevant_articles_count annotations were subject
+		-scoped, so a hidden-only author would still be returned, just with
+		a zero count (PR #863 review findings 1 and 5).
+		"""
+		if hasattr(self.request, "visible_subject_ids"):
+			if int(subject_id) not in self.request.visible_subject_ids:
+				raise Http404
+
 	def get_queryset(self):
 		params = (
 			self.request.query_params
@@ -4388,6 +4558,7 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 			)
 
 		self._check_team_visibility(team_id)
+		self._check_subject_visibility(subject_id)
 		return self.list(request, *args, **kwargs)
 
 	def get(self, request, *args, **kwargs):
@@ -4416,6 +4587,7 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 			)
 
 		self._check_team_visibility(team_id)
+		self._check_subject_visibility(subject_id)
 		# Delegate to the list method
 		return self.list(request, *args, **kwargs)
 

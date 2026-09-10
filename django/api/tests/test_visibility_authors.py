@@ -162,6 +162,23 @@ class AuthorVisibilityBase(TestCase):
 			authors=[self.author_cross],
 		)
 
+		# A second subject owned by pub_team but never curated onto ANY
+		# site's scope_subjects -- see test_visibility_articles.py's
+		# identical fixture for why (PR #863 review findings 1 and 5:
+		# AuthorSearchView selected author IDs from articles carrying the
+		# requested subject_id before checking that subject was visible).
+		self.pub_subj_unpublished = _make_subject(
+			self.pub_team, "Pub Unpublished Subject Auth"
+		)
+		self.author_pub_unpublished = _make_author("Erin", "Unpublished")
+		_make_article(
+			"Public Team, Unpublished Subject",
+			"https://ex.com/a6",
+			teams=[self.pub_team],
+			subjects=[self.pub_subj_unpublished],
+			authors=[self.author_pub_unpublished],
+		)
+
 		self.client = APIClient()
 
 
@@ -218,6 +235,27 @@ class AnonymousAuthorVisibilityTest(AuthorVisibilityBase):
 			},
 		)
 		self.assertEqual(resp.status_code, 200)
+
+	def test_author_search_reachable_team_but_unpublished_subject_returns_404(self):
+		"""PR #863 review findings 1 and 5 -- see the identical test in
+		test_visibility_articles.py for the full explanation. For
+		AuthorSearchView specifically, the pre-fix leak returned
+		author_pub_unpublished (with zero-count aggregates) rather than
+		404ing, since author IDs were selected from articles carrying the
+		requested subject_id before that subject's visibility was checked.
+		"""
+		for method in ("get", "post"):
+			with self.subTest(method=method):
+				params = {
+					"team_id": self.pub_team.id,
+					"subject_id": self.pub_subj_unpublished.id,
+				}
+				resp = (
+					self.client.get("/authors/search/", params)
+					if method == "get"
+					else self.client.post("/authors/search/", params, format="json")
+				)
+				self.assertEqual(resp.status_code, 404)
 
 
 # ---------------------------------------------------------------------------

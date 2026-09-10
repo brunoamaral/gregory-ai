@@ -122,6 +122,17 @@ class TrialVisibilityBase(TestCase):
 			subjects=[self.my_subj, self.priv_subj],
 		)
 
+		# A second subject owned by pub_team but never curated onto ANY
+		# site's scope_subjects -- see test_visibility_articles.py's
+		# identical fixture for why (PR #863 review finding 1).
+		self.pub_subj_unpublished = _make_subject(
+			self.pub_team, "Pub Unpublished Subject T"
+		)
+		self.trial_pub_unpublished_subj = _make_trial(
+			"Public Team, Unpublished Subject", "https://trial.com/6",
+			teams=[self.pub_team], subjects=[self.pub_subj_unpublished],
+		)
+
 		self.client = APIClient()
 
 
@@ -177,6 +188,22 @@ class AnonymousTrialVisibilityTest(TrialVisibilityBase):
 			},
 		)
 		self.assertEqual(resp.status_code, 200)
+
+	def test_search_with_reachable_team_but_unpublished_subject_returns_404(self):
+		"""PR #863 review finding 1 -- see the identical test in
+		test_visibility_articles.py for the full explanation."""
+		for method in ("get", "post"):
+			with self.subTest(method=method):
+				params = {
+					"team_id": self.pub_team.id,
+					"subject_id": self.pub_subj_unpublished.id,
+				}
+				resp = (
+					self.client.get("/trials/search/", params)
+					if method == "get"
+					else self.client.post("/trials/search/", params, format="json")
+				)
+				self.assertEqual(resp.status_code, 404)
 
 	def test_include_public_is_noop_for_anonymous(self):
 		"""include_public=true is a no-op for anonymous callers (already see public only)."""
