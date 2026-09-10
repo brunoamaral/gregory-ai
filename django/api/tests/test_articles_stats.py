@@ -35,6 +35,7 @@ from organizations.models import Organization
 from rest_framework.test import APIClient
 
 from api.models import APIAccessScheme
+from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import (
 	Articles,
 	ArticleSubjectRelevance,
@@ -44,14 +45,32 @@ from gregory.models import (
 	Team,
 )
 
+# Mirrors test_trials_stats.py: under subject-scoped visibility a row with no
+# subject is invisible to everyone, but nearly every `_make_article(...)`
+# call in this file was written against the old organisation rule and passes
+# no `subjects=`. Each team created via `_make_org_team` gets one default
+# subject, published (or kept private) to match that team's organisation,
+# and registered here so `_make_article` can fall back to it. `_ORG_SITES`
+# gives `_make_api_scheme` the matching site to bind a key to.
+_TEAM_DEFAULT_SUBJECTS = {}
+_ORG_SITES = {}
 
-def _make_org_team(name, slug, public=True):
+
+def _make_org_team(name, slug, public=True, subject_name=None, subject_slug=None):
 	org = Organization.objects.create(name=name, slug=slug)
 	OrganizationApiSettings.objects.filter(organization=org).update(
 		make_api_public=public
 	)
 	team = Team.objects.create(organization=org, name=name, slug=slug)
-	return org, team
+	subject = Subject.objects.create(
+		team=team,
+		subject_name=subject_name or f"{name} Subject",
+		subject_slug=subject_slug or f"{slug}-subject",
+	)
+	_TEAM_DEFAULT_SUBJECTS[team.pk] = subject
+	publisher = publish_subjects if public else private_site_publishing
+	_ORG_SITES[org.pk] = publisher(subject, organization=org)
+	return org, team, subject
 
 
 def _make_subject(team, name, slug):
@@ -79,16 +98,26 @@ def _make_article(
 	)
 	for team in teams:
 		article.teams.add(team)
-	for subject in subjects:
+	# Explicit subjects win; otherwise fall back to each team's default so
+	# the many pre-existing calls that never mention a subject stay visible.
+	tagged_subjects = list(subjects) or [
+		_TEAM_DEFAULT_SUBJECTS[team.pk]
+		for team in teams
+		if team.pk in _TEAM_DEFAULT_SUBJECTS
+	]
+	for subject in tagged_subjects:
 		article.subjects.add(subject)
 	return article
 
 
-def _make_api_scheme(org, name):
+def _make_api_scheme(org, name, site=None):
 	return APIAccessScheme.objects.create(
 		client_name=name,
 		client_contacts=f"{name}@example.com",
 		organization=org,
+		# A key without a site resolves to no subjects at all; fall back to
+		# the site _make_org_team already created for this org.
+		site=site or _ORG_SITES.get(org.pk),
 		ip_addresses="",
 		begin_date=now() - timedelta(days=1),
 		end_date=now() + timedelta(days=30),
@@ -109,11 +138,13 @@ class ArticleStatsBase(TestCase):
 		# cached stats from a previous test can't leak into this one.
 		cache.clear()
 
-		self.org, self.team = _make_org_team("A-Stats Org", "a-stats-org")
-		self.other_org, self.other_team = _make_org_team(
+		self.org, self.team, self.subject = _make_org_team(
+			"A-Stats Org", "a-stats-org",
+			subject_name="A-Stats Subject", subject_slug="a-stats-subject",
+		)
+		self.other_org, self.other_team, self.other_subject = _make_org_team(
 			"A-Other Stats Org", "a-other-stats-org"
 		)
-		self.subject = _make_subject(self.team, "A-Stats Subject", "a-stats-subject")
 
 		# a1: open access, relevant (manually reviewed for the subject), has
 		# DOI. The stats `relevant` count uses the live per-subject logic —
@@ -229,6 +260,11 @@ class ArticleStatsBySubjectTest(ArticleStatsBase):
 		other_subject = _make_subject(
 			self.other_team, "A-Other Subject", "a-other-subject"
 		)
+		# No organization= here: other_org already has a default site from
+		# _make_org_team, and OrganizationSite allows only one default per
+		# org. Anonymous visibility only needs an api_public site scoping
+		# the subject, so this stands alone.
+		publish_subjects(other_subject)
 		self.a3.subjects.add(self.subject)
 		self.a4.subjects.add(other_subject)
 
@@ -245,6 +281,7 @@ class ArticleStatsBySubjectTest(ArticleStatsBase):
 		other_subject = _make_subject(
 			self.other_team, "A-Other Subject", "a-other-subject"
 		)
+		publish_subjects(other_subject)
 		self.a4.subjects.add(other_subject)
 
 		resp = self.client.get("/articles/stats/", {"team_id": self.team.id})
@@ -257,7 +294,7 @@ class ArticleStatsBySubjectTest(ArticleStatsBase):
 		# A visible (public-org) article tagged with a subject belonging to
 		# a NON-visible org: the subject must not leak into by_subject, even
 		# though the article itself is counted.
-		hidden_org, hidden_team = _make_org_team(
+		hidden_org, hidden_team, _hidden_default_subject = _make_org_team(
 			"A-Hidden Org", "a-hidden-org", public=False
 		)
 		hidden_subject = _make_subject(
@@ -311,11 +348,11 @@ class ArticleStatsCachingTest(ArticleStatsBase):
 		# it, an API key bound to the org can. If the cache key ignored the
 		# caller's visible orgs, whichever request ran first would leak its
 		# stats to the other.
-		priv_org, priv_team = _make_org_team(
+		# Use the org's own default subject (returned by _make_org_team)
+		# rather than a fresh one: the API key below resolves through
+		# _ORG_SITES, which is keyed to that default subject's site.
+		priv_org, priv_team, priv_subject = _make_org_team(
 			"A-Private Stats Org", "a-private-stats-org", public=False
-		)
-		priv_subject = _make_subject(
-			priv_team, "A-Private Subject", "a-private-subject"
 		)
 		priv_article = _make_article(
 			"Private A",
@@ -363,11 +400,15 @@ class ArticleStatsSubjectScopedRelevantTest(TestCase):
 
 	def setUp(self):
 		cache.clear()
-		self.org, self.team = _make_org_team(
+		self.org, self.team, _default_subject = _make_org_team(
 			"A-Scoped Org", "a-scoped-stats-org"
 		)
 		self.subject_n = _make_subject(self.team, "Subject N", "a-scoped-subject-n")
 		self.subject_m = _make_subject(self.team, "Subject M", "a-scoped-subject-m")
+		# Anonymous only; the org already has a default site from
+		# _make_org_team, and a second organization= link would collide with
+		# OrganizationSite's one-default-per-org constraint.
+		publish_subjects(self.subject_n, self.subject_m)
 
 		# In both subjects, manually relevant ONLY for M.
 		self.article = _make_article(
