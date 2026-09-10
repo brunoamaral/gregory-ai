@@ -220,9 +220,9 @@ def _site_sitemaps(site_id):
 	"""Resolve the Site, its sitemap config, and sections — or 404.
 
 	404 (rather than an empty sitemap) when the site has no CustomSetting,
-	the switch is off, or no configured subject survives the public-org
-	check. Serving an empty sitemap for a misconfigured site would tell
-	Google "this site has no content".
+	the switch is off, or no configured subject survives the intersection
+	with the public subject scope. Serving an empty sitemap for a
+	misconfigured site would tell Google "this site has no content".
 	"""
 	site = get_object_or_404(Site, pk=site_id)
 	# CustomSetting.site is a plain FK (not unique) — order explicitly so

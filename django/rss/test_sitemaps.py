@@ -79,6 +79,17 @@ class SiteSitemapTests(TestCase):
 		cls.article_wrong_team.teams.add(cls.private_team)
 		cls.article_wrong_team.subjects.add(cls.subject_a)
 
+		# No teams M2M at all, tagged with a published subject. This is what
+		# every one of the 64 rows in the production delta looks like: the
+		# old ownership join dropped them for having nothing to match, not
+		# for being private. Pinned separately from article_wrong_team
+		# because a future join on teams would silently re-exclude them
+		# while the private-team case kept passing.
+		cls.article_teamless = Articles.objects.create(
+			title="teamless", link="https://example.org/teamless", kind="science paper"
+		)
+		cls.article_teamless.subjects.add(cls.subject_a)
+
 		def make_trial(title, *subjects, team=cls.team, **fields):
 			trial = Trials.objects.create(
 				title=title, link=f"https://registry.example.org/{title}", **fields
@@ -95,6 +106,12 @@ class SiteSitemapTests(TestCase):
 		cls.trial_wrong_team = make_trial(
 			"twrong", cls.subject_a, team=cls.private_team
 		)
+
+		# Trials' equivalent of article_teamless above.
+		cls.trial_teamless = Trials.objects.create(
+			title="tteamless", link="https://registry.example.org/tteamless"
+		)
+		cls.trial_teamless.subjects.add(cls.subject_a)
 
 		# recruitment_status_normalized is editable=False and recomputed
 		# from the raw status on every save(), so seed the raw value.
@@ -247,6 +264,15 @@ class SiteSitemapTests(TestCase):
 			body,
 		)
 
+	def test_article_with_no_team_at_all_is_listed(self):
+		# The production delta is entirely rows like this one, so it gets its
+		# own assertion rather than riding on the private-team case above.
+		body = self.client.get(self._section_url(self.site.pk)).content.decode()
+		self.assertIn(
+			f"https://frontend.example.com/articles/{self.article_teamless.pk}/",
+			body,
+		)
+
 	def test_curated_subject_outside_the_public_scope_is_dropped(self):
 		# The load-bearing guard now that ownership is gone: the site curates
 		# private_subject into sitemap_subjects, but no api_public site has it
@@ -325,11 +351,15 @@ class SiteSitemapTests(TestCase):
 
 	def _visible_trial_count(self):
 		"""Trials the site's trials section should list, counted independently
-		of the sitemap code under test."""
+		of the sitemap code under test.
+
+		Subject membership alone — the teams=self.team half this used to
+		carry was the old ownership rule, and it only kept agreeing because
+		no fixture was team-less. trial_teamless made the disagreement
+		visible.
+		"""
 		return (
-			Trials.objects.filter(
-				subjects__in=[self.subject_a], teams=self.team
-			)
+			Trials.objects.filter(subjects__in=[self.subject_a])
 			.distinct()
 			.count()
 		)
@@ -361,6 +391,17 @@ class SiteSitemapTests(TestCase):
 		).content.decode()
 		self.assertIn(
 			f"https://frontend.example.com/trials/{self.trial_wrong_team.pk}/", body
+		)
+
+	def test_trial_with_no_team_at_all_is_listed(self):
+		# See test_article_with_no_team_at_all_is_listed — all 64 trials in
+		# the measured production delta are team-less, not private.
+		self._enable_trials()
+		body = self.client.get(
+			self._section_url(self.site.pk, "trials")
+		).content.decode()
+		self.assertIn(
+			f"https://frontend.example.com/trials/{self.trial_teamless.pk}/", body
 		)
 
 	def test_trial_with_two_qualifying_subjects_listed_once(self):
@@ -398,12 +439,13 @@ class SiteSitemapTests(TestCase):
 		self.addCleanup(setattr, SiteTrialsSitemap, "limit", original_limit)
 		body = self.client.get(url).content.decode()
 		self.assertIn(self._section_url(self.site.pk, "trials"), body)
-		# 7 subject-A trials at 2 per page → 4 pages, + 1 articles page.
+		# 9 subject-A trials at 2 per page → 5 pages, + 1 articles page.
 		# Derived rather than hardcoded so adding a fixture doesn't turn
-		# into a puzzle about which number to bump.
+		# into a puzzle about which number to bump; the equality below is
+		# only there so a derivation that collapsed to zero would fail loudly.
 		trial_pages = -(-self._visible_trial_count() // 2)
 		self.assertEqual(body.count("<sitemap>"), 1 + trial_pages)
-		self.assertEqual(trial_pages, 4)
+		self.assertEqual(trial_pages, 5)
 
 	def test_no_status_selection_lists_every_status(self):
 		self._enable_trials()
