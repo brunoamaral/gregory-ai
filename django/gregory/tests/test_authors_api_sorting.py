@@ -7,6 +7,8 @@ from gregory.models import Authors, Articles, Team, Subject, OrganizationApiSett
 from organizations.models import Organization
 from django.db.models import Count, Q
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 class AuthorsAPISortingTestCase(TestCase):
 	"""
@@ -39,6 +41,7 @@ class AuthorsAPISortingTestCase(TestCase):
 			subject_slug="multiple-sclerosis",
 			team=self.team1,
 		)
+		publish_subjects(self.subject1, organization=self.organization)
 
 		# Create test authors with different article counts
 		self.author_high = Authors.objects.create(

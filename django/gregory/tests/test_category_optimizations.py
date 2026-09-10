@@ -20,6 +20,8 @@ from gregory.models import (
 from organizations.models import Organization
 import time
 
+from api.tests.visibility_helpers import publish_subjects
+
 
 class CategoryOptimizationTestCase(TestCase):
 	"""Test cases for the optimized category queries"""
@@ -44,6 +46,7 @@ class CategoryOptimizationTestCase(TestCase):
 
 		# Create test subject
 		self.subject = Subject.objects.create(subject_name="Test Subject")
+		publish_subjects(self.subject, organization=self.organization)
 
 		# Create test category
 		self.category = TeamCategory.objects.create(
