@@ -235,7 +235,7 @@ class UnpublishedContentFilter(admin.SimpleListFilter):
 	queue, for the same reason: their base queryset is everything.
 	"""
 
-	title = "site scope"
+	title = "curation queue"
 	parameter_name = "unpublished"
 
 	def lookups(self, request, model_admin):
