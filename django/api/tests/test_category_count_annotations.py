@@ -74,6 +74,7 @@ class CategoryCountAnnotationTests(TestCase):
 				published_date=timezone.now(),
 			)
 			article.team_categories.add(self.category)
+			article.subjects.add(self.subject)
 
 		for i in range(3):
 			trial = Trials.objects.create(
@@ -82,6 +83,7 @@ class CategoryCountAnnotationTests(TestCase):
 				published_date=timezone.now(),
 			)
 			trial.team_categories.add(self.category)
+			trial.subjects.add(self.subject)
 
 		self.client = APIClient()
 
@@ -108,10 +110,10 @@ class CategoryCountAnnotationTests(TestCase):
 		annotated_obj = (
 			TeamCategory.objects.annotate(
 				article_count_annotated=_category_through_count_subquery(
-					ArticleCategoryAssignment
+					ArticleCategoryAssignment, "articles"
 				),
 				trials_count_annotated=_category_through_count_subquery(
-					TrialCategoryAssignment
+					TrialCategoryAssignment, "trials"
 				),
 			)
 			.get(pk=self.category.pk)
@@ -147,6 +149,7 @@ class CategoryCountAnnotationTests(TestCase):
 				published_date=timezone.now(),
 			)
 			article.team_categories.add(self.category)
+			article.subjects.add(self.subject)
 		for i in range(12):
 			trial = Trials.objects.create(
 				title=f"Fanout Guard Trial {i}",
@@ -154,6 +157,7 @@ class CategoryCountAnnotationTests(TestCase):
 				published_date=timezone.now(),
 			)
 			trial.team_categories.add(self.category)
+			trial.subjects.add(self.subject)
 
 		url = reverse("categories-list")
 		with CaptureQueriesContext(connection) as ctx:
@@ -235,6 +239,7 @@ class CategoryAuthorsCountOrderingTests(TestCase):
 				published_date=timezone.now(),
 			)
 			article.team_categories.add(self.many_authors)
+			article.subjects.add(self.subject)
 			article.authors.add(shared, extra)
 
 		article = Articles.objects.create(
@@ -243,6 +248,7 @@ class CategoryAuthorsCountOrderingTests(TestCase):
 			published_date=timezone.now(),
 		)
 		article.team_categories.add(self.few_authors)
+		article.subjects.add(self.subject)
 		article.authors.add(authors[3])
 
 		self.client = APIClient()
@@ -338,11 +344,13 @@ class CategoryAuthorsCountOrderingTests(TestCase):
 	def test_ordering_by_trials_count_uses_the_free_annotation(self):
 		"""trials_count_annotated is always on the queryset, so sorting by it
 		must not add the expensive authors count."""
-		Trials.objects.create(
+		ordering_trial = Trials.objects.create(
 			title="Ordering Trial",
 			link="https://example.com/ordering-trial",
 			published_date=timezone.now(),
-		).team_categories.add(self.many_authors)
+		)
+		ordering_trial.team_categories.add(self.many_authors)
+		ordering_trial.subjects.add(self.subject)
 
 		url = reverse("categories-list")
 		with CaptureQueriesContext(connection) as ctx:

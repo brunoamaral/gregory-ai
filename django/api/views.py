@@ -1766,22 +1766,27 @@ class ArticleViewSet(
 ###
 
 
-def _visible_or_subjectless_q(content_prefix, visible_subject_ids):
-	"""Q object: the content reached via *content_prefix* has no subject at
-	all, OR has at least one subject in ``visible_subject_ids``.
+def _visible_content_q(content_prefix, visible_subject_ids):
+	"""Q object: the content reached via *content_prefix* carries at least
+	one subject in ``visible_subject_ids``.
 
 	*content_prefix* is the ORM path to Articles/Trials -- ``""`` when the
 	queryset being filtered IS Articles/Trials, or e.g. ``"articles__"``
 	when filtering a related model that reaches them through that relation.
 
-	This is the category-aggregate counterpart of StatsView's default
-	content filter (PR #863 review findings 4 and 6): a category assignment
-	whose article/trial carries ONLY an out-of-scope subject must not
-	inflate a category's counts or disclose its authors, but content with no
-	subject at all is not newly excluded by subject-scoping -- see
-	api/tests/test_visibility_stats.py's null-subject-Source fixtures
-	(test_source_with_null_subject_dropped_when_filtering's "unfiltered"
-	case) for why that distinction is load-bearing rather than incidental.
+	The category-aggregate counterpart of the list rule (PR #863 review
+	finding 4): a category shared between a visible and a hidden subject
+	must not have its counts inflated, or its authors disclosed, by rows the
+	caller cannot otherwise see.
+
+	Content with NO subject is excluded, exactly as
+	SubjectVisibilityMixin.get_queryset excludes it -- an Exists() over the
+	subjects through table fails for a row with no through rows, which
+	api/tests/test_visibility_org_filter_edge_cases.py pins as
+	test_subject_less_article_stays_invisible. Counting it here would make a
+	category report rows that its own list endpoint will not return, which
+	is a worse failure than under-counting: the numbers stop describing the
+	data the caller can actually reach.
 
 	Returns ``None`` when ``visible_subject_ids`` is ``None`` (no middleware
 	/ no scoping active), so callers can skip filtering entirely -- same
@@ -1789,9 +1794,7 @@ def _visible_or_subjectless_q(content_prefix, visible_subject_ids):
 	"""
 	if visible_subject_ids is None:
 		return None
-	return Q(**{f"{content_prefix}subjects__isnull": True}) | Q(
-		**{f"{content_prefix}subjects__id__in": visible_subject_ids}
-	)
+	return Q(**{f"{content_prefix}subjects__id__in": visible_subject_ids})
 
 
 def _category_through_count_subquery(through_model, content_fk, visible_subject_ids=None):
@@ -1819,7 +1822,7 @@ def _category_through_count_subquery(through_model, content_fk, visible_subject_
 	counts inflated by rows the caller cannot otherwise see).
 	"""
 	qs = through_model.objects.filter(teamcategory=OuterRef("pk"))
-	visible_q = _visible_or_subjectless_q(f"{content_fk}__", visible_subject_ids)
+	visible_q = _visible_content_q(f"{content_fk}__", visible_subject_ids)
 	if visible_q is not None:
 		qs = qs.filter(visible_q)
 	return Coalesce(
@@ -1850,7 +1853,7 @@ def _category_authors_count_subquery(visible_subject_ids=None):
 	through an article carrying solely a hidden subject must not be counted.
 	"""
 	qs = ArticleCategoryAssignment.objects.filter(teamcategory=OuterRef("pk"))
-	visible_q = _visible_or_subjectless_q("articles__", visible_subject_ids)
+	visible_q = _visible_content_q("articles__", visible_subject_ids)
 	if visible_q is not None:
 		qs = qs.filter(visible_q)
 	return Coalesce(
@@ -2066,9 +2069,15 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 		# intersects the caller's scope. Not the owning team's organisation:
 		# a category is a view onto subjects, so the subjects it names are
 		# what decides. distinct() because the M2M can match several times.
-		if hasattr(self.request, "visible_subject_ids"):
+		#
+		# The same set scopes the aggregates below. Filtering which category
+		# ROWS are visible without scoping their counts would leave a visible
+		# category reporting how much hidden content it holds (PR #863 review
+		# finding 4), including through ?ordering=-authors_count_annotated.
+		visible_subject_ids = getattr(self.request, "visible_subject_ids", None)
+		if visible_subject_ids is not None:
 			queryset = queryset.filter(
-				subjects__id__in=self.request.visible_subject_ids
+				subjects__id__in=visible_subject_ids
 			).distinct()
 
 		# Apply filters without expensive annotations
@@ -2108,8 +2117,12 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 		# per category, which spilled Postgres's hash aggregate to disk in
 		# production (see _category_through_count_subquery docstring).
 		queryset = queryset.select_related("team").prefetch_related("subjects").annotate(
-			article_count_annotated=_category_through_count_subquery(ArticleCategoryAssignment),
-			trials_count_annotated=_category_through_count_subquery(TrialCategoryAssignment),
+			article_count_annotated=_category_through_count_subquery(
+				ArticleCategoryAssignment, "articles", visible_subject_ids
+			),
+			trials_count_annotated=_category_through_count_subquery(
+				TrialCategoryAssignment, "trials", visible_subject_ids
+			),
 		)
 
 		# `authors_count_annotated` is an allowed ordering value but is NOT
@@ -2137,7 +2150,9 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 		# client happened to sort by it.
 		if self._orders_by_authors_count():
 			queryset = queryset.annotate(
-				authors_count_annotated=_category_authors_count_subquery()
+				authors_count_annotated=_category_authors_count_subquery(
+					visible_subject_ids
+				)
 			)
 
 		# No .distinct() needed: the count annotations are now correlated
@@ -3893,11 +3908,18 @@ class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 	def get_queryset(self):
 		team_id = self.kwargs.get("team_id")
 		subject_id = self.kwargs.get("subject_id")
+		visible_subject_ids = getattr(self.request, "visible_subject_ids", None)
 		if hasattr(self.request, "visible_org_ids"):
 			if not Team.objects.filter(
 				id=team_id, organization_id__in=self.request.visible_org_ids
 			).exists():
 				raise Http404
+		# The team_id check above is the org-keyed validation the spec keeps
+		# for team-addressed routes; it says nothing about the subject. Scope
+		# the requested subject too, or naming an out-of-scope subject_id
+		# returns that subject's categories and counts.
+		if visible_subject_ids is not None and int(subject_id) not in visible_subject_ids:
+			raise Http404
 		# See CategoryViewSet.get_queryset / _category_through_count_subquery:
 		# do NOT annotate both relations with Count(..., distinct=True) in
 		# one query — that fans out to an articles x trials cross product
@@ -3906,8 +3928,12 @@ class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 		return (
 			TeamCategory.objects.filter(team__id=team_id, subjects__id=subject_id)
 			.annotate(
-				article_count_annotated=_category_through_count_subquery(ArticleCategoryAssignment),
-				trials_count_annotated=_category_through_count_subquery(TrialCategoryAssignment),
+				article_count_annotated=_category_through_count_subquery(
+					ArticleCategoryAssignment, "articles", visible_subject_ids
+				),
+				trials_count_annotated=_category_through_count_subquery(
+					TrialCategoryAssignment, "trials", visible_subject_ids
+				),
 			)
 			.order_by("-id")
 		)
