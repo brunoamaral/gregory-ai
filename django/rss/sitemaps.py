@@ -21,14 +21,22 @@ statuses), sitemap_include_authors (whether this site publishes
 backed by one database expose non-competing content sets to Google.
 
 The authors section additionally applies its own fixed threshold
-(SiteAuthorsSitemap.MIN_ARTICLES) on top of subject/org membership, since
-an author with only one or two tracked papers is thin content regardless
-of which site is asking — see SiteAuthorsSitemap for the reasoning.
+(SiteAuthorsSitemap.MIN_ARTICLES) on top of subject membership, since an
+author with only one or two tracked papers is thin content regardless of
+which site is asking — see SiteAuthorsSitemap for the reasoning.
 
-Visibility is pinned to PUBLIC organisations regardless of caller
+Visibility is pinned to the PUBLIC SUBJECT scope regardless of caller
 identity: sitemaps exist for crawlers, and request-dependent visibility
 would let an authenticated caller warm the response cache with private
-article IDs.
+article IDs. That scope is the union of CustomSetting.scope_subjects over
+every site with api_public=True (gregory.visibility._public_subject_ids),
+and a site's sitemap_subjects are intersected with it before anything is
+queried — SEO curation can narrow what a site publishes, never widen it.
+
+Team ownership plays no part. Until Phase 4 of site-scoped API visibility
+these queries also required the row's own teams M2M to reach a public
+organisation; that check is gone, so a row tagged with a published subject
+is listed whatever team owns it, including a row with no team at all.
 """
 
 from django.contrib.sitemaps import Sitemap
@@ -42,7 +50,7 @@ from django.views.decorators.cache import cache_page
 
 from api.filters import ml_relevant_articles_q
 from gregory.models import Articles, Authors, Trials
-from gregory.visibility import _public_org_ids
+from gregory.visibility import _public_subject_ids
 from sitesettings.models import CustomSetting
 
 SITEMAP_CACHE_SECONDS = 3600
@@ -65,10 +73,9 @@ class _SiteContentSitemap(Sitemap):
 	pk_field = None
 	path_prefix = None
 
-	def __init__(self, site, subject_ids, public_org_ids):
+	def __init__(self, site, subject_ids):
 		self._site = site
 		self._subject_ids = subject_ids
-		self._public_org_ids = public_org_ids
 
 	def get_domain(self, site=None):
 		# The framework passes the *request's* Site (the API host).
@@ -76,21 +83,25 @@ class _SiteContentSitemap(Sitemap):
 		return self._site.domain
 
 	def get_queryset(self):
+		# Subject membership is the whole test. _site_sitemaps() has already
+		# intersected this site's sitemap_subjects with the public scope, so
+		# every id in self._subject_ids is publicly visible by construction —
+		# re-checking it here would be a second correlated subquery over the
+		# same rows for no added guarantee.
+		#
+		# Phase 4 of site-scoped API visibility dropped the
+		# teams__organization_id__in guard that used to sit alongside this
+		# one. Ownership no longer decides visibility; subject curation does
+		# (spec: the OWNERSHIP path is legacy and removed). One consequence
+		# worth knowing: a row carrying a qualifying subject but no team at
+		# all is now listed, where the old guard silently dropped it.
+		#
 		# Exists() so a row tagged with several qualifying subjects appears
 		# once without DISTINCT-ing the outer query.
 		tagged = self.model.objects.filter(
 			pk=OuterRef("pk"), subjects__in=self._subject_ids
 		)
-		# subject_ids are already restricted to public-org subjects, but a
-		# row can be tagged with a subject from one team while its own
-		# teams M2M points elsewhere — re-check the row's own team
-		# ownership too, matching the visibility pattern RSS feeds use
-		# (teams__organization_id__in), so private-org content can never
-		# surface just because it shares a subject tag with a public one.
-		publicly_owned = self.model.objects.filter(
-			pk=OuterRef("pk"), teams__organization_id__in=self._public_org_ids
-		)
-		return self.model.objects.filter(Exists(tagged), Exists(publicly_owned))
+		return self.model.objects.filter(Exists(tagged))
 
 	def items(self):
 		# Primary-key ordering keeps pagination stable between crawls:
@@ -115,8 +126,8 @@ class SiteArticlesSitemap(_SiteContentSitemap):
 	pk_field = "article_id"
 	path_prefix = "articles"
 
-	def __init__(self, site, subject_ids, relevant_only, public_org_ids):
-		super().__init__(site, subject_ids, public_org_ids)
+	def __init__(self, site, subject_ids, relevant_only):
+		super().__init__(site, subject_ids)
 		self._relevant_only = relevant_only
 
 	def get_queryset(self):
@@ -144,8 +155,8 @@ class SiteTrialsSitemap(_SiteContentSitemap):
 	pk_field = "trial_id"
 	path_prefix = "trials"
 
-	def __init__(self, site, subject_ids, public_org_ids, statuses=()):
-		super().__init__(site, subject_ids, public_org_ids)
+	def __init__(self, site, subject_ids, statuses=()):
+		super().__init__(site, subject_ids)
 		self._statuses = list(statuses)
 
 	def get_queryset(self):
@@ -160,9 +171,9 @@ class SiteTrialsSitemap(_SiteContentSitemap):
 
 
 class SiteAuthorsSitemap(_SiteContentSitemap):
-	# Authors carry no subjects/teams M2M of their own — unlike Articles and
-	# Trials, they only reach a site's subjects/public orgs by traversing
-	# their tracked articles. That means the base class's get_queryset(),
+	# Authors carry no subjects M2M of their own — unlike Articles and
+	# Trials, they only reach a site's subjects by traversing their tracked
+	# articles. That means the base class's get_queryset(),
 	# items() and location() (built around a model that carries those M2Ms
 	# and a pk-keyed URL) don't apply here and are overridden below; only
 	# __init__, protocol and get_domain are inherited as-is.
@@ -176,18 +187,14 @@ class SiteAuthorsSitemap(_SiteContentSitemap):
 	MIN_ARTICLES = 10
 
 	def get_queryset(self):
-		# Authors carry no subjects/teams of their own — traverse articles.
-		# Both conditions are given in a single filter() call so they bind
-		# to the same joined article row (an article tagged with a
-		# qualifying subject that is *also* owned by a public org), the
-		# same defense-in-depth the base class's docstring describes for
-		# Articles/Trials: a shared subject tag must never surface a
-		# private-organisation author.
+		# Authors carry no subjects of their own — traverse articles. The
+		# author qualifies when at least one of their articles is tagged
+		# with a subject this site publishes; those ids are already narrowed
+		# to the public scope by _site_sitemaps(), so this is the same single
+		# test the base class applies (Phase 4 of site-scoped API visibility
+		# dropped the accompanying public-org check here too).
 		return (
-			Authors.objects.filter(
-				articles__subjects__in=self._subject_ids,
-				articles__teams__organization_id__in=self._public_org_ids,
-			)
+			Authors.objects.filter(articles__subjects__in=self._subject_ids)
 			.exclude(ORCID__isnull=True)
 			.exclude(ORCID="")
 			.annotate(n=Count("articles", distinct=True), lastmod=Max("articles__last_updated"))
@@ -223,17 +230,22 @@ def _site_sitemaps(site_id):
 	settings_row = CustomSetting.objects.filter(site=site).order_by("setting_id").first()
 	if settings_row is None or not settings_row.generate_sitemap:
 		raise Http404("Sitemap not enabled for this site.")
-	public_org_ids = _public_org_ids()
+	# sitemap_subjects is SEO curation; a site may list a subject that is not
+	# publicly visible. Narrow to the public set so a sitemap can never
+	# publish something the API keeps private -- the property the old
+	# team__organization_id__in filter provided, restated in subject terms
+	# (Phase 4 of site-scoped API visibility).
+	public_subject_ids = _public_subject_ids()
 	subject_ids = list(
 		settings_row.sitemap_subjects.filter(
-			team__organization_id__in=public_org_ids
+			id__in=public_subject_ids
 		).values_list("id", flat=True)
 	)
 	if not subject_ids:
 		raise Http404("No publicly visible sitemap subjects configured.")
 	sitemaps = {
 		"articles": SiteArticlesSitemap(
-			site, subject_ids, settings_row.sitemap_relevant_only, public_org_ids
+			site, subject_ids, settings_row.sitemap_relevant_only
 		)
 	}
 	# Opt-in: a frontend that has no /trials/<id>/ pages (gregory-ms.com
@@ -243,13 +255,12 @@ def _site_sitemaps(site_id):
 		sitemaps["trials"] = SiteTrialsSitemap(
 			site,
 			subject_ids,
-			public_org_ids,
 			statuses=settings_row.sitemap_trial_statuses or (),
 		)
 	# Opt-in for the same reason as trials: a frontend without /authors/<orcid>/
 	# pages must not be handed author URLs that would 404.
 	if settings_row.sitemap_include_authors:
-		sitemaps["authors"] = SiteAuthorsSitemap(site, subject_ids, public_org_ids)
+		sitemaps["authors"] = SiteAuthorsSitemap(site, subject_ids)
 	return site, sitemaps
 
 
