@@ -553,6 +553,7 @@ class SponsorSerializer(serializers.ModelSerializer):
 
 
 class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
+	subjects = SubjectsSerializer(many=True, read_only=True)
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 	articles = serializers.SerializerMethodField()
@@ -649,6 +650,7 @@ class TrialSerializer(OrgScopedSerializerMixin, serializers.HyperlinkedModelSeri
 			"countries_decision_date",
 			"takeaways",
 			"articles",
+			"subjects",
 		]
 		read_only_fields = ("discovery_date", "articles")
 
@@ -912,3 +914,20 @@ class OrganizationSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = Organization
 		fields = ["id", "name", "slug", "is_active"]
+
+
+class PublicSiteSerializer(serializers.Serializer):
+	"""A publicly readable site, for the GET /sites/ discovery endpoint.
+
+	Deliberately minimal: just enough for a caller to learn which site IDs
+	exist so it can pass ?site_id=. Everything here is already public.
+
+	The MCP multi-tenancy spec proposes a richer per-site config endpoint
+	carrying subjects, prompts and documents. That project is unstarted; when
+	it lands, the two should converge on one endpoint rather than duplicate --
+	this payload is a strict subset of that one.
+	"""
+
+	site_id = serializers.IntegerField(source="site.id", read_only=True)
+	domain = serializers.CharField(source="site.domain", read_only=True)
+	name = serializers.CharField(source="site.name", read_only=True)

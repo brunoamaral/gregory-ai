@@ -44,6 +44,7 @@ from api.views import (
 	AuthorSearchView,
 	CategoriesByTeamAndSubject,
 	StatsView,
+	PublicSitesView,
 )
 from rss.views import ArticlesByAuthorFeed, TrialsBySubjectFeed
 from rss.sitemaps import sitemap_index, sitemap_section
@@ -199,6 +200,10 @@ urlpatterns = (
 		path("authors/search/", AuthorSearchView.as_view(), name="author-search"),
 		# Stats endpoint
 		path("stats/", StatsView.as_view(), name="stats"),
+		# Discovery entry point for site-scoped visibility: unscoped by design,
+		# because a caller needs a site_id and nothing else would tell it which
+		# exist. See SITE-API-VISIBILITY-SPEC.md (local planning doc).
+		path("sites/", PublicSitesView.as_view(), name="public_sites"),
 		# Gregory app routes
 		path("", include("gregory.urls")),
 		# Include router routes

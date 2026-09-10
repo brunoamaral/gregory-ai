@@ -274,10 +274,13 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		label="Relevant",
 		help_text=(
 			"Filter for relevant articles (true/false). When combined with "
-			"subject_id, relevance is scoped to that specific subject — only "
-			"articles relevant *for that subject* (via ML predictions or manual "
-			"marking) are returned. Without subject_id, relevance is checked "
-			"across all subjects."
+			"subject_id, subjects, and/or subjects_any, relevance is scoped to "
+			"that subject or subjects — only articles relevant *for one of "
+			"those subjects* (via ML predictions or manual marking) are "
+			"returned. Without any of those, relevance is checked across every "
+			"subject in the database, so a caller that also scopes the query by "
+			"subject should always pass the same subject(s) here to avoid "
+			"picking up relevance decided by an unrelated subject."
 		),
 	)
 	ml_threshold = filters.NumberFilter(
@@ -285,8 +288,8 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		label="ML Threshold (0.0-1.0)",
 		help_text=(
 			"Minimum ML prediction confidence (0.0-1.0, e.g. 0.75). Also scoped "
-			"to subject_id when provided. Defaults to 0.8 when relevant=true and "
-			"this is omitted."
+			"to subject_id/subjects/subjects_any when provided. Defaults to 0.8 "
+			"when relevant=true and this is omitted."
 		),
 		widget=forms.NumberInput(attrs={"step": "0.01", "min": "0.0", "max": "1.0"}),
 	)
@@ -439,12 +442,51 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		except (ValueError, TypeError):
 			return default  # Use default if conversion fails
 
-	def _get_ml_relevant_articles_query(self, threshold=0.8, filtered_subject_id=None):
+	def _request_subject_ids(self):
+		"""
+		Collect the subject IDs the current request already scopes the query
+		to, from ``subject_id`` (singular), ``subjects`` (AND list) and
+		``subjects_any`` (OR list) -- whichever of the three the caller used.
+
+		``filter_relevant``/``filter_ml_threshold`` need this because
+		``ml_relevant_articles_q`` defaults to checking consensus across
+		*every* auto_predict subject in the database when given no subject
+		list. Previously these two filters only ever read ``subject_id``
+		singular, so a request combining ``relevant=true`` with
+		``subjects``/``subjects_any`` (or, under site-scoped visibility, any
+		future subject-list scoping) had its relevance check silently widen
+		back to the whole database -- an article could be returned as
+		"relevant" on the strength of ML consensus reached for a completely
+		different, unrelated subject. Returns ``None`` when the request names
+		no subject at all, which preserves the original "check every
+		auto_predict subject" behaviour for an unscoped request.
+		"""
+		ids = set()
+		subject_id = self.request.GET.get("subject_id")
+		if subject_id:
+			try:
+				ids.add(int(subject_id))
+			except (TypeError, ValueError):
+				pass
+		for param in ("subjects", "subjects_any"):
+			raw = self.request.GET.get(param)
+			if not raw:
+				continue
+			for piece in raw.split(","):
+				piece = piece.strip()
+				if not piece:
+					continue
+				try:
+					ids.add(int(piece))
+				except (TypeError, ValueError):
+					continue
+		return sorted(ids) if ids else None
+
+	def _get_ml_relevant_articles_query(self, threshold=0.8, subject_ids=None):
 		"""Build a database-level query to find ML-relevant articles based on consensus logic.
 
-		If filtered_subject_id is provided, only check relevance for that specific subject.
+		If subject_ids is provided, only check relevance for those subjects.
 		"""
-		subject_ids = None if filtered_subject_id is None else [filtered_subject_id]
 		return ml_relevant_articles_q(threshold, subject_ids)
 
 	def filter_relevant(self, queryset, name, value):
@@ -452,26 +494,21 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		Filter for relevant articles (ML predictions with consensus or manual selection)
 		Uses ml_threshold parameter if provided, otherwise defaults to 0.8
 
-		When subject_id is provided, only checks relevance for that specific subject.
+		When subject_id, subjects, and/or subjects_any is provided, only checks
+		relevance for those specific subjects (see _request_subject_ids).
 		"""
-		# Get subject_id from request to scope relevance checks
-		filtered_subject_id = self.request.GET.get("subject_id")
-		if filtered_subject_id:
-			try:
-				filtered_subject_id = int(filtered_subject_id)
-			except (ValueError, TypeError):
-				filtered_subject_id = None
+		subject_ids = self._request_subject_ids()
 
 		if value:
 			# Get ML threshold from request parameters, default to 0.8
 			threshold = self._parse_ml_threshold(0.8)
 
 			# Get articles that are either:
-			# 1. Manually marked as relevant (scoped to subject if provided)
-			if filtered_subject_id:
+			# 1. Manually marked as relevant (scoped to subject(s) if provided)
+			if subject_ids:
 				manually_relevant = models.Q(
 					article_subject_relevances__is_relevant=True,
-					article_subject_relevances__subject_id=filtered_subject_id,
+					article_subject_relevances__subject_id__in=subject_ids,
 				)
 			else:
 				manually_relevant = models.Q(
@@ -480,24 +517,24 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 
 			# 2. ML-relevant based on subject-specific consensus settings and threshold
 			ml_relevant_q = self._get_ml_relevant_articles_query(
-				threshold, filtered_subject_id
+				threshold, subject_ids
 			)
 
 			return queryset.filter(manually_relevant | ml_relevant_q).distinct()
 		else:
 			# Exclude articles that are either manually relevant or ML-relevant
 			threshold = self._parse_ml_threshold(0.8)
-			if filtered_subject_id:
+			if subject_ids:
 				manually_relevant = models.Q(
 					article_subject_relevances__is_relevant=True,
-					article_subject_relevances__subject_id=filtered_subject_id,
+					article_subject_relevances__subject_id__in=subject_ids,
 				)
 			else:
 				manually_relevant = models.Q(
 					article_subject_relevances__is_relevant=True
 				)
 			ml_relevant_q = self._get_ml_relevant_articles_query(
-				threshold, filtered_subject_id
+				threshold, subject_ids
 			)
 
 			return queryset.exclude(manually_relevant | ml_relevant_q).distinct()
@@ -513,17 +550,12 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 				# Invalid threshold, return empty queryset
 				return queryset.none()
 
-			# Scope to subject_id if provided
-			filtered_subject_id = self.request.GET.get("subject_id")
-			if filtered_subject_id:
-				try:
-					filtered_subject_id = int(filtered_subject_id)
-				except (ValueError, TypeError):
-					filtered_subject_id = None
+			# Scope to subject_id/subjects/subjects_any if provided
+			subject_ids = self._request_subject_ids()
 
 			# Use efficient database-level query instead of Python loop
 			ml_relevant_q = self._get_ml_relevant_articles_query(
-				threshold, filtered_subject_id
+				threshold, subject_ids
 			)
 			return queryset.filter(ml_relevant_q)
 
@@ -1264,6 +1296,16 @@ class AuthorFilter(filters.FilterSet):
 		help_text="Exact match against the author's country code.",
 	)
 
+	subjects_any = filters.BaseInFilter(
+		method="filter_subjects_any",
+		label="Subjects (any)",
+		help_text=(
+			"Comma-separated subject IDs, OR semantics: authors with at least "
+			"one article in ANY of the listed subjects, e.g. ?subjects_any=1,10. "
+			"An author is reached only through their articles, so this is an "
+			"Exists() over articles rather than a direct field."
+		),
+	)
 	class Meta:
 		model = Authors
 		fields = [
@@ -1273,6 +1315,7 @@ class AuthorFilter(filters.FilterSet):
 			"author_id",
 			"orcid",
 			"country",
+			"subjects_any",
 		]
 
 	def filter_full_name(self, queryset, name, value):
@@ -1281,6 +1324,28 @@ class AuthorFilter(filters.FilterSet):
 		upper_value = value.upper()
 		return queryset.filter(ufull_name__contains=upper_value)
 
+	def filter_subjects_any(self, queryset, name, value: list[str]):
+		"""Authors with at least one article in ANY of the given subjects.
+
+		Exists() over Articles rather than a join on articles__subjects:
+		an author with several qualifying articles would otherwise be
+		returned once per article. Same reasoning as the other
+		subjects_any filters.
+		"""
+		if not value:
+			return queryset
+		ids = set()
+		for raw in value:
+			try:
+				ids.add(int(raw))
+			except (TypeError, ValueError):
+				continue
+		if not ids:
+			return queryset.none()
+		subquery = Articles.objects.filter(
+			authors=models.OuterRef("pk"), subjects__id__in=ids
+		)
+		return queryset.filter(models.Exists(subquery))
 
 class SourceFilter(filters.FilterSet):
 	"""
@@ -1338,10 +1403,62 @@ class SponsorFilter(filters.FilterSet):
 		label="Sponsor type",
 		help_text="Exact match against the canonical sponsor type (see SponsorType values).",
 	)
+	subject_id = filters.NumberFilter(
+		method="filter_subject_id",
+		label="Subject ID",
+		help_text=(
+			"Restrict to sponsors with at least one trial in this subject "
+			"(see /subjects/). A Sponsor carries no subject of its own — it "
+			"is reached only through its trials, via Exists() on "
+			"Trials.primary_sponsor_normalized (see SITE-API-VISIBILITY "
+			"project, site-scoped API visibility)."
+		),
+	)
+	subjects_any = filters.BaseInFilter(
+		method="filter_subjects_any",
+		label="Any subject IDs (comma-separated, OR match)",
+		help_text=(
+			"Comma-separated list of subject IDs, OR semantics — restrict to "
+			"sponsors with at least one trial in any of the listed subjects, "
+			"e.g. ?subjects_any=1,2. Same Exists()-on-trials approach as "
+			"subject_id."
+		),
+	)
 
 	class Meta:
 		model = Sponsor
 		fields = ["sponsor_type"]
+
+	def filter_subject_id(self, queryset, name, value):
+		"""
+		Sponsors with >=1 trial tagged with this subject.
+
+		Uses Exists() rather than a plain `trials__subjects__id` join filter:
+		a sponsor with several qualifying trials would otherwise be
+		duplicated by the join (same reasoning as ArticleFilter.filter_site /
+		OrgVisibilityMixin elsewhere in this API).
+		"""
+		subquery = Trials.objects.filter(
+			primary_sponsor_normalized=OuterRef("pk"), subjects__id=value
+		)
+		return queryset.filter(Exists(subquery))
+
+	def filter_subjects_any(self, queryset, name, value: list[str]):
+		"""OR-semantics equivalent of filter_subject_id for multiple subjects."""
+		if not value:
+			return queryset
+		ids = set()
+		for raw in value:
+			try:
+				ids.add(int(raw))
+			except (TypeError, ValueError):
+				continue
+		if not ids:
+			return queryset.none()
+		subquery = Trials.objects.filter(
+			primary_sponsor_normalized=OuterRef("pk"), subjects__id__in=ids
+		)
+		return queryset.filter(Exists(subquery))
 
 
 class SubjectFilter(filters.FilterSet):
@@ -1384,6 +1501,16 @@ class CategoryFilter(filters.FilterSet):
 		label="Subject ID",
 		help_text="Filter by subject ID (see /subjects/).",
 	)
+	subjects_any = filters.BaseInFilter(
+		method="filter_subjects_any",
+		label="Subjects (any)",
+		help_text=(
+			"Comma-separated subject IDs, OR semantics: categories used within "
+			"ANY of the listed subjects, e.g. ?subjects_any=1,10. Uses Exists() "
+			"rather than a join so a category tagged with several of the listed "
+			"subjects appears once without DISTINCT-ing the outer query."
+		),
+	)
 	category_terms = filters.CharFilter(
 		method="filter_category_terms",
 		label="Category Terms",
@@ -1392,7 +1519,36 @@ class CategoryFilter(filters.FilterSet):
 
 	class Meta:
 		model = TeamCategory
-		fields = ["category_id", "team_id", "subject_id", "category_terms"]
+		fields = [
+			"category_id",
+			"team_id",
+			"subject_id",
+			"subjects_any",
+			"category_terms",
+		]
+
+	def filter_subjects_any(self, queryset, name, value: list[str]):
+		"""Categories used within ANY of the given subjects.
+
+		Exists() rather than a join filter: TeamCategory.subjects is an
+		M2M, so a category tagged with two of the listed subjects would
+		otherwise be returned twice. Same reasoning as ArticleFilter and
+		OrgVisibilityMixin.
+		"""
+		if not value:
+			return queryset
+		ids = set()
+		for raw in value:
+			try:
+				ids.add(int(raw))
+			except (TypeError, ValueError):
+				continue
+		if not ids:
+			return queryset.none()
+		subquery = TeamCategory.objects.filter(
+			pk=models.OuterRef("pk"), subjects__id__in=ids
+		)
+		return queryset.filter(models.Exists(subquery))
 
 	def filter_category_terms(self, queryset, name, value):
 		"""Filter by category terms using array overlap"""
