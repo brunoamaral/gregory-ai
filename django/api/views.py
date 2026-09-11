@@ -1535,7 +1535,7 @@ class ArticleViewSet(
 
 	# Query Parameters:
 	- **team_id** - filter by team ID
-	- **site_id** - filter by Django Site ID; returns articles belonging to any team attached to that site (see Team.site)
+	- **site_id** - filter by Django Site ID; returns articles carrying a subject in that site's scope (see CustomSetting.scope_subjects)
 	- **doi** - filter by DOI, case-insensitive; accepts a single value or a comma-separated list (e.g. `?doi=10.1/a,10.2/b`)
 	- **subject_id** - filter by subject ID (used with team_id)
 	- **subjects** - comma-separated list of subject IDs with AND semantics — returns only articles tagged with *all* listed subjects (e.g., `?subjects=1,2`)
@@ -2409,7 +2409,7 @@ class TrialViewSet(
 	# Core Query Parameters:
 	- **trial_id** - filter by specific trial ID
 	- **team_id** - filter by team ID
-	- **site_id** - filter by Django Site ID; returns trials belonging to any team attached to that site (see Team.site)
+	- **site_id** - filter by Django Site ID; returns trials carrying a subject in that site's scope (see CustomSetting.scope_subjects)
 	- **subject_id** - filter by subject ID
 	- **subjects** - comma-separated list of subject IDs with AND semantics — returns only trials tagged with *all* listed subjects (e.g., `?subjects=1,2`)
 	- **subjects_any** - comma-separated list of subject IDs with OR semantics — returns trials tagged with *any* of the listed subjects (e.g., `?subjects_any=1,2`)

@@ -27,6 +27,19 @@ from gregory.utils.trial_field_normalizers import (
 )
 
 
+def _site_scope_subject_ids(site_id):
+	"""
+	Subject ids in the given Django Site's scope (CustomSetting.scope_subjects),
+	across every CustomSetting row for that site. Shared by ArticleFilter and
+	TrialFilter's filter_site so the two cannot drift apart.
+	"""
+	from sitesettings.models import CustomSetting
+
+	return CustomSetting.objects.filter(site_id=site_id).values_list(
+		"scope_subjects__id", flat=True
+	)
+
+
 class ChoiceInFilter(filters.BaseInFilter, filters.ChoiceFilter):
 	"""Comma-separated OR filter with per-value choice validation.
 
@@ -234,8 +247,8 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		method="filter_site",
 		label="Site ID",
 		help_text=(
-			"Filter by Django Site ID; returns articles belonging to any team "
-			"attached to that site (see Team.site)."
+			"Filter by Django Site ID; returns articles carrying a subject in "
+			"that site's scope (see CustomSetting.scope_subjects)."
 		),
 	)
 	subject_id = filters.NumberFilter(
@@ -404,14 +417,15 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 
 	def filter_site(self, queryset, name, value):
 		"""
-		Articles belonging to any team of the given Django Site.
+		Articles carrying a subject in the given Django Site's scope
+		(CustomSetting.scope_subjects).
 
-		Uses Exists() rather than a join filter: multiple teams can share a
-		site, and a plain teams__site_id filter would duplicate every article
-		that belongs to two such teams (same reasoning as OrgVisibilityMixin).
+		Uses Exists() rather than a join filter: an article with two subjects
+		in the site's scope would otherwise be duplicated by the join (same
+		reasoning as OrgVisibilityMixin).
 		"""
 		subquery = queryset.model.objects.filter(
-			pk=models.OuterRef("pk"), teams__site_id=value
+			pk=models.OuterRef("pk"), subjects__id__in=_site_scope_subject_ids(value)
 		)
 		return queryset.filter(models.Exists(subquery))
 
@@ -694,8 +708,8 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		method="filter_site",
 		label="Site ID",
 		help_text=(
-			"Filter by Django Site ID; returns trials belonging to any team "
-			"attached to that site (see Team.site)."
+			"Filter by Django Site ID; returns trials carrying a subject in "
+			"that site's scope (see CustomSetting.scope_subjects)."
 		),
 	)
 	subject_id = filters.NumberFilter(
@@ -1121,14 +1135,15 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 
 	def filter_site(self, queryset, name, value):
 		"""
-		Trials belonging to any team of the given Django Site.
+		Trials carrying a subject in the given Django Site's scope
+		(CustomSetting.scope_subjects).
 
-		Uses Exists() rather than a join filter: multiple teams can share a
-		site, and a plain teams__site_id filter would duplicate every trial
-		that belongs to two such teams (same reasoning as OrgVisibilityMixin).
+		Uses Exists() rather than a join filter: a trial with two subjects in
+		the site's scope would otherwise be duplicated by the join (same
+		reasoning as OrgVisibilityMixin).
 		"""
 		subquery = queryset.model.objects.filter(
-			pk=models.OuterRef("pk"), teams__site_id=value
+			pk=models.OuterRef("pk"), subjects__id__in=_site_scope_subject_ids(value)
 		)
 		return queryset.filter(models.Exists(subquery))
 
