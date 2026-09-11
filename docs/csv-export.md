@@ -10,7 +10,7 @@ All list endpoints that accept `format=csv` stream their results as a CSV file. 
 |:----------|:------------|
 | `format=csv` | Return CSV instead of JSON |
 | `all_results=true` | Bypass pagination and return all matching rows (recommended for exports) |
-| `site_id` | Filter to items belonging to any team attached to the given Django Site ID (see `Team.site`); useful for a multi-team install exporting a single frontend's scope without listing every team_id |
+| `site_id` | Filter to items carrying a subject in the given Django Site's scope (`CustomSetting.scope_subjects`); useful for exporting a single frontend's scope without listing every subject_id |
 
 ## What the export does
 
@@ -37,7 +37,7 @@ curl -X POST \
 # Export trial search results (GET)
 curl "https://api.example.com/api/trials/search/?team_id=1&subject_id=2&status=Recruiting&format=csv&all_results=true"
 
-# Export all articles for a site, across every team attached to it
+# Export all articles for a site, across every subject in its scope
 curl "https://api.example.com/articles/?site_id=1&format=csv&all_results=true"
 ```
 

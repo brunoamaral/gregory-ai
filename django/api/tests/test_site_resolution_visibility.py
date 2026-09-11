@@ -69,18 +69,6 @@ class TwoPublicSitesAmbiguityTest(TestCase):
 		self.site_b = publish_subjects(
 			self.subject_b, organization=self.org_b, name="Amb Site B"
 		)
-		# ArticleFilter's OWN, unrelated ?site_id= filter (Team.site, still
-		# using the pre-Phase-6 team->site edge -- see
-		# SITE-API-VISIBILITY-SPEC.md's "site_id is broken today") reads the
-		# exact same query parameter this test uses for VISIBILITY
-		# resolution. Set Team.site to match so that legacy filter doesn't
-		# also silently exclude these fixtures and confound what this test
-		# is actually checking -- the collision itself is documented and
-		# deliberately deferred to Phase 6, not something this test covers.
-		self.team_a.site = self.site_a
-		self.team_a.save(update_fields=["site"])
-		self.team_b.site = self.site_b
-		self.team_b.save(update_fields=["site"])
 		article = Articles.objects.create(
 			title="Amb Article A", link="https://amb.example/a"
 		)

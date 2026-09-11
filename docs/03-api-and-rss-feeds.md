@@ -120,7 +120,16 @@ A **site-bound API key ignores `Origin`/`Referer`/`?site_id=` entirely** — the
 
 Responses that consulted `Origin` or `Referer` to reach their result carry `Vary: Origin, Referer`, so an HTTP cache in front of the API never serves one Origin's (or Referer's) resolution to a request carrying a different one. A response resolved purely by `?site_id=` does not vary by either header at all.
 
-> **`?site_id=` is also, separately, a content filter on `/articles/` and `/trials/`** (`teams__site_id`, via the legacy `Team.site` field — see [06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md) and the codebase's own tracking of retiring `Team.site`). The two uses are independent and the same query parameter feeds both, so a value that correctly resolves *visibility* can simultaneously narrow the *result set* to nothing, since `Team.site` is stale for most teams today. This is a known, pre-existing gap being tracked for a follow-up fix — until then, prefer `Origin`/`Referer` over `?site_id=` when calling a content endpoint anonymously if you don't also want that content filter applied.
+> **`?site_id=` is also, separately, a content filter on `/articles/` and `/trials/`.** The two uses are independent and the same query parameter feeds both — one resolves anonymous *visibility*, the other narrows the *result set* to a site's scope. Through Phase 5 the content filter read the legacy `Team.site` field (`teams__site_id`), which was already stale for most teams; Phase 6 reimplemented it on `subjects__in=<that site's scope_subjects>` — the same field visibility resolution reads. They compose as independent constraints rather than becoming one rule: the content filter unions `scope_subjects` across *every* `CustomSetting` row for the site, while anonymous visibility only ever counts the `api_public=True` row, so a site carrying a second, private settings row can have the filter admit a result that visibility then excludes.
+>
+> **This changed what the filter returns, with no error, for anyone who had a `site_id` pinned:**
+>
+> | Query | Before Phase 6 | After Phase 6 |
+> |:---|---:|---:|
+> | `site_id=3` — brain-regeneration.com, the live site | 0 articles, 0 trials | 52,324 articles, 17,238 trials |
+> | `site_id=1` — gregory-ms.com, decommissioned | 50,953 articles, 17,007 trials | 0 articles, 0 trials |
+>
+> Nobody could have been relying on `site_id=3`, since it returned nothing; anyone relying on `site_id=1` was reading a number that was never meaningful — so this is a fix, not a regression. It is still called out here rather than only in a changelog, because a documented parameter whose results change completely with no error is exactly the failure mode this project exists to prevent.
 
 ### Discovering which sites exist
 
