@@ -139,22 +139,22 @@ Responses that consulted `Origin` or `Referer` to reach their result carry `Vary
 
 ## Accessing private organisation data
 
-By default the API only exposes data belonging to **public organisations** (`OrganizationApiSettings.make_api_public = True`). Callers that need to read a **private** organisation's data must identify themselves in one of two ways.
+Content visibility (articles, trials, RSS) is **subject-scoped**, not organisation-scoped — see [Visibility rules summary](#visibility-rules-summary) below. `OrganizationApiSettings.make_api_public` plays no part in it; that flag now governs only `/organizations/` and the `?team_id=`/`?organization=` scope validations (org-keyed surfaces kept deliberately organisation-scoped — see [06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md#api-visibility-for-organisation-keyed-surfaces)). Callers that need to read a **private** site's data must identify themselves in one of two ways.
 
-### Option 1 — API key bound to the organisation
+### Option 1 — API key bound to a site
 
-Create an `APIAccessScheme` record in the Django admin with `organization` set to the target private org. The client sends the raw key in the `Authorization` header (no prefix):
+Create an `APIAccessScheme` record in the Django admin with `organization` and `site` set to the target site. The client sends the raw key in the `Authorization` header (no prefix):
 
 ```http
 GET /articles/
 Authorization: <raw_api_key>
 ```
 
-The key is validated against its date window (`begin_date` / `end_date`) and, if configured, an IP allowlist. A valid key grants access to all data owned by its organisation.
+The key is validated against its date window (`begin_date` / `end_date`) and, if configured, an IP allowlist. A valid key grants that site's `scope_subjects`, whether or not the site is `api_public`.
 
 ### Option 2 — Authenticated Django user
 
-A user account that is a member of the organisation (an `OrganizationUser` record exists) sees that organisation's data automatically after logging in via the session-based endpoints.
+A user account that is a member of the organisation owning the site (an `OrganizationUser` record exists) sees the scopes of every site that organisation owns, automatically, after logging in via the session-based endpoints.
 
 ### Including public sites alongside private data
 

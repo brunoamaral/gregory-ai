@@ -6,7 +6,6 @@ Run in the gregory Docker container:
 
 import os
 import tempfile
-from io import StringIO
 
 from django.contrib.sites.models import Site
 from django.core.management import call_command
@@ -21,7 +20,6 @@ from gregory.models import (
 	ArticleTrialReference,
 	CategoryModality,
 	CategoryType,
-	OrganizationSite,
 	Sources,
 	Subject,
 	Team,
@@ -47,6 +45,7 @@ class ExportTrialsXlsxTests(TestCase):
 		self.team = Team.objects.create(
 			name="Team A", organization=self.org, slug="team-a"
 		)
+		self.site = Site.objects.create(domain="export-test.example", name="Export Test Site")
 
 		self.subject_ms = Subject.objects.create(
 			subject_name="Multiple Sclerosis", subject_slug="ms", team=self.team
@@ -140,7 +139,13 @@ class ExportTrialsXlsxTests(TestCase):
 		)
 
 	def _export(self, **kwargs):
-		"""Run the command into a temp file; return (path, workbook)."""
+		"""Run the command into a temp file; return (path, workbook).
+
+		Defaults --site to self.site: --site is required, and which site an
+		export is attributed to is not what most tests in this class are
+		about -- see AboutSheetTests for that.
+		"""
+		kwargs.setdefault("site", str(self.site.pk))
 		fd, path = tempfile.mkstemp(suffix=".xlsx")
 		os.close(fd)
 		call_command("export_trials_xlsx", output=path, **kwargs)
@@ -910,7 +915,7 @@ class AboutSheetTests(TestCase):
 			github_url="https://github.com/example/about-test",
 		)
 		self.team = Team.objects.create(
-			name="About Team", organization=self.org, slug="about-team", site=self.site
+			name="About Team", organization=self.org, slug="about-team"
 		)
 		self.subject = Subject.objects.create(
 			subject_name="About Subject",
@@ -926,7 +931,12 @@ class AboutSheetTests(TestCase):
 		self.trial.subjects.add(self.subject)
 
 	def _export(self, **kwargs):
-		"""Run the command into a temp file; return (path, workbook)."""
+		"""Run the command into a temp file; return (path, workbook).
+
+		Defaults --site to self.site; tests about --site resolution itself
+		override it explicitly.
+		"""
+		kwargs.setdefault("site", str(self.site.pk))
 		fd, path = tempfile.mkstemp(suffix=".xlsx")
 		os.close(fd)
 		call_command("export_trials_xlsx", output=path, **kwargs)
@@ -987,146 +997,20 @@ class AboutSheetTests(TestCase):
 		self.assertIn(self.site.domain, str(ctx.exception))
 
 	# ------------------------------------------------------------------
-	# Default resolution
+	# --site is required (Team.site retired; no more per-subject inference)
 	# ------------------------------------------------------------------
 
-	def test_team_site_wins_over_org_default(self):
-		other_site = Site.objects.create(
-			domain="org-default.example", name="Org Default Site"
-		)
-		OrganizationSite.objects.create(
-			organization=self.org, site=other_site, is_default=True
-		)
-		# self.team.site is already set to self.site, which must win.
-		path, wb = self._export(subjects=str(self.subject.pk))
-		try:
-			rows = self._about_rows(wb["About this file"])
-			self.assertEqual(rows["Published by"], "About Test Project")
-		finally:
-			os.unlink(path)
-
-	def test_org_default_used_when_team_site_is_none(self):
-		team_no_site = Team.objects.create(
-			name="No Site Team", organization=self.org, slug="no-site-team"
-		)
-		OrganizationSite.objects.create(
-			organization=self.org, site=self.site, is_default=True
-		)
-		subject = Subject.objects.create(
-			subject_name="Org Default Subject",
-			subject_slug="org-default-subject",
-			team=team_no_site,
-		)
-		trial = Trials.objects.create(
-			title="Trial for org default site",
-			link="https://clinicaltrials.gov/ct2/show/NCT00333333",
-			identifiers={"nct": "NCT00333333"},
-		)
-		trial.subjects.add(subject)
-		path, wb = self._export(subjects=str(subject.pk))
-		try:
-			rows = self._about_rows(wb["About this file"])
-			self.assertEqual(rows["Published by"], "About Test Project")
-		finally:
-			os.unlink(path)
-
-	def test_no_site_configured_writes_placeholder_and_does_not_raise(self):
-		# Point SITE_ID at a row that doesn't exist so resolution has nothing left
-		# to fall back to: no Team.site, no OrganizationSite default, and no current
-		# Site. Uses override_settings rather than deleting the real Site(pk=1) row,
-		# which would invalidate Django's process-wide site cache and leak into
-		# unrelated tests' query-count assertions.
-		org = Organization.objects.create(name="No Site Org", slug="no-site-org")
-		team = Team.objects.create(
-			name="No Site Team", organization=org, slug="no-site-team"
-		)
-		subject = Subject.objects.create(
-			subject_name="No Site Subject", subject_slug="no-site-subject", team=team
-		)
-		trial = Trials.objects.create(
-			title="Trial with no resolvable site",
-			link="https://clinicaltrials.gov/ct2/show/NCT00444444",
-			identifiers={"nct": "NCT00444444"},
-		)
-		trial.subjects.add(subject)
-		with self.settings(SITE_ID=999999999):
-			path, wb = self._export(subjects=str(subject.pk))
-		try:
-			ws = wb["About this file"]
-			col_a_values = [
-				ws.cell(row=r, column=1).value for r in range(1, ws.max_row + 1)
-			]
-			self.assertTrue(
-				any(
-					v and "No site is configured" in str(v)
-					for v in col_a_values
-				)
+	def test_missing_site_flag_raises(self):
+		with self.assertRaises(CommandError):
+			call_command(
+				"export_trials_xlsx",
+				subjects=str(self.subject.pk),
+				output="/tmp/unused-about-sheet-test.xlsx",
 			)
-		finally:
-			os.unlink(path)
-
-	def test_multiple_sites_majority_wins_with_warning_and_note(self):
-		minority_site = Site.objects.create(
-			domain="minority-site.example", name="Minority Site"
-		)
-		minority_team = Team.objects.create(
-			name="Minority Team",
-			organization=self.org,
-			slug="minority-team",
-			site=minority_site,
-		)
-		minority_subject = Subject.objects.create(
-			subject_name="Minority Subject",
-			subject_slug="minority-subject",
-			team=minority_team,
-		)
-		minority_trial = Trials.objects.create(
-			title="Minority site trial",
-			link="https://clinicaltrials.gov/ct2/show/NCT00555555",
-			identifiers={"nct": "NCT00555555"},
-		)
-		minority_trial.subjects.add(minority_subject)
-
-		out = StringIO()
-		path, wb = self._export(
-			subjects=f"{self.subject.pk},{minority_subject.pk}", stdout=out
-		)
-		try:
-			self.assertIn("multiple sites", out.getvalue())
-			rows = self._about_rows(wb["About this file"])
-			# self.site backs one subject, minority_site backs one too — tie-break
-			# on lowest pk decides which wins, so assert against whichever pk is lower.
-			winner = self.site if self.site.pk < minority_site.pk else minority_site
-			loser = minority_site if winner is self.site else self.site
-			self.assertIn(loser.domain, out.getvalue())
-			ws = wb["About this file"]
-			col_a_values = [
-				ws.cell(row=r, column=1).value for r in range(1, ws.max_row + 1)
-			]
-			note_row = next(
-				(v for v in col_a_values if v and "also contains subjects" in str(v)),
-				None,
-			)
-			self.assertIsNotNone(note_row)
-			self.assertIn(loser.domain, note_row)
-		finally:
-			os.unlink(path)
 
 	def test_site_without_custom_setting_falls_back_to_site_name(self):
 		bare_site = Site.objects.create(domain="bare-site.example", name="Bare Site")
-		team = Team.objects.create(
-			name="Bare Team", organization=self.org, slug="bare-team", site=bare_site
-		)
-		subject = Subject.objects.create(
-			subject_name="Bare Subject", subject_slug="bare-subject", team=team
-		)
-		trial = Trials.objects.create(
-			title="Trial for bare site",
-			link="https://clinicaltrials.gov/ct2/show/NCT00666666",
-			identifiers={"nct": "NCT00666666"},
-		)
-		trial.subjects.add(subject)
-		path, wb = self._export(subjects=str(subject.pk))
+		path, wb = self._export(subjects=str(self.subject.pk), site=str(bare_site.pk))
 		try:
 			rows = self._about_rows(wb["About this file"])
 			self.assertEqual(rows["Published by"], "Bare Site")

@@ -105,9 +105,11 @@ class CustomSetting(models.Model):
 			"scope is what an unauthenticated request can see. Defaults to "
 			"False: a new site is private until someone deliberately "
 			"publishes it. Replaces the organisation-level "
-			"OrganizationApiSettings.make_api_public flag, which could not "
-			"express one organisation owning both a public and a private "
-			"site."
+			"OrganizationApiSettings.make_api_public flag for content "
+			"visibility, which could not express one organisation owning "
+			"both a public and a private site. That flag still governs "
+			"/organizations/ and per-org serializer fields -- see its own "
+			"docstring -- but no longer article/trial/RSS visibility."
 		),
 	)
 	rss_enabled = models.BooleanField(

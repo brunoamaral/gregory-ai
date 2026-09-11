@@ -258,18 +258,15 @@ The `--days` flag controls the lookback window; articles older than N days are e
 ## How do I export trials to Excel?
 
 ```bash
-# Export one or more subjects by ID
-docker exec gregory python manage.py export_trials_xlsx --subjects 1,2 --output /tmp/trials.xlsx
+# Export one or more subjects by ID (GregoryAI is multi-tenant, so --site is
+# always required — accepts a Site ID or domain)
+docker exec gregory python manage.py export_trials_xlsx --subjects 1,2 --site brain-regeneration.com --output /tmp/trials.xlsx
 
 # Export every subject
-docker exec gregory python manage.py export_trials_xlsx --all-subjects --output /tmp/trials.xlsx
+docker exec gregory python manage.py export_trials_xlsx --all-subjects --site brain-regeneration.com --output /tmp/trials.xlsx
 
 # Restrict to subjects belonging to a team
-docker exec gregory python manage.py export_trials_xlsx --all-subjects --team 1 --output /tmp/trials.xlsx
-
-# Attribute the export to a specific site (GregoryAI is multi-tenant, so this
-# isn't always obvious from the subjects alone) — accepts a Site ID or domain
-docker exec gregory python manage.py export_trials_xlsx --all-subjects --site brain-regeneration.com --output /tmp/trials.xlsx
+docker exec gregory python manage.py export_trials_xlsx --all-subjects --team 1 --site brain-regeneration.com --output /tmp/trials.xlsx
 ```
 
 Flags:
@@ -279,12 +276,12 @@ Flags:
 | `--subjects <ids>` | Comma-separated subject IDs to export (mutually exclusive with `--all-subjects`). |
 | `--all-subjects` | Export every subject, one sheet each. |
 | `--team <id>` | Optional; narrows which subjects are exported to one team. |
-| `--site <id-or-domain>` | Optional; which Site to attribute the export to (see below). Defaults to the site resolved from the exported subjects' teams. |
+| `--site <id-or-domain>` | **Required**; which Site to attribute the export to (see below). The export no longer infers a site from the exported subjects' teams. |
 | `--output <path>` | Output file path (default: `trials_export_YYYYMMDD.xlsx` in the current directory). |
 
 The workbook opens on an **About this file** sheet, then has one sheet per exported subject, plus three reference sheets at the end:
 
-- **About this file** — where this export came from: the publishing site's title, description, contact/social links, licence and citation info (all pulled from that site's `CustomSetting` — see [docs/06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md)), when it was generated, and a one-line summary of every other sheet in the workbook. When `--site` is omitted, the site is inferred from the exported subjects' teams; if the export spans more than one site, the majority site is used and a warning is printed. Edit the fields in the Django admin under **Sites > (a site) > Custom Setting > About / data export**.
+- **About this file** — where this export came from: the publishing site's title, description, contact/social links, licence and citation info (all pulled from `--site`'s `CustomSetting` — see [docs/06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md)), when it was generated, and a one-line summary of every other sheet in the workbook. Edit the fields in the Django admin under **Sites > (a site) > Custom Setting > About / data export**.
 - **Categories** — one row per (subject, category) pair, with each category's description, search terms, matching configuration (scope, score threshold, field weights), and trial count scoped to that subject. Categories with no subject assigned are never exported.
 - **Glossary** — one row per exported trial column, with its label, description, and source registries.
 - **Registries** — prose on how trial data from multiple registries (WHO ICTRP, ClinicalTrials.gov, EU CTIS) is merged, plus a field-by-registry coverage matrix.

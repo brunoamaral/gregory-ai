@@ -16,7 +16,6 @@ Coverage:
 
 from io import StringIO
 
-from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
@@ -45,12 +44,10 @@ def _make_org(name="Test Org"):
 
 
 def _make_team(org, name="Team A", slug="team-a", is_active=True):
-	site = Site.objects.get_or_create(domain="example.com", name="example.com")[0]
 	return Team.all_objects.create(
 		organization=org,
 		name=name,
 		slug=slug,
-		site=site,
 		is_active=is_active,
 	)
 

@@ -25,17 +25,16 @@ class UnsubscribeScopesTest(TestCase):
 			id=102, defaults={"domain": "site-b.example.com", "name": "Site B"}
 		)
 
-		# Reproduce the exact production shape: team.site is None or a
-		# *different* value than list.site. The site-scope filter must not
-		# depend on team.site at all.
+		# Two teams, both on org's list.site alone -- Team carries no site of
+		# its own (Team.site is retired). The site-scope filter must depend
+		# only on list.site.
 		self.team_no_site = Team.objects.create(
-			organization=self.org, name="Team No Site", slug="team-no-site", site=None
+			organization=self.org, name="Team No Site", slug="team-no-site"
 		)
 		self.team_other_site = Team.objects.create(
 			organization=self.org,
 			name="Team Other Site",
 			slug="team-other-site",
-			site=self.site_b,
 		)
 
 		self.list1 = Lists.objects.create(
@@ -90,12 +89,10 @@ class UnsubscribeScopesTest(TestCase):
 
 	def test_site_scope_regression_ignores_team_site(self):
 		"""
-		Production shape: list.site is set, team.site is None or a
-		different site. The old code filtered on list__team__site_id and
-		matched nothing. This must deactivate based on list.site alone.
+		The old code filtered on list__team__site_id (Team.site, since
+		removed) and matched nothing. This must deactivate based on
+		list.site alone, regardless of which team a list belongs to.
 		"""
-		# list1's team has site=None, list2's team has site=site_b (different
-		# from list2.site=site_a) -- both must still be deactivated.
 		response = self._post_site(self.site_a.pk)
 		self.assertEqual(response.status_code, 200)
 
