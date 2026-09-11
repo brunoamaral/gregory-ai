@@ -1789,7 +1789,12 @@ class OrganizationSite(models.Model):
 	)
 	is_default = models.BooleanField(
 		default=False,
-		help_text="Mark this as the default site for the organization. Used when a team has no site configured.",
+		help_text=(
+			"Mark this as the default site for the organization. Used as "
+			"the fallback when a List has no explicit site "
+			"(subscriptions.Lists.save()), and to resolve an organisation's "
+			"API keys to one site."
+		),
 	)
 
 	class Meta:

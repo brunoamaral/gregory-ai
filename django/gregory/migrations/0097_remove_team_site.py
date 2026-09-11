@@ -7,6 +7,11 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('gregory', '0096_team_api_listed'),
+        # subscriptions/0013's raw SQL reads gregory_team.site_id
+        # (recreate_site_profiles); nothing otherwise forces it to run
+        # before this migration drops that column, so a fresh `migrate`
+        # could interleave them the wrong way without this dependency.
+        ('subscriptions', '0013_rerun_listsubscription_and_siteprofile_backfill'),
     ]
 
     operations = [
