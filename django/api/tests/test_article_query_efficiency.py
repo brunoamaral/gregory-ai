@@ -114,10 +114,7 @@ class TestArticleListQueryEfficiency(TestCase):
 		# site, so pin each anonymous request to that call's own site via
 		# Origin -- otherwise, once both exist, an anonymous request naming
 		# neither is ambiguous under Phase 3 site resolution
-		# (gregory/site_resolution.py) and 400s. NOT ?site_id=: ArticleFilter
-		# already defines that param to mean "articles on a team attached to
-		# this site" (Team.site), an unrelated content filter that would
-		# zero out these results since these teams have no Team.site set.
+		# (gregory/site_resolution.py) and 400s.
 		site_a = _build_articles(3, "a")
 		with CaptureQueriesContext(connection) as small:
 			response = client.get(

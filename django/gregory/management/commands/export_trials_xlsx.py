@@ -1,7 +1,6 @@
 import json
 import re
-from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, date, timezone as dt_timezone
 
 from django.contrib.sites.models import Site
@@ -748,56 +747,8 @@ WHATS_INSIDE_FIXED_ROWS = [
 class SiteAttribution:
 	"""Which Site (and its CustomSetting) an export is attributed to."""
 
-	site: object = None
+	site: object
 	custom_setting: object = None
-	other_sites: list = field(default_factory=list)
-
-
-def _resolve_site_for_team(team):
-	"""Resolve a single team's Site: team.site, else the org's default/first site, else the current site."""
-	if team is None:
-		return None
-	if team.site_id:
-		return team.site
-	if team.organization_id:
-		org_site = (
-			OrganizationSite.objects.filter(organization_id=team.organization_id)
-			.order_by("-is_default", "id")
-			.select_related("site")
-			.first()
-		)
-		if org_site:
-			return org_site.site
-	try:
-		return Site.objects.get_current()
-	except Site.DoesNotExist:
-		return None
-
-
-def _resolve_default_site(subjects):
-	"""Resolve the Site to attribute an export to, from its subjects' teams.
-
-	Returns (site_or_None, other_sites) where other_sites lists every other site
-	found (sorted by pk) when the export spans more than one.
-	"""
-	counts = Counter()
-	by_pk = {}
-	for subject in subjects:
-		site = _resolve_site_for_team(subject.team)
-		if site is None:
-			continue
-		counts[site.pk] += 1
-		by_pk[site.pk] = site
-
-	if not counts:
-		return None, []
-	if len(counts) == 1:
-		(only_pk,) = counts.keys()
-		return by_pk[only_pk], []
-
-	best_pk = max(counts, key=lambda pk: (counts[pk], -pk))
-	others = [by_pk[pk] for pk in sorted(counts) if pk != best_pk]
-	return by_pk[best_pk], others
 
 
 def _resolve_explicit_site(value):
@@ -813,20 +764,20 @@ def _resolve_explicit_site(value):
 	return site
 
 
-def _resolve_site_attribution(subjects, explicit_site_value):
-	"""Resolve the SiteAttribution for an export, from --site or the subjects' teams."""
-	if explicit_site_value:
-		site = _resolve_explicit_site(explicit_site_value)
-		other_sites = []
-	else:
-		site, other_sites = _resolve_default_site(subjects)
+def _resolve_site_attribution(explicit_site_value):
+	"""Resolve the SiteAttribution for an export from the required --site value.
 
-	custom_setting = None
-	if site is not None:
-		custom_setting = (
-			CustomSetting.objects.filter(site=site).order_by("setting_id").first()
-		)
-	return SiteAttribution(site=site, custom_setting=custom_setting, other_sites=other_sites)
+	The export used to infer a site per subject from Team.site, falling back to
+	the subject's organisation's default site -- removed along with Team.site
+	(SITE-API-VISIBILITY-SPEC.md, "Removing Team.site"). --site is now the only
+	source, which also removes the case where one export mixed rows resolved
+	against different sites.
+	"""
+	site = _resolve_explicit_site(explicit_site_value)
+	custom_setting = (
+		CustomSetting.objects.filter(site=site).order_by("setting_id").first()
+	)
+	return SiteAttribution(site=site, custom_setting=custom_setting)
 
 
 def _build_about_sheet(ws, attribution, sheet_entries, options_summary):
@@ -871,54 +822,40 @@ def _build_about_sheet(ws, attribution, sheet_entries, options_summary):
 	cs = attribution.custom_setting
 
 	write_section_header("Source")
-	if site is None:
-		write_note(
-			"No site is configured for the exported subjects' teams. Set a site on "
-			"the team, or pass --site."
-		)
-	else:
-		title = (cs.title if cs and cs.title else None) or site.name or site.domain
-		write_row("Published by", title)
+	title = (cs.title if cs and cs.title else None) or site.name or site.domain
+	write_row("Published by", title)
 
-		org_site = (
-			OrganizationSite.objects.filter(site=site)
-			.select_related("organization")
-			.first()
-		)
-		org_name = org_site.organization.name if org_site else ""
-		if org_name and org_name != title:
-			write_row("Organisation", org_name)
+	org_site = (
+		OrganizationSite.objects.filter(site=site)
+		.select_related("organization")
+		.first()
+	)
+	org_name = org_site.organization.name if org_site else ""
+	if org_name and org_name != title:
+		write_row("Organisation", org_name)
 
-		if cs:
-			write_row("About this project", cs.description)
-			write_row("Website", cs.website_url or f"https://{site.domain}")
-			write_row("About page", cs.about_url)
-			write_row("Contact", cs.contact_url)
-			write_row("Contact email", cs.contact_email or cs.admin_email)
-			if cs.api_domain:
-				write_row("API", f"https://{cs.api_domain}")
-			write_row("Source code", cs.github_url)
-			social = "; ".join(
-				filter(
-					None,
-					[
-						f"Mastodon: {cs.mastodon_url}" if cs.mastodon_url else "",
-						f"Bluesky: {cs.bluesky_url}" if cs.bluesky_url else "",
-					],
-				)
+	if cs:
+		write_row("About this project", cs.description)
+		write_row("Website", cs.website_url or f"https://{site.domain}")
+		write_row("About page", cs.about_url)
+		write_row("Contact", cs.contact_url)
+		write_row("Contact email", cs.contact_email or cs.admin_email)
+		if cs.api_domain:
+			write_row("API", f"https://{cs.api_domain}")
+		write_row("Source code", cs.github_url)
+		social = "; ".join(
+			filter(
+				None,
+				[
+					f"Mastodon: {cs.mastodon_url}" if cs.mastodon_url else "",
+					f"Bluesky: {cs.bluesky_url}" if cs.bluesky_url else "",
+				],
 			)
-			write_row("Mastodon / Bluesky", social)
-			write_row("Privacy policy", cs.privacy_policy_url)
-		else:
-			write_row("Website", f"https://{site.domain}")
-
-	if attribution.other_sites and site is not None:
-		all_sites_sorted = sorted([site] + attribution.other_sites, key=lambda s: s.pk)
-		domains = ", ".join(s.domain for s in all_sites_sorted if s.pk != site.pk)
-		write_note(
-			f"This workbook also contains subjects published by {domains}. Pass "
-			"--site to attribute it explicitly."
 		)
+		write_row("Mastodon / Bluesky", social)
+		write_row("Privacy policy", cs.privacy_policy_url)
+	else:
+		write_row("Website", f"https://{site.domain}")
 
 	write_section_header("This file")
 	generated = datetime.now(dt_timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -935,12 +872,10 @@ def _build_about_sheet(ws, attribution, sheet_entries, options_summary):
 	if not citation:
 		title_for_citation = (
 			(cs.title if cs and cs.title else None)
-			or (site.name or site.domain if site else "")
-			or "GregoryAI export"
+			or site.name
+			or site.domain
 		)
-		website_for_citation = (cs.website_url if cs else "") or (
-			f"https://{site.domain}" if site else ""
-		)
+		website_for_citation = (cs.website_url if cs else "") or f"https://{site.domain}"
 		date_str = date.today().strftime("%Y-%m-%d")
 		citation = f"{title_for_citation}. Clinical trials export, {date_str}."
 		if website_for_citation:
@@ -988,9 +923,10 @@ class Command(BaseCommand):
 		parser.add_argument(
 			"--site",
 			type=str,
-			default="",
-			help="Site ID or domain to attribute this export to. Defaults to the site "
-			"resolved from the exported subjects' teams.",
+			required=True,
+			help="Site ID or domain to attribute this export to. Required -- the "
+			"export no longer infers a site from the exported subjects' teams "
+			"(Team.site is retired), so pass the target site explicitly.",
 		)
 
 	def handle(self, *args, **options):
@@ -999,11 +935,7 @@ class Command(BaseCommand):
 			qs = Subject.objects.all()
 			if options["team"]:
 				qs = qs.filter(team_id=options["team"])
-			# select_related avoids one query per subject in _resolve_default_site,
-			# which walks subject.team and team.site for every exported subject.
-			subjects = list(
-				qs.select_related("team", "team__site").order_by("subject_name")
-			)
+			subjects = list(qs.order_by("subject_name"))
 		else:
 			raw = options["subjects"].strip()
 			if not raw:
@@ -1024,28 +956,14 @@ class Command(BaseCommand):
 					f"Subject ID(s) not found: {sorted(missing)}. Valid IDs: {valid_list}"
 				)
 			subjects = list(
-				subject_qs.filter(pk__in=ids)
-				.select_related("team", "team__site")
-				.order_by("subject_name")
+				subject_qs.filter(pk__in=ids).order_by("subject_name")
 			)
 
 		if not subjects:
 			raise CommandError("No subjects found.")
 
 		# --- Resolve site attribution ---
-		attribution = _resolve_site_attribution(subjects, options["site"])
-		if attribution.other_sites:
-			all_sites_sorted = sorted(
-				[attribution.site] + attribution.other_sites, key=lambda s: s.pk
-			)
-			domains = ", ".join(s.domain for s in all_sites_sorted)
-			self.stdout.write(
-				self.style.WARNING(
-					f"Exported subjects span multiple sites ({domains}); attributing "
-					f"this export to {attribution.site.domain} (most subjects). Pass "
-					"--site to be explicit."
-				)
-			)
+		attribution = _resolve_site_attribution(options["site"])
 
 		output_path = (
 			options["output"]

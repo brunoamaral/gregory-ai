@@ -41,7 +41,14 @@ from __future__ import annotations
 
 
 def _public_org_ids() -> set[int]:
-	"""Return the set of org IDs whose make_api_public flag is True."""
+	"""Return the set of org IDs whose make_api_public flag is True.
+
+	The only remaining reader of make_api_public via visible_org_ids() --
+	see OrganizationApiSettings' docstring for why the field stays even
+	though content visibility no longer reads it: /organizations/ and the
+	team_id/organization scope validations in api/views.py are org-keyed by
+	design, so an org-level public flag is still the right unit for them.
+	"""
 	from gregory.models import OrganizationApiSettings
 
 	return set(

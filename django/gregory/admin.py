@@ -3086,7 +3086,6 @@ class TeamAdminForm(forms.ModelForm):
 	def save(self, commit=True):
 		from django.utils.text import slugify
 		from organizations.models import Organization
-		from gregory.models import OrganizationSite
 
 		team_name = self.cleaned_data.get("team_name")
 		organization = self.cleaned_data.get("organization")
@@ -3115,19 +3114,6 @@ class TeamAdminForm(forms.ModelForm):
 			# For existing teams, update the name
 			if team_name:
 				self.instance.name = team_name.strip()
-
-		# Default site to the organisation's default site when not explicitly set
-		if not self.instance.site_id and self.instance.organization_id:
-			default_org_site = (
-				OrganizationSite.objects.filter(
-					organization_id=self.instance.organization_id,
-					is_default=True,
-				)
-				.select_related("site")
-				.first()
-			)
-			if default_org_site:
-				self.instance.site = default_org_site.site
 
 		return super().save(commit)
 

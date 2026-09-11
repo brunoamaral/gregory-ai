@@ -1682,13 +1682,6 @@ class Team(models.Model):
 		max_length=200, help_text="Team name within the organization"
 	)
 	slug = models.SlugField(unique=True, editable=True)
-	site = models.ForeignKey(
-		"sites.Site",
-		on_delete=models.PROTECT,
-		null=True,
-		blank=True,
-		help_text="The website (Site) this team sends emails from. Overrides the global SITE_ID setting.",
-	)
 	is_active = models.BooleanField(
 		default=True,
 		help_text="Inactive teams are soft-deleted: their data is preserved and can be reassigned to another team.",
@@ -1796,7 +1789,12 @@ class OrganizationSite(models.Model):
 	)
 	is_default = models.BooleanField(
 		default=False,
-		help_text="Mark this as the default site for the organization. Used when a team has no site configured.",
+		help_text=(
+			"Mark this as the default site for the organization. Used as "
+			"the fallback when a List has no explicit site "
+			"(subscriptions.Lists.save()), and to resolve an organisation's "
+			"API keys to one site."
+		),
 	)
 
 	class Meta:
@@ -1817,6 +1815,22 @@ class OrganizationSite(models.Model):
 
 
 class OrganizationApiSettings(models.Model):
+	"""
+	Kept deliberately after the site-scoped API visibility project, which
+	moved article/trial/RSS visibility onto CustomSetting.scope_subjects +
+	api_public (see SITE-API-VISIBILITY-SPEC.md, "Removing Team.site" and
+	its neighbouring sections). make_api_public no longer governs content --
+	only these two organisation-keyed surfaces, which were kept
+	organisation-keyed on purpose:
+	  - gregory.visibility.visible_org_ids()'s anonymous branch, which
+	    /organizations/ and every ?team_id=/?organization= scope validation
+	    (api/views.py) still read.
+	  - api.serializers.mixins._resolve_per_org_fields_org(), which decides
+	    whether an anonymous ?team_id= request may see per-org fields.
+	Both are org-shaped, not subject-shaped, so an org-level flag is still
+	the right unit for them -- this is not a leftover to migrate away.
+	"""
+
 	organization = models.OneToOneField(
 		Organization,
 		on_delete=models.CASCADE,
@@ -1825,7 +1839,14 @@ class OrganizationApiSettings(models.Model):
 	)
 	make_api_public = models.BooleanField(
 		default=False,
-		help_text="When true, anonymous API and RSS consumers can see this org's data.",
+		help_text=(
+			"When true, anonymous callers can see this organisation in "
+			"/organizations/, validate ?team_id=/?organization= against it, "
+			"and see its per-org serializer fields via ?team_id=. Does NOT "
+			"govern article/trial/RSS content visibility -- that is "
+			"CustomSetting.scope_subjects + api_public on the site(s) this "
+			"organisation owns."
+		),
 	)
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)

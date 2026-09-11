@@ -40,6 +40,6 @@ Key terms used across GregoryAI documentation.
 
 **SubscriberSiteProfile** — a per-site profile override for a subscriber (e.g., "researcher" on one site, "patient" on another). See [subscriptions.md](subscriptions.md).
 
-**Team** — a logical group that owns subjects, sources, subscriber lists, and optionally its own site and Postmark credentials. Multiple teams can share one GregoryAI instance. See [06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md).
+**Team** — a logical group that owns subjects, sources, subscriber lists, and optionally its own Postmark credentials. Multiple teams can share one GregoryAI instance. See [06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md).
 
 **Trial** — a clinical trial record. Trials share the same ingestion pipeline as articles but are stored in their own `Trials` model with WHO ICTRP fields. See [02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md).

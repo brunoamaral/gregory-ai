@@ -11,7 +11,7 @@ GregoryAI supports a multi-tenant structure where content, credentials, and emai
 | Entity | Description |
 |---|---|
 | **Organisation** | Top-level grouping (provided by `django-organizations`). Owns teams, credentials, and sites. |
-| **Team** | Belongs to one Organisation. Owns subjects, sources, and optionally its own site and credentials. |
+| **Team** | Belongs to one Organisation. Owns subjects, sources, and optionally its own credentials. |
 | **Site** | A Django `sites` framework entry (`domain` + `name`). Used as the base URL for email sender addresses. |
 | **CustomSetting** | Per-site settings: site title, email footer, admin email, sender email prefix, whether the site publishes author profile pages, `scope_subjects` (what the site owns for anonymous API/RSS visibility) and `api_public` (whether that scope is visible to anonymous API callers), `rss_enabled` (whether the site serves [RSS feeds](03-api-and-rss-feeds.md#rss-feeds) at `/feed/sites/{site_id}/...`, scoped to `scope_subjects` regardless of `api_public`), the [sitemap](03-api-and-rss-feeds.md#sitemaps) switches (master switch, curated subjects, articles-relevant-only, include trials, trial recruitment statuses), and the export/about metadata (description, contact email, data licence, citation) shown on the "About this file" sheet of `export_trials_xlsx` workbooks. |
 | **TeamCredentials** | Postmark API token and URL scoped to a specific team. |
@@ -20,14 +20,19 @@ GregoryAI supports a multi-tenant structure where content, credentials, and emai
 
 ---
 
-## API visibility for private organisations
+## API visibility for organisation-keyed surfaces
 
-Each Organisation has an `OrganizationApiSettings` record with a `make_api_public` flag.
+**Article/trial/RSS content visibility does not use this section at all** — it is subject-scoped via `CustomSetting.scope_subjects` + `api_public` on the site(s) an organisation owns; see [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#visibility-rules-summary). `OrganizationApiSettings.make_api_public` was replaced for that purpose, deliberately, by the site-scoped API visibility project.
 
-- When `make_api_public = True` the organisation's data is visible to **all callers**, including anonymous requests.
-- When `make_api_public = False` (the default) the data is **private** — only callers that have been explicitly granted access can read it.
+The flag survives for two organisation-keyed surfaces that the site project kept organisation-scoped on purpose, because they answer an organisation-shaped question rather than a content-shaped one:
 
-### Granting access to a private organisation
+- **`/organizations/`**, and every `?team_id=`/`?organization=` scope validation elsewhere in the API (`gregory.visibility.visible_org_ids()`).
+- **Per-org serializer fields** exposed to an anonymous `?team_id=` request (`api.serializers.mixins._resolve_per_org_fields_org()`).
+
+- When `make_api_public = True`, anonymous callers can see the organisation in `/organizations/`, validate `?team_id=`/`?organization=` against it, and see its per-org fields via `?team_id=`.
+- When `make_api_public = False` (the default), only callers granted access — an API key or a member account — get through those checks for that organisation.
+
+### Granting access to a private organisation, for these org-keyed surfaces
 
 **Via API key** — create an `APIAccessScheme` in the admin under **API > API Access Schemes**:
 
@@ -35,6 +40,7 @@ Each Organisation has an `OrganizationApiSettings` record with a `make_api_publi
 |:------|:------|
 | Client name | Descriptive label for the consumer |
 | Organisation | The private organisation |
+| Site | The site this key reads content from (governs article/trial/RSS scope — independent of `make_api_public`) |
 | Begin / end date | Validity window |
 | IP addresses | Optional comma-separated allowlist |
 
@@ -44,9 +50,9 @@ The consumer sends the generated key in every request:
 Authorization: <raw_api_key>
 ```
 
-**Via user account** — add the user to the organisation as an `OrganizationUser`. After logging in they will see the organisation's data automatically.
+**Via user account** — add the user to the organisation as an `OrganizationUser`. After logging in, the org-keyed checks above pass for that organisation, and content visibility separately follows every site that organisation owns.
 
-In both cases the caller can append `?include_public=true` to a request to also receive data from public organisations.
+In both cases the caller can append `?include_public=true` to a request to also receive the scopes of every `api_public` site.
 
 See [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#accessing-private-organisation-data) for the full visibility rules table.
 
@@ -130,26 +136,14 @@ When the flag is off (the default), all of the above link to `https://orcid.org/
 
 ---
 
-## Assigning a Site to a Team
-
-If a team sends emails from a different domain than its organisation, assign a Site directly to the team:
-
-1. Go to **Gregory > Teams** in the admin.
-2. Open a Team.
-3. Set the **Site** field to the appropriate Site.
-
-When a Site is assigned to the Team, it takes precedence over the Organisation's default Site.
-
----
-
 ## Site Resolution Order
 
-When sending emails, GregoryAI resolves the Site for a team using this fallback chain:
+Emails are sent per **List** (`subscriptions.Lists`), not per Team — each list carries its own `site` FK, auto-populated on save if left blank:
 
-1. **Team's own site** — if `Team.site` is set, use it.
-2. **Organisation's default site** — if the Organisation has an `OrganisationSite` with `is_default=True`, use its Site.
-3. **Organisation's first site** — if no default is set, use the first Site linked to the Organisation.
-4. **Global fallback** — use `Site.objects.get_current()` (the site configured via `SITE_ID` in Django settings).
+1. **Organisation's default site** — if the list's team's organisation has an `OrganisationSite` with `is_default=True`, use its Site.
+2. **Global fallback** — use `Site.objects.get_current()` (the site configured via `SITE_ID` in Django settings).
+
+`Lists.site` determines footer branding, links, and unsubscribe URLs for that list's emails, independently of which team the list belongs to. Teams do not carry a site of their own — `Team.site` was removed as part of the site-scoped API visibility project, since production data showed it unmaintained (every team on one organisation pointed at a decommissioned site or nothing).
 
 ---
 
