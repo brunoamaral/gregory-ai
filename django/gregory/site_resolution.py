@@ -225,11 +225,17 @@ def resolve_anonymous_site(request):
 	# that filter used the stale `teams__site_id` edge and could silently
 	# zero out results for a site this function resolved just fine (see
 	# SITE-API-VISIBILITY-SPEC.md, "site_id is broken today"). Phase 6
-	# reimplemented it on `subjects__in=<that site's scope_subjects>` --
-	# the same scope this function grants for a public site_id -- so the
-	# two mechanisms now agree rather than fight over one query parameter.
-	# They remain two independent code paths reading the same name; keep
-	# them in step if either one's notion of "that site's scope" changes.
+	# reimplemented it on `subjects__in=<that site's scope_subjects>`,
+	# reading the SAME scope_subjects field this function does -- but not
+	# an identical scope: that filter unions scope_subjects across EVERY
+	# CustomSetting row for the site, while this function (and
+	# visible_subject_ids' anonymous branch) only ever counts the
+	# api_public=True row. A site with a second, private settings row can
+	# therefore have the content filter admit a row that visibility then
+	# excludes -- compatible, not identical; see
+	# api/tests/test_site_filter.py's overlap-subject cases. They remain
+	# two independent code paths reading the same name; keep them in step
+	# if either one's notion of "that site's scope" changes.
 	raw_site_id = request.GET.get("site_id", "").strip()
 	if raw_site_id:
 		try:

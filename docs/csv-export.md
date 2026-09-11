@@ -37,7 +37,7 @@ curl -X POST \
 # Export trial search results (GET)
 curl "https://api.example.com/api/trials/search/?team_id=1&subject_id=2&status=Recruiting&format=csv&all_results=true"
 
-# Export all articles for a site, across every team attached to it
+# Export all articles for a site, across every subject in its scope
 curl "https://api.example.com/articles/?site_id=1&format=csv&all_results=true"
 ```
 
