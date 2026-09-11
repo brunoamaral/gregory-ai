@@ -283,7 +283,16 @@ class SeedSiteVisibilityScopeMigrationTests(TestCase):
 	def test_equivalence_anonymous_subject_scope_matches_todays_public_org_rule(self):
 		"""The acceptance gate (plan §1.4): with the migration applied,
 		visible_subject_ids(anonymous) == every subject visible under
-		today's public-organisation rule."""
+		today's public-organisation rule.
+
+		Phase 3 (site resolution, see gregory/site_resolution.py) replaced
+		the anonymous default with real resolution, but a caller naming no
+		site still gets exactly this fixture's public union automatically
+		-- br_site is the only api_public site here, so that union IS its
+		scope, and resolve_anonymous_site() serves it directly rather than
+		refusing. The bare "/" request below is therefore still the right
+		way to exercise this equivalence unchanged.
+		"""
 		self._run_migration()
 
 		req = self.factory.get("/")
@@ -332,7 +341,9 @@ class SeedSiteVisibilityScopeMigrationTests(TestCase):
 			{self.private_subject.id},
 		)
 
-		# And the anonymous rule still matches the old one.
+		# And the anonymous rule still matches the old one (Phase 3's
+		# resolve_anonymous_site() serves br_site's scope automatically here
+		# -- see the equivalence test above).
 		req = self.factory.get("/")
 		req.user = AnonymousUser()
 		self.assertNotIn(self.private_subject.id, visible_subject_ids(req))
@@ -470,6 +481,10 @@ class UncuratedPublicOrgSubjectStaysExcludedTests(TestCase):
 
 		self._run_migration()
 
+		# Phase 3's resolve_anonymous_site() serves `site`'s scope
+		# automatically here -- it is the only api_public site this fixture
+		# creates, so the public union just IS its scope (see
+		# gregory/site_resolution.py).
 		req = RequestFactory().get("/")
 		req.user = AnonymousUser()
 		after_migration = visible_subject_ids(req)

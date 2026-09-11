@@ -239,7 +239,11 @@ class AuthorCoauthorsQueryCountTest(TestCase):
 		# reasoning as clear_cache() in setUp).
 		self.client.get(url)
 		Site.objects.clear_cache()
-		expected_queries = 5 if _count_cache_hit_is_a_db_query() else 4
+		# +1 for gregory.site_resolution.resolve_anonymous_site's public-site-
+		# count query (Phase 3): this anonymous, no-Origin caller now falls
+		# through to the public-union step, which costs one extra query
+		# compared to the old single-query _public_subject_ids() lookup.
+		expected_queries = 6 if _count_cache_hit_is_a_db_query() else 5
 		with self.assertNumQueries(expected_queries):
 			response = self.client.get(url)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -272,7 +276,11 @@ class AuthorCoauthorsQueryCountTest(TestCase):
 		# test_coauthors_query_budget_flat_with_page_content for why.
 		self.client.get("/authors/")
 		Site.objects.clear_cache()
-		expected_queries = 5 if _count_cache_hit_is_a_db_query() else 4
+		# +1 for gregory.site_resolution.resolve_anonymous_site's public-site-
+		# count query (Phase 3): this anonymous, no-Origin caller now falls
+		# through to the public-union step, which costs one extra query
+		# compared to the old single-query _public_subject_ids() lookup.
+		expected_queries = 6 if _count_cache_hit_is_a_db_query() else 5
 		with self.assertNumQueries(expected_queries):
 			response = self.client.get("/authors/")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)

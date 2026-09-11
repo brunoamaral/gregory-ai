@@ -13,12 +13,20 @@ request.
       → {X}; ?include_public=true adds public orgs
 
 ``visible_subject_ids`` is the site-scoped replacement introduced by the
-site-scoped API visibility project. Phase 1 adds the function and computes
-it correctly; nothing reads it yet. See its own docstring for the per-caller
-rules, which mirror the shape above with sites and subjects standing in for
-organisations. Both functions are kept side by side: org-keyed endpoints
-(``/teams/``, ``/organizations/``, ``/stats/`` scope validation) keep reading
-``visible_org_ids`` even once content endpoints move to subjects.
+site-scoped API visibility project. See its own docstring for the
+per-caller rules, which mirror the shape above with sites and subjects
+standing in for organisations. Both functions are kept side by side:
+org-keyed endpoints (``/teams/``, ``/organizations/``, ``/stats/`` scope
+validation) keep reading ``visible_org_ids`` even though content endpoints
+read subjects.
+
+As of Phase 3, the anonymous branch of ``visible_subject_ids`` can RAISE
+(``gregory.site_resolution.NoSiteResolvedError``, a DRF 400) instead of
+returning a set -- see that function's docstring. This is deliberate and
+safe everywhere it is actually called from (every content endpoint is a
+DRF view), but it means ``visible_subject_ids`` must never be called from
+a non-DRF code path for an anonymous request without also handling that
+exception -- see ``gregory/site_resolution.py``'s module docstring.
 
 Note: ``request.visible_org_ids`` and ``request.visible_subject_ids`` are
 attached by ``VisibleOrgMiddleware`` as ``SimpleLazyObject``s so that
@@ -132,24 +140,49 @@ def visible_subject_ids(request) -> set[int]:
 	      → the union of ``scope_subjects`` across every site owned (via
 	        ``OrganizationSite``) by an organisation the user belongs to
 	        (via ``OrganizationUser``).
-	  - Anonymous
-	      → the union of ``scope_subjects`` across every ``api_public``
-	        site. Full site resolution (``?site_id=``, ``Origin``,
-	        ``Referer``, and the fail-closed 400 when none matches) is
-	        Phase 3; until then this is the entire anonymous rule. The
-	        Phase 1 equivalence test asserts this matches every subject
-	        visible under today's public-organisation rule.
+	  - Anonymous (Phase 3 -- see ``gregory.site_resolution``)
+	      → the ``scope_subjects`` of ONE resolved ``api_public`` site.
+	        Resolved by ``resolve_anonymous_site()``: ``?site_id=`` if it
+	        names an ``api_public`` site, else the ``Origin`` header, else
+	        ``Referer``, else the public union across every ``api_public``
+	        site -- served automatically when that union is UNAMBIGUOUS:
+	        empty (no ``api_public`` site exists -- an empty scope, not an
+	        error) or exactly one site (it then just IS that site's scope).
+	        Two or more ``api_public`` sites and nothing named which one
+	        raises ``NoSiteResolvedError`` (a DRF 400 whose body names the
+	        public sites the caller could ask for instead) -- THAT is what
+	        must fail closed, because serving "everything public" there
+	        would silently blend more than one site's content into one
+	        anonymous response. Serving a lone public site's scope by
+	        default is not a new disclosure -- that data is already
+	        anyone's to read -- so refusing it would only prevent unscoped
+	        *convenience*. (Amended 2026-09-10: the original design failed
+	        closed on ANY unnamed site, unconditionally; that broke ~478
+	        tests calling the API anonymously with no site indicator, none
+	        of which were newly disclosing anything -- see the spec.) MCP
+	        already sends ``?site_id=`` regardless (#860), and browser
+	        callers send ``Origin``, so in practice this still only ever
+	        bites anonymous server-side callers hitting a deployment with
+	        two or more public sites and no site indicator: curl, scripts.
 
 	``?include_public=true`` adds the scopes of every ``api_public`` site to
-	an identified caller's own scope, which is how a private site's frontend
-	reads public content alongside its own. It is a no-op for an anonymous
-	caller, whose scope is already exactly that set -- the same shape the
-	flag has in ``visible_org_ids``, restated in subjects (spec: "adds public
-	organisations" stops being true once organisations are not the unit).
-	It applies to an identified caller whose own scope came out empty too
-	(an API key with no site resolved, or one whose site and organisation
+	an IDENTIFIED caller's own scope, which is how a private site's frontend
+	reads public content alongside its own -- the same shape the flag has in
+	``visible_org_ids``, restated in subjects (spec: "adds public
+	organisations" stops being true once organisations are not the unit). It
+	applies to an identified caller whose own scope came out empty too (an
+	API key with no site resolved, or one whose site and organisation
 	disagree): those resolve to no subjects of their own, and public
 	subjects are public to everyone, so the flag still means what it says.
+
+	It does NOT apply to the anonymous branch (Phase 3 changed this from a
+	true no-op to simply not applying): an anonymous caller's resolved scope
+	already belongs to an ``api_public`` site by construction, so OR-ing in
+	the full public union would silently discard the very resolution this
+	function just performed -- the opposite of what site resolution exists
+	to guarantee. A caller that wants the full public union rather than one
+	site's scope has no way to ask for it from this function; that is
+	intentional, since "give me everything public" is not a resolvable site.
 	"""
 	from sitesettings.models import CustomSetting
 
@@ -206,9 +239,36 @@ def visible_subject_ids(request) -> set[int]:
 			)
 		)
 
-	# Anonymous caller -- Phase 1 rule, see docstring. include_public is a
-	# no-op here: this IS the public set.
-	return _public_subject_ids()
+	# Anonymous caller -- Phase 3 site resolution, see docstring.
+	# include_public is deliberately NOT applied here (see docstring).
+	from gregory.site_resolution import NoSiteResolvedError, resolve_anonymous_site
+
+	site_id, varies_by_origin, ambiguous = resolve_anonymous_site(request)
+	if varies_by_origin:
+		# Consumed by VisibleOrgMiddleware after get_response() returns, to
+		# set Vary: Origin -- see that module. A plain request attribute
+		# (not a return value) because this function's return type is fixed
+		# by every existing call site to `set[int]`.
+		request._site_resolution_varies_by_origin = True
+	if ambiguous:
+		raise NoSiteResolvedError()
+	if site_id is None:
+		# No api_public site exists at all -- an unambiguous empty union,
+		# not a failure. Same shape as an identified caller whose own scope
+		# came out empty (see the API-key/user branches above): zero
+		# subjects, no error.
+		return set()
+	return set(
+		# api_public=True, not just site_id=site_id: CustomSetting.site is a
+		# plain FK, not OneToOne, so a site can carry a second, PRIVATE
+		# settings row alongside the public one that made it eligible above.
+		# Filtering on site_id alone would union that private row's own
+		# scope_subjects into this anonymous response -- matching
+		# _public_subject_ids()'s own filter for the same reason.
+		CustomSetting.objects.filter(site_id=site_id, api_public=True)
+		.exclude(scope_subjects__isnull=True)
+		.values_list("scope_subjects__id", flat=True)
+	)
 
 
 def visible_org_ids(request) -> set[int]:

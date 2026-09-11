@@ -14,6 +14,7 @@ from organizations.models import Organization
 from django_countries.fields import Country
 
 from api.tests.visibility_helpers import publish_subjects
+from sitesettings.models import CustomSetting
 
 
 class AuthorAPITest(TestCase):
@@ -34,7 +35,7 @@ class AuthorAPITest(TestCase):
 		self.subject = Subject.objects.create(
 			subject_name="Test Subject", subject_slug="test-subject", team=self.team
 		)
-		publish_subjects(self.subject, organization=self.organization)
+		self.site = publish_subjects(self.subject, organization=self.organization)
 
 		# Create test category
 		self.category = TeamCategory.objects.create(
@@ -202,7 +203,13 @@ class AuthorAPITest(TestCase):
 		other_subject = Subject.objects.create(
 			subject_name="Other Subject", subject_slug="other-subject", team=self.team
 		)
-		publish_subjects(other_subject)
+		# Publishing other_subject on its own (org-less) site would put it on
+		# a different site than self.client resolves to (Phase 3 scopes an
+		# anonymous caller to exactly ONE site), so it would never show up
+		# alongside self.subject in one response. This test just wants both
+		# subjects visible together, so add other_subject to self.site's
+		# existing scope instead.
+		CustomSetting.objects.get(site=self.site).scope_subjects.add(other_subject)
 		other_author = Authors.objects.create(
 			given_name="Extra", family_name="Author"
 		)

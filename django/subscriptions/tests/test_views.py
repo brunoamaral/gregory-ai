@@ -15,7 +15,6 @@ from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, Subscribers
 from subscriptions.views import (
 	subscribe_view,
-	_find_site_by_domain,
 	_origin_matches_allowed,
 	_check_origin_allowed,
 	_resolve_site_from_request,
@@ -179,47 +178,13 @@ class SubscribeViewTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _find_site_by_domain
-# ---------------------------------------------------------------------------
-
-
-class FindSiteByDomainTest(TestCase):
-	def setUp(self):
-		Site.objects.update_or_create(
-			id=settings.SITE_ID,
-			defaults={"domain": "example.com", "name": "example"},
-		)
-
-	def test_exact_match(self):
-		site = _find_site_by_domain("example.com")
-		self.assertIsNotNone(site)
-		self.assertEqual(site.domain, "example.com")
-
-	def test_www_subdomain_resolves_to_parent(self):
-		site = _find_site_by_domain("www.example.com")
-		self.assertIsNotNone(site)
-		self.assertEqual(site.domain, "example.com")
-
-	def test_arbitrary_subdomain_resolves_to_parent(self):
-		site = _find_site_by_domain("api.example.com")
-		self.assertIsNotNone(site)
-		self.assertEqual(site.domain, "example.com")
-
-	def test_port_stripped_before_lookup(self):
-		site = _find_site_by_domain("example.com:8080")
-		self.assertIsNotNone(site)
-		self.assertEqual(site.domain, "example.com")
-
-	def test_unknown_domain_returns_none(self):
-		self.assertIsNone(_find_site_by_domain("evil.com"))
-
-	def test_unknown_subdomain_returns_none(self):
-		self.assertIsNone(_find_site_by_domain("api.evil.com"))
-
-
-# ---------------------------------------------------------------------------
 # _origin_matches_allowed
 # ---------------------------------------------------------------------------
+#
+# find_site_by_domain (formerly _find_site_by_domain, defined here) moved to
+# gregory/site_resolution.py as part of Phase 3 of site-scoped API
+# visibility -- visibility must not import from the subscriptions app. Its
+# tests moved with it: see gregory/tests/test_site_resolution.py.
 
 
 class OriginMatchesAllowedTest(TestCase):

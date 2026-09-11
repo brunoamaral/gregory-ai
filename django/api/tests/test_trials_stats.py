@@ -76,6 +76,7 @@ from rest_framework.test import APIClient
 from api.models import APIAccessScheme
 from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import OrganizationApiSettings, Subject, Team, Trials
+from sitesettings.models import CustomSetting
 from gregory.utils.trial_field_normalizers import (
 	TrialPhase,
 	TrialRecruitmentStatus,
@@ -203,6 +204,14 @@ class TrialStatsBase(TestCase):
 		)
 
 		self.client = APIClient()
+		# Anonymous site resolution (Phase 3, gregory/site_resolution.py)
+		# needs a site indicator once more than one api_public site exists --
+		# this fixture creates two (self.org and other_org, both public by
+		# default via _make_org_team). Resolve every request in this class to
+		# self.org's site via Origin, matching what "the caller's own scope"
+		# has always meant in these tests -- self.other_org/other_team/
+		# other_subject stay the "should NOT appear" counterexample.
+		self.client.defaults["HTTP_ORIGIN"] = f"https://{_ORG_SITES[self.org.pk].domain}"
 
 
 class TrialListNoStatsTest(TrialStatsBase):
@@ -244,10 +253,12 @@ class TrialStatsEndpointTest(TrialStatsBase):
 		resp = self.client.get("/trials/stats/")
 		self.assertEqual(resp.status_code, 200)
 		stats = resp.data
-		self.assertEqual(stats["total"], 4)
+		# self.client resolves to self.org's site only (Phase 3), so t4
+		# (other_team/other_subject, a different site) is out of scope: t1-t3.
+		self.assertEqual(stats["total"], 3)
 		self.assertEqual(stats["recruiting"], 2)
 		self.assertEqual(stats["completed"], 1)
-		self.assertEqual(stats["terminated"], 1)
+		self.assertEqual(stats["terminated"], 0)
 
 	def test_stats_endpoint_runs_aggregation_query(self):
 		with CaptureQueriesContext(connection) as ctx:
@@ -268,11 +279,15 @@ class TrialStatsEndpointTest(TrialStatsBase):
 		self.assertEqual(stats["terminated"], 0)
 
 	def test_stats_with_other_team_filter_scopes_totals(self):
+		# team_id is an additional AND filter on top of subject-scope visibility,
+		# not a substitute for it -- self.client resolves to self.org's site, so
+		# other_team's content (a different site) is invisible regardless of
+		# this filter, giving an empty result rather than other_team's own data.
 		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
 		self.assertEqual(resp.status_code, 200)
 		stats = resp.data
-		self.assertEqual(stats["total"], 1)
-		self.assertEqual(stats["terminated"], 1)
+		self.assertEqual(stats["total"], 0)
+		self.assertEqual(stats["terminated"], 0)
 		self.assertEqual(stats["recruiting"], 0)
 
 	def test_stats_with_status_filter_scopes_totals(self):
@@ -293,9 +308,11 @@ class TrialStatsEndpointTest(TrialStatsBase):
 		resp = self.client.get("/trials/stats/")
 		self.assertEqual(resp.status_code, 200)
 		stats = resp.data
-		# 4 original trials + 1 shared trial = 5, not 6 (would be 6 if the
-		# shared trial were counted once per team via a non-distinct Count).
-		self.assertEqual(stats["total"], 5)
+		# 3 visible original trials (t1-t3; t4 is other_team/other_subject, a
+		# different site, out of scope for self.client) + 1 shared trial = 4,
+		# not 5 (would be 5 if the shared trial were counted once per team via
+		# a non-distinct Count).
+		self.assertEqual(stats["total"], 4)
 		self.assertEqual(stats["recruiting"], 3)
 
 
@@ -306,11 +323,15 @@ class TrialStatsBySubjectTest(TrialStatsBase):
 		other_subject = _make_subject(
 			self.other_team, "Other Subject", "other-subject"
 		)
-		# No organization= here: other_org already has a default site from
-		# _make_org_team, and OrganizationSite allows only one default per
-		# org. Anonymous visibility only needs an api_public site scoping
-		# the subject, so this stands alone.
-		publish_subjects(other_subject)
+		# Publishing other_subject on its own (org-less) site would put it on
+		# a different site than self.client resolves to (Phase 3 scopes an
+		# anonymous caller to exactly ONE site), so it would never show up
+		# alongside self.subject in one response. This test just wants both
+		# subjects visible together, so add other_subject to self.org's
+		# existing site scope instead.
+		CustomSetting.objects.get(site=_ORG_SITES[self.org.pk]).scope_subjects.add(
+			other_subject
+		)
 		self.t3.subjects.add(self.subject)
 		self.t4.subjects.add(other_subject)
 
@@ -356,7 +377,9 @@ class TrialStatsBySubjectTest(TrialStatsBase):
 
 		resp = self.client.get("/trials/stats/")
 		self.assertEqual(resp.status_code, 200)
-		self.assertEqual(resp.data["total"], 4)  # t1 still counted
+		# t1-t3 visible (self.org's site); t4 is other_team/other_subject, a
+		# different site, out of scope for self.client regardless of this test.
+		self.assertEqual(resp.data["total"], 3)  # t1 still counted
 		subject_ids = [row["subject_id"] for row in resp.data["by_subject"]]
 		self.assertIn(self.subject.id, subject_ids)
 		self.assertNotIn(hidden_subject.id, subject_ids)
@@ -415,9 +438,12 @@ class TrialStatsCachingTest(TrialStatsBase):
 		other_stats = self.client.get(
 			"/trials/stats/", {"team_id": self.other_team.id}
 		)
-		self.assertEqual(all_stats.data["total"], 4)
+		# self.client resolves to self.org's site only: t1-t3 visible, t4
+		# (other_team/other_subject) is out of scope, so the other_team filter
+		# now yields an empty result instead of other_team's own trial.
+		self.assertEqual(all_stats.data["total"], 3)
 		self.assertEqual(team_stats.data["total"], 3)
-		self.assertEqual(other_stats.data["total"], 1)
+		self.assertEqual(other_stats.data["total"], 0)
 
 	def test_cache_is_isolated_per_visible_org_context(self):
 		# A private org with its own trial: anonymous callers cannot see it,
@@ -433,24 +459,28 @@ class TrialStatsCachingTest(TrialStatsBase):
 		scheme = _make_api_scheme(priv_org, "stats-key")
 
 		anon = APIClient()
+		# Two api_public sites now exist (self.org, other_org); resolve
+		# anonymous requests to self.org's site specifically, same as
+		# self.client in setUp.
+		anon.defaults["HTTP_ORIGIN"] = f"https://{_ORG_SITES[self.org.pk].domain}"
 		anon_resp = anon.get("/trials/stats/")
 		self.assertEqual(anon_resp.status_code, 200)
-		# Anonymous sees only the two public orgs' 4 trials.
-		self.assertEqual(anon_resp.data["total"], 4)
+		# Anonymous resolves to self.org's site only: t1-t3.
+		self.assertEqual(anon_resp.data["total"], 3)
 
 		keyed = APIClient()
 		keyed.credentials(HTTP_AUTHORIZATION=scheme.api_key)
 		keyed_resp = keyed.get("/trials/stats/")
 		self.assertEqual(keyed_resp.status_code, 200)
 		# The org-scoped caller sees only its own org's single trial — if it
-		# got the anonymous caller's cached payload this would be 4.
+		# got the anonymous caller's cached payload this would be 3.
 		self.assertEqual(keyed_resp.data["total"], 1)
 		self.assertEqual(keyed_resp.data["recruiting"], 1)
 
 		# And the reverse: a fresh anonymous request after the keyed one must
 		# not pick up the keyed caller's entry.
 		anon_again = anon.get("/trials/stats/")
-		self.assertEqual(anon_again.data["total"], 4)
+		self.assertEqual(anon_again.data["total"], 3)
 
 
 class TrialStatsRoutingTest(TrialStatsBase):
@@ -519,14 +549,17 @@ class TrialStatsNormalizedBucketsTest(TrialStatsBase):
 		self.assertEqual(resp.data["no_status"], 1)
 
 	def test_every_canonical_key_present_even_when_zero(self):
-		# other_team has only t4 (TERMINATED), so most buckets are 0 here — the point is
-		# that the zero-count keys are still in the payload, not omitted.
+		# other_team has only t4 (TERMINATED), but t4 is other_subject -- a
+		# different site than self.client resolves to (Phase 3) -- so the
+		# team_id filter now yields an empty result rather than other_team's
+		# own trial. All buckets are 0 here — the point is that the
+		# zero-count keys are still in the payload, not omitted.
 		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
 		self.assertEqual(resp.status_code, 200)
 		for value in TrialRecruitmentStatus.values:
 			self.assertIn(value, resp.data)
 		self.assertEqual(resp.data["recruiting"], 0)
-		self.assertEqual(resp.data["terminated"], 1)
+		self.assertEqual(resp.data["terminated"], 0)
 		# The old hand-rolled keys must not survive the rewrite.
 		for stale_key in ("available", "not_available", "withheld", "authorised"):
 			self.assertNotIn(stale_key, resp.data)
@@ -575,10 +608,11 @@ class TrialStatsPhaseFacetTest(TrialStatsBase):
 		self.assertEqual(resp.status_code, 200)
 		by_phase = resp.data["by_phase"]
 		self.assertEqual(set(by_phase.keys()), set(TrialPhase.values) | {"no_phase"})
-		# None of the fixture trials (t1-t4) have a phase set.
+		# None of the visible fixture trials (t1-t3; t4 is a different site,
+		# out of scope for self.client) have a phase set.
 		for value in TrialPhase.values:
 			self.assertEqual(by_phase[value], 0)
-		self.assertEqual(by_phase["no_phase"], 4)
+		self.assertEqual(by_phase["no_phase"], 3)
 
 	def test_raw_spelling_variants_land_in_same_bucket(self):
 		_make_trial(
@@ -594,10 +628,12 @@ class TrialStatsPhaseFacetTest(TrialStatsBase):
 		self.assertEqual(resp.data["by_phase"]["phase_3"], 2)
 
 	def test_null_raw_phase_lands_in_no_phase(self):
-		# other_team has only t4, which has no phase set.
+		# other_team has only t4, which is other_subject -- a different site
+		# than self.client resolves to (Phase 3) -- so this filter now yields
+		# an empty result rather than other_team's own trial.
 		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
 		self.assertEqual(resp.status_code, 200)
-		self.assertEqual(resp.data["by_phase"]["no_phase"], 1)
+		self.assertEqual(resp.data["by_phase"]["no_phase"], 0)
 
 	def test_by_phase_values_sum_to_total(self):
 		_make_trial(
@@ -634,10 +670,11 @@ class TrialStatsStudyTypeFacetTest(TrialStatsBase):
 		self.assertEqual(
 			set(by_study_type.keys()), set(TrialStudyType.values) | {"no_study_type"}
 		)
-		# None of the fixture trials (t1-t4) have a study_type set.
+		# None of the visible fixture trials (t1-t3; t4 is a different site,
+		# out of scope for self.client) have a study_type set.
 		for value in TrialStudyType.values:
 			self.assertEqual(by_study_type[value], 0)
-		self.assertEqual(by_study_type["no_study_type"], 4)
+		self.assertEqual(by_study_type["no_study_type"], 3)
 
 	def test_raw_spelling_variants_land_in_same_bucket(self):
 		_make_trial(
@@ -653,10 +690,12 @@ class TrialStatsStudyTypeFacetTest(TrialStatsBase):
 		self.assertEqual(resp.data["by_study_type"]["interventional"], 2)
 
 	def test_null_raw_study_type_lands_in_no_study_type(self):
-		# other_team has only t4, which has no study_type set.
+		# other_team has only t4, which is other_subject -- a different site
+		# than self.client resolves to (Phase 3) -- so this filter now yields
+		# an empty result rather than other_team's own trial.
 		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
 		self.assertEqual(resp.status_code, 200)
-		self.assertEqual(resp.data["by_study_type"]["no_study_type"], 1)
+		self.assertEqual(resp.data["by_study_type"]["no_study_type"], 0)
 
 	def test_by_study_type_values_sum_to_total(self):
 		_make_trial(
@@ -710,10 +749,11 @@ class TrialStatsSexFacetTest(TrialStatsBase):
 		self.assertEqual(
 			set(by_sex.keys()), set(TrialSexEligibility.values) | {"no_sex_data"}
 		)
-		# None of the fixture trials (t1-t4) have inclusion_gender set.
+		# None of the visible fixture trials (t1-t3; t4 is a different site,
+		# out of scope for self.client) have inclusion_gender set.
 		for value in TrialSexEligibility.values:
 			self.assertEqual(by_sex[value], 0)
-		self.assertEqual(by_sex["no_sex_data"], 4)
+		self.assertEqual(by_sex["no_sex_data"], 3)
 
 	def test_female_comma_male_lands_in_all_not_female(self):
 		"""Regression guard: the substring-match bug this normalization fixes must not
@@ -738,10 +778,12 @@ class TrialStatsSexFacetTest(TrialStatsBase):
 		self.assertEqual(resp.data["by_sex"]["female"], 2)
 
 	def test_null_raw_inclusion_gender_lands_in_no_sex_data(self):
-		# other_team has only t4, which has no inclusion_gender set.
+		# other_team has only t4, which is other_subject -- a different site
+		# than self.client resolves to (Phase 3) -- so this filter now yields
+		# an empty result rather than other_team's own trial.
 		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
 		self.assertEqual(resp.status_code, 200)
-		self.assertEqual(resp.data["by_sex"]["no_sex_data"], 1)
+		self.assertEqual(resp.data["by_sex"]["no_sex_data"], 0)
 
 	def test_by_sex_values_sum_to_total(self):
 		self._make_trial_with_gender(
@@ -806,11 +848,13 @@ class TrialStatsCountryFacetTest(TrialStatsBase):
 		self.assertTrue(all(count > 0 for _country, count in non_null))
 
 	def test_trial_with_no_country_data_is_trailing_null_entry(self):
-		# other_team has only t4, which has no country data at all.
+		# other_team has only t4, which is other_subject -- a different site
+		# than self.client resolves to (Phase 3) -- so this filter now yields
+		# an empty result rather than other_team's own trial (which had no
+		# country data at all).
 		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
 		self.assertEqual(resp.status_code, 200)
-		by_country = resp.data["by_country"]
-		self.assertEqual(by_country[-1], {"country": None, "count": 1})
+		self.assertEqual(resp.data["by_country"], [])
 
 	def test_trial_visible_under_two_teams_counted_once_per_country(self):
 		_make_trial(
@@ -852,11 +896,12 @@ class TrialStatsRegionFacetTest(TrialStatsBase):
 		self.assertEqual(resp.status_code, 200)
 		by_region = resp.data["by_region"]
 		self.assertEqual(set(by_region.keys()), set(TrialRegion.values) | {"no_region"})
-		# None of t1-t4 have country data, so every region is 0 and all four
-		# trials land in no_region.
+		# None of the visible t1-t3 have country data (t4 is a different site,
+		# out of scope for self.client), so every region is 0 and all three
+		# visible trials land in no_region.
 		for value in TrialRegion.values:
 			self.assertEqual(by_region[value], 0)
-		self.assertEqual(by_region["no_region"], 4)
+		self.assertEqual(by_region["no_region"], 3)
 
 	def test_multi_region_trial_counted_once_per_region(self):
 		_make_trial(
@@ -870,10 +915,12 @@ class TrialStatsRegionFacetTest(TrialStatsBase):
 		self.assertEqual(by_region["north_america"], 1)
 
 	def test_no_region_counts_null_or_empty_regions(self):
-		# other_team has only t4, whose regions_normalized is null.
+		# other_team has only t4, which is other_subject -- a different site
+		# than self.client resolves to (Phase 3) -- so this filter now yields
+		# an empty result rather than other_team's own trial.
 		resp = self.client.get("/trials/stats/", {"team_id": self.other_team.id})
 		self.assertEqual(resp.status_code, 200)
-		self.assertEqual(resp.data["by_region"]["no_region"], 1)
+		self.assertEqual(resp.data["by_region"]["no_region"], 0)
 
 
 class TrialStatsYearFacetTest(TrialStatsBase):

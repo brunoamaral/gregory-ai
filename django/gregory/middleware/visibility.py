@@ -17,11 +17,22 @@ Session-authenticated requests and raw API-key requests are unaffected: the
 lazy wrapper simply evaluates on first access with the same result as eager
 evaluation would have produced.
 
-``visible_subject_ids`` is part of the site-scoped API visibility project.
-As of Phase 1 it is computed correctly but read by no call site -- see
-``gregory/visibility.py`` for the per-caller rules.
+``visible_subject_ids`` is part of the site-scoped API visibility project --
+see ``gregory/visibility.py`` for the per-caller rules.
+
+As of Phase 3, resolving an anonymous caller's site can consult the
+``Origin`` header, and the ``Referer`` header when ``Origin`` is absent
+(``gregory.site_resolution.resolve_anonymous_site``), which means the
+response can vary by EITHER even though both are client-controlled. When
+``visible_subject_ids`` does this, it flags the request via
+``request._site_resolution_varies_by_origin`` (set as a side effect of
+evaluating the SimpleLazyObject inside ``get_response()`` below), and this
+middleware turns that into ``Vary: Origin, Referer`` response headers once
+``get_response()`` returns -- so a cache in front of this API never serves
+one Origin's (or Referer's) resolution to a request with a different one.
 """
 
+from django.utils.cache import patch_vary_headers
 from django.utils.functional import SimpleLazyObject
 
 
@@ -36,4 +47,10 @@ class VisibleOrgMiddleware:
 		request.visible_subject_ids = SimpleLazyObject(
 			lambda: visible_subject_ids(request)
 		)
-		return self.get_response(request)
+		response = self.get_response(request)
+		if getattr(request, "_site_resolution_varies_by_origin", False):
+			# Both headers, not just Origin: resolve_anonymous_site() also
+			# falls back to Referer when Origin is absent, so the outcome
+			# can depend on either one.
+			patch_vary_headers(response, ["Origin", "Referer"])
+		return response

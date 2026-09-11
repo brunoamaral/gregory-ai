@@ -132,8 +132,8 @@ class CategoryOptimizationTestCase(TestCase):
 	def test_query_count_optimization(self):
 		"""Test that we're not generating excessive database queries"""
 		with self.assertNumQueries(
-			7
-		):  # site + org visibility + count + select (with count annotations) + subjects prefetch + authors count + authors select
+			8
+		):  # site + [public-site-count + scope_subjects fetch, Phase 3 gregory.site_resolution.resolve_anonymous_site's anonymous fallback] + count + select (with count annotations) + subjects prefetch + authors count + authors select
 			response = self.client.get("/categories/")
 
 		self.assertEqual(response.status_code, 200)
@@ -204,8 +204,8 @@ class CategoryOptimizationTestCase(TestCase):
 		"""Test that our prefetch_related optimizations work correctly"""
 		# Test with include_authors=false (should be very efficient)
 		with self.assertNumQueries(
-			6
-		):  # Basic query (with count annotations) + subjects prefetch + authors count query + visibility queries
+			7
+		):  # Basic query (with count annotations) + subjects prefetch + authors count query + visibility queries (site + [public-site-count + scope_subjects fetch, Phase 3 resolve_anonymous_site's anonymous fallback])
 			response = self.client.get(
 				f"/categories/?team_id={self.team.id}&include_authors=false"
 			)
@@ -213,8 +213,8 @@ class CategoryOptimizationTestCase(TestCase):
 
 		# Test with include_authors=true (should still be reasonable; site is cached from first request)
 		with self.assertNumQueries(
-			6
-		):  # org + count + select (with count annotations) + subjects prefetch + authors count + authors select
+			7
+		):  # org + [public-site-count + scope_subjects fetch] + count + select (with count annotations) + subjects prefetch + authors count + authors select
 			response = self.client.get(
 				f"/categories/?team_id={self.team.id}&include_authors=true"
 			)

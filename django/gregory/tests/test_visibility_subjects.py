@@ -1,12 +1,26 @@
 """
 Tests for gregory.visibility — the visible_subject_ids() helper.
 
-Site-scoped API visibility, Phase 1: this function is introduced but read by
-no call site yet (see gregory/visibility.py's module docstring for how it
-relates to visible_org_ids). These tests pin its per-caller behaviour
-directly. The Phase 1 acceptance gate -- the equivalence test asserting
-visible_subject_ids(anonymous) matches today's public-organisation rule --
-lives in sitesettings/tests.py alongside the data migration it exercises.
+These tests pin its per-caller behaviour directly (see
+gregory/visibility.py's module docstring for how it relates to
+visible_org_ids). The Phase 1 acceptance gate -- the equivalence test
+asserting visible_subject_ids(anonymous) matches today's
+public-organisation rule -- lives in sitesettings/tests.py alongside the
+data migration it exercises, and was updated for Phase 3 (see below) to
+pass an explicit ?site_id= rather than relying on the old unconditional
+public-union default.
+
+Phase 3 of site-scoped API visibility replaced that default with real site
+resolution: an anonymous caller now sees exactly ONE resolved api_public
+site's scope. Resolving to nothing raises
+gregory.site_resolution.NoSiteResolvedError (a DRF 400) only when that
+"nothing" is genuine AMBIGUITY -- two or more api_public sites and no
+indicator naming one; zero api_public sites is unambiguous (an empty
+scope, no error) and is not this exception. See
+test_no_site_indicator_raises_once_a_second_public_site_exists below for
+the case that does raise, and gregory/tests/test_site_resolution.py for
+resolve_anonymous_site()'s own resolution-order tests (?site_id= -> Origin
+-> Referer), which this file assumes rather than re-tests.
 
 Run with:
     docker exec gregory python manage.py test gregory.tests.test_visibility_subjects
@@ -19,6 +33,7 @@ from django.contrib.sites.models import Site
 from organizations.models import Organization, OrganizationUser
 
 from gregory.models import Team, Subject, OrganizationSite
+from gregory.site_resolution import NoSiteResolvedError
 from gregory.visibility import visible_subject_ids
 from sitesettings.models import CustomSetting
 from api.models import APIAccessScheme
@@ -58,20 +73,86 @@ class VisibleSubjectIdsAnonymousTest(TestCase):
 			"vsi-anon-priv.test", "Priv", [self.priv_subject], api_public=False
 		)
 
-	def _anon_request(self):
-		req = self.factory.get("/")
+	def _anon_request(self, **extra):
+		req = self.factory.get("/", **extra)
 		req.user = AnonymousUser()
 		return req
 
-	def test_anonymous_sees_union_of_public_sites_only(self):
+	def _anon_request_for_pub_site(self):
+		"""An anonymous request resolved to self.pub_site via ?site_id= --
+		the explicit, unambiguous way to ask for one site's scope under
+		Phase 3 site resolution. See gregory/tests/test_site_resolution.py
+		for the ?site_id=/Origin/Referer resolution order itself."""
+		return self._anon_request(data={"site_id": str(self.pub_site.pk)})
+
+	def test_no_site_indicator_falls_back_to_the_sole_public_site(self):
+		"""Amended 2026-09-10: with exactly one api_public site (pub_site),
+		the public union just IS its scope, so an anonymous caller naming no
+		site gets it automatically rather than a 400 -- see
+		test_no_site_indicator_raises_once_a_second_public_site_exists below
+		for where the hard failure actually kicks in."""
 		result = visible_subject_ids(self._anon_request())
 		self.assertIn(self.pub_subject.id, result)
 		self.assertNotIn(self.priv_subject.id, result)
 
+	def test_no_site_indicator_raises_once_a_second_public_site_exists(self):
+		"""There is no unscoped mode once the public union is ambiguous: a
+		second api_public site makes "serve everything public" mean
+		"silently blend two sites' content", so this is where resolution
+		fails closed -- see gregory/site_resolution.py."""
+		Subject.objects.create(
+			subject_name="Second Public",
+			subject_slug="vsi-anon-second-pub",
+			team=self.team,
+		)
+		_make_site_with_scope(
+			"vsi-anon-pub-2.test", "Pub 2", [], api_public=True
+		)
+		with self.assertRaises(NoSiteResolvedError):
+			visible_subject_ids(self._anon_request())
+
+	def test_resolved_public_site_sees_its_own_scope_only(self):
+		result = visible_subject_ids(self._anon_request_for_pub_site())
+		self.assertIn(self.pub_subject.id, result)
+		self.assertNotIn(self.priv_subject.id, result)
+
+	def test_a_private_settings_row_on_the_resolved_site_does_not_leak_its_scope(self):
+		"""CustomSetting.site is a plain FK, not OneToOne -- pub_site can
+		carry a SECOND, private settings row alongside the public one that
+		made it resolvable at all. The private row's own scope_subjects must
+		not be unioned into this anonymous response just because it shares
+		a site_id with the public row -- the query must still filter on
+		api_public=True, not site_id alone."""
+		second_row_subject = Subject.objects.create(
+			subject_name="Second Row Private",
+			subject_slug="vsi-anon-second-row-private",
+			team=self.team,
+		)
+		second_row = CustomSetting.objects.create(
+			site=self.pub_site, title="Pub Site Private Row", api_public=False
+		)
+		second_row.scope_subjects.add(second_row_subject)
+
+		result = visible_subject_ids(self._anon_request_for_pub_site())
+		self.assertIn(self.pub_subject.id, result)
+		self.assertNotIn(second_row_subject.id, result)
+
+	def test_spoofed_private_origin_falls_back_to_the_sole_public_site(self):
+		"""The security property Phase 3 exists to preserve: Origin is
+		client-controlled, but resolution only ever considers api_public
+		sites, so claiming to come from a private site's domain can never
+		grant that site's scope. With exactly one api_public site here, the
+		fallback resolves to it (not a 400 -- amended 2026-09-10), but
+		crucially NEVER to the private site the Origin claimed."""
+		request = self._anon_request(HTTP_ORIGIN=f"https://{self.priv_site.domain}")
+		result = visible_subject_ids(request)
+		self.assertIn(self.pub_subject.id, result)
+		self.assertNotIn(self.priv_subject.id, result)
+
 	def test_overlapping_scope_is_public_even_if_a_private_site_also_lists_it(self):
-		"""Overlap is allowed by design: a subject in *any* public site's
-		scope is visible, even if a private site also contains it -- union,
-		not intersection, and not a reason to hide it."""
+		"""Overlap is allowed by design: a subject in a resolved public
+		site's scope is visible, even if a private site also contains it --
+		not a reason to hide it."""
 		shared_subject = Subject.objects.create(
 			subject_name="Shared", subject_slug="vsi-anon-shared", team=self.team
 		)
@@ -82,7 +163,7 @@ class VisibleSubjectIdsAnonymousTest(TestCase):
 			shared_subject
 		)
 
-		result = visible_subject_ids(self._anon_request())
+		result = visible_subject_ids(self._anon_request_for_pub_site())
 		self.assertIn(shared_subject.id, result)
 
 	def test_subject_in_no_sites_scope_is_invisible(self):
@@ -93,7 +174,7 @@ class VisibleSubjectIdsAnonymousTest(TestCase):
 		internal_subject = Subject.objects.create(
 			subject_name="Internal", subject_slug="vsi-anon-internal", team=self.team
 		)
-		result = visible_subject_ids(self._anon_request())
+		result = visible_subject_ids(self._anon_request_for_pub_site())
 		self.assertNotIn(internal_subject.id, result)
 
 

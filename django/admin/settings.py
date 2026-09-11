@@ -286,6 +286,12 @@ REST_FRAMEWORK = {
 		'rest_framework.filters.OrderingFilter',
 	],
 	'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+	# Delegates to DRF's own default handler for everything except
+	# gregory.site_resolution.NoSiteResolvedError (Phase 3 of site-scoped
+	# API visibility's fail-closed 400), whose int fields it restores after
+	# DRF's default handling would otherwise stringify them -- see that
+	# module's exception_handler and NoSiteResolvedError docstrings.
+	'EXCEPTION_HANDLER': 'gregory.site_resolution.exception_handler',
 }
 
 # drf-spectacular — OpenAPI schema generation. See /api/schema/, /api/schema/swagger-ui/,

@@ -97,6 +97,37 @@ This prevents open-redirect attacks — only explicitly whitelisted domains are 
 
 ---
 
+## Resolving a site for an anonymous caller
+
+An anonymous request is scoped to exactly one site's `scope_subjects`, resolved in this order:
+
+1. **`?site_id=`** — used if it names an *API public* site.
+2. **`Origin` header** — resolved to a Site by domain (exact match, then one subdomain level stripped), used if that site is *API public*.
+3. **`Referer` header** — same, for the cases where a browser sends this instead of `Origin`.
+4. **The public union, if unambiguous.** The union of every *API public* site's scope is data anyone may already read, so it is served automatically whenever it comes from **zero or one** site — zero means an empty scope, one means the union just *is* that site's scope. **Two or more *API public* sites and nothing above resolved one of them → `400`**, naming the sites the caller could ask for instead:
+
+   ```json
+   {"error": "No site could be determined for this request.",
+    "detail": "Pass ?site_id=, or call from a registered site origin.",
+    "public_sites": [{"site_id": 3, "domain": "brain-regeneration.com", "name": "Brain Regeneration"}]}
+   ```
+
+   This project has exactly one *API public* site today, so step 4 always resolves and the `400` never fires in practice — it exists for the moment a second one is onboarded, so an anonymous caller never silently receives two sites' content blended into one response.
+
+Only *API public* sites are candidates at every step, which is what makes trusting the client-controlled `Origin`/`Referer` headers safe: resolution can only ever **narrow** to a public site, never grant a private one's scope by a caller merely claiming to come from it.
+
+A **site-bound API key ignores `Origin`/`Referer`/`?site_id=` entirely** — the credential's own site always wins, so a client-controlled header can't override what the key grants. The same is true for a signed-in user: their organisations' sites decide, unaffected by any of the above.
+
+Responses that consulted `Origin` or `Referer` to reach their result carry `Vary: Origin, Referer`, so an HTTP cache in front of the API never serves one Origin's (or Referer's) resolution to a request carrying a different one. A response resolved purely by `?site_id=` does not vary by either header at all.
+
+> **`?site_id=` is also, separately, a content filter on `/articles/` and `/trials/`** (`teams__site_id`, via the legacy `Team.site` field — see [06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md) and the codebase's own tracking of retiring `Team.site`). The two uses are independent and the same query parameter feeds both, so a value that correctly resolves *visibility* can simultaneously narrow the *result set* to nothing, since `Team.site` is stale for most teams today. This is a known, pre-existing gap being tracked for a follow-up fix — until then, prefer `Origin`/`Referer` over `?site_id=` when calling a content endpoint anonymously if you don't also want that content filter applied.
+
+### Discovering which sites exist
+
+`GET /sites/` lists every *API public* site as `{site_id, domain, name}`. It is the discovery entry point a new caller needs before it can pass `?site_id=`, so it is **never gated by the resolution above** — it answers with no site indicator at all, even amid the exact ambiguity that would 400 every other endpoint. It is also the same code path the `400` body's `public_sites` list is drawn from, so the two can never disagree.
+
+---
+
 ## Accessing private organisation data
 
 By default the API only exposes data belonging to **public organisations** (`OrganizationApiSettings.make_api_public = True`). Callers that need to read a **private** organisation's data must identify themselves in one of two ways.
@@ -124,7 +155,7 @@ Identified callers can append `?include_public=true` to any request to add the s
 GET /articles/?include_public=true
 ```
 
-It is a no-op for an anonymous caller, whose scope already is exactly that set. Before subject scoping this parameter meant "adds public organisations"; it now adds public *sites'* subject scopes, and is declared in the OpenAPI schema rather than being undeclared-but-working as it was.
+It has no effect for an anonymous caller: their own resolved scope (see [Resolving a site for an anonymous caller](#resolving-a-site-for-an-anonymous-caller)) already belongs to an *API public* site by construction, so OR-ing in the full public union would silently discard that resolution — the opposite of what site resolution exists to guarantee. Before subject scoping this parameter meant "adds public organisations"; it now adds public *sites'* subject scopes for an identified caller, and is declared in the OpenAPI schema rather than being undeclared-but-working as it was.
 
 ### Visibility rules summary
 
@@ -132,7 +163,7 @@ Content visibility is **subject-scoped**: a caller sees a row when one of its su
 
 | Caller | Visible subjects |
 |:-------|:-----------------|
-| Anonymous (no credentials) | Every *API public* site's scope |
+| Anonymous (no credentials) | Exactly ONE resolved *API public* site's scope — see [Resolving a site for an anonymous caller](#resolving-a-site-for-an-anonymous-caller); `400` if that can't be pinned to one site |
 | API key bound to a site | That site's scope (+ public sites' if `?include_public=true`) |
 | API key with no site set | Nothing (+ public sites' if `?include_public=true`) |
 | Authenticated user, member of org X | The scopes of every site org X owns (+ public if `?include_public=true`) |
