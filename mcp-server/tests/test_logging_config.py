@@ -81,21 +81,21 @@ def test_json_formatter_omits_site_id_when_the_event_never_set_it():
 	assert "site_id" not in payload
 
 
-def test_intent_json_formatter_includes_site_id_when_resolved():
-	record = logging.getLogger(INTENT_LOGGER_NAME).makeRecord(
-		INTENT_LOGGER_NAME, logging.INFO, __file__, 0, "mcp_intent", (), None, extra={"site_id": 9}
-	)
-	payload = json.loads(IntentJsonFormatter().format(record))
-	assert payload["site_id"] == 9
+def test_intent_json_formatter_never_writes_site_id():
+	"""The file writer is the last line of the intent/telemetry separation.
 
-
-def test_intent_json_formatter_includes_null_site_id_when_unresolved():
-	record = logging.getLogger(INTENT_LOGGER_NAME).makeRecord(
-		INTENT_LOGGER_NAME, logging.INFO, __file__, 0, "mcp_intent", (), None, extra={"site_id": None}
-	)
-	payload = json.loads(IntentJsonFormatter().format(record))
-	assert "site_id" in payload
-	assert payload["site_id"] is None
+	intent.record() does not pass site_id, but this formatter must drop it
+	even if some future call site does — resolved or null — because a
+	site_id on an intent line would let it be matched to that tenant's nginx
+	IP log by timestamp (see intent.py's module docstring).
+	"""
+	for site_id in (9, None):
+		record = logging.getLogger(INTENT_LOGGER_NAME).makeRecord(
+			INTENT_LOGGER_NAME, logging.INFO, __file__, 0, "mcp_intent", (), None,
+			extra={"tool": "search_articles", "intent": "x", "site_id": site_id},
+		)
+		payload = json.loads(IntentJsonFormatter().format(record))
+		assert "site_id" not in payload, site_id
 
 
 def test_configure_logging_without_log_dir_only_attaches_stream_handlers():
@@ -137,7 +137,8 @@ def test_configure_logging_with_log_dir_writes_rotated_files(tmp_path):
 
 
 def test_configure_logging_writes_site_id_to_disk(tmp_path):
-	"""The requirement is site_id in the JSON *lines written to disk* --
+	"""The requirement is site_id in the telemetry JSON *lines written to
+	disk*, and never in the intent file --
 	exercise the real RotatingFileHandler + formatter pipeline end to end,
 	not just the formatter in isolation, the way
 	test_configure_logging_with_log_dir_writes_rotated_files already does
@@ -148,16 +149,16 @@ def test_configure_logging_writes_site_id_to_disk(tmp_path):
 	logging.getLogger("gregory_mcp.telemetry").info(
 		"mcp_request", extra={"tool": "search_articles", "site_id": 7}
 	)
+	# Passed on the intent record on purpose, to prove the file writer drops it.
 	logging.getLogger(INTENT_LOGGER_NAME).info(
-		"mcp_intent", extra={"tool": "search_articles", "intent": "test", "site_id": None}
+		"mcp_intent", extra={"tool": "search_articles", "intent": "test", "site_id": 7}
 	)
 
 	telemetry_payload = json.loads((tmp_path / "telemetry.log").read_text().splitlines()[-1])
 	assert telemetry_payload["site_id"] == 7
 
 	intent_payload = json.loads((tmp_path / "intent.log").read_text().splitlines()[-1])
-	assert "site_id" in intent_payload
-	assert intent_payload["site_id"] is None
+	assert "site_id" not in intent_payload
 
 
 def test_configure_logging_falls_back_when_log_dir_is_unwritable(tmp_path):

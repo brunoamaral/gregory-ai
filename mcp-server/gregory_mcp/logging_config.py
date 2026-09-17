@@ -76,13 +76,16 @@ _SITE_ID_UNSET = object()
 def _add_site_id(payload: dict, record: logging.LogRecord) -> None:
 	"""Adds `site_id` when, and only when, the log call explicitly set it.
 
-	Unlike every _EXTRA_FIELDS/_INTENT_FIELDS entry, this is not "omit when
-	None": telemetry.py's `mcp_request` and intent.py's `mcp_intent` events
-	both always put a `site_id` key on their `extra` dict (an int, or None
-	when nothing resolved) — so the key must always survive to the formatted
-	JSON for those two, with `null` meaning "no site resolved" rather than
-	being indistinguishable from an absent key (an older server version that
-	never recorded site_id at all). Every *other* log line on these loggers
+	Unlike every _EXTRA_FIELDS entry, this is not "omit when None":
+	telemetry.py's `mcp_request` event always puts a `site_id` key on its
+	`extra` dict (an int, or None when nothing resolved) — so the key must
+	survive to the formatted JSON, with `null` meaning "no site resolved"
+	rather than being indistinguishable from an absent key (an older server
+	version that never recorded site_id at all).
+
+	Used by JsonFormatter only. IntentJsonFormatter deliberately never calls
+	it: the intent stream must share no field with `mcp_request` (see
+	intent.py's module docstring for why `site_id` in particular). Every *other* log line on these loggers
 	(a retry warning, a cache-dir failure, ...) never sets `site_id`, so it
 	stays omitted for them exactly as before this existed — the sentinel
 	default is what tells "never set" apart from "set to None".
@@ -127,7 +130,9 @@ class IntentJsonFormatter(logging.Formatter):
 			"logger": record.name,
 			"message": record.getMessage(),
 		}
-		_add_site_id(payload, record)
+		# No _add_site_id() here, on purpose: this writer is the last line of
+		# the intent/telemetry separation, so a site_id passed on an intent
+		# record by some future call site is still never written to disk.
 		for key in _INTENT_FIELDS:
 			value = getattr(record, key, None)
 			if value is not None:

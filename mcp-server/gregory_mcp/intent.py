@@ -8,7 +8,18 @@ protection here is exposure duration and review, not content reduction:
 - its own log stream (see logging_config.INTENT_LOGGER_NAME /
   IntentJsonFormatter) — no field this module emits is also emitted on a
   telemetry.py `mcp_request` line, and neither carries a request id or
-  session id, so the two streams have nothing to join on
+  session id, so the two streams have nothing to join on.
+
+  That includes `site_id`, deliberately. `mcp_request` records which tenant
+  a call was for; this stream does not, and must not. Each tenant hostname
+  gets its own nginx server block, so nginx's IP logs are already split by
+  tenant — a `site_id` here would let an intent line be matched to that
+  tenant's IP log by timestamp, narrowing exactly the join this separation
+  exists to prevent. Tenant attribution of traffic and failures lives on
+  `mcp_request`; whether intent text is ever separated per tenant belongs
+  with the private-tenant design and its retention and access rules
+  (decided 2026-09-16, PR #872 review). IntentJsonFormatter enforces this
+  at the file writer too, so a future call site cannot reintroduce it.
 - a 90-day rolling retention / hard delete window (deploy-side, Phase 6)
 - a heuristic PII scan on write that flags without blocking, feeding the
   scheduled review in the plan's Phase 5
@@ -24,7 +35,6 @@ import logging
 import re
 
 from .logging_config import INTENT_LOGGER_NAME
-from .site_context import get_current_site_id
 
 logger = logging.getLogger(INTENT_LOGGER_NAME)
 
@@ -102,13 +112,5 @@ async def record(tool: str, text: str) -> None:
 	except Exception:
 		logger.warning("intent_pii_scan_failed", exc_info=True)
 		flags = []
-	logger.info(
-		"mcp_intent",
-		# site_id is always included, even as None -- see telemetry.py's
-		# identical comment on why an absent key is ambiguous and a null
-		# isn't. Low-cardinality tenant attribution, not a correlation key:
-		# many requests share one site_id, so unlike a request/session id it
-		# can't 1:1-join this event to a specific telemetry.py mcp_request
-		# line (see this module's docstring on why those stay unjoinable).
-		extra={"tool": tool, "intent": text, "pii_flags": flags, "site_id": get_current_site_id()},
-	)
+	# No site_id here, deliberately — see this module's docstring.
+	logger.info("mcp_intent", extra={"tool": tool, "intent": text, "pii_flags": flags})

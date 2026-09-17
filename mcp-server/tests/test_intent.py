@@ -162,7 +162,15 @@ async def test_record_includes_flags_when_present(intent_records, monkeypatch):
 	assert intent_records[0].pii_flags == ["email"]
 
 
-async def test_record_includes_resolved_site_id(intent_records, monkeypatch):
+async def test_record_never_carries_site_id_even_when_a_site_is_resolved(intent_records, monkeypatch):
+	"""site_id belongs on telemetry's mcp_request, never here.
+
+	Each tenant hostname gets its own nginx server block, so nginx's IP logs
+	are already split by tenant; a site_id on an intent line would let it be
+	matched to that tenant's IP log by timestamp. Resolving a site first is
+	what makes this test mean something — an unresolved site would pass even
+	if record() still read the ContextVar.
+	"""
 	_patch_categories(monkeypatch, [])
 
 	token = _current_site_id.set(9)
@@ -171,18 +179,7 @@ async def test_record_includes_resolved_site_id(intent_records, monkeypatch):
 	finally:
 		_current_site_id.reset(token)
 
-	assert intent_records[0].site_id == 9
-
-
-async def test_record_site_id_is_null_when_unresolved(intent_records, monkeypatch):
-	_patch_categories(monkeypatch, [])
-
-	await intent.record("search_articles", "treatment options for multiple sclerosis")
-
-	# The attribute must exist (as None), not simply be absent -- see
-	# logging_config._add_site_id for why the distinction matters once this
-	# reaches the formatted JSON.
-	assert intent_records[0].site_id is None
+	assert not hasattr(intent_records[0], "site_id")
 
 
 async def test_record_is_a_no_op_for_blank_text(intent_records):
@@ -207,13 +204,12 @@ async def test_record_never_raises_when_the_pii_scan_fails(intent_records, monke
 
 
 async def test_record_never_includes_telemetry_fields():
-	"""No shared correlation key with telemetry.py's mcp_request events —
-	assert at the call site that record() only ever passes the intent
-	stream's own three fields (plus site_id) — never a request id or
-	anything else. site_id is the one deliberate exception: low-cardinality
-	tenant attribution, not a correlation key. Many requests share one
-	site_id, so unlike a request/session id it can't 1:1-join this event to
-	a specific mcp_request line the way this docstring's first line means.
+	"""No shared field with telemetry.py's mcp_request events — assert at the
+	call site that record() only ever passes the intent stream's own three
+	fields, never a request id, a session id, or site_id.
+
+	Run with a site resolved: that is the condition under which site_id would
+	be available to leak, so it is the only way this assertion covers it.
 	"""
 	import logging as _logging
 
@@ -227,9 +223,11 @@ async def test_record_never_includes_telemetry_fields():
 		return rec
 
 	_logging.Logger.makeRecord = spy
+	site_token = _current_site_id.set(9)
 	try:
 		await intent.record("search_articles", "benign query about a rare disease")
 	finally:
+		_current_site_id.reset(site_token)
 		_logging.Logger.makeRecord = original_makeRecord
 
 	standard_attrs = {
@@ -238,7 +236,7 @@ async def test_record_never_includes_telemetry_fields():
 		"relativeCreated", "thread", "threadName", "processName", "process", "message", "taskName",
 	}
 	extra_fields = {k for k in captured if k not in standard_attrs}
-	assert extra_fields == {"tool", "intent", "pii_flags", "site_id"}
+	assert extra_fields == {"tool", "intent", "pii_flags"}
 
 
 # --- IntentJsonFormatter -------------------------------------------------
