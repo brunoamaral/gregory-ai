@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx2
 import pytest
 
+from gregory_mcp.client import GregoryAPIError
 from gregory_mcp.tools.authors import get_author, search_authors
 from gregory_mcp.tools.catalog import list_categories, list_sponsors, list_subjects
 from gregory_mcp.tools.stats import get_stats
@@ -110,6 +111,32 @@ async def test_get_author_without_coauthors_makes_one_call(mock_gregory):
 	await get_author(5)
 
 	assert len(mock_gregory.requests) == 1
+
+
+async def test_get_author_404_says_not_found_in_this_instance(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(404, json={"detail": "Not found."}))
+
+	with pytest.raises(ValueError) as exc_info:
+		await get_author(123)
+
+	message = str(exc_info.value)
+	assert message == "Author 123 was not found in this instance."
+	# Django returns 404 both for a missing author and one outside this
+	# site's scope, deliberately identical so existence isn't leaked -- the
+	# message must never suggest the record exists somewhere else.
+	assert "elsewhere" not in message.lower()
+	assert "scope" not in message.lower()
+	assert "site" not in message.lower()
+	assert "belongs" not in message.lower()
+
+
+async def test_get_author_non_404_error_propagates(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(500, text="boom"))
+
+	with pytest.raises(GregoryAPIError) as exc_info:
+		await get_author(123)
+
+	assert exc_info.value.status_code == 500
 
 
 async def test_list_subjects_follows_pagination(mock_gregory):

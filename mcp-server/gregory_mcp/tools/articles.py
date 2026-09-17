@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .. import intent as intent_module
-from ..client import get_client
+from ..client import GregoryAPIError, get_client
 from ..compact import compact_article
 from ..enums import CategoryModality
 from ..pagination import clamp_page, clamp_page_size
@@ -103,5 +103,19 @@ async def search_articles(
 
 async def get_article(article_id: int) -> dict:
 	"""Fetch the full record for one article by ID, including authors,
-	ML predictions, linked clinical trials, and the untruncated summary."""
-	return await get_client().get(f"/articles/{article_id}/")
+	ML predictions, linked clinical trials, and the untruncated summary.
+
+	Raises:
+		ValueError: If no article with this ID is visible in this instance.
+	"""
+	try:
+		return await get_client().get(f"/articles/{article_id}/")
+	except GregoryAPIError as exc:
+		# Django returns 404 both for an article that doesn't exist and one
+		# outside this site's scope — deliberately identical, so existence
+		# isn't leaked (see site-scoped API visibility, #858-#868). Match
+		# that: name the record and say it wasn't found here, never implying
+		# it might exist somewhere else.
+		if exc.status_code == 404:
+			raise ValueError(f"Article {article_id} was not found in this instance.") from exc
+		raise

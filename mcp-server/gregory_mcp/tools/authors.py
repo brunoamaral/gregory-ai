@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from ..client import get_client
+from ..client import GregoryAPIError, get_client
 from ..compact import compact_author
 from ..pagination import clamp_page
 
@@ -66,8 +66,18 @@ async def get_author(author_id: int, include_coauthors: bool = False) -> dict:
 		author_id: The author's ID.
 		include_coauthors: When true, also fetches this author's co-authors
 			(a second request) — off by default since it is rarely needed.
+
+	Raises:
+		ValueError: If no author with this ID is visible in this instance.
 	"""
-	author = await get_client().get(f"/authors/{author_id}/")
+	try:
+		author = await get_client().get(f"/authors/{author_id}/")
+	except GregoryAPIError as exc:
+		# See get_article's identical comment — Django's 404 deliberately
+		# doesn't distinguish "doesn't exist" from "out of this site's scope".
+		if exc.status_code == 404:
+			raise ValueError(f"Author {author_id} was not found in this instance.") from exc
+		raise
 	if include_coauthors:
 		coauthors = await get_client().get(f"/authors/{author_id}/coauthors/")
 		author["coauthors"] = coauthors.get("results", coauthors)

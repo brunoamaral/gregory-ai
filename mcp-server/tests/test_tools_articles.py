@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import httpx2
+import pytest
 
 import gregory_mcp.tools.articles as articles_module
+from gregory_mcp.client import GregoryAPIError
 from gregory_mcp.tools.articles import get_article, search_articles
 
 
@@ -156,3 +158,29 @@ async def test_get_article_returns_full_record(mock_gregory):
 	assert result["article_id"] == 42
 	assert result["authors"] == [{"full_name": "A"}]
 	assert mock_gregory.requests[0].url.path == "/articles/42/"
+
+
+async def test_get_article_404_says_not_found_in_this_instance(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(404, json={"detail": "Not found."}))
+
+	with pytest.raises(ValueError) as exc_info:
+		await get_article(999)
+
+	message = str(exc_info.value)
+	assert message == "Article 999 was not found in this instance."
+	# Django returns 404 both for a missing article and one outside this
+	# site's scope, deliberately identical so existence isn't leaked -- the
+	# message must never suggest the record exists somewhere else.
+	assert "elsewhere" not in message.lower()
+	assert "scope" not in message.lower()
+	assert "site" not in message.lower()
+	assert "belongs" not in message.lower()
+
+
+async def test_get_article_non_404_error_propagates(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(500, text="boom"))
+
+	with pytest.raises(GregoryAPIError) as exc_info:
+		await get_article(999)
+
+	assert exc_info.value.status_code == 500

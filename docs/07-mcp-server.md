@@ -80,6 +80,15 @@ response, and most searches are followed by a `get_*` read of one or two records
 No tool exposes `all_results=true`. Bulk export is deliberately out of scope for this
 server — see [Risks](#risks).
 
+### Not-found errors
+
+`get_article`, `get_trial`, and `get_author` turn a `404` from their endpoint into a clear
+`ValueError` naming the record — e.g. `Article 123 was not found in this instance.` — rather
+than the generic upstream error text. Django returns `404` both for a record that doesn't
+exist and one outside this site's scope (see [Site scoping](#site-scoping-site_id)),
+deliberately identical so existence isn't leaked; this server preserves that and never
+implies the record might exist elsewhere. Any other error status still propagates unchanged.
+
 ---
 
 ## Resources
