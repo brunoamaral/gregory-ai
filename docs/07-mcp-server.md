@@ -211,6 +211,21 @@ the same events either way; the files are additive, not a replacement. `MCP_LOG_
 only unset when running the server directly (`python -m gregory_mcp`, e.g. in tests),
 which keeps that path stdout/stderr-only.
 
+Every `mcp_request` event on the telemetry stream carries a `site_id` field — the integer
+resolved for that request (see [Site scoping](#site-scoping-site_id)), or `null` when
+nothing resolved. The field is always present, even when `null`, so a log consumer can tell
+"resolved to no site" apart from "this server predates site_id" — an absent key can't
+distinguish the two. Other log lines on that stream (retry warnings and the like) never
+carry it.
+
+**`mcp_intent` events deliberately do not carry `site_id`.** The intent stream keeps the
+model's full query text and must share no field with telemetry. Each tenant hostname gets
+its own nginx server block, so nginx's IP logs are already split by tenant; a `site_id` on
+an intent line would let it be matched to that tenant's IP log by timestamp — exactly the
+join the two streams are kept apart to prevent. The intent file writer drops the field even
+if a caller passes it. Per-tenant separation of intent text, if it is ever wanted, belongs
+with the retention and access rules for private MCP servers.
+
 The container runs as non-root `appuser` (UID 1000, see `mcp-server/Dockerfile`), so
 `./mcp-server/logs/` must exist and be writable by that UID before the container starts
 — `mkdir -p mcp-server/logs && chown 1000:1000 mcp-server/logs` on the host, or Docker

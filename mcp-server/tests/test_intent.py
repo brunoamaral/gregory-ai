@@ -8,6 +8,7 @@ import pytest
 import gregory_mcp.intent as intent
 import gregory_mcp.query_shape as query_shape
 from gregory_mcp.logging_config import INTENT_LOGGER_NAME, IntentJsonFormatter
+from gregory_mcp.site_context import _current_site_id
 from gregory_mcp.tools.articles import search_articles
 from gregory_mcp.tools.authors import search_authors
 from gregory_mcp.tools.trials import search_trials
@@ -161,6 +162,26 @@ async def test_record_includes_flags_when_present(intent_records, monkeypatch):
 	assert intent_records[0].pii_flags == ["email"]
 
 
+async def test_record_never_carries_site_id_even_when_a_site_is_resolved(intent_records, monkeypatch):
+	"""site_id belongs on telemetry's mcp_request, never here.
+
+	Each tenant hostname gets its own nginx server block, so nginx's IP logs
+	are already split by tenant; a site_id on an intent line would let it be
+	matched to that tenant's IP log by timestamp. Resolving a site first is
+	what makes this test mean something — an unresolved site would pass even
+	if record() still read the ContextVar.
+	"""
+	_patch_categories(monkeypatch, [])
+
+	token = _current_site_id.set(9)
+	try:
+		await intent.record("search_articles", "treatment options for multiple sclerosis")
+	finally:
+		_current_site_id.reset(token)
+
+	assert not hasattr(intent_records[0], "site_id")
+
+
 async def test_record_is_a_no_op_for_blank_text(intent_records):
 	await intent.record("search_articles", "")
 	await intent.record("search_articles", "   ")
@@ -183,9 +204,12 @@ async def test_record_never_raises_when_the_pii_scan_fails(intent_records, monke
 
 
 async def test_record_never_includes_telemetry_fields():
-	"""No shared correlation key with telemetry.py's mcp_request events —
-	assert at the call site that record() only ever passes the intent
-	stream's own three fields, never a request id or anything else.
+	"""No shared field with telemetry.py's mcp_request events — assert at the
+	call site that record() only ever passes the intent stream's own three
+	fields, never a request id, a session id, or site_id.
+
+	Run with a site resolved: that is the condition under which site_id would
+	be available to leak, so it is the only way this assertion covers it.
 	"""
 	import logging as _logging
 
@@ -199,9 +223,11 @@ async def test_record_never_includes_telemetry_fields():
 		return rec
 
 	_logging.Logger.makeRecord = spy
+	site_token = _current_site_id.set(9)
 	try:
 		await intent.record("search_articles", "benign query about a rare disease")
 	finally:
+		_current_site_id.reset(site_token)
 		_logging.Logger.makeRecord = original_makeRecord
 
 	standard_attrs = {
