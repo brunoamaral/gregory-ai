@@ -1,7 +1,7 @@
 """Catalog tools: subjects, categories, sponsors.
 
-Slow-changing reference data. `list_subjects` is the discovery entry point —
-every row carries `team_id`, which most other tools' filters need.
+Slow-changing reference data. `list_subjects` is the discovery entry point
+for subject IDs, which most article/trial filters need.
 """
 
 from __future__ import annotations
@@ -11,37 +11,31 @@ from ..client import get_client
 from ..pagination import clamp_page, clamp_page_size
 
 
-async def list_subjects(team_id: int | None = None, search: str | None = None) -> dict:
-	"""List research subjects, each carrying its `team_id`.
+async def list_subjects(search: str | None = None) -> dict:
+	"""List research subjects.
 
-	Call this first when you don't already know a subject's ID or its
-	team_id — most article/trial filters need one or both.
+	Call this first when you don't already know a subject's ID — most
+	article/trial filters need one.
 
 	Cached server-side for 10 minutes (subjects change rarely).
 
 	Args:
-		team_id: Restrict to subjects belonging to this team.
 		search: Case-insensitive substring match against the subject name.
 	"""
-	results = await get_all_pages_cached("/subjects/", {"team_id": team_id, "search": search})
+	results = await get_all_pages_cached("/subjects/", {"search": search})
 	return {
 		"count": len(results),
-		"subjects": [
-			{"id": s.get("id"), "subject_name": s.get("subject_name"), "team_id": s.get("team_id")}
-			for s in results
-		],
+		"subjects": [{"id": s.get("id"), "subject_name": s.get("subject_name")} for s in results],
 	}
 
 
 async def list_categories(
-	team_id: int | None = None,
 	subject_id: int | None = None,
 	search: str | None = None,
 ) -> dict:
 	"""List research categories (topic tags attached to articles/trials).
 
 	Args:
-		team_id: Restrict to categories belonging to this team.
 		subject_id: Restrict to categories used within this subject.
 		search: Case-insensitive substring match against category name/terms.
 
@@ -52,9 +46,7 @@ async def list_categories(
 	per request and takes 12 requests to read in full, so this avoids a
 	multi-second stall on every call.
 	"""
-	results = await get_all_pages_cached(
-		"/categories/", {"team_id": team_id, "subject_id": subject_id, "search": search}
-	)
+	results = await get_all_pages_cached("/categories/", {"subject_id": subject_id, "search": search})
 	return {
 		"count": len(results),
 		"categories": [

@@ -36,23 +36,31 @@ async def test_search_authors(mock_gregory):
 	assert "articles_list" not in author
 
 
-async def test_search_authors_team_subject_scope(mock_gregory):
+async def test_search_authors_subject_scope(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
 
-	await search_authors(team_id=1, subject_id=5, sort_by="article_count", order="desc")
+	await search_authors(subject_id=5, sort_by="article_count", order="desc")
 
 	params = mock_gregory.requests[0].url.params
-	assert params["team_id"] == "1"
 	assert params["subject_id"] == "5"
 	assert params["sort_by"] == "article_count"
 	assert params["order"] == "desc"
+	assert "team_id" not in params
 
 
-async def test_search_authors_rejects_subject_id_without_team_id(mock_gregory):
-	with pytest.raises(ValueError, match="subject_id requires team_id"):
-		await search_authors(subject_id=5)
+async def test_search_authors_subject_id_alone_is_allowed(mock_gregory):
+	"""Regression: subject_id filtering used to require team_id (a stale
+	guard predating site-scoped API visibility). Django's AuthorsViewSet
+	(django/api/views.py) deliberately excludes subject_id/subjects_any from
+	that requirement -- only category filters still need a team -- so this
+	must not raise.
+	"""
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
 
-	assert mock_gregory.requests == []
+	result = await search_authors(subject_id=5)
+
+	assert mock_gregory.requests[0].url.params["subject_id"] == "5"
+	assert result["count"] == 0
 
 
 async def test_search_authors_drops_none_scope_params(mock_gregory):
@@ -61,7 +69,6 @@ async def test_search_authors_drops_none_scope_params(mock_gregory):
 	await search_authors(search="Jane")
 
 	params = mock_gregory.requests[0].url.params
-	assert "team_id" not in params
 	assert "subject_id" not in params
 	assert "sort_by" not in params
 	assert "order" not in params
@@ -127,7 +134,7 @@ async def test_list_subjects_follows_pagination(mock_gregory):
 async def test_list_categories_excludes_expensive_ordering(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"next": None, "results": []}))
 
-	await list_categories(team_id=1)
+	await list_categories(subject_id=1)
 
 	params = mock_gregory.requests[0].url.params
 	assert "ordering" not in params
@@ -152,26 +159,27 @@ async def test_list_sponsors_next_page_is_none_on_last_page(mock_gregory):
 	assert result["next_page"] is None
 
 
-async def test_get_stats_global_maps_team_and_subject(mock_gregory):
+async def test_get_stats_global_maps_subject(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"articles": 1}))
 
-	await get_stats(scope="global", team_id=1, subject_id=2)
+	await get_stats(scope="global", subject_id=2)
 
 	request = mock_gregory.requests[0]
 	assert request.url.path == "/stats/"
-	assert request.url.params["team"] == "1"
 	assert request.url.params["subject"] == "2"
+	assert "team" not in request.url.params
 
 
 async def test_get_stats_articles_scope(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"total": 1}))
 
-	await get_stats(scope="articles", team_id=1, relevant=True)
+	await get_stats(scope="articles", subject_id=4, relevant=True)
 
 	request = mock_gregory.requests[0]
 	assert request.url.path == "/articles/stats/"
-	assert request.url.params["team_id"] == "1"
+	assert request.url.params["subject_id"] == "4"
 	assert request.url.params["relevant"] == "true"
+	assert "team_id" not in request.url.params
 
 
 async def test_get_stats_trials_scope(mock_gregory):

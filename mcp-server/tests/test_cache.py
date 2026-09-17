@@ -231,8 +231,8 @@ async def test_list_categories_uses_the_shared_cache(mock_gregory):
 
 	mock_gregory.set_handler(handler)
 
-	await list_categories(team_id=1)
-	await list_categories(team_id=1)
+	await list_categories(subject_id=1)
+	await list_categories(subject_id=1)
 
 	assert len(calls) == 1
 
@@ -265,8 +265,11 @@ async def test_list_subjects_does_not_leak_across_sites(mock_gregory):
 	finally:
 		_current_site_id.reset(token_b)
 
-	assert result_a["subjects"] == [{"id": 1, "subject_name": "MS (site A)", "team_id": 1}]
-	assert result_b["subjects"] == [{"id": 2, "subject_name": "MS (site B)", "team_id": 4}]
+	# team_id is still in the mocked upstream row (Django keeps returning it),
+	# but list_subjects' projection drops it (decision E) -- confirms this is
+	# an active strip, not an accident of the mock never sending it.
+	assert result_a["subjects"] == [{"id": 1, "subject_name": "MS (site A)"}]
+	assert result_b["subjects"] == [{"id": 2, "subject_name": "MS (site B)"}]
 
 
 def test_get_catalog_cache_is_a_singleton():

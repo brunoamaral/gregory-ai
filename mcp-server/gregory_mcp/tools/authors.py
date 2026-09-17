@@ -19,13 +19,12 @@ async def search_authors(
 	family_name: str | None = None,
 	orcid: str | None = None,
 	country: str | None = None,
-	team_id: int | None = None,
 	subject_id: int | None = None,
 	sort_by: SortBy | None = None,
 	order: Order | None = None,
 	page: int = 1,
 ) -> dict:
-	"""Search authors by name, ORCID iD, country, or team/subject scope.
+	"""Search authors by name, ORCID iD, country, or subject scope.
 
 	`search`, `full_name`, `given_name`, and `family_name` are all
 	case-insensitive substring matches. `country` and `orcid` match
@@ -33,17 +32,10 @@ async def search_authors(
 	also works. This endpoint has a fixed page size (10) — page through
 	with `page` rather than requesting a larger one.
 
-	`subject_id` requires `team_id`. `sort_by=article_count` ranks authors by
-	their article count (add `team_id`/`subject_id` to scope which articles
-	count); default order for it is descending, ascending for everything
-	else.
-
-	Raises:
-		ValueError: If `subject_id` is given without `team_id` — the API
-			would otherwise return a silent empty page rather than an error.
+	`sort_by=article_count` ranks authors by their article count (add
+	`subject_id` to scope which articles count); default order for it is
+	descending, ascending for everything else.
 	"""
-	if subject_id is not None and team_id is None:
-		raise ValueError("subject_id requires team_id to also be set")
 	clamped_page = clamp_page(page)
 	params = {
 		"search": search,
@@ -52,7 +44,6 @@ async def search_authors(
 		"family_name": family_name,
 		"orcid": orcid,
 		"country": country,
-		"team_id": team_id,
 		"subject_id": subject_id,
 		"sort_by": sort_by,
 		"order": order,
