@@ -67,6 +67,31 @@ def _add_exc_type(payload: dict, record: logging.LogRecord) -> None:
 		payload["exc_type"] = record.exc_info[0].__name__
 
 
+# Sentinel distinguishing "the event never mentioned site_id" from "the event
+# set it to None" — a plain `getattr(record, "site_id", None)` default can't
+# tell those apart, and they mean different things (see _add_site_id).
+_SITE_ID_UNSET = object()
+
+
+def _add_site_id(payload: dict, record: logging.LogRecord) -> None:
+	"""Adds `site_id` when, and only when, the log call explicitly set it.
+
+	Unlike every _EXTRA_FIELDS/_INTENT_FIELDS entry, this is not "omit when
+	None": telemetry.py's `mcp_request` and intent.py's `mcp_intent` events
+	both always put a `site_id` key on their `extra` dict (an int, or None
+	when nothing resolved) — so the key must always survive to the formatted
+	JSON for those two, with `null` meaning "no site resolved" rather than
+	being indistinguishable from an absent key (an older server version that
+	never recorded site_id at all). Every *other* log line on these loggers
+	(a retry warning, a cache-dir failure, ...) never sets `site_id`, so it
+	stays omitted for them exactly as before this existed — the sentinel
+	default is what tells "never set" apart from "set to None".
+	"""
+	site_id = getattr(record, "site_id", _SITE_ID_UNSET)
+	if site_id is not _SITE_ID_UNSET:
+		payload["site_id"] = site_id
+
+
 class JsonFormatter(logging.Formatter):
 	def format(self, record: logging.LogRecord) -> str:
 		payload = {
@@ -75,6 +100,7 @@ class JsonFormatter(logging.Formatter):
 			"logger": record.name,
 			"message": record.getMessage(),
 		}
+		_add_site_id(payload, record)
 		for key in _EXTRA_FIELDS:
 			value = getattr(record, key, None)
 			if value is not None:
@@ -101,6 +127,7 @@ class IntentJsonFormatter(logging.Formatter):
 			"logger": record.name,
 			"message": record.getMessage(),
 		}
+		_add_site_id(payload, record)
 		for key in _INTENT_FIELDS:
 			value = getattr(record, key, None)
 			if value is not None:

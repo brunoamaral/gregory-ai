@@ -202,6 +202,11 @@ the same events either way; the files are additive, not a replacement. `MCP_LOG_
 only unset when running the server directly (`python -m gregory_mcp`, e.g. in tests),
 which keeps that path stdout/stderr-only.
 
+Every event on both streams carries a `site_id` field — the integer resolved for that
+request (see [Site scoping](#site-scoping-site_id)), or `null` when nothing resolved. The
+field is always present, even when `null`, so a log consumer can tell "resolved to no
+site" apart from "this server predates site_id" — an absent key can't distinguish the two.
+
 The container runs as non-root `appuser` (UID 1000, see `mcp-server/Dockerfile`), so
 `./mcp-server/logs/` must exist and be writable by that UID before the container starts
 — `mkdir -p mcp-server/logs && chown 1000:1000 mcp-server/logs` on the host, or Docker

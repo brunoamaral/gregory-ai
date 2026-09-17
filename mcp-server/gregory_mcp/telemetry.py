@@ -27,6 +27,7 @@ from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, Server
 from mcp.shared.exceptions import MCPError
 
 from .enums import CategoryModality
+from .site_context import get_current_site_id
 
 logger = logging.getLogger("gregory_mcp.telemetry")
 
@@ -251,7 +252,16 @@ class TelemetryMiddleware(ServerMiddleware[Any]):
 		accumulator = _UpstreamAccumulator()
 		token = _accumulator.set(accumulator)
 		start = time.monotonic()
-		event: dict[str, Any] = {"method": ctx.method, "protocol_version": ctx.protocol_version}
+		event: dict[str, Any] = {
+			"method": ctx.method,
+			"protocol_version": ctx.protocol_version,
+			# Always present, even as None (no site resolved) — SiteMiddleware
+			# (site.py) is outermost, so this is set for the whole request
+			# before TelemetryMiddleware ever runs. An explicit null lets a log
+			# consumer tell "resolved to no site" apart from "this server
+			# predates site_id" (an absent key can't distinguish the two).
+			"site_id": get_current_site_id(),
+		}
 
 		params = ctx.params or {}
 		tool_name = params.get("name") if ctx.method == "tools/call" else None

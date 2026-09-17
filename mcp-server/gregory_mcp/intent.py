@@ -24,6 +24,7 @@ import logging
 import re
 
 from .logging_config import INTENT_LOGGER_NAME
+from .site_context import get_current_site_id
 
 logger = logging.getLogger(INTENT_LOGGER_NAME)
 
@@ -101,4 +102,13 @@ async def record(tool: str, text: str) -> None:
 	except Exception:
 		logger.warning("intent_pii_scan_failed", exc_info=True)
 		flags = []
-	logger.info("mcp_intent", extra={"tool": tool, "intent": text, "pii_flags": flags})
+	logger.info(
+		"mcp_intent",
+		# site_id is always included, even as None -- see telemetry.py's
+		# identical comment on why an absent key is ambiguous and a null
+		# isn't. Low-cardinality tenant attribution, not a correlation key:
+		# many requests share one site_id, so unlike a request/session id it
+		# can't 1:1-join this event to a specific telemetry.py mcp_request
+		# line (see this module's docstring on why those stay unjoinable).
+		extra={"tool": tool, "intent": text, "pii_flags": flags, "site_id": get_current_site_id()},
+	)

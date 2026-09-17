@@ -8,6 +8,7 @@ import pytest
 import gregory_mcp.intent as intent
 import gregory_mcp.query_shape as query_shape
 from gregory_mcp.logging_config import INTENT_LOGGER_NAME, IntentJsonFormatter
+from gregory_mcp.site_context import _current_site_id
 from gregory_mcp.tools.articles import search_articles
 from gregory_mcp.tools.authors import search_authors
 from gregory_mcp.tools.trials import search_trials
@@ -161,6 +162,29 @@ async def test_record_includes_flags_when_present(intent_records, monkeypatch):
 	assert intent_records[0].pii_flags == ["email"]
 
 
+async def test_record_includes_resolved_site_id(intent_records, monkeypatch):
+	_patch_categories(monkeypatch, [])
+
+	token = _current_site_id.set(9)
+	try:
+		await intent.record("search_articles", "treatment options for multiple sclerosis")
+	finally:
+		_current_site_id.reset(token)
+
+	assert intent_records[0].site_id == 9
+
+
+async def test_record_site_id_is_null_when_unresolved(intent_records, monkeypatch):
+	_patch_categories(monkeypatch, [])
+
+	await intent.record("search_articles", "treatment options for multiple sclerosis")
+
+	# The attribute must exist (as None), not simply be absent -- see
+	# logging_config._add_site_id for why the distinction matters once this
+	# reaches the formatted JSON.
+	assert intent_records[0].site_id is None
+
+
 async def test_record_is_a_no_op_for_blank_text(intent_records):
 	await intent.record("search_articles", "")
 	await intent.record("search_articles", "   ")
@@ -185,7 +209,11 @@ async def test_record_never_raises_when_the_pii_scan_fails(intent_records, monke
 async def test_record_never_includes_telemetry_fields():
 	"""No shared correlation key with telemetry.py's mcp_request events —
 	assert at the call site that record() only ever passes the intent
-	stream's own three fields, never a request id or anything else.
+	stream's own three fields (plus site_id) — never a request id or
+	anything else. site_id is the one deliberate exception: low-cardinality
+	tenant attribution, not a correlation key. Many requests share one
+	site_id, so unlike a request/session id it can't 1:1-join this event to
+	a specific mcp_request line the way this docstring's first line means.
 	"""
 	import logging as _logging
 
@@ -210,7 +238,7 @@ async def test_record_never_includes_telemetry_fields():
 		"relativeCreated", "thread", "threadName", "processName", "process", "message", "taskName",
 	}
 	extra_fields = {k for k in captured if k not in standard_attrs}
-	assert extra_fields == {"tool", "intent", "pii_flags"}
+	assert extra_fields == {"tool", "intent", "pii_flags", "site_id"}
 
 
 # --- IntentJsonFormatter -------------------------------------------------

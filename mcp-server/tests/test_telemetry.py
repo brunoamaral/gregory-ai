@@ -12,6 +12,7 @@ from mcp_types import CLIENT_INFO_META_KEY, INTERNAL_ERROR, CallToolResult, Text
 from gregory_mcp import telemetry
 from gregory_mcp.cache import CatalogCache
 from gregory_mcp.client import GregoryAPIError, GregoryClient
+from gregory_mcp.site_context import _current_site_id
 from gregory_mcp.telemetry import TelemetryMiddleware, _UpstreamAccumulator
 from tests.conftest import TEST_SETTINGS
 
@@ -101,6 +102,47 @@ async def test_emits_one_record_for_a_successful_tool_call(caplog):
 	assert fields["subject_id"] == 3
 	assert fields["page"] == 1
 	assert "duration_ms" in fields
+
+
+async def test_site_id_is_recorded_when_resolved(caplog):
+	"""SiteMiddleware (site.py) is outermost and sets this ContextVar before
+	TelemetryMiddleware ever runs, so a resolved site_id must reach the
+	emitted event."""
+
+	async def call_next(ctx):
+		return CallToolResult(content=[], structured_content={"count": 0, "articles": []})
+
+	ctx = _make_ctx(params={"name": "search_articles", "arguments": {}})
+	token = _current_site_id.set(5)
+	try:
+		await TelemetryMiddleware()(ctx, call_next)
+	finally:
+		_current_site_id.reset(token)
+
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
+	assert len(records) == 1
+	fields = _record_fields(records[0])
+	assert fields["site_id"] == 5
+
+
+async def test_site_id_is_null_when_unresolved(caplog):
+	"""No site resolved for this request (site_context's ContextVar default)
+	-- the key must still be present, as an explicit None, not simply
+	absent. An absent key can't be told apart from an older server version
+	that never recorded site_id at all.
+	"""
+
+	async def call_next(ctx):
+		return CallToolResult(content=[], structured_content={"count": 0, "articles": []})
+
+	ctx = _make_ctx(params={"name": "search_articles", "arguments": {}})
+	await TelemetryMiddleware()(ctx, call_next)
+
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
+	assert len(records) == 1
+	fields = _record_fields(records[0])
+	assert "site_id" in fields
+	assert fields["site_id"] is None
 
 
 def test_sanitized_logged_value_rejects_wrong_types_and_bad_formats():
