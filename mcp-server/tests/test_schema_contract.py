@@ -99,6 +99,12 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"subjects_any",  # multi-subject AND/OR; subject_id covers the common case
 		"week",
 		"year",  # legacy ISO-week filtering; published_date_after/before covers this better
+		# Decision E, MCP multi-tenancy audit (2026-09-16): site-scoped API
+		# visibility (#858-#868) means Django now scopes every caller by
+		# site first, so team_id can no longer widen a result set -- it had
+		# become purely cosmetic. Removed from the tool surface for
+		# quality; the API still accepts and declares it.
+		"team_id",
 	},
 	"/trials/": {
 		"format",
@@ -126,6 +132,11 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"inclusion_agemin",
 		"inclusion_agemax",  # -> age_eligible
 		"countries",  # -> country / region
+		# Decision E, MCP multi-tenancy audit (2026-09-16): same reasoning as
+		# /articles/'s entry above -- team_id can no longer widen results now
+		# that Django scopes by site first, so it was removed from the tool
+		# surface for quality.
+		"team_id",
 	},
 	"/authors/": {
 		# Added by site-scoped API visibility Phase 2 as the scoping primitive
@@ -136,8 +147,15 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"subjects_any",
 		"format",
 		"author_id",  # redundant with get_author(author_id)
-		# Task 5 restored team_id/subject_id; category/date scoping wasn't
-		# requested and stays out for now:
+		# Decision E, MCP multi-tenancy audit (2026-09-16): team_id can no
+		# longer widen results now that Django scopes by site first, so it was
+		# removed from search_authors for quality -- the stale
+		# subject_id-requires-team_id guard went with it (see AuthorsViewSet
+		# in django/api/views.py, which deliberately excludes subject filters
+		# from that requirement).
+		"team_id",
+		# Task 5 restored subject_id; category/date scoping wasn't requested
+		# and stays out for now:
 		"category_id",
 		"category_slug",
 		"date_from",
@@ -148,6 +166,11 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"format",
 		"page",  # list_subjects always fetches every page (get_all_pages)
 		"ordering",  # 7 rows total — nothing to usefully sort
+		# Decision E, MCP multi-tenancy audit (2026-09-16): team_id can no
+		# longer widen results now that Django scopes by site first, so it was
+		# removed from list_subjects (and the team_id key dropped from every
+		# returned row) for quality.
+		"team_id",
 	},
 	"/categories/": {
 		# Added by site-scoped API visibility Phase 2 as the scoping primitive
@@ -159,7 +182,7 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"format",
 		"page",  # list_categories always fetches every page (get_all_pages)
 		"ordering",
-		"category_id",  # redundant enough with team_id/subject_id/search
+		"category_id",  # redundant enough with subject_id/search
 		"category_terms",
 		"get_categories",  # comma-separated ID lookup; niche
 		# HANDOVER-MCP-FIXES-PLAN.md Task 5: "if useful" — deferred, not requested:
@@ -170,6 +193,10 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"date_from",
 		"date_to",
 		"timeframe",
+		# Decision E, MCP multi-tenancy audit (2026-09-16): team_id can no
+		# longer widen results now that Django scopes by site first, so it was
+		# removed from list_categories for quality.
+		"team_id",
 	},
 	"/sponsors/": {
 		# Sponsor subject scoping arrived with site-scoped API visibility

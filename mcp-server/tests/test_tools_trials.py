@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import httpx2
+import pytest
 
 import gregory_mcp.tools.trials as trials_module
+from gregory_mcp.client import GregoryAPIError
 from gregory_mcp.tools.trials import get_trial, search_trials
 
 
@@ -140,3 +142,29 @@ async def test_get_trial_returns_full_record(mock_gregory):
 
 	assert result["trial_id"] == 7
 	assert mock_gregory.requests[0].url.path == "/trials/7/"
+
+
+async def test_get_trial_404_says_not_found_in_this_instance(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(404, json={"detail": "Not found."}))
+
+	with pytest.raises(ValueError) as exc_info:
+		await get_trial(555)
+
+	message = str(exc_info.value)
+	assert message == "Trial 555 was not found in this instance."
+	# Django returns 404 both for a missing trial and one outside this site's
+	# scope, deliberately identical so existence isn't leaked -- the message
+	# must never suggest the record exists somewhere else.
+	assert "elsewhere" not in message.lower()
+	assert "scope" not in message.lower()
+	assert "site" not in message.lower()
+	assert "belongs" not in message.lower()
+
+
+async def test_get_trial_non_404_error_propagates(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(503, text="boom"))
+
+	with pytest.raises(GregoryAPIError) as exc_info:
+		await get_trial(555)
+
+	assert exc_info.value.status_code == 503

@@ -46,12 +46,12 @@ crowds context and degrades model tool selection.
 
 | Tool | Backing endpoint | Notes |
 |:---|:---|:---|
-| `list_subjects` | `GET /subjects/` | Discovery entry point. Every row carries `team_id`, which most other tools' filters need. |
+| `list_subjects` | `GET /subjects/` | Discovery entry point for subject IDs, which most article/trial filters need. |
 | `search_articles` | `GET /articles/` | Boolean `search` plus subject, category, `category_modality`, journal, DOI, `relevant`, `ml_threshold`, `open_access`, `has_clinical_trials`, date range, `last_days`. Compact results — see [Payload shaping](#payload-shaping). |
 | `get_article` | `GET /articles/{article_id}/` | Full record. |
 | `search_trials` | `GET /trials/` | `search` plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates, registry IDs (`nct`, `euct`, `eudract`, `ctis`), `acronym`, `has_results`, `therapeutic_areas`. |
 | `get_trial` | `GET /trials/{trial_id}/` | Full record, incl. eligibility text and results detail. |
-| `search_authors` | `GET /authors/` | Name, ORCID, country, team/subject scope, `sort_by`/`order`. Fixed page size (10) — this endpoint doesn't support `page_size`. |
+| `search_authors` | `GET /authors/` | Name, ORCID, country, subject scope, `sort_by`/`order`. Fixed page size (10) — this endpoint doesn't support `page_size`. |
 | `get_author` | `GET /authors/{id}/` (+ `/coauthors/`) | Co-authors optional (`include_coauthors`), off by default. |
 | `list_categories` | `GET /categories/` | Fetches every page — a small, slow-changing taxonomy. Does not expose `ordering=authors_count_annotated`; that sort is expensive. |
 | `list_sponsors` | `GET /sponsors/` | Paginated, not fetched in full — sponsors can number in the thousands. |
@@ -80,6 +80,15 @@ response, and most searches are followed by a `get_*` read of one or two records
 No tool exposes `all_results=true`. Bulk export is deliberately out of scope for this
 server — see [Risks](#risks).
 
+### Not-found errors
+
+`get_article`, `get_trial`, and `get_author` turn a `404` from their endpoint into a clear
+`ValueError` naming the record — e.g. `Article 123 was not found in this instance.` — rather
+than the generic upstream error text. Django returns `404` both for a record that doesn't
+exist and one outside this site's scope (see [Site scoping](#site-scoping-site_id)),
+deliberately identical so existence isn't leaked; this server preserves that and never
+implies the record might exist elsewhere. Any other error status still propagates unchanged.
+
 ---
 
 ## Resources
@@ -100,7 +109,7 @@ rather than each starting their own). `list_subjects`/`list_categories` share th
 entries as these resources when called with equivalent filters — search tools are never
 cached.
 
-- `gregory://subjects` — every subject, with `team_id`
+- `gregory://subjects` — every subject
 - `gregory://categories` — every category
 
 No sponsors resource: at 8,000+ rows / ~700 KB it isn't catalog-shaped the way

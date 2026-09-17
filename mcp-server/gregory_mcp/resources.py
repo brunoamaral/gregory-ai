@@ -21,16 +21,14 @@ def register_resources(server) -> None:
 		"gregory://subjects",
 		name="subjects_catalog",
 		title="Subjects catalog",
-		description="Every research subject, with its team_id, across the connected GregoryAI instance.",
+		description="Every research subject across the connected GregoryAI instance.",
 		mime_type="application/json",
 	)
 	async def subjects_catalog() -> str:
 		# No params (the full, unfiltered catalog) — same cache entry as
 		# list_subjects() called with no filters.
 		results = await get_all_pages_cached("/subjects/")
-		return json.dumps(
-			[{"id": s.get("id"), "subject_name": s.get("subject_name"), "team_id": s.get("team_id")} for s in results]
-		)
+		return json.dumps([{"id": s.get("id"), "subject_name": s.get("subject_name")} for s in results])
 
 	@server.resource(
 		"gregory://categories",
