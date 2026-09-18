@@ -62,7 +62,7 @@ class TrialSearchViewTests(TestCase):
 
 		# WHO ICTRP-shaped trial: registry name/acronym live only in
 		# scientific_title, title is the registry's lay public title, and
-		# there's no summary -- see TRIALS-SEARCH-COVERAGE-PLAN.md.
+		# there's no summary.
 		self.trial4 = Trials.objects.create(
 			title="Testing multiple drugs at once for a progressive condition",
 			summary="",
@@ -233,7 +233,7 @@ class TrialSearchViewTests(TestCase):
 		self.assertNotIn(self.trial1.title, titles)
 
 	# -----------------------------------------------------------------
-	# scientific_title coverage (TRIALS-SEARCH-COVERAGE-PLAN.md #3, #5.2).
+	# scientific_title coverage.
 	# trial4's "OCTOPUS" and "Optimal Clinical Trials Platform" live only in
 	# scientific_title -- title/summary don't contain either.
 	# -----------------------------------------------------------------

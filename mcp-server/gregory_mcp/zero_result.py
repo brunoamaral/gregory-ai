@@ -8,9 +8,9 @@ over-constraining the search — never the filter *values*, only which
 filter names were set, the same boundary telemetry.py holds for
 `params_used`.
 
-TRIALS-SEARCH-COVERAGE-PLAN.md §4.1 made this tool-aware (`tool` is
-"articles" or "trials") and added `fields_read`, so a caller doesn't have to
-parse prose to learn which fields a filter actually searched.
+It is tool-aware (`tool` is "articles" or "trials") and adds `fields_read`,
+so a caller doesn't have to parse prose to learn which fields a filter
+actually searched.
 """
 
 from __future__ import annotations
@@ -104,9 +104,9 @@ _TRIAL_SEARCH_RULE = (
 )
 
 # Checked in order per tool, so the categories most likely to silently zero
-# out an otherwise-good search come first. `search` is last in both: it's
-# the broadest filter, and its own rule only fires when nothing narrower
-# already explains the empty page.
+# out an otherwise-good search rank first. Every matching rule fires; `search`
+# is last in both because it's the broadest filter, so its suggestion ranks
+# after the narrower ones.
 _RULES_BY_TOOL: dict[str, tuple[tuple[tuple[str, ...], str], ...]] = {
 	"articles": (
 		_RELEVANCE_RULE,

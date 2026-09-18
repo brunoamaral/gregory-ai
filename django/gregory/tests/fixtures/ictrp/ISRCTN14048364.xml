@@ -2,11 +2,11 @@
 <!--
   Reconstructed for tests from trial 519 (ISRCTN14048364, "OCTOPUS") as stored
   in the dev database on 2026-09-18, formatted in the shape of a real WHO
-  ICTRP export (trialsearch.who.int), matching the sample at
-  ~/Downloads/ICTRP-Results.xml for the reference shape. This file is NOT a
-  captured export, and it intentionally omits every contact field (names,
-  emails, phone numbers). There is no Acronym element: ISRCTN, like most
-  registries other than ClinicalTrials.gov, doesn't supply one to ICTRP.
+  ICTRP XML export (trialsearch.who.int; reference sample exported
+  2026-09-18). This file is NOT a captured export, and it intentionally omits
+  every contact field (names, emails, phone numbers). There is no Acronym
+  element, matching the trial's empty acronym; in the reference sample,
+  records from registries other than ClinicalTrials.gov omit it too.
 -->
 <Trials_downloaded_from_ICTRP>
   <Trial><Export_date>06/19/2026 00:00:00</Export_date>

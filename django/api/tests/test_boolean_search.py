@@ -153,7 +153,7 @@ class BuildSearchQTests(TestCase):
 		self.assertIsInstance(q, Q)
 
 	# -----------------------------------------------------------------
-	# Per-model lookups (TRIALS-SEARCH-COVERAGE-PLAN.md #3.1): build_search_q
+	# Per-model lookups: build_search_q
 	# takes the lookups tuple to OR each term across, defaulting to the
 	# article pair for backward compatibility.
 	# -----------------------------------------------------------------
@@ -207,7 +207,27 @@ class BuildSearchQTests(TestCase):
 class TrialSearchHelpTextDriftGuardTests(TestCase):
 	"""TrialFilter.search's help_text must keep naming every field
 	TRIAL_SEARCH_LOOKUPS actually reads, so the two can't silently drift
-	apart (TRIALS-SEARCH-COVERAGE-PLAN.md #5.2)."""
+	apart."""
+
+	@staticmethod
+	def _fields_searched(lookups):
+		# utitle/usummary are the uppercase mirrors of title/summary.
+		column_to_field = {"utitle": "title", "usummary": "summary"}
+		columns = (lookup.split("__")[0] for lookup in lookups)
+		return tuple(column_to_field.get(c, c) for c in columns)
+
+	def test_trial_search_fields_match_the_lookups(self):
+		# The lookups are what's actually searched; TRIAL_SEARCH_FIELDS feeds
+		# the help text and is mirrored by the MCP guidance. Changing one
+		# without the other fails here.
+		self.assertEqual(
+			self._fields_searched(TRIAL_SEARCH_LOOKUPS), TRIAL_SEARCH_FIELDS
+		)
+
+	def test_article_search_fields_match_the_lookups(self):
+		self.assertEqual(
+			self._fields_searched(ARTICLE_SEARCH_LOOKUPS), ARTICLE_SEARCH_FIELDS
+		)
 
 	def test_help_text_names_every_trial_search_field(self):
 		help_text = TrialFilter.base_filters["search"].extra["help_text"]

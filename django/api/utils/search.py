@@ -3,10 +3,7 @@ from django.db.models import Q
 MAX_TERMS = 16
 MAX_DEPTH = 8
 
-# Lookups each term is OR-ed across. icontains compiles to
-# UPPER(col) LIKE UPPER(%s) — same plan shape as the hard-coded
-# utitle/usummary __contains lookups below — so it's served by a
-# GinIndex(OpClass(Upper(field), name="gin_trgm_ops")) expression index.
+# Lookups each search term is OR-ed across, per model.
 ARTICLE_SEARCH_LOOKUPS = ("utitle__contains", "usummary__contains")
 TRIAL_SEARCH_LOOKUPS = (
 	"utitle__contains",

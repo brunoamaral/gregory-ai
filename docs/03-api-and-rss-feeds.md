@@ -319,8 +319,8 @@ implemented and the one precedence rule to know.
 | `date_registration_after` / `date_registration_before` | trials | ✅ | ✅ | Registration date range — same semantics as on `GET /trials/`. |
 | Any other list-endpoint filter | articles, trials, authors | ✅ | ✅ | `relevant`, `subjects`, `open_access`, `phase_normalized`, `country`, `sponsor_id`, `orcid`, … — the search endpoints mount the same `ArticleFilter` / `TrialFilter` / `AuthorFilter` as the list endpoints, so every filter defined there applies. |
 
-Trials' `search` also reads `scientific_title` because WHO ICTRP-sourced trials
-(`Source_Register` other than ClinicalTrials.gov) rarely have a `summary`, and their
+Trials' `search` also reads `scientific_title` because trials from registries other than
+ClinicalTrials.gov, which arrive through WHO ICTRP, rarely have a `summary`, and their
 `title` is the registry's lay public title — the trial's actual name is usually only in
 the scientific title. This is additive for bare and `OR`-ed terms (a trial can only gain
 matches), but `-term` / `NOT term` now also excludes a trial whose scientific title
