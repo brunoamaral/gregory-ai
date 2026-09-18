@@ -60,6 +60,25 @@ class TrialSearchViewTests(TestCase):
 		self.trial3.teams.add(self.team)
 		self.trial3.subjects.add(self.subject)
 
+		# WHO ICTRP-shaped trial: registry name/acronym live only in
+		# scientific_title, title is the registry's lay public title, and
+		# there's no summary -- see TRIALS-SEARCH-COVERAGE-PLAN.md.
+		self.trial4 = Trials.objects.create(
+			title="Testing multiple drugs at once for a progressive condition",
+			summary="",
+			scientific_title="OCTOPUS - Optimal Clinical Trials Platform for Progressive Disease",
+			link="https://example.com/trial4",
+			published_date=timezone.now(),
+			# Deliberately not "Recruiting": test_filter_by_status below
+			# asserts exactly one Recruiting trial (trial1). "Completed" is
+			# safe here too -- test_combined_search_and_status's
+			# search=COVID&status=Completed already excludes trial4 on the
+			# search term alone.
+			recruitment_status="Completed",
+		)
+		self.trial4.teams.add(self.team)
+		self.trial4.subjects.add(self.subject)
+
 		self.client = APIClient()
 
 	def test_missing_required_parameters(self):
@@ -212,6 +231,81 @@ class TrialSearchViewTests(TestCase):
 		titles = [t["title"] for t in response.data["results"]]
 		self.assertIn(self.trial2.title, titles)
 		self.assertNotIn(self.trial1.title, titles)
+
+	# -----------------------------------------------------------------
+	# scientific_title coverage (TRIALS-SEARCH-COVERAGE-PLAN.md #3, #5.2).
+	# trial4's "OCTOPUS" and "Optimal Clinical Trials Platform" live only in
+	# scientific_title -- title/summary don't contain either.
+	# -----------------------------------------------------------------
+
+	def test_search_matches_scientific_title_only_via_search_endpoint(self):
+		url = reverse("trial-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"search": "OCTOPUS",
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		titles = [t["title"] for t in response.data["results"]]
+		self.assertIn(self.trial4.title, titles)
+
+	def test_search_matches_scientific_title_only_via_trials_list_endpoint(self):
+		response = self.client.get("/trials/", {"search": "OCTOPUS"})
+		self.assertEqual(response.status_code, 200)
+		ids = {t["trial_id"] for t in response.data["results"]}
+		self.assertIn(self.trial4.trial_id, ids)
+
+	def test_search_quoted_phrase_matches_scientific_title(self):
+		url = reverse("trial-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"search": '"Optimal Clinical Trials Platform"',
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		titles = [t["title"] for t in response.data["results"]]
+		self.assertIn(self.trial4.title, titles)
+
+	def test_negation_excludes_a_trial_via_its_scientific_title(self):
+		# -OCTOPUS must exclude trial4 even though "OCTOPUS" never appears in
+		# its title or summary -- a behaviour change from before this plan:
+		# NOT/- now also reads scientific_title.
+		url = reverse("trial-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"search": "progressive -OCTOPUS",
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		titles = [t["title"] for t in response.data["results"]]
+		self.assertNotIn(self.trial4.title, titles)
+
+	def test_title_filter_does_not_read_scientific_title(self):
+		# title= stays single-field: OCTOPUS is only in scientific_title.
+		url = reverse("trial-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"title": "OCTOPUS",
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data["results"]), 0)
+
+	def test_summary_filter_does_not_read_scientific_title(self):
+		# summary= stays single-field too.
+		url = reverse("trial-search")
+		data = {
+			"team_id": self.team.id,
+			"subject_id": self.subject.id,
+			"summary": "OCTOPUS",
+		}
+		response = self.client.post(url, data, format="json")
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data["results"]), 0)
 
 	def test_invalid_team_id(self):
 		"""Test with invalid team ID"""

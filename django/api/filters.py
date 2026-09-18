@@ -409,8 +409,8 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		Bare terms are AND-ed; uppercase OR/NOT and "quoted phrases" are supported.
 		Single-term queries behave identically to before (substring match).
 		"""
-		from api.utils.search import build_search_q
-		q = build_search_q(value)
+		from api.utils.search import ARTICLE_SEARCH_LOOKUPS, build_search_q
+		q = build_search_q(value, ARTICLE_SEARCH_LOOKUPS)
 		if q is None:
 			return queryset
 		return queryset.filter(q)
@@ -667,8 +667,8 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	"""
 	Filter class for Trials, allowing searching by title, summary,
-	and combined search across both fields, plus filtering by recruitment status,
-	team, and subject.
+	and scientific title, and combined search across all three fields,
+	plus filtering by recruitment status, team, and subject.
 	"""
 
 	# Core search filters
@@ -686,8 +686,10 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		method="filter_search",
 		label="Search",
 		help_text=(
-			"Boolean search across title and summary. Bare terms are AND-ed; "
-			'uppercase OR/NOT and "quoted phrases" are supported.'
+			"Boolean search across title, summary and scientific title. Bare "
+			'terms are AND-ed; uppercase OR/NOT and "quoted phrases" are '
+			"supported. Registries outside ClinicalTrials.gov usually put a "
+			"trial's name and acronym only in the scientific title."
 		),
 	)
 
@@ -1122,13 +1124,17 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 
 	def filter_search(self, queryset, name, value):
 		"""
-		Boolean search across title and summary using GIN-indexed uppercase columns.
+		Boolean search across title, summary and scientific title using
+		GIN-indexed uppercase columns/expressions.
 
 		Bare terms are AND-ed; uppercase OR/NOT and "quoted phrases" are supported.
-		Single-term queries behave identically to before (substring match).
+		Single-term queries behave identically to before (substring match), plus
+		now also matching on scientific_title. Registries outside
+		ClinicalTrials.gov usually put a trial's name and acronym only in the
+		scientific title, not the (lay) public title used for `title`.
 		"""
-		from api.utils.search import build_search_q
-		q = build_search_q(value)
+		from api.utils.search import TRIAL_SEARCH_LOOKUPS, build_search_q
+		q = build_search_q(value, TRIAL_SEARCH_LOOKUPS)
 		if q is None:
 			return queryset
 		return queryset.filter(q)
