@@ -577,7 +577,7 @@ recomputation is deterministic and never causes a spurious `update_fields` write
 Twenty-four registries in total. `nct`, `eudract`, `ctis`, `isrctn`, `actrn`, `drks`,
 `ctri`, `pactr`, `rpcec`, `tctr`, `slctr`, `itmctr`, `umin`, `jrct`, `rbr`, `irct`,
 `chictr` predate this field; this field's own pass added `nl_omon` (Dutch Trial Register, `NL-OMON…`), `nl`
-(`NL####`/`NL#####`), `ntr` (`NTR#`–`NTR#####`), `repec` (Peru, `PER-###-##`), `lbctr`
+(`NL####`), `ntr` (`NTR#`–`NTR#####`), `repec` (Peru, `PER-###-##`), `lbctr`
 (Lebanon, `LBCTR##########`), `utn` (the WHO Universal Trial Number, `U1111-####-####`),
 and `japic` (`JapicCTI-######`), and widened two existing ones: `jrct` now accepts an
 optional single sub-prefix letter (`jRCTs031180248`) and upper-cases the whole match rather
