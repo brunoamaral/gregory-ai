@@ -434,6 +434,65 @@ class ExportTrialsXlsxTests(TestCase):
 			os.unlink(path)
 
 	# ------------------------------------------------------------------
+	# identifiers_normalized / ctg_secondary_ids
+	# (TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.6)
+	# ------------------------------------------------------------------
+
+	def test_identifiers_normalized_column_present_and_rendered(self):
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			self.assertIn("identifiers_normalized", headers)
+			value = self._cell_for_title(
+				ws,
+				headers,
+				"identifiers_normalized",
+				"A randomised trial of natalizumab in MS",
+			)
+			# list-of-scalars renders as a "; "-joined string, not a Python repr.
+			self.assertEqual(value, "nct:NCT00111111")
+		finally:
+			os.unlink(path)
+
+	def test_identifiers_normalized_has_glossary_entry(self):
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Glossary"]
+			described = {}
+			for r in range(2, ws.max_row + 1):
+				described[ws.cell(row=r, column=1).value] = ws.cell(row=r, column=3).value
+			self.assertIn("identifiers_normalized", described)
+			self.assertTrue(
+				described["identifiers_normalized"],
+				'Glossary description for "identifiers_normalized" is empty',
+			)
+		finally:
+			os.unlink(path)
+
+	def test_ctg_secondary_ids_is_excluded_from_export(self):
+		"""ctg_secondary_ids is raw ClinicalTrials.gov data feeding
+		identifiers_normalized, not a public-facing column — plan §3.2."""
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			self.assertNotIn("ctg_secondary_ids", headers)
+
+			glossary = wb["Glossary"]
+			glossary_fields = {
+				glossary.cell(row=r, column=1).value
+				for r in range(2, glossary.max_row + 1)
+			}
+			self.assertNotIn("ctg_secondary_ids", glossary_fields)
+		finally:
+			os.unlink(path)
+
+	# ------------------------------------------------------------------
 	# Normalized sponsor columns
 	# ------------------------------------------------------------------
 

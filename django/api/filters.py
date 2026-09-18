@@ -25,6 +25,7 @@ from gregory.utils.trial_field_normalizers import (
 	TrialSexEligibility,
 	TrialStudyType,
 )
+from gregory.utils.trial_identifiers import extract_identifiers
 
 
 def _site_scope_subject_ids(site_id):
@@ -771,14 +772,22 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	# identifiers JSON (or acronym) matches *any* of them, case-insensitively.
 	# ``identifiers`` is the umbrella param: a mixed list matched across every
 	# registry key at once. The typed params below scope to a single registry.
+	# The format decides what a value matches, not which param it arrived in —
+	# see _match_registry_ids / TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.5.
 	identifiers = filters.BaseInFilter(
 		method="filter_identifiers",
-		label="Mixed registry id(s), comma-separated; matches any across NCT/EudraCT/EUCT/EUCTR/CTIS (case-insensitive)",
+		label="Mixed registry id(s), comma-separated; matches any registry (case-insensitive)",
 		help_text=(
 			"Mixed list of registry identifiers, comma-separated, matched across "
-			"all registry keys at once (NCT/EudraCT/EUCT/EUCTR/CTIS), "
-			"case-insensitive, e.g. ?identifiers=NCT02521311,2020-001234-12. "
-			"Acronyms are excluded (not unique) — use acronym for those."
+			"every registry the id's own format identifies it as, "
+			"case-insensitive — not just NCT/EudraCT/EUCT/EUCTR/CTIS, e.g. "
+			"?identifiers=NCT02521311,2020-001234-12,ISRCTN14048364. Any common "
+			"format is accepted (bare number, EUDRACT/EUCTR/CTIS-prefixed, "
+			"with or without dashes/spacing). Matches ids from the trial's "
+			"registry record, its secondary ids, and the sponsor's study code — "
+			"a lookup can return more than one row when a trial was imported "
+			"from two registries and hasn't been merged yet. Acronyms are "
+			"excluded (not unique) — use acronym for those."
 		),
 	)
 	nct = filters.BaseInFilter(
@@ -786,26 +795,51 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		label="NCT ID(s), comma-separated; matches any (case-insensitive)",
 		help_text=(
 			"ClinicalTrials.gov NCT id(s), comma-separated, matches any "
-			"(case-insensitive), e.g. ?nct=NCT02521311,NCT06065670."
+			"(case-insensitive), e.g. ?nct=NCT02521311,NCT06065670. Matches ids "
+			"from the trial's registry record, its secondary ids, and the "
+			"sponsor's study code — a lookup can return more than one row when "
+			"a trial was imported from two registries and hasn't been merged yet."
 		),
 	)
 	eudract = filters.BaseInFilter(
 		method="filter_eudract",
-		label="EudraCT number(s), comma-separated; matches any",
-		help_text="EudraCT number(s), comma-separated, matches any (case-insensitive).",
+		label="EudraCT number(s), comma-separated; matches any format",
+		help_text=(
+			"EudraCT number(s), comma-separated, matches any (case-insensitive). "
+			"Any common format is accepted — bare (2020-001234-12), "
+			"EUDRACT-prefixed, or EUCTR-prefixed with a member-state suffix "
+			"(EUCTR2020-001234-12-DE) — the number's own shape decides the "
+			"match, so this also finds a trial whose EudraCT number sits only "
+			"in a CTIS-shaped registry key or in free-text secondary ids/study "
+			"code. Matches ids from the trial's registry record, its secondary "
+			"ids, and the sponsor's study code — a lookup can return more than "
+			"one row when a trial was imported from two registries and hasn't "
+			"been merged yet."
+		),
 	)
 	euct = filters.BaseInFilter(
 		method="filter_euct",
-		label="EU CT / EUCTR number(s), comma-separated; matches any",
+		label="EU CT / EUCTR number(s), comma-separated; matches any format",
 		help_text=(
 			"EU CT / EUCTR number(s), comma-separated, matches any "
-			"(case-insensitive). Matches either the euct or euctr identifier key."
+			"(case-insensitive). Matches either the euct or euctr identifier "
+			"key, plus any common format (bare, EUCTR-prefixed, …) from the "
+			"trial's secondary ids or the sponsor's study code. A lookup can "
+			"return more than one row when a trial was imported from two "
+			"registries and hasn't been merged yet."
 		),
 	)
 	ctis = filters.BaseInFilter(
 		method="filter_ctis",
-		label="CTIS number(s), comma-separated; matches any",
-		help_text="CTIS number(s), comma-separated, matches any (case-insensitive).",
+		label="CTIS number(s), comma-separated; matches any format",
+		help_text=(
+			"CTIS number(s), comma-separated, matches any (case-insensitive). "
+			"Any common format is accepted (bare 2023-507431-37-00 or "
+			"CTIS-prefixed). Matches ids from the trial's registry record, its "
+			"secondary ids, and the sponsor's study code — a lookup can return "
+			"more than one row when a trial was imported from two registries "
+			"and hasn't been merged yet."
+		),
 	)
 	acronym = filters.BaseInFilter(
 		method="filter_acronym",
@@ -1153,64 +1187,109 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		)
 		return queryset.filter(models.Exists(subquery))
 
-	def _match_identifier(self, queryset, value, keys):
-		"""Return trials whose ``identifiers`` JSON has any of ``keys`` equal
-		(case-insensitively) to any of the supplied values.
+	def _legacy_identifier_condition(self, tokens, keys):
+		"""(annotations, Q) matching trials whose ``identifiers`` JSON has any of
+		``keys`` equal (case-insensitively) to any of ``tokens`` — the exact
+		raw-key match this app has always done, factored out of the old
+		``_match_identifier`` so ``_match_registry_ids`` can OR it together with
+		the new ``identifiers_normalized__overlap`` branch below.
 
-		``value`` is the list produced by ``BaseInFilter`` (comma-separated input).
-		Values are stripped and upper-cased so the comparison lines up with the
+		``tokens`` is stripped but NOT upper-cased by the caller (the raw case
+		is what ``_match_registry_ids`` needs for ``extract_identifiers``); this
+		method upper-cases its own copy so the comparison lines up with the
 		non-partial ``Upper(identifiers->>'<key>')`` expression indexes on the
 		model (``trials_u<key>_idx`` for nct/eudract/euct/euctr/ctis), keeping
 		each branch — and the BitmapOr behind the umbrella ``?identifiers=``
 		filter — an index scan rather than a seq scan. (The model's partial
 		*unique* indexes on the same expressions enforce integrity but are NOT
 		used for these lookups: Postgres can't prove their ``identifiers ? 'key'``
-		predicate.) Blank tokens (e.g. from a trailing comma) are ignored; an
-		all-blank list is treated as "no filter" and leaves the queryset untouched.
+		predicate.)
 		"""
-		wanted = {v.strip().upper() for v in (value or []) if v and v.strip()}
-		if not wanted:
-			return queryset
+		wanted = {t.upper() for t in tokens}
 		annotations = {}
 		condition = models.Q()
 		for key in keys:
 			alias = f"_id_{key}"
 			annotations[alias] = Upper(KeyTextTransform(key, "identifiers"))
 			condition |= models.Q(**{f"{alias}__in": wanted})
+		return annotations, condition
+
+	def _match_registry_ids(self, queryset, value, legacy_keys):
+		"""Return trials matching any of ``value``'s registry ids, in any common
+		format — the id's own shape decides what it matches, whichever param it
+		arrived in (TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.5).
+
+		Two branches, OR'd together:
+
+		- the legacy exact/case-insensitive match against ``legacy_keys`` in the
+		  raw ``identifiers`` JSON (unchanged from before this field existed);
+		- ``identifiers_normalized__overlap`` against every canonical id
+		  ``extract_identifiers`` can read out of the supplied token(s) — this is
+		  what lets ``eudract=2023-507431-37-00`` find a CTIS number, or
+		  ``identifiers=ISRCTN14048364`` work at all.
+
+		The legacy branch is kept so the result is a strict superset of the
+		pre-existing behaviour by construction: rows the identifiers_normalized
+		backfill hasn't reached yet (NULL), and truncated/malformed values
+		``extract_identifiers`` can't parse, still match exactly as they do
+		today — see the "Reachability"/"Superset" checks in the plan's §8.
+		"""
+		tokens = {v.strip() for v in (value or []) if v and v.strip()}
+		if not tokens:
+			return queryset
+		normalized = sorted(
+			{f"{t}:{v}" for token in tokens for t, v in extract_identifiers(token)}
+		)
+		annotations, condition = self._legacy_identifier_condition(tokens, legacy_keys)
+		if normalized:
+			condition |= models.Q(identifiers_normalized__overlap=normalized)
 		return queryset.annotate(**annotations).filter(condition)
 
 	def filter_identifiers(self, queryset, name, value):
-		"""Match a mixed list of registry id(s) against any registry key.
+		"""Match a mixed list of registry id(s), in any common format, against
+		any registry the trial is known under.
 
-		Pools every comma-separated token and returns trials whose
-		``identifiers`` JSON has any of nct/eudract/euct/euctr/ctis equal
-		(case-insensitively) to any token. Acronym is intentionally excluded:
-		acronyms are not unique, so acronym matching stays opt-in via the
-		dedicated ``?acronym=`` param.
+		Pools every comma-separated token. Each is matched against the legacy
+		raw nct/eudract/euct/euctr/ctis keys (exact, case-insensitive) AND
+		against ``identifiers_normalized`` — so unlike the typed params below,
+		this one is a real umbrella: any registry ``extract_identifiers``
+		recognises works here, e.g. ``?identifiers=ISRCTN14048364`` or
+		``?identifiers=U1111-1299-8084``, not just the five legacy keys.
+		Acronym is intentionally excluded: acronyms are not unique, so acronym
+		matching stays opt-in via the dedicated ``?acronym=`` param.
 		"""
-		return self._match_identifier(
+		return self._match_registry_ids(
 			queryset, value, ["nct", "eudract", "euct", "euctr", "ctis"]
 		)
 
 	def filter_nct(self, queryset, name, value: list[str]):
-		"""Match ClinicalTrials.gov NCT id(s) against ``identifiers['nct']``."""
-		return self._match_identifier(queryset, value, ["nct"])
+		"""Match ClinicalTrials.gov NCT id(s) — from the trial's registry record,
+		its secondary ids, or the sponsor's study code, whichever held it."""
+		return self._match_registry_ids(queryset, value, ["nct"])
 
 	def filter_eudract(self, queryset, name, value: list[str]):
-		"""Match EudraCT number(s) against ``identifiers['eudract']``."""
-		return self._match_identifier(queryset, value, ["eudract"])
+		"""Match EudraCT number(s) in any common format (bare
+		``2020-001234-12``, ``EUDRACT2020-…``, or ``EUCTR2020-…-DE``) — from
+		the trial's registry record, its secondary ids, or the sponsor's study
+		code, whichever held it."""
+		return self._match_registry_ids(queryset, value, ["eudract"])
 
 	def filter_euct(self, queryset, name, value: list[str]):
-		"""Match EU CT number(s) against ``identifiers['euct']`` or ``['euctr']``.
-
-		The two keys are used interchangeably across the ingestion pipeline for
-		the EU Clinical Trials register, so both are checked.
+		"""Match EU CT / EUCTR number(s) against ``identifiers['euct']`` or
+		``['euctr']`` (the two keys are used interchangeably across the
+		ingestion pipeline for the EU Clinical Trials register, so both are
+		checked) — plus any common format from the trial's secondary ids or the
+		sponsor's study code.
 		"""
-		return self._match_identifier(queryset, value, ["euct", "euctr"])
+		return self._match_registry_ids(queryset, value, ["euct", "euctr"])
 
 	def filter_ctis(self, queryset, name, value: list[str]):
-		"""Match CTIS number(s) against ``identifiers['ctis']``."""
-		return self._match_identifier(queryset, value, ["ctis"])
+		"""Match CTIS number(s) in any common format — from the trial's registry
+		record, its secondary ids, or the sponsor's study code, whichever held
+		it. A lookup can return more than one row when a trial was imported from
+		two registries and hasn't been merged yet.
+		"""
+		return self._match_registry_ids(queryset, value, ["ctis"])
 
 	def filter_acronym(self, queryset, name, value):
 		"""Match trial acronym(s) against the ``acronym`` column (case-insensitive)."""

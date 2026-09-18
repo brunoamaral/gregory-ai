@@ -15,7 +15,7 @@ from gregory.models import OrganizationSite, Trials, Subject, TeamCategory
 from sitesettings.models import CustomSetting
 
 
-EXCLUDED_SCALARS = frozenset({"utitle", "usummary"})
+EXCLUDED_SCALARS = frozenset({"utitle", "usummary", "ctg_secondary_ids"})
 EXCLUDED_M2M = frozenset({"ml_predictions"})
 
 # Ordered column groups for data sheets
@@ -37,6 +37,7 @@ SCALAR_ORDER = [
 	"summary",
 	"internal_number",
 	"secondary_id",
+	"identifiers_normalized",
 	"source_register",
 	"other_records",
 	"prospective_registration",
@@ -133,6 +134,16 @@ EXTRA_GLOSSARY = {
 	"identifiers_json": (
 		"Identifiers (raw JSON)",
 		"Raw JSON dict of all registry identifiers for this trial.",
+		"WHO ICTRP, ClinicalTrials.gov, EU CTIS",
+	),
+	"identifiers_normalized": (
+		"Identifiers (normalized)",
+		'Canonical registry ids as "type:VALUE" (e.g. "eudract:2021-003034-37", '
+		'"isrctn:ISRCTN14048364"), one per registry the trial is known under — '
+		"prefixes stripped and format differences collapsed, so this is what to "
+		"match a registry number against rather than the raw identifiers "
+		"columns. Derived from identifiers, secondary_id, and ClinicalTrials.gov's "
+		"typed secondary ids; recomputed on every save.",
 		"WHO ICTRP, ClinicalTrials.gov, EU CTIS",
 	),
 	"subjects": (
